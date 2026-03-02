@@ -1013,7 +1013,22 @@ function updateZoomLevel() {
   logIconLayerSnapshot('zoom/move')
 }
 
+function isWebGLSupported(): boolean {
+  try {
+    const canvas = document.createElement('canvas')
+    return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
+  } catch {
+    return false
+  }
+}
+
 onMounted(() => {
+  if (!isWebGLSupported()) {
+    mapError.value = 'Your browser does not support WebGL, which is required to display the map. Try enabling hardware acceleration in your browser settings, or use a different browser.'
+    defaultQueryLoading.value = false
+    return
+  }
+
   mapInitStartedAt = nowMs()
   console.info('[Perf] map:init:start')
   map = new maplibregl.Map({
@@ -1040,6 +1055,14 @@ onMounted(() => {
   } catch {
     // no-op
   }
+
+  map.on('error', (e) => {
+    const err = (e as any).error
+    if (err?.type === 'webglcontextcreationerror') {
+      mapError.value = 'Failed to initialize the map renderer (WebGL error). Try enabling hardware acceleration in your browser settings.'
+      defaultQueryLoading.value = false
+    }
+  })
 
   map.addControl(new maplibregl.NavigationControl(), 'top-right')
   ensureZoomControlLabel()
