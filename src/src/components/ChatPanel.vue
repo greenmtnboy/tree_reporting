@@ -96,18 +96,20 @@
         </template>
       </div>
       <div v-for="(msg, i) in messages" :key="i" :class="['chat-msg', `chat-msg--${msg.role}`]">
-        <div class="chat-msg-content">
+        <!-- Tool-call-only: render as pill stack, no bubble -->
+        <div v-if="!msg.isLoading && !msg.content && msg.toolCalls?.length" class="chat-tool-pills">
+          <span v-for="tc in msg.toolCalls" :key="tc.id" class="chat-tool-pill">{{ tc.name }}</span>
+        </div>
+        <!-- Regular message bubble -->
+        <div v-else class="chat-msg-content">
           <div v-if="msg.isLoading" class="chat-loading">
             <span class="chat-loading-spinner"></span>
             {{ thinkingPhrase }}
           </div>
           <template v-else>
             <MarkdownRenderer v-if="msg.content" :markdown="msg.content" />
-            <div v-if="msg.toolCalls?.length" class="chat-tool-calls">
-              <div v-for="tc in msg.toolCalls" :key="tc.id" class="chat-tool-call">
-                <span class="tool-name">{{ tc.name }}</span>
-                <span v-if="tc.input.sql" class="tool-sql">{{ tc.input.sql }}</span>
-              </div>
+            <div v-if="msg.toolCalls?.length" class="chat-tool-pills chat-tool-pills--inline">
+              <span v-for="tc in msg.toolCalls" :key="tc.id" class="chat-tool-pill">{{ tc.name }}</span>
             </div>
           </template>
         </div>
@@ -526,31 +528,29 @@ watch(
   padding: 0;
 }
 
-.chat-tool-calls {
+.chat-tool-pills {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 2px 0;
+}
+
+.chat-tool-pills--inline {
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid rgba(79, 195, 247, 0.15);
+  border-top: 1px solid rgba(79, 195, 247, 0.1);
 }
 
-.chat-tool-call {
-  font-size: 0.7rem;
-  color: #7a7a9e;
-  margin-bottom: 4px;
-}
-
-.tool-name {
-  color: #4fc3f7;
-  font-weight: 500;
-}
-
-.tool-sql {
-  display: block;
+.chat-tool-pill {
+  display: inline-block;
+  font-size: 0.68rem;
+  color: #6bb8d4;
+  background: rgba(79, 195, 247, 0.06);
+  border: 1px solid rgba(79, 195, 247, 0.15);
+  border-radius: 999px;
+  padding: 1px 8px;
   font-family: monospace;
-  font-size: 0.65rem;
-  color: #666;
-  margin-top: 2px;
-  white-space: pre-wrap;
-  word-break: break-all;
 }
 
 /* ── Input area ── */
