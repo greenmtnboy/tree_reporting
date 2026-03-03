@@ -91,7 +91,10 @@
       </div>
       <div v-for="(msg, i) in messages" :key="i" :class="['chat-msg', `chat-msg--${msg.role}`]">
         <div class="chat-msg-content">
-          <div v-if="msg.isLoading" class="chat-loading">Thinking...</div>
+          <div v-if="msg.isLoading" class="chat-loading">
+            <span class="chat-loading-spinner"></span>
+            {{ thinkingPhrase }}
+          </div>
           <template v-else>
             <MarkdownRenderer v-if="msg.content" :markdown="msg.content" />
             <div v-if="msg.toolCalls?.length" class="chat-tool-calls">
@@ -112,18 +115,22 @@
         type="text"
         :placeholder="dbReady ? 'Ask about SF trees...' : 'Loading data...'"
         @keydown.enter="handleSend"
-        :disabled="isLoading || !dbReady"
+        :disabled="isLoading || !dbReady || !introComplete"
       />
-      <button @click="handleSend" :disabled="isLoading || !dbReady || !userInput.trim()">Send</button>
+      <span class="send-btn-wrapper">
+        <button @click="handleSend" :disabled="isLoading || !dbReady || !introComplete || !userInput.trim()">Send</button>
+        <span v-if="sendTooltip" class="send-tooltip">{{ sendTooltip }}</span>
+      </span>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, watch, onUnmounted } from 'vue'
 import { MarkdownRenderer } from '@trilogy-data/trilogy-studio-components'
 import { useChat } from '../composables/useChat'
 import { useDuckDB } from '../composables/useDuckDB'
+import { useMapIntro } from '../composables/useMapIntro'
 
 const PROVIDERS = [
   { value: 'demo',       label: 'Demo (limited messages)' },
@@ -144,12 +151,59 @@ const KEY_PLACEHOLDERS: Record<string, string> = {
 
 const { messages, isLoading, isConfigured, providerType, setConnection, deleteConnection, sendMessage, clearMessages } = useChat()
 const { ready: dbReady } = useDuckDB()
+const { introComplete } = useMapIntro()
 
 const userInput = ref('')
 const keyInput = ref('')
 const typeInput = ref('demo')
 const showSettings = ref(false)
 const messagesContainer = ref<HTMLDivElement>()
+
+const THINKING_PHRASES = [
+  'Consulting the canopy...',
+  'Counting tree rings...',
+  'Asking the arbor...',
+  'Rustling through the leaves...',
+  'Photosynthesizing some ideas...',
+  'Branching out...',
+  'Checking the root system...',
+  'Pollinating the data...',
+  'Reticulating splines...',
+  'Tapping the sap lines...',
+  'Whispering to the willows...',
+  'Following the mycorrhizal network...',
+]
+
+const thinkingPhrase = ref(THINKING_PHRASES[0])
+let thinkingInterval: ReturnType<typeof setInterval> | null = null
+
+watch(isLoading, (loading) => {
+  if (loading) {
+    let idx = Math.floor(Math.random() * THINKING_PHRASES.length)
+    thinkingPhrase.value = THINKING_PHRASES[idx]
+    thinkingInterval = setInterval(() => {
+      idx = (idx + 1) % THINKING_PHRASES.length
+      thinkingPhrase.value = THINKING_PHRASES[idx]
+    }, 2500)
+  } else {
+    if (thinkingInterval != null) {
+      clearInterval(thinkingInterval)
+      thinkingInterval = null
+    }
+  }
+})
+
+onUnmounted(() => {
+  if (thinkingInterval != null) clearInterval(thinkingInterval)
+})
+
+const sendTooltip = computed(() => {
+  if (!introComplete.value) return 'Map is loading...'
+  if (isLoading.value) return 'Waiting for response...'
+  if (!dbReady.value) return 'Tree data is still loading'
+  if (!userInput.value.trim()) return 'Type a message to send'
+  return ''
+})
 
 const canSaveSetup = computed(() =>
   typeInput.value === 'demo' ? true : !!keyInput.value.trim()
@@ -496,10 +550,62 @@ watch(
   cursor: not-allowed;
 }
 
+.send-btn-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.send-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  white-space: nowrap;
+  background: #0f3460;
+  color: #a0c4e8;
+  border: 1px solid #1e4a8a;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.75rem;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.send-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 12px;
+  border: 5px solid transparent;
+  border-top-color: #1e4a8a;
+}
+
+.send-btn-wrapper:hover .send-tooltip {
+  display: block;
+}
+
 .chat-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: #4fc3f7;
   font-style: italic;
   font-size: 0.85rem;
+}
+
+.chat-loading-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(79, 195, 247, 0.25);
+  border-top-color: #4fc3f7;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: chat-spin 0.8s linear infinite;
+}
+
+@keyframes chat-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Prevent iOS auto-zoom on input focus (requires font-size >= 16px) */
