@@ -473,7 +473,14 @@ WHERE tree_id IS NOT NULL
         {
           tools: TOOLS,
           maxIterations: MAX_LOOPS,
-          buildSystemPrompt: () => SYSTEM_PROMPT,
+          buildSystemPrompt: () => {
+            const today = new Date().toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })
+            return `${SYSTEM_PROMPT}\n\nToday's date: ${today}`
+          },
         },
       )
     } catch (e) {

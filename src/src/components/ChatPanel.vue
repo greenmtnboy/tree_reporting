@@ -14,6 +14,15 @@
         </button>
         <button
           v-if="isConfigured && !showSettings"
+          class="chat-info-btn"
+          :class="{ 'chat-info-btn--active': showInfo }"
+          @click="showInfo = !showInfo"
+          title="Available data fields"
+        >
+          &#9432;
+        </button>
+        <button
+          v-if="isConfigured && !showSettings"
           class="chat-gear-btn"
           @click="openSettings"
           title="Manage connection"
@@ -21,6 +30,34 @@
           &#9881;
         </button>
       </div>
+    </div>
+
+    <!-- Info panel: field reference -->
+    <div v-if="showInfo && isConfigured && !showSettings" class="chat-info-panel">
+      <p class="chat-info-heading">Available Data Fields</p>
+      <p class="chat-info-section">Tree Fields</p>
+      <ul class="chat-info-list">
+        <li><code>tree_id</code> — unique identifier</li>
+        <li><code>common_name</code> — e.g. "Swamp Myrtle"</li>
+        <li><code>species</code> — full species string</li>
+        <li><code>plant_date</code> — date planted (MM/DD/YYYY)</li>
+        <li><code>site_info</code> — planting site description</li>
+        <li><code>latitude</code> / <code>longitude</code></li>
+        <li><code>diameter_at_breast_height</code> — trunk diameter (inches)</li>
+      </ul>
+      <p class="chat-info-section">Species Enrichment</p>
+      <ul class="chat-info-list">
+        <li><code>native_status</code> — native_bay_area | native_california | non_native | naturalized | unknown</li>
+        <li><code>is_evergreen</code> — bool</li>
+        <li><code>mature_height_ft</code> / <code>canopy_spread_ft</code></li>
+        <li><code>growth_rate</code> — slow | moderate | fast</li>
+        <li><code>lifespan_years</code> — e.g. "50–100", "200+"</li>
+        <li><code>drought_tolerance</code> — low | moderate | high</li>
+        <li><code>bloom_season</code></li>
+        <li><code>wildlife_value</code> — low | moderate | high</li>
+        <li><code>fire_risk</code> — low | moderate | high</li>
+        <li><code>tree_category</code> — palm | broadleaf | spreading | coniferous | columnar | ornamental</li>
+      </ul>
     </div>
 
     <!-- Settings panel (manage existing connection) -->
@@ -158,6 +195,7 @@ const KEY_PLACEHOLDERS: Record<string, string> = {
 }
 
 const SUGGESTIONS = [
+  'What can you do?',
   'How many palm trees are there?',
   'Show me trees near Coit Tower',
   'Where is the biggest magnolia tree?',
@@ -171,6 +209,7 @@ const userInput = ref('')
 const keyInput = ref('')
 const typeInput = ref('demo')
 const showSettings = ref(false)
+const showInfo = ref(false)
 const messagesContainer = ref<HTMLDivElement>()
 
 const THINKING_PHRASES = [
@@ -331,6 +370,63 @@ watch(
 }
 .chat-gear-btn:hover {
   color: #e0e0e0;
+}
+
+.chat-info-btn {
+  background: none;
+  border: none;
+  color: #7a7a9e;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+.chat-info-btn:hover,
+.chat-info-btn--active {
+  color: #4fc3f7;
+}
+
+.chat-info-panel {
+  padding: 12px 14px;
+  border-bottom: 1px solid #0f3460;
+  background: #1a1a2e;
+  overflow-y: auto;
+  max-height: 280px;
+  font-size: 0.75rem;
+  color: #a0a0c0;
+  line-height: 1.55;
+}
+
+.chat-info-heading {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.chat-info-section {
+  margin: 8px 0 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #4fc3f7;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chat-info-list {
+  margin: 0;
+  padding-left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.chat-info-list code {
+  background: rgba(79, 195, 247, 0.1);
+  color: #6bb8d4;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-size: 0.72rem;
 }
 
 /* ── Setup / Settings panel ── */
