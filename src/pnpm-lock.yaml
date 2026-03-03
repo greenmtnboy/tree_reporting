@@ -12,8 +12,8 @@ importers:
         specifier: 1.33.1-dev18.0
         version: 1.33.1-dev18.0
       '@trilogy-data/trilogy-studio-components':
-        specifier: ^0.1.11
-        version: 0.1.11(pinia@2.3.1(typescript@5.7.3)(vue@3.5.28(typescript@5.7.3)))(typescript@5.7.3)(vue@3.5.28(typescript@5.7.3))
+        specifier: ^0.1.13
+        version: 0.1.13(pinia@2.3.1(typescript@5.7.3)(vue@3.5.28(typescript@5.7.3)))(typescript@5.7.3)(vue@3.5.28(typescript@5.7.3))
       maplibre-gl:
         specifier: ^4.7.1
         version: 4.7.1
@@ -516,8 +516,8 @@ packages:
   '@swc/helpers@0.5.18':
     resolution: {integrity: sha512-TXTnIcNJQEKwThMMqBXsZ4VGAza6bvN4pa41Rkqoio6QBKMvo+5lexeTMScGCIxtzgQJzElcvIltani+adC5PQ==}
 
-  '@trilogy-data/trilogy-studio-components@0.1.11':
-    resolution: {integrity: sha512-hqouD/UuqY/F4nUgWdit6BKzR7eMwLH/nmIJK1styITJluw6edQVZsidoQPlxDmykthQwBsRPSA2EkYxUWOOeg==}
+  '@trilogy-data/trilogy-studio-components@0.1.13':
+    resolution: {integrity: sha512-FYhm+1I92YJtZXMOf5Rff4DvChlB2yNJWQs492rPG48Sgv7OrekKivn+GyNQLNQUpUC1KgXmNc0pClRrG0NQGQ==}
     peerDependencies:
       pinia: ^2.0.0
       vue: ^3.5.13
@@ -2194,7 +2194,7 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@trilogy-data/trilogy-studio-components@0.1.11(pinia@2.3.1(typescript@5.7.3)(vue@3.5.28(typescript@5.7.3)))(typescript@5.7.3)(vue@3.5.28(typescript@5.7.3))':
+  '@trilogy-data/trilogy-studio-components@0.1.13(pinia@2.3.1(typescript@5.7.3)(vue@3.5.28(typescript@5.7.3)))(typescript@5.7.3)(vue@3.5.28(typescript@5.7.3))':
     dependencies:
       '@duckdb/duckdb-wasm': 1.29.1-dev269.0
       '@google/genai': 0.12.0

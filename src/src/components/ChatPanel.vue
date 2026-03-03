@@ -83,22 +83,33 @@
           Loading tree data&hellip;
         </template>
         <template v-else>
-          Ask me about SF trees! Try:<br /><br />
-          "How many palm trees are there?"<br />
-          "Show me trees near Coit Tower"<br />
-          "What are the oldest trees?"
+          Ask me about SF trees! Try:
+          <div class="chat-suggestions">
+            <button
+              v-for="suggestion in SUGGESTIONS"
+              :key="suggestion"
+              class="chat-suggestion"
+              :disabled="!introComplete || !dbReady || isLoading"
+              @click="injectSuggestion(suggestion)"
+            >{{ suggestion }}</button>
+          </div>
         </template>
       </div>
       <div v-for="(msg, i) in messages" :key="i" :class="['chat-msg', `chat-msg--${msg.role}`]">
-        <div class="chat-msg-content">
-          <div v-if="msg.isLoading" class="chat-loading">Thinking...</div>
+        <!-- Tool-call-only: render as pill stack, no bubble -->
+        <div v-if="!msg.isLoading && !msg.content && msg.toolCalls?.length" class="chat-tool-pills">
+          <span v-for="tc in msg.toolCalls" :key="tc.id" class="chat-tool-pill">{{ tc.name }}</span>
+        </div>
+        <!-- Regular message bubble -->
+        <div v-else class="chat-msg-content">
+          <div v-if="msg.isLoading" class="chat-loading">
+            <span class="chat-loading-spinner"></span>
+            {{ thinkingPhrase }}
+          </div>
           <template v-else>
             <MarkdownRenderer v-if="msg.content" :markdown="msg.content" />
-            <div v-if="msg.toolCalls?.length" class="chat-tool-calls">
-              <div v-for="tc in msg.toolCalls" :key="tc.id" class="chat-tool-call">
-                <span class="tool-name">{{ tc.name }}</span>
-                <span v-if="tc.input.sql" class="tool-sql">{{ tc.input.sql }}</span>
-              </div>
+            <div v-if="msg.toolCalls?.length" class="chat-tool-pills chat-tool-pills--inline">
+              <span v-for="tc in msg.toolCalls" :key="tc.id" class="chat-tool-pill">{{ tc.name }}</span>
             </div>
           </template>
         </div>
@@ -112,18 +123,22 @@
         type="text"
         :placeholder="dbReady ? 'Ask about SF trees...' : 'Loading data...'"
         @keydown.enter="handleSend"
-        :disabled="isLoading || !dbReady"
+        :disabled="isLoading || !dbReady || !introComplete"
       />
-      <button @click="handleSend" :disabled="isLoading || !dbReady || !userInput.trim()">Send</button>
+      <span class="send-btn-wrapper">
+        <button @click="handleSend" :disabled="isLoading || !dbReady || !introComplete || !userInput.trim()">Send</button>
+        <span v-if="sendTooltip" class="send-tooltip">{{ sendTooltip }}</span>
+      </span>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, watch, onUnmounted } from 'vue'
 import { MarkdownRenderer } from '@trilogy-data/trilogy-studio-components'
 import { useChat } from '../composables/useChat'
 import { useDuckDB } from '../composables/useDuckDB'
+import { useMapIntro } from '../composables/useMapIntro'
 
 const PROVIDERS = [
   { value: 'demo',       label: 'Demo (limited messages)' },
@@ -142,14 +157,67 @@ const KEY_PLACEHOLDERS: Record<string, string> = {
   openrouter: 'sk-or-...',
 }
 
+const SUGGESTIONS = [
+  'How many palm trees are there?',
+  'Show me trees near Coit Tower',
+  'Where is the biggest magnolia tree?',
+]
+
 const { messages, isLoading, isConfigured, providerType, setConnection, deleteConnection, sendMessage, clearMessages } = useChat()
 const { ready: dbReady } = useDuckDB()
+const { introComplete } = useMapIntro()
 
 const userInput = ref('')
 const keyInput = ref('')
 const typeInput = ref('demo')
 const showSettings = ref(false)
 const messagesContainer = ref<HTMLDivElement>()
+
+const THINKING_PHRASES = [
+  'Consulting the canopy...',
+  'Counting tree rings...',
+  'Asking the arbor...',
+  'Rustling through the leaves...',
+  'Photosynthesizing some ideas...',
+  'Branching out...',
+  'Checking the root system...',
+  'Pollinating the data...',
+  'Reticulating splines...',
+  'Tapping the sap lines...',
+  'Whispering to the willows...',
+  'Following the mycorrhizal network...',
+]
+
+const thinkingPhrase = ref(THINKING_PHRASES[0])
+let thinkingInterval: ReturnType<typeof setInterval> | null = null
+
+watch(isLoading, (loading) => {
+  if (loading) {
+    let idx = Math.floor(Math.random() * THINKING_PHRASES.length)
+    thinkingPhrase.value = THINKING_PHRASES[idx]
+    thinkingInterval = setInterval(() => {
+      idx = (idx + 1) % THINKING_PHRASES.length
+      thinkingPhrase.value = THINKING_PHRASES[idx]
+    }, 2500)
+  } else {
+    if (thinkingInterval != null) {
+      clearInterval(thinkingInterval)
+      thinkingInterval = null
+    }
+  }
+})
+
+onUnmounted(() => {
+  if (thinkingInterval != null) clearInterval(thinkingInterval)
+})
+
+const sendTooltip = computed(() => {
+  if (!introComplete.value) return 'Map is loading...'
+  if (isLoading.value) return 'Waiting for response...'
+  if (!dbReady.value) return 'Tree data is still loading'
+  if (!userInput.value.trim()) return 'Type a message to send'
+  return ''
+})
 
 const canSaveSetup = computed(() =>
   typeInput.value === 'demo' ? true : !!keyInput.value.trim()
@@ -183,6 +251,11 @@ function handleDelete() {
   typeInput.value = 'demo'
   keyInput.value = ''
   showSettings.value = false
+}
+
+async function injectSuggestion(text: string) {
+  if (isLoading.value || !dbReady.value || !introComplete.value) return
+  await sendMessage(text)
 }
 
 async function handleSend() {
@@ -381,6 +454,35 @@ watch(
   line-height: 1.6;
 }
 
+.chat-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.chat-suggestion {
+  background: none;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  color: #4fc3f7;
+  font-size: 0.78rem;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.chat-suggestion:hover:not(:disabled) {
+  background: rgba(79, 195, 247, 0.08);
+  border-color: #4fc3f7;
+}
+
+.chat-suggestion:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .chat-msg {
   margin-bottom: 12px;
 }
@@ -426,31 +528,29 @@ watch(
   padding: 0;
 }
 
-.chat-tool-calls {
+.chat-tool-pills {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 2px 0;
+}
+
+.chat-tool-pills--inline {
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid rgba(79, 195, 247, 0.15);
+  border-top: 1px solid rgba(79, 195, 247, 0.1);
 }
 
-.chat-tool-call {
-  font-size: 0.7rem;
-  color: #7a7a9e;
-  margin-bottom: 4px;
-}
-
-.tool-name {
-  color: #4fc3f7;
-  font-weight: 500;
-}
-
-.tool-sql {
-  display: block;
+.chat-tool-pill {
+  display: inline-block;
+  font-size: 0.68rem;
+  color: #6bb8d4;
+  background: rgba(79, 195, 247, 0.06);
+  border: 1px solid rgba(79, 195, 247, 0.15);
+  border-radius: 999px;
+  padding: 1px 8px;
   font-family: monospace;
-  font-size: 0.65rem;
-  color: #666;
-  margin-top: 2px;
-  white-space: pre-wrap;
-  word-break: break-all;
 }
 
 /* ── Input area ── */
@@ -496,10 +596,62 @@ watch(
   cursor: not-allowed;
 }
 
+.send-btn-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.send-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  white-space: nowrap;
+  background: #0f3460;
+  color: #a0c4e8;
+  border: 1px solid #1e4a8a;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.75rem;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.send-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 12px;
+  border: 5px solid transparent;
+  border-top-color: #1e4a8a;
+}
+
+.send-btn-wrapper:hover .send-tooltip {
+  display: block;
+}
+
 .chat-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: #4fc3f7;
   font-style: italic;
   font-size: 0.85rem;
+}
+
+.chat-loading-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(79, 195, 247, 0.25);
+  border-top-color: #4fc3f7;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: chat-spin 0.8s linear infinite;
+}
+
+@keyframes chat-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Prevent iOS auto-zoom on input focus (requires font-size >= 16px) */

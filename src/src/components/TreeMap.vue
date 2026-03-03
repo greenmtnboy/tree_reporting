@@ -12,6 +12,7 @@ import { registerTreeIcons, CATEGORY_COLORS } from '../composables/useTreeCatego
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData } from '../composables/useMapData'
 import { useDuckDB } from '../composables/useDuckDB'
+import { useMapIntro } from '../composables/useMapIntro'
 import type { TreeCategory } from '../types'
 
 const props = defineProps<{
@@ -23,6 +24,8 @@ const zoomLevel = ref(13)
 const mapError = ref<string | null>(null)
 const defaultQueryLoading = ref(true)
 const introActive = ref(!props.simplified)
+const { setIntroComplete } = useMapIntro()
+if (props.simplified) setIntroComplete()
 const loadingMessage = ref('Counting our conifers...')
 let map: maplibregl.Map | null = null
 let mapInitStartedAt = 0
@@ -491,6 +494,7 @@ async function runIntroZoomOut() {
       })
     }
     introActive.value = false
+    setIntroComplete()
     introLockedRangeByZoom.clear()
     logIntroPrefetchSummary()
     setMapInteractions(true)

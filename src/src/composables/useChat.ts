@@ -1,6 +1,18 @@
 import { ref, computed } from 'vue'
+import type { ChatMessage as LibChatMessage } from '@trilogy-data/trilogy-studio-components'
 import type { ChatMessage, ToolCallRecord } from '../types'
-import { useTrilogyCore, buildCustomTrilogyPrompt } from '@trilogy-data/trilogy-studio-components'
+import {
+  useTrilogyCore,
+  buildCustomTrilogyPrompt,
+  runToolLoop,
+  RETURN_TO_USER_TOOL,
+} from '@trilogy-data/trilogy-studio-components'
+import type {
+  LLMAdapter,
+  MessagePersistence,
+  ToolExecutorFactory,
+  ExecutionStateUpdater,
+} from '@trilogy-data/trilogy-studio-components'
 import { useDuckDB } from './useDuckDB'
 import { useFlyTo } from './useFlyTo'
 import { useLandmarkData } from './useLandmarkData'
@@ -17,33 +29,23 @@ const LLM_CONNECTION = 'sf-trees'
 // generateCompletion works immediately without waiting for reset() to finish.
 const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
   anthropic: 'claude-sonnet-4-6',
-  openai: 'gpt-4o',
-  google: 'gemini-2.0-flash-001',
-  openrouter: 'openai/gpt-4o-mini',
-  demo: 'deepseek/deepseek-v3.2',
+  openai: 'gpt-5.2',
+  google: 'google/gemini-3-flash-preview',
+  openrouter: 'google/gemini-3-flash-preview',
+  demo: 'google/gemini-3-flash-preview',
 }
 
 const TREES_MODEL_SOURCE = { alias: 'trees', contents: TREES_MODEL }
-
-// Matches the library's LLMMessage shape for multi-turn history
-interface HistoryMsg {
-  role: 'user' | 'assistant'
-  content: string
-  toolCalls?: Array<{ id: string; name: string; input: Record<string, unknown> }>
-  toolResults?: Array<{ toolCallId: string; toolName: string; result: string }>
-}
-
-const _ALL_CATEGORIES = new Set(['palm', 'broadleaf', 'spreading', 'coniferous', 'columnar', 'ornamental', 'default'])
 
 const TOOLS = [
   {
     name: 'run_query',
     description:
-      'Execute a Trilogy/PreQL query against the trees dataset. Write a SELECT statement using the available concepts — no FROM clause needed; Trilogy resolves the source automatically. Returns JSON rows. Use this to filter, aggregate, or explore the dataset. Limit results to 500 rows max unless the user specifically needs more.',
+      'Execute a Trilogy against the trees dataset. Write a SELECT statement using the available concepts — no FROM clause needed; Trilogy resolves the source automatically. Returns up to 100 JSON rows and total count. Use this to filter, aggregate, or explore the dataset. Limit results to 500 rows max unless the user specifically needs more.',
     input_schema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'The Trilogy/PreQL SELECT statement to execute' },
+        query: { type: 'string', description: 'The Trilogy SELECT statement to execute' },
       },
       required: ['query'],
     },
@@ -51,13 +53,13 @@ const TOOLS = [
   {
     name: 'publish_results',
     description:
-      'Takes a Trilogy/PreQL SELECT query that returns tree_id values for the trees to display on the map. Compiles and executes the query, persists those IDs as the active map filter, and applies DB-side filtering across map tiles. Use this after the user asks to show/highlight a subset of trees. The query only needs tree_id.',
+      'Takes a Trilogy SELECT query that returns tree_id values for the trees to display on the map. Compiles and executes the query, persists those IDs as the active map filter, and applies DB-side filtering across map tiles. Use this after the user asks to show/highlight a subset of trees. The query only needs tree_id.',
     input_schema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'Trilogy/PreQL SELECT returning tree_id values (alias optional)',
+          description: 'Trilogy SELECT returning tree_id values (alias optional)',
         },
       },
       required: ['query'],
@@ -101,6 +103,19 @@ const TOOLS = [
       required: ['name'],
     },
   },
+  {
+    name: 'send_user_message',
+    description:
+      'Send a message to the user immediately, while continuing to work. Use this to share partial results, progress updates, or context before your final answer. After calling this, keep using other tools as needed, then call return_to_user when fully done.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', description: 'The message to display to the user right now' },
+      },
+      required: ['message'],
+    },
+  },
+  RETURN_TO_USER_TOOL,
 ]
 
 const SYSTEM_PROMPT = buildCustomTrilogyPrompt(
@@ -146,13 +161,16 @@ VALID DATA TYPES: ${datatypes.join(', ')}
 IMPORTANT GUIDELINES:
 1. Use a reasonable LIMIT (e.g., 100–500) for exploratory run_query calls. For publish_results tree_id filters, do not add restrictive LIMIT unless the user explicitly asks for a capped subset.
 2. For publish_results, return only tree_id (or alias that resolves to tree_id). Do not require latitude/longitude in publish queries.
-3. If a query fails, explain the error and try a corrected version
+3. If a query fails, explain the error and try a corrected version.
+4. Always finish by calling return_to_user with your complete response. Never return a plain text reply — use return_to_user to signal you are done.
 
 Be concise and helpful. When showing query results, format them nicely.`,
 )
 
 // Module-level state (singleton)
 const messages = ref<ChatMessage[]>([])
+// LLM history in the lib's ChatMessage format — persists across sendMessage calls for multi-turn context
+const llmHistory: LibChatMessage[] = []
 const isLoading = ref(false)
 const providerType = ref(localStorage.getItem(API_TYPE_STORAGE) || '')
 const apiKey = ref(localStorage.getItem(API_KEY_STORAGE) || '')
@@ -167,6 +185,24 @@ function cancelPendingNavigationTimers() {
   }
 }
 
+// Convert a lib message's executedToolCalls to the app's ToolCallRecord[] for UI display.
+// Filters out return_to_user since its message surfaces as the assistant's content instead.
+function toToolCallRecords(
+  executedToolCalls?: LibChatMessage['executedToolCalls'],
+): ToolCallRecord[] | undefined {
+  const display = executedToolCalls?.filter(
+    (tc) => tc.name !== 'return_to_user' && tc.name !== 'send_user_message',
+  )
+  if (!display?.length) return undefined
+  return display.map((tc) => ({
+    id: tc.id,
+    name: tc.name,
+    input: tc.input as Record<string, unknown>,
+    result: tc.result?.message || tc.result?.error || '',
+    isError: !(tc.result?.success ?? true),
+  }))
+}
+
 export function useChat() {
   const { query: duckQuery } = useDuckDB()
   const { flyTo } = useFlyTo()
@@ -175,8 +211,10 @@ export function useChat() {
   const trilogy = useTrilogyCore()
 
   // Ensure the Trilogy resolver points at the production service
-  if (!trilogy.userSettingsStore.settings.trilogyResolver ||
-      trilogy.userSettingsStore.settings.trilogyResolver.includes('localhost')) {
+  if (
+    !trilogy.userSettingsStore.settings.trilogyResolver ||
+    trilogy.userSettingsStore.settings.trilogyResolver.includes('localhost')
+  ) {
     trilogy.userSettingsStore.updateSetting('trilogyResolver', TRILOGY_RESOLVER_URL)
   }
 
@@ -211,7 +249,7 @@ export function useChat() {
       'duckdb',
       'preql',
       [TREES_MODEL_SOURCE],
-      [{name: TREES_MODEL_SOURCE.alias, alias: ''}]
+      [{ name: TREES_MODEL_SOURCE.alias, alias: '' }],
     )
     if (response.data.error) {
       throw new Error(`Trilogy compile error: ${response.data.error}`)
@@ -239,44 +277,14 @@ export function useChat() {
       delete trilogy.llmConnectionStore.connections[LLM_CONNECTION]
     }
     messages.value = []
+    llmHistory.length = 0
     cancelPendingNavigationTimers()
-  }
-
-  // Convert UI ChatMessage[] to the library's LLMMessage-compatible history format
-  function buildHistory(): HistoryMsg[] {
-    const result: HistoryMsg[] = []
-    for (const msg of messages.value) {
-      if (msg.isLoading) continue
-      if (msg.role === 'user') {
-        result.push({ role: 'user', content: msg.content })
-      } else {
-        result.push({
-          role: 'assistant',
-          content: msg.content,
-          ...(msg.toolCalls?.length && {
-            toolCalls: msg.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, input: tc.input })),
-          }),
-        })
-        if (msg.toolCalls?.length) {
-          result.push({
-            role: 'user',
-            content: '',
-            toolResults: msg.toolCalls.map((tc) => ({
-              toolCallId: tc.id,
-              toolName: tc.name,
-              result: tc.result,
-            })),
-          })
-        }
-      }
-    }
-    return result
   }
 
   async function executeTool(
     name: string,
-    input: Record<string, unknown>,
-  ): Promise<{ result: string; isError: boolean }> {
+    input: Record<string, any>,
+  ): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
       switch (name) {
         case 'run_query': {
@@ -285,8 +293,8 @@ export function useChat() {
           const { columns, rows } = await duckQuery(sql)
           const truncated = rows.slice(0, 100)
           return {
-            result: JSON.stringify({ columns, rows: truncated, totalRows: rows.length }),
-            isError: false,
+            success: true,
+            message: JSON.stringify({ columns, rows: truncated, totalRows: rows.length }),
           }
         }
         case 'publish_results': {
@@ -299,23 +307,21 @@ ${sql}
 ) AS __publish_ids
 WHERE tree_id IS NOT NULL
 `
-
-          const { rows } = await duckQuery(`SELECT COUNT(*) AS cnt FROM (${wrappedSql}) AS __count_ids`)
+          const { rows } = await duckQuery(
+            `SELECT COUNT(*) AS cnt FROM (${wrappedSql}) AS __count_ids`,
+          )
           const count = Number(rows[0]?.cnt ?? 0)
 
           if (!Number.isFinite(count) || count <= 0) {
             clearMapTreeIdFilter()
             return {
-              result: 'Publish query returned no tree_ids. Cleared the active map filter.',
-              isError: false,
+              success: true,
+              message: 'Publish query returned no tree_ids. Cleared the active map filter.',
             }
           }
 
           publishMapTreeIdFilterSql(wrappedSql)
-          return {
-            result: `Published ${count} tree_ids to the map filter.`,
-            isError: false,
-          }
+          return { success: true, message: `Published ${count} tree_ids to the map filter.` }
         }
         case 'navigate': {
           cancelPendingNavigationTimers()
@@ -341,113 +347,149 @@ WHERE tree_id IS NOT NULL
               pendingNavigationTimers.push(timerId)
             }
             return {
-              result: `Touring ${stops.length} locations (3s between each stop).`,
-              isError: false,
+              success: true,
+              message: `Touring ${stops.length} locations (6s between each stop).`,
             }
           }
           if (latitude != null && longitude != null) {
             flyTo({ lat: latitude, lng: longitude, zoom: zoom ?? 16 })
-            return { result: `Navigating to [${latitude.toFixed(4)}, ${longitude.toFixed(4)}]`, isError: false }
+            return {
+              success: true,
+              message: `Navigating to [${latitude.toFixed(4)}, ${longitude.toFixed(4)}]`,
+            }
           }
-          return { result: 'Must provide either latitude/longitude or a locations array.', isError: true }
+          return {
+            success: false,
+            error: 'Must provide either latitude/longitude or a locations array.',
+          }
         }
         case 'lookup_landmark': {
           const { name } = input as { name: string }
           const q = name.toLowerCase()
           const matches = landmarks.value.filter((l) => l.name.toLowerCase().includes(q))
-          if (matches.length === 0) return { result: 'No landmarks found matching that name.', isError: false }
-          return { result: JSON.stringify(matches.slice(0, 5)), isError: false }
+          if (matches.length === 0)
+            return { success: true, message: 'No landmarks found matching that name.' }
+          return { success: true, message: JSON.stringify(matches.slice(0, 5)) }
+        }
+        case 'send_user_message': {
+          const { message } = input as { message: string }
+          const intermediateMsg: ChatMessage = { role: 'assistant', content: message }
+          const loadingIdx = messages.value.findIndex((m) => m.isLoading)
+          if (loadingIdx !== -1) {
+            messages.value.splice(loadingIdx, 0, intermediateMsg)
+          } else {
+            messages.value.push(intermediateMsg)
+          }
+          return { success: true, message: 'Message delivered to user.' }
         }
         default:
-          return { result: `Unknown tool: ${name}`, isError: true }
+          return { success: false, error: `Unknown tool: ${name}` }
       }
     } catch (e) {
       const err = e as Error
-      console.error('[Tool Error]', {
-        tool: name,
-        input,
-        message: err.message,
-        stack: err.stack,
-      })
-      return { result: `Error: ${err.message}`, isError: true }
+      console.error('[Tool Error]', { tool: name, input, message: err.message, stack: err.stack })
+      return { success: false, error: err.message }
     }
   }
 
   async function sendMessage(userText: string) {
+    // Add to UI and to LLM history (runToolLoop slices off the last entry as the current prompt)
     messages.value.push({ role: 'user', content: userText })
-    const assistantMsg: ChatMessage = { role: 'assistant', content: '', isLoading: true }
-    messages.value.push(assistantMsg)
+    llmHistory.push({ role: 'user', content: userText })
+
+    // Loading placeholder — replaced in addMessage by the first real assistant response
+    const loadingMsg: ChatMessage = { role: 'assistant', content: '', isLoading: true }
+    messages.value.push(loadingMsg)
     isLoading.value = true
+
+    const persistence: MessagePersistence = {
+      addMessage: (msg) => {
+        llmHistory.push(msg)
+        if (msg.hidden) return
+
+        // When return_to_user fires, its message is the user-visible answer
+        const returnToUser = msg.executedToolCalls?.find((tc) => tc.name === 'return_to_user')
+        const appMsg: ChatMessage = {
+          role: msg.role as 'user' | 'assistant',
+          content: returnToUser?.result?.message ?? msg.content,
+          toolCalls: toToolCallRecords(msg.executedToolCalls),
+        }
+
+        if (msg.role === 'assistant') {
+          const idx = messages.value.indexOf(loadingMsg)
+          if (returnToUser) {
+            // Final message — replace the loading placeholder
+            if (idx !== -1) {
+              messages.value.splice(idx, 1, appMsg)
+            } else {
+              messages.value.push(appMsg)
+            }
+            return
+          }
+          // Intermediate message (tool calls) — insert before the spinner so it stays visible
+          if (idx !== -1) {
+            messages.value.splice(idx, 0, appMsg)
+          } else {
+            messages.value.push(appMsg)
+          }
+          return
+        }
+        messages.value.push(appMsg)
+      },
+      addArtifact: () => {},
+      getMessages: () => llmHistory,
+    }
+
+    const llmAdapter: LLMAdapter = {
+      generateCompletion: (connName, opts, msgs) =>
+        trilogy.llmConnectionStore.generateCompletion(connName, opts, msgs as any),
+    }
+
+    const toolExecutorFactory: ToolExecutorFactory = {
+      getToolExecutor: () => ({
+        executeToolCall: async (name, input) => {
+          if (name === 'return_to_user') {
+            return { success: true, message: input.message as string, terminatesLoop: true }
+          }
+          return executeTool(name, input)
+        },
+      }),
+    }
+
+    const stateUpdater: ExecutionStateUpdater = {
+      setActiveToolName: () => {},
+      checkAborted: () => false,
+    }
 
     try {
       await ensureConnection()
-      // buildHistory() includes all settled turns, ending with the current user message
-      let loopHistory = buildHistory()
-      let loopCount = 0
-
-      while (loopCount < MAX_LOOPS) {
-        loopCount++
-        // prompt is empty — full conversation lives in loopHistory
-        const response = await trilogy.llmConnectionStore.generateCompletion(
-          LLM_CONNECTION,
-          { prompt: '', systemPrompt: SYSTEM_PROMPT, tools: TOOLS, maxTokens: 4096 },
-          loopHistory as any,
-        )
-
-        if (!response.toolCalls?.length) {
-          assistantMsg.content = response.text
-          assistantMsg.isLoading = false
-          break
-        }
-
-        // Execute tools
-        const toolCalls: ToolCallRecord[] = []
-        for (const tc of response.toolCalls) {
-          const { result, isError } = await executeTool(tc.name, tc.input)
-          if (isError) {
-            console.error('[Tool Error Result]', {
-              tool: tc.name,
-              input: tc.input,
-              result,
-            })
-          }
-          toolCalls.push({ id: tc.id, name: tc.name, input: tc.input, result, isError })
-        }
-
-        // Update UI with intermediate state
-        assistantMsg.content = response.text
-        assistantMsg.toolCalls = [...(assistantMsg.toolCalls || []), ...toolCalls]
-
-        // Extend history so the LLM sees its tool calls and results
-        loopHistory = [
-          ...loopHistory,
-          { role: 'assistant', content: response.text, toolCalls: response.toolCalls },
-          {
-            role: 'user',
-            content: '',
-            toolResults: toolCalls.map((tc) => ({
-              toolCallId: tc.id,
-              toolName: tc.name,
-              result: tc.result,
-            })),
-          },
-        ]
-
-        if (loopCount >= MAX_LOOPS) {
-          assistantMsg.isLoading = false
-        }
-      }
+      await runToolLoop(
+        userText,
+        LLM_CONNECTION,
+        llmAdapter,
+        persistence,
+        toolExecutorFactory,
+        stateUpdater,
+        {
+          tools: TOOLS,
+          maxIterations: MAX_LOOPS,
+          buildSystemPrompt: () => SYSTEM_PROMPT,
+        },
+      )
     } catch (e) {
-      assistantMsg.content = `Error: ${(e as Error).message}`
-      assistantMsg.isLoading = false
+      messages.value.push({ role: 'assistant', content: `Error: ${(e as Error).message}` })
     } finally {
+      // Remove the loading placeholder if the loop never produced an assistant message
+      const idx = messages.value.indexOf(loadingMsg)
+      if (idx !== -1) messages.value.splice(idx, 1)
       isLoading.value = false
-      assistantMsg.isLoading = false
     }
   }
 
   function clearMessages() {
     messages.value = []
+    llmHistory.length = 0
+    cancelPendingNavigationTimers()
   }
 
   return {
@@ -455,7 +497,9 @@ WHERE tree_id IS NOT NULL
     isLoading,
     providerType: computed(() => providerType.value),
     apiKey: computed(() => apiKey.value),
-    isConfigured: computed(() => providerType.value === 'demo' ? !!providerType.value : !!apiKey.value),
+    isConfigured: computed(() =>
+      providerType.value === 'demo' ? !!providerType.value : !!apiKey.value,
+    ),
     setConnection,
     deleteConnection,
     sendMessage,
