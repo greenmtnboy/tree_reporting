@@ -83,10 +83,16 @@
           Loading tree data&hellip;
         </template>
         <template v-else>
-          Ask me about SF trees! Try:<br /><br />
-          "How many palm trees are there?"<br />
-          "Show me trees near Coit Tower"<br />
-          "What are the oldest trees?"
+          Ask me about SF trees! Try:
+          <div class="chat-suggestions">
+            <button
+              v-for="suggestion in SUGGESTIONS"
+              :key="suggestion"
+              class="chat-suggestion"
+              :disabled="!introComplete || !dbReady || isLoading"
+              @click="injectSuggestion(suggestion)"
+            >{{ suggestion }}</button>
+          </div>
         </template>
       </div>
       <div v-for="(msg, i) in messages" :key="i" :class="['chat-msg', `chat-msg--${msg.role}`]">
@@ -148,6 +154,12 @@ const KEY_PLACEHOLDERS: Record<string, string> = {
   google:     'AIza...',
   openrouter: 'sk-or-...',
 }
+
+const SUGGESTIONS = [
+  'How many palm trees are there?',
+  'Show me trees near Coit Tower',
+  'Where is the biggest magnolia tree?',
+]
 
 const { messages, isLoading, isConfigured, providerType, setConnection, deleteConnection, sendMessage, clearMessages } = useChat()
 const { ready: dbReady } = useDuckDB()
@@ -237,6 +249,11 @@ function handleDelete() {
   typeInput.value = 'demo'
   keyInput.value = ''
   showSettings.value = false
+}
+
+async function injectSuggestion(text: string) {
+  if (isLoading.value || !dbReady.value || !introComplete.value) return
+  await sendMessage(text)
 }
 
 async function handleSend() {
@@ -433,6 +450,35 @@ watch(
   font-size: 0.8rem;
   padding: 20px 0;
   line-height: 1.6;
+}
+
+.chat-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.chat-suggestion {
+  background: none;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  color: #4fc3f7;
+  font-size: 0.78rem;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.chat-suggestion:hover:not(:disabled) {
+  background: rgba(79, 195, 247, 0.08);
+  border-color: #4fc3f7;
+}
+
+.chat-suggestion:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .chat-msg {

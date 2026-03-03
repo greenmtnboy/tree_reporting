@@ -103,6 +103,18 @@ const TOOLS = [
       required: ['name'],
     },
   },
+  {
+    name: 'send_user_message',
+    description:
+      'Send a message to the user immediately, while continuing to work. Use this to share partial results, progress updates, or context before your final answer. After calling this, keep using other tools as needed, then call return_to_user when fully done.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', description: 'The message to display to the user right now' },
+      },
+      required: ['message'],
+    },
+  },
   RETURN_TO_USER_TOOL,
 ]
 
@@ -178,7 +190,9 @@ function cancelPendingNavigationTimers() {
 function toToolCallRecords(
   executedToolCalls?: LibChatMessage['executedToolCalls'],
 ): ToolCallRecord[] | undefined {
-  const display = executedToolCalls?.filter((tc) => tc.name !== 'return_to_user')
+  const display = executedToolCalls?.filter(
+    (tc) => tc.name !== 'return_to_user' && tc.name !== 'send_user_message',
+  )
   if (!display?.length) return undefined
   return display.map((tc) => ({
     id: tc.id,
@@ -357,6 +371,17 @@ WHERE tree_id IS NOT NULL
             return { success: true, message: 'No landmarks found matching that name.' }
           return { success: true, message: JSON.stringify(matches.slice(0, 5)) }
         }
+        case 'send_user_message': {
+          const { message } = input as { message: string }
+          const intermediateMsg: ChatMessage = { role: 'assistant', content: message }
+          const loadingIdx = messages.value.findIndex((m) => m.isLoading)
+          if (loadingIdx !== -1) {
+            messages.value.splice(loadingIdx, 0, intermediateMsg)
+          } else {
+            messages.value.push(intermediateMsg)
+          }
+          return { success: true, message: 'Message delivered to user.' }
+        }
         default:
           return { success: false, error: `Unknown tool: ${name}` }
       }
@@ -377,8 +402,6 @@ WHERE tree_id IS NOT NULL
     messages.value.push(loadingMsg)
     isLoading.value = true
 
-    let loadingReplaced = false
-
     const persistence: MessagePersistence = {
       addMessage: (msg) => {
         llmHistory.push(msg)
@@ -392,14 +415,24 @@ WHERE tree_id IS NOT NULL
           toolCalls: toToolCallRecords(msg.executedToolCalls),
         }
 
-        if (!loadingReplaced && msg.role === 'assistant') {
-          // Swap the loading placeholder for the first real assistant message
+        if (msg.role === 'assistant') {
           const idx = messages.value.indexOf(loadingMsg)
-          if (idx !== -1) {
-            messages.value.splice(idx, 1, appMsg)
-            loadingReplaced = true
+          if (returnToUser) {
+            // Final message — replace the loading placeholder
+            if (idx !== -1) {
+              messages.value.splice(idx, 1, appMsg)
+            } else {
+              messages.value.push(appMsg)
+            }
             return
           }
+          // Intermediate message (tool calls) — insert before the spinner so it stays visible
+          if (idx !== -1) {
+            messages.value.splice(idx, 0, appMsg)
+          } else {
+            messages.value.push(appMsg)
+          }
+          return
         }
         messages.value.push(appMsg)
       },
