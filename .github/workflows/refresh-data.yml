@@ -9,6 +9,9 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     environment: prod
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,6 +24,13 @@ jobs:
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt
+
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: 'projects/734709568634/locations/global/workloadIdentityPools/github/providers/trilogy-public-models'
+          project_id: 'preqldata'
 
       - name: Refresh data
         id: refresh_step

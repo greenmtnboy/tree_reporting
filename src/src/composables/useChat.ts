@@ -7,11 +7,21 @@ import { useLandmarkData } from './useLandmarkData'
 import { useMapData } from './useMapData'
 import TREES_MODEL from '../../../data/raw/tree_info.preql?raw'
 
-const API_KEY_STORAGE = 'sf_trees_anthropic_key'
+const API_KEY_STORAGE = 'sf_trees_api_key'
+const API_TYPE_STORAGE = 'sf_trees_provider_type'
 const MAX_LOOPS = 10
 const TRILOGY_RESOLVER_URL = 'https://trilogy-service.fly.dev'
 const LLM_CONNECTION = 'sf-trees'
-const MODEL = 'claude-sonnet-4-6'
+
+// Default models per provider — used when first creating the connection so
+// generateCompletion works immediately without waiting for reset() to finish.
+const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
+  anthropic: 'claude-sonnet-4-6',
+  openai: 'gpt-4o',
+  google: 'gemini-2.0-flash-001',
+  openrouter: 'openai/gpt-4o-mini',
+  demo: 'deepseek/deepseek-v3.2',
+}
 
 const TREES_MODEL_SOURCE = { alias: 'trees', contents: TREES_MODEL }
 
@@ -144,6 +154,7 @@ Be concise and helpful. When showing query results, format them nicely.`,
 // Module-level state (singleton)
 const messages = ref<ChatMessage[]>([])
 const isLoading = ref(false)
+const providerType = ref(localStorage.getItem(API_TYPE_STORAGE) || '')
 const apiKey = ref(localStorage.getItem(API_KEY_STORAGE) || '')
 const pendingNavigationTimers: number[] = []
 
@@ -169,16 +180,27 @@ export function useChat() {
     trilogy.userSettingsStore.updateSetting('trilogyResolver', TRILOGY_RESOLVER_URL)
   }
 
-  // Register (or update the key on) the Anthropic LLM connection
-  function ensureConnection() {
+  // Create or update the LLM connection based on current providerType/apiKey
+  async function ensureConnection() {
     const existing = trilogy.llmConnectionStore.connections[LLM_CONNECTION]
+    const model = PROVIDER_DEFAULT_MODELS[providerType.value] || ''
+
     if (!existing) {
-      trilogy.llmConnectionStore.newConnection(LLM_CONNECTION, 'anthropic', {
+      await trilogy.llmConnectionStore.newConnection(LLM_CONNECTION, providerType.value, {
         apiKey: apiKey.value,
-        model: MODEL,
+        model,
+        saveCredential: false,
+      })
+    } else if (existing.type !== providerType.value) {
+      // Provider type changed — remove old and create fresh
+      delete trilogy.llmConnectionStore.connections[LLM_CONNECTION]
+      await trilogy.llmConnectionStore.newConnection(LLM_CONNECTION, providerType.value, {
+        apiKey: apiKey.value,
+        model,
         saveCredential: false,
       })
     } else {
+      // Same type, just refresh the key
       existing.setApiKey(apiKey.value)
     }
   }
@@ -197,10 +219,27 @@ export function useChat() {
     return response.data.generated_sql
   }
 
-  function setApiKey(key: string) {
+  function setConnection(type: string, key: string) {
+    providerType.value = type
     apiKey.value = key
+    localStorage.setItem(API_TYPE_STORAGE, type)
     localStorage.setItem(API_KEY_STORAGE, key)
-    ensureConnection()
+    // Remove existing connection so ensureConnection recreates it with new settings
+    if (trilogy.llmConnectionStore.connections[LLM_CONNECTION]) {
+      delete trilogy.llmConnectionStore.connections[LLM_CONNECTION]
+    }
+  }
+
+  function deleteConnection() {
+    providerType.value = ''
+    apiKey.value = ''
+    localStorage.removeItem(API_TYPE_STORAGE)
+    localStorage.removeItem(API_KEY_STORAGE)
+    if (trilogy.llmConnectionStore.connections[LLM_CONNECTION]) {
+      delete trilogy.llmConnectionStore.connections[LLM_CONNECTION]
+    }
+    messages.value = []
+    cancelPendingNavigationTimers()
   }
 
   // Convert UI ChatMessage[] to the library's LLMMessage-compatible history format
@@ -341,7 +380,7 @@ WHERE tree_id IS NOT NULL
     isLoading.value = true
 
     try {
-      ensureConnection()
+      await ensureConnection()
       // buildHistory() includes all settled turns, ending with the current user message
       let loopHistory = buildHistory()
       let loopCount = 0
@@ -414,9 +453,11 @@ WHERE tree_id IS NOT NULL
   return {
     messages,
     isLoading,
+    providerType: computed(() => providerType.value),
     apiKey: computed(() => apiKey.value),
-    hasApiKey: computed(() => !!apiKey.value),
-    setApiKey,
+    isConfigured: computed(() => providerType.value === 'demo' ? !!providerType.value : !!apiKey.value),
+    setConnection,
+    deleteConnection,
     sendMessage,
     clearMessages,
   }
