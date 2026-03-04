@@ -118,6 +118,12 @@ const TOOLS = [
   RETURN_TO_USER_TOOL,
 ]
 
+const _today = new Date().toLocaleDateString('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+})
+
 const SYSTEM_PROMPT = buildCustomTrilogyPrompt(
   ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the SF Trees map application. You help users explore San Francisco's urban forest dataset of approximately 10,000 street trees.
 
@@ -164,7 +170,9 @@ IMPORTANT GUIDELINES:
 3. If a query fails, explain the error and try a corrected version.
 4. Always finish by calling return_to_user with your complete response. Never return a plain text reply — use return_to_user to signal you are done.
 
-Be concise and helpful. When showing query results, format them nicely.`,
+Be concise and helpful. When showing query results, format them nicely.
+
+Today's date: ${_today}`,
 )
 
 // Module-level state (singleton)
