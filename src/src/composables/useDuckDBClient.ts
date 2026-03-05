@@ -9,6 +9,7 @@ type WorkerMethodMap = {
   ensureInit: { params: Record<string, never>; result: { ready: boolean; initError: string | null } }
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
+  setColorOverrideSql: { params: { sql: string | null }; result: void }
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
   setVisibleTileRange: { params: { z: number; minX: number; maxX: number; minY: number; maxY: number }; result: void }
@@ -36,6 +37,8 @@ type WorkerResponse<K extends keyof WorkerMethodMap = keyof WorkerMethodMap> = {
 
 const ready = ref(false)
 const initError = ref<string | null>(null)
+const workerDistinctColors = ref<string[]>([])
+const workerColorLabelMap = ref<Record<string, string>>({})
 
 let worker: Worker | null = null
 let nextRequestId = 1
@@ -51,9 +54,18 @@ function getWorker(): Worker {
   if (worker) return worker
 
   worker = new DuckDBPipelineWorker({ name: 'duckdb-pipeline-worker' })
-  worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+  worker.onmessage = (event: MessageEvent) => {
     const msg = event.data
-    if (!msg || msg.type !== 'response') return
+    if (!msg) return
+
+    // Handle non-RPC push messages from the worker
+    if (msg.type === 'colorMapUpdate') {
+      workerDistinctColors.value = msg.distinctColors ?? []
+      workerColorLabelMap.value = msg.colorLabelMap ?? {}
+      return
+    }
+
+    if (msg.type !== 'response') return
 
     const waiter = pending.get(msg.requestId)
     if (!waiter) return
@@ -106,9 +118,9 @@ function parseDuckdbTileUrl(url: string): { z: number; x: number; y: number } | 
 
 function fireAndForget<K extends Exclude<keyof WorkerMethodMap,
   'ensureInit' | 'prefetchVisibleDetailTilesAtZoom' | 'prewarmLodCaches' | 'query' | 'getTile'>>(
-  method: K,
-  params: WorkerMethodMap[K]['params'],
-): void {
+    method: K,
+    params: WorkerMethodMap[K]['params'],
+  ): void {
   void rpc(method, params).catch((e) => {
     console.warn(`[DuckDB RPC] ${String(method)} failed`, e)
   })
@@ -139,6 +151,11 @@ async function setTileQuery(sql: string | null): Promise<void> {
 async function setPublishedTreeIdFilterSql(sql: string | null): Promise<void> {
   await ensureInit()
   await rpc('setPublishedTreeIdFilterSql', { sql })
+}
+
+async function setColorOverrideSql(sql: string | null): Promise<void> {
+  await ensureInit()
+  await rpc('setColorOverrideSql', { sql })
 }
 
 function setViewportZoom(zoom: number) {
@@ -203,11 +220,14 @@ export function useDuckDB() {
     ensureTileProtocolRegistered,
     setTileQuery,
     setPublishedTreeIdFilterSql,
+    setColorOverrideSql,
     setViewportZoom,
     setViewportCenter,
     setVisibleTileRange,
     prefetchVisibleDetailTilesAtZoom,
     prewarmLodCaches,
     setAutoTileFetchEnabled,
+    workerDistinctColors,
+    workerColorLabelMap,
   }
 }

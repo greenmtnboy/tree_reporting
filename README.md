@@ -71,3 +71,9 @@ https://github.com/greenmtnboy/sf_tree_reporting
 
 [Urban Forestry](https://bsm.sfdpw.org/urbanforestry/)
 
+## Dev
+
+### Update Data
+```bash
+ trilogy refresh data\raw\tree_info.preql --env=.env
+```

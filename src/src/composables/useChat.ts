@@ -53,13 +53,18 @@ const TOOLS = [
   {
     name: 'publish_results',
     description:
-      'Takes a Trilogy SELECT query that returns tree_id values for the trees to display on the map. Compiles and executes the query, persists those IDs as the active map filter, and applies DB-side filtering across map tiles. Use this after the user asks to show/highlight a subset of trees. The query only needs tree_id.',
+      'Takes a Trilogy SELECT query that returns tree_id values for the trees to display on the map. Compiles and executes the query, persists those IDs as the active map filter, and applies DB-side filtering across map tiles. Use this after the user asks to show/highlight a subset of trees. To color trees, also SELECT an override_color column in the query (a hex color string computed with a CASE/IF expression — all coloring logic must be expressed in Trilogy so it is materialized before reaching the map). Provide color_labels to add a legend. Example: SELECT tree_id, case when diameter_at_breast_height >= 20 then \'#FF69B4\' else \'#4169E1\' end as override_color WHERE ...',
     input_schema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'Trilogy SELECT returning tree_id values (alias optional)',
+          description: 'Trilogy SELECT returning tree_id. Optionally include override_color (hex string) for per-tree coloring — compute it inline with a CASE/IF expression.',
+        },
+        color_labels: {
+          type: 'object',
+          description: 'Maps hex colors used in override_color to legend labels shown on the map, e.g. {"#FF69B4": "DBH ≥ 20\\"", "#4169E1": "DBH < 20\\""}',
+          additionalProperties: { type: 'string' },
         },
       },
       required: ['query'],
@@ -166,7 +171,7 @@ VALID DATA TYPES: ${datatypes.join(', ')}
 
 IMPORTANT GUIDELINES:
 1. Use a reasonable LIMIT (e.g., 100–500) for exploratory run_query calls. For publish_results tree_id filters, do not add restrictive LIMIT unless the user explicitly asks for a capped subset.
-2. For publish_results, return only tree_id (or alias that resolves to tree_id). Do not require latitude/longitude in publish queries.
+2. For publish_results, include tree_id in the SELECT. To color trees, also SELECT override_color (a hex string) computed inline: SELECT tree_id, case when diameter_at_breast_height >= 20 then '#FF69B4' else '#4169E1' end as override_color WHERE ... All color logic must live in Trilogy — do not use color_field or color_mapping. Provide color_labels to label the legend: {"#FF69B4": "DBH ≥ 20\"", "#4169E1": "DBH < 20\""}.
 3. If a query fails, explain the error and try a corrected version.
 4. Always finish by calling return_to_user with your complete response. Never return a plain text reply — use return_to_user to signal you are done.
 
@@ -215,7 +220,7 @@ export function useChat() {
   const { query: duckQuery } = useDuckDB()
   const { flyTo } = useFlyTo()
   const { landmarks } = useLandmarkData()
-  const { publishMapTreeIdFilterSql, clearMapTreeIdFilter } = useMapData()
+  const { publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
   const trilogy = useTrilogyCore()
 
   // Ensure the Trilogy resolver points at the production service
@@ -306,8 +311,16 @@ export function useChat() {
           }
         }
         case 'publish_results': {
-          const { query } = input as { query: string }
+          const { query, color_labels } = input as {
+            query: string
+            color_labels?: Record<string, string>
+          }
           const sql = await compilePreQL(query)
+
+          // Check if the query returns an override_color column
+          const { columns } = await duckQuery(`SELECT * FROM (${sql}) AS __probe LIMIT 0`)
+          const hasColor = columns.includes('override_color')
+
           const wrappedSql = `
 SELECT tree_id
 FROM (
@@ -328,8 +341,22 @@ WHERE tree_id IS NOT NULL
             }
           }
 
+          if (hasColor) {
+            const colorOverrideSql = `
+SELECT tree_id, CAST(override_color AS VARCHAR) AS override_color
+FROM (
+${sql}
+) AS __color_src
+WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
+`
+            publishColorOverride(colorOverrideSql, color_labels ?? null)
+          } else {
+            publishColorOverride(null, null)
+          }
+
           publishMapTreeIdFilterSql(wrappedSql)
-          return { success: true, message: `Published ${count} tree_ids to the map filter.` }
+          const colorNote = hasColor ? ' with per-tree coloring' : ''
+          return { success: true, message: `Published ${count} tree_ids to the map filter${colorNote}.` }
         }
         case 'navigate': {
           cancelPendingNavigationTimers()

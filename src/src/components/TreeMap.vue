@@ -2,13 +2,19 @@
   <div ref="mapContainer" class="tree-map"></div>
   <div v-if="isInitialLoading" class="map-loading">{{ loadingMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
+  <div v-if="!isInitialLoading && legendEntries.length" class="map-legend">
+    <div v-for="entry in legendEntries" :key="entry.color" class="legend-entry">
+      <span class="legend-swatch" :style="{ background: entry.color }"></span>
+      <span class="legend-label">{{ entry.label }}</span>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import maplibregl from 'maplibre-gl'
 import { useTreeData } from '../composables/useTreeData'
-import { registerTreeIcons, CATEGORY_COLORS } from '../composables/useTreeCategories'
+import { registerTreeIcons, registerCategoryColoredIcons } from '../composables/useTreeCategories'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData } from '../composables/useMapData'
 import { useDuckDB } from '../composables/useDuckDB'
@@ -51,18 +57,36 @@ const {
   ensureTileProtocolRegistered,
   setTileQuery,
   setPublishedTreeIdFilterSql,
+  setColorOverrideSql,
   setViewportZoom,
   setViewportCenter,
   setVisibleTileRange,
   prefetchVisibleDetailTilesAtZoom,
   prewarmLodCaches,
   setAutoTileFetchEnabled,
+  workerDistinctColors,
+  workerColorLabelMap,
 } = useDuckDB()
 const { categoryIcons, loading, error, getSpeciesEnrichment } = useTreeData()
 const { target: flyToTarget } = useFlyTo()
-const { currentMapQuery, publishedTreeIdFilterSql, mapQueryRevision, publishMapQuery } = useMapData()
+const { currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision, publishMapQuery } = useMapData()
 const displayError = computed(() => error.value ?? mapError.value)
 const isInitialLoading = computed(() => loading.value || defaultQueryLoading.value || introActive.value)
+
+// Legend: derived from the worker's active color label map (updated when color map changes).
+// When the agent provides a colorLabelMap via useMapData, prefer that; otherwise use the worker's.
+const legendEntries = computed(() => {
+  const labelMap = colorLabelMap.value ?? workerColorLabelMap.value
+  if (!labelMap || Object.keys(labelMap).length === 0) return []
+  return Object.entries(labelMap)
+    .filter(([color]) => color !== '#66BB6A') // Hide "Other" from legend
+    .map(([color, label]) => ({ color, label }))
+})
+
+// Active distinct colors from the worker, used to build heatmap layers dynamically.
+const activeHeatmapColors = computed(() => {
+  return workerDistinctColors.value.length > 0 ? workerDistinctColors.value : []
+})
 
 const MAX_ZOOM = 19
 
@@ -82,6 +106,7 @@ const CENTER_ICON_GRID_MIN_TOTAL_ICONS = 8
 const VIEWPORT_TREE_MIN_FEATURES = 1
 const VIEWPORT_TREE_STABLE_FRAMES = 2
 const TREE_CATEGORIES: TreeCategory[] = ['palm', 'broadleaf', 'spreading', 'coniferous', 'columnar', 'ornamental', 'default']
+let lastBuiltHeatmapColors: string[] = []
 
 // Centralized zoom pivot points for layer transitions/sizing.
 const HEATMAP_ZOOM_INTENSITY_START = 10
@@ -556,36 +581,29 @@ function logIconLayerSnapshot(reason: string) {
   })
 }
 
-function buildColorExpression(): maplibregl.ExpressionSpecification {
-  const entries = Object.entries(CATEGORY_COLORS)
-  const expr: any[] = ['match', ['get', 'category']]
-  for (const [cat, color] of entries) {
-    expr.push(cat, color)
-  }
-  expr.push('#66BB6A') // fallback
-  return expr as maplibregl.ExpressionSpecification
+// Circle color: use the per-tree display_color from the tile directly.
+function buildCircleColorExpression(): maplibregl.ExpressionSpecification {
+  return ['coalesce', ['get', 'display_color'], '#66BB6A'] as maplibregl.ExpressionSpecification
 }
 
+// Icon: use category shape with display_color coloring.
+// Icon name format: tree-{category}-{hex}
 function buildIconExpression(): maplibregl.ExpressionSpecification {
-  const expr: any[] = ['match', ['get', 'category']]
-  for (const cat of TREE_CATEGORIES) {
-    expr.push(cat, `tree-${cat}`)
-  }
-  expr.push('tree-default') // fallback
-  return expr as maplibregl.ExpressionSpecification
+  return [
+    'concat', 'tree-', ['coalesce', ['get', 'category'], 'default'], '-', ['coalesce', ['get', 'display_color'], '#66BB6A'],
+  ] as unknown as maplibregl.ExpressionSpecification
 }
 
-function buildHeatmapColorExpression(category: TreeCategory): maplibregl.ExpressionSpecification {
-  const color = CATEGORY_COLORS[category] ?? '#66BB6A'
+function buildHeatmapColorExpression(hexColor: string): maplibregl.ExpressionSpecification {
   return [
     'interpolate',
     ['linear'],
     ['heatmap-density'],
     0, 'rgba(0,0,0,0)',
     0.05, 'rgba(0,0,0,0)',
-    0.15, color,
-    0.55, color,
-    1, color,
+    0.15, hexColor,
+    0.55, hexColor,
+    1, hexColor,
   ] as maplibregl.ExpressionSpecification
 }
 
@@ -716,10 +734,12 @@ function addTreeLayers() {
   const t0 = nowMs()
   console.info('[Perf] map:layers:add:start')
   const treeTiles = [`duckdb://trees/{z}/{x}/{y}.pbf?r=${mapQueryRevision.value}&n=${treesSourceReloadNonce}`]
-  const heatLayerIds = TREE_CATEGORIES.map((category) => `trees-heat-${category}`)
+  const heatColors = activeHeatmapColors.value
+  const heatLayerIds = heatColors.map((hex) => `trees-heat-${hex}`)
 
   const existingSource = mapInstance.getSource('trees') as any
-  const hasHeatLayers = heatLayerIds.every((id) => !!mapInstance.getLayer(id))
+  // Check if heatmap layer IDs match the currently active colors
+  const hasHeatLayers = heatLayerIds.length > 0 && heatLayerIds.every((id) => !!mapInstance.getLayer(id))
   const hasCircleLayer = !!mapInstance.getLayer('trees-circle')
   const hasIconLayer = !!mapInstance.getLayer('trees-icon')
 
@@ -742,9 +762,8 @@ function addTreeLayers() {
 
   if (mapInstance.getLayer('trees-icon')) mapInstance.removeLayer('trees-icon')
   if (mapInstance.getLayer('trees-circle')) mapInstance.removeLayer('trees-circle')
-  for (const id of heatLayerIds) {
-    if (mapInstance.getLayer(id)) mapInstance.removeLayer(id)
-  }
+  // Remove old heatmap layers (both category-based and color-based)
+  removeOldHeatmapLayers(mapInstance)
   if (mapInstance.getSource('trees')) mapInstance.removeSource('trees')
 
   mapInstance.addSource('trees', {
@@ -756,15 +775,15 @@ function addTreeLayers() {
     maxzoom: TREES_SOURCE_MAXZOOM,
   })
 
-  // Layer 1: Category heatmaps at far zoom.
-  for (const category of TREE_CATEGORIES) {
+  // Layer 1: Heatmaps per active display_color.
+  for (const hexColor of heatColors) {
     mapInstance.addLayer({
-      id: `trees-heat-${category}`,
+      id: `trees-heat-${hexColor}`,
       type: 'heatmap',
       source: 'trees',
       'source-layer': 'trees',
       maxzoom: HEATMAP_ZOOM_OPACITY_END,
-      filter: ['==', ['coalesce', ['get', 'category'], 'default'], category],
+      filter: ['==', ['coalesce', ['get', 'display_color'], '#66BB6A'], hexColor],
       paint: {
         // Normalize count by grid area so heatmap color is consistent across
         // different aggregation tiers. Reference grid is 32m.
@@ -793,7 +812,7 @@ function addTreeLayers() {
           HEATMAP_ZOOM_RADIUS_MID, 14,
           HEATMAP_ZOOM_RADIUS_END, 22,
         ],
-        'heatmap-color': buildHeatmapColorExpression(category),
+        'heatmap-color': buildHeatmapColorExpression(hexColor),
         'heatmap-opacity': [
           'interpolate', ['linear'], ['zoom'],
           HEATMAP_ZOOM_OPACITY_START, 0.48,
@@ -803,6 +822,7 @@ function addTreeLayers() {
       },
     })
   }
+  lastBuiltHeatmapColors = [...heatColors]
 
   // Layer 2: Colored circles at medium zoom (extended to all zoom levels in simplified mode)
   mapInstance.addLayer({
@@ -816,7 +836,7 @@ function addTreeLayers() {
       'circle-radius': [
         ...buildCircleRadiusExpression(),
       ],
-      'circle-color': buildColorExpression(),
+      'circle-color': buildCircleColorExpression(),
       'circle-opacity': props.simplified
         ? [
             'interpolate', ['linear'], ['zoom'],
@@ -1127,6 +1147,8 @@ onMounted(() => {
         if (e.id.startsWith('tree-')) {
           try {
             registerTreeIcons(map!, categoryIcons.value)
+            const colors = colorLabelMap.value ? Object.keys(colorLabelMap.value) : []
+            if (colors.length > 0) registerCategoryColoredIcons(map!, colors)
           } catch (err) {
             console.warn('[TreeIcons] recovery registration failed', err)
           }
@@ -1168,6 +1190,107 @@ if (!props.simplified) {
   })
 }
 
+/** Remove all existing heatmap layers (both old category-based and current color-based) */
+function removeOldHeatmapLayers(mapInstance: maplibregl.Map) {
+  // Remove color-based heatmap layers
+  for (const hex of lastBuiltHeatmapColors) {
+    const id = `trees-heat-${hex}`
+    if (mapInstance.getLayer(id)) mapInstance.removeLayer(id)
+  }
+  // Also remove any legacy category-based layers that might still exist
+  for (const cat of TREE_CATEGORIES) {
+    const id = `trees-heat-${cat}`
+    if (mapInstance.getLayer(id)) mapInstance.removeLayer(id)
+  }
+  lastBuiltHeatmapColors = []
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const HEATMAP_OPACITY_NORMAL: any = [
+  'interpolate', ['linear'], ['zoom'],
+  HEATMAP_ZOOM_OPACITY_START, 0.48,
+  HEATMAP_ZOOM_OPACITY_MID, 0.33,
+  HEATMAP_ZOOM_OPACITY_END, 0,
+]
+
+// Sync layers to the current color state. Rebuilds heatmap layers when
+// the set of active colors changes. Registers colored icons for all
+// active colors so the icon layer always works.
+function applyColorToLayers() {
+  if (!map) return
+  const colors = activeHeatmapColors.value
+
+  // Register colored icons for all active colors so icon layer can reference them.
+  if (colors.length > 0) {
+    registerCategoryColoredIcons(map, colors)
+  }
+
+  // Update icon expression
+  if (!props.simplified && map.getLayer('trees-icon')) {
+    map.setLayoutProperty('trees-icon', 'icon-image', buildIconExpression())
+  }
+
+  // Update circle color expression
+  if (map.getLayer('trees-circle')) {
+    map.setPaintProperty('trees-circle', 'circle-color', buildCircleColorExpression())
+  }
+
+  // Rebuild heatmap layers if the active color set changed
+  const colorsChanged = colors.length !== lastBuiltHeatmapColors.length
+    || colors.some((c, i) => c !== lastBuiltHeatmapColors[i])
+  if (colorsChanged && map.getSource('trees')) {
+    removeOldHeatmapLayers(map)
+    for (const hexColor of colors) {
+      map.addLayer({
+        id: `trees-heat-${hexColor}`,
+        type: 'heatmap',
+        source: 'trees',
+        'source-layer': 'trees',
+        maxzoom: HEATMAP_ZOOM_OPACITY_END,
+        filter: ['==', ['coalesce', ['get', 'display_color'], '#66BB6A'], hexColor],
+        paint: {
+          'heatmap-weight': [
+            'interpolate', ['linear'],
+            ['*',
+              ['coalesce', ['to-number', ['get', 'point_count']], 1],
+              ['^', ['/', 32, ['coalesce', ['to-number', ['get', 'grid_m']], 32]], 2],
+            ],
+            1, 0.2, 8, 0.45, 32, 0.75, 128, 1.05,
+          ],
+          'heatmap-intensity': [
+            'interpolate', ['linear'], ['zoom'],
+            HEATMAP_ZOOM_INTENSITY_START, 0.85,
+            HEATMAP_ZOOM_INTENSITY_MID, 1.2,
+            HEATMAP_ZOOM_INTENSITY_END, 1.9,
+          ],
+          'heatmap-radius': [
+            'interpolate', ['linear'], ['zoom'],
+            HEATMAP_ZOOM_RADIUS_START, 10,
+            HEATMAP_ZOOM_RADIUS_MID, 14,
+            HEATMAP_ZOOM_RADIUS_END, 22,
+          ],
+          'heatmap-color': buildHeatmapColorExpression(hexColor),
+          'heatmap-opacity': [...HEATMAP_OPACITY_NORMAL],
+        },
+      })
+    }
+    lastBuiltHeatmapColors = [...colors]
+    // Move heatmap layers below circle/icon
+    if (map.getLayer('trees-circle')) {
+      for (const hex of colors) {
+        map.moveLayer(`trees-heat-${hex}`, 'trees-circle')
+      }
+    }
+  } else {
+    // Just refresh heatmap opacity
+    for (const hex of lastBuiltHeatmapColors) {
+      const id = `trees-heat-${hex}`
+      if (!map.getLayer(id)) continue
+      map.setPaintProperty(id, 'heatmap-opacity', [...HEATMAP_OPACITY_NORMAL])
+    }
+  }
+}
+
 // If data loads after map is ready
 watch([currentMapQuery, publishedTreeIdFilterSql, mapQueryRevision], async ([query, filterSql]) => {
   if (!map?.loaded()) return
@@ -1178,9 +1301,22 @@ watch([currentMapQuery, publishedTreeIdFilterSql, mapQueryRevision], async ([que
   defaultQueryLoading.value = true
   lastVisibleRangeSigByZoom.clear()
   introLockedRangeByZoom.clear()
+  await setColorOverrideSql(colorOverrideSql.value)
   await setTileQuery(query)
   await setPublishedTreeIdFilterSql(filterSql)
   addTreeLayers()
+  applyColorToLayers()
+})
+
+// When the worker posts new color info (init or agent override), rebuild layers.
+watch(workerDistinctColors, () => {
+  if (!map?.loaded()) return
+  applyColorToLayers()
+  // Force a source reload so tiles with new display_color propagate.
+  const src = map.getSource('trees') as any
+  if (src && typeof src.reload === 'function') {
+    src.reload()
+  }
 })
 
 // Compute bearing from current map center to a target point
@@ -1299,6 +1435,42 @@ onUnmounted(() => {
 .map-error {
   background: rgba(183, 28, 28, 0.9);
   color: #ffcdd2;
+}
+
+.map-legend {
+  position: absolute;
+  bottom: 28px;
+  right: 8px;
+  background: rgba(22, 33, 62, 0.88);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  pointer-events: none;
+}
+
+.legend-entry {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.legend-label {
+  font-size: 0.72rem;
+  color: #c8cfe8;
+  white-space: nowrap;
 }
 </style>
 

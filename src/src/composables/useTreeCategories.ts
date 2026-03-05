@@ -44,7 +44,7 @@ export const CATEGORY_COLORS: Record<TreeCategory, string> = {
   default: '#66BB6A',
 }
 
-const CATEGORY_LABELS: Record<TreeCategory, string> = {
+export const CATEGORY_LABELS: Record<TreeCategory, string> = {
   palm: 'Palm',
   broadleaf: 'Broadleaf',
   spreading: 'Spreading',
@@ -65,12 +65,12 @@ export function getTreeCategory(qSpecies: string): CategoryInfo {
 }
 
 /** Generate a canvas image for a tree category silhouette */
-function drawTreeIcon(category: TreeCategory, size: number): HTMLCanvasElement {
+function drawTreeIcon(category: TreeCategory, size: number, color?: string): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')!
-  const color = CATEGORY_COLORS[category]
+  color = color ?? CATEGORY_COLORS[category]
   const cx = size / 2
   const _bottom = size - 2
 
@@ -209,6 +209,37 @@ function decodeBase64ToU8(base64: string): Uint8Array {
     bytes[i] = bin.charCodeAt(i)
   }
   return bytes
+}
+
+/**
+ * Register category-shaped icons for each given hex color.
+ * Image names are `tree-{category}-{hex}` (e.g. `tree-broadleaf-#4CAF50`).
+ * This is also used for the default category colors so the pipeline is uniform.
+ */
+export function registerCategoryColoredIcons(map: maplibregl.Map, hexColors: string[], size = 48): void {
+  for (const hex of hexColors) {
+    for (const cat of ALL_CATEGORIES) {
+      const imageName = `tree-${cat}-${hex}`
+      if (map.hasImage(imageName)) continue
+      try {
+        const canvas = drawTreeIcon(cat, size, hex)
+        const ctx = canvas.getContext('2d')
+        if (!ctx) continue
+        const imageData = ctx.getImageData(0, 0, size, size)
+        map.addImage(imageName, {
+          width: size,
+          height: size,
+          data: new Uint8Array(imageData.data.buffer),
+        })
+      } catch (e) {
+        console.warn('[TreeIcons] failed to register colored category icon', {
+          cat,
+          hex,
+          error: (e as Error)?.message ?? String(e),
+        })
+      }
+    }
+  }
 }
 
 /** Register all tree icons with a MapLibre map instance */
