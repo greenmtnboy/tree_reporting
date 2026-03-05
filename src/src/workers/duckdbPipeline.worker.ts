@@ -52,6 +52,28 @@ const WEB_MERCATOR_WORLD = WEB_MERCATOR_MAX * 2
 const MAX_TILE_CACHE_ENTRIES = 1536
 const MAX_PARALLEL_TILE_WORK = 3
 const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
+const COLOR_MAP_TABLE = '__tree_color_map'
+
+// Default category → hex color mapping (matches CATEGORY_COLORS in useTreeCategories.ts)
+const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
+  palm: '#e6a835',
+  broadleaf: '#4CAF50',
+  spreading: '#8BC34A',
+  coniferous: '#2E7D32',
+  columnar: '#43A047',
+  ornamental: '#E91E63',
+  default: '#66BB6A',
+}
+
+const DEFAULT_CATEGORY_LABELS: Record<string, string> = {
+  '#e6a835': 'Palm',
+  '#4CAF50': 'Broadleaf',
+  '#8BC34A': 'Spreading',
+  '#2E7D32': 'Coniferous',
+  '#43A047': 'Columnar',
+  '#E91E63': 'Ornamental',
+  '#66BB6A': 'Other',
+}
 
 type TileBounds = { minX: number; maxX: number; minY: number; maxY: number }
 type PrefetchStatus = 'executed' | 'deduped' | 'skipped'
@@ -84,6 +106,9 @@ let tileQuerySql: string | null = null
 let tileQueryRevision = 0
 let publishedTreeIdFilterSql: string | null = null
 let publishedTreeIdFilterSignature = 'all'
+let colorMapSignature = 'default'
+let activeDistinctColors: string[] = Object.values(DEFAULT_CATEGORY_COLORS)
+let activeColorLabelMap: Record<string, string> = { ...DEFAULT_CATEGORY_LABELS }
 let activeViewportZoom = 13
 let activeViewportCenter: { lng: number; lat: number } | null = null
 let spatialExtensionReady = false
@@ -111,7 +136,7 @@ function hashText(text: string): string {
 }
 
 function treeFilterSignature(): string {
-  return publishedTreeIdFilterSignature
+  return `${publishedTreeIdFilterSignature}|${colorMapSignature}`
 }
 
 function applyTreeFilterToBaseQuery(baseQuery: string): string {
@@ -538,31 +563,11 @@ async function doInit() {
   `)
   }
 
+  // Build default color map: each tree gets a display_color from its category
+  await buildDefaultColorMap()
+
   hasAggCacheByZoom.clear()
-  for (const z of [14]) {
-    try {
-      // Rebuild aggregate cache from trees_fast with category breakout so
-      // aggregated circles preserve effective color, not just default green.
-      const gridM = baseSimplifyGridMetersForZoom(z)
-      if (gridM <= 0) continue
-      await conn.query(`
-        CREATE OR REPLACE TABLE agg_z${z}_cache AS
-        SELECT
-          xtile_z${z} AS xtile,
-          ytile_z${z} AS ytile,
-          floor(x_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gx,
-          floor(y_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gy,
-          COALESCE(tree_category, 'default') AS category,
-          AVG(TRY_CAST(dbh AS DOUBLE)) AS dbh,
-          COUNT(*) AS point_count
-        FROM trees_fast
-        GROUP BY 1, 2, 3, 4, 5
-      `)
-      hasAggCacheByZoom.add(z)
-    } catch {
-      // runtime fallback stays active
-    }
-  }
+  await rebuildAggCaches()
 
   dataTileBoundsByZoom.clear()
   for (let z = 13; z <= 20; z += 1) {
@@ -601,7 +606,71 @@ async function doInit() {
 
   ready = true
   initError = null
+  postColorMapUpdate()
   console.info('[Perf] duckdb-worker:init:done', { ms: Math.round(nowMs() - t0) })
+}
+
+/** Post the active color label map and distinct colors to the main thread */
+function postColorMapUpdate() {
+  ctx.postMessage({
+    type: 'colorMapUpdate',
+    distinctColors: activeDistinctColors,
+    colorLabelMap: activeColorLabelMap,
+  })
+}
+
+/** Create / reset the __tree_color_map table from default category→color assignment */
+async function buildDefaultColorMap() {
+  if (!conn) return
+  await conn.query(`DROP TABLE IF EXISTS ${COLOR_MAP_TABLE}`)
+  await conn.query(`
+    CREATE TABLE ${COLOR_MAP_TABLE} AS
+    SELECT
+      tree_id,
+      CASE COALESCE(tree_category, 'default')
+        WHEN 'palm'        THEN '${DEFAULT_CATEGORY_COLORS.palm}'
+        WHEN 'broadleaf'   THEN '${DEFAULT_CATEGORY_COLORS.broadleaf}'
+        WHEN 'spreading'   THEN '${DEFAULT_CATEGORY_COLORS.spreading}'
+        WHEN 'coniferous'  THEN '${DEFAULT_CATEGORY_COLORS.coniferous}'
+        WHEN 'columnar'    THEN '${DEFAULT_CATEGORY_COLORS.columnar}'
+        WHEN 'ornamental'  THEN '${DEFAULT_CATEGORY_COLORS.ornamental}'
+        ELSE '${DEFAULT_CATEGORY_COLORS.default}'
+      END AS display_color
+    FROM trees_fast
+  `)
+  activeDistinctColors = Object.values(DEFAULT_CATEGORY_COLORS)
+  activeColorLabelMap = { ...DEFAULT_CATEGORY_LABELS }
+  colorMapSignature = 'default'
+}
+
+/** Rebuild the z14 aggregate cache using display_color from the color map */
+async function rebuildAggCaches() {
+  if (!conn) return
+  hasAggCacheByZoom.clear()
+  for (const z of [14]) {
+    try {
+      const gridM = baseSimplifyGridMetersForZoom(z)
+      if (gridM <= 0) continue
+      await conn.query(`
+        CREATE OR REPLACE TABLE agg_z${z}_cache AS
+        SELECT
+          tf.xtile_z${z} AS xtile,
+          tf.ytile_z${z} AS ytile,
+          floor(tf.x_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gx,
+          floor(tf.y_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gy,
+          COALESCE(tf.tree_category, 'default') AS category,
+          cm.display_color,
+          AVG(TRY_CAST(tf.dbh AS DOUBLE)) AS dbh,
+          COUNT(*) AS point_count
+        FROM trees_fast tf
+        INNER JOIN ${COLOR_MAP_TABLE} cm ON tf.tree_id = cm.tree_id
+        GROUP BY 1, 2, 3, 4, 5, 6
+      `)
+      hasAggCacheByZoom.add(z)
+    } catch {
+      // runtime fallback stays active
+    }
+  }
 }
 
 async function ensureInit(): Promise<void> {
@@ -653,6 +722,7 @@ WITH base AS (
       'id': COALESCE(base.tree_id, tf.tree_id, 0),
       'dbh': TRY_CAST(COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS DOUBLE),
       'category': COALESCE(tf.tree_category, 'default'),
+      'display_color': cm.display_color,
       'rotation': 0,
       'point_count': 1,
       'grid_m': 32
@@ -660,6 +730,8 @@ WITH base AS (
   FROM base
   INNER JOIN trees_fast tf
     ON base.tree_id = tf.tree_id
+  INNER JOIN ${COLOR_MAP_TABLE} cm
+    ON tf.tree_id = cm.tree_id
 )
 SELECT xtile, ytile, feature
 FROM rows
@@ -753,12 +825,15 @@ WITH base AS (
     COALESCE(base.tree_id, tf.tree_id, 0) AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
     COALESCE(tf.tree_category, 'default') AS category,
+    cm.display_color,
     0 AS rotation,
     ${tileXExpr('tf', z)} AS xtile,
     ${tileYExpr('tf', z)} AS ytile
   FROM base
   INNER JOIN trees_fast tf
     ON base.tree_id = tf.tree_id
+  INNER JOIN ${COLOR_MAP_TABLE} cm
+    ON tf.tree_id = cm.tree_id
   WHERE ${tileXExpr('tf', z)} BETWEEN ${minX} AND ${maxX}
     AND ${tileYExpr('tf', z)} BETWEEN ${minY} AND ${maxY}
 ), rows AS (
@@ -776,6 +851,7 @@ WITH base AS (
       'id': id,
       'dbh': TRY_CAST(dbh AS DOUBLE),
       'category': category,
+      'display_color': display_color,
       'rotation': rotation,
       'point_count': 1,
       'grid_m': 32
@@ -847,6 +923,7 @@ WITH agg AS (
     gx,
     gy,
     category,
+    display_color,
     dbh,
     point_count
   FROM agg_z${z}_cache
@@ -866,6 +943,7 @@ WITH agg AS (
       'id': -1,
       'dbh': TRY_CAST(dbh AS DOUBLE),
       'category': COALESCE(category, 'default'),
+      'display_color': display_color,
       'rotation': 0,
       'point_count': TRY_CAST(point_count AS INTEGER),
       'grid_m': ${simplifyGridMeters}
@@ -887,12 +965,15 @@ WITH base AS (
     tf.x_3857,
     tf.y_3857,
     COALESCE(tf.tree_category, 'default') AS category,
+    cm.display_color,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
     ${tileXExpr('tf', z)} AS xtile,
     ${tileYExpr('tf', z)} AS ytile
   FROM base
   INNER JOIN trees_fast tf
     ON base.tree_id = tf.tree_id
+  INNER JOIN ${COLOR_MAP_TABLE} cm
+    ON tf.tree_id = cm.tree_id
 ), bounded AS (
   SELECT *
   FROM pts
@@ -904,10 +985,11 @@ WITH base AS (
     floor(x_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gx,
     floor(y_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gy,
     category,
+    display_color,
     AVG(dbh) AS dbh,
     COUNT(*) AS point_count
   FROM bounded
-  GROUP BY 1, 2, 3, 4, 5
+  GROUP BY 1, 2, 3, 4, 5, 6
 ), rows AS (
   SELECT
     xtile,
@@ -923,6 +1005,7 @@ WITH base AS (
       'id': -1,
       'dbh': TRY_CAST(dbh AS DOUBLE),
       'category': COALESCE(category, 'default'),
+      'display_color': display_color,
       'rotation': 0,
       'point_count': TRY_CAST(point_count AS INTEGER),
       'grid_m': ${simplifyGridMeters}
@@ -946,12 +1029,15 @@ WITH base AS (
     COALESCE(base.tree_id, tf.tree_id, 0) AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
     COALESCE(tf.tree_category, 'default') AS category,
+    cm.display_color,
     0 AS rotation,
     ${tileXExpr('tf', z)} AS xtile,
     ${tileYExpr('tf', z)} AS ytile
   FROM base
   INNER JOIN trees_fast tf
     ON base.tree_id = tf.tree_id
+  INNER JOIN ${COLOR_MAP_TABLE} cm
+    ON tf.tree_id = cm.tree_id
 ), bounded AS (
   SELECT *
   FROM points
@@ -971,6 +1057,7 @@ WITH base AS (
       'id': id,
       'dbh': TRY_CAST(dbh AS DOUBLE),
       'category': category,
+      'display_color': display_color,
       'rotation': rotation,
       'point_count': 1,
       'grid_m': 32
@@ -1056,10 +1143,13 @@ WITH base AS (
     tf.x_3857,
     tf.y_3857,
     COALESCE(tf.tree_category, 'default') AS category,
+    cm.display_color,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh
   FROM base
   INNER JOIN trees_fast tf
     ON base.tree_id = tf.tree_id
+  INNER JOIN ${COLOR_MAP_TABLE} cm
+    ON tf.tree_id = cm.tree_id
   WHERE tf.x_3857 BETWEEN ${bounds.minX} AND ${bounds.maxX}
     AND tf.y_3857 BETWEEN ${bounds.minY} AND ${bounds.maxY}
 ), agg AS (
@@ -1067,10 +1157,11 @@ WITH base AS (
     floor(x_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gx,
     floor(y_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gy,
     category,
+    display_color,
     AVG(dbh) AS dbh,
     COUNT(*) AS point_count
   FROM pts
-  GROUP BY 1, 2, 3
+  GROUP BY 1, 2, 3, 4
 ), tiles AS (
   SELECT {
     'geometry': ST_AsMVTGeom(
@@ -1083,6 +1174,7 @@ WITH base AS (
     'id': -1,
     'dbh': TRY_CAST(dbh AS DOUBLE),
     'category': COALESCE(category, 'default'),
+    'display_color': display_color,
     'rotation': 0,
     'point_count': TRY_CAST(point_count AS INTEGER),
     'grid_m': ${simplifyGridMeters}
@@ -1100,6 +1192,7 @@ WITH base AS (
     COALESCE(base.tree_id, tf.tree_id, 0) AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
     COALESCE(tf.tree_category, 'default') AS category,
+    cm.display_color,
     0 AS rotation,
     1 AS point_count,
     32 AS grid_m,
@@ -1113,6 +1206,8 @@ WITH base AS (
   FROM base
   INNER JOIN trees_fast tf
     ON base.tree_id = tf.tree_id
+  INNER JOIN ${COLOR_MAP_TABLE} cm
+    ON tf.tree_id = cm.tree_id
   WHERE tf.x_3857 BETWEEN ${bounds.minX} AND ${bounds.maxX}
     AND tf.y_3857 BETWEEN ${bounds.minY} AND ${bounds.maxY}
   LIMIT 50000
@@ -1190,7 +1285,9 @@ WHERE tree_id IS NOT NULL
     publishedTreeIdFilterSignature = 'all'
   }
 
-  // Preserve tile cache across filter toggles; keys include filter signature.
+  tileCache.clear()
+  emptyTileKeys.clear()
+  persistentTileCacheKeys.clear()
   inflightTileRequests.clear()
   zoomBatchReady.clear()
   inflightZoomBatch.clear()
@@ -1200,6 +1297,79 @@ WHERE tree_id IS NOT NULL
   prefetchedVisibleRangeSigByZoom.clear()
   prewarmDoneRevision = -1
   prewarmPromise = null
+}
+
+async function setColorOverrideSql(sql: string | null) {
+  await ensureInit()
+  if (!conn) return
+  const normalized = sql?.trim() || null
+
+  if (normalized) {
+    // Agent provided a color override SQL returning (tree_id, override_color).
+    // Rebuild __tree_color_map: use agent colors where provided, fall back to
+    // category defaults for unmatched trees.
+    await conn.query(`DROP TABLE IF EXISTS __agent_color_override`)
+    await conn.query(`
+CREATE TEMP TABLE __agent_color_override AS
+SELECT DISTINCT CAST(tree_id AS BIGINT) AS tree_id, CAST(override_color AS VARCHAR) AS display_color
+FROM (
+  ${normalized}
+) __color_ids
+WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
+`)
+    const countResult = await conn.query(`SELECT COUNT(*) AS cnt FROM __agent_color_override`)
+    const count = Number(countResult.get(0)?.cnt ?? 0)
+
+    if (Number.isFinite(count) && count > 0) {
+      // Rebuild color map: agent colors override category defaults
+      await conn.query(`DROP TABLE IF EXISTS ${COLOR_MAP_TABLE}`)
+      await conn.query(`
+CREATE TABLE ${COLOR_MAP_TABLE} AS
+SELECT
+  tf.tree_id,
+  COALESCE(aco.display_color,
+    CASE COALESCE(tf.tree_category, 'default')
+      WHEN 'palm'        THEN '${DEFAULT_CATEGORY_COLORS.palm}'
+      WHEN 'broadleaf'   THEN '${DEFAULT_CATEGORY_COLORS.broadleaf}'
+      WHEN 'spreading'   THEN '${DEFAULT_CATEGORY_COLORS.spreading}'
+      WHEN 'coniferous'  THEN '${DEFAULT_CATEGORY_COLORS.coniferous}'
+      WHEN 'columnar'    THEN '${DEFAULT_CATEGORY_COLORS.columnar}'
+      WHEN 'ornamental'  THEN '${DEFAULT_CATEGORY_COLORS.ornamental}'
+      ELSE '${DEFAULT_CATEGORY_COLORS.default}'
+    END
+  ) AS display_color
+FROM trees_fast tf
+LEFT JOIN __agent_color_override aco ON tf.tree_id = aco.tree_id
+`)
+      // Compute distinct colors from the rebuilt map
+      const distinctResult = await conn.query(`SELECT DISTINCT display_color FROM ${COLOR_MAP_TABLE}`)
+      activeDistinctColors = distinctResult.toArray().map((r: Record<string, unknown>) => String(r.display_color))
+      colorMapSignature = `color-${hashText(normalizeSql(normalized))}`
+    } else {
+      // No valid override rows — reset to defaults
+      await buildDefaultColorMap()
+    }
+    await conn.query(`DROP TABLE IF EXISTS __agent_color_override`)
+  } else {
+    // No override — reset to category defaults
+    await buildDefaultColorMap()
+  }
+
+  await rebuildAggCaches()
+
+  tileCache.clear()
+  emptyTileKeys.clear()
+  persistentTileCacheKeys.clear()
+  inflightTileRequests.clear()
+  zoomBatchReady.clear()
+  inflightZoomBatch.clear()
+  inflightNeighborhoodBatch.clear()
+  preparedFeatureTablesReady.clear()
+  inflightFeatureTableBuild.clear()
+  prefetchedVisibleRangeSigByZoom.clear()
+  prewarmDoneRevision = -1
+  prewarmPromise = null
+  postColorMapUpdate()
 }
 
 function setViewportZoom(zoom: number) {
@@ -1340,6 +1510,7 @@ type WorkerMethodMap = {
   ensureInit: { params: Record<string, never>; result: { ready: boolean; initError: string | null } }
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
+  setColorOverrideSql: { params: { sql: string | null }; result: void }
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
   setVisibleTileRange: { params: { z: number; minX: number; maxX: number; minY: number; maxY: number }; result: void }
@@ -1403,6 +1574,12 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'setPublishedTreeIdFilterSql': {
         const { sql } = msg.params as WorkerMethodMap['setPublishedTreeIdFilterSql']['params']
         await setPublishedTreeIdFilterSql(sql)
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
+        break
+      }
+      case 'setColorOverrideSql': {
+        const { sql } = msg.params as WorkerMethodMap['setColorOverrideSql']['params']
+        await setColorOverrideSql(sql)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }
@@ -1471,4 +1648,4 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   }
 }
 
-export {}
+export { }

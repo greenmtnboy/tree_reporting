@@ -35,6 +35,7 @@
     <!-- Info panel: field reference -->
     <div v-if="showInfo && isConfigured && !showSettings" class="chat-info-panel">
       <p class="chat-info-heading">Available Data Fields</p>
+      <p>I can tell you about any of the following data points for our SF trees.</p>
       <p class="chat-info-section">Tree Fields</p>
       <ul class="chat-info-list">
         <li><code>tree_id</code> — unique identifier</li>
@@ -44,9 +45,6 @@
         <li><code>site_info</code> — planting site description</li>
         <li><code>latitude</code> / <code>longitude</code></li>
         <li><code>diameter_at_breast_height</code> — trunk diameter (inches)</li>
-      </ul>
-      <p class="chat-info-section">Species Enrichment</p>
-      <ul class="chat-info-list">
         <li><code>native_status</code> — native_bay_area | native_california | non_native | naturalized | unknown</li>
         <li><code>is_evergreen</code> — bool</li>
         <li><code>mature_height_ft</code> / <code>canopy_spread_ft</code></li>

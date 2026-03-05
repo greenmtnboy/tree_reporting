@@ -8,6 +8,7 @@ import sys
 import io
 import requests
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.csv as pv
 from datetime import datetime, timezone
 
@@ -42,11 +43,37 @@ def download_csv() -> io.BytesIO:
     return buf
 
 
+def cast_columns(table: pa.Table) -> pa.Table:
+    # PlantDate: "03/08/2024 12:00:00 AM" -> date32
+    # pc.strptime doesn't support %p (AM/PM), so slice the date portion first
+    if "PlantDate" in table.schema.names:
+        date_str = pc.utf8_slice_codeunits(table["PlantDate"], 0, 10)  # "03/08/2024"
+        ts = pc.strptime(date_str, format="%m/%d/%Y", unit="s")
+        table = table.set_column(
+            table.schema.get_field_index("PlantDate"),
+            "PlantDate",
+            pc.cast(ts, pa.date32()),
+        )
+    # SiteOrder: string -> int64
+    if "SiteOrder" in table.schema.names:
+        table = table.set_column(
+            table.schema.get_field_index("SiteOrder"),
+            "SiteOrder",
+            pc.cast(table["SiteOrder"], pa.int64()),
+        )
+    return table
+
+
 def load_arrow_table(csv_bytes: io.BytesIO) -> pa.Table:
-    return pv.read_csv(
+    table = pv.read_csv(
         csv_bytes,
-        convert_options=pv.ConvertOptions(strings_can_be_null=True),
+        convert_options=pv.ConvertOptions(
+            strings_can_be_null=True,
+            # Keep PlantDate and SiteOrder as strings so we can cast them ourselves
+            column_types={"PlantDate": pa.string(), "SiteOrder": pa.string()},
+        ),
     )
+    return cast_columns(table)
 
 
 def add_rows_updated_at_column(table: pa.Table, updated_at: datetime) -> pa.Table:

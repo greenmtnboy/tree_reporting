@@ -23,6 +23,9 @@ export interface Landmark {
   lat: number
 }
 
+// Maps hex color → display label for the map legend
+export type ColorLabelMap = Record<string, string>
+
 // --- Chat types ---
 
 export interface ChatMessage {
