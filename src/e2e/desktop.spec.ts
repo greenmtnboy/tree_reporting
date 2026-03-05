@@ -4,6 +4,10 @@ test.describe('Desktop layout', () => {
   test.beforeEach(async ({ page }) => {
     // Use a desktop viewport (well above the 768px mobile breakpoint)
     await page.setViewportSize({ width: 1280, height: 800 })
+    // Dismiss the welcome modal so it doesn't block interactions
+    await page.addInitScript(() => {
+      localStorage.setItem('sf_trees_welcome_dismissed', '1')
+    })
     await page.goto('/')
   })
 
