@@ -861,6 +861,11 @@ function addTreeLayers() {
 
   // Layer 3: Tree icons at close zoom (skipped in simplified mode)
   if (!props.simplified) {
+    // Register colored icon variants for all active colors before adding the icon layer.
+    // Icon names are tree-{category}-{hex}, so colored variants must exist at render time.
+    if (heatColors.length > 0) {
+      registerCategoryColoredIcons(mapInstance, heatColors)
+    }
     mapInstance.addLayer({
       id: 'trees-icon',
       type: 'symbol',
