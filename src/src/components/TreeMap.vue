@@ -14,7 +14,7 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import maplibregl from 'maplibre-gl'
 import { useTreeData } from '../composables/useTreeData'
-import { registerTreeIcons, registerCategoryColoredIcons } from '../composables/useTreeCategories'
+import { registerTreeIcons, registerCategoryColoredIcons, CATEGORY_COLORS } from '../composables/useTreeCategories'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData } from '../composables/useMapData'
 import { useDuckDB } from '../composables/useDuckDB'
@@ -85,7 +85,7 @@ const legendEntries = computed(() => {
 
 // Active distinct colors from the worker, used to build heatmap layers dynamically.
 const activeHeatmapColors = computed(() => {
-  return workerDistinctColors.value.length > 0 ? workerDistinctColors.value : []
+  return workerDistinctColors.value.length > 0 ? workerDistinctColors.value : [...CATEGORY_COLORS]
 })
 
 const MAX_ZOOM = 19
