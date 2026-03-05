@@ -349,6 +349,9 @@ ${sql}
 ) AS __color_src
 WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
 `
+            // Execute the full color SQL before publishing so any runtime errors (e.g. invalid datetime
+            // casts) are caught here and returned to the agent as a tool failure to refine.
+            await duckQuery(colorOverrideSql)
             publishColorOverride(colorOverrideSql, color_labels ?? null)
           } else {
             publishColorOverride(null, null)
