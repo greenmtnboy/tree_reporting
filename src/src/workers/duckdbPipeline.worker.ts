@@ -1285,7 +1285,9 @@ WHERE tree_id IS NOT NULL
     publishedTreeIdFilterSignature = 'all'
   }
 
-  // Preserve tile cache across filter toggles; keys include filter signature.
+  tileCache.clear()
+  emptyTileKeys.clear()
+  persistentTileCacheKeys.clear()
   inflightTileRequests.clear()
   zoomBatchReady.clear()
   inflightZoomBatch.clear()
@@ -1355,6 +1357,9 @@ LEFT JOIN __agent_color_override aco ON tf.tree_id = aco.tree_id
 
   await rebuildAggCaches()
 
+  tileCache.clear()
+  emptyTileKeys.clear()
+  persistentTileCacheKeys.clear()
   inflightTileRequests.clear()
   zoomBatchReady.clear()
   inflightZoomBatch.clear()

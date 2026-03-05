@@ -137,7 +137,7 @@ const _today = new Date().toLocaleDateString('en-US', {
 })
 
 const SYSTEM_PROMPT = buildCustomTrilogyPrompt(
-  ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the SF Trees map application. You help users explore San Francisco's urban forest dataset of approximately 10,000 street trees.
+  ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the SF Trees map application. You help users explore San Francisco's urban forest dataset of 100k+ trees and visualize the results. A default map is loaded with coloring by tree category, zoomed out to see SF from the oakland side.
 
 You have access to tools for querying the tree dataset, displaying query results on the map, navigating the map camera, and looking up SF landmarks.
 
