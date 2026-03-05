@@ -40,7 +40,6 @@ const ICON_ZOOM_OPACITY_START = ICON_ZOOM_MIN
 const ICON_ZOOM_OPACITY_MID = ICON_ZOOM_SIZE_MID
 const ICON_ZOOM_OPACITY_END = ICON_ZOOM_SIZE_MAX
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const HEATMAP_OPACITY_NORMAL: any[] = [
   'interpolate', ['linear'], ['zoom'],
   HEATMAP_ZOOM_OPACITY_START, 0.48,
@@ -102,7 +101,6 @@ function buildIconSizeExpression(): maplibregl.ExpressionSpecification {
   ] as maplibregl.ExpressionSpecification
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildHeatmapLayerPaint(hexColor: string): any {
   return {
     'heatmap-weight': [
@@ -232,15 +230,15 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
         'circle-color': buildCircleColorExpression(),
         'circle-opacity': simplified
           ? ['interpolate', ['linear'], ['zoom'],
-              CIRCLE_ZOOM_OPACITY_START, 0,
-              CIRCLE_ZOOM_OPACITY_START + 0.1, 0.85,
-              MAX_ZOOM, 0.92] as any
+            CIRCLE_ZOOM_OPACITY_START, 0,
+            CIRCLE_ZOOM_OPACITY_START + 0.1, 0.85,
+            MAX_ZOOM, 0.92] as any
           : ['interpolate', ['linear'], ['zoom'],
-              CIRCLE_ZOOM_OPACITY_START, 0,
-              CIRCLE_ZOOM_OPACITY_START + 0.1, 0.75,
-              CIRCLE_ZOOM_OPACITY_MID, 0.92,
-              CIRCLE_ZOOM_OPACITY_END - 0.1, 0.75,
-              CIRCLE_ZOOM_OPACITY_END, 0],
+            CIRCLE_ZOOM_OPACITY_START, 0,
+            CIRCLE_ZOOM_OPACITY_START + 0.1, 0.75,
+            CIRCLE_ZOOM_OPACITY_MID, 0.92,
+            CIRCLE_ZOOM_OPACITY_END - 0.1, 0.75,
+            CIRCLE_ZOOM_OPACITY_END, 0],
         'circle-pitch-alignment': 'map',
         'circle-pitch-scale': 'map',
         'circle-stroke-width': 0.65,

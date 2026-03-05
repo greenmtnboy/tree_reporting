@@ -27,7 +27,7 @@ type WorkerRequest<K extends keyof WorkerMethodMap> = {
   params: WorkerMethodMap[K]['params']
 }
 
-type WorkerResponse<K extends keyof WorkerMethodMap = keyof WorkerMethodMap> = {
+type _WorkerResponse<K extends keyof WorkerMethodMap = keyof WorkerMethodMap> = {
   type: 'response'
   requestId: number
   ok: boolean
