@@ -4,12 +4,12 @@ key tree_id int; # unique identifier for the tree record
 property tree_id.legal_status string; # legal/administrative status of the tree
 key species string; # scientific and common species name
 property tree_id.address string; # address where the tree is planted
-property tree_id.site_order string; # internal ordering for site location
+property tree_id.site_order int; # internal ordering for site location
 property tree_id.site_info string; # contextual site attributes (e.g., median, sidewalk)
 property tree_id.plant_type string; # type of planting (e.g., Tree vs. other flora)
 property tree_id.caretaker string; # entity responsible for tree maintenance
 property tree_id.care_assistant string; # secondary caretaker (if any)
-property tree_id.plant_date string; # date the tree was planted
+property tree_id.plant_date date; # date the tree was planted
 property tree_id.diameter_at_breast_height int; # diameter at breast height - standard forestry measure of tree diameter at about 4.5 feet above ground
 property tree_id.plot_size string; # plot area where the tree sits
 property tree_id.permit_notes string; # notes regarding permits or planting conditions

@@ -62,9 +62,16 @@ const TOOLS = [
           description: 'Trilogy SELECT returning tree_id. Optionally include override_color (hex string) for per-tree coloring — compute it inline with a CASE/IF expression.',
         },
         color_labels: {
-          type: 'object',
-          description: 'Maps hex colors used in override_color to legend labels shown on the map, e.g. {"#FF69B4": "DBH ≥ 20\\"", "#4169E1": "DBH < 20\\""}',
-          additionalProperties: { type: 'string' },
+          type: 'array',
+          description: 'List of {color, label} pairs mapping each hex color used in override_color to a legend label shown on the map. Example: [{"color": "#FF69B4", "label": "DBH ≥ 20\\""}, {"color": "#4169E1", "label": "DBH < 20\\""}]',
+          items: {
+            type: 'object',
+            properties: {
+              color: { type: 'string', description: 'Hex color string, e.g. "#FF69B4"' },
+              label: { type: 'string', description: 'Legend label for this color' },
+            },
+            required: ['color', 'label'],
+          },
         },
       },
       required: ['query'],
@@ -134,13 +141,13 @@ const SYSTEM_PROMPT = buildCustomTrilogyPrompt(
 
 You have access to tools for querying the tree dataset, displaying query results on the map, navigating the map camera, and looking up SF landmarks.
 
-When users ask about trees, write Trilogy/PreQL SELECT queries using the available concepts. When they want to visualize results on the map, use publish_results with a query that returns tree_id values only. When they mention locations, use lookup_landmark to find coordinates, then navigate there.
+When users ask about trees, write Trilogy/PreQL SELECT queries using the available concepts. When they want to visualize results on the map, use publish_results with a query that returns tree_id values and optional color map. The website and map are dark themed, so color appropriately. When they mention locations, use lookup_landmark to find coordinates, then navigate there.
 
 AVAILABLE CONCEPTS:
 - tree_id (int) — unique identifier
 - common_name (string) — e.g. "Swamp Myrtle"
 - site_info (string) — planting site info (e.g. "Sidewalk: Curb side")
-- plant_date (string) — date planted, format "MM/DD/YYYY HH:MM:SS AM"
+- plant_date (date) — date planted; not known for all trees.
 - species (string) — full species string like "Tristaniopsis laurina :: Swamp Myrtle"
 - latitude (float) — geographic latitude
 - longitude (float) — geographic longitude
@@ -311,15 +318,66 @@ export function useChat() {
           }
         }
         case 'publish_results': {
-          const { query, color_labels } = input as {
+          const { query, color_labels: rawColorLabels } = input as {
             query: string
-            color_labels?: Record<string, string>
+            color_labels?: Array<{ color: string; label: string }>
           }
+
+          // --- color_labels validation & debug ---
+          console.log('[publish_results] color_labels received:', rawColorLabels)
+          // Normalize to Record<string, string> with canonical #RRGGBB keys.
+          // We match loosely on the last 6 hex chars so minor agent formatting quirks (e.g. missing #) still work.
+          const HEX_TAIL = /([0-9a-fA-F]{6})$/i
+          let normalizedColorLabels: Record<string, string> | null = null
+          if (rawColorLabels !== undefined) {
+            if (!Array.isArray(rawColorLabels)) {
+              console.warn('[publish_results] color_labels is not an array:', rawColorLabels)
+              return {
+                success: false,
+                error: 'color_labels must be an array of {color, label} objects, e.g. [{"color": "#FF69B4", "label": "Big trees"}].',
+              }
+            }
+            const malformed: string[] = []
+            const built: Record<string, string> = {}
+            for (const entry of rawColorLabels) {
+              const m = typeof entry.color === 'string' ? entry.color.match(HEX_TAIL) : null
+              const label = typeof entry.label === 'string' ? entry.label.trim() : ''
+              if (!m) {
+                malformed.push(`"${entry.color}" has no valid 6-digit hex tail`)
+              } else if (!label) {
+                malformed.push(`entry for "${entry.color}" has an empty label`)
+              } else {
+                built['#' + m[1].toUpperCase()] = label
+              }
+            }
+            if (malformed.length > 0) {
+              console.warn('[publish_results] color_labels malformed entries:', malformed)
+              return {
+                success: false,
+                error: `color_labels has malformed entries — legend will not render correctly. Issues: ${malformed.join('; ')}. Each entry must be {color: "#RRGGBB", label: "some text"}.`,
+              }
+            }
+            normalizedColorLabels = built
+            console.log(
+              '[publish_results] color_labels normalized:',
+              Object.entries(built).map(([k, v]) => `${k} → "${v}"`).join(', '),
+            )
+          } else {
+            console.log('[publish_results] no color_labels provided')
+          }
+          // --- end validation ---
+
           const sql = await compilePreQL(query)
 
           // Check if the query returns an override_color column
           const { columns } = await duckQuery(`SELECT * FROM (${sql}) AS __probe LIMIT 0`)
           const hasColor = columns.includes('override_color')
+
+          if (hasColor && !normalizedColorLabels) {
+            console.warn(
+              '[publish_results] override_color column present but color_labels was not provided — legend will be empty',
+            )
+          }
 
           const wrappedSql = `
 SELECT tree_id
@@ -352,14 +410,22 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
             // Execute the full color SQL before publishing so any runtime errors (e.g. invalid datetime
             // casts) are caught here and returned to the agent as a tool failure to refine.
             await duckQuery(colorOverrideSql)
-            publishColorOverride(colorOverrideSql, color_labels ?? null)
+            console.log('[publish_results] publishing color override, labels:', normalizedColorLabels)
+            publishColorOverride(colorOverrideSql, normalizedColorLabels)
           } else {
             publishColorOverride(null, null)
           }
 
           publishMapTreeIdFilterSql(wrappedSql)
           const colorNote = hasColor ? ' with per-tree coloring' : ''
-          return { success: true, message: `Published ${count} tree_ids to the map filter${colorNote}.` }
+          const legendNote =
+            hasColor && !normalizedColorLabels
+              ? ' Warning: no color_labels provided so the legend will be empty.'
+              : ''
+          return {
+            success: true,
+            message: `Published ${count} tree_ids to the map filter${colorNote}.${legendNote}`,
+          }
         }
         case 'navigate': {
           cancelPendingNavigationTimers()

@@ -1,7 +1,18 @@
 import { ref } from 'vue'
 import type { ColorLabelMap } from '../types'
 
-const currentMapQuery = ref<string | null>(null)
+export const DEFAULT_MAP_QUERY = `
+SELECT
+  tree_id,
+  species,
+  latitude,
+  longitude,
+  diameter_at_breast_height
+FROM trees
+WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+`
+
+const currentMapQuery = ref<string>(DEFAULT_MAP_QUERY)
 const publishedTreeIdFilterSql = ref<string | null>(null)
 const colorOverrideSql = ref<string | null>(null)
 const colorLabelMap = ref<ColorLabelMap | null>(null)

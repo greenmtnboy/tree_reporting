@@ -2,7 +2,7 @@
   <div ref="mapContainer" class="tree-map"></div>
   <div v-if="isInitialLoading" class="map-loading">{{ loadingMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
-  <div v-if="!isInitialLoading && legendEntries.length" class="map-legend">
+  <div v-if="!isInitialLoading" class="map-legend">
     <div v-for="entry in legendEntries" :key="entry.color" class="legend-entry">
       <span class="legend-swatch" :style="{ background: entry.color }"></span>
       <span class="legend-label">{{ entry.label }}</span>
@@ -56,17 +56,6 @@ const INITIAL_TILE_PREFETCH_SCALE = 3.5
 const SCROLL_WHEEL_ZOOM_RATE = 1 / 5800
 const SCROLL_ZOOM_RATE = 1 / 400
 
-const DEFAULT_MAP_QUERY = `
-SELECT
-  tree_id,
-  species,
-  latitude,
-  longitude,
-  diameter_at_breast_height
-FROM trees
-WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-`
-
 // --- Composables ---
 
 const {
@@ -87,7 +76,7 @@ const {
 
 const { loading, error, getSpeciesEnrichment } = useTreeData()
 const { target: flyToTarget } = useFlyTo()
-const { currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision, publishMapQuery } = useMapData()
+const { currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision } = useMapData()
 
 // --- Computed ---
 
@@ -99,11 +88,16 @@ const activeHeatmapColors = computed(() => {
 })
 
 // Legend: prefer agent-provided colorLabelMap, fall back to worker's.
+// Color keys may be SQL-escaped by the agent (e.g. _RRGGBB, char_43_RRGGBB, u_0023RRGGBB).
+// Normalize by extracting the trailing 6 hex digits; drop entries with no valid hex tail.
 const legendEntries = computed(() => {
   const labelMap = colorLabelMap.value ?? workerColorLabelMap.value
   if (!labelMap || Object.keys(labelMap).length === 0) return []
-  return Object.entries(labelMap)
-    .map(([color, label]) => ({ color, label }))
+  return Object.entries(labelMap).flatMap(([rawColor, label]) => {
+    const m = rawColor.match(/([0-9a-fA-F]{6})$/i)
+    if (!m) return []
+    return [{ color: '#' + m[1], label }]
+  })
 })
 
 // --- Utilities ---
@@ -311,25 +305,6 @@ const { loadingMessage, runIntroZoomOut, cancelIntro, recordIntroPrefetchStatus 
   computeVisibleTileRangeForZoom,
   setMapInteractions,
 })
-
-// --- Data loading ---
-
-async function loadDefaultMapData() {
-  if (!currentMapQuery.value) {
-    publishMapQuery(DEFAULT_MAP_QUERY)
-    return
-  }
-  loadingMessage.value = 'Counting our conifers...'
-  mapQueryChangedAt = nowMs()
-  firstTreesSourceLoadedLogged = false
-  firstMapIdleAfterPublishLogged = false
-  defaultQueryLoading.value = true
-  lastVisibleRangeSigByZoom.clear()
-  introLockedRangeByZoom.clear()
-  await setTileQuery(currentMapQuery.value)
-  await setPublishedTreeIdFilterSql(publishedTreeIdFilterSql.value)
-  addTreeLayers()
-}
 
 // --- Tree popup ---
 
@@ -580,7 +555,29 @@ onMounted(() => {
 
     void ensureTileProtocolRegistered()
       .then(async () => {
-        await loadDefaultMapData()
+        // DuckDB init is complete — colors are available
+        const colors = workerDistinctColors.value
+        console.info('[Perf] map:init:colors-ready', { colors })
+        if (!props.simplified) {
+          if (colors.length === 0) {
+            console.error('[TreeIcons] no colors from worker after init — icons will not be registered')
+          } else {
+            registerCategoryColoredIcons(map, colors)
+            console.info('[Perf] map:icons:registered', { count: colors.length })
+          }
+        }
+
+        loadingMessage.value = 'Counting our conifers...'
+        mapQueryChangedAt = nowMs()
+        firstTreesSourceLoadedLogged = false
+        firstMapIdleAfterPublishLogged = false
+        defaultQueryLoading.value = true
+        lastVisibleRangeSigByZoom.clear()
+        introLockedRangeByZoom.clear()
+
+        await setTileQuery(currentMapQuery.value)
+        await setPublishedTreeIdFilterSql(publishedTreeIdFilterSql.value)
+        addTreeLayers()
         bindTreeInteractions()
       })
       .catch((e) => {
