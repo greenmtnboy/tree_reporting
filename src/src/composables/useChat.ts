@@ -178,7 +178,7 @@ VALID DATA TYPES: ${datatypes.join(', ')}
 
 IMPORTANT GUIDELINES:
 1. Use a reasonable LIMIT (e.g., 100–500) for exploratory run_query calls. For publish_results tree_id filters, do not add restrictive LIMIT unless the user explicitly asks for a capped subset.
-2. For publish_results, include tree_id in the SELECT. To color trees, also SELECT override_color (a hex string) computed inline: SELECT tree_id, case when diameter_at_breast_height >= 20 then '#FF69B4' else '#4169E1' end as override_color WHERE ... All color logic must live in Trilogy — do not use color_field or color_mapping. Provide color_labels to label the legend: {"#FF69B4": "DBH ≥ 20\"", "#4169E1": "DBH < 20\""}.
+2. For publish_results, include tree_id in the SELECT. To color trees, also SELECT override_color (a hex string) computed inline: SELECT tree_id, case when diameter_at_breast_height >= 20 then '#FF69B4' else '#4169E1' end as override_color WHERE ... All color logic must live in Trilogy — do not use color_field or color_mapping. Provide color_labels to label the legend: {"#FF69B4": "DBH ≥ 20", "#4169E1": "DBH < 20"}.
 3. If a query fails, explain the error and try a corrected version.
 4. Always finish by calling return_to_user with your complete response. Never return a plain text reply — use return_to_user to signal you are done.
 
@@ -540,7 +540,7 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
         }
         messages.value.push(appMsg)
       },
-      addArtifact: () => {},
+      addArtifact: () => { },
       getMessages: () => llmHistory,
     }
 
@@ -561,7 +561,7 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
     }
 
     const stateUpdater: ExecutionStateUpdater = {
-      setActiveToolName: () => {},
+      setActiveToolName: () => { },
       checkAborted: () => false,
     }
 
