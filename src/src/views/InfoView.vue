@@ -30,7 +30,7 @@
           <p>
             Per-species attributes (native status, evergreen, mature height, canopy
             spread, growth rate, lifespan, drought tolerance, bloom season, wildlife
-            value, fire risk) are collected from:
+            value, fire risk) are aggregated from the following. Inaccuracies may exist - corrections welcome! 
           </p>
           <ul>
             <li>
@@ -50,9 +50,6 @@
               &mdash; Cal Poly Urban Forest Ecosystems Institute
             </li>
           </ul>
-          <p class="source-note">
-            Structured fields extracted using Google Gemini 2.5 Pro.
-          </p>
         </div>
 
         <div class="source-card">
@@ -85,8 +82,7 @@
           <div class="tech-item"><span class="tech-label">Build</span><span>Vite 6</span></div>
           <div class="tech-item"><span class="tech-label">Map</span><span>MapLibre GL 4</span></div>
           <div class="tech-item"><span class="tech-label">SQL</span><span>DuckDB WASM</span></div>
-          <div class="tech-item"><span class="tech-label">AI Chat</span><span>Claude Sonnet</span></div>
-          <div class="tech-item"><span class="tech-label">Query</span><span>Trilogy / PreQL</span></div>
+          <div class="tech-item"><span class="tech-label">Query</span><span>Trilogy</span></div>
         </div>
       </section>
 
@@ -97,6 +93,12 @@
             SF Urban Forestry &rarr;
           </a>
           <p>San Francisco Department of Public Works Urban Forestry division.</p>
+        </div>
+        <div class="source-card">
+          <a href="https://greenmtnboy.github.io/space_reporting/" target="_blank" rel="noopener">
+            Want something different? How about rockets visualized? &rarr;
+          </a>
+          <p>An interactive reporting view for space data.</p>
         </div>
       </section>
 

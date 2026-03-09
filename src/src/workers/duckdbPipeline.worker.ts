@@ -10,31 +10,6 @@ let ready = false
 let initError: string | null = null
 let initPromise: Promise<void> | null = null
 
-const TABLE_DDL = `
-CREATE TABLE IF NOT EXISTS trees (
-  tree_id INTEGER,
-  common_name VARCHAR,
-  site_info VARCHAR,
-  plant_date VARCHAR,
-  species VARCHAR,
-  latitude DOUBLE,
-  longitude DOUBLE,
-  diameter_at_breast_height DOUBLE
-);
-`
-
-const SPECIES_DDL = `
-CREATE TABLE IF NOT EXISTS species_enrichment (
-  species VARCHAR,
-  tree_category VARCHAR,
-  native_status VARCHAR,
-  is_evergreen BOOLEAN,
-  mature_height_ft DOUBLE,
-  bloom_season VARCHAR,
-  wildlife_value VARCHAR,
-  fire_risk VARCHAR
-);
-`
 
 const DEFAULT_BASE_QUERY_SQL = `
 SELECT tree_id, species, latitude, longitude, diameter_at_breast_height
@@ -160,8 +135,10 @@ function normalizeSql(sql: string): string {
   return sql.replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
+const NORMALIZED_DEFAULT_BASE_QUERY_SQL = normalizeSql(DEFAULT_BASE_QUERY_SQL)
+
 function isDefaultBaseQuery(sql: string): boolean {
-  return normalizeSql(sql) === normalizeSql(DEFAULT_BASE_QUERY_SQL)
+  return normalizeSql(sql) === NORMALIZED_DEFAULT_BASE_QUERY_SQL
 }
 
 function tileCacheKey(z: number, x: number, y: number): string {
@@ -445,11 +422,9 @@ async function doInit() {
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
 
   conn = await db.connect()
-  await conn.query(TABLE_DDL)
-  await conn.query(SPECIES_DDL)
 
   await conn.query(`
-    INSERT INTO trees
+    CREATE TABLE trees AS
     SELECT
       tree_id,
       coalesce(nullif(trim(string_split(species, '::')[2]), ''), trim(string_split(species, '::')[1])) AS common_name,
@@ -464,16 +439,8 @@ async function doInit() {
 
   try {
     await conn.query(`
-      INSERT INTO species_enrichment
-      SELECT
-        species,
-        tree_category,
-        native_status,
-        is_evergreen,
-        mature_height_ft,
-        bloom_season,
-        wildlife_value,
-        fire_risk
+      CREATE TABLE species_enrichment AS
+      SELECT species, tree_category, native_status, is_evergreen, mature_height_ft, bloom_season, wildlife_value, fire_risk
       FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
     `)
   } catch (e) {
@@ -570,23 +537,30 @@ async function doInit() {
   await rebuildAggCaches()
 
   dataTileBoundsByZoom.clear()
-  for (let z = 13; z <= 20; z += 1) {
-    const result = await conn.query(`
+  {
+    const boundsResult = await conn.query(`
       SELECT
-        MIN(xtile_z${z}) AS min_x,
-        MAX(xtile_z${z}) AS max_x,
-        MIN(ytile_z${z}) AS min_y,
-        MAX(ytile_z${z}) AS max_y
+        MIN(xtile_z13) AS min_x13, MAX(xtile_z13) AS max_x13, MIN(ytile_z13) AS min_y13, MAX(ytile_z13) AS max_y13,
+        MIN(xtile_z14) AS min_x14, MAX(xtile_z14) AS max_x14, MIN(ytile_z14) AS min_y14, MAX(ytile_z14) AS max_y14,
+        MIN(xtile_z15) AS min_x15, MAX(xtile_z15) AS max_x15, MIN(ytile_z15) AS min_y15, MAX(ytile_z15) AS max_y15,
+        MIN(xtile_z16) AS min_x16, MAX(xtile_z16) AS max_x16, MIN(ytile_z16) AS min_y16, MAX(ytile_z16) AS max_y16,
+        MIN(xtile_z17) AS min_x17, MAX(xtile_z17) AS max_x17, MIN(ytile_z17) AS min_y17, MAX(ytile_z17) AS max_y17,
+        MIN(xtile_z18) AS min_x18, MAX(xtile_z18) AS max_x18, MIN(ytile_z18) AS min_y18, MAX(ytile_z18) AS max_y18,
+        MIN(xtile_z19) AS min_x19, MAX(xtile_z19) AS max_x19, MIN(ytile_z19) AS min_y19, MAX(ytile_z19) AS max_y19,
+        MIN(xtile_z20) AS min_x20, MAX(xtile_z20) AS max_x20, MIN(ytile_z20) AS min_y20, MAX(ytile_z20) AS max_y20
       FROM trees_fast
     `)
-    const row = result.toArray()[0] as Record<string, unknown> | undefined
-    if (!row) continue
-    const minX = Number(row.min_x)
-    const maxX = Number(row.max_x)
-    const minY = Number(row.min_y)
-    const maxY = Number(row.max_y)
-    if ([minX, maxX, minY, maxY].every((v) => Number.isFinite(v))) {
-      dataTileBoundsByZoom.set(z, { minX, maxX, minY, maxY })
+    const boundsRow = boundsResult.toArray()[0] as Record<string, unknown> | undefined
+    if (boundsRow) {
+      for (let z = 13; z <= 20; z += 1) {
+        const minX = Number(boundsRow[`min_x${z}`])
+        const maxX = Number(boundsRow[`max_x${z}`])
+        const minY = Number(boundsRow[`min_y${z}`])
+        const maxY = Number(boundsRow[`max_y${z}`])
+        if ([minX, maxX, minY, maxY].every((v) => Number.isFinite(v))) {
+          dataTileBoundsByZoom.set(z, { minX, maxX, minY, maxY })
+        }
+      }
     }
   }
 
@@ -647,29 +621,28 @@ async function buildDefaultColorMap() {
 async function rebuildAggCaches() {
   if (!conn) return
   hasAggCacheByZoom.clear()
-  for (const z of [14]) {
-    try {
-      const gridM = baseSimplifyGridMetersForZoom(z)
-      if (gridM <= 0) continue
-      await conn.query(`
-        CREATE OR REPLACE TABLE agg_z${z}_cache AS
-        SELECT
-          tf.xtile_z${z} AS xtile,
-          tf.ytile_z${z} AS ytile,
-          floor(tf.x_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gx,
-          floor(tf.y_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gy,
-          COALESCE(tf.tree_category, 'default') AS category,
-          cm.display_color,
-          AVG(TRY_CAST(tf.dbh AS DOUBLE)) AS dbh,
-          COUNT(*) AS point_count
-        FROM trees_fast tf
-        INNER JOIN ${COLOR_MAP_TABLE} cm ON tf.tree_id = cm.tree_id
-        GROUP BY 1, 2, 3, 4, 5, 6
-      `)
-      hasAggCacheByZoom.add(z)
-    } catch {
-      // runtime fallback stays active
-    }
+  const z = 14
+  const gridM = baseSimplifyGridMetersForZoom(z)
+  if (gridM <= 0) return
+  try {
+    await conn.query(`
+      CREATE OR REPLACE TABLE agg_z${z}_cache AS
+      SELECT
+        tf.xtile_z${z} AS xtile,
+        tf.ytile_z${z} AS ytile,
+        floor(tf.x_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gx,
+        floor(tf.y_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gy,
+        COALESCE(tf.tree_category, 'default') AS category,
+        cm.display_color,
+        AVG(TRY_CAST(tf.dbh AS DOUBLE)) AS dbh,
+        COUNT(*) AS point_count
+      FROM trees_fast tf
+      INNER JOIN ${COLOR_MAP_TABLE} cm ON tf.tree_id = cm.tree_id
+      GROUP BY 1, 2, 3, 4, 5, 6
+    `)
+    hasAggCacheByZoom.add(z)
+  } catch {
+    // runtime fallback stays active
   }
 }
 
@@ -1234,9 +1207,7 @@ WHERE geom IS NOT NULL
   }
 }
 
-function setTileQuery(sql: string | null) {
-  tileQuerySql = sql
-  tileQueryRevision += 1
+function invalidateTileCaches() {
   tileCache.clear()
   emptyTileKeys.clear()
   persistentTileCacheKeys.clear()
@@ -1250,6 +1221,12 @@ function setTileQuery(sql: string | null) {
   prefetchedVisibleRangeSigByZoom.clear()
   prewarmDoneRevision = -1
   prewarmPromise = null
+}
+
+function setTileQuery(sql: string | null) {
+  tileQuerySql = sql
+  tileQueryRevision += 1
+  invalidateTileCaches()
 }
 
 async function setPublishedTreeIdFilterSql(sql: string | null) {
@@ -1285,18 +1262,7 @@ WHERE tree_id IS NOT NULL
     publishedTreeIdFilterSignature = 'all'
   }
 
-  tileCache.clear()
-  emptyTileKeys.clear()
-  persistentTileCacheKeys.clear()
-  inflightTileRequests.clear()
-  zoomBatchReady.clear()
-  inflightZoomBatch.clear()
-  inflightNeighborhoodBatch.clear()
-  preparedFeatureTablesReady.clear()
-  inflightFeatureTableBuild.clear()
-  prefetchedVisibleRangeSigByZoom.clear()
-  prewarmDoneRevision = -1
-  prewarmPromise = null
+  invalidateTileCaches()
 }
 
 async function setColorOverrideSql(sql: string | null) {
@@ -1356,19 +1322,7 @@ LEFT JOIN __agent_color_override aco ON tf.tree_id = aco.tree_id
   }
 
   await rebuildAggCaches()
-
-  tileCache.clear()
-  emptyTileKeys.clear()
-  persistentTileCacheKeys.clear()
-  inflightTileRequests.clear()
-  zoomBatchReady.clear()
-  inflightZoomBatch.clear()
-  inflightNeighborhoodBatch.clear()
-  preparedFeatureTablesReady.clear()
-  inflightFeatureTableBuild.clear()
-  prefetchedVisibleRangeSigByZoom.clear()
-  prewarmDoneRevision = -1
-  prewarmPromise = null
+  invalidateTileCaches()
   postColorMapUpdate()
 }
 
