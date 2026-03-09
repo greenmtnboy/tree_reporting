@@ -16,7 +16,7 @@ Clicking a tree opens a popup with its common name, species, planting date, trun
 
 The sidebar lists San Francisco landmarks with a search filter; clicking one flies the map camera to that location.
 
-A chat panel (bring your own key or use a test key0 accepts natural language questions about the tree dataset. The assistant can query trees using Trilogy, filter the map to show a subset of trees, and navigate the camera to locations by name or coordinate.
+A chat panel (bring your own key or use a test key) lets you interact with the map in natural language - ask questions, fly around, or update what's shown.
 
 ---
 
