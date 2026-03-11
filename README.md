@@ -73,7 +73,7 @@ https://github.com/greenmtnboy/sf_tree_reporting
 
 ### Update Data
 
-TODO: instructions that would work for anyone else.
+TODO: instructions that would work for anyone else. (does GCS writes; bucket/locations would need to be parameterized)
 
 ```bash
  trilogy refresh data\raw\tree_info.preql --env=.env
