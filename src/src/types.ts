@@ -1,7 +1,6 @@
 export interface RawTree {
   tree_id: number
   common_name: string
-  site_info: string
   plant_date: string
   species: string
   latitude: number

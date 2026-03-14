@@ -71,6 +71,13 @@ https://github.com/greenmtnboy/sf_tree_reporting
 
 ## Dev
 
+### City Additions
+
+Update ingest pipelines with city source.
+- ingest watermark script
+- data ingest script
+- trilogy file + imports and merge
+
 ### Update Data
 
 TODO: instructions that would work for anyone else. (does GCS writes; bucket/locations would need to be parameterized)

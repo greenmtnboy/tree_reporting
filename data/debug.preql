@@ -1,4 +1,6 @@
-import raw.tree_info;
 
+import raw.tree_enrichment;
 
-SELECT tree_id WHERE is_evergreen = true limit 10;
+where city = 'USNYC'
+select species, city, tree_category, count(tree_id) as tree_count
+order by tree_count desc limit 10;

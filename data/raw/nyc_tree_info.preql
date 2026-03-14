@@ -1,6 +1,6 @@
 import tree_common;
 
-root datasource nyc_update_time (
+root partial datasource nyc_update_time (
     city: ~city,
     data_updated_through: nyc_data_updated_through
 )
@@ -9,14 +9,14 @@ complete where city = 'USNYC'
 file `./nyc_update_time.py`
 freshness by nyc_data_updated_through;
 
-root datasource nyc_raw_tree_info (
-    objectid: ~tree_id,
-    city: ~city,
-    genusspecies: ~species,
-    dbh: ~?diameter_at_breast_height,
-    planteddate: ~?plant_date,
-    latitude: ~?latitude,
-    longitude: ~?longitude,
+root partial datasource nyc_raw_tree_info (
+    objectid: tree_id,
+    city: city,
+    genusspecies: species,
+    dbh: ?diameter_at_breast_height,
+    planteddate: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
     # tpcondition: ?condition,
     # tpstructure: ?structure,
     # stumpdiameter: ?stump_diameter,
@@ -29,14 +29,14 @@ complete where city = 'USNYC'
 file `./nyc_tree_info.py`;
 
 
-datasource nyc_tree_info (
-    ~tree_id,
-    ~city,
-    ~species,
-    ~?diameter_at_breast_height,
-    ~?plant_date,
-    ~?latitude,
-    ~?longitude,
+partial datasource nyc_tree_info (
+    tree_id,
+    city,
+    species,
+    ?diameter_at_breast_height,
+    ?plant_date,
+    ?latitude,
+    ?longitude,
     nyc_data_updated_through,
     # ?condition,
     # ?structure,

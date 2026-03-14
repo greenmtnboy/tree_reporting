@@ -42,7 +42,6 @@
         <li><code>common_name</code> — e.g. "Swamp Myrtle"</li>
         <li><code>species</code> — full species string</li>
         <li><code>plant_date</code> — date planted (MM/DD/YYYY)</li>
-        <li><code>site_info</code> — planting site description</li>
         <li><code>latitude</code> / <code>longitude</code></li>
         <li><code>diameter_at_breast_height</code> — trunk diameter (inches)</li>
         <li><code>native_status</code> — native_bay_area | native_california | non_native | naturalized | unknown</li>

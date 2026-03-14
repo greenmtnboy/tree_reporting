@@ -146,7 +146,6 @@ When users ask about trees, write Trilogy/PreQL SELECT queries using the availab
 AVAILABLE CONCEPTS:
 - tree_id (int) — unique identifier
 - common_name (string) — e.g. "Swamp Myrtle"
-- site_info (string) — planting site info (e.g. "Sidewalk: Curb side")
 - plant_date (date) — date planted; not known for all trees.
 - species (string) — full species string like "Tristaniopsis laurina :: Swamp Myrtle"
 - latitude (float) — geographic latitude

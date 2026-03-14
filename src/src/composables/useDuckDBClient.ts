@@ -10,6 +10,7 @@ type WorkerMethodMap = {
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
   setColorOverrideSql: { params: { sql: string | null }; result: void }
+  setCityContext: { params: { city: string }; result: void }
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
   setVisibleTileRange: { params: { z: number; minX: number; maxX: number; minY: number; maxY: number }; result: void }
@@ -151,6 +152,11 @@ async function setColorOverrideSql(sql: string | null): Promise<void> {
   await rpc('setColorOverrideSql', { sql })
 }
 
+async function setCityContext(city: string): Promise<void> {
+  await ensureInit()
+  await rpc('setCityContext', { city })
+}
+
 function setViewportZoom(zoom: number) {
   fireAndForget('setViewportZoom', { zoom })
 }
@@ -214,6 +220,7 @@ export function useDuckDB() {
     setTileQuery,
     setPublishedTreeIdFilterSql,
     setColorOverrideSql,
+    setCityContext,
     setViewportZoom,
     setViewportCenter,
     setVisibleTileRange,

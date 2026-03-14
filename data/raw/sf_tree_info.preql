@@ -10,14 +10,14 @@ file `./sf_update_time.py`
 freshness by sf_data_updated_through;
 
 
-root datasource sf_raw_tree_info (
-    TreeID: ~tree_id,
-    city: ~city,
-    qSpecies: ~species,
-    PlantDate: ~?plant_date,
-    DBH: ~?diameter_at_breast_height,
-    Latitude: ~?latitude,
-    Longitude: ~?longitude,
+root partial datasource sf_raw_tree_info (
+    TreeID: tree_id,
+    city: city,
+    qSpecies: species,
+    PlantDate: ?plant_date,
+    DBH: ?diameter_at_breast_height,
+    Latitude: ?latitude,
+    Longitude: ?longitude,
     # qLegalStatus: ~?legal_status,
     # qAddress: ~?address,
     # SiteOrder: ~?site_order,
@@ -36,14 +36,14 @@ complete where city = 'USSFO'
 file `./sf_tree_info.py`;
 
 
-datasource sf_tree_info (
-    ~tree_id,
-    ~city,
-    ~species,
-    ~?plant_date,
-    ~?diameter_at_breast_height,
-    ~?latitude,
-    ~?longitude,
+partial datasource sf_tree_info (
+    tree_id,
+    city,
+    species,
+    ?plant_date,
+    ?diameter_at_breast_height,
+    ?latitude,
+    ?longitude,
     sf_data_updated_through,
     # ?legal_status,
     # ?address,

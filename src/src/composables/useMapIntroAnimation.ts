@@ -5,10 +5,6 @@ import maplibregl from 'maplibre-gl'
 
 export const INTRO_START_ZOOM = 18.5
 export const INTRO_END_ZOOM = 13.5
-
-// --- Internal constants ---
-
-const INTRO_CENTER: [number, number] = [-122.4194, 37.7749]
 const INTRO_DURATION_MS = 10_000
 const INTRO_ROTATION_DEG = 240
 const CENTER_ICON_GRID_RADIUS_PX = 96
@@ -37,6 +33,8 @@ export interface UseMapIntroAnimationOptions {
   introActive: Ref<boolean>
   /** Shared map of zoom → locked tile range used during intro prefetch. */
   introLockedRangeByZoom: Map<number, TileRange>
+  /** Geographic center for the intro animation. */
+  introCenter: Ref<[number, number]>
   setIntroComplete: () => void
   setAutoTileFetchEnabled: (enabled: boolean) => void
   setVisibleTileRange: (z: number, minX: number, maxX: number, minY: number, maxY: number) => void
@@ -52,6 +50,7 @@ export function useMapIntroAnimation({
   map,
   introActive,
   introLockedRangeByZoom,
+  introCenter,
   setIntroComplete,
   setAutoTileFetchEnabled,
   setVisibleTileRange,
@@ -263,13 +262,13 @@ export function useMapIntroAnimation({
 
     const startBearing = map.value.getBearing()
     const startPitch = map.value.getPitch()
-    const introCenter: [number, number] = [INTRO_CENTER[0], INTRO_CENTER[1]]
+    const introCenterSnapshot: [number, number] = [introCenter.value[0], introCenter.value[1]]
     let didRunIntroMotion = false
 
     try {
       // Re-anchor to the exact intro start pose, then wait for centered icons
       // before beginning motion.
-      map.value.jumpTo({ center: introCenter, zoom: INTRO_START_ZOOM, bearing: startBearing, pitch: startPitch })
+      map.value.jumpTo({ center: introCenterSnapshot, zoom: INTRO_START_ZOOM, bearing: startBearing, pitch: startPitch })
 
       // Publish initial visible ranges before prefetching.
       updateZoomLevel()
@@ -295,7 +294,7 @@ export function useMapIntroAnimation({
 
       await waitForTreesMilestone(2500)
       const initialReady = await waitForInitialDetailedTrees(5000)
-      const centeredReady = await waitForCenteredDetailedTrees(introCenter, 5000)
+      const centeredReady = await waitForCenteredDetailedTrees(introCenterSnapshot, 5000)
       const viewportReady = await waitForViewportTreesRendered(6000)
       const canStartMotion = initialReady || centeredReady || viewportReady
 
@@ -305,7 +304,7 @@ export function useMapIntroAnimation({
         await runIntroZoomSegment(
           INTRO_START_ZOOM, INTRO_END_ZOOM, 0, 1,
           INTRO_DURATION_MS, startBearing, startPitch,
-          introCenter, INTRO_ROTATION_DEG,
+          introCenterSnapshot, INTRO_ROTATION_DEG,
           (globalT) => {
             if (!didSetFinalPhase && globalT >= 0.72) {
               didSetFinalPhase = true
@@ -321,7 +320,7 @@ export function useMapIntroAnimation({
       setAutoTileFetchEnabled(true)
       if (map.value && didRunIntroMotion) {
         map.value.jumpTo({
-          center: introCenter,
+          center: introCenterSnapshot,
           zoom: INTRO_END_ZOOM,
           bearing: startBearing + INTRO_ROTATION_DEG,
           pitch: startPitch,
@@ -343,10 +342,82 @@ export function useMapIntroAnimation({
     }
   }
 
+  /** Allow the intro sequence to run again (e.g. after a city switch). */
+  function resetIntro() {
+    introStarted = false
+    introCancelled = false
+  }
+
+  /**
+   * Animate a globe-swoop transition to a new city:
+   *   current view → slow zoom out to globe → slow arc across → slowly zoom into city at z=13.5.
+   *
+   * Auto tile fetching is disabled during Phase 1 (zoom-out) only. At the start of Phase 2
+   * (the arc toward the new city) `onCrossingStart` is called so the caller can kick off DB
+   * context rebuild and tile queries while the camera is still in flight — giving DuckDB the
+   * full arc duration (~12 s) to prepare tiles before the camera lands.
+   *
+   * Because the DB is already initialised we land at city zoom directly (no INTRO_START_ZOOM).
+   */
+  async function runGlobeSwoopTo(targetCenter: [number, number], cityName: string): Promise<void> {
+    if (!map.value) return
+
+    cancelIntro()
+    introCancelled = false
+    introActive.value = true
+    setMapInteractions(false)
+    setAutoTileFetchEnabled(false)
+    loadingMessage.value = `Heading to ${cityName}…`
+
+    const GLOBE_ZOOM = 3
+    const ZOOM_OUT_MS = 7000
+    const FLY_ACROSS_MS = 12000
+
+    const cleanup = (cancelled: boolean) => {
+      setAutoTileFetchEnabled(true)
+      if (cancelled) introActive.value = false
+      setMapInteractions(true)
+    }
+
+    // Phase 1 — slow zoom out to globe (tile fetch disabled)
+    await new Promise<void>((resolve) => {
+      if (!map.value) return resolve()
+      map.value.flyTo({ zoom: GLOBE_ZOOM, duration: ZOOM_OUT_MS, essential: true })
+      const onEnd = () => { map.value?.off('moveend', onEnd); resolve() }
+      map.value.once('moveend', onEnd)
+    })
+
+    if (introCancelled) { cleanup(true); return }
+
+    loadingMessage.value = `Flying over the ocean…`
+
+    // Phase 2 — slow arc to new city; high curve dips through globe zoom then climbs to city zoom.
+    await new Promise<void>((resolve) => {
+      if (!map.value) return resolve()
+      map.value.flyTo({
+        center: targetCenter,
+        zoom: 13.5,
+        duration: FLY_ACROSS_MS,
+        essential: true,
+        curve: 1.6,
+      })
+      const onEnd = () => { map.value?.off('moveend', onEnd); resolve() }
+      map.value.once('moveend', onEnd)
+    })
+
+    if (introCancelled) { cleanup(true); return }
+
+    loadingMessage.value = 'Counting our conifers…'
+    introActive.value = false
+    cleanup(false)
+  }
+
   return {
     loadingMessage,
     runIntroZoomOut,
     cancelIntro,
+    resetIntro,
+    runGlobeSwoopTo,
     recordIntroPrefetchStatus,
   }
 }
