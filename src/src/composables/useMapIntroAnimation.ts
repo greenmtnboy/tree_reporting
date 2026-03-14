@@ -389,7 +389,7 @@ export function useMapIntroAnimation({
 
     if (introCancelled) { cleanup(true); return }
 
-    loadingMessage.value = `Flying over the ocean…`
+    loadingMessage.value = `Please remain seated while seatbelt light is on…`
 
     // Phase 2 — slow arc to new city; high curve dips through globe zoom then climbs to city zoom.
     await new Promise<void>((resolve) => {
