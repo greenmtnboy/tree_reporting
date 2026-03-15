@@ -912,6 +912,7 @@ def enrich_species(q_species: str, client, print_full_context: bool = False) -> 
     scientific_name = parse_scientific_name(q_species)
     if not scientific_name:
         return None
+    
     wiki_name = map_wikipedia_lookup(scientific_name)
 
     # Gather text from all available sources
@@ -971,6 +972,7 @@ _COMPLETENESS_EXPR = """
      AND tree_category IS NOT NULL)
 """.strip()
 
+SKIP_SPECIES = {'Scheduled Planting Site - Spring 2026', 'Vacant Unacceptable/Retired', 'Vacant site medium' }
 
 def get_already_enriched(source: str = ENRICHMENT_PARQUET) -> tuple[set[str], set[str]]:
     """Return (all_enriched, complete_enriched) from *source* (local path or https URL).
@@ -989,8 +991,8 @@ def get_already_enriched(source: str = ENRICHMENT_PARQUET) -> tuple[set[str], se
             """,
             [source],
         ).fetchall()
-        all_enriched      = {row[0] for row in rows}
-        complete_enriched = {row[0] for row in rows if row[1]}
+        all_enriched      = {row[0] for row in rows}.union(SKIP_SPECIES)
+        complete_enriched = {row[0] for row in rows if row[1]}.union(SKIP_SPECIES)
         return all_enriched, complete_enriched
     except Exception:
         return set(), set()
