@@ -9,7 +9,7 @@ import requests
 import pyarrow as pa
 from datetime import datetime, timezone
 
-DATASET_ID = "qexa-qpj6"
+DATASET_ID = "buis-pvji"  # Individual Landmark Sites (LPC)
 METADATA_URL = f"https://data.cityofnewyork.us/api/views/{DATASET_ID}.json"
 
 

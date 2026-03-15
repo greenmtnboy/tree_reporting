@@ -10,7 +10,7 @@ import requests
 import pyarrow as pa
 import pyarrow.csv as pv
 
-DATASET_ID = "qexa-qpj6"
+DATASET_ID = "buis-pvji"  # Individual Landmark Sites (LPC)
 DATASET_URL = (
     f"https://data.cityofnewyork.us/api/views/{DATASET_ID}/rows.csv?accessType=DOWNLOAD"
 )
@@ -33,8 +33,9 @@ def cast_columns(table: pa.Table) -> pa.Table:
     table = table.rename_columns([c.lower() for c in table.schema.names])
 
     # Normalize ID → "landmark_id" with "nyc-" prefix
+    # Prefer lpc_lpnumb (LP number like "LP-00011"), fall back to objectid
     id_col = next(
-        (c for c in table.schema.names if c in ("lp_number", "lm_id", "objectid")),
+        (c for c in table.schema.names if c in ("lpc_lpnumb", "lp_number", "lm_id", "objectid")),
         None,
     )
     if id_col is not None:
@@ -49,9 +50,9 @@ def cast_columns(table: pa.Table) -> pa.Table:
             [("landmark_id" if c == id_col else c) for c in table.schema.names]
         )
 
-    # Normalize name → "name" (dataset uses "scen_lm_na")
+    # Normalize name → "name" (buis-pvji uses "lpc_name")
     name_col = next(
-        (c for c in table.schema.names if c in ("scen_lm_na", "lm_name", "name")),
+        (c for c in table.schema.names if c in ("lpc_name", "scen_lm_na", "lm_name", "name")),
         None,
     )
     if name_col is not None and name_col != "name":
