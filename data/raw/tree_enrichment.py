@@ -808,7 +808,7 @@ def build_reference_text(texts: SourceTexts) -> str:
 
 def build_enrichment_prompt(scientific_name: str, wiki_name: str, reference_text: str) -> str:
     return (
-        "You are enriching tree data for an urban forestry dataset in San Francisco, CA.\n"
+        "You are enriching tree data for an urban forestry dataset.\n"
         "Extract structured information about this tree species from the reference text below.\n"
         "Be conservative with numeric estimates — use None if the sources don't clearly state a value.\n\n"
         f"Species: {scientific_name}\n\n"

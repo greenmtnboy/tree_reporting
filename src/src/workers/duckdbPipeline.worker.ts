@@ -121,7 +121,7 @@ WITH __base AS (
 SELECT __base.*
 FROM __base
 INNER JOIN ${PUBLISHED_TREE_FILTER_TABLE} __filter_ids
-  ON CAST(__base.tree_id AS BIGINT) = __filter_ids.tree_id
+  ON CAST(__base.tree_id AS VARCHAR) = __filter_ids.tree_id
 `
 }
 
@@ -1259,7 +1259,7 @@ async function setPublishedTreeIdFilterSql(sql: string | null) {
   if (normalized) {
     await conn.query(`
 CREATE TEMP TABLE ${PUBLISHED_TREE_FILTER_TABLE} AS
-SELECT DISTINCT CAST(tree_id AS BIGINT) AS tree_id
+SELECT DISTINCT CAST(tree_id AS VARCHAR) AS tree_id
 FROM (
   ${normalized}
 ) __published_ids
@@ -1297,7 +1297,7 @@ async function setColorOverrideSql(sql: string | null) {
     await conn.query(`DROP TABLE IF EXISTS __agent_color_override`)
     await conn.query(`
 CREATE TEMP TABLE __agent_color_override AS
-SELECT DISTINCT CAST(tree_id AS BIGINT) AS tree_id, CAST(override_color AS VARCHAR) AS display_color
+SELECT DISTINCT CAST(tree_id AS VARCHAR) AS tree_id, CAST(override_color AS VARCHAR) AS display_color
 FROM (
   ${normalized}
 ) __color_ids

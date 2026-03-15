@@ -1,6 +1,7 @@
 <template>
   <div ref="mapContainer" class="tree-map"></div>
   <div v-if="isInitialLoading" class="map-loading">{{ loadingMessage }}</div>
+  <div v-else-if="tileRefreshing" class="map-loading map-refreshing">{{ tileRefreshMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
   <div v-if="!isInitialLoading" class="map-legend">
     <div v-for="entry in legendEntries" :key="entry.color" class="legend-entry">
@@ -32,6 +33,7 @@ import { useDuckDB } from '../composables/useDuckDB'
 import { useMapIntro } from '../composables/useMapIntro'
 import { useMapLayers, TREES_SOURCE_MAXZOOM } from '../composables/useMapLayers'
 import { useMapIntroAnimation, INTRO_START_ZOOM } from '../composables/useMapIntroAnimation'
+import { THINKING_PHRASES } from '../constants/loadingPhrases'
 
 const props = defineProps<{
   simplified?: boolean
@@ -45,6 +47,27 @@ const zoomLevel = ref(13)
 const mapError = ref<string | null>(null)
 const defaultQueryLoading = ref(true)
 const introActive = ref(!props.simplified)
+const tileRefreshing = ref(false)
+const tileRefreshMessage = ref(THINKING_PHRASES[0])
+let tileRefreshInterval: ReturnType<typeof setInterval> | null = null
+
+function startTileRefreshMessage() {
+  let idx = Math.floor(Math.random() * THINKING_PHRASES.length)
+  tileRefreshMessage.value = THINKING_PHRASES[idx]
+  tileRefreshing.value = true
+  tileRefreshInterval = setInterval(() => {
+    idx = (idx + 1) % THINKING_PHRASES.length
+    tileRefreshMessage.value = THINKING_PHRASES[idx]
+  }, 2500)
+}
+
+function stopTileRefreshMessage() {
+  tileRefreshing.value = false
+  if (tileRefreshInterval != null) {
+    clearInterval(tileRefreshInterval)
+    tileRefreshInterval = null
+  }
+}
 
 const { setIntroComplete } = useMapIntro()
 if (props.simplified) setIntroComplete()
@@ -468,13 +491,20 @@ watch(flyToTarget, (t) => {
 // --- Watchers ---
 
 // Reload tiles when query, filter, or revision changes
-watch([currentMapQuery, publishedTreeIdFilterSql, mapQueryRevision], async ([query, filterSql]) => {
+watch([currentMapQuery, publishedTreeIdFilterSql, mapQueryRevision], async ([query, filterSql], [oldQuery]) => {
   if (!mapRef.value?.loaded()) return
-  loadingMessage.value = 'Counting our conifers...'
+  // Only show the full-screen loading overlay when the base query changes (city switch, query
+  // rewrite). Filter-only publishes from the chat should not block the UI with a loading screen.
+  const isQueryChange = query !== oldQuery
+  if (isQueryChange) {
+    loadingMessage.value = 'Counting our conifers...'
+    defaultQueryLoading.value = true
+  } else {
+    startTileRefreshMessage()
+  }
   mapQueryChangedAt = nowMs()
   firstTreesSourceLoadedLogged = false
   firstMapIdleAfterPublishLogged = false
-  defaultQueryLoading.value = true
   lastVisibleRangeSigByZoom.clear()
   introLockedRangeByZoom.clear()
   await setColorOverrideSql(colorOverrideSql.value)
@@ -556,6 +586,7 @@ onMounted(() => {
       if (e.sourceId === 'trees' && !firstTreesSourceLoadedLogged) {
         firstTreesSourceLoadedLogged = true
         defaultQueryLoading.value = false
+        stopTileRefreshMessage()
         console.info('[Perf] map:trees-source:loaded', {
           msSincePublish: Math.round(nowMs() - mapQueryChangedAt),
           isSourceLoaded: e.isSourceLoaded,
@@ -634,6 +665,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  stopTileRefreshMessage()
   cancelIntro()
   if (pendingSwoopFlyTimeout != null) {
     window.clearTimeout(pendingSwoopFlyTimeout)
@@ -683,6 +715,11 @@ onUnmounted(() => {
 .map-loading {
   background: rgba(22, 33, 62, 0.96);
   color: #4fc3f7;
+}
+
+.map-refreshing {
+  background: rgba(22, 33, 62, 0.82);
+  font-size: 0.8rem;
 }
 
 .map-error {

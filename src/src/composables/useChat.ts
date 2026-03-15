@@ -21,7 +21,6 @@ import type { CityCode } from './useMapData'
 import TREE_ENRICHMENT_MODEL from '../../../data/raw/tree_enrichment.preql?raw'
 import TREE_INFO_MODEL from '../../../data/raw/tree_info.preql?raw'
 import TREE_COMMON_MODEL from '../../../data/raw/tree_common.preql?raw'
-import CORE_MODEL from '../../../data/raw/core.preql?raw'
 import SF_TREE_INFO_MODEL from '../../../data/raw/sf_tree_info.preql?raw'
 import NYC_TREE_INFO_MODEL from '../../../data/raw/nyc_tree_info.preql?raw'
 import BOSTON_TREE_INFO_MODEL from '../../../data/raw/boston_tree_info.preql?raw'
@@ -41,6 +40,8 @@ const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
   openrouter: 'google/gemini-3-flash-preview',
   demo: 'google/gemini-3-flash-preview',
 }
+
+import CORE_MODEL from '../../../data/raw/core.preql?raw'
 
 const ALL_MODEL_SOURCES = [
   { alias: 'tree_enrichment', contents: TREE_ENRICHMENT_MODEL },
@@ -165,7 +166,7 @@ You have access to tools for querying the tree dataset, displaying query results
 When users ask about trees, write Trilogy SELECT queries using the available concepts. When they want to visualize results on the map, use publish_results with a query that returns tree_id values and optional color map. The website and map are dark themed, so color appropriately. When they mention locations, use lookup_landmark to find coordinates, then navigate there.
 
 AVAILABLE CONCEPTS:
-- tree_id (int) — unique identifier
+- tree_id (string) — unique identifier
 - common_name (string) — e.g. "Swamp Myrtle"
 - plant_date (date) — date planted; not known for all trees.
 - species (string) — full species string like "Tristaniopsis laurina :: Swamp Myrtle"

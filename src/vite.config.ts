@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
@@ -30,5 +30,9 @@ export default defineConfig({
     rollupOptions: {
       external: ['@motherduck/wasm-client'],
     },
+  },
+  test: {
+    environment: 'node',
+    include: ['src/tests/**/*.test.ts'],
   },
 })

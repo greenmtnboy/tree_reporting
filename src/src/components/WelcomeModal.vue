@@ -3,13 +3,13 @@
     <div v-if="visible" class="welcome-overlay" @click.self="dismiss">
       <div class="welcome-modal">
         <div class="welcome-header">
-          <h2>Welcome to SF Tree Explorer</h2>
+          <h2>Welcome to Urban Trees</h2>
           <button class="welcome-close" @click="dismiss" aria-label="Close">&times;</button>
         </div>
         <div class="welcome-body">
           <p>
-            This is an interactive explorer of <strong>San Francisco's urban tree population</strong>.
-            Browse the map to discover the diversity and distribution of trees across the city.
+            This is an interactive explorer of <strong>urban tree populations</strong> across multiple cities.
+            Browse the map to discover the diversity and distribution of trees across the urban forest.
           </p>
           <p>
             You can navigate the map freely, but the experience is best when using the
@@ -29,7 +29,8 @@
             <h3>Data Sources</h3>
             <ul>
               <li><a href="https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq" target="_blank" rel="noopener">SF Open Data — Street Tree List</a></li>
-              <li><a href="https://data.sfgov.org/City-Infrastructure/DPW-Maintained-Street-Trees/7g6n-5jhi" target="_blank" rel="noopener">SF DPW — Maintained Street Trees</a></li>
+              <li><a href="https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh" target="_blank" rel="noopener">NYC Open Data — Street Tree Census</a></li>
+              <li><a href="https://data.boston.gov/dataset/bprd-trees" target="_blank" rel="noopener">City of Boston — Street Trees</a></li>
             </ul>
             <p class="welcome-disclaimer">
               Species metadata may contain inaccuracies. Corrections are welcome!
