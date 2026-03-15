@@ -16,7 +16,8 @@ import type {
 import { useDuckDB } from './useDuckDB'
 import { useFlyTo } from './useFlyTo'
 import { useLandmarkData } from './useLandmarkData'
-import { useMapData } from './useMapData'
+import { useMapData, CITY_CONFIG } from './useMapData'
+import type { CityCode } from './useMapData'
 import TREES_MODEL from '../../../data/raw/tree_info.preql?raw'
 
 const API_KEY_STORAGE = 'sf_trees_api_key'
@@ -136,12 +137,18 @@ const _today = new Date().toLocaleDateString('en-US', {
   day: 'numeric',
 })
 
-const SYSTEM_PROMPT = buildCustomTrilogyPrompt(
-  ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the SF Trees map application. You help users explore San Francisco's urban forest dataset of 100k+ trees and visualize the results. A default map is loaded with coloring by tree category, zoomed out to see SF from the oakland side.
+const _cityNames = Object.values(CITY_CONFIG).map((c) => c.name).join(', ')
+
+function buildSystemPromptForCity(city: CityCode): string {
+  const cityName = CITY_CONFIG[city].name
+  return buildCustomTrilogyPrompt(
+    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Urban Trees map application. You help users explore cities' urban forest datasets of 100k+ trees and visualize the results. A default map is loaded with coloring by tree category. Cities supported include ${_cityNames}.
+
+ACTIVE CITY: ${cityName} (city code: ${city}). All queries must filter with WHERE city = '${city}' unless the user explicitly asks about another city.
 
 You have access to tools for querying the tree dataset, displaying query results on the map, navigating the map camera, and looking up landmarks for the active city.
 
-When users ask about trees, write Trilogy/PreQL SELECT queries using the available concepts. When they want to visualize results on the map, use publish_results with a query that returns tree_id values and optional color map. The website and map are dark themed, so color appropriately. When they mention locations, use lookup_landmark to find coordinates, then navigate there.
+When users ask about trees, write Trilogy SELECT queries using the available concepts. When they want to visualize results on the map, use publish_results with a query that returns tree_id values and optional color map. The website and map are dark themed, so color appropriately. When they mention locations, use lookup_landmark to find coordinates, then navigate there.
 
 AVAILABLE CONCEPTS:
 - tree_id (int) — unique identifier
@@ -184,7 +191,8 @@ IMPORTANT GUIDELINES:
 Be concise and helpful. When showing query results, format them nicely.
 
 Today's date: ${_today}`,
-)
+  )
+}
 
 // Module-level state (singleton)
 const messages = ref<ChatMessage[]>([])
@@ -226,7 +234,7 @@ export function useChat() {
   const { query: duckQuery } = useDuckDB()
   const { flyTo } = useFlyTo()
   const { landmarks } = useLandmarkData()
-  const { publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
+  const { selectedCity, publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
   const trilogy = useTrilogyCore()
 
   // Ensure the Trilogy resolver points at the production service
@@ -576,7 +584,7 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
         {
           tools: TOOLS,
           maxIterations: MAX_LOOPS,
-          buildSystemPrompt: () => SYSTEM_PROMPT,
+          buildSystemPrompt: () => buildSystemPromptForCity(selectedCity.value),
         },
       )
     } catch (e) {

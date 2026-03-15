@@ -1,6 +1,7 @@
 import tree_common;
 import sf_tree_info;
 import nyc_tree_info;
+import boston_tree_info;
 
 
 # --- Merged union datasource ---
