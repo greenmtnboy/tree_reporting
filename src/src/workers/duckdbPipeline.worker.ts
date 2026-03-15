@@ -17,7 +17,7 @@ FROM trees
 WHERE latitude IS NOT NULL AND longitude IS NOT NULL
 `
 
-import { REMOTE_TREES_PARQUET_URL, REMOTE_SPECIES_PARQUET_URL } from './parquetUrls'
+import { REMOTE_TREES_PARQUET_URL, REMOTE_SPECIES_PARQUET_URL, REMOTE_LANDMARKS_PARQUET_URL } from './parquetUrls'
 
 const WEB_MERCATOR_MAX = 20037508.342789244
 const WEB_MERCATOR_WORLD = WEB_MERCATOR_MAX * 2
@@ -462,6 +462,17 @@ async function doInit() {
     `)
   } catch (e) {
     console.warn('[Perf] duckdb-worker:species-load:failed', e)
+  }
+
+  try {
+    await conn.query(`
+      CREATE TABLE landmarks AS
+      SELECT landmark_id, city, name, latitude, longitude
+      FROM read_parquet('${REMOTE_LANDMARKS_PARQUET_URL}')
+      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+    `)
+  } catch (e) {
+    console.warn('[duckdb-worker] landmarks-load:failed', e)
   }
 
   // Always compute trees_fast from the full multi-city trees table rather than

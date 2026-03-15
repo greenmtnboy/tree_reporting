@@ -361,13 +361,15 @@ async function showTreePopup(feature: GeoJSON.Feature, offset: number) {
   if (!mapRef.value) return
   const requestToken = ++popupRequestToken
   const coords = (feature.geometry as GeoJSON.Point).coordinates.slice() as [number, number]
-  const id = Number(feature.properties?.id)
-  if (!Number.isFinite(id) || id <= 0) return
+  const id = feature.properties?.id
+  if (!id || id === 'unkwn') return
+  // Escape single quotes to prevent SQL injection from tile data
+  const safeId = String(id).replace(/'/g, "''")
   try {
     const { rows } = await duckQuery(`
       SELECT tree_id, common_name, species, plant_date, diameter_at_breast_height
       FROM trees
-      WHERE tree_id = ${id}
+      WHERE tree_id = '${safeId}'
       LIMIT 1
     `)
     const row = rows[0] as any

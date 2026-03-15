@@ -1,25 +1,32 @@
-import { ref } from 'vue'
-import type { RawLandmark, Landmark } from '../types'
+import { ref, watch } from 'vue'
+import type { Landmark } from '../types'
+import { useDuckDB } from './useDuckDB'
+import { useMapData } from './useMapData'
 
 export function useLandmarkData() {
   const landmarks = ref<Landmark[]>([])
   const loading = ref(true)
   const error = ref<string | null>(null)
 
-  async function load() {
-    try {
-      const res = await fetch(import.meta.env.BASE_URL + 'data/landmark_data.json')
-      if (!res.ok) throw new Error(`Failed to fetch landmark data: ${res.status}`)
-      const raw: RawLandmark[] = await res.json()
+  const { query } = useDuckDB()
+  const { selectedCity } = useMapData()
 
-      landmarks.value = raw
-        .filter((l) => l.name && l.latitude != null && l.longitude != null)
-        .map((l) => ({
-          name: l.name.trim(),
-          lng: l.longitude,
-          lat: l.latitude,
+  async function load(city: string) {
+    loading.value = true
+    try {
+      const result = await query(`
+        SELECT name, latitude, longitude
+        FROM landmarks
+        WHERE city = '${city}'
+        ORDER BY name
+      `)
+      landmarks.value = result.rows
+        .filter((r) => r.name)
+        .map((r) => ({
+          name: (r.name as string).trim(),
+          lng: r.longitude as number,
+          lat: r.latitude as number,
         }))
-        .sort((a, b) => a.name.localeCompare(b.name))
     } catch (e) {
       error.value = (e as Error).message
     } finally {
@@ -27,6 +34,7 @@ export function useLandmarkData() {
     }
   }
 
-  load()
+  watch(selectedCity, (city) => { void load(city) }, { immediate: true })
+
   return { landmarks, loading, error }
 }

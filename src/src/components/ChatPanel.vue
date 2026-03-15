@@ -35,7 +35,7 @@
     <!-- Info panel: field reference -->
     <div v-if="showInfo && isConfigured && !showSettings" class="chat-info-panel">
       <p class="chat-info-heading">Available Data Fields</p>
-      <p>I can tell you about any of the following data points for our SF trees.</p>
+      <p>I can tell you about any of the following data points for our urban trees.</p>
       <p class="chat-info-section">Tree Fields</p>
       <ul class="chat-info-list">
         <li><code>tree_id</code> — unique identifier</li>
@@ -117,7 +117,7 @@
           Loading tree data&hellip;
         </template>
         <template v-else>
-          Ask me about SF trees! Try:
+          Ask me about city trees! Try:
           <div class="chat-suggestions">
             <button
               v-for="suggestion in SUGGESTIONS"
@@ -155,7 +155,7 @@
       <input
         v-model="userInput"
         type="text"
-        :placeholder="dbReady ? 'Ask about SF trees...' : 'Loading data...'"
+        :placeholder="dbReady ? 'Ask about urban trees...' : 'Loading data...'"
         @keydown.enter="handleSend"
         :disabled="isLoading || !dbReady || !introComplete"
       />
@@ -193,9 +193,9 @@ const KEY_PLACEHOLDERS: Record<string, string> = {
 
 const SUGGESTIONS = [
   'What can you do?',
-  'How many palm trees are there?',
-  'Show me trees near Coit Tower',
-  'Where is the biggest magnolia tree?',
+  'What is the most common type of tree?',
+  'Show me trees in bloom right now!',
+  'Where is the biggest tree?',
 ]
 
 const { messages, isLoading, isConfigured, providerType, setConnection, deleteConnection, sendMessage, clearMessages } = useChat()
