@@ -94,7 +94,8 @@ const { selectedCity, setSelectedCity, currentMapQuery, publishedTreeIdFilterSql
 
 // Initialise city from URL on first load
 const urlCity = route.query.city
-if (urlCity && urlCity in CITY_CONFIG) setSelectedCity(urlCity as CityCode)
+const urlCityStr = Array.isArray(urlCity) ? urlCity[0] : urlCity
+if (urlCityStr && urlCityStr in CITY_CONFIG) setSelectedCity(urlCityStr as CityCode)
 
 const introCenterRef = computed((): [number, number] => CITY_CONFIG[selectedCity.value].center)
 
