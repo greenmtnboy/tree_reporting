@@ -1,8 +1,12 @@
-# SF Tree Reporting
+#  Urban Tree Reporting
 
-An interactive browser-based map of San Francisco's urban forest with a chat assistant (free to try!). Explore hundreds of thousands of street trees by location, species, and ecological attributes.
+An interactive browser-based map of city trees with a chat assistant (free to try!). Explore hundreds of thousands of street trees by location, species, and ecological attributes.
 
 Zoom around. Find interesting clusters.
+
+Currently as data from two US cities.
+- SFO
+- NYC
 
 **[Live page](https://greenmtnboy.github.io/sf_tree_reporting/)**
 
@@ -10,13 +14,15 @@ Zoom around. Find interesting clusters.
 
 ## What it does
 
-The page loads San Francisco street tree records into an in-browser DuckDB instance and renders them on a MapLibre GL map with adaptive display.
+Shows you pretty graphs of trees that you can zoom around on!
 
-Clicking a tree opens a popup with its common name, species, planting date, trunk diameter, site description, and enriched species data (native status, evergreen status, mature height, bloom season, wildlife value, fire risk).
+The page loads raw tree records sourced from city open data into an in-browser DuckDB instance and renders them on a MapLibre GL map with adaptive display.
 
-The sidebar lists San Francisco landmarks with a search filter; clicking one flies the map camera to that location.
+Clicking a tree opens a popup with its common name, species, planting date, trunk diameter,and enriched species data (native status, evergreen status, mature height, bloom season, wildlife value, fire risk, etc, etc)
 
-A chat panel (bring your own key or use a test key) lets you interact with the map in natural language - ask questions, fly around, or update what's shown.
+For supported cities you'll also get a landmark list with a search filter; clicking one flies the map camera to that location.
+
+A chat panel to use with LLMs (bring your own API key or use a test key) lets you interact with the map in natural language - ask questions, fly around, or update what's shown.
 
 ---
 
@@ -47,6 +53,8 @@ CARTO Dark Matter vector tile style.
 
 ## Tech stack
 
+If you're into the details:
+
 | Layer | Library / Service |
 |---|---|
 | Framework | Vue 3 (TypeScript) |
@@ -57,7 +65,7 @@ CARTO Dark Matter vector tile style.
 | Routing | Vue Router 4 |
 | Query language | Trilogy |
 
-Data pipeline dependencies: Python 3.13, PyArrow, DuckDB, Pillow, instructor, google-genai.
+Data pipeline dependencies: Python 3.13, PyArrow, Pytrilogy, DuckDB, Pillow, instructor, google-genai. The fun stuff!
 
 ---
 
@@ -71,9 +79,16 @@ https://github.com/greenmtnboy/sf_tree_reporting
 
 ## Dev
 
+### City Additions
+
+Update ingest pipelines with city source.
+- ingest watermark script
+- data ingest script
+- trilogy file + imports and merge
+
 ### Update Data
 
-TODO: instructions that would work for anyone else.
+TODO: instructions that would work for anyone else. (does GCS writes; bucket/locations would need to be parameterized)
 
 ```bash
  trilogy refresh data\raw\tree_info.preql --env=.env

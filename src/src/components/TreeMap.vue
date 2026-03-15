@@ -8,6 +8,16 @@
       <span class="legend-label">{{ entry.label }}</span>
     </div>
   </div>
+  <div v-if="!props.simplified" class="city-selector">
+    <button
+      v-for="(cfg, code) in CITY_CONFIG"
+      :key="code"
+      class="city-btn"
+      :class="{ active: selectedCity === code }"
+      :disabled="isInitialLoading"
+      @click="void switchCity(code as CityCode)"
+    >{{ cfg.name }}</button>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -16,7 +26,8 @@ import maplibregl from 'maplibre-gl'
 import { useTreeData } from '../composables/useTreeData'
 import { registerCategoryColoredIcons } from '../composables/useTreeCategories'
 import { useFlyTo } from '../composables/useFlyTo'
-import { useMapData } from '../composables/useMapData'
+import { useMapData, CITY_CONFIG, type CityCode } from '../composables/useMapData'
+import { useRoute, useRouter } from 'vue-router'
 import { useDuckDB } from '../composables/useDuckDB'
 import { useMapIntro } from '../composables/useMapIntro'
 import { useMapLayers, TREES_SOURCE_MAXZOOM } from '../composables/useMapLayers'
@@ -64,6 +75,7 @@ const {
   setTileQuery,
   setPublishedTreeIdFilterSql,
   setColorOverrideSql,
+  setCityContext,
   setViewportZoom,
   setViewportCenter,
   setVisibleTileRange,
@@ -76,7 +88,16 @@ const {
 
 const { loading, error, getSpeciesEnrichment } = useTreeData()
 const { target: flyToTarget } = useFlyTo()
-const { currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision } = useMapData()
+const route = useRoute()
+const router = useRouter()
+const { selectedCity, setSelectedCity, currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision } = useMapData()
+
+// Initialise city from URL on first load
+const urlCity = route.query.city
+const urlCityStr = Array.isArray(urlCity) ? urlCity[0] : urlCity
+if (urlCityStr && urlCityStr in CITY_CONFIG) setSelectedCity(urlCityStr as CityCode)
+
+const introCenterRef = computed((): [number, number] => CITY_CONFIG[selectedCity.value].center)
 
 // --- Computed ---
 
@@ -290,11 +311,12 @@ const { addTreeLayers, applyColorToLayers, requestTreesSourceReload, forceTreesT
 
 // --- Intro animation ---
 
-const { loadingMessage, runIntroZoomOut, cancelIntro, recordIntroPrefetchStatus } = useMapIntroAnimation({
+const { loadingMessage, runIntroZoomOut, cancelIntro, runGlobeSwoopTo, recordIntroPrefetchStatus } = useMapIntroAnimation({
   map: mapRef,
   simplified: props.simplified ?? false,
   introActive,
   introLockedRangeByZoom,
+  introCenter: introCenterRef,
   setIntroComplete,
   setAutoTileFetchEnabled,
   setVisibleTileRange,
@@ -319,7 +341,6 @@ function formatPopupHtml(row: any, enrichment?: ReturnType<typeof getSpeciesEnri
     ['Category', category],
     ['Planted', planted],
     ['Trunk diameter', row.diameter_at_breast_height != null ? `${row.diameter_at_breast_height}"` : null],
-    ['Site', row.site_info],
     ['Native', enrichment?.native_status],
     ['Evergreen', evergreen],
     ['Mature height', enrichment?.mature_height_ft != null ? `${enrichment.mature_height_ft} ft` : null],
@@ -341,13 +362,15 @@ async function showTreePopup(feature: GeoJSON.Feature, offset: number) {
   if (!mapRef.value) return
   const requestToken = ++popupRequestToken
   const coords = (feature.geometry as GeoJSON.Point).coordinates.slice() as [number, number]
-  const id = Number(feature.properties?.id)
-  if (!Number.isFinite(id) || id <= 0) return
+  const id = feature.properties?.id
+  if (!id || id === 'unkwn') return
+  // Escape single quotes to prevent SQL injection from tile data
+  const safeId = String(id).replace(/'/g, "''")
   try {
     const { rows } = await duckQuery(`
-      SELECT tree_id, common_name, species, plant_date, site_info, diameter_at_breast_height
+      SELECT tree_id, common_name, species, plant_date, diameter_at_breast_height
       FROM trees
-      WHERE tree_id = ${id}
+      WHERE tree_id = '${safeId}'
       LIMIT 1
     `)
     const row = rows[0] as any
@@ -384,6 +407,28 @@ function bindTreeInteractions() {
     mapRef.value.on('mouseleave', layer, () => { mapRef.value!.getCanvas().style.cursor = '' })
   }
   treeInteractionsBound = true
+}
+
+// --- City switching ---
+
+let citySwitchInProgress = false
+
+async function switchCity(city: CityCode) {
+  if (city === selectedCity.value || citySwitchInProgress) return
+  citySwitchInProgress = true
+
+  try {
+    const { center, name } = CITY_CONFIG[city]
+
+    await runGlobeSwoopTo(center, name)
+
+    // State updates after landing — triggers the query/filter watcher which reloads tiles.
+    setSelectedCity(city)
+    void router.replace({ query: { ...route.query, city } })
+    void setCityContext(city)
+  } finally {
+    citySwitchInProgress = false
+  }
 }
 
 // --- Camera fly-to ---
@@ -463,7 +508,7 @@ onMounted(() => {
     container: mapContainer.value!,
     style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
     zoom: props.simplified ? 13 : INTRO_START_ZOOM,
-    center: [-122.4194, 37.7749],
+    center: CITY_CONFIG[selectedCity.value].center,
     pitch: props.simplified ? 0 : 60,
     bearing: props.simplified ? 0 : -20,
     maxPitch: props.simplified ? 0 : 70,
@@ -575,6 +620,8 @@ onMounted(() => {
         lastVisibleRangeSigByZoom.clear()
         introLockedRangeByZoom.clear()
 
+        // Set city-specific DB context (bounds, agg cache, color map) for initial city.
+        await setCityContext(selectedCity.value)
         await setTileQuery(currentMapQuery.value)
         await setPublishedTreeIdFilterSql(publishedTreeIdFilterSql.value)
         addTreeLayers()
@@ -641,6 +688,45 @@ onUnmounted(() => {
 .map-error {
   background: rgba(183, 28, 28, 0.9);
   color: #ffcdd2;
+}
+
+.city-selector {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  gap: 4px;
+  z-index: 4;
+}
+
+.city-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(79, 195, 247, 0.3);
+  background: rgba(22, 33, 62, 0.88);
+  color: #8ca0c8;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.city-btn:hover {
+  background: rgba(30, 50, 90, 0.95);
+  color: #c8daf8;
+  border-color: rgba(79, 195, 247, 0.55);
+}
+
+.city-btn.active {
+  background: rgba(15, 52, 96, 0.96);
+  color: #4fc3f7;
+  border-color: rgba(79, 195, 247, 0.7);
+}
+
+.city-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
 }
 
 .map-legend {

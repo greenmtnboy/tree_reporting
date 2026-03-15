@@ -25,9 +25,9 @@ from pydantic import BaseModel, Field
 import instructor
 
 ICON_SIZE = 48
-ENRICHMENT_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/sf_trees/tree_enrichment.parquet"
-ENRICHMENT_GCS_URI  = "gs://trilogy_public_models/duckdb/sf_trees/tree_enrichment.parquet"
-TREE_INFO_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/sf_trees/tree_info.parquet"
+ENRICHMENT_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment.parquet"
+ENRICHMENT_GCS_URI  = "gs://trilogy_public_models/duckdb/trees/tree_enrichment.parquet"
+TREE_INFO_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info.parquet"
 
 
 SYNONYMS = {
@@ -264,6 +264,7 @@ SYNONYMS = {
     "robinia x ambigua 'purple robe'": "Robinia",
     "robinia x ambigua": "Robinia × ambigua",
     "x chiranthofremontia lenzii": "× Chiranthofremontia",
+    "betula alleghaniensis - yellow birch": "Betula alleghaniensis",
 }
 
 EXCLUDED_SPECIES = {"::", "tree", "to be determine'd"}
@@ -944,8 +945,7 @@ def get_all_species() -> list[str]:
             """
             SELECT DISTINCT species
             FROM read_parquet(?)
-            WHERE plant_type = 'Tree'
-              AND species IS NOT NULL
+            WHERE species IS NOT NULL
               AND lower(trim(species)) NOT IN ('::', 'tree', 'to be determine''d')
             ORDER BY species
             """,
@@ -1038,7 +1038,7 @@ def merge_with_existing(existing: pa.Table | None, new_rows: list[dict]) -> pa.T
     new_table = build_table(new_rows)
     if existing is None or len(existing) == 0:
         return new_table
-    re_processed = pa.array([row["species"] for row in new_rows])
+    re_processed = pa.array([row["species"] for row in new_rows], type=pa.string())
     keep_mask = pc.invert(pc.is_in(existing.column("species"), re_processed))
     return pa.concat_tables([existing.filter(keep_mask), new_table])
 
@@ -1173,7 +1173,7 @@ if __name__ == "__main__":
     already_enriched, complete_enriched = get_already_enriched(enrichment_source)
     all_species = get_all_species()
     # Process species that are new OR previously enriched but incomplete
-    to_process = [s for s in all_species if s not in complete_enriched]
+    to_process = [s for s in all_species if s not in already_enriched]
     if local_mode:
         to_process = to_process[:args.limit]
     incomplete_count = sum(1 for s in to_process if s in already_enriched)
@@ -1191,6 +1191,8 @@ if __name__ == "__main__":
 
     new_rows: list[dict] = []
     for q_species in to_process:
+        if not q_species:
+            continue
         status = "re-enrich" if q_species in already_enriched else "new"
         print(f"  [{status}] {q_species}", file=sys.stderr)
         enrichment = enrich_species(q_species, client, print_full_context=args.print_llm_context)

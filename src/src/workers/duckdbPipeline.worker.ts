@@ -17,10 +17,7 @@ FROM trees
 WHERE latitude IS NOT NULL AND longitude IS NOT NULL
 `
 
-const REMOTE_PARQUET_BASE_URL = 'https://storage.googleapis.com/trilogy_public_models/duckdb/sf_trees'
-const REMOTE_TREES_PARQUET_URL = `${REMOTE_PARQUET_BASE_URL}/tree_info.parquet`
-const REMOTE_SPECIES_PARQUET_URL = `${REMOTE_PARQUET_BASE_URL}/tree_enrichment.parquet`
-const REMOTE_TREES_FAST_PARQUET_URL = `${REMOTE_PARQUET_BASE_URL}/trees_fast.parquet`
+import { REMOTE_TREES_PARQUET_URL, REMOTE_SPECIES_PARQUET_URL, REMOTE_LANDMARKS_PARQUET_URL } from './parquetUrls'
 
 const WEB_MERCATOR_MAX = 20037508.342789244
 const WEB_MERCATOR_WORLD = WEB_MERCATOR_MAX * 2
@@ -91,6 +88,7 @@ let prewarmDoneRevision = -1
 let prewarmPromise: Promise<void> | null = null
 let autoTileFetchEnabled = true
 let activeQueuedWorkers = 0
+let activeCityDefaultQuery: string = DEFAULT_BASE_QUERY_SQL
 
 function nowMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now()
@@ -135,10 +133,8 @@ function normalizeSql(sql: string): string {
   return sql.replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
-const NORMALIZED_DEFAULT_BASE_QUERY_SQL = normalizeSql(DEFAULT_BASE_QUERY_SQL)
-
 function isDefaultBaseQuery(sql: string): boolean {
-  return normalizeSql(sql) === NORMALIZED_DEFAULT_BASE_QUERY_SQL
+  return normalizeSql(sql) === normalizeSql(activeCityDefaultQuery)
 }
 
 function tileCacheKey(z: number, x: number, y: number): string {
@@ -423,19 +419,39 @@ async function doInit() {
 
   conn = await db.connect()
 
-  await conn.query(`
-    CREATE TABLE trees AS
-    SELECT
-      tree_id,
-      coalesce(nullif(trim(string_split(species, '::')[2]), ''), trim(string_split(species, '::')[1])) AS common_name,
-      site_info,
-      plant_date,
-      species,
-      latitude,
-      longitude,
-      diameter_at_breast_height
-    FROM read_parquet('${REMOTE_TREES_PARQUET_URL}')
-  `)
+  // Try loading with an embedded tree_category column (multi-city enriched parquet).
+  // Fall back to a NULL column if the parquet schema doesn't include it yet.
+  try {
+    await conn.query(`
+      CREATE TABLE trees AS
+      SELECT
+        tree_id,
+        city,
+        coalesce(nullif(trim(string_split(species, '::')[2]), ''), trim(string_split(species, '::')[1])) AS common_name,
+        plant_date,
+        species,
+        latitude,
+        longitude,
+        diameter_at_breast_height,
+        tree_category
+      FROM read_parquet('${REMOTE_TREES_PARQUET_URL}')
+    `)
+  } catch {
+    await conn.query(`
+      CREATE TABLE trees AS
+      SELECT
+        tree_id,
+        city,
+        coalesce(nullif(trim(string_split(species, '::')[2]), ''), trim(string_split(species, '::')[1])) AS common_name,
+        plant_date,
+        species,
+        latitude,
+        longitude,
+        diameter_at_breast_height,
+        NULL::VARCHAR AS tree_category
+      FROM read_parquet('${REMOTE_TREES_PARQUET_URL}')
+    `)
+  }
 
   try {
     await conn.query(`
@@ -447,28 +463,34 @@ async function doInit() {
     console.warn('[Perf] duckdb-worker:species-load:failed', e)
   }
 
-  let loadedTreesFastFromParquet = false
   try {
-    await conn.query(`CREATE OR REPLACE TABLE trees_fast AS SELECT * FROM read_parquet('${REMOTE_TREES_FAST_PARQUET_URL}')`)
-    loadedTreesFastFromParquet = true
-  } catch {
-    // fallback below
+    await conn.query(`
+      CREATE TABLE landmarks AS
+      SELECT landmark_id, city, name, latitude, longitude
+      FROM read_parquet('${REMOTE_LANDMARKS_PARQUET_URL}')
+      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+    `)
+  } catch (e) {
+    console.warn('[duckdb-worker] landmarks-load:failed', e)
   }
 
-  if (!loadedTreesFastFromParquet) {
-    await conn.query(`
+  // Always compute trees_fast from the full multi-city trees table rather than
+  // loading the SF-only prebuilt parquet, so all cities get proper category data.
+  // Prefer t.tree_category from the parquet (populated for all cities) and fall
+  // back to the SF species_enrichment join for legacy SF rows that may lack it.
+  await conn.query(`
     CREATE OR REPLACE TABLE trees_fast AS
     WITH joined AS (
       SELECT
         t.tree_id,
+        t.city,
         t.common_name,
-        t.site_info,
         t.plant_date,
         t.species,
         t.latitude,
         t.longitude,
         COALESCE(t.diameter_at_breast_height, 3) AS dbh,
-        CASE lower(trim(COALESCE(se.tree_category, 'default')))
+        CASE lower(trim(COALESCE(t.tree_category, se.tree_category, 'default')))
           WHEN 'palm' THEN 'palm'
           WHEN 'broadleaf' THEN 'broadleaf'
           WHEN 'spreading' THEN 'spreading'
@@ -494,8 +516,8 @@ async function doInit() {
     )
     SELECT
       tree_id,
+      city,
       common_name,
-      site_info,
       plant_date,
       species,
       latitude,
@@ -528,7 +550,6 @@ async function doInit() {
       CAST(floor(y_norm * pow(2, 20)) AS INTEGER) AS ytile_z20
     FROM joined
   `)
-  }
 
   // Build default color map: each tree gets a display_color from its category
   await buildDefaultColorMap()
@@ -596,9 +617,8 @@ function postColorMapUpdate() {
 /** Create / reset the __tree_color_map table from default category→color assignment */
 async function buildDefaultColorMap() {
   if (!conn) return
-  await conn.query(`DROP TABLE IF EXISTS ${COLOR_MAP_TABLE}`)
   await conn.query(`
-    CREATE TABLE ${COLOR_MAP_TABLE} AS
+    CREATE OR REPLACE TABLE ${COLOR_MAP_TABLE} AS
     SELECT
       tree_id,
       CASE COALESCE(tree_category, 'default')
@@ -692,7 +712,7 @@ WITH base AS (
         64,
         true
       ),
-      'id': COALESCE(base.tree_id, tf.tree_id, 0),
+      'id': COALESCE(base.tree_id, tf.tree_id, 'unkwn'),
       'dbh': TRY_CAST(COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS DOUBLE),
       'category': COALESCE(tf.tree_category, 'default'),
       'display_color': cm.display_color,
@@ -795,7 +815,7 @@ WITH base AS (
   SELECT
     tf.x_3857,
     tf.y_3857,
-    COALESCE(base.tree_id, tf.tree_id, 0) AS id,
+    COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
     COALESCE(tf.tree_category, 'default') AS category,
     cm.display_color,
@@ -999,7 +1019,7 @@ WITH base AS (
   SELECT
     tf.x_3857,
     tf.y_3857,
-    COALESCE(base.tree_id, tf.tree_id, 0) AS id,
+    COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
     COALESCE(tf.tree_category, 'default') AS category,
     cm.display_color,
@@ -1162,7 +1182,7 @@ WITH base AS (
   ${baseQuery}
 ), points AS (
   SELECT
-    COALESCE(base.tree_id, tf.tree_id, 0) AS id,
+    COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
     COALESCE(tf.tree_category, 'default') AS category,
     cm.display_color,
@@ -1288,9 +1308,8 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
 
     if (Number.isFinite(count) && count > 0) {
       // Rebuild color map: agent colors override category defaults
-      await conn.query(`DROP TABLE IF EXISTS ${COLOR_MAP_TABLE}`)
       await conn.query(`
-CREATE TABLE ${COLOR_MAP_TABLE} AS
+CREATE OR REPLACE TABLE ${COLOR_MAP_TABLE} AS
 SELECT
   tf.tree_id,
   COALESCE(aco.display_color,
@@ -1322,6 +1341,56 @@ LEFT JOIN __agent_color_override aco ON tf.tree_id = aco.tree_id
   }
 
   await rebuildAggCaches()
+  invalidateTileCaches()
+  postColorMapUpdate()
+}
+
+async function rebuildCityBounds(cityCode: string) {
+  if (!conn) return
+  dataTileBoundsByZoom.clear()
+  const boundsResult = await conn.query(`
+    SELECT
+      MIN(xtile_z13) AS min_x13, MAX(xtile_z13) AS max_x13, MIN(ytile_z13) AS min_y13, MAX(ytile_z13) AS max_y13,
+      MIN(xtile_z14) AS min_x14, MAX(xtile_z14) AS max_x14, MIN(ytile_z14) AS min_y14, MAX(ytile_z14) AS max_y14,
+      MIN(xtile_z15) AS min_x15, MAX(xtile_z15) AS max_x15, MIN(ytile_z15) AS min_y15, MAX(ytile_z15) AS max_y15,
+      MIN(xtile_z16) AS min_x16, MAX(xtile_z16) AS max_x16, MIN(ytile_z16) AS min_y16, MAX(ytile_z16) AS max_y16,
+      MIN(xtile_z17) AS min_x17, MAX(xtile_z17) AS max_x17, MIN(ytile_z17) AS min_y17, MAX(ytile_z17) AS max_y17,
+      MIN(xtile_z18) AS min_x18, MAX(xtile_z18) AS max_x18, MIN(ytile_z18) AS min_y18, MAX(ytile_z18) AS max_y18,
+      MIN(xtile_z19) AS min_x19, MAX(xtile_z19) AS max_x19, MIN(ytile_z19) AS min_y19, MAX(ytile_z19) AS max_y19,
+      MIN(xtile_z20) AS min_x20, MAX(xtile_z20) AS max_x20, MIN(ytile_z20) AS min_y20, MAX(ytile_z20) AS max_y20
+    FROM trees_fast
+    WHERE city = '${cityCode}'
+  `)
+  const boundsRow = boundsResult.toArray()[0] as Record<string, unknown> | undefined
+  if (boundsRow) {
+    for (let z = 13; z <= 20; z += 1) {
+      const minX = Number(boundsRow[`min_x${z}`])
+      const maxX = Number(boundsRow[`max_x${z}`])
+      const minY = Number(boundsRow[`min_y${z}`])
+      const maxY = Number(boundsRow[`max_y${z}`])
+      if ([minX, maxX, minY, maxY].every((v) => Number.isFinite(v))) {
+        dataTileBoundsByZoom.set(z, { minX, maxX, minY, maxY })
+      }
+    }
+  }
+}
+
+async function setCityContext(city: string) {
+  await ensureInit()
+  if (!conn) return
+  activeCityDefaultQuery = `
+SELECT
+  tree_id,
+  species,
+  latitude,
+  longitude,
+  diameter_at_breast_height
+FROM trees
+WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND city = '${city}'
+`
+  await buildDefaultColorMap()
+  await rebuildAggCaches()
+  await rebuildCityBounds(city)
   invalidateTileCaches()
   postColorMapUpdate()
 }
@@ -1465,6 +1534,7 @@ type WorkerMethodMap = {
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
   setColorOverrideSql: { params: { sql: string | null }; result: void }
+  setCityContext: { params: { city: string }; result: void }
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
   setVisibleTileRange: { params: { z: number; minX: number; maxX: number; minY: number; maxY: number }; result: void }
@@ -1534,6 +1604,12 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'setColorOverrideSql': {
         const { sql } = msg.params as WorkerMethodMap['setColorOverrideSql']['params']
         await setColorOverrideSql(sql)
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
+        break
+      }
+      case 'setCityContext': {
+        const { city } = msg.params as WorkerMethodMap['setCityContext']['params']
+        await setCityContext(city)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }

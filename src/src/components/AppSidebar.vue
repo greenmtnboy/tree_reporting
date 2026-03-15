@@ -1,8 +1,8 @@
 <template>
   <aside class="sidebar">
     <div class="sidebar-header">
-      <h1>SF Trees</h1>
-      <div class="subtitle">San Francisco Urban Forest</div>
+      <h1>Urban Trees</h1>
+      <div class="subtitle">The Woods of the Concrete Jungle</div>
     </div>
     <nav class="sidebar-nav">
       <router-link to="/">

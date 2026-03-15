@@ -106,7 +106,7 @@ const TOOLS = [
   {
     name: 'lookup_landmark',
     description:
-      'Search the SF landmarks dataset by name (fuzzy match). Returns the landmark name, latitude, and longitude. Use this when the user mentions a place name in SF to find its coordinates.',
+      'Search the landmarks dataset for the active city by name (fuzzy match). Returns the landmark name, latitude, and longitude. Use this when the user mentions a place name to find its coordinates.',
     input_schema: {
       type: 'object',
       properties: {
@@ -139,14 +139,13 @@ const _today = new Date().toLocaleDateString('en-US', {
 const SYSTEM_PROMPT = buildCustomTrilogyPrompt(
   ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the SF Trees map application. You help users explore San Francisco's urban forest dataset of 100k+ trees and visualize the results. A default map is loaded with coloring by tree category, zoomed out to see SF from the oakland side.
 
-You have access to tools for querying the tree dataset, displaying query results on the map, navigating the map camera, and looking up SF landmarks.
+You have access to tools for querying the tree dataset, displaying query results on the map, navigating the map camera, and looking up landmarks for the active city.
 
 When users ask about trees, write Trilogy/PreQL SELECT queries using the available concepts. When they want to visualize results on the map, use publish_results with a query that returns tree_id values and optional color map. The website and map are dark themed, so color appropriately. When they mention locations, use lookup_landmark to find coordinates, then navigate there.
 
 AVAILABLE CONCEPTS:
 - tree_id (int) — unique identifier
 - common_name (string) — e.g. "Swamp Myrtle"
-- site_info (string) — planting site info (e.g. "Sidewalk: Curb side")
 - plant_date (date) — date planted; not known for all trees.
 - species (string) — full species string like "Tristaniopsis laurina :: Swamp Myrtle"
 - latitude (float) — geographic latitude

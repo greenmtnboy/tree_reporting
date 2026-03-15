@@ -10,25 +10,11 @@ import requests
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.csv as pv
-from datetime import datetime, timezone
 
 DATASET_ID = "tkzw-k3nq"
 DATASET_URL = (
     f"https://data.sfgov.org/api/views/{DATASET_ID}/rows.csv?accessType=DOWNLOAD"
 )
-METADATA_URL = f"https://data.sfgov.org/api/views/{DATASET_ID}.json"
-
-
-def fetch_rows_updated_at() -> datetime:
-    r = requests.get(METADATA_URL)
-    r.raise_for_status()
-    meta = r.json()
-
-    ts = meta.get("rowsUpdatedAt")
-    if ts is None:
-        raise RuntimeError("Dataset metadata missing rowsUpdatedAt")
-
-    return datetime.fromtimestamp(ts, tz=timezone.utc)
 
 
 def download_csv() -> io.BytesIO:
@@ -44,6 +30,17 @@ def download_csv() -> io.BytesIO:
 
 
 def cast_columns(table: pa.Table) -> pa.Table:
+    # TreeID: prefix with "sf-" for global uniqueness across cities
+    if "TreeID" in table.schema.names:
+        ids = table["TreeID"].to_pylist()
+        prefixed = pa.array(
+            [f"sf-{v}" if v is not None else None for v in ids],
+            type=pa.string(),
+        )
+        table = table.set_column(
+            table.schema.get_field_index("TreeID"), "TreeID", prefixed
+        )
+
     # PlantDate: "03/08/2024 12:00:00 AM" -> date32
     # pc.strptime doesn't support %p (AM/PM), so slice the date portion first
     if "PlantDate" in table.schema.names:
@@ -73,18 +70,16 @@ def load_arrow_table(csv_bytes: io.BytesIO) -> pa.Table:
             column_types={"PlantDate": pa.string(), "SiteOrder": pa.string()},
         ),
     )
+    # Filter to trees only before any further processing
+    if "PlantType" in table.schema.names:
+        table = table.filter(pc.equal(table["PlantType"], "Tree"))
     return cast_columns(table)
 
 
-def add_rows_updated_at_column(table: pa.Table, updated_at: datetime) -> pa.Table:
-    n = table.num_rows
-
-    ts_array = pa.array(
-        [updated_at] * n,
-        type=pa.timestamp("us", tz="UTC"),
+def add_city_column(table: pa.Table) -> pa.Table:
+    return table.append_column(
+        "city", pa.array(["USSFO"] * table.num_rows, type=pa.string())
     )
-
-    return table.append_column("rows_updated_at", ts_array)
 
 
 def emit(table: pa.Table) -> None:
@@ -93,8 +88,7 @@ def emit(table: pa.Table) -> None:
 
 
 if __name__ == "__main__":
-    rows_updated_at = fetch_rows_updated_at()
     csv_bytes = download_csv()
     table = load_arrow_table(csv_bytes)
-    table = add_rows_updated_at_column(table, rows_updated_at)
+    table = add_city_column(table)
     emit(table)

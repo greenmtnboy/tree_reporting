@@ -10,8 +10,8 @@ import sys
 
 import duckdb
 
-ENRICHMENT_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/sf_trees/tree_enrichment.parquet"
-TREE_INFO_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/sf_trees/tree_info.parquet"
+ENRICHMENT_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment.parquet"
+TREE_INFO_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info.parquet"
 
 _COMPLETENESS_EXPR = (
     "common_names IS NOT NULL AND trim(common_names) != ''"
@@ -30,8 +30,7 @@ def main() -> None:
                 """
                 SELECT DISTINCT species
                 FROM read_parquet(?)
-                WHERE plant_type = 'Tree'
-                  AND species IS NOT NULL
+                WHERE species IS NOT NULL
                   AND lower(trim(species)) NOT IN ('', '::', 'tree', 'to be determine''d')
                 """,
                 [TREE_INFO_PARQUET],

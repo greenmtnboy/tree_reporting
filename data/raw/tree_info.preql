@@ -1,145 +1,20 @@
-import std.geography;
+import tree_common;
+import sf_tree_info;
+import nyc_tree_info;
 
-key tree_id int; # unique identifier for the tree record
-property tree_id.legal_status string; # legal/administrative status of the tree
-key species string; # scientific and common species name
-property tree_id.address string; # address where the tree is planted
-property tree_id.site_order int; # internal ordering for site location
-property tree_id.site_info string; # contextual site attributes (e.g., median, sidewalk)
-property tree_id.plant_type string; # type of planting (e.g., Tree vs. other flora)
-property tree_id.caretaker string; # entity responsible for tree maintenance
-property tree_id.care_assistant string; # secondary caretaker (if any)
-property tree_id.plant_date date; # date the tree was planted
-property tree_id.diameter_at_breast_height int; # diameter at breast height - standard forestry measure of tree diameter at about 4.5 feet above ground
-property tree_id.plot_size string; # plot area where the tree sits
-property tree_id.permit_notes string; # notes regarding permits or planting conditions
-property tree_id.x_coord float; # internal grid x coordinate
-property tree_id.y_coord float; # internal grid y coordinate
-property tree_id.latitude float::latitude; # geographic latitude for mapping
-property tree_id.longitude float::longitude; # geographic longitude for mapping
-property tree_id.location string; # location string representation
-key data_updated_through datetime; # timestamp of last data update
 
-auto common_name <- coalesce(nullif(split(species, '::')[2],''),split(species, '::')[1]);
-
-# species section
-property species.species_is_enriched bool; # whether the species has been enriched with additional data
-
-root datasource raw_tree_info (
-    TreeID: tree_id,
-    qLegalStatus: ?legal_status,
-    qSpecies: species,
-    qAddress: ?address,
-    SiteOrder: ?site_order,
-    qSiteInfo: site_info,
-    PlantType: plant_type,
-    qCaretaker: caretaker,
-    qCareAssistant: ?care_assistant,
-    PlantDate: ?plant_date,
-    DBH: ?diameter_at_breast_height,
-    PlotSize: ?plot_size,
-    PermitNotes: ?permit_notes,
-    XCoord: ?x_coord,
-    YCoord: ?y_coord,
-    Latitude: ?latitude,
-    Longitude: ?longitude,
-    Location: ?location,
-    rows_updated_at: data_updated_through
-)
-grain (tree_id)
-file `./tree_info.py`
-freshness by data_updated_through;
-
+# --- Merged union datasource ---
 
 datasource tree_info (
     tree_id,
-    ?legal_status,
+    city,
     species,
-    ?address,
-    ?site_order,
-    site_info,
-    plant_type,
-    caretaker,
-    ?care_assistant,
     ?plant_date,
     ?diameter_at_breast_height,
-    ?plot_size,
-    ?permit_notes,
-    ?x_coord,
-    ?y_coord,
     ?latitude,
     ?longitude,
-    ?location,
-    data_updated_through
+    latest_update_through
 )
 grain (tree_id)
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/sf_trees/tree_info.parquet`:`gcs://trilogy_public_models/duckdb/sf_trees/tree_info.parquet`
-freshness by data_updated_through;
-
-
-# Enrichment properties hanging off the species key
-property species.common_names string;           # comma-separated common names, most familiar first
-property species.native_status string;          # native_bay_area | native_california | non_native | naturalized | unknown
-property species.is_evergreen bool;
-property species.mature_height_ft float;
-property species.canopy_spread_ft float;
-property species.growth_rate string;            # slow | moderate | fast
-property species.lifespan_years string;         # e.g. "50-100", "200+"
-property species.drought_tolerance string;      # low | moderate | high
-property species.bloom_season string;           # One of the following: generally, be inclusive when a user asks: September to November | autumn and winter | late spring and summer | late spring or summer | late spring to autumn | spring | spring and summer | summer | winter | year-round
-property species.wildlife_value string;         # low | moderate | high
-property species.fire_risk string;              # low | moderate | high
-property species.tree_category string;          # palm | broadleaf | spreading | coniferous | columnar | ornamental | default
-property species.icon_rgba_b64 string;          # raw RGBA bytes, base64-encoded, 48x48px
-property species.icon_width int;
-property species.icon_height int;
-property species.enriched_at datetime;
-
-# Root datasource: runs the Python script to fetch and enrich new species.
-# Emits the full merged table (existing + newly enriched rows).
-root datasource raw_tree_enrichment (
-    species,
-    common_names,
-    native_status,
-    ?is_evergreen,
-    ?mature_height_ft,
-    ?canopy_spread_ft,
-    ?growth_rate,
-    ?lifespan_years,
-    ?drought_tolerance,
-    ?bloom_season,
-    ?wildlife_value,
-    ?fire_risk,
-    tree_category,
-    icon_rgba_b64,
-    icon_width,
-    icon_height,
-    enriched_at,
-)
-grain (species)
-file `./tree_enrichment.py`;
-
-# Cached datasource: reads/writes the persisted parquet in GCS.
-# Use this for day-to-day queries to avoid re-running enrichment.
-datasource tree_enrichment (
-    species,
-    common_names,
-    native_status,
-    ?is_evergreen,
-    ?mature_height_ft,
-    ?canopy_spread_ft,
-    ?growth_rate,
-    ?lifespan_years,
-    ?drought_tolerance,
-    ?bloom_season,
-    ?wildlife_value,
-    ?fire_risk,
-    tree_category,
-    icon_rgba_b64,
-    icon_width,
-    icon_height,
-    enriched_at,
-)
-grain (species)
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/sf_trees/tree_enrichment.parquet`:`gcs://trilogy_public_models/duckdb/sf_trees/tree_enrichment.parquet`
-freshness by `./tree_enrichment_probe.py`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info.parquet`:`gcs://trilogy_public_models/duckdb/trees/full_tree_info.parquet`
+freshness by latest_update_through;
