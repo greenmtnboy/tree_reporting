@@ -4,6 +4,7 @@ import type { ColorLabelMap } from '../types'
 export const CITY_CONFIG = {
   USSFO: { name: 'San Francisco', center: [-122.4194, 37.7749] as [number, number] },
   USNYC: { name: 'New York City', center: [-73.9665, 40.7812] as [number, number] },
+  USBOS: { name: 'Boston', center: [-71.0589, 42.3601] as [number, number] },
 } as const
 
 export type CityCode = keyof typeof CITY_CONFIG
