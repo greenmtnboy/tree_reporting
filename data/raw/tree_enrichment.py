@@ -264,6 +264,7 @@ SYNONYMS = {
     "robinia x ambigua 'purple robe'": "Robinia",
     "robinia x ambigua": "Robinia × ambigua",
     "x chiranthofremontia lenzii": "× Chiranthofremontia",
+    "betula alleghaniensis - yellow birch": "Betula alleghaniensis",
 }
 
 EXCLUDED_SPECIES = {"::", "tree", "to be determine'd"}
@@ -1037,7 +1038,7 @@ def merge_with_existing(existing: pa.Table | None, new_rows: list[dict]) -> pa.T
     new_table = build_table(new_rows)
     if existing is None or len(existing) == 0:
         return new_table
-    re_processed = pa.array([row["species"] for row in new_rows])
+    re_processed = pa.array([row["species"] for row in new_rows], type=pa.string())
     keep_mask = pc.invert(pc.is_in(existing.column("species"), re_processed))
     return pa.concat_tables([existing.filter(keep_mask), new_table])
 
@@ -1190,6 +1191,8 @@ if __name__ == "__main__":
 
     new_rows: list[dict] = []
     for q_species in to_process:
+        if not q_species:
+            continue
         status = "re-enrich" if q_species in already_enriched else "new"
         print(f"  [{status}] {q_species}", file=sys.stderr)
         enrichment = enrich_species(q_species, client, print_full_context=args.print_llm_context)
