@@ -9,6 +9,10 @@
       <span class="legend-label">{{ entry.label }}</span>
     </div>
   </div>
+  <div v-if="!props.simplified && !isInitialLoading" class="cache-refresh-wrap">
+    <button class="cache-refresh-btn" :disabled="cacheRefreshing" @click="void purgeAndRefresh()">&#x21BA;</button>
+    <span class="cache-refresh-tooltip">Refresh map cache</span>
+  </div>
   <div v-if="!props.simplified" class="city-selector">
     <button
       v-for="(cfg, code) in CITY_CONFIG"
@@ -112,6 +116,7 @@ const {
   prefetchVisibleDetailTilesAtZoom,
   prewarmLodCaches,
   setAutoTileFetchEnabled,
+  invalidateTileCaches,
   workerDistinctColors,
   workerColorLabelMap,
 } = useDuckDB()
@@ -437,6 +442,23 @@ function bindTreeInteractions() {
     mapRef.value.on('mouseleave', layer, () => { mapRef.value!.getCanvas().style.cursor = '' })
   }
   treeInteractionsBound = true
+}
+
+// --- Cache purge ---
+
+const cacheRefreshing = ref(false)
+
+async function purgeAndRefresh() {
+  if (cacheRefreshing.value) return
+  cacheRefreshing.value = true
+  startTileRefreshMessage()
+  try {
+    await invalidateTileCaches()
+    forceTreesTileRefetchPass()
+  } finally {
+    cacheRefreshing.value = false
+    stopTileRefreshMessage()
+  }
 }
 
 // --- City switching ---
@@ -856,6 +878,51 @@ onUnmounted(() => {
   opacity: 0.4;
   cursor: default;
   pointer-events: none;
+}
+
+.cache-refresh-wrap {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cache-refresh-btn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  background: rgba(22, 33, 62, 0.75);
+  color: rgba(200, 218, 248, 0.6);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.cache-refresh-btn:hover {
+  background: rgba(30, 50, 90, 0.92);
+  color: #c8daf8;
+  border-color: rgba(79, 195, 247, 0.5);
+}
+
+.cache-refresh-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.cache-refresh-tooltip {
+  font-size: 0.72rem;
+  color: rgba(200, 218, 248, 0.45);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.cache-refresh-wrap:hover .cache-refresh-tooltip {
+  opacity: 1;
 }
 
 .map-legend {

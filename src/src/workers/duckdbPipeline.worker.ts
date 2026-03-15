@@ -1544,6 +1544,7 @@ type WorkerMethodMap = {
   }
   prewarmLodCaches: { params: Record<string, never>; result: void }
   setAutoTileFetchEnabled: { params: { enabled: boolean }; result: void }
+  invalidateTileCaches: { params: Record<string, never>; result: void }
   query: { params: { sql: string }; result: { columns: string[]; rows: Record<string, unknown>[] } }
   getTile: { params: { z: number; x: number; y: number }; result: { tileBuffer: ArrayBuffer } }
 }
@@ -1645,6 +1646,11 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'setAutoTileFetchEnabled': {
         const { enabled } = msg.params as WorkerMethodMap['setAutoTileFetchEnabled']['params']
         setAutoTileFetchEnabled(enabled)
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
+        break
+      }
+      case 'invalidateTileCaches': {
+        invalidateTileCaches()
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }

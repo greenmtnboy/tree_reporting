@@ -17,6 +17,7 @@ type WorkerMethodMap = {
   prefetchVisibleDetailTilesAtZoom: { params: { z: number; range?: TileRangeParams }; result: PrefetchStatus }
   prewarmLodCaches: { params: Record<string, never>; result: void }
   setAutoTileFetchEnabled: { params: { enabled: boolean }; result: void }
+  invalidateTileCaches: { params: Record<string, never>; result: void }
   query: { params: { sql: string }; result: { columns: string[]; rows: Record<string, unknown>[] } }
   getTile: { params: { z: number; x: number; y: number }; result: { tileBuffer: ArrayBuffer } }
 }
@@ -198,6 +199,11 @@ function setAutoTileFetchEnabled(enabled: boolean) {
   fireAndForget('setAutoTileFetchEnabled', { enabled })
 }
 
+async function invalidateTileCaches(): Promise<void> {
+  await ensureInit()
+  await rpc('invalidateTileCaches', {})
+}
+
 async function query(sql: string): Promise<{ columns: string[]; rows: Record<string, unknown>[] }> {
   await ensureInit()
   return rpc('query', { sql })
@@ -227,6 +233,7 @@ export function useDuckDB() {
     prefetchVisibleDetailTilesAtZoom,
     prewarmLodCaches,
     setAutoTileFetchEnabled,
+    invalidateTileCaches,
     workerDistinctColors,
     workerColorLabelMap,
   }
