@@ -26,7 +26,7 @@ import instructor
 
 ICON_SIZE = 48
 ENRICHMENT_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/sf_trees/tree_enrichment.parquet"
-ENRICHMENT_GCS_URI  = "gs://trilogy_public_models/duckdb/sf_trees/tree_enrichment.parquet"
+ENRICHMENT_GCS_URI  = "gs://trilogy_public_models/duckdb/trees/tree_enrichment.parquet"
 TREE_INFO_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info.parquet"
 
 
