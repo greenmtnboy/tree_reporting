@@ -18,6 +18,13 @@
       :disabled="isInitialLoading"
       @click="void switchCity(code as CityCode)"
     >{{ cfg.name }}</button>
+    <button
+      class="city-btn locate-btn"
+      :class="{ active: userLocation !== null }"
+      :disabled="isInitialLoading"
+      :title="userLocation ? 'Pan to my location' : 'Show my location on the map'"
+      @click="toggleUserLocation"
+    >&#x25CE; Find Me</button>
   </div>
 </template>
 
@@ -110,10 +117,10 @@ const {
 } = useDuckDB()
 
 const { loading, error, getSpeciesEnrichment } = useTreeData()
-const { target: flyToTarget } = useFlyTo()
+const { target: flyToTarget, flyTo } = useFlyTo()
 const route = useRoute()
 const router = useRouter()
-const { selectedCity, setSelectedCity, currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision } = useMapData()
+const { selectedCity, setSelectedCity, currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision, userLocation, setUserLocation, clearUserLocation } = useMapData()
 
 // Initialise city from URL on first load
 const urlCity = route.query.city
@@ -454,6 +461,74 @@ async function switchCity(city: CityCode) {
   }
 }
 
+// --- Geolocation ---
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLng = ((lng2 - lng1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+async function detectCityFromIp(): Promise<void> {
+  try {
+    const res = await fetch('https://ipapi.co/json/')
+    if (!res.ok) return
+    const data = await res.json()
+    const { latitude, longitude } = data as { latitude?: number; longitude?: number }
+    if (!latitude || !longitude) return
+    let closest: CityCode = selectedCity.value
+    let minDist = Infinity
+    for (const [code, cfg] of Object.entries(CITY_CONFIG) as [CityCode, (typeof CITY_CONFIG)[CityCode]][]) {
+      const dist = haversineKm(latitude, longitude, cfg.center[1], cfg.center[0])
+      if (dist < minDist) { minDist = dist; closest = code }
+    }
+    if (closest !== selectedCity.value) {
+      setSelectedCity(closest)
+      void router.replace({ query: { ...route.query, city: closest } })
+    }
+  } catch {
+    // best-effort, ignore errors
+  }
+}
+
+let userLocationMarker: maplibregl.Marker | null = null
+
+watch(userLocation, (loc) => {
+  if (!mapRef.value) return
+  if (!loc) {
+    userLocationMarker?.remove()
+    userLocationMarker = null
+    return
+  }
+  if (!userLocationMarker) {
+    const el = document.createElement('div')
+    el.className = 'user-location-marker'
+    userLocationMarker = new maplibregl.Marker({ element: el })
+  }
+  userLocationMarker.setLngLat([loc.lng, loc.lat]).addTo(mapRef.value)
+})
+
+function toggleUserLocation() {
+  if (!navigator.geolocation) return
+  if (userLocation.value) {
+    // Already sharing — just pan to current location
+    flyTo({ lat: userLocation.value.lat, lng: userLocation.value.lng, zoom: 15 })
+    return
+  }
+  // Not yet sharing — request permission; dot + pan only if granted
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      setUserLocation(pos.coords.latitude, pos.coords.longitude)
+      flyTo({ lat: pos.coords.latitude, lng: pos.coords.longitude, zoom: 15 })
+    },
+    (err) => { console.warn('[Geolocation]', err.message) },
+  )
+}
+
 // --- Camera fly-to ---
 
 function bearingTo(from: [number, number], to: [number, number]): number {
@@ -524,7 +599,24 @@ watch(workerDistinctColors, () => {
 
 // --- Lifecycle ---
 
-onMounted(() => {
+onMounted(async () => {
+  // Resolve city from IP before initialising the map so the initial center is correct.
+  if (!urlCityStr && !props.simplified) {
+    await Promise.race([detectCityFromIp(), new Promise<void>((r) => setTimeout(r, 2000))])
+  }
+
+  // If the user already granted geolocation, silently restore their location pin (no flyTo).
+  if (!props.simplified && navigator.geolocation && navigator.permissions) {
+    navigator.permissions.query({ name: 'geolocation' }).then((result) => {
+      if (result.state === 'granted') {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => setUserLocation(pos.coords.latitude, pos.coords.longitude),
+          () => {},
+        )
+      }
+    }).catch(() => {})
+  }
+
   if (!isWebGLSupported()) {
     mapError.value = 'Your browser does not support WebGL, which is required to display the map. Try enabling hardware acceleration in your browser settings, or use a different browser.'
     defaultQueryLoading.value = false
@@ -801,6 +893,16 @@ onUnmounted(() => {
   color: #c8cfe8;
   white-space: nowrap;
 }
+
+.locate-btn {
+  font-size: 0.78rem;
+}
+
+.locate-btn.active {
+  background: rgba(15, 52, 96, 0.96);
+  color: #4fc3f7;
+  border-color: rgba(79, 195, 247, 0.7);
+}
 </style>
 
 <style>
@@ -823,5 +925,21 @@ onUnmounted(() => {
 
 .tree-popup .maplibregl-popup-tip {
   border-top-color: #16213e;
+}
+
+.user-location-marker {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #4fc3f7;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 0 rgba(79, 195, 247, 0.5);
+  animation: user-location-pulse 2s infinite;
+}
+
+@keyframes user-location-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(79, 195, 247, 0.5); }
+  70% { box-shadow: 0 0 0 10px rgba(79, 195, 247, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(79, 195, 247, 0); }
 }
 </style>

@@ -23,11 +23,16 @@ from dataclasses import dataclass
 from PIL import Image, ImageDraw, ImageFilter
 from pydantic import BaseModel, Field
 import instructor
+from _tree_shared import (
+    ENRICHMENT_PARQUET,
+    ENRICHMENT_GCS_URI,
+    TREE_INFO_PARQUET,
+    SKIP_SPECIES,
+    SPECIES_EXCLUSION_SQL,
+    should_skip_species,
+)
 
 ICON_SIZE = 48
-ENRICHMENT_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment.parquet"
-ENRICHMENT_GCS_URI  = "gs://trilogy_public_models/duckdb/trees/tree_enrichment.parquet"
-TREE_INFO_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info.parquet"
 
 
 SYNONYMS = {
@@ -266,12 +271,6 @@ SYNONYMS = {
     "x chiranthofremontia lenzii": "× Chiranthofremontia",
     "betula alleghaniensis - yellow birch": "Betula alleghaniensis",
 }
-
-EXCLUDED_SPECIES = {"::", "tree", "to be determine'd"}
-
-
-def should_skip_species(species: str) -> bool:
-    return species.strip().lower() in EXCLUDED_SPECIES
 
 # ── Pydantic model ─────────────────────────────────────────────────────────────
 
@@ -946,8 +945,7 @@ def get_all_species() -> list[str]:
             """
             SELECT DISTINCT species
             FROM read_parquet(?)
-            WHERE species IS NOT NULL
-              AND lower(trim(species)) NOT IN ('::', 'tree', 'to be determine''d')
+            WHERE {SPECIES_EXCLUSION_SQL}
             ORDER BY species
             """,
             [TREE_INFO_PARQUET],

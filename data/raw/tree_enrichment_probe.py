@@ -9,16 +9,17 @@
 import sys
 
 import duckdb
-
-ENRICHMENT_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment.parquet"
-TREE_INFO_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info.parquet"
+from _tree_shared import (
+    ENRICHMENT_PARQUET,
+    TREE_INFO_PARQUET,
+    SKIP_SPECIES,
+    SPECIES_EXCLUSION_SQL,
+)
 
 _COMPLETENESS_EXPR = (
     "common_names IS NOT NULL AND trim(common_names) != ''"
     " AND tree_category IS NOT NULL"
 )
-
-SKIPPED = {':: To Be Determine', ':: Brisbane Box', ':: Tree'}
 
 def main() -> None:
     conn = duckdb.connect()
@@ -27,16 +28,15 @@ def main() -> None:
         all_species: set[str] = {
             row[0]
             for row in conn.execute(
-                """
+                f"""
                 SELECT DISTINCT species
                 FROM read_parquet(?)
-                WHERE species IS NOT NULL
-                  AND lower(trim(species)) NOT IN ('', '::', 'tree', 'to be determine''d')
+                WHERE {SPECIES_EXCLUSION_SQL}
                 """,
                 [TREE_INFO_PARQUET],
             ).fetchall()
         }
-        all_species.difference_update(SKIPPED)
+        all_species.difference_update(SKIP_SPECIES)
         try:
             complete_enriched: set[str] = {
                 row[0]

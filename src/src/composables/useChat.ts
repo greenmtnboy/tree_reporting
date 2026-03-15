@@ -154,10 +154,13 @@ const _today = new Date().toLocaleDateString('en-US', {
 
 const _cityNames = Object.values(CITY_CONFIG).map((c) => c.name).join(', ')
 
-function buildSystemPromptForCity(city: CityCode): string {
+function buildSystemPromptForCity(city: CityCode, userLoc?: { lat: number; lng: number } | null): string {
   const cityName = CITY_CONFIG[city].name
+  const userLocStr = userLoc
+    ? `\nUSER LOCATION: The user's precise device location is lat ${userLoc.lat.toFixed(5)}, lng ${userLoc.lng.toFixed(5)}. When asked about "trees near me" or nearby trees, use a bounding box: WHERE latitude BETWEEN ${(userLoc.lat - 0.009).toFixed(5)} AND ${(userLoc.lat + 0.009).toFixed(5)} AND longitude BETWEEN ${(userLoc.lng - 0.011).toFixed(5)} AND ${(userLoc.lng + 0.011).toFixed(5)} (≈ 1 km radius). Adjust the range based on context.`
+    : ''
   return buildCustomTrilogyPrompt(
-    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Urban Trees map application. You help users explore cities' urban forest datasets of 100k+ trees and visualize the results. A default map is loaded with coloring by tree category. Cities supported include ${_cityNames}.
+    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Urban Trees map application. You help users explore cities' urban forest datasets of 100k+ trees and visualize the results. A default map is loaded with coloring by tree category. Cities supported include ${_cityNames}.${userLocStr}
 
 ACTIVE CITY: ${cityName} (city code: ${city}). All queries must filter with WHERE city = '${city}' unless the user explicitly asks about another city.
 
@@ -249,7 +252,7 @@ export function useChat() {
   const { query: duckQuery } = useDuckDB()
   const { flyTo } = useFlyTo()
   const { landmarks } = useLandmarkData()
-  const { selectedCity, publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
+  const { selectedCity, userLocation, publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
   const trilogy = useTrilogyCore()
 
   // Ensure the Trilogy resolver points at the production service
@@ -599,7 +602,7 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
         {
           tools: TOOLS,
           maxIterations: MAX_LOOPS,
-          buildSystemPrompt: () => buildSystemPromptForCity(selectedCity.value),
+          buildSystemPrompt: () => buildSystemPromptForCity(selectedCity.value, userLocation.value),
         },
       )
     } catch (e) {

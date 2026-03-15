@@ -30,6 +30,7 @@ const publishedTreeIdFilterSql = ref<string | null>(null)
 const colorOverrideSql = ref<string | null>(null)
 const colorLabelMap = ref<ColorLabelMap | null>(null)
 const mapQueryRevision = ref(0)
+const userLocation = ref<{ lat: number; lng: number } | null>(null)
 
 export function useMapData() {
   function publishMapQuery(query: string) {
@@ -71,6 +72,14 @@ export function useMapData() {
     mapQueryRevision.value += 1
   }
 
+  function setUserLocation(lat: number, lng: number) {
+    userLocation.value = { lat, lng }
+  }
+
+  function clearUserLocation() {
+    userLocation.value = null
+  }
+
   return {
     selectedCity,
     setSelectedCity,
@@ -79,6 +88,9 @@ export function useMapData() {
     colorOverrideSql,
     colorLabelMap,
     mapQueryRevision,
+    userLocation,
+    setUserLocation,
+    clearUserLocation,
     publishMapQuery,
     publishMapTreeIdFilterSql,
     clearMapTreeIdFilter,
