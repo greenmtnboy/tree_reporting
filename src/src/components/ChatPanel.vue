@@ -173,6 +173,7 @@ import { MarkdownRenderer } from '@trilogy-data/trilogy-studio-components'
 import { useChat } from '../composables/useChat'
 import { useDuckDB } from '../composables/useDuckDB'
 import { useMapIntro } from '../composables/useMapIntro'
+import { THINKING_PHRASES } from '../constants/loadingPhrases'
 
 const PROVIDERS = [
   { value: 'demo',       label: 'Demo (limited messages)' },
@@ -209,20 +210,6 @@ const showSettings = ref(false)
 const showInfo = ref(false)
 const messagesContainer = ref<HTMLDivElement>()
 
-const THINKING_PHRASES = [
-  'Consulting the canopy...',
-  'Counting tree rings...',
-  'Asking the arbor...',
-  'Rustling through the leaves...',
-  'Photosynthesizing some ideas...',
-  'Branching out...',
-  'Checking the root system...',
-  'Pollinating the data...',
-  'Reticulating splines...',
-  'Tapping the sap lines...',
-  'Whispering to the willows...',
-  'Following the mycorrhizal network...',
-]
 
 const thinkingPhrase = ref(THINKING_PHRASES[0])
 let thinkingInterval: ReturnType<typeof setInterval> | null = null

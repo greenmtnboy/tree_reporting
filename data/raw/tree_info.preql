@@ -10,6 +10,7 @@ datasource tree_info (
     tree_id,
     city,
     species,
+    common_name,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,

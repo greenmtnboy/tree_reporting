@@ -1,9 +1,9 @@
 <template>
   <div class="info-page">
     <div class="info-content">
-      <h1>About SF Trees</h1>
+      <h1>About Urban Trees</h1>
       <p class="info-lead">
-        An interactive browser-based map of San Francisco's urban forest. Explore
+        An interactive browser-based map of urban forests across multiple cities. Explore
         hundreds of thousands of street trees by location, species, and ecological
         attributes.
       </p>
@@ -13,16 +13,11 @@
 
         <div class="source-card">
           <h3>Tree Inventory</h3>
-          <p>
-            SF Open Data Portal &mdash; Street Trees dataset
-          </p>
-          <a
-            href="https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq"
-            target="_blank"
-            rel="noopener"
-          >
-            data.sfgov.org &rarr;
-          </a>
+          <ul>
+            <li><a href="https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq" target="_blank" rel="noopener">SF Open Data Portal — Street Trees</a></li>
+            <li><a href="https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh" target="_blank" rel="noopener">NYC Open Data — Street Tree Census</a></li>
+            <li><a href="https://data.boston.gov/dataset/bprd-trees" target="_blank" rel="noopener">City of Boston — Street Trees</a></li>
+          </ul>
         </div>
 
         <div class="source-card">
@@ -55,7 +50,7 @@
         <div class="source-card">
           <h3>Landmarks</h3>
           <p>
-            SF Open Data Portal &mdash; Landmarks dataset
+            SF Open Data Portal &mdash; Landmarks dataset (SF); curated lists for NYC and Boston.
           </p>
           <a
             href="https://data.sfgov.org/Geographic-Locations-and-Boundaries/Landmarks/rzic-39gi/about_data"

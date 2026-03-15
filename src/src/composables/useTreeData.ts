@@ -29,7 +29,7 @@ export interface CategoryIconData {
 }
 
 export interface TreeQueryRow {
-  tree_id: number
+  tree_id: string
   species: string
   latitude: number
   longitude: number

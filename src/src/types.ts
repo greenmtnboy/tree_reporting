@@ -1,5 +1,5 @@
 export interface RawTree {
-  tree_id: number
+  tree_id: string
   common_name: string
   plant_date: string
   species: string
