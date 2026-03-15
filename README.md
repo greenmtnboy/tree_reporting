@@ -4,9 +4,10 @@ An interactive browser-based map of city trees with a chat assistant (free to tr
 
 Zoom around. Find interesting clusters.
 
-Currently as data from two US cities.
-- SFO
-- NYC
+Currently has data from the following cities:
+- San Franciso, United States
+- New York City, United States
+- Boston, United States
 
 **[Live page](https://greenmtnboy.github.io/sf_tree_reporting/)**
 
