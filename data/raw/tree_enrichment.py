@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 import instructor
 
 ICON_SIZE = 48
-ENRICHMENT_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/sf_trees/tree_enrichment.parquet"
+ENRICHMENT_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment.parquet"
 ENRICHMENT_GCS_URI  = "gs://trilogy_public_models/duckdb/trees/tree_enrichment.parquet"
 TREE_INFO_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info.parquet"
 
@@ -1172,7 +1172,7 @@ if __name__ == "__main__":
     already_enriched, complete_enriched = get_already_enriched(enrichment_source)
     all_species = get_all_species()
     # Process species that are new OR previously enriched but incomplete
-    to_process = [s for s in all_species if s not in complete_enriched]
+    to_process = [s for s in all_species if s not in already_enriched]
     if local_mode:
         to_process = to_process[:args.limit]
     incomplete_count = sum(1 for s in to_process if s in already_enriched)
