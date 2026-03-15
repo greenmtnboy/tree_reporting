@@ -88,7 +88,6 @@ let prewarmDoneRevision = -1
 let prewarmPromise: Promise<void> | null = null
 let autoTileFetchEnabled = true
 let activeQueuedWorkers = 0
-let activeCityCode: string | null = null
 let activeCityDefaultQuery: string = DEFAULT_BASE_QUERY_SQL
 
 function nowMs(): number {
@@ -1379,7 +1378,6 @@ async function rebuildCityBounds(cityCode: string) {
 async function setCityContext(city: string) {
   await ensureInit()
   if (!conn) return
-  activeCityCode = city
   activeCityDefaultQuery = `
 SELECT
   tree_id,
