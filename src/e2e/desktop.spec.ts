@@ -13,7 +13,7 @@ test.describe('Desktop layout', () => {
 
   test('renders sidebar with header and landmarks', async ({ page }) => {
     // Sidebar header
-    await expect(page.locator('.sidebar h1')).toHaveText('SF Trees')
+    await expect(page.locator('.sidebar h1')).toHaveText('Urban Trees')
     await expect(page.locator('.sidebar .subtitle')).toHaveText(
       'San Francisco Urban Forest',
     )
