@@ -126,7 +126,8 @@ async function ensureInit(city?: string) {
   if (!initPromise) {
     initPromise = rpc('ensureInit', { city })
       .then((state) => {
-        ready.value = !!state.ready
+        // Do NOT set ready.value here — city data isn't loaded yet.
+        // setCityContext sets ready.value = true once city tables exist.
         initError.value = state.initError
       })
       .catch((e) => {
@@ -154,8 +155,10 @@ async function setColorOverrideSql(sql: string | null): Promise<void> {
 }
 
 async function setCityContext(city: string): Promise<void> {
-  await ensureInit()
+  await ensureInit(city)
   await rpc('setCityContext', { city })
+  // Trees and landmarks are now loaded — signal the rest of the app.
+  ready.value = true
 }
 
 function setViewportZoom(zoom: number) {

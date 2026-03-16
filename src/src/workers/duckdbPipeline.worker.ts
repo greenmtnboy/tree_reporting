@@ -575,11 +575,14 @@ async function doInit(city?: string) {
 
   // Load city-specific tree data. setCityContext will call this if city is not
   // yet known at init time, so we only do it here when city is already available.
-  if (city) await loadCityTrees(city)
+  if (city) {
+    await loadCityTrees(city)
+    postColorMapUpdate()
+  } 
 
   ready = true
   initError = null
-  postColorMapUpdate()
+  
   console.info('[Perf] duckdb-worker:init:done', { ms: Math.round(nowMs() - t0) })
 }
 
