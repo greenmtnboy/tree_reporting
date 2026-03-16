@@ -6,7 +6,7 @@ export const REMOTE_SPECIES_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/tree_enrichm
 /** Per-city optimised parquet (e.g. ussfo_tree_info.parquet). Returns null if city code is unknown. */
 export function cityTreeParquetUrl(city: string): string | null {
   const lower = city.toLowerCase()
-  if (!lower.match(/^us[a-z]{3}$/)) return null
+  if (!lower.match(/^[a-z]{2}[a-z]{3}$/)) return null
   return `${REMOTE_TREES_BASE_URL}/${lower}_tree_info.parquet`
 }
 
@@ -17,6 +17,6 @@ export const REMOTE_LANDMARKS_PARQUET_URL = `${REMOTE_LANDMARKS_BASE_URL}/full_l
 /** Per-city optimised landmark parquet (e.g. ussfo_landmark_info.parquet). Returns null if city code is unknown. */
 export function cityLandmarkParquetUrl(city: string): string | null {
   const lower = city.toLowerCase()
-  if (!lower.match(/^us[a-z]{3}$/)) return null
+  if (!lower.match(/^[a-z]{2}[a-z]{3}$/)) return null
   return `${REMOTE_LANDMARKS_BASE_URL}/${lower}_landmark_info.parquet`
 }

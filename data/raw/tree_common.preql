@@ -33,8 +33,9 @@ property tree_id.longitude float::longitude; # geographic longitude for mapping
 property <*>.sf_data_updated_through datetime; # when SF data is through
 property <*>.nyc_data_updated_through datetime; # when NYC data is through
 property <*>.boston_data_updated_through datetime; # when Boston data is through
+property <*>.paris_data_updated_through datetime; # when Paris data is through
 
-auto latest_update_through <- greatest(sf_data_updated_through, nyc_data_updated_through, boston_data_updated_through);
+auto latest_update_through <- greatest(sf_data_updated_through, nyc_data_updated_through, boston_data_updated_through, paris_data_updated_through);
 
 auto common_name <- coalesce(nullif(split(species, '::')[2],''),split(species, '::')[1]);
 
