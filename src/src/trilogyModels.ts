@@ -11,7 +11,7 @@ export const ALL_MODEL_SOURCES = [
   { alias: 'tree_info', contents: TREE_INFO_MODEL },
   { alias: 'tree_common', contents: TREE_COMMON_MODEL },
   { alias: 'core', contents: CORE_MODEL },
-  { alias: 'sf_tree_info', contents: SF_TREE_INFO_MODEL },
-  { alias: 'nyc_tree_info', contents: NYC_TREE_INFO_MODEL },
-  { alias: 'boston_tree_info', contents: BOSTON_TREE_INFO_MODEL },
+  { alias: 'sf.sf_tree_info', contents: SF_TREE_INFO_MODEL },
+  { alias: 'nyc.nyc_tree_info', contents: NYC_TREE_INFO_MODEL },
+  { alias: 'boston.boston_tree_info', contents: BOSTON_TREE_INFO_MODEL },
 ]
