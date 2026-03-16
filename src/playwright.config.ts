@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const PORT = 4173
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -18,7 +20,7 @@ export default defineConfig({
       ],
 
   use: {
-    baseURL: 'http://localhost:4173',
+    baseURL: `http://localhost:${PORT}`,
     trace: 'on-first-retry',
   },
 
@@ -30,8 +32,8 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'pnpm preview --port 4173',
-    port: 4173,
+    command: `pnpm preview --port ${PORT}`,
+    port: PORT,
     reuseExistingServer: !process.env.CI,
   },
 })

@@ -41,8 +41,8 @@ test.describe('Desktop layout', () => {
     const countBefore = await landmarks.count()
     expect(countBefore).toBeGreaterThan(1)
 
-    // Type a search query that should narrow results
-    await page.locator('.landmarks-search').fill('Golden Gate')
+    // Type a common letter to narrow results without assuming location-specific landmarks
+    await page.locator('.landmarks-search').fill('a')
     const filtered = page.locator('.landmark-item')
     await expect(filtered.first()).toBeVisible()
     const countAfter = await filtered.count()
