@@ -421,8 +421,7 @@ async function doInit() {
 
   // Try loading with an embedded tree_category column (multi-city enriched parquet).
   // Fall back to a NULL column if the parquet schema doesn't include it yet.
-  try {
-    await conn.query(`
+  await conn.query(`
       CREATE TABLE trees AS
       SELECT
         tree_id,
@@ -433,25 +432,9 @@ async function doInit() {
         latitude,
         longitude,
         diameter_at_breast_height,
-        tree_category
       FROM read_parquet('${REMOTE_TREES_PARQUET_URL}')
+      where latitude IS NOT NULL AND longitude IS NOT NULL
     `)
-  } catch {
-    await conn.query(`
-      CREATE TABLE trees AS
-      SELECT
-        tree_id,
-        city,
-        coalesce(nullif(trim(string_split(species, '::')[2]), ''), trim(string_split(species, '::')[1])) AS common_name,
-        plant_date,
-        species,
-        latitude,
-        longitude,
-        diameter_at_breast_height,
-        NULL::VARCHAR AS tree_category
-      FROM read_parquet('${REMOTE_TREES_PARQUET_URL}')
-    `)
-  }
 
   try {
     await conn.query(`
@@ -490,7 +473,7 @@ async function doInit() {
         t.latitude,
         t.longitude,
         COALESCE(t.diameter_at_breast_height, 3) AS dbh,
-        CASE lower(trim(COALESCE(t.tree_category, se.tree_category, 'default')))
+        CASE lower(trim(COALESCE(se.tree_category, 'default')))
           WHEN 'palm' THEN 'palm'
           WHEN 'broadleaf' THEN 'broadleaf'
           WHEN 'spreading' THEN 'spreading'
