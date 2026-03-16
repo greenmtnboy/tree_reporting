@@ -17,7 +17,7 @@ FROM trees
 WHERE latitude IS NOT NULL AND longitude IS NOT NULL
 `
 
-import { REMOTE_TREES_PARQUET_URL, REMOTE_SPECIES_PARQUET_URL, REMOTE_LANDMARKS_PARQUET_URL } from './parquetUrls'
+import { REMOTE_TREES_PARQUET_URL, REMOTE_SPECIES_PARQUET_URL, REMOTE_LANDMARKS_PARQUET_URL, cityTreeParquetUrl, cityLandmarkParquetUrl } from './parquetUrls'
 
 const WEB_MERCATOR_MAX = 20037508.342789244
 const WEB_MERCATOR_WORLD = WEB_MERCATOR_MAX * 2
@@ -89,6 +89,8 @@ let prewarmPromise: Promise<void> | null = null
 let autoTileFetchEnabled = true
 let activeQueuedWorkers = 0
 let activeCityDefaultQuery: string = DEFAULT_BASE_QUERY_SQL
+/** The city code whose rows are currently loaded in the `trees` table (null = all cities). */
+let loadedCity: string | null = null
 
 function nowMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now()
@@ -395,72 +397,47 @@ function setCachedTile(key: string, tile: Uint8Array): void {
   }
 }
 
-async function doInit() {
-  if (db) return
-  const t0 = nowMs()
-  console.info('[Perf] duckdb-worker:init:start')
+/**
+ * Load (or reload) the `trees` and `trees_fast` tables for `city` from the
+ * per-city optimised parquet. Pass undefined to load all cities from the full
+ * file (only as a last-resort fallback when city is genuinely unknown).
+ */
+async function loadCityTrees(city?: string): Promise<void> {
+  if (!conn) return
+  if (city && loadedCity === city) return // already loaded
 
-  const bundles: duckdb.DuckDBBundles = {
-    mvp: {
-      mainModule: duckdb_wasm,
-      mainWorker: duckdb_worker,
-    },
-    eh: {
-      mainModule: duckdb_wasm_eh,
-      mainWorker: duckdb_worker_eh,
-    },
+  if (!city) {
+    throw new Error('City must be specified to load trees, to avoid accidentally loading all cities into memory.')
   }
-  const bundle = await duckdb.selectBundle(bundles)
 
-  const logger = new duckdb.ConsoleLogger()
-  const worker = new Worker(bundle.mainWorker!)
-  db = new duckdb.AsyncDuckDB(logger, worker)
-  await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
+  // Drop dependent tables so CREATE OR REPLACE can rebuild cleanly.
+  await conn.query(`DROP TABLE IF EXISTS ${COLOR_MAP_TABLE}`)
+  await conn.query(`DROP TABLE IF EXISTS agg_z14_cache`)
+  preparedFeatureTablesReady.clear()
+  hasAggCacheByZoom.clear()
+  zoomBatchReady.clear()
+  dataTileBoundsByZoom.clear()
 
-  conn = await db.connect()
+  const parquetUrl = city ? (cityTreeParquetUrl(city) ?? REMOTE_TREES_PARQUET_URL) : REMOTE_TREES_PARQUET_URL
 
-  // Try loading with an embedded tree_category column (multi-city enriched parquet).
-  // Fall back to a NULL column if the parquet schema doesn't include it yet.
   await conn.query(`
-      CREATE TABLE trees AS
-      SELECT
-        tree_id,
-        city,
-        coalesce(nullif(trim(string_split(species, '::')[2]), ''), trim(string_split(species, '::')[1])) AS common_name,
-        plant_date,
-        species,
-        latitude,
-        longitude,
-        diameter_at_breast_height,
-      FROM read_parquet('${REMOTE_TREES_PARQUET_URL}')
-      where latitude IS NOT NULL AND longitude IS NOT NULL
-    `)
+    CREATE OR REPLACE TABLE trees AS
+    SELECT
+      tree_id,
+      city,
+      coalesce(nullif(trim(string_split(species, '::')[2]), ''), trim(string_split(species, '::')[1])) AS common_name,
+      plant_date,
+      species,
+      latitude,
+      longitude,
+      diameter_at_breast_height
+    FROM read_parquet('${parquetUrl}')
+    WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+  `)
 
-  try {
-    await conn.query(`
-      CREATE TABLE species_enrichment AS
-      SELECT species, tree_category, native_status, is_evergreen, mature_height_ft, bloom_season, wildlife_value, fire_risk
-      FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
-    `)
-  } catch (e) {
-    console.warn('[Perf] duckdb-worker:species-load:failed', e)
-  }
+  loadedCity = city ?? null
 
-  try {
-    await conn.query(`
-      CREATE TABLE landmarks AS
-      SELECT landmark_id, city, name, latitude, longitude
-      FROM read_parquet('${REMOTE_LANDMARKS_PARQUET_URL}')
-      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-    `)
-  } catch (e) {
-    console.warn('[duckdb-worker] landmarks-load:failed', e)
-  }
-
-  // Always compute trees_fast from the full multi-city trees table rather than
-  // loading the SF-only prebuilt parquet, so all cities get proper category data.
-  // Prefer t.tree_category from the parquet (populated for all cities) and fall
-  // back to the SF species_enrichment join for legacy SF rows that may lack it.
+  // Rebuild trees_fast (join with enrichment + pre-computed tile coordinates).
   await conn.query(`
     CREATE OR REPLACE TABLE trees_fast AS
     WITH joined AS (
@@ -534,38 +511,52 @@ async function doInit() {
     FROM joined
   `)
 
-  // Build default color map: each tree gets a display_color from its category
-  await buildDefaultColorMap()
-
-  hasAggCacheByZoom.clear()
-  await rebuildAggCaches()
-
-  dataTileBoundsByZoom.clear()
-  {
-    const boundsResult = await conn.query(`
-      SELECT
-        MIN(xtile_z13) AS min_x13, MAX(xtile_z13) AS max_x13, MIN(ytile_z13) AS min_y13, MAX(ytile_z13) AS max_y13,
-        MIN(xtile_z14) AS min_x14, MAX(xtile_z14) AS max_x14, MIN(ytile_z14) AS min_y14, MAX(ytile_z14) AS max_y14,
-        MIN(xtile_z15) AS min_x15, MAX(xtile_z15) AS max_x15, MIN(ytile_z15) AS min_y15, MAX(ytile_z15) AS max_y15,
-        MIN(xtile_z16) AS min_x16, MAX(xtile_z16) AS max_x16, MIN(ytile_z16) AS min_y16, MAX(ytile_z16) AS max_y16,
-        MIN(xtile_z17) AS min_x17, MAX(xtile_z17) AS max_x17, MIN(ytile_z17) AS min_y17, MAX(ytile_z17) AS max_y17,
-        MIN(xtile_z18) AS min_x18, MAX(xtile_z18) AS max_x18, MIN(ytile_z18) AS min_y18, MAX(ytile_z18) AS max_y18,
-        MIN(xtile_z19) AS min_x19, MAX(xtile_z19) AS max_x19, MIN(ytile_z19) AS min_y19, MAX(ytile_z19) AS max_y19,
-        MIN(xtile_z20) AS min_x20, MAX(xtile_z20) AS max_x20, MIN(ytile_z20) AS min_y20, MAX(ytile_z20) AS max_y20
-      FROM trees_fast
+  const landmarkUrl = cityLandmarkParquetUrl(city) ?? REMOTE_LANDMARKS_PARQUET_URL
+  try {
+    await conn.query(`
+      CREATE OR REPLACE TABLE landmarks AS
+      SELECT landmark_id, city, name, latitude, longitude
+      FROM read_parquet('${landmarkUrl}')
+      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
     `)
-    const boundsRow = boundsResult.toArray()[0] as Record<string, unknown> | undefined
-    if (boundsRow) {
-      for (let z = 13; z <= 20; z += 1) {
-        const minX = Number(boundsRow[`min_x${z}`])
-        const maxX = Number(boundsRow[`max_x${z}`])
-        const minY = Number(boundsRow[`min_y${z}`])
-        const maxY = Number(boundsRow[`max_y${z}`])
-        if ([minX, maxX, minY, maxY].every((v) => Number.isFinite(v))) {
-          dataTileBoundsByZoom.set(z, { minX, maxX, minY, maxY })
-        }
-      }
-    }
+  } catch (e) {
+    console.warn('[duckdb-worker] landmarks-load:failed', e)
+  }
+}
+
+async function doInit(city?: string) {
+  if (db) return
+  const t0 = nowMs()
+  console.info('[Perf] duckdb-worker:init:start', { city: city ?? 'all' })
+
+  const bundles: duckdb.DuckDBBundles = {
+    mvp: {
+      mainModule: duckdb_wasm,
+      mainWorker: duckdb_worker,
+    },
+    eh: {
+      mainModule: duckdb_wasm_eh,
+      mainWorker: duckdb_worker_eh,
+    },
+  }
+  const bundle = await duckdb.selectBundle(bundles)
+
+  const logger = new duckdb.ConsoleLogger()
+  const worker = new Worker(bundle.mainWorker!)
+  db = new duckdb.AsyncDuckDB(logger, worker)
+  await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
+
+  conn = await db.connect()
+
+  // Load species enrichment and landmarks once — these are city-agnostic / small.
+  try {
+    await conn.query(`
+      CREATE TABLE species_enrichment AS
+      SELECT species, tree_category, native_status, is_evergreen, mature_height_ft, bloom_season, wildlife_value, fire_risk
+      FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
+    `)
+  } catch (e) {
+    console.warn('[Perf] duckdb-worker:species-load:failed', e)
   }
 
   spatialExtensionReady = false
@@ -581,6 +572,10 @@ async function doInit() {
       console.error('DuckDB spatial extension unavailable:', e)
     }
   }
+
+  // Load city-specific tree data. setCityContext will call this if city is not
+  // yet known at init time, so we only do it here when city is already available.
+  if (city) await loadCityTrees(city)
 
   ready = true
   initError = null
@@ -649,10 +644,10 @@ async function rebuildAggCaches() {
   }
 }
 
-async function ensureInit(): Promise<void> {
+async function ensureInit(city?: string): Promise<void> {
   if (ready) return
   if (!initPromise) {
-    initPromise = doInit().catch((e) => {
+    initPromise = doInit(city).catch((e) => {
       initError = (e as Error).message
       ready = false
       throw e
@@ -1359,8 +1354,18 @@ async function rebuildCityBounds(cityCode: string) {
 }
 
 async function setCityContext(city: string) {
-  await ensureInit()
+  // Pass city to ensureInit so that if init hasn't started yet it loads this
+  // city's data directly (avoids a redundant full-dataset load).
+  await ensureInit(city)
   if (!conn) return
+
+  // If trees/trees_fast are loaded for a different city (or not yet loaded),
+  // reload them for the requested city before rebuilding caches.
+  if (loadedCity !== city) {
+    await loadCityTrees(city)
+    invalidateTileCaches()
+  }
+
   activeCityDefaultQuery = `
 SELECT
   tree_id,
@@ -1513,7 +1518,7 @@ async function getTile(z: number, x: number, y: number): Promise<Uint8Array> {
 }
 
 type WorkerMethodMap = {
-  ensureInit: { params: Record<string, never>; result: { ready: boolean; initError: string | null } }
+  ensureInit: { params: { city?: string }; result: { ready: boolean; initError: string | null } }
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
   setColorOverrideSql: { params: { sql: string | null }; result: void }
@@ -1569,7 +1574,8 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   try {
     switch (msg.method) {
       case 'ensureInit': {
-        await ensureInit()
+        const { city } = msg.params as WorkerMethodMap['ensureInit']['params']
+        await ensureInit(city)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: { ready, initError } })
         break
       }

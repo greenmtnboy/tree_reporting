@@ -6,7 +6,7 @@ type PrefetchStatus = 'executed' | 'deduped' | 'skipped'
 type TileRangeParams = { minX: number; maxX: number; minY: number; maxY: number }
 
 type WorkerMethodMap = {
-  ensureInit: { params: Record<string, never>; result: { ready: boolean; initError: string | null } }
+  ensureInit: { params: { city?: string }; result: { ready: boolean; initError: string | null } }
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
   setColorOverrideSql: { params: { sql: string | null }; result: void }
@@ -121,10 +121,10 @@ function fireAndForget<K extends Exclude<keyof WorkerMethodMap,
   })
 }
 
-async function ensureInit() {
+async function ensureInit(city?: string) {
   if (ready.value) return
   if (!initPromise) {
-    initPromise = rpc('ensureInit', {})
+    initPromise = rpc('ensureInit', { city })
       .then((state) => {
         ready.value = !!state.ready
         initError.value = state.initError
@@ -180,9 +180,9 @@ async function prewarmLodCaches(): Promise<void> {
   await rpc('prewarmLodCaches', {})
 }
 
-async function ensureTileProtocolRegistered() {
+async function ensureTileProtocolRegistered(initialCity?: string) {
   if (protocolRegistered) return
-  await ensureInit()
+  await ensureInit(initialCity)
 
   maplibregl.addProtocol('duckdb', async (params) => {
     const parsed = parseDuckdbTileUrl(params.url)
@@ -193,6 +193,11 @@ async function ensureTileProtocolRegistered() {
   })
 
   protocolRegistered = true
+}
+
+/** Start DuckDB init early (e.g. before the map is created) with a known city. */
+function preWarmForCity(city: string) {
+  void ensureInit(city)
 }
 
 function setAutoTileFetchEnabled(enabled: boolean) {
@@ -209,19 +214,13 @@ async function query(sql: string): Promise<{ columns: string[]; rows: Record<str
   return rpc('query', { sql })
 }
 
-if (!initPromise) {
-  initPromise = ensureInit().catch((e) => {
-    initError.value = (e as Error).message
-    console.error('DuckDB worker init failed:', e)
-  })
-}
-
 export function useDuckDB() {
   return {
     ready,
     initError,
     query,
     ensureInit,
+    preWarmForCity,
     ensureTileProtocolRegistered,
     setTileQuery,
     setPublishedTreeIdFilterSql,

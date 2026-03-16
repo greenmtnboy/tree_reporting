@@ -60,6 +60,6 @@ partial datasource sf_tree_info (
 )
 grain (tree_id)
 complete where city = 'USSFO'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/sf_tree_info.parquet`:`gcs://trilogy_public_models/duckdb/trees/sf_tree_info.parquet`
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_info.parquet`:`gcs://trilogy_public_models/duckdb/trees/ussfo_tree_info.parquet`
 freshness by sf_data_updated_through;
 

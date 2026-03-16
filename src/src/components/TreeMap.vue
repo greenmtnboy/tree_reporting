@@ -105,6 +105,7 @@ const SCROLL_ZOOM_RATE = 1 / 400
 
 const {
   query: duckQuery,
+  preWarmForCity,
   ensureTileProtocolRegistered,
   setTileQuery,
   setPublishedTreeIdFilterSql,
@@ -627,6 +628,10 @@ onMounted(async () => {
     await Promise.race([detectCityFromIp(), new Promise<void>((r) => setTimeout(r, 2000))])
   }
 
+  // Kick off DuckDB init now that the city is known so it runs in parallel with
+  // map style loading instead of waiting until the map's 'load' event fires.
+  preWarmForCity(selectedCity.value)
+
   // If the user already granted geolocation, silently restore their location pin (no flyTo).
   if (!props.simplified && navigator.geolocation && navigator.permissions) {
     navigator.permissions.query({ name: 'geolocation' }).then((result) => {
@@ -743,7 +748,7 @@ onMounted(async () => {
       logIconLayerSnapshot('first-idle-after-publish')
     })
 
-    void ensureTileProtocolRegistered()
+    void ensureTileProtocolRegistered(selectedCity.value)
       .then(async () => {
         // DuckDB init is complete — colors are available
         const colors = workerDistinctColors.value

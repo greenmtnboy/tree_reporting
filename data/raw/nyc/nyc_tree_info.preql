@@ -47,5 +47,5 @@ partial datasource nyc_tree_info (
 )
 grain (tree_id)
 complete where city = 'USNYC'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nyc_tree_info.parquet`:`gcs://trilogy_public_models/duckdb/trees/nyc_tree_info.parquet`
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_info.parquet`:`gcs://trilogy_public_models/duckdb/trees/usnyc_tree_info.parquet`
 freshness by nyc_data_updated_through;
