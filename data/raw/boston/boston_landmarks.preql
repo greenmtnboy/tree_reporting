@@ -32,5 +32,5 @@ partial datasource boston_landmark_info (
 )
 grain (landmark_id)
 complete where city = 'USBOS'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usbos_landmark_info.parquet`:`gcs://trilogy_public_models/duckdb/landmarks/usbos_landmark_info.parquet`
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usbos_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usbos_landmark_info_v{data_version}.parquet`
 freshness by bos_landmark_data_updated_through;

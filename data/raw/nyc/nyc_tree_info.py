@@ -86,6 +86,25 @@ def cast_columns(table: pa.Table) -> pa.Table:
         idx = table.schema.get_field_index(dbh_col)
         table = table.set_column(idx, dbh_col, pc.cast(table[dbh_col], pa.int64()))
 
+    # genusspecies: split "scientific - common name" — store each part separately
+    genus_col = next((c for c in table.schema.names if c.lower() == "genusspecies"), None)
+    if genus_col is not None:
+        species_list = table[genus_col].to_pylist()
+        scientific = pa.array(
+            [v.split(" - ")[0].strip() if v is not None else None for v in species_list],
+            type=pa.string(),
+        )
+        sci_list = scientific.to_pylist()
+        tree_name = pa.array(
+            [
+                (v.split(" - ", 1)[1].strip().title() if v is not None and " - " in v else None) or s
+                for v, s in zip(species_list, sci_list)
+            ],
+            type=pa.string(),
+        )
+        table = table.set_column(table.schema.get_field_index(genus_col), genus_col, scientific)
+        table = table.append_column("tree_name", tree_name)
+
     # Normalize all column names to lowercase to match preql mappings
     table = table.rename_columns([c.lower() for c in table.schema.names])
 

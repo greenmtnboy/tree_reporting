@@ -41,9 +41,16 @@ property landmark_id.designation_date date;  # official designation date
 
 property landmark_id.neighborhood string;    # Boston neighborhood
 
+# --- Paris-specific properties ---
+
+property landmark_id.arrondissement string;   # Paris arrondissement (e.g. "Paris 1er Arrondissement")
+property landmark_id.protection_type string;  # e.g. "1925/02/12 : inscrit MH" or "1862 : classé MH"
+property landmark_id.denomination string;     # building type (e.g. "immeuble", "château", "église")
+
 # --- Freshness tracking ---
 
 property <*>.sf_landmark_data_updated_through datetime;
 property <*>.nyc_landmark_data_updated_through datetime;
 property <*>.bos_landmark_data_updated_through datetime;
-auto latest_landmark_update_through <- greatest(sf_landmark_data_updated_through, nyc_landmark_data_updated_through, bos_landmark_data_updated_through);
+property <*>.paris_landmark_data_updated_through datetime;
+auto latest_landmark_update_through <- greatest(sf_landmark_data_updated_through, nyc_landmark_data_updated_through, bos_landmark_data_updated_through, paris_landmark_data_updated_through);

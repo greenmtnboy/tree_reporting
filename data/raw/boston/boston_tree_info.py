@@ -64,6 +64,30 @@ def cast_columns(table: pa.Table) -> pa.Table:
         as_float = pc.cast(table[dbh_col], pa.float64())
         table = table.set_column(idx, dbh_col, pc.cast(as_float, pa.int64(), safe=False))
 
+    # spp_com: common name in "Genus, Qualifier" order — invert to "Qualifier Genus"
+    spp_com_col = next((c for c in table.schema.names if c.lower() == "spp_com"), None)
+    if spp_com_col is not None:
+        def invert_common_name(v: str | None) -> str | None:
+            if not v or not v.strip():
+                return None
+            parts = [p.strip() for p in v.split(",", 1)]
+            return f"{parts[1]} {parts[0]}" if len(parts) == 2 and parts[1] else parts[0]
+        tree_name = pa.array(
+            [invert_common_name(v) for v in table[spp_com_col].to_pylist()],
+            type=pa.string(),
+        )
+    else:
+        tree_name = pa.array([None] * table.num_rows, type=pa.string())
+
+    # Fallback to spp_bot (scientific name) when tree_name is null
+    spp_bot_col = next((c for c in table.schema.names if c.lower() == "spp_bot"), None)
+    spp_bot_list = table[spp_bot_col].to_pylist() if spp_bot_col else [None] * table.num_rows
+    tree_name = pa.array(
+        [t or s for t, s in zip(tree_name.to_pylist(), spp_bot_list)],
+        type=pa.string(),
+    )
+    table = table.append_column("tree_name", tree_name)
+
     # Normalize all column names to lowercase
     table = table.rename_columns([c.lower() for c in table.schema.names])
 
@@ -77,6 +101,7 @@ def load_arrow_table(csv_bytes: io.BytesIO) -> pa.Table:
             strings_can_be_null=True,
             column_types={
                 "id": pa.string(),
+                "spp_com": pa.string(),
                 "date_plant": pa.string(),
                 "dbh": pa.string(),
             },

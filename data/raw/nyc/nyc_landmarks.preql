@@ -31,5 +31,5 @@ partial datasource nyc_landmark_info (
 )
 grain (landmark_id)
 complete where city = 'USNYC'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usnyc_landmark_info.parquet`:`gcs://trilogy_public_models/duckdb/landmarks/usnyc_landmark_info.parquet`
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usnyc_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usnyc_landmark_info_v{data_version}.parquet`
 freshness by nyc_landmark_data_updated_through;

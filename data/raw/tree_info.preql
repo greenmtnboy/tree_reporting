@@ -11,7 +11,7 @@ datasource tree_info (
     tree_id,
     city,
     species,
-    common_name,
+    tree_name,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,
@@ -19,5 +19,5 @@ datasource tree_info (
     latest_update_through
 )
 grain (tree_id)
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info.parquet`:`gcs://trilogy_public_models/duckdb/trees/full_tree_info.parquet`
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/full_tree_info_v{data_version}.parquet`
 freshness by latest_update_through;

@@ -12,8 +12,7 @@ API:    https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/les-arbres/e
 
 Field mapping:
   idbase            -> tree_id  (prefixed "par-" for global uniqueness)
-  genre + espece    -> species  (formatted as "Genre espece :: libellefrancais")
-  libellefrancais   -> common name (embedded in species via "::" convention)
+  genre + espece    -> species  (scientific name only: "Genre espece")
   circonferenceencm -> diameter_at_breast_height (circumference cm → diameter inches)
   geo_point_2d      -> latitude, longitude
 """
@@ -30,7 +29,7 @@ import requests
 DATASET_URL = (
     "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/"
     "les-arbres/exports/parquet"
-    "?select=idbase%2Clifrancais%2Clibellefrancais%2Cgenre%2Cespece"
+    "?select=idbase%2Cgenre%2Cespece%2Clibellefrancais"
     "%2Ccirconferenceencm%2Cgeo_point_2d&lang=en&timezone=UTC"
 )
 
@@ -54,7 +53,7 @@ def transform(table: pa.Table) -> pa.Table:
     ids = table[idbase_col].to_pylist() if idbase_col else [None] * table.num_rows
     tree_id = pa.array([f"par-{v}" if v is not None else None for v in ids], type=pa.string())
 
-    # --- species: "Genre espece :: libellefrancais" ---
+    # --- species: "Genre espece" (scientific name only) ---
     genre_col = next((c for c in names if c.lower() == "genre"), None)
     espece_col = next((c for c in names if c.lower() == "espece"), None)
     libelle_col = next((c for c in names if c.lower() == "libellefrancais"), None)
@@ -65,9 +64,15 @@ def transform(table: pa.Table) -> pa.Table:
 
     species = pa.array(
         [
-            f"{(g or '').strip()} {(e or '').strip()} :: {(l or '').strip()}".strip(" :")
-            for g, e, l in zip(genre_list, espece_list, libelle_list)
+            f"{(g or '').strip()} {(e or '').strip()}".strip() or None
+            for g, e in zip(genre_list, espece_list)
         ],
+        type=pa.string(),
+    )
+
+    species_list = species.to_pylist()
+    tree_name = pa.array(
+        [(v.strip() if v and v.strip() else None) or s for v, s in zip(libelle_list, species_list)],
         type=pa.string(),
     )
 
@@ -102,6 +107,7 @@ def transform(table: pa.Table) -> pa.Table:
             "tree_id": tree_id,
             "city": pa.array(["FRPAR"] * n, type=pa.string()),
             "species": species,
+            "tree_name": tree_name,
             "plant_date": pa.array([None] * n, type=pa.null()),
             "latitude": lat,
             "longitude": lon,

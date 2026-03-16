@@ -1,1 +1,3 @@
 key city enum<string>['USSFO', 'USNYC', 'USBOS', 'FRPAR']; # UN/LOCODE for the source city (e.g. USSFO, USNYC, USBOS, FRPAR)
+
+param data_version string default '1';

@@ -449,7 +449,7 @@ async function loadCityTrees(city?: string): Promise<void> {
     SELECT
       tree_id,
       city,
-      coalesce(nullif(trim(string_split(species, '::')[2]), ''), trim(string_split(species, '::')[1])) AS common_name,
+      tree_name,
       plant_date,
       species,
       latitude,
@@ -468,7 +468,7 @@ async function loadCityTrees(city?: string): Promise<void> {
       SELECT
         t.tree_id,
         t.city,
-        t.common_name,
+        COALESCE(NULLIF(TRIM(split_part(se.common_names, ',', 1)), ''), t.tree_name, t.species) AS tree_name,
         t.plant_date,
         t.species,
         t.latitude,
@@ -501,7 +501,7 @@ async function loadCityTrees(city?: string): Promise<void> {
     SELECT
       tree_id,
       city,
-      common_name,
+      tree_name,
       plant_date,
       species,
       latitude,
@@ -576,7 +576,7 @@ async function doInit(city?: string) {
   try {
     await conn.query(`
       CREATE TABLE species_enrichment AS
-      SELECT species, tree_category, native_status, is_evergreen, mature_height_ft, bloom_season, wildlife_value, fire_risk
+      SELECT species, common_names, tree_category, native_status, is_evergreen, mature_height_ft, bloom_season, wildlife_value, fire_risk
       FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
     `)
   } catch (e) {
@@ -1415,7 +1415,9 @@ WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND city = '${city}'
   postColorMapUpdate()
   // All city tables are ready — unblock tile generation and queries.
   signalCityReady()
-  ctx.postMessage({ type: 'cityContextReady', loadMs: Math.round(nowMs() - cityLoadStartAt) })
+  const countResult = await conn.query(`SELECT COUNT(*) AS cnt FROM trees WHERE city = '${city}'`)
+  const treeCount = Number(countResult.toArray()[0]?.cnt ?? 0)
+  ctx.postMessage({ type: 'cityContextReady', loadMs: Math.round(nowMs() - cityLoadStartAt), treeCount })
 }
 
 function setViewportZoom(zoom: number) {

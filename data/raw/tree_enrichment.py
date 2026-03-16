@@ -942,7 +942,7 @@ def get_all_species() -> list[str]:
     conn = duckdb.connect()
     try:
         rows = conn.execute(
-            """
+            f"""
             SELECT DISTINCT species
             FROM read_parquet(?)
             WHERE {SPECIES_EXCLUSION_SQL}
@@ -1118,7 +1118,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--debug-species",
         dest="debug_species",
-        help="Run standalone parsing debug for a single species, e.g. \"Abutilon hybridum :: Flowering maple\"",
+        help="Run standalone parsing debug for a single species, e.g. \"Abutilon hybridum\"",
     )
     parser.add_argument(
         "--print-llm-context",
@@ -1206,7 +1206,7 @@ if __name__ == "__main__":
         else:
             print(f"    [complete]", file=sys.stderr)
         new_rows.append({
-            "species":          q_species,
+            "species":          parse_scientific_name(q_species),
             "common_names":     ", ".join(enrichment.common_names),
             "native_status":    enrichment.native_status,
             "is_evergreen":     enrichment.is_evergreen,

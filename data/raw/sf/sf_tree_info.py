@@ -58,6 +58,25 @@ def cast_columns(table: pa.Table) -> pa.Table:
             "SiteOrder",
             pc.cast(table["SiteOrder"], pa.int64()),
         )
+    # qSpecies: split "scientific :: common name" — store each part separately
+    if "qSpecies" in table.schema.names:
+        species_list = table["qSpecies"].to_pylist()
+        scientific = pa.array(
+            [v.split("::")[0].strip() if v is not None else None for v in species_list],
+            type=pa.string(),
+        )
+        sci_list = scientific.to_pylist()
+        tree_name = pa.array(
+            [
+                (v.split("::", 1)[1].strip() if v is not None and "::" in v else None) or s
+                for v, s in zip(species_list, sci_list)
+            ],
+            type=pa.string(),
+        )
+        table = table.set_column(
+            table.schema.get_field_index("qSpecies"), "qSpecies", scientific
+        )
+        table = table.append_column("tree_name", tree_name)
     return table
 
 
