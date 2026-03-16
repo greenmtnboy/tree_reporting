@@ -126,7 +126,7 @@ const { loading, error, getSpeciesEnrichment } = useTreeData()
 const { target: flyToTarget, flyTo } = useFlyTo()
 const route = useRoute()
 const router = useRouter()
-const { selectedCity, setSelectedCity, currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision, userLocation, setUserLocation, clearUserLocation } = useMapData()
+const { selectedCity, setSelectedCity, currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision, userLocation, setUserLocation } = useMapData()
 
 // Initialise city from URL on first load
 const urlCity = route.query.city
