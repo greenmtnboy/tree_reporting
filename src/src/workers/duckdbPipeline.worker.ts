@@ -96,7 +96,7 @@ let loadedCity: string | null = null
 // setCityContext has fully completed (color map, agg caches, bounds all built).
 // Uses a resolver array so that resetCityReadyGate() never orphans existing waiters.
 let cityContextReady = false
-let cityContextPendingResolvers: Array<() => void> = []
+const cityContextPendingResolvers: Array<() => void> = []
 
 function nowMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now()
