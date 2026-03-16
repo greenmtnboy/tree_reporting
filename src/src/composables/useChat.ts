@@ -18,12 +18,7 @@ import { useFlyTo } from './useFlyTo'
 import { useLandmarkData } from './useLandmarkData'
 import { useMapData, CITY_CONFIG } from './useMapData'
 import type { CityCode } from './useMapData'
-import TREE_ENRICHMENT_MODEL from '../../../data/raw/tree_enrichment.preql?raw'
-import TREE_INFO_MODEL from '../../../data/raw/tree_info.preql?raw'
-import TREE_COMMON_MODEL from '../../../data/raw/tree_common.preql?raw'
-import SF_TREE_INFO_MODEL from '../../../data/raw/sf_tree_info.preql?raw'
-import NYC_TREE_INFO_MODEL from '../../../data/raw/nyc_tree_info.preql?raw'
-import BOSTON_TREE_INFO_MODEL from '../../../data/raw/boston_tree_info.preql?raw'
+import { ALL_MODEL_SOURCES } from '../trilogyModels'
 
 const API_KEY_STORAGE = 'sf_trees_api_key'
 const API_TYPE_STORAGE = 'sf_trees_provider_type'
@@ -40,18 +35,6 @@ const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
   openrouter: 'google/gemini-3-flash-preview',
   demo: 'google/gemini-3-flash-preview',
 }
-
-import CORE_MODEL from '../../../data/raw/core.preql?raw'
-
-const ALL_MODEL_SOURCES = [
-  { alias: 'tree_enrichment', contents: TREE_ENRICHMENT_MODEL },
-  { alias: 'tree_info', contents: TREE_INFO_MODEL },
-  { alias: 'tree_common', contents: TREE_COMMON_MODEL },
-  { alias: 'core', contents: CORE_MODEL },
-  { alias: 'sf_tree_info', contents: SF_TREE_INFO_MODEL },
-  { alias: 'nyc_tree_info', contents: NYC_TREE_INFO_MODEL },
-  { alias: 'boston_tree_info', contents: BOSTON_TREE_INFO_MODEL },
-]
 
 const TOOLS = [
   {

@@ -1,13 +1,10 @@
-import tree_common;
+import ..tree_common;
 
 root partial datasource boston_update_time (
-    city: ~city,
     data_updated_through: boston_data_updated_through
 )
-grain (city)
 complete where city = 'USBOS'
-file `./boston_update_time.py`
-freshness by boston_data_updated_through;
+file `./boston_update_time.py`;
 
 root partial datasource boston_raw_tree_info (
     id: tree_id,
@@ -35,5 +32,5 @@ partial datasource boston_tree_info (
 )
 grain (tree_id)
 complete where city = 'USBOS'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/boston_tree_info.parquet`:`gcs://trilogy_public_models/duckdb/trees/boston_tree_info.parquet`
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info.parquet`:`gcs://trilogy_public_models/duckdb/trees/usbos_tree_info.parquet`
 freshness by boston_data_updated_through;

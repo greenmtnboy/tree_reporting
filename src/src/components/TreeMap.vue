@@ -9,6 +9,16 @@
       <span class="legend-label">{{ entry.label }}</span>
     </div>
   </div>
+  <div v-if="!props.simplified && !isInitialLoading" class="cache-refresh-wrap">
+    <div class="cache-refresh-btn-wrap">
+      <button class="cache-refresh-btn" :disabled="cacheRefreshing" @click="void purgeAndRefresh()">&#x21BA;</button>
+      <span class="cache-refresh-tooltip">Refresh map cache</span>
+    </div>
+    <div v-if="dbPopulatedMs != null" class="db-status-wrap">
+      <span class="db-status-dot">&#x25CF;</span>
+      <span class="db-status-tooltip">City DB populated; {{ dbPopulatedMs }}ms</span>
+    </div>
+  </div>
   <div v-if="!props.simplified" class="city-selector">
     <button
       v-for="(cfg, code) in CITY_CONFIG"
@@ -101,6 +111,7 @@ const SCROLL_ZOOM_RATE = 1 / 400
 
 const {
   query: duckQuery,
+  preWarmForCity,
   ensureTileProtocolRegistered,
   setTileQuery,
   setPublishedTreeIdFilterSql,
@@ -112,15 +123,17 @@ const {
   prefetchVisibleDetailTilesAtZoom,
   prewarmLodCaches,
   setAutoTileFetchEnabled,
+  invalidateTileCaches,
   workerDistinctColors,
   workerColorLabelMap,
+  dbPopulatedMs,
 } = useDuckDB()
 
 const { loading, error, getSpeciesEnrichment } = useTreeData()
 const { target: flyToTarget, flyTo } = useFlyTo()
 const route = useRoute()
 const router = useRouter()
-const { selectedCity, setSelectedCity, currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision, userLocation, setUserLocation, clearUserLocation } = useMapData()
+const { selectedCity, setSelectedCity, currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision, userLocation, setUserLocation } = useMapData()
 
 // Initialise city from URL on first load
 const urlCity = route.query.city
@@ -439,18 +452,35 @@ function bindTreeInteractions() {
   treeInteractionsBound = true
 }
 
+// --- Cache purge ---
+
+const cacheRefreshing = ref(false)
+
+async function purgeAndRefresh() {
+  if (cacheRefreshing.value) return
+  cacheRefreshing.value = true
+  startTileRefreshMessage()
+  try {
+    await invalidateTileCaches()
+    forceTreesTileRefetchPass()
+  } finally {
+    cacheRefreshing.value = false
+    stopTileRefreshMessage()
+  }
+}
+
 // --- City switching ---
 
 let citySwitchInProgress = false
 
-async function switchCity(city: CityCode) {
+async function switchCity(city: CityCode, landingCoords?: [number, number]) {
   if (city === selectedCity.value || citySwitchInProgress) return
   citySwitchInProgress = true
 
   try {
     const { center, name } = CITY_CONFIG[city]
 
-    await runGlobeSwoopTo(center, name)
+    await runGlobeSwoopTo(center, name, landingCoords)
 
     // State updates after landing — triggers the query/filter watcher which reloads tiles.
     setSelectedCity(city)
@@ -523,7 +553,18 @@ function toggleUserLocation() {
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       setUserLocation(pos.coords.latitude, pos.coords.longitude)
-      flyTo({ lat: pos.coords.latitude, lng: pos.coords.longitude, zoom: 15 })
+      // Check if user is closer to a different city and trigger a full city switch if so
+      let closest: CityCode = selectedCity.value
+      let minDist = Infinity
+      for (const [code, cfg] of Object.entries(CITY_CONFIG) as [CityCode, (typeof CITY_CONFIG)[CityCode]][]) {
+        const dist = haversineKm(pos.coords.latitude, pos.coords.longitude, cfg.center[1], cfg.center[0])
+        if (dist < minDist) { minDist = dist; closest = code }
+      }
+      if (closest !== selectedCity.value) {
+        void switchCity(closest, [pos.coords.longitude, pos.coords.latitude])
+      } else {
+        flyTo({ lat: pos.coords.latitude, lng: pos.coords.longitude, zoom: 15 })
+      }
     },
     (err) => { console.warn('[Geolocation]', err.message) },
   )
@@ -604,6 +645,10 @@ onMounted(async () => {
   if (!urlCityStr && !props.simplified) {
     await Promise.race([detectCityFromIp(), new Promise<void>((r) => setTimeout(r, 2000))])
   }
+
+  // Kick off DuckDB init now that the city is known so it runs in parallel with
+  // map style loading instead of waiting until the map's 'load' event fires.
+  preWarmForCity(selectedCity.value)
 
   // If the user already granted geolocation, silently restore their location pin (no flyTo).
   if (!props.simplified && navigator.geolocation && navigator.permissions) {
@@ -721,7 +766,7 @@ onMounted(async () => {
       logIconLayerSnapshot('first-idle-after-publish')
     })
 
-    void ensureTileProtocolRegistered()
+    void ensureTileProtocolRegistered(selectedCity.value)
       .then(async () => {
         // DuckDB init is complete — colors are available
         const colors = workerDistinctColors.value
@@ -856,6 +901,99 @@ onUnmounted(() => {
   opacity: 0.4;
   cursor: default;
   pointer-events: none;
+}
+
+.cache-refresh-wrap {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cache-refresh-btn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  background: rgba(22, 33, 62, 0.75);
+  color: rgba(200, 218, 248, 0.6);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.cache-refresh-btn:hover {
+  background: rgba(30, 50, 90, 0.92);
+  color: #c8daf8;
+  border-color: rgba(79, 195, 247, 0.5);
+}
+
+.cache-refresh-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.cache-refresh-btn-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cache-refresh-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.72rem;
+  color: rgba(200, 218, 248, 0.9);
+  background: rgba(22, 33, 62, 0.92);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 5px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.cache-refresh-btn-wrap:hover .cache-refresh-tooltip {
+  opacity: 1;
+}
+
+.db-status-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.db-status-dot {
+  font-size: 15px;
+  color: #4caf50;
+  cursor: default;
+  line-height: 1;
+}
+
+.db-status-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.72rem;
+  color: rgba(200, 218, 248, 0.9);
+  background: rgba(22, 33, 62, 0.92);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 5px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.db-status-wrap:hover .db-status-tooltip {
+  opacity: 1;
 }
 
 .map-legend {

@@ -1,23 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'fs'
-import { resolve } from 'path'
+import { ALL_MODEL_SOURCES } from '../trilogyModels'
 
 const TRILOGY_RESOLVER_URL = 'https://trilogy-service.fly.dev'
-const DATA_RAW = resolve(__dirname, '../../../data/raw')
-
-function readPreql(name: string): string {
-  return readFileSync(resolve(DATA_RAW, `${name}.preql`), 'utf8')
-}
-
-const ALL_MODEL_SOURCES = [
-  { alias: 'tree_enrichment', contents: readPreql('tree_enrichment') },
-  { alias: 'tree_info', contents: readPreql('tree_info') },
-  { alias: 'tree_common', contents: readPreql('tree_common') },
-  { alias: 'core', contents: readPreql('core') },
-  { alias: 'sf_tree_info', contents: readPreql('sf_tree_info') },
-  { alias: 'nyc_tree_info', contents: readPreql('nyc_tree_info') },
-  { alias: 'boston_tree_info', contents: readPreql('boston_tree_info') },
-]
 
 async function compilePreQL(query: string): Promise<string> {
   const body = {
