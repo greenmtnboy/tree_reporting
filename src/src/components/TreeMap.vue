@@ -466,14 +466,14 @@ async function purgeAndRefresh() {
 
 let citySwitchInProgress = false
 
-async function switchCity(city: CityCode) {
+async function switchCity(city: CityCode, landingCoords?: [number, number]) {
   if (city === selectedCity.value || citySwitchInProgress) return
   citySwitchInProgress = true
 
   try {
     const { center, name } = CITY_CONFIG[city]
 
-    await runGlobeSwoopTo(center, name)
+    await runGlobeSwoopTo(center, name, landingCoords)
 
     // State updates after landing — triggers the query/filter watcher which reloads tiles.
     setSelectedCity(city)
@@ -546,7 +546,18 @@ function toggleUserLocation() {
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       setUserLocation(pos.coords.latitude, pos.coords.longitude)
-      flyTo({ lat: pos.coords.latitude, lng: pos.coords.longitude, zoom: 15 })
+      // Check if user is closer to a different city and trigger a full city switch if so
+      let closest: CityCode = selectedCity.value
+      let minDist = Infinity
+      for (const [code, cfg] of Object.entries(CITY_CONFIG) as [CityCode, (typeof CITY_CONFIG)[CityCode]][]) {
+        const dist = haversineKm(pos.coords.latitude, pos.coords.longitude, cfg.center[1], cfg.center[0])
+        if (dist < minDist) { minDist = dist; closest = code }
+      }
+      if (closest !== selectedCity.value) {
+        void switchCity(closest, [pos.coords.longitude, pos.coords.latitude])
+      } else {
+        flyTo({ lat: pos.coords.latitude, lng: pos.coords.longitude, zoom: 15 })
+      }
     },
     (err) => { console.warn('[Geolocation]', err.message) },
   )

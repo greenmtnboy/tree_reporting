@@ -359,7 +359,7 @@ export function useMapIntroAnimation({
    *
    * Because the DB is already initialised we land at city zoom directly (no INTRO_START_ZOOM).
    */
-  async function runGlobeSwoopTo(targetCenter: [number, number], cityName: string): Promise<void> {
+  async function runGlobeSwoopTo(targetCenter: [number, number], cityName: string, landingCenter?: [number, number]): Promise<void> {
     if (!map.value) return
 
     cancelIntro()
@@ -395,7 +395,7 @@ export function useMapIntroAnimation({
     await new Promise<void>((resolve) => {
       if (!map.value) return resolve()
       map.value.flyTo({
-        center: targetCenter,
+        center: landingCenter ?? targetCenter,
         zoom: 13.5,
         duration: FLY_ACROSS_MS,
         essential: true,
