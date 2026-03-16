@@ -34,6 +34,7 @@ const ready = ref(false)
 const initError = ref<string | null>(null)
 const workerDistinctColors = ref<string[]>([])
 const workerColorLabelMap = ref<Record<string, string>>({})
+const dbPopulatedMs = ref<number | null>(null)
 
 let worker: Worker | null = null
 let nextRequestId = 1
@@ -57,6 +58,11 @@ function getWorker(): Worker {
     if (msg.type === 'colorMapUpdate') {
       workerDistinctColors.value = msg.distinctColors ?? []
       workerColorLabelMap.value = msg.colorLabelMap ?? {}
+      return
+    }
+
+    if (msg.type === 'cityContextReady') {
+      dbPopulatedMs.value = msg.loadMs as number
       return
     }
 
@@ -238,5 +244,6 @@ export function useDuckDB() {
     invalidateTileCaches,
     workerDistinctColors,
     workerColorLabelMap,
+    dbPopulatedMs,
   }
 }

@@ -94,10 +94,9 @@ let loadedCity: string | null = null
 
 // City-context gate: tile generation and city-table queries must not run until
 // setCityContext has fully completed (color map, agg caches, bounds all built).
-// Resolved once on first city load; reset + re-resolved on every city switch.
+// Uses a resolver array so that resetCityReadyGate() never orphans existing waiters.
 let cityContextReady = false
-let cityContextReadyResolve: () => void = () => {}
-let cityContextReadyPromise: Promise<void> = new Promise<void>((r) => { cityContextReadyResolve = r })
+let cityContextPendingResolvers: Array<() => void> = []
 
 function nowMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now()
@@ -106,19 +105,19 @@ function nowMs(): number {
 /** Block tile/query work until setCityContext has fully completed. */
 async function waitForCityContext(): Promise<void> {
   if (cityContextReady) return
-  await cityContextReadyPromise
+  await new Promise<void>((r) => { cityContextPendingResolvers.push(r) })
 }
 
-/** Create a fresh (unresolved) city gate — called at the start of a city switch. */
+/** Mark city as not-ready during a city switch; existing waiters stay in the queue. */
 function resetCityReadyGate(): void {
   cityContextReady = false
-  cityContextReadyPromise = new Promise<void>((r) => { cityContextReadyResolve = r })
 }
 
-/** Resolve the gate — called at the end of setCityContext. */
+/** Open the gate and unblock all current waiters. */
 function signalCityReady(): void {
   cityContextReady = true
-  cityContextReadyResolve()
+  const resolvers = cityContextPendingResolvers.splice(0)
+  for (const r of resolvers) r()
 }
 
 function sanitizeBaseQuery(sql: string | null): string {
@@ -1098,6 +1097,7 @@ GROUP BY xtile, ytile
 
 async function generatePointTileMvt(z: number, x: number, y: number): Promise<Uint8Array> {
   if (!conn) return new Uint8Array()
+  await waitForCityContext()
 
   const key = tileCacheKey(z, x, y)
   if (isTileOutsideDataBounds(z, x, y)) return new Uint8Array()
@@ -1387,6 +1387,8 @@ async function setCityContext(city: string) {
   await ensureInit(city)
   if (!conn) return
 
+  const cityLoadStartAt = nowMs()
+
   // If trees/trees_fast are loaded for a different city (or not yet loaded),
   // reload them for the requested city before rebuilding caches.
   // Reset the gate first so in-flight tile/query requests queue up while we load.
@@ -1413,6 +1415,7 @@ WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND city = '${city}'
   postColorMapUpdate()
   // All city tables are ready — unblock tile generation and queries.
   signalCityReady()
+  ctx.postMessage({ type: 'cityContextReady', loadMs: Math.round(nowMs() - cityLoadStartAt) })
 }
 
 function setViewportZoom(zoom: number) {
@@ -1437,6 +1440,7 @@ function setVisibleTileRange(z: number, minX: number, maxX: number, minY: number
 
 async function prefetchVisibleDetailTilesAtZoom(z: number, rangeOverride?: TileBounds): Promise<PrefetchStatus> {
   await ensureInit()
+  await waitForCityContext()
   if (!conn || !spatialExtensionReady || z < 15) return 'skipped'
 
   if (rangeOverride) {
@@ -1463,6 +1467,7 @@ async function prefetchVisibleDetailTilesAtZoom(z: number, rangeOverride?: TileB
 
 async function prewarmLodCaches(): Promise<void> {
   await ensureInit()
+  await waitForCityContext()
   if (!conn || !spatialExtensionReady) return
 
   const rev = tileQueryRevision

@@ -10,8 +10,14 @@
     </div>
   </div>
   <div v-if="!props.simplified && !isInitialLoading" class="cache-refresh-wrap">
-    <button class="cache-refresh-btn" :disabled="cacheRefreshing" @click="void purgeAndRefresh()">&#x21BA;</button>
-    <span class="cache-refresh-tooltip">Refresh map cache</span>
+    <div class="cache-refresh-btn-wrap">
+      <button class="cache-refresh-btn" :disabled="cacheRefreshing" @click="void purgeAndRefresh()">&#x21BA;</button>
+      <span class="cache-refresh-tooltip">Refresh map cache</span>
+    </div>
+    <div v-if="dbPopulatedMs != null" class="db-status-wrap">
+      <span class="db-status-dot">&#x25CF;</span>
+      <span class="db-status-tooltip">City DB populated; {{ dbPopulatedMs }}ms</span>
+    </div>
   </div>
   <div v-if="!props.simplified" class="city-selector">
     <button
@@ -120,6 +126,7 @@ const {
   invalidateTileCaches,
   workerDistinctColors,
   workerColorLabelMap,
+  dbPopulatedMs,
 } = useDuckDB()
 
 const { loading, error, getSpeciesEnrichment } = useTreeData()
@@ -928,16 +935,64 @@ onUnmounted(() => {
   cursor: default;
 }
 
+.cache-refresh-btn-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 .cache-refresh-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 0.72rem;
-  color: rgba(200, 218, 248, 0.45);
+  color: rgba(200, 218, 248, 0.9);
+  background: rgba(22, 33, 62, 0.92);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 5px;
+  padding: 3px 8px;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.15s;
 }
 
-.cache-refresh-wrap:hover .cache-refresh-tooltip {
+.cache-refresh-btn-wrap:hover .cache-refresh-tooltip {
+  opacity: 1;
+}
+
+.db-status-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.db-status-dot {
+  font-size: 15px;
+  color: #4caf50;
+  cursor: default;
+  line-height: 1;
+}
+
+.db-status-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.72rem;
+  color: rgba(200, 218, 248, 0.9);
+  background: rgba(22, 33, 62, 0.92);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 5px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.db-status-wrap:hover .db-status-tooltip {
   opacity: 1;
 }
 
