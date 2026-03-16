@@ -92,8 +92,33 @@ let activeCityDefaultQuery: string = DEFAULT_BASE_QUERY_SQL
 /** The city code whose rows are currently loaded in the `trees` table (null = all cities). */
 let loadedCity: string | null = null
 
+// City-context gate: tile generation and city-table queries must not run until
+// setCityContext has fully completed (color map, agg caches, bounds all built).
+// Resolved once on first city load; reset + re-resolved on every city switch.
+let cityContextReady = false
+let cityContextReadyResolve: () => void = () => {}
+let cityContextReadyPromise: Promise<void> = new Promise<void>((r) => { cityContextReadyResolve = r })
+
 function nowMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now()
+}
+
+/** Block tile/query work until setCityContext has fully completed. */
+async function waitForCityContext(): Promise<void> {
+  if (cityContextReady) return
+  await cityContextReadyPromise
+}
+
+/** Create a fresh (unresolved) city gate — called at the start of a city switch. */
+function resetCityReadyGate(): void {
+  cityContextReady = false
+  cityContextReadyPromise = new Promise<void>((r) => { cityContextReadyResolve = r })
+}
+
+/** Resolve the gate — called at the end of setCityContext. */
+function signalCityReady(): void {
+  cityContextReady = true
+  cityContextReadyResolve()
 }
 
 function sanitizeBaseQuery(sql: string | null): string {
@@ -1364,7 +1389,9 @@ async function setCityContext(city: string) {
 
   // If trees/trees_fast are loaded for a different city (or not yet loaded),
   // reload them for the requested city before rebuilding caches.
+  // Reset the gate first so in-flight tile/query requests queue up while we load.
   if (loadedCity !== city) {
+    resetCityReadyGate()
     await loadCityTrees(city)
     invalidateTileCaches()
   }
@@ -1384,6 +1411,8 @@ WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND city = '${city}'
   await rebuildCityBounds(city)
   invalidateTileCaches()
   postColorMapUpdate()
+  // All city tables are ready — unblock tile generation and queries.
+  signalCityReady()
 }
 
 function setViewportZoom(zoom: number) {
@@ -1497,6 +1526,7 @@ function normalizeValue(v: unknown): unknown {
 
 async function runQuery(sql: string): Promise<{ columns: string[]; rows: Record<string, unknown>[] }> {
   await ensureInit()
+  await waitForCityContext()
   if (!conn) throw new Error('DuckDB not initialized')
 
   const result = await conn.query(sql)
@@ -1513,6 +1543,7 @@ async function runQuery(sql: string): Promise<{ columns: string[]; rows: Record<
 
 async function getTile(z: number, x: number, y: number): Promise<Uint8Array> {
   await ensureInit()
+  await waitForCityContext()
   if (!autoTileFetchEnabled) {
     const cached = getCachedTile(tileCacheKey(z, x, y))
     return cached ?? new Uint8Array()
