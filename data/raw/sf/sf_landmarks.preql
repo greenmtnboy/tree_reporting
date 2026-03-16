@@ -1,4 +1,4 @@
-import landmark_common;
+import ..landmark_common;
 
 root datasource sf_landmarks_update_time (
     city: ~city,

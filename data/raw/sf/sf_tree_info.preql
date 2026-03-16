@@ -1,4 +1,4 @@
-import tree_common;
+import ..tree_common;
 
 root datasource sf_update_time (
     city: ~city,

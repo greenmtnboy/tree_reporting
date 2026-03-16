@@ -1,4 +1,4 @@
-import landmark_common;
+import ..landmark_common;
 
 root partial datasource nyc_landmarks_update_time (
     city: ~city,

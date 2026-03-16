@@ -37,8 +37,13 @@ property landmark_id.borough string;         # NYC borough
 property landmark_id.lm_type string;         # landmark type (e.g. Scenic Landmark)
 property landmark_id.designation_date date;  # official designation date
 
+# --- Boston-specific properties ---
+
+property landmark_id.neighborhood string;    # Boston neighborhood
+
 # --- Freshness tracking ---
 
 property <*>.sf_landmark_data_updated_through datetime;
 property <*>.nyc_landmark_data_updated_through datetime;
-auto latest_landmark_update_through <- greatest(sf_landmark_data_updated_through, nyc_landmark_data_updated_through);
+property <*>.bos_landmark_data_updated_through datetime;
+auto latest_landmark_update_through <- greatest(sf_landmark_data_updated_through, nyc_landmark_data_updated_through, bos_landmark_data_updated_through);

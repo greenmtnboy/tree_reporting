@@ -1,4 +1,4 @@
-import tree_common;
+import ..tree_common;
 
 root partial datasource boston_update_time (
     city: ~city,
