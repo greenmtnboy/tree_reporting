@@ -972,28 +972,21 @@ _COMPLETENESS_EXPR = """
 
 SKIP_SPECIES = {'Scheduled Planting Site - Spring 2026', 'Vacant Unacceptable/Retired', 'Vacant site medium' }
 
-def get_already_enriched(source: str = ENRICHMENT_PARQUET) -> tuple[set[str], set[str]]:
-    """Return (all_enriched, complete_enriched) from *source* (local path or https URL).
-
-    'complete' means every core Optional field has a non-null extracted value.
-    Completeness is computed from existing column values so it works even before
-    the is_complete column was added to the parquet.
-    """
+def get_already_enriched(source: str = ENRICHMENT_PARQUET) -> set[str]:
+    """Return the set of species names already present in *source* (local path or https URL)."""
     conn = duckdb.connect()
     try:
         rows = conn.execute(
-            f"""
-            SELECT species, {_COMPLETENESS_EXPR} AS is_complete
+            """
+            SELECT species
             FROM read_parquet(?)
             WHERE species IS NOT NULL
             """,
             [source],
         ).fetchall()
-        all_enriched      = {row[0] for row in rows}.union(SKIP_SPECIES)
-        complete_enriched = {row[0] for row in rows if row[1]}.union(SKIP_SPECIES)
-        return all_enriched, complete_enriched
+        return {row[0] for row in rows}.union(SKIP_SPECIES)
     except Exception:
-        return set(), set()
+        return set()
     finally:
         conn.close()
 
@@ -1170,18 +1163,15 @@ if __name__ == "__main__":
     else:
         enrichment_source = ENRICHMENT_PARQUET
 
-    already_enriched, complete_enriched = get_already_enriched(enrichment_source)
+    already_enriched = get_already_enriched(enrichment_source)
     all_species = get_all_species()
-    # Process species that are new OR previously enriched but incomplete
-    to_process = [s for s in all_species if s not in already_enriched]
+    to_process = [s for s in all_species if parse_scientific_name(s) not in already_enriched]
     if local_mode:
         to_process = to_process[:args.limit]
-    incomplete_count = sum(1 for s in to_process if s in already_enriched)
 
     print(
         f"[info] {len(all_species)} total species | "
-        f"{len(already_enriched)} already enriched "
-        f"({len(complete_enriched)} complete, {incomplete_count} incomplete) | "
+        f"{len(already_enriched)} already enriched | "
         f"{len(to_process)} to process",
         file=sys.stderr,
     )
@@ -1193,7 +1183,7 @@ if __name__ == "__main__":
     for q_species in to_process:
         if not q_species:
             continue
-        status = "re-enrich" if q_species in already_enriched else "new"
+        status = "re-enrich" if parse_scientific_name(q_species) in already_enriched else "new"
         print(f"  [{status}] {q_species}", file=sys.stderr)
         enrichment = enrich_species(q_species, client, print_full_context=args.print_llm_context)
         if enrichment is None:

@@ -235,7 +235,21 @@ trilogy run data/raw/tree_info.preql --city {CODE}
 
 **a) `src/src/workers/parquetUrls.ts`** — the `cityTreeParquetUrl` and `cityLandmarkParquetUrl` functions use a regex `/^[a-z]{2}[a-z]{3}$/` to validate city codes (5 lowercase letters). No code changes needed for new cities — just ensure the `DATA_VERSION` constant matches `_tree_shared.py`.
 
-**b) `src/src/composables/useMapData.ts`** — add the city to `CITY_CONFIG`:
+**b) `src/src/trilogyModels.ts`** — add raw imports and entries in `ALL_MODEL_SOURCES` for both the tree and landmarks preql files. The agent chat's query resolver loads models from this list at runtime; omitting a city here means the agent cannot resolve queries against that city's data even though the parquet is loaded in DuckDB.
+
+```ts
+import {CITY}_TREE_INFO_MODEL from '../../data/raw/{city}/{city}_tree_info.preql?raw'
+import {CITY}_LANDMARKS_MODEL from '../../data/raw/{city}/{city}_landmarks.preql?raw'
+```
+
+Add to `ALL_MODEL_SOURCES` alongside the other per-city entries:
+
+```ts
+{ alias: '{city}.{city}_tree_info', contents: {CITY}_TREE_INFO_MODEL },
+{ alias: '{city}.{city}_landmarks', contents: {CITY}_LANDMARKS_MODEL },
+```
+
+**c) `src/src/composables/useMapData.ts`** — add the city to `CITY_CONFIG`:
 
 ```ts
 export const CITY_CONFIG = {
@@ -380,6 +394,3 @@ This reads the existing GCS parquet, strips `::` suffixes, deduplicates (most-co
 **Problem:** The `city` key in `data/raw/core.preql` is a typed enum. Forgetting to add the new code there causes Trilogy to reject every `complete where city = '...'` clause in the new preql files — but the error message points at the preql files, not `core.preql`.
 **Suggestion:** Do this as step 3 (it already is), and double-check it's the very first edit before creating any other files.
 
-
-### 5. No Automated Enrichment Coverage Check in CI
-**Suggestion:** Run `tree_enrichment_probe.py` as a non-blocking CI step after any tree parquet rebuild and post the coverage report as a PR comment. Currently it has to be run manually.
