@@ -1,11 +1,9 @@
 import ..landmark_common;
 
-root partial datasource paris_landmarks_update_time (
+root datasource paris_landmarks_update_time (
     data_updated_through: paris_landmark_data_updated_through
 )
-complete where city = 'FRPAR'
-file `./paris_landmarks_probe.py`
-freshness by paris_landmark_data_updated_through;
+file `./paris_landmarks_probe.py`;
 
 
 root partial datasource raw_paris_landmark_info (
@@ -13,8 +11,6 @@ root partial datasource raw_paris_landmark_info (
     city: city,
     name: name,
     geometry_raw: ?geometry_raw,
-    latitude: ?latitude,
-    longitude: ?longitude,
     arrondissement: ?arrondissement,
     protection_type: ?protection_type,
     denomination: ?denomination,

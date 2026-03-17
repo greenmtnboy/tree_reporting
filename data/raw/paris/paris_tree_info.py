@@ -76,22 +76,23 @@ def transform(table: pa.Table) -> pa.Table:
         type=pa.string(),
     )
 
-    # --- lat/lon from geo_point_2d struct ---
+    # --- lat/lon from geo_point_2d (WKB binary: byte_order + uint32 type + double x + double y) ---
+    import struct
     geo_col = next((c for c in names if c.lower() == "geo_point_2d"), None)
     if geo_col is not None:
-        geo_list = table[geo_col].to_pylist()
-        lat = pa.array(
-            [g["lat"] if isinstance(g, dict) else None for g in geo_list],
-            type=pa.float64(),
-        )
-        lon = pa.array(
-            [g["lon"] if isinstance(g, dict) else None for g in geo_list],
-            type=pa.float64(),
-        )
+        lons, lats = [], []
+        for wkb in table[geo_col].to_pylist():
+            if wkb is None or len(wkb) < 21:
+                lons.append(None); lats.append(None)
+                continue
+            bo = '<' if wkb[0] == 1 else '>'
+            x, y = struct.unpack_from(bo + 'dd', wkb, 5)
+            lons.append(x); lats.append(y)
+        lat = pa.array(lats, type=pa.float64())
+        lon = pa.array(lons, type=pa.float64())
     else:
-        n = table.num_rows
-        lat = pa.array([None] * n, type=pa.float64())
-        lon = pa.array([None] * n, type=pa.float64())
+        lat = pa.array([None] * table.num_rows, type=pa.float64())
+        lon = pa.array([None] * table.num_rows, type=pa.float64())
 
     # --- diameter: circumference (cm) → diameter (inches) ---
     circ_col = next((c for c in names if c.lower() == "circonferenceencm"), None)
@@ -116,6 +117,19 @@ def transform(table: pa.Table) -> pa.Table:
     )
 
 
+def validate(table: pa.Table) -> None:
+    n = table.num_rows
+    if n == 0:
+        raise ValueError("Paris ingest produced 0 rows")
+    for col in ("latitude", "longitude"):
+        null_count = table.column(col).null_count
+        if null_count == n:
+            raise ValueError(f"Paris ingest: '{col}' is NULL for all {n} rows — geo extraction failed")
+        null_pct = null_count / n
+        if null_pct > 0.1:
+            raise ValueError(f"Paris ingest: '{col}' is NULL for {null_pct:.0%} of rows ({null_count}/{n})")
+
+
 def emit(table: pa.Table) -> None:
     with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
         writer.write_table(table)
@@ -125,4 +139,5 @@ if __name__ == "__main__":
     buf = download_parquet()
     raw = pq.read_table(buf)
     table = transform(raw)
+    validate(table)
     emit(table)

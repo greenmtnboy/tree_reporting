@@ -1,7 +1,7 @@
-import tree_info;
+import landmark_info;
 
+where city ='FRPAR' and latitude is not null
 select
-    species,
-    count(city) as city_count,
-     count(tree_id) as tree_count
-order by tree_count desc;
+   name,
+    latitude,longitude
+limit 100;

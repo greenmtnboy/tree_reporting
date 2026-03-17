@@ -65,12 +65,18 @@ def transform(table: pa.Table) -> pa.Table:
     name_col = next((c for c in names if c.lower() == "titre_editorial_de_la_notice"), None)
     name = table[name_col] if name_col else pa.array([None] * table.num_rows, type=pa.string())
 
-    # --- lat/lon + geometry_raw from coordonnees_au_format_wgs84 struct ---
+    # --- lat/lon + geometry_raw from coordonnees_au_format_wgs84 (WKB binary) ---
+    import struct
     coord_col = next((c for c in names if c.lower() == "coordonnees_au_format_wgs84"), None)
     if coord_col is not None:
-        coord_list = table[coord_col].to_pylist()
-        lat_list = [c["lat"] if isinstance(c, dict) else None for c in coord_list]
-        lon_list = [c["lon"] if isinstance(c, dict) else None for c in coord_list]
+        lon_list, lat_list = [], []
+        for wkb in table[coord_col].to_pylist():
+            if wkb is None or len(wkb) < 21:
+                lon_list.append(None); lat_list.append(None)
+                continue
+            bo = '<' if wkb[0] == 1 else '>'
+            x, y = struct.unpack_from(bo + 'dd', wkb, 5)
+            lon_list.append(x); lat_list.append(y)
     else:
         n = table.num_rows
         lat_list = [None] * n
@@ -121,6 +127,16 @@ def transform(table: pa.Table) -> pa.Table:
     )
 
 
+def validate(table: pa.Table) -> None:
+    n = table.num_rows
+    if n == 0:
+        raise ValueError("Paris landmarks ingest produced 0 rows")
+    for col in ("latitude", "longitude"):
+        null_count = table.column(col).null_count
+        if null_count / n > 0.10:
+            raise ValueError(f"Paris landmarks: '{col}' has {null_count}/{n} NULL rows ({null_count/n:.1%}) — exceeds 10% threshold")
+
+
 def emit(table: pa.Table) -> None:
     with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
         writer.write_table(table)
@@ -130,4 +146,5 @@ if __name__ == "__main__":
     buf = download_parquet()
     raw = pq.read_table(buf)
     table = transform(raw)
+    validate(table)
     emit(table)

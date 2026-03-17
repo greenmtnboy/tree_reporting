@@ -1,6 +1,6 @@
 import ..landmark_common;
 
-root partial datasource boston_landmarks_update_time (
+root datasource boston_landmarks_update_time (
     data_updated_through: bos_landmark_data_updated_through
 )
 file `./boston_landmarks_probe.py`;
