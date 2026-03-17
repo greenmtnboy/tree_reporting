@@ -61,9 +61,19 @@ def transform(table: pa.Table) -> pa.Table:
         type=pa.string(),
     )
 
-    # --- name: titre_editorial_de_la_notice ---
+    # --- name: titre_editorial_de_la_notice, disambiguated by address for duplicates ---
     name_col = next((c for c in names if c.lower() == "titre_editorial_de_la_notice"), None)
-    name = table[name_col] if name_col else pa.array([None] * table.num_rows, type=pa.string())
+    addr_col = next((c for c in names if c.lower() == "adresse_forme_editoriale"), None)
+    raw_names = table[name_col].to_pylist() if name_col else [None] * table.num_rows
+    addresses = table[addr_col].to_pylist() if addr_col else [None] * table.num_rows
+
+    from collections import Counter
+    name_counts = Counter(n for n in raw_names if n is not None)
+    disambiguated = [
+        f"{n} ({a})" if n is not None and name_counts[n] > 1 and a else n
+        for n, a in zip(raw_names, addresses)
+    ]
+    name = pa.array(disambiguated, type=pa.string())
 
     # --- lat/lon + geometry_raw from coordonnees_au_format_wgs84 (WKB binary) ---
     import struct
