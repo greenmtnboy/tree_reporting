@@ -31,6 +31,7 @@
               <li><a href="https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq" target="_blank" rel="noopener">SF Open Data — Street Tree List</a></li>
               <li><a href="https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh" target="_blank" rel="noopener">NYC Open Data — Street Tree Census</a></li>
               <li><a href="https://data.boston.gov/dataset/bprd-trees" target="_blank" rel="noopener">City of Boston — Street Trees</a></li>
+              <li><a href="https://opendata.paris.fr/explore/dataset/les-arbres/information/" target="_blank" rel="noopener">Paris Open Data — Les Arbres</a></li>
             </ul>
             <p class="welcome-disclaimer">
               Species metadata may contain inaccuracies. Corrections are welcome!

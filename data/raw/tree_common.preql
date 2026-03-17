@@ -2,7 +2,8 @@ import std.geography;
 import core;
 
 key tree_id string; # unique identifier for the tree record (prefixed: sf-<id> or nyc-<id>)
-key species string; # scientific and common species name
+key species string; # scientific species name (Latin binomial, no common-name suffix)
+property tree_id.tree_name string; # original name field from source data, which may be unique to certain trees
 property tree_id.plant_date date; # date the tree was planted
 property tree_id.diameter_at_breast_height int; # diameter at breast height - standard forestry measure of tree diameter at about 4.5 feet above ground
 property tree_id.latitude float::latitude; # geographic latitude for mapping
@@ -33,13 +34,6 @@ property tree_id.longitude float::longitude; # geographic longitude for mapping
 property <*>.sf_data_updated_through datetime; # when SF data is through
 property <*>.nyc_data_updated_through datetime; # when NYC data is through
 property <*>.boston_data_updated_through datetime; # when Boston data is through
+property <*>.paris_data_updated_through datetime; # when Paris data is through
 
-auto latest_update_through <- greatest(sf_data_updated_through, nyc_data_updated_through, boston_data_updated_through);
-
-auto common_name <- coalesce(nullif(split(species, '::')[2],''),split(species, '::')[1]);
-
-# species section
-property species.species_is_enriched bool; # whether the species has been enriched with additional data
-
-
-# --- Update time datasources (single-row, one timestamp per city) ---
+auto latest_update_through <- greatest(sf_data_updated_through, nyc_data_updated_through, boston_data_updated_through, paris_data_updated_through);

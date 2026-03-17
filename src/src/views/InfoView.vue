@@ -13,11 +13,16 @@
 
         <div class="source-card">
           <h3>Tree Inventory</h3>
-          <ul>
-            <li><a href="https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq" target="_blank" rel="noopener">SF Open Data Portal — Street Trees</a></li>
-            <li><a href="https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh" target="_blank" rel="noopener">NYC Open Data — Street Tree Census</a></li>
-            <li><a href="https://data.boston.gov/dataset/bprd-trees" target="_blank" rel="noopener">City of Boston — Street Trees</a></li>
-          </ul>
+          <p>Street tree inventory data from open data portals for each city.</p>
+          <details class="city-details">
+            <summary class="city-summary">View by city</summary>
+            <ul>
+              <li><a href="https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq" target="_blank" rel="noopener">San Francisco — SF Open Data Portal</a></li>
+              <li><a href="https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh" target="_blank" rel="noopener">New York City — NYC Open Data Street Tree Census</a></li>
+              <li><a href="https://data.boston.gov/dataset/bprd-trees" target="_blank" rel="noopener">Boston — City of Boston Open Data</a></li>
+              <li><a href="https://opendata.paris.fr/explore/dataset/les-arbres/information/" target="_blank" rel="noopener">Paris — Paris Open Data (les-arbres)</a></li>
+            </ul>
+          </details>
         </div>
 
         <div class="source-card">
@@ -49,16 +54,16 @@
 
         <div class="source-card">
           <h3>Landmarks</h3>
-          <p>
-            SF Open Data Portal &mdash; Landmarks dataset (SF); curated lists for NYC and Boston.
-          </p>
-          <a
-            href="https://data.sfgov.org/Geographic-Locations-and-Boundaries/Landmarks/rzic-39gi/about_data"
-            target="_blank"
-            rel="noopener"
-          >
-            data.sfgov.org &rarr;
-          </a>
+          <p>Points of interest sourced from open data portals and preservation registries.</p>
+          <details class="city-details">
+            <summary class="city-summary">View by city</summary>
+            <ul>
+              <li><a href="https://data.sfgov.org/Geographic-Locations-and-Boundaries/Landmarks/rzic-39gi/about_data" target="_blank" rel="noopener">San Francisco — SF Open Data Portal (Landmarks)</a></li>
+              <li><a href="https://data.cityofnewyork.us/Housing-Development/Individual-Landmark-Sites/buis-pvji" target="_blank" rel="noopener">New York City — NYC LPC Individual Landmark Sites</a></li>
+              <li><a href="https://data.boston.gov/dataset/92137315-e846-4c75-8c3d-2b7e93e38d03" target="_blank" rel="noopener">Boston — City of Boston Open Data (Landmarks)</a></li>
+              <li><a href="https://data.iledefrance.fr/explore/dataset/immeubles-proteges-au-titre-des-monuments-historiques/" target="_blank" rel="noopener">Paris — Île-de-France Open Data (Monuments Historiques)</a></li>
+            </ul>
+          </details>
         </div>
 
         <div class="source-card">
@@ -223,6 +228,40 @@ section {
 }
 
 .source-card ul li a:hover {
+  color: #81d4fa;
+}
+
+.city-details {
+  margin-top: 8px;
+}
+
+.city-summary {
+  font-size: 0.8rem;
+  color: #4fc3f7;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.city-summary::-webkit-details-marker {
+  display: none;
+}
+
+.city-summary::before {
+  content: '▶';
+  font-size: 0.6rem;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+
+details[open] > .city-summary::before {
+  transform: rotate(90deg);
+}
+
+.city-summary:hover {
   color: #81d4fa;
 }
 

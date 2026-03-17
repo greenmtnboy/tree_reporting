@@ -13,6 +13,7 @@ root partial datasource nyc_raw_tree_info (
     objectid: tree_id,
     city: city,
     genusspecies: species,
+    tree_name: ?tree_name,
     dbh: ?diameter_at_breast_height,
     planteddate: ?plant_date,
     latitude: ?latitude,
@@ -33,6 +34,7 @@ partial datasource nyc_tree_info (
     tree_id,
     city,
     species,
+    ?tree_name,
     ?diameter_at_breast_height,
     ?plant_date,
     ?latitude,
@@ -47,5 +49,8 @@ partial datasource nyc_tree_info (
 )
 grain (tree_id)
 complete where city = 'USNYC'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_info.parquet`:`gcs://trilogy_public_models/duckdb/trees/usnyc_tree_info.parquet`
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnyc_tree_info_v{data_version}.parquet`
 freshness by nyc_data_updated_through;
+
+#trilogy refresh C:\Users\ethan\coding_projects\sf_tree_reporting\data\raw\nyc\nyc_tree_info.preql --force=nyc_tree_info
+# trilogy refresh C:\Users\ethan\coding_projects\sf_tree_reporting\data\raw\tree_info.preql --force=nyc_tree_info

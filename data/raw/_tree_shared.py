@@ -1,13 +1,18 @@
 # Shared constants for tree_enrichment.py and tree_enrichment_probe.py.
 # Both scripts import from here so exclusion logic stays in one place.
 
-ENRICHMENT_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment.parquet"
-ENRICHMENT_GCS_URI = "gs://trilogy_public_models/duckdb/trees/tree_enrichment.parquet"
-TREE_INFO_PARQUET  = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info.parquet"
+DATA_VERSION = 1
+
+ENRICHMENT_PARQUET = f"https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment_v{DATA_VERSION}.parquet"
+ENRICHMENT_GCS_URI = f"gs://trilogy_public_models/duckdb/trees/tree_enrichment_v{DATA_VERSION}.parquet"
+TREE_INFO_PARQUET  = f"https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info_v{DATA_VERSION}.parquet"
 
 # Species that are not real trees and should never be enriched.
 # All values must be lowercase because should_skip_species() lowercases before comparing.
+# After the scientific-name refactor, malformed SF entries that began with "::" reduce to
+# an empty string once the prefix is stripped — so "" is also excluded.
 EXCLUDED_SPECIES: set[str] = {
+    "",
     "::",
     "tree",
     "to be determine'd",
@@ -27,6 +32,7 @@ SKIP_SPECIES: set[str] = {
 # Filters out all excluded species in one place.
 SPECIES_EXCLUSION_SQL = (
     "species IS NOT NULL"
+    " AND trim(species) != ''"
     " AND lower(trim(species)) NOT IN ("
     "  '::', 'tree', 'to be determine''d',"
     "  ':: tree', ':: brisbane box', ':: to be determine'"

@@ -64,5 +64,5 @@ datasource tree_enrichment (
     enriched_at,
 )
 grain (species)
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment.parquet`:`gcs://trilogy_public_models/duckdb/trees/tree_enrichment.parquet`
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_enrichment_v{data_version}.parquet`
 freshness by `./tree_enrichment_probe.py`;

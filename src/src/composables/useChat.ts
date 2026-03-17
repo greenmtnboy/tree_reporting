@@ -153,7 +153,7 @@ When users ask about trees, write Trilogy SELECT queries using the available con
 
 AVAILABLE CONCEPTS:
 - tree_id (string) — unique identifier
-- common_name (string) — e.g. "Swamp Myrtle"
+- tree_name (string) — e.g. "Swamp Myrtle"
 - plant_date (date) — date planted; not known for all trees.
 - species (string) — full species string like "Tristaniopsis laurina :: Swamp Myrtle"
 - latitude (float) — geographic latitude

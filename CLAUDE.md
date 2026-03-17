@@ -1,1 +1,3 @@
 @AGENTS.md
+
+@EXTENDING.md

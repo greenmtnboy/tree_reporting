@@ -39,7 +39,7 @@
       <p class="chat-info-section">Tree Fields</p>
       <ul class="chat-info-list">
         <li><code>tree_id</code> — unique identifier</li>
-        <li><code>common_name</code> — e.g. "Swamp Myrtle"</li>
+        <li><code>tree_name</code> — e.g. "Swamp Myrtle"</li>
         <li><code>species</code> — full species string</li>
         <li><code>plant_date</code> — date planted (MM/DD/YYYY)</li>
         <li><code>latitude</code> / <code>longitude</code></li>

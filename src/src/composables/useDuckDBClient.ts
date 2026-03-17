@@ -35,6 +35,7 @@ const initError = ref<string | null>(null)
 const workerDistinctColors = ref<string[]>([])
 const workerColorLabelMap = ref<Record<string, string>>({})
 const dbPopulatedMs = ref<number | null>(null)
+const dbTreeCount = ref<number | null>(null)
 
 let worker: Worker | null = null
 let nextRequestId = 1
@@ -63,6 +64,7 @@ function getWorker(): Worker {
 
     if (msg.type === 'cityContextReady') {
       dbPopulatedMs.value = msg.loadMs as number
+      dbTreeCount.value = msg.treeCount as number
       return
     }
 
@@ -245,5 +247,6 @@ export function useDuckDB() {
     workerDistinctColors,
     workerColorLabelMap,
     dbPopulatedMs,
+    dbTreeCount,
   }
 }

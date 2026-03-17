@@ -2,6 +2,7 @@ import landmark_common;
 import sf.sf_landmarks;
 import nyc.nyc_landmarks;
 import boston.boston_landmarks;
+import paris.paris_landmarks;
 
 
 # --- Merged union datasource ---
@@ -16,5 +17,5 @@ datasource landmark_info (
     latest_landmark_update_through
 )
 grain (landmark_id)
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/full_landmark_info.parquet`:`gcs://trilogy_public_models/duckdb/landmarks/full_landmark_info.parquet`
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/full_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/full_landmark_info_v{data_version}.parquet`
 freshness by latest_landmark_update_through;

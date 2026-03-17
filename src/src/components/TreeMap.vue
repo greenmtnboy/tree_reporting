@@ -16,7 +16,7 @@
     </div>
     <div v-if="dbPopulatedMs != null" class="db-status-wrap">
       <span class="db-status-dot">&#x25CF;</span>
-      <span class="db-status-tooltip">City DB populated; {{ dbPopulatedMs }}ms</span>
+      <span class="db-status-tooltip">City DB populated; {{ dbPopulatedMs }}ms · {{ dbTreeCount?.toLocaleString() }} trees</span>
     </div>
   </div>
   <div v-if="!props.simplified" class="city-selector">
@@ -127,6 +127,7 @@ const {
   workerDistinctColors,
   workerColorLabelMap,
   dbPopulatedMs,
+  dbTreeCount,
 } = useDuckDB()
 
 const { loading, error, getSpeciesEnrichment } = useTreeData()
@@ -395,7 +396,7 @@ function formatPopupHtml(row: any, enrichment?: ReturnType<typeof getSpeciesEnri
     .map(([label, value]) => `${label}: ${value}<br/>`)
     .join('')
   return `
-    <strong>${row.common_name || 'Unknown tree'}</strong><br/>
+    <strong>${row.tree_name || 'Unknown tree'}</strong><br/>
     <em>${row.species || ''}</em><br/>
     ${detailLines}
   `
@@ -411,7 +412,7 @@ async function showTreePopup(feature: GeoJSON.Feature, offset: number) {
   const safeId = String(id).replace(/'/g, "''")
   try {
     const { rows } = await duckQuery(`
-      SELECT tree_id, common_name, species, plant_date, diameter_at_breast_height
+      SELECT tree_id, tree_name, species, plant_date, diameter_at_breast_height
       FROM trees
       WHERE tree_id = '${safeId}'
       LIMIT 1

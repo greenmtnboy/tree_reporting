@@ -1,0 +1,7 @@
+import landmark_info;
+
+where city ='FRPAR' and latitude is not null
+select
+   name,
+    latitude,longitude
+limit 100;
