@@ -9,31 +9,12 @@ property tree_id.diameter_at_breast_height int; # diameter at breast height - st
 property tree_id.latitude float::latitude; # geographic latitude for mapping
 property tree_id.longitude float::longitude; # geographic longitude for mapping
 
-# SF-only properties (no shared NYC equivalent yet)
-# property tree_id.legal_status string; # legal/administrative status of the tree
-# property tree_id.address string; # address where the tree is planted
-# property tree_id.site_order int; # internal ordering for site location
-# property tree_id.site_info string; # contextual site attributes (e.g., median, sidewalk)
-# property tree_id.plant_type string; # type of planting - filtered to 'Tree' at ingest
-# property tree_id.caretaker string; # entity responsible for tree maintenance
-# property tree_id.care_assistant string; # secondary caretaker (if any)
-# property tree_id.plot_size string; # plot area where the tree sits
-# property tree_id.permit_notes string; # notes regarding permits or planting conditions
-# property tree_id.x_coord float; # internal grid x coordinate
-# property tree_id.y_coord float; # internal grid y coordinate
-# property tree_id.location string; # raw location string representation
 
-# NYC-only properties (no shared SF equivalent yet)
-# property tree_id.condition string;        # tree condition (e.g., Good, Fair, Poor)
-# property tree_id.structure string;        # tree structure rating
-# property tree_id.stump_diameter string;   # stump diameter (if applicable)
-# property tree_id.risk_rating string;      # assessed risk rating
-# property tree_id.risk_rating_date date;   # date of risk assessment
-# property tree_id.global_id string;        # NYC global identifier
 
 property <*>.sf_data_updated_through datetime; # when SF data is through
 property <*>.nyc_data_updated_through datetime; # when NYC data is through
-property <*>.boston_data_updated_through datetime; # when Boston data is through
+
 property <*>.paris_data_updated_through datetime; # when Paris data is through
 
-auto latest_update_through <- greatest(sf_data_updated_through, nyc_data_updated_through, boston_data_updated_through, paris_data_updated_through);
+
+
