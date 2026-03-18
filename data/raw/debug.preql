@@ -1,7 +1,12 @@
-import landmark_info;
+import boston.boston_tree_info;
 
-where city ='FRPAR' and latitude is not null
-select
-   name,
-    latitude,longitude
-limit 100;
+WHERE usbos_source ='ARBORETUM'
+SELECT
+    usbos_source,
+    latitude,
+    longitude,
+    # species,
+    count(tree_id) -> num_trees,
+order by num_trees desc
+LIMIT 100
+;

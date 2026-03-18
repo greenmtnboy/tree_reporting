@@ -30,6 +30,7 @@ def emit(updated_at: datetime) -> None:
     table = pa.table(
         {
             "city": pa.array(["USBOS"], type=pa.string()),
+            "usbos_source": pa.array(["CITY"], type=pa.string()),
             "data_updated_through": pa.array([updated_at], type=pa.timestamp("us", tz="UTC")),
         }
     )

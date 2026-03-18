@@ -4,7 +4,7 @@ import nyc.nyc_tree_info;
 import boston.boston_tree_info;
 import paris.paris_tree_info;
 
-
+auto latest_update_through <- greatest(sf_data_updated_through, nyc_data_updated_through, boston_data_updated_through, paris_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

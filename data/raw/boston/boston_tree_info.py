@@ -111,8 +111,11 @@ def load_arrow_table(csv_bytes: io.BytesIO) -> pa.Table:
 
 
 def add_city_column(table: pa.Table) -> pa.Table:
-    return table.append_column(
+    table = table.append_column(
         "city", pa.array(["USBOS"] * table.num_rows, type=pa.string())
+    )
+    return table.append_column(
+        "usbos_source", pa.array(["CITY"] * table.num_rows, type=pa.string())
     )
 
 
