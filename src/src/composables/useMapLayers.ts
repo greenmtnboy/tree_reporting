@@ -1,11 +1,12 @@
 import type { Ref, ComputedRef } from 'vue'
 import maplibregl from 'maplibre-gl'
 import { registerCategoryColoredIcons } from './useTreeCategories'
-import type { TreeCategory } from '../types'
+import type { Landmark, TreeCategory } from '../types'
 
 // --- Exported constants ---
 
 export const TREES_SOURCE_MAXZOOM = 16
+export const LANDMARK_ZOOM_MIN = 11
 
 // --- Internal constants ---
 
@@ -129,6 +130,129 @@ function buildHeatmapLayerPaint(hexColor: string): any {
   }
 }
 
+// --- Landmark eye icon + layer ---
+
+function drawLandmarkEye(ctx: CanvasRenderingContext2D, size: number): void {
+  const cx = size / 2
+  const cy = size / 2
+  const hw = size * 0.40 // half-width of eye almond
+  const hh = size * 0.22 // half-height
+
+  // No glow — keep it subtle
+  ctx.shadowBlur = 0
+
+  // Almond eye outline
+  ctx.beginPath()
+  ctx.moveTo(cx - hw, cy)
+  ctx.quadraticCurveTo(cx, cy - hh * 2, cx + hw, cy)
+  ctx.quadraticCurveTo(cx, cy + hh * 2, cx - hw, cy)
+  ctx.closePath()
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.06)'
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(200, 200, 200, 0.65)'
+  ctx.lineWidth = 1.2
+  ctx.stroke()
+
+  // Clip to eye shape for iris/pupil
+  ctx.save()
+  ctx.beginPath()
+  ctx.moveTo(cx - hw, cy)
+  ctx.quadraticCurveTo(cx, cy - hh * 2, cx + hw, cy)
+  ctx.quadraticCurveTo(cx, cy + hh * 2, cx - hw, cy)
+  ctx.closePath()
+  ctx.clip()
+
+  // Iris — muted grey-blue
+  const irisR = size * 0.145
+  ctx.beginPath()
+  ctx.arc(cx, cy, irisR, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(160, 170, 180, 0.75)'
+  ctx.fill()
+
+  // Pupil
+  const pupilR = size * 0.075
+  ctx.beginPath()
+  ctx.arc(cx, cy, pupilR, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'
+  ctx.fill()
+
+  // Highlight
+  ctx.beginPath()
+  ctx.arc(cx - irisR * 0.32, cy - irisR * 0.32, pupilR * 0.48, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+  ctx.fill()
+
+  ctx.restore()
+}
+
+export function registerLandmarkEyeIcon(mapInstance: maplibregl.Map): void {
+  if (mapInstance.hasImage('landmark-eye')) return
+  const size = 34
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  drawLandmarkEye(ctx, size)
+  const imageData = ctx.getImageData(0, 0, size, size)
+  mapInstance.addImage('landmark-eye', {
+    width: size,
+    height: size,
+    data: new Uint8Array(imageData.data.buffer),
+  })
+}
+
+export function addLandmarkLayer(mapInstance: maplibregl.Map, landmarks: Landmark[]): void {
+  const geojson: GeoJSON.FeatureCollection = {
+    type: 'FeatureCollection',
+    features: landmarks.map((lm) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [lm.lng, lm.lat] },
+      properties: { id: lm.id, name: lm.name },
+    })),
+  }
+
+  const existingSource = mapInstance.getSource('landmarks') as maplibregl.GeoJSONSource | undefined
+  if (existingSource) {
+    existingSource.setData(geojson)
+    return
+  }
+
+  registerLandmarkEyeIcon(mapInstance)
+
+  mapInstance.addSource('landmarks', { type: 'geojson', data: geojson })
+
+  mapInstance.addLayer({
+    id: 'landmarks-eye',
+    type: 'symbol',
+    source: 'landmarks',
+    minzoom: LANDMARK_ZOOM_MIN,
+    layout: {
+      'icon-image': 'landmark-eye',
+      'icon-size': [
+        'interpolate', ['linear'], ['zoom'],
+        LANDMARK_ZOOM_MIN, 0.55,
+        14, 0.72,
+        17, 0.92,
+      ] as any,
+      'icon-allow-overlap': false,
+      'icon-ignore-placement': false,
+      'icon-anchor': 'center',
+    },
+    paint: {
+      'icon-opacity': [
+        'interpolate', ['linear'], ['zoom'],
+        LANDMARK_ZOOM_MIN, 0,
+        LANDMARK_ZOOM_MIN + 0.8, 0.52,
+      ] as any,
+    },
+  })
+}
+
+export function removeLandmarkLayer(mapInstance: maplibregl.Map): void {
+  if (mapInstance.getLayer('landmarks-eye')) mapInstance.removeLayer('landmarks-eye')
+  if (mapInstance.getSource('landmarks')) mapInstance.removeSource('landmarks')
+}
+
 // --- Composable ---
 
 export interface UseMapLayersOptions {
@@ -198,7 +322,10 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     mapInstance.addSource('trees', {
       type: 'vector',
       tiles: treeTiles,
-      minzoom: 0,
+      // Don't request tiles below the zoom where the heatmap becomes visible.
+      // Below this zoom the opacity expression renders nothing anyway, and the
+      // globe city-marker layer takes over.
+      minzoom: HEATMAP_ZOOM_INTENSITY_START,
       // Pin detailed requests at z16; let MapLibre overzoom above.
       maxzoom: TREES_SOURCE_MAXZOOM,
     })

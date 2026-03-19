@@ -17,6 +17,7 @@ export interface RawLandmark {
 }
 
 export interface Landmark {
+  id: string
   name: string
   lng: number
   lat: number

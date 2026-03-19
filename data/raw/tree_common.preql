@@ -15,6 +15,7 @@ property <*>.sf_data_updated_through datetime; # when SF data is through
 property <*>.nyc_data_updated_through datetime; # when NYC data is through
 
 property <*>.paris_data_updated_through datetime; # when Paris data is through
+property <*>.usbtv_data_updated_through datetime; # when Burlington VT data is through
 
 
 

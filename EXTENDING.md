@@ -143,6 +143,17 @@ property <*>.{city}_data_updated_through datetime;
 auto latest_update_through <- greatest(..., {city}_data_updated_through);
 ```
 
+**One freshness timestamp per city (important):** The final materialized parquet's `freshness by` clause must reference a single per-city `auto` property, not a list of sub-source raw properties. If a city ingests from multiple sub-sources (e.g. Boston has `boston_city_data_updated_through` and `arboretum_data_updated_through`), define individual raw properties for each sub-source and one `auto` that coalesces them:
+
+```preql
+# tree_common.preql
+property <*>.{city}_source_a_data_updated_through datetime;
+property <*>.{city}_source_b_data_updated_through datetime;
+auto {city}_data_updated_through <- greatest({city}_source_a_data_updated_through, {city}_source_b_data_updated_through);
+```
+
+The `freshness by {city}_data_updated_through` in the parquet datasource then references only the `auto`. Adding raw sub-source properties directly to `freshness by` is incorrect and will cause Trilogy to treat the datasource as needing multiple independent freshness checks.
+
 Paris probe details:
 - **Metadata URL:** `https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/les-arbres`
 - **Timestamp field:** `.metas.default.modified` (ISO 8601, already timezone-aware)
@@ -266,7 +277,16 @@ That's it — the city button appears automatically in the UI, the worker loads 
 
 ## Landmarks (Mandatory)
 
-Every city should have a landmarks dataset. Landmarks give the chat agent geographic context and appear in the map UI. The worker silently skips missing landmark parquets, but the experience degrades — treat this as required, not optional.
+Every city **must** have a landmarks preql file, even if it yields zero rows. The worker silently skips missing landmark *parquets* at runtime, but a missing preql file will cause the Trilogy pipeline to fail and the agent will have no geographic context for the city. A landmarks dataset with zero rows is acceptable; a missing file is not.
+
+> **Burlington pattern — local CSV + Nominatim geocoding:**
+> When no structured spatial landmark source exists (e.g. the city only publishes a web directory), use a two-step approach:
+> 1. Run a one-off geocoder script (`{city}_landmarks_geocode.py`) that scrapes the city's landmark list and geocodes each entry via Nominatim (free, no key, 1 req/sec). Results are saved to a local `{city}_landmarks.csv`. The script is resumable — it skips already-geocoded rows so you can interrupt and continue.
+> 2. The preql datasource points directly at `{city}_landmarks.csv` — no Arrow redirect script needed. An empty CSV (header-only) is valid and produces zero rows.
+> 3. The freshness probe (`{city}_landmarks_probe.py`) emits the CSV file's mtime as the freshness timestamp; Trilogy only re-materialises the parquet if the CSV changes.
+>
+> Commit `{city}_landmarks.csv` to the repo so the pipeline can run without re-geocoding. Re-run the geocode script periodically to pick up new entries.
+> See `data/raw/burlington/` for the reference implementation.
 
 ### Landmark Data Schema
 
@@ -286,7 +306,8 @@ City-specific extra fields are fine — declare them in `landmark_common.preql` 
 Preference order:
 1. **Official historic landmark / heritage designation registry** from the city or national government — most consistent with how SF/NYC/Boston landmarks work (e.g. NYC Landmarks Preservation Commission, SF landmark designations)
 2. **Same open data platform as the trees** if a heritage dataset exists there
-3. OpenStreetMap extract as a last resort
+3. OpenStreetMap extract via Overpass API (`historic=*` tags)
+4. **Web directory + Nominatim geocoding** — scrape the city's landmark list, geocode addresses, commit the resulting CSV (see Burlington pattern above)
 
 **Paris:** The best source is the national Monuments Historiques registry filtered to Paris (dept 75), hosted on the Île-de-France regional open data platform — not opendata.paris.fr. It has ~1,885 officially classified/listed monuments, parquet export, and point coordinates.
 
