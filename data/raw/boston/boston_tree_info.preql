@@ -6,7 +6,15 @@ property <*>.cambridge_data_updated_through datetime; # when Cambridge open-data
 auto boston_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through, cambridge_data_updated_through);
 key usbos_source enum<string>['CITY', 'ARBORETUM', 'CAMBRIDGE']; # data source within Boston metro (CITY = Boston municipal, ARBORETUM = Arnold Arboretum, CAMBRIDGE = Cambridge municipal)
 
+
+property tree_id._raw_dbh float; # raw value 
+
+property tree_id._cleaned_db <- case when _raw_dbh < 0 then null else _raw_dbh end; # replace negative values with null
+
+auto processed_dbh <- coalesce(_cleaned_db, avg(_cleaned_db) by city, species); # replace 0 with null, then impute missing values with species average within each city
 # --- Freshness probes ---
+
+merge processed_dbh into diameter_at_breast_height;
 
 root datasource boston_update_time (
     data_updated_through: boston_city_data_updated_through
@@ -35,7 +43,7 @@ root partial datasource city_raw_tree_info (
     date_plant: ?plant_date,
     y_latitude: ?latitude,
     x_longitude: ?longitude,
-    dbh: ?diameter_at_breast_height,
+    dbh: ?_raw_dbh,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'CITY'
@@ -50,7 +58,7 @@ root partial datasource arboretum_raw_tree_info (
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
+    diameter_at_breast_height: ?_raw_dbh,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'ARBORETUM'
@@ -65,7 +73,7 @@ root partial datasource cambridge_raw_tree_info (
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
+    diameter_at_breast_height: ?_raw_dbh,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'CAMBRIDGE'
@@ -89,3 +97,4 @@ grain (tree_id)
 complete where city = 'USBOS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`
 freshness by boston_data_updated_through;
+
