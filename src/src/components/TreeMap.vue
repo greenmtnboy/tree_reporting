@@ -19,7 +19,7 @@
       <span class="db-status-tooltip">City DB populated; {{ dbPopulatedMs }}ms · {{ dbTreeCount?.toLocaleString() }} trees</span>
     </div>
   </div>
-  <div v-if="!props.simplified" class="city-selector">
+  <div class="city-selector" :class="{ 'city-selector--mobile': props.simplified }">
     <button
       v-for="(cfg, code) in CITY_CONFIG"
       :key="code"
@@ -481,7 +481,17 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
   try {
     const { center, name } = CITY_CONFIG[city]
 
-    await runGlobeSwoopTo(center, name, landingCoords)
+    if (props.simplified) {
+      // On mobile, skip the heavy globe swoop — just fly directly
+      mapRef.value?.flyTo({
+        center: landingCoords ?? center,
+        zoom: 13.5,
+        duration: 1500,
+        essential: true,
+      })
+    } else {
+      await runGlobeSwoopTo(center, name, landingCoords)
+    }
 
     // State updates after landing — triggers the query/filter watcher which reloads tiles.
     setSelectedCity(city)
@@ -902,6 +912,19 @@ onUnmounted(() => {
   opacity: 0.4;
   cursor: default;
   pointer-events: none;
+}
+
+.city-selector--mobile {
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.city-selector--mobile .city-btn {
+  padding: 5px 8px;
+  font-size: 0.7rem;
 }
 
 .cache-refresh-wrap {
