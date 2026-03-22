@@ -6,6 +6,7 @@ export const CITY_CONFIG = {
   USNYC: { name: 'New York City', center: [-73.9665, 40.7812] as [number, number] },
   USBOS: { name: 'Boston', center: [-71.0589, 42.3601] as [number, number] },
   FRPAR: { name: 'Paris', center: [2.3522, 48.8566] as [number, number] },
+  USBTV: { name: 'Burlington', center: [-73.2121, 44.4759] as [number, number] },
 } as const
 
 export type CityCode = keyof typeof CITY_CONFIG
