@@ -232,11 +232,34 @@ function toToolCallRecords(
 }
 
 export function useChat() {
-  const { query: duckQuery } = useDuckDB()
+  const { query: duckQuery, setCityContext } = useDuckDB()
   const { flyTo } = useFlyTo()
   const { landmarks } = useLandmarkData()
-  const { selectedCity, userLocation, publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
+  const { selectedCity, setSelectedCity, userLocation, publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
   const trilogy = useTrilogyCore()
+
+  /** If (lat, lng) is closer to a different city than the current one, switch to it. */
+  function detectAndSwitchCity(lat: number, lng: number): void {
+    const R = 6371
+    const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+      const dLat = ((lat2 - lat1) * Math.PI) / 180
+      const dLng = ((lng2 - lng1) * Math.PI) / 180
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    }
+    let closest = selectedCity.value
+    let minDist = Infinity
+    for (const [code, cfg] of Object.entries(CITY_CONFIG) as [CityCode, (typeof CITY_CONFIG)[CityCode]][]) {
+      const dist = haversineKm(lat, lng, cfg.center[1], cfg.center[0])
+      if (dist < minDist) { minDist = dist; closest = code }
+    }
+    if (closest !== selectedCity.value) {
+      setSelectedCity(closest)
+      void setCityContext(closest)
+    }
+  }
 
   // Ensure the Trilogy resolver points at the production service
   if (
@@ -450,6 +473,8 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
               lng: l.longitude,
               zoom: l.zoom ?? zoom ?? 16,
             }))
+            // Switch city based on the first stop if needed
+            detectAndSwitchCity(stops[0].lat, stops[0].lng)
             flyTo(stops[0])
             for (let i = 1; i < stops.length; i++) {
               const stop = stops[i]
@@ -464,6 +489,7 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
             }
           }
           if (latitude != null && longitude != null) {
+            detectAndSwitchCity(latitude, longitude)
             flyTo({ lat: latitude, lng: longitude, zoom: zoom ?? 16 })
             return {
               success: true,
