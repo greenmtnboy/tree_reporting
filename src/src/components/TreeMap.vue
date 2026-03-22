@@ -482,12 +482,17 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
     const { center, name } = CITY_CONFIG[city]
 
     if (props.simplified) {
-      // On mobile, skip the heavy globe swoop — just fly directly
-      mapRef.value?.flyTo({
-        center: landingCoords ?? center,
-        zoom: 13.5,
-        duration: 1500,
-        essential: true,
+      // On mobile, use a smooth but shorter animation than the globe swoop
+      await new Promise<void>((resolve) => {
+        if (!mapRef.value) return resolve()
+        mapRef.value.flyTo({
+          center: landingCoords ?? center,
+          zoom: 13.5,
+          duration: 3000,
+          essential: true,
+        })
+        const onEnd = () => { mapRef.value?.off('moveend', onEnd); resolve() }
+        mapRef.value.once('moveend', onEnd)
       })
     } else {
       await runGlobeSwoopTo(center, name, landingCoords)
@@ -653,7 +658,7 @@ watch(workerDistinctColors, () => {
 
 onMounted(async () => {
   // Resolve city from IP before initialising the map so the initial center is correct.
-  if (!urlCityStr && !props.simplified) {
+  if (!urlCityStr) {
     await Promise.race([detectCityFromIp(), new Promise<void>((r) => setTimeout(r, 2000))])
   }
 
@@ -662,7 +667,7 @@ onMounted(async () => {
   preWarmForCity(selectedCity.value)
 
   // If the user already granted geolocation, silently restore their location pin (no flyTo).
-  if (!props.simplified && navigator.geolocation && navigator.permissions) {
+  if (navigator.geolocation && navigator.permissions) {
     navigator.permissions.query({ name: 'geolocation' }).then((result) => {
       if (result.state === 'granted') {
         navigator.geolocation.getCurrentPosition(
