@@ -488,7 +488,7 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
         mapRef.value.flyTo({
           center: landingCoords ?? center,
           zoom: 13.5,
-          duration: 3000,
+          duration: 5000,
           essential: true,
         })
         const onEnd = () => { mapRef.value?.off('moveend', onEnd); resolve() }
