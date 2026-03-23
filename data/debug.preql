@@ -1,6 +1,6 @@
 
 import raw.tree_enrichment;
 
-where city = 'USNYC'
+where city = 'FRPAR'
 select species, city, tree_category, count(tree_id) as tree_count
 order by tree_count desc limit 10;

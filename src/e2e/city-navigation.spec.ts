@@ -1,65 +1,41 @@
 import { test, expect, type Page } from '@playwright/test'
 
-// ── MapLibre helpers ──────────────────────────────────────────────────────────
-// These run inside page.evaluate() so they cannot close over Node-side values.
-
-/** Wait until the MapLibre map fires 'idle' (no pending tile loads or animations). */
-async function waitForMapIdle(page: Page): Promise<void> {
-  await page.evaluate(() => new Promise<void>((resolve) => {
-    const canvas = document.querySelector('.tree-map canvas') as HTMLCanvasElement
-    if (!canvas) throw new Error('Map canvas not found')
-    const map = (canvas as any).__maplibre_map ??
-      Object.values(canvas).find((v: any) => v && typeof v.getCenter === 'function')
-    if (!map) throw new Error('MapLibre instance not found on canvas — internal property may have changed')
-    if (map.loaded() && !map.isMoving()) { resolve(); return }
-    map.once('idle', resolve)
-  }))
-}
-
-/** Returns the number of features currently loaded in the 'trees' source. */
-async function getLoadedTreeCount(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const canvas = document.querySelector('.tree-map canvas') as HTMLCanvasElement
-    if (!canvas) throw new Error('Map canvas not found')
-    const map = (canvas as any).__maplibre_map ??
-      Object.values(canvas).find((v: any) => v && typeof v.getCenter === 'function')
-    if (!map) throw new Error('MapLibre instance not found on canvas — internal property may have changed')
-    return map.querySourceFeatures('trees', { sourceLayer: 'trees' }).length
-  })
-}
-
-// ── Shared test logic ─────────────────────────────────────────────────────────
-
-interface NavTestOptions {
-  /** Milliseconds to allow for a single city switch (animation + DuckDB load + tile gen). */
-  switchTimeout: number
+// City name → city code, matching cityConfig.json
+const CITY_CODE: Record<string, string> = {
+  'San Francisco': 'USSFO',
+  'New York City': 'USNYC',
+  'Boston':        'USBOS',
+  'Paris':         'FRPAR',
+  'Burlington':    'USBTV',
 }
 
 /**
- * Switches to `cityName` and asserts that:
- * 1. The city button becomes active (setSelectedCity fired).
- * 2. The loading overlay reappears (watcher ran, defaultQueryLoading set to true)
- *    — this is the regression canary: in the broken state the watcher exits early
- *    and the overlay never reappears.
- * 3. The loading overlay disappears (trees source loaded).
- * 4. querySourceFeatures returns >0 features (tiles contain real tree data).
+ * Clicks the city button and waits until the map container's
+ * `data-trees-loaded-for` attribute equals the destination city code.
+ *
+ * This attribute is set in TreeMap.vue's sourcedata handler the moment the
+ * 'trees' source finishes loading tiles for the current city. In the broken
+ * state (watcher exits early, no tiles generated) the attribute stays on the
+ * previous city and this function times out.
  */
-async function assertCitySwitch(page: Page, cityName: string, opts: NavTestOptions): Promise<void> {
-  const { switchTimeout } = opts
+async function assertCitySwitch(page: Page, cityName: string, timeoutMs: number): Promise<void> {
+  const cityCode = CITY_CODE[cityName]
+  if (!cityCode) throw new Error(`Unknown city name "${cityName}" — add it to CITY_CODE`)
 
   await page.locator('.city-btn').filter({ hasText: cityName }).click()
 
+  // Wait for city button to become active (setSelectedCity fired).
   await expect(
     page.locator('.city-btn').filter({ hasText: cityName }),
-  ).toHaveClass(/active/, { timeout: switchTimeout })
+  ).toHaveClass(/active/, { timeout: timeoutMs })
 
-  await expect(page.locator('.map-loading')).toBeVisible({ timeout: switchTimeout })
-  await expect(page.locator('.map-loading')).toBeHidden({ timeout: switchTimeout })
-
-  await waitForMapIdle(page)
-
-  const treeCount = await getLoadedTreeCount(page)
-  expect(treeCount, `Expected trees for ${cityName}`).toBeGreaterThan(0)
+  // Wait for tiles to finish loading for this city.
+  // data-trees-loaded-for is set by the sourcedata handler once per city load.
+  await page.waitForFunction(
+    (code) => document.querySelector('.tree-map')?.getAttribute('data-trees-loaded-for') === code,
+    cityCode,
+    { timeout: timeoutMs },
+  )
 }
 
 // ── Desktop ───────────────────────────────────────────────────────────────────
@@ -78,15 +54,15 @@ test.describe('City navigation — desktop', () => {
 
   test('switching to a new city loads trees for that city', async ({ page }) => {
     test.setTimeout(120_000)
-    await expect(page.locator('.map-loading')).toBeHidden({ timeout: 60_000 })
-    await assertCitySwitch(page, 'Burlington', { switchTimeout: SWITCH_TIMEOUT })
+    await assertCitySwitch(page, 'San Francisco', SWITCH_TIMEOUT)
+    await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
   })
 
   test('switching cities twice renders trees for each destination', async ({ page }) => {
     test.setTimeout(240_000)
-    await expect(page.locator('.map-loading')).toBeHidden({ timeout: 60_000 })
-    await assertCitySwitch(page, 'Boston', { switchTimeout: SWITCH_TIMEOUT })
-    await assertCitySwitch(page, 'Burlington', { switchTimeout: SWITCH_TIMEOUT })
+    await assertCitySwitch(page, 'San Francisco', SWITCH_TIMEOUT)
+    await assertCitySwitch(page, 'Boston', SWITCH_TIMEOUT)
+    await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
   })
 })
 
@@ -106,14 +82,14 @@ test.describe('City navigation — mobile', () => {
 
   test('switching to a new city loads trees for that city', async ({ page }) => {
     test.setTimeout(90_000)
-    await expect(page.locator('.map-loading')).toBeHidden({ timeout: 30_000 })
-    await assertCitySwitch(page, 'Burlington', { switchTimeout: SWITCH_TIMEOUT })
+    await assertCitySwitch(page, 'San Francisco', SWITCH_TIMEOUT)
+    await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
   })
 
   test('switching cities twice renders trees for each destination', async ({ page }) => {
     test.setTimeout(150_000)
-    await expect(page.locator('.map-loading')).toBeHidden({ timeout: 30_000 })
-    await assertCitySwitch(page, 'Boston', { switchTimeout: SWITCH_TIMEOUT })
-    await assertCitySwitch(page, 'Burlington', { switchTimeout: SWITCH_TIMEOUT })
+    await assertCitySwitch(page, 'San Francisco', SWITCH_TIMEOUT)
+    await assertCitySwitch(page, 'Boston', SWITCH_TIMEOUT)
+    await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
   })
 })

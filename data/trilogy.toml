@@ -1,5 +1,5 @@
 [project]
-name ="concrete_jungle"
+name = "urban_forest"
 
 [engine]
 # Default dialect for execution
@@ -11,3 +11,6 @@ env_file="../.env"
 enable_gcs = true
 enable_spatial = true
 enable_python_datasources = true
+
+[serve]
+studio_url="http://localhost:5173/trilogy-studio-core/"
