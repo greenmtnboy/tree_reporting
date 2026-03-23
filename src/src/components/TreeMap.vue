@@ -567,10 +567,11 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
       await runGlobeSwoopTo(center, name, landingCoords)
     }
 
-    // State updates after landing — triggers the query/filter watcher which reloads tiles.
+    // Load the new city's parquet before updating state — the query/filter watcher fires
+    // immediately on setSelectedCity, so the city context must be ready first.
+    await setCityContext(city)
     setSelectedCity(city)
     void router.replace({ query: { ...route.query, city } })
-    void setCityContext(city)
   } finally {
     citySwitchInProgress = false
   }
@@ -693,7 +694,7 @@ watch(flyToTarget, (t) => {
 
 // Reload tiles when query, filter, or revision changes
 watch([currentMapQuery, publishedTreeIdFilterSql, mapQueryRevision], async ([query, filterSql], [oldQuery]) => {
-  if (!mapRef.value?.loaded()) return
+  if (!mapRef.value) return
   // Only show the full-screen loading overlay when the base query changes (city switch, query
   // rewrite). Filter-only publishes from the chat should not block the UI with a loading screen.
   const isQueryChange = query !== oldQuery
