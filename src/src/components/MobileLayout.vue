@@ -5,12 +5,12 @@
     </div>
 
     <div v-if="!activePanel" class="mobile-bottom-bar">
-      <button class="mobile-bar-btn" @click="openPanel('search')">
+      <button class="mobile-bar-btn" @click="openPanel('landmarks')">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="11" cy="11" r="8" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
-        Search
+        Landmarks
       </button>
       <button class="mobile-bar-btn" @click="openPanel('chat')">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -29,7 +29,7 @@
     </div>
 
     <transition name="mobile-slide">
-      <div v-if="activePanel === 'search'" class="mobile-overlay">
+      <div v-if="activePanel === 'landmarks'" class="mobile-overlay">
         <div class="mobile-overlay-header">
           <span class="mobile-overlay-title">Search Landmarks</span>
           <button class="mobile-overlay-close" @click="activePanel = null">&times;</button>
@@ -91,7 +91,7 @@ import { useLandmarkData } from '../composables/useLandmarkData'
 import { useFlyTo } from '../composables/useFlyTo'
 import type { Landmark } from '../types'
 
-const activePanel = ref<'search' | 'chat' | 'info' | null>(null)
+const activePanel = ref<'landmarks' | 'chat' | 'info' | null>(null)
 const search = ref('')
 
 const { landmarks, loading: landmarkLoading } = useLandmarkData()
@@ -103,7 +103,7 @@ const filtered = computed(() => {
   return landmarks.value.filter((l) => l.name.toLowerCase().includes(q))
 })
 
-function openPanel(panel: 'search' | 'chat' | 'info') {
+function openPanel(panel: 'landmarks' | 'chat' | 'info') {
   activePanel.value = panel
 }
 

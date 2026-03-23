@@ -824,6 +824,7 @@ onMounted(async () => {
       if (e.sourceId === 'trees' && !firstTreesSourceLoadedLogged) {
         firstTreesSourceLoadedLogged = true
         defaultQueryLoading.value = false
+        mapContainer.value?.setAttribute('data-trees-loaded-for', selectedCity.value)
         stopTileRefreshMessage()
         console.info('[Perf] map:trees-source:loaded', {
           msSincePublish: Math.round(nowMs() - mapQueryChangedAt),

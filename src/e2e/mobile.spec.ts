@@ -24,8 +24,7 @@ test.describe('Mobile layout', () => {
   })
 
   test('landmarks overlay opens and shows search', async ({ page }) => {
-    // Tap the first nav button (landmarks/search)
-    await page.locator('.mobile-bar-btn').first().click()
+    await page.locator('.mobile-bar-btn').filter({ hasText: 'Landmarks' }).click()
 
     const overlay = page.locator('.mobile-overlay')
     await expect(overlay).toBeVisible()
@@ -36,24 +35,25 @@ test.describe('Mobile layout', () => {
     await expect(firstItem).toBeVisible({ timeout: 10_000 })
   })
 
-  test('landmark search filters results', async ({ page }) => {
-    await page.locator('.mobile-bar-btn').first().click()
+  test('landmarks overlay filters results', async ({ page }) => {
+    await page.locator('.mobile-bar-btn').filter({ hasText: 'Landmarks' }).click()
 
     const items = page.locator('.mobile-landmark-item')
     await expect(items.first()).toBeVisible({ timeout: 10_000 })
     const countBefore = await items.count()
     expect(countBefore).toBeGreaterThan(1)
 
-    await page.locator('.mobile-search-input').fill('Golden Gate')
-    const filtered = page.locator('.mobile-landmark-item')
-    await expect(filtered.first()).toBeVisible()
-    const countAfter = await filtered.count()
+    // Use a common letter rather than a location-specific name to avoid
+    // coupling the test to the exact landmark dataset.
+    await page.locator('.mobile-search-input').fill('a')
+    await expect(items.first()).toBeVisible({ timeout: 5_000 })
+    const countAfter = await items.count()
     expect(countAfter).toBeLessThan(countBefore)
     expect(countAfter).toBeGreaterThan(0)
   })
 
   test('clicking a landmark closes overlay and moves map', async ({ page }) => {
-    await page.locator('.mobile-bar-btn').first().click()
+    await page.locator('.mobile-bar-btn').filter({ hasText: 'Landmarks' }).click()
 
     const firstItem = page.locator('.mobile-landmark-item').first()
     await expect(firstItem).toBeVisible({ timeout: 10_000 })
@@ -105,7 +105,7 @@ test.describe('Mobile layout', () => {
   })
 
   test('overlay closes via close button', async ({ page }) => {
-    await page.locator('.mobile-bar-btn').first().click()
+    await page.locator('.mobile-bar-btn').filter({ hasText: 'Landmarks' }).click()
     await expect(page.locator('.mobile-overlay')).toBeVisible()
 
     await page.locator('.mobile-overlay-close').click()
