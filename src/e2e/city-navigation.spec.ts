@@ -1,5 +1,8 @@
 import { test, expect, type Page } from '@playwright/test'
 
+// ── MapLibre helpers ──────────────────────────────────────────────────────────
+// These run inside page.evaluate() so they cannot close over Node-side values.
+
 /** Wait until the MapLibre map fires 'idle' (no pending tile loads or animations). */
 async function waitForMapIdle(page: Page): Promise<void> {
   await page.evaluate(() => new Promise<void>((resolve) => {
@@ -25,7 +28,46 @@ async function getLoadedTreeCount(page: Page): Promise<number> {
   })
 }
 
-test.describe('City navigation', () => {
+// ── Shared test logic ─────────────────────────────────────────────────────────
+
+interface NavTestOptions {
+  /** Milliseconds to allow for a single city switch (animation + DuckDB load + tile gen). */
+  switchTimeout: number
+}
+
+/**
+ * Switches to `cityName` and asserts that:
+ * 1. The city button becomes active (setSelectedCity fired).
+ * 2. The loading overlay reappears (watcher ran, defaultQueryLoading set to true)
+ *    — this is the regression canary: in the broken state the watcher exits early
+ *    and the overlay never reappears.
+ * 3. The loading overlay disappears (trees source loaded).
+ * 4. querySourceFeatures returns >0 features (tiles contain real tree data).
+ */
+async function assertCitySwitch(page: Page, cityName: string, opts: NavTestOptions): Promise<void> {
+  const { switchTimeout } = opts
+
+  await page.locator('.city-btn').filter({ hasText: cityName }).click()
+
+  await expect(
+    page.locator('.city-btn').filter({ hasText: cityName }),
+  ).toHaveClass(/active/, { timeout: switchTimeout })
+
+  await expect(page.locator('.map-loading')).toBeVisible({ timeout: switchTimeout })
+  await expect(page.locator('.map-loading')).toBeHidden({ timeout: switchTimeout })
+
+  await waitForMapIdle(page)
+
+  const treeCount = await getLoadedTreeCount(page)
+  expect(treeCount, `Expected trees for ${cityName}`).toBeGreaterThan(0)
+}
+
+// ── Desktop ───────────────────────────────────────────────────────────────────
+
+test.describe('City navigation — desktop', () => {
+  // Globe swoop: ~7 s zoom-out + ~12 s arc = ~19 s animation alone.
+  const SWITCH_TIMEOUT = 90_000
+
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
     await page.addInitScript(() => {
@@ -35,58 +77,43 @@ test.describe('City navigation', () => {
   })
 
   test('switching to a new city loads trees for that city', async ({ page }) => {
-    // The globe swoop takes ~19 s; allow extra time for DuckDB parquet download and tile generation.
     test.setTimeout(120_000)
-
-    // ── Wait for initial SF load ──────────────────────────────────────────────
-    // The loading overlay appears on mount and hides once the first tiles load.
     await expect(page.locator('.map-loading')).toBeHidden({ timeout: 60_000 })
-
-    // ── Switch to Burlington ──────────────────────────────────────────────────
-    await page.locator('.city-btn').filter({ hasText: 'Burlington' }).click()
-
-    // The Burlington button should get the 'active' class once setSelectedCity fires.
-    await expect(
-      page.locator('.city-btn').filter({ hasText: 'Burlington' }),
-    ).toHaveClass(/active/, { timeout: 60_000 })
-
-    // The watcher must set defaultQueryLoading=true, which makes the loading
-    // overlay reappear.  In the broken state the watcher exits early and this
-    // never happens — so this assertion is the regression canary.
-    await expect(page.locator('.map-loading')).toBeVisible({ timeout: 60_000 })
-
-    // Then it must disappear once the trees source finishes loading.
-    await expect(page.locator('.map-loading')).toBeHidden({ timeout: 60_000 })
-
-    // ── Verify trees are actually in the source ───────────────────────────────
-    await waitForMapIdle(page)
-
-    const treeCount = await getLoadedTreeCount(page)
-    expect(treeCount).toBeGreaterThan(0)
+    await assertCitySwitch(page, 'Burlington', { switchTimeout: SWITCH_TIMEOUT })
   })
 
   test('switching cities twice renders trees for each destination', async ({ page }) => {
-    // Two globe swoops back-to-back: budget ~3 minutes.
-    test.setTimeout(180_000)
-
-    // Wait for initial SF load.
+    test.setTimeout(240_000)
     await expect(page.locator('.map-loading')).toBeHidden({ timeout: 60_000 })
+    await assertCitySwitch(page, 'Boston', { switchTimeout: SWITCH_TIMEOUT })
+    await assertCitySwitch(page, 'Burlington', { switchTimeout: SWITCH_TIMEOUT })
+  })
+})
 
-    for (const city of ['Boston', 'Burlington']) {
-      await page.locator('.city-btn').filter({ hasText: city }).click()
+// ── Mobile ────────────────────────────────────────────────────────────────────
 
-      await expect(
-        page.locator('.city-btn').filter({ hasText: city }),
-      ).toHaveClass(/active/, { timeout: 60_000 })
+test.describe('City navigation — mobile', () => {
+  // Mobile uses a plain 5 s flyTo instead of the globe swoop.
+  const SWITCH_TIMEOUT = 60_000
 
-      // Loading overlay must reappear (watcher ran) then disappear (tiles loaded).
-      await expect(page.locator('.map-loading')).toBeVisible({ timeout: 60_000 })
-      await expect(page.locator('.map-loading')).toBeHidden({ timeout: 60_000 })
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.addInitScript(() => {
+      localStorage.setItem('sf_trees_welcome_dismissed', '1')
+    })
+    await page.goto('/')
+  })
 
-      await waitForMapIdle(page)
+  test('switching to a new city loads trees for that city', async ({ page }) => {
+    test.setTimeout(90_000)
+    await expect(page.locator('.map-loading')).toBeHidden({ timeout: 30_000 })
+    await assertCitySwitch(page, 'Burlington', { switchTimeout: SWITCH_TIMEOUT })
+  })
 
-      const treeCount = await getLoadedTreeCount(page)
-      expect(treeCount, `Expected trees for ${city}`).toBeGreaterThan(0)
-    }
+  test('switching cities twice renders trees for each destination', async ({ page }) => {
+    test.setTimeout(150_000)
+    await expect(page.locator('.map-loading')).toBeHidden({ timeout: 30_000 })
+    await assertCitySwitch(page, 'Boston', { switchTimeout: SWITCH_TIMEOUT })
+    await assertCitySwitch(page, 'Burlington', { switchTimeout: SWITCH_TIMEOUT })
   })
 })
