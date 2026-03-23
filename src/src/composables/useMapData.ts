@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import type { ColorLabelMap } from '../types'
 import cityConfigData from '../cityConfig.json'
 
-export const CITY_CONFIG = cityConfigData as Record<string, { name: string; center: [number, number] }>
+export const CITY_CONFIG = cityConfigData as unknown as Record<string, { name: string; center: [number, number] }>
 export type CityCode = string
 
 export function buildDefaultQueryForCity(city: CityCode): string {
