@@ -48,7 +48,9 @@ import { useMapData, CITY_CONFIG, type CityCode } from '../composables/useMapDat
 import { useRoute, useRouter } from 'vue-router'
 import { useDuckDB } from '../composables/useDuckDB'
 import { useMapIntro } from '../composables/useMapIntro'
-import { useMapLayers, TREES_SOURCE_MAXZOOM } from '../composables/useMapLayers'
+import { useMapLayers, TREES_SOURCE_MAXZOOM, addLandmarkLayer, removeLandmarkLayer, registerLandmarkEyeIcon } from '../composables/useMapLayers'
+import { useLandmarkData } from '../composables/useLandmarkData'
+import { addCityMarkers, updateCityMarkersSelected, removeCityMarkers, bindCityMarkerInteractions } from '../composables/useGlobeCityMarkers'
 import { useMapIntroAnimation, INTRO_START_ZOOM } from '../composables/useMapIntroAnimation'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
 
@@ -97,7 +99,10 @@ let treeInteractionsBound = false
 let lastIconDebugAt = 0
 let prewarmStartedForRevision = -1
 let activeTreePopup: maplibregl.Popup | null = null
+let activeLandmarkPopup: maplibregl.Popup | null = null
 let popupRequestToken = 0
+let landmarkInteractionsBound = false
+let globeMarkersBound = false
 let zoomControlLabelEl: HTMLDivElement | null = null
 let pendingSwoopFlyTimeout: number | null = null
 const lastVisibleRangeSigByZoom = new Map<number, string>()
@@ -106,6 +111,14 @@ const introLockedRangeByZoom = new Map<number, { minX: number; maxX: number; min
 const INITIAL_TILE_PREFETCH_SCALE = 3.5
 const SCROLL_WHEEL_ZOOM_RATE = 1 / 5800
 const SCROLL_ZOOM_RATE = 1 / 400
+const WASD_PAN_PX = 100
+
+const WASD_MAP: Record<string, [number, number]> = {
+  w: [0, -WASD_PAN_PX],
+  a: [-WASD_PAN_PX, 0],
+  s: [0, WASD_PAN_PX],
+  d: [WASD_PAN_PX, 0],
+}
 
 // --- Composables ---
 
@@ -131,6 +144,7 @@ const {
 } = useDuckDB()
 
 const { loading, error, getSpeciesEnrichment } = useTreeData()
+const { landmarks } = useLandmarkData()
 const { target: flyToTarget, flyTo } = useFlyTo()
 const route = useRoute()
 const router = useRouter()
@@ -453,6 +467,61 @@ function bindTreeInteractions() {
   treeInteractionsBound = true
 }
 
+// --- Landmark interactions (bound once after layer exists) ---
+
+function bindLandmarkInteractions() {
+  if (!mapRef.value || landmarkInteractionsBound) return
+  landmarkInteractionsBound = true
+
+  mapRef.value.on('mouseenter', 'landmarks-eye', (e) => {
+    if (!mapRef.value) return
+    mapRef.value.getCanvas().style.cursor = 'pointer'
+    const feature = e.features?.[0]
+    if (!feature) return
+    const name = feature.properties?.name as string | undefined
+    if (!name) return
+    const coords = (feature.geometry as GeoJSON.Point).coordinates as [number, number]
+    if (activeLandmarkPopup) { activeLandmarkPopup.remove(); activeLandmarkPopup = null }
+    activeLandmarkPopup = new maplibregl.Popup({
+      closeButton: false,
+      closeOnClick: false,
+      className: 'landmark-popup',
+      offset: 14,
+    })
+      .setLngLat(coords)
+      .setHTML(`<strong>${name}</strong>`)
+      .addTo(mapRef.value)
+  })
+
+  mapRef.value.on('mouseleave', 'landmarks-eye', () => {
+    if (!mapRef.value) return
+    mapRef.value.getCanvas().style.cursor = ''
+    activeLandmarkPopup?.remove()
+    activeLandmarkPopup = null
+  })
+
+  mapRef.value.on('click', 'landmarks-eye', (e) => {
+    if (!mapRef.value) return
+    const feature = e.features?.[0]
+    if (!feature) return
+    const coords = (feature.geometry as GeoJSON.Point).coordinates as [number, number]
+    mapRef.value.flyTo({ center: coords, zoom: 16, pitch: 50, duration: 2000, essential: true })
+  })
+}
+
+// --- WASD keyboard pan ---
+
+function onWasdKeyDown(e: KeyboardEvent) {
+  if (!mapRef.value) return
+  // Skip when focus is inside a text field (chat box, search inputs, etc.)
+  const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || (e.target as HTMLElement)?.isContentEditable) return
+  const delta = WASD_MAP[e.key.toLowerCase()]
+  if (!delta) return
+  e.preventDefault()
+  mapRef.value.panBy(delta, { duration: 200 })
+}
+
 // --- Cache purge ---
 
 const cacheRefreshing = ref(false)
@@ -498,10 +567,11 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
       await runGlobeSwoopTo(center, name, landingCoords)
     }
 
-    // State updates after landing — triggers the query/filter watcher which reloads tiles.
+    // Load the new city's parquet before updating state — the query/filter watcher fires
+    // immediately on setSelectedCity, so the city context must be ready first.
+    await setCityContext(city)
     setSelectedCity(city)
     void router.replace({ query: { ...route.query, city } })
-    void setCityContext(city)
   } finally {
     citySwitchInProgress = false
   }
@@ -624,7 +694,7 @@ watch(flyToTarget, (t) => {
 
 // Reload tiles when query, filter, or revision changes
 watch([currentMapQuery, publishedTreeIdFilterSql, mapQueryRevision], async ([query, filterSql], [oldQuery]) => {
-  if (!mapRef.value?.loaded()) return
+  if (!mapRef.value) return
   // Only show the full-screen loading overlay when the base query changes (city switch, query
   // rewrite). Filter-only publishes from the chat should not block the UI with a loading screen.
   const isQueryChange = query !== oldQuery
@@ -654,9 +724,24 @@ watch(workerDistinctColors, () => {
   if (src && typeof src.reload === 'function') src.reload()
 })
 
+// Update the landmark GeoJSON source (or add the layer for the first time) when landmark data loads.
+watch(landmarks, (lms) => {
+  if (!mapRef.value?.loaded()) return
+  if (!mapRef.value.hasImage('landmark-eye')) registerLandmarkEyeIcon(mapRef.value)
+  addLandmarkLayer(mapRef.value, lms)
+  if (!landmarkInteractionsBound) bindLandmarkInteractions()
+})
+
+// Keep city marker highlight in sync with selected city
+watch(selectedCity, (city) => {
+  if (!mapRef.value?.loaded()) return
+  updateCityMarkersSelected(mapRef.value, city)
+})
+
 // --- Lifecycle ---
 
 onMounted(async () => {
+  window.addEventListener('keydown', onWasdKeyDown)
   // Resolve city from IP before initialising the map so the initial center is correct.
   if (!urlCityStr) {
     await Promise.race([detectCityFromIp(), new Promise<void>((r) => setTimeout(r, 2000))])
@@ -810,6 +895,22 @@ onMounted(async () => {
         await setPublishedTreeIdFilterSql(publishedTreeIdFilterSql.value)
         addTreeLayers()
         bindTreeInteractions()
+
+        // Globe-level city overview — visible only when zoomed out past heatmap range
+        if (!props.simplified) {
+          addCityMarkers(map, selectedCity.value)
+          if (!globeMarkersBound) {
+            globeMarkersBound = true
+            bindCityMarkerInteractions(map, (code) => { void switchCity(code) })
+          }
+        }
+
+        // Landmark eyes — add immediately if data is already loaded
+        if (landmarks.value.length > 0) {
+          registerLandmarkEyeIcon(map)
+          addLandmarkLayer(map, landmarks.value)
+          bindLandmarkInteractions()
+        }
       })
       .catch((e) => {
         mapError.value = (e as Error).message
@@ -818,6 +919,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('keydown', onWasdKeyDown)
   stopTileRefreshMessage()
   cancelIntro()
   if (pendingSwoopFlyTimeout != null) {
@@ -825,7 +927,14 @@ onUnmounted(() => {
     pendingSwoopFlyTimeout = null
   }
   if (activeTreePopup) { activeTreePopup.remove(); activeTreePopup = null }
+  if (activeLandmarkPopup) { activeLandmarkPopup.remove(); activeLandmarkPopup = null }
+  if (mapRef.value) {
+    removeLandmarkLayer(mapRef.value)
+    removeCityMarkers(mapRef.value)
+  }
   zoomControlLabelEl = null
+  landmarkInteractionsBound = false
+  globeMarkersBound = false
   mapRef.value?.remove()
   mapRef.value = null
 })
@@ -1092,6 +1201,23 @@ onUnmounted(() => {
 
 .tree-popup .maplibregl-popup-tip {
   border-top-color: #16213e;
+}
+
+.landmark-popup .maplibregl-popup-content {
+  background: rgba(10, 20, 48, 0.92);
+  color: #e0f7fa;
+  border: 1px solid rgba(79, 195, 247, 0.4);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.landmark-popup .maplibregl-popup-tip {
+  border-top-color: rgba(10, 20, 48, 0.92);
 }
 
 .user-location-marker {

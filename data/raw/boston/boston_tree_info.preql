@@ -2,10 +2,19 @@ import ..tree_common;
 
 property <*>.arboretum_data_updated_through datetime; # when Arnold Arboretum data is through
 property <*>.boston_city_data_updated_through datetime; # when Boston city open-data is through
-auto boston_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through);
-key usbos_source enum<string>['CITY', 'ARBORETUM']; # data source within Boston (CITY = municipal open data, ARBORETUM = Arnold Arboretum)
+property <*>.cambridge_data_updated_through datetime; # when Cambridge open-data is through
+auto boston_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through, cambridge_data_updated_through);
+key usbos_source enum<string>['CITY', 'ARBORETUM', 'CAMBRIDGE']; # data source within Boston metro (CITY = Boston municipal, ARBORETUM = Arnold Arboretum, CAMBRIDGE = Cambridge municipal)
 
+
+property tree_id._raw_dbh float; # raw value 
+
+property tree_id._cleaned_db <- case when _raw_dbh < 0 then null else _raw_dbh end; # replace negative values with null
+
+auto processed_dbh <- coalesce(_cleaned_db, avg(_cleaned_db) by city, species); # replace 0 with null, then impute missing values with species average within each city
 # --- Freshness probes ---
+
+merge processed_dbh into diameter_at_breast_height;
 
 root datasource boston_update_time (
     data_updated_through: boston_city_data_updated_through
@@ -16,6 +25,11 @@ root datasource arboretum_update_time (
     data_updated_through: arboretum_data_updated_through
 )
 file `./arboretum_update_time.py`;
+
+root datasource cambridge_update_time (
+    data_updated_through: cambridge_data_updated_through
+)
+file `./cambridge_update_time.py`;
 
 # --- Raw sources ---
 
@@ -29,7 +43,7 @@ root partial datasource city_raw_tree_info (
     date_plant: ?plant_date,
     y_latitude: ?latitude,
     x_longitude: ?longitude,
-    dbh: ?diameter_at_breast_height,
+    dbh: ?_raw_dbh,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'CITY'
@@ -44,11 +58,26 @@ root partial datasource arboretum_raw_tree_info (
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
+    diameter_at_breast_height: ?_raw_dbh,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'ARBORETUM'
 file `./arboretum_tree_info.py`;
+
+root partial datasource cambridge_raw_tree_info (
+    tree_id: tree_id,
+    city: city,
+    usbos_source: usbos_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?_raw_dbh,
+)
+grain (tree_id)
+complete where city = 'USBOS' and usbos_source = 'CAMBRIDGE'
+file `./cambridge_tree_info.py`;
 
 # --- Merged materialized parquet (all Boston sources) ---
 
@@ -62,9 +91,10 @@ partial datasource boston_tree_info (
     ?plant_date,
     ?latitude,
     ?longitude,
-    boston_data_updated_through,
+    boston_data_updated_through
 )
 grain (tree_id)
 complete where city = 'USBOS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`
 freshness by boston_data_updated_through;
+

@@ -1,3 +1,6 @@
+[project]
+name ="concrete_jungle"
+
 [engine]
 # Default dialect for execution
 dialect = "duck_db"
@@ -8,4 +11,3 @@ env_file="../.env"
 enable_gcs = true
 enable_spatial = true
 enable_python_datasources = true
-

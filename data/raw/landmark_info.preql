@@ -3,6 +3,7 @@ import sf.sf_landmarks;
 import nyc.nyc_landmarks;
 import boston.boston_landmarks;
 import paris.paris_landmarks;
+import burlington.burlington_landmarks;
 
 
 # --- Merged union datasource ---

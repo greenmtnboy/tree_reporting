@@ -15,7 +15,7 @@ export function useLandmarkData() {
     loading.value = true
     try {
       const result = await query(`
-        SELECT name, latitude, longitude
+        SELECT landmark_id, name, latitude, longitude
         FROM landmarks
         WHERE city = '${city}'
         ORDER BY name
@@ -23,6 +23,7 @@ export function useLandmarkData() {
       landmarks.value = result.rows
         .filter((r) => r.name)
         .map((r) => ({
+          id: (r.landmark_id as string) ?? '',
           name: (r.name as string).trim(),
           lng: r.longitude as number,
           lat: r.latitude as number,
