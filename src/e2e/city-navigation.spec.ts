@@ -1,39 +1,28 @@
 import { test, expect, type Page } from '@playwright/test'
 
-// Accesses the MapLibre map instance from the canvas element.
-// MapLibre attaches the instance as an internal property; the exact key varies
-// by version so we fall back to scanning Object.values().
-function resolveMapInstanceScript(): string {
-  return `(() => {
-    const canvas = document.querySelector('.tree-map canvas')
-    if (!canvas) return null
-    return canvas.__maplibre_map ??
-      Object.values(canvas).find(v => v && typeof v.getCenter === 'function') ??
-      null
-  })()`
-}
-
 /** Wait until the MapLibre map fires 'idle' (no pending tile loads or animations). */
 async function waitForMapIdle(page: Page): Promise<void> {
-  await page.evaluate((script) => new Promise<void>((resolve) => {
-    const map = eval(script)
-    if (!map) { resolve(); return }
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    const canvas = document.querySelector('.tree-map canvas') as HTMLCanvasElement
+    if (!canvas) throw new Error('Map canvas not found')
+    const map = (canvas as any).__maplibre_map ??
+      Object.values(canvas).find((v: any) => v && typeof v.getCenter === 'function')
+    if (!map) throw new Error('MapLibre instance not found on canvas — internal property may have changed')
     if (map.loaded() && !map.isMoving()) { resolve(); return }
     map.once('idle', resolve)
-  }), resolveMapInstanceScript())
+  }))
 }
 
 /** Returns the number of features currently loaded in the 'trees' source. */
 async function getLoadedTreeCount(page: Page): Promise<number> {
-  return page.evaluate((script) => {
-    const map = eval(script)
-    if (!map) return 0
-    try {
-      return map.querySourceFeatures('trees', { sourceLayer: 'trees' }).length
-    } catch {
-      return 0
-    }
-  }, resolveMapInstanceScript())
+  return page.evaluate(() => {
+    const canvas = document.querySelector('.tree-map canvas') as HTMLCanvasElement
+    if (!canvas) throw new Error('Map canvas not found')
+    const map = (canvas as any).__maplibre_map ??
+      Object.values(canvas).find((v: any) => v && typeof v.getCenter === 'function')
+    if (!map) throw new Error('MapLibre instance not found on canvas — internal property may have changed')
+    return map.querySourceFeatures('trees', { sourceLayer: 'trees' }).length
+  })
 }
 
 test.describe('City navigation', () => {
