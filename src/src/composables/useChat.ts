@@ -1,29 +1,28 @@
 import { ref, computed } from 'vue'
-import type { ChatMessage as LibChatMessage } from '@trilogy-data/trilogy-studio-components'
+import type { ChatMessage as LibChatMessage } from '@trilogy-data/trilogy-studio-components/llm'
 import type { ChatMessage, ToolCallRecord } from '../types'
 import {
-  useTrilogyCore,
   buildCustomTrilogyPrompt,
   runToolLoop,
   RETURN_TO_USER_TOOL,
-} from '@trilogy-data/trilogy-studio-components'
+} from '@trilogy-data/trilogy-studio-components/llm'
 import type {
   LLMAdapter,
   MessagePersistence,
   ToolExecutorFactory,
   ExecutionStateUpdater,
-} from '@trilogy-data/trilogy-studio-components'
+} from '@trilogy-data/trilogy-studio-components/llm'
 import { useDuckDB } from './useDuckDB'
 import { useFlyTo } from './useFlyTo'
 import { useLandmarkData } from './useLandmarkData'
 import { useMapData, CITY_CONFIG } from './useMapData'
 import type { CityCode } from './useMapData'
 import { ALL_MODEL_SOURCES } from '../trilogyModels'
+import { useTrilogyRuntime } from './useTrilogyRuntime'
 
 const API_KEY_STORAGE = 'sf_trees_api_key'
 const API_TYPE_STORAGE = 'sf_trees_provider_type'
 const MAX_LOOPS = 10
-const TRILOGY_RESOLVER_URL = 'https://trilogy-service.fly.dev'
 const LLM_CONNECTION = 'sf-trees'
 
 // Default models per provider — used when first creating the connection so
@@ -236,7 +235,7 @@ export function useChat() {
   const { flyTo } = useFlyTo()
   const { landmarks } = useLandmarkData()
   const { selectedCity, setSelectedCity, userLocation, publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
-  const trilogy = useTrilogyCore()
+  const trilogy = useTrilogyRuntime()
 
   /** If (lat, lng) is closer to a different city than the current one, switch to it. */
   function detectAndSwitchCity(lat: number, lng: number): void {
@@ -259,14 +258,6 @@ export function useChat() {
       setSelectedCity(closest)
       void setCityContext(closest)
     }
-  }
-
-  // Ensure the Trilogy resolver points at the production service
-  if (
-    !trilogy.userSettingsStore.settings.trilogyResolver ||
-    trilogy.userSettingsStore.settings.trilogyResolver.includes('localhost')
-  ) {
-    trilogy.userSettingsStore.updateSetting('trilogyResolver', TRILOGY_RESOLVER_URL)
   }
 
   // Create or update the LLM connection based on current providerType/apiKey

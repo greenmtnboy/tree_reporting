@@ -2,540 +2,389 @@
   <div class="summary-page">
     <div class="summary-header">
       <div class="summary-title-row">
-        <h1>Tree Analytics</h1>
+        <div>
+          <p class="summary-eyebrow">Urban forest snapshot</p>
+          <h1>Tree Analytics</h1>
+        </div>
         <div class="city-badge">{{ cityName }}</div>
       </div>
+      <p class="summary-intro">
+        Explore canopy composition, species mix, and resilience indicators for the active city.
+      </p>
       <div v-if="activeFilters.length" class="active-filters">
-        <span class="filter-chip" v-for="f in activeFilters" :key="f.key">
-          <span class="filter-chip-label">{{ f.label }}</span>
-          <button class="filter-chip-clear" @click="clearFilter(f.key)" title="Remove filter">×</button>
+        <span v-for="filter in activeFilters" :key="filter.key" class="filter-chip">
+          <span class="filter-chip-label">{{ filter.label }}</span>
+          <button class="filter-chip-clear" :title="`Remove ${filter.label}`" @click="clearFilter(filter.key)">
+            x
+          </button>
         </span>
         <button class="clear-all-btn" @click="clearAllFilters">Clear all</button>
       </div>
     </div>
 
-    <div v-if="!dbReady" class="loading-state">
-      <div class="loading-spinner" />
-      <span>Loading tree data…</span>
+    <div class="kpi-row">
+      <div
+        v-for="kpi in kpiCharts"
+        :key="kpi.id"
+        class="chart-card chart-card--kpi chart-card--metric"
+      >
+        <div class="metric-label">{{ kpi.label }}</div>
+        <EmbeddedDashboardChart
+          :item-id="kpi.id"
+          v-bind="sharedChartProps"
+          :filters="filtersForChart(kpi.id)"
+          :title="kpi.title"
+          :query="kpi.query"
+          :chart-config="{ chartType: 'headline', xField: kpi.xField, showTitle: false }"
+        />
+      </div>
     </div>
 
-    <template v-else>
-      <!-- KPI Row -->
-      <div class="kpi-row">
-        <StatCard label="Total Trees" :value="fmtBig(kpis.total)" />
-        <StatCard label="Unique Species" :value="fmtBig(kpis.speciesCount)" />
-        <StatCard
-          label="Median Trunk Diameter"
-          :value="kpis.medianDbh != null ? `${kpis.medianDbh.toFixed(1)}&quot;` : '—'"
-          sub="at breast height"
+    <div class="chart-row">
+      <div class="chart-card chart-card--narrow">
+        <div class="chart-card-header">
+          <h2>Tree Types</h2>
+        </div>
+        <EmbeddedDashboardChart
+          item-id="tree-category"
+          v-bind="sharedChartProps"
+          :filters="filtersForChart('tree-category')"
+          title="Tree Types"
+          query="SELECT tree_category, count(tree_id) as tree_count WHERE tree_category IS NOT NULL ORDER BY tree_count DESC;"
+          :chart-config="{ chartType: 'donut', xField: 'tree_count', yField: 'tree_category', colorField: 'tree_category', showTitle: false }"
+          :selection-filters="selectionFiltersForChart('tree-category')"
+          @dimension-click="handleChartClick"
+          @background-click="clearChartSelection('tree-category')"
         />
-        <StatCard
-          label="Evergreen Trees"
-          :value="kpis.evergreenPct != null ? `${kpis.evergreenPct.toFixed(0)}%` : '—'"
-          :sub="kpis.evergreenCount ? `${fmtBig(kpis.evergreenCount)} trees` : undefined"
+      </div>
+
+      <div class="chart-card chart-card--wide">
+        <div class="chart-card-header">
+          <h2>
+            Top Species
+            <span v-if="selectedCategory" class="header-filter-hint">
+              filtered to <em>{{ formatFilterValue(selectedCategory) }}</em>
+            </span>
+          </h2>
+          <span class="chart-sub">top 15 by tree count</span>
+        </div>
+        <EmbeddedDashboardChart
+          item-id="top-species"
+          v-bind="sharedChartProps"
+          :filters="filtersForChart('top-species')"
+          title="Top Species"
+          query="SELECT species, count(tree_id) as tree_count WHERE species IS NOT NULL ORDER BY tree_count DESC LIMIT 15;"
+          :chart-config="{ chartType: 'bar', xField: 'species', yField: 'tree_count', showTitle: false }"
+          :selection-filters="selectionFiltersForChart('top-species')"
+          @dimension-click="handleChartClick"
+          @background-click="clearChartSelection('top-species')"
+        />
+      </div>
+    </div>
+
+    <div class="chart-row">
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <h2>Native Status</h2>
+        </div>
+        <EmbeddedDashboardChart
+          item-id="native-status"
+          v-bind="sharedChartProps"
+          :filters="filtersForChart('native-status')"
+          title="Native Status"
+          query="SELECT native_status, count(tree_id) as tree_count WHERE native_status IS NOT NULL ORDER BY tree_count DESC;"
+          :chart-config="{ chartType: 'barh', xField: 'tree_count', yField: 'native_status', showTitle: false }"
+          :selection-filters="selectionFiltersForChart('native-status')"
+          @dimension-click="handleChartClick"
+          @background-click="clearChartSelection('native-status')"
         />
       </div>
 
-      <!-- Row 2: Category donut + Top species bar -->
-      <div class="chart-row">
-        <div class="chart-card chart-card--narrow">
-          <div class="chart-card-header">
-            <h2>Tree Types</h2>
-          </div>
-          <DonutChart
-            :data="categoryData"
-            :selected="selectedCategory"
-            @select="toggleCategory"
-          />
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <h2>Drought Tolerance</h2>
+          <span class="chart-sub">enriched species only</span>
         </div>
-
-        <div class="chart-card chart-card--wide">
-          <div class="chart-card-header">
-            <h2>
-              Top Species
-              <span v-if="selectedCategory" class="header-filter-hint">
-                · filtered to <em>{{ selectedCategory }}</em>
-              </span>
-            </h2>
-          </div>
-          <HBarChart
-            :data="speciesData"
-            :selected="selectedSpecies"
-            @select="toggleSpecies"
-          />
-        </div>
+        <EmbeddedDashboardChart
+          item-id="drought-tolerance"
+          v-bind="sharedChartProps"
+          :filters="filtersForChart('drought-tolerance')"
+          title="Drought Tolerance"
+          query="SELECT drought_tolerance, count(tree_id) as tree_count WHERE drought_tolerance IS NOT NULL ORDER BY tree_count DESC;"
+          :chart-config="{ chartType: 'barh', xField: 'tree_count', yField: 'drought_tolerance', showTitle: false }"
+        />
       </div>
 
-      <!-- Row 3: Trunk diameter distribution + Planted by decade -->
-      <div class="chart-row">
-        <div class="chart-card">
-          <div class="chart-card-header">
-            <h2>Trunk Diameter Distribution</h2>
-            <span class="chart-sub">inches at breast height, 5&Prime; buckets</span>
-          </div>
-          <VBarChart :data="dbhData" />
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <h2>Trees Planted by Year</h2>
+          <span class="chart-sub">where planting dates are available</span>
         </div>
-
-        <div class="chart-card" v-if="decadeData.length > 0">
-          <div class="chart-card-header">
-            <h2>Trees Planted by Decade</h2>
-          </div>
-          <VBarChart :data="decadeData" />
-        </div>
-
-        <div class="chart-card" v-else>
-          <div class="chart-card-header">
-            <h2>Native Status</h2>
-          </div>
-          <HBarChart :data="nativeData" :selected="selectedNative" @select="toggleNative" />
-        </div>
+        <EmbeddedDashboardChart
+          item-id="plant-year"
+          v-bind="sharedChartProps"
+          :filters="filtersForChart('plant-year')"
+          title="Trees Planted by Year"
+          query="SELECT plant_date.year as plant_year, count(tree_id) as tree_count WHERE plant_date IS NOT NULL ORDER BY plant_year ASC;"
+          :chart-config="{ chartType: 'bar', xField: 'plant_year', yField: 'tree_count', showTitle: false }"
+          :allow-cross-filter="false"
+        />
       </div>
-
-      <!-- Row 4: Native + Ecological -->
-      <div class="chart-row">
-        <div class="chart-card" v-if="decadeData.length > 0">
-          <div class="chart-card-header">
-            <h2>Native Status</h2>
-          </div>
-          <HBarChart :data="nativeData" :selected="selectedNative" @select="toggleNative" />
-        </div>
-
-        <div class="chart-card">
-          <div class="chart-card-header">
-            <h2>Mature Height Profile</h2>
-            <span class="chart-sub">enriched species only</span>
-          </div>
-          <VBarChart :data="heightData" />
-        </div>
-
-        <div class="chart-card">
-          <div class="chart-card-header">
-            <h2>Drought Tolerance</h2>
-            <span class="chart-sub">enriched species only</span>
-          </div>
-          <HBarChart :data="droughtData" />
-        </div>
-      </div>
-    </template>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import StatCard from '../components/StatCard.vue'
-import HBarChart from '../components/HBarChart.vue'
-import type { HBarItem } from '../components/HBarChart.vue'
-import DonutChart from '../components/DonutChart.vue'
-import type { DonutItem } from '../components/DonutChart.vue'
-import VBarChart from '../components/VBarChart.vue'
-import type { VBarItem } from '../components/VBarChart.vue'
-import { useDuckDB } from '../composables/useDuckDB'
-import { useMapData } from '../composables/useMapData'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import {
+  type DashboardImport,
+  type DimensionClick,
+  type CrossFilterSelection,
+  useCrossFilterController,
+} from '@trilogy-data/trilogy-studio-components/dashboard'
+import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
+import { useMapData, CITY_CONFIG, type CityCode } from '../composables/useMapData'
+import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
 import cityConfig from '../cityConfig.json'
 
-const { ready: dbReady, query } = useDuckDB()
-const { selectedCity } = useMapData()
+const route = useRoute()
+const router = useRouter()
+const { selectedCity, setSelectedCity } = useMapData()
+const { initialize, connectionId, queryExecutionService } = useSummaryDashboardExecution()
 
-// ── Cross-filter state ────────────────────────────────────────────────────────
-const selectedCategory = ref<string | null>(null)
-const selectedSpecies = ref<string | null>(null)
-const selectedNative = ref<string | null>(null)
-
-function toggleCategory(label: string) {
-  selectedCategory.value = selectedCategory.value === label ? null : label
-  selectedSpecies.value = null
-}
-function toggleSpecies(label: string) {
-  selectedSpecies.value = selectedSpecies.value === label ? null : label
-}
-function toggleNative(label: string) {
-  selectedNative.value = selectedNative.value === label ? null : label
-}
-function clearFilter(key: string) {
-  if (key === 'category') selectedCategory.value = null
-  if (key === 'species') selectedSpecies.value = null
-  if (key === 'native') selectedNative.value = null
-}
-function clearAllFilters() {
-  selectedCategory.value = null
-  selectedSpecies.value = null
-  selectedNative.value = null
+const sharedChartProps = {
+  connectionId,
+  queryExecutionService,
+  imports: [{ id: 'tree_enrichment', name: 'tree_enrichment', alias: '' }] as DashboardImport[],
 }
 
-const activeFilters = computed(() => {
-  const filters: { key: string; label: string }[] = []
-  if (selectedCategory.value) filters.push({ key: 'category', label: `Type: ${selectedCategory.value}` })
-  if (selectedSpecies.value) filters.push({ key: 'species', label: `Species: ${selectedSpecies.value}` })
-  if (selectedNative.value) filters.push({ key: 'native', label: `Native: ${selectedNative.value}` })
+const kpiCharts = [
+  { id: 'total-trees',     label: 'Inventory',     title: 'Total Trees',             query: 'SELECT count(tree_id) as total_trees;',                                                                          xField: 'total_trees' },
+  { id: 'unique-species',  label: 'Biodiversity',  title: 'Unique Species',          query: 'SELECT count_distinct(species) as unique_species WHERE species IS NOT NULL;',                                    xField: 'unique_species' },
+  { id: 'average-dbh',     label: 'Average size',  title: 'Average Trunk Diameter',  query: 'SELECT avg(diameter_at_breast_height) as avg_dbh WHERE diameter_at_breast_height IS NOT NULL;',                 xField: 'avg_dbh' },
+  { id: 'evergreen-trees', label: 'Evergreen share', title: 'Evergreen Trees',       query: 'SELECT count(tree_id) as evergreen_trees WHERE is_evergreen = true;',                                            xField: 'evergreen_trees' },
+] as const
+
+const crossFilterableCharts: { id: string; label: string; format?: (v: string) => string }[] = [
+  { id: 'tree-category', label: 'Type',    format: formatFilterValue },
+  { id: 'top-species',   label: 'Species' },
+  { id: 'native-status', label: 'Native',  format: formatFilterValue },
+]
+
+const cityFilter = ref<CityCode | null>(null)
+const crossFilters = useCrossFilterController({
+  validFields: ['tree_category', 'species', 'native_status'],
+})
+
+const cityName = computed(() => {
+  if (!cityFilter.value) {
+    return 'All Cities'
+  }
+  const cfg = (cityConfig as Record<string, { name: string }>)[cityFilter.value]
+  return cfg?.name ?? cityFilter.value
+})
+
+const baseFilters = computed(() => {
+  const filters: string[] = []
+  if (cityFilter.value) {
+    filters.push(`city = '${cityFilter.value}'`)
+  }
   return filters
 })
 
-// ── Category colors (mirrors worker + useTreeCategories) ──────────────────────
-const CATEGORY_COLORS: Record<string, string> = {
-  broadleaf: '#4CAF50',
-  spreading: '#8BC34A',
-  coniferous: '#2E7D32',
-  columnar: '#43A047',
-  ornamental: '#E91E63',
-  palm: '#e6a835',
-  default: '#66BB6A',
+function currentSelectionValue(source: string, field: string) {
+  crossFilters.version.value
+  const match = crossFilters
+    .getSelections()
+    .find(
+      (selection: CrossFilterSelection) =>
+        selection.source === source && typeof selection.filters[field] === 'string',
+    )
+  return match?.filters[field] ?? null
 }
 
-// ── Display name ──────────────────────────────────────────────────────────────
-const cityName = computed(() => {
-  const cfg = (cityConfig as Record<string, { name: string }>)[selectedCity.value]
-  return cfg?.name ?? selectedCity.value
-})
+const selectedCategory = computed(() => currentSelectionValue('tree-category', 'tree_category'))
 
-// ── KPIs ──────────────────────────────────────────────────────────────────────
-const kpis = ref({
-  total: 0,
-  speciesCount: 0,
-  medianDbh: null as number | null,
-  evergreenCount: 0,
-  evergreenPct: null as number | null,
-})
-
-async function loadKpis() {
-  // Build WHERE snippet for active filters
-  const where = buildFilterWhere()
-
-  const res = await query(`
-    SELECT
-      COUNT(*) AS total,
-      COUNT(DISTINCT t.species) AS species_count,
-      MEDIAN(t.diameter_at_breast_height) AS median_dbh,
-      SUM(CASE WHEN se.is_evergreen = true THEN 1 ELSE 0 END) AS evergreen_count
-    FROM trees t
-    LEFT JOIN species_enrichment se ON t.species = se.species
-    ${where}
-  `)
-  const row = res.rows[0]
-  if (!row) return
-  const total = Number(row.total ?? 0)
-  const evergreen = Number(row.evergreen_count ?? 0)
-  kpis.value = {
-    total,
-    speciesCount: Number(row.species_count ?? 0),
-    medianDbh: row.median_dbh != null ? Number(row.median_dbh) : null,
-    evergreenCount: evergreen,
-    evergreenPct: total > 0 ? (evergreen / total) * 100 : null,
+const activeFilters = computed(() => {
+  const filters: Array<{ key: string; label: string }> = []
+  if (cityFilter.value) {
+    filters.push({ key: 'city', label: `City: ${cityName.value}` })
   }
+  crossFilters.version.value
+  const grouped = new Map<string, string[]>()
+  for (const selection of crossFilters.getSelections()) {
+    const [field, value] = Object.entries(selection.filters)[0] ?? []
+    if (!field || typeof value !== 'string') continue
+    const values = grouped.get(selection.source) ?? []
+    values.push(value)
+    grouped.set(selection.source, values)
+  }
+  for (const { id, label, format } of crossFilterableCharts) {
+    const values = grouped.get(id)
+    if (values) {
+      filters.push({ key: id, label: `${label}: ${values.map(format ?? ((v) => v)).join(', ')}` })
+    }
+  }
+  return filters
+})
+
+function formatFilterValue(value: string) {
+  return value.replace(/_/g, ' ')
 }
 
-// ── Category (donut) ──────────────────────────────────────────────────────────
-const categoryData = ref<DonutItem[]>([])
-
-async function loadCategories() {
-  const speciesWhere = selectedSpecies.value
-    ? `AND t.species = '${selectedSpecies.value.replace(/'/g, "''")}'`
-    : ''
-  const nativeWhere = selectedNative.value
-    ? `AND COALESCE(se.native_status, 'Unknown') = '${selectedNative.value.replace(/'/g, "''")}'`
-    : ''
-
-  const res = await query(`
-    SELECT
-      COALESCE(se.tree_category, 'default') AS category,
-      COUNT(*) AS cnt
-    FROM trees t
-    LEFT JOIN species_enrichment se ON t.species = se.species
-    WHERE 1=1 ${speciesWhere} ${nativeWhere}
-    GROUP BY category
-    ORDER BY cnt DESC
-  `)
-  categoryData.value = res.rows.map((r) => ({
-    label: String(r.category ?? 'default'),
-    value: Number(r.cnt ?? 0),
-    color: CATEGORY_COLORS[String(r.category ?? 'default')] ?? '#66BB6A',
-  }))
+function clearFilter(key: string) {
+  if (key === 'city') cityFilter.value = null
+  else crossFilters.clearSource(key)
 }
 
-// ── Top species (horizontal bar) ──────────────────────────────────────────────
-const speciesData = ref<HBarItem[]>([])
-
-async function loadSpecies() {
-  const catWhere = selectedCategory.value
-    ? `AND COALESCE(se.tree_category, 'default') = '${selectedCategory.value.replace(/'/g, "''")}'`
-    : ''
-  const nativeWhere = selectedNative.value
-    ? `AND COALESCE(se.native_status, 'Unknown') = '${selectedNative.value.replace(/'/g, "''")}'`
-    : ''
-
-  const res = await query(`
-    SELECT
-      t.species,
-      COALESCE(se.tree_category, 'default') AS category,
-      COUNT(*) AS cnt
-    FROM trees t
-    LEFT JOIN species_enrichment se ON t.species = se.species
-    WHERE t.species IS NOT NULL AND t.species != '' ${catWhere} ${nativeWhere}
-    GROUP BY t.species, category
-    ORDER BY cnt DESC
-    LIMIT 15
-  `)
-  speciesData.value = res.rows.map((r) => ({
-    label: String(r.species ?? ''),
-    value: Number(r.cnt ?? 0),
-    color: CATEGORY_COLORS[String(r.category ?? 'default')] ?? '#66BB6A',
-  }))
+function clearAllFilters() {
+  cityFilter.value = null
+  crossFilters.clearAll()
 }
 
-// ── DBH distribution (vertical bars / histogram) ─────────────────────────────
-const dbhData = ref<VBarItem[]>([])
-
-async function loadDbh() {
-  const where = buildFilterWhere()
-  const res = await query(`
-    SELECT
-      CAST(FLOOR(t.diameter_at_breast_height / 5) * 5 AS INTEGER) AS bucket,
-      COUNT(*) AS cnt
-    FROM trees t
-    LEFT JOIN species_enrichment se ON t.species = se.species
-    WHERE t.diameter_at_breast_height BETWEEN 0 AND 79
-    ${where.replace('WHERE 1=1', 'AND 1=1')}
-    GROUP BY bucket
-    ORDER BY bucket
-  `)
-  dbhData.value = res.rows.map((r) => ({
-    label: `${r.bucket}–${Number(r.bucket) + 5}″`,
-    value: Number(r.cnt ?? 0),
-    color: '#4fc3f7',
-  }))
+function filtersForChart(chartId: string) {
+  crossFilters.version.value
+  return crossFilters.getSqlFiltersFor(chartId, baseFilters.value)
 }
 
-// ── Trees planted by decade ───────────────────────────────────────────────────
-const decadeData = ref<VBarItem[]>([])
-
-async function loadDecades() {
-  const where = buildFilterWhere()
-  try {
-    const res = await query(`
-      SELECT
-        CAST(FLOOR(YEAR(t.plant_date) / 10) * 10 AS INTEGER) AS decade,
-        COUNT(*) AS cnt
-      FROM trees t
-      LEFT JOIN species_enrichment se ON t.species = se.species
-      WHERE t.plant_date IS NOT NULL AND YEAR(t.plant_date) BETWEEN 1900 AND 2030
-      ${where.replace('WHERE 1=1', 'AND 1=1')}
-      GROUP BY decade
-      ORDER BY decade
-    `)
-    decadeData.value = res.rows.map((r) => ({
-      label: `${r.decade}s`,
-      value: Number(r.cnt ?? 0),
-      color: '#81c784',
+function selectionFiltersForChart(chartId: string) {
+  crossFilters.version.value
+  return crossFilters
+    .getSelections()
+    .filter((selection: CrossFilterSelection) => selection.source === chartId)
+    .map((selection: CrossFilterSelection) => ({
+      source: selection.source,
+      value: selection.chart ?? selection.filters,
     }))
-  } catch {
-    decadeData.value = []
+}
+
+function handleChartClick(info: DimensionClick) {
+  crossFilters.applyDimensionClick(info)
+}
+
+function clearChartSelection(chartId: string) {
+  crossFilters.clearSource(chartId)
+}
+
+function readRouteCity(value: unknown): CityCode | null {
+  const city = Array.isArray(value) ? value[0] : value
+  if (typeof city !== 'string') {
+    return null
   }
+  return city in CITY_CONFIG ? (city as CityCode) : null
 }
 
-// ── Native status ─────────────────────────────────────────────────────────────
-const nativeData = ref<HBarItem[]>([])
-const NATIVE_COLORS: Record<string, string> = {
-  Native: '#4CAF50',
-  'Non-native': '#ef5350',
-  Invasive: '#FF6D00',
-  Naturalized: '#FFA726',
-  Unknown: '#555577',
-}
-
-async function loadNative() {
-  const catWhere = selectedCategory.value
-    ? `AND COALESCE(se.tree_category, 'default') = '${selectedCategory.value.replace(/'/g, "''")}'`
-    : ''
-  const speciesWhere = selectedSpecies.value
-    ? `AND t.species = '${selectedSpecies.value.replace(/'/g, "''")}'`
-    : ''
-
-  const res = await query(`
-    SELECT
-      COALESCE(se.native_status, 'Unknown') AS native_status,
-      COUNT(*) AS cnt
-    FROM trees t
-    LEFT JOIN species_enrichment se ON t.species = se.species
-    WHERE 1=1 ${catWhere} ${speciesWhere}
-    GROUP BY native_status
-    ORDER BY cnt DESC
-  `)
-  nativeData.value = res.rows.map((r) => ({
-    label: String(r.native_status ?? 'Unknown'),
-    value: Number(r.cnt ?? 0),
-    color: NATIVE_COLORS[String(r.native_status)] ?? '#7a7a9e',
-  }))
-}
-
-// ── Mature height profile ─────────────────────────────────────────────────────
-const HEIGHT_BUCKETS = [
-  { label: '<20ft', min: 0, max: 20, color: '#AED581' },
-  { label: '20–40ft', min: 20, max: 40, color: '#66BB6A' },
-  { label: '40–60ft', min: 40, max: 60, color: '#43A047' },
-  { label: '60–80ft', min: 60, max: 80, color: '#2E7D32' },
-  { label: '80ft+', min: 80, max: 9999, color: '#1B5E20' },
-]
-const heightData = ref<VBarItem[]>([])
-
-async function loadHeight() {
-  const where = buildFilterWhere()
-  const res = await query(`
-    SELECT
-      se.mature_height_ft,
-      COUNT(*) AS cnt
-    FROM trees t
-    LEFT JOIN species_enrichment se ON t.species = se.species
-    WHERE se.mature_height_ft IS NOT NULL
-    ${where.replace('WHERE 1=1', 'AND 1=1')}
-    GROUP BY se.mature_height_ft
-  `)
-  const buckets = HEIGHT_BUCKETS.map((b) => ({ ...b, count: 0 }))
-  for (const row of res.rows) {
-    const h = Number(row.mature_height_ft ?? 0)
-    const cnt = Number(row.cnt ?? 0)
-    const b = buckets.find((bk) => h >= bk.min && h < bk.max)
-    if (b) b.count += cnt
+const initialRouteCity = readRouteCity(route.query.city)
+if (initialRouteCity) {
+  cityFilter.value = initialRouteCity
+  if (initialRouteCity !== selectedCity.value) {
+    setSelectedCity(initialRouteCity)
   }
-  heightData.value = buckets
-    .filter((b) => b.count > 0)
-    .map((b) => ({ label: b.label, value: b.count, color: b.color }))
+} else {
+  cityFilter.value = selectedCity.value
 }
 
-// ── Drought tolerance ─────────────────────────────────────────────────────────
-const droughtData = ref<HBarItem[]>([])
-const DROUGHT_COLORS: Record<string, string> = {
-  High: '#e6a835',
-  Moderate: '#4fc3f7',
-  Low: '#1565c0',
-  Unknown: '#555577',
-}
-
-async function loadDrought() {
-  const where = buildFilterWhere()
-  const res = await query(`
-    SELECT
-      COALESCE(se.drought_tolerance, 'Unknown') AS drought_tolerance,
-      COUNT(*) AS cnt
-    FROM trees t
-    LEFT JOIN species_enrichment se ON t.species = se.species
-    WHERE 1=1
-    ${where.replace('WHERE 1=1', 'AND 1=1')}
-    GROUP BY drought_tolerance
-    ORDER BY cnt DESC
-  `)
-  droughtData.value = res.rows.map((r) => ({
-    label: String(r.drought_tolerance ?? 'Unknown'),
-    value: Number(r.cnt ?? 0),
-    color: DROUGHT_COLORS[String(r.drought_tolerance)] ?? '#7a7a9e',
-  }))
-}
-
-// ── Filter WHERE builder ──────────────────────────────────────────────────────
-function buildFilterWhere(): string {
-  const clauses: string[] = ['1=1']
-  if (selectedCategory.value)
-    clauses.push(`COALESCE(se.tree_category, 'default') = '${selectedCategory.value.replace(/'/g, "''")}'`)
-  if (selectedSpecies.value)
-    clauses.push(`t.species = '${selectedSpecies.value.replace(/'/g, "''")}'`)
-  if (selectedNative.value)
-    clauses.push(`COALESCE(se.native_status, 'Unknown') = '${selectedNative.value.replace(/'/g, "''")}'`)
-  return `WHERE ${clauses.join(' AND ')}`
-}
-
-// ── Orchestration ─────────────────────────────────────────────────────────────
-async function loadAll() {
-  if (!dbReady.value) return
-  await Promise.all([
-    loadKpis(),
-    loadCategories(),
-    loadSpecies(),
-    loadDbh(),
-    loadDecades(),
-    loadNative(),
-    loadHeight(),
-    loadDrought(),
-  ])
-}
-
-// Full reload when city switches
-watch([dbReady, selectedCity], () => {
-  selectedCategory.value = null
-  selectedSpecies.value = null
-  selectedNative.value = null
-  void loadAll()
+onMounted(() => {
+  void initialize()
 })
 
-// Partial reloads when cross-filters change
-watch(selectedCategory, () => {
-  void loadSpecies()
-  void loadKpis()
-  void loadDbh()
-  void loadNative()
-  void loadDecades()
-  void loadHeight()
-  void loadDrought()
-})
-watch(selectedSpecies, () => {
-  void loadCategories()
-  void loadKpis()
-  void loadNative()
-})
-watch(selectedNative, () => {
-  void loadSpecies()
-  void loadCategories()
-  void loadKpis()
-})
+watch(
+  () => route.query.city,
+  (routeCity) => {
+    const nextCity = readRouteCity(routeCity)
+    cityFilter.value = nextCity
+    if (nextCity && nextCity !== selectedCity.value) {
+      setSelectedCity(nextCity)
+    }
+  },
+)
 
-onMounted(() => void loadAll())
-
-// ── Formatters ────────────────────────────────────────────────────────────────
-function fmtBig(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
-  return n.toLocaleString()
-}
+watch(
+  cityFilter,
+  (city) => {
+    crossFilters.clearAll()
+    const routeCity = readRouteCity(route.query.city)
+    if (route.name === 'summary' && routeCity !== city) {
+      const nextQuery = { ...route.query }
+      if (city) {
+        nextQuery.city = city
+      } else {
+        delete nextQuery.city
+      }
+      void router.replace({
+        query: nextQuery,
+      })
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>
 .summary-page {
-  padding: 24px 28px;
+  padding: 28px 30px 40px;
   overflow-y: auto;
   height: 100%;
   box-sizing: border-box;
-  background: #1a1a2e;
+  background:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.1), transparent 24%),
+    radial-gradient(circle at top right, rgba(168, 85, 247, 0.1), transparent 18%),
+    linear-gradient(180deg, #11182d 0%, #151d35 42%, #11182d 100%);
   color: #e0e0e0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 22px;
 }
 
-/* ── Header ── */
 .summary-header {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .summary-title-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 14px;
+  flex-wrap: wrap;
+}
+
+.summary-eyebrow {
+  margin: 0 0 6px;
+  font-size: 0.74rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #7dd3fc;
+}
+
+.summary-intro {
+  margin: 0;
+  max-width: 720px;
+  color: #94a3b8;
+  font-size: 0.95rem;
+  line-height: 1.45;
 }
 
 .summary-title-row h1 {
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #e0e0e0;
+  font-size: 2rem;
+  font-weight: 800;
+  color: #f8fafc;
+  letter-spacing: -0.03em;
 }
 
 .city-badge {
-  background: rgba(79, 195, 247, 0.15);
-  border: 1px solid rgba(79, 195, 247, 0.35);
-  color: #4fc3f7;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 0.78rem;
-  font-weight: 600;
+  align-self: flex-start;
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.2), rgba(14, 116, 144, 0.18));
+  border: 1px solid rgba(125, 211, 252, 0.4);
+  color: #67e8f9;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .active-filters {
@@ -549,12 +398,12 @@ function fmtBig(n: number): string {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(79, 195, 247, 0.12);
-  border: 1px solid rgba(79, 195, 247, 0.3);
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(103, 232, 249, 0.24);
   border-radius: 16px;
-  padding: 3px 10px 3px 12px;
-  font-size: 0.75rem;
-  color: #4fc3f7;
+  padding: 5px 10px 5px 12px;
+  font-size: 0.78rem;
+  color: #67e8f9;
 }
 
 .filter-chip-clear {
@@ -562,100 +411,107 @@ function fmtBig(n: number): string {
   border: none;
   color: #4fc3f7;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 0.9rem;
   line-height: 1;
   padding: 0;
   opacity: 0.7;
 }
-.filter-chip-clear:hover { opacity: 1; }
+
+.filter-chip-clear:hover {
+  opacity: 1;
+}
 
 .clear-all-btn {
   background: none;
   border: none;
-  color: #7a7a9e;
+  color: #94a3b8;
   cursor: pointer;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   text-decoration: underline;
   padding: 0;
 }
-.clear-all-btn:hover { color: #e0e0e0; }
 
-/* ── Loading ── */
-.loading-state {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 60px 0;
-  justify-content: center;
-  color: #7a7a9e;
-  font-size: 0.9rem;
+.clear-all-btn:hover {
+  color: #e2e8f0;
 }
 
-.loading-spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid #0f3460;
-  border-top-color: #4fc3f7;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* ── KPI row ── */
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
 }
 
-@media (max-width: 900px) {
-  .kpi-row { grid-template-columns: repeat(2, 1fr); }
-}
-
-/* ── Chart rows ── */
 .chart-row {
   display: flex;
-  gap: 14px;
-  align-items: flex-start;
+  gap: 16px;
+  align-items: stretch;
   flex-wrap: wrap;
 }
 
 .chart-card {
-  background: #16213e;
-  border: 1px solid #0f3460;
-  border-radius: 8px;
-  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  background:
+    linear-gradient(180deg, rgba(23, 34, 63, 0.96), rgba(18, 28, 52, 0.98)),
+    #16213e;
+  border: 1px solid rgba(43, 92, 161, 0.45);
+  border-radius: 16px;
+  padding: 20px 22px;
   flex: 1;
   min-width: 260px;
+  height: 380px;
+  min-height: 0;
+  overflow: hidden;
+  box-shadow:
+    0 16px 40px rgba(2, 6, 23, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.chart-card--kpi {
+  height: 220px;
+  padding: 16px 18px;
+}
+
+.chart-card--metric {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metric-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7dd3fc;
 }
 
 .chart-card--narrow {
-  flex: 0 0 260px;
+  flex: 0 0 420px;
 }
 
 .chart-card--wide {
-  flex: 2;
+  flex: 2 1 560px;
 }
 
 .chart-card-header {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+  flex: 0 0 auto;
 }
 
 .chart-card-header h2 {
   margin: 0;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #c0c0d8;
-  letter-spacing: 0.3px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #dbe7ff;
+  letter-spacing: 0.01em;
 }
 
 .header-filter-hint {
   font-weight: 400;
-  color: #7a7a9e;
+  color: #94a3b8;
   font-size: 0.8rem;
+  margin-left: 6px;
 }
 
 .header-filter-hint em {
@@ -666,8 +522,36 @@ function fmtBig(n: number): string {
 
 .chart-sub {
   display: block;
-  font-size: 0.7rem;
-  color: #555577;
-  margin-top: 2px;
+  font-size: 0.78rem;
+  color: #7f8ea8;
+  margin-top: 6px;
+  line-height: 1.35;
+}
+
+@media (max-width: 900px) {
+  .summary-page {
+    padding: 20px 18px 30px;
+  }
+
+  .kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .summary-title-row h1 {
+    font-size: 1.7rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .kpi-row {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-card,
+  .chart-card--narrow,
+  .chart-card--wide {
+    min-width: 100%;
+    flex-basis: 100%;
+  }
 }
 </style>

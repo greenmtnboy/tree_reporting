@@ -13,4 +13,4 @@ enable_spatial = true
 enable_python_datasources = true
 
 [serve]
-studio_url="http://localhost:5173/trilogy-studio-core/"
+studio_url="http://localhost:5174/trilogy-studio-core/"

@@ -5,15 +5,15 @@
       <div class="subtitle">The Woods of the Concrete Jungle</div>
     </div>
     <nav class="sidebar-nav">
-      <router-link to="/">
+      <router-link :to="mapRoute">
         <span class="nav-icon">&#x1f5fa;</span>
         Map
       </router-link>
-      <router-link to="/summary">
+      <router-link :to="summaryRoute">
         <span class="nav-icon">&#x1f4ca;</span>
         Analytics
       </router-link>
-      <router-link to="/info">
+      <router-link :to="infoRoute">
         <span class="nav-icon">&#x2139;</span>
         Info
       </router-link>
@@ -47,12 +47,19 @@
 import { ref, computed } from 'vue'
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { useFlyTo } from '../composables/useFlyTo'
+import { useMapData } from '../composables/useMapData'
 import type { Landmark } from '../types'
 
 const { landmarks, loading: landmarkLoading } = useLandmarkData()
 const { flyTo } = useFlyTo()
+const { selectedCity } = useMapData()
 
 const search = ref('')
+
+const routeQuery = computed(() => ({ city: selectedCity.value }))
+const mapRoute = computed(() => ({ path: '/', query: routeQuery.value }))
+const summaryRoute = computed(() => ({ path: '/summary', query: routeQuery.value }))
+const infoRoute = computed(() => ({ path: '/info', query: routeQuery.value }))
 
 const filtered = computed(() => {
   const q = search.value.toLowerCase().trim()

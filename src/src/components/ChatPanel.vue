@@ -169,7 +169,7 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onUnmounted } from 'vue'
-import { MarkdownRenderer } from '@trilogy-data/trilogy-studio-components'
+import { MarkdownRenderer } from '@trilogy-data/trilogy-studio-components/dashboard'
 import { useChat } from '../composables/useChat'
 import { useDuckDB } from '../composables/useDuckDB'
 import { useMapIntro } from '../composables/useMapIntro'
