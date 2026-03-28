@@ -1,6 +1,5 @@
 
 import raw.tree_enrichment;
 
-where lower(species) = 'syringa reticulata'
-select species, city, count(tree_id) as tree_count
-order by tree_count desc limit 10;
+
+select  latest_update_through;

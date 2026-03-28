@@ -11,6 +11,7 @@ env_file="../.env"
 enable_gcs = true
 enable_spatial = true
 enable_python_datasources = true
+gcs_cache_bust = true
 
 [serve]
 studio_url="http://localhost:5174/trilogy-studio-core/"

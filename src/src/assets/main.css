@@ -58,34 +58,42 @@ body,
 }
 
 #app::before {
-  top: 0;
-  left: 0;
-  width: min(60vw, 760px);
-  height: min(64vh, 680px);
+  inset: 0;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.07), transparent 62%),
-    repeating-linear-gradient(0deg, rgba(231, 235, 233, 0.055) 0 2px, transparent 2px 54px),
-    repeating-linear-gradient(90deg, rgba(231, 235, 233, 0.055) 0 2px, transparent 2px 54px),
-    repeating-linear-gradient(0deg, transparent 0 108px, rgba(255, 255, 255, 0.03) 108px 118px, transparent 118px 216px),
-    repeating-linear-gradient(90deg, transparent 0 148px, rgba(255, 255, 255, 0.03) 148px 158px, transparent 158px 296px);
-  opacity: 0.34;
-  mask-image: linear-gradient(135deg, black 0%, black 52%, transparent 88%);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent 58%),
+    repeating-linear-gradient(0deg, rgba(231, 235, 233, 0.05) 0 2px, transparent 2px 54px),
+    repeating-linear-gradient(90deg, rgba(231, 235, 233, 0.05) 0 2px, transparent 2px 54px),
+    repeating-linear-gradient(0deg, transparent 0 108px, rgba(255, 255, 255, 0.024) 108px 118px, transparent 118px 216px),
+    repeating-linear-gradient(90deg, transparent 0 148px, rgba(255, 255, 255, 0.024) 148px 158px, transparent 158px 296px);
+  opacity: 0.3;
+  mask-image: linear-gradient(
+    135deg,
+    black 0%,
+    black 54%,
+    rgba(0, 0, 0, 0.82) 63%,
+    rgba(0, 0, 0, 0.35) 74%,
+    transparent 86%
+  );
 }
 
 #app::after {
-  right: 0;
-  bottom: 0;
-  width: min(52vw, 760px);
-  height: min(62vh, 720px);
+  inset: 0;
   background:
-    linear-gradient(180deg, rgba(15, 36, 23, 0), rgba(15, 36, 23, 0.24)),
-    radial-gradient(circle at 78% 72%, rgba(47, 125, 79, 0.2), transparent 48%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 700 700'%3E%3Cg fill='%236baf92' fill-opacity='.11'%3E%3Cpolygon points='20,700 90,520 160,700'/%3E%3Cpolygon points='110,700 200,430 290,700'/%3E%3Cpolygon points='230,700 320,500 410,700'/%3E%3Cpolygon points='360,700 470,390 580,700'/%3E%3Cpolygon points='500,700 590,470 680,700'/%3E%3C/g%3E%3Cg fill='%232f7d4f' fill-opacity='.16'%3E%3Cpolygon points='55,700 120,560 185,700'/%3E%3Cpolygon points='170,700 250,470 330,700'/%3E%3Cpolygon points='305,700 405,430 505,700'/%3E%3Cpolygon points='455,700 555,520 655,700'/%3E%3Cpath d='M540 700C500 520 560 250 700 60V700Z'/%3E%3Cpath d='M600 700C560 560 610 340 700 180V700Z'/%3E%3C/g%3E%3Cg stroke='%23a7e3b2' stroke-opacity='.09' stroke-width='2' fill='none'%3E%3Cpath d='M520 700C470 570 510 390 610 240'/%3E%3Cpath d='M590 700C550 600 585 430 665 300'/%3E%3C/g%3E%3C/svg%3E");
+    linear-gradient(180deg, rgba(15, 36, 23, 0), rgba(15, 36, 23, 0.34)),
+    radial-gradient(circle at 70% 84%, rgba(47, 125, 79, 0.34), transparent 42%),
+    radial-gradient(circle at 88% 92%, rgba(107, 175, 146, 0.16), transparent 30%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 980 900'%3E%3Cg fill='%23223a2c' fill-opacity='.18'%3E%3Cpolygon points='70,900 190,610 310,900'/%3E%3Cpolygon points='220,900 360,470 500,900'/%3E%3Cpolygon points='400,900 545,545 690,900'/%3E%3Cpolygon points='565,900 735,315 905,900'/%3E%3Cpolygon points='700,900 835,500 970,900'/%3E%3C/g%3E%3Cg fill='%232f7d4f' fill-opacity='.17'%3E%3Cpolygon points='120,900 208,690 296,900'/%3E%3Cpolygon points='250,900 362,560 474,900'/%3E%3Cpolygon points='400,900 496,658 592,900'/%3E%3Cpolygon points='540,900 676,460 812,900'/%3E%3Cpolygon points='690,900 818,612 946,900'/%3E%3Cpolygon points='790,900 890,682 990,900'/%3E%3C/g%3E%3Cg fill='%236baf92' fill-opacity='.095'%3E%3Cpolygon points='196,900 252,792 308,900'/%3E%3Cpolygon points='346,900 410,760 474,900'/%3E%3Cpolygon points='520,900 590,774 660,900'/%3E%3Cpolygon points='694,900 762,752 830,900'/%3E%3Cpolygon points='812,900 872,790 932,900'/%3E%3C/g%3E%3Cpath d='M0 900V818C128 796 224 794 328 776C442 756 542 760 652 742C770 724 856 714 980 676V900Z' fill='%230f2417' fill-opacity='.22'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: center, center, right bottom;
-  background-size: cover, cover, contain;
-  opacity: 0.78;
-  mask-image: linear-gradient(135deg, transparent 0%, rgba(0, 0, 0, 0.78) 18%, black 100%);
+  background-position: center, center, center, right bottom;
+  background-size: cover, cover, cover, min(74vw, 1080px) auto;
+  opacity: 0.88;
+  mask-image: linear-gradient(
+    135deg,
+    transparent 34%,
+    rgba(0, 0, 0, 0.28) 50%,
+    rgba(0, 0, 0, 0.76) 64%,
+    black 80%
+  );
 }
 
 #app > * {

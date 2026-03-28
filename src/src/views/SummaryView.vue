@@ -50,7 +50,7 @@
           v-bind="sharedChartProps"
           :filters="filtersForChart('tree-category')"
           title="Tree Types"
-          query="SELECT tree_category, count(tree_id) as tree_count WHERE tree_category IS NOT NULL ORDER BY tree_count DESC;"
+          query="import std.color;SELECT tree_category, case when tree_category = 'broadleaf' then '#A7E3B2' else '#2F7D4F' end::string::hex as cat_color,  count(tree_id) as tree_count WHERE tree_category IS NOT NULL ORDER BY tree_count DESC;"
           :chart-config="{ chartType: 'donut', xField: 'tree_count', yField: 'tree_category', colorField: 'tree_category', showTitle: false }"
           :selection-filters="selectionFiltersForChart('tree-category')"
           @dimension-click="handleChartClick"
@@ -73,8 +73,13 @@
           v-bind="sharedChartProps"
           :filters="filtersForChart('top-species')"
           title="Top Species"
-          query="SELECT species, count(tree_id) as tree_count WHERE species IS NOT NULL ORDER BY tree_count DESC LIMIT 15;"
-          :chart-config="{ chartType: 'bar', xField: 'species', yField: 'tree_count', showTitle: false }"
+          query="import std.color; 
+          SELECT 
+          species, 
+          count(tree_id) as tree_count, 
+          '#2F7D4F'::string::hex as color  
+          WHERE species IS NOT NULL ORDER BY tree_count DESC LIMIT 15;"
+          :chart-config="{ chartType: 'bar', xField: 'species', yField: 'tree_count', showTitle: false, 'colorField': 'color', hideLegend: true   }"
           :selection-filters="selectionFiltersForChart('top-species')"
           @dimension-click="handleChartClick"
           @background-click="clearChartSelection('top-species')"
