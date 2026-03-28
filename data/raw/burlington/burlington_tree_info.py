@@ -17,6 +17,13 @@ OUT_FIELDS = "OBJECTID,botanic,common,planted,diameter"
 WHERE = "site_typ = 'T'"
 
 
+def normalize_species(s: str | None) -> str | None:
+    if not s or not s.strip():
+        return None
+    parts = s.strip().split()
+    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
+
+
 def parse_plant_date(year: int | None) -> date | None:
     """Convert a planted year integer to January 1 of that year, or None if unknown."""
     if not year or year <= 0:
@@ -82,7 +89,7 @@ def build_table(attrs: list[dict], geoms: list[dict]) -> pa.Table:
         cities.append("USBTV")
 
         bot = rec.get("botanic")
-        species_list.append(bot.strip() if bot and bot.strip() else None)
+        species_list.append(normalize_species(bot))
 
         cn = rec.get("common")
         tree_names.append(cn.strip() if cn and cn.strip() else None)

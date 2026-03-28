@@ -52,6 +52,13 @@ def fetch_all() -> list[dict]:
     return records
 
 
+def normalize_species(s: str | None) -> str | None:
+    if not s or not s.strip():
+        return None
+    parts = s.strip().split()
+    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
+
+
 def build_table(records: list[dict]) -> pa.Table:
     tree_ids: list[str | None] = []
     cities: list[str] = []
@@ -70,7 +77,7 @@ def build_table(records: list[dict]) -> pa.Table:
         sources.append("CAMBRIDGE")
 
         sci = rec.get("scientific")
-        species_list.append(sci.strip() if sci and sci.strip() else None)
+        species_list.append(normalize_species(sci))
 
         cn = rec.get("commonname")
         tree_names.append(cn.strip() if cn and cn.strip() else None)

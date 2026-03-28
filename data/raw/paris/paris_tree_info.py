@@ -45,6 +45,13 @@ def download_parquet() -> io.BytesIO:
     return buf
 
 
+def normalize_species(s: str | None) -> str | None:
+    if not s or not s.strip():
+        return None
+    parts = s.strip().split()
+    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
+
+
 def transform(table: pa.Table) -> pa.Table:
     names = table.schema.names
 
@@ -64,7 +71,7 @@ def transform(table: pa.Table) -> pa.Table:
 
     species = pa.array(
         [
-            f"{(g or '').strip()} {(e or '').strip()}".strip() or None
+            normalize_species(f"{(g or '').strip()} {(e or '').strip()}")
             for g, e in zip(genre_list, espece_list)
         ],
         type=pa.string(),

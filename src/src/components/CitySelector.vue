@@ -1,7 +1,7 @@
 <template>
   <select class="city-select" :value="selectedCity" aria-label="Select city" @change="handleChange">
     <option v-for="(cfg, code) in CITY_CONFIG" :key="code" :value="code">
-      {{ cfg.name }}
+      {{ formatCityLabel(code, cfg.name) }}
     </option>
   </select>
 </template>
@@ -10,9 +10,19 @@
 import { useRouter, useRoute } from 'vue-router'
 import { useMapData, CITY_CONFIG, type CityCode } from '../composables/useMapData'
 
+const COUNTRY_BY_PREFIX: Record<string, string> = {
+  US: 'United States',
+  FR: 'France',
+}
+
 const router = useRouter()
 const route = useRoute()
 const { selectedCity } = useMapData()
+
+function formatCityLabel(code: string, name: string) {
+  const country = COUNTRY_BY_PREFIX[code.slice(0, 2)]
+  return country ? `${name}, ${country}` : name
+}
 
 function handleChange(e: Event) {
   const city = (e.target as HTMLSelectElement).value as CityCode

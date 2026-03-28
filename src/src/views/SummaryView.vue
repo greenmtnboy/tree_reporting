@@ -3,13 +3,13 @@
     <div class="summary-header">
       <div class="summary-title-row">
         <div>
-          <p class="summary-eyebrow">Urban forest snapshot</p>
+          <p class="summary-eyebrow">Summary</p>
           <h1>Tree Analytics</h1>
         </div>
         <div class="city-badge">{{ cityName }}</div>
       </div>
       <p class="summary-intro">
-        Explore canopy composition, species mix, and resilience indicators for the active city.
+        Inventory mix, species distribution, and resilience indicators for the active city.
       </p>
       <div v-if="activeFilters.length" class="active-filters">
         <span v-for="filter in activeFilters" :key="filter.key" class="filter-chip">
@@ -63,10 +63,10 @@
           <h2>
             Top Species
             <span v-if="selectedCategory" class="header-filter-hint">
-              filtered to <em>{{ formatFilterValue(selectedCategory) }}</em>
+              in <em>{{ formatFilterValue(selectedCategory) }}</em>
             </span>
           </h2>
-          <span class="chart-sub">top 15 by tree count</span>
+          <span class="chart-sub">Top 15 by tree count</span>
         </div>
         <EmbeddedDashboardChart
           item-id="top-species"
@@ -103,7 +103,7 @@
       <div class="chart-card">
         <div class="chart-card-header">
           <h2>Drought Tolerance</h2>
-          <span class="chart-sub">enriched species only</span>
+          <span class="chart-sub">Enriched species only</span>
         </div>
         <EmbeddedDashboardChart
           item-id="drought-tolerance"
@@ -118,7 +118,7 @@
       <div class="chart-card">
         <div class="chart-card-header">
           <h2>Trees Planted by Year</h2>
-          <span class="chart-sub">where planting dates are available</span>
+          <span class="chart-sub">Years with planting data</span>
         </div>
         <EmbeddedDashboardChart
           item-id="plant-year"
@@ -327,14 +327,10 @@ watch(
   overflow-y: auto;
   height: 100%;
   box-sizing: border-box;
-  background:
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.1), transparent 24%),
-    radial-gradient(circle at top right, rgba(168, 85, 247, 0.1), transparent 18%),
-    linear-gradient(180deg, #11182d 0%, #151d35 42%, #11182d 100%);
-  color: #e0e0e0;
   display: flex;
   flex-direction: column;
   gap: 22px;
+  color: var(--color-ink);
 }
 
 .summary-header {
@@ -352,39 +348,40 @@ watch(
 }
 
 .summary-eyebrow {
-  margin: 0 0 6px;
-  font-size: 0.74rem;
-  letter-spacing: 0.16em;
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #7dd3fc;
+  color: var(--color-moss);
 }
 
 .summary-intro {
   margin: 0;
-  max-width: 720px;
-  color: #94a3b8;
-  font-size: 0.95rem;
-  line-height: 1.45;
+  max-width: 760px;
+  color: rgba(237, 242, 235, 0.78);
+  line-height: 1.55;
 }
 
 .summary-title-row h1 {
   margin: 0;
   font-size: 2rem;
-  font-weight: 800;
-  color: #f8fafc;
-  letter-spacing: -0.03em;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .city-badge {
   align-self: flex-start;
-  background: linear-gradient(180deg, rgba(56, 189, 248, 0.2), rgba(14, 116, 144, 0.18));
-  border: 1px solid rgba(125, 211, 252, 0.4);
-  color: #67e8f9;
-  padding: 8px 14px;
-  border-radius: 999px;
-  font-size: 0.82rem;
+  padding: 10px 14px;
+  border: 1px solid rgba(167, 227, 178, 0.16);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(58, 64, 72, 0.72), rgba(28, 31, 36, 0.92));
+  font-size: 0.76rem;
   font-weight: 700;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-leaf);
 }
 
 .active-filters {
@@ -395,44 +392,33 @@ watch(
 }
 
 .filter-chip {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(103, 232, 249, 0.24);
-  border-radius: 16px;
-  padding: 5px 10px 5px 12px;
+  gap: 8px;
+  padding: 6px 10px 6px 12px;
+  border: 1px solid rgba(107, 175, 146, 0.18);
+  background: rgba(47, 125, 79, 0.12);
+  border-radius: 999px;
   font-size: 0.78rem;
-  color: #67e8f9;
+  color: var(--color-leaf);
 }
 
 .filter-chip-clear {
   background: none;
   border: none;
-  color: #4fc3f7;
+  color: inherit;
   cursor: pointer;
-  font-size: 0.9rem;
-  line-height: 1;
-  padding: 0;
-  opacity: 0.7;
-}
-
-.filter-chip-clear:hover {
-  opacity: 1;
+  font-size: 0.8rem;
 }
 
 .clear-all-btn {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: rgba(237, 242, 235, 0.65);
   cursor: pointer;
   font-size: 0.78rem;
   text-decoration: underline;
   padding: 0;
-}
-
-.clear-all-btn:hover {
-  color: #e2e8f0;
 }
 
 .kpi-row {
@@ -449,22 +435,21 @@ watch(
 }
 
 .chart-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   background:
-    linear-gradient(180deg, rgba(23, 34, 63, 0.96), rgba(18, 28, 52, 0.98)),
-    #16213e;
-  border: 1px solid rgba(43, 92, 161, 0.45);
-  border-radius: 16px;
+    linear-gradient(180deg, rgba(42, 47, 54, 0.62), rgba(28, 31, 36, 0.72));
+  border: 1px solid rgba(167, 227, 178, 0.1);
+  border-radius: 14px;
   padding: 20px 22px;
   flex: 1 1 220px;
   min-width: 0;
   height: 380px;
   min-height: 0;
   overflow: hidden;
-  box-shadow:
-    0 16px 40px rgba(2, 6, 23, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: 0 16px 36px rgba(7, 10, 11, 0.2);
+  isolation: isolate;
 }
 
 .chart-card--kpi {
@@ -481,9 +466,9 @@ watch(
 .metric-label {
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #7dd3fc;
+  color: rgba(154, 166, 154, 0.85);
 }
 
 .chart-card--narrow {
@@ -495,27 +480,30 @@ watch(
 }
 
 .chart-card-header {
+  position: relative;
+  z-index: 1;
   margin-bottom: 16px;
   flex: 0 0 auto;
 }
 
 .chart-card-header h2 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1rem;
+  font-family: var(--font-display);
   font-weight: 700;
-  color: #dbe7ff;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.03em;
 }
 
 .header-filter-hint {
-  font-weight: 400;
-  color: #94a3b8;
-  font-size: 0.8rem;
-  margin-left: 6px;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 500;
+  margin-left: 8px;
+  color: rgba(237, 242, 235, 0.62);
 }
 
 .header-filter-hint em {
-  color: #4fc3f7;
+  color: var(--color-leaf);
   font-style: normal;
   text-transform: capitalize;
 }
@@ -523,9 +511,19 @@ watch(
 .chart-sub {
   display: block;
   font-size: 0.78rem;
-  color: #7f8ea8;
-  margin-top: 6px;
-  line-height: 1.35;
+  color: rgba(154, 166, 154, 0.82);
+  margin-top: 8px;
+  line-height: 1.45;
+}
+
+.chart-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 88px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(77, 163, 255, 0.55), rgba(167, 227, 178, 0));
 }
 
 @media (max-width: 900px) {

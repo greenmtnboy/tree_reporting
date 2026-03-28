@@ -18,6 +18,13 @@ OUT_FIELDS = "OBJECTID,SCIENTIFIC_NAME,COMMON_NAME,LATITUDE,LONGITUDE,DBH_NUM,DB
 WHERE = "IS_DEAD=0 AND IS_MAPPED=1"
 
 
+def normalize_species(s: str | None) -> str | None:
+    if not s or not s.strip():
+        return None
+    parts = s.strip().split()
+    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
+
+
 def strip_cultivar(name: str | None) -> str | None:
     """Strip cultivar notation (single-quoted suffix) from a scientific name.
 
@@ -96,7 +103,7 @@ def build_table(records: list[dict]) -> pa.Table:
         tree_ids.append(f"arb-{obj_id}" if obj_id is not None else None)
         cities.append("USBOS")
         sources.append("ARBORETUM")
-        species_list.append(strip_cultivar(rec.get("SCIENTIFIC_NAME")))
+        species_list.append(normalize_species(strip_cultivar(rec.get("SCIENTIFIC_NAME"))))
         raw_common = rec.get("COMMON_NAME")
         tree_names.append(raw_common.strip() if raw_common and raw_common.strip() else None)
         plant_dates.append(parse_plant_date(rec.get("PLANT_DT")))

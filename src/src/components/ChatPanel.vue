@@ -296,12 +296,33 @@ watch(
   width: 360px;
   min-width: 360px;
   height: 100%;
+  position: relative;
+  overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(42, 47, 54, 0.9), rgba(28, 31, 36, 0.98));
+    linear-gradient(180deg, rgba(42, 47, 54, 0.54), rgba(28, 31, 36, 0.62));
   border-left: 1px solid rgba(167, 227, 178, 0.1);
   display: flex;
   flex-direction: column;
+  color: var(--color-ink);
   z-index: 15;
+}
+
+.chat-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(167, 227, 178, 0.018) 100%);
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+.chat-header,
+.chat-info-panel,
+.chat-setup,
+.chat-messages,
+.chat-input-area {
+  position: relative;
+  z-index: 1;
 }
 
 .chat-header {
@@ -357,7 +378,7 @@ watch(
 .chat-info-panel {
   padding: 12px 14px;
   border-bottom: 1px solid rgba(167, 227, 178, 0.08);
-  background: rgba(28, 31, 36, 0.72);
+  background: rgba(28, 31, 36, 0.52);
   overflow-y: auto;
   max-height: 280px;
   font-size: 0.75rem;
@@ -427,8 +448,8 @@ watch(
 .chat-setup-input {
   padding: 8px 12px;
   border: 1px solid rgba(167, 227, 178, 0.12);
-  border-radius: 6px;
-  background: rgba(28, 31, 36, 0.82);
+  border-radius: 8px;
+  background: rgba(28, 31, 36, 0.58);
   color: var(--color-ink);
   font-size: 0.85rem;
   outline: none;
@@ -448,7 +469,7 @@ watch(
   padding: 8px 10px;
   background: rgba(47, 125, 79, 0.08);
   border: 1px solid rgba(167, 227, 178, 0.12);
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .chat-setup-actions {
@@ -462,7 +483,7 @@ watch(
   background: rgba(47, 125, 79, 0.18);
   color: var(--color-leaf);
   border: 1px solid rgba(167, 227, 178, 0.18);
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 0.85rem;
   transition: background 0.15s, border-color 0.15s;
@@ -483,7 +504,7 @@ watch(
   background: none;
   color: var(--color-muted);
   border: 1px solid rgba(167, 227, 178, 0.12);
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 0.85rem;
   transition: color 0.15s;
@@ -498,7 +519,7 @@ watch(
   background: none;
   color: #d48f72;
   border: 1px solid rgba(217, 122, 58, 0.4);
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 0.8rem;
   transition: background 0.15s;
@@ -532,7 +553,7 @@ watch(
 .chat-suggestion {
   background: none;
   border: 1px solid rgba(167, 227, 178, 0.12);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--color-leaf);
   font-size: 0.78rem;
   padding: 6px 10px;
@@ -556,10 +577,10 @@ watch(
 }
 
 .chat-msg--user .chat-msg-content {
-  background: rgba(47, 125, 79, 0.24);
+  background: rgba(47, 125, 79, 0.18);
   border: 1px solid rgba(167, 227, 178, 0.12);
   color: var(--color-ink);
-  border-radius: 12px 12px 4px 12px;
+  border-radius: 12px 12px 6px 12px;
   padding: 8px 12px;
   margin-left: 40px;
   font-size: 0.85rem;
@@ -567,10 +588,10 @@ watch(
 }
 
 .chat-msg--assistant .chat-msg-content {
-  background: rgba(28, 31, 36, 0.8);
+  background: rgba(28, 31, 36, 0.52);
   border: 1px solid rgba(167, 227, 178, 0.08);
   color: var(--color-ink);
-  border-radius: 12px 12px 12px 4px;
+  border-radius: 12px 12px 12px 6px;
   padding: 8px 12px;
   margin-right: 20px;
   font-size: 0.85rem;
@@ -578,7 +599,7 @@ watch(
 }
 
 .chat-msg-content :deep(pre) {
-  background: rgba(15, 24, 19, 0.72);
+  background: rgba(15, 24, 19, 0.52);
   border-radius: 4px;
   padding: 6px 8px;
   margin: 4px 0;
@@ -634,8 +655,8 @@ watch(
   flex: 1;
   padding: 8px 12px;
   border: 1px solid rgba(167, 227, 178, 0.12);
-  border-radius: 6px;
-  background: rgba(28, 31, 36, 0.82);
+  border-radius: 8px;
+  background: rgba(28, 31, 36, 0.56);
   color: var(--color-ink);
   font-size: 0.85rem;
   outline: none;
@@ -654,7 +675,7 @@ watch(
   background: rgba(47, 125, 79, 0.18);
   color: var(--color-leaf);
   border: 1px solid rgba(167, 227, 178, 0.18);
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 0.85rem;
   transition: background 0.15s, border-color 0.15s;
@@ -681,10 +702,10 @@ watch(
   bottom: calc(100% + 8px);
   right: 0;
   white-space: nowrap;
-  background: rgba(28, 31, 36, 0.96);
+  background: rgba(28, 31, 36, 0.82);
   color: var(--color-muted);
   border: 1px solid rgba(167, 227, 178, 0.12);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 5px 10px;
   font-size: 0.75rem;
   pointer-events: none;

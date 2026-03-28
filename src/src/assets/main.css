@@ -42,12 +42,55 @@ body,
 
 #app {
   display: flex;
+  position: relative;
+  isolation: isolate;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 18%),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
     linear-gradient(180deg, #1c1f24 0%, #171c20 42%, #0f2417 100%);
-  background-size: auto, 40px 40px, 40px 40px, auto;
+  background-size: auto;
+}
+
+#app::before,
+#app::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#app::before {
+  top: 0;
+  left: 0;
+  width: min(60vw, 760px);
+  height: min(64vh, 680px);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.07), transparent 62%),
+    repeating-linear-gradient(0deg, rgba(231, 235, 233, 0.055) 0 2px, transparent 2px 54px),
+    repeating-linear-gradient(90deg, rgba(231, 235, 233, 0.055) 0 2px, transparent 2px 54px),
+    repeating-linear-gradient(0deg, transparent 0 108px, rgba(255, 255, 255, 0.03) 108px 118px, transparent 118px 216px),
+    repeating-linear-gradient(90deg, transparent 0 148px, rgba(255, 255, 255, 0.03) 148px 158px, transparent 158px 296px);
+  opacity: 0.34;
+  mask-image: linear-gradient(135deg, black 0%, black 52%, transparent 88%);
+}
+
+#app::after {
+  right: 0;
+  bottom: 0;
+  width: min(52vw, 760px);
+  height: min(62vh, 720px);
+  background:
+    linear-gradient(180deg, rgba(15, 36, 23, 0), rgba(15, 36, 23, 0.24)),
+    radial-gradient(circle at 78% 72%, rgba(47, 125, 79, 0.2), transparent 48%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 700 700'%3E%3Cg fill='%236baf92' fill-opacity='.11'%3E%3Cpolygon points='20,700 90,520 160,700'/%3E%3Cpolygon points='110,700 200,430 290,700'/%3E%3Cpolygon points='230,700 320,500 410,700'/%3E%3Cpolygon points='360,700 470,390 580,700'/%3E%3Cpolygon points='500,700 590,470 680,700'/%3E%3C/g%3E%3Cg fill='%232f7d4f' fill-opacity='.16'%3E%3Cpolygon points='55,700 120,560 185,700'/%3E%3Cpolygon points='170,700 250,470 330,700'/%3E%3Cpolygon points='305,700 405,430 505,700'/%3E%3Cpolygon points='455,700 555,520 655,700'/%3E%3Cpath d='M540 700C500 520 560 250 700 60V700Z'/%3E%3Cpath d='M600 700C560 560 610 340 700 180V700Z'/%3E%3C/g%3E%3Cg stroke='%23a7e3b2' stroke-opacity='.09' stroke-width='2' fill='none'%3E%3Cpath d='M520 700C470 570 510 390 610 240'/%3E%3Cpath d='M590 700C550 600 585 430 665 300'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center, center, right bottom;
+  background-size: cover, cover, contain;
+  opacity: 0.78;
+  mask-image: linear-gradient(135deg, transparent 0%, rgba(0, 0, 0, 0.78) 18%, black 100%);
+}
+
+#app > * {
+  position: relative;
+  z-index: 1;
 }
 
 .sidebar {
@@ -55,8 +98,8 @@ body,
   min-width: 280px;
   height: 100%;
   background:
-    linear-gradient(180deg, rgba(167, 227, 178, 0.04), transparent 18%),
-    linear-gradient(180deg, rgba(28, 31, 36, 0.98), rgba(20, 23, 27, 0.98));
+    linear-gradient(180deg, rgba(167, 227, 178, 0.025), transparent 18%),
+    linear-gradient(180deg, rgba(28, 31, 36, 0.62), rgba(20, 23, 27, 0.62));
   border-right: 1px solid rgba(167, 227, 178, 0.1);
   display: flex;
   flex-direction: column;
@@ -69,12 +112,8 @@ body,
   content: '';
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(180deg, transparent 0%, rgba(167, 227, 178, 0.045) 100%),
-    linear-gradient(0deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-  background-size: auto, 28px 28px, 28px 28px;
-  opacity: 0.5;
+  background: linear-gradient(180deg, transparent 0%, rgba(167, 227, 178, 0.028) 100%);
+  opacity: 0.18;
   pointer-events: none;
 }
 
@@ -103,10 +142,10 @@ body,
 }
 
 .sidebar-nav {
-  padding: 18px 14px 12px 20px;
+  padding: 12px 14px 6px 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   position: relative;
   z-index: 1;
 }
@@ -114,8 +153,8 @@ body,
 .sidebar-nav a {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 12px 14px 12px 0;
+  gap: 10px;
+  padding: 8px 14px 8px 0;
   color: rgba(237, 242, 235, 0.78);
   text-decoration: none;
   font-size: 0.875rem;
@@ -136,8 +175,8 @@ body,
 }
 
 .sidebar-nav .nav-icon {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

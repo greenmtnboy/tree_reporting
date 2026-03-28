@@ -52,6 +52,13 @@ def parse_point_column(table: pa.Table, col: str) -> tuple[pa.Array, pa.Array]:
     return pa.array(lons, type=pa.float64()), pa.array(lats, type=pa.float64())
 
 
+def normalize_species(s: str | None) -> str | None:
+    if not s or not s.strip():
+        return None
+    parts = s.strip().split()
+    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
+
+
 def cast_columns(table: pa.Table) -> pa.Table:
     # Parse WKT location point into latitude/longitude
     # Socrata CSV exports the point column as "Location" (capital L)
@@ -91,7 +98,7 @@ def cast_columns(table: pa.Table) -> pa.Table:
     if genus_col is not None:
         species_list = table[genus_col].to_pylist()
         scientific = pa.array(
-            [v.split(" - ")[0].strip() if v is not None else None for v in species_list],
+            [normalize_species(v.split(" - ")[0]) if v is not None else None for v in species_list],
             type=pa.string(),
         )
         sci_list = scientific.to_pylist()

@@ -1,6 +1,6 @@
 
 import raw.tree_enrichment;
 
-where city = 'FRPAR' and tree_category='broadleaf'
-select species, city, tree_category, count(tree_id) as tree_count
+where lower(species) = 'syringa reticulata'
+select species, city, count(tree_id) as tree_count
 order by tree_count desc limit 10;

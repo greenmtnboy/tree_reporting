@@ -29,6 +29,13 @@ def download_csv() -> io.BytesIO:
     return buf
 
 
+def normalize_species(s: str | None) -> str | None:
+    if not s or not s.strip():
+        return None
+    parts = s.strip().split()
+    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
+
+
 def cast_columns(table: pa.Table) -> pa.Table:
     # id: prefix with "bos-" for global uniqueness across cities
     id_col = next((c for c in table.schema.names if c.lower() == "id"), None)
@@ -79,8 +86,14 @@ def cast_columns(table: pa.Table) -> pa.Table:
     else:
         tree_name = pa.array([None] * table.num_rows, type=pa.string())
 
-    # Fallback to spp_bot (scientific name) when tree_name is null
+    # Normalize spp_bot (scientific name) casing and use as fallback for tree_name
     spp_bot_col = next((c for c in table.schema.names if c.lower() == "spp_bot"), None)
+    if spp_bot_col is not None:
+        idx = table.schema.get_field_index(spp_bot_col)
+        table = table.set_column(
+            idx, spp_bot_col,
+            pa.array([normalize_species(v) for v in table[spp_bot_col].to_pylist()], type=pa.string()),
+        )
     spp_bot_list = table[spp_bot_col].to_pylist() if spp_bot_col else [None] * table.num_rows
     tree_name = pa.array(
         [t or s for t, s in zip(tree_name.to_pylist(), spp_bot_list)],

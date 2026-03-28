@@ -29,6 +29,13 @@ def download_csv() -> io.BytesIO:
     return buf
 
 
+def normalize_species(s: str | None) -> str | None:
+    if not s or not s.strip():
+        return None
+    parts = s.strip().split()
+    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
+
+
 def cast_columns(table: pa.Table) -> pa.Table:
     # TreeID: prefix with "sf-" for global uniqueness across cities
     if "TreeID" in table.schema.names:
@@ -62,7 +69,7 @@ def cast_columns(table: pa.Table) -> pa.Table:
     if "qSpecies" in table.schema.names:
         species_list = table["qSpecies"].to_pylist()
         scientific = pa.array(
-            [v.split("::")[0].strip() if v is not None else None for v in species_list],
+            [normalize_species(v.split("::")[0]) if v is not None else None for v in species_list],
             type=pa.string(),
         )
         sci_list = scientific.to_pylist()

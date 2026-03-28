@@ -2,7 +2,7 @@
   <aside class="sidebar">
     <div class="sidebar-header">
       <h1>Urban Trees</h1>
-      <div class="subtitle">City tree explorer</div>
+      <div class="subtitle">The Concrete Jungle</div>
     </div>
     <nav class="sidebar-nav">
       <router-link :to="mapRoute" class="nav-link">
@@ -111,9 +111,9 @@ function handleClick(lm: Landmark) {
 
 .nav-copy strong {
   font-family: var(--font-display);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
@@ -122,13 +122,13 @@ function handleClick(lm: Landmark) {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  padding: 10px 14px 16px 20px;
+  padding: 2px 14px 14px 20px;
   position: relative;
   z-index: 1;
 }
 
 .landmarks-header {
-  padding: 10px 0 10px;
+  padding: 6px 0 8px;
 }
 
 .landmarks-header span {
@@ -143,12 +143,12 @@ function handleClick(lm: Landmark) {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 12px;
-  padding: 0 12px;
+  margin: 0 0 10px;
+  padding: 0 10px;
   border: 1px solid rgba(167, 227, 178, 0.12);
   background: rgba(28, 31, 36, 0.9);
   color: var(--color-moss);
-  min-height: 42px;
+  min-height: 40px;
 }
 
 .landmarks-search {
@@ -167,14 +167,14 @@ function handleClick(lm: Landmark) {
 .landmarks-list {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 0 8px;
+  padding: 2px 0 6px;
 }
 
 .landmark-item {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: none;
   background: rgba(42, 47, 54, 0.34);
   color: rgba(237, 242, 235, 0.82);
@@ -185,7 +185,7 @@ function handleClick(lm: Landmark) {
     color 0.12s,
     transform 0.12s;
   line-height: 1.3;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .landmark-item:hover {
