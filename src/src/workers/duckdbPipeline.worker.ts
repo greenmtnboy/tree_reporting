@@ -1,8 +1,5 @@
 import * as duckdb from '@duckdb/duckdb-wasm'
-import duckdb_wasm from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url'
-import duckdb_worker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url'
-import duckdb_wasm_eh from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url'
-import duckdb_worker_eh from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url'
+import { DUCKDB_ASSET_URLS } from '../duckdbAssetUrls'
 
 let db: duckdb.AsyncDuckDB | null = null
 let conn: duckdb.AsyncDuckDBConnection | null = null
@@ -489,6 +486,7 @@ async function loadCityTrees(city?: string): Promise<void> {
         se.bloom_season,
         se.wildlife_value,
         se.fire_risk,
+        se.drought_tolerance,
         LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878) AS latitude_clamped,
         ((t.longitude + 180.0) / 360.0) AS x_norm,
         ((1.0 - ln(tan(radians(LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878))) + (1.0 / cos(radians(LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878))))) / pi()) / 2.0) AS y_norm
@@ -514,6 +512,7 @@ async function loadCityTrees(city?: string): Promise<void> {
       bloom_season,
       wildlife_value,
       fire_risk,
+      drought_tolerance,
       ((longitude * ${WEB_MERCATOR_MAX}) / 180.0) AS x_3857,
       (6378137.0 * ln(tan(pi() / 4.0 + radians(latitude_clamped) / 2.0))) AS y_3857,
       CAST(floor(x_norm * pow(2, 13)) AS INTEGER) AS xtile_z13,
@@ -555,12 +554,12 @@ async function doInit(city?: string) {
 
   const bundles: duckdb.DuckDBBundles = {
     mvp: {
-      mainModule: duckdb_wasm,
-      mainWorker: duckdb_worker,
+      mainModule: DUCKDB_ASSET_URLS.mvp.mainModule,
+      mainWorker: DUCKDB_ASSET_URLS.mvp.mainWorker,
     },
     eh: {
-      mainModule: duckdb_wasm_eh,
-      mainWorker: duckdb_worker_eh,
+      mainModule: DUCKDB_ASSET_URLS.eh.mainModule,
+      mainWorker: DUCKDB_ASSET_URLS.eh.mainWorker,
     },
   }
   const bundle = await duckdb.selectBundle(bundles)
@@ -576,7 +575,7 @@ async function doInit(city?: string) {
   try {
     await conn.query(`
       CREATE TABLE species_enrichment AS
-      SELECT species, common_names, tree_category, native_status, is_evergreen, mature_height_ft, bloom_season, wildlife_value, fire_risk
+      SELECT species, common_names, tree_category, native_status, is_evergreen, mature_height_ft, bloom_season, wildlife_value, fire_risk, drought_tolerance
       FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
     `)
   } catch (e) {

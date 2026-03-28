@@ -41,7 +41,7 @@
     </div>
 
     <div class="chart-row">
-      <div class="chart-card chart-card--narrow">
+      <div class="chart-card chart-card--wide">
         <div class="chart-card-header">
           <h2>Tree Types</h2>
         </div>
@@ -58,7 +58,7 @@
         />
       </div>
 
-      <div class="chart-card chart-card--wide">
+      <div class="chart-card chart-card--narrow">
         <div class="chart-card-header">
           <h2>
             Top Species
@@ -161,9 +161,9 @@ const sharedChartProps = {
 
 const kpiCharts = [
   { id: 'total-trees',     label: 'Inventory',     title: 'Total Trees',             query: 'SELECT count(tree_id) as total_trees;',                                                                          xField: 'total_trees' },
-  { id: 'unique-species',  label: 'Biodiversity',  title: 'Unique Species',          query: 'SELECT count_distinct(species) as unique_species WHERE species IS NOT NULL;',                                    xField: 'unique_species' },
-  { id: 'average-dbh',     label: 'Average size',  title: 'Average Trunk Diameter',  query: 'SELECT avg(diameter_at_breast_height) as avg_dbh WHERE diameter_at_breast_height IS NOT NULL;',                 xField: 'avg_dbh' },
-  { id: 'evergreen-trees', label: 'Evergreen share', title: 'Evergreen Trees',       query: 'SELECT count(tree_id) as evergreen_trees WHERE is_evergreen = true;',                                            xField: 'evergreen_trees' },
+  { id: 'unique-species',  label: 'Biodiversity',  title: 'Unique Species',          query: 'SELECT count(species ? count(tree_id) by species >0) as unique_species WHERE species IS NOT NULL;',                                    xField: 'unique_species' },
+  { id: 'average-dbh',     label: 'Average size',  title: '',  query: 'SELECT round(avg(diameter_at_breast_height),2) as avg_dbh_inches WHERE diameter_at_breast_height IS NOT NULL;',                 xField: 'avg_dbh' },
+  { id: 'evergreen-trees', label: 'Evergreens', title: 'Evergreen Trees',       query: 'SELECT count(tree_id) as evergreen_trees WHERE is_evergreen = true;',                                            xField: 'evergreen_trees' },
 ] as const
 
 const crossFilterableCharts: { id: string; label: string; format?: (v: string) => string }[] = [
@@ -437,7 +437,7 @@ watch(
 
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 16px;
 }
 
@@ -457,8 +457,8 @@ watch(
   border: 1px solid rgba(43, 92, 161, 0.45);
   border-radius: 16px;
   padding: 20px 22px;
-  flex: 1;
-  min-width: 260px;
+  flex: 1 1 220px;
+  min-width: 0;
   height: 380px;
   min-height: 0;
   overflow: hidden;
@@ -468,7 +468,7 @@ watch(
 }
 
 .chart-card--kpi {
-  height: 220px;
+  height: 150px;
   padding: 16px 18px;
 }
 
@@ -487,11 +487,11 @@ watch(
 }
 
 .chart-card--narrow {
-  flex: 0 0 420px;
+  flex: 1 1 300px;
 }
 
 .chart-card--wide {
-  flex: 2 1 560px;
+  flex: 2 1 380px;
 }
 
 .chart-card-header {
@@ -533,24 +533,15 @@ watch(
     padding: 20px 18px 30px;
   }
 
-  .kpi-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .summary-title-row h1 {
     font-size: 1.7rem;
   }
 }
 
-@media (max-width: 640px) {
-  .kpi-row {
-    grid-template-columns: 1fr;
-  }
-
+@media (max-width: 560px) {
   .chart-card,
   .chart-card--narrow,
   .chart-card--wide {
-    min-width: 100%;
     flex-basis: 100%;
   }
 }

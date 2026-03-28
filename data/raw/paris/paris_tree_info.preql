@@ -5,8 +5,7 @@ root partial datasource paris_update_time (
 )
 grain (city)
 complete where city = 'FRPAR'
-file `./paris_update_time.py`
-freshness by paris_data_updated_through;
+file `./paris_update_time.py`;
 
 root partial datasource paris_raw_tree_info (
     tree_id: tree_id,

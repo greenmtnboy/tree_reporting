@@ -6,85 +6,163 @@
   box-sizing: border-box;
 }
 
+:root {
+  --color-asphalt: #1c1f24;
+  --color-steel: #2a2f36;
+  --color-concrete: #3a4048;
+  --color-canopy: #2f7d4f;
+  --color-moss: #6baf92;
+  --color-leaf: #a7e3b2;
+  --color-autumn: #d97a3a;
+  --color-soil: #7a5c3e;
+  --color-water: #4da3ff;
+  --color-ink: #edf2eb;
+  --color-muted: #9aa69a;
+  --color-border: rgba(167, 227, 178, 0.12);
+  --surface-0: #15181d;
+  --surface-1: rgba(28, 31, 36, 0.94);
+  --surface-2: rgba(42, 47, 54, 0.92);
+  --surface-3: rgba(58, 64, 72, 0.92);
+  --shadow-soft: 0 20px 48px rgba(7, 10, 11, 0.26);
+  --font-body: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Bahnschrift", "Arial Narrow", "Segoe UI Variable", sans-serif;
+}
+
 html,
 body,
 #app {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #1a1a2e;
-  color: #e0e0e0;
+  font-family: var(--font-body);
+  background:
+    linear-gradient(180deg, #1c1f24 0%, #171c20 42%, #0f2417 100%);
+  color: var(--color-ink);
 }
 
 #app {
   display: flex;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 18%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(180deg, #1c1f24 0%, #171c20 42%, #0f2417 100%);
+  background-size: auto, 40px 40px, 40px 40px, auto;
 }
 
 .sidebar {
-  width: 220px;
-  min-width: 220px;
+  width: 280px;
+  min-width: 280px;
   height: 100%;
-  background: #16213e;
-  border-right: 1px solid #0f3460;
+  background:
+    linear-gradient(180deg, rgba(167, 227, 178, 0.04), transparent 18%),
+    linear-gradient(180deg, rgba(28, 31, 36, 0.98), rgba(20, 23, 27, 0.98));
+  border-right: 1px solid rgba(167, 227, 178, 0.1);
   display: flex;
   flex-direction: column;
   z-index: 10;
+  position: relative;
+  overflow: hidden;
+}
+
+.sidebar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, transparent 0%, rgba(167, 227, 178, 0.045) 100%),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: auto, 28px 28px, 28px 28px;
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .sidebar-header {
-  padding: 20px 16px 12px;
-  border-bottom: 1px solid #0f3460;
+  padding: 24px 20px 16px;
+  border-bottom: 1px solid rgba(167, 227, 178, 0.08);
+  position: relative;
+  z-index: 1;
 }
 
 .sidebar-header h1 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #e0e0e0;
-  letter-spacing: 0.5px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--color-ink);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .sidebar-header .subtitle {
-  font-size: 0.75rem;
-  color: #7a7a9e;
-  margin-top: 2px;
+  font-size: 0.76rem;
+  color: var(--color-muted);
+  margin-top: 6px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .sidebar-nav {
-  padding: 8px 0;
+  padding: 18px 14px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
 }
 
 .sidebar-nav a {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  color: #a0a0c0;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px 12px 0;
+  color: rgba(237, 242, 235, 0.78);
   text-decoration: none;
   font-size: 0.875rem;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    transform 0.15s;
+  position: relative;
 }
 
 .sidebar-nav a:hover {
-  background: rgba(15, 52, 96, 0.5);
-  color: #e0e0e0;
+  color: var(--color-ink);
+  transform: translateX(2px);
 }
 
 .sidebar-nav a.router-link-active {
-  background: #0f3460;
-  color: #4fc3f7;
-  font-weight: 500;
+  color: var(--color-leaf);
 }
 
 .sidebar-nav .nav-icon {
-  font-size: 1.1rem;
-  width: 20px;
-  text-align: center;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(167, 227, 178, 0.14);
+  background: rgba(58, 64, 72, 0.28);
+  color: var(--color-moss);
+  flex-shrink: 0;
+}
+
+.sidebar-nav a.router-link-active .nav-icon {
+  border-color: rgba(167, 227, 178, 0.28);
+  background: linear-gradient(180deg, rgba(47, 125, 79, 0.24), rgba(28, 31, 36, 0.42));
+  color: var(--color-leaf);
+}
+
+.main-col {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .main-content {
   flex: 1;
-  height: 100%;
   position: relative;
   overflow: hidden;
   z-index: 1;

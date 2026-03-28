@@ -2,30 +2,56 @@
   <aside class="sidebar">
     <div class="sidebar-header">
       <h1>Urban Trees</h1>
-      <div class="subtitle">The Woods of the Concrete Jungle</div>
+      <div class="subtitle">City tree explorer</div>
     </div>
     <nav class="sidebar-nav">
-      <router-link :to="mapRoute">
-        <span class="nav-icon">&#x1f5fa;</span>
-        Map
+      <router-link :to="mapRoute" class="nav-link">
+        <span class="nav-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6.5 9 4l6 2.5 6-2.5v13L15 19l-6-2.5L3 19z" />
+            <path d="M9 4v12.5" />
+            <path d="M15 6.5V19" />
+          </svg>
+        </span>
+        <span class="nav-copy">
+          <strong>Map</strong>
+        </span>
       </router-link>
-      <router-link :to="summaryRoute">
-        <span class="nav-icon">&#x1f4ca;</span>
-        Analytics
+      <router-link :to="summaryRoute" class="nav-link">
+        <span class="nav-icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="12" width="4" height="9" />
+            <rect x="10" y="7" width="4" height="14" />
+            <rect x="17" y="3" width="4" height="18" />
+          </svg>
+        </span>
+        <span class="nav-copy">
+          <strong>Analytics</strong>
+        </span>
       </router-link>
-      <router-link :to="infoRoute">
-        <span class="nav-icon">&#x2139;</span>
-        Info
+      <router-link :to="infoRoute" class="nav-link">
+        <span class="nav-icon nav-icon--text" aria-hidden="true">&#9432;</span>
+        <span class="nav-copy">
+          <strong>Info</strong>
+        </span>
       </router-link>
     </nav>
     <div class="sidebar-landmarks">
-      <div class="landmarks-header">Landmarks</div>
-      <input
-        v-model="search"
-        type="text"
-        class="landmarks-search"
-        placeholder="Search landmarks..."
-      />
+      <div class="landmarks-header">
+        <span>Landmarks</span>
+      </div>
+      <div class="landmarks-search-wrap">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <path d="m20 20-3.5-3.5"></path>
+        </svg>
+        <input
+          v-model="search"
+          type="text"
+          class="landmarks-search"
+          placeholder="Search landmarks..."
+        />
+      </div>
       <div class="landmarks-list">
         <button
           v-for="lm in filtered"
@@ -33,7 +59,7 @@
           class="landmark-item"
           @click="handleClick(lm)"
         >
-          {{ lm.name }}
+          <span class="landmark-name">{{ lm.name }}</span>
         </button>
         <div v-if="!landmarkLoading && filtered.length === 0" class="landmarks-empty">
           No landmarks found
@@ -73,72 +99,109 @@ function handleClick(lm: Landmark) {
 </script>
 
 <style scoped>
+.nav-link {
+  position: relative;
+}
+
+.nav-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nav-copy strong {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .sidebar-landmarks {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid #0f3460;
   flex: 1;
   min-height: 0;
+  padding: 10px 14px 16px 20px;
+  position: relative;
+  z-index: 1;
 }
 
 .landmarks-header {
-  padding: 10px 16px 6px;
-  font-size: 0.7rem;
+  padding: 10px 0 10px;
+}
+
+.landmarks-header span {
+  font-size: 0.78rem;
   font-weight: 600;
+  color: var(--color-muted);
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  color: #7a7a9e;
+}
+
+.landmarks-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0 12px;
+  border: 1px solid rgba(167, 227, 178, 0.12);
+  background: rgba(28, 31, 36, 0.9);
+  color: var(--color-moss);
+  min-height: 42px;
 }
 
 .landmarks-search {
-  margin: 0 12px 8px;
-  padding: 6px 10px;
-  border: 1px solid #0f3460;
-  border-radius: 4px;
-  background: #1a1a2e;
-  color: #e0e0e0;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--color-ink);
   font-size: 0.8rem;
   outline: none;
-  transition: border-color 0.15s;
-}
-
-.landmarks-search:focus {
-  border-color: #4fc3f7;
 }
 
 .landmarks-search::placeholder {
-  color: #555577;
+  color: rgba(154, 166, 154, 0.7);
 }
 
 .landmarks-list {
   flex: 1;
   overflow-y: auto;
-  padding-bottom: 8px;
+  padding: 4px 0 8px;
 }
 
 .landmark-item {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 7px 16px;
+  padding: 10px 12px;
   border: none;
-  background: none;
-  color: #a0a0c0;
+  background: rgba(42, 47, 54, 0.34);
+  color: rgba(237, 242, 235, 0.82);
   font-size: 0.8rem;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s,
+    transform 0.12s;
   line-height: 1.3;
+  margin-bottom: 6px;
 }
 
 .landmark-item:hover {
-  background: rgba(15, 52, 96, 0.5);
-  color: #4fc3f7;
+  background: rgba(47, 125, 79, 0.14);
+  color: var(--color-ink);
+  transform: translateX(2px);
+}
+
+.nav-icon--text {
+  font-size: 1rem;
 }
 
 .landmarks-empty {
-  padding: 12px 16px;
+  padding: 12px 4px;
   font-size: 0.75rem;
-  color: #555577;
+  color: rgba(154, 166, 154, 0.72);
   font-style: italic;
 }
 
@@ -151,7 +214,7 @@ function handleClick(lm: Landmark) {
 }
 
 .landmarks-list::-webkit-scrollbar-thumb {
-  background: #0f3460;
+  background: rgba(107, 175, 146, 0.3);
   border-radius: 2px;
 }
 </style>

@@ -19,15 +19,8 @@
       <span class="db-status-tooltip">City DB populated; {{ dbPopulatedMs }}ms · {{ dbTreeCount?.toLocaleString() }} trees</span>
     </div>
   </div>
-  <div class="city-selector" :class="{ 'city-selector--mobile': props.simplified }">
-    <button
-      v-for="(cfg, code) in CITY_CONFIG"
-      :key="code"
-      class="city-btn"
-      :class="{ active: selectedCity === code }"
-      :disabled="isInitialLoading"
-      @click="void switchCity(code as CityCode)"
-    >{{ cfg.name }}</button>
+  <div v-if="props.simplified" class="city-selector city-selector--mobile">
+    <CitySelector />
     <button
       class="city-btn locate-btn"
       :class="{ active: userLocation !== null }"
@@ -36,6 +29,14 @@
       @click="toggleUserLocation"
     >&#x25CE; Find Me</button>
   </div>
+  <button
+    v-else
+    class="locate-btn-desktop"
+    :class="{ active: userLocation !== null }"
+    :disabled="isInitialLoading"
+    :title="userLocation ? 'Pan to my location' : 'Show my location on the map'"
+    @click="toggleUserLocation"
+  >&#x25CE; Find Me</button>
 </template>
 
 <script setup lang="ts">
@@ -52,6 +53,7 @@ import { useMapLayers, TREES_SOURCE_MAXZOOM, addLandmarkLayer, removeLandmarkLay
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { addCityMarkers, updateCityMarkersSelected, removeCityMarkers, bindCityMarkerInteractions } from '../composables/useGlobeCityMarkers'
 import { useMapIntroAnimation, INTRO_START_ZOOM } from '../composables/useMapIntroAnimation'
+import CitySelector from './CitySelector.vue'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
 
 const props = defineProps<{
@@ -577,6 +579,17 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
   }
 }
 
+// React to URL city changes driven by the sidebar CitySelector
+watch(
+  () => route.query.city,
+  (newCity) => {
+    const city = Array.isArray(newCity) ? newCity[0] : newCity
+    if (typeof city === 'string' && city in CITY_CONFIG && city !== selectedCity.value) {
+      void switchCity(city as CityCode)
+    }
+  },
+)
+
 // --- Geolocation ---
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -990,13 +1003,49 @@ onUnmounted(() => {
   color: #ffcdd2;
 }
 
-.city-selector {
+.locate-btn-desktop {
   position: absolute;
   top: 10px;
   left: 10px;
+  z-index: 4;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(79, 195, 247, 0.3);
+  background: rgba(22, 33, 62, 0.88);
+  color: #8ca0c8;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.locate-btn-desktop:hover {
+  background: rgba(30, 50, 90, 0.95);
+  color: #c8daf8;
+  border-color: rgba(79, 195, 247, 0.55);
+}
+
+.locate-btn-desktop.active {
+  background: rgba(15, 52, 96, 0.96);
+  color: #4fc3f7;
+  border-color: rgba(79, 195, 247, 0.7);
+}
+
+.locate-btn-desktop:disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+.city-selector {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
   display: flex;
   gap: 4px;
   z-index: 4;
+  align-items: center;
 }
 
 .city-btn {
@@ -1009,6 +1058,8 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .city-btn:hover {
@@ -1030,16 +1081,8 @@ onUnmounted(() => {
 }
 
 .city-selector--mobile {
-  top: 8px;
-  left: 8px;
-  right: 8px;
-  flex-wrap: wrap;
-  gap: 3px;
-}
-
-.city-selector--mobile .city-btn {
-  padding: 5px 8px;
-  font-size: 0.7rem;
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 .cache-refresh-wrap {

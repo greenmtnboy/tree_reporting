@@ -131,9 +131,10 @@ function handleLandmarkClick(lm: Landmark) {
 /* Bottom bar */
 .mobile-bottom-bar {
   display: flex;
-  height: 56px;
-  background: #16213e;
-  border-top: 1px solid #0f3460;
+  height: 62px;
+  background:
+    linear-gradient(180deg, rgba(58, 64, 72, 0.42), rgba(28, 31, 36, 0.96));
+  border-top: 1px solid rgba(167, 227, 178, 0.08);
   z-index: 20;
 }
 
@@ -145,20 +146,22 @@ function handleLandmarkClick(lm: Landmark) {
   gap: 8px;
   background: none;
   border: none;
-  color: #a0a0c0;
-  font-size: 0.9rem;
-  font-weight: 500;
+  color: rgba(237, 242, 235, 0.76);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
 .mobile-bar-btn + .mobile-bar-btn {
-  border-left: 1px solid #0f3460;
+  border-left: 1px solid rgba(167, 227, 178, 0.08);
 }
 
 .mobile-bar-btn:active {
-  background: rgba(15, 52, 96, 0.6);
-  color: #4fc3f7;
+  background: rgba(47, 125, 79, 0.18);
+  color: var(--color-leaf);
 }
 
 /* Overlays */
@@ -171,7 +174,8 @@ function handleLandmarkClick(lm: Landmark) {
   z-index: 100;
   display: flex;
   flex-direction: column;
-  background: #1a1a2e;
+  background:
+    linear-gradient(180deg, rgba(28, 31, 36, 0.98), rgba(15, 36, 23, 0.98));
 }
 
 .mobile-overlay-header {
@@ -179,21 +183,24 @@ function handleLandmarkClick(lm: Landmark) {
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
-  background: #16213e;
-  border-bottom: 1px solid #0f3460;
+  background:
+    linear-gradient(180deg, rgba(58, 64, 72, 0.42), rgba(28, 31, 36, 0.96));
+  border-bottom: 1px solid rgba(167, 227, 178, 0.08);
   min-height: 52px;
 }
 
 .mobile-overlay-title {
   font-size: 1rem;
   font-weight: 600;
-  color: #e0e0e0;
+  color: var(--color-ink);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .mobile-overlay-close {
   background: none;
   border: none;
-  color: #7a7a9e;
+  color: rgba(154, 166, 154, 0.78);
   font-size: 1.5rem;
   line-height: 1;
   cursor: pointer;
@@ -203,8 +210,8 @@ function handleLandmarkClick(lm: Landmark) {
 }
 
 .mobile-overlay-close:active {
-  color: #e0e0e0;
-  background: rgba(15, 52, 96, 0.5);
+  color: var(--color-ink);
+  background: rgba(47, 125, 79, 0.18);
 }
 
 /* Search overlay body */
@@ -218,21 +225,21 @@ function handleLandmarkClick(lm: Landmark) {
 .mobile-search-input {
   margin: 12px;
   padding: 10px 14px;
-  border: 1px solid #0f3460;
+  border: 1px solid rgba(167, 227, 178, 0.12);
   border-radius: 8px;
-  background: #16213e;
-  color: #e0e0e0;
+  background: rgba(42, 47, 54, 0.72);
+  color: var(--color-ink);
   font-size: 1rem;
   outline: none;
   transition: border-color 0.15s;
 }
 
 .mobile-search-input:focus {
-  border-color: #4fc3f7;
+  border-color: rgba(167, 227, 178, 0.3);
 }
 
 .mobile-search-input::placeholder {
-  color: #555577;
+  color: rgba(154, 166, 154, 0.7);
 }
 
 .mobile-landmarks-list {
@@ -248,22 +255,22 @@ function handleLandmarkClick(lm: Landmark) {
   padding: 14px 16px;
   border: none;
   background: none;
-  color: #a0a0c0;
+  color: rgba(237, 242, 235, 0.78);
   font-size: 0.95rem;
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
-  border-bottom: 1px solid rgba(15, 52, 96, 0.3);
+  border-bottom: 1px solid rgba(167, 227, 178, 0.08);
 }
 
 .mobile-landmark-item:active {
-  background: rgba(15, 52, 96, 0.5);
-  color: #4fc3f7;
+  background: rgba(47, 125, 79, 0.18);
+  color: var(--color-leaf);
 }
 
 .mobile-landmarks-empty {
   padding: 24px 16px;
   font-size: 0.9rem;
-  color: #555577;
+  color: rgba(154, 166, 154, 0.74);
   font-style: italic;
   text-align: center;
 }
