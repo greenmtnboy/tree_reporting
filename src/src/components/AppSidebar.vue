@@ -36,7 +36,7 @@
         </span>
       </router-link>
     </nav>
-    <div class="sidebar-landmarks">
+    <div v-if="showLandmarksSection" class="sidebar-landmarks">
       <div class="landmarks-header">
         <span>Landmarks</span>
       </div>
@@ -71,6 +71,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData } from '../composables/useMapData'
@@ -79,8 +80,10 @@ import type { Landmark } from '../types'
 const { landmarks, loading: landmarkLoading } = useLandmarkData()
 const { flyTo } = useFlyTo()
 const { selectedCity } = useMapData()
+const route = useRoute()
 
 const search = ref('')
+const showLandmarksSection = computed(() => route.name !== 'summary')
 
 const routeQuery = computed(() => ({ city: selectedCity.value }))
 const mapRoute = computed(() => ({ path: '/', query: routeQuery.value }))

@@ -74,7 +74,7 @@ WHERE tree_category IS NOT NULL ORDER BY tree_count DESC;`,
       chartType: 'donut',
       xField: 'tree_count',
       yField: 'tree_category',
-      colorField: 'cat_color',
+      colorField: 'tree_category',
       showTitle: false,
       hideLegend: true,
     },
@@ -140,13 +140,28 @@ WHERE drought_tolerance IS NOT NULL ORDER BY tree_count DESC;`,
 SELECT
 plant_date.year as plant_year,
 count(tree_id) as tree_count,
-'#2F7D4F'::string::hex as color
+case
+when 2026 - plant_date.year < 10 then '0-9 years ago'
+when 2026 - plant_date.year < 20 then '10-19 years ago'
+when 2026 - plant_date.year < 30 then '20-29 years ago'
+when 2026 - plant_date.year < 40 then '30-39 years ago'
+when 2026 - plant_date.year < 50 then '40-49 years ago'
+else '50+ years ago'
+end as decade_window,
+case
+when 2026 - plant_date.year < 10 then '#A7E3B2'
+when 2026 - plant_date.year < 20 then '#8DCEA3'
+when 2026 - plant_date.year < 30 then '#6BAF92'
+when 2026 - plant_date.year < 40 then '#4E9872'
+when 2026 - plant_date.year < 50 then '#2F7D4F'
+else '#1F5A34'
+end::string::hex as color
 WHERE plant_date IS NOT NULL ORDER BY plant_year ASC;`,
     chartConfig: {
       chartType: 'bar',
       xField: 'plant_year',
       yField: 'tree_count',
-      colorField: 'color',
+      colorField: 'decade_window',
       showTitle: false,
       hideLegend: true,
     },

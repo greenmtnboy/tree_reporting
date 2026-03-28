@@ -965,15 +965,31 @@ onUnmounted(() => {
   place-items: center;
   width: 29px;
   min-height: 29px;
-  color: #4fc3f7;
-  background: #1a1a2e;
-  border-top: 1px solid rgba(79, 195, 247, 0.24);
-  border-bottom: 1px solid rgba(79, 195, 247, 0.24);
+  color: var(--color-leaf);
+  background: rgba(28, 31, 36, 0.92);
+  border-top: 1px solid rgba(167, 227, 178, 0.18);
+  border-bottom: 1px solid rgba(167, 227, 178, 0.18);
   font-size: 0.68rem;
   font-weight: 700;
   line-height: 1;
   pointer-events: none;
   user-select: none;
+}
+
+:deep(.maplibregl-ctrl-group) {
+  background: rgba(28, 31, 36, 0.82);
+  border: 1px solid rgba(167, 227, 178, 0.16);
+  box-shadow: 0 10px 24px rgba(7, 10, 11, 0.24);
+}
+
+:deep(.maplibregl-ctrl-group button) {
+  background: transparent;
+  color: rgba(237, 242, 235, 0.82);
+}
+
+:deep(.maplibregl-ctrl-group button:hover) {
+  background: rgba(47, 125, 79, 0.16);
+  color: var(--color-ink);
 }
 
 .map-loading,
@@ -989,12 +1005,14 @@ onUnmounted(() => {
 }
 
 .map-loading {
-  background: rgba(22, 33, 62, 0.96);
-  color: #4fc3f7;
+  background: rgba(28, 31, 36, 0.9);
+  color: var(--color-leaf);
+  border: 1px solid rgba(167, 227, 178, 0.18);
+  box-shadow: 0 18px 36px rgba(7, 10, 11, 0.26);
 }
 
 .map-refreshing {
-  background: rgba(22, 33, 62, 0.82);
+  background: rgba(28, 31, 36, 0.76);
   font-size: 0.8rem;
 }
 
@@ -1010,9 +1028,9 @@ onUnmounted(() => {
   z-index: 4;
   padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(79, 195, 247, 0.3);
-  background: rgba(22, 33, 62, 0.88);
-  color: #8ca0c8;
+  border: 1px solid rgba(167, 227, 178, 0.16);
+  background: rgba(28, 31, 36, 0.82);
+  color: rgba(237, 242, 235, 0.74);
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
@@ -1020,15 +1038,15 @@ onUnmounted(() => {
 }
 
 .locate-btn-desktop:hover {
-  background: rgba(30, 50, 90, 0.95);
-  color: #c8daf8;
-  border-color: rgba(79, 195, 247, 0.55);
+  background: rgba(47, 125, 79, 0.16);
+  color: var(--color-ink);
+  border-color: rgba(167, 227, 178, 0.32);
 }
 
 .locate-btn-desktop.active {
-  background: rgba(15, 52, 96, 0.96);
-  color: #4fc3f7;
-  border-color: rgba(79, 195, 247, 0.7);
+  background: rgba(47, 125, 79, 0.22);
+  color: var(--color-leaf);
+  border-color: rgba(167, 227, 178, 0.42);
 }
 
 .locate-btn-desktop:disabled {
@@ -1051,9 +1069,9 @@ onUnmounted(() => {
 .city-btn {
   padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(79, 195, 247, 0.3);
-  background: rgba(22, 33, 62, 0.88);
-  color: #8ca0c8;
+  border: 1px solid rgba(167, 227, 178, 0.16);
+  background: rgba(28, 31, 36, 0.82);
+  color: rgba(237, 242, 235, 0.74);
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
@@ -1063,15 +1081,15 @@ onUnmounted(() => {
 }
 
 .city-btn:hover {
-  background: rgba(30, 50, 90, 0.95);
-  color: #c8daf8;
-  border-color: rgba(79, 195, 247, 0.55);
+  background: rgba(47, 125, 79, 0.16);
+  color: var(--color-ink);
+  border-color: rgba(167, 227, 178, 0.32);
 }
 
 .city-btn.active {
-  background: rgba(15, 52, 96, 0.96);
-  color: #4fc3f7;
-  border-color: rgba(79, 195, 247, 0.7);
+  background: rgba(47, 125, 79, 0.22);
+  color: var(--color-leaf);
+  border-color: rgba(167, 227, 178, 0.42);
 }
 
 .city-btn:disabled {
@@ -1098,18 +1116,18 @@ onUnmounted(() => {
 .cache-refresh-btn {
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid rgba(79, 195, 247, 0.2);
-  background: rgba(22, 33, 62, 0.75);
-  color: rgba(200, 218, 248, 0.6);
+  border: 1px solid rgba(167, 227, 178, 0.14);
+  background: rgba(28, 31, 36, 0.74);
+  color: rgba(237, 242, 235, 0.58);
   font-size: 14px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .cache-refresh-btn:hover {
-  background: rgba(30, 50, 90, 0.92);
-  color: #c8daf8;
-  border-color: rgba(79, 195, 247, 0.5);
+  background: rgba(47, 125, 79, 0.16);
+  color: var(--color-ink);
+  border-color: rgba(167, 227, 178, 0.28);
 }
 
 .cache-refresh-btn:disabled {
@@ -1129,9 +1147,9 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.72rem;
-  color: rgba(200, 218, 248, 0.9);
-  background: rgba(22, 33, 62, 0.92);
-  border: 1px solid rgba(79, 195, 247, 0.2);
+  color: rgba(237, 242, 235, 0.9);
+  background: rgba(28, 31, 36, 0.94);
+  border: 1px solid rgba(167, 227, 178, 0.16);
   border-radius: 5px;
   padding: 3px 8px;
   white-space: nowrap;
@@ -1152,7 +1170,7 @@ onUnmounted(() => {
 
 .db-status-dot {
   font-size: 15px;
-  color: #4caf50;
+  color: var(--color-leaf);
   cursor: default;
   line-height: 1;
 }
@@ -1163,9 +1181,9 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.72rem;
-  color: rgba(200, 218, 248, 0.9);
-  background: rgba(22, 33, 62, 0.92);
-  border: 1px solid rgba(79, 195, 247, 0.2);
+  color: rgba(237, 242, 235, 0.9);
+  background: rgba(28, 31, 36, 0.94);
+  border: 1px solid rgba(167, 227, 178, 0.16);
   border-radius: 5px;
   padding: 3px 8px;
   white-space: nowrap;
@@ -1182,8 +1200,8 @@ onUnmounted(() => {
   position: absolute;
   bottom: 28px;
   right: 8px;
-  background: rgba(22, 33, 62, 0.88);
-  border: 1px solid rgba(79, 195, 247, 0.2);
+  background: rgba(28, 31, 36, 0.84);
+  border: 1px solid rgba(167, 227, 178, 0.16);
   border-radius: 8px;
   padding: 8px 12px;
   z-index: 4;
@@ -1191,6 +1209,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 5px;
   pointer-events: none;
+  box-shadow: 0 16px 32px rgba(7, 10, 11, 0.22);
 }
 
 .legend-entry {
@@ -1210,7 +1229,7 @@ onUnmounted(() => {
 
 .legend-label {
   font-size: 0.72rem;
-  color: #c8cfe8;
+  color: rgba(237, 242, 235, 0.84);
   white-space: nowrap;
 }
 
@@ -1219,38 +1238,38 @@ onUnmounted(() => {
 }
 
 .locate-btn.active {
-  background: rgba(15, 52, 96, 0.96);
-  color: #4fc3f7;
-  border-color: rgba(79, 195, 247, 0.7);
+  background: rgba(47, 125, 79, 0.22);
+  color: var(--color-leaf);
+  border-color: rgba(167, 227, 178, 0.42);
 }
 </style>
 
 <style>
 .tree-popup .maplibregl-popup-content {
-  background: #16213e;
-  color: #e0e0e0;
-  border: 1px solid #0f3460;
+  background: rgba(28, 31, 36, 0.96);
+  color: rgba(237, 242, 235, 0.92);
+  border: 1px solid rgba(167, 227, 178, 0.18);
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 0.8rem;
   line-height: 1.5;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
 }
 
 .tree-popup .maplibregl-popup-close-button {
-  color: #7a7a9e;
+  color: rgba(154, 166, 154, 0.82);
   font-size: 1rem;
   padding: 2px 6px;
 }
 
 .tree-popup .maplibregl-popup-tip {
-  border-top-color: #16213e;
+  border-top-color: rgba(28, 31, 36, 0.96);
 }
 
 .landmark-popup .maplibregl-popup-content {
-  background: rgba(10, 20, 48, 0.92);
-  color: #e0f7fa;
-  border: 1px solid rgba(79, 195, 247, 0.4);
+  background: rgba(28, 31, 36, 0.94);
+  color: rgba(237, 242, 235, 0.92);
+  border: 1px solid rgba(167, 227, 178, 0.22);
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 0.78rem;
@@ -1261,22 +1280,22 @@ onUnmounted(() => {
 }
 
 .landmark-popup .maplibregl-popup-tip {
-  border-top-color: rgba(10, 20, 48, 0.92);
+  border-top-color: rgba(28, 31, 36, 0.94);
 }
 
 .user-location-marker {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #4fc3f7;
+  background: var(--color-leaf);
   border: 2px solid #fff;
-  box-shadow: 0 0 0 0 rgba(79, 195, 247, 0.5);
+  box-shadow: 0 0 0 0 rgba(167, 227, 178, 0.46);
   animation: user-location-pulse 2s infinite;
 }
 
 @keyframes user-location-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(79, 195, 247, 0.5); }
-  70% { box-shadow: 0 0 0 10px rgba(79, 195, 247, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(79, 195, 247, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(167, 227, 178, 0.46); }
+  70% { box-shadow: 0 0 0 10px rgba(167, 227, 178, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(167, 227, 178, 0); }
 }
 </style>

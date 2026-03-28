@@ -36,7 +36,7 @@ body,
   overflow: hidden;
   font-family: var(--font-body);
   background:
-    linear-gradient(180deg, #1c1f24 0%, #171c20 42%, #0f2417 100%);
+    linear-gradient(180deg, #20242a 0%, #1a1f24 40%, #0f2417 100%);
   color: var(--color-ink);
 }
 
@@ -45,7 +45,8 @@ body,
   position: relative;
   isolation: isolate;
   background:
-    linear-gradient(180deg, #1c1f24 0%, #171c20 42%, #0f2417 100%);
+    radial-gradient(circle at 12% 10%, rgba(88, 94, 102, 0.22), transparent 28%),
+    linear-gradient(180deg, #20242a 0%, #1a1f24 40%, #0f2417 100%);
   background-size: auto;
 }
 
@@ -60,19 +61,20 @@ body,
 #app::before {
   inset: 0;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent 58%),
-    repeating-linear-gradient(0deg, rgba(231, 235, 233, 0.05) 0 2px, transparent 2px 54px),
-    repeating-linear-gradient(90deg, rgba(231, 235, 233, 0.05) 0 2px, transparent 2px 54px),
-    repeating-linear-gradient(0deg, transparent 0 108px, rgba(255, 255, 255, 0.024) 108px 118px, transparent 118px 216px),
-    repeating-linear-gradient(90deg, transparent 0 148px, rgba(255, 255, 255, 0.024) 148px 158px, transparent 158px 296px);
-  opacity: 0.3;
+    radial-gradient(circle at 10% 10%, rgba(215, 220, 224, 0.12), transparent 24%),
+    linear-gradient(135deg, rgba(220, 225, 229, 0.075), transparent 62%),
+    repeating-linear-gradient(0deg, rgba(214, 220, 223, 0.072) 0 2px, transparent 2px 54px),
+    repeating-linear-gradient(90deg, rgba(214, 220, 223, 0.072) 0 2px, transparent 2px 54px),
+    repeating-linear-gradient(0deg, rgba(226, 230, 233, 0.04) 0 4px, transparent 4px 216px),
+    repeating-linear-gradient(90deg, rgba(226, 230, 233, 0.04) 0 4px, transparent 4px 216px);
+  opacity: 0.48;
   mask-image: linear-gradient(
     135deg,
     black 0%,
-    black 54%,
-    rgba(0, 0, 0, 0.82) 63%,
-    rgba(0, 0, 0, 0.35) 74%,
-    transparent 86%
+    black 60%,
+    rgba(0, 0, 0, 0.88) 68%,
+    rgba(0, 0, 0, 0.42) 79%,
+    transparent 90%
   );
 }
 
@@ -106,8 +108,8 @@ body,
   min-width: 280px;
   height: 100%;
   background:
-    linear-gradient(180deg, rgba(167, 227, 178, 0.025), transparent 18%),
-    linear-gradient(180deg, rgba(28, 31, 36, 0.62), rgba(20, 23, 27, 0.62));
+    linear-gradient(180deg, rgba(167, 227, 178, 0.005), transparent 0%),
+    linear-gradient(180deg, rgba(28, 31, 36, 0.08) 0%, rgba(24, 27, 31, 0.42) 45%, rgba(20, 23, 27, 0.58) 100%);
   border-right: 1px solid rgba(167, 227, 178, 0.1);
   display: flex;
   flex-direction: column;
@@ -120,8 +122,8 @@ body,
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, transparent 0%, rgba(167, 227, 178, 0.028) 100%);
-  opacity: 0.18;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(167, 227, 178, 0.022) 100%);
+  opacity: 0.1;
   pointer-events: none;
 }
 

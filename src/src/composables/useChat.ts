@@ -436,6 +436,84 @@ function serializeDashboardRows(result: { toJSON: () => unknown }, rowLimit: num
   }
 }
 
+async function executeSummaryRunQuery(
+  query: string,
+  selectedCity: CityCode,
+  initializeSummaryDashboard: () => Promise<void>,
+  summaryConnectionId: string,
+  summaryQueryExecutionService: ReturnType<typeof useSummaryDashboardExecution>['queryExecutionService'],
+  crossFilters: ReturnType<typeof useSummaryFilters>['crossFilters'],
+) {
+  console.debug('[useChat] summary run_query start', { city: selectedCity })
+  await initializeSummaryDashboard()
+
+  const activeCity = getActiveSummaryCity(selectedCity)
+  const baseFilters = getSummaryBaseFilters(activeCity)
+  const extraFilters = crossFilters.getSqlFiltersFor('assistant-run-query', baseFilters)
+
+  console.debug('[useChat] summary run_query execute', {
+    city: activeCity,
+    extraFilters,
+  })
+
+  const { resultPromise } = await summaryQueryExecutionService.executeQueriesBatch(
+    summaryConnectionId,
+    [{ label: 'assistant-run-query', query, extra_filters: extraFilters }],
+    'trilogy',
+    SUMMARY_DASHBOARD_IMPORTS.map((imp) => ({ name: imp.name, alias: imp.alias })),
+  )
+
+  const batchResult = await resultPromise
+  const result = batchResult.results[0]
+
+  console.debug('[useChat] summary run_query result', {
+    success: Boolean(result?.success),
+    hasSql: Boolean(result?.generatedSql),
+  })
+
+  if (!result?.success) {
+    return {
+      success: false,
+      error:
+        result?.error ||
+        safeJsonStringifyHelper({
+          message: 'Summary query failed without an explicit error.',
+          batchSuccess: batchResult.success,
+          activeFilters: extraFilters,
+          result: result ?? null,
+        }),
+    }
+  }
+
+  if (!result.results) {
+    return {
+      success: false,
+      error: safeJsonStringifyHelper({
+        message: 'Summary query failed before returning a result payload.',
+        batchSuccess: batchResult.success,
+        activeFilters: extraFilters,
+        result: {
+          success: result.success,
+          error: result.error ?? null,
+          generatedSql: result.generatedSql ?? '',
+          executionTime: result.executionTime,
+          resultSize: result.resultSize,
+          columnCount: result.columnCount,
+        },
+      }),
+    }
+  }
+
+  return {
+    success: true,
+    message: safeJsonStringifyHelper({
+      ...serializeDashboardRows(result.results, 100),
+      generatedSql: result.generatedSql ?? '',
+      activeFilters: extraFilters,
+    }),
+  }
+}
+
 // Module-level state (singleton)
 const messages = ref<ChatMessage[]>([])
 // LLM history in the lib's ChatMessage format — persists across sendMessage calls for multi-turn context
@@ -578,6 +656,16 @@ export function useChat() {
       switch (name) {
         case 'run_query': {
           const { query } = input as { query: string }
+          if (resolveRouteScreen(router.currentRoute.value) === 'summary') {
+            return executeSummaryRunQuery(
+              query,
+              selectedCity.value,
+              initializeSummaryDashboard,
+              summaryConnectionId,
+              summaryQueryExecutionService,
+              crossFilters,
+            )
+          }
           const sql = await compilePreQL(query)
           const { columns, rows } = await duckQuery(sql)
           const truncated = rows.slice(0, 100)

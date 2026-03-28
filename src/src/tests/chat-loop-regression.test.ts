@@ -26,6 +26,116 @@ describe('chat loop regression coverage', () => {
     expect(toolNames).not.toContain('lookup_landmark')
   })
 
+  it('calls the LLM again after a thrown tool error and includes the error as a tool result', async () => {
+    const persistedMessages: any[] = []
+    const seenHistories: any[][] = []
+    let completionCalls = 0
+
+    const result = await runToolLoop(
+      'Show me Boston trees',
+      'test-connection',
+      {
+        async generateCompletion(_connectionName, _options, messages) {
+          seenHistories.push(messages.map((message) => ({ ...message })))
+
+          if (completionCalls === 0) {
+            completionCalls += 1
+            return {
+              text: 'Running a query.',
+              usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+              toolCalls: [
+                {
+                  id: 'tool_fail_1',
+                  name: 'run_query',
+                  input: { query: 'SELECT tree_id WHERE local.city = \'USMA-BOS\'' },
+                },
+              ],
+            }
+          }
+
+          if (completionCalls === 1) {
+            const toolResultsMessage = messages.find(
+              (message) =>
+                message.role === 'user' &&
+                Array.isArray(message.toolResults) &&
+                message.toolResults.some((toolResult: any) => toolResult.toolName === 'run_query'),
+            ) as { toolResults: Array<{ result: string }> } | undefined
+
+            expect(toolResultsMessage).toBeDefined()
+            expect(toolResultsMessage?.toolResults[0].result).toContain('Tool "run_query" failed:')
+            expect(toolResultsMessage?.toolResults[0].result).toContain('USMA-BOS')
+
+            completionCalls += 1
+            return {
+              text: 'Done.',
+              usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+              toolCalls: [
+                {
+                  id: 'tool_fail_2',
+                  name: 'return_to_user',
+                  input: {
+                    message: 'That query failed because the city code is invalid.',
+                  },
+                },
+              ],
+            }
+          }
+
+          throw new Error('LLM should only be called twice in this scenario.')
+        },
+      },
+      {
+        addMessage(message) {
+          persistedMessages.push(message)
+        },
+        addArtifact() {},
+        getMessages() {
+          return persistedMessages
+        },
+      },
+      {
+        getToolExecutor: () => ({
+          executeToolCall: async (name) => {
+            if (name === 'run_query') {
+              throw new Error(
+                "Value 'USMA-BOS' is not a valid member of enum enum<'USSFO', 'USNYC', 'USBOS', 'FRPAR', 'USBTV'> for 'local.city'",
+              )
+            }
+
+            if (name === 'return_to_user') {
+              return {
+                success: true,
+                message: 'That query failed because the city code is invalid.',
+                terminatesLoop: true,
+              }
+            }
+
+            return {
+              success: false,
+              error: `Unexpected tool ${name}`,
+            }
+          },
+        }),
+      },
+      {
+        setActiveToolName() {},
+        checkAborted() {
+          return false
+        },
+      },
+      {
+        tools: toolsForScreen('summary'),
+        buildSystemPrompt: () => 'Test summary prompt',
+        maxIterations: 4,
+      },
+    )
+
+    expect(result.terminated).toBe(true)
+    expect(result.finalMessage).toBe('That query failed because the city code is invalid.')
+    expect(completionCalls).toBe(2)
+    expect(seenHistories).toHaveLength(2)
+  })
+
   it('calls the LLM again after a tool result and sends toolResults in history', async () => {
     const persistedMessages: any[] = []
     const seenTools: string[][] = []
