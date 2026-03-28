@@ -3,7 +3,6 @@ import ..tree_common;
 root datasource burlington_update_time (
     data_updated_through: usbtv_data_updated_through
 )
-complete where city = 'USBTV'
 file `./burlington_update_time.py`;
 
 root partial datasource burlington_raw_tree_info (

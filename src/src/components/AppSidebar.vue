@@ -106,12 +106,14 @@ function handleClick(lm: Landmark) {
 .nav-copy {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   min-width: 0;
+  min-height: 28px;
 }
 
 .nav-copy strong {
   font-family: var(--font-display);
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;

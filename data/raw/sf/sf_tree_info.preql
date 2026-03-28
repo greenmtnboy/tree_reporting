@@ -1,11 +1,8 @@
 import ..tree_common;
 
 root datasource sf_update_time (
-    city: ~city,
     data_updated_through: sf_data_updated_through
 )
-grain (city)
-complete where city = 'USSFO'
 file `./sf_update_time.py`;
 
 

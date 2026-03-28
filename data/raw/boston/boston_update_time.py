@@ -23,7 +23,8 @@ def fetch_rows_updated_at() -> datetime:
     if ts is None:
         raise RuntimeError("Dataset metadata missing last_modified")
 
-    return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
+    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 def emit(updated_at: datetime) -> None:

@@ -49,9 +49,9 @@
           item-id="tree-category"
           v-bind="sharedChartProps"
           :filters="filtersForChart('tree-category')"
-          title="Tree Types"
-          query="import std.color;SELECT tree_category, case when tree_category = 'broadleaf' then '#A7E3B2' else '#2F7D4F' end::string::hex as cat_color,  count(tree_id) as tree_count WHERE tree_category IS NOT NULL ORDER BY tree_count DESC;"
-          :chart-config="{ chartType: 'donut', xField: 'tree_count', yField: 'tree_category', colorField: 'tree_category', showTitle: false }"
+          :title="treeCategoryChart.title"
+          :query="treeCategoryChart.query"
+          :chart-config="treeCategoryChart.chartConfig"
           :selection-filters="selectionFiltersForChart('tree-category')"
           @dimension-click="handleChartClick"
           @background-click="clearChartSelection('tree-category')"
@@ -72,14 +72,9 @@
           item-id="top-species"
           v-bind="sharedChartProps"
           :filters="filtersForChart('top-species')"
-          title="Top Species"
-          query="import std.color; 
-          SELECT 
-          species, 
-          count(tree_id) as tree_count, 
-          '#2F7D4F'::string::hex as color  
-          WHERE species IS NOT NULL ORDER BY tree_count DESC LIMIT 15;"
-          :chart-config="{ chartType: 'bar', xField: 'species', yField: 'tree_count', showTitle: false, 'colorField': 'color', hideLegend: true   }"
+          :title="topSpeciesChart.title"
+          :query="topSpeciesChart.query"
+          :chart-config="topSpeciesChart.chartConfig"
           :selection-filters="selectionFiltersForChart('top-species')"
           @dimension-click="handleChartClick"
           @background-click="clearChartSelection('top-species')"
@@ -96,9 +91,9 @@
           item-id="native-status"
           v-bind="sharedChartProps"
           :filters="filtersForChart('native-status')"
-          title="Native Status"
-          query="SELECT native_status, count(tree_id) as tree_count WHERE native_status IS NOT NULL ORDER BY tree_count DESC;"
-          :chart-config="{ chartType: 'barh', xField: 'tree_count', yField: 'native_status', showTitle: false }"
+          :title="nativeStatusChart.title"
+          :query="nativeStatusChart.query"
+          :chart-config="nativeStatusChart.chartConfig"
           :selection-filters="selectionFiltersForChart('native-status')"
           @dimension-click="handleChartClick"
           @background-click="clearChartSelection('native-status')"
@@ -114,13 +109,13 @@
           item-id="drought-tolerance"
           v-bind="sharedChartProps"
           :filters="filtersForChart('drought-tolerance')"
-          title="Drought Tolerance"
-          query="SELECT drought_tolerance, count(tree_id) as tree_count WHERE drought_tolerance IS NOT NULL ORDER BY tree_count DESC;"
-          :chart-config="{ chartType: 'barh', xField: 'tree_count', yField: 'drought_tolerance', showTitle: false }"
+          :title="droughtToleranceChart.title"
+          :query="droughtToleranceChart.query"
+          :chart-config="droughtToleranceChart.chartConfig"
         />
       </div>
 
-      <div class="chart-card">
+      <div class="chart-card chart-card--wide">
         <div class="chart-card-header">
           <h2>Trees Planted by Year</h2>
           <span class="chart-sub">Years with planting data</span>
@@ -129,10 +124,10 @@
           item-id="plant-year"
           v-bind="sharedChartProps"
           :filters="filtersForChart('plant-year')"
-          title="Trees Planted by Year"
-          query="SELECT plant_date.year as plant_year, count(tree_id) as tree_count WHERE plant_date IS NOT NULL ORDER BY plant_year ASC;"
-          :chart-config="{ chartType: 'bar', xField: 'plant_year', yField: 'tree_count', showTitle: false }"
-          :allow-cross-filter="false"
+          :title="plantYearChart.title"
+          :query="plantYearChart.query"
+          :chart-config="plantYearChart.chartConfig"
+          :allow-cross-filter="plantYearChart.allowCrossFilter ?? false"
         />
       </div>
     </div>
@@ -145,12 +140,18 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   type DashboardImport,
   type DimensionClick,
-  type CrossFilterSelection,
-  useCrossFilterController,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
 import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
-import { useMapData, CITY_CONFIG, type CityCode } from '../composables/useMapData'
+import { useMapData, type CityCode } from '../composables/useMapData'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
+import {
+  SUMMARY_CHARTS_BY_ID,
+  SUMMARY_DASHBOARD_IMPORTS,
+  SUMMARY_KPI_CHARTS,
+  getSummaryBaseFilters,
+  readSummaryRouteCity,
+} from '../composables/summaryDashboardConfig'
+import { useSummaryFilters } from '../composables/useSummaryFilters'
 import cityConfig from '../cityConfig.json'
 
 const route = useRoute()
@@ -161,26 +162,22 @@ const { initialize, connectionId, queryExecutionService } = useSummaryDashboardE
 const sharedChartProps = {
   connectionId,
   queryExecutionService,
-  imports: [{ id: 'tree_enrichment', name: 'tree_enrichment', alias: '' }] as DashboardImport[],
+  imports: SUMMARY_DASHBOARD_IMPORTS as DashboardImport[],
 }
-
-const kpiCharts = [
-  { id: 'total-trees',     label: 'Inventory',     title: 'Total Trees',             query: 'SELECT count(tree_id) as total_trees;',                                                                          xField: 'total_trees' },
-  { id: 'unique-species',  label: 'Biodiversity',  title: 'Unique Species',          query: 'SELECT count(species ? count(tree_id) by species >0) as unique_species WHERE species IS NOT NULL;',                                    xField: 'unique_species' },
-  { id: 'average-dbh',     label: 'Average size',  title: '',  query: 'SELECT round(avg(diameter_at_breast_height),2) as avg_dbh_inches WHERE diameter_at_breast_height IS NOT NULL;',                 xField: 'avg_dbh' },
-  { id: 'evergreen-trees', label: 'Evergreens', title: 'Evergreen Trees',       query: 'SELECT count(tree_id) as evergreen_trees WHERE is_evergreen = true;',                                            xField: 'evergreen_trees' },
-] as const
-
-const crossFilterableCharts: { id: string; label: string; format?: (v: string) => string }[] = [
-  { id: 'tree-category', label: 'Type',    format: formatFilterValue },
-  { id: 'top-species',   label: 'Species' },
-  { id: 'native-status', label: 'Native',  format: formatFilterValue },
-]
+const kpiCharts = SUMMARY_KPI_CHARTS
+const treeCategoryChart = SUMMARY_CHARTS_BY_ID['tree-category']
+const topSpeciesChart = SUMMARY_CHARTS_BY_ID['top-species']
+const nativeStatusChart = SUMMARY_CHARTS_BY_ID['native-status']
+const droughtToleranceChart = SUMMARY_CHARTS_BY_ID['drought-tolerance']
+const plantYearChart = SUMMARY_CHARTS_BY_ID['plant-year']
 
 const cityFilter = ref<CityCode | null>(null)
-const crossFilters = useCrossFilterController({
-  validFields: ['tree_category', 'species', 'native_status'],
-})
+const {
+  crossFilters,
+  activeSummaryFilters,
+  selectionsByField,
+  formatSummaryFilterValue,
+} = useSummaryFilters()
 
 const cityName = computed(() => {
   if (!cityFilter.value) {
@@ -191,56 +188,31 @@ const cityName = computed(() => {
 })
 
 const baseFilters = computed(() => {
-  const filters: string[] = []
-  if (cityFilter.value) {
-    filters.push(`city = '${cityFilter.value}'`)
-  }
-  return filters
+  return getSummaryBaseFilters(cityFilter.value)
 })
 
-function currentSelectionValue(source: string, field: string) {
-  crossFilters.version.value
-  const match = crossFilters
-    .getSelections()
-    .find(
-      (selection: CrossFilterSelection) =>
-        selection.source === source && typeof selection.filters[field] === 'string',
-    )
-  return match?.filters[field] ?? null
-}
-
-const selectedCategory = computed(() => currentSelectionValue('tree-category', 'tree_category'))
+const selectedCategory = computed(() => selectionsByField().tree_category?.[0] ?? null)
 
 const activeFilters = computed(() => {
   const filters: Array<{ key: string; label: string }> = []
   if (cityFilter.value) {
     filters.push({ key: 'city', label: `City: ${cityName.value}` })
   }
-  crossFilters.version.value
-  const grouped = new Map<string, string[]>()
-  for (const selection of crossFilters.getSelections()) {
-    const [field, value] = Object.entries(selection.filters)[0] ?? []
-    if (!field || typeof value !== 'string') continue
-    const values = grouped.get(selection.source) ?? []
-    values.push(value)
-    grouped.set(selection.source, values)
-  }
-  for (const { id, label, format } of crossFilterableCharts) {
-    const values = grouped.get(id)
-    if (values) {
-      filters.push({ key: id, label: `${label}: ${values.map(format ?? ((v) => v)).join(', ')}` })
-    }
+  for (const filter of activeSummaryFilters.value) {
+    filters.push({ key: filter.field, label: filter.display })
   }
   return filters
 })
 
 function formatFilterValue(value: string) {
-  return value.replace(/_/g, ' ')
+  return formatSummaryFilterValue(value)
 }
 
 function clearFilter(key: string) {
   if (key === 'city') cityFilter.value = null
-  else crossFilters.clearSource(key)
+  else if (key === 'tree_category') crossFilters.clearSource('tree-category')
+  else if (key === 'species') crossFilters.clearSource('top-species')
+  else if (key === 'native_status') crossFilters.clearSource('native-status')
 }
 
 function clearAllFilters() {
@@ -257,8 +229,8 @@ function selectionFiltersForChart(chartId: string) {
   crossFilters.version.value
   return crossFilters
     .getSelections()
-    .filter((selection: CrossFilterSelection) => selection.source === chartId)
-    .map((selection: CrossFilterSelection) => ({
+    .filter((selection) => selection.source === chartId)
+    .map((selection) => ({
       source: selection.source,
       value: selection.chart ?? selection.filters,
     }))
@@ -272,15 +244,7 @@ function clearChartSelection(chartId: string) {
   crossFilters.clearSource(chartId)
 }
 
-function readRouteCity(value: unknown): CityCode | null {
-  const city = Array.isArray(value) ? value[0] : value
-  if (typeof city !== 'string') {
-    return null
-  }
-  return city in CITY_CONFIG ? (city as CityCode) : null
-}
-
-const initialRouteCity = readRouteCity(route.query.city)
+const initialRouteCity = readSummaryRouteCity(route.query.city)
 if (initialRouteCity) {
   cityFilter.value = initialRouteCity
   if (initialRouteCity !== selectedCity.value) {
@@ -297,7 +261,7 @@ onMounted(() => {
 watch(
   () => route.query.city,
   (routeCity) => {
-    const nextCity = readRouteCity(routeCity)
+    const nextCity = readSummaryRouteCity(routeCity)
     cityFilter.value = nextCity
     if (nextCity && nextCity !== selectedCity.value) {
       setSelectedCity(nextCity)
@@ -309,7 +273,7 @@ watch(
   cityFilter,
   (city) => {
     crossFilters.clearAll()
-    const routeCity = readRouteCity(route.query.city)
+    const routeCity = readSummaryRouteCity(route.query.city)
     if (route.name === 'summary' && routeCity !== city) {
       const nextQuery = { ...route.query }
       if (city) {
@@ -528,7 +492,7 @@ watch(
   left: 0;
   width: 88px;
   height: 1px;
-  background: linear-gradient(90deg, rgba(77, 163, 255, 0.55), rgba(167, 227, 178, 0));
+  background: linear-gradient(90deg, rgba(47, 125, 79, 0.58), rgba(167, 227, 178, 0));
 }
 
 @media (max-width: 900px) {

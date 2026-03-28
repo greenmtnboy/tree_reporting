@@ -108,17 +108,17 @@
 
     <div v-else class="chat-messages" ref="messagesContainer">
       <div v-if="messages.length === 0" class="chat-empty">
-        <template v-if="!dbReady">
-          Loading tree data...
+        <template v-if="!activeDataReady">
+          {{ isSummaryScreen ? 'Loading analytics...' : 'Loading tree data...' }}
         </template>
         <template v-else>
-          Ask me about city trees. Try:
+          {{ emptyStateText }}
           <div class="chat-suggestions">
             <button
-              v-for="suggestion in SUGGESTIONS"
+              v-for="suggestion in suggestions"
               :key="suggestion"
               class="chat-suggestion"
-              :disabled="!introComplete || !dbReady || isLoading"
+              :disabled="inputDisabled"
               @click="injectSuggestion(suggestion)"
             >{{ suggestion }}</button>
           </div>
@@ -144,15 +144,15 @@
     </div>
 
     <div v-if="isConfigured && !showSettings" class="chat-input-area">
-      <input
-        v-model="userInput"
-        type="text"
-        :placeholder="dbReady ? 'Ask about trees...' : 'Loading data...'"
-        @keydown.enter="handleSend"
-        :disabled="isLoading || !dbReady || !introComplete"
-      />
+        <input
+          v-model="userInput"
+          type="text"
+          :placeholder="inputPlaceholder"
+          @keydown.enter="handleSend"
+          :disabled="inputDisabled"
+        />
       <span class="send-btn-wrapper">
-        <button @click="handleSend" :disabled="isLoading || !dbReady || !introComplete || !userInput.trim()">Send</button>
+        <button @click="handleSend" :disabled="inputDisabled || !userInput.trim()">Send</button>
         <span v-if="sendTooltip" class="send-tooltip">{{ sendTooltip }}</span>
       </span>
     </div>
@@ -161,10 +161,12 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { MarkdownRenderer } from '@trilogy-data/trilogy-studio-components/dashboard'
 import { useChat } from '../composables/useChat'
 import { useDuckDB } from '../composables/useDuckDB'
 import { useMapIntro } from '../composables/useMapIntro'
+import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
 
 const PROVIDERS = [
@@ -184,16 +186,25 @@ const KEY_PLACEHOLDERS: Record<string, string> = {
   openrouter: 'sk-or-...',
 }
 
-const SUGGESTIONS = [
+const MAP_SUGGESTIONS = [
   'What can you do?',
   'What is the most common type of tree?',
   'Show me trees in bloom right now!',
   'Where is the biggest tree?',
 ]
 
+const SUMMARY_SUGGESTIONS = [
+  'Filter the charts to native trees',
+  'Show only broadleaf trees in the analytics',
+  'What are the top species right now?',
+  'Clear the analytics filters',
+]
+
 const { messages, isLoading, isConfigured, providerType, setConnection, deleteConnection, sendMessage, clearMessages } = useChat()
 const { ready: dbReady } = useDuckDB()
 const { introComplete } = useMapIntro()
+const { ready: summaryReady, initialize: initializeSummary } = useSummaryDashboardExecution()
+const route = useRoute()
 
 const userInput = ref('')
 const keyInput = ref('')
@@ -223,10 +234,53 @@ onUnmounted(() => {
   if (thinkingInterval != null) clearInterval(thinkingInterval)
 })
 
+const isMapScreen = computed(() => route.name === 'map')
+const isSummaryScreen = computed(() => route.name === 'summary')
+
+watch(
+  isSummaryScreen,
+  (summaryScreen) => {
+    if (summaryScreen && !summaryReady.value) {
+      void initializeSummary()
+    }
+  },
+  { immediate: true },
+)
+
+const activeDataReady = computed(() =>
+  isSummaryScreen.value ? summaryReady.value : dbReady.value,
+)
+
+const inputDisabled = computed(() =>
+  isLoading.value || !activeDataReady.value || (isMapScreen.value && !introComplete.value),
+)
+
+const suggestions = computed(() =>
+  route.name === 'summary' ? SUMMARY_SUGGESTIONS : MAP_SUGGESTIONS,
+)
+
+const emptyStateText = computed(() =>
+  route.name === 'summary'
+    ? 'Ask me to explain or filter the analytics. Try:'
+    : 'Ask me about city trees. Try:',
+)
+
+const inputPlaceholder = computed(() =>
+  !activeDataReady.value
+    ? isSummaryScreen.value
+      ? 'Loading analytics...'
+      : 'Loading data...'
+    : route.name === 'summary'
+      ? 'Ask about analytics...'
+      : 'Ask about trees...',
+)
+
 const sendTooltip = computed(() => {
-  if (!introComplete.value) return 'Map is loading...'
+  if (isMapScreen.value && !introComplete.value) return 'Map is loading...'
   if (isLoading.value) return 'Waiting for response...'
-  if (!dbReady.value) return 'Tree data is still loading'
+  if (!activeDataReady.value) {
+    return isSummaryScreen.value ? 'Analytics are still loading' : 'Tree data is still loading'
+  }
   if (!userInput.value.trim()) return 'Type a message to send'
   return ''
 })
@@ -266,13 +320,13 @@ function handleDelete() {
 }
 
 async function injectSuggestion(text: string) {
-  if (isLoading.value || !dbReady.value || !introComplete.value) return
+  if (inputDisabled.value) return
   await sendMessage(text)
 }
 
 async function handleSend() {
   const text = userInput.value.trim()
-  if (!text || isLoading.value) return
+  if (!text || inputDisabled.value) return
   userInput.value = ''
   await sendMessage(text)
 }
@@ -577,9 +631,9 @@ watch(
 }
 
 .chat-msg--user .chat-msg-content {
-  background: rgba(47, 125, 79, 0.18);
-  border: 1px solid rgba(167, 227, 178, 0.12);
-  color: var(--color-ink);
+  background: rgba(47, 125, 79, 0.28);
+  border: 1px solid rgba(167, 227, 178, 0.24);
+  color: var(--color-leaf);
   border-radius: 12px 12px 6px 12px;
   padding: 8px 12px;
   margin-left: 40px;
@@ -587,15 +641,23 @@ watch(
   line-height: 1.5;
 }
 
+.chat-msg--user .chat-msg-content :deep(*) {
+  color: inherit;
+}
+
 .chat-msg--assistant .chat-msg-content {
-  background: rgba(28, 31, 36, 0.52);
-  border: 1px solid rgba(167, 227, 178, 0.08);
-  color: var(--color-ink);
+  background: rgba(28, 31, 36, 0.72);
+  border: 1px solid rgba(167, 227, 178, 0.12);
+  color: rgba(237, 242, 235, 0.94);
   border-radius: 12px 12px 12px 6px;
   padding: 8px 12px;
   margin-right: 20px;
   font-size: 0.85rem;
   line-height: 1.5;
+}
+
+.chat-msg--assistant .chat-msg-content :deep(*) {
+  color: inherit;
 }
 
 .chat-msg-content :deep(pre) {
@@ -658,6 +720,7 @@ watch(
   border-radius: 8px;
   background: rgba(28, 31, 36, 0.56);
   color: var(--color-ink);
+  caret-color: var(--color-leaf);
   font-size: 0.85rem;
   outline: none;
 }
