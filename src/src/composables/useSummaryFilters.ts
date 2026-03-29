@@ -4,7 +4,18 @@ import {
   useCrossFilterController,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
 
-export const SUMMARY_FILTER_FIELDS = ['tree_form', 'species', 'native_status'] as const
+export const SUMMARY_FILTER_FIELDS = [
+  'tree_form',
+  'species',
+  'native_locality_bucket',
+  'hardiness_fit_bucket',
+  'water_resilience_bucket',
+  'sun_exposure_label',
+  'lifespan_bucket',
+  'growth_rate',
+  'wildlife_value',
+  'fire_risk',
+] as const
 export type SummaryFilterField = (typeof SUMMARY_FILTER_FIELDS)[number]
 
 type SummaryFilterMeta = {
@@ -16,14 +27,28 @@ type SummaryFilterMeta = {
 
 const SUMMARY_FILTER_META: SummaryFilterMeta[] = [
   { id: 'tree-form', field: 'tree_form', label: 'Form', format: formatSummaryFilterValue },
-  { id: 'top-species', field: 'species', label: 'Species' },
-  { id: 'native-status', field: 'native_status', label: 'Native', format: formatSummaryFilterValue },
+  { id: 'manual-species', field: 'species', label: 'Species' },
+  { id: 'native-locality', field: 'native_locality_bucket', label: 'Nativeness' },
+  { id: 'hardiness-fit', field: 'hardiness_fit_bucket', label: 'Hardiness fit' },
+  { id: 'water-resilience', field: 'water_resilience_bucket', label: 'Water resilience' },
+  { id: 'sun-exposure', field: 'sun_exposure_label', label: 'Sun exposure' },
+  { id: 'lifespan-profile', field: 'lifespan_bucket', label: 'Lifespan' },
+  { id: 'growth-rate', field: 'growth_rate', label: 'Growth rate', format: formatSummaryFilterValue },
+  { id: 'wildlife-value', field: 'wildlife_value', label: 'Wildlife value', format: formatSummaryFilterValue },
+  { id: 'fire-risk', field: 'fire_risk', label: 'Fire risk', format: formatSummaryFilterValue },
 ]
 
 const SOURCE_BY_FIELD: Record<SummaryFilterField, string> = {
   tree_form: 'tree-form',
-  species: 'top-species',
-  native_status: 'native-status',
+  species: 'manual-species',
+  native_locality_bucket: 'native-locality',
+  hardiness_fit_bucket: 'hardiness-fit',
+  water_resilience_bucket: 'water-resilience',
+  sun_exposure_label: 'sun-exposure',
+  lifespan_bucket: 'lifespan-profile',
+  growth_rate: 'growth-rate',
+  wildlife_value: 'wildlife-value',
+  fire_risk: 'fire-risk',
 }
 
 const SUMMARY_FILTER_META_BY_FIELD = new Map(

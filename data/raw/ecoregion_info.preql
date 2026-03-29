@@ -24,7 +24,6 @@ root datasource raw_ecoregion_info (
     ?bbox_max_lon,
     ?is_terrestrial,
     ?source_version,
-    enriched_at,
 )
 grain (ecoregion_id)
 file `./ecoregion_info.py`;
@@ -47,7 +46,6 @@ datasource ecoregion_info (
     ?bbox_max_lon,
     ?is_terrestrial,
     ?source_version,
-    enriched_at,
     ecoregion_data_updated_through,
 )
 grain (ecoregion_id)

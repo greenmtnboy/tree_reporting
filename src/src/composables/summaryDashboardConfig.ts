@@ -4,9 +4,11 @@ import { CITY_CONFIG, type CityCode } from './useMapData'
 export type SummaryDashboardChart = {
   id: string
   title: string
+  subtitle?: string
   query: string
   chartConfig: ChartConfig
   allowCrossFilter?: boolean
+  requiresCitySelection?: boolean
 }
 
 export type SummaryDashboardKpi = {
@@ -15,10 +17,24 @@ export type SummaryDashboardKpi = {
   title: string
   query: string
   xField: string
+  requiresCitySelection?: boolean
+}
+
+export type SummaryDashboardSectionCard = {
+  id: string
+  width?: 'default' | 'wide'
+}
+
+export type SummaryDashboardSection = {
+  id: string
+  title: string
+  subtitle: string
+  cards: SummaryDashboardSectionCard[]
 }
 
 export const SUMMARY_DASHBOARD_IMPORTS: DashboardImport[] = [
   { id: 'tree_enrichment', name: 'tree_enrichment', alias: '' },
+  { id: 'dashboard_context', name: 'dashboard_context', alias: '' },
 ]
 
 export const SUMMARY_KPI_CHARTS: SummaryDashboardKpi[] = [
@@ -31,31 +47,170 @@ export const SUMMARY_KPI_CHARTS: SummaryDashboardKpi[] = [
   },
   {
     id: 'unique-species',
-    label: 'Biodiversity',
+    label: 'Diversity',
     title: 'Unique Species',
-    query: 'SELECT count(species ? count(tree_id) by species >0) as unique_species WHERE species IS NOT NULL;',
+    query: 'SELECT count(species ? count(tree_id) by species > 0) as unique_species WHERE species IS NOT NULL;',
     xField: 'unique_species',
   },
   {
-    id: 'average-dbh',
-    label: 'Average size',
-    title: '',
-    query: 'SELECT round(avg(diameter_at_breast_height),2) as avg_dbh_inches WHERE diameter_at_breast_height IS NOT NULL;',
-    xField: 'avg_dbh',
+    id: 'top-5-share',
+    label: 'Concentration',
+    title: 'Top 5 Share %',
+    query: `SELECT --species, 
+    --dominance_rank,
+    cumulative_tree_share_pct as top_5_species_share_pct having dominance_rank = 5;`,
+    xField: 'top_5_species_share_pct',
   },
   {
-    id: 'evergreen-trees',
-    label: 'Evergreens',
-    title: 'Evergreen Trees',
-    query: 'SELECT count(tree_id) as evergreen_trees WHERE is_evergreen = true;',
-    xField: 'evergreen_trees',
+    id: 'local-native-share',
+    label: 'Ecological Fit',
+    title: 'Biome Fit %',
+    query: "import std.display; SELECT  (count(tree_id ? native_locality_bucket = 'Native' or native_locality_bucket = 'Same biome, non-native') / count(tree_id))::float::percent as biome_fit_pct;",
+    xField: 'biome_fit_pct',
+    requiresCitySelection: true,
   },
 ]
 
 export const SUMMARY_CHARTS: SummaryDashboardChart[] = [
   {
+    id: 'dominance-curve',
+    title: 'Dominance Curve',
+    subtitle: 'Cumulative share held by the top 50 ranked species',
+    query: `SELECT
+dominance_rank,
+species,
+count(tree_id) as tree_count,
+cumulative_tree_share_pct
+HAVING dominance_rank <= 50
+ORDER BY dominance_rank ASC;`,
+    chartConfig: {
+      chartType: 'line',
+      xField: 'dominance_rank',
+      yField: 'cumulative_tree_share_pct',
+      showTitle: false,
+      hideLegend: true,
+      annotationField: 'species',
+    },
+    allowCrossFilter: false,
+  },
+  {
+    id: 'plant-year',
+    title: 'Planting Waves',
+    subtitle: 'Years with planting data',
+    query: `import std.color;
+SELECT
+plant_date.year as plant_year,
+count(tree_id) as tree_count,
+case
+when 2026 - plant_date.year < 10 then '0-9 years ago'
+when 2026 - plant_date.year < 20 then '10-19 years ago'
+when 2026 - plant_date.year < 30 then '20-29 years ago'
+when 2026 - plant_date.year < 40 then '30-39 years ago'
+when 2026 - plant_date.year < 50 then '40-49 years ago'
+else '50+ years ago'
+end as planting_window,
+case
+when 2026 - plant_date.year < 10 then '#A7E3B2'
+when 2026 - plant_date.year < 20 then '#8DCEA3'
+when 2026 - plant_date.year < 30 then '#6BAF92'
+when 2026 - plant_date.year < 40 then '#4E9872'
+when 2026 - plant_date.year < 50 then '#2F7D4F'
+else '#1F5A34'
+end::string::hex as color
+WHERE plant_date IS NOT NULL and plant_year>1800
+ORDER BY plant_year ASC;`,
+    chartConfig: {
+      chartType: 'bar',
+      xField: 'plant_year',
+      yField: 'tree_count',
+      colorField: 'planting_window',
+      showTitle: false,
+      hideLegend: true,
+    },
+    allowCrossFilter: false,
+  },
+  {
+    id: 'native-locality',
+    title: 'Nativeness Context',
+    subtitle: 'Local native vs biome and realm peers for the selected city',
+    query: `import std.color;
+SELECT
+native_locality_bucket,
+count(tree_id) as tree_count,
+case native_locality_bucket
+when 'Native' then '#2F7D4F'
+when 'Same biome, non-native' then '#6BAF92'
+when 'Native Region, Different Biome' then '#B59A54'
+when 'Non-Native, Different Biome' then '#A96F49'
+else '#7E9D86'
+end::string::hex as bucket_color
+WHERE native_locality_bucket IS NOT NULL
+ORDER BY tree_count DESC;`,
+    chartConfig: {
+      chartType: 'donut',
+      xField: 'tree_count',
+      yField: 'native_locality_bucket',
+      colorField: 'native_locality_bucket',
+      showTitle: false,
+      hideLegend: true,
+    },
+    requiresCitySelection: true,
+  },
+  {
+    id: 'hardiness-fit',
+    title: 'Hardiness Zone Fit',
+    subtitle: 'Compared with the active city zone',
+    query: `import std.color;
+SELECT
+hardiness_fit_bucket,
+count(tree_id) as tree_count,
+case hardiness_fit_bucket
+when 'Well within zone' then '#2F7D4F'
+when 'Edge of tolerance' then '#D4A14A'
+when 'Outside zone' then '#A96F49'
+else '#7E9D86'
+end::string::hex as bucket_color
+WHERE hardiness_fit_bucket IS NOT NULL
+ORDER BY tree_count DESC;`,
+    chartConfig: {
+      chartType: 'barh',
+      xField: 'tree_count',
+      yField: 'hardiness_fit_bucket',
+      colorField: 'hardiness_fit_bucket',
+      showTitle: false,
+      hideLegend: true,
+    },
+    requiresCitySelection: true,
+  },
+  {
+    id: 'water-resilience',
+    title: 'Water vs Drought',
+    subtitle: 'Operational resilience profile',
+    query: `import std.color;
+SELECT
+water_resilience_bucket,
+count(tree_id) as tree_count,
+case water_resilience_bucket
+when 'Low water / high drought tolerance' then '#2F7D4F'
+when 'Moderate / mixed' then '#D4A14A'
+when 'High water / low drought tolerance' then '#A96F49'
+else '#7E9D86'
+end::string::hex as bucket_color
+WHERE water_resilience_bucket IS NOT NULL
+ORDER BY tree_count DESC;`,
+    chartConfig: {
+      chartType: 'barh',
+      xField: 'tree_count',
+      yField: 'water_resilience_bucket',
+      colorField: 'water_resilience_bucket',
+      showTitle: false,
+      hideLegend: true,
+    },
+  },
+  {
     id: 'tree-form',
     title: 'Tree Forms',
+    subtitle: 'Structural diversity across the inventory',
     query: `import std.color;
 SELECT
 tree_form,
@@ -71,7 +226,8 @@ when 'multi_trunk' then '#8B6B4A'
 else '#7E9D86'
 end::string::hex as cat_color,
 count(tree_id) as tree_count
-WHERE tree_form IS NOT NULL ORDER BY tree_count DESC;`,
+WHERE tree_form IS NOT NULL
+ORDER BY tree_count DESC;`,
     chartConfig: {
       chartType: 'donut',
       xField: 'tree_count',
@@ -82,91 +238,171 @@ WHERE tree_form IS NOT NULL ORDER BY tree_count DESC;`,
     },
   },
   {
-    id: 'top-species',
-    title: 'Top Species',
+    id: 'sun-exposure',
+    title: 'Sun Exposure Fit',
+    subtitle: 'Light tolerance in the planted mix',
     query: `import std.color;
 SELECT
-species,
+sun_exposure_label,
 count(tree_id) as tree_count,
-'#2F7D4F'::string::hex as color
-WHERE species IS NOT NULL ORDER BY tree_count DESC LIMIT 15;`,
+case sun_exposure_label
+when 'Full sun' then '#D4A14A'
+when 'Partial shade' then '#6BAF92'
+when 'Shade' then '#1F5A4E'
+else '#7E9D86'
+end::string::hex as bucket_color
+WHERE sun_exposure_label IS NOT NULL
+ORDER BY tree_count DESC;`,
     chartConfig: {
       chartType: 'bar',
-      xField: 'species',
+      xField: 'sun_exposure_label',
       yField: 'tree_count',
-      colorField: 'species',
+      colorField: 'sun_exposure_label',
       showTitle: false,
       hideLegend: true,
     },
   },
   {
-    id: 'native-status',
-    title: 'Native Status',
+    id: 'wildlife-value',
+    title: 'Wildlife Value',
+    subtitle: 'Ecological value from enriched species',
     query: `import std.color;
 SELECT
-native_status,
+wildlife_value,
 count(tree_id) as tree_count,
-'#2F7D4F'::string::hex as color
-WHERE native_status IS NOT NULL ORDER BY tree_count DESC;`,
+case wildlife_value
+when 'high' then '#2F7D4F'
+when 'moderate' then '#D4A14A'
+when 'low' then '#A96F49'
+else '#7E9D86'
+end::string::hex as bucket_color
+WHERE wildlife_value IS NOT NULL
+ORDER BY tree_count DESC;`,
     chartConfig: {
       chartType: 'barh',
       xField: 'tree_count',
-      yField: 'native_status',
-      colorField: 'native_status',
+      yField: 'wildlife_value',
+      colorField: 'wildlife_value',
       showTitle: false,
       hideLegend: true,
     },
   },
   {
-    id: 'drought-tolerance',
-    title: 'Drought Tolerance',
+    id: 'lifespan-profile',
+    title: 'Lifespan Profile',
+    subtitle: 'Replacement risk over time',
     query: `import std.color;
 SELECT
-drought_tolerance,
+lifespan_bucket,
 count(tree_id) as tree_count,
-'#2F7D4F'::string::hex as color
-WHERE drought_tolerance IS NOT NULL ORDER BY tree_count DESC;`,
+case lifespan_bucket
+when 'Long-lived (150+y)' then '#2F7D4F'
+when 'Medium-lived (50-149y)' then '#D4A14A'
+when 'Short-lived (<50y)' then '#A96F49'
+else '#7E9D86'
+end::string::hex as bucket_color
+WHERE lifespan_bucket IS NOT NULL
+ORDER BY tree_count DESC;`,
     chartConfig: {
       chartType: 'barh',
       xField: 'tree_count',
-      yField: 'drought_tolerance',
-      colorField: 'drought_tolerance',
+      yField: 'lifespan_bucket',
+      colorField: 'lifespan_bucket',
       showTitle: false,
       hideLegend: true,
     },
   },
   {
-    id: 'plant-year',
-    title: 'Trees Planted by Year',
+    id: 'growth-rate',
+    title: 'Growth Rate',
+    subtitle: 'Maintenance pressure signal',
     query: `import std.color;
 SELECT
-plant_date.year as plant_year,
+growth_rate,
 count(tree_id) as tree_count,
-case
-when 2026 - plant_date.year < 10 then '0-9 years ago'
-when 2026 - plant_date.year < 20 then '10-19 years ago'
-when 2026 - plant_date.year < 30 then '20-29 years ago'
-when 2026 - plant_date.year < 40 then '30-39 years ago'
-when 2026 - plant_date.year < 50 then '40-49 years ago'
-else '50+ years ago'
-end as decade_window,
-case
-when 2026 - plant_date.year < 10 then '#A7E3B2'
-when 2026 - plant_date.year < 20 then '#8DCEA3'
-when 2026 - plant_date.year < 30 then '#6BAF92'
-when 2026 - plant_date.year < 40 then '#4E9872'
-when 2026 - plant_date.year < 50 then '#2F7D4F'
-else '#1F5A34'
-end::string::hex as color
-WHERE plant_date IS NOT NULL ORDER BY plant_year ASC;`,
+case growth_rate
+when 'slow' then '#1F5A4E'
+when 'moderate' then '#D4A14A'
+when 'fast' then '#A96F49'
+else '#7E9D86'
+end::string::hex as bucket_color
+WHERE growth_rate IS NOT NULL
+ORDER BY tree_count DESC;`,
     chartConfig: {
-      chartType: 'bar',
-      xField: 'plant_year',
-      yField: 'tree_count',
-      colorField: 'decade_window',
+      chartType: 'barh',
+      xField: 'tree_count',
+      yField: 'growth_rate',
+      colorField: 'growth_rate',
       showTitle: false,
       hideLegend: true,
     },
+  },
+  {
+    id: 'fire-risk',
+    title: 'Fire Risk',
+    subtitle: 'Forward-looking resilience profile',
+    query: `import std.color;
+SELECT
+fire_risk,
+count(tree_id) as tree_count,
+case fire_risk
+when 'low' then '#2F7D4F'
+when 'moderate' then '#D4A14A'
+when 'high' then '#A96F49'
+else '#7E9D86'
+end::string::hex as bucket_color
+WHERE fire_risk IS NOT NULL
+ORDER BY tree_count DESC;`,
+    chartConfig: {
+      chartType: 'barh',
+      xField: 'tree_count',
+      yField: 'fire_risk',
+      colorField: 'fire_risk',
+      showTitle: false,
+      hideLegend: true,
+    },
+  },
+]
+
+export const SUMMARY_SECTIONS: SummaryDashboardSection[] = [
+  {
+    id: 'composition',
+    title: 'Composition',
+    subtitle: 'How concentrated the inventory is and when it was planted.',
+    cards: [
+      { id: 'dominance-curve', width: 'wide' },
+      { id: 'plant-year', width: 'wide' },
+    ],
+  },
+  {
+    id: 'ecological-fit',
+    title: 'Ecological Fit',
+    subtitle: 'Nativeness, hardiness, and water resilience against the local context.',
+    cards: [
+      { id: 'native-locality' },
+      { id: 'hardiness-fit' },
+      { id: 'water-resilience' },
+    ],
+  },
+  {
+    id: 'diversity',
+    title: 'Diversity',
+    subtitle: 'Structural variety, light niches, and ecological value.',
+    cards: [
+      { id: 'tree-form' },
+      { id: 'sun-exposure' },
+      { id: 'wildlife-value' },
+    ],
+  },
+  {
+    id: 'risk-resilience',
+    title: 'Risk / Resilience',
+    subtitle: 'Longevity, maintenance burden, and fire profile.',
+    cards: [
+      { id: 'lifespan-profile' },
+      { id: 'growth-rate' },
+      { id: 'fire-risk' },
+    ],
   },
 ]
 

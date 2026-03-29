@@ -42,16 +42,20 @@
         <li><code>plant_date</code> - date planted (MM/DD/YYYY)</li>
         <li><code>latitude</code> / <code>longitude</code></li>
         <li><code>diameter_at_breast_height</code> - trunk diameter (inches)</li>
-        <li><code>native_status</code> - native_bay_area | native_california | non_native | naturalized | unknown</li>
+        <li><code>native_ecoregions</code> - list of ecoregion ids where the species is native</li>
         <li><code>is_evergreen</code> - bool</li>
-        <li><code>mature_height_ft</code> / <code>canopy_spread_ft</code></li>
+        <li><code>mature_height_min_ft</code> / <code>mature_height_max_ft</code></li>
+        <li><code>canopy_spread_min_ft</code> / <code>canopy_spread_max_ft</code></li>
         <li><code>growth_rate</code> - slow | moderate | fast</li>
-        <li><code>lifespan_years</code> - e.g. "50-100", "200+"</li>
+        <li><code>lifespan_min_years</code> / <code>lifespan_max_years</code></li>
         <li><code>drought_tolerance</code> - low | moderate | high</li>
-        <li><code>bloom_season</code></li>
+        <li><code>water_needs</code> - low | moderate | high</li>
+        <li><code>sun_exposure</code> - array of light tolerances</li>
+        <li><code>bloom_months</code> - array of month numbers</li>
         <li><code>wildlife_value</code> - low | moderate | high</li>
         <li><code>fire_risk</code> - low | moderate | high</li>
         <li><code>tree_form</code> - broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default</li>
+        <li><code>description</code> - short ecology and urban planting note</li>
       </ul>
     </div>
 
@@ -194,9 +198,9 @@ const MAP_SUGGESTIONS = [
 ]
 
 const SUMMARY_SUGGESTIONS = [
-  'Filter the charts to native trees',
-  'Show only broadleaf trees in the analytics',
-  'What are the top species right now?',
+  'Filter the charts to local native trees',
+  'Show only trees outside the hardiness zone',
+  'What share of the city is concentrated in the top 5 species?',
   'Clear the analytics filters',
 ]
 

@@ -115,7 +115,7 @@ export const SUMMARY_CHAT_TOOLS = [
   {
     name: 'set_summary_filters',
     description:
-      'Update the analytics page cross-filters. Use this on the summary page to focus the charts by tree_form, species, or native_status. You can replace all filters, replace only specific fields, append values, or clear filters.',
+      'Update the analytics page cross-filters. Use this on the summary page to focus the charts by tree_form, species, native_locality_bucket, hardiness_fit_bucket, water_resilience_bucket, sun_exposure_label, lifespan_bucket, growth_rate, wildlife_value, or fire_risk. You can replace all filters, replace only specific fields, append values, or clear filters.',
     input_schema: {
       type: 'object',
       properties: {
@@ -132,7 +132,18 @@ export const SUMMARY_CHAT_TOOLS = [
             properties: {
               field: {
                 type: 'string',
-                enum: ['tree_form', 'species', 'native_status'],
+                enum: [
+                  'tree_form',
+                  'species',
+                  'native_locality_bucket',
+                  'hardiness_fit_bucket',
+                  'water_resilience_bucket',
+                  'sun_exposure_label',
+                  'lifespan_bucket',
+                  'growth_rate',
+                  'wildlife_value',
+                  'fire_risk',
+                ],
                 description: 'Which analytics dimension to filter.',
               },
               values: {

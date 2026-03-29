@@ -45,6 +45,7 @@ import maplibregl from 'maplibre-gl'
 import { registerCategoryColoredIcons } from '../composables/useTreeCategories'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData, CITY_CONFIG, type CityCode } from '../composables/useMapData'
+import { getCityBiome, getCityEcoregionId } from '../composables/dashboardContextSource'
 import { useRoute, useRouter } from 'vue-router'
 import { useDuckDB } from '../composables/useDuckDB'
 import { useMapIntro } from '../composables/useMapIntro'
@@ -395,42 +396,124 @@ interface PopupTreeRow {
   plant_date: string | null
   dbh: number | null
   tree_form: string | null
-  native_status: string | null
+  ecological_fit: string | null
   is_evergreen: boolean | null
-  mature_height_ft: number | null
-  bloom_season: string | null
+  mature_height_min_ft: number | null
+  mature_height_max_ft: number | null
+  canopy_spread_min_ft: number | null
+  canopy_spread_max_ft: number | null
+  growth_rate: string | null
+  lifespan_min_years: number | null
+  lifespan_max_years: number | null
+  drought_tolerance: string | null
+  water_needs: string | null
+  sun_exposure: string[] | null
+  bloom_months: number[] | null
   wildlife_value: string | null
   fire_risk: string | null
+  description: string | null
+}
+
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function formatTitleCase(value: string | null) {
+  return value
+    ? value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+    : null
+}
+
+function formatRange(min: number | null, max: number | null, unit: string) {
+  if (min == null && max == null) return null
+  if (min != null && max != null) {
+    if (min === max) return `${min} ${unit}`
+    return `${min}-${max} ${unit}`
+  }
+  return `${min ?? max} ${unit}`
+}
+
+function formatBloomMonths(months: number[] | null) {
+  if (!Array.isArray(months) || months.length === 0) return null
+  const normalized = Array.from(
+    new Set(
+      months
+        .filter((value): value is number => Number.isInteger(value) && value >= 1 && value <= 12)
+        .sort((a, b) => a - b),
+    ),
+  )
+  if (normalized.length === 0) return null
+  if (normalized.length === 12) return 'Year-round'
+
+  const isContiguous = normalized.every((value, index) => {
+    if (index === 0) return true
+    return value === normalized[index - 1] + 1
+  })
+
+  if (isContiguous) {
+    const start = MONTH_LABELS[normalized[0] - 1]
+    const end = MONTH_LABELS[normalized[normalized.length - 1] - 1]
+    return start === end ? start : `${start}-${end}`
+  }
+
+  return normalized.map((value) => MONTH_LABELS[value - 1]).join(', ')
+}
+
+function formatSunExposure(values: string[] | null) {
+  if (!Array.isArray(values) || values.length === 0) return null
+  return values
+    .map((value) => formatTitleCase(value))
+    .filter((value): value is string => Boolean(value))
+    .join(', ')
+}
+
+function formatDbh(value: number | null) {
+  if (value == null || !Number.isFinite(value)) return null
+  return `${value.toFixed(2)}"`
+}
+
+function renderPopupRow(label: string, value: string | number) {
+  return `<div class="tree-popup-row"><span class="tree-popup-label">${label}</span><span class="tree-popup-value">${value}</span></div>`
+}
+
+function formatPlantDate(value: string | null) {
+  if (!value) return null
+  const normalized = String(value)
+  if (!normalized) return null
+  return normalized.split('T')[0]?.split(' ')[0] ?? normalized
 }
 
 function formatPopupHtml(row: PopupTreeRow): string {
-  const planted = row.plant_date?.split(' ')[0] ?? null
+  const planted = formatPlantDate(row.plant_date)
   const evergreen = row.is_evergreen == null ? null : (row.is_evergreen ? 'Yes' : 'No')
-  const treeForm = row.tree_form
-  const category = treeForm
-    ? treeForm
-      .replace(/_/g, ' ')
-      .replace(/\b\w/g, (letter) => letter.toUpperCase())
-    : null
+  const category = formatTitleCase(row.tree_form)
+  const description = row.description?.trim() || null
   const detailLines = [
     ['ID', row.tree_id],
     ['Form', category],
     ['Planted', planted],
-    ['Trunk diameter', row.dbh != null ? `${row.dbh}"` : null],
-    ['Native', row.native_status],
+    ['Trunk diameter', formatDbh(row.dbh)],
+    ['Ecological fit', row.ecological_fit],
     ['Evergreen', evergreen],
-    ['Mature height', row.mature_height_ft != null ? `${row.mature_height_ft} ft` : null],
-    ['Bloom', row.bloom_season],
-    ['Wildlife value', row.wildlife_value],
-    ['Fire risk', row.fire_risk],
+    ['Mature height', formatRange(row.mature_height_min_ft, row.mature_height_max_ft, 'ft')],
+    ['Canopy spread', formatRange(row.canopy_spread_min_ft, row.canopy_spread_max_ft, 'ft')],
+    ['Growth rate', formatTitleCase(row.growth_rate)],
+    ['Lifespan', formatRange(row.lifespan_min_years, row.lifespan_max_years, 'years')],
+    ['Water needs', formatTitleCase(row.water_needs)],
+    ['Drought tolerance', formatTitleCase(row.drought_tolerance)],
+    ['Sun exposure', formatSunExposure(row.sun_exposure)],
+    ['Bloom period', formatBloomMonths(row.bloom_months)],
+    ['Wildlife value', formatTitleCase(row.wildlife_value)],
+    ['Fire risk', formatTitleCase(row.fire_risk)],
   ]
     .filter(([, value]) => value != null && value !== '' && value !== 'Unknown')
-    .map(([label, value]) => `${label}: ${value}<br/>`)
+    .map(([label, value]) => renderPopupRow(String(label), String(value ?? '')))
     .join('')
   return `
-    <strong>${row.tree_name || 'Unknown tree'}</strong><br/>
-    <em>${row.species || ''}</em><br/>
-    ${detailLines}
+    <div class="tree-popup-shell">
+      <div class="tree-popup-title">${row.tree_name || 'Unknown tree'}</div>
+      ${row.species ? `<div class="tree-popup-species">${row.species}</div>` : ''}
+      ${detailLines ? `<div class="tree-popup-grid">${detailLines}</div>` : ''}
+      ${description ? `<div class="tree-popup-description">${description}</div>` : ''}
+    </div>
   `
 }
 
@@ -442,6 +525,8 @@ async function showTreePopup(feature: GeoJSON.Feature, offset: number) {
   if (!id || id === 'unkwn') return
   // Escape single quotes to prevent SQL injection from tile data
   const safeId = String(id).replace(/'/g, "''")
+  const cityBiome = getCityBiome(selectedCity.value).replace(/'/g, "''")
+  const cityEcoregionId = getCityEcoregionId(selectedCity.value)
   try {
     const { rows } = await duckQuery(`
       SELECT
@@ -451,13 +536,33 @@ async function showTreePopup(feature: GeoJSON.Feature, offset: number) {
         plant_date,
         dbh,
         tree_form,
-        native_status,
+        CASE
+          WHEN native_ecoregions IS NULL OR len(native_ecoregions) = 0 THEN NULL
+          WHEN list_contains(native_ecoregions, ${cityEcoregionId}) THEN 'Native here'
+          WHEN EXISTS (
+            SELECT 1
+            FROM ecoregion_info ei
+            WHERE list_contains(tf.native_ecoregions, ei.ecoregion_id)
+              AND ei.biome = '${cityBiome}'
+          ) THEN 'Biome match'
+          ELSE 'Different biome'
+        END AS ecological_fit,
         is_evergreen,
-        mature_height_ft,
-        bloom_season,
+        mature_height_min_ft,
+        mature_height_max_ft,
+        canopy_spread_min_ft,
+        canopy_spread_max_ft,
+        growth_rate,
+        lifespan_min_years,
+        lifespan_max_years,
+        drought_tolerance,
+        water_needs,
+        sun_exposure,
+        bloom_months,
         wildlife_value,
-        fire_risk
-      FROM trees_fast
+        fire_risk,
+        description
+      FROM trees_fast tf
       WHERE tree_id = '${safeId}'
       LIMIT 1
     `)
@@ -1273,20 +1378,81 @@ onUnmounted(() => {
 
 <style>
 .tree-popup .maplibregl-popup-content {
-  background: rgba(28, 31, 36, 0.96);
+  background:
+    linear-gradient(180deg, rgba(34, 38, 45, 0.98), rgba(24, 27, 32, 0.98));
   color: rgba(237, 242, 235, 0.92);
   border: 1px solid rgba(167, 227, 178, 0.18);
-  border-radius: 8px;
-  padding: 10px 14px;
+  border-radius: 12px;
+  padding: 12px 14px;
   font-size: 0.8rem;
-  line-height: 1.5;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+  line-height: 1.45;
+  min-width: 220px;
+  max-width: 280px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
 }
 
 .tree-popup .maplibregl-popup-close-button {
   color: rgba(154, 166, 154, 0.82);
-  font-size: 1rem;
-  padding: 2px 6px;
+  font-size: 1.05rem;
+  padding: 4px 8px;
+}
+
+.tree-popup-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tree-popup-title {
+  color: var(--color-ink);
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.2;
+  padding-right: 20px;
+}
+
+.tree-popup-species {
+  color: rgba(237, 242, 235, 0.82);
+  font-size: 0.82rem;
+  font-style: italic;
+  line-height: 1.35;
+}
+
+.tree-popup-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tree-popup-row {
+  display: grid;
+  grid-template-columns: minmax(78px, auto) 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.tree-popup-label {
+  color: rgba(154, 166, 154, 0.74);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tree-popup-value {
+  color: rgba(237, 242, 235, 0.96);
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.tree-popup-description {
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(167, 227, 178, 0.1);
+  color: rgba(237, 242, 235, 0.72);
+  font-size: 0.76rem;
+  line-height: 1.5;
 }
 
 .tree-popup .maplibregl-popup-tip {

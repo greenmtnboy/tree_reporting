@@ -11,6 +11,8 @@ import { ref } from 'vue'
 import { useTrilogyRuntime } from './useTrilogyRuntime'
 import { ALL_MODEL_SOURCES } from '../trilogyModels'
 import { DUCKDB_ASSET_URLS } from '../duckdbAssetUrls'
+import { buildDashboardContextSource } from './dashboardContextSource'
+import type { CityCode } from './useMapData'
 
 const CONNECTION_ID = 'summary-duckdb'
 
@@ -19,6 +21,7 @@ const initError = ref<string | null>(null)
 
 let connection: DuckDBConnection | null = null
 let initPromise: Promise<void> | null = null
+const dashboardContextSource = ref(buildDashboardContextSource(null))
 
 async function ensureInit(): Promise<void> {
   if (ready.value && connection?.connected) {
@@ -84,7 +87,7 @@ export function useSummaryDashboardExecution() {
       if (connectionId !== CONNECTION_ID) {
         return []
       }
-      return ALL_MODEL_SOURCES
+      return [...ALL_MODEL_SOURCES, dashboardContextSource.value]
     },
   }
 
@@ -96,5 +99,8 @@ export function useSummaryDashboardExecution() {
     initError,
     connectionId: CONNECTION_ID,
     queryExecutionService,
+    setDashboardContext(city: CityCode | null) {
+      dashboardContextSource.value = buildDashboardContextSource(city)
+    },
   }
 }

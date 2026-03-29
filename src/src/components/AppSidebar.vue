@@ -26,7 +26,7 @@
           </svg>
         </span>
         <span class="nav-copy">
-          <strong>Analytics</strong>
+          <strong>City Summary</strong>
         </span>
       </router-link>
       <router-link :to="infoRoute" class="nav-link">

@@ -14,7 +14,14 @@ FROM trees
 WHERE latitude IS NOT NULL AND longitude IS NOT NULL
 `
 
-import { REMOTE_TREES_PARQUET_URL, REMOTE_SPECIES_PARQUET_URL, REMOTE_LANDMARKS_PARQUET_URL, cityTreeParquetUrl, cityLandmarkParquetUrl } from './parquetUrls'
+import {
+  REMOTE_TREES_PARQUET_URL,
+  REMOTE_SPECIES_PARQUET_URL,
+  REMOTE_ECOREGION_PARQUET_URL,
+  REMOTE_LANDMARKS_PARQUET_URL,
+  cityTreeParquetUrl,
+  cityLandmarkParquetUrl,
+} from './parquetUrls'
 
 const WEB_MERCATOR_MAX = 20037508.342789244
 const WEB_MERCATOR_WORLD = WEB_MERCATOR_MAX * 2
@@ -469,7 +476,7 @@ async function loadCityTrees(city?: string): Promise<void> {
       SELECT
         t.tree_id,
         t.city,
-        COALESCE(NULLIF(TRIM(split_part(se.common_names, ',', 1)), ''), t.tree_name, t.species) AS tree_name,
+        COALESCE(NULLIF(TRIM(CAST(list_extract(se.common_names, 1) AS VARCHAR)), ''), t.tree_name, t.species) AS tree_name,
         t.plant_date,
         t.species,
         t.latitude,
@@ -486,13 +493,24 @@ async function loadCityTrees(city?: string): Promise<void> {
           WHEN 'multi_trunk' THEN 'multi_trunk'
           ELSE 'default'
         END AS tree_form,
-        se.native_status,
+        se.native_ecoregions,
         se.is_evergreen,
-        se.mature_height_ft,
-        se.bloom_season,
+        se.mature_height_min_ft,
+        se.mature_height_max_ft,
+        se.canopy_spread_min_ft,
+        se.canopy_spread_max_ft,
+        se.growth_rate,
+        se.lifespan_min_years,
+        se.lifespan_max_years,
+        se.water_needs,
+        se.sun_exposure,
+        se.bloom_months,
         se.wildlife_value,
         se.fire_risk,
         se.drought_tolerance,
+        se.description,
+        se.usda_zone_min,
+        se.usda_zone_max,
         LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878) AS latitude_clamped,
         ((t.longitude + 180.0) / 360.0) AS x_norm,
         ((1.0 - ln(tan(radians(LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878))) + (1.0 / cos(radians(LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878))))) / pi()) / 2.0) AS y_norm
@@ -512,13 +530,24 @@ async function loadCityTrees(city?: string): Promise<void> {
       longitude,
       TRY_CAST(dbh AS DOUBLE) AS dbh,
       tree_form,
-      native_status,
+      native_ecoregions,
       is_evergreen,
-      mature_height_ft,
-      bloom_season,
+      mature_height_min_ft,
+      mature_height_max_ft,
+      canopy_spread_min_ft,
+      canopy_spread_max_ft,
+      growth_rate,
+      lifespan_min_years,
+      lifespan_max_years,
+      water_needs,
+      sun_exposure,
+      bloom_months,
       wildlife_value,
       fire_risk,
       drought_tolerance,
+      description,
+      usda_zone_min,
+      usda_zone_max,
       ((longitude * ${WEB_MERCATOR_MAX}) / 180.0) AS x_3857,
       (6378137.0 * ln(tan(pi() / 4.0 + radians(latitude_clamped) / 2.0))) AS y_3857,
       CAST(floor(x_norm * pow(2, 13)) AS INTEGER) AS xtile_z13,
@@ -581,7 +610,28 @@ async function doInit(city?: string) {
   try {
     await conn.query(`
       CREATE TABLE species_enrichment AS
-      SELECT species, common_names, tree_form, native_status, is_evergreen, mature_height_ft, bloom_season, wildlife_value, fire_risk, drought_tolerance
+      SELECT
+        species,
+        common_names,
+        description,
+        tree_form,
+        native_ecoregions,
+        is_evergreen,
+        mature_height_min_ft,
+        mature_height_max_ft,
+        canopy_spread_min_ft,
+        canopy_spread_max_ft,
+        growth_rate,
+        lifespan_min_years,
+        lifespan_max_years,
+        drought_tolerance,
+        water_needs,
+        sun_exposure,
+        bloom_months,
+        wildlife_value,
+        fire_risk,
+        usda_zone_min,
+        usda_zone_max
       FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
     `)
   } catch (e) {
@@ -591,23 +641,44 @@ async function doInit(city?: string) {
         CREATE TABLE species_enrichment AS
         SELECT
           species,
-          common_names,
+          string_split(common_names, ',') AS common_names,
+          CAST(NULL AS VARCHAR) AS description,
           CASE lower(trim(COALESCE(tree_category, 'default')))
             WHEN 'coniferous' THEN 'conifer'
             ELSE lower(trim(COALESCE(tree_category, 'default')))
           END AS tree_form,
-          native_status,
+          CAST(NULL AS INTEGER[]) AS native_ecoregions,
           is_evergreen,
-          mature_height_ft,
-          bloom_season,
+          mature_height_ft AS mature_height_min_ft,
+          mature_height_ft AS mature_height_max_ft,
+          CAST(NULL AS DOUBLE) AS canopy_spread_min_ft,
+          CAST(NULL AS DOUBLE) AS canopy_spread_max_ft,
+          growth_rate,
+          CAST(NULL AS INTEGER) AS lifespan_min_years,
+          CAST(NULL AS INTEGER) AS lifespan_max_years,
+          drought_tolerance,
+          CAST(NULL AS VARCHAR) AS water_needs,
+          CAST(NULL AS VARCHAR[]) AS sun_exposure,
+          CAST(NULL AS INTEGER[]) AS bloom_months,
           wildlife_value,
           fire_risk,
-          drought_tolerance
+          CAST(NULL AS INTEGER) AS usda_zone_min,
+          CAST(NULL AS INTEGER) AS usda_zone_max
         FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
       `)
     } catch (legacyError) {
       console.warn('[Perf] duckdb-worker:species-load:failed', legacyError)
     }
+  }
+
+  try {
+    await conn.query(`
+      CREATE OR REPLACE TABLE ecoregion_info AS
+      SELECT ecoregion_id, biome, realm
+      FROM read_parquet('${REMOTE_ECOREGION_PARQUET_URL}')
+    `)
+  } catch (e) {
+    console.warn('[Perf] duckdb-worker:ecoregion-load:failed', e)
   }
 
   spatialExtensionReady = false
@@ -1552,12 +1623,34 @@ function setAutoTileFetchEnabled(enabled: boolean) {
 }
 
 function normalizeValue(v: unknown): unknown {
+  if (typeof v === 'function') {
+    return undefined
+  }
   if (typeof v === 'bigint') {
     const n = Number(v)
     return Number.isSafeInteger(n) ? n : v.toString()
   }
+  if (v instanceof Date) {
+    return v.toISOString()
+  }
+  if (
+    v !== null &&
+    v !== undefined &&
+    (v as { isLuxonDateTime?: boolean }).isLuxonDateTime === true &&
+    typeof (v as { toISO?: () => string | null }).toISO === 'function'
+  ) {
+    return (v as { toISO: () => string | null }).toISO() ?? null
+  }
   if (v instanceof Uint8Array) {
     return Array.from(v)
+  }
+  if (Array.isArray(v)) {
+    return v.map((item) => normalizeValue(item))
+  }
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(
+      Object.entries(v as Record<string, unknown>).map(([key, value]) => [key, normalizeValue(value)]),
+    )
   }
   return v
 }

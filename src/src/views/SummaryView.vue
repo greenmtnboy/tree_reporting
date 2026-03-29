@@ -3,13 +3,18 @@
     <div class="summary-header">
       <div class="summary-title-row">
         <div>
-          <p class="summary-eyebrow">Summary</p>
-          <h1>Tree Analytics</h1>
+          <p class="summary-eyebrow">Urban Forest Dashboard</p>
+          <h1>{{ summaryTitle }}</h1>
         </div>
-        <div class="city-badge">{{ cityName }}</div>
+        <div v-if="cityContextPills.length" class="city-context-pills">
+          <span v-for="pill in cityContextPills" :key="pill.label" class="city-context-pill">
+            <span class="city-context-pill-label">{{ pill.label }}</span>
+            <span class="city-context-pill-value">{{ pill.value }}</span>
+          </span>
+        </div>
       </div>
       <p class="summary-intro">
-        Inventory mix, species distribution, and resilience indicators for the active city.
+        Inventory concentration, ecological fit, resilience, and value for the active city.
       </p>
       <div v-if="activeFilters.length" class="active-filters">
         <span v-for="filter in activeFilters" :key="filter.key" class="filter-chip">
@@ -24,7 +29,7 @@
 
     <div class="kpi-row">
       <div
-        v-for="kpi in kpiCharts"
+        v-for="kpi in visibleKpiCharts"
         :key="kpi.id"
         class="chart-card chart-card--kpi chart-card--metric"
       >
@@ -36,106 +41,49 @@
           :title="kpi.title"
           :query="kpi.query"
           :chart-config="{ chartType: 'headline', xField: kpi.xField, showTitle: false }"
+          :allow-cross-filter="false"
         />
       </div>
     </div>
 
-    <div class="chart-row">
-      <div class="chart-card chart-card--wide">
-        <div class="chart-card-header">
-          <h2>Tree Forms</h2>
-        </div>
-        <EmbeddedDashboardChart
-          item-id="tree-form"
-          v-bind="sharedChartProps"
-          :filters="filtersForChart('tree-form')"
-          :title="treeFormChart.title"
-          :query="treeFormChart.query"
-          :chart-config="treeFormChart.chartConfig"
-          :selection-filters="selectionFiltersForChart('tree-form')"
-          @dimension-click="handleChartClick"
-          @background-click="clearChartSelection('tree-form')"
-        />
+    <section
+      v-for="section in visibleSummarySections"
+      :key="section.id"
+      class="summary-section"
+    >
+      <div class="summary-section-header">
+        <h2>{{ section.title }}</h2>
+        <p>{{ section.subtitle }}</p>
       </div>
 
-      <div class="chart-card chart-card--narrow">
-        <div class="chart-card-header">
-          <h2>
-            Top Species
-            <span v-if="selectedTreeForm" class="header-filter-hint">
-              in <em>{{ formatFilterValue(selectedTreeForm) }}</em>
-            </span>
-          </h2>
-          <span class="chart-sub">Top 15 by tree count</span>
+      <div class="chart-row">
+        <div
+          v-for="card in section.cards"
+          :key="card.id"
+          :class="[
+            'chart-card',
+            card.width === 'wide' ? 'chart-card--wide' : null,
+          ]"
+        >
+          <div class="chart-card-header">
+            <h3>{{ chartById(card.id).title }}</h3>
+            <span v-if="chartById(card.id).subtitle" class="chart-sub">{{ chartById(card.id).subtitle }}</span>
+          </div>
+          <EmbeddedDashboardChart
+            :item-id="card.id"
+            v-bind="sharedChartProps"
+            :filters="filtersForChart(card.id)"
+            :title="chartById(card.id).title"
+            :query="chartById(card.id).query"
+            :chart-config="chartById(card.id).chartConfig"
+            :selection-filters="selectionFiltersForChart(card.id)"
+            :allow-cross-filter="chartById(card.id).allowCrossFilter ?? true"
+            @dimension-click="handleChartClick"
+            @background-click="clearChartSelection(card.id)"
+          />
         </div>
-        <EmbeddedDashboardChart
-          item-id="top-species"
-          v-bind="sharedChartProps"
-          :filters="filtersForChart('top-species')"
-          :title="topSpeciesChart.title"
-          :query="topSpeciesChart.query"
-          :chart-config="topSpeciesChart.chartConfig"
-          :selection-filters="selectionFiltersForChart('top-species')"
-          @dimension-click="handleChartClick"
-          @background-click="clearChartSelection('top-species')"
-        />
       </div>
-    </div>
-
-    <div class="chart-row">
-      <div class="chart-card">
-        <div class="chart-card-header">
-          <h2>Native Status</h2>
-        </div>
-        <EmbeddedDashboardChart
-          item-id="native-status"
-          v-bind="sharedChartProps"
-          :filters="filtersForChart('native-status')"
-          :title="nativeStatusChart.title"
-          :query="nativeStatusChart.query"
-          :chart-config="nativeStatusChart.chartConfig"
-          :selection-filters="selectionFiltersForChart('native-status')"
-          @dimension-click="handleChartClick"
-          @background-click="clearChartSelection('native-status')"
-        />
-      </div>
-
-      <div class="chart-card">
-        <div class="chart-card-header">
-          <h2>Drought Tolerance</h2>
-          <span class="chart-sub">Enriched species only</span>
-        </div>
-        <EmbeddedDashboardChart
-          item-id="drought-tolerance"
-          v-bind="sharedChartProps"
-          :filters="filtersForChart('drought-tolerance')"
-          :title="droughtToleranceChart.title"
-          :query="droughtToleranceChart.query"
-          :chart-config="droughtToleranceChart.chartConfig"
-          :selection-filters="selectionFiltersForChart('drought-tolerance')"
-          @dimension-click="handleChartClick"
-          @background-click="clearChartSelection('drought-tolerance')"
-        />
-      </div>
-
-      <div class="chart-card chart-card--wide">
-        <div class="chart-card-header">
-          <h2>Trees Planted by Year</h2>
-          <span class="chart-sub">Years with planting data</span>
-        </div>
-        <EmbeddedDashboardChart
-          item-id="plant-year"
-          v-bind="sharedChartProps"
-          :filters="filtersForChart('plant-year')"
-          :title="plantYearChart.title"
-          :query="plantYearChart.query"
-          :chart-config="plantYearChart.chartConfig"
-          :selection-filters="selectionFiltersForChart('plant-year')"
-          @dimension-click="handleChartClick"
-          @background-click="clearChartSelection('plant-year')"
-        />
-      </div>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -148,11 +96,13 @@ import {
 } from '@trilogy-data/trilogy-studio-components/dashboard'
 import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
 import { useMapData, type CityCode } from '../composables/useMapData'
+import { getCityBiome, getCityUsdaZone } from '../composables/dashboardContextSource'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
 import {
   SUMMARY_CHARTS_BY_ID,
   SUMMARY_DASHBOARD_IMPORTS,
   SUMMARY_KPI_CHARTS,
+  SUMMARY_SECTIONS,
   getSummaryBaseFilters,
   readSummaryRouteCity,
 } from '../composables/summaryDashboardConfig'
@@ -162,26 +112,18 @@ import cityConfig from '../cityConfig.json'
 const route = useRoute()
 const router = useRouter()
 const { selectedCity, setSelectedCity } = useMapData()
-const { initialize, connectionId, queryExecutionService } = useSummaryDashboardExecution()
+const { initialize, connectionId, queryExecutionService, setDashboardContext } = useSummaryDashboardExecution()
 
 const sharedChartProps = {
   connectionId,
   queryExecutionService,
   imports: SUMMARY_DASHBOARD_IMPORTS as DashboardImport[],
 }
-const kpiCharts = SUMMARY_KPI_CHARTS
-const treeFormChart = SUMMARY_CHARTS_BY_ID['tree-form']
-const topSpeciesChart = SUMMARY_CHARTS_BY_ID['top-species']
-const nativeStatusChart = SUMMARY_CHARTS_BY_ID['native-status']
-const droughtToleranceChart = SUMMARY_CHARTS_BY_ID['drought-tolerance']
-const plantYearChart = SUMMARY_CHARTS_BY_ID['plant-year']
 
 const cityFilter = ref<CityCode | null>(null)
 const {
   crossFilters,
   activeSummaryFilters,
-  selectionsByField,
-  formatSummaryFilterValue,
 } = useSummaryFilters()
 
 const cityName = computed(() => {
@@ -192,11 +134,37 @@ const cityName = computed(() => {
   return cfg?.name ?? cityFilter.value
 })
 
-const baseFilters = computed(() => {
-  return getSummaryBaseFilters(cityFilter.value)
+const summaryTitle = computed(() =>
+  cityFilter.value ? `${cityName.value} City Summary` : 'City Summary',
+)
+
+const baseFilters = computed(() => getSummaryBaseFilters(cityFilter.value))
+
+const cityContextPills = computed(() => {
+  if (!cityFilter.value) {
+    return []
+  }
+  return [
+    { label: 'USDA zone', value: String(getCityUsdaZone(cityFilter.value)) },
+    { label: 'Biome', value: getCityBiome(cityFilter.value) },
+  ]
 })
 
-const selectedTreeForm = computed(() => selectionsByField().tree_form?.[0] ?? null)
+const visibleKpiCharts = computed(() =>
+  SUMMARY_KPI_CHARTS.filter((chart) => cityFilter.value || !chart.requiresCitySelection),
+)
+
+const visibleSummarySections = computed(() =>
+  SUMMARY_SECTIONS
+    .map((section) => ({
+      ...section,
+      cards: section.cards.filter((card) => {
+        const chart = chartById(card.id)
+        return cityFilter.value || !chart.requiresCitySelection
+      }),
+    }))
+    .filter((section) => section.cards.length > 0),
+)
 
 const activeFilters = computed(() => {
   const filters: Array<{ key: string; label: string }> = []
@@ -209,13 +177,16 @@ const activeFilters = computed(() => {
   return filters
 })
 
-function formatFilterValue(value: string) {
-  return formatSummaryFilterValue(value)
+function chartById(chartId: string) {
+  return SUMMARY_CHARTS_BY_ID[chartId]
 }
 
 function clearFilter(key: string) {
-  if (key === 'city') cityFilter.value = null
-  else crossFilters.clearSource(key)
+  if (key === 'city') {
+    cityFilter.value = null
+    return
+  }
+  crossFilters.clearSource(key)
 }
 
 function clearAllFilters() {
@@ -272,6 +243,14 @@ watch(
 watch(
   cityFilter,
   (city) => {
+    setDashboardContext(city)
+  },
+  { immediate: true },
+)
+
+watch(
+  cityFilter,
+  (city) => {
     crossFilters.clearAll()
     const routeCity = readSummaryRouteCity(route.query.city)
     if (route.name === 'summary' && routeCity !== city) {
@@ -281,9 +260,7 @@ watch(
       } else {
         delete nextQuery.city
       }
-      void router.replace({
-        query: nextQuery,
-      })
+      void router.replace({ query: nextQuery })
     }
   },
   { immediate: true },
@@ -306,6 +283,29 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.city-context-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(167, 227, 178, 0.12);
+  border-radius: 999px;
+  background: rgba(47, 125, 79, 0.1);
+}
+
+.city-context-pill-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(154, 166, 154, 0.82);
+}
+
+.city-context-pill-value {
+  font-size: 0.82rem;
+  color: var(--color-foam);
 }
 
 .summary-title-row {
@@ -339,18 +339,12 @@ watch(
   letter-spacing: 0.01em;
 }
 
-.city-badge {
-  align-self: flex-start;
-  padding: 10px 14px;
-  border: 1px solid rgba(167, 227, 178, 0.16);
-  border-radius: 10px;
-  background:
-    linear-gradient(180deg, rgba(58, 64, 72, 0.72), rgba(28, 31, 36, 0.92));
-  font-size: 0.76rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-leaf);
+.city-context-pills {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .active-filters {
@@ -396,6 +390,33 @@ watch(
   gap: 16px;
 }
 
+.summary-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.summary-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summary-section-header h2 {
+  margin: 0;
+  font-size: 1.08rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.summary-section-header p {
+  margin: 0;
+  color: rgba(154, 166, 154, 0.82);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 .chart-row {
   display: flex;
   gap: 16px;
@@ -412,7 +433,7 @@ watch(
   border: 1px solid rgba(167, 227, 178, 0.1);
   border-radius: 14px;
   padding: 20px 22px;
-  flex: 1 1 220px;
+  flex: 1 1 260px;
   min-width: 0;
   height: 380px;
   min-height: 0;
@@ -440,12 +461,8 @@ watch(
   color: rgba(154, 166, 154, 0.85);
 }
 
-.chart-card--narrow {
-  flex: 1 1 300px;
-}
-
 .chart-card--wide {
-  flex: 2 1 380px;
+  flex: 2 1 420px;
 }
 
 .chart-card-header {
@@ -455,26 +472,12 @@ watch(
   flex: 0 0 auto;
 }
 
-.chart-card-header h2 {
+.chart-card-header h3 {
   margin: 0;
   font-size: 1rem;
   font-family: var(--font-display);
   font-weight: 700;
   letter-spacing: 0.03em;
-}
-
-.header-filter-hint {
-  font-family: var(--font-body);
-  font-size: 0.78rem;
-  font-weight: 500;
-  margin-left: 8px;
-  color: rgba(237, 242, 235, 0.62);
-}
-
-.header-filter-hint em {
-  color: var(--color-leaf);
-  font-style: normal;
-  text-transform: capitalize;
 }
 
 .chart-sub {
@@ -507,7 +510,6 @@ watch(
 
 @media (max-width: 560px) {
   .chart-card,
-  .chart-card--narrow,
   .chart-card--wide {
     flex-basis: 100%;
   }

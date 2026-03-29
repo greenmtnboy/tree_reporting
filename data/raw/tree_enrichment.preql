@@ -45,6 +45,11 @@ property species.native_ecoregions list<int>; # list of ecoregion_id values wher
 
 property species.enriched_at datetime;
 
+auto tree_eco_region<- unnest(native_ecoregions);
+
+merge tree_eco_region into ecoregion_id;
+
+
 # Root datasource: runs the Python script to fetch and enrich new species.
 # Emits the full merged table (existing + newly enriched rows).
 root datasource raw_tree_enrichment (

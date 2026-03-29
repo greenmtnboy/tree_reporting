@@ -30,7 +30,7 @@ import {
   safeJsonStringify as safeJsonStringifyHelper,
   toJsonSafeRows as toJsonSafeRowsHelper,
 } from './chatToolExecution'
-import { useSummaryFilters, type SummaryFilterField } from './useSummaryFilters'
+import { useSummaryFilters, SUMMARY_FILTER_FIELDS, type SummaryFilterField } from './useSummaryFilters'
 import { useSummaryDashboardExecution } from './useSummaryDashboardExecution'
 import {
   SUMMARY_CHARTS,
@@ -217,7 +217,7 @@ ACTIVE SCREEN: Analytics summary.
 ACTIVE CITY: ${cityName} (city code: ${city}). All queries must filter with WHERE city = '${city}' unless the user explicitly asks about another city.
 ACTIVE ANALYTICS FILTERS: ${summaryFilterState}.
 
-You have access to tools for querying the tree dataset, inspecting the active analytics dashboard, and updating the analytics dashboard filters. Use set_summary_filters when the user wants the charts narrowed, focused, or cleared. Use inspect_summary_dashboard when you need to see the current summary chart queries or results. Available analytics filter fields are tree_form, species, and native_status.
+You have access to tools for querying the tree dataset, inspecting the active analytics dashboard, and updating the analytics dashboard filters. Use set_summary_filters when the user wants the charts narrowed, focused, or cleared. Use inspect_summary_dashboard when you need to see the current summary chart queries or results. Available analytics filter fields are tree_form, species, native_locality_bucket, hardiness_fit_bucket, water_resilience_bucket, sun_exposure_label, lifespan_bucket, growth_rate, wildlife_value, and fire_risk.
 
 AVAILABLE CONCEPTS:
 - tree_id (string) - unique identifier
@@ -228,19 +228,32 @@ AVAILABLE CONCEPTS:
 - longitude (float) - geographic longitude
 - diameter_at_breast_height (float) - trunk diameter in inches
 
+SUMMARY ANALYTICS CONCEPTS:
+- native_locality_bucket (string) - Local native | Non-local native | Introduced
+- hardiness_fit_bucket (string) - Well within zone | Edge of tolerance | Outside zone | Unknown
+- water_resilience_bucket (string) - High water / low drought tolerance | Low water / high drought tolerance | Moderate / mixed | Unknown
+- sun_exposure_label (string) - Full sun | Partial shade | Shade
+- lifespan_bucket (string) - Short-lived (<50y) | Medium-lived (50-149y) | Long-lived (150+y) | Unknown
+- dominance_rank (int)
+- cumulative_tree_share_pct (float)
+
 SPECIES-LEVEL ENRICHMENT CONCEPTS:
-- common_names (string) - comma-separated common names for the species
-- native_status (string) - native_bay_area | native_california | non_native | naturalized | unknown
+- common_names (string)
+- description (string)
 - is_evergreen (bool)
-- mature_height_ft (float)
-- canopy_spread_ft (float)
+- mature_height_min_ft / mature_height_max_ft (float)
+- canopy_spread_min_ft / canopy_spread_max_ft (float)
 - growth_rate (string) - slow | moderate | fast
-- lifespan_years (string) - e.g. "50-100", "200+"
+- lifespan_min_years / lifespan_max_years (int)
 - drought_tolerance (string) - low | moderate | high
-- bloom_season (string) - September to November | autumn and winter | late spring and summer | late spring or summer | late spring to autumn | spring | spring and summer | summer | winter | year-round
+- water_needs (string) - low | moderate | high
+- sun_exposure (array)
+- bloom_months (array of month numbers)
 - wildlife_value (string) - low | moderate | high
 - fire_risk (string) - low | moderate | high
 - tree_form (string) - broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default
+- usda_zone_min / usda_zone_max (int)
+- native_ecoregions (array of ecoregion ids)
 
 TRILOGY SYNTAX RULES:
 ${rulesInput}
@@ -253,7 +266,7 @@ VALID DATA TYPES: ${datatypes.join(', ')}
 
 IMPORTANT GUIDELINES:
 1. Use a reasonable LIMIT (e.g., 100-500) for exploratory run_query calls.
-2. Use set_summary_filters for requests like "filter to native trees", "show broadleaf species only", or "clear the filters".
+2. Use set_summary_filters for requests like "filter to local native trees", "show broadleaf species only", "show only trees outside the hardiness zone", or "clear the filters".
 3. If a query fails, explain the error and try a corrected version.
 4. Always finish by calling return_to_user with your complete response. Never return a plain text reply - use return_to_user to signal you are done.
 
@@ -707,7 +720,7 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
           const validFilters = filters.filter(
             (filter): filter is { field: SummaryFilterField; values?: string[] } =>
               filter != null &&
-              ['tree_form', 'species', 'native_status'].includes(filter.field),
+              SUMMARY_FILTER_FIELDS.includes(filter.field),
           )
 
           if (operation === 'clear') {
@@ -723,7 +736,7 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
             return {
               success: false,
               error:
-                'set_summary_filters requires at least one filter with field tree_form, species, or native_status.',
+                `set_summary_filters requires at least one filter with field ${SUMMARY_FILTER_FIELDS.join(', ')}.`,
             }
           }
 
