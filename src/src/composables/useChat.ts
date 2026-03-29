@@ -47,15 +47,7 @@ const LLM_CONNECTION = 'sf-trees'
 
 // Default models per provider — used when first creating the connection so
 // generateCompletion works immediately without waiting for reset() to finish.
-const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
-  anthropic: 'claude-sonnet-4-6',
-  openai: 'gpt-5.2',
-  google: 'google/gemini-3-flash-preview',
-  openrouter: 'google/gemini-3-flash-preview',
-  demo: 'google/gemini-3-flash-preview',
-}
-
-const TOOLS = [
+const _TOOLS = [
   {
     name: 'run_query',
     description:
@@ -148,78 +140,6 @@ const TOOLS = [
   RETURN_TO_USER_TOOL,
 ]
 
-type AppScreen = 'map' | 'summary' | 'info'
-
-const SUMMARY_TOOLS = [
-  TOOLS[0],
-  {
-    name: 'set_summary_filters',
-    description:
-      'Update the analytics page cross-filters. Use this on the summary page to focus the charts by tree_category, species, or native_status. You can replace all filters, replace only specific fields, append values, or clear filters.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        operation: {
-          type: 'string',
-          enum: ['replace_all', 'replace_fields', 'append', 'clear'],
-          description: 'How to apply the analytics filters.',
-        },
-        filters: {
-          type: 'array',
-          description: 'Analytics filters to apply.',
-          items: {
-            type: 'object',
-            properties: {
-              field: {
-                type: 'string',
-                enum: ['tree_category', 'species', 'native_status'],
-                description: 'Which analytics dimension to filter.',
-              },
-              values: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'One or more exact values for that field.',
-              },
-            },
-            required: ['field'],
-          },
-        },
-      },
-      required: ['operation'],
-    },
-  },
-  {
-    name: 'inspect_summary_dashboard',
-    description:
-      'Inspect the active analytics dashboard. Returns the current chart queries, active filters, generated SQL, and a sampled result set for the requested summary cards.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        chart_ids: {
-          type: 'array',
-          description: 'Optional list of summary chart ids to inspect. If omitted, all summary charts are included.',
-          items: { type: 'string' },
-        },
-        row_limit: {
-          type: 'number',
-          description: 'Maximum number of result rows to return per chart. Defaults to 10 and is capped at 25.',
-        },
-      },
-    },
-  },
-  TOOLS[4],
-  RETURN_TO_USER_TOOL,
-]
-
-function getActiveScreen(): AppScreen {
-  const routeName = router.currentRoute.value.name
-  return routeName === 'summary' || routeName === 'info' ? routeName : 'map'
-}
-
-function toolsForScreen(screen: AppScreen) {
-  return screen === 'summary' ? SUMMARY_TOOLS : TOOLS
-}
-
 const SUMMARY_INSPECTABLE_CHARTS = [...SUMMARY_KPI_CHARTS, ...SUMMARY_CHARTS]
 
 const _today = new Date().toLocaleDateString('en-US', {
@@ -230,81 +150,13 @@ const _today = new Date().toLocaleDateString('en-US', {
 
 const _cityNames = Object.values(CITY_CONFIG).map((c) => c.name).join(', ')
 
-function toJsonSafeValue(value: unknown): unknown {
-  if (typeof value === 'bigint') {
-    const asNumber = Number(value)
-    return Number.isSafeInteger(asNumber) ? asNumber : value.toString()
-  }
-
-  if (value instanceof Date) {
-    return value.toISOString()
-  }
-
-  if (value !== null && value !== undefined && (value as { isLuxonDateTime?: boolean }).isLuxonDateTime === true) {
-    return (value as { toISO: () => string | null }).toISO() ?? null
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => toJsonSafeValue(item))
-  }
-
-  if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [key, toJsonSafeValue(nestedValue)]),
-    )
-  }
-
-  return value
-}
-
-function toJsonSafeRows(rows: readonly Readonly<Record<string, unknown>>[]) {
-  return rows.map((row) => toJsonSafeValue(row) as Record<string, unknown>)
-}
-
-function safeJsonStringify(value: unknown): string {
-  return JSON.stringify(toJsonSafeValue(value))
-}
-
-function describeToolError(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message
-  }
-  if (typeof error === 'string') {
-    return error
-  }
-
-  try {
-    return safeJsonStringify(error)
-  } catch {
-    return String(error)
-  }
-}
-
-function normalizeToolResult<T extends { message?: unknown; error?: unknown }>(result: T): T {
-  return {
-    ...result,
-    message:
-      result.message == null
-        ? undefined
-        : typeof result.message === 'string'
-          ? result.message
-          : safeJsonStringify(result.message),
-    error:
-      result.error == null
-        ? undefined
-        : typeof result.error === 'string'
-          ? result.error
-          : safeJsonStringify(result.error),
-  }
-}
-
 function buildSystemPromptForCity(city: CityCode, userLoc?: { lat: number; lng: number } | null): string {
   const cityName = CITY_CONFIG[city].name
   const userLocStr = userLoc
     ? `\nUSER LOCATION: The user's precise device location is lat ${userLoc.lat.toFixed(5)}, lng ${userLoc.lng.toFixed(5)}. When asked about "trees near me" or nearby trees, use a bounding box: WHERE latitude BETWEEN ${(userLoc.lat - 0.009).toFixed(5)} AND ${(userLoc.lat + 0.009).toFixed(5)} AND longitude BETWEEN ${(userLoc.lng - 0.011).toFixed(5)} AND ${(userLoc.lng + 0.011).toFixed(5)} (≈ 1 km radius). Adjust the range based on context.`
     : ''
   return buildCustomTrilogyPrompt(
-    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Urban Trees map application. You help users explore cities' urban forest datasets of 100k+ trees and visualize the results. A default map is loaded with coloring by tree category. Cities supported include ${_cityNames}.${userLocStr}
+    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Urban Trees map application. You help users explore cities' urban forest datasets of 100k+ trees and visualize the results. A default map is loaded with coloring by tree form. Cities supported include ${_cityNames}.${userLocStr}
 
 ACTIVE CITY: ${cityName} (city code: ${city}). All queries must filter with WHERE city = '${city}' unless the user explicitly asks about another city.
 
@@ -333,7 +185,7 @@ SPECIES-LEVEL ENRICHMENT CONCEPTS:
 - bloom_season (string) — September to November | autumn and winter | late spring and summer | late spring or summer | late spring to autumn | spring | spring and summer | summer | winter | year-round
 - wildlife_value (string) — low | moderate | high
 - fire_risk (string) — low | moderate | high
-- tree_category (string) — palm | broadleaf | spreading | coniferous | columnar | ornamental | default
+- tree_form (string) — broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default
 
 TRILOGY SYNTAX RULES:
 ${rulesInput}
@@ -365,7 +217,7 @@ ACTIVE SCREEN: Analytics summary.
 ACTIVE CITY: ${cityName} (city code: ${city}). All queries must filter with WHERE city = '${city}' unless the user explicitly asks about another city.
 ACTIVE ANALYTICS FILTERS: ${summaryFilterState}.
 
-You have access to tools for querying the tree dataset, inspecting the active analytics dashboard, and updating the analytics dashboard filters. Use set_summary_filters when the user wants the charts narrowed, focused, or cleared. Use inspect_summary_dashboard when you need to see the current summary chart queries or results. Available analytics filter fields are tree_category, species, and native_status.
+You have access to tools for querying the tree dataset, inspecting the active analytics dashboard, and updating the analytics dashboard filters. Use set_summary_filters when the user wants the charts narrowed, focused, or cleared. Use inspect_summary_dashboard when you need to see the current summary chart queries or results. Available analytics filter fields are tree_form, species, and native_status.
 
 AVAILABLE CONCEPTS:
 - tree_id (string) - unique identifier
@@ -388,7 +240,7 @@ SPECIES-LEVEL ENRICHMENT CONCEPTS:
 - bloom_season (string) - September to November | autumn and winter | late spring and summer | late spring or summer | late spring to autumn | spring | spring and summer | summer | winter | year-round
 - wildlife_value (string) - low | moderate | high
 - fire_risk (string) - low | moderate | high
-- tree_category (string) - palm | broadleaf | spreading | coniferous | columnar | ornamental | default
+- tree_form (string) - broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default
 
 TRILOGY SYNTAX RULES:
 ${rulesInput}
@@ -855,7 +707,7 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
           const validFilters = filters.filter(
             (filter): filter is { field: SummaryFilterField; values?: string[] } =>
               filter != null &&
-              ['tree_category', 'species', 'native_status'].includes(filter.field),
+              ['tree_form', 'species', 'native_status'].includes(filter.field),
           )
 
           if (operation === 'clear') {
@@ -871,7 +723,7 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
             return {
               success: false,
               error:
-                'set_summary_filters requires at least one filter with field tree_category, species, or native_status.',
+                'set_summary_filters requires at least one filter with field tree_form, species, or native_status.',
             }
           }
 

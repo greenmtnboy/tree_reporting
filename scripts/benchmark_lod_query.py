@@ -15,7 +15,7 @@ import duckdb
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW_JSON = ROOT / "data" / "raw_data.json"
-SPECIES_JSON = ROOT / "data" / "species_data.json"
+REMOTE_SPECIES_PARQUET_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment_v1.parquet"
 
 WEB_MERCATOR_MAX = 20037508.342789244
 WEB_MERCATOR_WORLD = WEB_MERCATOR_MAX * 2
@@ -42,22 +42,25 @@ def setup(con: duckdb.DuckDBPyConnection) -> None:
         [str(RAW_JSON)],
     )
 
-    if SPECIES_JSON.exists():
+    try:
         con.execute(
-            """
+            f"""
             CREATE OR REPLACE TABLE species_enrichment AS
-            SELECT * FROM read_json_auto(?);
-            """,
-            [str(SPECIES_JSON)],
-        )
-    else:
-        con.execute(
+            SELECT species, tree_form
+            FROM read_parquet('{REMOTE_SPECIES_PARQUET_URL}');
             """
+        )
+    except duckdb.Error:
+        con.execute(
+            f"""
             CREATE OR REPLACE TABLE species_enrichment AS
             SELECT
-              ''::VARCHAR AS species,
-              'default'::VARCHAR AS tree_category
-            WHERE FALSE;
+              species,
+              CASE lower(trim(COALESCE(tree_category, 'default')))
+                WHEN 'coniferous' THEN 'conifer'
+                ELSE lower(trim(COALESCE(tree_category, 'default')))
+              END AS tree_form
+            FROM read_parquet('{REMOTE_SPECIES_PARQUET_URL}');
             """
         )
 
@@ -74,13 +77,15 @@ def build_precomputed(con: duckdb.DuckDBPyConnection) -> float:
             t.latitude,
             t.longitude,
             COALESCE(t.diameter_at_breast_height, 3) AS dbh,
-            CASE lower(trim(COALESCE(se.tree_category, 'default')))
+            CASE lower(trim(COALESCE(se.tree_form, 'default')))
               WHEN 'palm' THEN 'palm'
               WHEN 'broadleaf' THEN 'broadleaf'
+              WHEN 'conifer' THEN 'conifer'
               WHEN 'spreading' THEN 'spreading'
-              WHEN 'coniferous' THEN 'coniferous'
               WHEN 'columnar' THEN 'columnar'
               WHEN 'ornamental' THEN 'ornamental'
+              WHEN 'weeping' THEN 'weeping'
+              WHEN 'multi_trunk' THEN 'multi_trunk'
               ELSE 'default'
             END AS category,
             LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878) AS latitude_clamped,
@@ -133,13 +138,15 @@ def main() -> None:
           AS INTEGER
         ) AS ytile,
         COALESCE(diameter_at_breast_height, 3) AS dbh,
-        CASE lower(trim(COALESCE(se.tree_category, 'default')))
+        CASE lower(trim(COALESCE(se.tree_form, 'default')))
           WHEN 'palm' THEN 'palm'
           WHEN 'broadleaf' THEN 'broadleaf'
+          WHEN 'conifer' THEN 'conifer'
           WHEN 'spreading' THEN 'spreading'
-          WHEN 'coniferous' THEN 'coniferous'
           WHEN 'columnar' THEN 'columnar'
           WHEN 'ornamental' THEN 'ornamental'
+          WHEN 'weeping' THEN 'weeping'
+          WHEN 'multi_trunk' THEN 'multi_trunk'
           ELSE 'default'
         END AS category
       FROM trees t

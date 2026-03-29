@@ -28,7 +28,7 @@ SELECT
     plant_date,
     species,
     species as species_key,
-    tree_category,
+    tree_form,
     native_status,
     is_evergreen,
     mature_height_ft,
@@ -48,7 +48,7 @@ where plant_type = 'Tree' and latitude is not null and longitude is not null
 SELECT
     tree_id,
     species as species_key,
-    tree_category,
+    tree_form,
     latitude,
     longitude,
     diameter_at_breast_height

@@ -3,7 +3,7 @@ import ..tree_common;
 property <*>.arboretum_data_updated_through datetime; # when Arnold Arboretum data is through
 property <*>.boston_city_data_updated_through datetime; # when Boston city open-data is through
 property <*>.cambridge_data_updated_through datetime; # when Cambridge open-data is through
-auto boston_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through, cambridge_data_updated_through);
+auto usbos_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through, cambridge_data_updated_through);
 key usbos_source enum<string>['CITY', 'ARBORETUM', 'CAMBRIDGE']; # data source within Boston metro (CITY = Boston municipal, ARBORETUM = Arnold Arboretum, CAMBRIDGE = Cambridge municipal)
 
 
@@ -91,10 +91,10 @@ partial datasource boston_tree_info (
     ?plant_date,
     ?latitude,
     ?longitude,
-    boston_data_updated_through
+    usbos_data_updated_through
 )
 grain (tree_id)
 complete where city = 'USBOS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`
-freshness by boston_data_updated_through;
+freshness by usbos_data_updated_through;
 

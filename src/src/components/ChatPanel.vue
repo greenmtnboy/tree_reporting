@@ -51,7 +51,7 @@
         <li><code>bloom_season</code></li>
         <li><code>wildlife_value</code> - low | moderate | high</li>
         <li><code>fire_risk</code> - low | moderate | high</li>
-        <li><code>tree_category</code> - palm | broadleaf | spreading | coniferous | columnar | ornamental</li>
+        <li><code>tree_form</code> - broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default</li>
       </ul>
     </div>
 

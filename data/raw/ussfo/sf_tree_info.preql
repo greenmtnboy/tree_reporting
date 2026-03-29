@@ -1,7 +1,7 @@
 import ..tree_common;
 
 root datasource sf_update_time (
-    data_updated_through: sf_data_updated_through
+    data_updated_through: ussfo_data_updated_through
 )
 file `./sf_update_time.py`;
 
@@ -15,18 +15,6 @@ root partial datasource sf_raw_tree_info (
     DBH: ?diameter_at_breast_height,
     Latitude: ?latitude,
     Longitude: ?longitude,
-    # qLegalStatus: ~?legal_status,
-    # qAddress: ~?address,
-    # SiteOrder: ~?site_order,
-    # qSiteInfo: site_info,
-    # PlantType: plant_type,
-    # qCaretaker: caretaker,
-    # qCareAssistant: ?care_assistant,
-    # PlotSize: ?plot_size,
-    # PermitNotes: ?permit_notes,
-    # XCoord: ?x_coord,
-    # YCoord: ?y_coord,
-    # Location: ?location,
 )
 grain (tree_id)
 complete where city = 'USSFO'
@@ -42,22 +30,10 @@ partial datasource sf_tree_info (
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
-    sf_data_updated_through,
-    # ?legal_status,
-    # ?address,
-    # ?site_order,
-    # site_info,
-    # plant_type,
-    # caretaker,
-    # ?care_assistant,
-    # ?plot_size,
-    # ?permit_notes,
-    # ?x_coord,
-    # ?y_coord,
-    # ?location,
+    ussfo_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'USSFO'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ussfo_tree_info_v{data_version}.parquet`
-freshness by sf_data_updated_through;
+freshness by ussfo_data_updated_through;
 

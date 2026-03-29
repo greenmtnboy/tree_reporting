@@ -1,0 +1,6 @@
+LAYER_METADATA_URL = "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/Resolve_Ecoregions/FeatureServer/0?f=pjson"
+LAYER_QUERY_URL = "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/Resolve_Ecoregions/FeatureServer/0/query"
+SERVICE_ITEM_ID = "37ea320eebb647c6838c23f72abae5ef"
+SOURCE_VERSION = "resolve-ecoregions-2017"
+REMOTE_ECOREGION_PARQUET = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ecoregion_info_v1.parquet"
+GCS_ECOREGION_PARQUET = "gs://trilogy_public_models/duckdb/trees/ecoregion_info_v1.parquet"

@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "1.33.1-dev18.0",
-    "@trilogy-data/trilogy-studio-components": "link:../../trilogy-studio-core/lib",
+    "@trilogy-data/trilogy-studio-components": "0.1.17",
     "maplibre-gl": "^4.7.1",
     "pinia": "^2.3.1",
     "vue": "^3.5.13",

@@ -14,7 +14,7 @@ METADATA_URL = f"https://data.boston.gov/api/3/action/resource_show?id={RESOURCE
 
 
 def fetch_rows_updated_at() -> datetime:
-    r = requests.get(METADATA_URL)
+    r = requests.get(METADATA_URL, timeout=30)
     r.raise_for_status()
     meta = r.json()
 
@@ -23,7 +23,10 @@ def fetch_rows_updated_at() -> datetime:
     if ts is None:
         raise RuntimeError("Dataset metadata missing last_modified")
 
-    return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
+    parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def emit(updated_at: datetime) -> None:

@@ -42,7 +42,6 @@
 <script setup lang="ts">
 import { ref, shallowRef, onMounted, onUnmounted, watch, computed } from 'vue'
 import maplibregl from 'maplibre-gl'
-import { useTreeData } from '../composables/useTreeData'
 import { registerCategoryColoredIcons } from '../composables/useTreeCategories'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData, CITY_CONFIG, type CityCode } from '../composables/useMapData'
@@ -145,7 +144,6 @@ const {
   dbTreeCount,
 } = useDuckDB()
 
-const { loading, error, getSpeciesEnrichment } = useTreeData()
 const { landmarks } = useLandmarkData()
 const { target: flyToTarget, flyTo } = useFlyTo()
 const route = useRoute()
@@ -161,8 +159,8 @@ const introCenterRef = computed((): [number, number] => CITY_CONFIG[selectedCity
 
 // --- Computed ---
 
-const displayError = computed(() => error.value ?? mapError.value)
-const isInitialLoading = computed(() => loading.value || defaultQueryLoading.value || introActive.value)
+const displayError = computed(() => mapError.value)
+const isInitialLoading = computed(() => defaultQueryLoading.value || introActive.value)
 
 const activeHeatmapColors = computed(() => {
   return workerDistinctColors.value.length > 0 ? workerDistinctColors.value : []
@@ -390,23 +388,41 @@ const { loadingMessage, runIntroZoomOut, cancelIntro, runGlobeSwoopTo, recordInt
 
 // --- Tree popup ---
 
-function formatPopupHtml(row: any, enrichment?: ReturnType<typeof getSpeciesEnrichment>): string {
+interface PopupTreeRow {
+  tree_id: string
+  tree_name: string | null
+  species: string | null
+  plant_date: string | null
+  dbh: number | null
+  tree_form: string | null
+  native_status: string | null
+  is_evergreen: boolean | null
+  mature_height_ft: number | null
+  bloom_season: string | null
+  wildlife_value: string | null
+  fire_risk: string | null
+}
+
+function formatPopupHtml(row: PopupTreeRow): string {
   const planted = row.plant_date?.split(' ')[0] ?? null
-  const evergreen = enrichment?.is_evergreen == null ? null : (enrichment.is_evergreen ? 'Yes' : 'No')
-  const category = enrichment?.tree_category
-    ? enrichment.tree_category.charAt(0).toUpperCase() + enrichment.tree_category.slice(1)
+  const evergreen = row.is_evergreen == null ? null : (row.is_evergreen ? 'Yes' : 'No')
+  const treeForm = row.tree_form
+  const category = treeForm
+    ? treeForm
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase())
     : null
   const detailLines = [
     ['ID', row.tree_id],
-    ['Category', category],
+    ['Form', category],
     ['Planted', planted],
-    ['Trunk diameter', row.diameter_at_breast_height != null ? `${row.diameter_at_breast_height}"` : null],
-    ['Native', enrichment?.native_status],
+    ['Trunk diameter', row.dbh != null ? `${row.dbh}"` : null],
+    ['Native', row.native_status],
     ['Evergreen', evergreen],
-    ['Mature height', enrichment?.mature_height_ft != null ? `${enrichment.mature_height_ft} ft` : null],
-    ['Bloom', enrichment?.bloom_season],
-    ['Wildlife value', enrichment?.wildlife_value],
-    ['Fire risk', enrichment?.fire_risk],
+    ['Mature height', row.mature_height_ft != null ? `${row.mature_height_ft} ft` : null],
+    ['Bloom', row.bloom_season],
+    ['Wildlife value', row.wildlife_value],
+    ['Fire risk', row.fire_risk],
   ]
     .filter(([, value]) => value != null && value !== '' && value !== 'Unknown')
     .map(([label, value]) => `${label}: ${value}<br/>`)
@@ -428,18 +444,29 @@ async function showTreePopup(feature: GeoJSON.Feature, offset: number) {
   const safeId = String(id).replace(/'/g, "''")
   try {
     const { rows } = await duckQuery(`
-      SELECT tree_id, tree_name, species, plant_date, diameter_at_breast_height
-      FROM trees
+      SELECT
+        tree_id,
+        tree_name,
+        species,
+        plant_date,
+        dbh,
+        tree_form,
+        native_status,
+        is_evergreen,
+        mature_height_ft,
+        bloom_season,
+        wildlife_value,
+        fire_risk
+      FROM trees_fast
       WHERE tree_id = '${safeId}'
       LIMIT 1
     `)
-    const row = rows[0] as any
+    const row = rows[0] as unknown as PopupTreeRow | undefined
     if (!row || requestToken !== popupRequestToken) return
-    const enrichment = getSpeciesEnrichment(row.species)
     if (activeTreePopup) { activeTreePopup.remove(); activeTreePopup = null }
     const popup = new maplibregl.Popup({ offset, className: 'tree-popup' })
       .setLngLat(coords)
-      .setHTML(formatPopupHtml(row, enrichment))
+      .setHTML(formatPopupHtml(row))
       .addTo(mapRef.value)
     activeTreePopup = popup
     popup.on('close', () => { if (activeTreePopup === popup) activeTreePopup = null })

@@ -43,18 +43,18 @@
     <div class="chart-row">
       <div class="chart-card chart-card--wide">
         <div class="chart-card-header">
-          <h2>Tree Types</h2>
+          <h2>Tree Forms</h2>
         </div>
         <EmbeddedDashboardChart
-          item-id="tree-category"
+          item-id="tree-form"
           v-bind="sharedChartProps"
-          :filters="filtersForChart('tree-category')"
-          :title="treeCategoryChart.title"
-          :query="treeCategoryChart.query"
-          :chart-config="treeCategoryChart.chartConfig"
-          :selection-filters="selectionFiltersForChart('tree-category')"
+          :filters="filtersForChart('tree-form')"
+          :title="treeFormChart.title"
+          :query="treeFormChart.query"
+          :chart-config="treeFormChart.chartConfig"
+          :selection-filters="selectionFiltersForChart('tree-form')"
           @dimension-click="handleChartClick"
-          @background-click="clearChartSelection('tree-category')"
+          @background-click="clearChartSelection('tree-form')"
         />
       </div>
 
@@ -62,8 +62,8 @@
         <div class="chart-card-header">
           <h2>
             Top Species
-            <span v-if="selectedCategory" class="header-filter-hint">
-              in <em>{{ formatFilterValue(selectedCategory) }}</em>
+            <span v-if="selectedTreeForm" class="header-filter-hint">
+              in <em>{{ formatFilterValue(selectedTreeForm) }}</em>
             </span>
           </h2>
           <span class="chart-sub">Top 15 by tree count</span>
@@ -112,6 +112,9 @@
           :title="droughtToleranceChart.title"
           :query="droughtToleranceChart.query"
           :chart-config="droughtToleranceChart.chartConfig"
+          :selection-filters="selectionFiltersForChart('drought-tolerance')"
+          @dimension-click="handleChartClick"
+          @background-click="clearChartSelection('drought-tolerance')"
         />
       </div>
 
@@ -127,7 +130,9 @@
           :title="plantYearChart.title"
           :query="plantYearChart.query"
           :chart-config="plantYearChart.chartConfig"
-          :allow-cross-filter="plantYearChart.allowCrossFilter ?? false"
+          :selection-filters="selectionFiltersForChart('plant-year')"
+          @dimension-click="handleChartClick"
+          @background-click="clearChartSelection('plant-year')"
         />
       </div>
     </div>
@@ -165,7 +170,7 @@ const sharedChartProps = {
   imports: SUMMARY_DASHBOARD_IMPORTS as DashboardImport[],
 }
 const kpiCharts = SUMMARY_KPI_CHARTS
-const treeCategoryChart = SUMMARY_CHARTS_BY_ID['tree-category']
+const treeFormChart = SUMMARY_CHARTS_BY_ID['tree-form']
 const topSpeciesChart = SUMMARY_CHARTS_BY_ID['top-species']
 const nativeStatusChart = SUMMARY_CHARTS_BY_ID['native-status']
 const droughtToleranceChart = SUMMARY_CHARTS_BY_ID['drought-tolerance']
@@ -191,7 +196,7 @@ const baseFilters = computed(() => {
   return getSummaryBaseFilters(cityFilter.value)
 })
 
-const selectedCategory = computed(() => selectionsByField().tree_category?.[0] ?? null)
+const selectedTreeForm = computed(() => selectionsByField().tree_form?.[0] ?? null)
 
 const activeFilters = computed(() => {
   const filters: Array<{ key: string; label: string }> = []
@@ -199,7 +204,7 @@ const activeFilters = computed(() => {
     filters.push({ key: 'city', label: `City: ${cityName.value}` })
   }
   for (const filter of activeSummaryFilters.value) {
-    filters.push({ key: filter.field, label: filter.display })
+    filters.push({ key: filter.key, label: filter.display })
   }
   return filters
 })
@@ -210,9 +215,7 @@ function formatFilterValue(value: string) {
 
 function clearFilter(key: string) {
   if (key === 'city') cityFilter.value = null
-  else if (key === 'tree_category') crossFilters.clearSource('tree-category')
-  else if (key === 'species') crossFilters.clearSource('top-species')
-  else if (key === 'native_status') crossFilters.clearSource('native-status')
+  else crossFilters.clearSource(key)
 }
 
 function clearAllFilters() {
@@ -221,19 +224,16 @@ function clearAllFilters() {
 }
 
 function filtersForChart(chartId: string) {
-  crossFilters.version.value
+  void crossFilters.version.value
   return crossFilters.getSqlFiltersFor(chartId, baseFilters.value)
 }
 
 function selectionFiltersForChart(chartId: string) {
-  crossFilters.version.value
-  return crossFilters
-    .getSelections()
-    .filter((selection) => selection.source === chartId)
-    .map((selection) => ({
-      source: selection.source,
-      value: selection.chart ?? selection.filters,
-    }))
+  void crossFilters.version.value
+  return crossFilters.getChartSelectionsFor(chartId).map((value) => ({
+    source: chartId,
+    value,
+  }))
 }
 
 function handleChartClick(info: DimensionClick) {

@@ -1,7 +1,7 @@
 import ..landmark_common;
 
 root datasource paris_landmarks_update_time (
-    data_updated_through: paris_landmark_data_updated_through
+    data_updated_through: frpar_landmark_data_updated_through
 )
 file `./paris_landmarks_probe.py`;
 
@@ -30,9 +30,9 @@ partial datasource paris_landmark_info (
     ?arrondissement,
     ?protection_type,
     ?denomination,
-    paris_landmark_data_updated_through,
+    frpar_landmark_data_updated_through,
 )
 grain (landmark_id)
 complete where city = 'FRPAR'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/frpar_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/frpar_landmark_info_v{data_version}.parquet`
-freshness by paris_landmark_data_updated_through;
+freshness by frpar_landmark_data_updated_through;

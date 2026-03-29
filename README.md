@@ -1,13 +1,17 @@
 #  Urban Tree Reporting
 
-An interactive browser-based map of city trees with a chat assistant (free to try!). Explore hundreds of thousands of street trees by location, species, and ecological attributes.
+An interactive browser-based map of city trees with a chat assistant. Explore hundreds of thousands of street trees by location, species, and ecological attributes.
 
-Zoom around. Find interesting clusters.
+Urban forests aren't just stately, magnificant, or supportive of urban design - they can reduce city heat, absorb runoff, improve air quality, and enhance the mental health of residents. Read more [here](https://www.climatecentral.org/climate-matters/the-power-of-urban-trees-2023).
+
+See what you can discovery!
 
 Currently has data from the following cities:
-- San Franciso, United States
-- New York City, United States
-- Boston, United States
+- San Franciso CA, United States
+- New York City NY, United States
+- Boston MA, United States
+- Burlington VT, United States
+- Paris, France
 
 **[Live page](https://greenmtnboy.github.io/sf_tree_reporting/)**
 
@@ -15,7 +19,7 @@ Currently has data from the following cities:
 
 ## What it does
 
-Shows you pretty graphs of trees that you can zoom around on!
+Shows you the trees of a city on a map. Typically these will be the subset managed by the city.
 
 The page loads raw tree records sourced from city open data into an in-browser DuckDB instance and renders them on a MapLibre GL map with adaptive display.
 

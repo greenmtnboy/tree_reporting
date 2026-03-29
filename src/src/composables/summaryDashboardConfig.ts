@@ -54,27 +54,29 @@ export const SUMMARY_KPI_CHARTS: SummaryDashboardKpi[] = [
 
 export const SUMMARY_CHARTS: SummaryDashboardChart[] = [
   {
-    id: 'tree-category',
-    title: 'Tree Types',
+    id: 'tree-form',
+    title: 'Tree Forms',
     query: `import std.color;
 SELECT
-tree_category,
-case lower(tree_category)
+tree_form,
+case lower(tree_form)
 when 'palm' then '#D4A14A'
 when 'broadleaf' then '#A7E3B2'
 when 'columnar' then '#6BAF92'
-when 'coniferous' then '#1F5A4E'
+when 'conifer' then '#1F5A4E'
 when 'ornamental' then '#A96F49'
 when 'spreading' then '#2F7D4F'
+when 'weeping' then '#5F9EA0'
+when 'multi_trunk' then '#8B6B4A'
 else '#7E9D86'
 end::string::hex as cat_color,
 count(tree_id) as tree_count
-WHERE tree_category IS NOT NULL ORDER BY tree_count DESC;`,
+WHERE tree_form IS NOT NULL ORDER BY tree_count DESC;`,
     chartConfig: {
       chartType: 'donut',
       xField: 'tree_count',
-      yField: 'tree_category',
-      colorField: 'tree_category',
+      yField: 'tree_form',
+      colorField: 'tree_form',
       showTitle: false,
       hideLegend: true,
     },
@@ -165,7 +167,6 @@ WHERE plant_date IS NOT NULL ORDER BY plant_year ASC;`,
       showTitle: false,
       hideLegend: true,
     },
-    allowCrossFilter: false,
   },
 ]
 

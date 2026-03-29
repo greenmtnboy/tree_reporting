@@ -1,7 +1,7 @@
 import ..landmark_common;
 
 root datasource nyc_landmarks_update_time (
-    data_updated_through: nyc_landmark_data_updated_through
+    data_updated_through: usnyc_landmark_data_updated_through
 )
 file `./nyc_landmarks_probe.py`;
 
@@ -26,9 +26,9 @@ partial datasource nyc_landmark_info (
     ?latitude,
     ?longitude,
     ?geometry,
-    nyc_landmark_data_updated_through,
+    usnyc_landmark_data_updated_through,
 )
 grain (landmark_id)
 complete where city = 'USNYC'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usnyc_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usnyc_landmark_info_v{data_version}.parquet`
-freshness by nyc_landmark_data_updated_through;
+freshness by usnyc_landmark_data_updated_through;

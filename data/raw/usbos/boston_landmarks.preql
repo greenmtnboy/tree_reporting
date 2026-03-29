@@ -1,7 +1,7 @@
 import ..landmark_common;
 
 root datasource boston_landmarks_update_time (
-    data_updated_through: bos_landmark_data_updated_through
+    data_updated_through: usbos_landmark_data_updated_through
 )
 file `./boston_landmarks_probe.py`;
 
@@ -28,9 +28,9 @@ partial datasource boston_landmark_info (
     ?geometry,
     ?latitude,
     ?longitude,
-    bos_landmark_data_updated_through,
+    usbos_landmark_data_updated_through,
 )
 grain (landmark_id)
 complete where city = 'USBOS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usbos_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usbos_landmark_info_v{data_version}.parquet`
-freshness by bos_landmark_data_updated_through;
+freshness by usbos_landmark_data_updated_through;

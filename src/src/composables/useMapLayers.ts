@@ -1,7 +1,7 @@
 import type { Ref, ComputedRef } from 'vue'
 import maplibregl from 'maplibre-gl'
 import { registerCategoryColoredIcons } from './useTreeCategories'
-import type { Landmark, TreeCategory } from '../types'
+import type { Landmark, TreeForm } from '../types'
 
 // --- Exported constants ---
 
@@ -12,7 +12,17 @@ export const LANDMARK_ZOOM_MIN = 11
 
 const MAX_ZOOM = 19
 
-const TREE_CATEGORIES: TreeCategory[] = ['palm', 'broadleaf', 'spreading', 'coniferous', 'columnar', 'ornamental', 'default']
+const TREE_CATEGORIES: TreeForm[] = [
+  'broadleaf',
+  'conifer',
+  'palm',
+  'columnar',
+  'ornamental',
+  'spreading',
+  'weeping',
+  'multi_trunk',
+  'default',
+]
 
 const HEATMAP_ZOOM_INTENSITY_START = 10
 const HEATMAP_ZOOM_INTENSITY_MID = 13

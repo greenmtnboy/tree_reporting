@@ -2,4 +2,7 @@
 import raw.tree_enrichment;
 
 
-select  latest_update_through;
+import std.color;
+show SELECT
+native_status,count(tree_id) as tree_count,'#2F7D4F'::string::hex as color
+WHERE city = 'USSFO' and native_status IS NOT NULL ORDER BY tree_count DESC;

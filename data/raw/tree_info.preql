@@ -1,11 +1,11 @@
 import tree_common;
-import sf.sf_tree_info;
-import nyc.nyc_tree_info;
-import boston.boston_tree_info;
-import paris.paris_tree_info;
-import burlington.burlington_tree_info;
+import ussfo.sf_tree_info;
+import usnyc.nyc_tree_info;
+import usbos.boston_tree_info;
+import frpar.paris_tree_info;
+import usbtv.burlington_tree_info;
 
-auto latest_update_through <- greatest(sf_data_updated_through, nyc_data_updated_through, boston_data_updated_through, paris_data_updated_through, usbtv_data_updated_through);
+auto latest_update_through <- greatest(ussfo_data_updated_through, usnyc_data_updated_through, usbos_data_updated_through, frpar_data_updated_through, usbtv_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

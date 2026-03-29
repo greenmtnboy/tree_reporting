@@ -4,7 +4,7 @@ name = "urban_forest"
 [engine]
 # Default dialect for execution
 dialect = "duck_db"
-parallelism = 2
+parallelism = 3
 env_file="../.env"
 
 [engine.config]

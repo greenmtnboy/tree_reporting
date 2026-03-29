@@ -39,10 +39,14 @@ describe('parquet schema', () => {
 
       const colResult = await conn.runAndReadAll(`SELECT column_name FROM information_schema.columns WHERE table_name = 'enrichment'`)
       const cols = colResult.getRowObjects().map((r) => r.column_name as string)
-      const required = ['species', 'tree_category', 'native_status']
+      const required = ['species', 'native_status']
       for (const col of required) {
         expect(cols, `missing column: ${col}`).toContain(col)
       }
+      expect(
+        cols.includes('tree_form') || cols.includes('tree_category'),
+        'missing tree-form column (expected tree_form or legacy tree_category)',
+      ).toBe(true)
 
       const countResult = await conn.runAndReadAll(`SELECT COUNT(*) AS n FROM enrichment`)
       const n = Number(countResult.getRowObjects()[0].n)

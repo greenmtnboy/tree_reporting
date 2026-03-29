@@ -11,10 +11,11 @@ property tree_id.longitude float::longitude; # geographic longitude for mapping
 
 
 
-property <*>.sf_data_updated_through datetime; # when SF data is through
-property <*>.nyc_data_updated_through datetime; # when NYC data is through
-
-property <*>.paris_data_updated_through datetime; # when Paris data is through
+property <*>.ussfo_data_updated_through datetime; # when SF data is through
+property <*>.usnyc_data_updated_through datetime; # when NYC data is through
+# defined in boston dataset as it's a erivation
+# property <*>.usbos_data_updated_through datetime; # when Boston data is through
+property <*>.frpar_data_updated_through datetime; # when Paris data is through
 property <*>.usbtv_data_updated_through datetime; # when Burlington VT data is through
 
 

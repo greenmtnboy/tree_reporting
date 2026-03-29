@@ -49,9 +49,9 @@ property landmark_id.denomination string;     # building type (e.g. "immeuble", 
 
 # --- Freshness tracking ---
 
-property <*>.sf_landmark_data_updated_through datetime;
-property <*>.nyc_landmark_data_updated_through datetime;
-property <*>.bos_landmark_data_updated_through datetime;
-property <*>.paris_landmark_data_updated_through datetime;
+property <*>.ussfo_landmark_data_updated_through datetime;
+property <*>.usnyc_landmark_data_updated_through datetime;
+property <*>.usbos_landmark_data_updated_through datetime;
+property <*>.frpar_landmark_data_updated_through datetime;
 property <*>.usbtv_landmark_data_updated_through datetime;
-auto latest_landmark_update_through <- greatest(sf_landmark_data_updated_through, nyc_landmark_data_updated_through, bos_landmark_data_updated_through, paris_landmark_data_updated_through, usbtv_landmark_data_updated_through);
+auto latest_landmark_update_through <- greatest(ussfo_landmark_data_updated_through, usnyc_landmark_data_updated_through, usbos_landmark_data_updated_through, frpar_landmark_data_updated_through, usbtv_landmark_data_updated_through);

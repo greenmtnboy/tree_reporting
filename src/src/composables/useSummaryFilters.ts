@@ -4,30 +4,34 @@ import {
   useCrossFilterController,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
 
-export const SUMMARY_FILTER_FIELDS = ['tree_category', 'species', 'native_status'] as const
+export const SUMMARY_FILTER_FIELDS = ['tree_form', 'species', 'native_status'] as const
 export type SummaryFilterField = (typeof SUMMARY_FILTER_FIELDS)[number]
 
 type SummaryFilterMeta = {
   id: string
-  field: SummaryFilterField
+  field: string
   label: string
   format?: (value: string) => string
 }
 
 const SUMMARY_FILTER_META: SummaryFilterMeta[] = [
-  { id: 'tree-category', field: 'tree_category', label: 'Type', format: formatSummaryFilterValue },
+  { id: 'tree-form', field: 'tree_form', label: 'Form', format: formatSummaryFilterValue },
   { id: 'top-species', field: 'species', label: 'Species' },
   { id: 'native-status', field: 'native_status', label: 'Native', format: formatSummaryFilterValue },
 ]
 
 const SOURCE_BY_FIELD: Record<SummaryFilterField, string> = {
-  tree_category: 'tree-category',
+  tree_form: 'tree-form',
   species: 'top-species',
   native_status: 'native-status',
 }
 
+const SUMMARY_FILTER_META_BY_FIELD = new Map(
+  SUMMARY_FILTER_META.map((meta) => [meta.field, meta] as const),
+)
+
 const crossFilters = useCrossFilterController({
-  validFields: SUMMARY_FILTER_FIELDS,
+  normalizeLocalFields: true,
 })
 
 function normalizeValues(values: string[]) {
@@ -44,13 +48,19 @@ export function formatSummaryFilterValue(value: string) {
   return value.replace(/_/g, ' ')
 }
 
-function fieldForSource(source: string): SummaryFilterField | null {
-  const match = SUMMARY_FILTER_META.find((meta) => meta.id === source)
-  return match?.field ?? null
+function humanizeFieldName(field: string) {
+  return field
+    .replace(/^local\./, '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-function labelForField(field: SummaryFilterField) {
-  return SUMMARY_FILTER_META.find((meta) => meta.field === field)?.label ?? field
+function labelForField(field: string) {
+  return SUMMARY_FILTER_META_BY_FIELD.get(field)?.label ?? humanizeFieldName(field)
+}
+
+function formatValueForField(field: string, value: string) {
+  return SUMMARY_FILTER_META_BY_FIELD.get(field)?.format?.(value) ?? value
 }
 
 function applyValuesForField(
@@ -92,32 +102,49 @@ function clearFields(fields?: SummaryFilterField[]) {
 }
 
 function selectionsByField() {
-  crossFilters.version.value
-  const grouped: Partial<Record<SummaryFilterField, string[]>> = {}
+  void crossFilters.version.value
+  const grouped: Record<string, string[]> = {}
 
   for (const selection of crossFilters.getSelections()) {
-    const field = fieldForSource(selection.source)
-    if (!field) continue
-    const value = selection.filters[field]
-    if (typeof value !== 'string') continue
-    grouped[field] = [...(grouped[field] ?? []), value]
+    for (const [field, value] of Object.entries(selection.filters)) {
+      if (typeof value !== 'string') continue
+      grouped[field] = normalizeValues([...(grouped[field] ?? []), value])
+    }
   }
 
   return grouped
 }
 
 function getActiveFilterSummary() {
-  const grouped = selectionsByField()
-  return SUMMARY_FILTER_META.flatMap(({ field, label, format }) => {
-    const values = grouped[field]
-    if (!values?.length) return []
-    const fmt = format ?? ((value: string) => value)
+  void crossFilters.version.value
+  const grouped = new Map<string, Record<string, string[]>>()
+
+  for (const selection of crossFilters.getSelections()) {
+    const sourceFilters = grouped.get(selection.source) ?? {}
+    for (const [field, value] of Object.entries(selection.filters)) {
+      if (typeof value !== 'string') continue
+      sourceFilters[field] = normalizeValues([...(sourceFilters[field] ?? []), value])
+    }
+    grouped.set(selection.source, sourceFilters)
+  }
+
+  return Array.from(grouped.entries()).flatMap(([source, sourceFilters]) => {
+    const parts = Object.entries(sourceFilters)
+      .filter(([, values]) => values.length > 0)
+      .map(
+        ([field, values]) =>
+          `${labelForField(field)}: ${values.map((value) => formatValueForField(field, value)).join(', ')}`,
+      )
+
+    if (!parts.length) {
+      return []
+    }
+
     return [
       {
-        field,
-        label,
-        values,
-        display: `${label}: ${values.map(fmt).join(', ')}`,
+        key: source,
+        source,
+        display: parts.join(' | '),
       },
     ]
   })

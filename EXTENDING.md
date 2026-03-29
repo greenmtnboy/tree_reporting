@@ -366,7 +366,7 @@ The landmark preql follows the same versioned `f\`` URL pattern as tree files. S
 
 The `tree_enrichment_v{DATA_VERSION}.parquet` at GCS is city-agnostic. It maps **scientific species names** (Latin binomials only) to:
 - `common_names` — comma-separated English common names, most familiar first
-- `tree_category` — visual category (`palm`, `broadleaf`, `coniferous`, etc.) used for icon and color
+- `tree_form` — visual form (`broadleaf`, `conifer`, `palm`, `columnar`, `ornamental`, `spreading`, `weeping`, `multi_trunk`, `default`) used for icon and color
 - Ecological metadata: `native_status`, `is_evergreen`, `mature_height_ft`, `bloom_season`, etc.
 
 The browser worker joins on `t.species = se.species` (exact match on scientific name) and derives `common_name` as `split_part(se.common_names, ',', 1)` — the first enrichment common name, falling back to the scientific name if unenriched.

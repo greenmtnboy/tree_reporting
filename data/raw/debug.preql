@@ -1,4 +1,4 @@
-import boston.boston_tree_info;
+import usbos.boston_tree_info;
 
 WHERE usbos_source ='ARBORETUM'
 SELECT

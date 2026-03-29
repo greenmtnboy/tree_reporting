@@ -1,7 +1,7 @@
 import ..tree_common;
 
 root datasource paris_update_time (
-    data_updated_through: paris_data_updated_through
+    data_updated_through: frpar_data_updated_through
 )
 file `./paris_update_time.py`;
 
@@ -29,9 +29,9 @@ partial datasource paris_tree_info (
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
-    paris_data_updated_through,
+    frpar_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'FRPAR'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frpar_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/frpar_tree_info_v{data_version}.parquet`
-freshness by paris_data_updated_through;
+freshness by frpar_data_updated_through;

@@ -2,6 +2,8 @@ import TREE_ENRICHMENT_MODEL from '../../data/raw/tree_enrichment.preql?raw'
 import TREE_INFO_MODEL from '../../data/raw/tree_info.preql?raw'
 import TREE_COMMON_MODEL from '../../data/raw/tree_common.preql?raw'
 import CORE_MODEL from '../../data/raw/core.preql?raw'
+import ECOREGION_COMMON_MODEL from '../../data/raw/ecoregion_common.preql?raw'
+import ECOREGION_INFO_MODEL from '../../data/raw/ecoregion_info.preql?raw'
 import LANDMARK_COMMON_MODEL from '../../data/raw/landmark_common.preql?raw'
 import LANDMARK_INFO_MODEL from '../../data/raw/landmark_info.preql?raw'
 
@@ -23,6 +25,8 @@ export const ALL_MODEL_SOURCES = [
   { alias: 'tree_info', contents: TREE_INFO_MODEL },
   { alias: 'tree_common', contents: TREE_COMMON_MODEL },
   { alias: 'core', contents: CORE_MODEL },
+  { alias: 'ecoregion_common', contents: ECOREGION_COMMON_MODEL },
+  { alias: 'ecoregion_info', contents: ECOREGION_INFO_MODEL },
   { alias: 'landmark_common', contents: LANDMARK_COMMON_MODEL },
   { alias: 'landmark_info', contents: LANDMARK_INFO_MODEL },
   ...[...Object.entries(cityTreeModels), ...Object.entries(cityLandmarkModels)].map(

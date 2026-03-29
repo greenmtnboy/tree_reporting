@@ -27,20 +27,24 @@ const COLOR_MAP_TABLE = '__tree_color_map'
 const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
   palm: '#e6a835',
   broadleaf: '#4CAF50',
-  spreading: '#8BC34A',
-  coniferous: '#2E7D32',
+  conifer: '#2E7D32',
   columnar: '#43A047',
   ornamental: '#E91E63',
+  spreading: '#8BC34A',
+  weeping: '#26A69A',
+  multi_trunk: '#8D6E63',
   default: '#66BB6A',
 }
 
 const DEFAULT_CATEGORY_LABELS: Record<string, string> = {
   '#e6a835': 'Palm',
   '#4CAF50': 'Broadleaf',
-  '#8BC34A': 'Spreading',
-  '#2E7D32': 'Coniferous',
+  '#2E7D32': 'Conifer',
   '#43A047': 'Columnar',
   '#E91E63': 'Ornamental',
+  '#8BC34A': 'Spreading',
+  '#26A69A': 'Weeping',
+  '#8D6E63': 'Multi-trunk',
   '#66BB6A': 'Other',
 }
 
@@ -471,15 +475,17 @@ async function loadCityTrees(city?: string): Promise<void> {
         t.latitude,
         t.longitude,
         COALESCE(t.diameter_at_breast_height, 3) AS dbh,
-        CASE lower(trim(COALESCE(se.tree_category, 'default')))
+        CASE lower(trim(COALESCE(se.tree_form, 'default')))
           WHEN 'palm' THEN 'palm'
           WHEN 'broadleaf' THEN 'broadleaf'
+          WHEN 'conifer' THEN 'conifer'
           WHEN 'spreading' THEN 'spreading'
-          WHEN 'coniferous' THEN 'coniferous'
           WHEN 'columnar' THEN 'columnar'
           WHEN 'ornamental' THEN 'ornamental'
+          WHEN 'weeping' THEN 'weeping'
+          WHEN 'multi_trunk' THEN 'multi_trunk'
           ELSE 'default'
-        END AS tree_category,
+        END AS tree_form,
         se.native_status,
         se.is_evergreen,
         se.mature_height_ft,
@@ -505,7 +511,7 @@ async function loadCityTrees(city?: string): Promise<void> {
       latitude,
       longitude,
       TRY_CAST(dbh AS DOUBLE) AS dbh,
-      tree_category,
+      tree_form,
       native_status,
       is_evergreen,
       mature_height_ft,
@@ -575,11 +581,33 @@ async function doInit(city?: string) {
   try {
     await conn.query(`
       CREATE TABLE species_enrichment AS
-      SELECT species, common_names, tree_category, native_status, is_evergreen, mature_height_ft, bloom_season, wildlife_value, fire_risk, drought_tolerance
+      SELECT species, common_names, tree_form, native_status, is_evergreen, mature_height_ft, bloom_season, wildlife_value, fire_risk, drought_tolerance
       FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
     `)
   } catch (e) {
-    console.warn('[Perf] duckdb-worker:species-load:failed', e)
+    console.warn('[Perf] duckdb-worker:species-load:new-schema-failed', e)
+    try {
+      await conn.query(`
+        CREATE TABLE species_enrichment AS
+        SELECT
+          species,
+          common_names,
+          CASE lower(trim(COALESCE(tree_category, 'default')))
+            WHEN 'coniferous' THEN 'conifer'
+            ELSE lower(trim(COALESCE(tree_category, 'default')))
+          END AS tree_form,
+          native_status,
+          is_evergreen,
+          mature_height_ft,
+          bloom_season,
+          wildlife_value,
+          fire_risk,
+          drought_tolerance
+        FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
+      `)
+    } catch (legacyError) {
+      console.warn('[Perf] duckdb-worker:species-load:failed', legacyError)
+    }
   }
 
   spatialExtensionReady = false
@@ -625,13 +653,15 @@ async function buildDefaultColorMap() {
     CREATE OR REPLACE TABLE ${COLOR_MAP_TABLE} AS
     SELECT
       tree_id,
-      CASE COALESCE(tree_category, 'default')
+      CASE COALESCE(tree_form, 'default')
         WHEN 'palm'        THEN '${DEFAULT_CATEGORY_COLORS.palm}'
         WHEN 'broadleaf'   THEN '${DEFAULT_CATEGORY_COLORS.broadleaf}'
+        WHEN 'conifer'     THEN '${DEFAULT_CATEGORY_COLORS.conifer}'
         WHEN 'spreading'   THEN '${DEFAULT_CATEGORY_COLORS.spreading}'
-        WHEN 'coniferous'  THEN '${DEFAULT_CATEGORY_COLORS.coniferous}'
         WHEN 'columnar'    THEN '${DEFAULT_CATEGORY_COLORS.columnar}'
         WHEN 'ornamental'  THEN '${DEFAULT_CATEGORY_COLORS.ornamental}'
+        WHEN 'weeping'     THEN '${DEFAULT_CATEGORY_COLORS.weeping}'
+        WHEN 'multi_trunk' THEN '${DEFAULT_CATEGORY_COLORS.multi_trunk}'
         ELSE '${DEFAULT_CATEGORY_COLORS.default}'
       END AS display_color
     FROM trees_fast
@@ -656,7 +686,7 @@ async function rebuildAggCaches() {
         tf.ytile_z${z} AS ytile,
         floor(tf.x_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gx,
         floor(tf.y_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gy,
-        COALESCE(tf.tree_category, 'default') AS category,
+        COALESCE(tf.tree_form, 'default') AS category,
         cm.display_color,
         AVG(TRY_CAST(tf.dbh AS DOUBLE)) AS dbh,
         COUNT(*) AS point_count
@@ -718,7 +748,7 @@ WITH base AS (
       ),
       'id': COALESCE(base.tree_id, tf.tree_id, 'unkwn'),
       'dbh': TRY_CAST(COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS DOUBLE),
-      'category': COALESCE(tf.tree_category, 'default'),
+      'category': COALESCE(tf.tree_form, 'default'),
       'display_color': cm.display_color,
       'rotation': 0,
       'point_count': 1,
@@ -821,7 +851,7 @@ WITH base AS (
     tf.y_3857,
     COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
-    COALESCE(tf.tree_category, 'default') AS category,
+    COALESCE(tf.tree_form, 'default') AS category,
     cm.display_color,
     0 AS rotation,
     ${tileXExpr('tf', z)} AS xtile,
@@ -961,7 +991,7 @@ WITH base AS (
   SELECT
     tf.x_3857,
     tf.y_3857,
-    COALESCE(tf.tree_category, 'default') AS category,
+    COALESCE(tf.tree_form, 'default') AS category,
     cm.display_color,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
     ${tileXExpr('tf', z)} AS xtile,
@@ -1025,7 +1055,7 @@ WITH base AS (
     tf.y_3857,
     COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
-    COALESCE(tf.tree_category, 'default') AS category,
+    COALESCE(tf.tree_form, 'default') AS category,
     cm.display_color,
     0 AS rotation,
     ${tileXExpr('tf', z)} AS xtile,
@@ -1140,7 +1170,7 @@ WITH base AS (
   SELECT
     tf.x_3857,
     tf.y_3857,
-    COALESCE(tf.tree_category, 'default') AS category,
+    COALESCE(tf.tree_form, 'default') AS category,
     cm.display_color,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh
   FROM base
@@ -1189,7 +1219,7 @@ WITH base AS (
   SELECT
     COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
-    COALESCE(tf.tree_category, 'default') AS category,
+    COALESCE(tf.tree_form, 'default') AS category,
     cm.display_color,
     0 AS rotation,
     1 AS point_count,
@@ -1318,13 +1348,15 @@ CREATE OR REPLACE TABLE ${COLOR_MAP_TABLE} AS
 SELECT
   tf.tree_id,
   COALESCE(aco.display_color,
-    CASE COALESCE(tf.tree_category, 'default')
+    CASE COALESCE(tf.tree_form, 'default')
       WHEN 'palm'        THEN '${DEFAULT_CATEGORY_COLORS.palm}'
       WHEN 'broadleaf'   THEN '${DEFAULT_CATEGORY_COLORS.broadleaf}'
+      WHEN 'conifer'     THEN '${DEFAULT_CATEGORY_COLORS.conifer}'
       WHEN 'spreading'   THEN '${DEFAULT_CATEGORY_COLORS.spreading}'
-      WHEN 'coniferous'  THEN '${DEFAULT_CATEGORY_COLORS.coniferous}'
       WHEN 'columnar'    THEN '${DEFAULT_CATEGORY_COLORS.columnar}'
       WHEN 'ornamental'  THEN '${DEFAULT_CATEGORY_COLORS.ornamental}'
+      WHEN 'weeping'     THEN '${DEFAULT_CATEGORY_COLORS.weeping}'
+      WHEN 'multi_trunk' THEN '${DEFAULT_CATEGORY_COLORS.multi_trunk}'
       ELSE '${DEFAULT_CATEGORY_COLORS.default}'
     END
   ) AS display_color

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["duckdb"]
+# dependencies = ["duckdb","pytrilogy"]
 # ///
 # Freshness probe for tree_enrichment datasource.
 # Prints "true" if every species in tree_info is completely enriched, "false" otherwise.
@@ -16,10 +16,18 @@ from _tree_shared import (
     SPECIES_EXCLUSION_SQL,
 )
 
-_COMPLETENESS_EXPR = (
-    "common_names IS NOT NULL AND trim(common_names) != ''"
-    " AND tree_category IS NOT NULL"
-)
+_COMPLETENESS_EXPRESSIONS = [
+    (
+        "common_names IS NOT NULL"
+        " AND array_length(common_names) > 0"
+        " AND tree_form IS NOT NULL"
+    ),
+    (
+        "common_names IS NOT NULL AND trim(common_names) != ''"
+        " AND tree_form IS NOT NULL"
+    ),
+]
+
 
 def main() -> None:
     conn = duckdb.connect()
@@ -37,25 +45,33 @@ def main() -> None:
             ).fetchall()
         }
         all_species.difference_update(SKIP_SPECIES)
-        try:
-            complete_enriched: set[str] = {
-                row[0]
-                for row in conn.execute(
-                    f"SELECT species FROM read_parquet(?) WHERE species IS NOT NULL AND {_COMPLETENESS_EXPR}",
-                    [ENRICHMENT_PARQUET],
-                ).fetchall()
-            }
-        except Exception:
-            # Enrichment parquet missing or unreadable — treat as fully stale.
+
+        complete_enriched: set[str] | None = None
+        for completeness_expr in _COMPLETENESS_EXPRESSIONS:
+            try:
+                complete_enriched = {
+                    row[0]
+                    for row in conn.execute(
+                        f"SELECT species FROM read_parquet(?) WHERE species IS NOT NULL AND {completeness_expr}",
+                        [ENRICHMENT_PARQUET],
+                    ).fetchall()
+                }
+                break
+            except Exception:
+                continue
+
+        if complete_enriched is None:
             complete_enriched = set()
     finally:
         conn.close()
+
     if all_species - complete_enriched:
         print(
-                    f"missing enrichment for species: {all_species - complete_enriched}",
-                    file=sys.stderr,
-                )
+            f"missing enrichment for species: {all_species - complete_enriched}",
+            file=sys.stderr,
+        )
     print("true" if all_species <= complete_enriched else "false")
+
 
 if __name__ == "__main__":
     main()

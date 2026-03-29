@@ -59,7 +59,7 @@ describe('EmbeddedDashboardChart cross-filter self-suppression', () => {
 
     // Chart emits dimension-click → flag set → parent updates filters
     onDimensionClick()
-    await simulateParentFilterUpdate(["city = 'USSFO'", "tree_category = 'broadleaf'"])
+    await simulateParentFilterUpdate(["city = 'USSFO'", "tree_form = 'broadleaf'"])
 
     // Should still be 1 — the source chart must not reload itself
     expect(runQuery).toHaveBeenCalledTimes(1)
@@ -73,11 +73,11 @@ describe('EmbeddedDashboardChart cross-filter self-suppression', () => {
 
     // Suppressed click
     onDimensionClick()
-    await simulateParentFilterUpdate(["city = 'USSFO'", "tree_category = 'broadleaf'"])
+    await simulateParentFilterUpdate(["city = 'USSFO'", "tree_form = 'broadleaf'"])
     expect(runQuery).toHaveBeenCalledTimes(1)
 
     // Subsequent external change (e.g. city switch) must still run
-    await simulateParentFilterUpdate(["city = 'USNYC'", "tree_category = 'broadleaf'"])
+    await simulateParentFilterUpdate(["city = 'USNYC'", "tree_form = 'broadleaf'"])
     expect(runQuery).toHaveBeenCalledTimes(2)
   })
 
@@ -89,16 +89,16 @@ describe('EmbeddedDashboardChart cross-filter self-suppression', () => {
 
     // First click: suppressed
     onDimensionClick()
-    await simulateParentFilterUpdate(["city = 'USSFO'", "tree_category = 'broadleaf'"])
+    await simulateParentFilterUpdate(["city = 'USSFO'", "tree_form = 'broadleaf'"])
     expect(runQuery).toHaveBeenCalledTimes(1)
 
     // Second click (e.g. selecting a different category): also suppressed
     onDimensionClick()
-    await simulateParentFilterUpdate(["city = 'USSFO'", "tree_category = 'palm'"])
+    await simulateParentFilterUpdate(["city = 'USSFO'", "tree_form = 'palm'"])
     expect(runQuery).toHaveBeenCalledTimes(1)
 
     // Next external change: runs
-    await simulateParentFilterUpdate(["city = 'USNYC'", "tree_category = 'palm'"])
+    await simulateParentFilterUpdate(["city = 'USNYC'", "tree_form = 'palm'"])
     expect(runQuery).toHaveBeenCalledTimes(2)
   })
 })

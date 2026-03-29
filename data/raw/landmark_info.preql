@@ -1,9 +1,9 @@
 import landmark_common;
-import sf.sf_landmarks;
-import nyc.nyc_landmarks;
-import boston.boston_landmarks;
-import paris.paris_landmarks;
-import burlington.burlington_landmarks;
+import ussfo.sf_landmarks;
+import usnyc.nyc_landmarks;
+import usbos.boston_landmarks;
+import frpar.paris_landmarks;
+import usbtv.burlington_landmarks;
 
 
 # --- Merged union datasource ---
