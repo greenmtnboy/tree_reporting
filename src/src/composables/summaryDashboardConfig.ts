@@ -7,6 +7,7 @@ export type SummaryDashboardChart = {
   subtitle?: string
   query: string
   chartConfig: ChartConfig
+  renderMode?: 'chart' | 'markdown'
   allowCrossFilter?: boolean
   requiresCitySelection?: boolean
 }
@@ -73,20 +74,53 @@ export const SUMMARY_KPI_CHARTS: SummaryDashboardKpi[] = [
 
 export const SUMMARY_CHARTS: SummaryDashboardChart[] = [
   {
+    id: 'top-tree-spotlight',
+    title: 'Top Tree In Current View',
+    subtitle: 'Most common species in the active filter set',
+    query: `SELECT
+species,
+common_names[1] as common_name,
+description,
+tree_form,
+mature_height_min_ft,
+mature_height_max_ft,
+canopy_spread_min_ft,
+canopy_spread_max_ft,
+growth_rate,
+bloom_months,
+wildlife_value,
+drought_tolerance,
+water_needs,
+count(tree_id) as tree_count,
+rank(species) over (order by count(tree_id) by species desc, species asc) as tree_rank
+WHERE species IS NOT NULL
+HAVING tree_rank = 1;`,
+    chartConfig: {
+      chartType: 'headline',
+      xField: 'tree_count',
+      showTitle: false,
+    },
+    renderMode: 'markdown',
+    allowCrossFilter: false,
+  },
+  {
     id: 'dominance-curve',
     title: 'Dominance Curve',
     subtitle: 'Cumulative share held by the top 50 ranked species',
-    query: `SELECT
+    query: `import std.color;
+SELECT
 dominance_rank,
 species,
 count(tree_id) as tree_count,
-cumulative_tree_share_pct
+cumulative_tree_share_pct,
+'#6BAF92'::string::hex as curve_color
 HAVING dominance_rank <= 50
 ORDER BY dominance_rank ASC;`,
     chartConfig: {
-      chartType: 'line',
+      chartType: 'bar',
       xField: 'dominance_rank',
       yField: 'cumulative_tree_share_pct',
+      colorField: 'curve_color',
       showTitle: false,
       hideLegend: true,
       annotationField: 'species',
@@ -372,6 +406,14 @@ export const SUMMARY_SECTIONS: SummaryDashboardSection[] = [
     cards: [
       { id: 'dominance-curve', width: 'wide' },
       { id: 'plant-year', width: 'wide' },
+    ],
+  },
+  {
+    id: 'spotlight',
+    title: 'Spotlight',
+    subtitle: 'A quick read on the most common species in the current view.',
+    cards: [
+      { id: 'top-tree-spotlight', width: 'wide' },
     ],
   },
   {

@@ -69,7 +69,17 @@
             <h3>{{ chartById(card.id).title }}</h3>
             <span v-if="chartById(card.id).subtitle" class="chart-sub">{{ chartById(card.id).subtitle }}</span>
           </div>
+          <SummaryMarkdownCard
+            v-if="chartById(card.id).renderMode === 'markdown'"
+            :item-id="card.id"
+            :connection-id="connectionId"
+            :query-execution-service="queryExecutionService"
+            :imports="SUMMARY_DASHBOARD_IMPORTS as DashboardImport[]"
+            :filters="filtersForChart(card.id)"
+            :query="chartById(card.id).query"
+          />
           <EmbeddedDashboardChart
+            v-else
             :item-id="card.id"
             v-bind="sharedChartProps"
             :filters="filtersForChart(card.id)"
@@ -95,6 +105,7 @@ import {
   type DimensionClick,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
 import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
+import SummaryMarkdownCard from '../components/SummaryMarkdownCard.vue'
 import { useMapData, type CityCode } from '../composables/useMapData'
 import { getCityBiome, getCityUsdaZone } from '../composables/dashboardContextSource'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'

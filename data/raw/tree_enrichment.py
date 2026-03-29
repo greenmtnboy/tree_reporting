@@ -1745,7 +1745,7 @@ if __name__ == "__main__":
             continue
         counter +=1
         # temporary
-        if counter >100:
+        if counter >1000:
             break
         is_complete, missing = compute_is_complete(enrichment)
         if missing:
