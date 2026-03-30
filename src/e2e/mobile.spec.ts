@@ -7,16 +7,20 @@ test.describe('Mobile layout', () => {
     await page.addInitScript(() => {
       localStorage.setItem('sf_trees_welcome_dismissed', '1')
     })
-    await page.goto('/')
+    await page.goto('/#/?city=USSFO')
   })
 
   test('renders the map and bottom navigation bar', async ({ page }) => {
     await expect(page.locator('.mobile-map-container')).toBeVisible()
     await expect(page.locator('.tree-map canvas')).toBeAttached({ timeout: 15_000 })
     await expect(page.locator('.mobile-bottom-bar')).toBeVisible()
-    // All three nav buttons should be present
+
+    // The current mobile shell exposes three primary actions.
     const navBtns = page.locator('.mobile-bar-btn')
     await expect(navBtns).toHaveCount(3)
+    await expect(page.locator('.mobile-bottom-bar')).toContainText('Landmarks')
+    await expect(page.locator('.mobile-bottom-bar')).toContainText('Chat')
+    await expect(page.locator('.mobile-bottom-bar')).toContainText('Info')
   })
 
   test('desktop sidebar is not rendered on mobile', async ({ page }) => {

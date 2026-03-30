@@ -10,7 +10,7 @@ const CITY_CODE: Record<string, string> = {
 }
 
 /**
- * Clicks the city button and waits until the map container's
+ * Selects the city from the dropdown and waits until the map container's
  * `data-trees-loaded-for` attribute equals the destination city code.
  *
  * This attribute is set in TreeMap.vue's sourcedata handler the moment the
@@ -22,12 +22,11 @@ async function assertCitySwitch(page: Page, cityName: string, timeoutMs: number)
   const cityCode = CITY_CODE[cityName]
   if (!cityCode) throw new Error(`Unknown city name "${cityName}" — add it to CITY_CODE`)
 
-  await page.locator('.city-btn').filter({ hasText: cityName }).click()
+  const citySelect = page.getByLabel('Select city')
+  await citySelect.selectOption(cityCode)
 
-  // Wait for city button to become active (setSelectedCity fired).
-  await expect(
-    page.locator('.city-btn').filter({ hasText: cityName }),
-  ).toHaveClass(/active/, { timeout: timeoutMs })
+  // Wait for the dropdown value to reflect the selected city.
+  await expect(citySelect).toHaveValue(cityCode, { timeout: timeoutMs })
 
   // Wait for tiles to finish loading for this city.
   // data-trees-loaded-for is set by the sourcedata handler once per city load.
@@ -49,7 +48,7 @@ test.describe('City navigation — desktop', () => {
     await page.addInitScript(() => {
       localStorage.setItem('sf_trees_welcome_dismissed', '1')
     })
-    await page.goto('/')
+    await page.goto('/#/?city=USSFO')
   })
 
   test('switching to a new city loads trees for that city', async ({ page }) => {
@@ -77,7 +76,7 @@ test.describe('City navigation — mobile', () => {
     await page.addInitScript(() => {
       localStorage.setItem('sf_trees_welcome_dismissed', '1')
     })
-    await page.goto('/')
+    await page.goto('/#/?city=USSFO')
   })
 
   test('switching to a new city loads trees for that city', async ({ page }) => {

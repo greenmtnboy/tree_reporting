@@ -8,15 +8,20 @@ test.describe('Desktop layout', () => {
     await page.addInitScript(() => {
       localStorage.setItem('sf_trees_welcome_dismissed', '1')
     })
-    await page.goto('/')
+    await page.goto('/#/?city=USSFO')
   })
 
-  test('renders sidebar with header and landmarks', async ({ page }) => {
+  test('renders sidebar navigation and landmarks', async ({ page }) => {
     // Sidebar header
     await expect(page.locator('.sidebar h1')).toHaveText('Urban Trees')
     await expect(page.locator('.sidebar .subtitle')).toHaveText(
-      'The Woods of the Concrete Jungle',
+      'The Concrete Jungle',
     )
+
+    // Primary nav reflects the current app structure.
+    await expect(page.locator('.sidebar-nav')).toContainText('Map')
+    await expect(page.locator('.sidebar-nav')).toContainText('City Summary')
+    await expect(page.locator('.sidebar-nav')).toContainText('Info')
 
     // Landmarks section is present with search input
     await expect(page.locator('.landmarks-search')).toBeVisible()
