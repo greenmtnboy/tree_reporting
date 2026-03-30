@@ -9,7 +9,7 @@
 import sys
 
 import duckdb
-from _tree_shared import (
+from enrichment._tree_shared import (
     ENRICHMENT_PARQUET,
     TREE_INFO_PARQUET,
     SKIP_SPECIES,
