@@ -4,13 +4,14 @@ name = "urban_forest"
 [engine]
 # Default dialect for execution
 dialect = "duck_db"
-parallelism = 2
+parallelism = 3
 env_file="../.env"
 
 [engine.config]
 enable_gcs = true
 enable_spatial = true
 enable_python_datasources = true
+gcs_cache_bust = true
 
 [serve]
-studio_url="http://localhost:5173/trilogy-studio-core/"
+studio_url="http://localhost:5174/trilogy-studio-core/"

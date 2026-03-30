@@ -121,7 +121,7 @@
 .info-page {
   height: 100%;
   overflow-y: auto;
-  background: #1a1a2e;
+  background: transparent;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -132,28 +132,31 @@
 }
 
 h1 {
-  font-size: 1.5rem;
+  font-size: 1.8rem;
   font-weight: 700;
-  color: #e0e0e0;
+  font-family: var(--font-display);
+  color: var(--color-ink);
   margin-bottom: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .info-lead {
-  color: #7a7a9e;
+  color: rgba(237, 242, 235, 0.76);
   font-size: 0.95rem;
   line-height: 1.6;
   margin-bottom: 32px;
 }
 
 h2 {
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.72rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  color: #7a7a9e;
+  letter-spacing: 0.18em;
+  color: var(--color-moss);
   margin-bottom: 12px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #0f3460;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(167, 227, 178, 0.08);
 }
 
 section {
@@ -161,22 +164,23 @@ section {
 }
 
 .source-card {
-  background: #16213e;
-  border: 1px solid #0f3460;
-  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(42, 47, 54, 0.82), rgba(28, 31, 36, 0.96));
+  border: 1px solid rgba(167, 227, 178, 0.1);
   padding: 14px 16px;
   margin-bottom: 10px;
+  box-shadow: var(--shadow-soft);
 }
 
 .source-card h3 {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #e0e0e0;
+  color: var(--color-ink);
   margin-bottom: 6px;
 }
 
 .source-card p {
-  color: #a0a0c0;
+  color: rgba(237, 242, 235, 0.72);
   font-size: 0.85rem;
   line-height: 1.5;
   margin-bottom: 6px;
@@ -187,14 +191,14 @@ section {
 }
 
 .source-card a {
-  color: #4fc3f7;
+  color: var(--color-leaf);
   text-decoration: none;
   font-size: 0.85rem;
   transition: color 0.15s;
 }
 
 .source-card a:hover {
-  color: #81d4fa;
+  color: #d4f4d8;
 }
 
 .source-card ul {
@@ -206,7 +210,7 @@ section {
 .source-card ul li {
   padding: 4px 0 4px 12px;
   position: relative;
-  color: #a0a0c0;
+  color: rgba(237, 242, 235, 0.72);
   font-size: 0.85rem;
   line-height: 1.5;
 }
@@ -219,16 +223,16 @@ section {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #4fc3f7;
+  background: var(--color-moss);
 }
 
 .source-card ul li a {
-  color: #4fc3f7;
+  color: var(--color-leaf);
   text-decoration: none;
 }
 
 .source-card ul li a:hover {
-  color: #81d4fa;
+  color: #d4f4d8;
 }
 
 .city-details {
@@ -237,7 +241,7 @@ section {
 
 .city-summary {
   font-size: 0.8rem;
-  color: #4fc3f7;
+  color: var(--color-leaf);
   cursor: pointer;
   user-select: none;
   list-style: none;
@@ -262,12 +266,12 @@ details[open] > .city-summary::before {
 }
 
 .city-summary:hover {
-  color: #81d4fa;
+  color: #d4f4d8;
 }
 
 .source-note {
   font-size: 0.8rem !important;
-  color: #555577 !important;
+  color: rgba(154, 166, 154, 0.72) !important;
   font-style: italic;
 }
 
@@ -278,9 +282,9 @@ details[open] > .city-summary::before {
 }
 
 .tech-item {
-  background: #16213e;
-  border: 1px solid #0f3460;
-  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(42, 47, 54, 0.82), rgba(28, 31, 36, 0.96));
+  border: 1px solid rgba(167, 227, 178, 0.1);
   padding: 10px 14px;
   display: flex;
   flex-direction: column;
@@ -291,24 +295,24 @@ details[open] > .city-summary::before {
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #555577;
+  letter-spacing: 0.12em;
+  color: rgba(154, 166, 154, 0.74);
 }
 
 .tech-item span:last-child {
-  color: #e0e0e0;
+  color: var(--color-ink);
   font-size: 0.85rem;
 }
 
 .repo-link {
-  color: #4fc3f7;
+  color: var(--color-leaf);
   text-decoration: none;
   font-size: 0.9rem;
   transition: color 0.15s;
 }
 
 .repo-link:hover {
-  color: #81d4fa;
+  color: #d4f4d8;
 }
 
 .source-section {

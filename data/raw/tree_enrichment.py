@@ -1,13 +1,13 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests", "pillow", "instructor[litellm]", "duckdb", "google-genai", "jsonref"]
+# dependencies = ["pyarrow", "requests", "pillow", "instructor[litellm]", "duckdb", "google-genai", "jsonref", "pytrilogy"]
+# [tool.uv]
+# exclude-newer = "14 days"
 # ///
 
 import sys
 import os
-import math
-import base64
 import argparse
 import re
 import html
@@ -20,9 +20,18 @@ import duckdb
 from datetime import datetime, timezone
 from typing import Literal, Optional
 from dataclasses import dataclass
-from PIL import Image, ImageDraw, ImageFilter
 from pydantic import BaseModel, Field
 import instructor
+from ecoregion_matcher import (
+    EcoregionReference,
+    build_native_range_evidence as build_native_range_evidence_for_entries,
+    make_ecoregion_reference,
+    select_ecoregion_candidates as select_ecoregion_candidates_from_evidence,
+)
+from _ecoregion_shared import (
+    LAYER_QUERY_URL,
+    REMOTE_ECOREGION_PARQUET,
+)
 from _tree_shared import (
     ENRICHMENT_PARQUET,
     ENRICHMENT_GCS_URI,
@@ -33,6 +42,23 @@ from _tree_shared import (
 )
 
 ICON_SIZE = 48
+DEFAULT_INSTRUCTOR_MODEL = os.getenv("TREE_ENRICHMENT_MODEL", "google/gemini-2.5-flash")
+DEFAULT_VERTEX_PROJECT = os.getenv("TREE_ENRICHMENT_VERTEX_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT") or "preqldata"
+DEFAULT_VERTEX_LOCATION = os.getenv("TREE_ENRICHMENT_VERTEX_LOCATION", "us-central1")
+
+LENGTH_TO_FEET = {
+    "ft": 1.0,
+    "m": 3.28084,
+    "cm": 0.0328084,
+    "in": 1.0 / 12.0,
+}
+
+GROWTH_RATE_TO_FT_PER_YEAR = {
+    "ft_per_year": 1.0,
+    "m_per_year": 3.28084,
+    "cm_per_year": 0.0328084,
+    "in_per_year": 1.0 / 12.0,
+}
 
 
 SYNONYMS = {
@@ -278,31 +304,95 @@ class TreeEnrichment(BaseModel):
     common_names: list[str] = Field(
         description="All known common names for this species, most familiar first"
     )
-    native_status: Literal["native_bay_area", "native_california", "non_native", "naturalized", "unknown"] = Field(
+    description: Optional[str] = Field(
+        None,
         description=(
-            "Native status relative to the San Francisco Bay Area. "
-            "'native_bay_area' = native to the SF Bay Area specifically. "
-            "'native_california' = native to California but not the Bay Area. "
-            "'naturalized' = non-native but now established in the wild. "
-            "'non_native' = introduced, not naturalized."
+            "Brief 1-3 sentence note describing appearance, ecology, and any especially relevant "
+            "urban planting considerations such as drought, roots, wildlife, litter, or site fit."
+        ),
+    )
+    native_ecoregions: list[int] = Field(
+        default_factory=list,
+        description=(
+            "List of ecoregion_id values where the species is native. "
+            "Only choose IDs from the provided shortlist and leave this empty if the evidence is weak or ambiguous."
         )
     )
     is_evergreen: Optional[bool] = Field(
         None, description="True if evergreen, False if deciduous, None if unknown or semi-evergreen"
     )
-    mature_height_ft: Optional[float] = Field(
-        None, description="Typical mature height in feet. Use midpoint if a range is given."
+    mature_height_min_value: Optional[float] = Field(
+        None, description="Minimum reported mature height numeric value from sources, before unit conversion."
     )
-    canopy_spread_ft: Optional[float] = Field(
-        None, description="Typical mature canopy spread in feet. Use midpoint if a range is given."
+    mature_height_max_value: Optional[float] = Field(
+        None, description="Maximum reported mature height numeric value from sources, before unit conversion."
     )
-    growth_rate: Optional[Literal["slow", "moderate", "fast"]] = Field(None)
+    mature_height_unit: Optional[Literal["ft", "m", "cm", "in"]] = Field(
+        None, description="Unit for mature height values. Prefer ft or m when sources allow."
+    )
+    canopy_spread_min_value: Optional[float] = Field(
+        None, description="Minimum reported mature canopy spread numeric value from sources, before unit conversion."
+    )
+    canopy_spread_max_value: Optional[float] = Field(
+        None, description="Maximum reported mature canopy spread numeric value from sources, before unit conversion."
+    )
+    canopy_spread_unit: Optional[Literal["ft", "m", "cm", "in"]] = Field(
+        None, description="Unit for canopy spread values. Prefer ft or m when sources allow."
+    )
+    growth_rate_min_value: Optional[float] = Field(
+        None, description="Minimum reported annual growth increment numeric value from sources."
+    )
+    growth_rate_max_value: Optional[float] = Field(
+        None, description="Maximum reported annual growth increment numeric value from sources."
+    )
+    growth_rate_unit: Optional[Literal["ft_per_year", "m_per_year", "cm_per_year", "in_per_year"]] = Field(
+        None, description="Unit for annual growth increment values."
+    )
+    growth_rate: Optional[Literal["slow", "moderate", "fast"]] = Field(
+        None,
+        description="Qualitative growth rate label only when sources clearly give slow, moderate, or fast directly.",
+    )
     lifespan_years: Optional[str] = Field(
         None, description="Typical lifespan, e.g. '50-100', '200+', 'short-lived'"
     )
     drought_tolerance: Optional[Literal["low", "moderate", "high"]] = Field(None)
-    bloom_season: Optional[str] = Field(
-        None, description="Season or months when it blooms, e.g. 'spring', 'March-May', 'year-round'"
+    water_needs: Optional[Literal["low", "moderate", "high"]] = Field(
+        None,
+        description="Irrigation needs: low = drought-adapted once established, moderate = average garden watering, high = consistently moist soil required.",
+    )
+    sun_exposure: list[Literal["full_sun", "part_shade", "full_shade"]] = Field(
+        default_factory=list,
+        description="Tolerated light conditions. Include all that apply: full_sun (6+ hrs direct), part_shade (3-6 hrs), full_shade (<3 hrs).",
+    )
+    soil_preferences: list[str] = Field(
+        default_factory=list,
+        description="Preferred soil types using standard horticultural terms, e.g. ['well-drained', 'loamy', 'clay-tolerant', 'sandy', 'acidic']. Return [] if unknown.",
+    )
+    root_behavior: Optional[Literal["non-invasive", "moderate", "invasive"]] = Field(
+        None,
+        description="Root aggressiveness in urban settings: non-invasive = deep/compact roots, moderate = some surface spreading, invasive = aggressive surface roots that damage pavement or structures.",
+    )
+    coastal_tolerance: Optional[bool] = Field(
+        None, description="True if the species tolerates salt spray and coastal wind exposure."
+    )
+    salt_tolerance: Optional[bool] = Field(
+        None, description="True if the species tolerates road salt or saline soil conditions."
+    )
+    pollution_tolerance: Optional[Literal["low", "moderate", "high"]] = Field(
+        None, description="Tolerance for urban air pollution and compacted urban soils."
+    )
+    usda_zone_min: Optional[int] = Field(
+        None, description="Minimum USDA hardiness zone as an integer (e.g. 5 for zone 5). Omit the letter suffix."
+    )
+    usda_zone_max: Optional[int] = Field(
+        None, description="Maximum USDA hardiness zone as an integer (e.g. 11). Omit the letter suffix."
+    )
+    bloom_months: list[int] = Field(
+        default_factory=list,
+        description=(
+            "Blooming months as integers 1-12. Convert season text into months. "
+            "Return [] if bloom timing is unknown."
+        ),
     )
     wildlife_value: Optional[Literal["low", "moderate", "high"]] = Field(
         None, description="Value to local urban wildlife: pollinators, birds, small mammals"
@@ -310,124 +400,24 @@ class TreeEnrichment(BaseModel):
     fire_risk: Optional[Literal["low", "moderate", "high"]] = Field(
         None, description="Fire risk / flammability rating relevant to urban California"
     )
-    tree_category: Literal["palm", "broadleaf", "spreading", "coniferous", "columnar", "ornamental", "default"] = Field(
+    tree_form: Literal["broadleaf", "conifer", "palm", "columnar", "ornamental", "spreading", "weeping", "multi_trunk", "default"] = Field(
         description=(
-            "Visual silhouette category for map icon rendering. "
+            "Visual silhouette tree form for map icon rendering. "
             "palm = fan fronds on tall slender trunk (palms). "
             "broadleaf = round canopy on short trunk (oaks, maples, most deciduous). "
-            "spreading = wide flat canopy, broader than tall (plane trees, acacias). "
-            "coniferous = triangular/spire shape (pines, cypress, firs). "
+            "conifer = triangular/spire shape (pines, cypress, firs). "
             "columnar = narrow upright oval, taller than wide (Italian cypress, columnar trees). "
             "ornamental = small flowering tree with visible blooms (cherry, plum, crabapple). "
+            "spreading = wide flat canopy, broader than tall (plane trees, acacias). "
+            "weeping = drooping canopy with pendulous branches (weeping willow, bottlebrush forms). "
+            "multi_trunk = clustered trunks supporting a broad crown (crape myrtle, paperbark forms). "
             "default = generic round tree when shape is unclear."
         )
     )
 
 
-# ── Icon drawing ───────────────────────────────────────────────────────────────
-
-CATEGORY_COLORS: dict[str, tuple[int, int, int]] = {
-    "palm":       (230, 168,  53),
-    "broadleaf":  ( 76, 175,  80),
-    "spreading":  (139, 195,  74),
-    "coniferous": ( 46, 125,  50),
-    "columnar":   ( 67, 160,  71),
-    "ornamental": (233,  30,  99),
-    "default":    (102, 187, 106),
-}
-TRUNK_COLOR = (93, 64, 55, 255)
 
 
-def _c(rgb: tuple[int, int, int], a: int = 255) -> tuple[int, int, int, int]:
-    return (*rgb, a)
-
-
-def draw_tree_icon(category: str, size: int = ICON_SIZE) -> Image.Image:
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    col = _c(CATEGORY_COLORS.get(category, CATEGORY_COLORS["default"]))
-    cx = size / 2
-
-    def trunk(top: float, width: float = 0.1) -> None:
-        tw = size * width
-        d.rectangle([cx - tw / 2, size * top, cx + tw / 2, size * 0.96], fill=TRUNK_COLOR)
-
-    if category == "palm":
-        trunk(0.35, 0.08)
-        top_y = size * 0.35
-        for angle_deg in range(-70, 71, 28):
-            rad = math.radians(angle_deg - 90)
-            length = size * 0.38
-            ex = cx + math.cos(rad) * length
-            ey = top_y + math.sin(rad) * length
-            perp = rad + math.pi / 2
-            w = size * 0.055
-            d.polygon([
-                (round(cx + math.cos(perp) * w), round(top_y + math.sin(perp) * w)),
-                (round(cx - math.cos(perp) * w), round(top_y - math.sin(perp) * w)),
-                (round(ex), round(ey)),
-            ], fill=col)
-
-    elif category == "broadleaf":
-        trunk(0.55)
-        r = size * 0.32
-        cy = size * 0.38
-        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=col)
-
-    elif category == "spreading":
-        trunk(0.50)
-        rx, ry = size * 0.42, size * 0.22
-        cy = size * 0.38
-        d.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=col)
-
-    elif category == "coniferous":
-        trunk(0.70, 0.08)
-        d.polygon([
-            (round(cx),                  round(size * 0.08)),
-            (round(cx + size * 0.28),    round(size * 0.72)),
-            (round(cx - size * 0.28),    round(size * 0.72)),
-        ], fill=col)
-
-    elif category == "columnar":
-        trunk(0.60, 0.08)
-        rx, ry = size * 0.20, size * 0.32
-        cy = size * 0.38
-        d.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=col)
-
-    elif category == "ornamental":
-        trunk(0.55, 0.08)
-        r = size * 0.26
-        cy = size * 0.40
-        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=col)
-        bloom = (248, 187, 208, 220)
-        dot_r = size * 0.055
-        for ox, oy in [(-0.10, -0.08), (0.12, 0.04), (-0.04, 0.10), (0.08, -0.12)]:
-            bx, by = cx + size * ox, cy + size * oy
-            d.ellipse([bx - dot_r, by - dot_r, bx + dot_r, by + dot_r], fill=bloom)
-
-    else:  # default
-        trunk(0.55)
-        r = size * 0.30
-        cy = size * 0.38
-        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=col)
-
-    # Soft glow outline using GaussianBlur on the alpha mask (replaces the
-    # expensive pixel-walk approach; same visual result, GPU-friendly)
-    mask = img.getchannel("A")
-    glow_alpha = mask.filter(ImageFilter.GaussianBlur(1.8))
-    glow = Image.new("RGBA", (size, size), (255, 255, 255, 0))
-    glow.putalpha(glow_alpha)
-    result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    result.alpha_composite(glow)
-    result.alpha_composite(img)
-    return result
-
-
-def to_raw_rgba_b64(img: Image.Image) -> str:
-    """Encode image as raw RGBA bytes (no PNG header) → base64 string.
-    Matches exactly what MapLibre addImage({ width, height, data: Uint8Array }) expects.
-    """
-    return base64.b64encode(img.tobytes()).decode()
 
 
 # ── External data sources ───────────────────────────────────────────────────────
@@ -443,16 +433,270 @@ class SourceTexts:
     selectree: str | None
 
 
+_ECOREGION_CACHE: list[EcoregionReference] | None = None
+
+
 def parse_scientific_name(q_species: str) -> str:
     return q_species.split("::")[0].strip()
+
+
+def normalize_instructor_model_name(model_name: str) -> str:
+    cleaned = model_name.strip()
+    if not cleaned:
+        return DEFAULT_INSTRUCTOR_MODEL
+    if "/" in cleaned:
+        return cleaned
+    return f"google/{cleaned}"
+
+
+def create_instructor_client(model_name: str, project: str, location: str):
+    normalized_model = normalize_instructor_model_name(model_name)
+    return instructor.from_provider(
+        normalized_model,
+        vertexai=True,
+        project=project,
+        location=location,
+    )
+
+
+def load_ecoregion_references() -> list[EcoregionReference]:
+    global _ECOREGION_CACHE
+    if _ECOREGION_CACHE is not None:
+        return _ECOREGION_CACHE
+
+    rows: list[tuple[int, str, str | None, str | None]] = []
+
+    conn = duckdb.connect()
+    try:
+        try:
+            rows = conn.execute(
+                """
+                SELECT
+                    ecoregion_id,
+                    ecoregion_name,
+                    realm,
+                    biome
+                FROM read_parquet(?)
+                WHERE ecoregion_id IS NOT NULL
+                ORDER BY ecoregion_id
+                """,
+                [REMOTE_ECOREGION_PARQUET],
+            ).fetchall()
+        except Exception:
+            rows = []
+    finally:
+        conn.close()
+
+    if not rows:
+        try:
+            response = requests.get(
+                LAYER_QUERY_URL,
+                params={
+                    "where": "ECO_ID IS NOT NULL AND ECO_ID > 0",
+                    "outFields": "ECO_ID,ECO_NAME,REALM,BIOME_NAME",
+                    "returnGeometry": "false",
+                    "orderByFields": "ECO_ID",
+                    "f": "json",
+                },
+                timeout=120,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            rows = [
+                (
+                    int(feature["attributes"]["ECO_ID"]),
+                    feature["attributes"]["ECO_NAME"],
+                    feature["attributes"].get("REALM"),
+                    feature["attributes"].get("BIOME_NAME"),
+                )
+                for feature in payload.get("features", [])
+                if feature.get("attributes", {}).get("ECO_ID") is not None
+            ]
+        except Exception:
+            rows = []
+
+    _ECOREGION_CACHE = [
+        make_ecoregion_reference(
+            ecoregion_id=ecoregion_id,
+            ecoregion_name=ecoregion_name,
+            realm=realm,
+            biome=biome,
+        )
+        for ecoregion_id, ecoregion_name, realm, biome in rows
+    ]
+    return _ECOREGION_CACHE
+
+
+def build_native_range_evidence(texts: SourceTexts, reference_text: str) -> str:
+    return build_native_range_evidence_for_entries(
+        [
+            ("Wikipedia", texts.wikipedia),
+            ("POWO", texts.powo),
+            ("GBIF", texts.gbif),
+            ("SelecTree", texts.selectree),
+        ],
+        reference_text,
+    )
+
+
+def select_ecoregion_candidates(native_range_evidence: str, limit: int = 40) -> list[EcoregionReference]:
+    return select_ecoregion_candidates_from_evidence(
+        native_range_evidence,
+        load_ecoregion_references(),
+        limit=limit,
+    )
+
+
+def format_ecoregion_candidates(candidates: list[EcoregionReference]) -> str:
+    if not candidates:
+        return "No shortlist available. Return an empty list unless the evidence is exceptionally clear."
+    return "\n".join(
+        f"- {candidate.ecoregion_id} | {candidate.ecoregion_name} | realm={candidate.realm or 'unknown'} | biome={candidate.biome or 'unknown'}"
+        for candidate in candidates
+    )
+
+
+TREE_FORM_MAP: dict[str, str] = {
+    "palm": "palm",
+    "broadleaf": "broadleaf",
+    "conifer": "conifer",
+    "spreading": "spreading",
+    "coniferous": "conifer",
+    "columnar": "columnar",
+    "ornamental": "ornamental",
+    "weeping": "weeping",
+    "multi_trunk": "multi_trunk",
+    "default": "default",
+}
+
+MONTH_NAME_TO_NUM = {
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "may": 5,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
+}
+
+SEASON_MONTHS = {
+    "spring": [3, 4, 5],
+    "summer": [6, 7, 8],
+    "autumn": [9, 10, 11],
+    "fall": [9, 10, 11],
+    "winter": [12, 1, 2],
+}
+
+
+def split_scientific_parts(scientific_name: str) -> tuple[str | None, str | None]:
+    tokens = scientific_name.split()
+    genus = tokens[0] if tokens else None
+    species_epithet = tokens[1] if len(tokens) >= 2 else None
+    return genus, species_epithet
+
+
+def map_tree_form(tree_form: str | None) -> str | None:
+    if tree_form is None:
+        return None
+    return TREE_FORM_MAP.get(tree_form, tree_form)
+
+
+def parse_lifespan_range(lifespan_years: str | None) -> tuple[int | None, int | None]:
+    if not lifespan_years:
+        return None, None
+    numbers = [int(match) for match in re.findall(r"\d+", lifespan_years)]
+    if len(numbers) >= 2:
+        return numbers[0], numbers[1]
+    if len(numbers) == 1:
+        if "+" in lifespan_years:
+            return numbers[0], None
+        return numbers[0], numbers[0]
+    return None, None
+
+
+def normalize_bloom_months(bloom_months: list[int] | None) -> list[int] | None:
+    if not bloom_months:
+        return None
+    cleaned = sorted({month for month in bloom_months if isinstance(month, int) and 1 <= month <= 12})
+    return cleaned or None
+
+
+def convert_length_range_to_feet(
+    min_value: float | None,
+    max_value: float | None,
+    unit: str | None,
+) -> tuple[float | None, float | None]:
+    if unit is None:
+        return None, None
+    factor = LENGTH_TO_FEET.get(unit)
+    if factor is None:
+        return None, None
+    converted_min = float(min_value) * factor if min_value is not None else None
+    converted_max = float(max_value) * factor if max_value is not None else None
+    if converted_min is None and converted_max is not None:
+        converted_min = converted_max
+    if converted_max is None and converted_min is not None:
+        converted_max = converted_min
+    if converted_min is not None and converted_max is not None and converted_min > converted_max:
+        converted_min, converted_max = converted_max, converted_min
+    return converted_min, converted_max
+
+
+def normalize_growth_rate(
+    min_value: float | None,
+    max_value: float | None,
+    unit: str | None,
+    fallback_label: str | None,
+) -> str | None:
+    if unit in GROWTH_RATE_TO_FT_PER_YEAR:
+        factor = GROWTH_RATE_TO_FT_PER_YEAR[unit]
+        converted_values = [
+            float(value) * factor
+            for value in (min_value, max_value)
+            if value is not None
+        ]
+        if converted_values:
+            typical_ft_per_year = sum(converted_values) / len(converted_values)
+            if typical_ft_per_year < 1.0:
+                return "slow"
+            if typical_ft_per_year <= 2.0:
+                return "moderate"
+            return "fast"
+    if fallback_label in {"slow", "moderate", "fast"}:
+        return fallback_label
+    return None
 
 
 def map_wikipedia_lookup(scientific_name: str) -> str:
     return SYNONYMS.get(scientific_name.lower(), scientific_name)
 
 
+def normalize_enrichment_search_name(scientific_name: str) -> str:
+    tokens = scientific_name.split()
+    if len(tokens) < 2:
+        return scientific_name
+    genus, species_epithet = tokens[0], tokens[1]
+    if not re.fullmatch(r"[A-Z][A-Za-z.-]*", genus):
+        return scientific_name
+    if not re.fullmatch(r"[a-z-]+", species_epithet):
+        return scientific_name
+    if species_epithet in {"sp", "sp.", "spp", "spp.", "x", "cf", "aff", "other"}:
+        return scientific_name
+    return f"{genus} {species_epithet}"
+
+
+def normalize_powo_query_name(scientific_name: str) -> str:
+    return normalize_enrichment_search_name(scientific_name)
+
+
 def fetch_wikipedia_text(scientific_name: str) -> str | None:
-    slug = scientific_name.replace(" ", "_")
+    query_name = normalize_enrichment_search_name(scientific_name)
+    slug = query_name.replace(" ", "_")
     summary_extract: str | None = None
 
     # REST summary endpoint — concise intro paragraph, best for LLM context
@@ -476,7 +720,7 @@ def fetch_wikipedia_text(scientific_name: str) -> str | None:
             "prop": "extracts",
             "exintro": True,
             "explaintext": True,
-            "titles": scientific_name,
+            "titles": query_name,
             "format": "json",
             "redirects": 1,
         },
@@ -503,9 +747,10 @@ def fetch_powo_text(scientific_name: str) -> str | None:
     habitat, morphology, and distribution descriptions.
     """
     try:
+        powo_query_name = normalize_powo_query_name(scientific_name)
         r = requests.get(
             "https://powo.science.kew.org/api/2/search",
-            params={"q": scientific_name, "f": "species_f"},
+            params={"q": powo_query_name, "f": "species_f"},
             headers=HEADERS,
             timeout=10,
         )
@@ -515,17 +760,28 @@ def fetch_powo_text(scientific_name: str) -> str | None:
         if not results:
             return None
         top = results[0]
-        fq_id = top.get("fqId")
-        if not fq_id:
+        matched_fq_id = top.get("fqId")
+        if not matched_fq_id:
             return None
+        accepted_ref = top.get("synonymOf") if not top.get("accepted", True) else None
+        fq_id = accepted_ref.get("fqId") if isinstance(accepted_ref, dict) and accepted_ref.get("fqId") else matched_fq_id
 
         parts = []
+        if powo_query_name != scientific_name:
+            parts.append(f"POWO search query normalized to: {powo_query_name}")
         if top.get("name"):
             parts.append(f"POWO matched name: {top['name']}")
         if top.get("author"):
             parts.append(f"POWO author: {top['author']}")
         if top.get("family"):
             parts.append(f"POWO family: {top['family']}")
+        if accepted_ref:
+            accepted_name = accepted_ref.get("name")
+            accepted_author = accepted_ref.get("author")
+            if accepted_name:
+                parts.append(f"POWO accepted name via synonym: {accepted_name}")
+            if accepted_author:
+                parts.append(f"POWO accepted author via synonym: {accepted_author}")
         snippet = top.get("snippet")
         if isinstance(snippet, str) and snippet.strip():
             snippet_text = snippet.replace("<b>", "").replace("</b>", "")
@@ -540,6 +796,27 @@ def fetch_powo_text(scientific_name: str) -> str | None:
         if r2.status_code != 200:
             return None
         data = r2.json()
+        accepted_data = data.get("accepted")
+        if (
+            data.get("taxonomicStatus")
+            and "synonym" in str(data.get("taxonomicStatus")).lower()
+            and isinstance(accepted_data, dict)
+            and accepted_data.get("fqId")
+            and accepted_data.get("fqId") != fq_id
+        ):
+            accepted_fq_id = accepted_data["fqId"]
+            r3 = requests.get(
+                f"https://powo.science.kew.org/api/2/taxon/{accepted_fq_id}",
+                params={"fields": "descriptions,distribution"},
+                headers=HEADERS,
+                timeout=10,
+            )
+            if r3.status_code == 200:
+                data = r3.json()
+                if accepted_data.get("name"):
+                    parts.append(f"POWO accepted name from taxon record: {accepted_data['name']}")
+                if accepted_data.get("author"):
+                    parts.append(f"POWO accepted author from taxon record: {accepted_data['author']}")
 
         descriptions = data.get("descriptions", {})
         if isinstance(descriptions, dict):
@@ -563,18 +840,54 @@ def fetch_powo_text(scientific_name: str) -> str | None:
             parts.append(f"Lifeform: {data['lifeform']}")
         if data.get("climate"):
             parts.append(f"Climate: {data['climate']}")
+        if data.get("species"):
+            parts.append(f"Species epithet: {data['species']}")
+        if data.get("taxonomicStatus"):
+            parts.append(f"Taxonomic status: {data['taxonomicStatus']}")
         if data.get("taxonRemarks"):
             parts.append(f"Taxon remarks: {data['taxonRemarks']}")
+        locations = data.get("locations")
+        if isinstance(locations, list) and locations:
+            parts.append(f"POWO location codes: {', '.join(str(code) for code in locations[:20])}")
+        classification = data.get("classification")
+        if isinstance(classification, list) and classification:
+            labels = [
+                f"{entry.get('rank')}: {entry.get('name')}"
+                for entry in classification
+                if isinstance(entry, dict) and entry.get("rank") and entry.get("name")
+            ]
+            if labels:
+                parts.append(f"Classification: {' | '.join(labels[:8])}")
 
-        # Include native distribution regions
+        # Include structured distribution evidence whenever available.
         dist = data.get("distribution", {})
-        natives = [
-            r.get("name")
-            for r in dist.get("natives", [])
-            if r.get("name")
-        ]
-        if natives:
-            parts.append(f"Native distribution: {', '.join(natives)}")
+        if isinstance(dist, dict):
+            for bucket in ("natives", "introduced", "extinct", "uncertain"):
+                entries = dist.get(bucket, [])
+                if not isinstance(entries, list) or not entries:
+                    continue
+                names = [entry.get("name") for entry in entries if isinstance(entry, dict) and entry.get("name")]
+                if names:
+                    parts.append(f"Distribution {bucket}: {', '.join(names[:20])}")
+                detailed_entries = []
+                for entry in entries[:12]:
+                    if not isinstance(entry, dict):
+                        continue
+                    detail_bits = []
+                    if entry.get("name"):
+                        detail_bits.append(f"name={entry['name']}")
+                    if entry.get("tdwgCode"):
+                        detail_bits.append(f"tdwg={entry['tdwgCode']}")
+                    if entry.get("locationTree"):
+                        detail_bits.append(
+                            "path=" + " > ".join(str(node) for node in entry["locationTree"][:10])
+                        )
+                    if entry.get("establishment"):
+                        detail_bits.append(f"establishment={entry['establishment']}")
+                    if detail_bits:
+                        detailed_entries.append("; ".join(detail_bits))
+                if detailed_entries:
+                    parts.append(f"Distribution {bucket} detail: {' | '.join(detailed_entries)}")
 
         return "\n".join(parts) if parts else None
     except Exception:
@@ -588,9 +901,10 @@ def fetch_gbif_text(scientific_name: str) -> str | None:
     useful for resolving synonyms and taxonomy.
     """
     try:
+        query_name = normalize_enrichment_search_name(scientific_name)
         r = requests.get(
             "https://api.gbif.org/v1/species/match",
-            params={"name": scientific_name, "verbose": "true"},
+            params={"name": query_name, "verbose": "true"},
             headers=HEADERS,
             timeout=10,
         )
@@ -602,6 +916,8 @@ def fetch_gbif_text(scientific_name: str) -> str | None:
             return None
 
         parts = []
+        if query_name != scientific_name:
+            parts.append(f"GBIF search query normalized to: {query_name}")
         if data.get("scientificName"):
             parts.append(f"Matched scientific name: {data['scientificName']}")
         if data.get("canonicalName"):
@@ -673,11 +989,12 @@ def fetch_selectree_text(scientific_name: str) -> str | None:
         return text.strip()
 
     try:
+        query_name = normalize_enrichment_search_name(scientific_name)
         search_resp = requests.get(
             "https://selectree.calpoly.edu/api/tree/search-by-name-multiresult",
             params={
                 "region": "",
-                "searchTerm": scientific_name,
+                "searchTerm": query_name,
                 "activePage": 1,
                 "resultsPerPage": 30,
                 "sort": 1,
@@ -694,7 +1011,7 @@ def fetch_selectree_text(scientific_name: str) -> str | None:
             return None
 
         selected = rows[0]
-        target = scientific_name.strip().lower()
+        target = query_name.strip().lower()
         for row in rows:
             accepted = str(row.get("accepted_scientific") or "").strip().lower()
             raw_name = str(row.get("name_concat") or "").strip().lower()
@@ -710,6 +1027,8 @@ def fetch_selectree_text(scientific_name: str) -> str | None:
             f"SelecTree tree_id: {tree_id}",
             f"SelecTree accepted scientific: {clean_value(selected.get('accepted_scientific') or selected.get('name_concat') or scientific_name)}",
         ]
+        if query_name != scientific_name:
+            parts.insert(0, f"SelecTree search query normalized to: {query_name}")
 
         if selected.get("common"):
             parts.append(f"SelecTree common name: {clean_value(selected['common'])}")
@@ -809,7 +1128,11 @@ def build_enrichment_prompt(scientific_name: str, wiki_name: str, reference_text
     return (
         "You are enriching tree data for an urban forestry dataset.\n"
         "Extract structured information about this tree species from the reference text below.\n"
-        "Be conservative with numeric estimates — use None if the sources don't clearly state a value.\n\n"
+        "Be conservative with numeric estimates - use None if the sources do not clearly state a value.\n"
+        "For mature height and canopy spread, extract min and max numeric values plus the original unit instead of converting units yourself.\n"
+        "For growth rate, prefer annual numeric growth increments with units; only use the qualitative slow/moderate/fast field when the source explicitly uses those words.\n"
+        "For bloom_months, return month numbers 1-12 rather than season text.\n"
+        "For description, write a brief 1-3 sentence summary covering appearance, ecology, and urban planting relevance.\n\n"
         f"Species: {scientific_name}\n\n"
         f"Wikipedia lookup: {wiki_name}\n\n"
         f"Reference text:\n{reference_text}"
@@ -838,6 +1161,73 @@ def parse_enrichment_from_text(
             messages=[{
                 "role": "user",
                 "content": build_enrichment_prompt(scientific_name, wiki_name, reference_text),
+            }],
+        )
+    except Exception as e:
+        print(f"  [error] instructor failed for {scientific_name!r}: {e}", file=sys.stderr)
+        return None
+
+
+def build_enrichment_prompt_v2(
+    scientific_name: str,
+    wiki_name: str,
+    reference_text: str,
+    native_range_evidence: str,
+    ecoregion_candidates: list[EcoregionReference],
+) -> str:
+    return (
+        "You are enriching tree data for an urban forestry dataset.\n"
+        "Extract structured information about this tree species from the reference text below.\n"
+        "Be conservative with numeric estimates - use None if the sources do not clearly state a value.\n"
+        "For mature height and canopy spread, extract min and max numeric values plus the original unit instead of converting units yourself.\n"
+        "For growth rate, prefer annual numeric growth increments with units; only use the qualitative slow/moderate/fast field when the source explicitly uses those words.\n"
+        "For bloom_months, return month numbers 1-12 rather than season text.\n"
+        "For description, write a brief 1-3 sentence summary covering appearance, ecology, and urban planting relevance.\n\n"
+        "For native_ecoregions, only use IDs from the shortlist below.\n"
+        "Return an empty list when the native-range evidence is weak or ambiguous.\n"
+        "Do not use planted range, cultivation range, or naturalized range as native range.\n\n"
+        f"Species: {scientific_name}\n\n"
+        f"Wikipedia lookup: {wiki_name}\n\n"
+        f"Native-range evidence:\n{native_range_evidence}\n\n"
+        f"Ecoregion shortlist:\n{format_ecoregion_candidates(ecoregion_candidates)}\n\n"
+        f"Reference text:\n{reference_text}"
+    )
+
+
+def parse_enrichment_from_text_v2(
+    scientific_name: str,
+    wiki_name: str,
+    texts: SourceTexts,
+    client,
+    ecoregion_candidates: list[EcoregionReference],
+    print_full_context: bool = False,
+) -> TreeEnrichment | None:
+    reference_text = build_reference_text(texts)
+    if not reference_text:
+        return None
+    native_range_evidence = build_native_range_evidence(texts, reference_text)
+
+    if print_full_context:
+        print("[debug] BEGIN LLM REFERENCE TEXT", file=sys.stderr)
+        print(reference_text, file=sys.stderr)
+        print("[debug] END LLM REFERENCE TEXT", file=sys.stderr)
+        print("[debug] BEGIN NATIVE RANGE EVIDENCE", file=sys.stderr)
+        print(native_range_evidence, file=sys.stderr)
+        print("[debug] END NATIVE RANGE EVIDENCE", file=sys.stderr)
+        print(f"[debug] ecoregion shortlist count: {len(ecoregion_candidates)}", file=sys.stderr)
+
+    try:
+        return client.chat.completions.create(
+            response_model=TreeEnrichment,
+            messages=[{
+                "role": "user",
+                "content": build_enrichment_prompt_v2(
+                    scientific_name,
+                    wiki_name,
+                    reference_text,
+                    native_range_evidence,
+                    ecoregion_candidates,
+                ),
             }],
         )
     except Exception as e:
@@ -874,21 +1264,25 @@ def run_standalone_debug(q_species: str, client) -> int:
 
     texts = gather_source_texts(scientific_name, wiki_name)
     labels = source_labels(texts)
+    native_range_evidence = build_native_range_evidence(texts, build_reference_text(texts))
+    ecoregion_candidates = select_ecoregion_candidates(native_range_evidence)
     if labels:
         print(f"[debug] sources: {', '.join(labels)}", file=sys.stderr)
     else:
         print("[debug] sources: none", file=sys.stderr)
+    print(f"[debug] ecoregion shortlist count: {len(ecoregion_candidates)}", file=sys.stderr)
 
     debug_print_source_details(texts)
 
     reference_text = build_reference_text(texts)
     print(f"[debug] combined_reference_chars: {len(reference_text)}", file=sys.stderr)
 
-    enrichment = parse_enrichment_from_text(
+    enrichment = parse_enrichment_from_text_v2(
         scientific_name,
         wiki_name,
         texts,
         client,
+        ecoregion_candidates,
         print_full_context=True,
     )
     if enrichment is None:
@@ -926,11 +1320,16 @@ def enrich_species(q_species: str, client, print_full_context: bool = False) -> 
         return None
 
     print(f"    [sources] {', '.join(labels)}", file=sys.stderr)
-    return parse_enrichment_from_text(
+    native_range_evidence = build_native_range_evidence(texts, build_reference_text(texts))
+    ecoregion_candidates = select_ecoregion_candidates(native_range_evidence)
+    if ecoregion_candidates:
+        print(f"    [ecoregions] shortlist={len(ecoregion_candidates)}", file=sys.stderr)
+    return parse_enrichment_from_text_v2(
         scientific_name,
         wiki_name,
         texts,
         client,
+        ecoregion_candidates,
         print_full_context=print_full_context,
     )
 
@@ -955,19 +1354,15 @@ def get_all_species() -> list[str]:
         conn.close()
 
 
-_COMPLETENESS_EXPR = """
-    (common_names IS NOT NULL AND trim(common_names) != ''
-     AND native_status IS NOT NULL
+_NEW_COMPLETENESS_EXPR = """
+    (common_names IS NOT NULL
+     AND array_length(common_names) > 0
      AND is_evergreen IS NOT NULL
-     AND mature_height_ft IS NOT NULL
-     AND canopy_spread_ft IS NOT NULL
+     AND mature_height_max_ft IS NOT NULL
+     AND canopy_spread_max_ft IS NOT NULL
      AND growth_rate IS NOT NULL
-     AND lifespan_years IS NOT NULL
      AND drought_tolerance IS NOT NULL
-     AND bloom_season IS NOT NULL
-     AND wildlife_value IS NOT NULL
-     AND fire_risk IS NOT NULL
-     AND tree_category IS NOT NULL)
+     AND tree_form IS NOT NULL)
 """.strip()
 
 SKIP_SPECIES = {'Scheduled Planting Site - Spring 2026', 'Vacant Unacceptable/Retired', 'Vacant site medium' }
@@ -992,37 +1387,74 @@ def get_already_enriched(source: str = ENRICHMENT_PARQUET) -> set[str]:
 
 
 def load_existing_table(source: str) -> pa.Table | None:
-    """Load the full enrichment parquet from *source*, computing is_complete inline."""
+    """Load the full enrichment parquet from *source*.
+
+    Returns None only if the file does not exist (local path missing or GCS 404).
+    Raises on any other error (schema mismatch, network failure, etc.).
+    """
     conn = duckdb.connect()
     try:
         table = conn.execute(
             f"""
             SELECT
-              species, common_names, native_status, is_evergreen,
-              mature_height_ft, canopy_spread_ft, growth_rate, lifespan_years,
-              drought_tolerance, bloom_season, wildlife_value, fire_risk,
-              tree_category,
-              {_COMPLETENESS_EXPR} AS is_complete,
-              icon_rgba_b64, icon_width, icon_height, enriched_at
+              species,
+              genus,
+              species_epithet,
+              family,
+              common_names,
+              description,
+              is_evergreen,
+              mature_height_min_ft,
+              mature_height_max_ft,
+              canopy_spread_min_ft,
+              canopy_spread_max_ft,
+              growth_rate,
+              lifespan_min_years,
+              lifespan_max_years,
+              drought_tolerance,
+              water_needs,
+              sun_exposure,
+              soil_preferences,
+              root_behavior,
+              coastal_tolerance,
+              salt_tolerance,
+              pollution_tolerance,
+              bloom_months,
+              wildlife_value,
+              fire_risk,
+              tree_form,
+              usda_zone_min,
+              usda_zone_max,
+              native_ecoregions,
+              {_NEW_COMPLETENESS_EXPR} AS is_complete,
+              enriched_at
             FROM read_parquet(?)
             """,
             [source],
         ).fetch_arrow_table()
-    except Exception:
-        return None
+    except Exception as exc:
+        msg = str(exc)
+        if (
+            "No such file or directory" in msg
+            or "does not exist" in msg
+            or "404" in msg
+            or "HTTP" in msg and "404" in msg
+        ):
+            return None
+        raise RuntimeError(f"load_existing_table({source!r}) failed: {exc}") from exc
     finally:
         conn.close()
 
-    # Normalize enriched_at timezone metadata if needed
-    tz_idx = table.schema.get_field_index("enriched_at")
-    if tz_idx >= 0:
-        target_ts  = SCHEMA.field("enriched_at").type
-        current_ts = table.schema.field(tz_idx).type
-        if current_ts != target_ts:
-            table = table.set_column(
-                tz_idx, "enriched_at",
-                pc.cast(table.column(tz_idx), target_ts, safe=False),
-            )
+    # Drop any extra columns not in SCHEMA (e.g. legacy icon_rgba_b64/width/height)
+    schema_names = {f.name for f in SCHEMA}
+    extra = [name for name in table.schema.names if name not in schema_names]
+    if extra:
+        table = table.drop(extra)
+
+    # Cast to canonical SCHEMA — normalizes list child field names (DuckDB emits 'l', PyArrow uses 'item')
+    # and ensures all column types match exactly before concat.
+    table = table.cast(SCHEMA)
+
     return table
 
 
@@ -1057,15 +1489,35 @@ def compute_is_complete(enrichment: TreeEnrichment) -> tuple[bool, list[str]]:
     """
     checks = [
         ("common_names",    bool(enrichment.common_names)),
+        ("description",     bool(enrichment.description and enrichment.description.strip())),
         ("is_evergreen",    enrichment.is_evergreen      is not None),
-        ("mature_height_ft",enrichment.mature_height_ft  is not None),
-        ("canopy_spread_ft",enrichment.canopy_spread_ft  is not None),
-        ("growth_rate",     enrichment.growth_rate       is not None),
-        # ("lifespan_years",  enrichment.lifespan_years    is not None),
-        ("drought_tolerance",enrichment.drought_tolerance is not None),
-        ("bloom_season",    enrichment.bloom_season      is not None),
-        ("wildlife_value",  enrichment.wildlife_value    is not None),
-        # ("fire_risk",       enrichment.fire_risk         is not None),
+        (
+            "mature_height_max_ft",
+            convert_length_range_to_feet(
+                enrichment.mature_height_min_value,
+                enrichment.mature_height_max_value,
+                enrichment.mature_height_unit,
+            )[1] is not None,
+        ),
+        (
+            "canopy_spread_max_ft",
+            convert_length_range_to_feet(
+                enrichment.canopy_spread_min_value,
+                enrichment.canopy_spread_max_value,
+                enrichment.canopy_spread_unit,
+            )[1] is not None,
+        ),
+        (
+            "growth_rate",
+            normalize_growth_rate(
+                enrichment.growth_rate_min_value,
+                enrichment.growth_rate_max_value,
+                enrichment.growth_rate_unit,
+                enrichment.growth_rate,
+            ) is not None,
+        ),
+        ("drought_tolerance", enrichment.drought_tolerance is not None),
+        ("tree_form", map_tree_form(enrichment.tree_form) is not None),
     ]
     missing = [name for name, ok in checks if not ok]
     return len(missing) == 0, missing
@@ -1074,24 +1526,37 @@ def compute_is_complete(enrichment: TreeEnrichment) -> tuple[bool, list[str]]:
 # ── Arrow table ────────────────────────────────────────────────────────────────
 
 SCHEMA = pa.schema([
-    ("species",          pa.string()),
-    ("common_names",     pa.string()),       # comma-separated
-    ("native_status",    pa.string()),
-    ("is_evergreen",     pa.bool_()),
-    ("mature_height_ft", pa.float32()),
-    ("canopy_spread_ft", pa.float32()),
-    ("growth_rate",      pa.string()),
-    ("lifespan_years",   pa.string()),
-    ("drought_tolerance",pa.string()),
-    ("bloom_season",     pa.string()),
-    ("wildlife_value",   pa.string()),
-    ("fire_risk",        pa.string()),
-    ("tree_category",    pa.string()),
-    ("is_complete",      pa.bool_()),        # all core Optional fields are non-null
-    ("icon_rgba_b64",    pa.string()),
-    ("icon_width",       pa.int32()),
-    ("icon_height",      pa.int32()),
-    ("enriched_at",      pa.timestamp("us", tz="UTC")),
+    ("species",               pa.string()),
+    ("genus",                 pa.string()),
+    ("species_epithet",       pa.string()),
+    ("family",                pa.string()),
+    ("common_names",          pa.list_(pa.string())),
+    ("description",           pa.string()),
+    ("is_evergreen",          pa.bool_()),
+    ("mature_height_min_ft",  pa.float32()),
+    ("mature_height_max_ft",  pa.float32()),
+    ("canopy_spread_min_ft",  pa.float32()),
+    ("canopy_spread_max_ft",  pa.float32()),
+    ("growth_rate",           pa.string()),
+    ("lifespan_min_years",    pa.int32()),
+    ("lifespan_max_years",    pa.int32()),
+    ("drought_tolerance",     pa.string()),
+    ("water_needs",           pa.string()),
+    ("sun_exposure",          pa.list_(pa.string())),
+    ("soil_preferences",      pa.list_(pa.string())),
+    ("root_behavior",         pa.string()),
+    ("coastal_tolerance",     pa.bool_()),
+    ("salt_tolerance",        pa.bool_()),
+    ("pollution_tolerance",   pa.string()),
+    ("bloom_months",          pa.list_(pa.int32())),
+    ("wildlife_value",        pa.string()),
+    ("fire_risk",             pa.string()),
+    ("tree_form",             pa.string()),
+    ("usda_zone_min",         pa.int32()),
+    ("usda_zone_max",         pa.int32()),
+    ("native_ecoregions",     pa.list_(pa.int32())),
+    ("is_complete",           pa.bool_()),
+    ("enriched_at",           pa.timestamp("us", tz="UTC")),
 ])
 
 
@@ -1142,13 +1607,38 @@ if __name__ == "__main__":
         metavar="N",
         help="Write a checkpoint to --output every N successfully enriched species (default: 10).",
     )
+    parser.add_argument(
+        "--model",
+        default=DEFAULT_INSTRUCTOR_MODEL,
+        help=(
+            "Instructor model to use for enrichment. Accepts either a full provider "
+            f"model name or a Gemini shorthand (default: {DEFAULT_INSTRUCTOR_MODEL})."
+        ),
+    )
+    parser.add_argument(
+        "--vertex-project",
+        dest="vertex_project",
+        default=DEFAULT_VERTEX_PROJECT,
+        help=f"Vertex AI project for instructor provider calls (default: {DEFAULT_VERTEX_PROJECT}).",
+    )
+    parser.add_argument(
+        "--vertex-location",
+        dest="vertex_location",
+        default=DEFAULT_VERTEX_LOCATION,
+        help=f"Vertex AI location for instructor provider calls (default: {DEFAULT_VERTEX_LOCATION}).",
+    )
     args = parser.parse_args()
 
-    client = instructor.from_provider(
-        "google/gemini-2.5-pro",
-        vertexai=True,
-        project="preqldata",
-        location="us-central1"      # e.g., us-central1, europe-west1
+    normalized_model = normalize_instructor_model_name(args.model)
+    print(
+        f"[info] instructor model={normalized_model} | "
+        f"vertex_project={args.vertex_project} | vertex_location={args.vertex_location}",
+        file=sys.stderr,
+    )
+    client = create_instructor_client(
+        normalized_model,
+        args.vertex_project,
+        args.vertex_location,
     )
 
     if args.debug_species:
@@ -1178,42 +1668,87 @@ if __name__ == "__main__":
 
     # Pre-load existing table once so every checkpoint flush is cheap.
     existing_table = load_existing_table(enrichment_source) if already_enriched else None
+    if already_enriched and (existing_table is None or len(existing_table) == 0):
+        raise RuntimeError(
+            f"existing_table is empty/None but get_already_enriched() returned "
+            f"{len(already_enriched)} species from {enrichment_source!r}. "
+            f"load_existing_table() silently failed — check schema compatibility or URL reachability."
+        )
 
     new_rows: list[dict] = []
+    counter = 0
     for q_species in to_process:
         if not q_species:
             continue
         status = "re-enrich" if parse_scientific_name(q_species) in already_enriched else "new"
-        print(f"  [{status}] {q_species}", file=sys.stderr)
+        print(f"{counter:03d}/{len(to_process):03d}  [{status}] {q_species}", file=sys.stderr)
         enrichment = enrich_species(q_species, client, print_full_context=args.print_llm_context)
         if enrichment is None:
             continue
-
-        icon = draw_tree_icon(enrichment.tree_category)
+        counter +=1
+        # temporary
+        if counter >100:
+            break
         is_complete, missing = compute_is_complete(enrichment)
         if missing:
             print(f"    [incomplete] missing: {', '.join(missing)}", file=sys.stderr)
         else:
             print(f"    [complete]", file=sys.stderr)
+        scientific_name = parse_scientific_name(q_species)
+        genus, species_epithet = split_scientific_parts(scientific_name)
+        lifespan_min_years, lifespan_max_years = parse_lifespan_range(enrichment.lifespan_years)
+        mature_height_min_ft, mature_height_max_ft = convert_length_range_to_feet(
+            enrichment.mature_height_min_value,
+            enrichment.mature_height_max_value,
+            enrichment.mature_height_unit,
+        )
+        canopy_spread_min_ft, canopy_spread_max_ft = convert_length_range_to_feet(
+            enrichment.canopy_spread_min_value,
+            enrichment.canopy_spread_max_value,
+            enrichment.canopy_spread_unit,
+        )
+        bloom_months = normalize_bloom_months(enrichment.bloom_months)
+        normalized_growth_rate = normalize_growth_rate(
+            enrichment.growth_rate_min_value,
+            enrichment.growth_rate_max_value,
+            enrichment.growth_rate_unit,
+            enrichment.growth_rate,
+        )
         new_rows.append({
-            "species":          parse_scientific_name(q_species),
-            "common_names":     ", ".join(enrichment.common_names),
-            "native_status":    enrichment.native_status,
-            "is_evergreen":     enrichment.is_evergreen,
-            "mature_height_ft": enrichment.mature_height_ft,
-            "canopy_spread_ft": enrichment.canopy_spread_ft,
-            "growth_rate":      enrichment.growth_rate,
-            "lifespan_years":   enrichment.lifespan_years,
-            "drought_tolerance":enrichment.drought_tolerance,
-            "bloom_season":     enrichment.bloom_season,
-            "wildlife_value":   enrichment.wildlife_value,
-            "fire_risk":        enrichment.fire_risk,
-            "tree_category":    enrichment.tree_category,
-            "is_complete":      True, # we can reset this when we update enrichment logic
-            "icon_rgba_b64":    to_raw_rgba_b64(icon),
-            "icon_width":       ICON_SIZE,
-            "icon_height":      ICON_SIZE,
-            "enriched_at":      datetime.now(tz=timezone.utc),
+            "species":              scientific_name,
+            "genus":                genus,
+            "species_epithet":      species_epithet,
+            "family":               None,
+            "common_names":         enrichment.common_names or None,
+            "description":          enrichment.description.strip() if enrichment.description else None,
+            "is_evergreen":         enrichment.is_evergreen,
+            "mature_height_min_ft": mature_height_min_ft,
+            "mature_height_max_ft": mature_height_max_ft,
+            "canopy_spread_min_ft": canopy_spread_min_ft,
+            "canopy_spread_max_ft": canopy_spread_max_ft,
+            "growth_rate":          normalized_growth_rate,
+            "lifespan_min_years":   lifespan_min_years,
+            "lifespan_max_years":   lifespan_max_years,
+            "drought_tolerance":    enrichment.drought_tolerance,
+            "water_needs":          enrichment.water_needs,
+            "sun_exposure":         enrichment.sun_exposure or None,
+            "soil_preferences":     enrichment.soil_preferences or None,
+            "root_behavior":        enrichment.root_behavior,
+            "coastal_tolerance":    enrichment.coastal_tolerance,
+            "salt_tolerance":       enrichment.salt_tolerance,
+            "pollution_tolerance":  enrichment.pollution_tolerance,
+            "bloom_months":         bloom_months,
+            "wildlife_value":       enrichment.wildlife_value,
+            "fire_risk":            enrichment.fire_risk,
+            "tree_form":            map_tree_form(enrichment.tree_form),
+            "usda_zone_min":        enrichment.usda_zone_min,
+            "usda_zone_max":        enrichment.usda_zone_max,
+            "native_ecoregions":    sorted(set(enrichment.native_ecoregions)) or None,
+            "is_complete":          is_complete,
+            # "icon_rgba_b64":        to_raw_rgba_b64(icon),
+            # "icon_width":           ICON_SIZE,
+            # "icon_height":          ICON_SIZE,
+            "enriched_at":          datetime.now(tz=timezone.utc),
         })
 
         # Periodic checkpoint flush
@@ -1226,6 +1761,18 @@ if __name__ == "__main__":
             )
 
     merged = merge_with_existing(existing_table, new_rows)
+
+    if existing_table is not None and len(existing_table) > 0 and new_rows:
+        new_species_set = {row["species"] for row in new_rows}
+        overlap = sum(1 for s in existing_table.column("species").to_pylist() if s in new_species_set)
+        expected = len(existing_table) - overlap + len(new_rows)
+        if len(merged) != expected:
+            raise RuntimeError(
+                f"Merge validation failed: expected {expected} rows "
+                f"({len(existing_table)} existing − {overlap} re-processed + {len(new_rows)} new), "
+                f"got {len(merged)}. "
+                f"Existing rows were likely dropped due to a silent load failure."
+            )
 
     if local_mode:
         pq.write_table(merged, args.output)

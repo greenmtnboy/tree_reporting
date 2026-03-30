@@ -8,7 +8,16 @@ export interface RawTree {
   diameter_at_breast_height: number | null
 }
 
-export type TreeCategory = 'palm' | 'broadleaf' | 'spreading' | 'coniferous' | 'columnar' | 'ornamental' | 'default'
+export type TreeForm =
+  | 'broadleaf'
+  | 'conifer'
+  | 'palm'
+  | 'columnar'
+  | 'ornamental'
+  | 'spreading'
+  | 'weeping'
+  | 'multi_trunk'
+  | 'default'
 
 export interface RawLandmark {
   name: string

@@ -1,0 +1,39 @@
+import ..tree_common;
+
+root datasource sf_update_time (
+    data_updated_through: ussfo_data_updated_through
+)
+file `./sf_update_time.py`;
+
+
+root partial datasource sf_raw_tree_info (
+    TreeID: tree_id,
+    city: city,
+    qSpecies: species,
+    tree_name: ?tree_name,
+    PlantDate: ?plant_date,
+    DBH: ?diameter_at_breast_height,
+    Latitude: ?latitude,
+    Longitude: ?longitude,
+)
+grain (tree_id)
+complete where city = 'USSFO'
+file `./sf_tree_info.py`;
+
+
+partial datasource sf_tree_info (
+    tree_id,
+    city,
+    species,
+    ?tree_name,
+    ?plant_date,
+    ?diameter_at_breast_height,
+    ?latitude,
+    ?longitude,
+    ussfo_data_updated_through,
+)
+grain (tree_id)
+complete where city = 'USSFO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ussfo_tree_info_v{data_version}.parquet`
+freshness by ussfo_data_updated_through;
+

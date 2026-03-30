@@ -11,7 +11,7 @@ DATA_DIR = ROOT / "data"
 PUBLIC_CACHE_DIR = ROOT / "src" / "public" / "data" / "cache"
 
 RAW_JSON = DATA_DIR / "raw_data.json"
-SPECIES_JSON = DATA_DIR / "species_data.json"
+REMOTE_SPECIES_PARQUET_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment_v1.parquet"
 
 
 def build() -> None:
@@ -25,27 +25,48 @@ def build() -> None:
 
     con.execute("CREATE OR REPLACE TABLE trees AS SELECT * FROM read_json_auto(?)", [str(RAW_JSON)])
 
-    if SPECIES_JSON.exists():
-        con.execute("CREATE OR REPLACE TABLE species_enrichment AS SELECT * FROM read_json_auto(?)", [str(SPECIES_JSON)])
-    else:
+    try:
         con.execute(
+            f"""
+            CREATE OR REPLACE TABLE species_enrichment AS
+            SELECT
+              species,
+              common_names,
+              tree_form,
+              native_status,
+              is_evergreen,
+              mature_height_ft,
+              bloom_season,
+              wildlife_value,
+              fire_risk,
+              drought_tolerance
+            FROM read_parquet('{REMOTE_SPECIES_PARQUET_URL}')
             """
-            CREATE OR REPLACE TABLE species_enrichment (
-              species VARCHAR,
-              tree_category VARCHAR,
-              native_status VARCHAR,
-              is_evergreen BOOLEAN,
-              mature_height_ft DOUBLE,
-              bloom_season VARCHAR,
-              wildlife_value VARCHAR,
-              fire_risk VARCHAR
-            )
+        )
+    except duckdb.Error:
+        con.execute(
+            f"""
+            CREATE OR REPLACE TABLE species_enrichment AS
+            SELECT
+              species,
+              common_names,
+              CASE lower(trim(COALESCE(tree_category, 'default')))
+                WHEN 'coniferous' THEN 'conifer'
+                ELSE lower(trim(COALESCE(tree_category, 'default')))
+              END AS tree_form,
+              native_status,
+              is_evergreen,
+              mature_height_ft,
+              bloom_season,
+              wildlife_value,
+              fire_risk,
+              drought_tolerance
+            FROM read_parquet('{REMOTE_SPECIES_PARQUET_URL}')
             """
         )
 
     # Persist base parquet caches.
     con.execute(f"COPY trees TO '{(PUBLIC_CACHE_DIR / 'trees.parquet').as_posix()}' (FORMAT PARQUET)")
-    con.execute(f"COPY species_enrichment TO '{(PUBLIC_CACHE_DIR / 'species.parquet').as_posix()}' (FORMAT PARQUET)")
 
     # Precomputed map-optimized table.
     con.execute(
@@ -61,15 +82,17 @@ def build() -> None:
             t.latitude,
             t.longitude,
             COALESCE(t.diameter_at_breast_height, 3) AS dbh,
-            CASE lower(trim(COALESCE(se.tree_category, 'default')))
+            CASE lower(trim(COALESCE(se.tree_form, 'default')))
               WHEN 'palm' THEN 'palm'
               WHEN 'broadleaf' THEN 'broadleaf'
+              WHEN 'conifer' THEN 'conifer'
               WHEN 'spreading' THEN 'spreading'
-              WHEN 'coniferous' THEN 'coniferous'
               WHEN 'columnar' THEN 'columnar'
               WHEN 'ornamental' THEN 'ornamental'
+              WHEN 'weeping' THEN 'weeping'
+              WHEN 'multi_trunk' THEN 'multi_trunk'
               ELSE 'default'
-            END AS tree_category,
+            END AS tree_form,
             se.native_status,
             se.is_evergreen,
             se.mature_height_ft,
@@ -95,7 +118,7 @@ def build() -> None:
           latitude,
           longitude,
           TRY_CAST(dbh AS DOUBLE) AS dbh,
-          tree_category,
+          tree_form,
           native_status,
           is_evergreen,
           mature_height_ft,

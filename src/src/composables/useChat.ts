@@ -1,42 +1,53 @@
 import { ref, computed } from 'vue'
-import type { ChatMessage as LibChatMessage } from '@trilogy-data/trilogy-studio-components'
+import type { ChatMessage as LibChatMessage } from '@trilogy-data/trilogy-studio-components/llm'
 import type { ChatMessage, ToolCallRecord } from '../types'
 import {
-  useTrilogyCore,
   buildCustomTrilogyPrompt,
   runToolLoop,
   RETURN_TO_USER_TOOL,
-} from '@trilogy-data/trilogy-studio-components'
+} from '@trilogy-data/trilogy-studio-components/llm'
 import type {
   LLMAdapter,
   MessagePersistence,
   ToolExecutorFactory,
   ExecutionStateUpdater,
-} from '@trilogy-data/trilogy-studio-components'
+} from '@trilogy-data/trilogy-studio-components/llm'
 import { useDuckDB } from './useDuckDB'
 import { useFlyTo } from './useFlyTo'
 import { useLandmarkData } from './useLandmarkData'
 import { useMapData, CITY_CONFIG } from './useMapData'
 import type { CityCode } from './useMapData'
 import { ALL_MODEL_SOURCES } from '../trilogyModels'
+import { useTrilogyRuntime } from './useTrilogyRuntime'
+import { router } from '../router'
+import {
+  PROVIDER_DEFAULT_MODELS as CHAT_PROVIDER_DEFAULT_MODELS,
+  resolveAppScreen as resolveRouteScreen,
+  toolsForScreen as selectToolsForScreen,
+} from './chatToolConfig'
+import {
+  createSafeToolExecutor as wrapSafeToolExecutor,
+  safeJsonStringify as safeJsonStringifyHelper,
+  toJsonSafeRows as toJsonSafeRowsHelper,
+} from './chatToolExecution'
+import { useSummaryFilters, SUMMARY_FILTER_FIELDS, type SummaryFilterField } from './useSummaryFilters'
+import { useSummaryDashboardExecution } from './useSummaryDashboardExecution'
+import {
+  SUMMARY_CHARTS,
+  SUMMARY_DASHBOARD_IMPORTS,
+  SUMMARY_KPI_CHARTS,
+  getSummaryBaseFilters,
+  readSummaryRouteCity,
+} from './summaryDashboardConfig'
 
 const API_KEY_STORAGE = 'sf_trees_api_key'
 const API_TYPE_STORAGE = 'sf_trees_provider_type'
 const MAX_LOOPS = 10
-const TRILOGY_RESOLVER_URL = 'https://trilogy-service.fly.dev'
 const LLM_CONNECTION = 'sf-trees'
 
 // Default models per provider — used when first creating the connection so
 // generateCompletion works immediately without waiting for reset() to finish.
-const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
-  anthropic: 'claude-sonnet-4-6',
-  openai: 'gpt-5.2',
-  google: 'google/gemini-3-flash-preview',
-  openrouter: 'google/gemini-3-flash-preview',
-  demo: 'google/gemini-3-flash-preview',
-}
-
-const TOOLS = [
+const _TOOLS = [
   {
     name: 'run_query',
     description:
@@ -129,6 +140,8 @@ const TOOLS = [
   RETURN_TO_USER_TOOL,
 ]
 
+const SUMMARY_INSPECTABLE_CHARTS = [...SUMMARY_KPI_CHARTS, ...SUMMARY_CHARTS]
+
 const _today = new Date().toLocaleDateString('en-US', {
   year: 'numeric',
   month: 'long',
@@ -143,7 +156,7 @@ function buildSystemPromptForCity(city: CityCode, userLoc?: { lat: number; lng: 
     ? `\nUSER LOCATION: The user's precise device location is lat ${userLoc.lat.toFixed(5)}, lng ${userLoc.lng.toFixed(5)}. When asked about "trees near me" or nearby trees, use a bounding box: WHERE latitude BETWEEN ${(userLoc.lat - 0.009).toFixed(5)} AND ${(userLoc.lat + 0.009).toFixed(5)} AND longitude BETWEEN ${(userLoc.lng - 0.011).toFixed(5)} AND ${(userLoc.lng + 0.011).toFixed(5)} (≈ 1 km radius). Adjust the range based on context.`
     : ''
   return buildCustomTrilogyPrompt(
-    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Urban Trees map application. You help users explore cities' urban forest datasets of 100k+ trees and visualize the results. A default map is loaded with coloring by tree category. Cities supported include ${_cityNames}.${userLocStr}
+    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Urban Trees map application. You help users explore cities' urban forest datasets of 100k+ trees and visualize the results. A default map is loaded with coloring by tree form. Cities supported include ${_cityNames}.${userLocStr}
 
 ACTIVE CITY: ${cityName} (city code: ${city}). All queries must filter with WHERE city = '${city}' unless the user explicitly asks about another city.
 
@@ -172,7 +185,7 @@ SPECIES-LEVEL ENRICHMENT CONCEPTS:
 - bloom_season (string) — September to November | autumn and winter | late spring and summer | late spring or summer | late spring to autumn | spring | spring and summer | summer | winter | year-round
 - wildlife_value (string) — low | moderate | high
 - fire_risk (string) — low | moderate | high
-- tree_category (string) — palm | broadleaf | spreading | coniferous | columnar | ornamental | default
+- tree_form (string) — broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default
 
 TRILOGY SYNTAX RULES:
 ${rulesInput}
@@ -193,6 +206,177 @@ Be concise and helpful. When showing query results, format them nicely.
 
 Today's date: ${_today}`,
   )
+}
+
+function buildSummarySystemPrompt(city: CityCode, summaryFilterState: string): string {
+  const cityName = CITY_CONFIG[city].name
+  return buildCustomTrilogyPrompt(
+    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Urban Trees analytics page. You help users explore city tree datasets through summary charts and direct data questions. Cities supported include ${_cityNames}.
+
+ACTIVE SCREEN: Analytics summary.
+ACTIVE CITY: ${cityName} (city code: ${city}). All queries must filter with WHERE city = '${city}' unless the user explicitly asks about another city.
+ACTIVE ANALYTICS FILTERS: ${summaryFilterState}.
+
+You have access to tools for querying the tree dataset, inspecting the active analytics dashboard, and updating the analytics dashboard filters. Use set_summary_filters when the user wants the charts narrowed, focused, or cleared. Use inspect_summary_dashboard when you need to see the current summary chart queries or results. Available analytics filter fields are tree_form, species, native_locality_bucket, hardiness_fit_bucket, water_resilience_bucket, sun_exposure_label, lifespan_bucket, growth_rate, wildlife_value, and fire_risk.
+
+AVAILABLE CONCEPTS:
+- tree_id (string) - unique identifier
+- tree_name (string) - e.g. "Swamp Myrtle"
+- plant_date (date) - date planted; not known for all trees.
+- species (string) - full species string like "Tristaniopsis laurina :: Swamp Myrtle"
+- latitude (float) - geographic latitude
+- longitude (float) - geographic longitude
+- diameter_at_breast_height (float) - trunk diameter in inches
+
+SUMMARY ANALYTICS CONCEPTS:
+- native_locality_bucket (string) - Local native | Non-local native | Introduced
+- hardiness_fit_bucket (string) - Well within zone | Edge of tolerance | Outside zone | Unknown
+- water_resilience_bucket (string) - High water / low drought tolerance | Low water / high drought tolerance | Moderate / mixed | Unknown
+- sun_exposure_label (string) - Full sun | Partial shade | Shade
+- lifespan_bucket (string) - Short-lived (<50y) | Medium-lived (50-149y) | Long-lived (150+y) | Unknown
+- dominance_rank (int)
+- cumulative_tree_share_pct (float)
+
+SPECIES-LEVEL ENRICHMENT CONCEPTS:
+- common_names (string)
+- description (string)
+- is_evergreen (bool)
+- mature_height_min_ft / mature_height_max_ft (float)
+- canopy_spread_min_ft / canopy_spread_max_ft (float)
+- growth_rate (string) - slow | moderate | fast
+- lifespan_min_years / lifespan_max_years (int)
+- drought_tolerance (string) - low | moderate | high
+- water_needs (string) - low | moderate | high
+- sun_exposure (array)
+- bloom_months (array of month numbers)
+- wildlife_value (string) - low | moderate | high
+- fire_risk (string) - low | moderate | high
+- tree_form (string) - broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default
+- usda_zone_min / usda_zone_max (int)
+- native_ecoregions (array of ecoregion ids)
+
+TRILOGY SYNTAX RULES:
+${rulesInput}
+
+AGGREGATE FUNCTIONS: ${aggFunctions.join(', ')}
+
+COMMON FUNCTIONS: ${functions.join(', ')}
+
+VALID DATA TYPES: ${datatypes.join(', ')}
+
+IMPORTANT GUIDELINES:
+1. Use a reasonable LIMIT (e.g., 100-500) for exploratory run_query calls.
+2. Use set_summary_filters for requests like "filter to local native trees", "show broadleaf species only", "show only trees outside the hardiness zone", or "clear the filters".
+3. If a query fails, explain the error and try a corrected version.
+4. Always finish by calling return_to_user with your complete response. Never return a plain text reply - use return_to_user to signal you are done.
+
+Be concise and helpful. When showing query results, format them nicely.
+
+Today's date: ${_today}`,
+  )
+}
+
+function getActiveSummaryCity(selectedCity: CityCode): CityCode {
+  return readSummaryRouteCity(router.currentRoute.value.query.city) ?? selectedCity
+}
+
+function getSummaryChartDefinitions(chartIds?: string[]) {
+  if (!chartIds?.length) {
+    return SUMMARY_INSPECTABLE_CHARTS
+  }
+  const requested = new Set(chartIds)
+  return SUMMARY_INSPECTABLE_CHARTS.filter((chart) => requested.has(chart.id))
+}
+
+function serializeDashboardRows(result: { toJSON: () => unknown }, rowLimit: number) {
+  const serialized = result.toJSON() as {
+    data?: Array<Record<string, unknown>>
+    headers?: Record<string, unknown>
+  }
+  const rows = Array.isArray(serialized.data) ? serialized.data.slice(0, rowLimit) : []
+  return {
+    columns: Object.keys(serialized.headers ?? {}),
+    rows: toJsonSafeRowsHelper(rows),
+    totalRows: Array.isArray(serialized.data) ? serialized.data.length : 0,
+  }
+}
+
+async function executeSummaryRunQuery(
+  query: string,
+  selectedCity: CityCode,
+  initializeSummaryDashboard: () => Promise<void>,
+  summaryConnectionId: string,
+  summaryQueryExecutionService: ReturnType<typeof useSummaryDashboardExecution>['queryExecutionService'],
+  crossFilters: ReturnType<typeof useSummaryFilters>['crossFilters'],
+) {
+  console.debug('[useChat] summary run_query start', { city: selectedCity })
+  await initializeSummaryDashboard()
+
+  const activeCity = getActiveSummaryCity(selectedCity)
+  const baseFilters = getSummaryBaseFilters(activeCity)
+  const extraFilters = crossFilters.getSqlFiltersFor('assistant-run-query', baseFilters)
+
+  console.debug('[useChat] summary run_query execute', {
+    city: activeCity,
+    extraFilters,
+  })
+
+  const { resultPromise } = await summaryQueryExecutionService.executeQueriesBatch(
+    summaryConnectionId,
+    [{ label: 'assistant-run-query', query, extra_filters: extraFilters }],
+    'trilogy',
+    SUMMARY_DASHBOARD_IMPORTS.map((imp) => ({ name: imp.name, alias: imp.alias })),
+  )
+
+  const batchResult = await resultPromise
+  const result = batchResult.results[0]
+
+  console.debug('[useChat] summary run_query result', {
+    success: Boolean(result?.success),
+    hasSql: Boolean(result?.generatedSql),
+  })
+
+  if (!result?.success) {
+    return {
+      success: false,
+      error:
+        result?.error ||
+        safeJsonStringifyHelper({
+          message: 'Summary query failed without an explicit error.',
+          batchSuccess: batchResult.success,
+          activeFilters: extraFilters,
+          result: result ?? null,
+        }),
+    }
+  }
+
+  if (!result.results) {
+    return {
+      success: false,
+      error: safeJsonStringifyHelper({
+        message: 'Summary query failed before returning a result payload.',
+        batchSuccess: batchResult.success,
+        activeFilters: extraFilters,
+        result: {
+          success: result.success,
+          error: result.error ?? null,
+          generatedSql: result.generatedSql ?? '',
+          executionTime: result.executionTime,
+          resultSize: result.resultSize,
+          columnCount: result.columnCount,
+        },
+      }),
+    }
+  }
+
+  return {
+    success: true,
+    message: safeJsonStringifyHelper({
+      ...serializeDashboardRows(result.results, 100),
+      generatedSql: result.generatedSql ?? '',
+      activeFilters: extraFilters,
+    }),
+  }
 }
 
 // Module-level state (singleton)
@@ -236,7 +420,9 @@ export function useChat() {
   const { flyTo } = useFlyTo()
   const { landmarks } = useLandmarkData()
   const { selectedCity, setSelectedCity, userLocation, publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
-  const trilogy = useTrilogyCore()
+  const { crossFilters, applyValuesForField, clearFields, summaryFilterPromptState } = useSummaryFilters()
+  const { initialize: initializeSummaryDashboard, connectionId: summaryConnectionId, queryExecutionService: summaryQueryExecutionService } = useSummaryDashboardExecution()
+  const trilogy = useTrilogyRuntime()
 
   /** If (lat, lng) is closer to a different city than the current one, switch to it. */
   function detectAndSwitchCity(lat: number, lng: number): void {
@@ -261,18 +447,10 @@ export function useChat() {
     }
   }
 
-  // Ensure the Trilogy resolver points at the production service
-  if (
-    !trilogy.userSettingsStore.settings.trilogyResolver ||
-    trilogy.userSettingsStore.settings.trilogyResolver.includes('localhost')
-  ) {
-    trilogy.userSettingsStore.updateSetting('trilogyResolver', TRILOGY_RESOLVER_URL)
-  }
-
   // Create or update the LLM connection based on current providerType/apiKey
   async function ensureConnection() {
     const existing = trilogy.llmConnectionStore.connections[LLM_CONNECTION]
-    const model = PROVIDER_DEFAULT_MODELS[providerType.value] || ''
+    const model = CHAT_PROVIDER_DEFAULT_MODELS[providerType.value] || ''
 
     if (!existing) {
       await trilogy.llmConnectionStore.newConnection(LLM_CONNECTION, providerType.value, {
@@ -289,8 +467,11 @@ export function useChat() {
         saveCredential: false,
       })
     } else {
-      // Same type, just refresh the key
+      // Same type, refresh the key and normalize the default model for app-managed connections.
       existing.setApiKey(apiKey.value)
+      if (model) {
+        existing.setModel(model)
+      }
     }
   }
 
@@ -340,12 +521,26 @@ export function useChat() {
       switch (name) {
         case 'run_query': {
           const { query } = input as { query: string }
+          if (resolveRouteScreen(router.currentRoute.value) === 'summary') {
+            return executeSummaryRunQuery(
+              query,
+              selectedCity.value,
+              initializeSummaryDashboard,
+              summaryConnectionId,
+              summaryQueryExecutionService,
+              crossFilters,
+            )
+          }
           const sql = await compilePreQL(query)
           const { columns, rows } = await duckQuery(sql)
           const truncated = rows.slice(0, 100)
           return {
             success: true,
-            message: JSON.stringify({ columns, rows: truncated, totalRows: rows.length }),
+            message: safeJsonStringifyHelper({
+              columns,
+              rows: toJsonSafeRowsHelper(truncated),
+              totalRows: rows.length,
+            }),
           }
         }
         case 'publish_results': {
@@ -507,7 +702,128 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
           const matches = landmarks.value.filter((l) => l.name.toLowerCase().includes(q))
           if (matches.length === 0)
             return { success: true, message: 'No landmarks found matching that name.' }
-          return { success: true, message: JSON.stringify(matches.slice(0, 5)) }
+          return { success: true, message: safeJsonStringifyHelper(matches.slice(0, 5)) }
+        }
+        case 'set_summary_filters': {
+          const { operation, filters = [] } = input as {
+            operation: 'replace_all' | 'replace_fields' | 'append' | 'clear'
+            filters?: Array<{ field: SummaryFilterField; values?: string[] }>
+          }
+
+          if (resolveRouteScreen(router.currentRoute.value) !== 'summary') {
+            return {
+              success: false,
+              error: 'set_summary_filters is only available on the analytics summary page.',
+            }
+          }
+
+          const validFilters = filters.filter(
+            (filter): filter is { field: SummaryFilterField; values?: string[] } =>
+              filter != null &&
+              SUMMARY_FILTER_FIELDS.includes(filter.field),
+          )
+
+          if (operation === 'clear') {
+            const fields = validFilters.map((filter) => filter.field)
+            clearFields(fields.length ? fields : undefined)
+            return {
+              success: true,
+              message: `Updated analytics filters. Active filters: ${summaryFilterPromptState.value}.`,
+            }
+          }
+
+          if (!validFilters.length) {
+            return {
+              success: false,
+              error:
+                `set_summary_filters requires at least one filter with field ${SUMMARY_FILTER_FIELDS.join(', ')}.`,
+            }
+          }
+
+          if (operation === 'replace_all') {
+            clearFields()
+          }
+
+          for (const filter of validFilters) {
+            applyValuesForField(
+              filter.field,
+              Array.isArray(filter.values) ? filter.values : [],
+              operation === 'append' ? 'append' : 'replace',
+            )
+          }
+
+          return {
+            success: true,
+            message: `Updated analytics filters. Active filters: ${summaryFilterPromptState.value}.`,
+          }
+        }
+        case 'inspect_summary_dashboard': {
+          if (resolveRouteScreen(router.currentRoute.value) !== 'summary') {
+            return {
+              success: false,
+              error: 'inspect_summary_dashboard is only available on the analytics summary page.',
+            }
+          }
+
+          const { chart_ids: chartIds, row_limit: rawRowLimit } = input as {
+            chart_ids?: string[]
+            row_limit?: number
+          }
+          const rowLimit = Math.max(1, Math.min(Number(rawRowLimit) || 10, 25))
+          const charts = getSummaryChartDefinitions(chartIds)
+
+          if (!charts.length) {
+            return {
+              success: false,
+              error: 'No matching summary chart ids were found to inspect.',
+            }
+          }
+
+          await initializeSummaryDashboard()
+          const activeCity = getActiveSummaryCity(selectedCity.value)
+          const baseFilters = getSummaryBaseFilters(activeCity)
+          const queries = charts.map((chart) => ({
+            label: chart.id,
+            query: chart.query,
+            extra_filters: crossFilters.getSqlFiltersFor(chart.id, baseFilters),
+          }))
+
+          const { resultPromise } = await summaryQueryExecutionService.executeQueriesBatch(
+            summaryConnectionId,
+            queries,
+            'trilogy',
+            SUMMARY_DASHBOARD_IMPORTS.map((imp) => ({ name: imp.name, alias: imp.alias })),
+          )
+          const batchResult = await resultPromise
+
+          const payload = charts.map((chart, index) => {
+            const filters = crossFilters.getSqlFiltersFor(chart.id, baseFilters)
+            const result = batchResult.results[index]
+            const resultData =
+              result?.success && result.results
+                ? serializeDashboardRows(result.results, rowLimit)
+                : { columns: [], rows: [], totalRows: 0 }
+
+            return {
+              id: chart.id,
+              title: chart.title,
+              query: chart.query,
+              filters,
+              generatedSql: result?.generatedSql ?? '',
+              success: Boolean(result?.success),
+              error: result?.error,
+              ...resultData,
+            }
+          })
+
+          return {
+            success: true,
+            message: safeJsonStringifyHelper({
+              city: activeCity,
+              activeFilters: summaryFilterPromptState.value,
+              charts: payload,
+            }),
+          }
         }
         case 'send_user_message': {
           const { message } = input as { message: string }
@@ -586,10 +902,16 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
     const toolExecutorFactory: ToolExecutorFactory = {
       getToolExecutor: () => ({
         executeToolCall: async (name, input) => {
-          if (name === 'return_to_user') {
-            return { success: true, message: input.message as string, terminatesLoop: true }
-          }
-          return executeTool(name, input)
+          return wrapSafeToolExecutor(async (toolName, toolInput) => {
+            if (toolName === 'return_to_user') {
+              return {
+                success: true,
+                message: toolInput.message as string,
+                terminatesLoop: true,
+              }
+            }
+            return executeTool(toolName, toolInput)
+          })(name, input)
         },
       }),
     }
@@ -601,6 +923,7 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
 
     try {
       await ensureConnection()
+      const screen = resolveRouteScreen(router.currentRoute.value)
       await runToolLoop(
         userText,
         LLM_CONNECTION,
@@ -609,9 +932,12 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
         toolExecutorFactory,
         stateUpdater,
         {
-          tools: TOOLS,
+          tools: selectToolsForScreen(screen),
           maxIterations: MAX_LOOPS,
-          buildSystemPrompt: () => buildSystemPromptForCity(selectedCity.value, userLocation.value),
+          buildSystemPrompt: () =>
+            screen === 'summary'
+              ? buildSummarySystemPrompt(selectedCity.value, summaryFilterPromptState.value)
+              : buildSystemPromptForCity(selectedCity.value, userLocation.value),
         },
       )
     } catch (e) {

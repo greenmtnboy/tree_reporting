@@ -1,7 +1,15 @@
 # Shared constants for tree_enrichment.py and tree_enrichment_probe.py.
 # Both scripts import from here so exclusion logic stays in one place.
 
-DATA_VERSION = 1
+from trilogy import Environment
+from pathlib import Path
+
+env = Environment(working_path =Path(__file__).parent)
+
+env.parse('''import core;''')
+
+# get this out of the trilogy file
+DATA_VERSION = env.concepts['local.data_version'].lineage.arguments[0]
 
 ENRICHMENT_PARQUET = f"https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment_v{DATA_VERSION}.parquet"
 ENRICHMENT_GCS_URI = f"gs://trilogy_public_models/duckdb/trees/tree_enrichment_v{DATA_VERSION}.parquet"

@@ -1,13 +1,12 @@
-import type { TreeCategory } from '../types'
-import type { CategoryIconData } from './useTreeData'
+import type { TreeForm } from '../types'
 
 interface CategoryInfo {
-  category: TreeCategory
+  category: TreeForm
   color: string
   label: string
 }
 
-const GENUS_TO_CATEGORY: Record<string, TreeCategory> = {
+const GENUS_TO_CATEGORY: Record<string, TreeForm> = {
   washingtonia: 'palm',
   lophostemon: 'broadleaf',
   pittosporum: 'broadleaf',
@@ -19,9 +18,9 @@ const GENUS_TO_CATEGORY: Record<string, TreeCategory> = {
   acer: 'broadleaf',
   platanus: 'spreading',
   acacia: 'spreading',
-  callistemon: 'coniferous',
-  melaleuca: 'coniferous',
-  metrosideros: 'coniferous',
+  callistemon: 'weeping',
+  melaleuca: 'multi_trunk',
+  metrosideros: 'spreading',
   tristaniopsis: 'columnar',
   tristania: 'columnar',
   geijera: 'columnar',
@@ -31,30 +30,36 @@ const GENUS_TO_CATEGORY: Record<string, TreeCategory> = {
   dodonaea: 'ornamental',
   hymenosporum: 'ornamental',
   myoporum: 'broadleaf',
-  cupressus: 'coniferous',
+  cupressus: 'conifer',
+  salix: 'weeping',
+  lagerstroemia: 'multi_trunk',
 }
 
-export const CATEGORY_COLORS: Record<TreeCategory, string> = {
+export const CATEGORY_COLORS: Record<TreeForm, string> = {
   palm: '#e6a835',
   broadleaf: '#4CAF50',
-  spreading: '#8BC34A',
-  coniferous: '#2E7D32',
+  conifer: '#2E7D32',
   columnar: '#43A047',
   ornamental: '#E91E63',
+  spreading: '#8BC34A',
+  weeping: '#26A69A',
+  multi_trunk: '#8D6E63',
   default: '#66BB6A',
 }
 
-export const CATEGORY_LABELS: Record<TreeCategory, string> = {
+export const CATEGORY_LABELS: Record<TreeForm, string> = {
   palm: 'Palm',
   broadleaf: 'Broadleaf',
-  spreading: 'Spreading',
-  coniferous: 'Coniferous',
+  conifer: 'Conifer',
   columnar: 'Columnar',
   ornamental: 'Ornamental',
+  spreading: 'Spreading',
+  weeping: 'Weeping',
+  multi_trunk: 'Multi-trunk',
   default: 'Other',
 }
 
-export function getTreeCategory(qSpecies: string): CategoryInfo {
+export function getTreeForm(qSpecies: string): CategoryInfo {
   const genus = qSpecies.split('::')[0].trim().split(' ')[0].toLowerCase()
   const category = GENUS_TO_CATEGORY[genus] ?? 'default'
   return {
@@ -65,14 +70,13 @@ export function getTreeCategory(qSpecies: string): CategoryInfo {
 }
 
 /** Generate a canvas image for a tree category silhouette */
-function drawTreeIcon(category: TreeCategory, size: number, color?: string): HTMLCanvasElement {
+function drawTreeIcon(category: TreeForm, size: number, color?: string): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')!
   color = color ?? CATEGORY_COLORS[category]
   const cx = size / 2
-  const _bottom = size - 2
 
   ctx.fillStyle = '#5D4037'
   ctx.strokeStyle = 'none'
@@ -115,7 +119,7 @@ function drawTreeIcon(category: TreeCategory, size: number, color?: string): HTM
       ctx.fill()
       break
     }
-    case 'coniferous': {
+    case 'conifer': {
       // Sharp Christmas tree / conifer shape
       const trunkW = size * 0.08
       ctx.fillRect(cx - trunkW / 2, size * 0.7, trunkW, size * 0.25)
@@ -151,6 +155,37 @@ function drawTreeIcon(category: TreeCategory, size: number, color?: string): HTM
       for (const [ox, oy] of [[-0.1, -0.08], [0.12, 0.04], [-0.04, 0.1], [0.08, -0.12]]) {
         ctx.beginPath()
         ctx.arc(cx + size * ox, size * 0.4 + size * oy, size * 0.05, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      break
+    }
+    case 'weeping': {
+      const trunkW = size * 0.08
+      ctx.fillRect(cx - trunkW / 2, size * 0.42, trunkW, size * 0.53)
+      ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.ellipse(cx, size * 0.34, size * 0.22, size * 0.18, 0, Math.PI, 0, true)
+      ctx.fill()
+      for (const x of [-0.22, -0.12, -0.02, 0.08, 0.18]) {
+        ctx.beginPath()
+        ctx.ellipse(cx + size * x, size * 0.52, size * 0.055, size * 0.2, 0, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      break
+    }
+    case 'multi_trunk': {
+      const trunkW = size * 0.065
+      ctx.fillRect(cx - size * 0.16, size * 0.56, trunkW, size * 0.34)
+      ctx.fillRect(cx - trunkW / 2, size * 0.5, trunkW, size * 0.4)
+      ctx.fillRect(cx + size * 0.1, size * 0.58, trunkW, size * 0.32)
+      ctx.fillStyle = color
+      for (const [ox, oy, rx, ry] of [
+        [-0.16, 0.36, 0.16, 0.18],
+        [0.02, 0.28, 0.2, 0.22],
+        [0.2, 0.38, 0.14, 0.16],
+      ]) {
+        ctx.beginPath()
+        ctx.ellipse(cx + size * ox, size * oy, size * rx, size * ry, 0, 0, Math.PI * 2)
         ctx.fill()
       }
       break
@@ -200,16 +235,17 @@ function drawTreeIcon(category: TreeCategory, size: number, color?: string): HTM
   return canvas
 }
 
-const ALL_CATEGORIES: TreeCategory[] = ['palm', 'broadleaf', 'spreading', 'coniferous', 'columnar', 'ornamental', 'default']
-
-function decodeBase64ToU8(base64: string): Uint8Array {
-  const bin = atob(base64)
-  const bytes = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) {
-    bytes[i] = bin.charCodeAt(i)
-  }
-  return bytes
-}
+const ALL_CATEGORIES: TreeForm[] = [
+  'broadleaf',
+  'conifer',
+  'palm',
+  'columnar',
+  'ornamental',
+  'spreading',
+  'weeping',
+  'multi_trunk',
+  'default',
+]
 
 /**
  * Register category-shaped icons for each given hex color.
@@ -238,55 +274,6 @@ export function registerCategoryColoredIcons(map: maplibregl.Map, hexColors: str
           error: (e as Error)?.message ?? String(e),
         })
       }
-    }
-  }
-}
-
-/** Register all tree icons with a MapLibre map instance */
-export function registerTreeIcons(map: maplibregl.Map, categoryIcons: CategoryIconData[] = [], size = 48): void {
-  // Prefer enriched, pre-baked RGBA icons when available
-  for (const icon of categoryIcons) {
-    const imageName = `tree-${icon.category}`
-    try {
-      const decoded = decodeBase64ToU8(icon.rgbaBase64)
-      const expectedLen = icon.width * icon.height * 4
-      if (decoded.length !== expectedLen) continue
-      const image = {
-        width: icon.width,
-        height: icon.height,
-        data: decoded,
-      }
-      if (map.hasImage(imageName)) {
-        map.updateImage(imageName, image)
-      } else {
-        map.addImage(imageName, image)
-      }
-    } catch (e) {
-      console.warn('[TreeIcons] failed to register enriched icon', {
-        category: icon.category,
-        error: (e as Error)?.message ?? String(e),
-      })
-    }
-  }
-
-  // Fallback icon generation for any missing category icon
-  for (const cat of ALL_CATEGORIES) {
-    if (map.hasImage(`tree-${cat}`)) continue
-    try {
-      const canvas = drawTreeIcon(cat, size)
-      const ctx = canvas.getContext('2d')
-      if (!ctx) continue
-      const imageData = ctx.getImageData(0, 0, size, size)
-      map.addImage(`tree-${cat}`, {
-        width: size,
-        height: size,
-        data: new Uint8Array(imageData.data.buffer),
-      })
-    } catch (e) {
-      console.warn('[TreeIcons] failed to register fallback icon', {
-        category: cat,
-        error: (e as Error)?.message ?? String(e),
-      })
     }
   }
 }

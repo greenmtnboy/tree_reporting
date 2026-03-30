@@ -1,42 +1,87 @@
 import tree_info;
+import ecoregion_common;
 
-# Enrichment properties hanging off the species key
-property species.common_names string;           # comma-separated common names, most familiar first
-property species.native_status string;          # native_bay_area | native_california | non_native | naturalized | unknown
+# Species dimension. The existing `species` key already serves as the canonical
+# scientific-name identifier, so we extend it instead of introducing a separate
+# `species_id` key and forcing downstream join changes.
+property species.genus string;
+property species.species_epithet string;
+property species.family string;
+
+property species.common_names list<string>; # ordered by familiarity / prevalence
+property species.description string; # short ecology / appearance / urban planting note
 property species.is_evergreen bool;
-property species.mature_height_ft float;
-property species.canopy_spread_ft float;
-property species.growth_rate string;            # slow | moderate | fast
-property species.lifespan_years string;         # e.g. "50-100", "200+"
-property species.drought_tolerance string;      # low | moderate | high
-property species.bloom_season string;           # One of the following: generally, be inclusive when a user asks: September to November | autumn and winter | late spring and summer | late spring or summer | late spring to autumn | spring | spring and summer | summer | winter | year-round
-property species.wildlife_value string;         # low | moderate | high
-property species.fire_risk string;              # low | moderate | high
-property species.tree_category string;          # palm | broadleaf | spreading | coniferous | columnar | ornamental | default
-property species.icon_rgba_b64 string;          # raw RGBA bytes, base64-encoded, 48x48px
-property species.icon_width int;
-property species.icon_height int;
+
+property species.mature_height_min_ft float;
+property species.mature_height_max_ft float;
+property species.canopy_spread_min_ft float;
+property species.canopy_spread_max_ft float;
+
+property species.growth_rate enum<string>['slow', 'moderate', 'fast'];
+property species.lifespan_min_years int;
+property species.lifespan_max_years int;
+
+property species.drought_tolerance enum<string>['low', 'moderate', 'high'];
+property species.water_needs enum<string>['low', 'moderate', 'high'];
+
+property species.sun_exposure list<enum<string>['full_sun', 'partial_shade', 'shade']>;
+property species.soil_preferences list<string>; # clay | loam | sandy | rocky | well_drained | moist
+property species.root_behavior enum<string>['non_invasive', 'moderate', 'invasive'];
+
+property species.coastal_tolerance bool;
+property species.salt_tolerance bool;
+property species.pollution_tolerance string; # low | moderate | high
+
+property species.bloom_months list<int>; # 1-12
+property species.wildlife_value enum<string>['low', 'moderate', 'high'];
+property species.fire_risk enum<string>['low', 'moderate', 'high'];
+
+property species.tree_form string; # broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default
+
+property species.usda_zone_min int;
+property species.usda_zone_max int;
+
+property species.native_ecoregions list<int>; # list of ecoregion_id values where the species is native
+
 property species.enriched_at datetime;
+
+auto tree_eco_region<- unnest(native_ecoregions);
+
+merge tree_eco_region into ecoregion_id;
+
 
 # Root datasource: runs the Python script to fetch and enrich new species.
 # Emits the full merged table (existing + newly enriched rows).
 root datasource raw_tree_enrichment (
     species,
-    common_names,
-    native_status,
+    ?genus,
+    ?species_epithet,
+    ?family,
+    ?common_names,
+    ?description,
     ?is_evergreen,
-    ?mature_height_ft,
-    ?canopy_spread_ft,
+    ?mature_height_min_ft,
+    ?mature_height_max_ft,
+    ?canopy_spread_min_ft,
+    ?canopy_spread_max_ft,
     ?growth_rate,
-    ?lifespan_years,
+    ?lifespan_min_years,
+    ?lifespan_max_years,
     ?drought_tolerance,
-    ?bloom_season,
+    ?water_needs,
+    ?sun_exposure,
+    ?soil_preferences,
+    ?root_behavior,
+    ?coastal_tolerance,
+    ?salt_tolerance,
+    ?pollution_tolerance,
+    ?bloom_months,
     ?wildlife_value,
     ?fire_risk,
-    tree_category,
-    icon_rgba_b64,
-    icon_width,
-    icon_height,
+    ?tree_form,
+    ?usda_zone_min,
+    ?usda_zone_max,
+    ?native_ecoregions,
     enriched_at,
 )
 grain (species)
@@ -46,21 +91,34 @@ file `./tree_enrichment.py`;
 # Use this for day-to-day queries to avoid re-running enrichment.
 datasource tree_enrichment (
     species,
-    common_names,
-    native_status,
+    ?genus,
+    ?species_epithet,
+    ?family,
+    ?common_names,
+    ?description,
     ?is_evergreen,
-    ?mature_height_ft,
-    ?canopy_spread_ft,
+    ?mature_height_min_ft,
+    ?mature_height_max_ft,
+    ?canopy_spread_min_ft,
+    ?canopy_spread_max_ft,
     ?growth_rate,
-    ?lifespan_years,
+    ?lifespan_min_years,
+    ?lifespan_max_years,
     ?drought_tolerance,
-    ?bloom_season,
+    ?water_needs,
+    ?sun_exposure,
+    ?soil_preferences,
+    ?root_behavior,
+    ?coastal_tolerance,
+    ?salt_tolerance,
+    ?pollution_tolerance,
+    ?bloom_months,
     ?wildlife_value,
     ?fire_risk,
-    tree_category,
-    icon_rgba_b64,
-    icon_width,
-    icon_height,
+    ?tree_form,
+    ?usda_zone_min,
+    ?usda_zone_max,
+    ?native_ecoregions,
     enriched_at,
 )
 grain (species)

@@ -1,8 +1,5 @@
 import * as duckdb from '@duckdb/duckdb-wasm'
-import duckdb_wasm from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url'
-import duckdb_worker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url'
-import duckdb_wasm_eh from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url'
-import duckdb_worker_eh from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url'
+import { DUCKDB_ASSET_URLS } from '../duckdbAssetUrls'
 
 let db: duckdb.AsyncDuckDB | null = null
 let conn: duckdb.AsyncDuckDBConnection | null = null
@@ -17,7 +14,14 @@ FROM trees
 WHERE latitude IS NOT NULL AND longitude IS NOT NULL
 `
 
-import { REMOTE_TREES_PARQUET_URL, REMOTE_SPECIES_PARQUET_URL, REMOTE_LANDMARKS_PARQUET_URL, cityTreeParquetUrl, cityLandmarkParquetUrl } from './parquetUrls'
+import {
+  REMOTE_TREES_PARQUET_URL,
+  REMOTE_SPECIES_PARQUET_URL,
+  REMOTE_ECOREGION_PARQUET_URL,
+  REMOTE_LANDMARKS_PARQUET_URL,
+  cityTreeParquetUrl,
+  cityLandmarkParquetUrl,
+} from './parquetUrls'
 
 const WEB_MERCATOR_MAX = 20037508.342789244
 const WEB_MERCATOR_WORLD = WEB_MERCATOR_MAX * 2
@@ -30,20 +34,24 @@ const COLOR_MAP_TABLE = '__tree_color_map'
 const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
   palm: '#e6a835',
   broadleaf: '#4CAF50',
-  spreading: '#8BC34A',
-  coniferous: '#2E7D32',
+  conifer: '#2E7D32',
   columnar: '#43A047',
   ornamental: '#E91E63',
+  spreading: '#8BC34A',
+  weeping: '#26A69A',
+  multi_trunk: '#8D6E63',
   default: '#66BB6A',
 }
 
 const DEFAULT_CATEGORY_LABELS: Record<string, string> = {
   '#e6a835': 'Palm',
   '#4CAF50': 'Broadleaf',
-  '#8BC34A': 'Spreading',
-  '#2E7D32': 'Coniferous',
+  '#2E7D32': 'Conifer',
   '#43A047': 'Columnar',
   '#E91E63': 'Ornamental',
+  '#8BC34A': 'Spreading',
+  '#26A69A': 'Weeping',
+  '#8D6E63': 'Multi-trunk',
   '#66BB6A': 'Other',
 }
 
@@ -468,27 +476,41 @@ async function loadCityTrees(city?: string): Promise<void> {
       SELECT
         t.tree_id,
         t.city,
-        COALESCE(NULLIF(TRIM(split_part(se.common_names, ',', 1)), ''), t.tree_name, t.species) AS tree_name,
+        COALESCE(NULLIF(TRIM(CAST(list_extract(se.common_names, 1) AS VARCHAR)), ''), t.tree_name, t.species) AS tree_name,
         t.plant_date,
         t.species,
         t.latitude,
         t.longitude,
         COALESCE(t.diameter_at_breast_height, 3) AS dbh,
-        CASE lower(trim(COALESCE(se.tree_category, 'default')))
+        CASE lower(trim(COALESCE(se.tree_form, 'default')))
           WHEN 'palm' THEN 'palm'
           WHEN 'broadleaf' THEN 'broadleaf'
+          WHEN 'conifer' THEN 'conifer'
           WHEN 'spreading' THEN 'spreading'
-          WHEN 'coniferous' THEN 'coniferous'
           WHEN 'columnar' THEN 'columnar'
           WHEN 'ornamental' THEN 'ornamental'
+          WHEN 'weeping' THEN 'weeping'
+          WHEN 'multi_trunk' THEN 'multi_trunk'
           ELSE 'default'
-        END AS tree_category,
-        se.native_status,
+        END AS tree_form,
+        se.native_ecoregions,
         se.is_evergreen,
-        se.mature_height_ft,
-        se.bloom_season,
+        se.mature_height_min_ft,
+        se.mature_height_max_ft,
+        se.canopy_spread_min_ft,
+        se.canopy_spread_max_ft,
+        se.growth_rate,
+        se.lifespan_min_years,
+        se.lifespan_max_years,
+        se.water_needs,
+        se.sun_exposure,
+        se.bloom_months,
         se.wildlife_value,
         se.fire_risk,
+        se.drought_tolerance,
+        se.description,
+        se.usda_zone_min,
+        se.usda_zone_max,
         LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878) AS latitude_clamped,
         ((t.longitude + 180.0) / 360.0) AS x_norm,
         ((1.0 - ln(tan(radians(LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878))) + (1.0 / cos(radians(LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878))))) / pi()) / 2.0) AS y_norm
@@ -507,13 +529,25 @@ async function loadCityTrees(city?: string): Promise<void> {
       latitude,
       longitude,
       TRY_CAST(dbh AS DOUBLE) AS dbh,
-      tree_category,
-      native_status,
+      tree_form,
+      native_ecoregions,
       is_evergreen,
-      mature_height_ft,
-      bloom_season,
+      mature_height_min_ft,
+      mature_height_max_ft,
+      canopy_spread_min_ft,
+      canopy_spread_max_ft,
+      growth_rate,
+      lifespan_min_years,
+      lifespan_max_years,
+      water_needs,
+      sun_exposure,
+      bloom_months,
       wildlife_value,
       fire_risk,
+      drought_tolerance,
+      description,
+      usda_zone_min,
+      usda_zone_max,
       ((longitude * ${WEB_MERCATOR_MAX}) / 180.0) AS x_3857,
       (6378137.0 * ln(tan(pi() / 4.0 + radians(latitude_clamped) / 2.0))) AS y_3857,
       CAST(floor(x_norm * pow(2, 13)) AS INTEGER) AS xtile_z13,
@@ -555,12 +589,12 @@ async function doInit(city?: string) {
 
   const bundles: duckdb.DuckDBBundles = {
     mvp: {
-      mainModule: duckdb_wasm,
-      mainWorker: duckdb_worker,
+      mainModule: DUCKDB_ASSET_URLS.mvp.mainModule,
+      mainWorker: DUCKDB_ASSET_URLS.mvp.mainWorker,
     },
     eh: {
-      mainModule: duckdb_wasm_eh,
-      mainWorker: duckdb_worker_eh,
+      mainModule: DUCKDB_ASSET_URLS.eh.mainModule,
+      mainWorker: DUCKDB_ASSET_URLS.eh.mainWorker,
     },
   }
   const bundle = await duckdb.selectBundle(bundles)
@@ -576,11 +610,75 @@ async function doInit(city?: string) {
   try {
     await conn.query(`
       CREATE TABLE species_enrichment AS
-      SELECT species, common_names, tree_category, native_status, is_evergreen, mature_height_ft, bloom_season, wildlife_value, fire_risk
+      SELECT
+        species,
+        common_names,
+        description,
+        tree_form,
+        native_ecoregions,
+        is_evergreen,
+        mature_height_min_ft,
+        mature_height_max_ft,
+        canopy_spread_min_ft,
+        canopy_spread_max_ft,
+        growth_rate,
+        lifespan_min_years,
+        lifespan_max_years,
+        drought_tolerance,
+        water_needs,
+        sun_exposure,
+        bloom_months,
+        wildlife_value,
+        fire_risk,
+        usda_zone_min,
+        usda_zone_max
       FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
     `)
   } catch (e) {
-    console.warn('[Perf] duckdb-worker:species-load:failed', e)
+    console.warn('[Perf] duckdb-worker:species-load:new-schema-failed', e)
+    try {
+      await conn.query(`
+        CREATE TABLE species_enrichment AS
+        SELECT
+          species,
+          string_split(common_names, ',') AS common_names,
+          CAST(NULL AS VARCHAR) AS description,
+          CASE lower(trim(COALESCE(tree_category, 'default')))
+            WHEN 'coniferous' THEN 'conifer'
+            ELSE lower(trim(COALESCE(tree_category, 'default')))
+          END AS tree_form,
+          CAST(NULL AS INTEGER[]) AS native_ecoregions,
+          is_evergreen,
+          mature_height_ft AS mature_height_min_ft,
+          mature_height_ft AS mature_height_max_ft,
+          CAST(NULL AS DOUBLE) AS canopy_spread_min_ft,
+          CAST(NULL AS DOUBLE) AS canopy_spread_max_ft,
+          growth_rate,
+          CAST(NULL AS INTEGER) AS lifespan_min_years,
+          CAST(NULL AS INTEGER) AS lifespan_max_years,
+          drought_tolerance,
+          CAST(NULL AS VARCHAR) AS water_needs,
+          CAST(NULL AS VARCHAR[]) AS sun_exposure,
+          CAST(NULL AS INTEGER[]) AS bloom_months,
+          wildlife_value,
+          fire_risk,
+          CAST(NULL AS INTEGER) AS usda_zone_min,
+          CAST(NULL AS INTEGER) AS usda_zone_max
+        FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
+      `)
+    } catch (legacyError) {
+      console.warn('[Perf] duckdb-worker:species-load:failed', legacyError)
+    }
+  }
+
+  try {
+    await conn.query(`
+      CREATE OR REPLACE TABLE ecoregion_info AS
+      SELECT ecoregion_id, biome, realm
+      FROM read_parquet('${REMOTE_ECOREGION_PARQUET_URL}')
+    `)
+  } catch (e) {
+    console.warn('[Perf] duckdb-worker:ecoregion-load:failed', e)
   }
 
   spatialExtensionReady = false
@@ -626,13 +724,15 @@ async function buildDefaultColorMap() {
     CREATE OR REPLACE TABLE ${COLOR_MAP_TABLE} AS
     SELECT
       tree_id,
-      CASE COALESCE(tree_category, 'default')
+      CASE COALESCE(tree_form, 'default')
         WHEN 'palm'        THEN '${DEFAULT_CATEGORY_COLORS.palm}'
         WHEN 'broadleaf'   THEN '${DEFAULT_CATEGORY_COLORS.broadleaf}'
+        WHEN 'conifer'     THEN '${DEFAULT_CATEGORY_COLORS.conifer}'
         WHEN 'spreading'   THEN '${DEFAULT_CATEGORY_COLORS.spreading}'
-        WHEN 'coniferous'  THEN '${DEFAULT_CATEGORY_COLORS.coniferous}'
         WHEN 'columnar'    THEN '${DEFAULT_CATEGORY_COLORS.columnar}'
         WHEN 'ornamental'  THEN '${DEFAULT_CATEGORY_COLORS.ornamental}'
+        WHEN 'weeping'     THEN '${DEFAULT_CATEGORY_COLORS.weeping}'
+        WHEN 'multi_trunk' THEN '${DEFAULT_CATEGORY_COLORS.multi_trunk}'
         ELSE '${DEFAULT_CATEGORY_COLORS.default}'
       END AS display_color
     FROM trees_fast
@@ -657,7 +757,7 @@ async function rebuildAggCaches() {
         tf.ytile_z${z} AS ytile,
         floor(tf.x_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gx,
         floor(tf.y_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gy,
-        COALESCE(tf.tree_category, 'default') AS category,
+        COALESCE(tf.tree_form, 'default') AS category,
         cm.display_color,
         AVG(TRY_CAST(tf.dbh AS DOUBLE)) AS dbh,
         COUNT(*) AS point_count
@@ -719,7 +819,7 @@ WITH base AS (
       ),
       'id': COALESCE(base.tree_id, tf.tree_id, 'unkwn'),
       'dbh': TRY_CAST(COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS DOUBLE),
-      'category': COALESCE(tf.tree_category, 'default'),
+      'category': COALESCE(tf.tree_form, 'default'),
       'display_color': cm.display_color,
       'rotation': 0,
       'point_count': 1,
@@ -822,7 +922,7 @@ WITH base AS (
     tf.y_3857,
     COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
-    COALESCE(tf.tree_category, 'default') AS category,
+    COALESCE(tf.tree_form, 'default') AS category,
     cm.display_color,
     0 AS rotation,
     ${tileXExpr('tf', z)} AS xtile,
@@ -962,7 +1062,7 @@ WITH base AS (
   SELECT
     tf.x_3857,
     tf.y_3857,
-    COALESCE(tf.tree_category, 'default') AS category,
+    COALESCE(tf.tree_form, 'default') AS category,
     cm.display_color,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
     ${tileXExpr('tf', z)} AS xtile,
@@ -1026,7 +1126,7 @@ WITH base AS (
     tf.y_3857,
     COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
-    COALESCE(tf.tree_category, 'default') AS category,
+    COALESCE(tf.tree_form, 'default') AS category,
     cm.display_color,
     0 AS rotation,
     ${tileXExpr('tf', z)} AS xtile,
@@ -1141,7 +1241,7 @@ WITH base AS (
   SELECT
     tf.x_3857,
     tf.y_3857,
-    COALESCE(tf.tree_category, 'default') AS category,
+    COALESCE(tf.tree_form, 'default') AS category,
     cm.display_color,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh
   FROM base
@@ -1190,7 +1290,7 @@ WITH base AS (
   SELECT
     COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
-    COALESCE(tf.tree_category, 'default') AS category,
+    COALESCE(tf.tree_form, 'default') AS category,
     cm.display_color,
     0 AS rotation,
     1 AS point_count,
@@ -1319,13 +1419,15 @@ CREATE OR REPLACE TABLE ${COLOR_MAP_TABLE} AS
 SELECT
   tf.tree_id,
   COALESCE(aco.display_color,
-    CASE COALESCE(tf.tree_category, 'default')
+    CASE COALESCE(tf.tree_form, 'default')
       WHEN 'palm'        THEN '${DEFAULT_CATEGORY_COLORS.palm}'
       WHEN 'broadleaf'   THEN '${DEFAULT_CATEGORY_COLORS.broadleaf}'
+      WHEN 'conifer'     THEN '${DEFAULT_CATEGORY_COLORS.conifer}'
       WHEN 'spreading'   THEN '${DEFAULT_CATEGORY_COLORS.spreading}'
-      WHEN 'coniferous'  THEN '${DEFAULT_CATEGORY_COLORS.coniferous}'
       WHEN 'columnar'    THEN '${DEFAULT_CATEGORY_COLORS.columnar}'
       WHEN 'ornamental'  THEN '${DEFAULT_CATEGORY_COLORS.ornamental}'
+      WHEN 'weeping'     THEN '${DEFAULT_CATEGORY_COLORS.weeping}'
+      WHEN 'multi_trunk' THEN '${DEFAULT_CATEGORY_COLORS.multi_trunk}'
       ELSE '${DEFAULT_CATEGORY_COLORS.default}'
     END
   ) AS display_color
@@ -1521,12 +1623,34 @@ function setAutoTileFetchEnabled(enabled: boolean) {
 }
 
 function normalizeValue(v: unknown): unknown {
+  if (typeof v === 'function') {
+    return undefined
+  }
   if (typeof v === 'bigint') {
     const n = Number(v)
     return Number.isSafeInteger(n) ? n : v.toString()
   }
+  if (v instanceof Date) {
+    return v.toISOString()
+  }
+  if (
+    v !== null &&
+    v !== undefined &&
+    (v as { isLuxonDateTime?: boolean }).isLuxonDateTime === true &&
+    typeof (v as { toISO?: () => string | null }).toISO === 'function'
+  ) {
+    return (v as { toISO: () => string | null }).toISO() ?? null
+  }
   if (v instanceof Uint8Array) {
     return Array.from(v)
+  }
+  if (Array.isArray(v)) {
+    return v.map((item) => normalizeValue(item))
+  }
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(
+      Object.entries(v as Record<string, unknown>).map(([key, value]) => [key, normalizeValue(value)]),
+    )
   }
   return v
 }

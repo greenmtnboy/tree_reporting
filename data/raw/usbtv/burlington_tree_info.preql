@@ -1,0 +1,36 @@
+import ..tree_common;
+
+root datasource burlington_update_time (
+    data_updated_through: usbtv_data_updated_through
+)
+file `./burlington_update_time.py`;
+
+root partial datasource burlington_raw_tree_info (
+    tree_id: tree_id,
+    city: city,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+)
+grain (tree_id)
+complete where city = 'USBTV'
+file `./burlington_tree_info.py`;
+
+partial datasource burlington_tree_info (
+    tree_id,
+    city,
+    species,
+    ?tree_name,
+    ?plant_date,
+    ?diameter_at_breast_height,
+    ?latitude,
+    ?longitude,
+    usbtv_data_updated_through,
+)
+grain (tree_id)
+complete where city = 'USBTV'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbtv_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbtv_tree_info_v{data_version}.parquet`
+freshness by usbtv_data_updated_through;

@@ -19,15 +19,8 @@
       <span class="db-status-tooltip">City DB populated; {{ dbPopulatedMs }}ms · {{ dbTreeCount?.toLocaleString() }} trees</span>
     </div>
   </div>
-  <div class="city-selector" :class="{ 'city-selector--mobile': props.simplified }">
-    <button
-      v-for="(cfg, code) in CITY_CONFIG"
-      :key="code"
-      class="city-btn"
-      :class="{ active: selectedCity === code }"
-      :disabled="isInitialLoading"
-      @click="void switchCity(code as CityCode)"
-    >{{ cfg.name }}</button>
+  <div v-if="props.simplified" class="city-selector city-selector--mobile">
+    <CitySelector />
     <button
       class="city-btn locate-btn"
       :class="{ active: userLocation !== null }"
@@ -36,15 +29,23 @@
       @click="toggleUserLocation"
     >&#x25CE; Find Me</button>
   </div>
+  <button
+    v-else
+    class="locate-btn-desktop"
+    :class="{ active: userLocation !== null }"
+    :disabled="isInitialLoading"
+    :title="userLocation ? 'Pan to my location' : 'Show my location on the map'"
+    @click="toggleUserLocation"
+  >&#x25CE; Find Me</button>
 </template>
 
 <script setup lang="ts">
 import { ref, shallowRef, onMounted, onUnmounted, watch, computed } from 'vue'
 import maplibregl from 'maplibre-gl'
-import { useTreeData } from '../composables/useTreeData'
 import { registerCategoryColoredIcons } from '../composables/useTreeCategories'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData, CITY_CONFIG, type CityCode } from '../composables/useMapData'
+import { getCityBiome, getCityEcoregionId } from '../composables/dashboardContextSource'
 import { useRoute, useRouter } from 'vue-router'
 import { useDuckDB } from '../composables/useDuckDB'
 import { useMapIntro } from '../composables/useMapIntro'
@@ -52,6 +53,7 @@ import { useMapLayers, TREES_SOURCE_MAXZOOM, addLandmarkLayer, removeLandmarkLay
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { addCityMarkers, updateCityMarkersSelected, removeCityMarkers, bindCityMarkerInteractions } from '../composables/useGlobeCityMarkers'
 import { useMapIntroAnimation, INTRO_START_ZOOM } from '../composables/useMapIntroAnimation'
+import CitySelector from './CitySelector.vue'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
 
 const props = defineProps<{
@@ -143,24 +145,27 @@ const {
   dbTreeCount,
 } = useDuckDB()
 
-const { loading, error, getSpeciesEnrichment } = useTreeData()
 const { landmarks } = useLandmarkData()
 const { target: flyToTarget, flyTo } = useFlyTo()
 const route = useRoute()
 const router = useRouter()
 const { selectedCity, setSelectedCity, currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision, userLocation, setUserLocation } = useMapData()
 
-// Initialise city from URL on first load
-const urlCity = route.query.city
-const urlCityStr = Array.isArray(urlCity) ? urlCity[0] : urlCity
-if (urlCityStr && urlCityStr in CITY_CONFIG) setSelectedCity(urlCityStr as CityCode)
+function readRouteCity(value: unknown): CityCode | null {
+  const city = Array.isArray(value) ? value[0] : value
+  return typeof city === 'string' && city in CITY_CONFIG ? (city as CityCode) : null
+}
+
+// Initialise city from URL on first load.
+const initialRouteCity = readRouteCity(route.query.city)
+if (initialRouteCity) setSelectedCity(initialRouteCity)
 
 const introCenterRef = computed((): [number, number] => CITY_CONFIG[selectedCity.value].center)
 
 // --- Computed ---
 
-const displayError = computed(() => error.value ?? mapError.value)
-const isInitialLoading = computed(() => loading.value || defaultQueryLoading.value || introActive.value)
+const displayError = computed(() => mapError.value)
+const isInitialLoading = computed(() => defaultQueryLoading.value || introActive.value)
 
 const activeHeatmapColors = computed(() => {
   return workerDistinctColors.value.length > 0 ? workerDistinctColors.value : []
@@ -388,31 +393,131 @@ const { loadingMessage, runIntroZoomOut, cancelIntro, runGlobeSwoopTo, recordInt
 
 // --- Tree popup ---
 
-function formatPopupHtml(row: any, enrichment?: ReturnType<typeof getSpeciesEnrichment>): string {
-  const planted = row.plant_date?.split(' ')[0] ?? null
-  const evergreen = enrichment?.is_evergreen == null ? null : (enrichment.is_evergreen ? 'Yes' : 'No')
-  const category = enrichment?.tree_category
-    ? enrichment.tree_category.charAt(0).toUpperCase() + enrichment.tree_category.slice(1)
+interface PopupTreeRow {
+  tree_id: string
+  tree_name: string | null
+  species: string | null
+  plant_date: string | null
+  dbh: number | null
+  tree_form: string | null
+  ecological_fit: string | null
+  is_evergreen: boolean | null
+  mature_height_min_ft: number | null
+  mature_height_max_ft: number | null
+  canopy_spread_min_ft: number | null
+  canopy_spread_max_ft: number | null
+  growth_rate: string | null
+  lifespan_min_years: number | null
+  lifespan_max_years: number | null
+  drought_tolerance: string | null
+  water_needs: string | null
+  sun_exposure: string[] | null
+  bloom_months: number[] | null
+  wildlife_value: string | null
+  fire_risk: string | null
+  description: string | null
+}
+
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function formatTitleCase(value: string | null) {
+  return value
+    ? value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
     : null
+}
+
+function formatRange(min: number | null, max: number | null, unit: string) {
+  if (min == null && max == null) return null
+  if (min != null && max != null) {
+    if (min === max) return `${min} ${unit}`
+    return `${min}-${max} ${unit}`
+  }
+  return `${min ?? max} ${unit}`
+}
+
+function formatBloomMonths(months: number[] | null) {
+  if (!Array.isArray(months) || months.length === 0) return null
+  const normalized = Array.from(
+    new Set(
+      months
+        .filter((value): value is number => Number.isInteger(value) && value >= 1 && value <= 12)
+        .sort((a, b) => a - b),
+    ),
+  )
+  if (normalized.length === 0) return null
+  if (normalized.length === 12) return 'Year-round'
+
+  const isContiguous = normalized.every((value, index) => {
+    if (index === 0) return true
+    return value === normalized[index - 1] + 1
+  })
+
+  if (isContiguous) {
+    const start = MONTH_LABELS[normalized[0] - 1]
+    const end = MONTH_LABELS[normalized[normalized.length - 1] - 1]
+    return start === end ? start : `${start}-${end}`
+  }
+
+  return normalized.map((value) => MONTH_LABELS[value - 1]).join(', ')
+}
+
+function formatSunExposure(values: string[] | null) {
+  if (!Array.isArray(values) || values.length === 0) return null
+  return values
+    .map((value) => formatTitleCase(value))
+    .filter((value): value is string => Boolean(value))
+    .join(', ')
+}
+
+function formatDbh(value: number | null) {
+  if (value == null || !Number.isFinite(value)) return null
+  return `${value.toFixed(2)}"`
+}
+
+function renderPopupRow(label: string, value: string | number) {
+  return `<div class="tree-popup-row"><span class="tree-popup-label">${label}</span><span class="tree-popup-value">${value}</span></div>`
+}
+
+function formatPlantDate(value: string | null) {
+  if (!value) return null
+  const normalized = String(value)
+  if (!normalized) return null
+  return normalized.split('T')[0]?.split(' ')[0] ?? normalized
+}
+
+function formatPopupHtml(row: PopupTreeRow): string {
+  const planted = formatPlantDate(row.plant_date)
+  const evergreen = row.is_evergreen == null ? null : (row.is_evergreen ? 'Yes' : 'No')
+  const category = formatTitleCase(row.tree_form)
+  const description = row.description?.trim() || null
   const detailLines = [
     ['ID', row.tree_id],
-    ['Category', category],
+    ['Form', category],
     ['Planted', planted],
-    ['Trunk diameter', row.diameter_at_breast_height != null ? `${row.diameter_at_breast_height}"` : null],
-    ['Native', enrichment?.native_status],
+    ['Trunk diameter', formatDbh(row.dbh)],
+    ['Ecological fit', row.ecological_fit],
     ['Evergreen', evergreen],
-    ['Mature height', enrichment?.mature_height_ft != null ? `${enrichment.mature_height_ft} ft` : null],
-    ['Bloom', enrichment?.bloom_season],
-    ['Wildlife value', enrichment?.wildlife_value],
-    ['Fire risk', enrichment?.fire_risk],
+    ['Mature height', formatRange(row.mature_height_min_ft, row.mature_height_max_ft, 'ft')],
+    ['Canopy spread', formatRange(row.canopy_spread_min_ft, row.canopy_spread_max_ft, 'ft')],
+    ['Growth rate', formatTitleCase(row.growth_rate)],
+    ['Lifespan', formatRange(row.lifespan_min_years, row.lifespan_max_years, 'years')],
+    ['Water needs', formatTitleCase(row.water_needs)],
+    ['Drought tolerance', formatTitleCase(row.drought_tolerance)],
+    ['Sun exposure', formatSunExposure(row.sun_exposure)],
+    ['Bloom period', formatBloomMonths(row.bloom_months)],
+    ['Wildlife value', formatTitleCase(row.wildlife_value)],
+    ['Fire risk', formatTitleCase(row.fire_risk)],
   ]
     .filter(([, value]) => value != null && value !== '' && value !== 'Unknown')
-    .map(([label, value]) => `${label}: ${value}<br/>`)
+    .map(([label, value]) => renderPopupRow(String(label), String(value ?? '')))
     .join('')
   return `
-    <strong>${row.tree_name || 'Unknown tree'}</strong><br/>
-    <em>${row.species || ''}</em><br/>
-    ${detailLines}
+    <div class="tree-popup-shell">
+      <div class="tree-popup-title">${row.tree_name || 'Unknown tree'}</div>
+      ${row.species ? `<div class="tree-popup-species">${row.species}</div>` : ''}
+      ${detailLines ? `<div class="tree-popup-grid">${detailLines}</div>` : ''}
+      ${description ? `<div class="tree-popup-description">${description}</div>` : ''}
+    </div>
   `
 }
 
@@ -424,20 +529,53 @@ async function showTreePopup(feature: GeoJSON.Feature, offset: number) {
   if (!id || id === 'unkwn') return
   // Escape single quotes to prevent SQL injection from tile data
   const safeId = String(id).replace(/'/g, "''")
+  const cityBiome = getCityBiome(selectedCity.value).replace(/'/g, "''")
+  const cityEcoregionId = getCityEcoregionId(selectedCity.value)
   try {
     const { rows } = await duckQuery(`
-      SELECT tree_id, tree_name, species, plant_date, diameter_at_breast_height
-      FROM trees
+      SELECT
+        tree_id,
+        tree_name,
+        species,
+        plant_date,
+        dbh,
+        tree_form,
+        CASE
+          WHEN native_ecoregions IS NULL OR len(native_ecoregions) = 0 THEN NULL
+          WHEN list_contains(native_ecoregions, ${cityEcoregionId}) THEN 'Native here'
+          WHEN EXISTS (
+            SELECT 1
+            FROM ecoregion_info ei
+            WHERE list_contains(tf.native_ecoregions, ei.ecoregion_id)
+              AND ei.biome = '${cityBiome}'
+          ) THEN 'Biome match'
+          ELSE 'Different biome'
+        END AS ecological_fit,
+        is_evergreen,
+        mature_height_min_ft,
+        mature_height_max_ft,
+        canopy_spread_min_ft,
+        canopy_spread_max_ft,
+        growth_rate,
+        lifespan_min_years,
+        lifespan_max_years,
+        drought_tolerance,
+        water_needs,
+        sun_exposure,
+        bloom_months,
+        wildlife_value,
+        fire_risk,
+        description
+      FROM trees_fast tf
       WHERE tree_id = '${safeId}'
       LIMIT 1
     `)
-    const row = rows[0] as any
+    const row = rows[0] as unknown as PopupTreeRow | undefined
     if (!row || requestToken !== popupRequestToken) return
-    const enrichment = getSpeciesEnrichment(row.species)
     if (activeTreePopup) { activeTreePopup.remove(); activeTreePopup = null }
     const popup = new maplibregl.Popup({ offset, className: 'tree-popup' })
       .setLngLat(coords)
-      .setHTML(formatPopupHtml(row, enrichment))
+      .setHTML(formatPopupHtml(row))
       .addTo(mapRef.value)
     activeTreePopup = popup
     popup.on('close', () => { if (activeTreePopup === popup) activeTreePopup = null })
@@ -576,6 +714,17 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
     citySwitchInProgress = false
   }
 }
+
+// React to URL city changes driven by the sidebar CitySelector
+watch(
+  () => route.query.city,
+  (newCity) => {
+    const city = Array.isArray(newCity) ? newCity[0] : newCity
+    if (typeof city === 'string' && city in CITY_CONFIG && city !== selectedCity.value) {
+      void switchCity(city as CityCode)
+    }
+  },
+)
 
 // --- Geolocation ---
 
@@ -743,7 +892,12 @@ watch(selectedCity, (city) => {
 onMounted(async () => {
   window.addEventListener('keydown', onWasdKeyDown)
   // Resolve city from IP before initialising the map so the initial center is correct.
-  if (!urlCityStr) {
+  await router.isReady()
+  const mountedRouteCity = readRouteCity(route.query.city)
+  if (mountedRouteCity && mountedRouteCity !== selectedCity.value) {
+    setSelectedCity(mountedRouteCity)
+  }
+  if (!mountedRouteCity) {
     await Promise.race([detectCityFromIp(), new Promise<void>((r) => setTimeout(r, 2000))])
   }
 
@@ -952,15 +1106,31 @@ onUnmounted(() => {
   place-items: center;
   width: 29px;
   min-height: 29px;
-  color: #4fc3f7;
-  background: #1a1a2e;
-  border-top: 1px solid rgba(79, 195, 247, 0.24);
-  border-bottom: 1px solid rgba(79, 195, 247, 0.24);
+  color: var(--color-leaf);
+  background: rgba(28, 31, 36, 0.92);
+  border-top: 1px solid rgba(167, 227, 178, 0.18);
+  border-bottom: 1px solid rgba(167, 227, 178, 0.18);
   font-size: 0.68rem;
   font-weight: 700;
   line-height: 1;
   pointer-events: none;
   user-select: none;
+}
+
+:deep(.maplibregl-ctrl-group) {
+  background: rgba(28, 31, 36, 0.82);
+  border: 1px solid rgba(167, 227, 178, 0.16);
+  box-shadow: 0 10px 24px rgba(7, 10, 11, 0.24);
+}
+
+:deep(.maplibregl-ctrl-group button) {
+  background: transparent;
+  color: rgba(237, 242, 235, 0.82);
+}
+
+:deep(.maplibregl-ctrl-group button:hover) {
+  background: rgba(47, 125, 79, 0.16);
+  color: var(--color-ink);
 }
 
 .map-loading,
@@ -976,12 +1146,14 @@ onUnmounted(() => {
 }
 
 .map-loading {
-  background: rgba(22, 33, 62, 0.96);
-  color: #4fc3f7;
+  background: rgba(28, 31, 36, 0.9);
+  color: var(--color-leaf);
+  border: 1px solid rgba(167, 227, 178, 0.18);
+  box-shadow: 0 18px 36px rgba(7, 10, 11, 0.26);
 }
 
 .map-refreshing {
-  background: rgba(22, 33, 62, 0.82);
+  background: rgba(28, 31, 36, 0.76);
   font-size: 0.8rem;
 }
 
@@ -990,37 +1162,75 @@ onUnmounted(() => {
   color: #ffcdd2;
 }
 
-.city-selector {
+.locate-btn-desktop {
   position: absolute;
   top: 10px;
   left: 10px;
-  display: flex;
-  gap: 4px;
   z-index: 4;
-}
-
-.city-btn {
   padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(79, 195, 247, 0.3);
-  background: rgba(22, 33, 62, 0.88);
-  color: #8ca0c8;
+  border: 1px solid rgba(167, 227, 178, 0.16);
+  background: rgba(28, 31, 36, 0.82);
+  color: rgba(237, 242, 235, 0.74);
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
+.locate-btn-desktop:hover {
+  background: rgba(47, 125, 79, 0.16);
+  color: var(--color-ink);
+  border-color: rgba(167, 227, 178, 0.32);
+}
+
+.locate-btn-desktop.active {
+  background: rgba(47, 125, 79, 0.22);
+  color: var(--color-leaf);
+  border-color: rgba(167, 227, 178, 0.42);
+}
+
+.locate-btn-desktop:disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+.city-selector {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  z-index: 4;
+  align-items: center;
+}
+
+.city-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(167, 227, 178, 0.16);
+  background: rgba(28, 31, 36, 0.82);
+  color: rgba(237, 242, 235, 0.74);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .city-btn:hover {
-  background: rgba(30, 50, 90, 0.95);
-  color: #c8daf8;
-  border-color: rgba(79, 195, 247, 0.55);
+  background: rgba(47, 125, 79, 0.16);
+  color: var(--color-ink);
+  border-color: rgba(167, 227, 178, 0.32);
 }
 
 .city-btn.active {
-  background: rgba(15, 52, 96, 0.96);
-  color: #4fc3f7;
-  border-color: rgba(79, 195, 247, 0.7);
+  background: rgba(47, 125, 79, 0.22);
+  color: var(--color-leaf);
+  border-color: rgba(167, 227, 178, 0.42);
 }
 
 .city-btn:disabled {
@@ -1030,16 +1240,8 @@ onUnmounted(() => {
 }
 
 .city-selector--mobile {
-  top: 8px;
-  left: 8px;
-  right: 8px;
-  flex-wrap: wrap;
-  gap: 3px;
-}
-
-.city-selector--mobile .city-btn {
-  padding: 5px 8px;
-  font-size: 0.7rem;
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 .cache-refresh-wrap {
@@ -1055,18 +1257,18 @@ onUnmounted(() => {
 .cache-refresh-btn {
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid rgba(79, 195, 247, 0.2);
-  background: rgba(22, 33, 62, 0.75);
-  color: rgba(200, 218, 248, 0.6);
+  border: 1px solid rgba(167, 227, 178, 0.14);
+  background: rgba(28, 31, 36, 0.74);
+  color: rgba(237, 242, 235, 0.58);
   font-size: 14px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .cache-refresh-btn:hover {
-  background: rgba(30, 50, 90, 0.92);
-  color: #c8daf8;
-  border-color: rgba(79, 195, 247, 0.5);
+  background: rgba(47, 125, 79, 0.16);
+  color: var(--color-ink);
+  border-color: rgba(167, 227, 178, 0.28);
 }
 
 .cache-refresh-btn:disabled {
@@ -1086,9 +1288,9 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.72rem;
-  color: rgba(200, 218, 248, 0.9);
-  background: rgba(22, 33, 62, 0.92);
-  border: 1px solid rgba(79, 195, 247, 0.2);
+  color: rgba(237, 242, 235, 0.9);
+  background: rgba(28, 31, 36, 0.94);
+  border: 1px solid rgba(167, 227, 178, 0.16);
   border-radius: 5px;
   padding: 3px 8px;
   white-space: nowrap;
@@ -1109,7 +1311,7 @@ onUnmounted(() => {
 
 .db-status-dot {
   font-size: 15px;
-  color: #4caf50;
+  color: var(--color-leaf);
   cursor: default;
   line-height: 1;
 }
@@ -1120,9 +1322,9 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.72rem;
-  color: rgba(200, 218, 248, 0.9);
-  background: rgba(22, 33, 62, 0.92);
-  border: 1px solid rgba(79, 195, 247, 0.2);
+  color: rgba(237, 242, 235, 0.9);
+  background: rgba(28, 31, 36, 0.94);
+  border: 1px solid rgba(167, 227, 178, 0.16);
   border-radius: 5px;
   padding: 3px 8px;
   white-space: nowrap;
@@ -1139,8 +1341,8 @@ onUnmounted(() => {
   position: absolute;
   bottom: 28px;
   right: 8px;
-  background: rgba(22, 33, 62, 0.88);
-  border: 1px solid rgba(79, 195, 247, 0.2);
+  background: rgba(28, 31, 36, 0.84);
+  border: 1px solid rgba(167, 227, 178, 0.16);
   border-radius: 8px;
   padding: 8px 12px;
   z-index: 4;
@@ -1148,6 +1350,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 5px;
   pointer-events: none;
+  box-shadow: 0 16px 32px rgba(7, 10, 11, 0.22);
 }
 
 .legend-entry {
@@ -1167,7 +1370,7 @@ onUnmounted(() => {
 
 .legend-label {
   font-size: 0.72rem;
-  color: #c8cfe8;
+  color: rgba(237, 242, 235, 0.84);
   white-space: nowrap;
 }
 
@@ -1176,38 +1379,99 @@ onUnmounted(() => {
 }
 
 .locate-btn.active {
-  background: rgba(15, 52, 96, 0.96);
-  color: #4fc3f7;
-  border-color: rgba(79, 195, 247, 0.7);
+  background: rgba(47, 125, 79, 0.22);
+  color: var(--color-leaf);
+  border-color: rgba(167, 227, 178, 0.42);
 }
 </style>
 
 <style>
 .tree-popup .maplibregl-popup-content {
-  background: #16213e;
-  color: #e0e0e0;
-  border: 1px solid #0f3460;
-  border-radius: 8px;
-  padding: 10px 14px;
+  background:
+    linear-gradient(180deg, rgba(34, 38, 45, 0.98), rgba(24, 27, 32, 0.98));
+  color: rgba(237, 242, 235, 0.92);
+  border: 1px solid rgba(167, 227, 178, 0.18);
+  border-radius: 12px;
+  padding: 12px 14px;
   font-size: 0.8rem;
-  line-height: 1.5;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  line-height: 1.45;
+  min-width: 220px;
+  max-width: 280px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
 }
 
 .tree-popup .maplibregl-popup-close-button {
-  color: #7a7a9e;
-  font-size: 1rem;
-  padding: 2px 6px;
+  color: rgba(154, 166, 154, 0.82);
+  font-size: 1.05rem;
+  padding: 4px 8px;
+}
+
+.tree-popup-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tree-popup-title {
+  color: var(--color-ink);
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.2;
+  padding-right: 20px;
+}
+
+.tree-popup-species {
+  color: rgba(237, 242, 235, 0.82);
+  font-size: 0.82rem;
+  font-style: italic;
+  line-height: 1.35;
+}
+
+.tree-popup-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tree-popup-row {
+  display: grid;
+  grid-template-columns: minmax(78px, auto) 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.tree-popup-label {
+  color: rgba(154, 166, 154, 0.74);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tree-popup-value {
+  color: rgba(237, 242, 235, 0.96);
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.tree-popup-description {
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(167, 227, 178, 0.1);
+  color: rgba(237, 242, 235, 0.72);
+  font-size: 0.76rem;
+  line-height: 1.5;
 }
 
 .tree-popup .maplibregl-popup-tip {
-  border-top-color: #16213e;
+  border-top-color: rgba(28, 31, 36, 0.96);
 }
 
 .landmark-popup .maplibregl-popup-content {
-  background: rgba(10, 20, 48, 0.92);
-  color: #e0f7fa;
-  border: 1px solid rgba(79, 195, 247, 0.4);
+  background: rgba(28, 31, 36, 0.94);
+  color: rgba(237, 242, 235, 0.92);
+  border: 1px solid rgba(167, 227, 178, 0.22);
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 0.78rem;
@@ -1218,22 +1482,22 @@ onUnmounted(() => {
 }
 
 .landmark-popup .maplibregl-popup-tip {
-  border-top-color: rgba(10, 20, 48, 0.92);
+  border-top-color: rgba(28, 31, 36, 0.94);
 }
 
 .user-location-marker {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #4fc3f7;
+  background: var(--color-leaf);
   border: 2px solid #fff;
-  box-shadow: 0 0 0 0 rgba(79, 195, 247, 0.5);
+  box-shadow: 0 0 0 0 rgba(167, 227, 178, 0.46);
   animation: user-location-pulse 2s infinite;
 }
 
 @keyframes user-location-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(79, 195, 247, 0.5); }
-  70% { box-shadow: 0 0 0 10px rgba(79, 195, 247, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(79, 195, 247, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(167, 227, 178, 0.46); }
+  70% { box-shadow: 0 0 0 10px rgba(167, 227, 178, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(167, 227, 178, 0); }
 }
 </style>

@@ -1,0 +1,38 @@
+import ..landmark_common;
+
+root datasource paris_landmarks_update_time (
+    data_updated_through: frpar_landmark_data_updated_through
+)
+file `./paris_landmarks_probe.py`;
+
+
+root partial datasource raw_paris_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    arrondissement: ?arrondissement,
+    protection_type: ?protection_type,
+    denomination: ?denomination,
+)
+grain (landmark_id)
+complete where city = 'FRPAR'
+file `./paris_landmarks.py`;
+
+
+partial datasource paris_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?arrondissement,
+    ?protection_type,
+    ?denomination,
+    frpar_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'FRPAR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/frpar_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/frpar_landmark_info_v{data_version}.parquet`
+freshness by frpar_landmark_data_updated_through;

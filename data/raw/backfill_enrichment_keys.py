@@ -69,13 +69,13 @@ def main() -> None:
                 bloom_season,
                 wildlife_value,
                 fire_risk,
-                tree_category,
+                tree_form,
                 (common_names IS NOT NULL AND trim(common_names) != ''
                  AND native_status IS NOT NULL AND is_evergreen IS NOT NULL
                  AND mature_height_ft IS NOT NULL AND canopy_spread_ft IS NOT NULL
                  AND growth_rate IS NOT NULL AND drought_tolerance IS NOT NULL
                  AND bloom_season IS NOT NULL AND wildlife_value IS NOT NULL
-                 AND tree_category IS NOT NULL) AS is_complete_flag,
+                 AND tree_form IS NOT NULL) AS is_complete_flag,
                 icon_rgba_b64,
                 icon_width,
                 icon_height,
@@ -105,7 +105,7 @@ def main() -> None:
             bloom_season,
             wildlife_value,
             fire_risk,
-            tree_category,
+            tree_form,
             is_complete_flag AS is_complete,
             icon_rgba_b64,
             icon_width,

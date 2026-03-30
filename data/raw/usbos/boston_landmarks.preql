@@ -1,0 +1,36 @@
+import ..landmark_common;
+
+root datasource boston_landmarks_update_time (
+    data_updated_through: usbos_landmark_data_updated_through
+)
+file `./boston_landmarks_probe.py`;
+
+
+root partial datasource raw_boston_landmark_info (
+    Unique_ID: landmark_id,
+    city: city,
+    Common_Name: name,
+    Neighborhood: ?neighborhood,
+    Date_Designated_1: ?designation_date,
+    shape_wkt: ?geometry_raw,
+)
+grain (landmark_id)
+complete where city = 'USBOS'
+file `./boston_landmarks.py`;
+
+
+partial datasource boston_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?neighborhood,
+    ?designation_date,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    usbos_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'USBOS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usbos_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usbos_landmark_info_v{data_version}.parquet`
+freshness by usbos_landmark_data_updated_through;
