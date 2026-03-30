@@ -151,10 +151,14 @@ const route = useRoute()
 const router = useRouter()
 const { selectedCity, setSelectedCity, currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision, userLocation, setUserLocation } = useMapData()
 
-// Initialise city from URL on first load
-const urlCity = route.query.city
-const urlCityStr = Array.isArray(urlCity) ? urlCity[0] : urlCity
-if (urlCityStr && urlCityStr in CITY_CONFIG) setSelectedCity(urlCityStr as CityCode)
+function readRouteCity(value: unknown): CityCode | null {
+  const city = Array.isArray(value) ? value[0] : value
+  return typeof city === 'string' && city in CITY_CONFIG ? (city as CityCode) : null
+}
+
+// Initialise city from URL on first load.
+const initialRouteCity = readRouteCity(route.query.city)
+if (initialRouteCity) setSelectedCity(initialRouteCity)
 
 const introCenterRef = computed((): [number, number] => CITY_CONFIG[selectedCity.value].center)
 
@@ -888,7 +892,12 @@ watch(selectedCity, (city) => {
 onMounted(async () => {
   window.addEventListener('keydown', onWasdKeyDown)
   // Resolve city from IP before initialising the map so the initial center is correct.
-  if (!urlCityStr) {
+  await router.isReady()
+  const mountedRouteCity = readRouteCity(route.query.city)
+  if (mountedRouteCity && mountedRouteCity !== selectedCity.value) {
+    setSelectedCity(mountedRouteCity)
+  }
+  if (!mountedRouteCity) {
     await Promise.race([detectCityFromIp(), new Promise<void>((r) => setTimeout(r, 2000))])
   }
 

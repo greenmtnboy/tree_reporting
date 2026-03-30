@@ -91,8 +91,8 @@ bloom_months,
 wildlife_value,
 drought_tolerance,
 water_needs,
-count(tree_id) as tree_count,
-rank(species) over (order by count(tree_id) by species desc, species asc) as tree_rank
+count(tree_id) by species as tree_count,
+rank(species) over (order by tree_count desc, species asc) as tree_rank
 
 HAVING tree_rank = 1;`,
     chartConfig: {

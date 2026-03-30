@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test'
 
+async function openMobileMenu(page: import('@playwright/test').Page) {
+  await page.getByLabel('Open navigation menu').click()
+  await expect(page.locator('.mobile-nav-menu')).toBeVisible()
+}
+
 test.describe('Mobile layout', () => {
   test.beforeEach(async ({ page }) => {
     // Use a mobile viewport (below the 768px breakpoint)
@@ -10,17 +15,14 @@ test.describe('Mobile layout', () => {
     await page.goto('/#/?city=USSFO')
   })
 
-  test('renders the map and bottom navigation bar', async ({ page }) => {
+  test('renders the map and mobile navigation controls', async ({ page }) => {
     await expect(page.locator('.mobile-map-container')).toBeVisible()
     await expect(page.locator('.tree-map canvas')).toBeAttached({ timeout: 15_000 })
-    await expect(page.locator('.mobile-bottom-bar')).toBeVisible()
+    await expect(page.locator('.mobile-map-actions')).toBeVisible()
+    await expect(page.getByLabel('Open navigation menu')).toBeVisible()
 
-    // The current mobile shell exposes three primary actions.
-    const navBtns = page.locator('.mobile-bar-btn')
-    await expect(navBtns).toHaveCount(3)
-    await expect(page.locator('.mobile-bottom-bar')).toContainText('Landmarks')
-    await expect(page.locator('.mobile-bottom-bar')).toContainText('Chat')
-    await expect(page.locator('.mobile-bottom-bar')).toContainText('Info')
+    await expect(page.locator('.mobile-map-actions')).toContainText('Landmarks')
+    await expect(page.locator('.mobile-map-actions')).toContainText('Chat')
   })
 
   test('desktop sidebar is not rendered on mobile', async ({ page }) => {
@@ -28,7 +30,7 @@ test.describe('Mobile layout', () => {
   })
 
   test('landmarks overlay opens and shows search', async ({ page }) => {
-    await page.locator('.mobile-bar-btn').filter({ hasText: 'Landmarks' }).click()
+    await page.locator('.mobile-action-btn').filter({ hasText: 'Landmarks' }).click()
 
     const overlay = page.locator('.mobile-overlay')
     await expect(overlay).toBeVisible()
@@ -40,7 +42,7 @@ test.describe('Mobile layout', () => {
   })
 
   test('landmarks overlay filters results', async ({ page }) => {
-    await page.locator('.mobile-bar-btn').filter({ hasText: 'Landmarks' }).click()
+    await page.locator('.mobile-action-btn').filter({ hasText: 'Landmarks' }).click()
 
     const items = page.locator('.mobile-landmark-item')
     await expect(items.first()).toBeVisible({ timeout: 10_000 })
@@ -57,7 +59,7 @@ test.describe('Mobile layout', () => {
   })
 
   test('clicking a landmark closes overlay and moves map', async ({ page }) => {
-    await page.locator('.mobile-bar-btn').filter({ hasText: 'Landmarks' }).click()
+    await page.locator('.mobile-action-btn').filter({ hasText: 'Landmarks' }).click()
 
     const firstItem = page.locator('.mobile-landmark-item').first()
     await expect(firstItem).toBeVisible({ timeout: 10_000 })
@@ -109,10 +111,35 @@ test.describe('Mobile layout', () => {
   })
 
   test('overlay closes via close button', async ({ page }) => {
-    await page.locator('.mobile-bar-btn').filter({ hasText: 'Landmarks' }).click()
+    await page.locator('.mobile-action-btn').filter({ hasText: 'Landmarks' }).click()
     await expect(page.locator('.mobile-overlay')).toBeVisible()
 
     await page.locator('.mobile-overlay-close').click()
     await expect(page.locator('.mobile-overlay')).not.toBeVisible({ timeout: 3_000 })
+  })
+
+  test('navigation menu switches to analytics and info screens', async ({ page }) => {
+    await openMobileMenu(page)
+    await page.locator('.mobile-nav-item').filter({ hasText: 'Analytics' }).click()
+
+    await expect(page.locator('.mobile-route-screen')).toBeVisible()
+    await expect(page.locator('.mobile-route-header')).toContainText('City Summary')
+    await expect(page.locator('.summary-page h1')).toContainText('City Summary')
+    await expect(page.locator('.mobile-chat-fab')).toBeVisible()
+
+    await openMobileMenu(page)
+    await page.locator('.mobile-nav-item').filter({ hasText: 'Info' }).click()
+
+    await expect(page.locator('.mobile-route-header')).toContainText('Project Info')
+    await expect(page.locator('.info-page h1')).toContainText('About Urban Trees')
+  })
+
+  test('analytics screen opens chat overlay', async ({ page }) => {
+    await openMobileMenu(page)
+    await page.locator('.mobile-nav-item').filter({ hasText: 'Analytics' }).click()
+
+    await page.getByLabel('Open analytics chat').click()
+    await expect(page.locator('.mobile-chat-overlay')).toBeVisible()
+    await expect(page.locator('.mobile-chat-overlay')).toContainText('Analytics Assistant')
   })
 })
