@@ -1686,9 +1686,6 @@ if __name__ == "__main__":
         if enrichment is None:
             continue
         counter +=1
-        # temporary
-        if counter >5:
-            break
         is_complete, missing = compute_is_complete(enrichment)
         if missing:
             print(f"    [incomplete] missing: {', '.join(missing)}", file=sys.stderr)

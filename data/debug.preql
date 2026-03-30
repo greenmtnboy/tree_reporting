@@ -50,7 +50,7 @@ end::string;
 
 
 
-
+show
 WHERE city ='USBTV' and 
 species= 'Syringa reticulata !ivory silk!'
 
