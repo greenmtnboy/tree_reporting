@@ -23,6 +23,19 @@
   --surface-1: rgba(28, 31, 36, 0.94);
   --surface-2: rgba(42, 47, 54, 0.92);
   --surface-3: rgba(58, 64, 72, 0.92);
+  --app-biome-glow-primary: rgba(47, 125, 79, 0.34);
+  --app-biome-glow-secondary: rgba(107, 175, 146, 0.16);
+  --app-biome-wash: rgba(15, 36, 23, 0.34);
+  --app-biome-background-art: none;
+  --app-biome-accent-art: none;
+  --app-biome-tree-art: none;
+  --app-biome-background-size: min(78vw, 1160px) auto;
+  --app-biome-accent-size: min(72vw, 1040px) auto;
+  --app-biome-tree-size: min(62vw, 900px) auto;
+  --app-biome-background-position: right bottom;
+  --app-biome-accent-position: right bottom;
+  --app-biome-tree-position: right bottom;
+  --app-biome-opacity: 0.88;
   --shadow-soft: 0 20px 48px rgba(7, 10, 11, 0.26);
   --font-body: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   --font-display: "Bahnschrift", "Arial Narrow", "Segoe UI Variable", sans-serif;
@@ -81,14 +94,28 @@ body,
 #app::after {
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(15, 36, 23, 0), rgba(15, 36, 23, 0.34)),
-    radial-gradient(circle at 70% 84%, rgba(47, 125, 79, 0.34), transparent 42%),
-    radial-gradient(circle at 88% 92%, rgba(107, 175, 146, 0.16), transparent 30%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 980 900'%3E%3Cg fill='%23223a2c' fill-opacity='.18'%3E%3Cpolygon points='70,900 190,610 310,900'/%3E%3Cpolygon points='220,900 360,470 500,900'/%3E%3Cpolygon points='400,900 545,545 690,900'/%3E%3Cpolygon points='565,900 735,315 905,900'/%3E%3Cpolygon points='700,900 835,500 970,900'/%3E%3C/g%3E%3Cg fill='%232f7d4f' fill-opacity='.17'%3E%3Cpolygon points='120,900 208,690 296,900'/%3E%3Cpolygon points='250,900 362,560 474,900'/%3E%3Cpolygon points='400,900 496,658 592,900'/%3E%3Cpolygon points='540,900 676,460 812,900'/%3E%3Cpolygon points='690,900 818,612 946,900'/%3E%3Cpolygon points='790,900 890,682 990,900'/%3E%3C/g%3E%3Cg fill='%236baf92' fill-opacity='.095'%3E%3Cpolygon points='196,900 252,792 308,900'/%3E%3Cpolygon points='346,900 410,760 474,900'/%3E%3Cpolygon points='520,900 590,774 660,900'/%3E%3Cpolygon points='694,900 762,752 830,900'/%3E%3Cpolygon points='812,900 872,790 932,900'/%3E%3C/g%3E%3Cpath d='M0 900V818C128 796 224 794 328 776C442 756 542 760 652 742C770 724 856 714 980 676V900Z' fill='%230f2417' fill-opacity='.22'/%3E%3C/svg%3E");
+    linear-gradient(180deg, rgba(15, 36, 23, 0), var(--app-biome-wash)),
+    radial-gradient(circle at 70% 84%, var(--app-biome-glow-primary), transparent 42%),
+    radial-gradient(circle at 88% 92%, var(--app-biome-glow-secondary), transparent 30%),
+    var(--app-biome-background-art),
+    var(--app-biome-accent-art),
+    var(--app-biome-tree-art);
   background-repeat: no-repeat;
-  background-position: center, center, center, right bottom;
-  background-size: cover, cover, cover, min(74vw, 1080px) auto;
-  opacity: 0.88;
+  background-position:
+    center,
+    center,
+    center,
+    var(--app-biome-background-position),
+    var(--app-biome-accent-position),
+    var(--app-biome-tree-position);
+  background-size:
+    cover,
+    cover,
+    cover,
+    var(--app-biome-background-size),
+    var(--app-biome-accent-size),
+    var(--app-biome-tree-size);
+  opacity: var(--app-biome-opacity);
   mask-image: linear-gradient(
     135deg,
     transparent 34%,

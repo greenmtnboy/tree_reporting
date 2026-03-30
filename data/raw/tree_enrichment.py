@@ -356,6 +356,37 @@ class TreeEnrichment(BaseModel):
         None, description="Typical lifespan, e.g. '50-100', '200+', 'short-lived'"
     )
     drought_tolerance: Optional[Literal["low", "moderate", "high"]] = Field(None)
+    water_needs: Optional[Literal["low", "moderate", "high"]] = Field(
+        None,
+        description="Irrigation needs: low = drought-adapted once established, moderate = average garden watering, high = consistently moist soil required.",
+    )
+    sun_exposure: list[Literal["full_sun", "part_shade", "full_shade"]] = Field(
+        default_factory=list,
+        description="Tolerated light conditions. Include all that apply: full_sun (6+ hrs direct), part_shade (3-6 hrs), full_shade (<3 hrs).",
+    )
+    soil_preferences: list[str] = Field(
+        default_factory=list,
+        description="Preferred soil types using standard horticultural terms, e.g. ['well-drained', 'loamy', 'clay-tolerant', 'sandy', 'acidic']. Return [] if unknown.",
+    )
+    root_behavior: Optional[Literal["non-invasive", "moderate", "invasive"]] = Field(
+        None,
+        description="Root aggressiveness in urban settings: non-invasive = deep/compact roots, moderate = some surface spreading, invasive = aggressive surface roots that damage pavement or structures.",
+    )
+    coastal_tolerance: Optional[bool] = Field(
+        None, description="True if the species tolerates salt spray and coastal wind exposure."
+    )
+    salt_tolerance: Optional[bool] = Field(
+        None, description="True if the species tolerates road salt or saline soil conditions."
+    )
+    pollution_tolerance: Optional[Literal["low", "moderate", "high"]] = Field(
+        None, description="Tolerance for urban air pollution and compacted urban soils."
+    )
+    usda_zone_min: Optional[int] = Field(
+        None, description="Minimum USDA hardiness zone as an integer (e.g. 5 for zone 5). Omit the letter suffix."
+    )
+    usda_zone_max: Optional[int] = Field(
+        None, description="Maximum USDA hardiness zone as an integer (e.g. 11). Omit the letter suffix."
+    )
     bloom_months: list[int] = Field(
         default_factory=list,
         description=(
@@ -1334,16 +1365,6 @@ _NEW_COMPLETENESS_EXPR = """
      AND tree_form IS NOT NULL)
 """.strip()
 
-_OLD_COMPLETENESS_EXPR = """
-    (common_names IS NOT NULL AND trim(common_names) != ''
-     AND is_evergreen IS NOT NULL
-     AND mature_height_ft IS NOT NULL
-     AND canopy_spread_ft IS NOT NULL
-     AND growth_rate IS NOT NULL
-     AND drought_tolerance IS NOT NULL
-     AND tree_category IS NOT NULL)
-""".strip()
-
 SKIP_SPECIES = {'Scheduled Planting Site - Spring 2026', 'Vacant Unacceptable/Retired', 'Vacant site medium' }
 
 def get_already_enriched(source: str = ENRICHMENT_PARQUET) -> set[str]:
@@ -1366,10 +1387,14 @@ def get_already_enriched(source: str = ENRICHMENT_PARQUET) -> set[str]:
 
 
 def load_existing_table(source: str) -> pa.Table | None:
-    """Load the full enrichment parquet from *source*, computing is_complete inline."""
+    """Load the full enrichment parquet from *source*.
+
+    Returns None only if the file does not exist (local path missing or GCS 404).
+    Raises on any other error (schema mismatch, network failure, etc.).
+    """
     conn = duckdb.connect()
     try:
-        queries = [
+        table = conn.execute(
             f"""
             SELECT
               species,
@@ -1402,120 +1427,34 @@ def load_existing_table(source: str) -> pa.Table | None:
               usda_zone_max,
               native_ecoregions,
               {_NEW_COMPLETENESS_EXPR} AS is_complete,
-              icon_rgba_b64,
-              icon_width,
-              icon_height,
               enriched_at
             FROM read_parquet(?)
             """,
-            f"""
-            SELECT
-              species,
-              genus,
-              species_epithet,
-              family,
-              common_names,
-              NULL::VARCHAR AS description,
-              is_evergreen,
-              mature_height_min_ft,
-              mature_height_max_ft,
-              canopy_spread_min_ft,
-              canopy_spread_max_ft,
-              growth_rate,
-              lifespan_min_years,
-              lifespan_max_years,
-              drought_tolerance,
-              water_needs,
-              sun_exposure,
-              soil_preferences,
-              root_behavior,
-              coastal_tolerance,
-              salt_tolerance,
-              pollution_tolerance,
-              bloom_months,
-              wildlife_value,
-              fire_risk,
-              tree_form,
-              usda_zone_min,
-              usda_zone_max,
-              native_ecoregions,
-              {_NEW_COMPLETENESS_EXPR} AS is_complete,
-              icon_rgba_b64,
-              icon_width,
-              icon_height,
-              enriched_at
-            FROM read_parquet(?)
-            """,
-            """
-            SELECT
-              species,
-              split_part(species, ' ', 1) AS genus,
-              CASE
-                WHEN array_length(string_split(species, ' ')) >= 2 THEN string_split(species, ' ')[2]
-                ELSE NULL
-              END AS species_epithet,
-              NULL::VARCHAR AS family,
-              CASE
-                WHEN common_names IS NULL OR trim(common_names) = '' THEN NULL
-                ELSE string_split(common_names, ', ')
-              END AS common_names,
-              NULL::VARCHAR AS description,
-              is_evergreen,
-              mature_height_ft AS mature_height_min_ft,
-              mature_height_ft AS mature_height_max_ft,
-              canopy_spread_ft AS canopy_spread_min_ft,
-              canopy_spread_ft AS canopy_spread_max_ft,
-              growth_rate,
-              NULL::INTEGER AS lifespan_min_years,
-              NULL::INTEGER AS lifespan_max_years,
-              drought_tolerance,
-              NULL::VARCHAR AS water_needs,
-              NULL::VARCHAR[] AS sun_exposure,
-              NULL::VARCHAR[] AS soil_preferences,
-              NULL::VARCHAR AS root_behavior,
-              NULL::BOOLEAN AS coastal_tolerance,
-              NULL::BOOLEAN AS salt_tolerance,
-              NULL::VARCHAR AS pollution_tolerance,
-              NULL::INTEGER[] AS bloom_months,
-              wildlife_value,
-              fire_risk,
-              CASE tree_category
-                WHEN 'coniferous' THEN 'conifer'
-                ELSE tree_category
-              END AS tree_form,
-              NULL::INTEGER AS usda_zone_min,
-              NULL::INTEGER AS usda_zone_max,
-              NULL::INTEGER[] AS native_ecoregions,
-              """ + _OLD_COMPLETENESS_EXPR + """ AS is_complete,
-              icon_rgba_b64,
-              icon_width,
-              icon_height,
-              enriched_at
-            FROM read_parquet(?)
-            """,
-        ]
-        table = None
-        for query in queries:
-            try:
-                table = conn.execute(query, [source]).fetch_arrow_table()
-                break
-            except Exception:
-                continue
-        if table is None:
+            [source],
+        ).fetch_arrow_table()
+    except Exception as exc:
+        msg = str(exc)
+        if (
+            "No such file or directory" in msg
+            or "does not exist" in msg
+            or "404" in msg
+            or "HTTP" in msg and "404" in msg
+        ):
             return None
+        raise RuntimeError(f"load_existing_table({source!r}) failed: {exc}") from exc
     finally:
         conn.close()
 
-    # Normalize enriched_at timezone metadata if needed
-    tz_idx = table.schema.get_field_index("enriched_at")
-    if tz_idx >= 0:
-        target_ts  = SCHEMA.field("enriched_at").type
-        current_ts = table.schema.field(tz_idx).type
-        if current_ts != target_ts:
-            table = table.set_column(
-                tz_idx, "enriched_at",
-                pc.cast(table.column(tz_idx), target_ts, safe=False),
-            )
+    # Drop any extra columns not in SCHEMA (e.g. legacy icon_rgba_b64/width/height)
+    schema_names = {f.name for f in SCHEMA}
+    extra = [name for name in table.schema.names if name not in schema_names]
+    if extra:
+        table = table.drop(extra)
+
+    # Cast to canonical SCHEMA — normalizes list child field names (DuckDB emits 'l', PyArrow uses 'item')
+    # and ensures all column types match exactly before concat.
+    table = table.cast(SCHEMA)
+
     return table
 
 
@@ -1617,9 +1556,6 @@ SCHEMA = pa.schema([
     ("usda_zone_max",         pa.int32()),
     ("native_ecoregions",     pa.list_(pa.int32())),
     ("is_complete",           pa.bool_()),
-    ("icon_rgba_b64",         pa.string()),
-    ("icon_width",            pa.int32()),
-    ("icon_height",           pa.int32()),
     ("enriched_at",           pa.timestamp("us", tz="UTC")),
 ])
 
@@ -1732,6 +1668,12 @@ if __name__ == "__main__":
 
     # Pre-load existing table once so every checkpoint flush is cheap.
     existing_table = load_existing_table(enrichment_source) if already_enriched else None
+    if already_enriched and (existing_table is None or len(existing_table) == 0):
+        raise RuntimeError(
+            f"existing_table is empty/None but get_already_enriched() returned "
+            f"{len(already_enriched)} species from {enrichment_source!r}. "
+            f"load_existing_table() silently failed — check schema compatibility or URL reachability."
+        )
 
     new_rows: list[dict] = []
     counter = 0
@@ -1745,7 +1687,7 @@ if __name__ == "__main__":
             continue
         counter +=1
         # temporary
-        if counter >1000:
+        if counter >5:
             break
         is_complete, missing = compute_is_complete(enrichment)
         if missing:
@@ -1788,19 +1730,19 @@ if __name__ == "__main__":
             "lifespan_min_years":   lifespan_min_years,
             "lifespan_max_years":   lifespan_max_years,
             "drought_tolerance":    enrichment.drought_tolerance,
-            "water_needs":          None,
-            "sun_exposure":         None,
-            "soil_preferences":     None,
-            "root_behavior":        None,
-            "coastal_tolerance":    None,
-            "salt_tolerance":       None,
-            "pollution_tolerance":  None,
+            "water_needs":          enrichment.water_needs,
+            "sun_exposure":         enrichment.sun_exposure or None,
+            "soil_preferences":     enrichment.soil_preferences or None,
+            "root_behavior":        enrichment.root_behavior,
+            "coastal_tolerance":    enrichment.coastal_tolerance,
+            "salt_tolerance":       enrichment.salt_tolerance,
+            "pollution_tolerance":  enrichment.pollution_tolerance,
             "bloom_months":         bloom_months,
             "wildlife_value":       enrichment.wildlife_value,
             "fire_risk":            enrichment.fire_risk,
             "tree_form":            map_tree_form(enrichment.tree_form),
-            "usda_zone_min":        None,
-            "usda_zone_max":        None,
+            "usda_zone_min":        enrichment.usda_zone_min,
+            "usda_zone_max":        enrichment.usda_zone_max,
             "native_ecoregions":    sorted(set(enrichment.native_ecoregions)) or None,
             "is_complete":          is_complete,
             # "icon_rgba_b64":        to_raw_rgba_b64(icon),
@@ -1819,6 +1761,18 @@ if __name__ == "__main__":
             )
 
     merged = merge_with_existing(existing_table, new_rows)
+
+    if existing_table is not None and len(existing_table) > 0 and new_rows:
+        new_species_set = {row["species"] for row in new_rows}
+        overlap = sum(1 for s in existing_table.column("species").to_pylist() if s in new_species_set)
+        expected = len(existing_table) - overlap + len(new_rows)
+        if len(merged) != expected:
+            raise RuntimeError(
+                f"Merge validation failed: expected {expected} rows "
+                f"({len(existing_table)} existing − {overlap} re-processed + {len(new_rows)} new), "
+                f"got {len(merged)}. "
+                f"Existing rows were likely dropped due to a silent load failure."
+            )
 
     if local_mode:
         pq.write_table(merged, args.output)

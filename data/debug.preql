@@ -50,9 +50,25 @@ end::string;
 
 
 
-WHERE city ='USBOS' and ecoregion_id is not null
 
-SELECT 
-native_locality_bucket,
-count(tree_id) as tree_count,
-;
+WHERE city ='USBTV' and 
+species= 'Syringa reticulata !ivory silk!'
+
+SELECT
+species,
+common_names[1] as common_name,
+description,
+tree_form,
+mature_height_min_ft,
+mature_height_max_ft,
+canopy_spread_min_ft,
+canopy_spread_max_ft,
+growth_rate,
+bloom_months,
+wildlife_value,
+drought_tolerance,
+water_needs,
+count(tree_id) by species as tree_count,
+rank(species) over (order by tree_count desc nulls last, species asc) as tree_rank
+
+HAVING tree_rank = 1;

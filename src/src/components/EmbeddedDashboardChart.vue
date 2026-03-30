@@ -17,16 +17,14 @@
 <script setup lang="ts">
 import {
   DashboardChart,
-  DashboardQueryExecutor,
-  CELL_TYPES,
-  type DashboardDefinition,
+  useEmbeddedDashboardGroup,
+  type EmbeddedDashboardGroup,
   type DashboardImport,
   type DashboardExecutionService,
-  type GridItemDataResponse,
   type ChartConfig,
   type DimensionClick,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -42,6 +40,7 @@ const props = withDefaults(
     selectedValue?: string | null
     selectionFilters?: Array<{ source: string; value: Record<string, string> }>
     dashboardId?: string
+    dashboardGroup?: EmbeddedDashboardGroup
     priority?: number
     allowCrossFilter?: boolean
   }>(),
@@ -62,64 +61,27 @@ const emit = defineEmits<{
 }>()
 
 const containerRef = ref<HTMLElement | null>(null)
-const resolvedDashboardId = computed(() => props.dashboardId ?? `summary-${props.connectionId}`)
+const standaloneDashboardId = computed(() => props.dashboardId ?? `summary-${props.connectionId}`)
+const resolvedDashboardId = computed(() => props.dashboardGroup?.dashboard.id ?? standaloneDashboardId.value)
 
-const itemState = reactive({
-  type: CELL_TYPES.CHART,
-  content: props.query,
-  drilldown: null as string | null,
-  name: props.title,
-  allowCrossFilter: props.allowCrossFilter,
-  width: 0,
-  height: 320,
-  chartConfig: props.chartConfig,
-  drilldownChartConfig: null as ChartConfig | null,
-  conceptFilters: [] as Array<{ source: string; value: Record<string, string> }>,
-  chartFilters: [] as Array<{ source: string; value: Record<string, string> }>,
-  filters: [] as Array<{ source: string; value: string }>,
-  parameters: {} as Record<string, unknown>,
-  results: null,
-  loading: false,
-  error: null as string | null,
-  loadStartTime: null as number | null,
-})
+let localDashboardGroup: EmbeddedDashboardGroup | null = null
 
-const dashboard = reactive<DashboardDefinition>({
-  id: resolvedDashboardId.value,
-  name: resolvedDashboardId.value,
-  storage: 'local',
-  connection: props.connectionId,
-  layout: [
-    {
-      x: 0,
-      y: props.priority,
-      w: 12,
-      h: 10,
-      i: props.itemId,
-      static: true,
-    },
-  ],
-  gridItems: {
-    [props.itemId]: itemState,
-  },
-  nextId: 1,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  filter: null,
-  imports: props.imports,
-  version: 1,
-  description: '',
-  state: 'published',
-})
+function getActiveDashboardGroup() {
+  if (props.dashboardGroup) {
+    return props.dashboardGroup
+  }
 
-const executor = new DashboardQueryExecutor(
-  props.queryExecutionService,
-  props.connectionId,
-  resolvedDashboardId.value,
-  () => dashboard,
-  getItemData,
-  setItemData,
-)
+  if (!localDashboardGroup) {
+    localDashboardGroup = useEmbeddedDashboardGroup({
+      dashboardId: standaloneDashboardId.value,
+      connectionId: props.connectionId,
+      queryExecutionService: props.queryExecutionService,
+      imports: props.imports,
+    })
+  }
+
+  return localDashboardGroup
+}
 
 let resizeObserver: ResizeObserver | null = null
 const lastQuerySignature = ref<string | null>(null)
@@ -146,13 +108,19 @@ function buildChartFilters() {
 }
 
 function syncExternalState() {
-  itemState.name = props.title
-  itemState.content = props.query
-  itemState.chartConfig = props.chartConfig
-  itemState.allowCrossFilter = props.allowCrossFilter
-  itemState.filters = buildFilters()
-  itemState.chartFilters = buildChartFilters()
-  dashboard.imports = props.imports
+  const dashboardGroup = getActiveDashboardGroup()
+  dashboardGroup.setConnection(props.connectionId)
+  dashboardGroup.setImports(props.imports)
+  dashboardGroup.registerItem({
+    itemId: props.itemId,
+    title: props.title,
+    query: props.query,
+    priority: props.priority,
+    chartConfig: props.chartConfig,
+    allowCrossFilter: props.allowCrossFilter,
+    filters: buildFilters(),
+    chartFilters: buildChartFilters(),
+  })
 }
 
 function getQuerySignature() {
@@ -164,90 +132,16 @@ function getQuerySignature() {
   })
 }
 
-function getStructuredQuery() {
-  return itemState.drilldown || itemState.content
-}
-
-function getItemData(itemId: string, dashboardId: string): GridItemDataResponse {
-  if (itemId !== props.itemId || dashboardId !== resolvedDashboardId.value) {
-    return {
-      type: CELL_TYPES.CHART,
-      content: '',
-      structured_content: { markdown: '', query: '' },
-      rootContent: [],
-      name: '',
-      allowCrossFilter: true,
-      hasDrilldown: false,
-    }
-  }
-
-  return {
-    type: CELL_TYPES.CHART,
-    content: itemState.content,
-    structured_content: { markdown: '', query: getStructuredQuery() },
-    rootContent: [],
-    name: itemState.name,
-    allowCrossFilter: itemState.allowCrossFilter,
-    width: itemState.width,
-    height: itemState.height,
-    chartConfig: itemState.drilldown ? itemState.drilldownChartConfig || undefined : itemState.chartConfig,
-    connectionName: props.connectionId,
-    imports: props.imports,
-    conceptFilters: itemState.conceptFilters,
-    chartFilters: itemState.chartFilters,
-    filters: itemState.filters,
-    parameters: itemState.parameters,
-    results: itemState.results,
-    loading: itemState.loading,
-    error: itemState.error,
-    loadStartTime: itemState.loadStartTime,
-    hasDrilldown: Boolean(itemState.drilldown),
-  }
+function getItemData(itemId: string, dashboardId: string) {
+  return getActiveDashboardGroup().getItemData(itemId, dashboardId)
 }
 
 function setItemData(itemId: string, dashboardId: string, data: Record<string, unknown>) {
-  if (itemId !== props.itemId || dashboardId !== resolvedDashboardId.value) {
-    return
-  }
-
-  if ('name' in data) itemState.name = (data.name as string) ?? itemState.name
-  if ('content' in data) itemState.content = (data.content as string) ?? itemState.content
-  if ('chartConfig' in data) itemState.chartConfig = (data.chartConfig as ChartConfig | undefined) ?? undefined
-  if ('drilldown' in data) itemState.drilldown = (data.drilldown as string | null) ?? null
-  if ('drilldownChartConfig' in data)
-    itemState.drilldownChartConfig = (data.drilldownChartConfig as ChartConfig | null) ?? null
-  if ('allowCrossFilter' in data) itemState.allowCrossFilter = Boolean(data.allowCrossFilter)
-  if ('width' in data) itemState.width = Number(data.width ?? itemState.width)
-  if ('height' in data) itemState.height = Number(data.height ?? itemState.height)
-  if ('filters' in data) itemState.filters = (data.filters as typeof itemState.filters) ?? []
-  if ('chartFilters' in data) itemState.chartFilters = (data.chartFilters as typeof itemState.chartFilters) ?? []
-  if ('conceptFilters' in data)
-    itemState.conceptFilters = (data.conceptFilters as typeof itemState.conceptFilters) ?? []
-  if ('parameters' in data) itemState.parameters = (data.parameters as typeof itemState.parameters) ?? {}
-  if ('results' in data) {
-    itemState.results = data.results as typeof itemState.results
-    itemState.loading = false
-    itemState.error = null
-    itemState.loadStartTime = null
-  }
-  if ('loading' in data) {
-    itemState.loading = Boolean(data.loading)
-    itemState.loadStartTime = itemState.loading ? Date.now() : null
-  }
-  if ('error' in data) {
-    itemState.error = (data.error as string | null) ?? null
-    if (itemState.error) {
-      itemState.loading = false
-      itemState.loadStartTime = null
-    }
-  }
+  getActiveDashboardGroup().setItemData(itemId, dashboardId, data)
 }
 
 function getDashboardQueryExecutor(dashboardId: string) {
-  if (dashboardId !== resolvedDashboardId.value) {
-    throw new Error(`Unexpected dashboard id ${dashboardId}`)
-  }
-  return executor
+  return getActiveDashboardGroup().getDashboardQueryExecutor(dashboardId)
 }
 
 // Set before emitting dimension-click / background-click so the filter watcher
@@ -267,9 +161,11 @@ function handleBackgroundClick() {
 async function runQuery(force = false) {
   syncExternalState()
   if (!props.query.trim()) {
-    itemState.results = null
-    itemState.error = null
-    itemState.loading = false
+    getActiveDashboardGroup().setItemData(props.itemId, resolvedDashboardId.value, {
+      results: null,
+      error: null,
+      loading: false,
+    })
     lastQuerySignature.value = null
     return
   }
@@ -281,7 +177,7 @@ async function runQuery(force = false) {
 
   lastQuerySignature.value = nextSignature
   await nextTick()
-  executor.runSingle(props.itemId)
+  getActiveDashboardGroup().scheduleRun(props.itemId)
 }
 
 function updateDimensions() {
@@ -289,8 +185,10 @@ function updateDimensions() {
     return
   }
   const rect = containerRef.value.getBoundingClientRect()
-  itemState.width = Math.max(Math.floor(rect.width), 240)
-  itemState.height = Math.max(Math.floor(rect.height), 220)
+  getActiveDashboardGroup().setItemData(props.itemId, resolvedDashboardId.value, {
+    width: Math.max(Math.floor(rect.width), 240),
+    height: Math.max(Math.floor(rect.height), 220),
+  })
 }
 
 watch(
@@ -312,9 +210,11 @@ watch(
 )
 
 watch(
-  () => JSON.stringify(props.selectionFilters),
+  () => JSON.stringify([props.selectionFilters, props.selectionField, props.selectedValue]),
   () => {
-    itemState.chartFilters = buildChartFilters()
+    getActiveDashboardGroup().setItemData(props.itemId, resolvedDashboardId.value, {
+      chartFilters: buildChartFilters(),
+    })
   },
 )
 
@@ -330,6 +230,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
+  localDashboardGroup?.dispose()
 })
 </script>
 

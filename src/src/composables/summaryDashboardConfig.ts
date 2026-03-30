@@ -93,7 +93,7 @@ drought_tolerance,
 water_needs,
 count(tree_id) as tree_count,
 rank(species) over (order by count(tree_id) by species desc, species asc) as tree_rank
-WHERE species IS NOT NULL
+
 HAVING tree_rank = 1;`,
     chartConfig: {
       chartType: 'headline',
@@ -109,18 +109,27 @@ HAVING tree_rank = 1;`,
     subtitle: 'Cumulative share held by the top 50 ranked species',
     query: `import std.color;
 SELECT
-dominance_rank,
+dominance_rank as rank_by_count,
 species,
 count(tree_id) as tree_count,
 cumulative_tree_share_pct,
-'#6BAF92'::string::hex as curve_color
-HAVING dominance_rank <= 50
-ORDER BY dominance_rank ASC;`,
+case when rank_by_count <10 THEN 'top-10'
+when rank_by_count < 20 then 'top-20'
+when rank_by_count <= 35 then 'top-35'
+else 'other'
+end as rank_bucket,
+case when rank_by_count <10 then '#1F5A4E'
+when rank_by_count < 20 then '#2F7D4F'
+when rank_by_count <= 35 then '#6BAF92'
+else '#A7E3B2'
+end::string::hex as bucket_color
+HAVING rank_by_count <= 50
+ORDER BY rank_by_count ASC;`,
     chartConfig: {
       chartType: 'bar',
-      xField: 'dominance_rank',
+      xField: 'rank_by_count',
       yField: 'cumulative_tree_share_pct',
-      colorField: 'curve_color',
+      colorField: 'rank_bucket',
       showTitle: false,
       hideLegend: true,
       annotationField: 'species',
@@ -151,7 +160,7 @@ when 2026 - plant_date.year < 40 then '#4E9872'
 when 2026 - plant_date.year < 50 then '#2F7D4F'
 else '#1F5A34'
 end::string::hex as color
-WHERE plant_date IS NOT NULL and plant_year>1800
+WHERE plant_date IS NOT NULL and plant_year>1800 and plant_year<2030
 ORDER BY plant_year ASC;`,
     chartConfig: {
       chartType: 'bar',

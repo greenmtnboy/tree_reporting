@@ -12,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { MarkdownRenderer } from '@trilogy-data/trilogy-studio-components/dashboard'
 import type { DashboardImport, DashboardExecutionService } from '@trilogy-data/trilogy-studio-components/dashboard'
 
@@ -34,6 +34,10 @@ const props = withDefaults(
 const loading = ref(false)
 const error = ref<string | null>(null)
 const row = ref<Record<string, unknown> | null>(null)
+const latestLoadId = ref(0)
+const activeCancellation = ref<{ cancel: () => void } | null>(null)
+const spotlightDebugEnabled = typeof window !== 'undefined'
+  && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -70,6 +74,13 @@ function formatBloomMonths(value: unknown) {
     return start === end ? start : `${start}-${end}`
   }
   return months.map((month) => MONTH_LABELS[month - 1]).join(', ')
+}
+
+function debugSpotlight(message: string, details?: Record<string, unknown>) {
+  if (!spotlightDebugEnabled) {
+    return
+  }
+  console.debug(`[SummaryMarkdownCard:${props.itemId}] ${message}`, details ?? {})
 }
 
 const markdown = computed(() => {
@@ -109,16 +120,30 @@ const markdown = computed(() => {
 })
 
 async function load() {
+  const loadId = latestLoadId.value + 1
+  latestLoadId.value = loadId
+  activeCancellation.value?.cancel()
+  activeCancellation.value = null
+
+  debugSpotlight('load:start', {
+    loadId,
+    connectionId: props.connectionId,
+    filters: props.filters,
+    query: props.query,
+  })
+
   if (!props.query.trim()) {
     row.value = null
     error.value = null
+    loading.value = false
+    debugSpotlight('load:skip-empty-query', { loadId })
     return
   }
 
   loading.value = true
   error.value = null
   try {
-    const { resultPromise } = await props.queryExecutionService.executeQueriesBatch(
+    const execution = await props.queryExecutionService.executeQueriesBatch(
       props.connectionId,
       [{
         label: props.itemId,
@@ -128,18 +153,54 @@ async function load() {
       'trilogy',
       props.imports.map((imp) => ({ name: imp.name, alias: imp.alias })),
     )
-    const batch = await resultPromise
+    activeCancellation.value = execution.cancellation
+    const batch = await execution.resultPromise
+    if (loadId !== latestLoadId.value) {
+      debugSpotlight('load:stale-result-ignored', { loadId })
+      return
+    }
     const result = batch.results[0]
     if (!result?.success || !result.results) {
+      debugSpotlight('load:query-failed', {
+        loadId,
+        batchSuccess: batch.success,
+        result,
+      })
       throw new Error(result?.error || 'Failed to load spotlight card.')
     }
     const payload = result.results.toJSON() as { data?: Array<Record<string, unknown>> }
+    debugSpotlight('load:query-succeeded', {
+      loadId,
+      generatedSql: result.generatedSql,
+      rowCount: Array.isArray(payload.data) ? payload.data.length : null,
+      firstRow: Array.isArray(payload.data) ? (payload.data[0] ?? null) : null,
+      payload,
+    })
     row.value = Array.isArray(payload.data) ? (payload.data[0] ?? null) : null
   } catch (err) {
+    if (loadId !== latestLoadId.value) {
+      debugSpotlight('load:stale-error-ignored', {
+        loadId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      return
+    }
     row.value = null
     error.value = (err as Error).message
+    debugSpotlight('load:error', {
+      loadId,
+      error: error.value,
+    })
   } finally {
-    loading.value = false
+    if (loadId === latestLoadId.value) {
+      loading.value = false
+      activeCancellation.value = null
+      debugSpotlight('load:finish', {
+        loadId,
+        hasRow: Boolean(row.value),
+        error: error.value,
+      })
+    }
   }
 }
 
@@ -150,6 +211,11 @@ watch(
   },
   { immediate: true },
 )
+
+onBeforeUnmount(() => {
+  activeCancellation.value?.cancel()
+  activeCancellation.value = null
+})
 </script>
 
 <style scoped>

@@ -1,6 +1,8 @@
 import { computed } from 'vue'
 import {
+  filterAllowedDimensionFilters,
   type CrossFilterSelection,
+  type DimensionClick,
   useCrossFilterController,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
 
@@ -55,7 +57,27 @@ const SUMMARY_FILTER_META_BY_FIELD = new Map(
   SUMMARY_FILTER_META.map((meta) => [meta.field, meta] as const),
 )
 
+export function filterSummaryCrossFilterFields(filters: Record<string, string>) {
+  return filterAllowedDimensionFilters(filters, SUMMARY_FILTER_FIELDS, {
+    normalizeLocalFields: true,
+  })
+}
+
+export function filterSummaryDimensionClick(info: DimensionClick): DimensionClick | null {
+  const filters = filterSummaryCrossFilterFields(info.filters)
+
+  if (Object.keys(filters).length === 0) {
+    return null
+  }
+
+  return {
+    ...info,
+    filters,
+  }
+}
+
 const crossFilters = useCrossFilterController({
+  validFields: SUMMARY_FILTER_FIELDS,
   normalizeLocalFields: true,
 })
 

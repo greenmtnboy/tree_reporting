@@ -37,6 +37,7 @@
         <EmbeddedDashboardChart
           :item-id="kpi.id"
           v-bind="sharedChartProps"
+          :dashboard-group="embeddedDashboardGroup"
           :filters="filtersForChart(kpi.id)"
           :title="kpi.title"
           :query="kpi.query"
@@ -82,6 +83,7 @@
             v-else
             :item-id="card.id"
             v-bind="sharedChartProps"
+            :dashboard-group="embeddedDashboardGroup"
             :filters="filtersForChart(card.id)"
             :title="chartById(card.id).title"
             :query="chartById(card.id).query"
@@ -101,6 +103,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  useEmbeddedDashboardGroup,
   type DashboardImport,
   type DimensionClick,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
@@ -117,7 +120,7 @@ import {
   getSummaryBaseFilters,
   readSummaryRouteCity,
 } from '../composables/summaryDashboardConfig'
-import { useSummaryFilters } from '../composables/useSummaryFilters'
+import { filterSummaryDimensionClick, useSummaryFilters } from '../composables/useSummaryFilters'
 import cityConfig from '../cityConfig.json'
 
 const route = useRoute()
@@ -130,6 +133,13 @@ const sharedChartProps = {
   queryExecutionService,
   imports: SUMMARY_DASHBOARD_IMPORTS as DashboardImport[],
 }
+
+const embeddedDashboardGroup = useEmbeddedDashboardGroup({
+  dashboardId: `summary-${connectionId}`,
+  connectionId,
+  queryExecutionService,
+  imports: SUMMARY_DASHBOARD_IMPORTS as DashboardImport[],
+})
 
 const cityFilter = ref<CityCode | null>(null)
 const {
@@ -219,7 +229,11 @@ function selectionFiltersForChart(chartId: string) {
 }
 
 function handleChartClick(info: DimensionClick) {
-  crossFilters.applyDimensionClick(info)
+  const filtered = filterSummaryDimensionClick(info)
+  if (!filtered) {
+    return
+  }
+  crossFilters.applyDimensionClick(filtered)
 }
 
 function clearChartSelection(chartId: string) {
