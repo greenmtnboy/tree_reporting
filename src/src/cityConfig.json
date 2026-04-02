@@ -3,5 +3,10 @@
   "USNYC": { "name": "New York City", "center": [-73.9665, 40.7812] },
   "USBOS": { "name": "Boston", "center": [-71.0589, 42.3601] },
   "FRPAR": { "name": "Paris", "center": [2.3522, 48.8566] },
-  "USBTV": { "name": "Burlington", "center": [-73.2121, 44.4759] }
+  "USBTV": { "name": "Burlington", "center": [-73.2121, 44.4759] },
+  "CAVAN": { "name": "Vancouver", "center": [-123.1207, 49.2827] },
+  "DEBER": { "name": "Berlin", "center": [13.4050, 52.5200] },
+  "NLAMS": { "name": "Amsterdam", "center": [4.9041, 52.3676] },
+  "GBLON": { "name": "London", "center": [-0.1278, 51.5074] },
+  "AUMEL": { "name": "Melbourne", "center": [144.9631, -37.8136] }
 }

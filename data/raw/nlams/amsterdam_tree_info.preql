@@ -1,0 +1,37 @@
+import ..tree_common;
+
+root datasource amsterdam_update_time (
+    data_updated_through: nlams_data_updated_through
+)
+file `./amsterdam_update_time.py`;
+
+root partial datasource amsterdam_raw_tree_info (
+    tree_id: tree_id,
+    city: city,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+)
+grain (tree_id)
+complete where city = 'NLAMS'
+file `./amsterdam_tree_info.py`;
+
+
+partial datasource amsterdam_tree_info (
+    tree_id,
+    city,
+    species,
+    ?tree_name,
+    ?plant_date,
+    ?diameter_at_breast_height,
+    ?latitude,
+    ?longitude,
+    nlams_data_updated_through,
+)
+grain (tree_id)
+complete where city = 'NLAMS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlams_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/nlams_tree_info_v{data_version}.parquet`
+freshness by nlams_data_updated_through;

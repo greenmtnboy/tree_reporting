@@ -3,8 +3,9 @@ import ..tree_common;
 property <*>.arboretum_data_updated_through datetime; # when Arnold Arboretum data is through
 property <*>.boston_city_data_updated_through datetime; # when Boston city open-data is through
 property <*>.cambridge_data_updated_through datetime; # when Cambridge open-data is through
-auto usbos_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through, cambridge_data_updated_through);
-key usbos_source enum<string>['CITY', 'ARBORETUM', 'CAMBRIDGE']; # data source within Boston metro (CITY = Boston municipal, ARBORETUM = Arnold Arboretum, CAMBRIDGE = Cambridge municipal)
+property <*>.brookline_data_updated_through datetime; # when Brookline open-data is through
+auto usbos_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through, cambridge_data_updated_through, brookline_data_updated_through);
+key usbos_source enum<string>['CITY', 'ARBORETUM', 'CAMBRIDGE', 'BROOKLINE']; # data source within Boston metro (CITY = Boston municipal, ARBORETUM = Arnold Arboretum, CAMBRIDGE = Cambridge municipal, BROOKLINE = Brookline municipal)
 
 
 property tree_id._raw_dbh float; # raw value 
@@ -30,6 +31,11 @@ root datasource cambridge_update_time (
     data_updated_through: cambridge_data_updated_through
 )
 file `./cambridge_update_time.py`;
+
+root datasource brookline_update_time (
+    data_updated_through: brookline_data_updated_through
+)
+file `./brookline_update_time.py`;
 
 # --- Raw sources ---
 
@@ -78,6 +84,21 @@ root partial datasource cambridge_raw_tree_info (
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'CAMBRIDGE'
 file `./cambridge_tree_info.py`;
+
+root partial datasource brookline_raw_tree_info (
+    tree_id: tree_id,
+    city: city,
+    usbos_source: usbos_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?_raw_dbh,
+)
+grain (tree_id)
+complete where city = 'USBOS' and usbos_source = 'BROOKLINE'
+file `./brookline_tree_info.py`;
 
 # --- Merged materialized parquet (all Boston sources) ---
 

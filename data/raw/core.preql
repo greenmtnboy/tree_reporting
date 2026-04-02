@@ -1,12 +1,17 @@
 import ecoregion_common;
 
-key city enum<string>['USSFO', 'USNYC', 'USBOS', 'FRPAR', 'USBTV']; # UN/LOCODE for the source city (e.g. USSFO, USNYC, USBOS, FRPAR)
+key city enum<string>['USSFO', 'USNYC', 'USBOS', 'FRPAR', 'USBTV', 'CAVAN', 'DEBER', 'NLAMS', 'GBLON', 'AUMEL']; # UN/LOCODE for the source city (e.g. USSFO, USNYC, USBOS, FRPAR)
 property city.ecoregion_id <- case
     when city = 'USSFO' then 423
     when city = 'USNYC' then 339
     when city = 'USBOS' then 339
     when city = 'FRPAR' then 664
     when city = 'USBTV' then 334
+    when city = 'CAVAN' then 319
+    when city = 'DEBER' then 651
+    when city = 'NLAMS' then 664
+    when city = 'GBLON' then 663
+    when city = 'AUMEL' then 808
 end; # mapped from RESOLVE ecoregion at each city centroid
 
 param data_version string default '2';

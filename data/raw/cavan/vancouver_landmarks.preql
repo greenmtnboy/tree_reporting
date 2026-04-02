@@ -1,0 +1,36 @@
+import ..landmark_common;
+
+root datasource vancouver_landmarks_update_time (
+    data_updated_through: cavan_landmark_data_updated_through
+)
+file `./vancouver_landmarks_probe.py`;
+
+
+root partial datasource raw_vancouver_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    category: ?category,
+    evaluation_group: ?evaluation_group,
+)
+grain (landmark_id)
+complete where city = 'CAVAN'
+file `./vancouver_landmarks.py`;
+
+
+partial datasource vancouver_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?category,
+    ?evaluation_group,
+    cavan_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'CAVAN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cavan_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/cavan_landmark_info_v{data_version}.parquet`
+freshness by cavan_landmark_data_updated_through;

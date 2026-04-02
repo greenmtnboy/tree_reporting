@@ -1,4 +1,5 @@
 import type { TreeForm } from '../types'
+import { CATEGORY_COLORS } from '../treeFormColors'
 
 interface CategoryInfo {
   category: TreeForm
@@ -35,17 +36,7 @@ const GENUS_TO_CATEGORY: Record<string, TreeForm> = {
   lagerstroemia: 'multi_trunk',
 }
 
-export const CATEGORY_COLORS: Record<TreeForm, string> = {
-  palm: '#e6a835',
-  broadleaf: '#4CAF50',
-  conifer: '#2E7D32',
-  columnar: '#43A047',
-  ornamental: '#E91E63',
-  spreading: '#8BC34A',
-  weeping: '#26A69A',
-  multi_trunk: '#8D6E63',
-  default: '#66BB6A',
-}
+export { CATEGORY_COLORS }
 
 export const CATEGORY_LABELS: Record<TreeForm, string> = {
   palm: 'Palm',

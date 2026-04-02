@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
 
 """
@@ -23,10 +23,19 @@ Field mapping:
 
 import io
 import sys
+from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import requests
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import (
+    emit,
+    validate_coordinates,
+    download_parquet as _download_parquet,
+    parse_wkb_point,
+    make_point_wkt,
+)
 
 DATASET_URL = (
     "https://data.iledefrance.fr/api/explore/v2.1/catalog/datasets/"
@@ -40,14 +49,7 @@ DATASET_URL = (
 
 
 def download_parquet() -> io.BytesIO:
-    r = requests.get(DATASET_URL, stream=True, timeout=180)
-    r.raise_for_status()
-    buf = io.BytesIO()
-    for chunk in r.iter_content(chunk_size=1024 * 1024):
-        if chunk:
-            buf.write(chunk)
-    buf.seek(0)
-    return buf
+    return _download_parquet(DATASET_URL, timeout=180)
 
 
 def transform(table: pa.Table) -> pa.Table:
@@ -76,17 +78,13 @@ def transform(table: pa.Table) -> pa.Table:
     name = pa.array(disambiguated, type=pa.string())
 
     # --- lat/lon + geometry_raw from coordonnees_au_format_wgs84 (WKB binary) ---
-    import struct
     coord_col = next((c for c in names if c.lower() == "coordonnees_au_format_wgs84"), None)
     if coord_col is not None:
         lon_list, lat_list = [], []
         for wkb in table[coord_col].to_pylist():
-            if wkb is None or len(wkb) < 21:
-                lon_list.append(None); lat_list.append(None)
-                continue
-            bo = '<' if wkb[0] == 1 else '>'
-            x, y = struct.unpack_from(bo + 'dd', wkb, 5)
-            lon_list.append(x); lat_list.append(y)
+            x, y = parse_wkb_point(wkb)
+            lon_list.append(x)
+            lat_list.append(y)
     else:
         n = table.num_rows
         lat_list = [None] * n
@@ -95,10 +93,7 @@ def transform(table: pa.Table) -> pa.Table:
     lat = pa.array(lat_list, type=pa.float64())
     lon = pa.array(lon_list, type=pa.float64())
     geometry_raw = pa.array(
-        [
-            f"POINT({lo} {la})" if lo is not None and la is not None else None
-            for lo, la in zip(lon_list, lat_list)
-        ],
+        [make_point_wkt(lo, la) for lo, la in zip(lon_list, lat_list)],
         type=pa.string(),
     )
 
@@ -138,18 +133,7 @@ def transform(table: pa.Table) -> pa.Table:
 
 
 def validate(table: pa.Table) -> None:
-    n = table.num_rows
-    if n == 0:
-        raise ValueError("Paris landmarks ingest produced 0 rows")
-    for col in ("latitude", "longitude"):
-        null_count = table.column(col).null_count
-        if null_count / n > 0.10:
-            raise ValueError(f"Paris landmarks: '{col}' has {null_count}/{n} NULL rows ({null_count/n:.1%}) — exceeds 10% threshold")
-
-
-def emit(table: pa.Table) -> None:
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
+    validate_coordinates(table, city="Paris landmarks")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
 
 import sys
@@ -9,6 +9,9 @@ import io
 import requests
 import pyarrow as pa
 import pyarrow.csv as pv
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import emit
 
 DATASET_ID = "rzic-39gi"
 DATASET_URL = (
@@ -53,11 +56,6 @@ def add_city_column(table: pa.Table) -> pa.Table:
     return table.append_column(
         "city", pa.array(["USSFO"] * table.num_rows, type=pa.string())
     )
-
-
-def emit(table: pa.Table) -> None:
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
 
 
 if __name__ == "__main__":

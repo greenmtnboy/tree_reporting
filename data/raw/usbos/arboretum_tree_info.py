@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
 
 import sys
@@ -9,6 +9,9 @@ import math
 import requests
 import pyarrow as pa
 from datetime import date, timezone, datetime
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import emit, normalize_species
 
 BASE_URL = "https://gis.arboretum.harvard.edu/arcgis/rest/services/Maps/Explorer/MapServer/34/query"
 PAGE_SIZE = 100_000
@@ -16,13 +19,6 @@ OUT_FIELDS = "OBJECTID,SCIENTIFIC_NAME,COMMON_NAME,LATITUDE,LONGITUDE,DBH_NUM,DB
 
 # Only include living, geographically mapped specimens
 WHERE = "IS_DEAD=0 AND IS_MAPPED=1"
-
-
-def normalize_species(s: str | None) -> str | None:
-    if not s or not s.strip():
-        return None
-    parts = s.strip().split()
-    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
 
 
 def strip_cultivar(name: str | None) -> str | None:
@@ -124,11 +120,6 @@ def build_table(records: list[dict]) -> pa.Table:
             "diameter_at_breast_height": pa.array(dbhs, type=pa.float64()),
         }
     )
-
-
-def emit(table: pa.Table) -> None:
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
 
 
 if __name__ == "__main__":

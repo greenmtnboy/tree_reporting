@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
 
 import re
@@ -11,6 +11,9 @@ import requests
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.csv as pv
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import emit, normalize_species
 
 DATASET_ID = "hn5i-inap"
 DATASET_URL = (
@@ -50,13 +53,6 @@ def parse_point_column(table: pa.Table, col: str) -> tuple[pa.Array, pa.Array]:
                 lons.append(None)
                 lats.append(None)
     return pa.array(lons, type=pa.float64()), pa.array(lats, type=pa.float64())
-
-
-def normalize_species(s: str | None) -> str | None:
-    if not s or not s.strip():
-        return None
-    parts = s.strip().split()
-    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
 
 
 def cast_columns(table: pa.Table) -> pa.Table:
@@ -138,11 +134,6 @@ def add_city_column(table: pa.Table) -> pa.Table:
     return table.append_column(
         "city", pa.array(["USNYC"] * table.num_rows, type=pa.string())
     )
-
-
-def emit(table: pa.Table) -> None:
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
 
 
 if __name__ == "__main__":

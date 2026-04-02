@@ -1,0 +1,37 @@
+import ..tree_common;
+
+root datasource vancouver_update_time (
+    data_updated_through: cavan_data_updated_through
+)
+file `./vancouver_update_time.py`;
+
+root partial datasource vancouver_raw_tree_info (
+    tree_id: tree_id,
+    city: city,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+)
+grain (tree_id)
+complete where city = 'CAVAN'
+file `./vancouver_tree_info.py`;
+
+
+partial datasource vancouver_tree_info (
+    tree_id,
+    city,
+    species,
+    ?tree_name,
+    ?plant_date,
+    ?diameter_at_breast_height,
+    ?latitude,
+    ?longitude,
+    cavan_data_updated_through,
+)
+grain (tree_id)
+complete where city = 'CAVAN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavan_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cavan_tree_info_v{data_version}.parquet`
+freshness by cavan_data_updated_through;

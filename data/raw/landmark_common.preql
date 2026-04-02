@@ -41,6 +41,11 @@ property landmark_id.designation_date date;  # official designation date
 
 property landmark_id.neighborhood string;    # Boston neighborhood
 
+# --- Vancouver-specific properties ---
+
+property landmark_id.category string;        # landmark category (e.g. "Architecture", "Cultural")
+property landmark_id.evaluation_group string; # evaluation group classification
+
 # --- Paris-specific properties ---
 
 property landmark_id.arrondissement string;   # Paris arrondissement (e.g. "Paris 1er Arrondissement")
@@ -54,4 +59,9 @@ property <*>.usnyc_landmark_data_updated_through datetime;
 property <*>.usbos_landmark_data_updated_through datetime;
 property <*>.frpar_landmark_data_updated_through datetime;
 property <*>.usbtv_landmark_data_updated_through datetime;
-auto latest_landmark_update_through <- greatest(ussfo_landmark_data_updated_through, usnyc_landmark_data_updated_through, usbos_landmark_data_updated_through, frpar_landmark_data_updated_through, usbtv_landmark_data_updated_through);
+property <*>.cavan_landmark_data_updated_through datetime;
+property <*>.deber_landmark_data_updated_through datetime;
+property <*>.nlams_landmark_data_updated_through datetime;
+property <*>.gblon_landmark_data_updated_through datetime;
+property <*>.aumel_landmark_data_updated_through datetime;
+auto latest_landmark_update_through <- greatest(ussfo_landmark_data_updated_through, usnyc_landmark_data_updated_through, usbos_landmark_data_updated_through, frpar_landmark_data_updated_through, usbtv_landmark_data_updated_through, cavan_landmark_data_updated_through, deber_landmark_data_updated_through, nlams_landmark_data_updated_through, gblon_landmark_data_updated_through, aumel_landmark_data_updated_through);

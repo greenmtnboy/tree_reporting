@@ -42,6 +42,36 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'nearctic',
   },
+  CAVAN: {
+    ecoregionId: 524,
+    usdaZone: 8,
+    biome: 'Temperate Conifer Forests',
+    realm: 'nearctic',
+  },
+  DEBER: {
+    ecoregionId: 680,
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  NLAMS: {
+    ecoregionId: 661,
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  GBLON: {
+    ecoregionId: 660,
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  AUMEL: {
+    ecoregionId: 801,
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'australasian',
+  },
 }
 
 function escapeStringLiteral(value: string) {

@@ -1,13 +1,16 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
 
 import sys
 import requests
 import pyarrow as pa
 from datetime import date
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import emit, normalize_species
 
 BASE_URL = "https://maps.burlingtonvt.gov/arcgis/rest/services/Tree_Sites_Public_View/FeatureServer/0/query"
 PAGE_SIZE = 2_000
@@ -15,13 +18,6 @@ OUT_FIELDS = "OBJECTID,botanic,common,planted,diameter"
 
 # Active tree sites only (T = Tree; excludes R = Removed, S = Stump, etc.)
 WHERE = "site_typ = 'T'"
-
-
-def normalize_species(s: str | None) -> str | None:
-    if not s or not s.strip():
-        return None
-    parts = s.strip().split()
-    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
 
 
 def parse_plant_date(year: int | None) -> date | None:
@@ -118,11 +114,6 @@ def build_table(attrs: list[dict], geoms: list[dict]) -> pa.Table:
             "diameter_at_breast_height": pa.array(dbhs, type=pa.float64()),
         }
     )
-
-
-def emit(table: pa.Table) -> None:
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
 
 
 if __name__ == "__main__":

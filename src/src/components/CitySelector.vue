@@ -13,6 +13,11 @@ import { useMapData, CITY_CONFIG, type CityCode } from '../composables/useMapDat
 const COUNTRY_BY_PREFIX: Record<string, string> = {
   US: 'United States',
   FR: 'France',
+  CA: 'Canada',
+  DE: 'Germany',
+  NL: 'Netherlands',
+  GB: 'United Kingdom',
+  AU: 'Australia',
 }
 
 const router = useRouter()
