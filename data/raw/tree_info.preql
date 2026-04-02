@@ -5,7 +5,7 @@ import usbos.boston_tree_info;
 import frpar.paris_tree_info;
 import usbtv.burlington_tree_info;
 import cavan.vancouver_tree_info;
-# import deber.berlin_tree_info;
+import deber.berlin_tree_info;
 import nlams.amsterdam_tree_info;
 import gblon.london_tree_info;
 import aumel.melbourne_tree_info;
@@ -17,7 +17,7 @@ usbos_data_updated_through,
 frpar_data_updated_through, 
 usbtv_data_updated_through, 
 cavan_data_updated_through, 
-# deber_data_updated_through, 
+deber_data_updated_through, 
 nlams_data_updated_through, 
 gblon_data_updated_through, 
 aumel_data_updated_through);

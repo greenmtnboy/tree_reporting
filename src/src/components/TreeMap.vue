@@ -113,13 +113,15 @@ const introLockedRangeByZoom = new Map<number, { minX: number; maxX: number; min
 const INITIAL_TILE_PREFETCH_SCALE = 3.5
 const SCROLL_WHEEL_ZOOM_RATE = 1 / 5800
 const SCROLL_ZOOM_RATE = 1 / 400
-const WASD_PAN_PX = 100
+const WASD_ACCEL = 3
+const WASD_MAX_SPEED = 22
+const WASD_FRICTION = 0.82
 
-const WASD_MAP: Record<string, [number, number]> = {
-  w: [0, -WASD_PAN_PX],
-  a: [-WASD_PAN_PX, 0],
-  s: [0, WASD_PAN_PX],
-  d: [WASD_PAN_PX, 0],
+const WASD_DIRS: Record<string, [number, number]> = {
+  w: [0, -1],
+  a: [-1, 0],
+  s: [0, 1],
+  d: [1, 0],
 }
 
 // --- Composables ---
@@ -647,17 +649,57 @@ function bindLandmarkInteractions() {
   })
 }
 
-// --- WASD keyboard pan ---
+// --- WASD keyboard pan (smooth acceleration) ---
+
+const wasdHeld = new Set<string>()
+const wasdVelocity = { x: 0, y: 0 }
+let wasdRafId: number | null = null
+
+function wasdTick() {
+  let dx = 0, dy = 0
+  for (const key of wasdHeld) {
+    const dir = WASD_DIRS[key]
+    if (dir) { dx += dir[0]; dy += dir[1] }
+  }
+  if (dx !== 0 && dy !== 0) {
+    const len = Math.sqrt(dx * dx + dy * dy)
+    dx /= len; dy /= len
+  }
+  if (dx !== 0 || dy !== 0) {
+    wasdVelocity.x += dx * WASD_ACCEL
+    wasdVelocity.y += dy * WASD_ACCEL
+    const speed = Math.sqrt(wasdVelocity.x ** 2 + wasdVelocity.y ** 2)
+    if (speed > WASD_MAX_SPEED) {
+      wasdVelocity.x = (wasdVelocity.x / speed) * WASD_MAX_SPEED
+      wasdVelocity.y = (wasdVelocity.y / speed) * WASD_MAX_SPEED
+    }
+  } else {
+    wasdVelocity.x *= WASD_FRICTION
+    wasdVelocity.y *= WASD_FRICTION
+  }
+  if (Math.abs(wasdVelocity.x) > 0.1 || Math.abs(wasdVelocity.y) > 0.1) {
+    mapRef.value?.panBy([wasdVelocity.x, wasdVelocity.y], { duration: 0 })
+    wasdRafId = requestAnimationFrame(wasdTick)
+  } else {
+    wasdVelocity.x = 0
+    wasdVelocity.y = 0
+    wasdRafId = null
+  }
+}
 
 function onWasdKeyDown(e: KeyboardEvent) {
   if (!mapRef.value) return
-  // Skip when focus is inside a text field (chat box, search inputs, etc.)
   const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
   if (tag === 'input' || tag === 'textarea' || (e.target as HTMLElement)?.isContentEditable) return
-  const delta = WASD_MAP[e.key.toLowerCase()]
-  if (!delta) return
+  const key = e.key.toLowerCase()
+  if (!WASD_DIRS[key]) return
   e.preventDefault()
-  mapRef.value.panBy(delta, { duration: 200 })
+  wasdHeld.add(key)
+  if (wasdRafId === null) wasdRafId = requestAnimationFrame(wasdTick)
+}
+
+function onWasdKeyUp(e: KeyboardEvent) {
+  wasdHeld.delete(e.key.toLowerCase())
 }
 
 // --- Cache purge ---
@@ -891,6 +933,7 @@ watch(selectedCity, (city) => {
 
 onMounted(async () => {
   window.addEventListener('keydown', onWasdKeyDown)
+  window.addEventListener('keyup', onWasdKeyUp)
   // Resolve city from IP before initialising the map so the initial center is correct.
   await router.isReady()
   const mountedRouteCity = readRouteCity(route.query.city)
@@ -1075,6 +1118,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onWasdKeyDown)
+  window.removeEventListener('keyup', onWasdKeyUp)
+  if (wasdRafId !== null) cancelAnimationFrame(wasdRafId)
   stopTileRefreshMessage()
   cancelIntro()
   if (pendingSwoopFlyTimeout != null) {
