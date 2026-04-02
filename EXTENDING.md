@@ -35,7 +35,7 @@ All GCS parquet files use a versioned naming scheme: `{name}_v{DATA_VERSION}.par
 
 The version is a single integer defined in two places — keep them in sync when bumping:
 
-- **`data/raw/_tree_shared.py`** — `DATA_VERSION = 1` (used by all Python scripts)
+- **`data/raw/enrichment/_tree_shared.py`** — `DATA_VERSION = 1` (used by the tree enrichment Python scripts)
 - **`src/src/workers/parquetUrls.ts`** — `const DATA_VERSION = 1` (used by the browser worker)
 
 Preql datasource files use the `f\`` template syntax to interpolate the version:
@@ -244,7 +244,7 @@ trilogy run data/raw/tree_info.preql --city {CODE}
 
 ### 9. Update the Frontend
 
-**a) `src/src/workers/parquetUrls.ts`** — the `cityTreeParquetUrl` and `cityLandmarkParquetUrl` functions use a regex `/^[a-z]{2}[a-z]{3}$/` to validate city codes (5 lowercase letters). No code changes needed for new cities — just ensure the `DATA_VERSION` constant matches `_tree_shared.py`.
+**a) `src/src/workers/parquetUrls.ts`** — the `cityTreeParquetUrl` and `cityLandmarkParquetUrl` functions use a regex `/^[a-z]{2}[a-z]{3}$/` to validate city codes (5 lowercase letters). No code changes needed for new cities — just ensure the `DATA_VERSION` constant matches `data/raw/enrichment/_tree_shared.py`.
 
 **b) `src/src/trilogyModels.ts`** — add raw imports and entries in `ALL_MODEL_SOURCES` for both the tree and landmarks preql files. The agent chat's query resolver loads models from this list at runtime; omitting a city here means the agent cannot resolve queries against that city's data even though the parquet is loaded in DuckDB.
 

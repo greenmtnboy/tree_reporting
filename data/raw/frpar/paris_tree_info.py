@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
 
 """
@@ -18,12 +18,21 @@ Field mapping:
 """
 
 import io
-import math
 import sys
+from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import requests
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import (
+    emit,
+    normalize_species,
+    validate_coordinates,
+    download_parquet as _download_parquet,
+    parse_wkb_point,
+    circumference_cm_to_dbh_inches,
+)
 
 # OpenDataSoft v2 parquet export — full dataset, no pagination needed
 DATASET_URL = (
@@ -35,21 +44,7 @@ DATASET_URL = (
 
 
 def download_parquet() -> io.BytesIO:
-    r = requests.get(DATASET_URL, stream=True, timeout=180)
-    r.raise_for_status()
-    buf = io.BytesIO()
-    for chunk in r.iter_content(chunk_size=1024 * 1024):
-        if chunk:
-            buf.write(chunk)
-    buf.seek(0)
-    return buf
-
-
-def normalize_species(s: str | None) -> str | None:
-    if not s or not s.strip():
-        return None
-    parts = s.strip().split()
-    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
+    return _download_parquet(DATASET_URL, timeout=180)
 
 
 def transform(table: pa.Table) -> pa.Table:
@@ -84,17 +79,13 @@ def transform(table: pa.Table) -> pa.Table:
     )
 
     # --- lat/lon from geo_point_2d (WKB binary: byte_order + uint32 type + double x + double y) ---
-    import struct
     geo_col = next((c for c in names if c.lower() == "geo_point_2d"), None)
     if geo_col is not None:
         lons, lats = [], []
         for wkb in table[geo_col].to_pylist():
-            if wkb is None or len(wkb) < 21:
-                lons.append(None); lats.append(None)
-                continue
-            bo = '<' if wkb[0] == 1 else '>'
-            x, y = struct.unpack_from(bo + 'dd', wkb, 5)
-            lons.append(x); lats.append(y)
+            x, y = parse_wkb_point(wkb)
+            lons.append(x)
+            lats.append(y)
         lat = pa.array(lats, type=pa.float64())
         lon = pa.array(lons, type=pa.float64())
     else:
@@ -105,7 +96,7 @@ def transform(table: pa.Table) -> pa.Table:
     circ_col = next((c for c in names if c.lower() == "circonferenceencm"), None)
     circ_list = table[circ_col].to_pylist() if circ_col else [None] * table.num_rows
     dbh = pa.array(
-        [float(v) / (math.pi * 2.54) if v is not None else None for v in circ_list],
+        [circumference_cm_to_dbh_inches(v) for v in circ_list],
         type=pa.float64(),
     )
 
@@ -125,21 +116,7 @@ def transform(table: pa.Table) -> pa.Table:
 
 
 def validate(table: pa.Table) -> None:
-    n = table.num_rows
-    if n == 0:
-        raise ValueError("Paris ingest produced 0 rows")
-    for col in ("latitude", "longitude"):
-        null_count = table.column(col).null_count
-        if null_count == n:
-            raise ValueError(f"Paris ingest: '{col}' is NULL for all {n} rows — geo extraction failed")
-        null_pct = null_count / n
-        if null_pct > 0.1:
-            raise ValueError(f"Paris ingest: '{col}' is NULL for {null_pct:.0%} of rows ({null_count}/{n})")
-
-
-def emit(table: pa.Table) -> None:
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
+    validate_coordinates(table, city="Paris")
 
 
 if __name__ == "__main__":

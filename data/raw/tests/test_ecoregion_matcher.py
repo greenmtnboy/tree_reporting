@@ -1,4 +1,14 @@
+#!/usr/bin/env -S uv run
+# /// script
+# requires-python = ">=3.13"
+# dependencies = []
+# ///
+
+import sys
 import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ecoregion_matcher import (
     build_native_range_evidence,

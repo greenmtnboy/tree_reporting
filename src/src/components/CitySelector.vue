@@ -1,18 +1,24 @@
 <template>
   <select class="city-select" :value="selectedCity" aria-label="Select city" @change="handleChange">
-    <option v-for="(cfg, code) in CITY_CONFIG" :key="code" :value="code">
-      {{ formatCityLabel(code, cfg.name) }}
+    <option v-for="{ code, label } in sortedCities" :key="code" :value="code">
+      {{ label }}
     </option>
   </select>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMapData, CITY_CONFIG, type CityCode } from '../composables/useMapData'
 
 const COUNTRY_BY_PREFIX: Record<string, string> = {
   US: 'United States',
   FR: 'France',
+  CA: 'Canada',
+  DE: 'Germany',
+  NL: 'Netherlands',
+  GB: 'United Kingdom',
+  AU: 'Australia',
 }
 
 const router = useRouter()
@@ -23,6 +29,12 @@ function formatCityLabel(code: string, name: string) {
   const country = COUNTRY_BY_PREFIX[code.slice(0, 2)]
   return country ? `${name}, ${country}` : name
 }
+
+const sortedCities = computed(() =>
+  Object.entries(CITY_CONFIG)
+    .map(([code, cfg]) => ({ code, label: formatCityLabel(code, cfg.name) }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+)
 
 function handleChange(e: Event) {
   const city = (e.target as HTMLSelectElement).value as CityCode

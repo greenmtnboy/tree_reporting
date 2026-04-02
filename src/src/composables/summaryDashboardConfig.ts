@@ -1,5 +1,6 @@
 import type { ChartConfig, DashboardImport } from '@trilogy-data/trilogy-studio-components/dashboard'
 import { CITY_CONFIG, type CityCode } from './useMapData'
+import { treeFormColorSql } from '../treeFormColors'
 
 export type SummaryDashboardChart = {
   id: string
@@ -257,17 +258,7 @@ ORDER BY tree_count DESC;`,
     query: `import std.color;
 SELECT
 tree_form,
-case lower(tree_form)
-when 'palm' then '#D4A14A'
-when 'broadleaf' then '#A7E3B2'
-when 'columnar' then '#6BAF92'
-when 'conifer' then '#1F5A4E'
-when 'ornamental' then '#A96F49'
-when 'spreading' then '#2F7D4F'
-when 'weeping' then '#5F9EA0'
-when 'multi_trunk' then '#8B6B4A'
-else '#7E9D86'
-end::string::hex as cat_color,
+${treeFormColorSql('tree_form', 'cat_color')},
 count(tree_id) as tree_count
 WHERE tree_form IS NOT NULL
 ORDER BY tree_count DESC;`,

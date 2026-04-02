@@ -30,18 +30,7 @@ const MAX_PARALLEL_TILE_WORK = 3
 const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
 const COLOR_MAP_TABLE = '__tree_color_map'
 
-// Default category → hex color mapping (matches CATEGORY_COLORS in useTreeCategories.ts)
-const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
-  palm: '#e6a835',
-  broadleaf: '#4CAF50',
-  conifer: '#2E7D32',
-  columnar: '#43A047',
-  ornamental: '#E91E63',
-  spreading: '#8BC34A',
-  weeping: '#26A69A',
-  multi_trunk: '#8D6E63',
-  default: '#66BB6A',
-}
+import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 
 const DEFAULT_CATEGORY_LABELS: Record<string, string> = {
   '#e6a835': 'Palm',

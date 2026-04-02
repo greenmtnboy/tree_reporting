@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["duckdb", "pyarrow"]
+# dependencies = ["duckdb", "pyarrow", "pytrilogy"]
 # ///
 """Backfill tree_enrichment.parquet to use scientific-name-only keys.
 
@@ -23,7 +23,7 @@ import sys
 import duckdb
 import pyarrow.parquet as pq
 
-from _tree_shared import ENRICHMENT_PARQUET, ENRICHMENT_GCS_URI
+from enrichment._tree_shared import ENRICHMENT_PARQUET, ENRICHMENT_GCS_URI
 
 OUTPUT_PATH = "tree_enrichment.parquet"
 

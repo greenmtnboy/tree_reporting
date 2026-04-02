@@ -1,0 +1,30 @@
+import ..landmark_common;
+
+root datasource berlin_landmarks_update_time (
+    data_updated_through: deber_landmark_data_updated_through
+)
+file `./berlin_landmarks_probe.py`;
+
+root partial datasource raw_berlin_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+)
+grain (landmark_id)
+complete where city = 'DEBER'
+file `./berlin_landmarks.py`;
+
+partial datasource berlin_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    deber_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'DEBER'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/deber_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/deber_landmark_info_v{data_version}.parquet`
+freshness by deber_landmark_data_updated_through;

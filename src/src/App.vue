@@ -134,6 +134,90 @@ function makeTemperateTreeSvg(season: SeasonName) {
   `)
 }
 
+function makeConiferBackgroundSvg(season: SeasonName) {
+  const palette = {
+    spring: { far: '#172e24', near: '#1e3d2c', floor: '#2c5a3e' },
+    summer: { far: '#102418', near: '#163222', floor: '#224836' },
+    autumn: { far: '#1a2e22', near: '#253c2c', floor: '#2e4e38' },
+    winter: { far: '#18262e', near: '#223240', floor: '#2e404e' },
+  }[season]
+
+  return svgUrl(`
+    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 980 900'>
+      <path d='M0 900V480C80 452 150 424 220 394C290 362 360 340 440 316C510 296 580 300 650 278C720 256 800 240 900 222C940 214 960 228 980 218V900Z'
+        fill='${palette.far}' fill-opacity='.2'/>
+      <path d='M0 900V680C28 654 52 622 80 602C100 588 118 604 140 580C162 556 172 530 200 518C220 508 242 526 264 506C286 486 298 462 328 452C350 444 372 464 396 446C418 430 432 408 460 400C482 392 506 412 530 396C552 380 566 358 596 350C618 342 642 362 670 344C692 328 710 308 746 300C768 292 794 312 826 292C852 278 876 258 930 246C956 238 970 254 980 244V900Z'
+        fill='${palette.near}' fill-opacity='.2'/>
+      <path d='M0 900V808C70 792 140 782 210 770C290 756 370 748 460 738C540 730 620 736 700 724C778 714 858 700 980 686V900Z'
+        fill='${palette.floor}' fill-opacity='.15'/>
+    </svg>
+  `)
+}
+
+function makeConiferAccentSvg(season: SeasonName) {
+  const palette = {
+    spring: { mist: '#9ec8bc', stream: '#68b0c4' },
+    summer: { mist: '#80b4aa', stream: '#50a0b8' },
+    autumn: { mist: '#8caaa4', stream: '#5c8898' },
+    winter: { mist: '#a8c4cc', stream: '#6e9cb0' },
+  }[season]
+
+  return svgUrl(`
+    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 980 900'>
+      <path d='M0 700C120 680 240 668 360 658C480 648 580 654 700 642C800 632 890 626 980 616V720C880 734 780 742 680 750C560 760 440 756 340 766C220 778 110 794 0 814Z'
+        fill='${palette.mist}' fill-opacity='.08'/>
+      <path d='M400 900C434 852 462 818 498 782C534 746 566 734 608 708C648 684 692 684 736 656C778 628 820 578 888 536C928 512 956 518 980 506V580C952 596 924 616 882 652C828 694 782 744 736 778C692 810 646 822 602 848C558 874 520 900 476 900Z'
+        fill='${palette.stream}' fill-opacity='.13'/>
+    </svg>
+  `)
+}
+
+function makeConiferTreeSvg(season: SeasonName) {
+  const palette = {
+    spring: { trunk: '#3a2c1c', canopy: '#2e6e48', snow: 'none' },
+    summer: { trunk: '#3a2c1c', canopy: '#1e5c38', snow: 'none' },
+    autumn: { trunk: '#3e2e1e', canopy: '#2a5c40', snow: 'none' },
+    winter: { trunk: '#4a5860', canopy: '#2a4c4a', snow: '#ccdde4' },
+  }[season]
+
+  const snowAccents = season === 'winter'
+    ? `
+      <g fill='${palette.snow}' fill-opacity='.18'>
+        <polygon points='560,510 516,558 604,558'/>
+        <polygon points='560,466 522,508 598,508'/>
+        <polygon points='750,488 710,534 790,534'/>
+        <polygon points='750,444 714,484 786,484'/>
+      </g>`
+    : ''
+
+  return svgUrl(`
+    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 980 900'>
+      <g fill='${palette.trunk}' fill-opacity='.22'>
+        <rect x='554' y='598' width='12' height='222' rx='4'/>
+        <rect x='745' y='576' width='10' height='244' rx='4'/>
+      </g>
+      <g fill='${palette.canopy}'>
+        <polygon points='560,608 490,684 630,684' fill-opacity='.22'/>
+        <polygon points='560,558 498,628 622,628' fill-opacity='.22'/>
+        <polygon points='560,512 506,574 614,574' fill-opacity='.2'/>
+        <polygon points='560,470 512,526 608,526' fill-opacity='.19'/>
+        <polygon points='560,432 518,480 602,480' fill-opacity='.17'/>
+        <polygon points='560,400 522,442 598,442' fill-opacity='.15'/>
+        <polygon points='560,372 530,406 590,406' fill-opacity='.13'/>
+        <polygon points='750,588 684,660 816,660' fill-opacity='.2'/>
+        <polygon points='750,540 690,606 810,606' fill-opacity='.2'/>
+        <polygon points='750,496 696,554 804,554' fill-opacity='.18'/>
+        <polygon points='750,456 702,508 798,508' fill-opacity='.17'/>
+        <polygon points='750,420 708,464 792,464' fill-opacity='.16'/>
+        <polygon points='750,388 712,426 788,426' fill-opacity='.14'/>
+        <polygon points='750,360 718,392 782,392' fill-opacity='.13'/>
+        <polygon points='750,336 722,362 778,362' fill-opacity='.11'/>
+      </g>
+      ${snowAccents}
+    </svg>
+  `)
+}
+
 function makeMediterraneanBackgroundSvg(season: SeasonName) {
   const palette = {
     spring: { far: '#2d3827', near: '#658d58', ridge: '#b8d48f' },
@@ -279,6 +363,31 @@ function buildBackgroundTheme(biome: string, season: SeasonName): BackgroundThem
       accentPosition: 'right -1vw bottom -1vh',
       treePosition: 'right 4vw bottom -1vh',
       opacity: season === 'summer' ? '0.94' : '0.88',
+    }
+  }
+
+  if (normalizedBiome.includes('conifer')) {
+    const seasonal = {
+      spring: ['rgba(46, 120, 90, 0.26)', 'rgba(110, 190, 158, 0.13)', 'rgba(14, 44, 32, 0.2)'],
+      summer: ['rgba(24, 96, 66, 0.34)', 'rgba(72, 154, 118, 0.16)', 'rgba(10, 36, 26, 0.2)'],
+      autumn: ['rgba(52, 106, 82, 0.28)', 'rgba(96, 154, 124, 0.13)', 'rgba(20, 38, 30, 0.2)'],
+      winter: ['rgba(46, 88, 110, 0.26)', 'rgba(130, 172, 192, 0.12)', 'rgba(16, 30, 40, 0.22)'],
+    }[season]
+
+    return {
+      glowPrimary: seasonal[0],
+      glowSecondary: seasonal[1],
+      wash: seasonal[2],
+      backgroundArt: makeConiferBackgroundSvg(season),
+      accentArt: makeConiferAccentSvg(season),
+      treeArt: makeConiferTreeSvg(season),
+      backgroundSize: 'min(80vw, 1180px) auto',
+      accentSize: 'min(72vw, 1040px) auto',
+      treeSize: 'min(60vw, 880px) auto',
+      backgroundPosition: 'right -2vw bottom',
+      accentPosition: 'right bottom',
+      treePosition: 'right 2vw bottom -1vh',
+      opacity: season === 'winter' ? '0.9' : '0.86',
     }
   }
 

@@ -1,0 +1,31 @@
+import ..landmark_common;
+
+root datasource amsterdam_landmarks_update_time (
+    data_updated_through: nlams_landmark_data_updated_through
+)
+file `./amsterdam_landmarks_probe.py`;
+
+root partial datasource raw_amsterdam_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+)
+grain (landmark_id)
+complete where city = 'NLAMS'
+file `./amsterdam_landmarks.py`;
+
+
+partial datasource amsterdam_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    nlams_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'NLAMS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/nlams_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/nlams_landmark_info_v{data_version}.parquet`
+freshness by nlams_landmark_data_updated_through;

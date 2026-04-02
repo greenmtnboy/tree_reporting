@@ -1,13 +1,16 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
 
 import sys
 import requests
 import pyarrow as pa
 from datetime import date, datetime, timezone
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import emit, normalize_species
 
 DATASET_ID = "82zb-7qc9"
 # Only current (non-removed) trees; request all fields we need
@@ -50,13 +53,6 @@ def fetch_all() -> list[dict]:
             break
         offset += PAGE_SIZE
     return records
-
-
-def normalize_species(s: str | None) -> str | None:
-    if not s or not s.strip():
-        return None
-    parts = s.strip().split()
-    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
 
 
 def build_table(records: list[dict]) -> pa.Table:
@@ -109,11 +105,6 @@ def build_table(records: list[dict]) -> pa.Table:
             "diameter_at_breast_height": pa.array(dbhs, type=pa.float64()),
         }
     )
-
-
-def emit(table: pa.Table) -> None:
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
 
 
 if __name__ == "__main__":
