@@ -26,6 +26,7 @@ import {
   type DashboardExecutionService,
   type ChartConfig,
   type DimensionClick,
+  type GridItemDataResponse,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 
@@ -137,10 +138,10 @@ function getQuerySignature() {
   })
 }
 
-function getItemData(itemId: string, dashboardId: string) {
-  const data = getActiveDashboardGroup().getItemData(itemId, dashboardId) as Record<string, unknown> | null
+function getItemData(itemId: string, dashboardId: string): GridItemDataResponse {
+  const data = getActiveDashboardGroup().getItemData(itemId, dashboardId) as unknown as Record<string, unknown> | null
   if (!data || typeof data !== 'object') {
-    return data
+    return data as unknown as GridItemDataResponse
   }
 
   const error = data.error
@@ -148,10 +149,10 @@ function getItemData(itemId: string, dashboardId: string) {
     return {
       ...data,
       error: JSON.stringify(error, null, 2),
-    }
+    } as unknown as GridItemDataResponse
   }
 
-  return data
+  return data as unknown as GridItemDataResponse
 }
 
 function setItemData(itemId: string, dashboardId: string, data: Record<string, unknown>) {

@@ -44,18 +44,6 @@ const SPECIES_FILTER_META: SpeciesFilterMeta[] = [
   { id: 'sp-fire-risk', field: 'fire_risk', label: 'Fire risk', format: formatSpeciesFilterValue },
 ]
 
-const SOURCE_BY_FIELD: Record<SpeciesFilterField, string> = {
-  tree_form: 'sp-tree-form',
-  native_locality_bucket: 'sp-native-locality',
-  hardiness_fit_bucket: 'sp-hardiness-fit',
-  water_resilience_bucket: 'sp-water-resilience',
-  sun_exposure_label: 'sp-sun-exposure',
-  lifespan_bucket: 'sp-lifespan',
-  growth_rate: 'sp-growth-rate',
-  wildlife_value: 'sp-wildlife-value',
-  fire_risk: 'sp-fire-risk',
-}
-
 const SPECIES_FILTER_META_BY_FIELD = new Map(
   SPECIES_FILTER_META.map((meta) => [meta.field, meta] as const),
 )

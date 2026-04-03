@@ -7,11 +7,16 @@ Urban forests aren't just stately, magnificant, or supportive of urban design - 
 See what you can discovery!
 
 Currently has data from the following cities:
-- San Franciso CA, United States
-- New York City NY, United States
-- Boston MA, United States
-- Burlington VT, United States
-- Paris, France
+- [San Francisco, CA, United States](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=USSFO)
+- [New York City, NY, United States](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=USNYC)
+- [Boston, MA, United States](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=USBOS)
+- [Burlington, VT, United States](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=USBTV)
+- [Vancouver, Canada](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=CAVAN)
+- [London, United Kingdom](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=GBLON)
+- [Amsterdam, Netherlands](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=NLAMS)
+- [Berlin, Germany](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=DEBER)
+- [Melbourne, Australia](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=AUMEL)
+- [Paris, France](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=FRPAR)
 
 **[Live page](https://greenmtnboy.github.io/sf_tree_reporting/)**
 
