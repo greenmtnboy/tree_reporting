@@ -64,11 +64,12 @@
           :class="[
             'chart-card',
             card.width === 'wide' ? 'chart-card--wide' : null,
+            emptyChartIds.has(card.id) ? 'chart-card--empty' : null,
           ]"
         >
           <div class="chart-card-header">
-            <h3>{{ chartById(card.id).title }}</h3>
-            <span v-if="chartById(card.id).subtitle" class="chart-sub">{{ chartById(card.id).subtitle }}</span>
+            <h3>{{ emptyChartIds.has(card.id) ? 'No planting data for this city' : chartById(card.id).title }}</h3>
+            <span v-if="!emptyChartIds.has(card.id) && chartById(card.id).subtitle" class="chart-sub">{{ chartById(card.id).subtitle }}</span>
           </div>
           <SummaryMarkdownCard
             v-if="chartById(card.id).renderMode === 'markdown'"
@@ -81,6 +82,7 @@
           />
           <EmbeddedDashboardChart
             v-else
+            v-show="!emptyChartIds.has(card.id)"
             :item-id="card.id"
             v-bind="sharedChartProps"
             :dashboard-group="embeddedDashboardGroup"
@@ -92,6 +94,8 @@
             :allow-cross-filter="chartById(card.id).allowCrossFilter ?? true"
             @dimension-click="handleChartClick"
             @background-click="clearChartSelection(card.id)"
+            @results-empty="emptyChartIds.add(card.id)"
+            @results-present="emptyChartIds.delete(card.id)"
           />
         </div>
       </div>
@@ -100,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   useEmbeddedDashboardGroup,
@@ -142,6 +146,8 @@ const embeddedDashboardGroup = useEmbeddedDashboardGroup({
 })
 
 const cityFilter = ref<CityCode | null>(null)
+const emptyChartIds = reactive(new Set<string>())
+
 const {
   crossFilters,
   activeSummaryFilters,
@@ -276,6 +282,7 @@ watch(
 watch(
   cityFilter,
   (city) => {
+    emptyChartIds.clear()
     crossFilters.clearAll()
     const routeCity = readSummaryRouteCity(route.query.city)
     if (route.name === 'summary' && routeCity !== city) {
@@ -488,6 +495,15 @@ watch(
 
 .chart-card--wide {
   flex: 2 1 420px;
+}
+
+.chart-card--empty {
+  height: auto;
+  min-height: 0;
+}
+
+.chart-card--empty .chart-card-header {
+  margin-bottom: 0;
 }
 
 .chart-card-header {

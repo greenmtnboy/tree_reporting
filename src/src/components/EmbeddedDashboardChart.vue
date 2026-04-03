@@ -24,7 +24,7 @@ import {
   type ChartConfig,
   type DimensionClick,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -58,6 +58,8 @@ const props = withDefaults(
 const emit = defineEmits<{
   dimensionClick: [info: DimensionClick]
   backgroundClick: []
+  resultsEmpty: []
+  resultsPresent: []
 }>()
 
 const containerRef = ref<HTMLElement | null>(null)
@@ -217,6 +219,20 @@ watch(
     })
   },
 )
+
+watchEffect(() => {
+  const data = getItemData(props.itemId, resolvedDashboardId.value) as Record<string, unknown> | null
+  if (!data || data.loading) return
+  const results = data.results as { data?: unknown[] } | null
+  if (!results) return
+  const rows = results.data
+  if (!Array.isArray(rows)) return
+  if (rows.length === 0) {
+    emit('resultsEmpty')
+  } else {
+    emit('resultsPresent')
+  }
+})
 
 onMounted(() => {
   syncExternalState()
