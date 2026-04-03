@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
 
 """
@@ -17,9 +17,12 @@ Timestamp field: gmd:dateStamp → gco:DateTime → #text  (ISO 8601, UTC)
 
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pyarrow as pa
-import requests
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import get_with_retry
 
 METADATA_URL = (
     "https://gdi.berlin.de/geonetwork/srv/api/records/"
@@ -28,12 +31,7 @@ METADATA_URL = (
 
 
 def fetch_modified_at() -> datetime:
-    r = requests.get(
-        METADATA_URL,
-        headers={"Accept": "application/json"},
-        timeout=30,
-    )
-    r.raise_for_status()
+    r = get_with_retry(METADATA_URL, headers={"Accept": "application/json"})
     data = r.json()
     # Path: gmd:dateStamp → gco:DateTime → #text  e.g. "2025-11-19T00:00:00Z"
     ts_str = data["gmd:dateStamp"]["gco:DateTime"]["#text"]

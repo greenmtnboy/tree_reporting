@@ -1,21 +1,23 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
 
 import sys
-import requests
+from pathlib import Path
 import pyarrow as pa
 from datetime import datetime, timezone
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import get_with_retry
 
 RESOURCE_ID = "995cd80f-2489-41bf-b16b-113dba4f2797"
 METADATA_URL = f"https://data.boston.gov/api/3/action/resource_show?id={RESOURCE_ID}"
 
 
 def fetch_rows_updated_at() -> datetime:
-    r = requests.get(METADATA_URL)
-    r.raise_for_status()
+    r = get_with_retry(METADATA_URL)
     meta = r.json()
 
     result = meta.get("result", {})

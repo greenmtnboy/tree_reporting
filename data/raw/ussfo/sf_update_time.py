@@ -1,21 +1,23 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
 
 import sys
-import requests
+from pathlib import Path
 import pyarrow as pa
 from datetime import datetime, timezone
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import get_with_retry
 
 DATASET_ID = "tkzw-k3nq"
 METADATA_URL = f"https://data.sfgov.org/api/views/{DATASET_ID}.json"
 
 
 def fetch_rows_updated_at() -> datetime:
-    r = requests.get(METADATA_URL)
-    r.raise_for_status()
+    r = get_with_retry(METADATA_URL)
     meta = r.json()
 
     ts = meta.get("rowsUpdatedAt")
