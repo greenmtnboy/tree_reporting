@@ -29,6 +29,18 @@
           <strong>City Summary</strong>
         </span>
       </router-link>
+      <router-link :to="speciesRoute" class="nav-link">
+        <span class="nav-icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M7 10L12 2l5 8" />
+            <path d="M12 6l-8 13h16l-8-13z" />
+            <path d="M12 19v3" />
+          </svg>
+        </span>
+        <span class="nav-copy">
+          <strong>Species</strong>
+        </span>
+      </router-link>
       <router-link :to="infoRoute" class="nav-link">
         <span class="nav-icon nav-icon--text" aria-hidden="true">&#9432;</span>
         <span class="nav-copy">
@@ -83,11 +95,12 @@ const { selectedCity } = useMapData()
 const route = useRoute()
 
 const search = ref('')
-const showLandmarksSection = computed(() => route.name !== 'summary')
+const showLandmarksSection = computed(() => route.name !== 'summary' && route.name !== 'species')
 
 const routeQuery = computed(() => ({ city: selectedCity.value }))
 const mapRoute = computed(() => ({ path: '/', query: routeQuery.value }))
 const summaryRoute = computed(() => ({ path: '/summary', query: routeQuery.value }))
+const speciesRoute = computed(() => ({ path: '/species', query: routeQuery.value }))
 const infoRoute = computed(() => ({ path: '/info', query: routeQuery.value }))
 
 const filtered = computed(() => {

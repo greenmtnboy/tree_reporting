@@ -113,7 +113,7 @@
     <div v-else class="chat-messages" ref="messagesContainer">
       <div v-if="messages.length === 0" class="chat-empty">
         <template v-if="!activeDataReady">
-          {{ isSummaryScreen ? 'Loading analytics...' : 'Loading tree data...' }}
+          {{ isSummaryScreen || isSpeciesScreen ? 'Loading analytics...' : 'Loading tree data...' }}
         </template>
         <template v-else>
           {{ emptyStateText }}
@@ -204,6 +204,13 @@ const SUMMARY_SUGGESTIONS = [
   'Clear the analytics filters',
 ]
 
+const SPECIES_SUGGESTIONS = [
+  'Set the genus to Quercus',
+  'Filter this page to Acer rubrum',
+  'What does the current species view show?',
+  'Clear the species filter but keep the genus',
+]
+
 const { messages, isLoading, isConfigured, providerType, setConnection, deleteConnection, sendMessage, clearMessages } = useChat()
 const { ready: dbReady } = useDuckDB()
 const { introComplete } = useMapIntro()
@@ -240,11 +247,12 @@ onUnmounted(() => {
 
 const isMapScreen = computed(() => route.name === 'map')
 const isSummaryScreen = computed(() => route.name === 'summary')
+const isSpeciesScreen = computed(() => route.name === 'species')
 
 watch(
-  isSummaryScreen,
-  (summaryScreen) => {
-    if (summaryScreen && !summaryReady.value) {
+  () => isSummaryScreen.value || isSpeciesScreen.value,
+  (analyticsScreen) => {
+    if (analyticsScreen && !summaryReady.value) {
       void initializeSummary()
     }
   },
@@ -252,7 +260,7 @@ watch(
 )
 
 const activeDataReady = computed(() =>
-  isSummaryScreen.value ? summaryReady.value : dbReady.value,
+  isSummaryScreen.value || isSpeciesScreen.value ? summaryReady.value : dbReady.value,
 )
 
 const inputDisabled = computed(() =>
@@ -260,22 +268,30 @@ const inputDisabled = computed(() =>
 )
 
 const suggestions = computed(() =>
-  route.name === 'summary' ? SUMMARY_SUGGESTIONS : MAP_SUGGESTIONS,
+  route.name === 'summary'
+    ? SUMMARY_SUGGESTIONS
+    : route.name === 'species'
+      ? SPECIES_SUGGESTIONS
+      : MAP_SUGGESTIONS,
 )
 
 const emptyStateText = computed(() =>
   route.name === 'summary'
     ? 'Ask me to explain or filter the analytics. Try:'
+    : route.name === 'species'
+      ? 'Ask me to inspect or change the species explorer. Try:'
     : 'Ask me about city trees. Try:',
 )
 
 const inputPlaceholder = computed(() =>
   !activeDataReady.value
-    ? isSummaryScreen.value
+    ? isSummaryScreen.value || isSpeciesScreen.value
       ? 'Loading analytics...'
       : 'Loading data...'
     : route.name === 'summary'
       ? 'Ask about analytics...'
+      : route.name === 'species'
+        ? 'Ask about the species explorer...'
       : 'Ask about trees...',
 )
 
@@ -283,7 +299,9 @@ const sendTooltip = computed(() => {
   if (isMapScreen.value && !introComplete.value) return 'Map is loading...'
   if (isLoading.value) return 'Waiting for response...'
   if (!activeDataReady.value) {
-    return isSummaryScreen.value ? 'Analytics are still loading' : 'Tree data is still loading'
+    return isSummaryScreen.value || isSpeciesScreen.value
+      ? 'Analytics are still loading'
+      : 'Tree data is still loading'
   }
   if (!userInput.value.trim()) return 'Type a message to send'
   return ''

@@ -1,22 +1,25 @@
 <template>
-  <div ref="containerRef" class="embedded-dashboard-chart">
-    <DashboardChart
-      :dashboard-id="resolvedDashboardId"
-      :item-id="itemId"
-      :get-item-data="getItemData"
-      :set-item-data="setItemData"
-      :edit-mode="false"
-      :symbols="[]"
-      :get-dashboard-query-executor="getDashboardQueryExecutor"
-      @dimension-click="handleDimensionClick"
-      @background-click="handleBackgroundClick"
-    />
-  </div>
+  <TrilogyEmbedProvider theme="dark">
+    <div ref="containerRef" class="embedded-dashboard-chart">
+      <DashboardChart
+        :dashboard-id="resolvedDashboardId"
+        :item-id="itemId"
+        :get-item-data="getItemData"
+        :set-item-data="setItemData"
+        :edit-mode="false"
+        :symbols="[]"
+        :get-dashboard-query-executor="getDashboardQueryExecutor"
+        @dimension-click="handleDimensionClick"
+        @background-click="handleBackgroundClick"
+      />
+    </div>
+  </TrilogyEmbedProvider>
 </template>
 
 <script setup lang="ts">
 import {
   DashboardChart,
+  TrilogyEmbedProvider,
   useEmbeddedDashboardGroup,
   type EmbeddedDashboardGroup,
   type DashboardImport,
@@ -135,7 +138,20 @@ function getQuerySignature() {
 }
 
 function getItemData(itemId: string, dashboardId: string) {
-  return getActiveDashboardGroup().getItemData(itemId, dashboardId)
+  const data = getActiveDashboardGroup().getItemData(itemId, dashboardId) as Record<string, unknown> | null
+  if (!data || typeof data !== 'object') {
+    return data
+  }
+
+  const error = data.error
+  if (error && typeof error === 'object') {
+    return {
+      ...data,
+      error: JSON.stringify(error, null, 2),
+    }
+  }
+
+  return data
 }
 
 function setItemData(itemId: string, dashboardId: string, data: Record<string, unknown>) {

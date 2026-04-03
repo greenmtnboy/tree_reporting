@@ -757,10 +757,13 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
   }
 }
 
-// React to URL city changes driven by the sidebar CitySelector
+// React to URL city changes driven by the sidebar CitySelector.
+// Block during initial load — IP detection or startup routing can update the URL before
+// the first city context is ready, which would start a second city-switch and race with startup.
 watch(
   () => route.query.city,
   (newCity) => {
+    if (isInitialLoading.value) return
     const city = Array.isArray(newCity) ? newCity[0] : newCity
     if (typeof city === 'string' && city in CITY_CONFIG && city !== selectedCity.value) {
       void switchCity(city as CityCode)
@@ -903,7 +906,10 @@ watch([currentMapQuery, publishedTreeIdFilterSql, mapQueryRevision], async ([que
   await setColorOverrideSql(colorOverrideSql.value)
   await setTileQuery(query)
   await setPublishedTreeIdFilterSql(filterSql)
-  addTreeLayers()
+  // Use forceTreesTileRefetchPass instead of addTreeLayers so the tile URL nonce is always
+  // incremented after a publish. setTiles/reload alone can leave MapLibre's internal tile
+  // cache serving stale data (old filtered trees popping in); a new nonce forces a clean fetch.
+  forceTreesTileRefetchPass()
   applyColorToLayers()
 })
 

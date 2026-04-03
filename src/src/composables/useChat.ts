@@ -39,6 +39,12 @@ import {
   getSummaryBaseFilters,
   readSummaryRouteCity,
 } from './summaryDashboardConfig'
+import {
+  SPECIES_DASHBOARD_IMPORTS,
+  extractGenusFromSpecies,
+  getSpeciesViewBaseFilters,
+  readSpeciesRouteCity,
+} from './speciesDashboardConfig'
 
 const API_KEY_STORAGE = 'sf_trees_api_key'
 const API_TYPE_STORAGE = 'sf_trees_provider_type'
@@ -276,8 +282,85 @@ Today's date: ${_today}`,
   )
 }
 
+function buildSpeciesSystemPrompt() {
+  const state = getActiveSpeciesState()
+  const cityName = state.city ? CITY_CONFIG[state.city].name : 'All cities'
+  const scopeSummary = [
+    `city: ${cityName}${state.city ? ` (${state.city})` : ''}`,
+    `genus: ${state.genus ?? 'none'}`,
+    `species: ${state.species ?? 'none'}`,
+  ].join(' | ')
+
+  return buildCustomTrilogyPrompt(
+    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Urban Trees species explorer. You help users explore the taxonomy-first species dashboard, which starts with a genus and can optionally narrow to a specific species, hybrid, or varietal.
+
+ACTIVE SCREEN: Species explorer.
+ACTIVE VIEW SCOPE: ${scopeSummary}.
+ACTIVE BASE FILTERS: ${state.baseFilters.length ? state.baseFilters.join(' AND ') : 'none'}.
+
+You have access to tools for querying the tree dataset inside the current species-view scope, inspecting the active species explorer state, and updating the genus/species selectors. Use set_species_filters when the user wants to change the explorer selection. Use inspect_species_view when you need to confirm the current genus/species scope before answering.
+
+AVAILABLE CONCEPTS:
+- tree_id (string) - unique identifier
+- species (string) - full scientific name
+- city (string) - city code
+- latitude / longitude (float)
+- plant_date (date)
+- diameter_at_breast_height (float)
+- common_names (string)
+- description (string)
+- tree_form (string)
+- growth_rate (string)
+- wildlife_value (string)
+- fire_risk (string)
+- drought_tolerance (string)
+- water_needs (string)
+- native_locality_bucket (string)
+- hardiness_fit_bucket (string)
+- water_resilience_bucket (string)
+- lifespan_bucket (string)
+
+TRILOGY SYNTAX RULES:
+${rulesInput}
+
+AGGREGATE FUNCTIONS: ${aggFunctions.join(', ')}
+
+COMMON FUNCTIONS: ${functions.join(', ')}
+
+VALID DATA TYPES: ${datatypes.join(', ')}
+
+IMPORTANT GUIDELINES:
+1. run_query already applies the active city/genus/species scope automatically unless the user changes the selectors first with set_species_filters.
+2. Use set_species_filters for requests like "show Acer", "switch to Quercus rubra", "clear the species filter", or "reset the explorer".
+3. If a query fails, explain the error and try a corrected version.
+4. Always finish by calling return_to_user with your complete response. Never return a plain text reply - use return_to_user to signal you are done.
+
+Be concise and helpful. When showing query results, format them clearly.
+
+Today's date: ${_today}`,
+  )
+}
+
 function getActiveSummaryCity(selectedCity: CityCode): CityCode {
   return readSummaryRouteCity(router.currentRoute.value.query.city) ?? selectedCity
+}
+
+function readRouteText(value: unknown): string | null {
+  const normalized = Array.isArray(value) ? value[0] : value
+  return typeof normalized === 'string' && normalized.length > 0 ? normalized : null
+}
+
+function getActiveSpeciesState() {
+  const route = router.currentRoute.value
+  const city = readSpeciesRouteCity(route.query.city)
+  const species = readRouteText(route.query.species)
+  const genus = readRouteText(route.query.genus) ?? extractGenusFromSpecies(species)
+  return {
+    city,
+    genus,
+    species,
+    baseFilters: getSpeciesViewBaseFilters(city, genus, species),
+  }
 }
 
 function getSummaryChartDefinitions(chartIds?: string[]) {
@@ -379,6 +462,74 @@ async function executeSummaryRunQuery(
   }
 }
 
+async function executeSpeciesRunQuery(
+  query: string,
+  initializeSummaryDashboard: () => Promise<void>,
+  setSummaryDashboardContext: ReturnType<typeof useSummaryDashboardExecution>['setDashboardContext'],
+  summaryConnectionId: string,
+  summaryQueryExecutionService: ReturnType<typeof useSummaryDashboardExecution>['queryExecutionService'],
+) {
+  await initializeSummaryDashboard()
+
+  const activeState = getActiveSpeciesState()
+  setSummaryDashboardContext(activeState.city)
+
+  const { resultPromise } = await summaryQueryExecutionService.executeQueriesBatch(
+    summaryConnectionId,
+    [{ label: 'assistant-species-run-query', query, extra_filters: activeState.baseFilters }],
+    'trilogy',
+    SPECIES_DASHBOARD_IMPORTS.map((imp) => ({ name: imp.name, alias: imp.alias })),
+  )
+
+  const batchResult = await resultPromise
+  const result = batchResult.results[0]
+
+  if (!result?.success) {
+    return {
+      success: false,
+      error:
+        result?.error ||
+        safeJsonStringifyHelper({
+          message: 'Species query failed without an explicit error.',
+          batchSuccess: batchResult.success,
+          activeFilters: activeState.baseFilters,
+          result: result ?? null,
+        }),
+    }
+  }
+
+  if (!result.results) {
+    return {
+      success: false,
+      error: safeJsonStringifyHelper({
+        message: 'Species query failed before returning a result payload.',
+        batchSuccess: batchResult.success,
+        activeFilters: activeState.baseFilters,
+        result: {
+          success: result.success,
+          error: result.error ?? null,
+          generatedSql: result.generatedSql ?? '',
+          executionTime: result.executionTime,
+          resultSize: result.resultSize,
+          columnCount: result.columnCount,
+        },
+      }),
+    }
+  }
+
+  return {
+    success: true,
+    message: safeJsonStringifyHelper({
+      ...serializeDashboardRows(result.results, 100),
+      generatedSql: result.generatedSql ?? '',
+      activeFilters: activeState.baseFilters,
+      city: activeState.city,
+      genus: activeState.genus,
+      species: activeState.species,
+    }),
+  }
+}
+
 // Module-level state (singleton)
 const messages = ref<ChatMessage[]>([])
 // LLM history in the lib's ChatMessage format — persists across sendMessage calls for multi-turn context
@@ -421,7 +572,12 @@ export function useChat() {
   const { landmarks } = useLandmarkData()
   const { selectedCity, setSelectedCity, userLocation, publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
   const { crossFilters, applyValuesForField, clearFields, summaryFilterPromptState } = useSummaryFilters()
-  const { initialize: initializeSummaryDashboard, connectionId: summaryConnectionId, queryExecutionService: summaryQueryExecutionService } = useSummaryDashboardExecution()
+  const {
+    initialize: initializeSummaryDashboard,
+    connectionId: summaryConnectionId,
+    queryExecutionService: summaryQueryExecutionService,
+    setDashboardContext: setSummaryDashboardContext,
+  } = useSummaryDashboardExecution()
   const trilogy = useTrilogyRuntime()
 
   /** If (lat, lng) is closer to a different city than the current one, switch to it. */
@@ -521,7 +677,8 @@ export function useChat() {
       switch (name) {
         case 'run_query': {
           const { query } = input as { query: string }
-          if (resolveRouteScreen(router.currentRoute.value) === 'summary') {
+          const screen = resolveRouteScreen(router.currentRoute.value)
+          if (screen === 'summary') {
             return executeSummaryRunQuery(
               query,
               selectedCity.value,
@@ -529,6 +686,15 @@ export function useChat() {
               summaryConnectionId,
               summaryQueryExecutionService,
               crossFilters,
+            )
+          }
+          if (screen === 'species') {
+            return executeSpeciesRunQuery(
+              query,
+              initializeSummaryDashboard,
+              setSummaryDashboardContext,
+              summaryConnectionId,
+              summaryQueryExecutionService,
             )
           }
           const sql = await compilePreQL(query)
@@ -825,6 +991,90 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
             }),
           }
         }
+        case 'set_species_filters': {
+          if (resolveRouteScreen(router.currentRoute.value) !== 'species') {
+            return {
+              success: false,
+              error: 'set_species_filters is only available on the species explorer page.',
+            }
+          }
+
+          const { operation, genus, species } = input as {
+            operation: 'replace' | 'clear_species' | 'clear_all'
+            genus?: string
+            species?: string
+          }
+
+          const route = router.currentRoute.value
+          const nextQuery = { ...route.query }
+
+          if (operation === 'clear_all') {
+            delete nextQuery.genus
+            delete nextQuery.species
+          } else if (operation === 'clear_species') {
+            delete nextQuery.species
+          } else if (operation === 'replace') {
+            const nextSpecies = typeof species === 'string' && species.trim() ? species.trim() : null
+            const nextGenusInput = typeof genus === 'string' && genus.trim() ? genus.trim() : null
+            const nextGenus = nextGenusInput ?? extractGenusFromSpecies(nextSpecies)
+
+            if (!nextGenus && !nextSpecies) {
+              return {
+                success: false,
+                error: 'set_species_filters with operation "replace" requires a genus or species value.',
+              }
+            }
+
+            if (nextGenus) {
+              nextQuery.genus = nextGenus
+            } else {
+              delete nextQuery.genus
+            }
+
+            if (nextSpecies) {
+              nextQuery.species = nextSpecies
+            } else {
+              delete nextQuery.species
+            }
+          } else {
+            return {
+              success: false,
+              error: `Unsupported species filter operation: ${String(operation)}`,
+            }
+          }
+
+          await router.replace({ query: nextQuery })
+          const state = getActiveSpeciesState()
+          return {
+            success: true,
+            message: safeJsonStringifyHelper({
+              city: state.city,
+              genus: state.genus,
+              species: state.species,
+              baseFilters: state.baseFilters,
+            }),
+          }
+        }
+        case 'inspect_species_view': {
+          if (resolveRouteScreen(router.currentRoute.value) !== 'species') {
+            return {
+              success: false,
+              error: 'inspect_species_view is only available on the species explorer page.',
+            }
+          }
+
+          const state = getActiveSpeciesState()
+          return {
+            success: true,
+            message: safeJsonStringifyHelper({
+              city: state.city,
+              cityName: state.city ? CITY_CONFIG[state.city].name : 'All cities',
+              genus: state.genus,
+              species: state.species,
+              baseFilters: state.baseFilters,
+            }),
+          }
+        }
         case 'send_user_message': {
           const { message } = input as { message: string }
           const intermediateMsg: ChatMessage = { role: 'assistant', content: message }
@@ -937,6 +1187,8 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
           buildSystemPrompt: () =>
             screen === 'summary'
               ? buildSummarySystemPrompt(selectedCity.value, summaryFilterPromptState.value)
+              : screen === 'species'
+                ? buildSpeciesSystemPrompt()
               : buildSystemPromptForCity(selectedCity.value, userLocation.value),
         },
       )

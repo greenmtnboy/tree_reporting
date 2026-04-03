@@ -1,5 +1,5 @@
 <template>
-  <div class="top-bar">
+  <div v-if="route.name !== 'species'" class="top-bar">
     <div class="top-bar-context">
       <span class="top-bar-label">Active city</span>
       <CitySelector />
@@ -8,7 +8,10 @@
 </template>
 
 <script setup lang="ts">
+import { useRoute } from 'vue-router'
 import CitySelector from './CitySelector.vue'
+
+const route = useRoute()
 </script>
 
 <style scoped>

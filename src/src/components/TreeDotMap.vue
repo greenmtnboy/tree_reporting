@@ -154,7 +154,7 @@ onBeforeUnmount(() => {
 })
 
 watch(
-  () => [JSON.stringify(props.filters), props.connectionId] as const,
+  () => `${props.connectionId}::${JSON.stringify(props.filters)}`,
   () => void load(),
   { immediate: true },
 )
