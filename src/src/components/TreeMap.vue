@@ -758,12 +758,14 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
 }
 
 // React to URL city changes driven by the sidebar CitySelector.
-// Block during initial load — IP detection or startup routing can update the URL before
-// the first city context is ready, which would start a second city-switch and race with startup.
+// Block until the first city context is ready — IP detection or startup routing can update
+// the URL before the parquet/DB is initialised, which would race with startup.
+// We do NOT block on introActive here: the intro animation is cosmetic and city switches
+// should work as soon as the data layer is ready.
 watch(
   () => route.query.city,
   (newCity) => {
-    if (isInitialLoading.value) return
+    if (defaultQueryLoading.value) return
     const city = Array.isArray(newCity) ? newCity[0] : newCity
     if (typeof city === 'string' && city in CITY_CONFIG && city !== selectedCity.value) {
       void switchCity(city as CityCode)
