@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
 
 """
@@ -17,16 +17,18 @@ Reads: .result.metadata_modified  (ISO 8601 string)
 """
 
 import sys
-import requests
+from pathlib import Path
 import pyarrow as pa
 from datetime import datetime, timezone
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import get_with_retry
 
 PACKAGE_URL = "https://data.london.gov.uk/api/3/action/package_show?id=2r45m"
 
 
 def fetch_modified_at() -> datetime:
-    r = requests.get(PACKAGE_URL, timeout=30)
-    r.raise_for_status()
+    r = get_with_retry(PACKAGE_URL)
     data = r.json()
     result = data.get("result", {})
     ts = result.get("metadata_modified") or result.get("metadata_created")

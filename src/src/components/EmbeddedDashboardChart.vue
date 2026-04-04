@@ -1,30 +1,34 @@
 <template>
-  <div ref="containerRef" class="embedded-dashboard-chart">
-    <DashboardChart
-      :dashboard-id="resolvedDashboardId"
-      :item-id="itemId"
-      :get-item-data="getItemData"
-      :set-item-data="setItemData"
-      :edit-mode="false"
-      :symbols="[]"
-      :get-dashboard-query-executor="getDashboardQueryExecutor"
-      @dimension-click="handleDimensionClick"
-      @background-click="handleBackgroundClick"
-    />
-  </div>
+  <TrilogyEmbedProvider theme="dark">
+    <div ref="containerRef" class="embedded-dashboard-chart">
+      <DashboardChart
+        :dashboard-id="resolvedDashboardId"
+        :item-id="itemId"
+        :get-item-data="getItemData"
+        :set-item-data="setItemData"
+        :edit-mode="false"
+        :symbols="[]"
+        :get-dashboard-query-executor="getDashboardQueryExecutor"
+        @dimension-click="handleDimensionClick"
+        @background-click="handleBackgroundClick"
+      />
+    </div>
+  </TrilogyEmbedProvider>
 </template>
 
 <script setup lang="ts">
 import {
   DashboardChart,
+  TrilogyEmbedProvider,
   useEmbeddedDashboardGroup,
   type EmbeddedDashboardGroup,
   type DashboardImport,
   type DashboardExecutionService,
   type ChartConfig,
   type DimensionClick,
+  type GridItemDataResponse,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -58,6 +62,8 @@ const props = withDefaults(
 const emit = defineEmits<{
   dimensionClick: [info: DimensionClick]
   backgroundClick: []
+  resultsEmpty: []
+  resultsPresent: []
 }>()
 
 const containerRef = ref<HTMLElement | null>(null)
@@ -132,8 +138,21 @@ function getQuerySignature() {
   })
 }
 
-function getItemData(itemId: string, dashboardId: string) {
-  return getActiveDashboardGroup().getItemData(itemId, dashboardId)
+function getItemData(itemId: string, dashboardId: string): GridItemDataResponse {
+  const data = getActiveDashboardGroup().getItemData(itemId, dashboardId) as unknown as Record<string, unknown> | null
+  if (!data || typeof data !== 'object') {
+    return data as unknown as GridItemDataResponse
+  }
+
+  const error = data.error
+  if (error && typeof error === 'object') {
+    return {
+      ...data,
+      error: JSON.stringify(error, null, 2),
+    } as unknown as GridItemDataResponse
+  }
+
+  return data as unknown as GridItemDataResponse
 }
 
 function setItemData(itemId: string, dashboardId: string, data: Record<string, unknown>) {
@@ -217,6 +236,20 @@ watch(
     })
   },
 )
+
+watchEffect(() => {
+  const data = getItemData(props.itemId, resolvedDashboardId.value) as unknown as Record<string, unknown> | null
+  if (!data || data.loading) return
+  const results = data.results as { data?: unknown[] } | null
+  if (!results) return
+  const rows = results.data
+  if (!Array.isArray(rows)) return
+  if (rows.length === 0) {
+    emit('resultsEmpty')
+  } else {
+    emit('resultsPresent')
+  }
+})
 
 onMounted(() => {
   syncExternalState()

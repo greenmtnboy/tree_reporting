@@ -116,6 +116,7 @@ def get_with_retry(
     timeout: int = 120,
     max_retries: int = 5,
     backoff: float = 2.0,
+    headers: dict | None = None,
 ) -> requests.Response:
     """GET with exponential backoff on 5xx / connection errors.
 
@@ -125,7 +126,7 @@ def get_with_retry(
     err = ""
     for attempt in range(max_retries):
         try:
-            r = requests.get(url, timeout=timeout)
+            r = requests.get(url, timeout=timeout, headers=headers)
             if r.status_code < 400:
                 return r
             if 400 <= r.status_code < 500 and r.status_code != 429:

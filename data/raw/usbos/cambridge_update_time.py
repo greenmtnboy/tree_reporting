@@ -1,13 +1,16 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
 
 import sys
-import requests
+from pathlib import Path
 import pyarrow as pa
 from datetime import datetime, timezone
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import get_with_retry
 
 # Socrata views endpoint — returns rowsUpdatedAt as a Unix timestamp
 DATASET_ID = "82zb-7qc9"
@@ -15,8 +18,7 @@ METADATA_URL = f"https://data.cambridgema.gov/api/views/{DATASET_ID}.json"
 
 
 def fetch_modified_at() -> datetime:
-    r = requests.get(METADATA_URL, timeout=30)
-    r.raise_for_status()
+    r = get_with_retry(METADATA_URL)
     data = r.json()
 
     ts = data.get("rowsUpdatedAt")

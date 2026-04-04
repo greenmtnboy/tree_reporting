@@ -4,10 +4,10 @@
     <div v-else-if="error" class="summary-markdown-card__state summary-markdown-card__state--error">
       {{ error }}
     </div>
-    <div v-else-if="markdown" class="summary-markdown-card__content">
+    <div v-else-if="!markdown" class="summary-markdown-card__state">No matching tree data in the current filter set.</div>
+    <div v-show="!loading && !error && markdown" class="summary-markdown-card__content">
       <MarkdownRenderer :markdown="markdown" />
     </div>
-    <div v-else class="summary-markdown-card__state">No matching tree data in the current filter set.</div>
   </div>
 </template>
 
@@ -76,6 +76,27 @@ function formatBloomMonths(value: unknown) {
   return months.map((month) => MONTH_LABELS[month - 1]).join(', ')
 }
 
+function parseScientificName(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return { genus: null, specificEpithet: null, taxonType: null as string | null }
+  }
+  const tokens = value.trim().split(/\s+/).filter(Boolean)
+  const genus = tokens[0] ?? null
+  const hasHybridMarker = tokens.some((token) => token === 'x' || token === '×')
+  const hasVarietalMarker = tokens.some((token) => /^(var\.?|subsp\.?|ssp\.?|f\.?|cv\.?)$/i.test(token))
+    || value.includes("'")
+  const specificEpithetIndex = tokens[1] === 'x' || tokens[1] === '×' ? 2 : 1
+  const specificEpithet = tokens[specificEpithetIndex] ?? null
+  const taxonType = hasHybridMarker
+    ? 'Hybrid'
+    : hasVarietalMarker
+      ? 'Varietal / cultivar'
+      : specificEpithet
+        ? 'Species'
+        : null
+  return { genus, specificEpithet, taxonType }
+}
+
 function debugSpotlight(message: string, details?: Record<string, unknown>) {
   if (!spotlightDebugEnabled) {
     return
@@ -94,8 +115,12 @@ const markdown = computed(() => {
   const description = typeof row.value.description === 'string' && row.value.description.trim()
     ? row.value.description.trim()
     : null
+  const taxonomy = parseScientificName(species)
 
   const facts = [
+    ['Genus', taxonomy.genus],
+    ['Specific epithet', taxonomy.specificEpithet],
+    ['Taxon type', taxonomy.taxonType],
     ['Form', formatTitleCase(row.value.tree_form)],
     ['Mature height', formatRange(row.value.mature_height_min_ft, row.value.mature_height_max_ft, 'ft')],
     ['Canopy spread', formatRange(row.value.canopy_spread_min_ft, row.value.canopy_spread_max_ft, 'ft')],
@@ -205,7 +230,7 @@ async function load() {
 }
 
 watch(
-  () => [props.query, JSON.stringify(props.filters), JSON.stringify(props.imports), props.connectionId],
+  () => `${props.connectionId}::${props.query}::${JSON.stringify(props.filters)}::${JSON.stringify(props.imports)}`,
   () => {
     void load()
   },

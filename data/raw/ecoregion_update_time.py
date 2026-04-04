@@ -1,21 +1,20 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
 
 import sys
 from datetime import datetime, timezone
 
 import pyarrow as pa
-import requests
 
 from _ecoregion_shared import LAYER_METADATA_URL
+from _ingest_shared import get_with_retry
 
 
 def fetch_data_updated_through() -> datetime:
-    response = requests.get(LAYER_METADATA_URL, timeout=60)
-    response.raise_for_status()
+    response = get_with_retry(LAYER_METADATA_URL)
     payload = response.json()
 
     editing_info = payload.get("editingInfo", {})

@@ -41,7 +41,7 @@ const DEFAULT_CATEGORY_LABELS: Record<string, string> = {
   '#8BC34A': 'Spreading',
   '#26A69A': 'Weeping',
   '#8D6E63': 'Multi-trunk',
-  '#66BB6A': 'Other',
+  '#81C784': 'Other',
 }
 
 type TileBounds = { minX: number; maxX: number; minY: number; maxY: number }

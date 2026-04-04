@@ -1,21 +1,23 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
 
 import sys
-import requests
+from pathlib import Path
 import pyarrow as pa
 from datetime import datetime, timezone
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import get_with_retry
 
 # ArcGIS FeatureServer layer metadata — editingInfo.dataLastEditDate is ms since epoch
 LAYER_URL = "https://services1.arcgis.com/Oknk0tvfHOElpgGU/arcgis/rest/services/Brookline_Tree_Viewer_Web_WFL1/FeatureServer/0"
 
 
 def fetch_modified_at() -> datetime:
-    r = requests.get(LAYER_URL, params={"f": "json"}, timeout=30)
-    r.raise_for_status()
+    r = get_with_retry(LAYER_URL + "?f=json")
     data = r.json()
 
     ms = data.get("editingInfo", {}).get("dataLastEditDate")

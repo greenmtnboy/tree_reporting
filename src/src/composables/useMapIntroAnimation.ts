@@ -66,6 +66,7 @@ export function useMapIntroAnimation({
   let introStarted = false
   let introRafId: number | null = null
   let introCancelled = false
+  let swoopCancelled = false
 
   const introPrefetchStatsByZoom = new Map<number, IntroPrefetchCounters>()
 
@@ -317,25 +318,31 @@ export function useMapIntroAnimation({
         console.warn('[Perf] map:intro-gate:blocked-motion', { canStartMotion, initialReady, centeredReady, viewportReady })
       }
     } finally {
-      setAutoTileFetchEnabled(true)
-      if (map.value && didRunIntroMotion) {
-        map.value.jumpTo({
-          center: introCenterSnapshot,
-          zoom: INTRO_END_ZOOM,
-          bearing: startBearing + INTRO_ROTATION_DEG,
-          pitch: startPitch,
-        })
+      // If cancelIntro() was called, runGlobeSwoopTo has taken over camera control and owns
+      // introActive / tile-fetch / interactions. Don't touch those — only do safe cleanup.
+      if (!introCancelled) {
+        setAutoTileFetchEnabled(true)
+        if (map.value && didRunIntroMotion) {
+          map.value.jumpTo({
+            center: introCenterSnapshot,
+            zoom: INTRO_END_ZOOM,
+            bearing: startBearing + INTRO_ROTATION_DEG,
+            pitch: startPitch,
+          })
+        }
+        introActive.value = false
+        setMapInteractions(true)
       }
-      introActive.value = false
+      // Always mark intro as complete so the chat panel doesn't stay locked.
       setIntroComplete()
       introLockedRangeByZoom.clear()
       logIntroPrefetchSummary()
-      setMapInteractions(true)
     }
   }
 
   function cancelIntro() {
     introCancelled = true
+    swoopCancelled = true
     if (introRafId != null) {
       cancelAnimationFrame(introRafId)
       introRafId = null
@@ -363,7 +370,9 @@ export function useMapIntroAnimation({
     if (!map.value) return
 
     cancelIntro()
-    introCancelled = false
+    // Reset only swoopCancelled — introCancelled must stay true so runIntroZoomOut's
+    // pending async continuation recognises it was cancelled and does not jump back.
+    swoopCancelled = false
     introActive.value = true
     setMapInteractions(false)
     setAutoTileFetchEnabled(false)
@@ -387,7 +396,7 @@ export function useMapIntroAnimation({
       map.value.once('moveend', onEnd)
     })
 
-    if (introCancelled) { cleanup(true); return }
+    if (swoopCancelled) { cleanup(true); return }
 
     loadingMessage.value = `Please remain seated while seatbelt light is on…`
 
@@ -405,7 +414,7 @@ export function useMapIntroAnimation({
       map.value.once('moveend', onEnd)
     })
 
-    if (introCancelled) { cleanup(true); return }
+    if (swoopCancelled) { cleanup(true); return }
 
     loadingMessage.value = 'Counting our conifers…'
     introActive.value = false

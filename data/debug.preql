@@ -1,74 +1,17 @@
 import raw.tree_enrichment;
-import raw.ecoregion_info;
-import std.display;
 
-const active_city <- 'USBTV';
-const active_city_ecoregion <- 334;
-const active_city_usda_zone <- 5;
-const active_city_biome <- 'Temperate Broadleaf & Mixed Forests';
-const active_city_realm <- 'nearctic';
+import std.color; 
 
-def is_full_sun(x) -> x = 'full_sun';
-def is_partial_shade(x) -> x = 'partial_shade';
-def is_shade(x) -> x = 'shade';
-
-property hardiness_fit_bucket <- CASE
-    WHEN usda_zone_min is null or usda_zone_max is null THEN 'Unknown'
-    WHEN active_city_usda_zone < usda_zone_min or active_city_usda_zone > usda_zone_max THEN 'Outside zone'
-    WHEN active_city_usda_zone = usda_zone_min or active_city_usda_zone = usda_zone_max THEN 'Edge of tolerance'
-    ELSE 'Well within zone'
-END::string;
-property water_resilience_bucket <- CASE
-    WHEN water_needs = 'high' and drought_tolerance = 'low' THEN 'High water / low drought tolerance'
-    WHEN water_needs = 'low' and drought_tolerance = 'high' THEN 'Low water / high drought tolerance'
-    WHEN water_needs is null or drought_tolerance is null THEN 'Unknown'
-    ELSE 'Moderate / mixed'
-END::string;
-property lifespan_bucket <- CASE
-    WHEN lifespan_max_years is null and lifespan_min_years is null THEN 'Unknown'
-    WHEN coalesce(lifespan_max_years,lifespan_min_years) < 50 THEN 'Short-lived (<50y)'
-    WHEN coalesce(lifespan_max_years,lifespan_min_years) < 150 THEN 'Medium-lived (50-149y)'
-    ELSE 'Long-lived (150+y)'
-END::string;
-property sun_exposure_label <- CASE
-    WHEN len(array_filter(sun_exposure,@is_shade)) > 0 THEN 'Shade'
-    WHEN len(array_filter(sun_exposure,@is_partial_shade)) > 0 THEN 'Partial shade'
-    WHEN len(array_filter(sun_exposure,@is_full_sun)) > 0 THEN 'Full sun'
-END::string;
-property dominance_rank <- rank(species) over (order by count(tree_id) by species desc,species asc);
-auto cumulative_tree_share_pct <- ((sum count(tree_id) by species order by dominance_rank asc) / (count(tree_id) by *))::float::percent;
-
-
-
-property native_locality_bucket <- CASE
-    WHEN ecoregion_id=active_city_ecoregion THEN 'Local native'
-    WHEN biome = active_city_biome THEN 'Same biome, non-local'
-    WHEN realm = active_city_realm THEN 'Same realm, different biome'
-  else 'Outside realm'
-end::string;
-
-
-
-
-show
-WHERE city ='USBTV' and 
-species= 'Syringa reticulata !ivory silk!'
-
+where city = 'USBTV' and  city IS NOT NULL AND native_locality_bucket IS NOT NULL
 SELECT
-species,
-common_names[1] as common_name,
-description,
-tree_form,
-mature_height_min_ft,
-mature_height_max_ft,
-canopy_spread_min_ft,
-canopy_spread_max_ft,
-growth_rate,
-bloom_months,
-wildlife_value,
-drought_tolerance,
-water_needs,
-count(tree_id) by species as tree_count,
-rank(species) over (order by tree_count desc nulls last, species asc) as tree_rank
-
-HAVING tree_rank = 1;
+city,
+native_locality_bucket,
+count(tree_id) as tree_count,
+case native_locality_bucket
+when 'Native' then '#2F7D4F'
+when 'Same biome, non-native' then '#6BAF92'
+when 'Native Region, Different Biome' then '#B59A54'
+when 'Non-Native, Different Biome' then '#A96F49'
+else '#7E9D86'
+end::string::hex as bucket_color
+ORDER BY tree_count DESC;

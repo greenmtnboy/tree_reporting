@@ -47,6 +47,14 @@
       </div>
     </div>
 
+    <div class="tree-map-card">
+      <TreeDotMap
+        item-id="tree-dot-map"
+        v-bind="sharedChartProps"
+        :filters="filtersForChart('tree-dot-map')"
+      />
+    </div>
+
     <section
       v-for="section in visibleSummarySections"
       :key="section.id"
@@ -64,11 +72,12 @@
           :class="[
             'chart-card',
             card.width === 'wide' ? 'chart-card--wide' : null,
+            emptyChartIds.has(card.id) ? 'chart-card--empty' : null,
           ]"
         >
           <div class="chart-card-header">
-            <h3>{{ chartById(card.id).title }}</h3>
-            <span v-if="chartById(card.id).subtitle" class="chart-sub">{{ chartById(card.id).subtitle }}</span>
+            <h3>{{ emptyChartIds.has(card.id) ? 'No planting data for this city' : chartById(card.id).title }}</h3>
+            <span v-if="!emptyChartIds.has(card.id) && chartById(card.id).subtitle" class="chart-sub">{{ chartById(card.id).subtitle }}</span>
           </div>
           <SummaryMarkdownCard
             v-if="chartById(card.id).renderMode === 'markdown'"
@@ -81,6 +90,7 @@
           />
           <EmbeddedDashboardChart
             v-else
+            v-show="!emptyChartIds.has(card.id)"
             :item-id="card.id"
             v-bind="sharedChartProps"
             :dashboard-group="embeddedDashboardGroup"
@@ -92,6 +102,8 @@
             :allow-cross-filter="chartById(card.id).allowCrossFilter ?? true"
             @dimension-click="handleChartClick"
             @background-click="clearChartSelection(card.id)"
+            @results-empty="emptyChartIds.add(card.id)"
+            @results-present="emptyChartIds.delete(card.id)"
           />
         </div>
       </div>
@@ -100,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   useEmbeddedDashboardGroup,
@@ -109,6 +121,7 @@ import {
 } from '@trilogy-data/trilogy-studio-components/dashboard'
 import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
 import SummaryMarkdownCard from '../components/SummaryMarkdownCard.vue'
+import TreeDotMap from '../components/TreeDotMap.vue'
 import { useMapData, type CityCode } from '../composables/useMapData'
 import { getCityBiome, getCityUsdaZone } from '../composables/dashboardContextSource'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
@@ -142,6 +155,8 @@ const embeddedDashboardGroup = useEmbeddedDashboardGroup({
 })
 
 const cityFilter = ref<CityCode | null>(null)
+const emptyChartIds = reactive(new Set<string>())
+
 const {
   crossFilters,
   activeSummaryFilters,
@@ -276,6 +291,7 @@ watch(
 watch(
   cityFilter,
   (city) => {
+    emptyChartIds.clear()
     crossFilters.clearAll()
     const routeCity = readSummaryRouteCity(route.query.city)
     if (route.name === 'summary' && routeCity !== city) {
@@ -415,6 +431,17 @@ watch(
   gap: 16px;
 }
 
+.tree-map-card {
+  flex-shrink: 0;
+  width: 100%;
+  height: 400px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(42, 47, 54, 0.5), rgba(20, 24, 28, 0.65));
+  border: 1px solid rgba(167, 227, 178, 0.07);
+  box-shadow: 0 16px 36px rgba(7, 10, 11, 0.2);
+}
+
 .summary-section {
   display: flex;
   flex-direction: column;
@@ -488,6 +515,15 @@ watch(
 
 .chart-card--wide {
   flex: 2 1 420px;
+}
+
+.chart-card--empty {
+  height: auto;
+  min-height: 0;
+}
+
+.chart-card--empty .chart-card-header {
+  margin-bottom: 0;
 }
 
 .chart-card-header {

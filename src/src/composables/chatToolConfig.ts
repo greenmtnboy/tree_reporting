@@ -1,6 +1,6 @@
 import { RETURN_TO_USER_TOOL } from '@trilogy-data/trilogy-studio-components/llm'
 
-export type AppScreen = 'map' | 'summary' | 'info'
+export type AppScreen = 'map' | 'summary' | 'species' | 'info'
 
 export type RouteLike = {
   name?: unknown
@@ -184,15 +184,57 @@ export const SUMMARY_CHAT_TOOLS = [
   RETURN_TO_USER_TOOL,
 ]
 
+export const SPECIES_CHAT_TOOLS = [
+  MAP_CHAT_TOOLS[0],
+  {
+    name: 'set_species_filters',
+    description:
+      'Update the species explorer selectors. Use this on the species page to set or clear the active genus and species filters. A species value may be provided without a genus; the genus will be derived automatically from the first token.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        operation: {
+          type: 'string',
+          enum: ['replace', 'clear_species', 'clear_all'],
+          description: 'How to update the species explorer filters.',
+        },
+        genus: {
+          type: 'string',
+          description: 'Exact genus value to select, such as "Acer".',
+        },
+        species: {
+          type: 'string',
+          description: 'Exact species value to select, such as "Acer rubrum".',
+        },
+      },
+      required: ['operation'],
+    },
+  },
+  {
+    name: 'inspect_species_view',
+    description:
+      'Inspect the current species explorer state. Returns the active city, genus, species, and the scoped Trilogy base filters currently applied to the page.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  MAP_CHAT_TOOLS[4],
+  RETURN_TO_USER_TOOL,
+]
+
 export function resolveAppScreen(route: RouteLike): AppScreen {
   const name = route.name
   const path = route.path ?? ''
 
   if (name === 'summary' || path.startsWith('/summary')) return 'summary'
+  if (name === 'species' || path.startsWith('/species')) return 'species'
   if (name === 'info' || path.startsWith('/info')) return 'info'
   return 'map'
 }
 
 export function toolsForScreen(screen: AppScreen) {
-  return screen === 'summary' ? SUMMARY_CHAT_TOOLS : MAP_CHAT_TOOLS
+  if (screen === 'summary') return SUMMARY_CHAT_TOOLS
+  if (screen === 'species') return SPECIES_CHAT_TOOLS
+  return MAP_CHAT_TOOLS
 }

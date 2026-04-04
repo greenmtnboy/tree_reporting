@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
 
 """
@@ -14,9 +14,12 @@ Reads: .metas.default.modified  (ISO 8601 string)
 """
 
 import sys
-import requests
+from pathlib import Path
 import pyarrow as pa
 from datetime import datetime, timezone
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import get_with_retry
 
 METADATA_URL = (
     "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets/"
@@ -25,8 +28,7 @@ METADATA_URL = (
 
 
 def fetch_modified_at() -> datetime:
-    r = requests.get(METADATA_URL, timeout=30)
-    r.raise_for_status()
+    r = get_with_retry(METADATA_URL)
     meta = r.json()
 
     ts = meta.get("metas", {}).get("default", {}).get("modified")

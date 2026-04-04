@@ -9,7 +9,7 @@ export const CATEGORY_COLORS: Record<TreeForm, string> = {
   weeping:     '#26A69A',
   ornamental:  '#EC407A',
   multi_trunk: '#8D6E63',
-  default:     '#9E9E9E',
+  default:     '#81C784',
 }
 
 /** SQL CASE expression mapping lower(tree_form) to a hex color literal. */

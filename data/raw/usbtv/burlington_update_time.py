@@ -1,14 +1,16 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
 
 import sys
-import json
-import requests
+from pathlib import Path
 import pyarrow as pa
 from datetime import datetime, timezone
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import get_with_retry
 
 # ArcGIS statistics query — fetches MAX(EditDate) without downloading the full dataset
 STATS_URL = (
@@ -20,8 +22,7 @@ STATS_URL = (
 
 
 def fetch_modified_at() -> datetime:
-    r = requests.get(STATS_URL, timeout=30)
-    r.raise_for_status()
+    r = get_with_retry(STATS_URL)
     data = r.json()
 
     features = data.get("features", [])
