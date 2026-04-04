@@ -238,7 +238,7 @@ watch(
 )
 
 watchEffect(() => {
-  const data = getItemData(props.itemId, resolvedDashboardId.value) as Record<string, unknown> | null
+  const data = getItemData(props.itemId, resolvedDashboardId.value) as unknown as Record<string, unknown> | null
   if (!data || data.loading) return
   const results = data.results as { data?: unknown[] } | null
   if (!results) return
