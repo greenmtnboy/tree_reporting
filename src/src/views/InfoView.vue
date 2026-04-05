@@ -21,6 +21,12 @@
               <li><a href="https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh" target="_blank" rel="noopener">New York City — NYC Open Data Street Tree Census</a></li>
               <li><a href="https://data.boston.gov/dataset/bprd-trees" target="_blank" rel="noopener">Boston — City of Boston Open Data</a></li>
               <li><a href="https://opendata.paris.fr/explore/dataset/les-arbres/information/" target="_blank" rel="noopener">Paris — Paris Open Data (les-arbres)</a></li>
+              <li><a href="https://maps.burlingtonvt.gov/arcgis/rest/services/Tree_Sites_Public_View/FeatureServer/0" target="_blank" rel="noopener">Burlington — City of Burlington VT ArcGIS FeatureServer</a></li>
+              <li><a href="https://opendata.vancouver.ca/explore/dataset/public-trees/information/" target="_blank" rel="noopener">Vancouver — Vancouver Open Data (public-trees)</a></li>
+              <li><a href="https://gdi.berlin.de/services/wfs/baumbestand" target="_blank" rel="noopener">Berlin — Berlin GDI WFS (Straßenbäume / baumbestand)</a></li>
+              <li><a href="https://api.data.amsterdam.nl/v1/bomen/stamgegevens/" target="_blank" rel="noopener">Amsterdam — City of Amsterdam REST API (bomen/stamgegevens)</a></li>
+              <li><a href="https://data.london.gov.uk/dataset/2r45m" target="_blank" rel="noopener">London — London Datastore (Public Realm Trees)</a></li>
+              <li><a href="https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/" target="_blank" rel="noopener">Melbourne — City of Melbourne Open Data (Urban Forest)</a></li>
             </ul>
           </details>
         </div>
@@ -62,6 +68,12 @@
               <li><a href="https://data.cityofnewyork.us/Housing-Development/Individual-Landmark-Sites/buis-pvji" target="_blank" rel="noopener">New York City — NYC LPC Individual Landmark Sites</a></li>
               <li><a href="https://data.boston.gov/dataset/92137315-e846-4c75-8c3d-2b7e93e38d03" target="_blank" rel="noopener">Boston — City of Boston Open Data (Landmarks)</a></li>
               <li><a href="https://data.iledefrance.fr/explore/dataset/immeubles-proteges-au-titre-des-monuments-historiques/" target="_blank" rel="noopener">Paris — Île-de-France Open Data (Monuments Historiques)</a></li>
+              <li>Burlington — Geocoded from city landmark directory via Nominatim</li>
+              <li><a href="https://opendata.vancouver.ca/explore/dataset/heritage-sites/information/" target="_blank" rel="noopener">Vancouver — Vancouver Open Data (Heritage Sites)</a></li>
+              <li>Berlin — OpenStreetMap via Overpass API (historic=* tags)</li>
+              <li><a href="https://api.data.amsterdam.nl/v1/monumenten/monumenten/" target="_blank" rel="noopener">Amsterdam — City of Amsterdam REST API (monumenten)</a></li>
+              <li>London — OpenStreetMap via Overpass API (historic=* tags)</li>
+              <li><a href="https://data.melbourne.vic.gov.au/explore/dataset/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/" target="_blank" rel="noopener">Melbourne — City of Melbourne Open Data (Landmarks &amp; Places of Interest)</a></li>
             </ul>
           </details>
         </div>

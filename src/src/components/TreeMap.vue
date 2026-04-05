@@ -37,6 +37,103 @@
     :title="userLocation ? 'Pan to my location' : 'Show my location on the map'"
     @click="toggleUserLocation"
   >&#x25CE; Find Me</button>
+
+  <!-- Three-pane tree info card -->
+  <div v-if="selectedTree" class="tree-card" @click.stop>
+    <button class="tree-card-close" @click="selectedTree = null" aria-label="Close">&#x2715;</button>
+
+    <div class="tree-card-header">
+      <div class="tree-card-title">{{ selectedTree.tree_name || 'Unknown tree' }}</div>
+      <div v-if="selectedTree.species" class="tree-card-species">{{ selectedTree.species }}</div>
+    </div>
+
+    <div class="tree-card-body">
+      <!-- Left pane: this tree -->
+      <div class="tree-card-pane tree-card-pane--tree">
+        <div class="tree-card-section-label">This tree</div>
+        <div class="tc-grid">
+          <template v-if="selectedTree.tree_id">
+            <span class="tc-label">ID</span><span class="tc-value">{{ selectedTree.tree_id }}</span>
+          </template>
+          <template v-if="formatPlantDate(selectedTree.plant_date)">
+            <span class="tc-label">Planted</span><span class="tc-value">{{ formatPlantDate(selectedTree.plant_date) }}</span>
+          </template>
+          <template v-if="formatTreeAge(selectedTree.plant_date)">
+            <span class="tc-label">Age</span><span class="tc-value">{{ formatTreeAge(selectedTree.plant_date) }}</span>
+          </template>
+          <template v-if="formatDbh(selectedTree.dbh)">
+            <span class="tc-label">Trunk diameter</span><span class="tc-value">{{ formatDbh(selectedTree.dbh) }}</span>
+          </template>
+          <template v-if="selectedTree.ecological_fit">
+            <span class="tc-label">Ecological fit</span><span class="tc-value">{{ selectedTree.ecological_fit }}</span>
+          </template>
+        </div>
+      </div>
+
+      <!-- Center pane: species info -->
+      <div class="tree-card-pane tree-card-pane--species">
+        <div class="tree-card-section-label">Species</div>
+
+        <p v-if="selectedTree.description" class="tc-description">{{ selectedTree.description }}</p>
+
+        <div class="tc-grid">
+          <template v-if="formatTitleCase(selectedTree.tree_form)">
+            <span class="tc-label">Form</span><span class="tc-value">{{ formatTitleCase(selectedTree.tree_form) }}</span>
+          </template>
+          <template v-if="selectedTree.is_evergreen != null">
+            <span class="tc-label">Evergreen</span><span class="tc-value">{{ selectedTree.is_evergreen ? 'Yes' : 'No' }}</span>
+          </template>
+          <template v-if="selectedTree.mature_height_max_ft != null">
+            <span class="tc-label">Mature height</span><span class="tc-value">{{ formatRange(selectedTree.mature_height_min_ft, selectedTree.mature_height_max_ft, 'ft') }}</span>
+          </template>
+          <template v-if="selectedTree.canopy_spread_max_ft != null">
+            <span class="tc-label">Canopy spread</span><span class="tc-value">{{ formatRange(selectedTree.canopy_spread_min_ft, selectedTree.canopy_spread_max_ft, 'ft') }}</span>
+          </template>
+          <template v-if="selectedTree.growth_rate != null">
+            <span class="tc-label">Growth rate</span><span class="tc-value">{{ formatTitleCase(selectedTree.growth_rate) }}</span>
+          </template>
+          <template v-if="selectedTree.lifespan_max_years != null">
+            <span class="tc-label">Lifespan</span><span class="tc-value">{{ formatRange(selectedTree.lifespan_min_years, selectedTree.lifespan_max_years, 'years') }}</span>
+          </template>
+          <template v-if="selectedTree.water_needs != null">
+            <span class="tc-label">Water needs</span><span class="tc-value">{{ formatTitleCase(selectedTree.water_needs) }}</span>
+          </template>
+          <template v-if="selectedTree.drought_tolerance != null">
+            <span class="tc-label">Drought tol.</span><span class="tc-value">{{ formatTitleCase(selectedTree.drought_tolerance) }}</span>
+          </template>
+          <template v-if="selectedTree.sun_exposure?.length">
+            <span class="tc-label">Sun exposure</span><span class="tc-value">{{ formatSunExposure(selectedTree.sun_exposure) }}</span>
+          </template>
+          <template v-if="selectedTree.bloom_months?.length">
+            <span class="tc-label">Bloom period</span><span class="tc-value">{{ formatBloomMonths(selectedTree.bloom_months) }}</span>
+          </template>
+          <template v-if="selectedTree.wildlife_value != null">
+            <span class="tc-label">Wildlife value</span><span class="tc-value">{{ formatTitleCase(selectedTree.wildlife_value) }}</span>
+          </template>
+          <template v-if="selectedTree.fire_risk != null">
+            <span class="tc-label">Fire risk</span><span class="tc-value">{{ formatTitleCase(selectedTree.fire_risk) }}</span>
+          </template>
+        </div>
+      </div>
+
+      <!-- Right pane: photo -->
+      <div class="tree-card-pane tree-card-pane--photos">
+        <div class="tree-card-section-label">Example species photo</div>
+        <div v-if="selectedTree.photo_url" class="tc-photo-wrap">
+          <img
+            :src="selectedTree.photo_url"
+            :alt="selectedTree.species || 'tree photo'"
+            class="tc-photo"
+            loading="lazy"
+          />
+          <div v-if="selectedTree.photo_attribution" class="tc-photo-footer">
+            <span class="tc-photo-attr">{{ selectedTree.photo_attribution }}</span>
+          </div>
+        </div>
+        <div v-else class="tc-photo-placeholder">No photo available</div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -100,7 +197,6 @@ let firstMapIdleAfterPublishLogged = false
 let treeInteractionsBound = false
 let lastIconDebugAt = 0
 let prewarmStartedForRevision = -1
-let activeTreePopup: maplibregl.Popup | null = null
 let activeLandmarkPopup: maplibregl.Popup | null = null
 let popupRequestToken = 0
 let landmarkInteractionsBound = false
@@ -418,6 +514,16 @@ interface PopupTreeRow {
   wildlife_value: string | null
   fire_risk: string | null
   description: string | null
+  inat_taxon_id: number | null
+  photo_url: string | null
+  photo_license: string | null
+  photo_attribution: string | null
+}
+
+const selectedTree = ref<PopupTreeRow | null>(null)
+
+function selectTree(row: PopupTreeRow): void {
+  selectedTree.value = row
 }
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -476,10 +582,6 @@ function formatDbh(value: number | null) {
   return `${value.toFixed(2)}"`
 }
 
-function renderPopupRow(label: string, value: string | number) {
-  return `<div class="tree-popup-row"><span class="tree-popup-label">${label}</span><span class="tree-popup-value">${value}</span></div>`
-}
-
 function formatPlantDate(value: string | null) {
   if (!value) return null
   const normalized = String(value)
@@ -487,64 +589,43 @@ function formatPlantDate(value: string | null) {
   return normalized.split('T')[0]?.split(' ')[0] ?? normalized
 }
 
-function formatPopupHtml(row: PopupTreeRow): string {
-  const planted = formatPlantDate(row.plant_date)
-  const evergreen = row.is_evergreen == null ? null : (row.is_evergreen ? 'Yes' : 'No')
-  const category = formatTitleCase(row.tree_form)
-  const description = row.description?.trim() || null
-  const detailLines = [
-    ['ID', row.tree_id],
-    ['Form', category],
-    ['Planted', planted],
-    ['Trunk diameter', formatDbh(row.dbh)],
-    ['Ecological fit', row.ecological_fit],
-    ['Evergreen', evergreen],
-    ['Mature height', formatRange(row.mature_height_min_ft, row.mature_height_max_ft, 'ft')],
-    ['Canopy spread', formatRange(row.canopy_spread_min_ft, row.canopy_spread_max_ft, 'ft')],
-    ['Growth rate', formatTitleCase(row.growth_rate)],
-    ['Lifespan', formatRange(row.lifespan_min_years, row.lifespan_max_years, 'years')],
-    ['Water needs', formatTitleCase(row.water_needs)],
-    ['Drought tolerance', formatTitleCase(row.drought_tolerance)],
-    ['Sun exposure', formatSunExposure(row.sun_exposure)],
-    ['Bloom period', formatBloomMonths(row.bloom_months)],
-    ['Wildlife value', formatTitleCase(row.wildlife_value)],
-    ['Fire risk', formatTitleCase(row.fire_risk)],
-  ]
-    .filter(([, value]) => value != null && value !== '' && value !== 'Unknown')
-    .map(([label, value]) => renderPopupRow(String(label), String(value ?? '')))
-    .join('')
-  return `
-    <div class="tree-popup-shell">
-      <div class="tree-popup-title">${row.tree_name || 'Unknown tree'}</div>
-      ${row.species ? `<div class="tree-popup-species">${row.species}</div>` : ''}
-      ${detailLines ? `<div class="tree-popup-grid">${detailLines}</div>` : ''}
-      ${description ? `<div class="tree-popup-description">${description}</div>` : ''}
-    </div>
-  `
+function formatTreeAge(value: string | null) {
+  const dateStr = formatPlantDate(value)
+  if (!dateStr) return null
+  const planted = new Date(dateStr)
+  if (Number.isNaN(planted.getTime())) return null
+  const now = new Date()
+  let years = now.getFullYear() - planted.getFullYear()
+  if (
+    now.getMonth() < planted.getMonth() ||
+    (now.getMonth() === planted.getMonth() && now.getDate() < planted.getDate())
+  ) {
+    years--
+  }
+  if (years < 1) return '< 1 year'
+  return `${years} year${years !== 1 ? 's' : ''}`
 }
 
-async function showTreePopup(feature: GeoJSON.Feature, offset: number) {
+async function showTreeCard(feature: GeoJSON.Feature) {
   if (!mapRef.value) return
   const requestToken = ++popupRequestToken
-  const coords = (feature.geometry as GeoJSON.Point).coordinates.slice() as [number, number]
   const id = feature.properties?.id
   if (!id || id === 'unkwn') return
-  // Escape single quotes to prevent SQL injection from tile data
   const safeId = String(id).replace(/'/g, "''")
   const cityBiome = getCityBiome(selectedCity.value).replace(/'/g, "''")
   const cityEcoregionId = getCityEcoregionId(selectedCity.value)
   try {
     const { rows } = await duckQuery(`
       SELECT
-        tree_id,
-        tree_name,
-        species,
-        plant_date,
-        dbh,
-        tree_form,
+        tf.tree_id,
+        tf.tree_name,
+        tf.species,
+        tf.plant_date,
+        tf.dbh,
+        tf.tree_form,
         CASE
-          WHEN native_ecoregions IS NULL OR len(native_ecoregions) = 0 THEN NULL
-          WHEN list_contains(native_ecoregions, ${cityEcoregionId}) THEN 'Native here'
+          WHEN tf.native_ecoregions IS NULL OR len(tf.native_ecoregions) = 0 THEN NULL
+          WHEN list_contains(tf.native_ecoregions, ${cityEcoregionId}) THEN 'Native here'
           WHEN EXISTS (
             SELECT 1
             FROM ecoregion_info ei
@@ -553,36 +634,35 @@ async function showTreePopup(feature: GeoJSON.Feature, offset: number) {
           ) THEN 'Biome match'
           ELSE 'Different biome'
         END AS ecological_fit,
-        is_evergreen,
-        mature_height_min_ft,
-        mature_height_max_ft,
-        canopy_spread_min_ft,
-        canopy_spread_max_ft,
-        growth_rate,
-        lifespan_min_years,
-        lifespan_max_years,
-        drought_tolerance,
-        water_needs,
-        sun_exposure,
-        bloom_months,
-        wildlife_value,
-        fire_risk,
-        description
+        tf.is_evergreen,
+        tf.mature_height_min_ft,
+        tf.mature_height_max_ft,
+        tf.canopy_spread_min_ft,
+        tf.canopy_spread_max_ft,
+        tf.growth_rate,
+        tf.lifespan_min_years,
+        tf.lifespan_max_years,
+        tf.drought_tolerance,
+        tf.water_needs,
+        tf.sun_exposure,
+        tf.bloom_months,
+        tf.wildlife_value,
+        tf.fire_risk,
+        se.description,
+        se.inat_taxon_id,
+        se.photo_url,
+        se.photo_license,
+        se.photo_attribution
       FROM trees_fast tf
-      WHERE tree_id = '${safeId}'
+      LEFT JOIN species_enrichment se ON tf.species = se.species
+      WHERE tf.tree_id = '${safeId}'
       LIMIT 1
     `)
     const row = rows[0] as unknown as PopupTreeRow | undefined
     if (!row || requestToken !== popupRequestToken) return
-    if (activeTreePopup) { activeTreePopup.remove(); activeTreePopup = null }
-    const popup = new maplibregl.Popup({ offset, className: 'tree-popup' })
-      .setLngLat(coords)
-      .setHTML(formatPopupHtml(row))
-      .addTo(mapRef.value)
-    activeTreePopup = popup
-    popup.on('close', () => { if (activeTreePopup === popup) activeTreePopup = null })
+    selectTree(row)
   } catch (e) {
-    console.error('[Popup Query Error]', e)
+    console.error('[Tree Card Query Error]', e)
   }
 }
 
@@ -597,8 +677,7 @@ function bindTreeInteractions() {
     if (!features.length) return
     const iconFeature = !props.simplified ? features.find((f) => f.layer?.id === 'trees-icon') : undefined
     const picked = (iconFeature ?? features[0]) as unknown as GeoJSON.Feature
-    const offset = (iconFeature ?? features[0]).layer?.id === 'trees-icon' ? 15 : 8
-    void showTreePopup(picked, offset)
+    void showTreeCard(picked)
   })
   for (const layer of interactiveLayers) {
     mapRef.value.on('mouseenter', layer, () => { mapRef.value!.getCanvas().style.cursor = 'pointer' })
@@ -1131,7 +1210,7 @@ onUnmounted(() => {
     window.clearTimeout(pendingSwoopFlyTimeout)
     pendingSwoopFlyTimeout = null
   }
-  if (activeTreePopup) { activeTreePopup.remove(); activeTreePopup = null }
+  selectedTree.value = null
   if (activeLandmarkPopup) { activeLandmarkPopup.remove(); activeLandmarkPopup = null }
   if (mapRef.value) {
     removeLandmarkLayer(mapRef.value)
@@ -1436,86 +1515,210 @@ onUnmounted(() => {
 </style>
 
 <style>
-.tree-popup .maplibregl-popup-content {
-  background:
-    linear-gradient(180deg, rgba(34, 38, 45, 0.98), rgba(24, 27, 32, 0.98));
-  color: rgba(237, 242, 235, 0.92);
+/* ── Tree info card ──────────────────────────────────────────── */
+
+.tree-card {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  width: min(840px, calc(100% - 24px));
+  max-height: min(420px, 55vh);
+  background: linear-gradient(160deg, rgba(30, 34, 41, 0.98), rgba(20, 24, 29, 0.98));
   border: 1px solid rgba(167, 227, 178, 0.18);
-  border-radius: 12px;
-  padding: 12px 14px;
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  color: rgba(237, 242, 235, 0.92);
   font-size: 0.8rem;
-  line-height: 1.45;
-  min-width: 220px;
-  max-width: 280px;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
-}
-
-.tree-popup .maplibregl-popup-close-button {
-  color: rgba(154, 166, 154, 0.82);
-  font-size: 1.05rem;
-  padding: 4px 8px;
-}
-
-.tree-popup-shell {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  overflow: hidden;
 }
 
-.tree-popup-title {
-  color: var(--color-ink);
+.tree-card-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(167, 227, 178, 0.14);
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(237, 242, 235, 0.58);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.tree-card-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(237, 242, 235, 0.92);
+}
+
+.tree-card-header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(167, 227, 178, 0.1);
+  flex-shrink: 0;
+}
+
+.tree-card-title {
   font-size: 1.08rem;
   font-weight: 700;
+  color: var(--color-ink, #edf2eb);
+  padding-right: 28px;
   line-height: 1.2;
-  padding-right: 20px;
 }
 
-.tree-popup-species {
-  color: rgba(237, 242, 235, 0.82);
-  font-size: 0.82rem;
+.tree-card-species {
+  margin-top: 3px;
+  font-size: 0.78rem;
   font-style: italic;
-  line-height: 1.35;
+  color: rgba(237, 242, 235, 0.6);
 }
 
-.tree-popup-grid {
+/* Three-pane body — side by side on desktop, stacked on mobile */
+.tree-card-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.tree-card-pane {
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  overflow-y: auto;
 }
 
-.tree-popup-row {
+.tree-card-pane--tree,
+.tree-card-pane--species {
+  border-right: 1px solid rgba(167, 227, 178, 0.08);
+}
+
+.tree-card-section-label {
+  color: rgba(167, 227, 178, 0.52);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+/* Shared grid for label/value pairs */
+.tc-grid {
   display: grid;
-  grid-template-columns: minmax(78px, auto) 1fr;
-  gap: 10px;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
   align-items: start;
 }
 
-.tree-popup-label {
-  color: rgba(154, 166, 154, 0.74);
-  font-size: 0.68rem;
+.tc-label {
+  color: rgba(154, 166, 154, 0.7);
+  font-size: 0.66rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
+  white-space: nowrap;
+  padding-top: 1px;
 }
 
-.tree-popup-value {
-  color: rgba(237, 242, 235, 0.96);
-  font-size: 0.84rem;
+.tc-value {
+  color: rgba(237, 242, 235, 0.92);
+  font-size: 0.8rem;
   font-weight: 600;
   line-height: 1.35;
 }
 
-.tree-popup-description {
-  margin-top: 2px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(167, 227, 178, 0.1);
+/* Photo carousel */
+.tc-photo-wrap {
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.tc-photo {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+.tc-photo-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 8px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+
+.tc-photo-count {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.tc-photo-attr {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.6rem;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+
+.tc-photo-loading {
+  color: rgba(167, 227, 178, 0.6);
+  font-size: 0.62rem;
+  font-style: italic;
+}
+
+.tc-photo-placeholder {
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(237, 242, 235, 0.32);
+  font-size: 0.76rem;
+  font-style: italic;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tc-description {
   color: rgba(237, 242, 235, 0.72);
   font-size: 0.76rem;
   line-height: 1.5;
+  margin: 0;
 }
 
-.tree-popup .maplibregl-popup-tip {
-  border-top-color: rgba(28, 31, 36, 0.96);
+/* ── Mobile: stack panes vertically ────────────────────────── */
+@media (max-width: 640px) {
+  .tree-card {
+    bottom: 8px;
+    width: calc(100% - 16px);
+    max-height: 65vh;
+    border-radius: 12px;
+  }
+  .tree-card-body {
+    grid-template-columns: 1fr;
+  }
+  .tree-card-pane--tree,
+  .tree-card-pane--species {
+    border-right: none;
+    border-bottom: 1px solid rgba(167, 227, 178, 0.08);
+  }
+  .tc-photo { height: 140px; }
 }
 
 .landmark-popup .maplibregl-popup-content {

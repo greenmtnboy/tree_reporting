@@ -3,6 +3,12 @@
     <div class="sidebar-header">
       <h1>Urban Trees</h1>
       <div class="subtitle">The Concrete Jungle</div>
+      <a
+        href="https://github.com/greenmtnboy/sf_tree_reporting"
+        target="_blank"
+        rel="noopener"
+        class="source-link"
+      >source code</a>
     </div>
     <nav class="sidebar-nav">
       <router-link :to="mapRoute" class="nav-link">
@@ -234,5 +240,21 @@ function handleClick(lm: Landmark) {
 .landmarks-list::-webkit-scrollbar-thumb {
   background: rgba(107, 175, 146, 0.3);
   border-radius: 2px;
+}
+
+.source-link {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--color-moss);
+  text-decoration: none;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.source-link:hover {
+  opacity: 1;
+  color: var(--color-leaf);
 }
 </style>
