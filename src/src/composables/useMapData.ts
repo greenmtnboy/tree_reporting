@@ -5,6 +5,27 @@ import cityConfigData from '../cityConfig.json'
 export const CITY_CONFIG = cityConfigData as unknown as Record<string, { name: string; center: [number, number] }>
 export type CityCode = string
 
+export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLng = ((lng2 - lng1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+/** Returns the city code whose center is closest to the given coordinates. Pure, no Vue state. */
+export function closestCityTo(lat: number, lng: number): CityCode {
+  let closest: CityCode = Object.keys(CITY_CONFIG)[0]
+  let minDist = Infinity
+  for (const [code, cfg] of Object.entries(CITY_CONFIG)) {
+    const dist = haversineKm(lat, lng, cfg.center[1], cfg.center[0])
+    if (dist < minDist) { minDist = dist; closest = code }
+  }
+  return closest
+}
+
 export function buildDefaultQueryForCity(city: CityCode): string {
   return `
 SELECT

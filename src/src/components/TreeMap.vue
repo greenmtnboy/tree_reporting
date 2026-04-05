@@ -44,7 +44,7 @@ import { ref, shallowRef, onMounted, onUnmounted, watch, computed } from 'vue'
 import maplibregl from 'maplibre-gl'
 import { registerCategoryColoredIcons } from '../composables/useTreeCategories'
 import { useFlyTo } from '../composables/useFlyTo'
-import { useMapData, CITY_CONFIG, type CityCode } from '../composables/useMapData'
+import { useMapData, CITY_CONFIG, closestCityTo, type CityCode } from '../composables/useMapData'
 import { getCityBiome, getCityEcoregionId } from '../composables/dashboardContextSource'
 import { useRoute, useRouter } from 'vue-router'
 import { useDuckDB } from '../composables/useDuckDB'
@@ -775,16 +775,6 @@ watch(
 
 // --- Geolocation ---
 
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371
-  const dLat = ((lat2 - lat1) * Math.PI) / 180
-  const dLng = ((lng2 - lng1) * Math.PI) / 180
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
 async function detectCityFromIp(): Promise<void> {
   try {
     const res = await fetch('https://ipapi.co/json/')
@@ -792,18 +782,36 @@ async function detectCityFromIp(): Promise<void> {
     const data = await res.json()
     const { latitude, longitude } = data as { latitude?: number; longitude?: number }
     if (!latitude || !longitude) return
-    let closest: CityCode = selectedCity.value
-    let minDist = Infinity
-    for (const [code, cfg] of Object.entries(CITY_CONFIG) as [CityCode, (typeof CITY_CONFIG)[CityCode]][]) {
-      const dist = haversineKm(latitude, longitude, cfg.center[1], cfg.center[0])
-      if (dist < minDist) { minDist = dist; closest = code }
-    }
-    if (closest !== selectedCity.value) {
-      setSelectedCity(closest)
-      void router.replace({ query: { ...route.query, city: closest } })
-    }
+    silentlyApplyCity(latitude, longitude)
   } catch {
     // best-effort, ignore errors
+  }
+}
+
+/**
+ * Update the city based on coordinates without triggering an animated camera transition.
+ * Used for IP detection and background geolocation restores.
+ */
+function silentlyApplyCity(lat: number, lng: number): void {
+  const city = closestCityTo(lat, lng)
+  if (city !== selectedCity.value) {
+    setSelectedCity(city)
+    void router.replace({ query: { ...route.query, city } })
+  }
+}
+
+/**
+ * Set the user location pin and navigate: switches city with the globe swoop if the
+ * closest city differs from the current one, otherwise pans to the coordinates.
+ * This is the single authoritative path for GPS-driven navigation.
+ */
+function navigateToLocation(lat: number, lng: number): void {
+  setUserLocation(lat, lng)
+  const city = closestCityTo(lat, lng)
+  if (city !== selectedCity.value) {
+    void switchCity(city, [lng, lat])
+  } else {
+    flyTo({ lat, lng, zoom: 15 })
   }
 }
 
@@ -827,27 +835,12 @@ watch(userLocation, (loc) => {
 function toggleUserLocation() {
   if (!navigator.geolocation) return
   if (userLocation.value) {
-    // Already sharing — just pan to current location
-    flyTo({ lat: userLocation.value.lat, lng: userLocation.value.lng, zoom: 15 })
+    // Already have a location — re-navigate so a city change is detected if needed.
+    navigateToLocation(userLocation.value.lat, userLocation.value.lng)
     return
   }
-  // Not yet sharing — request permission; dot + pan only if granted
   navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      setUserLocation(pos.coords.latitude, pos.coords.longitude)
-      // Check if user is closer to a different city and trigger a full city switch if so
-      let closest: CityCode = selectedCity.value
-      let minDist = Infinity
-      for (const [code, cfg] of Object.entries(CITY_CONFIG) as [CityCode, (typeof CITY_CONFIG)[CityCode]][]) {
-        const dist = haversineKm(pos.coords.latitude, pos.coords.longitude, cfg.center[1], cfg.center[0])
-        if (dist < minDist) { minDist = dist; closest = code }
-      }
-      if (closest !== selectedCity.value) {
-        void switchCity(closest, [pos.coords.longitude, pos.coords.latitude])
-      } else {
-        flyTo({ lat: pos.coords.latitude, lng: pos.coords.longitude, zoom: 15 })
-      }
-    },
+    (pos) => navigateToLocation(pos.coords.latitude, pos.coords.longitude),
     (err) => { console.warn('[Geolocation]', err.message) },
   )
 }
@@ -956,12 +949,16 @@ onMounted(async () => {
   // map style loading instead of waiting until the map's 'load' event fires.
   preWarmForCity(selectedCity.value)
 
-  // If the user already granted geolocation, silently restore their location pin (no flyTo).
+  // If the user already granted geolocation, silently restore their location pin and apply
+  // city detection (no animated camera transition).
   if (navigator.geolocation && navigator.permissions) {
     navigator.permissions.query({ name: 'geolocation' }).then((result) => {
       if (result.state === 'granted') {
         navigator.geolocation.getCurrentPosition(
-          (pos) => setUserLocation(pos.coords.latitude, pos.coords.longitude),
+          (pos) => {
+            setUserLocation(pos.coords.latitude, pos.coords.longitude)
+            silentlyApplyCity(pos.coords.latitude, pos.coords.longitude)
+          },
           () => {},
         )
       }
