@@ -36,7 +36,7 @@
 
         <div class="carousel-detail-pane">
           <div class="carousel-intro">
-            <span class="carousel-common-name">{{ current.common_name || current.species }}</span>
+            <span class="carousel-common-name">{{ displayTitle }}</span>
             <span v-if="current.common_name" class="carousel-sci-name">{{ current.species }}</span>
           </div>
           <div class="carousel-count">
@@ -87,6 +87,12 @@ const activeCancellation = ref<{ cancel: () => void } | null>(null)
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 const current = computed(() => species.value[currentIndex.value] ?? ({} as SpeciesRow))
+const displayTitle = computed(() => {
+  const commonName = formatCommonName(current.value.common_name)
+  if (!commonName) return current.value.species
+  const cultivar = formatCommonName(extractCultivar(current.value.species))
+  return cultivar ? `${commonName} (${cultivar})` : commonName
+})
 
 function prev() {
   if (currentIndex.value > 0) currentIndex.value--
@@ -94,6 +100,21 @@ function prev() {
 
 function next() {
   if (currentIndex.value < species.value.length - 1) currentIndex.value++
+}
+
+function formatCommonName(value: unknown) {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  if (!normalized) return null
+  return normalized
+    .toLowerCase()
+    .replace(/(^|[\s\-\/(])([a-z])/g, (_match, prefix: string, letter: string) => `${prefix}${letter.toUpperCase()}`)
+}
+
+function extractCultivar(value: unknown) {
+  if (typeof value !== 'string') return null
+  const match = value.match(/'([^']+)'/)
+  return match?.[1]?.trim() || null
 }
 
 function formatTitleCase(value: unknown) {
