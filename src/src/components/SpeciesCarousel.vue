@@ -23,8 +23,8 @@
         <div class="carousel-photo-pane">
           <img
             v-if="current.photo_url"
-            :src="current.photo_url"
-            :alt="current.species || 'species photo'"
+            :src="String(current.photo_url)"
+            :alt="String(current.species || 'species photo')"
             class="carousel-photo"
             loading="lazy"
           />

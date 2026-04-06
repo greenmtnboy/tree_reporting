@@ -243,7 +243,7 @@ onUnmounted(() => {
   if (thinkingInterval != null) clearInterval(thinkingInterval)
 })
 
-const isMapScreen = computed(() => route.name === 'map')
+const _isMapScreen = computed(() => route.name === 'map')
 const isSummaryScreen = computed(() => route.name === 'summary')
 const isSpeciesScreen = computed(() => route.name === 'species')
 
