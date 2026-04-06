@@ -79,8 +79,18 @@
             <h3>{{ emptyChartIds.has(card.id) ? 'No planting data for this city' : chartById(card.id).title }}</h3>
             <span v-if="!emptyChartIds.has(card.id) && chartById(card.id).subtitle" class="chart-sub">{{ chartById(card.id).subtitle }}</span>
           </div>
+          <SpeciesCarousel
+            v-if="chartById(card.id).renderMode === 'carousel'"
+            :item-id="card.id"
+            :connection-id="connectionId"
+            :query-execution-service="queryExecutionService"
+            :imports="SUMMARY_DASHBOARD_IMPORTS as DashboardImport[]"
+            :filters="filtersForChart(card.id)"
+            :parameters="dashboardContextParameters"
+            :query="chartById(card.id).query"
+          />
           <SummaryMarkdownCard
-            v-if="chartById(card.id).renderMode === 'markdown'"
+            v-else-if="chartById(card.id).renderMode === 'markdown'"
             :item-id="card.id"
             :connection-id="connectionId"
             :query-execution-service="queryExecutionService"
@@ -122,6 +132,7 @@ import {
 } from '@trilogy-data/trilogy-studio-components/dashboard'
 import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
 import SummaryMarkdownCard from '../components/SummaryMarkdownCard.vue'
+import SpeciesCarousel from '../components/SpeciesCarousel.vue'
 import TreeDotMap from '../components/TreeDotMap.vue'
 import { useMapData, type CityCode } from '../composables/useMapData'
 import {

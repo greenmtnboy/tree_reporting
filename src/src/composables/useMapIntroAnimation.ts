@@ -36,6 +36,8 @@ export interface UseMapIntroAnimationOptions {
   /** Geographic center for the intro animation. */
   introCenter: Ref<[number, number]>
   setIntroComplete: () => void
+  /** Lifecycle state machine callback: intro animation finished → ready. */
+  onIntroFinished?: () => void
   setAutoTileFetchEnabled: (enabled: boolean) => void
   setVisibleTileRange: (z: number, minX: number, maxX: number, minY: number, maxY: number) => void
   prefetchVisibleDetailTilesAtZoom: (z: number, range?: TileRange) => Promise<IntroPrefetchStatus>
@@ -52,6 +54,7 @@ export function useMapIntroAnimation({
   introLockedRangeByZoom,
   introCenter,
   setIntroComplete,
+  onIntroFinished,
   setAutoTileFetchEnabled,
   setVisibleTileRange,
   prefetchVisibleDetailTilesAtZoom,
@@ -335,6 +338,10 @@ export function useMapIntroAnimation({
       }
       // Always mark intro as complete so the chat panel doesn't stay locked.
       setIntroComplete()
+      // Notify the lifecycle state machine that the intro is done.
+      // Only transition intro→ready when the intro wasn't cancelled by a city switch
+      // (if cancelled, the switch handler owns the lifecycle transition).
+      if (!introCancelled) onIntroFinished?.()
       introLockedRangeByZoom.clear()
       logIntroPrefetchSummary()
     }

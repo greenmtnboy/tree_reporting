@@ -168,9 +168,8 @@ import { ref, computed, nextTick, watch, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { MarkdownRenderer } from '@trilogy-data/trilogy-studio-components/dashboard'
 import { useChat } from '../composables/useChat'
-import { useDuckDB } from '../composables/useDuckDB'
-import { useMapIntro } from '../composables/useMapIntro'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
+import { useMapLifecycle } from '../composables/useMapLifecycle'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
 
 const PROVIDERS = [
@@ -212,8 +211,7 @@ const SPECIES_SUGGESTIONS = [
 ]
 
 const { messages, isLoading, isConfigured, providerType, setConnection, deleteConnection, sendMessage, clearMessages } = useChat()
-const { ready: dbReady } = useDuckDB()
-const { introComplete } = useMapIntro()
+const { chatReady: mapReady } = useMapLifecycle()
 const { ready: summaryReady, initialize: initializeSummary } = useSummaryDashboardExecution()
 const route = useRoute()
 
@@ -260,11 +258,11 @@ watch(
 )
 
 const activeDataReady = computed(() =>
-  isSummaryScreen.value || isSpeciesScreen.value ? summaryReady.value : dbReady.value,
+  isSummaryScreen.value || isSpeciesScreen.value ? summaryReady.value : mapReady.value,
 )
 
 const inputDisabled = computed(() =>
-  isLoading.value || !activeDataReady.value || (isMapScreen.value && !introComplete.value),
+  isLoading.value || !activeDataReady.value,
 )
 
 const suggestions = computed(() =>
@@ -296,7 +294,6 @@ const inputPlaceholder = computed(() =>
 )
 
 const sendTooltip = computed(() => {
-  if (isMapScreen.value && !introComplete.value) return 'Map is loading...'
   if (isLoading.value) return 'Waiting for response...'
   if (!activeDataReady.value) {
     return isSummaryScreen.value || isSpeciesScreen.value

@@ -146,6 +146,7 @@ import { getCityBiome, getCityEcoregionId } from '../composables/dashboardContex
 import { useRoute, useRouter } from 'vue-router'
 import { useDuckDB } from '../composables/useDuckDB'
 import { useMapIntro } from '../composables/useMapIntro'
+import { useMapLifecycle } from '../composables/useMapLifecycle'
 import { useMapLayers, TREES_SOURCE_MAXZOOM, addLandmarkLayer, removeLandmarkLayer, registerLandmarkEyeIcon } from '../composables/useMapLayers'
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { addCityMarkers, updateCityMarkersSelected, removeCityMarkers, bindCityMarkerInteractions } from '../composables/useGlobeCityMarkers'
@@ -163,7 +164,17 @@ const mapContainer = ref<HTMLDivElement>()
 const mapRef = shallowRef<maplibregl.Map | null>(null)
 const zoomLevel = ref(13)
 const mapError = ref<string | null>(null)
-const defaultQueryLoading = ref(true)
+const {
+  phase: lifecyclePhase,
+  showLoadingOverlay,
+  isSwitching,
+  startLoading: lifecycleStartLoading,
+  tilesLoaded: lifecycleTilesLoaded,
+  introFinished: lifecycleIntroFinished,
+  startCitySwitch: lifecycleStartCitySwitch,
+  citySwitchReady: lifecycleCitySwitchReady,
+  forceReady: lifecycleForceReady,
+} = useMapLifecycle()
 const introActive = ref(!props.simplified)
 const tileRefreshing = ref(false)
 const tileRefreshMessage = ref(THINKING_PHRASES[0])
@@ -263,7 +274,7 @@ const introCenterRef = computed((): [number, number] => CITY_CONFIG[selectedCity
 // --- Computed ---
 
 const displayError = computed(() => mapError.value)
-const isInitialLoading = computed(() => defaultQueryLoading.value || introActive.value)
+const isInitialLoading = computed(() => showLoadingOverlay.value)
 
 const activeHeatmapColors = computed(() => {
   return workerDistinctColors.value.length > 0 ? workerDistinctColors.value : []
@@ -479,6 +490,7 @@ const { loadingMessage, runIntroZoomOut, cancelIntro, runGlobeSwoopTo, recordInt
   introLockedRangeByZoom,
   introCenter: introCenterRef,
   setIntroComplete,
+  onIntroFinished: lifecycleIntroFinished,
   setAutoTileFetchEnabled,
   setVisibleTileRange,
   prefetchVisibleDetailTilesAtZoom,
@@ -800,11 +812,9 @@ async function purgeAndRefresh() {
 
 // --- City switching ---
 
-let citySwitchInProgress = false
-
 async function switchCity(city: CityCode, landingCoords?: [number, number]) {
-  if (city === selectedCity.value || citySwitchInProgress) return
-  citySwitchInProgress = true
+  if (city === selectedCity.value || isSwitching.value) return
+  lifecycleStartCitySwitch()
 
   try {
     const { center, name } = CITY_CONFIG[city]
@@ -831,20 +841,23 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
     await setCityContext(city)
     setSelectedCity(city)
     void router.replace({ query: { ...route.query, city } })
-  } finally {
-    citySwitchInProgress = false
+  } catch (e) {
+    console.error('[CitySwitch] failed', e)
+    // On failure, transition back to ready so the UI isn't stuck
+    lifecycleForceReady()
+    return
   }
+  // NOTE: we don't transition to ready here — the sourcedata handler does
+  // that when tiles actually render (via lifecycleTilesLoaded / lifecycleCitySwitchReady).
 }
 
 // React to URL city changes driven by the sidebar CitySelector.
-// Block until the first city context is ready — IP detection or startup routing can update
-// the URL before the parquet/DB is initialised, which would race with startup.
-// We do NOT block on introActive here: the intro animation is cosmetic and city switches
-// should work as soon as the data layer is ready.
+// Allow city switches from any lifecycle phase — the state machine handles
+// cancellation and re-entry correctly.
 watch(
   () => route.query.city,
   (newCity) => {
-    if (defaultQueryLoading.value) return
+    if (lifecyclePhase.value === 'initializing') return
     const city = Array.isArray(newCity) ? newCity[0] : newCity
     if (typeof city === 'string' && city in CITY_CONFIG && city !== selectedCity.value) {
       void switchCity(city as CityCode)
@@ -963,12 +976,11 @@ watch(flyToTarget, (t) => {
 // Reload tiles when query, filter, or revision changes
 watch([currentMapQuery, publishedTreeIdFilterSql, mapQueryRevision], async ([query, filterSql], [oldQuery]) => {
   if (!mapRef.value) return
-  // Only show the full-screen loading overlay when the base query changes (city switch, query
-  // rewrite). Filter-only publishes from the chat should not block the UI with a loading screen.
+  // Only show the tile-refresh spinner for filter-only changes (not city switches,
+  // which are managed by the lifecycle state machine).
   const isQueryChange = query !== oldQuery
   if (isQueryChange) {
     loadingMessage.value = 'Counting our conifers...'
-    defaultQueryLoading.value = true
   } else {
     startTileRefreshMessage()
   }
@@ -1046,7 +1058,7 @@ onMounted(async () => {
 
   if (!isWebGLSupported()) {
     mapError.value = 'Your browser does not support WebGL, which is required to display the map. Try enabling hardware acceleration in your browser settings, or use a different browser.'
-    defaultQueryLoading.value = false
+    lifecycleForceReady() // Force to ready so error message is visible
     return
   }
 
@@ -1079,7 +1091,7 @@ onMounted(async () => {
     const err = (e as any).error
     if (err?.type === 'webglcontextcreationerror') {
       mapError.value = 'Failed to initialize the map renderer (WebGL error). Try enabling hardware acceleration in your browser settings.'
-      defaultQueryLoading.value = false
+      lifecycleForceReady() // Force to ready so error message is visible
     }
   })
 
@@ -1104,7 +1116,14 @@ onMounted(async () => {
       }
       if (e.sourceId === 'trees' && !firstTreesSourceLoadedLogged) {
         firstTreesSourceLoadedLogged = true
-        defaultQueryLoading.value = false
+        // Notify the lifecycle state machine that tiles are loaded.
+        // On initial load: loading → intro (desktop) or loading → ready (mobile).
+        // On city switch: switching → ready.
+        if (lifecyclePhase.value === 'switching') {
+          lifecycleCitySwitchReady()
+        } else {
+          lifecycleTilesLoaded(!!props.simplified)
+        }
         mapContainer.value?.setAttribute('data-trees-loaded-for', selectedCity.value)
         stopTileRefreshMessage()
         console.info('[Perf] map:trees-source:loaded', {
@@ -1167,7 +1186,7 @@ onMounted(async () => {
         mapQueryChangedAt = nowMs()
         firstTreesSourceLoadedLogged = false
         firstMapIdleAfterPublishLogged = false
-        defaultQueryLoading.value = true
+        lifecycleStartLoading()
         lastVisibleRangeSigByZoom.clear()
         introLockedRangeByZoom.clear()
 
@@ -1196,6 +1215,7 @@ onMounted(async () => {
       })
       .catch((e) => {
         mapError.value = (e as Error).message
+        lifecycleCitySwitchReady() // Force to ready so error is visible
       })
   })
 })

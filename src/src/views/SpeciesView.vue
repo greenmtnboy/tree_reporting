@@ -150,8 +150,18 @@
                 class="chart-sub"
               >{{ chartById(card.id).subtitle }}</span>
             </div>
+            <SpeciesCarousel
+              v-if="chartById(card.id).renderMode === 'carousel'"
+              :item-id="card.id"
+              :connection-id="connectionId"
+              :query-execution-service="queryExecutionService"
+              :imports="SPECIES_DASHBOARD_IMPORTS as DashboardImport[]"
+              :filters="filtersForChart(card.id)"
+              :parameters="dashboardContextParameters"
+              :query="chartById(card.id).query"
+            />
             <SummaryMarkdownCard
-              v-if="chartById(card.id).renderMode === 'markdown'"
+              v-else-if="chartById(card.id).renderMode === 'markdown'"
               :item-id="card.id"
               :connection-id="connectionId"
               :query-execution-service="queryExecutionService"
@@ -195,6 +205,7 @@ import {
 } from '@trilogy-data/trilogy-studio-components/dashboard'
 import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
 import SummaryMarkdownCard from '../components/SummaryMarkdownCard.vue'
+import SpeciesCarousel from '../components/SpeciesCarousel.vue'
 import SpeciesSearchFilter from '../components/SpeciesSearchFilter.vue'
 import TreeDotMap from '../components/TreeDotMap.vue'
 import { buildDashboardContextParameters } from '../composables/dashboardContextSource'
