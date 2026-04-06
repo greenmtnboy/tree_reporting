@@ -225,6 +225,7 @@ import {
   readSpeciesRouteCity,
 } from '../composables/speciesDashboardConfig'
 import { filterSpeciesDimensionClick, useSpeciesFilters } from '../composables/useSpeciesFilters'
+import { useMapLifecycle } from '../composables/useMapLifecycle'
 import { CATEGORY_COLORS } from '../treeFormColors'
 import type { TreeForm } from '../types'
 import cityConfig from '../cityConfig.json'
@@ -268,7 +269,8 @@ LIMIT 1;`
 const route = useRoute()
 const router = useRouter()
 let syncingRoute = false
-const { selectedCity, setSelectedCity } = useMapData()
+const { selectedCity } = useMapData()
+const { activateCity } = useMapLifecycle()
 const { initialize, connectionId, queryExecutionService, setDashboardContext, ready } = useSummaryDashboardExecution()
 
 const embeddedDashboardGroup = useEmbeddedDashboardGroup({
@@ -545,7 +547,7 @@ const initialRouteCity = readSpeciesRouteCity(route.query.city)
 if (initialRouteCity) {
   cityFilter.value = initialRouteCity
   if (initialRouteCity !== selectedCity.value) {
-    setSelectedCity(initialRouteCity)
+    activateCity(initialRouteCity)
   }
 } else {
   cityFilter.value = null
@@ -567,7 +569,7 @@ watch(
     const nextCity = readSpeciesRouteCity(routeCity)
     cityFilter.value = nextCity
     if (nextCity && nextCity !== selectedCity.value) {
-      setSelectedCity(nextCity)
+      activateCity(nextCity)
     }
   },
 )

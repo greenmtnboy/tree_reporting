@@ -1,6 +1,7 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { ColorLabelMap } from '../types'
 import cityConfigData from '../cityConfig.json'
+import { useMapLifecycle } from './useMapLifecycle'
 
 export const CITY_CONFIG = cityConfigData as unknown as Record<string, { name: string; center: [number, number] }>
 export type CityCode = string
@@ -49,6 +50,26 @@ const colorLabelMap = ref<ColorLabelMap | null>(null)
 const mapQueryRevision = ref(0)
 const userLocation = ref<{ lat: number; lng: number } | null>(null)
 
+function applyCommittedCity(city: CityCode) {
+  selectedCity.value = city
+  currentMapQuery.value = buildDefaultQueryForCity(city)
+  publishedTreeIdFilterSql.value = null
+  colorOverrideSql.value = null
+  colorLabelMap.value = null
+  mapQueryRevision.value += 1
+}
+
+const { contextCity } = useMapLifecycle()
+
+watch(
+  contextCity,
+  (city) => {
+    if (!city || city === selectedCity.value) return
+    applyCommittedCity(city)
+  },
+  { immediate: true },
+)
+
 export function useMapData() {
   function publishMapQuery(query: string) {
     currentMapQuery.value = query.trim()
@@ -80,15 +101,6 @@ export function useMapData() {
     mapQueryRevision.value += 1
   }
 
-  function setSelectedCity(city: CityCode) {
-    selectedCity.value = city
-    currentMapQuery.value = buildDefaultQueryForCity(city)
-    publishedTreeIdFilterSql.value = null
-    colorOverrideSql.value = null
-    colorLabelMap.value = null
-    mapQueryRevision.value += 1
-  }
-
   function setUserLocation(lat: number, lng: number) {
     userLocation.value = { lat, lng }
   }
@@ -99,7 +111,6 @@ export function useMapData() {
 
   return {
     selectedCity,
-    setSelectedCity,
     currentMapQuery,
     publishedTreeIdFilterSql,
     colorOverrideSql,

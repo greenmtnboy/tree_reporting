@@ -150,11 +150,13 @@ import {
   readSummaryRouteCity,
 } from '../composables/summaryDashboardConfig'
 import { filterSummaryDimensionClick, useSummaryFilters } from '../composables/useSummaryFilters'
+import { useMapLifecycle } from '../composables/useMapLifecycle'
 import cityConfig from '../cityConfig.json'
 
 const route = useRoute()
 const router = useRouter()
-const { selectedCity, setSelectedCity } = useMapData()
+const { selectedCity } = useMapData()
+const { activateCity } = useMapLifecycle()
 const { initialize, connectionId, queryExecutionService, setDashboardContext } = useSummaryDashboardExecution()
 
 const embeddedDashboardGroup = useEmbeddedDashboardGroup({
@@ -277,7 +279,7 @@ const initialRouteCity = readSummaryRouteCity(route.query.city)
 if (initialRouteCity) {
   cityFilter.value = initialRouteCity
   if (initialRouteCity !== selectedCity.value) {
-    setSelectedCity(initialRouteCity)
+    activateCity(initialRouteCity)
   }
 } else {
   cityFilter.value = selectedCity.value
@@ -293,7 +295,7 @@ watch(
     const nextCity = readSummaryRouteCity(routeCity)
     cityFilter.value = nextCity
     if (nextCity && nextCity !== selectedCity.value) {
-      setSelectedCity(nextCity)
+      activateCity(nextCity)
     }
   },
 )

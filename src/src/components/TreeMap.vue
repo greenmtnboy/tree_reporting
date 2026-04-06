@@ -166,13 +166,20 @@ const zoomLevel = ref(13)
 const mapError = ref<string | null>(null)
 const {
   phase: lifecyclePhase,
+  requestedCity: lifecycleRequestedCity,
+  renderedCity: lifecycleRenderedCity,
   showLoadingOverlay,
-  isSwitching,
+  initialize: lifecycleInitialize,
+  requestCity: lifecycleRequestCity,
+  setManualCitySelectionReady: lifecycleSetManualCitySelectionReady,
+  currentSnapshot: lifecycleCurrentSnapshot,
   startLoading: lifecycleStartLoading,
+  commitContextCity: lifecycleCommitContextCity,
   tilesLoaded: lifecycleTilesLoaded,
   introFinished: lifecycleIntroFinished,
   startCitySwitch: lifecycleStartCitySwitch,
   citySwitchReady: lifecycleCitySwitchReady,
+  matches: lifecycleMatches,
   forceReady: lifecycleForceReady,
 } = useMapLifecycle()
 const introActive = ref(!props.simplified)
@@ -258,7 +265,7 @@ const { landmarks } = useLandmarkData()
 const { target: flyToTarget, flyTo } = useFlyTo()
 const route = useRoute()
 const router = useRouter()
-const { selectedCity, setSelectedCity, currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision, userLocation, setUserLocation } = useMapData()
+const { selectedCity, currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision, userLocation, setUserLocation } = useMapData()
 
 function readRouteCity(value: unknown): CityCode | null {
   const city = Array.isArray(value) ? value[0] : value
@@ -267,9 +274,10 @@ function readRouteCity(value: unknown): CityCode | null {
 
 // Initialise city from URL on first load.
 const initialRouteCity = readRouteCity(route.query.city)
-if (initialRouteCity) setSelectedCity(initialRouteCity)
+lifecycleInitialize(initialRouteCity ?? selectedCity.value)
 
-const introCenterRef = computed((): [number, number] => CITY_CONFIG[selectedCity.value].center)
+const mapDisplayCity = computed((): CityCode => (lifecycleRequestedCity.value ?? selectedCity.value) as CityCode)
+const introCenterRef = computed((): [number, number] => CITY_CONFIG[mapDisplayCity.value].center)
 
 // --- Computed ---
 
@@ -351,6 +359,17 @@ function setMapInteractions(enabled: boolean) {
   mapRef.value.scrollZoom[action]()
   mapRef.value.touchZoomRotate[action]()
   mapRef.value.touchPitch[action]()
+}
+
+function jumpMapToCity(city: CityCode) {
+  if (!mapRef.value) return
+  mapRef.value.stop()
+  mapRef.value.jumpTo({
+    center: CITY_CONFIG[city].center,
+    zoom: props.simplified ? 13 : INTRO_START_ZOOM,
+    pitch: props.simplified ? 0 : 60,
+    bearing: props.simplified ? 0 : -20,
+  })
 }
 
 // --- Viewport tracking ---
@@ -813,11 +832,12 @@ async function purgeAndRefresh() {
 // --- City switching ---
 
 async function switchCity(city: CityCode, landingCoords?: [number, number]) {
-  if (city === selectedCity.value || isSwitching.value) return
-  lifecycleStartCitySwitch()
+  if (city === lifecycleRequestedCity.value && city === lifecycleRenderedCity.value) return
+  const transition = lifecycleStartCitySwitch(city)
 
   try {
     const { center, name } = CITY_CONFIG[city]
+    mapRef.value?.stop()
 
     if (props.simplified) {
       // On mobile, use a smooth but shorter animation than the globe swoop
@@ -836,15 +856,20 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
       await runGlobeSwoopTo(center, name, landingCoords)
     }
 
-    // Load the new city's parquet before updating state — the query/filter watcher fires
-    // immediately on setSelectedCity, so the city context must be ready first.
+    if (!lifecycleMatches(transition)) return
+
+    // Load the new city's parquet before accepting the transition so stale
+    // switch completions cannot overwrite the lifecycle's current request.
     await setCityContext(city)
-    setSelectedCity(city)
-    void router.replace({ query: { ...route.query, city } })
+    if (!lifecycleCommitContextCity(transition)) return
+    if (readRouteCity(route.query.city) !== city) {
+      void router.replace({ query: { ...route.query, city } })
+    }
   } catch (e) {
+    if (!lifecycleMatches(transition)) return
     console.error('[CitySwitch] failed', e)
     // On failure, transition back to ready so the UI isn't stuck
-    lifecycleForceReady()
+    lifecycleForceReady(transition)
     return
   }
   // NOTE: we don't transition to ready here — the sourcedata handler does
@@ -852,16 +877,21 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
 }
 
 // React to URL city changes driven by the sidebar CitySelector.
-// Allow city switches from any lifecycle phase — the state machine handles
-// cancellation and re-entry correctly.
+// During initialization there is no meaningful in-flight city to preserve, so
+// update selectedCity immediately. Once the map is live, newer requests should
+// preempt older ones rather than wait behind them.
 watch(
   () => route.query.city,
   (newCity) => {
-    if (lifecyclePhase.value === 'initializing') return
     const city = Array.isArray(newCity) ? newCity[0] : newCity
-    if (typeof city === 'string' && city in CITY_CONFIG && city !== selectedCity.value) {
-      void switchCity(city as CityCode)
+    if (typeof city !== 'string' || !(city in CITY_CONFIG)) return
+    if (city === lifecycleRequestedCity.value && city === selectedCity.value) return
+    lifecycleRequestCity(city)
+    if (lifecyclePhase.value === 'initializing' || lifecyclePhase.value === 'loading') {
+      jumpMapToCity(city as CityCode)
+      return
     }
+    void switchCity(city as CityCode)
   },
 )
 
@@ -886,8 +916,8 @@ async function detectCityFromIp(): Promise<void> {
  */
 function silentlyApplyCity(lat: number, lng: number): void {
   const city = closestCityTo(lat, lng)
-  if (city !== selectedCity.value) {
-    setSelectedCity(city)
+  if (city !== lifecycleRequestedCity.value) {
+    lifecycleRequestCity(city)
     void router.replace({ query: { ...route.query, city } })
   }
 }
@@ -1021,24 +1051,64 @@ watch(selectedCity, (city) => {
   updateCityMarkersSelected(mapRef.value, city)
 })
 
+async function initializeRequestedCity(map: maplibregl.Map): Promise<void> {
+  while (true) {
+    const city = (lifecycleRequestedCity.value ?? selectedCity.value) as CityCode
+    const transition = lifecycleStartLoading(lifecycleCurrentSnapshot(city) ?? undefined)
+    if (!transition) return
+
+    loadingMessage.value = 'Counting our conifers...'
+    mapQueryChangedAt = nowMs()
+    firstTreesSourceLoadedLogged = false
+    firstMapIdleAfterPublishLogged = false
+    lastVisibleRangeSigByZoom.clear()
+    introLockedRangeByZoom.clear()
+    jumpMapToCity(city)
+
+    await setCityContext(city)
+    if (!lifecycleCommitContextCity(transition)) continue
+    await setTileQuery(currentMapQuery.value)
+    if (!lifecycleMatches(transition)) continue
+    await setPublishedTreeIdFilterSql(publishedTreeIdFilterSql.value)
+    if (!lifecycleMatches(transition)) continue
+
+    addTreeLayers()
+    bindTreeInteractions()
+
+    if (!props.simplified) {
+      addCityMarkers(map, city)
+      if (!globeMarkersBound) {
+        globeMarkersBound = true
+        bindCityMarkerInteractions(map, (code) => { void switchCity(code) })
+      }
+    }
+
+    if (landmarks.value.length > 0) {
+      registerLandmarkEyeIcon(map)
+      addLandmarkLayer(map, landmarks.value)
+      bindLandmarkInteractions()
+    }
+
+    return
+  }
+}
+
 // --- Lifecycle ---
 
 onMounted(async () => {
+  lifecycleSetManualCitySelectionReady(false)
   window.addEventListener('keydown', onWasdKeyDown)
   window.addEventListener('keyup', onWasdKeyUp)
   // Resolve city from IP before initialising the map so the initial center is correct.
   await router.isReady()
   const mountedRouteCity = readRouteCity(route.query.city)
-  if (mountedRouteCity && mountedRouteCity !== selectedCity.value) {
-    setSelectedCity(mountedRouteCity)
-  }
   if (!mountedRouteCity) {
     await Promise.race([detectCityFromIp(), new Promise<void>((r) => setTimeout(r, 2000))])
   }
 
   // Kick off DuckDB init now that the city is known so it runs in parallel with
   // map style loading instead of waiting until the map's 'load' event fires.
-  preWarmForCity(selectedCity.value)
+  preWarmForCity(mapDisplayCity.value)
 
   // If the user already granted geolocation, silently restore their location pin and apply
   // city detection (no animated camera transition).
@@ -1069,7 +1139,7 @@ onMounted(async () => {
     container: mapContainer.value!,
     style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
     zoom: props.simplified ? 13 : INTRO_START_ZOOM,
-    center: CITY_CONFIG[selectedCity.value].center,
+    center: CITY_CONFIG[mapDisplayCity.value].center,
     pitch: props.simplified ? 0 : 60,
     bearing: props.simplified ? 0 : -20,
     maxPitch: props.simplified ? 0 : 70,
@@ -1116,15 +1186,18 @@ onMounted(async () => {
       }
       if (e.sourceId === 'trees' && !firstTreesSourceLoadedLogged) {
         firstTreesSourceLoadedLogged = true
+        const loadedCity = (lifecycleRequestedCity.value ?? selectedCity.value) as CityCode
+        const transition = lifecycleCurrentSnapshot(loadedCity)
+        if (!transition) return
         // Notify the lifecycle state machine that tiles are loaded.
         // On initial load: loading → intro (desktop) or loading → ready (mobile).
         // On city switch: switching → ready.
         if (lifecyclePhase.value === 'switching') {
-          lifecycleCitySwitchReady()
+          lifecycleCitySwitchReady(transition)
         } else {
-          lifecycleTilesLoaded(!!props.simplified)
+          lifecycleTilesLoaded(transition, !!props.simplified)
         }
-        mapContainer.value?.setAttribute('data-trees-loaded-for', selectedCity.value)
+        mapContainer.value?.setAttribute('data-trees-loaded-for', loadedCity)
         stopTileRefreshMessage()
         console.info('[Perf] map:trees-source:loaded', {
           msSincePublish: Math.round(nowMs() - mapQueryChangedAt),
@@ -1168,7 +1241,7 @@ onMounted(async () => {
       logIconLayerSnapshot('first-idle-after-publish')
     })
 
-    void ensureTileProtocolRegistered(selectedCity.value)
+    void ensureTileProtocolRegistered((lifecycleRequestedCity.value ?? selectedCity.value) as CityCode)
       .then(async () => {
         // DuckDB init is complete — colors are available
         const colors = workerDistinctColors.value
@@ -1182,45 +1255,18 @@ onMounted(async () => {
           }
         }
 
-        loadingMessage.value = 'Counting our conifers...'
-        mapQueryChangedAt = nowMs()
-        firstTreesSourceLoadedLogged = false
-        firstMapIdleAfterPublishLogged = false
-        lifecycleStartLoading()
-        lastVisibleRangeSigByZoom.clear()
-        introLockedRangeByZoom.clear()
-
-        // Set city-specific DB context (bounds, agg cache, color map) for initial city.
-        await setCityContext(selectedCity.value)
-        await setTileQuery(currentMapQuery.value)
-        await setPublishedTreeIdFilterSql(publishedTreeIdFilterSql.value)
-        addTreeLayers()
-        bindTreeInteractions()
-
-        // Globe-level city overview — visible only when zoomed out past heatmap range
-        if (!props.simplified) {
-          addCityMarkers(map, selectedCity.value)
-          if (!globeMarkersBound) {
-            globeMarkersBound = true
-            bindCityMarkerInteractions(map, (code) => { void switchCity(code) })
-          }
-        }
-
-        // Landmark eyes — add immediately if data is already loaded
-        if (landmarks.value.length > 0) {
-          registerLandmarkEyeIcon(map)
-          addLandmarkLayer(map, landmarks.value)
-          bindLandmarkInteractions()
-        }
+        lifecycleSetManualCitySelectionReady(true)
+        await initializeRequestedCity(map)
       })
       .catch((e) => {
         mapError.value = (e as Error).message
-        lifecycleCitySwitchReady() // Force to ready so error is visible
+        lifecycleForceReady(lifecycleRenderedCity.value ? { id: 0, city: lifecycleRenderedCity.value } : null) // Force to ready so error is visible
       })
   })
 })
 
 onUnmounted(() => {
+  lifecycleSetManualCitySelectionReady(false)
   window.removeEventListener('keydown', onWasdKeyDown)
   window.removeEventListener('keyup', onWasdKeyUp)
   if (wasdRafId !== null) cancelAnimationFrame(wasdRafId)

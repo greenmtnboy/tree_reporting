@@ -1,5 +1,5 @@
 <template>
-  <select class="city-select" :value="selectedCity" aria-label="Select city" @change="handleChange">
+  <select class="city-select" :value="displayedCity" :disabled="isDisabled" aria-label="Select city" @change="handleChange">
     <option v-for="{ code, label } in sortedCities" :key="code" :value="code">
       {{ label }}
     </option>
@@ -10,6 +10,7 @@
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMapData, CITY_CONFIG, type CityCode } from '../composables/useMapData'
+import { useMapLifecycle } from '../composables/useMapLifecycle'
 
 const COUNTRY_BY_PREFIX: Record<string, string> = {
   US: 'United States',
@@ -24,6 +25,9 @@ const COUNTRY_BY_PREFIX: Record<string, string> = {
 const router = useRouter()
 const route = useRoute()
 const { selectedCity } = useMapData()
+const { requestedCity, canManuallySelectCity } = useMapLifecycle()
+const displayedCity = computed(() => requestedCity.value ?? selectedCity.value)
+const isDisabled = computed(() => route.name === 'map' && !canManuallySelectCity.value)
 
 function formatCityLabel(code: string, name: string) {
   const country = COUNTRY_BY_PREFIX[code.slice(0, 2)]
@@ -37,6 +41,7 @@ const sortedCities = computed(() =>
 )
 
 function handleChange(e: Event) {
+  if (isDisabled.value) return
   const city = (e.target as HTMLSelectElement).value as CityCode
   void router.replace({ query: { ...route.query, city } })
 }
@@ -82,5 +87,11 @@ function handleChange(e: Event) {
 .city-select option {
   background: var(--color-asphalt);
   color: var(--color-ink);
+}
+
+.city-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
 }
 </style>

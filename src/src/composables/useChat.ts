@@ -568,10 +568,10 @@ function toToolCallRecords(
 }
 
 export function useChat() {
-  const { query: duckQuery, setCityContext } = useDuckDB()
+  const { query: duckQuery } = useDuckDB()
   const { flyTo } = useFlyTo()
   const { landmarks } = useLandmarkData()
-  const { selectedCity, setSelectedCity, userLocation, publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
+  const { selectedCity, userLocation, publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
   const { crossFilters, applyValuesForField, clearFields, summaryFilterPromptState } = useSummaryFilters()
   const {
     initialize: initializeSummaryDashboard,
@@ -599,8 +599,8 @@ export function useChat() {
       if (dist < minDist) { minDist = dist; closest = code }
     }
     if (closest !== selectedCity.value) {
-      setSelectedCity(closest)
-      void setCityContext(closest)
+      const route = router.currentRoute.value
+      void router.replace({ query: { ...route.query, city: closest } })
     }
   }
 

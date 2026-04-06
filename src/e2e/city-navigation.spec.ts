@@ -9,6 +9,10 @@ const CITY_CODE: Record<string, string> = {
   'Burlington':    'USBTV',
 }
 
+async function waitForManualCitySelection(page: Page, timeoutMs: number): Promise<void> {
+  await expect(page.getByLabel('Select city')).toBeEnabled({ timeout: timeoutMs })
+}
+
 /**
  * Selects the city from the dropdown and waits until the map container's
  * `data-trees-loaded-for` attribute equals the destination city code.
@@ -73,13 +77,10 @@ test.describe('City navigation — desktop', () => {
 
   test('switching city during initial animation unlocks the chat', async ({ page }) => {
     test.setTimeout(180_000)
-    // Wait just long enough for the initial city to start loading (but not finish
-    // the intro animation), then switch to a different city.
     const citySelect = page.getByLabel('Select city')
     await expect(citySelect).toBeVisible({ timeout: 30_000 })
-    // Switch immediately — the initial city may still be in the intro animation.
+    await waitForManualCitySelection(page, 30_000)
     await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
-    // assertCitySwitch already checks that the chat input is enabled.
   })
 })
 
@@ -114,6 +115,7 @@ test.describe('City navigation — mobile', () => {
     test.setTimeout(120_000)
     const citySelect = page.getByLabel('Select city')
     await expect(citySelect).toBeVisible({ timeout: 30_000 })
+    await waitForManualCitySelection(page, 30_000)
     await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
   })
 })
