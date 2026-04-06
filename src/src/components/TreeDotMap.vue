@@ -8,20 +8,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import type { DashboardImport, DashboardExecutionService } from '@trilogy-data/trilogy-studio-components/dashboard'
+import { ref, watch, onMounted, onBeforeUnmount, nextTick, toValue } from 'vue'
+import type { DashboardImport, DashboardExecutionService, SqlFilterLike } from '@trilogy-data/trilogy-studio-components/dashboard'
 
 const props = withDefaults(
   defineProps<{
     connectionId: string
     queryExecutionService: DashboardExecutionService
     imports?: DashboardImport[]
-    filters?: string[]
+    filters?: SqlFilterLike[] | string[]
+    parameters?: Record<string, unknown>
     itemId: string
   }>(),
   {
     imports: () => [],
     filters: () => [],
+    parameters: () => ({}),
   },
 )
 
@@ -33,6 +35,11 @@ const activeCancellation = ref<{ cancel: () => void } | null>(null)
 const lastPoints = ref<Array<{ latitude: number; longitude: number }>>([])
 
 const QUERY = 'SELECT latitude, longitude WHERE latitude IS NOT NULL AND longitude IS NOT NULL;'
+
+function buildParameters() {
+  const parameters = toValue(props.parameters as Record<string, unknown> | undefined)
+  return parameters && typeof parameters === 'object' ? { ...parameters } : {}
+}
 
 function renderDots(points: Array<{ latitude: number; longitude: number }>) {
   const canvas = canvasRef.value
@@ -101,12 +108,18 @@ async function load() {
   loading.value = true
 
   try {
+    const resolvedFilters = (props.filters || []).map((f) =>
+      typeof f === 'string' ? { value: f } : f,
+    )
+    const filterStrings = resolvedFilters.map((f) => f.value)
+    const filterParams = Object.assign({}, ...resolvedFilters.map((f) => (f as SqlFilterLike).parameters || {}))
     const execution = await props.queryExecutionService.executeQueriesBatch(
       props.connectionId,
       [{
         label: props.itemId,
         query: QUERY,
-        extra_filters: props.filters,
+        extra_filters: filterStrings,
+        parameters: { ...buildParameters(), ...filterParams },
       }],
       'trilogy',
       props.imports.map((imp) => ({ name: imp.name, alias: imp.alias })),
@@ -154,7 +167,7 @@ onBeforeUnmount(() => {
 })
 
 watch(
-  () => `${props.connectionId}::${JSON.stringify(props.filters)}`,
+  () => `${props.connectionId}::${JSON.stringify(props.filters)}::${JSON.stringify(buildParameters())}`,
   () => void load(),
   { immediate: true },
 )

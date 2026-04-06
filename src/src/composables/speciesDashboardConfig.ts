@@ -8,7 +8,7 @@ export type SpeciesDashboardChart = {
   subtitle?: string
   query: string
   chartConfig: ChartConfig
-  renderMode?: 'chart' | 'markdown'
+  renderMode?: 'chart' | 'markdown' | 'carousel'
   allowCrossFilter?: boolean
   requiresCitySelection?: boolean
 }
@@ -72,8 +72,8 @@ export const SPECIES_CHARTS: SpeciesDashboardChart[] = [
   // Spotlight — rich markdown fact sheet for the selected species
   {
     id: 'sp-spotlight',
-    title: 'Species Fact Sheet',
-    subtitle: 'Dominant species detail for the current genus or species filter',
+    title: 'Top 100 Species',
+    subtitle: 'Most common species in the current filter, ordered by population',
     query: `SELECT
 species,
 common_names[1] as common_name,
@@ -88,11 +88,13 @@ bloom_months,
 wildlife_value,
 drought_tolerance,
 water_needs,
-count(tree_id) by species as tree_count,
-rank(species) over (order by tree_count desc, species asc) as tree_rank
-HAVING tree_rank = 1;`,
+photo_url,
+photo_attribution,
+count(tree_id) by species as tree_count
+ORDER BY tree_count DESC, species ASC
+LIMIT 100;`,
     chartConfig: { chartType: 'headline', xField: 'tree_count', showTitle: false },
-    renderMode: 'markdown',
+    renderMode: 'carousel',
   },
 
   // City distribution — which cities have this species, colored by nativeness

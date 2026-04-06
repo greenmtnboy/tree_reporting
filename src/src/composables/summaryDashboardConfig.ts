@@ -8,7 +8,7 @@ export type SummaryDashboardChart = {
   subtitle?: string
   query: string
   chartConfig: ChartConfig
-  renderMode?: 'chart' | 'markdown'
+  renderMode?: 'chart' | 'markdown' | 'carousel'
   allowCrossFilter?: boolean
   requiresCitySelection?: boolean
 }
@@ -76,7 +76,7 @@ export const SUMMARY_KPI_CHARTS: SummaryDashboardKpi[] = [
 export const SUMMARY_CHARTS: SummaryDashboardChart[] = [
   {
     id: 'top-tree-spotlight',
-    title: 'Top Tree In Current View',
+    title: 'Top 100 Species',
     subtitle: 'Most common species in the active filter set',
     query: `SELECT
 species,
@@ -92,16 +92,17 @@ bloom_months,
 wildlife_value,
 drought_tolerance,
 water_needs,
-count(tree_id) by species as tree_count,
-rank(species) over (order by tree_count desc, species asc) as tree_rank
-
-HAVING tree_rank = 1;`,
+photo_url,
+photo_attribution,
+count(tree_id) by species as tree_count
+ORDER BY tree_count DESC, species ASC
+LIMIT 100;`,
     chartConfig: {
       chartType: 'headline',
       xField: 'tree_count',
       showTitle: false,
     },
-    renderMode: 'markdown',
+    renderMode: 'carousel',
     allowCrossFilter: false,
   },
   {

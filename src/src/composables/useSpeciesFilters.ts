@@ -87,9 +87,9 @@ function getActiveFilterSummary() {
 
   for (const selection of crossFilters.getSelections()) {
     const sourceFilters = grouped.get(selection.source) ?? {}
-    for (const [field, value] of Object.entries(selection.filters)) {
-      if (typeof value !== 'string') continue
-      sourceFilters[field] = normalizeValues([...(sourceFilters[field] ?? []), value])
+    for (const [field, entry] of Object.entries(selection.filters)) {
+      if (entry.op !== 'eq' || typeof entry.value !== 'string') continue
+      sourceFilters[field] = normalizeValues([...(sourceFilters[field] ?? []), entry.value])
     }
     grouped.set(selection.source, sourceFilters)
   }

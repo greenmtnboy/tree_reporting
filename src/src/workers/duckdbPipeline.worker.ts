@@ -497,7 +497,6 @@ async function loadCityTrees(city?: string): Promise<void> {
         se.wildlife_value,
         se.fire_risk,
         se.drought_tolerance,
-        se.description,
         se.usda_zone_min,
         se.usda_zone_max,
         LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878) AS latitude_clamped,
@@ -534,7 +533,6 @@ async function loadCityTrees(city?: string): Promise<void> {
       wildlife_value,
       fire_risk,
       drought_tolerance,
-      description,
       usda_zone_min,
       usda_zone_max,
       ((longitude * ${WEB_MERCATOR_MAX}) / 180.0) AS x_3857,
@@ -574,7 +572,7 @@ async function loadCityTrees(city?: string): Promise<void> {
 async function doInit(city?: string) {
   if (db) return
   const t0 = nowMs()
-  console.info('[Perf] duckdb-worker:init:start', { city: city ?? 'all' })
+  console.info('[Perf] duckdb-worker:init:start', { city: city ?? '(deferred)' })
 
   const bundles: duckdb.DuckDBBundles = {
     mvp: {
@@ -620,44 +618,15 @@ async function doInit(city?: string) {
         wildlife_value,
         fire_risk,
         usda_zone_min,
-        usda_zone_max
+        usda_zone_max,
+        inat_taxon_id,
+        photo_url,
+        photo_license,
+        photo_attribution
       FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
     `)
   } catch (e) {
-    console.warn('[Perf] duckdb-worker:species-load:new-schema-failed', e)
-    try {
-      await conn.query(`
-        CREATE TABLE species_enrichment AS
-        SELECT
-          species,
-          string_split(common_names, ',') AS common_names,
-          CAST(NULL AS VARCHAR) AS description,
-          CASE lower(trim(COALESCE(tree_category, 'default')))
-            WHEN 'coniferous' THEN 'conifer'
-            ELSE lower(trim(COALESCE(tree_category, 'default')))
-          END AS tree_form,
-          CAST(NULL AS INTEGER[]) AS native_ecoregions,
-          is_evergreen,
-          mature_height_ft AS mature_height_min_ft,
-          mature_height_ft AS mature_height_max_ft,
-          CAST(NULL AS DOUBLE) AS canopy_spread_min_ft,
-          CAST(NULL AS DOUBLE) AS canopy_spread_max_ft,
-          growth_rate,
-          CAST(NULL AS INTEGER) AS lifespan_min_years,
-          CAST(NULL AS INTEGER) AS lifespan_max_years,
-          drought_tolerance,
-          CAST(NULL AS VARCHAR) AS water_needs,
-          CAST(NULL AS VARCHAR[]) AS sun_exposure,
-          CAST(NULL AS INTEGER[]) AS bloom_months,
-          wildlife_value,
-          fire_risk,
-          CAST(NULL AS INTEGER) AS usda_zone_min,
-          CAST(NULL AS INTEGER) AS usda_zone_max
-        FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
-      `)
-    } catch (legacyError) {
-      console.warn('[Perf] duckdb-worker:species-load:failed', legacyError)
-    }
+    console.error('[duckdb-worker] species-enrichment load failed — parquet schema may be out of date', e)
   }
 
   try {

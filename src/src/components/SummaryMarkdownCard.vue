@@ -12,9 +12,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, toValue, watch } from 'vue'
 import { MarkdownRenderer } from '@trilogy-data/trilogy-studio-components/dashboard'
-import type { DashboardImport, DashboardExecutionService } from '@trilogy-data/trilogy-studio-components/dashboard'
+import type { DashboardImport, DashboardExecutionService, SqlFilterLike } from '@trilogy-data/trilogy-studio-components/dashboard'
 
 const props = withDefaults(
   defineProps<{
@@ -22,12 +22,14 @@ const props = withDefaults(
     queryExecutionService: DashboardExecutionService
     imports?: DashboardImport[]
     query: string
-    filters?: string[]
+    filters?: SqlFilterLike[] | string[]
+    parameters?: Record<string, unknown>
     itemId: string
   }>(),
   {
     imports: () => [],
     filters: () => [],
+    parameters: () => ({}),
   },
 )
 
@@ -40,6 +42,11 @@ const spotlightDebugEnabled = typeof window !== 'undefined'
   && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function buildParameters() {
+  const parameters = toValue(props.parameters as Record<string, unknown> | undefined)
+  return parameters && typeof parameters === 'object' ? { ...parameters } : {}
+}
 
 function formatTitleCase(value: unknown) {
   if (typeof value !== 'string' || !value.trim()) return null
@@ -168,12 +175,18 @@ async function load() {
   loading.value = true
   error.value = null
   try {
+    const resolvedFilters = (props.filters || []).map((f) =>
+      typeof f === 'string' ? { value: f } : f,
+    )
+    const filterStrings = resolvedFilters.map((f) => f.value)
+    const filterParams = Object.assign({}, ...resolvedFilters.map((f) => (f as SqlFilterLike).parameters || {}))
     const execution = await props.queryExecutionService.executeQueriesBatch(
       props.connectionId,
       [{
         label: props.itemId,
         query: props.query,
-        extra_filters: props.filters,
+        extra_filters: filterStrings,
+        parameters: { ...buildParameters(), ...filterParams },
       }],
       'trilogy',
       props.imports.map((imp) => ({ name: imp.name, alias: imp.alias })),
@@ -230,7 +243,7 @@ async function load() {
 }
 
 watch(
-  () => `${props.connectionId}::${props.query}::${JSON.stringify(props.filters)}::${JSON.stringify(props.imports)}`,
+  () => `${props.connectionId}::${props.query}::${JSON.stringify(props.filters)}::${JSON.stringify(props.imports)}::${JSON.stringify(buildParameters())}`,
   () => {
     void load()
   },

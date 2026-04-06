@@ -398,6 +398,7 @@ async function executeSummaryRunQuery(
   const activeCity = getActiveSummaryCity(selectedCity)
   const baseFilters = getSummaryBaseFilters(activeCity)
   const extraFilters = crossFilters.getSqlFiltersFor('assistant-run-query', baseFilters)
+  const crossFilterParams = crossFilters.getSqlParametersFor('assistant-run-query')
 
   console.debug('[useChat] summary run_query execute', {
     city: activeCity,
@@ -406,7 +407,7 @@ async function executeSummaryRunQuery(
 
   const { resultPromise } = await summaryQueryExecutionService.executeQueriesBatch(
     summaryConnectionId,
-    [{ label: 'assistant-run-query', query, extra_filters: extraFilters }],
+    [{ label: 'assistant-run-query', query, extra_filters: extraFilters, parameters: crossFilterParams }],
     'trilogy',
     SUMMARY_DASHBOARD_IMPORTS.map((imp) => ({ name: imp.name, alias: imp.alias })),
   )
@@ -567,10 +568,10 @@ function toToolCallRecords(
 }
 
 export function useChat() {
-  const { query: duckQuery, setCityContext } = useDuckDB()
+  const { query: duckQuery } = useDuckDB()
   const { flyTo } = useFlyTo()
   const { landmarks } = useLandmarkData()
-  const { selectedCity, setSelectedCity, userLocation, publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
+  const { selectedCity, userLocation, publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
   const { crossFilters, applyValuesForField, clearFields, summaryFilterPromptState } = useSummaryFilters()
   const {
     initialize: initializeSummaryDashboard,
@@ -598,8 +599,8 @@ export function useChat() {
       if (dist < minDist) { minDist = dist; closest = code }
     }
     if (closest !== selectedCity.value) {
-      setSelectedCity(closest)
-      void setCityContext(closest)
+      const route = router.currentRoute.value
+      void router.replace({ query: { ...route.query, city: closest } })
     }
   }
 
@@ -952,6 +953,7 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
             label: chart.id,
             query: chart.query,
             extra_filters: crossFilters.getSqlFiltersFor(chart.id, baseFilters),
+            parameters: crossFilters.getSqlParametersFor(chart.id),
           }))
 
           const { resultPromise } = await summaryQueryExecutionService.executeQueriesBatch(

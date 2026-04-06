@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
+type CrossFilterEntry = { op: 'eq'; value: string | number | Date } | { op: 'range'; value: [any, any] } | { op: 'in'; value: any[] } | { op: 'is_null' }
+type CrossFilterValueMap = Record<string, CrossFilterEntry>
+
 vi.mock('@trilogy-data/trilogy-studio-components/dashboard', () => {
   function filterAllowedDimensionFilters(
-    filters: Record<string, string>,
+    filters: CrossFilterValueMap,
     validFields: Iterable<string> = [],
     options: { normalizeLocalFields?: boolean } = {},
   ) {
@@ -11,10 +14,6 @@ vi.mock('@trilogy-data/trilogy-studio-components/dashboard', () => {
 
     return Object.entries(filters).reduce(
       (acc, [field, value]) => {
-        if (typeof value !== 'string') {
-          return acc
-        }
-
         if (valid.size === 0) {
           acc[normalizeLocalFields ? field.replace(/^local\./, '') : field] = value
           return acc
@@ -34,7 +33,7 @@ vi.mock('@trilogy-data/trilogy-studio-components/dashboard', () => {
 
         return acc
       },
-      {} as Record<string, string>,
+      {} as CrossFilterValueMap,
     )
   }
 
@@ -52,6 +51,9 @@ vi.mock('@trilogy-data/trilogy-studio-components/dashboard', () => {
       getChartSelectionsFor: () => [],
       getFilterExpressionFor: () => '',
       getSqlFiltersFor: (_itemId: string, baseFilters: string[] = []) => baseFilters,
+      getSqlFilterLikesFor: (_itemId: string, baseFilters: string[] = []) =>
+        baseFilters.map((value) => ({ source: 'base', value })),
+      getSqlParametersFor: () => ({}),
     }),
   }
 })
@@ -63,10 +65,10 @@ describe('summary cross-filter field gating', () => {
     const result = filterSummaryDimensionClick({
       source: 'dominance-curve',
       filters: {
-        species: 'Red Maple',
-        rank_by_count: '1',
-        tree_count: '200',
-        curve_color: '#6BAF92',
+        species: { op: 'eq', value: 'Red Maple' },
+        rank_by_count: { op: 'eq', value: '1' },
+        tree_count: { op: 'eq', value: '200' },
+        curve_color: { op: 'eq', value: '#6BAF92' },
       },
       chart: {
         rank_by_count: '1',
@@ -78,7 +80,7 @@ describe('summary cross-filter field gating', () => {
     expect(result).toEqual({
       source: 'dominance-curve',
       filters: {
-        species: 'Red Maple',
+        species: { op: 'eq', value: 'Red Maple' },
       },
       chart: {
         rank_by_count: '1',
@@ -92,8 +94,8 @@ describe('summary cross-filter field gating', () => {
     const result = filterSummaryDimensionClick({
       source: 'tree-form',
       filters: {
-        'local.tree_form': 'broadleaf',
-        cat_color: '#A7E3B2',
+        'local.tree_form': { op: 'eq', value: 'broadleaf' },
+        cat_color: { op: 'eq', value: '#A7E3B2' },
       },
       chart: {
         'local.tree_form': 'broadleaf',
@@ -102,7 +104,7 @@ describe('summary cross-filter field gating', () => {
     })
 
     expect(result?.filters).toEqual({
-      tree_form: 'broadleaf',
+      tree_form: { op: 'eq', value: 'broadleaf' },
     })
   })
 
@@ -110,9 +112,9 @@ describe('summary cross-filter field gating', () => {
     const result = filterSummaryDimensionClick({
       source: 'plant-year',
       filters: {
-        plant_year: '1984',
-        planting_window: '40-49 years ago',
-        color: '#2F7D4F',
+        plant_year: { op: 'eq', value: '1984' },
+        planting_window: { op: 'eq', value: '40-49 years ago' },
+        color: { op: 'eq', value: '#2F7D4F' },
       },
       chart: {
         plant_year: '1984',

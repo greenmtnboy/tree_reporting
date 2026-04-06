@@ -150,13 +150,24 @@
                 class="chart-sub"
               >{{ chartById(card.id).subtitle }}</span>
             </div>
-            <SummaryMarkdownCard
-              v-if="chartById(card.id).renderMode === 'markdown'"
+            <SpeciesCarousel
+              v-if="chartById(card.id).renderMode === 'carousel'"
               :item-id="card.id"
               :connection-id="connectionId"
               :query-execution-service="queryExecutionService"
               :imports="SPECIES_DASHBOARD_IMPORTS as DashboardImport[]"
               :filters="filtersForChart(card.id)"
+              :parameters="dashboardContextParameters"
+              :query="chartById(card.id).query"
+            />
+            <SummaryMarkdownCard
+              v-else-if="chartById(card.id).renderMode === 'markdown'"
+              :item-id="card.id"
+              :connection-id="connectionId"
+              :query-execution-service="queryExecutionService"
+              :imports="SPECIES_DASHBOARD_IMPORTS as DashboardImport[]"
+              :filters="filtersForChart(card.id)"
+              :parameters="dashboardContextParameters"
               :query="chartById(card.id).query"
             />
             <EmbeddedDashboardChart
@@ -194,8 +205,10 @@ import {
 } from '@trilogy-data/trilogy-studio-components/dashboard'
 import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
 import SummaryMarkdownCard from '../components/SummaryMarkdownCard.vue'
+import SpeciesCarousel from '../components/SpeciesCarousel.vue'
 import SpeciesSearchFilter from '../components/SpeciesSearchFilter.vue'
 import TreeDotMap from '../components/TreeDotMap.vue'
+import { buildDashboardContextParameters } from '../composables/dashboardContextSource'
 import { useMapData, type CityCode } from '../composables/useMapData'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
 import {
@@ -212,6 +225,7 @@ import {
   readSpeciesRouteCity,
 } from '../composables/speciesDashboardConfig'
 import { filterSpeciesDimensionClick, useSpeciesFilters } from '../composables/useSpeciesFilters'
+import { useMapLifecycle } from '../composables/useMapLifecycle'
 import { CATEGORY_COLORS } from '../treeFormColors'
 import type { TreeForm } from '../types'
 import cityConfig from '../cityConfig.json'
@@ -255,14 +269,9 @@ LIMIT 1;`
 const route = useRoute()
 const router = useRouter()
 let syncingRoute = false
-const { selectedCity, setSelectedCity } = useMapData()
+const { selectedCity } = useMapData()
+const { activateCity } = useMapLifecycle()
 const { initialize, connectionId, queryExecutionService, setDashboardContext, ready } = useSummaryDashboardExecution()
-
-const sharedChartProps = {
-  connectionId,
-  queryExecutionService,
-  imports: SPECIES_DASHBOARD_IMPORTS as DashboardImport[],
-}
 
 const embeddedDashboardGroup = useEmbeddedDashboardGroup({
   dashboardId: `species-${connectionId}`,
@@ -277,6 +286,14 @@ const speciesFilter = ref<string | null>(null)
 const genusOptions = ref<FilterOption[]>([])
 const speciesOptions = ref<FilterOption[]>([])
 const emptyChartIds = reactive(new Set<string>())
+const dashboardContextParameters = computed(() => buildDashboardContextParameters(cityFilter.value))
+
+const sharedChartProps = computed(() => ({
+  connectionId,
+  queryExecutionService,
+  imports: SPECIES_DASHBOARD_IMPORTS as DashboardImport[],
+  parameters: dashboardContextParameters.value,
+}))
 
 const { crossFilters, activeSpeciesFilters } = useSpeciesFilters()
 
@@ -500,7 +517,7 @@ function clearAllFilters() {
 
 function filtersForChart(chartId: string) {
   void crossFilters.version.value
-  return crossFilters.getSqlFiltersFor(chartId, baseFilters.value)
+  return crossFilters.getSqlFilterLikesFor(chartId, baseFilters.value)
 }
 
 function selectionFiltersForChart(chartId: string) {
@@ -530,7 +547,7 @@ const initialRouteCity = readSpeciesRouteCity(route.query.city)
 if (initialRouteCity) {
   cityFilter.value = initialRouteCity
   if (initialRouteCity !== selectedCity.value) {
-    setSelectedCity(initialRouteCity)
+    activateCity(initialRouteCity)
   }
 } else {
   cityFilter.value = null
@@ -552,7 +569,7 @@ watch(
     const nextCity = readSpeciesRouteCity(routeCity)
     cityFilter.value = nextCity
     if (nextCity && nextCity !== selectedCity.value) {
-      setSelectedCity(nextCity)
+      activateCity(nextCity)
     }
   },
 )

@@ -11,6 +11,8 @@ playwright-report/
 test-results/
 
 *.pyc
+.uv-cache/
+.pytest_cache/
 
 *.tsbuildinfo
 

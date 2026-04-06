@@ -395,18 +395,6 @@ It prints `true` if every species has complete enrichment, `false` + a list of m
 cd data/raw && uv run tree_enrichment.py --limit 50 --output tree_enrichment.parquet
 ```
 
-### Enrichment Key Migration (Backfill)
-
-If the enrichment parquet was built with old `::` keyed rows (pre-refactor), run the backfill script once to rekey everything to scientific names without re-calling the LLM:
-
-```bash
-cd data/raw && uv run backfill_enrichment_keys.py
-# or for a dry run:
-uv run backfill_enrichment_keys.py --dry-run
-```
-
-This reads the existing GCS parquet, strips `::` suffixes, deduplicates (most-complete / most-recent row wins per scientific name), writes locally, and uploads to GCS via `gcloud storage cp`. On Windows, `gsutil` requires Python ≤ 3.11 — use `gcloud storage cp` instead.
-
 ---
 
 ## What to Optimize / Streamline Next Time

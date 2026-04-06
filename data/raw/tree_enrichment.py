@@ -1,13 +1,16 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests", "pillow", "instructor[litellm]", "duckdb", "google-genai", "jsonref", "pytrilogy", "pydantic"]
+# dependencies = ["pyarrow", "requests", "pillow", "instructor[litellm]", "duckdb", "google-genai", "jsonref", "pytrilogy", "pydantic", "google-cloud-storage"]
 # ///
 
 import sys
 import os
 import argparse
-import subprocess
+import json as _json
+import time as _time
+import urllib.request as _urllib_request
+import urllib.parse as _urllib_parse
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
@@ -59,6 +62,77 @@ from enrichment._tree_enrichment_sources import (
     gather_source_texts,
     source_labels,
 )
+
+# ── iNaturalist photo fetching ─────────────────────────────────────────────────
+
+_INAT_BASE = "https://api.inaturalist.org/v1"
+_INAT_ACCEPTABLE_LICENSES: frozenset[str] = frozenset({"cc0", "cc-by", "cc-by-sa", "cc-by-nc", "cc-by-nc-sa"})
+
+
+def _inat_get(path: str, params: dict) -> dict:
+    url = f"{_INAT_BASE}{path}?{_urllib_parse.urlencode(params)}"
+    req = _urllib_request.Request(url, headers={"User-Agent": "tree-enrichment/1.0"})
+    with _urllib_request.urlopen(req, timeout=15) as resp:
+        return _json.loads(resp.read())
+
+
+def fetch_inat_photo(scientific_name: str) -> tuple[int | None, str | None, str | None, str | None]:
+    """Return (taxon_id, photo_url, photo_license, photo_attribution).
+
+    Tries the curated taxon default photo first; falls back to the best
+    research-grade observation photo with an acceptable open license.
+    Returns (None, None, None, None) on any network failure or when no
+    acceptable-license photo exists.
+    """
+    try:
+        data = _inat_get("/taxa", {"q": scientific_name, "rank": "species,hybrid", "per_page": 3})
+        results = data.get("results", [])
+        if not results:
+            return None, None, None, None
+
+        # Prefer exact name match — iNat normalises × so compare with both forms
+        lower_name = scientific_name.lower().replace(" x ", " × ")
+        taxon = None
+        for r in results:
+            r_name = r.get("name", "").lower()
+            if r_name == lower_name or r_name == scientific_name.lower():
+                taxon = r
+                break
+        if taxon is None:
+            taxon = results[0]
+
+        taxon_id: int = taxon["id"]
+
+        # Try curated default photo first
+        dp = taxon.get("default_photo")
+        if dp and dp.get("license_code") in _INAT_ACCEPTABLE_LICENSES:
+            return taxon_id, dp.get("medium_url"), dp.get("license_code"), dp.get("attribution")
+
+        # Fall back to best open-licensed research-grade observation photo
+        license_param = ",".join(sorted(_INAT_ACCEPTABLE_LICENSES))
+        obs_data = _inat_get("/observations", {
+            "taxon_id": taxon_id,
+            "photos": "true",
+            "quality_grade": "research",
+            "license": license_param,
+            "photo_license": license_param,
+            "per_page": 5,
+            "order_by": "votes",
+        })
+        for obs in obs_data.get("results", []):
+            for photo in obs.get("photos", []):
+                lic = photo.get("license_code")
+                if lic in _INAT_ACCEPTABLE_LICENSES:
+                    url = photo["url"].replace("square", "medium")
+                    return taxon_id, url, lic, photo.get("attribution")
+
+        # Found taxon but no acceptable photo
+        return taxon_id, None, None, None
+
+    except Exception as exc:
+        print(f"    [inat] failed for {scientific_name!r}: {exc}", file=sys.stderr)
+        return None, None, None, None
+
 
 # ── External data sources ───────────────────────────────────────────────────────
 
@@ -299,49 +373,70 @@ def get_already_enriched(source: str = ENRICHMENT_PARQUET) -> set[str]:
         conn.close()
 
 
+def _pa_type_to_duckdb_sql(t: pa.DataType) -> str:
+    """Convert a PyArrow type to the equivalent DuckDB SQL type string."""
+    if pa.types.is_boolean(t):
+        return "BOOLEAN"
+    if pa.types.is_int32(t):
+        return "INTEGER"
+    if pa.types.is_int64(t):
+        return "BIGINT"
+    if pa.types.is_float32(t) or pa.types.is_float16(t):
+        return "FLOAT"
+    if pa.types.is_float64(t):
+        return "DOUBLE"
+    if pa.types.is_string(t) or pa.types.is_large_string(t):
+        return "VARCHAR"
+    if pa.types.is_timestamp(t):
+        return "TIMESTAMPTZ" if t.tz else "TIMESTAMP"
+    if pa.types.is_date(t):
+        return "DATE"
+    if pa.types.is_list(t):
+        inner = _pa_type_to_duckdb_sql(t.value_type)
+        return f"{inner}[]"
+    return "VARCHAR"
+
+
 def load_existing_table(source: str) -> pa.Table | None:
     """Load the full enrichment parquet from *source*.
 
     Returns None only if the file does not exist. Raises on any other error.
+    Column patching is schema-driven: any column in SCHEMA missing from the
+    source parquet is synthesised as ``CAST(NULL AS <type>)`` so the query
+    never fails when the parquet predates a schema addition.
     """
     if not parquet_exists(source):
         return None
     conn = duckdb.connect()
     try:
+        try:
+            col_rows = conn.execute(
+                "SELECT column_name FROM (DESCRIBE SELECT * FROM read_parquet(?)) LIMIT 200",
+                [source],
+            ).fetchall()
+            existing_cols = {row[0] for row in col_rows}
+        except Exception:
+            existing_cols = set()
+
+        schema_field_map = {f.name: f.type for f in SCHEMA}
+
+        def _col(name: str) -> str:
+            if name in existing_cols:
+                return name
+            sql_type = _pa_type_to_duckdb_sql(schema_field_map[name])
+            return f"CAST(NULL AS {sql_type}) AS {name}"
+
+        # Build column list from SCHEMA — is_complete is always recomputed
+        data_cols = ", ".join(
+            _col(f.name) for f in SCHEMA
+            if f.name not in ("is_complete", "enriched_at")
+        )
         table = conn.execute(
             f"""
             SELECT
-              species,
-              genus,
-              species_epithet,
-              family,
-              common_names,
-              description,
-              is_evergreen,
-              mature_height_min_ft,
-              mature_height_max_ft,
-              canopy_spread_min_ft,
-              canopy_spread_max_ft,
-              growth_rate,
-              lifespan_min_years,
-              lifespan_max_years,
-              drought_tolerance,
-              water_needs,
-              sun_exposure,
-              soil_preferences,
-              root_behavior,
-              coastal_tolerance,
-              salt_tolerance,
-              pollution_tolerance,
-              bloom_months,
-              wildlife_value,
-              fire_risk,
-              tree_form,
-              usda_zone_min,
-              usda_zone_max,
-              native_ecoregions,
+              {data_cols},
               {_NEW_COMPLETENESS_EXPR} AS is_complete,
-              enriched_at
+              {_col("enriched_at")}
             FROM read_parquet(?)
             """,
             [source],
@@ -391,16 +486,21 @@ def merge_with_existing(existing: pa.Table | None, new_rows: list[dict]) -> pa.T
 
 
 def upload_to_gcs(local_path: str, gcs_uri: str) -> None:
-    """Copy *local_path* to *gcs_uri* using gsutil."""
+    """Upload *local_path* to *gcs_uri* using the google-cloud-storage Python library."""
+    from google.cloud import storage as gcs
+
     print(f"[info] uploading {local_path} → {gcs_uri}", file=sys.stderr)
-    result = subprocess.run(
-        ["gsutil", "cp", local_path, gcs_uri],
-        capture_output=True, text=True,
-    )
-    if result.returncode == 0:
-        print("[info] upload complete", file=sys.stderr)
-    else:
-        print(f"[error] gsutil upload failed:\n{result.stderr.strip()}", file=sys.stderr)
+    # Parse gs://bucket/path
+    if not gcs_uri.startswith("gs://"):
+        raise ValueError(f"expected gs:// URI, got {gcs_uri!r}")
+    without_scheme = gcs_uri[len("gs://"):]
+    bucket_name, _, blob_name = without_scheme.partition("/")
+
+    client = gcs.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    blob.upload_from_filename(local_path)
+    print("[info] upload complete", file=sys.stderr)
 
 
 # ── Arrow table ────────────────────────────────────────────────────────────────
@@ -435,6 +535,10 @@ SCHEMA = pa.schema([
     ("usda_zone_min",         pa.int32()),
     ("usda_zone_max",         pa.int32()),
     ("native_ecoregions",     pa.list_(pa.int32())),
+    ("inat_taxon_id",         pa.int64()),
+    ("photo_url",             pa.string()),
+    ("photo_license",         pa.string()),
+    ("photo_attribution",     pa.string()),
     ("is_complete",           pa.bool_()),
     ("enriched_at",           pa.timestamp("us", tz="UTC")),
 ])
@@ -593,6 +697,8 @@ if __name__ == "__main__":
             enrichment.growth_rate_unit,
             enrichment.growth_rate,
         )
+        inat_taxon_id, photo_url, photo_license, photo_attribution = fetch_inat_photo(scientific_name)
+        _time.sleep(0.3)  # stay well under iNat 100 req/min limit
         new_rows.append({
             "species":              scientific_name,
             "genus":                genus,
@@ -623,6 +729,10 @@ if __name__ == "__main__":
             "usda_zone_min":        enrichment.usda_zone_min,
             "usda_zone_max":        enrichment.usda_zone_max,
             "native_ecoregions":    sorted(set(enrichment.native_ecoregions)) or None,
+            "inat_taxon_id":        inat_taxon_id,
+            "photo_url":            photo_url,
+            "photo_license":        photo_license,
+            "photo_attribution":    photo_attribution,
             "is_complete":          is_complete,
             "enriched_at":          datetime.now(tz=timezone.utc),
         })

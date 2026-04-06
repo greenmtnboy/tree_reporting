@@ -5,6 +5,14 @@ export type DashboardContextSource = {
   contents: string
 }
 
+export type DashboardContextParameters = {
+  active_city: string
+  active_city_ecoregion: number
+  active_city_usda_zone: number
+  active_city_biome: string
+  active_city_realm: string
+}
+
 const UNKNOWN_ECOREGION_ID = -1
 const UNKNOWN_USDA_ZONE = -1
 
@@ -106,13 +114,21 @@ export function getCityRealm(city: CityCode | null): string {
   return CITY_DASHBOARD_CONTEXT[city]?.realm ?? 'unknown'
 }
 
+export function buildDashboardContextParameters(city: CityCode | null): DashboardContextParameters {
+  return {
+    active_city: city ?? 'ALL',
+    active_city_ecoregion: getCityEcoregionId(city),
+    active_city_usda_zone: getCityUsdaZone(city),
+    active_city_biome: getCityBiome(city),
+    active_city_realm: getCityRealm(city),
+  }
+}
+
 export function buildDashboardContextSource(city: CityCode | null): DashboardContextSource {
-  const activeCity = city ?? 'ALL'
-  const escapedCity = escapeStringLiteral(activeCity)
-  const activeCityEcoregion = getCityEcoregionId(city)
-  const activeCityUsdaZone = getCityUsdaZone(city)
-  const activeCityBiome = escapeStringLiteral(getCityBiome(city))
-  const activeCityRealm = escapeStringLiteral(getCityRealm(city))
+  const context = buildDashboardContextParameters(city)
+  const escapedCity = escapeStringLiteral(context.active_city)
+  const activeCityBiome = escapeStringLiteral(context.active_city_biome)
+  const activeCityRealm = escapeStringLiteral(context.active_city_realm)
 
   return {
     alias: 'dashboard_context',
@@ -121,8 +137,8 @@ import ecoregion_info;
 import std.display;
 
 constant active_city <- '${escapedCity}';
-constant active_city_ecoregion <- ${activeCityEcoregion};
-constant active_city_usda_zone <- ${activeCityUsdaZone};
+constant active_city_ecoregion <- ${context.active_city_ecoregion};
+constant active_city_usda_zone <- ${context.active_city_usda_zone};
 constant active_city_biome <- '${activeCityBiome}';
 constant active_city_realm <- '${activeCityRealm}';
 

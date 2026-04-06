@@ -9,6 +9,10 @@ const CITY_CODE: Record<string, string> = {
   'Burlington':    'USBTV',
 }
 
+async function waitForManualCitySelection(page: Page, timeoutMs: number): Promise<void> {
+  await expect(page.getByLabel('Select city')).toBeEnabled({ timeout: timeoutMs })
+}
+
 /**
  * Selects the city from the dropdown and waits until the map container's
  * `data-trees-loaded-for` attribute equals the destination city code.
@@ -35,6 +39,13 @@ async function assertCitySwitch(page: Page, cityName: string, timeoutMs: number)
     cityCode,
     { timeout: timeoutMs },
   )
+
+  // The chat input must be enabled after city data loads.  A past bug caused
+  // the input to stay disabled when switching cities mid-animation.
+  const chatInput = page.locator('.chat-input-area input')
+  if (await chatInput.count() > 0) {
+    await expect(chatInput).toBeEnabled({ timeout: 15_000 })
+  }
 }
 
 // ── Desktop ───────────────────────────────────────────────────────────────────
@@ -63,6 +74,14 @@ test.describe('City navigation — desktop', () => {
     await assertCitySwitch(page, 'Boston', SWITCH_TIMEOUT)
     await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
   })
+
+  test('switching city during initial animation unlocks the chat', async ({ page }) => {
+    test.setTimeout(180_000)
+    const citySelect = page.getByLabel('Select city')
+    await expect(citySelect).toBeVisible({ timeout: 30_000 })
+    await waitForManualCitySelection(page, 30_000)
+    await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
+  })
 })
 
 // ── Mobile ────────────────────────────────────────────────────────────────────
@@ -89,6 +108,14 @@ test.describe('City navigation — mobile', () => {
     test.setTimeout(150_000)
     await assertCitySwitch(page, 'San Francisco', SWITCH_TIMEOUT)
     await assertCitySwitch(page, 'Boston', SWITCH_TIMEOUT)
+    await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
+  })
+
+  test('switching city during initial load unlocks the chat', async ({ page }) => {
+    test.setTimeout(120_000)
+    const citySelect = page.getByLabel('Select city')
+    await expect(citySelect).toBeVisible({ timeout: 30_000 })
+    await waitForManualCitySelection(page, 30_000)
     await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
   })
 })

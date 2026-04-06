@@ -79,13 +79,24 @@
             <h3>{{ emptyChartIds.has(card.id) ? 'No planting data for this city' : chartById(card.id).title }}</h3>
             <span v-if="!emptyChartIds.has(card.id) && chartById(card.id).subtitle" class="chart-sub">{{ chartById(card.id).subtitle }}</span>
           </div>
-          <SummaryMarkdownCard
-            v-if="chartById(card.id).renderMode === 'markdown'"
+          <SpeciesCarousel
+            v-if="chartById(card.id).renderMode === 'carousel'"
             :item-id="card.id"
             :connection-id="connectionId"
             :query-execution-service="queryExecutionService"
             :imports="SUMMARY_DASHBOARD_IMPORTS as DashboardImport[]"
             :filters="filtersForChart(card.id)"
+            :parameters="dashboardContextParameters"
+            :query="chartById(card.id).query"
+          />
+          <SummaryMarkdownCard
+            v-else-if="chartById(card.id).renderMode === 'markdown'"
+            :item-id="card.id"
+            :connection-id="connectionId"
+            :query-execution-service="queryExecutionService"
+            :imports="SUMMARY_DASHBOARD_IMPORTS as DashboardImport[]"
+            :filters="filtersForChart(card.id)"
+            :parameters="dashboardContextParameters"
             :query="chartById(card.id).query"
           />
           <EmbeddedDashboardChart
@@ -121,9 +132,14 @@ import {
 } from '@trilogy-data/trilogy-studio-components/dashboard'
 import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
 import SummaryMarkdownCard from '../components/SummaryMarkdownCard.vue'
+import SpeciesCarousel from '../components/SpeciesCarousel.vue'
 import TreeDotMap from '../components/TreeDotMap.vue'
 import { useMapData, type CityCode } from '../composables/useMapData'
-import { getCityBiome, getCityUsdaZone } from '../composables/dashboardContextSource'
+import {
+  buildDashboardContextParameters,
+  getCityBiome,
+  getCityUsdaZone,
+} from '../composables/dashboardContextSource'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
 import {
   SUMMARY_CHARTS_BY_ID,
@@ -134,18 +150,14 @@ import {
   readSummaryRouteCity,
 } from '../composables/summaryDashboardConfig'
 import { filterSummaryDimensionClick, useSummaryFilters } from '../composables/useSummaryFilters'
+import { useMapLifecycle } from '../composables/useMapLifecycle'
 import cityConfig from '../cityConfig.json'
 
 const route = useRoute()
 const router = useRouter()
-const { selectedCity, setSelectedCity } = useMapData()
+const { selectedCity } = useMapData()
+const { activateCity } = useMapLifecycle()
 const { initialize, connectionId, queryExecutionService, setDashboardContext } = useSummaryDashboardExecution()
-
-const sharedChartProps = {
-  connectionId,
-  queryExecutionService,
-  imports: SUMMARY_DASHBOARD_IMPORTS as DashboardImport[],
-}
 
 const embeddedDashboardGroup = useEmbeddedDashboardGroup({
   dashboardId: `summary-${connectionId}`,
@@ -156,6 +168,14 @@ const embeddedDashboardGroup = useEmbeddedDashboardGroup({
 
 const cityFilter = ref<CityCode | null>(null)
 const emptyChartIds = reactive(new Set<string>())
+const dashboardContextParameters = computed(() => buildDashboardContextParameters(cityFilter.value))
+
+const sharedChartProps = computed(() => ({
+  connectionId,
+  queryExecutionService,
+  imports: SUMMARY_DASHBOARD_IMPORTS as DashboardImport[],
+  parameters: dashboardContextParameters.value,
+}))
 
 const {
   crossFilters,
@@ -232,7 +252,7 @@ function clearAllFilters() {
 
 function filtersForChart(chartId: string) {
   void crossFilters.version.value
-  return crossFilters.getSqlFiltersFor(chartId, baseFilters.value)
+  return crossFilters.getSqlFilterLikesFor(chartId, baseFilters.value)
 }
 
 function selectionFiltersForChart(chartId: string) {
@@ -259,7 +279,7 @@ const initialRouteCity = readSummaryRouteCity(route.query.city)
 if (initialRouteCity) {
   cityFilter.value = initialRouteCity
   if (initialRouteCity !== selectedCity.value) {
-    setSelectedCity(initialRouteCity)
+    activateCity(initialRouteCity)
   }
 } else {
   cityFilter.value = selectedCity.value
@@ -275,7 +295,7 @@ watch(
     const nextCity = readSummaryRouteCity(routeCity)
     cityFilter.value = nextCity
     if (nextCity && nextCity !== selectedCity.value) {
-      setSelectedCity(nextCity)
+      activateCity(nextCity)
     }
   },
 )
