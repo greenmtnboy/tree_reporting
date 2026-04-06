@@ -25,6 +25,7 @@ import {
   type DashboardImport,
   type DashboardExecutionService,
   type ChartConfig,
+  type CrossFilterChartMap,
   type DimensionClick,
   type GridItemDataResponse,
   type SqlFilterLike,
@@ -44,7 +45,7 @@ const props = withDefaults(
     parameters?: Record<string, unknown>
     selectionField?: string
     selectedValue?: string | null
-    selectionFilters?: Array<{ source: string; value: Record<string, string> }>
+    selectionFilters?: Array<{ source: string; value: CrossFilterChartMap }>
     dashboardId?: string
     dashboardGroup?: EmbeddedDashboardGroup
     priority?: number

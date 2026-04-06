@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import {
   filterAllowedDimensionFilters,
   type CrossFilterSelection,
+  type CrossFilterValueMap,
   type DimensionClick,
   useCrossFilterController,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
@@ -57,7 +58,7 @@ const SUMMARY_FILTER_META_BY_FIELD = new Map(
   SUMMARY_FILTER_META.map((meta) => [meta.field, meta] as const),
 )
 
-export function filterSummaryCrossFilterFields(filters: Record<string, string>) {
+export function filterSummaryCrossFilterFields(filters: CrossFilterValueMap) {
   return filterAllowedDimensionFilters(filters, SUMMARY_FILTER_FIELDS, {
     normalizeLocalFields: true,
   })
@@ -130,7 +131,7 @@ function applyValuesForField(
     crossFilters.applyDimensionClick(
       {
         source,
-        filters: { [field]: value },
+        filters: { [field]: { op: 'eq' as const, value } },
       },
       mode === 'append' || index > 0 ? 'append' : 'add',
     )
@@ -153,9 +154,9 @@ function selectionsByField() {
   const grouped: Record<string, string[]> = {}
 
   for (const selection of crossFilters.getSelections()) {
-    for (const [field, value] of Object.entries(selection.filters)) {
-      if (typeof value !== 'string') continue
-      grouped[field] = normalizeValues([...(grouped[field] ?? []), value])
+    for (const [field, entry] of Object.entries(selection.filters)) {
+      if (entry.op !== 'eq' || typeof entry.value !== 'string') continue
+      grouped[field] = normalizeValues([...(grouped[field] ?? []), entry.value])
     }
   }
 
@@ -168,9 +169,9 @@ function getActiveFilterSummary() {
 
   for (const selection of crossFilters.getSelections()) {
     const sourceFilters = grouped.get(selection.source) ?? {}
-    for (const [field, value] of Object.entries(selection.filters)) {
-      if (typeof value !== 'string') continue
-      sourceFilters[field] = normalizeValues([...(sourceFilters[field] ?? []), value])
+    for (const [field, entry] of Object.entries(selection.filters)) {
+      if (entry.op !== 'eq' || typeof entry.value !== 'string') continue
+      sourceFilters[field] = normalizeValues([...(sourceFilters[field] ?? []), entry.value])
     }
     grouped.set(selection.source, sourceFilters)
   }
