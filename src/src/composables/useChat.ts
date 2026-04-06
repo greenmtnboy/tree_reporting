@@ -398,6 +398,7 @@ async function executeSummaryRunQuery(
   const activeCity = getActiveSummaryCity(selectedCity)
   const baseFilters = getSummaryBaseFilters(activeCity)
   const extraFilters = crossFilters.getSqlFiltersFor('assistant-run-query', baseFilters)
+  const crossFilterParams = crossFilters.getSqlParametersFor('assistant-run-query')
 
   console.debug('[useChat] summary run_query execute', {
     city: activeCity,
@@ -406,7 +407,7 @@ async function executeSummaryRunQuery(
 
   const { resultPromise } = await summaryQueryExecutionService.executeQueriesBatch(
     summaryConnectionId,
-    [{ label: 'assistant-run-query', query, extra_filters: extraFilters }],
+    [{ label: 'assistant-run-query', query, extra_filters: extraFilters, parameters: crossFilterParams }],
     'trilogy',
     SUMMARY_DASHBOARD_IMPORTS.map((imp) => ({ name: imp.name, alias: imp.alias })),
   )
@@ -952,6 +953,7 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
             label: chart.id,
             query: chart.query,
             extra_filters: crossFilters.getSqlFiltersFor(chart.id, baseFilters),
+            parameters: crossFilters.getSqlParametersFor(chart.id),
           }))
 
           const { resultPromise } = await summaryQueryExecutionService.executeQueriesBatch(

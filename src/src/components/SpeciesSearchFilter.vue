@@ -218,6 +218,7 @@ async function runOptionsQuery(version: number, label: string, query: string, ex
 async function loadOptions() {
   const version = ++loadVersion
   if (props.disabled || !props.connectionReady) {
+    console.debug('[SpeciesFilter] loadOptions skipped (disabled=%s, ready=%s, version=%d)', props.disabled, props.connectionReady, version)
     options.value = []
     manualAllSelected.value = false
     emit('optionsLoaded', [])
@@ -226,6 +227,7 @@ async function loadOptions() {
     syncSearchTermToSelection()
     return
   }
+  console.debug('[SpeciesFilter] loadOptions running (version=%d, modelValue=%s, autoSelect=%s)', version, props.modelValue, props.autoSelectTop)
 
   loading.value = true
   let seededOptions: SpeciesFilterOption[] = props.modelValue
@@ -235,11 +237,15 @@ async function loadOptions() {
   try {
     if (props.autoSelectTop && !props.modelValue && !manualAllSelected.value) {
       const topOptions = await runOptionsQuery(version, 'taxonomy-filter-top-option', props.topQuery)
-      if (version !== loadVersion || topOptions == null) return
+      if (version !== loadVersion || topOptions == null) {
+        console.debug('[SpeciesFilter] auto-select ABORTED (version=%d, loadVersion=%d)', version, loadVersion)
+        return
+      }
       seededOptions = topOptions
       options.value = topOptions
       emit('optionsLoaded', topOptions)
       if (topOptions.length > 0) {
+        console.debug('[SpeciesFilter] auto-selecting top option: %s', topOptions[0].value)
         emit('update:modelValue', topOptions[0].value)
       }
     } else if (props.modelValue) {
@@ -266,7 +272,8 @@ async function loadOptions() {
     if (version !== loadVersion || allOptions == null) return
     options.value = mergeOptions(seededOptions, allOptions)
     emit('optionsLoaded', options.value)
-  } catch {
+  } catch (err) {
+    console.warn('[SpeciesFilter] loadOptions error (version=%d)', version, err)
     if (version !== loadVersion) return
     options.value = seededOptions
     emit('optionsLoaded', seededOptions)

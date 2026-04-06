@@ -52,6 +52,9 @@ vi.mock('@trilogy-data/trilogy-studio-components/dashboard', () => {
       getChartSelectionsFor: () => [],
       getFilterExpressionFor: () => '',
       getSqlFiltersFor: (_itemId: string, baseFilters: string[] = []) => baseFilters,
+      getSqlFilterLikesFor: (_itemId: string, baseFilters: string[] = []) =>
+        baseFilters.map((value) => ({ source: 'base', value })),
+      getSqlParametersFor: () => ({}),
     }),
   }
 })

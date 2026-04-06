@@ -1,11 +1,13 @@
 import {
   ColumnType,
-  QueryExecutionService,
   Results,
-  type ExecutionConnection,
-  type ExecutionConnectionProvider,
   type ResultColumn,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
+import {
+  QueryExecutionService,
+  type ExecutionConnection,
+  type ExecutionConnectionProvider,
+} from '@trilogy-data/trilogy-studio-components/stores'
 import { useDuckDB } from './useDuckDB'
 import { useTrilogyRuntime } from './useTrilogyRuntime'
 import { ALL_MODEL_SOURCES } from '../trilogyModels'

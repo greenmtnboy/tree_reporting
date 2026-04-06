@@ -27,8 +27,9 @@ import {
   type ChartConfig,
   type DimensionClick,
   type GridItemDataResponse,
+  type SqlFilterLike,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toValue, watch, watchEffect } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -39,7 +40,8 @@ const props = withDefaults(
     queryExecutionService: DashboardExecutionService
     chartConfig?: ChartConfig
     imports?: DashboardImport[]
-    filters?: string[]
+    filters?: SqlFilterLike[] | string[]
+    parameters?: Record<string, unknown>
     selectionField?: string
     selectedValue?: string | null
     selectionFilters?: Array<{ source: string; value: Record<string, string> }>
@@ -51,6 +53,7 @@ const props = withDefaults(
   {
     imports: () => [{ id: 'tree_enrichment', name: 'tree_enrichment', alias: '' }],
     filters: () => [],
+    parameters: () => ({}),
     selectedValue: null,
     selectionFilters: () => [],
     dashboardId: undefined,
@@ -92,8 +95,13 @@ function getActiveDashboardGroup() {
 let resizeObserver: ResizeObserver | null = null
 const lastQuerySignature = ref<string | null>(null)
 
-function buildFilters() {
-  return props.filters.map((value) => ({ source: 'summary-view', value }))
+function buildFilters(): SqlFilterLike[] {
+  return (props.filters || []).map((f) => {
+    if (typeof f === 'string') {
+      return { source: 'summary-view', value: f }
+    }
+    return f
+  })
 }
 
 function buildChartFilters() {
@@ -113,6 +121,11 @@ function buildChartFilters() {
   ]
 }
 
+function buildParameters() {
+  const parameters = toValue(props.parameters as Record<string, unknown> | undefined)
+  return parameters && typeof parameters === 'object' ? { ...parameters } : {}
+}
+
 function syncExternalState() {
   const dashboardGroup = getActiveDashboardGroup()
   dashboardGroup.setConnection(props.connectionId)
@@ -126,15 +139,17 @@ function syncExternalState() {
     allowCrossFilter: props.allowCrossFilter,
     filters: buildFilters(),
     chartFilters: buildChartFilters(),
+    parameters: buildParameters(),
   })
 }
 
 function getQuerySignature() {
   return JSON.stringify({
     query: props.query,
-    filters: buildFilters().map((filter) => filter.value),
+    filters: buildFilters().map((filter) => ({ value: filter.value, parameters: filter.parameters })),
     imports: props.imports.map((imp) => ({ name: imp.name, alias: imp.alias })),
     connectionId: props.connectionId,
+    parameters: buildParameters(),
   })
 }
 
@@ -218,7 +233,7 @@ watch(
 )
 
 watch(
-  () => [props.query, JSON.stringify(props.filters), JSON.stringify(props.imports), props.connectionId],
+  () => [props.query, JSON.stringify(props.filters), JSON.stringify(props.imports), JSON.stringify(buildParameters()), props.connectionId],
   () => {
     if (suppressNextFilterUpdate) {
       suppressNextFilterUpdate = false

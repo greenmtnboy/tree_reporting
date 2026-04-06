@@ -2,7 +2,7 @@ import {
   QueryExecutionService,
   type ExecutionConnection,
   type ExecutionConnectionProvider,
-} from '@trilogy-data/trilogy-studio-components/dashboard'
+} from '@trilogy-data/trilogy-studio-components/stores'
 import {
   DuckDBConnection,
   configureDuckDBAssets,
@@ -58,7 +58,8 @@ async function executeSql(
     throw new Error('Summary DuckDB connection unavailable')
   }
 
-  return connection.query(sql, parameters ?? null)
+  console.log('[executeSql] parameters:', JSON.stringify(parameters), 'has :param:', sql.includes(':active_city'))
+  return connection.query_core(sql, parameters ?? null, null)
 }
 
 export function useSummaryDashboardExecution() {

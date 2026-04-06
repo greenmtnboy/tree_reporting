@@ -86,6 +86,7 @@
             :query-execution-service="queryExecutionService"
             :imports="SUMMARY_DASHBOARD_IMPORTS as DashboardImport[]"
             :filters="filtersForChart(card.id)"
+            :parameters="dashboardContextParameters"
             :query="chartById(card.id).query"
           />
           <EmbeddedDashboardChart
@@ -123,7 +124,11 @@ import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
 import SummaryMarkdownCard from '../components/SummaryMarkdownCard.vue'
 import TreeDotMap from '../components/TreeDotMap.vue'
 import { useMapData, type CityCode } from '../composables/useMapData'
-import { getCityBiome, getCityUsdaZone } from '../composables/dashboardContextSource'
+import {
+  buildDashboardContextParameters,
+  getCityBiome,
+  getCityUsdaZone,
+} from '../composables/dashboardContextSource'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
 import {
   SUMMARY_CHARTS_BY_ID,
@@ -141,12 +146,6 @@ const router = useRouter()
 const { selectedCity, setSelectedCity } = useMapData()
 const { initialize, connectionId, queryExecutionService, setDashboardContext } = useSummaryDashboardExecution()
 
-const sharedChartProps = {
-  connectionId,
-  queryExecutionService,
-  imports: SUMMARY_DASHBOARD_IMPORTS as DashboardImport[],
-}
-
 const embeddedDashboardGroup = useEmbeddedDashboardGroup({
   dashboardId: `summary-${connectionId}`,
   connectionId,
@@ -156,6 +155,14 @@ const embeddedDashboardGroup = useEmbeddedDashboardGroup({
 
 const cityFilter = ref<CityCode | null>(null)
 const emptyChartIds = reactive(new Set<string>())
+const dashboardContextParameters = computed(() => buildDashboardContextParameters(cityFilter.value))
+
+const sharedChartProps = computed(() => ({
+  connectionId,
+  queryExecutionService,
+  imports: SUMMARY_DASHBOARD_IMPORTS as DashboardImport[],
+  parameters: dashboardContextParameters.value,
+}))
 
 const {
   crossFilters,
@@ -232,7 +239,7 @@ function clearAllFilters() {
 
 function filtersForChart(chartId: string) {
   void crossFilters.version.value
-  return crossFilters.getSqlFiltersFor(chartId, baseFilters.value)
+  return crossFilters.getSqlFilterLikesFor(chartId, baseFilters.value)
 }
 
 function selectionFiltersForChart(chartId: string) {

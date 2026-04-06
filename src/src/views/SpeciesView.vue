@@ -157,6 +157,7 @@
               :query-execution-service="queryExecutionService"
               :imports="SPECIES_DASHBOARD_IMPORTS as DashboardImport[]"
               :filters="filtersForChart(card.id)"
+              :parameters="dashboardContextParameters"
               :query="chartById(card.id).query"
             />
             <EmbeddedDashboardChart
@@ -196,6 +197,7 @@ import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
 import SummaryMarkdownCard from '../components/SummaryMarkdownCard.vue'
 import SpeciesSearchFilter from '../components/SpeciesSearchFilter.vue'
 import TreeDotMap from '../components/TreeDotMap.vue'
+import { buildDashboardContextParameters } from '../composables/dashboardContextSource'
 import { useMapData, type CityCode } from '../composables/useMapData'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
 import {
@@ -258,12 +260,6 @@ let syncingRoute = false
 const { selectedCity, setSelectedCity } = useMapData()
 const { initialize, connectionId, queryExecutionService, setDashboardContext, ready } = useSummaryDashboardExecution()
 
-const sharedChartProps = {
-  connectionId,
-  queryExecutionService,
-  imports: SPECIES_DASHBOARD_IMPORTS as DashboardImport[],
-}
-
 const embeddedDashboardGroup = useEmbeddedDashboardGroup({
   dashboardId: `species-${connectionId}`,
   connectionId,
@@ -277,6 +273,14 @@ const speciesFilter = ref<string | null>(null)
 const genusOptions = ref<FilterOption[]>([])
 const speciesOptions = ref<FilterOption[]>([])
 const emptyChartIds = reactive(new Set<string>())
+const dashboardContextParameters = computed(() => buildDashboardContextParameters(cityFilter.value))
+
+const sharedChartProps = computed(() => ({
+  connectionId,
+  queryExecutionService,
+  imports: SPECIES_DASHBOARD_IMPORTS as DashboardImport[],
+  parameters: dashboardContextParameters.value,
+}))
 
 const { crossFilters, activeSpeciesFilters } = useSpeciesFilters()
 
@@ -500,7 +504,7 @@ function clearAllFilters() {
 
 function filtersForChart(chartId: string) {
   void crossFilters.version.value
-  return crossFilters.getSqlFiltersFor(chartId, baseFilters.value)
+  return crossFilters.getSqlFilterLikesFor(chartId, baseFilters.value)
 }
 
 function selectionFiltersForChart(chartId: string) {
