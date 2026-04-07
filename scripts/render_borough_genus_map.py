@@ -30,16 +30,16 @@ DATA_VERSION = 2
 GENUS_PALETTE = [
     "#F07E82",  # coral red
     "#EDB85A",  # golden amber
-    "#50E0AD",  # teal green (brighter)
-    "#82BFF8",  # steel blue (brighter)
+    "#60F0BF",  # teal green
+    "#92CFF8",  # steel blue
     "#D494E0",  # soft violet
     "#F0A54E",  # burnt orange
-    "#78F0EA",  # aqua (brighter)
+    "#88FFF4",  # aqua
     "#BDD468",  # olive lime
     "#E47EA0",  # rose
-    "#90E8B8",  # sage (brighter)
+    "#A0F8C8",  # sage
     "#C89260",  # bronze
-    "#A0D8F4",  # sky (brighter)
+    "#B0E8FF",  # sky
 ]
 
 BASE_COLOR = "#999999"
@@ -201,9 +201,9 @@ def main() -> None:
                    label=f"{name}  —  {n} borough{'s' if n != 1 else ''}")
 
     legend = ax.legend(
-        loc="lower right", bbox_to_anchor=(1.0, 0.05), fontsize=10, frameon=True,
+        loc="lower right", bbox_to_anchor=(1.0, 0.15), fontsize=10, frameon=True,
         facecolor=args.bg, edgecolor="none", framealpha=0.8,
-        markerscale=2.5, labelcolor="#d0d0d0",
+        markerscale=1.25, labelcolor="#d0d0d0",
         borderpad=1.0, labelspacing=0.7, handletextpad=0.6,
     )
     legend.set_zorder(100)
@@ -217,13 +217,13 @@ def main() -> None:
              fontsize=24, color="#C9CDD3", ha="center", va="top")
     fig.text(0.5, 0.943, "Most common genus in each borough highlighted",
              ha="center", va="top",
-             fontsize=12, color="#8a9a8a", fontfamily=font_family)
+             fontsize=12, color="#a0b0a0", fontfamily=font_family)
 
     # Citation
-    fig.text(0.02, 0.015,
+    fig.text(0.5, 0.015,
              "Data: London Datastore \u2014 Public Realm Trees  (data.london.gov.uk/dataset/2r45m)",
-             ha="left", va="bottom",
-             fontsize=8, color="#687068", fontfamily=font_family)
+             ha="center", va="bottom",
+             fontsize=8, color="#a0a8a0", fontfamily=font_family)
 
     plt.subplots_adjust(left=0, right=1, top=0.93, bottom=0.03)
     out_path = args.output or "gblon_borough_genus.png"
