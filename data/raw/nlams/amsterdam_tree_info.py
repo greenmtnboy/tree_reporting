@@ -10,11 +10,11 @@ Fetch Amsterdam tree data from the Amsterdam REST API and emit Arrow IPC to stdo
 Source: https://api.data.amsterdam.nl/v1/bomen/stamgegevens/
 API:    https://api.data.amsterdam.nl/v1/bomen/stamgegevens/?_format=json&page_size=2000
 
-Field mapping:
+Field mapping (API v2 field names as of 2025):
   id                  -> tree_id  (prefixed "ams-" for global uniqueness)
-  soortnaamLatijn     -> species  (scientific name only, normalised)
-  soortnaamNederlands -> tree_name (Dutch common name)
-  plantjaar           -> plant_date (year integer → January 1 of that year)
+  soortnaam           -> species  (scientific name only, normalised)
+  soortnaamTop        -> tree_name (Dutch common name with genus, e.g. "Linde (Tilia)")
+  jaarVanAanleg       -> plant_date (year integer → January 1 of that year)
   stamdiameterklasse  -> diameter_at_breast_height (midpoint of class range, cm → inches)
   geometrie           -> latitude, longitude (WGS84 via GeoJSON or RD→WGS84 conversion)
 
@@ -157,15 +157,19 @@ def transform(rows: list[dict]) -> pa.Table:
 
         cities.append("NLAMS")
 
-        # species: soortnaamLatijn (scientific name)
-        species_list.append(normalize_species(rec.get("soortnaamLatijn")))
+        # species: soortnaam (scientific name; was "soortnaamLatijn" in API v1)
+        species_list.append(normalize_species(
+            rec.get("soortnaam") or rec.get("soortnaamLatijn")
+        ))
 
-        # tree_name: soortnaamNederlands (Dutch common name)
-        nl_name = rec.get("soortnaamNederlands")
+        # tree_name: soortnaamTop (Dutch common name; was "soortnaamNederlands" in v1)
+        nl_name = rec.get("soortnaamTop") or rec.get("soortnaamNederlands")
         tree_names.append(nl_name.strip() if nl_name and nl_name.strip() else None)
 
-        # plant_date: plantjaar (integer year)
-        plant_dates.append(parse_plant_date(rec.get("plantjaar")))
+        # plant_date: jaarVanAanleg (year; was "plantjaar" in API v1)
+        plant_dates.append(parse_plant_date(
+            rec.get("jaarVanAanleg") or rec.get("plantjaar")
+        ))
 
         # coordinates
         lat, lon = extract_coords(rec.get("geometrie"))
