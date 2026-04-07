@@ -10,7 +10,7 @@ import pyarrow as pa
 from datetime import date, datetime, timezone
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, normalize_species
+from _ingest_shared import emit, normalize_species, validate_coordinates
 
 DATASET_ID = "82zb-7qc9"
 # Only current (non-removed) trees; request all fields we need
@@ -109,4 +109,6 @@ def build_table(records: list[dict]) -> pa.Table:
 
 if __name__ == "__main__":
     records = fetch_all()
-    emit(build_table(records))
+    table = build_table(records)
+    table = validate_coordinates(table, city="Cambridge", city_code="USBOS")
+    emit(table)

@@ -11,7 +11,7 @@ import pyarrow as pa
 from datetime import date
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, normalize_species
+from _ingest_shared import emit, normalize_species, validate_coordinates
 
 # ArcGIS FeatureServer — Brookline Tree Viewer
 QUERY_URL = "https://services1.arcgis.com/Oknk0tvfHOElpgGU/arcgis/rest/services/Brookline_Tree_Viewer_Web_WFL1/FeatureServer/0/query"
@@ -124,4 +124,6 @@ def build_table(features: list[dict]) -> pa.Table:
 
 if __name__ == "__main__":
     features = fetch_all()
-    emit(build_table(features))
+    table = build_table(features)
+    table = validate_coordinates(table, city="Brookline", city_code="USBOS")
+    emit(table)

@@ -193,12 +193,8 @@ def transform(rows: list[dict]) -> pa.Table:
 # Validate
 # ---------------------------------------------------------------------------
 
-def validate(table: pa.Table) -> None:
-    validate_coordinates(table, city="Amsterdam")
-
-
 if __name__ == "__main__":
     rows = download_all_pages()
     table = transform(rows)
-    validate(table)
+    table = validate_coordinates(table, city="Amsterdam", city_code="NLAMS")
     emit(table)

@@ -126,12 +126,8 @@ def transform(features: list[dict]) -> pa.Table:
     )
 
 
-def validate(table: pa.Table) -> None:
-    validate_coordinates(table, city="Berlin")
-
-
 if __name__ == "__main__":
     features = fetch_all_features()
     table = transform(features)
-    validate(table)
+    table = validate_coordinates(table, city="Berlin", city_code="DEBER")
     emit(table)

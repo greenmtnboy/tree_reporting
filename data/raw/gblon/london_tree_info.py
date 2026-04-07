@@ -341,12 +341,8 @@ def transform(rows: list[dict]) -> pa.Table:
 # Validate & emit
 # ---------------------------------------------------------------------------
 
-def validate(table: pa.Table) -> None:
-    validate_coordinates(table, city="London")
-
-
 if __name__ == "__main__":
     rows = download_csv()
     table = transform(rows)
-    validate(table)
+    table = validate_coordinates(table, city="London", city_code="GBLON")
     emit(table)

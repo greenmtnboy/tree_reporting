@@ -12,7 +12,7 @@ import pyarrow.compute as pc
 import pyarrow.csv as pv
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, normalize_species
+from _ingest_shared import emit, normalize_species, validate_coordinates
 
 DATASET_URL = (
     "https://data.boston.gov/dataset/e4c76e72-dcf1-40a0-b426-97c52214a9fe"
@@ -132,4 +132,5 @@ if __name__ == "__main__":
     csv_bytes = download_csv()
     table = load_arrow_table(csv_bytes)
     table = add_city_column(table)
+    table = validate_coordinates(table, city="Boston", city_code="USBOS")
     emit(table)

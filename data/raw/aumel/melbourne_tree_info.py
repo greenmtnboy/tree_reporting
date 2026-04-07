@@ -172,13 +172,9 @@ def transform(table: pa.Table) -> pa.Table:
     )
 
 
-def validate(table: pa.Table) -> None:
-    validate_coordinates(table, city="Melbourne")
-
-
 if __name__ == "__main__":
     buf = download_parquet()
     raw = pq.read_table(buf)
     table = transform(raw)
-    validate(table)
+    table = validate_coordinates(table, city="Melbourne", city_code="AUMEL")
     emit(table)

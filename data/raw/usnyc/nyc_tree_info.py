@@ -13,7 +13,7 @@ import pyarrow.compute as pc
 import pyarrow.csv as pv
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, normalize_species
+from _ingest_shared import emit, normalize_species, validate_coordinates
 
 DATASET_ID = "hn5i-inap"
 DATASET_URL = (
@@ -140,4 +140,5 @@ if __name__ == "__main__":
     csv_bytes = download_csv()
     table = load_arrow_table(csv_bytes)
     table = add_city_column(table)
+    table = validate_coordinates(table, city="New York City", city_code="USNYC")
     emit(table)

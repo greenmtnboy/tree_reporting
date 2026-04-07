@@ -72,22 +72,51 @@ def normalize_species_parts(genus: str | None, epithet: str | None) -> str | Non
 
 
 # ---------------------------------------------------------------------------
-# Coordinate validation
+# Coordinate validation & bounding-box filtering
 # ---------------------------------------------------------------------------
+
+# Generous bounding boxes per city code — wide enough for metro-area trees,
+# tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
+# Format: (lat_min, lat_max, lon_min, lon_max)
+CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USSFO": (37.60, 37.90, -122.60, -122.30),
+    "USNYC": (40.45, 40.95, -74.30, -73.65),
+    "USBOS": (42.15, 42.55, -71.25, -70.85),
+    "FRPAR": (48.70, 49.05, 2.10, 2.60),
+    "USBTV": (44.35, 44.60, -73.35, -73.10),
+    "CAVAN": (49.10, 49.40, -123.30, -122.95),
+    "DEBER": (52.30, 52.70, 13.05, 13.80),
+    "NLAMS": (52.25, 52.45, 4.70, 5.10),
+    "GBLON": (51.25, 51.75, -0.55, 0.35),
+    "AUMEL": (-38.10, -37.55, 144.55, 145.40),
+}
+
 
 def validate_coordinates(
     table: pa.Table,
     city: str = "",
+    city_code: str = "",
     threshold: float = 0.10,
-) -> None:
-    """Raise ValueError if the table has 0 rows or >threshold null lat/lon.
+) -> pa.Table:
+    """Validate and filter coordinates, returning the cleaned table.
+
+    1. Raises ValueError if the table has 0 rows or >threshold null lat/lon.
+    2. If *city_code* matches a CITY_BOUNDS entry, drops rows outside the
+       bounding box and logs the count to stderr.
 
     Parameters
     ----------
-    table:     The Arrow table to validate.
-    city:      Optional city name used in error messages.
-    threshold: Maximum allowed null fraction for latitude/longitude (default 10%).
+    table:      The Arrow table to validate.
+    city:       Optional city name used in error messages.
+    city_code:  City code (e.g. "USSFO") for bounding-box filtering.
+    threshold:  Maximum allowed null fraction for latitude/longitude (default 10%).
+
+    Returns
+    -------
+    The table with out-of-bounds rows removed (if a bounding box was applied).
     """
+    import pyarrow.compute as pc
+
     n = table.num_rows
     prefix = f"{city} ingest" if city else "Ingest"
     if n == 0:
@@ -105,6 +134,33 @@ def validate_coordinates(
                 f"{prefix}: '{col}' is NULL for {null_pct:.0%} of rows "
                 f"({null_count}/{n})"
             )
+
+    bounds = CITY_BOUNDS.get(city_code)
+    if bounds:
+        lat_min, lat_max, lon_min, lon_max = bounds
+        mask = (
+            pc.and_(
+                pc.and_(
+                    pc.greater_equal(table["latitude"], lat_min),
+                    pc.less_equal(table["latitude"], lat_max),
+                ),
+                pc.and_(
+                    pc.greater_equal(table["longitude"], lon_min),
+                    pc.less_equal(table["longitude"], lon_max),
+                ),
+            )
+        )
+        filtered = table.filter(mask)
+        dropped = n - filtered.num_rows
+        if dropped:
+            print(
+                f"{prefix}: dropped {dropped} rows outside {city_code} bounds "
+                f"({lat_min}–{lat_max}°N, {lon_min}–{lon_max}°E)",
+                file=sys.stderr,
+            )
+        return filtered
+
+    return table
 
 
 # ---------------------------------------------------------------------------
