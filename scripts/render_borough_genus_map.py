@@ -28,21 +28,21 @@ DATA_VERSION = 2
 
 # One color per distinct genus — we'll assign dynamically
 GENUS_PALETTE = [
-    "#E56B6F",  # coral red
-    "#D9A441",  # golden amber
-    "#2FA27F",  # teal green
-    "#5B8BD4",  # steel blue
-    "#C47ED0",  # soft violet
-    "#E0913A",  # burnt orange
-    "#4EC6C1",  # aqua
-    "#A8BF54",  # olive lime
-    "#D46B8C",  # rose
-    "#6DB88F",  # sage
-    "#B07D4B",  # bronze
-    "#7BAFD4",  # sky
+    "#F07E82",  # coral red
+    "#EDB85A",  # golden amber
+    "#50E0AD",  # teal green (brighter)
+    "#82BFF8",  # steel blue (brighter)
+    "#D494E0",  # soft violet
+    "#F0A54E",  # burnt orange
+    "#78F0EA",  # aqua (brighter)
+    "#BDD468",  # olive lime
+    "#E47EA0",  # rose
+    "#90E8B8",  # sage (brighter)
+    "#C89260",  # bronze
+    "#A0D8F4",  # sky (brighter)
 ]
 
-BASE_COLOR = "#666666"
+BASE_COLOR = "#999999"
 
 
 def load_inter_font() -> str:
@@ -154,8 +154,8 @@ def main() -> None:
         for b, g in zip(boroughs, genera)
     ])
 
-    # Bounding box
-    pad = 0.02
+    # Bounding box (negative pad to crop whitespace)
+    pad = -0.03
     lon_min, lon_max = float(lon.min()), float(lon.max())
     lat_min, lat_max = float(lat.min()), float(lat.max())
     lon_pad = (lon_max - lon_min) * pad
@@ -180,7 +180,7 @@ def main() -> None:
     # Layer 1: all non-highlighted trees in gray
     gray_mask = ~is_highlighted
     ax.scatter(lon[gray_mask], lat[gray_mask], s=args.dot_size, c=BASE_COLOR,
-               alpha=args.dot_alpha * 0.4, linewidths=0, rasterized=True)
+               alpha=args.dot_alpha * 0.5, linewidths=0, rasterized=True)
 
     # Layer 2: highlighted trees, colored by their genus
     for genus in reversed(distinct_genera):
@@ -188,20 +188,22 @@ def main() -> None:
         if not mask.any():
             continue
         ax.scatter(lon[mask], lat[mask], s=args.dot_size, c=genus_color[genus],
-                   alpha=args.dot_alpha, linewidths=0, rasterized=True)
+                   alpha=args.dot_alpha * 1.15, linewidths=0, rasterized=True)
 
-    # Legend — one entry per distinct dominant genus
-    for genus in distinct_genera:
+    # Legend — sorted by borough frequency (most boroughs first)
+    genus_borough_count = {g: sum(1 for v in borough_top_genus.values() if v == g) for g in distinct_genera}
+    sorted_genera = sorted(distinct_genera, key=lambda g: genus_borough_count[g], reverse=True)
+    for genus in sorted_genera:
         common = genus_common.get(genus, "")
-        name = f"{genus} / {common}" if common else genus
-        n_boroughs = sum(1 for g in borough_top_genus.values() if g == genus)
+        name = f"{genus} ({common})" if common else genus
+        n = genus_borough_count[genus]
         ax.scatter([], [], s=40, c=genus_color[genus], linewidths=0,
-                   label=f"{name}  —  {n_boroughs} borough{'s' if n_boroughs != 1 else ''}")
+                   label=f"{name}  —  {n} borough{'s' if n != 1 else ''}")
 
     legend = ax.legend(
-        loc="lower right", fontsize=10, frameon=True,
+        loc="lower right", bbox_to_anchor=(1.0, 0.05), fontsize=10, frameon=True,
         facecolor=args.bg, edgecolor="none", framealpha=0.8,
-        markerscale=2.5, labelcolor="#b8b8b8",
+        markerscale=2.5, labelcolor="#d0d0d0",
         borderpad=1.0, labelspacing=0.7, handletextpad=0.6,
     )
     legend.set_zorder(100)
@@ -215,13 +217,13 @@ def main() -> None:
              fontsize=24, color="#C9CDD3", ha="center", va="top")
     fig.text(0.5, 0.943, "Most common genus in each borough highlighted",
              ha="center", va="top",
-             fontsize=12, color="#707a70", fontfamily=font_family)
+             fontsize=12, color="#8a9a8a", fontfamily=font_family)
 
     # Citation
-    fig.text(0.5, 0.015,
+    fig.text(0.02, 0.015,
              "Data: London Datastore \u2014 Public Realm Trees  (data.london.gov.uk/dataset/2r45m)",
-             ha="center", va="bottom",
-             fontsize=8, color="#505a50", fontfamily=font_family)
+             ha="left", va="bottom",
+             fontsize=8, color="#687068", fontfamily=font_family)
 
     plt.subplots_adjust(left=0, right=1, top=0.93, bottom=0.03)
     out_path = args.output or "gblon_borough_genus.png"
