@@ -110,7 +110,7 @@ function formatCommonName(value: unknown) {
   if (!normalized) return null
   return normalized
     .toLowerCase()
-    .replace(/(^|[\s\-\/(])([a-z])/g, (_match, prefix: string, letter: string) => `${prefix}${letter.toUpperCase()}`)
+    .replace(/(^|[\s\-/(])([a-z])/g, (_match, prefix: string, letter: string) => `${prefix}${letter.toUpperCase()}`)
 }
 
 function extractCultivar(value: unknown) {
