@@ -22,3 +22,5 @@ data/raw/*.parquet
 
 .vscode/
 .vscode/settings.json
+
+scripts/*.png

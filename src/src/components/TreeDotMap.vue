@@ -133,20 +133,25 @@ function renderDots(points: Array<{ latitude: number; longitude: number }>) {
   const latRange = maxLat - minLat
   if (lonRange === 0 || latRange === 0) return
 
+  // Correct for longitude shrinking at higher latitudes (Mercator-style)
+  const midLat = (minLat + maxLat) / 2
+  const cosLat = Math.cos((midLat * Math.PI) / 180)
+  const adjustedLonRange = lonRange * cosLat
+
   const pad = 12
   const availW = W - pad * 2
   const availH = H - pad * 2
-  const scaleX = availW / lonRange
+  const scaleX = availW / adjustedLonRange
   const scaleY = availH / latRange
   const scale = Math.min(scaleX, scaleY)
-  const originX = pad + (availW - lonRange * scale) / 2
+  const originX = pad + (availW - adjustedLonRange * scale) / 2
   const originY = pad + (availH - latRange * scale) / 2
 
   // Vary opacity by density — single pass, fixed small dot
   ctx.fillStyle = 'rgba(107, 195, 140, 0.45)'
 
   for (const p of points) {
-    const x = originX + (p.longitude - minLon) * scale
+    const x = originX + (p.longitude - minLon) * cosLat * scale
     const y = H - (originY + (p.latitude - minLat) * scale)
     ctx.fillRect(x - 0.3, y - 0.3, 0.6, 0.6)
   }
