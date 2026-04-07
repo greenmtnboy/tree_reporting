@@ -8,8 +8,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount, nextTick, toValue } from 'vue'
-import type { DashboardImport, DashboardExecutionService, SqlFilterLike } from '@trilogy-data/trilogy-studio-components/dashboard'
+import { ref, watch, watchEffect, onMounted, onBeforeUnmount, nextTick, toValue, computed } from 'vue'
+import type { DashboardImport, DashboardExecutionService, SqlFilterLike, EmbeddedDashboardGroup } from '@trilogy-data/trilogy-studio-components/dashboard'
 
 const props = withDefaults(
   defineProps<{
@@ -19,11 +19,13 @@ const props = withDefaults(
     filters?: SqlFilterLike[] | string[]
     parameters?: Record<string, unknown>
     itemId: string
+    dashboardGroup?: EmbeddedDashboardGroup
   }>(),
   {
     imports: () => [],
     filters: () => [],
     parameters: () => ({}),
+    dashboardGroup: undefined,
   },
 )
 
@@ -36,10 +38,65 @@ const lastPoints = ref<Array<{ latitude: number; longitude: number }>>([])
 
 const QUERY = 'SELECT latitude, longitude WHERE latitude IS NOT NULL AND longitude IS NOT NULL;'
 
+const dashboardId = computed(() => props.dashboardGroup?.dashboard.id ?? '')
+
 function buildParameters() {
   const parameters = toValue(props.parameters as Record<string, unknown> | undefined)
   return parameters && typeof parameters === 'object' ? { ...parameters } : {}
 }
+
+function buildGroupFilters(): SqlFilterLike[] {
+  return (props.filters || []).map((f) =>
+    typeof f === 'string' ? { source: props.itemId, value: f } : f,
+  )
+}
+
+// --- Dashboard group mode ---
+const lastGroupSignature = ref<string | null>(null)
+
+function syncWithGroup() {
+  if (!props.dashboardGroup) return
+  props.dashboardGroup.setConnection(props.connectionId)
+  props.dashboardGroup.setImports(props.imports)
+  props.dashboardGroup.registerItem({
+    itemId: props.itemId,
+    title: 'Tree Distribution',
+    query: QUERY,
+    priority: 0,
+    allowCrossFilter: false,
+    filters: buildGroupFilters(),
+    chartFilters: [],
+    parameters: buildParameters(),
+  })
+}
+
+async function runViaGroup() {
+  syncWithGroup()
+  const sig = JSON.stringify({
+    query: QUERY,
+    filters: buildGroupFilters().map((f) => ({ value: f.value, parameters: f.parameters })),
+    parameters: buildParameters(),
+  })
+  if (lastGroupSignature.value === sig) return
+  lastGroupSignature.value = sig
+  await nextTick()
+  props.dashboardGroup!.scheduleRun(props.itemId)
+}
+
+watchEffect(() => {
+  if (!props.dashboardGroup) return
+  const data = props.dashboardGroup.getItemData(props.itemId, dashboardId.value) as unknown as Record<string, unknown> | null
+  if (!data) return
+  if (data.loading) {
+    loading.value = true
+    return
+  }
+  loading.value = false
+  const results = data.results as { data?: Array<{ latitude: number; longitude: number }> } | null
+  const points = results?.data ?? []
+  lastPoints.value = points
+  nextTick().then(() => renderDots(points))
+})
 
 function renderDots(points: Array<{ latitude: number; longitude: number }>) {
   const canvas = canvasRef.value
@@ -95,15 +152,11 @@ function renderDots(points: Array<{ latitude: number; longitude: number }>) {
   }
 }
 
-async function load() {
+async function loadDirect() {
   const loadId = latestLoadId.value + 1
   latestLoadId.value = loadId
   activeCancellation.value?.cancel()
   activeCancellation.value = null
-
-  if (!props.filters.length && props.connectionId) {
-    // Always load when we have a connection
-  }
 
   loading.value = true
 
@@ -168,7 +221,13 @@ onBeforeUnmount(() => {
 
 watch(
   () => `${props.connectionId}::${JSON.stringify(props.filters)}::${JSON.stringify(buildParameters())}`,
-  () => void load(),
+  () => {
+    if (props.dashboardGroup) {
+      void runViaGroup()
+    } else {
+      void loadDirect()
+    }
+  },
   { immediate: true },
 )
 </script>

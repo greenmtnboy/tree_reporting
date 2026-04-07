@@ -55,8 +55,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, toValue, watch } from 'vue'
-import type { DashboardImport, DashboardExecutionService, SqlFilterLike } from '@trilogy-data/trilogy-studio-components/dashboard'
+import { computed, nextTick, onBeforeUnmount, ref, toValue, watch, watchEffect } from 'vue'
+import type { DashboardImport, DashboardExecutionService, SqlFilterLike, EmbeddedDashboardGroup } from '@trilogy-data/trilogy-studio-components/dashboard'
 
 type SpeciesRow = Record<string, unknown>
 
@@ -69,11 +69,13 @@ const props = withDefaults(
     filters?: SqlFilterLike[] | string[]
     parameters?: Record<string, unknown>
     itemId: string
+    dashboardGroup?: EmbeddedDashboardGroup
   }>(),
   {
     imports: () => [],
     filters: () => [],
     parameters: () => ({}),
+    dashboardGroup: undefined,
   },
 )
 
@@ -181,6 +183,73 @@ function buildParameters() {
   return p && typeof p === 'object' ? { ...p } : {}
 }
 
+function buildGroupFilters(): SqlFilterLike[] {
+  return (props.filters || []).map((f) =>
+    typeof f === 'string' ? { source: props.itemId, value: f } : f,
+  )
+}
+
+// --- Dashboard group mode ---
+const dashboardId = computed(() => props.dashboardGroup?.dashboard.id ?? '')
+const lastGroupSignature = ref<string | null>(null)
+
+function syncWithGroup() {
+  if (!props.dashboardGroup) return
+  props.dashboardGroup.setConnection(props.connectionId)
+  props.dashboardGroup.setImports(props.imports)
+  props.dashboardGroup.registerItem({
+    itemId: props.itemId,
+    title: 'Species Carousel',
+    query: props.query,
+    priority: 0,
+    allowCrossFilter: false,
+    filters: buildGroupFilters(),
+    chartFilters: [],
+    parameters: buildParameters(),
+  })
+}
+
+async function runViaGroup() {
+  syncWithGroup()
+  if (!props.query.trim()) {
+    species.value = []
+    error.value = null
+    loading.value = false
+    return
+  }
+  const sig = JSON.stringify({
+    query: props.query,
+    filters: buildGroupFilters().map((f) => ({ value: f.value, parameters: f.parameters })),
+    parameters: buildParameters(),
+  })
+  if (lastGroupSignature.value === sig) return
+  lastGroupSignature.value = sig
+  await nextTick()
+  props.dashboardGroup!.scheduleRun(props.itemId)
+}
+
+watchEffect(() => {
+  if (!props.dashboardGroup) return
+  const data = props.dashboardGroup.getItemData(props.itemId, dashboardId.value) as unknown as Record<string, unknown> | null
+  if (!data) return
+  if (data.loading) {
+    loading.value = true
+    return
+  }
+  loading.value = false
+  if (data.error) {
+    error.value = typeof data.error === 'string' ? data.error : 'Failed to load species carousel.'
+    species.value = []
+    return
+  }
+  error.value = null
+  const results = data.results as { data?: SpeciesRow[] } | null
+  const rows = Array.isArray(results?.data) ? results!.data : []
+  species.value = rows
+  currentIndex.value = 0
+})
+
+// --- Direct mode ---
 async function load() {
   const loadId = ++latestLoadId.value
   activeCancellation.value?.cancel()
@@ -236,7 +305,13 @@ async function load() {
 
 watch(
   () => `${props.connectionId}::${props.query}::${JSON.stringify(props.filters)}::${JSON.stringify(props.imports)}::${JSON.stringify(buildParameters())}`,
-  () => { void load() },
+  () => {
+    if (props.dashboardGroup) {
+      void runViaGroup()
+    } else {
+      void load()
+    }
+  },
   { immediate: true },
 )
 
