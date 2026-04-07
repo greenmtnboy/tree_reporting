@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
-# requires-python = ">=3.11"
-# dependencies = ["duckdb", "matplotlib", "numpy"]
+# requires-python = ">=3.13"
+# dependencies = ["duckdb", "matplotlib", "numpy", "requests"]
 # ///
 """Dot map with top N genera tinted in nature colors, everything else in gray.
 
@@ -13,11 +13,38 @@ from __future__ import annotations
 
 import argparse
 
+import tempfile
+from pathlib import Path
+
 import duckdb
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import numpy as np
+import requests
+
+
+def load_inter_font() -> str:
+    """Download Inter from Google Fonts and register it. Returns the font family name."""
+    cache_dir = Path(tempfile.gettempdir()) / "inter_font"
+    cache_dir.mkdir(exist_ok=True)
+    regular = cache_dir / "Inter-Regular.ttf"
+    bold = cache_dir / "Inter-Bold.ttf"
+
+    urls = {
+        regular: "https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hjQ.ttf",
+        bold: "https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYAZ9hjQ.ttf",
+    }
+    for path, url in urls.items():
+        if not path.exists():
+            print(f"Downloading {path.name} ...")
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+            path.write_bytes(resp.content)
+        fm.fontManager.addfont(str(path))
+
+    return "Inter"
 
 REMOTE_BASE = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees"
 DATA_VERSION = 2
@@ -39,6 +66,8 @@ BASE_COLOR = "#cccccc"
 
 
 def main() -> None:
+    font_family = load_inter_font()
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--city", default="GBLON")
     parser.add_argument("-n", "--top-n", type=int, default=10)
@@ -126,26 +155,14 @@ def main() -> None:
     # Draw base (non-top-N) trees first in gray
     top_set = set(genus_names)
     base_mask = np.array([g not in top_set for g in genus])
-    ax.scatter(
-        lon[base_mask], lat[base_mask],
-        s=args.dot_size,
-        c=BASE_COLOR,
-        alpha=args.dot_alpha,
-        linewidths=0,
-        rasterized=True,
-    )
+    ax.scatter(lon[base_mask], lat[base_mask], s=args.dot_size, c=BASE_COLOR,
+               alpha=args.dot_alpha, linewidths=0, rasterized=True)
 
     # Draw top genera on top, in reverse order (most common last = on top)
     for g in reversed(genus_names):
         mask = genus == g
-        ax.scatter(
-            lon[mask], lat[mask],
-            s=args.dot_size,
-            c=genus_color_map[g],
-            alpha=args.dot_alpha,
-            linewidths=0,
-            rasterized=True,
-        )
+        ax.scatter(lon[mask], lat[mask], s=args.dot_size, c=genus_color_map[g],
+                   alpha=args.dot_alpha, linewidths=0, rasterized=True)
 
     # Legend
     genus_counts = {r[0]: r[1] for r in top_genera}
@@ -162,21 +179,22 @@ def main() -> None:
     )
     legend.set_zorder(100)
     for text in legend.get_texts():
-        text.set_fontstyle("italic")
+        text.set_fontfamily(font_family)
 
     # Title + subtitle
-    title = args.title or "London, revealed by trees"
-    fig.text(0.5, 0.97, title, ha="center", va="top",
-             fontsize=24, color="#d8d8d8", fontweight="bold", fontfamily="serif")
-    fig.text(0.5, 0.945, "Street-tree records across the city, colored by genus",
+    title = args.title or "London, Revealed by Trees"
+    spaced_title = "\u2009".join(title)
+    fig.text(0.5, 0.97, spaced_title, fontfamily=font_family,
+             fontsize=24, color="#C9CDD3", ha="center", va="top")
+    fig.text(0.5, 0.943, "Street-tree records across the city, colored by genus",
              ha="center", va="top",
-             fontsize=13, color="#808a80", fontstyle="italic", fontfamily="serif")
+             fontsize=12, color="#707a70", fontfamily=font_family)
 
     # Citation
     fig.text(0.5, 0.015,
              "Data: London Datastore — Public Realm Trees  (data.london.gov.uk/dataset/2r45m)",
              ha="center", va="bottom",
-             fontsize=8, color="#505a50", fontfamily="serif")
+             fontsize=8, color="#505a50", fontfamily=font_family)
 
     plt.subplots_adjust(left=0, right=1, top=0.93, bottom=0.03)
     out_path = args.output or f"{args.city.lower()}_top{args.top_n}_genus.png"
