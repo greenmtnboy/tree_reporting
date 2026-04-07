@@ -180,7 +180,7 @@ def main() -> None:
     # Layer 1: all non-highlighted trees in gray
     gray_mask = ~is_highlighted
     ax.scatter(lon[gray_mask], lat[gray_mask], s=args.dot_size, c=BASE_COLOR,
-               alpha=args.dot_alpha * 0.5, linewidths=0, rasterized=True)
+               alpha=args.dot_alpha * 0.625, linewidths=0, rasterized=True)
 
     # Layer 2: highlighted trees, colored by their genus
     for genus in reversed(distinct_genera):
@@ -188,7 +188,7 @@ def main() -> None:
         if not mask.any():
             continue
         ax.scatter(lon[mask], lat[mask], s=args.dot_size, c=genus_color[genus],
-                   alpha=args.dot_alpha * 1.15, linewidths=0, rasterized=True)
+                   alpha=min(args.dot_alpha * 1.44, 1.0), linewidths=0, rasterized=True)
 
     # Legend — sorted by borough frequency (most boroughs first)
     genus_borough_count = {g: sum(1 for v in borough_top_genus.values() if v == g) for g in distinct_genera}
