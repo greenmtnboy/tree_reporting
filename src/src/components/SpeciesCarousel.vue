@@ -36,7 +36,7 @@
 
         <div class="carousel-detail-pane">
           <div class="carousel-intro">
-            <span class="carousel-common-name">{{ current.common_name || current.species }}</span>
+            <span class="carousel-common-name">{{ displayTitle }}</span>
             <span v-if="current.common_name" class="carousel-sci-name">{{ current.species }}</span>
           </div>
           <div class="carousel-count">
@@ -55,8 +55,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, toValue, watch } from 'vue'
-import type { DashboardImport, DashboardExecutionService, SqlFilterLike } from '@trilogy-data/trilogy-studio-components/dashboard'
+import { computed, nextTick, onBeforeUnmount, ref, toValue, watch, watchEffect } from 'vue'
+import type { DashboardImport, DashboardExecutionService, SqlFilterLike, EmbeddedDashboardGroup } from '@trilogy-data/trilogy-studio-components/dashboard'
 
 type SpeciesRow = Record<string, unknown>
 
@@ -69,11 +69,13 @@ const props = withDefaults(
     filters?: SqlFilterLike[] | string[]
     parameters?: Record<string, unknown>
     itemId: string
+    dashboardGroup?: EmbeddedDashboardGroup
   }>(),
   {
     imports: () => [],
     filters: () => [],
     parameters: () => ({}),
+    dashboardGroup: undefined,
   },
 )
 
@@ -87,6 +89,12 @@ const activeCancellation = ref<{ cancel: () => void } | null>(null)
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 const current = computed(() => species.value[currentIndex.value] ?? ({} as SpeciesRow))
+const displayTitle = computed(() => {
+  const commonName = formatCommonName(current.value.common_name)
+  if (!commonName) return current.value.species
+  const cultivar = formatCommonName(extractCultivar(current.value.species))
+  return cultivar ? `${commonName} (${cultivar})` : commonName
+})
 
 function prev() {
   if (currentIndex.value > 0) currentIndex.value--
@@ -94,6 +102,21 @@ function prev() {
 
 function next() {
   if (currentIndex.value < species.value.length - 1) currentIndex.value++
+}
+
+function formatCommonName(value: unknown) {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  if (!normalized) return null
+  return normalized
+    .toLowerCase()
+    .replace(/(^|[\s\-/(])([a-z])/g, (_match, prefix: string, letter: string) => `${prefix}${letter.toUpperCase()}`)
+}
+
+function extractCultivar(value: unknown) {
+  if (typeof value !== 'string') return null
+  const match = value.match(/'([^']+)'/)
+  return match?.[1]?.trim() || null
 }
 
 function formatTitleCase(value: unknown) {
@@ -160,6 +183,73 @@ function buildParameters() {
   return p && typeof p === 'object' ? { ...p } : {}
 }
 
+function buildGroupFilters(): SqlFilterLike[] {
+  return (props.filters || []).map((f) =>
+    typeof f === 'string' ? { source: props.itemId, value: f } : f,
+  )
+}
+
+// --- Dashboard group mode ---
+const dashboardId = computed(() => props.dashboardGroup?.dashboard.id ?? '')
+const lastGroupSignature = ref<string | null>(null)
+
+function syncWithGroup() {
+  if (!props.dashboardGroup) return
+  props.dashboardGroup.setConnection(props.connectionId)
+  props.dashboardGroup.setImports(props.imports)
+  props.dashboardGroup.registerItem({
+    itemId: props.itemId,
+    title: 'Species Carousel',
+    query: props.query,
+    priority: 0,
+    allowCrossFilter: false,
+    filters: buildGroupFilters(),
+    chartFilters: [],
+    parameters: buildParameters(),
+  })
+}
+
+async function runViaGroup() {
+  syncWithGroup()
+  if (!props.query.trim()) {
+    species.value = []
+    error.value = null
+    loading.value = false
+    return
+  }
+  const sig = JSON.stringify({
+    query: props.query,
+    filters: buildGroupFilters().map((f) => ({ value: f.value, parameters: f.parameters })),
+    parameters: buildParameters(),
+  })
+  if (lastGroupSignature.value === sig) return
+  lastGroupSignature.value = sig
+  await nextTick()
+  props.dashboardGroup!.scheduleRun(props.itemId)
+}
+
+watchEffect(() => {
+  if (!props.dashboardGroup) return
+  const data = props.dashboardGroup.getItemData(props.itemId, dashboardId.value) as unknown as Record<string, unknown> | null
+  if (!data) return
+  if (data.loading) {
+    loading.value = true
+    return
+  }
+  loading.value = false
+  if (data.error) {
+    error.value = typeof data.error === 'string' ? data.error : 'Failed to load species carousel.'
+    species.value = []
+    return
+  }
+  error.value = null
+  const results = data.results as { data?: SpeciesRow[] } | null
+  const rows = Array.isArray(results?.data) ? results!.data : []
+  species.value = rows
+  currentIndex.value = 0
+})
+
+// --- Direct mode ---
 async function load() {
   const loadId = ++latestLoadId.value
   activeCancellation.value?.cancel()
@@ -215,7 +305,13 @@ async function load() {
 
 watch(
   () => `${props.connectionId}::${props.query}::${JSON.stringify(props.filters)}::${JSON.stringify(props.imports)}::${JSON.stringify(buildParameters())}`,
-  () => { void load() },
+  () => {
+    if (props.dashboardGroup) {
+      void runViaGroup()
+    } else {
+      void load()
+    }
+  },
   { immediate: true },
 )
 

@@ -38,6 +38,36 @@ def parse_scientific_name(q_species: str) -> str:
     return q_species.split("::")[0].strip()
 
 
+def build_inat_lookup_candidates(scientific_name: str) -> list[str]:
+    normalized = scientific_name.strip()
+    if not normalized:
+        return []
+
+    candidates: list[str] = []
+
+    def add(candidate: str) -> None:
+        cleaned = re.sub(r"\s+", " ", candidate).strip(" ,")
+        if cleaned and cleaned not in candidates:
+            candidates.append(cleaned)
+
+    add(normalized)
+
+    # Drop quoted cultivar names first, e.g. Acer rubrum 'Frank Jr' -> Acer rubrum
+    without_quoted_cultivar = re.sub(r"\s*'[^']+'", "", normalized)
+    add(without_quoted_cultivar)
+
+    # Drop explicit infraspecific / cultivar markers and the trailing epithet.
+    without_infraspecific = re.sub(
+        r"\s+(?:var\.?|subsp\.?|ssp\.?|f\.?|cv\.?)\s+[^\s]+.*$",
+        "",
+        without_quoted_cultivar,
+        flags=re.IGNORECASE,
+    )
+    add(without_infraspecific)
+
+    return candidates
+
+
 def split_scientific_parts(scientific_name: str) -> tuple[str | None, str | None]:
     tokens = scientific_name.split()
     genus = tokens[0] if tokens else None

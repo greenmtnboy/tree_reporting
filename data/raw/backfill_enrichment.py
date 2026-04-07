@@ -29,6 +29,12 @@ Usage
   # Backfill description for species missing it
   uv run backfill_enrichment.py --fields description --model gemini-2.0-flash
 
+    # Re-run a single species and overwrite its existing description
+    uv run backfill_enrichment.py --fields description --species "Acer x freemanii 'sienna glen'" --overwrite-existing --model gemini-2.5-flash
+
+    # Inspect the exact LLM context for a targeted rerun
+    uv run backfill_enrichment.py --fields description --species "Acer x freemanii 'sienna glen'" --overwrite-existing --print-llm-context --model gemini-2.5-flash
+
   # Multiple fields — all providers needed are resolved automatically
   uv run backfill_enrichment.py --fields photo_url,description --model gemini-2.0-flash
 
@@ -56,14 +62,12 @@ from enrichment._tree_shared import (
 # Local filename derived from the GCS URI, e.g. "tree_enrichment_v2.parquet"
 _DEFAULT_OUTPUT = os.path.basename(ENRICHMENT_GCS_URI)
 from enrichment._tree_enrichment_helpers import (
-    compute_is_complete,
     convert_length_range_to_feet,
     map_tree_form,
-    map_wikipedia_lookup,
     normalize_bloom_months,
     normalize_growth_rate,
-    parse_lifespan_range,
     parse_scientific_name,
+    parse_lifespan_range,
     split_scientific_parts,
 )
 
@@ -170,9 +174,9 @@ def run_inat_provider(species: str) -> dict:
     }
 
 
-def run_llm_provider(species: str, client) -> dict:
+def run_llm_provider(species: str, client, print_llm_context: bool = False) -> dict:
     """Run LLM enrichment and return a partial row dict for all LLM-derived fields."""
-    enrichment = enrich_species(species, client)
+    enrichment = enrich_species(species, client, print_full_context=print_llm_context)
     if enrichment is None:
         return {}
 
@@ -227,7 +231,7 @@ def run_llm_provider(species: str, client) -> dict:
 
 # ── Row-level merge ────────────────────────────────────────────────────────────
 
-def apply_provider_updates(row: dict, updates: dict) -> tuple[dict, list[str]]:
+def apply_provider_updates(row: dict, updates: dict, overwrite_fields: frozenset[str] = frozenset()) -> tuple[dict, list[str]]:
     """
     Merge *updates* into *row*, touching only fields that are currently NULL.
     Returns (updated_row, list_of_fields_changed).
@@ -235,10 +239,19 @@ def apply_provider_updates(row: dict, updates: dict) -> tuple[dict, list[str]]:
     result = dict(row)
     changed = []
     for field, value in updates.items():
-        if value is not None and result.get(field) is None:
+        if value is None:
+            continue
+        if result.get(field) is None or field in overwrite_fields:
             result[field] = value
             changed.append(field)
     return result, changed
+
+
+def format_debug_value(value: object, max_len: int = 220) -> str:
+    text = repr(value)
+    if len(text) <= max_len:
+        return text
+    return f"{text[:max_len - 3]}..."
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -274,6 +287,12 @@ def main() -> None:
         help="Process at most N species.",
     )
     parser.add_argument(
+        "--species",
+        default=None,
+        metavar="SCIENTIFIC_NAME",
+        help="Only backfill this species. Matches exact stored name and normalized scientific-name forms.",
+    )
+    parser.add_argument(
         "--flush-every",
         dest="flush_every",
         type=int,
@@ -298,6 +317,16 @@ def main() -> None:
         action="store_false",
         help="Skip GCS upload (write local file only).",
     )
+    parser.add_argument(
+        "--overwrite-existing",
+        action="store_true",
+        help="Overwrite the requested --fields even when they are already populated. Other fields still only fill NULLs.",
+    )
+    parser.add_argument(
+        "--print-llm-context",
+        action="store_true",
+        help="Print the full concatenated source text and native-range evidence sent to the LLM for each targeted species.",
+    )
     # LLM options — only needed if 'llm' provider is required
     parser.add_argument("--model", default=None)
     parser.add_argument("--vertex-project", dest="vertex_project", default=None)
@@ -316,6 +345,12 @@ def main() -> None:
     providers_needed: set[str] = {FIELD_TO_PROVIDER[f] for f in target_fields}
     print(f"[info] target fields : {', '.join(target_fields)}", file=sys.stderr)
     print(f"[info] providers     : {', '.join(sorted(providers_needed))}", file=sys.stderr)
+    if args.species:
+        print(f"[info] species filter: {args.species}", file=sys.stderr)
+    if args.overwrite_existing:
+        print(f"[info] overwrite     : {', '.join(target_fields)}", file=sys.stderr)
+    if args.print_llm_context:
+        print("[info] print llm context enabled", file=sys.stderr)
 
     # Validate LLM args if needed
     llm_client = None
@@ -346,16 +381,36 @@ def main() -> None:
     rows = table.to_pylist()
     print(f"[info] loaded {len(rows)} rows", file=sys.stderr)
 
+    normalized_species_filter = parse_scientific_name(args.species) if args.species else None
+
+    def species_matches(row_species: str) -> bool:
+        if not args.species:
+            return True
+        if row_species == args.species:
+            return True
+        return parse_scientific_name(row_species) == normalized_species_filter
+
     # Find rows that need backfill (any target field is NULL)
     def needs_backfill(row: dict) -> bool:
-        return any(row.get(f) is None for f in target_fields)
+        return args.overwrite_existing or any(row.get(f) is None for f in target_fields)
 
-    to_backfill = [row for row in rows if not should_skip_species(row.get("species", "")) and needs_backfill(row)]
+    matching_rows = [
+        row for row in rows
+        if species_matches(row.get("species", ""))
+    ]
+    if args.species and not matching_rows:
+        print(f"[error] species not found in source parquet: {args.species}", file=sys.stderr)
+        raise SystemExit(1)
+
+    to_backfill = [
+        row for row in matching_rows
+        if not should_skip_species(row.get("species", "")) and needs_backfill(row)
+    ]
     if args.limit:
         to_backfill = to_backfill[:args.limit]
 
     print(
-        f"[info] {len(to_backfill)} / {len(rows)} species need backfill",
+        f"[info] {len(to_backfill)} / {len(matching_rows)} matching species need backfill",
         file=sys.stderr,
     )
 
@@ -389,14 +444,24 @@ def main() -> None:
             merged_updates.update(updates)
 
         if "llm" in providers_needed and llm_client is not None:
-            updates = run_llm_provider(species, llm_client)
+            updates = run_llm_provider(species, llm_client, print_llm_context=args.print_llm_context)
             merged_updates.update(updates)
 
-        updated_row, changed = apply_provider_updates(rows_by_species[species], merged_updates)
+        updated_row, changed = apply_provider_updates(
+            rows_by_species[species],
+            merged_updates,
+            frozenset(target_fields) if args.overwrite_existing else frozenset(),
+        )
         if changed:
             rows_by_species[species] = updated_row
             update_count += 1
             print(f"    [updated] {', '.join(changed)}", file=sys.stderr)
+            if args.print_llm_context:
+                for field in changed:
+                    print(
+                        f"      [value] {field}={format_debug_value(updated_row.get(field))}",
+                        file=sys.stderr,
+                    )
         else:
             print(f"    [no change]", file=sys.stderr)
 

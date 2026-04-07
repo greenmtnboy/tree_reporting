@@ -236,6 +236,7 @@ def transform(rows: list[dict]) -> pa.Table:
     common_field = col(
         "common_name", "common", "english_name", "common_name_uk",
     )
+    borough_field = col("borough", "borough_name", "district")
     year_field = col(
         "year_planted", "planting_year", "planted_year",
         "date_planted", "plant_date", "planted",
@@ -261,6 +262,7 @@ def transform(rows: list[dict]) -> pa.Table:
     cities: list[str] = []
     species_list: list[str | None] = []
     tree_names: list[str | None] = []
+    boroughs: list[str | None] = []
     plant_dates: list[date | None] = []
     latitudes: list[float | None] = []
     longitudes: list[float | None] = []
@@ -279,6 +281,10 @@ def transform(rows: list[dict]) -> pa.Table:
         # common name / tree name
         raw_common = row.get(common_field, "") if common_field else ""
         tree_names.append(raw_common.strip() if raw_common and raw_common.strip() else None)
+
+        # borough
+        raw_borough = row.get(borough_field, "") if borough_field else ""
+        boroughs.append(raw_borough.strip() if raw_borough and raw_borough.strip() else None)
 
         # plant_date
         raw_year = row.get(year_field, "") if year_field else ""
@@ -322,6 +328,7 @@ def transform(rows: list[dict]) -> pa.Table:
             "city": pa.array(cities, type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
             "tree_name": pa.array(tree_names, type=pa.string()),
+            "borough": pa.array(boroughs, type=pa.string()),
             "plant_date": pa.array(plant_dates, type=pa.date32()),
             "latitude": pa.array(latitudes, type=pa.float64()),
             "longitude": pa.array(longitudes, type=pa.float64()),

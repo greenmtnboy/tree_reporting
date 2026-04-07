@@ -12,9 +12,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, toValue, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, toValue, watch, watchEffect } from 'vue'
 import { MarkdownRenderer } from '@trilogy-data/trilogy-studio-components/dashboard'
-import type { DashboardImport, DashboardExecutionService, SqlFilterLike } from '@trilogy-data/trilogy-studio-components/dashboard'
+import type { DashboardImport, DashboardExecutionService, SqlFilterLike, EmbeddedDashboardGroup } from '@trilogy-data/trilogy-studio-components/dashboard'
 
 const props = withDefaults(
   defineProps<{
@@ -25,11 +25,13 @@ const props = withDefaults(
     filters?: SqlFilterLike[] | string[]
     parameters?: Record<string, unknown>
     itemId: string
+    dashboardGroup?: EmbeddedDashboardGroup
   }>(),
   {
     imports: () => [],
     filters: () => [],
     parameters: () => ({}),
+    dashboardGroup: undefined,
   },
 )
 
@@ -110,6 +112,70 @@ function debugSpotlight(message: string, details?: Record<string, unknown>) {
   }
   console.debug(`[SummaryMarkdownCard:${props.itemId}] ${message}`, details ?? {})
 }
+
+function buildGroupFilters(): SqlFilterLike[] {
+  return (props.filters || []).map((f) =>
+    typeof f === 'string' ? { source: props.itemId, value: f } : f,
+  )
+}
+
+// --- Dashboard group mode ---
+const dashboardId = computed(() => props.dashboardGroup?.dashboard.id ?? '')
+const lastGroupSignature = ref<string | null>(null)
+
+function syncWithGroup() {
+  if (!props.dashboardGroup) return
+  props.dashboardGroup.setConnection(props.connectionId)
+  props.dashboardGroup.setImports(props.imports)
+  props.dashboardGroup.registerItem({
+    itemId: props.itemId,
+    title: 'Spotlight Card',
+    query: props.query,
+    priority: 0,
+    allowCrossFilter: false,
+    filters: buildGroupFilters(),
+    chartFilters: [],
+    parameters: buildParameters(),
+  })
+}
+
+async function runViaGroup() {
+  syncWithGroup()
+  if (!props.query.trim()) {
+    row.value = null
+    error.value = null
+    loading.value = false
+    return
+  }
+  const sig = JSON.stringify({
+    query: props.query,
+    filters: buildGroupFilters().map((f) => ({ value: f.value, parameters: f.parameters })),
+    parameters: buildParameters(),
+  })
+  if (lastGroupSignature.value === sig) return
+  lastGroupSignature.value = sig
+  await nextTick()
+  props.dashboardGroup!.scheduleRun(props.itemId)
+}
+
+watchEffect(() => {
+  if (!props.dashboardGroup) return
+  const data = props.dashboardGroup.getItemData(props.itemId, dashboardId.value) as unknown as Record<string, unknown> | null
+  if (!data) return
+  if (data.loading) {
+    loading.value = true
+    return
+  }
+  loading.value = false
+  if (data.error) {
+    error.value = typeof data.error === 'string' ? data.error : 'Failed to load spotlight card.'
+    row.value = null
+    return
+  }
+  error.value = null
+  const results = data.results as { data?: Array<Record<string, unknown>> } | null
+  row.value = Array.isArray(results?.data) ? (results!.data[0] ?? null) : null
+})
 
 const markdown = computed(() => {
   if (!row.value) return ''
@@ -245,7 +311,11 @@ async function load() {
 watch(
   () => `${props.connectionId}::${props.query}::${JSON.stringify(props.filters)}::${JSON.stringify(props.imports)}::${JSON.stringify(buildParameters())}`,
   () => {
-    void load()
+    if (props.dashboardGroup) {
+      void runViaGroup()
+    } else {
+      void load()
+    }
   },
   { immediate: true },
 )

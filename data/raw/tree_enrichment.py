@@ -36,6 +36,7 @@ from enrichment._tree_shared import (
     should_skip_species,
 )
 from enrichment._tree_enrichment_helpers import (
+    build_inat_lookup_candidates,
     compute_is_complete,
     convert_length_range_to_feet,
     map_tree_form,
@@ -76,6 +77,48 @@ def _inat_get(path: str, params: dict) -> dict:
         return _json.loads(resp.read())
 
 
+def _fetch_inat_photo_for_query(query_name: str) -> tuple[int | None, str | None, str | None, str | None]:
+    data = _inat_get("/taxa", {"q": query_name, "rank": "species,hybrid", "per_page": 3})
+    results = data.get("results", [])
+    if not results:
+        return None, None, None, None
+
+    lower_name = query_name.lower().replace(" x ", " × ")
+    taxon = None
+    for r in results:
+        r_name = r.get("name", "").lower()
+        if r_name == lower_name or r_name == query_name.lower():
+            taxon = r
+            break
+    if taxon is None:
+        taxon = results[0]
+
+    taxon_id: int = taxon["id"]
+
+    dp = taxon.get("default_photo")
+    if dp and dp.get("license_code") in _INAT_ACCEPTABLE_LICENSES:
+        return taxon_id, dp.get("medium_url"), dp.get("license_code"), dp.get("attribution")
+
+    license_param = ",".join(sorted(_INAT_ACCEPTABLE_LICENSES))
+    obs_data = _inat_get("/observations", {
+        "taxon_id": taxon_id,
+        "photos": "true",
+        "quality_grade": "research",
+        "license": license_param,
+        "photo_license": license_param,
+        "per_page": 5,
+        "order_by": "votes",
+    })
+    for obs in obs_data.get("results", []):
+        for photo in obs.get("photos", []):
+            lic = photo.get("license_code")
+            if lic in _INAT_ACCEPTABLE_LICENSES:
+                url = photo["url"].replace("square", "medium")
+                return taxon_id, url, lic, photo.get("attribution")
+
+    return taxon_id, None, None, None
+
+
 def fetch_inat_photo(scientific_name: str) -> tuple[int | None, str | None, str | None, str | None]:
     """Return (taxon_id, photo_url, photo_license, photo_attribution).
 
@@ -85,49 +128,23 @@ def fetch_inat_photo(scientific_name: str) -> tuple[int | None, str | None, str 
     acceptable-license photo exists.
     """
     try:
-        data = _inat_get("/taxa", {"q": scientific_name, "rank": "species,hybrid", "per_page": 3})
-        results = data.get("results", [])
-        if not results:
-            return None, None, None, None
+        candidates = build_inat_lookup_candidates(scientific_name)
+        fallback_result: tuple[int | None, str | None, str | None, str | None] | None = None
+        for idx, candidate in enumerate(candidates):
+            taxon_id, photo_url, photo_license, photo_attribution = _fetch_inat_photo_for_query(candidate)
+            if photo_url:
+                if idx > 0:
+                    print(
+                        f"    [inat] fallback photo lookup {scientific_name!r} -> {candidate!r}",
+                        file=sys.stderr,
+                    )
+                return taxon_id, photo_url, photo_license, photo_attribution
+            if fallback_result is None and taxon_id is not None:
+                fallback_result = (taxon_id, photo_url, photo_license, photo_attribution)
 
-        # Prefer exact name match — iNat normalises × so compare with both forms
-        lower_name = scientific_name.lower().replace(" x ", " × ")
-        taxon = None
-        for r in results:
-            r_name = r.get("name", "").lower()
-            if r_name == lower_name or r_name == scientific_name.lower():
-                taxon = r
-                break
-        if taxon is None:
-            taxon = results[0]
-
-        taxon_id: int = taxon["id"]
-
-        # Try curated default photo first
-        dp = taxon.get("default_photo")
-        if dp and dp.get("license_code") in _INAT_ACCEPTABLE_LICENSES:
-            return taxon_id, dp.get("medium_url"), dp.get("license_code"), dp.get("attribution")
-
-        # Fall back to best open-licensed research-grade observation photo
-        license_param = ",".join(sorted(_INAT_ACCEPTABLE_LICENSES))
-        obs_data = _inat_get("/observations", {
-            "taxon_id": taxon_id,
-            "photos": "true",
-            "quality_grade": "research",
-            "license": license_param,
-            "photo_license": license_param,
-            "per_page": 5,
-            "order_by": "votes",
-        })
-        for obs in obs_data.get("results", []):
-            for photo in obs.get("photos", []):
-                lic = photo.get("license_code")
-                if lic in _INAT_ACCEPTABLE_LICENSES:
-                    url = photo["url"].replace("square", "medium")
-                    return taxon_id, url, lic, photo.get("attribution")
-
-        # Found taxon but no acceptable photo
-        return taxon_id, None, None, None
+        if fallback_result is not None:
+            return fallback_result
+        return None, None, None, None
 
     except Exception as exc:
         print(f"    [inat] failed for {scientific_name!r}: {exc}", file=sys.stderr)

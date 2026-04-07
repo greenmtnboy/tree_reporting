@@ -8,8 +8,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount, nextTick, toValue } from 'vue'
-import type { DashboardImport, DashboardExecutionService, SqlFilterLike } from '@trilogy-data/trilogy-studio-components/dashboard'
+import { ref, watch, watchEffect, onMounted, onBeforeUnmount, nextTick, toValue, computed } from 'vue'
+import type { DashboardImport, DashboardExecutionService, SqlFilterLike, EmbeddedDashboardGroup } from '@trilogy-data/trilogy-studio-components/dashboard'
 
 const props = withDefaults(
   defineProps<{
@@ -19,11 +19,13 @@ const props = withDefaults(
     filters?: SqlFilterLike[] | string[]
     parameters?: Record<string, unknown>
     itemId: string
+    dashboardGroup?: EmbeddedDashboardGroup
   }>(),
   {
     imports: () => [],
     filters: () => [],
     parameters: () => ({}),
+    dashboardGroup: undefined,
   },
 )
 
@@ -36,10 +38,65 @@ const lastPoints = ref<Array<{ latitude: number; longitude: number }>>([])
 
 const QUERY = 'SELECT latitude, longitude WHERE latitude IS NOT NULL AND longitude IS NOT NULL;'
 
+const dashboardId = computed(() => props.dashboardGroup?.dashboard.id ?? '')
+
 function buildParameters() {
   const parameters = toValue(props.parameters as Record<string, unknown> | undefined)
   return parameters && typeof parameters === 'object' ? { ...parameters } : {}
 }
+
+function buildGroupFilters(): SqlFilterLike[] {
+  return (props.filters || []).map((f) =>
+    typeof f === 'string' ? { source: props.itemId, value: f } : f,
+  )
+}
+
+// --- Dashboard group mode ---
+const lastGroupSignature = ref<string | null>(null)
+
+function syncWithGroup() {
+  if (!props.dashboardGroup) return
+  props.dashboardGroup.setConnection(props.connectionId)
+  props.dashboardGroup.setImports(props.imports)
+  props.dashboardGroup.registerItem({
+    itemId: props.itemId,
+    title: 'Tree Distribution',
+    query: QUERY,
+    priority: 0,
+    allowCrossFilter: false,
+    filters: buildGroupFilters(),
+    chartFilters: [],
+    parameters: buildParameters(),
+  })
+}
+
+async function runViaGroup() {
+  syncWithGroup()
+  const sig = JSON.stringify({
+    query: QUERY,
+    filters: buildGroupFilters().map((f) => ({ value: f.value, parameters: f.parameters })),
+    parameters: buildParameters(),
+  })
+  if (lastGroupSignature.value === sig) return
+  lastGroupSignature.value = sig
+  await nextTick()
+  props.dashboardGroup!.scheduleRun(props.itemId)
+}
+
+watchEffect(() => {
+  if (!props.dashboardGroup) return
+  const data = props.dashboardGroup.getItemData(props.itemId, dashboardId.value) as unknown as Record<string, unknown> | null
+  if (!data) return
+  if (data.loading) {
+    loading.value = true
+    return
+  }
+  loading.value = false
+  const results = data.results as { data?: Array<{ latitude: number; longitude: number }> } | null
+  const points = results?.data ?? []
+  lastPoints.value = points
+  nextTick().then(() => renderDots(points))
+})
 
 function renderDots(points: Array<{ latitude: number; longitude: number }>) {
   const canvas = canvasRef.value
@@ -76,34 +133,35 @@ function renderDots(points: Array<{ latitude: number; longitude: number }>) {
   const latRange = maxLat - minLat
   if (lonRange === 0 || latRange === 0) return
 
+  // Correct for longitude shrinking at higher latitudes (Mercator-style)
+  const midLat = (minLat + maxLat) / 2
+  const cosLat = Math.cos((midLat * Math.PI) / 180)
+  const adjustedLonRange = lonRange * cosLat
+
   const pad = 12
   const availW = W - pad * 2
   const availH = H - pad * 2
-  const scaleX = availW / lonRange
+  const scaleX = availW / adjustedLonRange
   const scaleY = availH / latRange
   const scale = Math.min(scaleX, scaleY)
-  const originX = pad + (availW - lonRange * scale) / 2
+  const originX = pad + (availW - adjustedLonRange * scale) / 2
   const originY = pad + (availH - latRange * scale) / 2
 
   // Vary opacity by density — single pass, fixed small dot
   ctx.fillStyle = 'rgba(107, 195, 140, 0.45)'
 
   for (const p of points) {
-    const x = originX + (p.longitude - minLon) * scale
+    const x = originX + (p.longitude - minLon) * cosLat * scale
     const y = H - (originY + (p.latitude - minLat) * scale)
     ctx.fillRect(x - 0.3, y - 0.3, 0.6, 0.6)
   }
 }
 
-async function load() {
+async function loadDirect() {
   const loadId = latestLoadId.value + 1
   latestLoadId.value = loadId
   activeCancellation.value?.cancel()
   activeCancellation.value = null
-
-  if (!props.filters.length && props.connectionId) {
-    // Always load when we have a connection
-  }
 
   loading.value = true
 
@@ -168,7 +226,13 @@ onBeforeUnmount(() => {
 
 watch(
   () => `${props.connectionId}::${JSON.stringify(props.filters)}::${JSON.stringify(buildParameters())}`,
-  () => void load(),
+  () => {
+    if (props.dashboardGroup) {
+      void runViaGroup()
+    } else {
+      void loadDirect()
+    }
+  },
   { immediate: true },
 )
 </script>

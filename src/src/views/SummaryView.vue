@@ -51,6 +51,7 @@
       <TreeDotMap
         item-id="tree-dot-map"
         v-bind="sharedChartProps"
+        :dashboard-group="embeddedDashboardGroup"
         :filters="filtersForChart('tree-dot-map')"
       />
     </div>
@@ -82,21 +83,17 @@
           <SpeciesCarousel
             v-if="chartById(card.id).renderMode === 'carousel'"
             :item-id="card.id"
-            :connection-id="connectionId"
-            :query-execution-service="queryExecutionService"
-            :imports="SUMMARY_DASHBOARD_IMPORTS as DashboardImport[]"
+            v-bind="sharedChartProps"
+            :dashboard-group="embeddedDashboardGroup"
             :filters="filtersForChart(card.id)"
-            :parameters="dashboardContextParameters"
             :query="chartById(card.id).query"
           />
           <SummaryMarkdownCard
             v-else-if="chartById(card.id).renderMode === 'markdown'"
             :item-id="card.id"
-            :connection-id="connectionId"
-            :query-execution-service="queryExecutionService"
-            :imports="SUMMARY_DASHBOARD_IMPORTS as DashboardImport[]"
+            v-bind="sharedChartProps"
+            :dashboard-group="embeddedDashboardGroup"
             :filters="filtersForChart(card.id)"
-            :parameters="dashboardContextParameters"
             :query="chartById(card.id).query"
           />
           <EmbeddedDashboardChart
