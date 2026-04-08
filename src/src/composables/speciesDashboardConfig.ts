@@ -8,7 +8,7 @@ export type SpeciesDashboardChart = {
   subtitle?: string
   query: string
   chartConfig: ChartConfig
-  renderMode?: 'chart' | 'markdown' | 'carousel'
+  renderMode?: 'chart' | 'markdown' | 'carousel' | 'top-chart'
   allowCrossFilter?: boolean
   requiresCitySelection?: boolean
 }
@@ -69,6 +69,28 @@ export const SPECIES_KPI_CHARTS: SpeciesDashboardKpi[] = [
 ]
 
 export const SPECIES_CHARTS: SpeciesDashboardChart[] = [
+  // Top 15 species bar chart with % of total
+  {
+    id: 'sp-top-species',
+    title: 'Top 15 Species',
+    subtitle: 'Most common species by share of the filtered population',
+    query: `import std.display;
+SELECT
+  coalesce(common_names[1], species) as display_name,
+  count(tree_id) as tree_count,
+  (cast(count(tree_id) as float) / cast(count(tree_id) by * as float))::float::percent as pct_of_total
+WHERE species IS NOT NULL
+ORDER BY tree_count DESC
+LIMIT 15;`,
+    chartConfig: {
+      chartType: 'barh',
+      xField: 'pct_of_total',
+      yField: 'display_name',
+      showTitle: false,
+      hideLegend: true,
+    },
+  },
+
   // Spotlight — rich markdown fact sheet for the selected species
   {
     id: 'sp-spotlight',
@@ -389,6 +411,7 @@ export const SPECIES_SECTIONS: SpeciesDashboardSection[] = [
     subtitle: 'Taxonomy context, dominant species detail, and city presence for the current filter.',
     cards: [
       { id: 'sp-spotlight', width: 'wide', height: 'tall' },
+      { id: 'sp-top-species', width: 'full' },
       { id: 'sp-city-presence-map', width: 'full', height: 'tall' },
       { id: 'sp-city-distribution' },
     ],
