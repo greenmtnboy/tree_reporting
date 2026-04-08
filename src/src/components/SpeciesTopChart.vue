@@ -98,7 +98,7 @@ async function load() {
   error.value = null
   try {
     const { filterStrings, filterParams } = resolveFilters()
-    const params = { ...buildParameters(), ...filterParams }
+    const params = { ...buildParameters(), ...filterParams } as Record<string, string | number | boolean>
     const importRefs = props.imports.map((imp) => ({ name: imp.name, alias: imp.alias }))
 
     const execution = await props.queryExecutionService.executeQueriesBatch(

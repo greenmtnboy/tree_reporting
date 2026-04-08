@@ -2,9 +2,9 @@
 
 An interactive browser-based map of city trees. Explore hundreds of thousands of street trees by location, species, and ecological attributes.
 
-Urban forests are a key part of intentional live city design - they can reduce city heat, absorb runoff, improve air quality, and enhance the mental health of residents. Read more [here](https://www.climatecentral.org/climate-matters/the-power-of-urban-trees-2023).
+Urban forests are a key part of modern urban design- they can reduce city heat, absorb runoff, improve air quality, and enhance the mental health of residents. Read more [here](https://www.climatecentral.org/climate-matters/the-power-of-urban-trees-2023).
 
-Plus they look nice. 
+Plus they look nice! Charistmatic megaplants.
 
 There are several projects that collect open tree data; this one aims to be more exploratory and fun. Raw data is available in parquet. (and of course,
 also from original sources.)
