@@ -80,6 +80,30 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'australasian',
   },
+  ARBUE: {
+    ecoregionId: 576,
+    usdaZone: 10,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'neotropical',
+  },
+  USLAX: {
+    ecoregionId: 422,
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'nearctic',
+  },
+  USWAS: {
+    ecoregionId: 399,
+    usdaZone: 7,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USTEM: {
+    ecoregionId: 435,
+    usdaZone: 10,
+    biome: 'Deserts & Xeric Shrublands',
+    realm: 'nearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

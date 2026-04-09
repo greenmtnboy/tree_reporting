@@ -1,0 +1,30 @@
+import ..landmark_common;
+
+root datasource losangeles_landmarks_update_time (
+    data_updated_through: uslax_landmark_data_updated_through
+)
+file `./losangeles_landmarks_probe.py`;
+
+root partial datasource raw_losangeles_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+)
+grain (landmark_id)
+complete where city = 'USLAX'
+file `./losangeles_landmarks.csv`;
+
+partial datasource losangeles_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    uslax_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'USLAX'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/uslax_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/uslax_landmark_info_v{data_version}.parquet`
+freshness by uslax_landmark_data_updated_through;

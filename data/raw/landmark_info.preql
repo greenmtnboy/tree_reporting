@@ -9,6 +9,10 @@ import deber.berlin_landmarks;
 import nlams.amsterdam_landmarks;
 import gblon.london_landmarks;
 import aumel.melbourne_landmarks;
+import arbue.buenosaires_landmarks;
+import uslax.losangeles_landmarks;
+import uswas.washingtondc_landmarks;
+import ustem.tempe_landmarks;
 
 
 # --- Merged union datasource ---

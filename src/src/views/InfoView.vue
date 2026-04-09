@@ -13,20 +13,16 @@
 
         <div class="source-card">
           <h3>Tree Inventory</h3>
-          <p>Street tree inventory data from open data portals for each city.</p>
+          <p>Street tree inventory data from open data portals for each live city.</p>
           <details class="city-details">
             <summary class="city-summary">View by city</summary>
             <ul>
-              <li><a href="https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq" target="_blank" rel="noopener">San Francisco — SF Open Data Portal</a></li>
-              <li><a href="https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh" target="_blank" rel="noopener">New York City — NYC Open Data Street Tree Census</a></li>
-              <li><a href="https://data.boston.gov/dataset/bprd-trees" target="_blank" rel="noopener">Boston — City of Boston Open Data</a></li>
-              <li><a href="https://opendata.paris.fr/explore/dataset/les-arbres/information/" target="_blank" rel="noopener">Paris — Paris Open Data (les-arbres)</a></li>
-              <li><a href="https://maps.burlingtonvt.gov/arcgis/rest/services/Tree_Sites_Public_View/FeatureServer/0" target="_blank" rel="noopener">Burlington — City of Burlington VT ArcGIS FeatureServer</a></li>
-              <li><a href="https://opendata.vancouver.ca/explore/dataset/public-trees/information/" target="_blank" rel="noopener">Vancouver — Vancouver Open Data (public-trees)</a></li>
-              <li><a href="https://gdi.berlin.de/services/wfs/baumbestand" target="_blank" rel="noopener">Berlin — Berlin GDI WFS (Straßenbäume / baumbestand)</a></li>
-              <li><a href="https://api.data.amsterdam.nl/v1/bomen/stamgegevens/" target="_blank" rel="noopener">Amsterdam — City of Amsterdam REST API (bomen/stamgegevens)</a></li>
-              <li><a href="https://data.london.gov.uk/dataset/2r45m" target="_blank" rel="noopener">London — London Datastore (Public Realm Trees)</a></li>
-              <li><a href="https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/" target="_blank" rel="noopener">Melbourne — City of Melbourne Open Data (Urban Forest)</a></li>
+              <li v-for="source in treeInventorySources" :key="source.city">
+                <a v-if="source.url" :href="source.url" target="_blank" rel="noopener">
+                  {{ source.city }} - {{ source.label }}
+                </a>
+                <template v-else>{{ source.city }} - {{ source.label }}</template>
+              </li>
             </ul>
           </details>
         </div>
@@ -36,24 +32,13 @@
           <p>
             Per-species attributes (native status, evergreen, mature height, canopy
             spread, growth rate, lifespan, drought tolerance, bloom season, wildlife
-            value, fire risk) are aggregated from the following. Inaccuracies may exist - corrections welcome! 
+            value, fire risk) are aggregated from the following. Inaccuracies may exist -
+            corrections welcome!
           </p>
           <ul>
-            <li>
-              <a href="https://en.wikipedia.org/" target="_blank" rel="noopener">Wikipedia</a>
-              &mdash; REST &amp; MediaWiki APIs
-            </li>
-            <li>
-              <a href="https://powo.science.kew.org/" target="_blank" rel="noopener">Plants of the World Online</a>
-              &mdash; POWO / Royal Botanic Gardens, Kew
-            </li>
-            <li>
-              <a href="https://www.gbif.org/" target="_blank" rel="noopener">GBIF</a>
-              &mdash; Global Biodiversity Information Facility
-            </li>
-            <li>
-              <a href="https://selectree.calpoly.edu/" target="_blank" rel="noopener">SelecTree</a>
-              &mdash; Cal Poly Urban Forest Ecosystems Institute
+            <li v-for="source in speciesEnrichmentSources" :key="source.label">
+              <a :href="source.url" target="_blank" rel="noopener">{{ source.label }}</a>
+              &mdash; {{ source.description }}
             </li>
           </ul>
         </div>
@@ -64,16 +49,12 @@
           <details class="city-details">
             <summary class="city-summary">View by city</summary>
             <ul>
-              <li><a href="https://data.sfgov.org/Geographic-Locations-and-Boundaries/Landmarks/rzic-39gi/about_data" target="_blank" rel="noopener">San Francisco — SF Open Data Portal (Landmarks)</a></li>
-              <li><a href="https://data.cityofnewyork.us/Housing-Development/Individual-Landmark-Sites/buis-pvji" target="_blank" rel="noopener">New York City — NYC LPC Individual Landmark Sites</a></li>
-              <li><a href="https://data.boston.gov/dataset/92137315-e846-4c75-8c3d-2b7e93e38d03" target="_blank" rel="noopener">Boston — City of Boston Open Data (Landmarks)</a></li>
-              <li><a href="https://data.iledefrance.fr/explore/dataset/immeubles-proteges-au-titre-des-monuments-historiques/" target="_blank" rel="noopener">Paris — Île-de-France Open Data (Monuments Historiques)</a></li>
-              <li>Burlington — Geocoded from city landmark directory via Nominatim</li>
-              <li><a href="https://opendata.vancouver.ca/explore/dataset/heritage-sites/information/" target="_blank" rel="noopener">Vancouver — Vancouver Open Data (Heritage Sites)</a></li>
-              <li>Berlin — OpenStreetMap via Overpass API (historic=* tags)</li>
-              <li><a href="https://api.data.amsterdam.nl/v1/monumenten/monumenten/" target="_blank" rel="noopener">Amsterdam — City of Amsterdam REST API (monumenten)</a></li>
-              <li>London — OpenStreetMap via Overpass API (historic=* tags)</li>
-              <li><a href="https://data.melbourne.vic.gov.au/explore/dataset/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/" target="_blank" rel="noopener">Melbourne — City of Melbourne Open Data (Landmarks &amp; Places of Interest)</a></li>
+              <li v-for="source in landmarkSources" :key="source.city">
+                <a v-if="source.url" :href="source.url" target="_blank" rel="noopener">
+                  {{ source.city }} - {{ source.label }}
+                </a>
+                <template v-else>{{ source.city }} - {{ source.label }}</template>
+              </li>
             </ul>
           </details>
         </div>
@@ -128,6 +109,18 @@
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import {
+  LANDMARK_SOURCES,
+  SPECIES_ENRICHMENT_SOURCES,
+  TREE_INVENTORY_SOURCES,
+} from '../data/sourceCatalog'
+
+const treeInventorySources = TREE_INVENTORY_SOURCES
+const speciesEnrichmentSources = SPECIES_ENRICHMENT_SOURCES
+const landmarkSources = LANDMARK_SOURCES
+</script>
 
 <style scoped>
 .info-page {
@@ -267,7 +260,7 @@ section {
 }
 
 .city-summary::before {
-  content: '▶';
+  content: '>';
   font-size: 0.6rem;
   transition: transform 0.15s;
   display: inline-block;
