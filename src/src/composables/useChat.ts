@@ -30,6 +30,7 @@ import {
   safeJsonStringify as safeJsonStringifyHelper,
   toJsonSafeRows as toJsonSafeRowsHelper,
 } from './chatToolExecution'
+import { applySqlParameters, type SqlParameterMap } from './sqlParameters'
 import { useSummaryFilters, SUMMARY_FILTER_FIELDS, type SummaryFilterField } from './useSummaryFilters'
 import { useSummaryDashboardExecution } from './useSummaryDashboardExecution'
 import {
@@ -632,7 +633,7 @@ export function useChat() {
     }
   }
 
-  async function compilePreQL(query: string): Promise<string> {
+  async function compilePreQL(query: string): Promise<{ sql: string; parameters: SqlParameterMap | null }> {
     const response = await trilogy.resolver.resolve_query(
       query,
       'duckdb',
@@ -643,7 +644,14 @@ export function useChat() {
     if (response.data.error) {
       throw new Error(`Trilogy compile error: ${response.data.error}`)
     }
-    return response.data.generated_sql
+    const parameters =
+      response.data.parameters && Object.keys(response.data.parameters).length > 0
+        ? response.data.parameters as SqlParameterMap
+        : null
+    return {
+      sql: response.data.generated_sql,
+      parameters,
+    }
   }
 
   function setConnection(type: string, key: string) {
@@ -698,7 +706,8 @@ export function useChat() {
               summaryQueryExecutionService,
             )
           }
-          const sql = await compilePreQL(query)
+          const compiled = await compilePreQL(query)
+          const sql = applySqlParameters(compiled.sql, compiled.parameters)
           const { columns, rows } = await duckQuery(sql)
           const truncated = rows.slice(0, 100)
           return {
@@ -760,7 +769,8 @@ export function useChat() {
           }
           // --- end validation ---
 
-          const sql = await compilePreQL(query)
+          const compiled = await compilePreQL(query)
+          const sql = applySqlParameters(compiled.sql, compiled.parameters)
 
           // Check if the query returns an override_color column
           const { columns } = await duckQuery(`SELECT * FROM (${sql}) AS __probe LIMIT 0`)
