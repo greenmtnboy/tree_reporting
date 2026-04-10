@@ -55,6 +55,37 @@ def fetch_all() -> list[dict]:
     return records
 
 
+def _record_completeness(rec: dict) -> int:
+    return sum(
+        1
+        for key in ("scientific", "commonname", "plantdate", "the_geom", "diameter")
+        if rec.get(key) not in (None, "")
+    )
+
+
+def canonicalize_records(records: list[dict]) -> tuple[list[dict], int, int]:
+    deduped: dict[str, dict] = {}
+    dropped_missing_id = 0
+    duplicate_rows = 0
+
+    for rec in records:
+        raw_id = rec.get("treeid")
+        if not raw_id:
+            dropped_missing_id += 1
+            continue
+
+        existing = deduped.get(raw_id)
+        if existing is None:
+            deduped[raw_id] = rec
+            continue
+
+        duplicate_rows += 1
+        if _record_completeness(rec) > _record_completeness(existing):
+            deduped[raw_id] = rec
+
+    return list(deduped.values()), dropped_missing_id, duplicate_rows
+
+
 def build_table(records: list[dict]) -> pa.Table:
     tree_ids: list[str | None] = []
     cities: list[str] = []
@@ -67,13 +98,15 @@ def build_table(records: list[dict]) -> pa.Table:
     dbhs: list[float | None] = []
 
     for rec in records:
+        species = normalize_species(rec.get("scientific"))
+        if species is None:
+            continue
+
         raw_id = rec.get("treeid")
         tree_ids.append(f"cam-{raw_id}" if raw_id else None)
         cities.append("USBOS")
         sources.append("CAMBRIDGE")
-
-        sci = rec.get("scientific")
-        species_list.append(normalize_species(sci))
+        species_list.append(species)
 
         cn = rec.get("commonname")
         tree_names.append(cn.strip() if cn and cn.strip() else None)
@@ -109,6 +142,23 @@ def build_table(records: list[dict]) -> pa.Table:
 
 if __name__ == "__main__":
     records = fetch_all()
+    records, dropped_missing_id, duplicate_rows = canonicalize_records(records)
+    if dropped_missing_id:
+        print(
+            f"Cambridge ingest: dropped {dropped_missing_id} rows with null tree_id",
+            file=sys.stderr,
+        )
+    if duplicate_rows:
+        print(
+            f"Cambridge ingest: collapsed {duplicate_rows} duplicate tree_id rows",
+            file=sys.stderr,
+        )
     table = build_table(records)
+    dropped_null_species = len(records) - table.num_rows
+    if dropped_null_species:
+        print(
+            f"Cambridge ingest: dropped {dropped_null_species} rows with null species",
+            file=sys.stderr,
+        )
     table = validate_coordinates(table, city="Cambridge", city_code="USBOS")
     emit(table)

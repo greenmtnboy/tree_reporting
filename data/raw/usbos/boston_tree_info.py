@@ -100,6 +100,14 @@ def cast_columns(table: pa.Table) -> pa.Table:
     # Normalize all column names to lowercase
     table = table.rename_columns([c.lower() for c in table.schema.names])
 
+    for old_name, new_name in (("y_latitude", "latitude"), ("x_longitude", "longitude")):
+        if old_name in table.schema.names:
+            table = table.set_column(
+                table.schema.get_field_index(old_name),
+                new_name,
+                table[old_name],
+            )
+
     return table
 
 

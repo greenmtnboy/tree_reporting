@@ -83,12 +83,17 @@ def build_table(features: list[dict]) -> pa.Table:
             continue
 
         obj_id = attrs.get("OBJECTID")
+        if obj_id is None:
+            continue
+
+        species = normalize_species(attrs.get("ScientificNameTxt"))
+        if species is None:
+            continue
+
         tree_ids.append(f"bkl-{obj_id}" if obj_id is not None else None)
         cities.append("USBOS")
         sources.append("BROOKLINE")
-
-        sci = attrs.get("ScientificNameTxt")
-        species_list.append(normalize_species(sci))
+        species_list.append(species)
 
         cn = attrs.get("CommonNameTxt")
         tree_names.append(cn.strip() if cn and cn.strip() else None)
@@ -124,6 +129,39 @@ def build_table(features: list[dict]) -> pa.Table:
 
 if __name__ == "__main__":
     features = fetch_all()
+    stump_count = sum(
+        1
+        for feat in features
+        if feat.get("attributes", {}).get("IsStump") == 1
+    )
+    missing_id_count = sum(
+        1
+        for feat in features
+        if feat.get("attributes", {}).get("IsStump") != 1
+        and feat.get("attributes", {}).get("OBJECTID") is None
+    )
+    null_species_count = sum(
+        1
+        for feat in features
+        if feat.get("attributes", {}).get("IsStump") != 1
+        and feat.get("attributes", {}).get("OBJECTID") is not None
+        and normalize_species(feat.get("attributes", {}).get("ScientificNameTxt")) is None
+    )
+    if stump_count:
+        print(
+            f"Brookline ingest: dropped {stump_count} stump rows",
+            file=sys.stderr,
+        )
+    if missing_id_count:
+        print(
+            f"Brookline ingest: dropped {missing_id_count} rows with null tree_id",
+            file=sys.stderr,
+        )
+    if null_species_count:
+        print(
+            f"Brookline ingest: dropped {null_species_count} rows with null species",
+            file=sys.stderr,
+        )
     table = build_table(features)
     table = validate_coordinates(table, city="Brookline", city_code="USBOS")
     emit(table)

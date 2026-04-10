@@ -7,14 +7,14 @@ file `./sf_update_time.py`;
 
 
 root partial datasource sf_raw_tree_info (
-    TreeID: tree_id,
+    treeid: tree_id,
     city: city,
-    qSpecies: species,
+    qspecies: species,
     tree_name: ?tree_name,
-    PlantDate: ?plant_date,
-    DBH: ?diameter_at_breast_height,
-    Latitude: ?latitude,
-    Longitude: ?longitude,
+    plantdate: ?plant_date,
+    dbh: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
 )
 grain (tree_id)
 complete where city = 'USSFO'

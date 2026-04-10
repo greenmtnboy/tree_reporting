@@ -3,7 +3,6 @@ import ..tree_common;
 root datasource nyc_update_time (
     data_updated_through: usnyc_data_updated_through
 )
-grain (city)
 file `./nyc_update_time.py`;
 
 root partial datasource nyc_raw_tree_info (

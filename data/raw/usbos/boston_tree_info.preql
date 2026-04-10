@@ -47,8 +47,8 @@ root partial datasource city_raw_tree_info (
     tree_name: ?tree_name,
     
     date_plant: ?plant_date,
-    y_latitude: ?latitude,
-    x_longitude: ?longitude,
+    latitude: ?latitude,
+    longitude: ?longitude,
     dbh: ?_raw_dbh,
 )
 grain (tree_id)

@@ -8,6 +8,7 @@ import sys
 import io
 import requests
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.csv as pv
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -32,10 +33,30 @@ def download_csv() -> io.BytesIO:
 
 
 def load_arrow_table(csv_bytes: io.BytesIO) -> pa.Table:
-    return pv.read_csv(
+    table = pv.read_csv(
         csv_bytes,
         convert_options=pv.ConvertOptions(strings_can_be_null=True),
     )
+    name_col = next((c for c in table.schema.names if c.lower() == "name"), None)
+    if name_col is not None:
+        table = table.set_column(
+            table.schema.get_field_index(name_col),
+            "name",
+            table[name_col],
+        )
+        before = table.num_rows
+        non_blank = pc.and_(
+            pc.is_valid(table["name"]),
+            pc.not_equal(pc.utf8_trim_whitespace(table["name"]), ""),
+        )
+        table = table.filter(non_blank)
+        dropped = before - table.num_rows
+        if dropped:
+            print(
+                f"San Francisco landmarks ingest: dropped {dropped} rows with null or blank names",
+                file=sys.stderr,
+            )
+    return table
 
 
 def add_city_prefix(table: pa.Table) -> pa.Table:
