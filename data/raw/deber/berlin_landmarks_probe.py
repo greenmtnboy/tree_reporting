@@ -17,8 +17,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 import pyarrow as pa
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import post_with_retry
-from trilogy.io.arrow import emit_arrow
+from _ingest_shared import emit, post_with_retry
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
@@ -42,17 +41,14 @@ def fetch_modified_at() -> datetime:
     return datetime.fromisoformat(latest.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
-def emit(updated_at: datetime) -> None:
-    table = pa.table(
-        {
-            "city": pa.array(["DEBER"], type=pa.string()),
-            "data_updated_through": pa.array(
-                [updated_at], type=pa.timestamp("us", tz="UTC")
-            ),
-        }
-    )
-    emit_arrow(table)
-
-
 if __name__ == "__main__":
-    emit(fetch_modified_at())
+    emit(
+        pa.table(
+            {
+                "city": pa.array(["DEBER"], type=pa.string()),
+                "data_updated_through": pa.array(
+                    [fetch_modified_at()], type=pa.timestamp("us", tz="UTC")
+                ),
+            }
+        )
+    )

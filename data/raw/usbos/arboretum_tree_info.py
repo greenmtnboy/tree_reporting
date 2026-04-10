@@ -5,7 +5,6 @@
 # ///
 
 import sys
-import math
 import requests
 import pyarrow as pa
 from datetime import date, timezone, datetime

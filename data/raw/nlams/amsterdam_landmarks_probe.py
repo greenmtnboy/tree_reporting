@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
 
 """
@@ -14,10 +14,15 @@ Primary:  GET https://data.amsterdam.nl/api/catalog/v3/datasets/monumenten/
 Fallback: Last-Modified response header from the monumenten API endpoint.
 """
 
-import sys
-import requests
-import pyarrow as pa
 from datetime import datetime, timezone
+from pathlib import Path
+
+import pyarrow as pa
+import requests
+
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import emit
 
 CATALOG_URL = "https://data.amsterdam.nl/api/catalog/v3/datasets/monumenten/"
 PROBE_URL = "https://api.data.amsterdam.nl/v1/monumenten/monumenten/?_format=json&page_size=1"
@@ -53,18 +58,14 @@ def fetch_last_modified() -> datetime:
     return datetime(2024, 1, 1, tzinfo=timezone.utc)
 
 
-def emit(updated_at: datetime) -> None:
-    table = pa.table(
-        {
-            "city": pa.array(["NLAMS"], type=pa.string()),
-            "data_updated_through": pa.array(
-                [updated_at], type=pa.timestamp("us", tz="UTC")
-            ),
-        }
-    )
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
-
-
 if __name__ == "__main__":
-    emit(fetch_last_modified())
+    emit(
+        pa.table(
+            {
+                "city": pa.array(["NLAMS"], type=pa.string()),
+                "data_updated_through": pa.array(
+                    [fetch_last_modified()], type=pa.timestamp("us", tz="UTC")
+                ),
+            }
+        )
+    )

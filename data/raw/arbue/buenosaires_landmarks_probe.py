@@ -1,14 +1,17 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow"]
+# dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
 
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pyarrow as pa
+
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import emit
 
 CSV_PATH = Path(__file__).parent / 'buenosaires_landmarks.csv'
 
@@ -19,14 +22,8 @@ def modified_at() -> datetime:
     return datetime.fromtimestamp(CSV_PATH.stat().st_mtime, tz=timezone.utc)
 
 
-def emit(updated_at: datetime) -> None:
-    table = pa.table({
-        'city': pa.array(['ARBUE'], type=pa.string()),
-        'data_updated_through': pa.array([updated_at], type=pa.timestamp('us', tz='UTC')),
-    })
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
-
-
 if __name__ == '__main__':
-    emit(modified_at())
+    emit(pa.table({
+        'city': pa.array(['ARBUE'], type=pa.string()),
+        'data_updated_through': pa.array([modified_at()], type=pa.timestamp('us', tz='UTC')),
+    }))
