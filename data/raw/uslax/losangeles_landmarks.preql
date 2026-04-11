@@ -13,7 +13,7 @@ root partial datasource raw_losangeles_landmark_info (
 )
 grain (landmark_id)
 complete where city = 'USLAX'
-file `./losangeles_landmarks.csv`;
+file `./losangeles_landmarks.py`;
 
 partial datasource losangeles_landmark_info (
     landmark_id,

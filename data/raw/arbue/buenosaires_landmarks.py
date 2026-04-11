@@ -4,7 +4,6 @@
 # dependencies = ["pyarrow", "pytrilogy"]
 # ///
 
-import csv
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,58 +13,88 @@ import pyarrow as pa
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import emit
 
-CSV_PATH = Path(__file__).with_name("buenosaires_landmarks.csv")
+UPDATED_AT = datetime(2026, 4, 10, 12, 0, 0, tzinfo=timezone.utc)
+LANDMARKS: list[dict[str, str]] = [
+    {
+        "landmark_id": "arbue-casa-rosada",
+        "name": "Casa Rosada",
+        "city": "ARBUE",
+        "geometry_raw": "POINT(-58.3702762 -34.6080692)",
+    },
+    {
+        "landmark_id": "arbue-el-cabildo",
+        "name": "El Cabildo",
+        "city": "ARBUE",
+        "geometry_raw": "POINT(-58.3736709 -34.6088795)",
+    },
+    {
+        "landmark_id": "arbue-plaza-de-mayo",
+        "name": "Plaza de Mayo",
+        "city": "ARBUE",
+        "geometry_raw": "POINT(-58.3721787 -34.6084453)",
+    },
+    {
+        "landmark_id": "arbue-eco-park",
+        "name": "Buenos Aires Eco Park",
+        "city": "ARBUE",
+        "geometry_raw": "POINT(-58.4157363 -34.5775084)",
+    },
+    {
+        "landmark_id": "arbue-tres-de-febrero",
+        "name": "Tres de Febrero Park",
+        "city": "ARBUE",
+        "geometry_raw": "POINT(-58.4079408 -34.5745996)",
+    },
+    {
+        "landmark_id": "arbue-teatro-colon",
+        "name": "Teatro Colon",
+        "city": "ARBUE",
+        "geometry_raw": "POINT(-58.3831869 -34.6010855)",
+    },
+    {
+        "landmark_id": "arbue-caminito",
+        "name": "Caminito",
+        "city": "ARBUE",
+        "geometry_raw": "POINT(-58.3625689 -34.6393589)",
+    },
+    {
+        "landmark_id": "arbue-obelisco",
+        "name": "Obelisco",
+        "city": "ARBUE",
+        "geometry_raw": "POINT(-58.3816296 -34.6037094)",
+    },
+    {
+        "landmark_id": "arbue-floralis-generica",
+        "name": "Floralis Generica",
+        "city": "ARBUE",
+        "geometry_raw": "POINT(-58.3940018 -34.5816892)",
+    },
+    {
+        "landmark_id": "arbue-piramide-de-mayo",
+        "name": "Piramide de Mayo",
+        "city": "ARBUE",
+        "geometry_raw": "POINT(-58.3721649 -34.6084064)",
+    },
+]
 
 
-def modified_at() -> datetime:
-    if not CSV_PATH.exists():
-        return datetime.fromtimestamp(0, tz=timezone.utc)
-    return datetime.fromtimestamp(CSV_PATH.stat().st_mtime, tz=timezone.utc)
-
-
-def load_rows() -> list[dict[str, str]]:
-    if not CSV_PATH.exists():
-        return []
-    with CSV_PATH.open("r", encoding="utf-8", newline="") as f:
-        reader = csv.DictReader(f)
-        return [row for row in reader]
-
-
-def build_table(rows: list[dict[str, str]]) -> pa.Table:
-    updated_at = modified_at()
-    landmark_ids: list[str] = []
-    names: list[str] = []
-    cities: list[str] = []
-    geometries: list[str | None] = []
-    updated_ats: list[datetime] = []
-
-    for row in rows:
-        landmark_id = (row.get("landmark_id") or "").strip()
-        name = (row.get("name") or "").strip()
-        city = (row.get("city") or "").strip()
-        geometry_raw = (row.get("geometry_raw") or "").strip()
-
-        if not landmark_id or not name or not city:
-            continue
-
-        landmark_ids.append(landmark_id)
-        names.append(name)
-        cities.append(city)
-        geometries.append(geometry_raw or None)
-        updated_ats.append(updated_at)
-
+def build_table() -> pa.Table:
     return pa.table(
         {
-            "landmark_id": pa.array(landmark_ids, type=pa.string()),
-            "name": pa.array(names, type=pa.string()),
-            "city": pa.array(cities, type=pa.string()),
-            "geometry_raw": pa.array(geometries, type=pa.string()),
+            "landmark_id": pa.array(
+                [row["landmark_id"] for row in LANDMARKS], type=pa.string()
+            ),
+            "name": pa.array([row["name"] for row in LANDMARKS], type=pa.string()),
+            "city": pa.array([row["city"] for row in LANDMARKS], type=pa.string()),
+            "geometry_raw": pa.array(
+                [row["geometry_raw"] for row in LANDMARKS], type=pa.string()
+            ),
             "arbue_landmark_data_updated_through": pa.array(
-                updated_ats, type=pa.timestamp("us", tz="UTC")
+                [UPDATED_AT for _ in LANDMARKS], type=pa.timestamp("us", tz="UTC")
             ),
         }
     )
 
 
 if __name__ == "__main__":
-    emit(build_table(load_rows()))
+    emit(build_table())

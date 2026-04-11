@@ -10,6 +10,7 @@ from datetime import date
 from pathlib import Path
 
 import pyarrow as pa
+import pyarrow.compute as pc
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import emit, normalize_species, validate_coordinates
@@ -115,5 +116,13 @@ def transform(rows: list[dict]) -> pa.Table:
 
 if __name__ == '__main__':
     table = transform(fetch_rows())
+    before = table.num_rows
+    table = table.filter(pc.is_valid(table['species']))
+    dropped = before - table.num_rows
+    if dropped:
+        print(
+            f"Los Angeles ingest: dropped {dropped} rows with null species",
+            file=sys.stderr,
+        )
     table = validate_coordinates(table, city='Los Angeles', city_code='USLAX')
     emit(table)

@@ -49,6 +49,7 @@ const colorOverrideSql = ref<string | null>(null)
 const colorLabelMap = ref<ColorLabelMap | null>(null)
 const mapQueryRevision = ref(0)
 const userLocation = ref<{ lat: number; lng: number } | null>(null)
+const initialUserCityDetectionDone = ref(false)
 
 function applyCommittedCity(city: CityCode) {
   selectedCity.value = city
@@ -109,6 +110,10 @@ export function useMapData() {
     userLocation.value = null
   }
 
+  function markInitialUserCityDetectionDone() {
+    initialUserCityDetectionDone.value = true
+  }
+
   return {
     selectedCity,
     currentMapQuery,
@@ -117,8 +122,10 @@ export function useMapData() {
     colorLabelMap,
     mapQueryRevision,
     userLocation,
+    initialUserCityDetectionDone,
     setUserLocation,
     clearUserLocation,
+    markInitialUserCityDetectionDone,
     publishMapQuery,
     publishMapTreeIdFilterSql,
     clearMapTreeIdFilter,

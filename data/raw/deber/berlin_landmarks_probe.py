@@ -7,9 +7,10 @@
 """
 Freshness probe for Berlin landmarks.
 
-Runs the same Overpass filter as berlin_landmarks.py but with `out ids meta`
-(no geometry, no tags) to cheaply get the max element timestamp — the actual
-date the most recently edited matching landmark was changed in OSM.
+Runs a tiny Overpass query and reads `osm3s.timestamp_osm_base` from the
+response metadata. This is the snapshot timestamp of the OSM database behind
+the Overpass instance, and is dramatically cheaper than scanning all matching
+landmarks just to compute a max element timestamp.
 """
 
 import sys
@@ -22,23 +23,21 @@ from _ingest_shared import emit, post_with_retry
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
 QUERY = """
-[out:json][timeout:60];
-(
-  node["historic"]["name"](52.3,13.0,52.7,13.8);
-  way["historic"]["name"](52.3,13.0,52.7,13.8);
-);
-out ids meta;
+[out:json][timeout:25];
+node(52.52,13.40,52.5201,13.4001);
+out ids;
 """
 
 
 def fetch_modified_at() -> datetime:
     r = post_with_retry(OVERPASS_URL, data={"data": QUERY}, timeout=90)
-    elements = r.json().get("elements", [])
-    timestamps = [e["timestamp"] for e in elements if "timestamp" in e]
-    if not timestamps:
+    data = r.json()
+    ts = data.get("osm3s", {}).get("timestamp_osm_base")
+    if ts is None:
         return datetime.now(tz=timezone.utc)
-    latest = max(timestamps)
-    return datetime.fromisoformat(latest.replace("Z", "+00:00")).astimezone(timezone.utc)
+    return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(
+        timezone.utc
+    )
 
 
 if __name__ == "__main__":
