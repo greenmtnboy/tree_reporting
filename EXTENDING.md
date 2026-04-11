@@ -275,6 +275,15 @@ That's it — the city button appears automatically in the UI, the worker loads 
 
 ---
 
+### 10. Update Attribution and Docs
+
+Do not stop after the parquet and city config are working. Every city addition must also update the public attribution surfaces:
+
+- `README.md` - add or update the source links in the tree inventory / landmarks tables.
+- `src/src/data/sourceCatalog.ts` - add or update the portal metadata that powers the Info page attribution. `InfoView.vue` renders from this catalog; avoid hardcoding new portal links directly in the view.
+
+If you change the source story significantly, review `src/src/components/WelcomeModal.vue` as well so the onboarding copy does not drift.
+
 ## Landmarks (Mandatory)
 
 Every city **must** have a landmarks preql file, even if it yields zero rows. The worker silently skips missing landmark *parquets* at runtime, but a missing preql file will cause the Trilogy pipeline to fail and the agent will have no geographic context for the city. A landmarks dataset with zero rows is acceptable; a missing file is not.

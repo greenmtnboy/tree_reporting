@@ -14,6 +14,7 @@ import { useMapLifecycle } from '../composables/useMapLifecycle'
 
 const COUNTRY_BY_PREFIX: Record<string, string> = {
   US: 'United States',
+  AR: 'Argentina',
   FR: 'France',
   CA: 'Canada',
   DE: 'Germany',

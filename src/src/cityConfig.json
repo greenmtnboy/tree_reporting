@@ -8,5 +8,9 @@
   "DEBER": { "name": "Berlin", "center": [13.4050, 52.5200] },
   "NLAMS": { "name": "Amsterdam", "center": [4.9041, 52.3676] },
   "GBLON": { "name": "London", "center": [-0.1278, 51.5074] },
-  "AUMEL": { "name": "Melbourne", "center": [144.9631, -37.8136] }
+  "AUMEL": { "name": "Melbourne", "center": [144.9631, -37.8136] },
+  "ARBUE": { "name": "Buenos Aires", "center": [-58.3816, -34.6037] },
+  "USLAX": { "name": "Los Angeles", "center": [-118.2437, 34.0522] },
+  "USWAS": { "name": "Washington, DC", "center": [-77.0369, 38.9072] },
+  "USTEM": { "name": "Tempe", "center": [-111.9400, 33.4255] }
 }

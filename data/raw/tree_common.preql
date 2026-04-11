@@ -23,6 +23,10 @@ property <*>.deber_data_updated_through datetime; # when Berlin data is through
 property <*>.nlams_data_updated_through datetime; # when Amsterdam data is through
 property <*>.gblon_data_updated_through datetime; # when London data is through
 property <*>.aumel_data_updated_through datetime; # when Melbourne data is through
+property <*>.arbue_data_updated_through datetime; # when Buenos Aires data is through
+property <*>.uslax_data_updated_through datetime; # when Los Angeles data is through
+property <*>.uswas_data_updated_through datetime; # when Washington DC data is through
+property <*>.ustem_data_updated_through datetime; # when Tempe data is through
 
 
 

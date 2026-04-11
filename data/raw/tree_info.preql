@@ -9,6 +9,10 @@ import deber.berlin_tree_info;
 import nlams.amsterdam_tree_info;
 import gblon.london_tree_info;
 import aumel.melbourne_tree_info;
+import arbue.buenosaires_tree_info;
+import uslax.losangeles_tree_info;
+import uswas.washingtondc_tree_info;
+import ustem.tempe_tree_info;
 
 auto latest_update_through <- greatest(
 ussfo_data_updated_through, 
@@ -20,7 +24,11 @@ cavan_data_updated_through,
 deber_data_updated_through, 
 nlams_data_updated_through, 
 gblon_data_updated_through, 
-aumel_data_updated_through);
+aumel_data_updated_through,
+arbue_data_updated_through,
+uslax_data_updated_through,
+uswas_data_updated_through,
+ustem_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (
