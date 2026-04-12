@@ -20,6 +20,7 @@ Field mapping:
 import io
 import sys
 from pathlib import Path
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -47,22 +48,66 @@ def download_parquet() -> io.BytesIO:
     return _download_parquet(DATASET_URL, timeout=180)
 
 
+def _row_score(row: dict[str, Any]) -> tuple[int, float]:
+    populated = sum(
+        1
+        for key in (
+            "genre",
+            "espece",
+            "libellefrancais",
+            "circonferenceencm",
+            "geo_point_2d",
+        )
+        if row.get(key) not in (None, "")
+    )
+    circumference = row.get("circonferenceencm")
+    if isinstance(circumference, (int, float)):
+        size = float(circumference)
+    else:
+        size = -1.0
+    return (populated, size)
+
+
+def _dedupe_rows(table: pa.Table) -> list[dict[str, Any]]:
+    rows = table.to_pylist()
+    deduped: dict[Any, dict[str, Any]] = {}
+    for row in rows:
+        key = row.get("idbase")
+        if key is None:
+            continue
+        existing = deduped.get(key)
+        if existing is None or _row_score(row) > _row_score(existing):
+            deduped[key] = row
+    return list(deduped.values())
+
+
 def transform(table: pa.Table) -> pa.Table:
-    names = table.schema.names
+    rows = _dedupe_rows(table)
+    if not rows:
+        return pa.table(
+            {
+                "tree_id": pa.array([], type=pa.string()),
+                "city": pa.array([], type=pa.string()),
+                "species": pa.array([], type=pa.string()),
+                "tree_name": pa.array([], type=pa.string()),
+                "plant_date": pa.array([], type=pa.null()),
+                "latitude": pa.array([], type=pa.float64()),
+                "longitude": pa.array([], type=pa.float64()),
+                "diameter_at_breast_height": pa.array([], type=pa.float64()),
+            }
+        )
 
     # --- tree_id: prefix idbase with "par-" ---
-    idbase_col = next((c for c in names if c.lower() == "idbase"), None)
-    ids = table[idbase_col].to_pylist() if idbase_col else [None] * table.num_rows
-    tree_id = pa.array([f"par-{v}" if v is not None else None for v in ids], type=pa.string())
+    ids = [row.get("idbase") for row in rows]
+    tree_id = pa.array(
+        [f"par-{value}" if value is not None else None for value in ids],
+        type=pa.string(),
+    )
 
     # --- species: "Genre espece" (scientific name only) ---
-    genre_col = next((c for c in names if c.lower() == "genre"), None)
-    espece_col = next((c for c in names if c.lower() == "espece"), None)
-    libelle_col = next((c for c in names if c.lower() == "libellefrancais"), None)
-
-    genre_list = table[genre_col].to_pylist() if genre_col else [None] * table.num_rows
-    espece_list = table[espece_col].to_pylist() if espece_col else [None] * table.num_rows
-    libelle_list = table[libelle_col].to_pylist() if libelle_col else [None] * table.num_rows
+    genre_list = [row.get("genre") for row in rows]
+    espece_list = [row.get("espece") for row in rows]
+    libelle_list = [row.get("libellefrancais") for row in rows]
 
     species = pa.array(
         [
@@ -79,28 +124,22 @@ def transform(table: pa.Table) -> pa.Table:
     )
 
     # --- lat/lon from geo_point_2d (WKB binary: byte_order + uint32 type + double x + double y) ---
-    geo_col = next((c for c in names if c.lower() == "geo_point_2d"), None)
-    if geo_col is not None:
-        lons, lats = [], []
-        for wkb in table[geo_col].to_pylist():
-            x, y = parse_wkb_point(wkb)
-            lons.append(x)
-            lats.append(y)
-        lat = pa.array(lats, type=pa.float64())
-        lon = pa.array(lons, type=pa.float64())
-    else:
-        lat = pa.array([None] * table.num_rows, type=pa.float64())
-        lon = pa.array([None] * table.num_rows, type=pa.float64())
+    lons, lats = [], []
+    for wkb in [row.get("geo_point_2d") for row in rows]:
+        x, y = parse_wkb_point(wkb)
+        lons.append(x)
+        lats.append(y)
+    lat = pa.array(lats, type=pa.float64())
+    lon = pa.array(lons, type=pa.float64())
 
     # --- diameter: circumference (cm) → diameter (inches) ---
-    circ_col = next((c for c in names if c.lower() == "circonferenceencm"), None)
-    circ_list = table[circ_col].to_pylist() if circ_col else [None] * table.num_rows
+    circ_list = [row.get("circonferenceencm") for row in rows]
     dbh = pa.array(
         [circumference_cm_to_dbh_inches(v) for v in circ_list],
         type=pa.float64(),
     )
 
-    n = table.num_rows
+    n = len(rows)
     return pa.table(
         {
             "tree_id": tree_id,

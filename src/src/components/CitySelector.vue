@@ -26,7 +26,7 @@ const COUNTRY_BY_PREFIX: Record<string, string> = {
 const router = useRouter()
 const route = useRoute()
 const { selectedCity } = useMapData()
-const { requestedCity, canManuallySelectCity } = useMapLifecycle()
+const { requestedCity, canManuallySelectCity, activateCity } = useMapLifecycle()
 const displayedCity = computed(() => requestedCity.value ?? selectedCity.value)
 const isDisabled = computed(() => route.name === 'map' && !canManuallySelectCity.value)
 
@@ -44,6 +44,9 @@ const sortedCities = computed(() =>
 function handleChange(e: Event) {
   if (isDisabled.value) return
   const city = (e.target as HTMLSelectElement).value as CityCode
+  if (route.name !== 'map') {
+    activateCity(city)
+  }
   void router.replace({ query: { ...route.query, city } })
 }
 </script>

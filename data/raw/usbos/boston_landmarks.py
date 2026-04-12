@@ -8,6 +8,7 @@ import sys
 import io
 import requests
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.csv as pv
 from datetime import date
 from pathlib import Path
@@ -76,7 +77,17 @@ def load_arrow_table(csv_bytes: io.BytesIO) -> pa.Table:
             },
         ),
     )
-    return cast_columns(table)
+    table = cast_columns(table)
+    if "Unique_ID" in table.schema.names:
+        before = table.num_rows
+        table = table.filter(pc.is_valid(table["Unique_ID"]))
+        dropped = before - table.num_rows
+        if dropped:
+            print(
+                f"Boston landmarks ingest: dropped {dropped} rows with null landmark_id",
+                file=sys.stderr,
+            )
+    return table
 
 
 def add_city_column(table: pa.Table) -> pa.Table:

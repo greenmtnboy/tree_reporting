@@ -2,7 +2,7 @@
 Shared helpers for city ingest scripts (tree_info.py / landmarks.py).
 
 NOT a uv inline script — this is a regular importable module.
-All scripts that import it declare pyarrow, requests, and pytrilogy as their own dependencies.
+Scripts that only use non-HTTP helpers need pyarrow and pytrilogy; requests is only needed when calling the HTTP helper functions below.
 
 Usage in each city script:
     import sys
@@ -11,16 +11,21 @@ Usage in each city script:
     from _ingest_shared import emit, normalize_species, ...
 """
 
+from __future__ import annotations
+
 import io
 import math
 import struct
 import sys
 import time
 from datetime import date
+from typing import TYPE_CHECKING
 
 import pyarrow as pa
-import requests
 from trilogy.io.arrow import emit_arrow as emit  # noqa: F401  (re-exported)
+
+if TYPE_CHECKING:
+    import requests
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +188,8 @@ def get_with_retry(
     4xx errors (except 429 Too Many Requests) are not retried — they indicate
     a client-side problem (auth, forbidden, not found) that retrying won't fix.
     """
+    import requests
+
     err = ""
     for attempt in range(max_retries):
         try:
@@ -218,6 +225,8 @@ def post_with_retry(
     Longer default backoff than get_with_retry — suited to Overpass API.
     4xx errors (except 429) are not retried.
     """
+    import requests
+
     err = ""
     for attempt in range(max_retries):
         try:
@@ -243,6 +252,8 @@ def post_with_retry(
 
 def download_parquet(url: str, timeout: int = 300) -> io.BytesIO:
     """Stream-download a parquet file into a BytesIO buffer and return it seeked to 0."""
+    import requests
+
     r = requests.get(url, stream=True, timeout=timeout)
     r.raise_for_status()
     buf = io.BytesIO()

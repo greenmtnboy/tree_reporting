@@ -21,6 +21,7 @@ import sys
 import requests
 import pyarrow as pa
 from pathlib import Path
+from typing import Any
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
     emit,
@@ -50,7 +51,38 @@ def fetch_elements() -> list[dict]:
     return r.json()["elements"]
 
 
+def _landmark_id(element: dict[str, Any]) -> str:
+    tags = element.get("tags", {})
+    nhle = tags.get("ref:GB:nhle")
+    return f"gblon-{nhle}" if nhle else f"gblon-osm-{element['id']}"
+
+
+def _element_score(element: dict[str, Any]) -> tuple[int, int, int, int, int]:
+    tags = element.get("tags", {})
+    return (
+        1 if tags.get("wikidata") else 0,
+        1 if tags.get("addr:housenumber") else 0,
+        1 if tags.get("addr:street") else 0,
+        len(tags.get("name") or ""),
+        -int(element["id"]),
+    )
+
+
+def dedupe_elements(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: dict[str, dict[str, Any]] = {}
+    for element in elements:
+        tags = element.get("tags", {})
+        if not tags.get("name"):
+            continue
+        lid = _landmark_id(element)
+        existing = deduped.get(lid)
+        if existing is None or _element_score(element) > _element_score(existing):
+            deduped[lid] = element
+    return list(deduped.values())
+
+
 def transform(elements: list[dict]) -> pa.Table:
+    elements = dedupe_elements(elements)
     landmark_ids, cities, names, geom_raws, lats, lons = [], [], [], [], [], []
 
     for el in elements:
@@ -59,8 +91,7 @@ def transform(elements: list[dict]) -> pa.Table:
         if not name:
             continue
 
-        nhle = tags.get("ref:GB:nhle")
-        lid = f"gblon-{nhle}" if nhle else f"gblon-osm-{el['id']}"
+        lid = _landmark_id(el)
 
         if el["type"] == "node":
             lat = el.get("lat")

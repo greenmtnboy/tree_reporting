@@ -39,8 +39,8 @@
   >&#x25CE; Find Me</button>
 
   <!-- Three-pane tree info card -->
-  <div v-if="selectedTree" class="tree-card" @click.stop>
-    <button class="tree-card-close" @click="selectedTree = null" aria-label="Close">&#x2715;</button>
+  <div v-if="selectedTree" class="tree-card" :style="treeCardStyle" @click.stop>
+    <button class="tree-card-close" @click="closeTreeCard" aria-label="Close">&#x2715;</button>
 
     <div class="tree-card-header">
       <div class="tree-card-title">{{ selectedTree.tree_name || 'Unknown tree' }}</div>
@@ -265,7 +265,18 @@ const { landmarks } = useLandmarkData()
 const { target: flyToTarget, flyTo } = useFlyTo()
 const route = useRoute()
 const router = useRouter()
-const { selectedCity, currentMapQuery, publishedTreeIdFilterSql, colorOverrideSql, colorLabelMap, mapQueryRevision, userLocation, setUserLocation } = useMapData()
+const {
+  selectedCity,
+  currentMapQuery,
+  publishedTreeIdFilterSql,
+  colorOverrideSql,
+  colorLabelMap,
+  mapQueryRevision,
+  userLocation,
+  initialUserCityDetectionDone,
+  setUserLocation,
+  markInitialUserCityDetectionDone,
+} = useMapData()
 
 function readRouteCity(value: unknown): CityCode | null {
   const city = Array.isArray(value) ? value[0] : value
@@ -414,6 +425,7 @@ function ensureZoomControlLabel() {
 function updateZoomLevel() {
   if (!mapRef.value) return
   zoomLevel.value = mapRef.value.getZoom()
+  updateTreeCardPosition()
   ensureZoomControlLabel()
   if (zoomControlLabelEl) zoomControlLabelEl.textContent = zoomLevel.value.toFixed(2)
 
@@ -545,16 +557,43 @@ interface PopupTreeRow {
   wildlife_value: string | null
   fire_risk: string | null
   description: string | null
-  inat_taxon_id: number | null
   photo_url: string | null
   photo_license: string | null
   photo_attribution: string | null
 }
 
 const selectedTree = ref<PopupTreeRow | null>(null)
+const selectedTreeAnchor = ref<[number, number] | null>(null)
+const selectedTreeScreenPoint = ref<{ x: number; y: number } | null>(null)
 
-function selectTree(row: PopupTreeRow): void {
+function updateTreeCardPosition(): void {
+  if (!mapRef.value || !selectedTreeAnchor.value) {
+    selectedTreeScreenPoint.value = null
+    return
+  }
+  const point = mapRef.value.project(selectedTreeAnchor.value)
+  selectedTreeScreenPoint.value = { x: point.x, y: point.y }
+}
+
+const treeCardStyle = computed(() => {
+  const point = selectedTreeScreenPoint.value
+  if (!point) return {}
+  return {
+    left: `${point.x}px`,
+    top: `${point.y}px`,
+  }
+})
+
+function selectTree(row: PopupTreeRow, coords: [number, number]): void {
   selectedTree.value = row
+  selectedTreeAnchor.value = coords
+  updateTreeCardPosition()
+}
+
+function closeTreeCard(): void {
+  selectedTree.value = null
+  selectedTreeAnchor.value = null
+  selectedTreeScreenPoint.value = null
 }
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -637,11 +676,14 @@ function formatTreeAge(value: string | null) {
   return `${years} year${years !== 1 ? 's' : ''}`
 }
 
-async function showTreeCard(feature: GeoJSON.Feature) {
+async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, number]) {
   if (!mapRef.value) return
   const requestToken = ++popupRequestToken
   const id = feature.properties?.id
   if (!id || id === 'unkwn') return
+  const featureCoords = feature.geometry?.type === 'Point'
+    ? (feature.geometry.coordinates as [number, number])
+    : fallbackCoords
   const safeId = String(id).replace(/'/g, "''")
   const cityBiome = getCityBiome(selectedCity.value).replace(/'/g, "''")
   const cityEcoregionId = getCityEcoregionId(selectedCity.value)
@@ -680,7 +722,6 @@ async function showTreeCard(feature: GeoJSON.Feature) {
         tf.wildlife_value,
         tf.fire_risk,
         se.description,
-        se.inat_taxon_id,
         se.photo_url,
         se.photo_license,
         se.photo_attribution
@@ -691,7 +732,7 @@ async function showTreeCard(feature: GeoJSON.Feature) {
     `)
     const row = rows[0] as unknown as PopupTreeRow | undefined
     if (!row || requestToken !== popupRequestToken) return
-    selectTree(row)
+    selectTree(row, featureCoords)
   } catch (e) {
     console.error('[Tree Card Query Error]', e)
   }
@@ -708,7 +749,7 @@ function bindTreeInteractions() {
     if (!features.length) return
     const iconFeature = !props.simplified ? features.find((f) => f.layer?.id === 'trees-icon') : undefined
     const picked = (iconFeature ?? features[0]) as unknown as GeoJSON.Feature
-    void showTreeCard(picked)
+    void showTreeCard(picked, [e.lngLat.lng, e.lngLat.lat])
   })
   for (const layer of interactiveLayers) {
     mapRef.value.on('mouseenter', layer, () => { mapRef.value!.getCanvas().style.cursor = 'pointer' })
@@ -833,6 +874,7 @@ async function purgeAndRefresh() {
 
 async function switchCity(city: CityCode, landingCoords?: [number, number]) {
   if (city === lifecycleRequestedCity.value && city === lifecycleRenderedCity.value) return
+  closeTreeCard()
   const transition = lifecycleStartCitySwitch(city)
 
   try {
@@ -910,6 +952,28 @@ async function detectCityFromIp(): Promise<void> {
   }
 }
 
+async function restoreGrantedUserLocation(applyCity: boolean): Promise<void> {
+  if (!navigator.geolocation || !navigator.permissions) return
+  try {
+    const result = await navigator.permissions.query({ name: 'geolocation' })
+    if (result.state !== 'granted') return
+    await new Promise<void>((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserLocation(pos.coords.latitude, pos.coords.longitude)
+          if (applyCity) {
+            silentlyApplyCity(pos.coords.latitude, pos.coords.longitude)
+          }
+          resolve()
+        },
+        () => resolve(),
+      )
+    })
+  } catch {
+    // best-effort, ignore errors
+  }
+}
+
 /**
  * Update the city based on coordinates without triggering an animated camera transition.
  * Used for IP detection and background geolocation restores.
@@ -939,8 +1003,8 @@ function navigateToLocation(lat: number, lng: number): void {
 
 let userLocationMarker: maplibregl.Marker | null = null
 
-watch(userLocation, (loc) => {
-  if (!mapRef.value) return
+watch([userLocation, mapRef], ([loc, map]) => {
+  if (!map) return
   if (!loc) {
     userLocationMarker?.remove()
     userLocationMarker = null
@@ -951,8 +1015,8 @@ watch(userLocation, (loc) => {
     el.className = 'user-location-marker'
     userLocationMarker = new maplibregl.Marker({ element: el })
   }
-  userLocationMarker.setLngLat([loc.lng, loc.lat]).addTo(mapRef.value)
-})
+  userLocationMarker.setLngLat([loc.lng, loc.lat]).addTo(map)
+}, { immediate: true })
 
 function toggleUserLocation() {
   if (!navigator.geolocation) return
@@ -1102,29 +1166,19 @@ onMounted(async () => {
   // Resolve city from IP before initialising the map so the initial center is correct.
   await router.isReady()
   const mountedRouteCity = readRouteCity(route.query.city)
-  if (!mountedRouteCity) {
-    await Promise.race([detectCityFromIp(), new Promise<void>((r) => setTimeout(r, 2000))])
+  if (!initialUserCityDetectionDone.value) {
+    markInitialUserCityDetectionDone()
+    if (!mountedRouteCity) {
+      await restoreGrantedUserLocation(true)
+      if (!userLocation.value) {
+        await Promise.race([detectCityFromIp(), new Promise<void>((r) => setTimeout(r, 2000))])
+      }
+    }
   }
 
   // Kick off DuckDB init now that the city is known so it runs in parallel with
   // map style loading instead of waiting until the map's 'load' event fires.
   preWarmForCity(mapDisplayCity.value)
-
-  // If the user already granted geolocation, silently restore their location pin and apply
-  // city detection (no animated camera transition).
-  if (navigator.geolocation && navigator.permissions) {
-    navigator.permissions.query({ name: 'geolocation' }).then((result) => {
-      if (result.state === 'granted') {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            setUserLocation(pos.coords.latitude, pos.coords.longitude)
-            silentlyApplyCity(pos.coords.latitude, pos.coords.longitude)
-          },
-          () => {},
-        )
-      }
-    }).catch(() => {})
-  }
 
   if (!isWebGLSupported()) {
     mapError.value = 'Your browser does not support WebGL, which is required to display the map. Try enabling hardware acceleration in your browser settings, or use a different browser.'
@@ -1585,9 +1639,9 @@ onUnmounted(() => {
 
 .tree-card {
   position: absolute;
-  bottom: 16px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, calc(-100% - 18px));
   z-index: 10;
   width: min(840px, calc(100% - 24px));
   max-height: min(420px, 55vh);
@@ -1599,7 +1653,21 @@ onUnmounted(() => {
   font-size: 0.8rem;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.tree-card::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -9px;
+  width: 16px;
+  height: 16px;
+  transform: translateX(-50%) rotate(45deg);
+  background: rgba(20, 24, 29, 0.98);
+  border-right: 1px solid rgba(167, 227, 178, 0.18);
+  border-bottom: 1px solid rgba(167, 227, 178, 0.18);
 }
 
 .tree-card-close {
@@ -1771,7 +1839,6 @@ onUnmounted(() => {
 /* ── Mobile: stack panes vertically ────────────────────────── */
 @media (max-width: 640px) {
   .tree-card {
-    bottom: 8px;
     width: calc(100% - 16px);
     max-height: 65vh;
     border-radius: 12px;

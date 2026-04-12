@@ -6,7 +6,7 @@ where plant_type = 'Tree' and latitude is not null and longitude is not null
 SELECT
     tree_id,
     # plant_type,
-    common_name,
+    tree_name,
     site_info,
     plant_date,
     species,
@@ -23,7 +23,7 @@ copy into json `./raw_data_high_lod.json` from
 where plant_type = 'Tree' and latitude is not null and longitude is not null
 SELECT
     tree_id,
-    common_name,
+    tree_name,
     site_info,
     plant_date,
     species,

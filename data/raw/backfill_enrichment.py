@@ -12,7 +12,7 @@ fields are currently NULL. Existing non-null values are never overwritten.
 
 Providers
 ---------
-  inat_photos — fills: inat_taxon_id, photo_url, photo_license, photo_attribution
+    inat_photos — fills: photo_url, photo_license, photo_attribution
                 source: iNaturalist API (no credentials needed)
 
   llm         — fills: all LLM-derived fields (description, common_names, tree_form, …)
@@ -89,7 +89,7 @@ enrich_species = _te.enrich_species
 # Maps each provider name to the complete set of fields it can fill.
 PROVIDER_FIELDS: dict[str, frozenset[str]] = {
     "inat_photos": frozenset({
-        "inat_taxon_id", "photo_url", "photo_license", "photo_attribution",
+        "photo_url", "photo_license", "photo_attribution",
     }),
     "llm": frozenset({
         "common_names", "description", "is_evergreen",
@@ -163,11 +163,10 @@ def load_full_table(source: str) -> pa.Table:
 # ── Providers ──────────────────────────────────────────────────────────────────
 
 def run_inat_provider(species: str) -> dict:
-    """Call iNaturalist and return a partial row dict for the 4 iNat fields."""
-    taxon_id, photo_url, photo_license, photo_attribution = fetch_inat_photo(species)
+    """Call iNaturalist and return a partial row dict for the iNat media fields."""
+    _, photo_url, photo_license, photo_attribution = fetch_inat_photo(species)
     _time.sleep(0.3)  # stay under iNat 100 req/min
     return {
-        "inat_taxon_id":    taxon_id,
         "photo_url":        photo_url,
         "photo_license":    photo_license,
         "photo_attribution": photo_attribution,

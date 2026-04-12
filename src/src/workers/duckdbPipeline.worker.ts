@@ -619,7 +619,6 @@ async function doInit(city?: string) {
         fire_risk,
         usda_zone_min,
         usda_zone_max,
-        inat_taxon_id,
         photo_url,
         photo_license,
         photo_attribution

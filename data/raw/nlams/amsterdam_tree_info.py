@@ -29,6 +29,7 @@ Coordinate notes:
 import sys
 import requests
 import pyarrow as pa
+import pyarrow.compute as pc
 from datetime import date
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -200,5 +201,13 @@ def transform(rows: list[dict]) -> pa.Table:
 if __name__ == "__main__":
     rows = download_all_pages()
     table = transform(rows)
+    before = table.num_rows
+    table = table.filter(pc.is_valid(table["species"]))
+    dropped = before - table.num_rows
+    if dropped:
+        print(
+            f"Amsterdam ingest: dropped {dropped} rows with null species",
+            file=sys.stderr,
+        )
     table = validate_coordinates(table, city="Amsterdam", city_code="NLAMS")
     emit(table)

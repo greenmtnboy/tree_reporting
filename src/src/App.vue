@@ -15,6 +15,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, watchEffect } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from './components/AppSidebar.vue'
 import ChatPanel from './components/ChatPanel.vue'
 import MobileLayout from './components/MobileLayout.vue'
@@ -22,10 +23,14 @@ import TopBar from './components/TopBar.vue'
 import WelcomeModal from './components/WelcomeModal.vue'
 import { getCityBiome } from './composables/dashboardContextSource'
 import { useIsMobile } from './composables/useIsMobile'
-import { useMapData } from './composables/useMapData'
+import { CITY_CONFIG, useMapData, type CityCode } from './composables/useMapData'
+import { useMapLifecycle } from './composables/useMapLifecycle'
 
 const { isMobile } = useIsMobile()
 const { selectedCity } = useMapData()
+const { activateCity } = useMapLifecycle()
+const route = useRoute()
+const router = useRouter()
 
 type SeasonName = 'spring' | 'summer' | 'autumn' | 'winter'
 type BackgroundTheme = {
@@ -54,6 +59,19 @@ function getSeason(date = new Date()): SeasonName {
   if (month >= 6 && month <= 8) return 'summer'
   if (month >= 9 && month <= 11) return 'autumn'
   return 'winter'
+}
+
+const BIOME_BACKGROUND_SIZE = '100vw auto'
+const BIOME_ACCENT_SIZE = '100vw auto'
+const BIOME_TREE_SIZE = '100vw auto'
+const BIOME_BACKGROUND_POSITION = 'center bottom'
+const BIOME_ACCENT_POSITION = 'center bottom'
+const BIOME_TREE_POSITION = 'center bottom'
+
+function readRouteCity(value: unknown): CityCode | null {
+  const city = Array.isArray(value) ? value[0] : value
+  if (typeof city !== 'string') return null
+  return city in CITY_CONFIG ? (city as CityCode) : null
 }
 
 function makeTemperateBackgroundSvg(season: SeasonName) {
@@ -283,6 +301,147 @@ function makeMediterraneanTreeSvg(season: SeasonName) {
   `)
 }
 
+function makeGrasslandBackgroundSvg(season: SeasonName) {
+  const palette = {
+    spring: { sky: '#6d9f8c', far: '#6fa15e', near: '#b7c66b' },
+    summer: { sky: '#63866d', far: '#7f8e43', near: '#c2a457' },
+    autumn: { sky: '#7c6548', far: '#9a753d', near: '#d09b57' },
+    winter: { sky: '#6b7777', far: '#8a8d74', near: '#b9b39a' },
+  }[season]
+
+  return svgUrl(`
+    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 980 900'>
+      <path d='M0 900V510C110 486 210 472 316 462C430 450 536 456 650 434C766 412 860 372 980 330V900Z'
+        fill='${palette.sky}' fill-opacity='.13'/>
+      <path d='M0 900V690C142 650 268 626 402 612C536 598 646 612 760 588C852 568 918 538 980 510V900Z'
+        fill='${palette.far}' fill-opacity='.18'/>
+      <path d='M0 900V798C150 768 282 754 410 744C540 734 660 746 782 728C858 718 924 698 980 674V900Z'
+        fill='${palette.near}' fill-opacity='.16'/>
+    </svg>
+  `)
+}
+
+function makeGrasslandAccentSvg(season: SeasonName) {
+  const palette = {
+    spring: { river: '#86c7bc', seed: '#e2d99a' },
+    summer: { river: '#6eaa9a', seed: '#e0bd70' },
+    autumn: { river: '#7f9a8f', seed: '#e2a35f' },
+    winter: { river: '#9fb1ad', seed: '#d6ccb0' },
+  }[season]
+
+  return svgUrl(`
+    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 980 900'>
+      <path d='M340 900C410 840 488 800 570 770C646 742 720 724 790 690C860 656 914 612 980 552V642C914 700 848 754 780 792C708 832 630 846 548 874C506 888 466 900 420 900Z'
+        fill='${palette.river}' fill-opacity='.12'/>
+      <g fill='${palette.seed}' fill-opacity='.16'>
+        <circle cx='612' cy='650' r='8'/>
+        <circle cx='706' cy='612' r='7'/>
+        <circle cx='810' cy='570' r='7'/>
+        <circle cx='894' cy='528' r='6'/>
+      </g>
+    </svg>
+  `)
+}
+
+function makeGrasslandTreeSvg(season: SeasonName) {
+  const palette = {
+    spring: { stem: '#5e4b2f', grass: '#9fc46d', canopy: '#74a85d' },
+    summer: { stem: '#5b482d', grass: '#c1a458', canopy: '#8c8f44' },
+    autumn: { stem: '#63432b', grass: '#d08a45', canopy: '#aa763f' },
+    winter: { stem: '#65645b', grass: '#aca385', canopy: '#8d8d78' },
+  }[season]
+
+  return svgUrl(`
+    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 980 900'>
+      <g stroke='${palette.grass}' stroke-opacity='.24' stroke-width='5' stroke-linecap='round' fill='none'>
+        <path d='M544 820C550 742 572 690 612 628'/>
+        <path d='M590 830C596 760 620 706 672 638'/>
+        <path d='M674 828C682 750 714 684 776 604'/>
+        <path d='M742 830C748 760 782 700 850 626'/>
+        <path d='M812 828C818 768 846 718 900 658'/>
+      </g>
+      <g fill='${palette.stem}' fill-opacity='.2'>
+        <rect x='636' y='568' width='12' height='236' rx='6'/>
+        <rect x='806' y='600' width='10' height='204' rx='5'/>
+      </g>
+      <g fill='${palette.canopy}' fill-opacity='.18'>
+        <ellipse cx='642' cy='548' rx='92' ry='42'/>
+        <ellipse cx='808' cy='584' rx='70' ry='34'/>
+      </g>
+    </svg>
+  `)
+}
+
+function makeDesertBackgroundSvg(season: SeasonName) {
+  const palette = {
+    spring: { far: '#6f6b45', dune: '#b99a62', wash: '#d3b178' },
+    summer: { far: '#6f5b36', dune: '#b8874f', wash: '#d4a15c' },
+    autumn: { far: '#704c35', dune: '#b47749', wash: '#cf8f5f' },
+    winter: { far: '#656c68', dune: '#a99676', wash: '#c0b196' },
+  }[season]
+
+  return svgUrl(`
+    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 980 900'>
+      <path d='M0 900V560C104 512 210 484 318 462C436 438 548 450 664 426C776 402 874 354 980 286V900Z'
+        fill='${palette.far}' fill-opacity='.16'/>
+      <path d='M0 900V720C120 662 248 626 382 614C520 602 640 638 768 612C850 596 920 562 980 520V900Z'
+        fill='${palette.dune}' fill-opacity='.17'/>
+      <path d='M0 900V814C136 776 276 760 420 764C558 768 700 800 830 778C890 768 940 748 980 724V900Z'
+        fill='${palette.wash}' fill-opacity='.13'/>
+    </svg>
+  `)
+}
+
+function makeDesertAccentSvg(season: SeasonName) {
+  const palette = {
+    spring: { bloom: '#f0c88a', shadow: '#7aa07b' },
+    summer: { bloom: '#e1aa68', shadow: '#8a8f65' },
+    autumn: { bloom: '#e1945d', shadow: '#92705f' },
+    winter: { bloom: '#d8c7a7', shadow: '#8aa0a0' },
+  }[season]
+
+  return svgUrl(`
+    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 980 900'>
+      <path d='M518 900C600 834 666 804 742 774C818 744 886 700 980 620V732C912 784 842 826 764 852C690 878 622 896 552 900Z'
+        fill='${palette.shadow}' fill-opacity='.11'/>
+      <g fill='${palette.bloom}' fill-opacity='.17'>
+        <circle cx='690' cy='646' r='8'/>
+        <circle cx='760' cy='612' r='7'/>
+        <circle cx='834' cy='666' r='7'/>
+      </g>
+    </svg>
+  `)
+}
+
+function makeDesertTreeSvg(season: SeasonName) {
+  const palette = {
+    spring: { cactus: '#6d9b72', spine: '#d7caa2', trunk: '#68482f' },
+    summer: { cactus: '#778958', spine: '#d3b577', trunk: '#67442b' },
+    autumn: { cactus: '#88744f', spine: '#d79b6a', trunk: '#70452f' },
+    winter: { cactus: '#7f9186', spine: '#d8d4c5', trunk: '#69706c' },
+  }[season]
+
+  return svgUrl(`
+    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 980 900'>
+      <g fill='${palette.cactus}' fill-opacity='.2'>
+        <rect x='682' y='482' width='36' height='318' rx='18'/>
+        <rect x='616' y='568' width='28' height='132' rx='14'/>
+        <rect x='754' y='560' width='28' height='144' rx='14'/>
+        <rect x='810' y='618' width='24' height='156' rx='12'/>
+      </g>
+      <g fill='${palette.trunk}' fill-opacity='.18'>
+        <rect x='630' y='688' width='14' height='86' rx='7'/>
+        <rect x='754' y='694' width='14' height='82' rx='7'/>
+      </g>
+      <g stroke='${palette.spine}' stroke-opacity='.12' stroke-width='3' stroke-linecap='round'>
+        <path d='M692 530H710'/>
+        <path d='M690 620H712'/>
+        <path d='M690 716H712'/>
+      </g>
+    </svg>
+  `)
+}
+
 function makeFallbackBackgroundSvg(season: SeasonName) {
   const palette = {
     spring: { far: '#223a2c', near: '#3f8259' },
@@ -356,12 +515,12 @@ function buildBackgroundTheme(biome: string, season: SeasonName): BackgroundThem
       backgroundArt: makeMediterraneanBackgroundSvg(season),
       accentArt: makeMediterraneanAccentSvg(season),
       treeArt: makeMediterraneanTreeSvg(season),
-      backgroundSize: 'min(76vw, 1120px) auto',
-      accentSize: 'min(74vw, 1080px) auto',
-      treeSize: 'min(62vw, 900px) auto',
-      backgroundPosition: 'right -3vw bottom',
-      accentPosition: 'right -1vw bottom -1vh',
-      treePosition: 'right 4vw bottom -1vh',
+      backgroundSize: BIOME_BACKGROUND_SIZE,
+      accentSize: BIOME_ACCENT_SIZE,
+      treeSize: BIOME_TREE_SIZE,
+      backgroundPosition: BIOME_BACKGROUND_POSITION,
+      accentPosition: BIOME_ACCENT_POSITION,
+      treePosition: BIOME_TREE_POSITION,
       opacity: season === 'summer' ? '0.94' : '0.88',
     }
   }
@@ -381,13 +540,71 @@ function buildBackgroundTheme(biome: string, season: SeasonName): BackgroundThem
       backgroundArt: makeConiferBackgroundSvg(season),
       accentArt: makeConiferAccentSvg(season),
       treeArt: makeConiferTreeSvg(season),
-      backgroundSize: 'min(80vw, 1180px) auto',
-      accentSize: 'min(72vw, 1040px) auto',
-      treeSize: 'min(60vw, 880px) auto',
-      backgroundPosition: 'right -2vw bottom',
-      accentPosition: 'right bottom',
-      treePosition: 'right 2vw bottom -1vh',
+      backgroundSize: BIOME_BACKGROUND_SIZE,
+      accentSize: BIOME_ACCENT_SIZE,
+      treeSize: BIOME_TREE_SIZE,
+      backgroundPosition: BIOME_BACKGROUND_POSITION,
+      accentPosition: BIOME_ACCENT_POSITION,
+      treePosition: BIOME_TREE_POSITION,
       opacity: season === 'winter' ? '0.9' : '0.86',
+    }
+  }
+
+  if (
+    !normalizedBiome.includes('desert')
+    && !normalizedBiome.includes('xeric')
+    && (
+      normalizedBiome.includes('grassland')
+      || normalizedBiome.includes('savanna')
+      || normalizedBiome.includes('shrubland')
+    )
+  ) {
+    const seasonal = {
+      spring: ['rgba(169, 196, 96, 0.28)', 'rgba(132, 204, 184, 0.12)', 'rgba(48, 50, 28, 0.18)'],
+      summer: ['rgba(199, 160, 72, 0.3)', 'rgba(118, 160, 112, 0.13)', 'rgba(54, 44, 24, 0.2)'],
+      autumn: ['rgba(210, 136, 70, 0.28)', 'rgba(228, 178, 98, 0.12)', 'rgba(56, 38, 24, 0.2)'],
+      winter: ['rgba(166, 160, 124, 0.24)', 'rgba(168, 188, 184, 0.1)', 'rgba(44, 44, 36, 0.2)'],
+    }[season]
+
+    return {
+      glowPrimary: seasonal[0],
+      glowSecondary: seasonal[1],
+      wash: seasonal[2],
+      backgroundArt: makeGrasslandBackgroundSvg(season),
+      accentArt: makeGrasslandAccentSvg(season),
+      treeArt: makeGrasslandTreeSvg(season),
+      backgroundSize: BIOME_BACKGROUND_SIZE,
+      accentSize: BIOME_ACCENT_SIZE,
+      treeSize: BIOME_TREE_SIZE,
+      backgroundPosition: BIOME_BACKGROUND_POSITION,
+      accentPosition: BIOME_ACCENT_POSITION,
+      treePosition: BIOME_TREE_POSITION,
+      opacity: season === 'summer' ? '0.92' : '0.88',
+    }
+  }
+
+  if (normalizedBiome.includes('desert') || normalizedBiome.includes('xeric')) {
+    const seasonal = {
+      spring: ['rgba(207, 167, 86, 0.28)', 'rgba(116, 156, 112, 0.12)', 'rgba(58, 44, 28, 0.2)'],
+      summer: ['rgba(218, 150, 74, 0.32)', 'rgba(154, 128, 74, 0.14)', 'rgba(60, 38, 24, 0.23)'],
+      autumn: ['rgba(208, 122, 76, 0.3)', 'rgba(218, 160, 104, 0.12)', 'rgba(58, 36, 26, 0.22)'],
+      winter: ['rgba(180, 164, 126, 0.24)', 'rgba(138, 166, 164, 0.1)', 'rgba(44, 44, 38, 0.2)'],
+    }[season]
+
+    return {
+      glowPrimary: seasonal[0],
+      glowSecondary: seasonal[1],
+      wash: seasonal[2],
+      backgroundArt: makeDesertBackgroundSvg(season),
+      accentArt: makeDesertAccentSvg(season),
+      treeArt: makeDesertTreeSvg(season),
+      backgroundSize: BIOME_BACKGROUND_SIZE,
+      accentSize: BIOME_ACCENT_SIZE,
+      treeSize: BIOME_TREE_SIZE,
+      backgroundPosition: BIOME_BACKGROUND_POSITION,
+      accentPosition: BIOME_ACCENT_POSITION,
+      treePosition: BIOME_TREE_POSITION,
+      opacity: season === 'summer' ? '0.94' : '0.88',
     }
   }
 
@@ -406,12 +623,12 @@ function buildBackgroundTheme(biome: string, season: SeasonName): BackgroundThem
       backgroundArt: makeTemperateBackgroundSvg(season),
       accentArt: makeTemperateAccentSvg(season),
       treeArt: makeTemperateTreeSvg(season),
-      backgroundSize: 'min(78vw, 1160px) auto',
-      accentSize: 'min(72vw, 1040px) auto',
-      treeSize: 'min(62vw, 900px) auto',
-      backgroundPosition: 'right -2vw bottom',
-      accentPosition: 'right bottom',
-      treePosition: 'right 3vw bottom',
+      backgroundSize: BIOME_BACKGROUND_SIZE,
+      accentSize: BIOME_ACCENT_SIZE,
+      treeSize: BIOME_TREE_SIZE,
+      backgroundPosition: BIOME_BACKGROUND_POSITION,
+      accentPosition: BIOME_ACCENT_POSITION,
+      treePosition: BIOME_TREE_POSITION,
       opacity: season === 'spring' ? '0.92' : '0.88',
     }
   }
@@ -430,12 +647,12 @@ function buildBackgroundTheme(biome: string, season: SeasonName): BackgroundThem
     backgroundArt: makeFallbackBackgroundSvg(season),
     accentArt: makeFallbackAccentSvg(season),
     treeArt: makeFallbackTreeSvg(season),
-    backgroundSize: 'min(74vw, 1080px) auto',
-    accentSize: 'min(70vw, 1020px) auto',
-    treeSize: 'min(56vw, 820px) auto',
-    backgroundPosition: 'right bottom',
-    accentPosition: 'right bottom',
-    treePosition: 'right 5vw bottom',
+    backgroundSize: BIOME_BACKGROUND_SIZE,
+    accentSize: BIOME_ACCENT_SIZE,
+    treeSize: BIOME_TREE_SIZE,
+    backgroundPosition: BIOME_BACKGROUND_POSITION,
+    accentPosition: BIOME_ACCENT_POSITION,
+    treePosition: BIOME_TREE_POSITION,
     opacity: '0.86',
   }
 }
@@ -443,6 +660,13 @@ function buildBackgroundTheme(biome: string, season: SeasonName): BackgroundThem
 const activeBackgroundTheme = computed(() => {
   const biome = getCityBiome(selectedCity.value)
   return buildBackgroundTheme(biome, getSeason())
+})
+
+void router.isReady().then(() => {
+  const city = readRouteCity(route.query.city)
+  if (city && city !== selectedCity.value) {
+    activateCity(city)
+  }
 })
 
 watchEffect(() => {
