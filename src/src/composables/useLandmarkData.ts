@@ -9,7 +9,7 @@ export function useLandmarkData() {
   const error = ref<string | null>(null)
 
   const { query } = useDuckDB()
-  const { selectedCity } = useMapData()
+  const { selectedCity, initialUserCityDetectionDone } = useMapData()
 
   async function load(city: string) {
     loading.value = true
@@ -35,7 +35,14 @@ export function useLandmarkData() {
     }
   }
 
-  watch(selectedCity, (city) => { void load(city) }, { immediate: true })
+  watch(
+    [selectedCity, initialUserCityDetectionDone],
+    ([city, bootstrapReady]) => {
+      if (!bootstrapReady) return
+      void load(city)
+    },
+    { immediate: true },
+  )
 
   return { landmarks, loading, error }
 }

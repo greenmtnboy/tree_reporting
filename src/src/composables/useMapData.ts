@@ -60,6 +60,11 @@ function applyCommittedCity(city: CityCode) {
   mapQueryRevision.value += 1
 }
 
+function commitResolvedCity(city: CityCode) {
+  if (selectedCity.value === city && currentMapQuery.value === buildDefaultQueryForCity(city)) return
+  applyCommittedCity(city)
+}
+
 const { contextCity } = useMapLifecycle()
 
 watch(
@@ -125,6 +130,7 @@ export function useMapData() {
     initialUserCityDetectionDone,
     setUserLocation,
     clearUserLocation,
+    commitResolvedCity,
     markInitialUserCityDetectionDone,
     publishMapQuery,
     publishMapTreeIdFilterSql,
