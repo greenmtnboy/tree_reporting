@@ -151,6 +151,7 @@ import { useMapLayers, TREES_SOURCE_MAXZOOM, addLandmarkLayer, removeLandmarkLay
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { addCityMarkers, updateCityMarkersSelected, removeCityMarkers, bindCityMarkerInteractions } from '../composables/useGlobeCityMarkers'
 import { useMapIntroAnimation, INTRO_START_ZOOM } from '../composables/useMapIntroAnimation'
+import { resolveBootstrapCity } from '../composables/bootstrapCity'
 import CitySelector from './CitySelector.vue'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
 
@@ -275,6 +276,7 @@ const {
   userLocation,
   initialUserCityDetectionDone,
   setUserLocation,
+  commitResolvedCity,
   markInitialUserCityDetectionDone,
 } = useMapData()
 
@@ -939,19 +941,6 @@ watch(
 
 // --- Geolocation ---
 
-async function detectCityFromIp(): Promise<void> {
-  try {
-    const res = await fetch('https://ipapi.co/json/')
-    if (!res.ok) return
-    const data = await res.json()
-    const { latitude, longitude } = data as { latitude?: number; longitude?: number }
-    if (!latitude || !longitude) return
-    silentlyApplyCity(latitude, longitude)
-  } catch {
-    // best-effort, ignore errors
-  }
-}
-
 async function restoreGrantedUserLocation(applyCity: boolean): Promise<void> {
   if (!navigator.geolocation || !navigator.permissions) return
   try {
@@ -1163,17 +1152,26 @@ onMounted(async () => {
   lifecycleSetManualCitySelectionReady(false)
   window.addEventListener('keydown', onWasdKeyDown)
   window.addEventListener('keyup', onWasdKeyUp)
-  // Resolve city from IP before initialising the map so the initial center is correct.
+  // Resolve the initial city before hydrating any map or query state.
   await router.isReady()
   const mountedRouteCity = readRouteCity(route.query.city)
   if (!initialUserCityDetectionDone.value) {
-    markInitialUserCityDetectionDone()
-    if (!mountedRouteCity) {
-      await restoreGrantedUserLocation(true)
-      if (!userLocation.value) {
-        await Promise.race([detectCityFromIp(), new Promise<void>((r) => setTimeout(r, 2000))])
-      }
+    const bootstrapResolution = await resolveBootstrapCity({
+      routeCity: mountedRouteCity,
+      defaultCity: selectedCity.value as CityCode,
+      resolveSharedLocationCity: async () => {
+        await restoreGrantedUserLocation(true)
+        return lifecycleRequestedCity.value as CityCode | null
+      },
+    })
+    commitResolvedCity(bootstrapResolution.city)
+    if (bootstrapResolution.source !== 'route' && readRouteCity(route.query.city) !== bootstrapResolution.city) {
+      await router.replace({ query: { ...route.query, city: bootstrapResolution.city } })
     }
+    markInitialUserCityDetectionDone()
+  } else {
+    const resolvedBootstrapCity = (lifecycleRequestedCity.value ?? mountedRouteCity ?? selectedCity.value) as CityCode
+    commitResolvedCity(resolvedBootstrapCity)
   }
 
   // Kick off DuckDB init now that the city is known so it runs in parallel with
