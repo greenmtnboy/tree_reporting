@@ -552,7 +552,6 @@ SCHEMA = pa.schema([
     ("usda_zone_min",         pa.int32()),
     ("usda_zone_max",         pa.int32()),
     ("native_ecoregions",     pa.list_(pa.int32())),
-    ("inat_taxon_id",         pa.int64()),
     ("photo_url",             pa.string()),
     ("photo_license",         pa.string()),
     ("photo_attribution",     pa.string()),
@@ -714,7 +713,7 @@ if __name__ == "__main__":
             enrichment.growth_rate_unit,
             enrichment.growth_rate,
         )
-        inat_taxon_id, photo_url, photo_license, photo_attribution = fetch_inat_photo(scientific_name)
+        _, photo_url, photo_license, photo_attribution = fetch_inat_photo(scientific_name)
         _time.sleep(0.3)  # stay well under iNat 100 req/min limit
         new_rows.append({
             "species":              scientific_name,
@@ -746,7 +745,6 @@ if __name__ == "__main__":
             "usda_zone_min":        enrichment.usda_zone_min,
             "usda_zone_max":        enrichment.usda_zone_max,
             "native_ecoregions":    sorted(set(enrichment.native_ecoregions)) or None,
-            "inat_taxon_id":        inat_taxon_id,
             "photo_url":            photo_url,
             "photo_license":        photo_license,
             "photo_attribution":    photo_attribution,

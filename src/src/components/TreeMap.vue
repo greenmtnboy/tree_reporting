@@ -557,7 +557,6 @@ interface PopupTreeRow {
   wildlife_value: string | null
   fire_risk: string | null
   description: string | null
-  inat_taxon_id: number | null
   photo_url: string | null
   photo_license: string | null
   photo_attribution: string | null
@@ -723,7 +722,6 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
         tf.wildlife_value,
         tf.fire_risk,
         se.description,
-        se.inat_taxon_id,
         se.photo_url,
         se.photo_license,
         se.photo_attribution

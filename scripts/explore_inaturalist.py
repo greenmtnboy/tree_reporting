@@ -178,7 +178,6 @@ for s in has_photo[:3]:
     p = results[s]["photo"]
     print(json.dumps({
         "species": s,
-        "inat_taxon_id": results[s]["taxon_id"],
         "photo_url": p["url_medium"],
         "photo_license": p["license"],
         "photo_attribution": p["attribution"],
