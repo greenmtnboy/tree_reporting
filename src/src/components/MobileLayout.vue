@@ -14,70 +14,62 @@
       </header>
       <div class="mobile-route-body">
         <SummaryView v-if="isSummaryScreen" />
+        <SpeciesView v-else-if="isSpeciesScreen" />
         <InfoView v-else />
       </div>
     </div>
 
-    <div v-if="isMapScreen && !activeOverlay" class="mobile-map-actions">
-      <button class="mobile-action-btn" @click="openOverlay('landmarks')">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8" />
-          <line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </svg>
-        Landmarks
-      </button>
-      <button class="mobile-action-btn" @click="openOverlay('chat')">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-        Chat
-      </button>
-    </div>
+    <div class="mobile-bottom-bar" :class="{ 'mobile-bottom-bar--overlay-open': !!activeOverlay }">
+      <div class="mobile-bottom-bar-actions">
+        <button
+          v-for="action in visibleActions"
+          :key="action.key"
+          class="mobile-action-btn"
+          :class="{ 'mobile-action-btn--active': activeOverlay === action.key }"
+          :aria-label="action.ariaLabel"
+          :aria-pressed="activeOverlay === action.key"
+          @click="action.onClick"
+        >
+          <svg v-if="action.key === 'landmarks'" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          {{ action.label }}
+        </button>
+      </div>
 
-    <button
-      v-if="isSummaryScreen && !activeOverlay"
-      class="mobile-chat-fab"
-      aria-label="Open analytics chat"
-      @click="openOverlay('chat')"
-    >
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      </svg>
-      Chat
-    </button>
-
-    <div class="mobile-nav-wrap">
-      <transition name="mobile-fade">
-        <div v-if="navMenuOpen" class="mobile-nav-menu" aria-label="Mobile navigation">
-          <button
-            v-for="item in navItems"
-            :key="item.screen"
-            class="mobile-nav-item"
-            :class="{ 'mobile-nav-item--active': currentScreen === item.screen }"
-            @click="goToScreen(item.screen)"
-          >
-            <span class="mobile-nav-item-label">{{ item.label }}</span>
-            <span class="mobile-nav-item-copy">{{ item.copy }}</span>
-          </button>
-        </div>
-      </transition>
-      <button
-        class="mobile-nav-fab"
-        :class="{ 'mobile-nav-fab--open': navMenuOpen }"
-        aria-label="Open navigation menu"
-        @click="navMenuOpen = !navMenuOpen"
-      >
-        <span></span>
-        <span></span>
-        <span></span>
-      </button>
+      <div class="mobile-nav-wrap">
+        <transition name="mobile-fade">
+          <div v-if="navMenuOpen" class="mobile-nav-menu" aria-label="Mobile navigation">
+            <button
+              v-for="item in navItems"
+              :key="item.screen"
+              class="mobile-nav-item"
+              :class="{ 'mobile-nav-item--active': currentScreen === item.screen }"
+              @click="goToScreen(item.screen)"
+            >
+              <span class="mobile-nav-item-label">{{ item.label }}</span>
+              <span class="mobile-nav-item-copy">{{ item.copy }}</span>
+            </button>
+          </div>
+        </transition>
+        <button
+          class="mobile-nav-trigger"
+          :class="{ 'mobile-nav-trigger--open': navMenuOpen }"
+          aria-label="Open navigation menu"
+          @click="navMenuOpen = !navMenuOpen"
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
     </div>
 
     <transition name="mobile-slide">
       <div v-if="activeOverlay === 'landmarks'" class="mobile-overlay">
         <div class="mobile-overlay-header">
           <span class="mobile-overlay-title">Search Landmarks</span>
-          <button class="mobile-overlay-close" @click="activeOverlay = null">&times;</button>
         </div>
         <div class="mobile-overlay-body">
           <input
@@ -106,8 +98,7 @@
     <transition name="mobile-slide">
       <div v-if="activeOverlay === 'chat'" class="mobile-overlay mobile-chat-overlay">
         <div class="mobile-overlay-header">
-          <span class="mobile-overlay-title">{{ isSummaryScreen ? 'Analytics Assistant' : 'Tree Assistant' }}</span>
-          <button class="mobile-overlay-close" @click="activeOverlay = null">&times;</button>
+          <span class="mobile-overlay-title">{{ chatOverlayTitle }}</span>
         </div>
         <ChatPanel />
       </div>
@@ -122,6 +113,7 @@ import TreeMap from './TreeMap.vue'
 import ChatPanel from './ChatPanel.vue'
 import CitySelector from './CitySelector.vue'
 import SummaryView from '../views/SummaryView.vue'
+import SpeciesView from '../views/SpeciesView.vue'
 import InfoView from '../views/InfoView.vue'
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { useFlyTo } from '../composables/useFlyTo'
@@ -129,7 +121,13 @@ import { useMapData } from '../composables/useMapData'
 import type { Landmark } from '../types'
 
 type MobileOverlay = 'landmarks' | 'chat' | null
-type MobileScreen = 'map' | 'summary' | 'info'
+type MobileScreen = 'map' | 'summary' | 'species' | 'info'
+type MobileAction = {
+  key: 'landmarks' | 'chat'
+  label: string
+  ariaLabel: string
+  onClick: () => void
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -143,22 +141,59 @@ const search = ref('')
 
 const currentScreen = computed<MobileScreen>(() => {
   if (route.name === 'summary') return 'summary'
+  if (route.name === 'species') return 'species'
   if (route.name === 'info') return 'info'
   return 'map'
 })
 
 const isMapScreen = computed(() => currentScreen.value === 'map')
 const isSummaryScreen = computed(() => currentScreen.value === 'summary')
+const isSpeciesScreen = computed(() => currentScreen.value === 'species')
 
-const routeTitle = computed(() =>
-  isSummaryScreen.value ? 'City Summary' : 'Project Info',
-)
+const routeTitle = computed(() => {
+  if (isSummaryScreen.value) return 'City Summary'
+  if (isSpeciesScreen.value) return 'Species Explorer'
+  return 'Project Info'
+})
+
+const chatOverlayTitle = computed(() => {
+  if (isSummaryScreen.value) return 'Analytics Assistant'
+  if (isSpeciesScreen.value) return 'Species Assistant'
+  if (isMapScreen.value) return 'Tree Assistant'
+  return 'Project Assistant'
+})
 
 const navItems: Array<{ screen: MobileScreen; label: string; copy: string }> = [
   { screen: 'map', label: 'Map', copy: 'Explore trees and landmarks' },
   { screen: 'summary', label: 'Analytics', copy: 'Inspect city summary charts' },
+  { screen: 'species', label: 'Species', copy: 'Browse taxa, traits, and filters' },
   { screen: 'info', label: 'Info', copy: 'Read sources and project notes' },
 ]
+
+const visibleActions = computed<MobileAction[]>(() => {
+  const actions: MobileAction[] = []
+  if (isMapScreen.value) {
+    actions.push({
+      key: 'landmarks',
+      label: 'Landmarks',
+      ariaLabel: 'Open landmarks search',
+      onClick: () => openOverlay('landmarks'),
+    })
+  }
+  actions.push({
+    key: 'chat',
+    label: 'Chat',
+    ariaLabel: isSummaryScreen.value
+      ? 'Open analytics chat'
+      : isSpeciesScreen.value
+        ? 'Open species chat'
+        : isMapScreen.value
+          ? 'Open tree assistant'
+          : 'Open project chat',
+    onClick: () => openOverlay('chat'),
+  })
+  return actions
+})
 
 const filtered = computed(() => {
   const q = search.value.toLowerCase().trim()
@@ -176,7 +211,7 @@ watch(
 
 function openOverlay(overlay: Exclude<MobileOverlay, null>) {
   navMenuOpen.value = false
-  activeOverlay.value = overlay
+  activeOverlay.value = activeOverlay.value === overlay ? null : overlay
 }
 
 function goToScreen(screen: MobileScreen) {
@@ -220,6 +255,8 @@ function handleLandmarkClick(lm: Landmark) {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  padding-bottom: 82px;
+  box-sizing: border-box;
   background:
     radial-gradient(circle at top left, rgba(47, 125, 79, 0.16), transparent 44%),
     linear-gradient(180deg, rgba(28, 31, 36, 0.98), rgba(15, 20, 17, 0.98));
@@ -265,14 +302,15 @@ function handleLandmarkClick(lm: Landmark) {
 }
 
 .mobile-route-body :deep(.summary-page),
+.mobile-route-body :deep(.species-page),
 .mobile-route-body :deep(.info-page) {
   height: 100%;
 }
 
-.mobile-map-actions {
+.mobile-bottom-bar {
   position: absolute;
   left: 14px;
-  right: 92px;
+  right: 14px;
   bottom: 16px;
   z-index: 30;
   display: flex;
@@ -280,14 +318,26 @@ function handleLandmarkClick(lm: Landmark) {
   pointer-events: none;
 }
 
-.mobile-action-btn,
-.mobile-chat-fab {
+.mobile-bottom-bar--overlay-open {
+  z-index: 120;
+}
+
+.mobile-bottom-bar-actions {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mobile-action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 46px;
-  padding: 0 16px;
+  min-height: 42px;
+  min-width: 0;
+  padding: 0 14px;
+  border-radius: 16px;
   border: 1px solid rgba(167, 227, 178, 0.14);
   background:
     linear-gradient(180deg, rgba(58, 64, 72, 0.64), rgba(28, 31, 36, 0.96));
@@ -301,35 +351,35 @@ function handleLandmarkClick(lm: Landmark) {
 }
 
 .mobile-action-btn {
-  flex: 1;
+  flex: 1 1 0;
 }
 
-.mobile-action-btn:active,
-.mobile-chat-fab:active {
+.mobile-action-btn:active {
   background: rgba(47, 125, 79, 0.24);
   color: var(--color-leaf);
 }
 
-.mobile-chat-fab {
-  position: absolute;
-  left: 16px;
-  bottom: 16px;
-  z-index: 30;
+.mobile-action-btn--active {
+  border-color: rgba(167, 227, 178, 0.26);
+  background:
+    linear-gradient(180deg, rgba(67, 107, 77, 0.82), rgba(28, 55, 38, 0.98));
+  color: var(--color-ink);
 }
 
 .mobile-nav-wrap {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  z-index: 35;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
+  position: relative;
+  flex: 0 0 76px;
+  width: 76px;
+  pointer-events: auto;
 }
 
 .mobile-nav-menu {
-  width: min(72vw, 260px);
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: 72px;
+  width: auto;
+  max-width: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -338,6 +388,7 @@ function handleLandmarkClick(lm: Landmark) {
   background:
     linear-gradient(180deg, rgba(42, 47, 54, 0.94), rgba(18, 20, 24, 0.98));
   box-shadow: 0 18px 38px rgba(6, 8, 10, 0.38);
+  pointer-events: auto;
 }
 
 .mobile-nav-item {
@@ -369,10 +420,10 @@ function handleLandmarkClick(lm: Landmark) {
   color: rgba(154, 166, 154, 0.82);
 }
 
-.mobile-nav-fab {
-  width: 58px;
-  height: 58px;
-  border-radius: 999px;
+.mobile-nav-trigger {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 16px;
   border: 1px solid rgba(167, 227, 178, 0.12);
   background:
     radial-gradient(circle at top, rgba(167, 227, 178, 0.18), transparent 62%),
@@ -382,11 +433,21 @@ function handleLandmarkClick(lm: Landmark) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding: 10px;
   gap: 5px;
   color: var(--color-ink);
+  pointer-events: auto;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
-.mobile-nav-fab span {
+.mobile-nav-trigger--open {
+  border-color: rgba(167, 227, 178, 0.26);
+  background:
+    linear-gradient(180deg, rgba(67, 107, 77, 0.82), rgba(28, 55, 38, 0.98));
+  box-shadow: 0 18px 36px rgba(12, 22, 16, 0.42);
+}
+
+.mobile-nav-trigger span {
   width: 22px;
   height: 2px;
   border-radius: 999px;
@@ -394,36 +455,39 @@ function handleLandmarkClick(lm: Landmark) {
   transition: transform 0.18s ease, opacity 0.18s ease;
 }
 
-.mobile-nav-fab--open span:nth-child(1) {
+.mobile-nav-trigger--open span:nth-child(1) {
   transform: translateY(7px) rotate(45deg);
 }
 
-.mobile-nav-fab--open span:nth-child(2) {
+.mobile-nav-trigger--open span:nth-child(2) {
   opacity: 0;
 }
 
-.mobile-nav-fab--open span:nth-child(3) {
+.mobile-nav-trigger--open span:nth-child(3) {
   transform: translateY(-7px) rotate(-45deg);
 }
 
 /* Overlays */
 .mobile-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: max(72px, calc(env(safe-area-inset-top, 0px) + 16px));
+  left: 14px;
+  right: 14px;
+  bottom: 74px;
   z-index: 100;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(167, 227, 178, 0.1);
+  border-radius: 24px;
+  box-shadow: 0 24px 48px rgba(6, 8, 10, 0.44);
   background:
-    linear-gradient(180deg, rgba(28, 31, 36, 0.98), rgba(15, 36, 23, 0.98));
+    linear-gradient(180deg, rgba(28, 31, 36, 0.95), rgba(15, 36, 23, 0.97));
 }
 
 .mobile-overlay-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 14px 16px;
   background:
     linear-gradient(180deg, rgba(58, 64, 72, 0.42), rgba(28, 31, 36, 0.96));
@@ -437,23 +501,6 @@ function handleLandmarkClick(lm: Landmark) {
   color: var(--color-ink);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-.mobile-overlay-close {
-  background: none;
-  border: none;
-  color: rgba(154, 166, 154, 0.78);
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: color 0.15s, background 0.15s;
-}
-
-.mobile-overlay-close:active {
-  color: var(--color-ink);
-  background: rgba(47, 125, 79, 0.18);
 }
 
 /* Search overlay body */
@@ -537,11 +584,12 @@ function handleLandmarkClick(lm: Landmark) {
 
 .mobile-slide-enter-active,
 .mobile-slide-leave-active {
-  transition: transform 0.3s ease;
+  transition: opacity 0.24s ease, transform 0.3s ease;
 }
 
 .mobile-slide-enter-from,
 .mobile-slide-leave-to {
+  opacity: 0;
   transform: translateY(100%);
 }
 </style>
@@ -556,6 +604,7 @@ function handleLandmarkClick(lm: Landmark) {
   height: auto !important;
   min-height: 0;
   overflow: hidden;
+  border-radius: 0 0 24px 24px;
 }
 
 .mobile-chat-overlay .chat-header {

@@ -148,17 +148,30 @@
     </div>
 
     <div v-if="isConfigured && !showSettings" class="chat-input-area">
+      <div class="chat-input-shell">
         <input
           v-model="userInput"
           type="text"
+          class="chat-input-field"
           :placeholder="inputPlaceholder"
           @keydown.enter="handleSend"
           :disabled="inputDisabled"
         />
-      <span class="send-btn-wrapper">
-        <button @click="handleSend" :disabled="inputDisabled || !userInput.trim()">Send</button>
-        <span v-if="sendTooltip" class="send-tooltip">{{ sendTooltip }}</span>
-      </span>
+        <span class="send-btn-wrapper">
+          <button
+            class="chat-send-btn"
+            @click="handleSend"
+            :disabled="inputDisabled || !userInput.trim()"
+            aria-label="Send message"
+          >
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10 16V4" />
+              <path d="M5 9l5-5 5 5" />
+            </svg>
+          </button>
+          <span v-if="sendTooltip" class="send-tooltip">{{ sendTooltip }}</span>
+        </span>
+      </div>
     </div>
   </aside>
 </template>
@@ -726,56 +739,78 @@ watch(
 }
 
 .chat-input-area {
-  display: flex;
-  gap: 8px;
   padding: 12px;
   border-top: 1px solid rgba(167, 227, 178, 0.08);
 }
 
-.chat-input-area input {
-  flex: 1;
-  padding: 8px 12px;
+.chat-input-shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px;
   border: 1px solid rgba(167, 227, 178, 0.12);
-  border-radius: 8px;
-  background: rgba(28, 31, 36, 0.56);
+  border-radius: 999px;
+  background: rgba(28, 31, 36, 0.72);
+  box-shadow: 0 12px 28px rgba(7, 10, 11, 0.16);
+}
+
+.chat-input-shell:focus-within {
+  border-color: rgba(167, 227, 178, 0.28);
+  box-shadow: 0 14px 30px rgba(12, 22, 16, 0.22);
+}
+
+.chat-input-field {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 56px 10px 14px;
+  border: none;
+  background: transparent;
   color: var(--color-ink);
   caret-color: var(--color-leaf);
   font-size: 0.85rem;
   outline: none;
 }
 
-.chat-input-area input:focus {
-  border-color: rgba(167, 227, 178, 0.28);
+.chat-input-field::placeholder {
+  color: rgba(154, 166, 154, 0.72);
 }
 
-.chat-input-area input:disabled {
+.chat-input-field:disabled {
   opacity: 0.5;
-}
-
-.chat-input-area button {
-  padding: 8px 16px;
-  background: rgba(47, 125, 79, 0.18);
-  color: var(--color-leaf);
-  border: 1px solid rgba(167, 227, 178, 0.18);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.chat-input-area button:hover:not(:disabled) {
-  background: rgba(47, 125, 79, 0.28);
-  border-color: rgba(167, 227, 178, 0.3);
-}
-
-.chat-input-area button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .send-btn-wrapper {
   position: relative;
   display: inline-flex;
+}
+
+.chat-send-btn {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(47, 125, 79, 0.18);
+  color: var(--color-leaf);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+
+.chat-send-btn:hover:not(:disabled) {
+  background: rgba(47, 125, 79, 0.28);
+}
+
+.chat-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .send-tooltip {
@@ -834,8 +869,9 @@ watch(
 }
 
 @media screen and (max-width: 768px) {
-  .chat-input-area input,
-  .chat-setup-input {
+  .chat-input-field,
+  .chat-setup-input,
+  .chat-setup-select {
     font-size: 16px;
   }
 }

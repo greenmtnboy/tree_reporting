@@ -18,11 +18,11 @@ test.describe('Mobile layout', () => {
   test('renders the map and mobile navigation controls', async ({ page }) => {
     await expect(page.locator('.mobile-map-container')).toBeVisible()
     await expect(page.locator('.tree-map canvas')).toBeAttached({ timeout: 15_000 })
-    await expect(page.locator('.mobile-map-actions')).toBeVisible()
+    await expect(page.locator('.mobile-bottom-bar')).toBeVisible()
     await expect(page.getByLabel('Open navigation menu')).toBeVisible()
 
-    await expect(page.locator('.mobile-map-actions')).toContainText('Landmarks')
-    await expect(page.locator('.mobile-map-actions')).toContainText('Chat')
+    await expect(page.locator('.mobile-bottom-bar')).toContainText('Landmarks')
+    await expect(page.locator('.mobile-bottom-bar')).toContainText('Chat')
   })
 
   test('desktop sidebar is not rendered on mobile', async ({ page }) => {
@@ -110,22 +110,41 @@ test.describe('Mobile layout', () => {
     }
   })
 
-  test('overlay closes via close button', async ({ page }) => {
+  test('landmarks overlay toggles closed from the action button', async ({ page }) => {
     await page.locator('.mobile-action-btn').filter({ hasText: 'Landmarks' }).click()
     await expect(page.locator('.mobile-overlay')).toBeVisible()
 
-    await page.locator('.mobile-overlay-close').click()
+    await page.locator('.mobile-action-btn').filter({ hasText: 'Landmarks' }).click()
     await expect(page.locator('.mobile-overlay')).not.toBeVisible({ timeout: 3_000 })
   })
 
-  test('navigation menu switches to analytics and info screens', async ({ page }) => {
+  test('navigation menu trigger gets active treatment when open', async ({ page }) => {
+    const trigger = page.getByLabel('Open navigation menu')
+
+    await trigger.click()
+    await expect(page.locator('.mobile-nav-menu')).toBeVisible()
+    await expect(trigger).toHaveClass(/mobile-nav-trigger--open/)
+
+    await trigger.click()
+    await expect(page.locator('.mobile-nav-menu')).not.toBeVisible({ timeout: 3_000 })
+    await expect(trigger).not.toHaveClass(/mobile-nav-trigger--open/)
+  })
+
+  test('navigation menu switches to analytics, species, and info screens', async ({ page }) => {
     await openMobileMenu(page)
     await page.locator('.mobile-nav-item').filter({ hasText: 'Analytics' }).click()
 
     await expect(page.locator('.mobile-route-screen')).toBeVisible()
     await expect(page.locator('.mobile-route-header')).toContainText('City Summary')
     await expect(page.locator('.summary-page h1')).toContainText('City Summary')
-    await expect(page.locator('.mobile-chat-fab')).toBeVisible()
+    await expect(page.locator('.mobile-bottom-bar')).toContainText('Chat')
+
+    await openMobileMenu(page)
+    await page.locator('.mobile-nav-item').filter({ hasText: 'Species' }).click()
+
+    await expect(page.locator('.mobile-route-header')).toContainText('Species Explorer')
+    await expect(page.locator('.species-page h1')).toContainText('Tree Species Explorer')
+    await expect(page.locator('.mobile-bottom-bar')).toContainText('Chat')
 
     await openMobileMenu(page)
     await page.locator('.mobile-nav-item').filter({ hasText: 'Info' }).click()
