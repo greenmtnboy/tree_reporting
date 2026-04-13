@@ -40,11 +40,14 @@
 
   <!-- Three-pane tree info card -->
   <div v-if="selectedTree" class="tree-card" :style="treeCardStyle" @click.stop>
-    <button class="tree-card-close" @click="closeTreeCard" aria-label="Close">&#x2715;</button>
-
     <div class="tree-card-header">
-      <div class="tree-card-title">{{ selectedTree.tree_name || 'Unknown tree' }}</div>
-      <div v-if="selectedTree.species" class="tree-card-species">{{ selectedTree.species }}</div>
+      <div class="tree-card-header-main">
+        <div class="tree-card-title-wrap">
+          <div class="tree-card-title">{{ selectedTree.tree_name || 'Unknown tree' }}</div>
+          <div v-if="selectedTree.species" class="tree-card-species">{{ selectedTree.species }}</div>
+        </div>
+        <button class="tree-card-close" @click="closeTreeCard" aria-label="Close">&#x2715;</button>
+      </div>
     </div>
 
     <div class="tree-card-body">
@@ -137,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ref, shallowRef, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
 import maplibregl from 'maplibre-gl'
 import { registerCategoryColoredIcons } from '../composables/useTreeCategories'
 import { useFlyTo } from '../composables/useFlyTo'
@@ -231,6 +234,8 @@ const SCROLL_ZOOM_RATE = 1 / 400
 const WASD_ACCEL = 3
 const WASD_MAX_SPEED = 22
 const WASD_FRICTION = 0.82
+const MOBILE_TREE_CARD_EDGE_MARGIN = 12
+const MOBILE_TREE_CARD_POINTER_GAP = 18
 
 const WASD_DIRS: Record<string, [number, number]> = {
   w: [0, -1],
@@ -540,7 +545,7 @@ interface PopupTreeRow {
   tree_id: string
   tree_name: string | null
   species: string | null
-  plant_date: string | null
+  plant_date: string | number | null
   dbh: number | null
   tree_form: string | null
   ecological_fit: string | null
@@ -590,6 +595,43 @@ function selectTree(row: PopupTreeRow, coords: [number, number]): void {
   selectedTree.value = row
   selectedTreeAnchor.value = coords
   updateTreeCardPosition()
+  void ensureTreeCardVisibleOnMobile(coords)
+}
+
+async function ensureTreeCardVisibleOnMobile(coords: [number, number]): Promise<void> {
+  if (!props.simplified || !mapRef.value || typeof window === 'undefined') return
+  if (!window.matchMedia('(max-width: 640px)').matches) return
+
+  await nextTick()
+  if (!mapRef.value) return
+
+  const container = mapRef.value.getContainer()
+  const viewportHeight = container.clientHeight
+  if (!viewportHeight) return
+
+  const containerRect = container.getBoundingClientRect()
+  const cardEl = container.parentElement?.querySelector('.tree-card') as HTMLElement | null
+  const headerEl = container.parentElement?.querySelector('.city-selector--mobile') as HTMLElement | null
+  const bottomBarEl = document.querySelector('.mobile-bottom-bar') as HTMLElement | null
+
+  const topSafe = headerEl
+    ? (headerEl.getBoundingClientRect().bottom - containerRect.top) + MOBILE_TREE_CARD_EDGE_MARGIN
+    : MOBILE_TREE_CARD_EDGE_MARGIN
+  const bottomSafe = bottomBarEl
+    ? (bottomBarEl.getBoundingClientRect().top - containerRect.top) - MOBILE_TREE_CARD_EDGE_MARGIN
+    : viewportHeight - MOBILE_TREE_CARD_EDGE_MARGIN
+  const cardHeight = cardEl?.offsetHeight ?? Math.round(viewportHeight * 0.65)
+  const minAnchorY = topSafe + cardHeight + MOBILE_TREE_CARD_POINTER_GAP
+  const maxAnchorY = Math.max(MOBILE_TREE_CARD_EDGE_MARGIN, bottomSafe)
+  const desiredAnchorY = Math.max(minAnchorY, maxAnchorY)
+
+  const targetYOffset = Math.round(desiredAnchorY - viewportHeight / 2)
+  mapRef.value.easeTo({
+    center: coords,
+    offset: [0, targetYOffset],
+    duration: 400,
+    essential: true,
+  })
 }
 
 function closeTreeCard(): void {
@@ -654,14 +696,37 @@ function formatDbh(value: number | null) {
   return `${value.toFixed(2)}"`
 }
 
-function formatPlantDate(value: string | null) {
-  if (!value) return null
-  const normalized = String(value)
+function formatPlantDate(value: string | number | null) {
+  if (value == null || value === '') return null
+
+  const normalizeDate = (date: Date): string | null => {
+    if (Number.isNaN(date.getTime())) return null
+    return date.toISOString().slice(0, 10)
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const timestamp = value < 1e12 ? value * 1000 : value
+    return normalizeDate(new Date(timestamp))
+  }
+
+  const normalized = String(value).trim()
   if (!normalized) return null
-  return normalized.split('T')[0]?.split(' ')[0] ?? normalized
+
+  if (/^\d+$/.test(normalized)) {
+    const numeric = Number(normalized)
+    if (Number.isFinite(numeric)) {
+      const timestamp = numeric < 1e12 ? numeric * 1000 : numeric
+      return normalizeDate(new Date(timestamp))
+    }
+  }
+
+  const simpleDate = normalized.split('T')[0]?.split(' ')[0]
+  if (simpleDate && /^\d{4}-\d{2}-\d{2}$/.test(simpleDate)) return simpleDate
+
+  return normalizeDate(new Date(normalized)) ?? normalized
 }
 
-function formatTreeAge(value: string | null) {
+function formatTreeAge(value: string | number | null) {
   const dateStr = formatPlantDate(value)
   if (!dateStr) return null
   const planted = new Date(dateStr)
@@ -1669,10 +1734,6 @@ onUnmounted(() => {
 }
 
 .tree-card-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 2;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(167, 227, 178, 0.14);
   border-radius: 50%;
@@ -1681,6 +1742,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
   color: rgba(237, 242, 235, 0.58);
   font-size: 0.72rem;
   cursor: pointer;
@@ -1697,11 +1759,22 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.tree-card-header-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tree-card-title-wrap {
+  min-width: 0;
+  flex: 1;
+}
+
 .tree-card-title {
   font-size: 1.08rem;
   font-weight: 700;
   color: var(--color-ink, #edf2eb);
-  padding-right: 28px;
   line-height: 1.2;
 }
 
@@ -1838,18 +1911,78 @@ onUnmounted(() => {
 @media (max-width: 640px) {
   .tree-card {
     width: calc(100% - 16px);
-    max-height: 65vh;
+    max-height: 85vh;
     border-radius: 12px;
+    overflow: hidden;
+  }
+  .tree-card-header {
+    padding: 10px 12px 8px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: linear-gradient(160deg, rgba(30, 34, 41, 0.98), rgba(20, 24, 29, 0.98));
+  }
+  .tree-card-header-main {
+    gap: 10px;
+  }
+  .tree-card-title {
+    font-size: 0.96rem;
+    line-height: 1.15;
+  }
+  .tree-card-species {
+    margin-top: 2px;
+    font-size: 0.72rem;
+  }
+  .tree-card-close {
+    width: 22px;
+    height: 22px;
+    font-size: 0.64rem;
   }
   .tree-card-body {
     grid-template-columns: 1fr;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .tree-card-pane {
+    padding: 10px 12px;
+    gap: 6px;
+    overflow-y: visible;
+  }
+  .tree-card-section-label {
+    font-size: 0.58rem;
+    letter-spacing: 0.1em;
+  }
+  .tc-grid {
+    gap: 3px 8px;
+  }
+  .tc-label {
+    font-size: 0.62rem;
+  }
+  .tc-value {
+    font-size: 0.76rem;
+    line-height: 1.3;
+  }
+  .tc-description {
+    font-size: 0.72rem;
+    line-height: 1.42;
   }
   .tree-card-pane--tree,
   .tree-card-pane--species {
     border-right: none;
     border-bottom: 1px solid rgba(167, 227, 178, 0.08);
   }
-  .tc-photo { height: 140px; }
+  .tc-photo-wrap {
+    overflow: visible;
+  }
+  .tc-photo {
+    height: auto;
+    min-height: 196px;
+    aspect-ratio: 4 / 3;
+  }
+  .tc-photo-placeholder {
+    min-height: 156px;
+    height: auto;
+  }
 }
 
 .landmark-popup .maplibregl-popup-content {

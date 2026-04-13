@@ -110,12 +110,24 @@ test.describe('Mobile layout', () => {
     }
   })
 
-  test('overlay closes via close button', async ({ page }) => {
+  test('landmarks overlay toggles closed from the action button', async ({ page }) => {
     await page.locator('.mobile-action-btn').filter({ hasText: 'Landmarks' }).click()
     await expect(page.locator('.mobile-overlay')).toBeVisible()
 
-    await page.locator('.mobile-overlay-close').click()
+    await page.locator('.mobile-action-btn').filter({ hasText: 'Landmarks' }).click()
     await expect(page.locator('.mobile-overlay')).not.toBeVisible({ timeout: 3_000 })
+  })
+
+  test('navigation menu trigger gets active treatment when open', async ({ page }) => {
+    const trigger = page.getByLabel('Open navigation menu')
+
+    await trigger.click()
+    await expect(page.locator('.mobile-nav-menu')).toBeVisible()
+    await expect(trigger).toHaveClass(/mobile-nav-trigger--open/)
+
+    await trigger.click()
+    await expect(page.locator('.mobile-nav-menu')).not.toBeVisible({ timeout: 3_000 })
+    await expect(trigger).not.toHaveClass(/mobile-nav-trigger--open/)
   })
 
   test('navigation menu switches to analytics, species, and info screens', async ({ page }) => {
