@@ -27,6 +27,7 @@ const WEB_MERCATOR_MAX = 20037508.342789244
 const WEB_MERCATOR_WORLD = WEB_MERCATOR_MAX * 2
 const MAX_TILE_CACHE_ENTRIES = 1536
 const MAX_PARALLEL_TILE_WORK = 3
+const PREPARED_FEATURE_TABLE_ZOOM = 15
 const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
 const COLOR_MAP_TABLE = '__tree_color_map'
 
@@ -741,7 +742,7 @@ async function ensureInit(city?: string): Promise<void> {
 }
 
 async function ensurePreparedFeatureTableForZoom(z: number, baseQuery: string): Promise<void> {
-  if (!conn || z !== 15) return
+  if (!conn || z !== PREPARED_FEATURE_TABLE_ZOOM) return
 
   const rev = tileQueryRevision
   const key = featureTableBuildKey(rev, z)
@@ -813,6 +814,9 @@ WHERE xtile >= 0
 
 async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, baseQuery: string): Promise<void> {
   if (!conn) return
+  if (z === PREPARED_FEATURE_TABLE_ZOOM) {
+    await ensurePreparedFeatureTableForZoom(PREPARED_FEATURE_TABLE_ZOOM, baseQuery)
+  }
   const blockSize = neighborhoodBlockSizeForZoom(z)
   if (blockSize <= 1) return
 
@@ -854,13 +858,13 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   }
 
   const request = (async () => {
-    const sql = z === 15 ? `
+    const sql = z === PREPARED_FEATURE_TABLE_ZOOM ? `
 WITH rows AS (
   SELECT
     xtile,
     ytile,
     feature
-  FROM ${featureTableName(15)}
+  FROM ${featureTableName(PREPARED_FEATURE_TABLE_ZOOM)}
   WHERE xtile BETWEEN ${minX} AND ${maxX}
     AND ytile BETWEEN ${minY} AND ${maxY}
 )
@@ -1515,8 +1519,8 @@ async function prefetchVisibleDetailTilesAtZoom(z: number, rangeOverride?: TileB
   if (prefetchedVisibleRangeSigByZoom.get(z) === sig) return 'deduped'
 
   const baseQuery = effectiveBaseQuery(tileQuerySql)
-  if (z === 15) {
-    await ensurePreparedFeatureTableForZoom(15, baseQuery)
+  if (z === PREPARED_FEATURE_TABLE_ZOOM) {
+    await ensurePreparedFeatureTableForZoom(PREPARED_FEATURE_TABLE_ZOOM, baseQuery)
   }
 
   const centerX = Math.floor((range.minX + range.maxX) / 2)
@@ -1541,23 +1545,30 @@ async function prewarmLodCaches(): Promise<void> {
   const baseQuery = effectiveBaseQuery(tileQuerySql)
   prewarmPromise = (async () => {
     const viewport = activeViewportCenter
-    const focusZoom = Math.max(15, Math.min(19, Math.round(activeViewportZoom)))
+    const focusZoom = Math.max(PREPARED_FEATURE_TABLE_ZOOM, Math.min(19, Math.round(activeViewportZoom)))
+
+    if (focusZoom === PREPARED_FEATURE_TABLE_ZOOM) {
+      await ensurePreparedFeatureTableForZoom(PREPARED_FEATURE_TABLE_ZOOM, baseQuery)
+    }
 
     if (viewport) {
       const cFocus = lngLatToTile(viewport.lng, viewport.lat, focusZoom)
       await ensureNeighborhoodBatchTiles(focusZoom, cFocus.x, cFocus.y, baseQuery)
 
       const zMinusOne = focusZoom - 1
-      if (zMinusOne >= 15) {
+      if (zMinusOne >= PREPARED_FEATURE_TABLE_ZOOM) {
+        if (zMinusOne === PREPARED_FEATURE_TABLE_ZOOM) {
+          await ensurePreparedFeatureTableForZoom(PREPARED_FEATURE_TABLE_ZOOM, baseQuery)
+        }
         const cMinusOne = lngLatToTile(viewport.lng, viewport.lat, zMinusOne)
         await ensureNeighborhoodBatchTiles(zMinusOne, cMinusOne.x, cMinusOne.y, baseQuery)
       }
     }
 
-    await ensurePreparedFeatureTableForZoom(15, baseQuery)
+    await ensurePreparedFeatureTableForZoom(PREPARED_FEATURE_TABLE_ZOOM, baseQuery)
     if (viewport) {
-      const c15 = lngLatToTile(viewport.lng, viewport.lat, 15)
-      await ensureNeighborhoodBatchTiles(15, c15.x, c15.y, baseQuery)
+      const c15 = lngLatToTile(viewport.lng, viewport.lat, PREPARED_FEATURE_TABLE_ZOOM)
+      await ensureNeighborhoodBatchTiles(PREPARED_FEATURE_TABLE_ZOOM, c15.x, c15.y, baseQuery)
     }
 
     await ensureZoomBatchTiles(14, baseQuery, 32)
