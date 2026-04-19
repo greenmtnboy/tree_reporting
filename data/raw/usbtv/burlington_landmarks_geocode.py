@@ -14,7 +14,6 @@ interrupt and resume without re-hitting Nominatim.
 
 import csv
 import time
-import sys
 from pathlib import Path
 import requests
 from bs4 import BeautifulSoup

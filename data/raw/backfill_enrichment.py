@@ -72,7 +72,8 @@ from enrichment._tree_enrichment_helpers import (
 )
 
 # Import the pieces we reuse from tree_enrichment without re-running its __main__
-import importlib.util as _ilu, pathlib as _pl
+import importlib.util as _ilu
+import pathlib as _pl
 _te_spec = _ilu.spec_from_file_location("tree_enrichment", _pl.Path(__file__).parent / "tree_enrichment.py")
 _te = _ilu.module_from_spec(_te_spec)  # type: ignore[arg-type]
 _te_spec.loader.exec_module(_te)  # type: ignore[union-attr]
@@ -270,7 +271,7 @@ def main() -> None:
         "--source",
         default=ENRICHMENT_PARQUET,
         metavar="PATH_OR_URL",
-        help=f"Parquet to read from (default: remote GCS). Use a local path for checkpoint-based runs.",
+        help="Parquet to read from (default: remote GCS). Use a local path for checkpoint-based runs.",
     )
     parser.add_argument(
         "--output",
@@ -462,7 +463,7 @@ def main() -> None:
                         file=sys.stderr,
                     )
         else:
-            print(f"    [no change]", file=sys.stderr)
+            print("    [no change]", file=sys.stderr)
 
         # Periodic checkpoint
         if args.flush_every and (i + 1) % args.flush_every == 0:
@@ -479,7 +480,6 @@ def main() -> None:
 
 def _write_table(rows: list[dict], path: str) -> None:
     """Rebuild is_complete and write the table to *path*."""
-    from enrichment._tree_enrichment_models import TreeEnrichment
     import datetime
 
     schema_names = {f.name for f in SCHEMA}

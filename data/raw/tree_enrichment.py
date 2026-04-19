@@ -692,7 +692,7 @@ if __name__ == "__main__":
         if missing:
             print(f"    [incomplete] missing: {', '.join(missing)}", file=sys.stderr)
         else:
-            print(f"    [complete]", file=sys.stderr)
+            print("    [complete]", file=sys.stderr)
         scientific_name = parse_scientific_name(q_species)
         genus, species_epithet = split_scientific_parts(scientific_name)
         lifespan_min_years, lifespan_max_years = parse_lifespan_range(enrichment.lifespan_years)

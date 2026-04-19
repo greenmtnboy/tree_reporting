@@ -7,7 +7,7 @@
 import sys
 import requests
 import pyarrow as pa
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import emit, normalize_species, validate_coordinates

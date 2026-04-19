@@ -18,7 +18,6 @@ Field mapping:
 """
 
 import sys
-import requests
 import pyarrow as pa
 from pathlib import Path
 from typing import Any
