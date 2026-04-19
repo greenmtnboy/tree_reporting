@@ -175,7 +175,7 @@ def main() -> None:
 
     # 6x6 neighborhood test around SF center-like tile at z17.
     center = con.execute(
-        f"""
+        """
         SELECT
           CAST(floor(((-122.44 + 180.0) / 360.0) * pow(2, 17)) AS INTEGER) AS cx,
           CAST(floor(((1.0 - ln(tan(radians(37.76)) + 1.0 / cos(radians(37.76))) / pi()) / 2.0) * pow(2, 17)) AS INTEGER) AS cy

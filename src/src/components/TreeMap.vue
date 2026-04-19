@@ -810,6 +810,16 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
 function bindTreeInteractions() {
   if (!mapRef.value || treeInteractionsBound) return
   const interactiveLayers = props.simplified ? ['trees-circle'] : ['trees-icon', 'trees-circle']
+  const updateTreeCursor = (point?: maplibregl.PointLike) => {
+    if (!mapRef.value) return
+    if (!point) {
+      mapRef.value.getCanvas().style.cursor = ''
+      return
+    }
+    const features = mapRef.value.queryRenderedFeatures(point, { layers: interactiveLayers })
+    mapRef.value.getCanvas().style.cursor = features.length > 0 ? 'pointer' : ''
+  }
+
   mapRef.value.on('click', (e) => {
     if (!mapRef.value) return
     const features = mapRef.value.queryRenderedFeatures(e.point, { layers: interactiveLayers })
@@ -818,10 +828,8 @@ function bindTreeInteractions() {
     const picked = (iconFeature ?? features[0]) as unknown as GeoJSON.Feature
     void showTreeCard(picked, [e.lngLat.lng, e.lngLat.lat])
   })
-  for (const layer of interactiveLayers) {
-    mapRef.value.on('mouseenter', layer, () => { mapRef.value!.getCanvas().style.cursor = 'pointer' })
-    mapRef.value.on('mouseleave', layer, () => { mapRef.value!.getCanvas().style.cursor = '' })
-  }
+  mapRef.value.on('mousemove', (e) => { updateTreeCursor(e.point) })
+  mapRef.value.on('mouseout', () => { updateTreeCursor() })
   treeInteractionsBound = true
 }
 

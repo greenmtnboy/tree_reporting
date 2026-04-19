@@ -18,7 +18,6 @@ Field mapping:
 """
 
 import sys
-import requests
 import pyarrow as pa
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))

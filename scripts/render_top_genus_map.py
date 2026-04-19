@@ -21,8 +21,6 @@ import duckdb
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.offsetbox import AnchoredText
-from matplotlib.patches import FancyBboxPatch
 import matplotlib.patheffects as pe
 import numpy as np
 from scipy.ndimage import gaussian_filter

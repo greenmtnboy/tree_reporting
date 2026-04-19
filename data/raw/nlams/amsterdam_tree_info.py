@@ -27,7 +27,6 @@ Coordinate notes:
 """
 
 import sys
-import requests
 import pyarrow as pa
 import pyarrow.compute as pc
 from datetime import date
