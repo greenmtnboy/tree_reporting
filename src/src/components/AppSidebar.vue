@@ -84,6 +84,18 @@
         </div>
       </div>
     </div>
+    <router-link to="/profile" class="sidebar-profile" :class="{ 'is-active': route.name === 'profile' }">
+      <span class="sidebar-profile__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21v-1a7 7 0 0 1 7-7h2a7 7 0 0 1 7 7v1" />
+        </svg>
+      </span>
+      <span class="sidebar-profile__copy">
+        <strong>{{ profileLabel }}</strong>
+        <span v-if="profileSubLabel" class="sidebar-profile__sub">{{ profileSubLabel }}</span>
+      </span>
+    </router-link>
   </aside>
 </template>
 
@@ -93,15 +105,26 @@ import { useRoute } from 'vue-router'
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData } from '../composables/useMapData'
+import { useAuth } from '../composables/useAuth'
 import type { Landmark } from '../types'
 
 const { landmarks, loading: landmarkLoading } = useLandmarkData()
 const { flyTo } = useFlyTo()
 const { selectedCity } = useMapData()
+const { user, authReady, isAnonymous } = useAuth()
 const route = useRoute()
 
 const search = ref('')
 const showLandmarksSection = computed(() => route.name !== 'summary' && route.name !== 'species')
+
+const profileLabel = computed(() => {
+  if (!authReady.value) return 'Sign in'
+  return user.value ? 'Profile' : 'Sign in'
+})
+const profileSubLabel = computed(() => {
+  if (!authReady.value || !user.value) return null
+  return isAnonymous.value ? 'anonymous' : null
+})
 
 const routeQuery = computed(() => ({ city: selectedCity.value }))
 const mapRoute = computed(() => ({ path: '/', query: routeQuery.value }))
@@ -256,5 +279,68 @@ function handleClick(lm: Landmark) {
 .source-link:hover {
   opacity: 1;
   color: var(--color-leaf);
+}
+
+.sidebar-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding: 14px 20px;
+  border-top: 1px solid rgba(167, 227, 178, 0.1);
+  color: rgba(237, 242, 235, 0.78);
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
+  position: relative;
+  z-index: 1;
+}
+
+.sidebar-profile:hover {
+  color: var(--color-ink);
+  background: rgba(47, 125, 79, 0.08);
+}
+
+.sidebar-profile.is-active {
+  color: var(--color-leaf);
+}
+
+.sidebar-profile__icon {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(167, 227, 178, 0.14);
+  background: rgba(58, 64, 72, 0.28);
+  color: var(--color-moss);
+  flex-shrink: 0;
+}
+
+.sidebar-profile.is-active .sidebar-profile__icon {
+  color: var(--color-leaf);
+  border-color: rgba(167, 227, 178, 0.35);
+}
+
+.sidebar-profile__copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.sidebar-profile__copy strong {
+  font-family: var(--font-display);
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sidebar-profile__sub {
+  font-size: 0.68rem;
+  color: var(--color-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-top: 2px;
 }
 </style>

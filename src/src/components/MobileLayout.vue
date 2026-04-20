@@ -121,7 +121,7 @@ import { useMapData } from '../composables/useMapData'
 import type { Landmark } from '../types'
 
 type MobileOverlay = 'landmarks' | 'chat' | null
-type MobileScreen = 'map' | 'summary' | 'species' | 'info'
+type MobileScreen = 'map' | 'summary' | 'species' | 'info' | 'profile'
 type MobileAction = {
   key: 'landmarks' | 'chat'
   label: string
@@ -143,6 +143,7 @@ const currentScreen = computed<MobileScreen>(() => {
   if (route.name === 'summary') return 'summary'
   if (route.name === 'species') return 'species'
   if (route.name === 'info') return 'info'
+  if (route.name === 'profile') return 'profile'
   return 'map'
 })
 
@@ -168,6 +169,7 @@ const navItems: Array<{ screen: MobileScreen; label: string; copy: string }> = [
   { screen: 'summary', label: 'Analytics', copy: 'Inspect city summary charts' },
   { screen: 'species', label: 'Species', copy: 'Browse taxa, traits, and filters' },
   { screen: 'info', label: 'Info', copy: 'Read sources and project notes' },
+  { screen: 'profile', label: 'Profile', copy: 'Sign in, privacy, and data use' },
 ]
 
 const visibleActions = computed<MobileAction[]>(() => {
