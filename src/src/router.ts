@@ -3,6 +3,7 @@ import MapView from './views/MapView.vue'
 import InfoView from './views/InfoView.vue'
 import SummaryView from './views/SummaryView.vue'
 import SpeciesView from './views/SpeciesView.vue'
+import ProfileView from './views/ProfileView.vue'
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -11,5 +12,6 @@ export const router = createRouter({
     { path: '/summary', name: 'summary', component: SummaryView },
     { path: '/species', name: 'species', component: SpeciesView },
     { path: '/info', name: 'info', component: InfoView },
+    { path: '/profile', name: 'profile', component: ProfileView },
   ],
 })

@@ -22,6 +22,8 @@ export default defineConfig({
     dedupe: ['vue', 'pinia'],
   },
   server: {
+    port: 5174,
+    strictPort: true,
     sourcemapIgnoreList: (sourcePath) => sourcePath.includes('@duckdb/duckdb-wasm'),
   },
   optimizeDeps: {
