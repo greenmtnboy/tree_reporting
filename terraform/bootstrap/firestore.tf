@@ -34,3 +34,45 @@ resource "google_firebaserules_release" "firestore" {
     replace_triggered_by = [google_firebaserules_ruleset.firestore]
   }
 }
+
+resource "google_firestore_index" "submissions_by_user_recent" {
+  project    = var.project_id
+  database   = google_firestore_database.default.name
+  collection = "submissions"
+
+  fields {
+    field_path = "userId"
+    order      = "ASCENDING"
+  }
+
+  fields {
+    field_path = "submittedAt"
+    order      = "DESCENDING"
+  }
+
+  fields {
+    field_path = "__name__"
+    order      = "DESCENDING"
+  }
+}
+
+resource "google_firestore_index" "checkins_by_user_recent" {
+  project    = var.project_id
+  database   = google_firestore_database.default.name
+  collection = "checkins"
+
+  fields {
+    field_path = "userId"
+    order      = "ASCENDING"
+  }
+
+  fields {
+    field_path = "at"
+    order      = "DESCENDING"
+  }
+
+  fields {
+    field_path = "__name__"
+    order      = "DESCENDING"
+  }
+}

@@ -24,9 +24,14 @@
             <dt>Account ID</dt>
             <dd><code>{{ user.uid }}</code></dd>
           </dl>
-          <button class="btn-secondary" :disabled="pending" @click="handleSignOut">
-            Sign out
-          </button>
+          <div class="profile-actions">
+            <router-link class="btn-primary" :to="{ name: 'contributions' }">
+              My contributions
+            </router-link>
+            <button class="btn-secondary" :disabled="pending" @click="handleSignOut">
+              Sign out
+            </button>
+          </div>
         </template>
       </section>
 
@@ -182,6 +187,12 @@ async function handleSignOut() {
   color: var(--color-leaf);
 }
 
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .btn-primary,
 .btn-secondary {
   align-self: flex-start;
@@ -192,6 +203,9 @@ async function handleSignOut() {
   text-transform: uppercase;
   border: 1px solid rgba(167, 227, 178, 0.3);
   cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
