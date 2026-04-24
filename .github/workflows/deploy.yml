@@ -39,6 +39,8 @@ jobs:
 
       - name: Build
         working-directory: src
+        env:
+          GITHUB_PAGES: 'true'
         run: pnpm build
 
       - name: Setup Pages

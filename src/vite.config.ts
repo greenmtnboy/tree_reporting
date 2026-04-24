@@ -13,7 +13,7 @@ const stubMotherDuck = {
 }
 
 export default defineConfig({
-  base: process.env.NODE_ENV === 'production' ? '/sf_tree_reporting/' : '/',
+  base: process.env.GITHUB_PAGES === 'true' ? '/sf_tree_reporting/' : '/',
   plugins: [vue(), stubMotherDuck],
   resolve: {
     alias: {
