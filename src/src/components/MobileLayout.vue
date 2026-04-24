@@ -37,6 +37,7 @@
           }"
           :aria-label="action.ariaLabel"
           :aria-pressed="action.key !== 'submit' ? activeOverlay === action.key : undefined"
+          :data-testid="`mobile-action-${action.key}`"
           @click="action.onClick"
         >
           <span v-if="action.key === 'submit'" class="mobile-action-btn__plus" aria-hidden="true">+</span>
@@ -63,6 +64,7 @@
           class="mobile-nav-trigger"
           :class="{ 'mobile-nav-trigger--open': navMenuOpen }"
           aria-label="Open navigation menu"
+          data-testid="mobile-nav-trigger"
           @click="navMenuOpen = !navMenuOpen"
         >
           <span></span>
@@ -76,6 +78,12 @@
       <div v-if="activeOverlay === 'landmarks'" class="mobile-overlay">
         <div class="mobile-overlay-header">
           <span class="mobile-overlay-title">Search Landmarks</span>
+          <button
+            class="mobile-overlay-close"
+            aria-label="Close overlay"
+            data-testid="overlay-close"
+            @click="activeOverlay = null"
+          >×</button>
         </div>
         <div class="mobile-overlay-body">
           <input
@@ -105,6 +113,12 @@
       <div v-if="activeOverlay === 'chat'" class="mobile-overlay mobile-chat-overlay">
         <div class="mobile-overlay-header">
           <span class="mobile-overlay-title">{{ chatOverlayTitle }}</span>
+          <button
+            class="mobile-overlay-close"
+            aria-label="Close overlay"
+            data-testid="overlay-close"
+            @click="activeOverlay = null"
+          >×</button>
         </div>
         <ChatPanel />
       </div>
@@ -562,6 +576,36 @@ function handleLandmarkClick(lm: Landmark) {
   color: var(--color-ink);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.mobile-overlay-close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(167, 227, 178, 0.14);
+  background: rgba(28, 31, 36, 0.72);
+  color: rgba(237, 242, 235, 0.82);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.mobile-overlay-close:hover,
+.mobile-overlay-close:focus-visible {
+  background: rgba(47, 125, 79, 0.24);
+  border-color: rgba(167, 227, 178, 0.26);
+  color: var(--color-leaf);
+  outline: none;
+}
+
+.mobile-overlay-close:active {
+  background: rgba(47, 125, 79, 0.36);
 }
 
 /* Search overlay body */

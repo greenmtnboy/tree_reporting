@@ -10,7 +10,7 @@ const CITY_CODE: Record<string, string> = {
 }
 
 async function waitForManualCitySelection(page: Page, timeoutMs: number): Promise<void> {
-  await expect(page.getByLabel('Select city')).toBeEnabled({ timeout: timeoutMs })
+  await expect(page.getByTestId('city-select')).toBeEnabled({ timeout: timeoutMs })
 }
 
 /**
@@ -26,7 +26,7 @@ async function assertCitySwitch(page: Page, cityName: string, timeoutMs: number)
   const cityCode = CITY_CODE[cityName]
   if (!cityCode) throw new Error(`Unknown city name "${cityName}" — add it to CITY_CODE`)
 
-  const citySelect = page.getByLabel('Select city')
+  const citySelect = page.getByTestId('city-select')
   await citySelect.selectOption(cityCode)
 
   // Wait for the dropdown value to reflect the selected city.
@@ -77,7 +77,7 @@ test.describe('City navigation — desktop', () => {
 
   test('switching city during initial animation unlocks the chat', async ({ page }) => {
     test.setTimeout(180_000)
-    const citySelect = page.getByLabel('Select city')
+    const citySelect = page.getByTestId('city-select')
     await expect(citySelect).toBeVisible({ timeout: 30_000 })
     await waitForManualCitySelection(page, 30_000)
     await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
@@ -113,7 +113,7 @@ test.describe('City navigation — mobile', () => {
 
   test('switching city during initial load unlocks the chat', async ({ page }) => {
     test.setTimeout(120_000)
-    const citySelect = page.getByLabel('Select city')
+    const citySelect = page.getByTestId('city-select')
     await expect(citySelect).toBeVisible({ timeout: 30_000 })
     await waitForManualCitySelection(page, 30_000)
     await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
