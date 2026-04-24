@@ -8,9 +8,11 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: process.env.CI ? 1 : undefined,
+  globalTimeout: 15 * 60 * 1000,
 
   reporter: process.env.CI
     ? [
+        ['list'],
         ['github'],
         ['html', { outputFolder: 'playwright-report', open: 'never' }],
       ]
@@ -35,5 +37,6 @@ export default defineConfig({
     command: `pnpm preview --port ${PORT}`,
     port: PORT,
     reuseExistingServer: !process.env.CI,
+    timeout: 60_000,
   },
 })
