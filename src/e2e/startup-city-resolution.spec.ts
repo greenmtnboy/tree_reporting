@@ -32,7 +32,7 @@ async function waitForInitialHydratedCity(page: Page, expectedCity: string) {
     { timeout: 90_000 },
   )
 
-  await expect(page.getByLabel('Select city')).toHaveValue(expectedCity, { timeout: 30_000 })
+  await expect(page.getByTestId('city-select')).toHaveValue(expectedCity, { timeout: 30_000 })
 
   return page.evaluate(() => window.__treesLoadedForHistory ?? [])
 }

@@ -6,11 +6,13 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: 0,
   workers: process.env.CI ? 1 : undefined,
+  globalTimeout: 15 * 60 * 1000,
 
   reporter: process.env.CI
     ? [
+        ['list'],
         ['github'],
         ['html', { outputFolder: 'playwright-report', open: 'never' }],
       ]
@@ -21,7 +23,9 @@ export default defineConfig({
 
   use: {
     baseURL: `http://localhost:${PORT}`,
-    trace: 'on-first-retry',
+    trace: process.env.CI ? 'retain-on-failure' : 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: process.env.CI ? 'retain-on-failure' : 'off',
   },
 
   projects: [
@@ -35,5 +39,6 @@ export default defineConfig({
     command: `pnpm preview --port ${PORT}`,
     port: PORT,
     reuseExistingServer: !process.env.CI,
+    timeout: 60_000,
   },
 })

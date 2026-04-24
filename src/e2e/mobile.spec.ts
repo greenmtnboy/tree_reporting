@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 async function openMobileMenu(page: import('@playwright/test').Page) {
-  await page.getByLabel('Open navigation menu').click()
+  await page.getByTestId('mobile-nav-trigger').click()
   await expect(page.locator('.mobile-nav-menu')).toBeVisible()
 }
 
@@ -19,7 +19,7 @@ test.describe('Mobile layout', () => {
     await expect(page.locator('.mobile-map-container')).toBeVisible()
     await expect(page.locator('.tree-map canvas')).toBeAttached({ timeout: 15_000 })
     await expect(page.locator('.mobile-bottom-bar')).toBeVisible()
-    await expect(page.getByLabel('Open navigation menu')).toBeVisible()
+    await expect(page.getByTestId('mobile-nav-trigger')).toBeVisible()
 
     await expect(page.locator('.mobile-bottom-bar')).toContainText('Landmarks')
     await expect(page.locator('.mobile-bottom-bar')).toContainText('Chat')
@@ -30,7 +30,7 @@ test.describe('Mobile layout', () => {
   })
 
   test('landmarks overlay opens and shows search', async ({ page }) => {
-    await page.locator('.mobile-action-btn').filter({ hasText: 'Landmarks' }).click()
+    await page.getByTestId('mobile-action-landmarks').click()
 
     const overlay = page.locator('.mobile-overlay')
     await expect(overlay).toBeVisible()
@@ -42,7 +42,7 @@ test.describe('Mobile layout', () => {
   })
 
   test('landmarks overlay filters results', async ({ page }) => {
-    await page.locator('.mobile-action-btn').filter({ hasText: 'Landmarks' }).click()
+    await page.getByTestId('mobile-action-landmarks').click()
 
     const items = page.locator('.mobile-landmark-item')
     await expect(items.first()).toBeVisible({ timeout: 10_000 })
@@ -59,7 +59,7 @@ test.describe('Mobile layout', () => {
   })
 
   test('clicking a landmark closes overlay and moves map', async ({ page }) => {
-    await page.locator('.mobile-action-btn').filter({ hasText: 'Landmarks' }).click()
+    await page.getByTestId('mobile-action-landmarks').click()
 
     const firstItem = page.locator('.mobile-landmark-item').first()
     await expect(firstItem).toBeVisible({ timeout: 10_000 })
@@ -110,16 +110,16 @@ test.describe('Mobile layout', () => {
     }
   })
 
-  test('landmarks overlay toggles closed from the action button', async ({ page }) => {
-    await page.locator('.mobile-action-btn').filter({ hasText: 'Landmarks' }).click()
+  test('landmarks overlay closes from the header close button', async ({ page }) => {
+    await page.getByTestId('mobile-action-landmarks').click()
     await expect(page.locator('.mobile-overlay')).toBeVisible()
 
-    await page.locator('.mobile-action-btn').filter({ hasText: 'Landmarks' }).click()
+    await page.getByTestId('overlay-close').click()
     await expect(page.locator('.mobile-overlay')).not.toBeVisible({ timeout: 3_000 })
   })
 
   test('navigation menu trigger gets active treatment when open', async ({ page }) => {
-    const trigger = page.getByLabel('Open navigation menu')
+    const trigger = page.getByTestId('mobile-nav-trigger')
 
     await trigger.click()
     await expect(page.locator('.mobile-nav-menu')).toBeVisible()
@@ -157,7 +157,7 @@ test.describe('Mobile layout', () => {
     await openMobileMenu(page)
     await page.locator('.mobile-nav-item').filter({ hasText: 'Analytics' }).click()
 
-    await page.getByLabel('Open analytics chat').click()
+    await page.getByTestId('mobile-action-chat').click()
     await expect(page.locator('.mobile-chat-overlay')).toBeVisible()
     await expect(page.locator('.mobile-chat-overlay')).toContainText('Analytics Assistant')
   })

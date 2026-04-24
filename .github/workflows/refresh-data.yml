@@ -12,7 +12,7 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    environment: prod
+    environment: prod-refresh
     steps:
       - name: Checkout
         uses: actions/checkout@v4

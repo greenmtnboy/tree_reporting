@@ -1,5 +1,12 @@
 <template>
-  <select class="city-select" :value="displayedCity" :disabled="isDisabled" aria-label="Select city" @change="handleChange">
+  <select
+    class="city-select"
+    :value="displayedCity"
+    :disabled="isDisabled"
+    aria-label="Select city"
+    data-testid="city-select"
+    @change="handleChange"
+  >
     <option v-for="{ code, label } in sortedCities" :key="code" :value="code">
       {{ label }}
     </option>

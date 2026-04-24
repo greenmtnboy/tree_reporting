@@ -46,7 +46,14 @@
           <div class="tree-card-title">{{ selectedTree.tree_name || 'Unknown tree' }}</div>
           <div v-if="selectedTree.species" class="tree-card-species">{{ selectedTree.species }}</div>
         </div>
-        <button class="tree-card-close" @click="closeTreeCard" aria-label="Close">&#x2715;</button>
+        <div class="tree-card-header-actions">
+          <button
+            v-if="canCheckInToSelectedTree"
+            class="tree-card-checkin"
+            @click="openCheckin"
+          >Check in</button>
+          <button class="tree-card-close" @click="closeTreeCard" aria-label="Close">&#x2715;</button>
+        </div>
       </div>
     </div>
 
@@ -137,6 +144,15 @@
       </div>
     </div>
   </div>
+
+  <CheckinDialog
+    v-if="checkinDialog"
+    :tree-id="checkinDialog.treeId"
+    :tree-lat="checkinDialog.lat"
+    :tree-lng="checkinDialog.lng"
+    @close="checkinDialog = null"
+    @success="checkinDialog = null"
+  />
 </template>
 
 <script setup lang="ts">
@@ -144,7 +160,7 @@ import { ref, shallowRef, onMounted, onUnmounted, watch, computed, nextTick } fr
 import maplibregl from 'maplibre-gl'
 import { registerCategoryColoredIcons } from '../composables/useTreeCategories'
 import { useFlyTo } from '../composables/useFlyTo'
-import { useMapData, CITY_CONFIG, closestCityTo, type CityCode } from '../composables/useMapData'
+import { useMapData, CITY_CONFIG, closestCityTo, haversineKm, type CityCode } from '../composables/useMapData'
 import { getCityBiome, getCityEcoregionId } from '../composables/dashboardContextSource'
 import { useRoute, useRouter } from 'vue-router'
 import { useDuckDB } from '../composables/useDuckDB'
@@ -156,6 +172,8 @@ import { addCityMarkers, updateCityMarkersSelected, removeCityMarkers, bindCityM
 import { useMapIntroAnimation, INTRO_START_ZOOM } from '../composables/useMapIntroAnimation'
 import { resolveBootstrapCity } from '../composables/bootstrapCity'
 import CitySelector from './CitySelector.vue'
+import CheckinDialog from './CheckinDialog.vue'
+import { firebaseAvailable } from '../lib/firebase'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
 
 const props = defineProps<{
@@ -572,6 +590,29 @@ interface PopupTreeRow {
 const selectedTree = ref<PopupTreeRow | null>(null)
 const selectedTreeAnchor = ref<[number, number] | null>(null)
 const selectedTreeScreenPoint = ref<{ x: number; y: number } | null>(null)
+const checkinDialog = ref<{ treeId: string; lat: number; lng: number } | null>(null)
+
+const CHECKIN_MAX_METERS = 50
+
+const canCheckInToSelectedTree = computed(() => {
+  if (!firebaseAvailable) return false
+  if (!selectedTreeAnchor.value) return false
+  const loc = userLocation.value
+  if (!loc) return true
+  const [lng, lat] = selectedTreeAnchor.value
+  const meters = haversineKm(loc.lat, loc.lng, lat, lng) * 1000
+  return meters <= CHECKIN_MAX_METERS
+})
+
+function openCheckin(): void {
+  if (!selectedTree.value || !selectedTreeAnchor.value) return
+  const [lng, lat] = selectedTreeAnchor.value
+  checkinDialog.value = {
+    treeId: selectedTree.value.tree_id,
+    lat,
+    lng,
+  }
+}
 
 function updateTreeCardPosition(): void {
   if (!mapRef.value || !selectedTreeAnchor.value) {
@@ -1759,6 +1800,31 @@ onUnmounted(() => {
 .tree-card-close:hover {
   background: rgba(255, 255, 255, 0.12);
   color: rgba(237, 242, 235, 0.92);
+}
+
+.tree-card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.tree-card-checkin {
+  background: var(--color-leaf);
+  color: #0b0f0d;
+  border: 1px solid var(--color-leaf);
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tree-card-checkin:hover {
+  background: transparent;
+  color: var(--color-leaf);
 }
 
 .tree-card-header {

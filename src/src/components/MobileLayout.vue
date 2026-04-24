@@ -4,6 +4,12 @@
       <TreeMap simplified />
     </div>
 
+    <div v-else-if="isFullScreen" class="mobile-full-screen mobile-screen">
+      <ProfileView v-if="currentScreen === 'profile'" />
+      <SubmitView v-else-if="currentScreen === 'submit'" />
+      <ContributionsView v-else-if="currentScreen === 'contributions'" />
+    </div>
+
     <div v-else class="mobile-route-screen mobile-screen">
       <header class="mobile-route-header">
         <div class="mobile-route-heading">
@@ -25,16 +31,17 @@
           v-for="action in visibleActions"
           :key="action.key"
           class="mobile-action-btn"
-          :class="{ 'mobile-action-btn--active': activeOverlay === action.key }"
+          :class="{
+            'mobile-action-btn--active': action.key !== 'submit' && activeOverlay === action.key,
+            'mobile-action-btn--icon': action.key === 'submit',
+          }"
           :aria-label="action.ariaLabel"
-          :aria-pressed="activeOverlay === action.key"
+          :aria-pressed="action.key !== 'submit' ? activeOverlay === action.key : undefined"
+          :data-testid="`mobile-action-${action.key}`"
           @click="action.onClick"
         >
-          <svg v-if="action.key === 'landmarks'" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          {{ action.label }}
+          <span v-if="action.key === 'submit'" class="mobile-action-btn__plus" aria-hidden="true">+</span>
+          <template v-else>{{ action.label }}</template>
         </button>
       </div>
 
@@ -57,6 +64,7 @@
           class="mobile-nav-trigger"
           :class="{ 'mobile-nav-trigger--open': navMenuOpen }"
           aria-label="Open navigation menu"
+          data-testid="mobile-nav-trigger"
           @click="navMenuOpen = !navMenuOpen"
         >
           <span></span>
@@ -70,6 +78,12 @@
       <div v-if="activeOverlay === 'landmarks'" class="mobile-overlay">
         <div class="mobile-overlay-header">
           <span class="mobile-overlay-title">Search Landmarks</span>
+          <button
+            class="mobile-overlay-close"
+            aria-label="Close overlay"
+            data-testid="overlay-close"
+            @click="activeOverlay = null"
+          >×</button>
         </div>
         <div class="mobile-overlay-body">
           <input
@@ -99,6 +113,12 @@
       <div v-if="activeOverlay === 'chat'" class="mobile-overlay mobile-chat-overlay">
         <div class="mobile-overlay-header">
           <span class="mobile-overlay-title">{{ chatOverlayTitle }}</span>
+          <button
+            class="mobile-overlay-close"
+            aria-label="Close overlay"
+            data-testid="overlay-close"
+            @click="activeOverlay = null"
+          >×</button>
         </div>
         <ChatPanel />
       </div>
@@ -115,15 +135,19 @@ import CitySelector from './CitySelector.vue'
 import SummaryView from '../views/SummaryView.vue'
 import SpeciesView from '../views/SpeciesView.vue'
 import InfoView from '../views/InfoView.vue'
+import ProfileView from '../views/ProfileView.vue'
+import SubmitView from '../views/SubmitView.vue'
+import ContributionsView from '../views/ContributionsView.vue'
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData } from '../composables/useMapData'
+import { firebaseAvailable } from '../lib/firebase'
 import type { Landmark } from '../types'
 
 type MobileOverlay = 'landmarks' | 'chat' | null
-type MobileScreen = 'map' | 'summary' | 'species' | 'info'
+type MobileScreen = 'map' | 'summary' | 'species' | 'info' | 'profile' | 'submit' | 'contributions'
 type MobileAction = {
-  key: 'landmarks' | 'chat'
+  key: 'landmarks' | 'chat' | 'submit'
   label: string
   ariaLabel: string
   onClick: () => void
@@ -143,12 +167,21 @@ const currentScreen = computed<MobileScreen>(() => {
   if (route.name === 'summary') return 'summary'
   if (route.name === 'species') return 'species'
   if (route.name === 'info') return 'info'
+  if (route.name === 'profile') return 'profile'
+  if (route.name === 'submit') return 'submit'
+  if (route.name === 'contributions') return 'contributions'
   return 'map'
 })
 
 const isMapScreen = computed(() => currentScreen.value === 'map')
 const isSummaryScreen = computed(() => currentScreen.value === 'summary')
 const isSpeciesScreen = computed(() => currentScreen.value === 'species')
+const isFullScreen = computed(
+  () =>
+    currentScreen.value === 'profile' ||
+    currentScreen.value === 'submit' ||
+    currentScreen.value === 'contributions',
+)
 
 const routeTitle = computed(() => {
   if (isSummaryScreen.value) return 'City Summary'
@@ -163,23 +196,24 @@ const chatOverlayTitle = computed(() => {
   return 'Project Assistant'
 })
 
-const navItems: Array<{ screen: MobileScreen; label: string; copy: string }> = [
-  { screen: 'map', label: 'Map', copy: 'Explore trees and landmarks' },
-  { screen: 'summary', label: 'Analytics', copy: 'Inspect city summary charts' },
-  { screen: 'species', label: 'Species', copy: 'Browse taxa, traits, and filters' },
-  { screen: 'info', label: 'Info', copy: 'Read sources and project notes' },
-]
+const navItems = computed<Array<{ screen: MobileScreen; label: string; copy: string }>>(() => {
+  const items: Array<{ screen: MobileScreen; label: string; copy: string }> = [
+    { screen: 'map', label: 'Map', copy: 'Explore trees and landmarks' },
+    { screen: 'summary', label: 'Analytics', copy: 'Inspect city summary charts' },
+    { screen: 'species', label: 'Species', copy: 'Browse taxa, traits, and filters' },
+    { screen: 'info', label: 'Info', copy: 'Read sources and project notes' },
+  ]
+  if (firebaseAvailable) {
+    items.push(
+      { screen: 'contributions', label: 'My contributions', copy: 'Photos and check-ins you submitted' },
+      { screen: 'profile', label: 'Profile', copy: 'Sign in, privacy, and data use' },
+    )
+  }
+  return items
+})
 
 const visibleActions = computed<MobileAction[]>(() => {
   const actions: MobileAction[] = []
-  if (isMapScreen.value) {
-    actions.push({
-      key: 'landmarks',
-      label: 'Landmarks',
-      ariaLabel: 'Open landmarks search',
-      onClick: () => openOverlay('landmarks'),
-    })
-  }
   actions.push({
     key: 'chat',
     label: 'Chat',
@@ -192,6 +226,26 @@ const visibleActions = computed<MobileAction[]>(() => {
           : 'Open project chat',
     onClick: () => openOverlay('chat'),
   })
+  if (isMapScreen.value) {
+    actions.push({
+      key: 'landmarks',
+      label: 'Landmarks',
+      ariaLabel: 'Open landmarks search',
+      onClick: () => openOverlay('landmarks'),
+    })
+    if (firebaseAvailable) {
+      actions.push({
+        key: 'submit',
+        label: 'Submit a tree',
+        ariaLabel: 'Submit a tree',
+        onClick: () => {
+          navMenuOpen.value = false
+          activeOverlay.value = null
+          void router.push({ name: 'submit' })
+        },
+      })
+    }
+  }
   return actions
 })
 
@@ -248,6 +302,16 @@ function handleLandmarkClick(lm: Landmark) {
   flex: 1;
   position: relative;
   overflow: hidden;
+}
+
+.mobile-full-screen {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 82px;
+  background:
+    radial-gradient(circle at top left, rgba(47, 125, 79, 0.16), transparent 44%),
+    linear-gradient(180deg, rgba(28, 31, 36, 0.98), rgba(15, 20, 17, 0.98));
 }
 
 .mobile-route-screen {
@@ -364,6 +428,27 @@ function handleLandmarkClick(lm: Landmark) {
   background:
     linear-gradient(180deg, rgba(67, 107, 77, 0.82), rgba(28, 55, 38, 0.98));
   color: var(--color-ink);
+}
+
+.mobile-action-btn--icon {
+  flex: 0 0 46px;
+  min-width: 46px;
+  padding: 0;
+  border-color: var(--color-leaf);
+  background: var(--color-leaf);
+  color: #0b0f0d;
+}
+
+.mobile-action-btn--icon:active {
+  background: var(--color-leaf);
+  color: #0b0f0d;
+  filter: brightness(0.9);
+}
+
+.mobile-action-btn__plus {
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .mobile-nav-wrap {
@@ -501,6 +586,36 @@ function handleLandmarkClick(lm: Landmark) {
   color: var(--color-ink);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.mobile-overlay-close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(167, 227, 178, 0.14);
+  background: rgba(28, 31, 36, 0.72);
+  color: rgba(237, 242, 235, 0.82);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.mobile-overlay-close:hover,
+.mobile-overlay-close:focus-visible {
+  background: rgba(47, 125, 79, 0.24);
+  border-color: rgba(167, 227, 178, 0.26);
+  color: var(--color-leaf);
+  outline: none;
+}
+
+.mobile-overlay-close:active {
+  background: rgba(47, 125, 79, 0.36);
 }
 
 /* Search overlay body */
