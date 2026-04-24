@@ -1,55 +1,57 @@
 <template>
-  <transition name="modal-fade">
-    <div v-if="visible" class="welcome-overlay" @click.self="dismiss">
-      <div class="welcome-modal">
-        <div class="welcome-header">
-          <h2>Welcome to Urban Trees</h2>
-          <button class="welcome-close" @click="dismiss" aria-label="Close">&times;</button>
-        </div>
-        <div class="welcome-body">
-          <p>
-            This is an interactive explorer of <strong>urban tree populations</strong> across multiple cities.
-            Browse the map to discover the diversity and distribution of trees across the urban forest.
-          </p>
-          <p>
-            You can navigate the map freely, but the experience is best when using the
-            <strong>AI agent assistant</strong> in the chat panel — ask it questions, request
-            filters, or let it guide you through interesting patterns in the data.
-          </p>
-
-          <div class="welcome-section">
-            <h3>API Access</h3>
+  <Teleport to="body">
+    <transition name="modal-fade">
+      <div v-if="visible" class="welcome-overlay" @click.self="dismiss">
+        <div class="welcome-modal" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+          <div class="welcome-header">
+            <h2 id="welcome-title">Welcome to Urban Trees</h2>
+            <button class="welcome-close" @click="dismiss" aria-label="Close">&times;</button>
+          </div>
+          <div class="welcome-body">
             <p>
-              You can <strong>bring your own API token</strong> for unlimited use, or try the
-              <strong>demo token</strong> which has a daily spend cap.
+              This is an interactive explorer of <strong>urban tree populations</strong> across multiple cities.
+              Browse the map to discover the diversity and distribution of trees across the urban forest.
             </p>
-          </div>
-
-          <div class="welcome-section">
-            <h3>Data Sources</h3>
-            <ul>
-              <li><a href="https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq" target="_blank" rel="noopener">SF Open Data — Street Tree List</a></li>
-              <li><a href="https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh" target="_blank" rel="noopener">NYC Open Data — Street Tree Census</a></li>
-              <li><a href="https://data.boston.gov/dataset/bprd-trees" target="_blank" rel="noopener">City of Boston — Street Trees</a></li>
-              <li><a href="https://opendata.paris.fr/explore/dataset/les-arbres/information/" target="_blank" rel="noopener">Paris Open Data — Les Arbres</a></li>
-            </ul>
-            <p class="welcome-disclaimer">
-              Species metadata may contain inaccuracies. Corrections are welcome!
+            <p>
+              You can navigate the map freely, but the experience is best when using the
+              <strong>AI agent assistant</strong> in the chat panel — ask it questions, request
+              filters, or let it guide you through interesting patterns in the data.
             </p>
-          </div>
 
-          <p class="welcome-fun">Have fun exploring!</p>
-        </div>
-        <div class="welcome-footer">
-          <label class="welcome-dismiss-label">
-            <input type="checkbox" v-model="dontShowAgain" />
-            Don't show this again
-          </label>
-          <button class="welcome-btn" @click="dismiss">Get Started</button>
+            <div class="welcome-section">
+              <h3>API Access</h3>
+              <p>
+                You can <strong>bring your own API token</strong> for unlimited use, or try the
+                <strong>demo token</strong> which has a daily spend cap.
+              </p>
+            </div>
+
+            <div class="welcome-section">
+              <h3>Data Sources</h3>
+              <ul>
+                <li><a href="https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq" target="_blank" rel="noopener">SF Open Data — Street Tree List</a></li>
+                <li><a href="https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh" target="_blank" rel="noopener">NYC Open Data — Street Tree Census</a></li>
+                <li><a href="https://data.boston.gov/dataset/bprd-trees" target="_blank" rel="noopener">City of Boston — Street Trees</a></li>
+                <li><a href="https://opendata.paris.fr/explore/dataset/les-arbres/information/" target="_blank" rel="noopener">Paris Open Data — Les Arbres</a></li>
+              </ul>
+              <p class="welcome-disclaimer">
+                Species metadata may contain inaccuracies. Corrections are welcome!
+              </p>
+            </div>
+
+            <p class="welcome-fun">Have fun exploring!</p>
+          </div>
+          <div class="welcome-footer">
+            <label class="welcome-dismiss-label">
+              <input type="checkbox" v-model="dontShowAgain" />
+              Don't show this again
+            </label>
+            <button class="welcome-btn" @click="dismiss">Get Started</button>
+          </div>
         </div>
       </div>
-    </div>
-  </transition>
+    </transition>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -78,7 +80,7 @@ function dismiss() {
 .welcome-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(6, 10, 14, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -87,50 +89,58 @@ function dismiss() {
 }
 
 .welcome-modal {
-  background: #16213e;
-  border: 1px solid #0f3460;
-  border-radius: 12px;
-  max-width: 520px;
   width: 100%;
+  max-width: 520px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  background:
+    linear-gradient(180deg, rgba(28, 31, 36, 0.98), rgba(15, 20, 17, 0.98));
+  border: 1px solid rgba(167, 227, 178, 0.18);
+  box-shadow: 0 24px 56px rgba(6, 8, 10, 0.55);
+  display: flex;
+  flex-direction: column;
 }
 
 .welcome-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(167, 227, 178, 0.1);
 }
 
 .welcome-header h2 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #4fc3f7;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink);
   margin: 0;
 }
 
 .welcome-close {
-  background: none;
-  border: none;
-  color: #7a7a9e;
-  font-size: 1.5rem;
-  cursor: pointer;
-  padding: 0 4px;
+  background: transparent;
+  border: 1px solid rgba(167, 227, 178, 0.2);
+  color: var(--color-ink);
+  width: 30px;
+  height: 30px;
+  font-size: 1rem;
   line-height: 1;
-  transition: color 0.15s;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
 }
 
 .welcome-close:hover {
-  color: #e0e0e0;
+  background: rgba(167, 227, 178, 0.08);
+  border-color: rgba(167, 227, 178, 0.4);
 }
 
 .welcome-body {
-  padding: 16px 24px;
+  padding: 16px 20px;
   font-size: 0.9rem;
   line-height: 1.6;
-  color: #c0c0d8;
+  color: rgba(237, 242, 235, 0.82);
 }
 
 .welcome-body p {
@@ -138,24 +148,26 @@ function dismiss() {
 }
 
 .welcome-body strong {
-  color: #e0e0e0;
+  color: var(--color-leaf);
+  font-weight: 600;
 }
 
 .welcome-section {
   margin: 16px 0;
-  padding: 12px 16px;
-  background: rgba(15, 52, 96, 0.3);
-  border-radius: 8px;
-  border-left: 3px solid #4fc3f7;
+  padding: 12px 14px;
+  background: rgba(47, 125, 79, 0.08);
+  border: 1px solid rgba(167, 227, 178, 0.12);
+  border-left: 3px solid var(--color-moss);
 }
 
 .welcome-section h3 {
-  font-size: 0.85rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
   font-weight: 600;
-  color: #4fc3f7;
+  color: var(--color-leaf);
   margin-bottom: 6px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.08em;
 }
 
 .welcome-section p {
@@ -174,11 +186,11 @@ function dismiss() {
 
 .welcome-section ul li::before {
   content: '• ';
-  color: #4fc3f7;
+  color: var(--color-moss);
 }
 
 .welcome-section a {
-  color: #4fc3f7;
+  color: var(--color-leaf);
   text-decoration: none;
 }
 
@@ -188,15 +200,17 @@ function dismiss() {
 
 .welcome-disclaimer {
   font-size: 0.8rem;
-  color: #7a7a9e;
+  color: var(--color-muted);
   font-style: italic;
   margin-top: 8px;
 }
 
 .welcome-fun {
-  font-size: 1rem;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
   font-weight: 500;
-  color: #4fc3f7;
+  letter-spacing: 0.04em;
+  color: var(--color-leaf);
   text-align: center;
   margin-top: 16px;
   margin-bottom: 0 !important;
@@ -206,8 +220,8 @@ function dismiss() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px 20px;
-  border-top: 1px solid #0f3460;
+  padding: 14px 20px;
+  border-top: 1px solid rgba(167, 227, 178, 0.1);
 }
 
 .welcome-dismiss-label {
@@ -215,31 +229,33 @@ function dismiss() {
   align-items: center;
   gap: 8px;
   font-size: 0.8rem;
-  color: #7a7a9e;
+  color: var(--color-muted);
   cursor: pointer;
 }
 
 .welcome-dismiss-label input[type="checkbox"] {
-  accent-color: #4fc3f7;
+  accent-color: var(--color-moss);
 }
 
 .welcome-btn {
-  background: #4fc3f7;
-  color: #1a1a2e;
-  border: none;
-  padding: 8px 24px;
-  border-radius: 6px;
-  font-size: 0.9rem;
+  background: linear-gradient(180deg, rgba(47, 125, 79, 0.9), rgba(34, 96, 60, 0.9));
+  color: var(--color-ink);
+  border: 1px solid rgba(167, 227, 178, 0.3);
+  padding: 8px 22px;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
   font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 }
 
 .welcome-btn:hover {
-  background: #81d4fa;
+  background: linear-gradient(180deg, rgba(56, 142, 92, 0.95), rgba(40, 108, 68, 0.95));
+  border-color: rgba(167, 227, 178, 0.5);
 }
 
-/* Transition */
 .modal-fade-enter-active,
 .modal-fade-leave-active {
   transition: opacity 0.3s ease;

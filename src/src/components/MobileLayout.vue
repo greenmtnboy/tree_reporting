@@ -141,6 +141,7 @@ import ContributionsView from '../views/ContributionsView.vue'
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData } from '../composables/useMapData'
+import { firebaseAvailable } from '../lib/firebase'
 import type { Landmark } from '../types'
 
 type MobileOverlay = 'landmarks' | 'chat' | null
@@ -195,14 +196,21 @@ const chatOverlayTitle = computed(() => {
   return 'Project Assistant'
 })
 
-const navItems: Array<{ screen: MobileScreen; label: string; copy: string }> = [
-  { screen: 'map', label: 'Map', copy: 'Explore trees and landmarks' },
-  { screen: 'summary', label: 'Analytics', copy: 'Inspect city summary charts' },
-  { screen: 'species', label: 'Species', copy: 'Browse taxa, traits, and filters' },
-  { screen: 'info', label: 'Info', copy: 'Read sources and project notes' },
-  { screen: 'contributions', label: 'My contributions', copy: 'Photos and check-ins you submitted' },
-  { screen: 'profile', label: 'Profile', copy: 'Sign in, privacy, and data use' },
-]
+const navItems = computed<Array<{ screen: MobileScreen; label: string; copy: string }>>(() => {
+  const items: Array<{ screen: MobileScreen; label: string; copy: string }> = [
+    { screen: 'map', label: 'Map', copy: 'Explore trees and landmarks' },
+    { screen: 'summary', label: 'Analytics', copy: 'Inspect city summary charts' },
+    { screen: 'species', label: 'Species', copy: 'Browse taxa, traits, and filters' },
+    { screen: 'info', label: 'Info', copy: 'Read sources and project notes' },
+  ]
+  if (firebaseAvailable) {
+    items.push(
+      { screen: 'contributions', label: 'My contributions', copy: 'Photos and check-ins you submitted' },
+      { screen: 'profile', label: 'Profile', copy: 'Sign in, privacy, and data use' },
+    )
+  }
+  return items
+})
 
 const visibleActions = computed<MobileAction[]>(() => {
   const actions: MobileAction[] = []
@@ -225,16 +233,18 @@ const visibleActions = computed<MobileAction[]>(() => {
       ariaLabel: 'Open landmarks search',
       onClick: () => openOverlay('landmarks'),
     })
-    actions.push({
-      key: 'submit',
-      label: 'Submit a tree',
-      ariaLabel: 'Submit a tree',
-      onClick: () => {
-        navMenuOpen.value = false
-        activeOverlay.value = null
-        void router.push({ name: 'submit' })
-      },
-    })
+    if (firebaseAvailable) {
+      actions.push({
+        key: 'submit',
+        label: 'Submit a tree',
+        ariaLabel: 'Submit a tree',
+        onClick: () => {
+          navMenuOpen.value = false
+          activeOverlay.value = null
+          void router.push({ name: 'submit' })
+        },
+      })
+    }
   }
   return actions
 })

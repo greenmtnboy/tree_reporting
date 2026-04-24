@@ -4,7 +4,10 @@
       <h1 class="profile-title">Profile</h1>
 
       <section class="profile-status">
-        <template v-if="!authReady">
+        <template v-if="!firebaseAvailable">
+          <p>Profile features are unavailable right now. Authentication services couldn't be reached.</p>
+        </template>
+        <template v-else-if="!authReady">
           <p class="muted">Loading…</p>
         </template>
         <template v-else-if="!user">
@@ -94,6 +97,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import { firebaseAvailable } from '../lib/firebase'
 
 const { user, authReady, authError, isAnonymous, signInIfNeeded, signOut } = useAuth()
 const pending = ref(false)

@@ -3,10 +3,13 @@
     <div class="contributions-card">
       <header class="contributions-header">
         <h1>My contributions</h1>
-        <router-link :to="{ name: 'submit' }" class="btn-primary">+ Submit a tree</router-link>
+        <router-link v-if="firebaseAvailable" :to="{ name: 'submit' }" class="btn-primary">+ Submit a tree</router-link>
       </header>
 
-      <section v-if="!authReady" class="contributions-status">
+      <section v-if="!firebaseAvailable" class="contributions-status">
+        <p>Contributions are unavailable right now. Sign-in and submission services couldn't be reached.</p>
+      </section>
+      <section v-else-if="!authReady" class="contributions-status">
         <p class="muted">Loading…</p>
       </section>
       <section v-else-if="!user" class="contributions-status">
@@ -68,6 +71,7 @@
 import { onMounted, watch } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { useMyContributions } from '../composables/useSubmissions'
+import { firebaseAvailable } from '../lib/firebase'
 import SubmissionThumbnail from '../components/SubmissionThumbnail.vue'
 
 const { user, authReady } = useAuth()

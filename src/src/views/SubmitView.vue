@@ -13,8 +13,16 @@
         </div>
       </header>
 
+      <!-- Firebase unavailable -->
+      <section v-if="!firebaseAvailable" class="submit-body">
+        <p>Submissions are unavailable right now. The upload service couldn't be reached.</p>
+        <div class="submit-actions">
+          <button type="button" class="btn-primary" @click="handleBack">Back to map</button>
+        </div>
+      </section>
+
       <!-- Step 1: Capture -->
-      <section v-if="step === 'capture'" class="submit-body">
+      <section v-else-if="step === 'capture'" class="submit-body">
         <p class="muted">
           Take a clear photo of the whole tree. You'll pinpoint its location next.
         </p>
@@ -129,6 +137,7 @@ import { useMapData, CITY_CONFIG, closestCityTo } from '../composables/useMapDat
 import { resizeImage } from '../lib/image'
 import { getCurrentPosition } from '../lib/geo'
 import { submitPhoto } from '../composables/useSubmissions'
+import { firebaseAvailable } from '../lib/firebase'
 
 type Step = 'capture' | 'locate' | 'confirm' | 'uploading' | 'done' | 'error'
 

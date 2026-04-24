@@ -173,6 +173,7 @@ import { useMapIntroAnimation, INTRO_START_ZOOM } from '../composables/useMapInt
 import { resolveBootstrapCity } from '../composables/bootstrapCity'
 import CitySelector from './CitySelector.vue'
 import CheckinDialog from './CheckinDialog.vue'
+import { firebaseAvailable } from '../lib/firebase'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
 
 const props = defineProps<{
@@ -594,6 +595,7 @@ const checkinDialog = ref<{ treeId: string; lat: number; lng: number } | null>(n
 const CHECKIN_MAX_METERS = 50
 
 const canCheckInToSelectedTree = computed(() => {
+  if (!firebaseAvailable) return false
   if (!selectedTreeAnchor.value) return false
   const loc = userLocation.value
   if (!loc) return true

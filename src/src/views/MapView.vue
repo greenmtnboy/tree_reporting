@@ -2,6 +2,7 @@
   <div class="map-view">
     <TreeMap />
     <router-link
+      v-if="firebaseAvailable"
       :to="{ name: 'submit' }"
       class="submit-fab"
       aria-label="Submit a tree"
@@ -14,6 +15,7 @@
 
 <script setup lang="ts">
 import TreeMap from '../components/TreeMap.vue'
+import { firebaseAvailable } from '../lib/firebase'
 </script>
 
 <style scoped>

@@ -16,7 +16,16 @@ import {
   uploadBytesResumable,
 } from 'firebase/storage'
 import { db, storage } from '../lib/firebase'
+import type { Firestore } from 'firebase/firestore'
+import type { FirebaseStorage } from 'firebase/storage'
 import { signInIfNeeded, useAuth } from './useAuth'
+
+function requireFirebase(): { db: Firestore; storage: FirebaseStorage } {
+  if (!db || !storage) {
+    throw new Error('Firebase is not configured — contribution features are unavailable')
+  }
+  return { db, storage }
+}
 
 export type SubmissionStatus = 'pending' | 'published' | 'rejected'
 
@@ -76,6 +85,7 @@ export interface SubmitInput {
 }
 
 export async function submitPhoto(input: SubmitInput): Promise<string> {
+  const { db: firestore, storage: bucket } = requireFirebase()
   const user = await signInIfNeeded()
   const submissionId =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -86,7 +96,7 @@ export async function submitPhoto(input: SubmitInput): Promise<string> {
   const ext = contentType.split('/')[1] ?? 'jpg'
   const photoPath = `submissions/${user.uid}/${submissionId}.${ext}`
 
-  const sref = storageRef(storage, photoPath)
+  const sref = storageRef(bucket, photoPath)
   const uploadTask = uploadBytesResumable(sref, input.photoBlob, { contentType })
 
   await new Promise<void>((resolve, reject) => {
@@ -117,7 +127,7 @@ export async function submitPhoto(input: SubmitInput): Promise<string> {
     submittedAt: serverTimestamp(),
     status: 'pending' as SubmissionStatus,
   }
-  const docRef = await addDoc(collection(db, 'submissions'), docData)
+  const docRef = await addDoc(collection(firestore, 'submissions'), docData)
   return docRef.id
 }
 
@@ -163,6 +173,7 @@ function mapCheckinDoc(id: string, data: Record<string, unknown>): Checkin {
 }
 
 export async function recordCheckin(input: CheckinInput): Promise<string> {
+  const { db: firestore, storage: bucket } = requireFirebase()
   const user = await signInIfNeeded()
 
   let photoPath: string | null = null
@@ -174,7 +185,7 @@ export async function recordCheckin(input: CheckinInput): Promise<string> {
     const contentType = input.photoBlob.type || 'image/jpeg'
     const ext = contentType.split('/')[1] ?? 'jpg'
     photoPath = `checkins/${user.uid}/${checkinPhotoId}.${ext}`
-    const sref = storageRef(storage, photoPath)
+    const sref = storageRef(bucket, photoPath)
     const uploadTask = uploadBytesResumable(sref, input.photoBlob, { contentType })
     await new Promise<void>((resolve, reject) => {
       uploadTask.on(
@@ -202,14 +213,15 @@ export async function recordCheckin(input: CheckinInput): Promise<string> {
     photoPath,
     at: serverTimestamp(),
   }
-  const docRef = await addDoc(collection(db, 'checkins'), docData)
+  const docRef = await addDoc(collection(firestore, 'checkins'), docData)
   return docRef.id
 }
 
 export async function listMySubmissions(maxResults = 50): Promise<Submission[]> {
+  const { db: firestore } = requireFirebase()
   const user = await signInIfNeeded()
   const q = query(
-    collection(db, 'submissions'),
+    collection(firestore, 'submissions'),
     where('userId', '==', user.uid),
     orderBy('submittedAt', 'desc'),
     limit(maxResults),
@@ -219,9 +231,10 @@ export async function listMySubmissions(maxResults = 50): Promise<Submission[]> 
 }
 
 export async function listMyCheckins(maxResults = 50): Promise<Checkin[]> {
+  const { db: firestore } = requireFirebase()
   const user = await signInIfNeeded()
   const q = query(
-    collection(db, 'checkins'),
+    collection(firestore, 'checkins'),
     where('userId', '==', user.uid),
     orderBy('at', 'desc'),
     limit(maxResults),
@@ -231,7 +244,8 @@ export async function listMyCheckins(maxResults = 50): Promise<Checkin[]> {
 }
 
 export async function getSubmissionPhotoUrl(photoPath: string): Promise<string> {
-  return getDownloadURL(storageRef(storage, photoPath))
+  const { storage: bucket } = requireFirebase()
+  return getDownloadURL(storageRef(bucket, photoPath))
 }
 
 export function useMyContributions() {

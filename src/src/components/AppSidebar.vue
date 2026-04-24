@@ -84,7 +84,7 @@
         </div>
       </div>
     </div>
-    <router-link to="/profile" class="sidebar-profile" :class="{ 'is-active': route.name === 'profile' }">
+    <router-link v-if="firebaseAvailable" to="/profile" class="sidebar-profile" :class="{ 'is-active': route.name === 'profile' }">
       <span class="sidebar-profile__icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="8" r="4" />
@@ -106,6 +106,7 @@ import { useLandmarkData } from '../composables/useLandmarkData'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData } from '../composables/useMapData'
 import { useAuth } from '../composables/useAuth'
+import { firebaseAvailable } from '../lib/firebase'
 import type { Landmark } from '../types'
 
 const { landmarks, loading: landmarkLoading } = useLandmarkData()

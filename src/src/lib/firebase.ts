@@ -12,7 +12,30 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-export const app: FirebaseApp = initializeApp(firebaseConfig)
-export const auth: Auth = getAuth(app)
-export const db: Firestore = getFirestore(app)
-export const storage: FirebaseStorage = getStorage(app)
+let _app: FirebaseApp | null = null
+let _auth: Auth | null = null
+let _db: Firestore | null = null
+let _storage: FirebaseStorage | null = null
+
+if (firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId) {
+  try {
+    _app = initializeApp(firebaseConfig)
+    _auth = getAuth(_app)
+    _db = getFirestore(_app)
+    _storage = getStorage(_app)
+  } catch (err) {
+    console.warn('[firebase] initialization failed — auth and contribution features disabled', err)
+    _app = null
+    _auth = null
+    _db = null
+    _storage = null
+  }
+} else {
+  console.warn('[firebase] VITE_FIREBASE_* env vars missing — auth and contribution features disabled')
+}
+
+export const firebaseAvailable = _auth !== null && _db !== null && _storage !== null
+export const app: FirebaseApp | null = _app
+export const auth: Auth | null = _auth
+export const db: Firestore | null = _db
+export const storage: FirebaseStorage | null = _storage
