@@ -17,7 +17,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 import pyarrow as pa
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, post_with_retry
+from _ingest_shared import emit, post_with_retry, OVERPASS_HEADERS
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
@@ -33,7 +33,7 @@ out ids meta;
 
 
 def fetch_modified_at() -> datetime:
-    r = post_with_retry(OVERPASS_URL, data={"data": QUERY}, timeout=90)
+    r = post_with_retry(OVERPASS_URL, data={"data": QUERY}, timeout=90, headers=OVERPASS_HEADERS)
     elements = r.json().get("elements", [])
     timestamps = [e["timestamp"] for e in elements if "timestamp" in e]
     if not timestamps:

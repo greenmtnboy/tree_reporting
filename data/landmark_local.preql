@@ -1,5 +1,0 @@
-import raw.landmarks;
-
-copy into json `./landmark_data.json` from
-where name is not null
-select name, latitude, longitude;
