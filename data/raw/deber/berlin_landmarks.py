@@ -26,6 +26,7 @@ from _ingest_shared import (
     validate_coordinates,
     post_with_retry,
     make_point_wkt,
+    OVERPASS_HEADERS,
 )
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
@@ -44,7 +45,7 @@ out center;
 
 
 def fetch_elements() -> list[dict]:
-    r = post_with_retry(OVERPASS_URL, data={"data": QUERY}, timeout=240)
+    r = post_with_retry(OVERPASS_URL, data={"data": QUERY}, timeout=240, headers=OVERPASS_HEADERS)
     return r.json()["elements"]
 
 

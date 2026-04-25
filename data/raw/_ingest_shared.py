@@ -176,6 +176,14 @@ def validate_coordinates(
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
+# Overpass API rejects the default `python-requests/...` User-Agent with
+# HTTP 406 ("Not Acceptable"). OSM etiquette also requires identifying the
+# application. Cities that fetch from Overpass should pass these headers to
+# `post_with_retry` / `get_with_retry`.
+OVERPASS_HEADERS = {
+    "User-Agent": "sf-tree-reporting/1.0 (https://github.com/greenmtnboy/sf_tree_reporting)"
+}
+
 def get_with_retry(
     url: str,
     timeout: int = 120,
@@ -219,6 +227,7 @@ def post_with_retry(
     timeout: int = 240,
     max_retries: int = 5,
     backoff: float = 10.0,
+    headers: dict | None = None,
 ) -> requests.Response:
     """POST with exponential backoff on 5xx / connection errors.
 
@@ -230,7 +239,7 @@ def post_with_retry(
     err = ""
     for attempt in range(max_retries):
         try:
-            r = requests.post(url, data=data, timeout=timeout)
+            r = requests.post(url, data=data, timeout=timeout, headers=headers)
             if r.status_code < 400:
                 return r
             if 400 <= r.status_code < 500 and r.status_code != 429:

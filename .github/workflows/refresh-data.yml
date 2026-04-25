@@ -34,25 +34,16 @@ jobs:
           project_id: 'preqldata'
 
       - name: Refresh data
-        id: refresh_step
         working-directory: data
         run: |
-          # Run the refresh and capture the exit code
           set +e
-          trilogy refresh raw/tree_info.preql \
+          trilogy refresh raw \
             --env GOOGLE_HMAC_KEY=${{ secrets.GOOGLE_HMAC_KEY }} \
             --env GOOGLE_HMAC_SECRET=${{ secrets.GOOGLE_HMAC_SECRET }}
           EXIT_CODE=$?
-          set -e
-
-          if [ $EXIT_CODE -eq 0 ]; then
-            echo "Changes detected. Running downstream preql..."
-            trilogy run . \
-              --env GOOGLE_HMAC_KEY=${{ secrets.GOOGLE_HMAC_KEY }} \
-              --env GOOGLE_HMAC_SECRET=${{ secrets.GOOGLE_HMAC_SECRET }}
-          elif [ $EXIT_CODE -eq 2 ]; then
-            echo "Data is already fresh. Skipping downstream run."
-          else
-            echo "Error: Refresh script failed with exit code $EXIT_CODE"
-            exit $EXIT_CODE
+          # Exit code 2 = data already fresh; treat as success.
+          if [ $EXIT_CODE -eq 2 ]; then
+            echo "Data is already fresh."
+            exit 0
           fi
+          exit $EXIT_CODE
