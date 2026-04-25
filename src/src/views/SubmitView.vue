@@ -70,7 +70,29 @@
       <!-- Step 3: Confirm -->
       <section v-else-if="step === 'confirm'" class="submit-body">
         <div class="confirm-row">
-          <img v-if="previewUrl" :src="previewUrl" alt="Photo preview" class="confirm-thumb" />
+          <div class="photo-strip">
+            <img v-if="previewUrl" :src="previewUrl" alt="Photo preview" class="photo-tile" />
+            <div v-for="(p, i) in additionalPhotos" :key="p.previewUrl" class="photo-tile-wrap">
+              <img :src="p.previewUrl" :alt="`Additional photo ${i + 1}`" class="photo-tile" />
+              <button
+                type="button"
+                class="photo-remove"
+                :aria-label="`Remove additional photo ${i + 1}`"
+                @click="removeAdditionalPhoto(i)"
+              >×</button>
+            </div>
+            <label v-if="canAddMorePhotos" class="photo-add">
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                class="capture-input"
+                @change="handleAdditionalPicked"
+              />
+              <span class="photo-add__icon" aria-hidden="true">+</span>
+              <span class="photo-add__label">Add</span>
+            </label>
+          </div>
           <div class="confirm-meta">
             <dl class="kv">
               <dt>Location</dt>
@@ -80,9 +102,37 @@
             </dl>
           </div>
         </div>
+        <p v-if="additionalPhotoError" class="error-text">{{ additionalPhotoError }}</p>
         <label class="field">
           <span class="field-label">Species (optional)</span>
           <input v-model="species" type="text" placeholder="e.g. Platanus x hispanica" class="text-input" />
+          <div v-if="plantnetAvailable" class="identify-row">
+            <button
+              type="button"
+              class="btn-identify"
+              :disabled="identifying || !photoBlob"
+              @click="handleIdentify"
+            >
+              {{ identifying ? 'Identifying…' : 'Identify from photo' }}
+            </button>
+            <span v-if="identifyError" class="error-text">{{ identifyError }}</span>
+          </div>
+          <div v-if="candidates.length" class="candidate-list">
+            <button
+              v-for="c in candidates"
+              :key="c.scientificName"
+              type="button"
+              :class="['candidate-chip', { selected: species === c.scientificName }]"
+              @click="species = c.scientificName"
+            >
+              <span class="candidate-sci">{{ c.scientificName }}</span>
+              <span v-if="c.commonName" class="candidate-common">{{ c.commonName }}</span>
+              <span class="candidate-score">{{ Math.round(c.score * 100) }}%</span>
+            </button>
+          </div>
+          <p v-else-if="identifyAttempted && !identifying && !identifyError" class="muted">
+            No matches returned. Try the species field.
+          </p>
         </label>
         <label class="field">
           <span class="field-label">Notes (optional)</span>
@@ -138,6 +188,12 @@ import { resizeImage } from '../lib/image'
 import { getCurrentPosition } from '../lib/geo'
 import { submitPhoto } from '../composables/useSubmissions'
 import { firebaseAvailable } from '../lib/firebase'
+import {
+  identifySpecies,
+  plantnetAvailable,
+  PLANTNET_MAX_IMAGES,
+  type SpeciesCandidate,
+} from '../lib/plantnet'
 
 type Step = 'capture' | 'locate' | 'confirm' | 'uploading' | 'done' | 'error'
 
@@ -160,6 +216,73 @@ const detectedCity = ref<string | null>(null)
 
 const species = ref('')
 const notes = ref('')
+
+const candidates = ref<SpeciesCandidate[]>([])
+const identifying = ref(false)
+const identifyError = ref<string | null>(null)
+const identifyAttempted = ref(false)
+
+interface AdditionalPhoto {
+  blob: Blob
+  previewUrl: string
+}
+
+const additionalPhotos = ref<AdditionalPhoto[]>([])
+const additionalPhotoError = ref<string | null>(null)
+
+const canAddMorePhotos = computed(
+  () => additionalPhotos.value.length < PLANTNET_MAX_IMAGES - 1,
+)
+
+async function handleAdditionalPicked(event: Event) {
+  additionalPhotoError.value = null
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!canAddMorePhotos.value) {
+    additionalPhotoError.value = `Up to ${PLANTNET_MAX_IMAGES} photos total.`
+    input.value = ''
+    return
+  }
+  try {
+    const resized = await resizeImage(file)
+    additionalPhotos.value.push({
+      blob: resized,
+      previewUrl: URL.createObjectURL(resized),
+    })
+  } catch (err) {
+    additionalPhotoError.value = (err as Error).message ?? 'Could not process image'
+  } finally {
+    input.value = ''
+  }
+}
+
+function removeAdditionalPhoto(index: number) {
+  const [removed] = additionalPhotos.value.splice(index, 1)
+  if (removed) URL.revokeObjectURL(removed.previewUrl)
+}
+
+function clearAdditionalPhotos() {
+  for (const p of additionalPhotos.value) URL.revokeObjectURL(p.previewUrl)
+  additionalPhotos.value = []
+  additionalPhotoError.value = null
+}
+
+async function handleIdentify() {
+  if (!photoBlob.value) return
+  identifying.value = true
+  identifyError.value = null
+  identifyAttempted.value = true
+  try {
+    const blobs = [photoBlob.value, ...additionalPhotos.value.map((p) => p.blob)]
+    candidates.value = await identifySpecies(blobs)
+  } catch (err) {
+    candidates.value = []
+    identifyError.value = (err as Error).message ?? 'Identification failed'
+  } finally {
+    identifying.value = false
+  }
+}
 
 const progress = ref(0)
 const errorMessage = ref('')
@@ -234,6 +357,7 @@ async function handleSubmit() {
   try {
     await submitPhoto({
       photoBlob: photoBlob.value,
+      additionalPhotoBlobs: additionalPhotos.value.map((p) => p.blob),
       city: String(cityCode),
       initialLat: initialLat.value,
       initialLng: initialLng.value,
@@ -258,11 +382,15 @@ function reset() {
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
   previewUrl.value = null
   photoBlob.value = null
+  clearAdditionalPhotos()
   species.value = ''
   notes.value = ''
   progress.value = 0
   errorMessage.value = ''
   refinedByUser.value = false
+  candidates.value = []
+  identifyError.value = null
+  identifyAttempted.value = false
   step.value = 'capture'
 }
 
@@ -280,6 +408,7 @@ function handleBack() {
 
 onBeforeUnmount(() => {
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+  clearAdditionalPhotos()
 })
 </script>
 
@@ -415,15 +544,90 @@ onBeforeUnmount(() => {
 
 .confirm-row {
   display: flex;
+  flex-direction: column;
   gap: 14px;
-  align-items: flex-start;
+  align-items: stretch;
 }
 
-.confirm-thumb {
-  width: 140px;
-  height: 140px;
+.photo-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.photo-tile,
+.photo-tile-wrap,
+.photo-add {
+  width: 96px;
+  height: 96px;
+  flex: 0 0 auto;
+}
+
+.photo-tile {
   object-fit: cover;
   border: 1px solid rgba(167, 227, 178, 0.2);
+  display: block;
+}
+
+.photo-tile-wrap {
+  position: relative;
+}
+
+.photo-tile-wrap .photo-tile {
+  width: 100%;
+  height: 100%;
+}
+
+.photo-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: rgba(11, 15, 13, 0.75);
+  color: var(--color-ink);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-remove:hover {
+  background: rgba(11, 15, 13, 0.95);
+  color: #ff8a8a;
+}
+
+.photo-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px dashed rgba(167, 227, 178, 0.28);
+  background: rgba(28, 31, 36, 0.5);
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.photo-add:hover {
+  border-color: var(--color-leaf);
+  background: rgba(47, 125, 79, 0.1);
+  color: var(--color-leaf);
+}
+
+.photo-add__icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.photo-add__label {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .confirm-meta {
@@ -482,6 +686,87 @@ onBeforeUnmount(() => {
 
 .text-input:focus {
   border-color: var(--color-leaf);
+}
+
+.identify-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-identify {
+  background: transparent;
+  color: var(--color-leaf);
+  border: 1px solid rgba(167, 227, 178, 0.3);
+  padding: 6px 12px;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.btn-identify:hover:not(:disabled) {
+  background: rgba(47, 125, 79, 0.15);
+  border-color: var(--color-leaf);
+}
+
+.btn-identify:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.candidate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.candidate-chip {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  text-align: left;
+  background: rgba(28, 31, 36, 0.6);
+  border: 1px solid rgba(167, 227, 178, 0.14);
+  color: var(--color-ink);
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.candidate-chip:hover {
+  border-color: var(--color-leaf);
+  background: rgba(47, 125, 79, 0.1);
+}
+
+.candidate-chip.selected {
+  border-color: var(--color-leaf);
+  background: rgba(47, 125, 79, 0.18);
+}
+
+.candidate-sci {
+  font-style: italic;
+  font-size: 0.88rem;
+}
+
+.candidate-common {
+  grid-column: 1;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+}
+
+.candidate-score {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--color-leaf);
+  font-size: 0.78rem;
 }
 
 .submit-disclaimer {
