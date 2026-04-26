@@ -112,7 +112,7 @@ import type { Landmark } from '../types'
 const { landmarks, loading: landmarkLoading } = useLandmarkData()
 const { flyTo } = useFlyTo()
 const { selectedCity } = useMapData()
-const { user, authReady, isAnonymous } = useAuth()
+const { user, authReady, isAnonymous, isGoogleLinked } = useAuth()
 const route = useRoute()
 
 const search = ref('')
@@ -124,7 +124,10 @@ const profileLabel = computed(() => {
 })
 const profileSubLabel = computed(() => {
   if (!authReady.value || !user.value) return null
-  return isAnonymous.value ? 'anonymous' : null
+  if (isAnonymous.value) return 'anonymous'
+  if (user.value.email) return user.value.email
+  if (isGoogleLinked.value) return 'google linked'
+  return null
 })
 
 const routeQuery = computed(() => ({ city: selectedCity.value }))

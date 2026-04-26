@@ -1,7 +1,8 @@
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { ColorLabelMap } from '../types'
 import cityConfigData from '../cityConfig.json'
 import { useMapLifecycle } from './useMapLifecycle'
+import { clearSharedPosition, setSharedPosition, useSharedPosition } from '../lib/geo'
 
 export const CITY_CONFIG = cityConfigData as unknown as Record<string, { name: string; center: [number, number] }>
 export type CityCode = string
@@ -48,8 +49,14 @@ const publishedTreeIdFilterSql = ref<string | null>(null)
 const colorOverrideSql = ref<string | null>(null)
 const colorLabelMap = ref<ColorLabelMap | null>(null)
 const mapQueryRevision = ref(0)
-const userLocation = ref<{ lat: number; lng: number } | null>(null)
 const initialUserCityDetectionDone = ref(false)
+const { sharedPosition } = useSharedPosition()
+const userLocation = computed(() => (
+  sharedPosition.value
+    ? { lat: sharedPosition.value.lat, lng: sharedPosition.value.lng }
+    : null
+))
+const userLocationAccuracy = computed(() => sharedPosition.value?.accuracy ?? null)
 
 function applyCommittedCity(city: CityCode) {
   selectedCity.value = city
@@ -107,12 +114,18 @@ export function useMapData() {
     mapQueryRevision.value += 1
   }
 
-  function setUserLocation(lat: number, lng: number) {
-    userLocation.value = { lat, lng }
+  function setUserLocation(lat: number, lng: number, accuracy?: number | null) {
+    setSharedPosition({
+      lat,
+      lng,
+      accuracy: accuracy ?? null,
+      heading: null,
+      speed: null,
+    })
   }
 
   function clearUserLocation() {
-    userLocation.value = null
+    clearSharedPosition()
   }
 
   function markInitialUserCityDetectionDone() {
@@ -127,6 +140,7 @@ export function useMapData() {
     colorLabelMap,
     mapQueryRevision,
     userLocation,
+    userLocationAccuracy,
     initialUserCityDetectionDone,
     setUserLocation,
     clearUserLocation,

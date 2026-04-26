@@ -8,22 +8,39 @@
           <p>Profile features are unavailable right now. Authentication services couldn't be reached.</p>
         </template>
         <template v-else-if="!authReady">
-          <p class="muted">Loading…</p>
+          <p class="muted">Loading...</p>
         </template>
         <template v-else-if="!user">
           <p>You're not signed in.</p>
           <p class="muted">
-            Signing in creates a pseudonymous account so your contributions
-            (check-ins, photos) stay tied to you across visits.
+            Use Google to keep your contributions recoverable across refreshes,
+            browser resets, and other devices. Anonymous mode is still available
+            if you want the fastest possible path to submit.
           </p>
-          <button class="btn-primary" :disabled="pending" @click="handleSignIn">
-            {{ pending ? 'Signing in…' : 'Sign in anonymously' }}
-          </button>
+          <div class="profile-actions">
+            <button class="btn-google" :disabled="pending" @click="handleGoogleSignIn">
+              {{ googleButtonLabel }}
+            </button>
+            <button class="btn-secondary" :disabled="pending" @click="handleAnonymousSignIn">
+              {{ pending ? 'Signing in...' : 'Continue anonymously' }}
+            </button>
+          </div>
           <p v-if="authError" class="error-text">Sign-in failed: {{ authError.message }}</p>
         </template>
         <template v-else>
-          <p>Signed in {{ isAnonymous ? 'anonymously' : '' }}.</p>
+          <p>{{ signedInSummary }}</p>
+          <p v-if="isAnonymous" class="muted">
+            Link Google before clearing this browser if you want to keep this exact account ID.
+          </p>
           <dl class="kv">
+            <template v-if="user.displayName">
+              <dt>Name</dt>
+              <dd>{{ user.displayName }}</dd>
+            </template>
+            <template v-if="user.email">
+              <dt>Email</dt>
+              <dd>{{ user.email }}</dd>
+            </template>
             <dt>Account ID</dt>
             <dd><code>{{ user.uid }}</code></dd>
           </dl>
@@ -31,10 +48,19 @@
             <router-link class="btn-primary" :to="{ name: 'contributions' }">
               My contributions
             </router-link>
+            <button
+              v-if="isAnonymous"
+              class="btn-google"
+              :disabled="pending"
+              @click="handleGoogleSignIn"
+            >
+              {{ googleButtonLabel }}
+            </button>
             <button class="btn-secondary" :disabled="pending" @click="handleSignOut">
               Sign out
             </button>
           </div>
+          <p v-if="authError" class="error-text">Sign-in failed: {{ authError.message }}</p>
         </template>
       </section>
 
@@ -43,7 +69,7 @@
         <div class="privacy-body">
           <h2>What we collect</h2>
           <ul>
-            <li>A pseudonymous account ID (no name, no email unless you link one)</li>
+            <li>A pseudonymous account ID, plus optional Google profile info if you link it</li>
             <li>Tree check-ins you record (location + timestamp)</li>
             <li>Photos you submit, with the location you confirm</li>
             <li>
@@ -86,7 +112,7 @@
           <h2>What we don't do</h2>
           <ul>
             <li>We don't sell or share your data.</li>
-            <li>We don't email you (there's no address to email unless you link one).</li>
+            <li>We don't email you unless you explicitly contact us first.</li>
           </ul>
         </div>
       </details>
@@ -95,17 +121,47 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { firebaseAvailable } from '../lib/firebase'
 
-const { user, authReady, authError, isAnonymous, signInIfNeeded, signOut } = useAuth()
+const {
+  user,
+  authReady,
+  authError,
+  isAnonymous,
+  redirectingToGoogle,
+  signInIfNeeded,
+  signInWithGoogle,
+  signOut,
+} = useAuth()
 const pending = ref(false)
 
-async function handleSignIn() {
+const googleButtonLabel = computed(() => {
+  if (pending.value && redirectingToGoogle.value) return 'Redirecting to Google...'
+  if (pending.value) return isAnonymous.value ? 'Linking Google...' : 'Signing in...'
+  return isAnonymous.value ? 'Link Google account' : 'Continue with Google'
+})
+
+const signedInSummary = computed(() =>
+  isAnonymous.value ? 'Signed in anonymously.' : 'Signed in with Google.',
+)
+
+async function handleAnonymousSignIn() {
   pending.value = true
   try {
     await signInIfNeeded()
+  } catch {
+    /* error already surfaced via authError */
+  } finally {
+    pending.value = false
+  }
+}
+
+async function handleGoogleSignIn() {
+  pending.value = true
+  try {
+    await signInWithGoogle()
   } catch {
     /* error already surfaced via authError */
   } finally {
@@ -198,7 +254,8 @@ async function handleSignOut() {
 }
 
 .btn-primary,
-.btn-secondary {
+.btn-secondary,
+.btn-google {
   align-self: flex-start;
   padding: 10px 18px;
   font-family: var(--font-display);
@@ -233,8 +290,20 @@ async function handleSignOut() {
   background: rgba(167, 227, 178, 0.08);
 }
 
+.btn-google {
+  background: #f3f6ef;
+  color: #122014;
+  border-color: #f3f6ef;
+}
+
+.btn-google:hover:not(:disabled) {
+  background: transparent;
+  color: #f3f6ef;
+}
+
 .btn-primary:disabled,
-.btn-secondary:disabled {
+.btn-secondary:disabled,
+.btn-google:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -275,7 +344,7 @@ async function handleSignOut() {
 }
 
 .privacy-section[open] summary::after {
-  content: '−';
+  content: '-';
 }
 
 .privacy-body {

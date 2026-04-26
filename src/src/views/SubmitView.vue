@@ -48,16 +48,18 @@
       <section v-else-if="step === 'locate'" class="submit-body submit-body--locate">
         <div class="locate-copy">
           <p>Drag the pin to the base of the tree.</p>
-          <p class="muted" v-if="initialAccuracy != null">
-            GPS accuracy: ±{{ Math.round(initialAccuracy) }} m
+          <p class="muted" v-if="userAccuracy != null">
+            GPS accuracy: +/-{{ Math.round(userAccuracy) }} m
           </p>
         </div>
         <div class="locate-map">
           <SubmitLocationPicker
             :lat="lat"
             :lng="lng"
-            :initial-lat="initialLat"
-            :initial-lng="initialLng"
+            :user-lat="userLat"
+            :user-lng="userLng"
+            :zoom="19"
+            :max-zoom="21"
             @update="handleLocationUpdate"
           />
         </div>
@@ -133,6 +135,20 @@
           <p v-else-if="identifyAttempted && !identifying && !identifyError" class="muted">
             No matches returned. Try the species field.
           </p>
+          <div v-if="identifyAttempted && !identifying" class="plantnet-credit">
+            <a href="https://my.plantnet.org/" target="_blank" rel="noopener">
+              <img
+                :src="plantnetLogo"
+                alt="Powered by Pl@ntNet"
+                class="plantnet-credit__logo"
+              />
+            </a>
+            <p class="plantnet-credit__text">
+              The image-based plant species identification service used, is based on the
+              Pl@ntNet recognition API, regularly updated and accessible through the site
+              <a href="https://my.plantnet.org/" target="_blank" rel="noopener">https://my.plantnet.org/</a>.
+            </p>
+          </div>
         </label>
         <label class="field">
           <span class="field-label">Notes (optional)</span>
@@ -180,12 +196,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount } from 'vue'
+import { ref, computed, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import SubmitLocationPicker from '../components/SubmitLocationPicker.vue'
 import { useMapData, CITY_CONFIG, closestCityTo } from '../composables/useMapData'
 import { resizeImage } from '../lib/image'
-import { getCurrentPosition } from '../lib/geo'
+import {
+  acquireSharedPositionWatch,
+  refreshSharedPosition,
+  useSharedPosition,
+  type SharedPosition,
+} from '../lib/geo'
 import { submitPhoto } from '../composables/useSubmissions'
 import { firebaseAvailable } from '../lib/firebase'
 import {
@@ -194,6 +215,7 @@ import {
   PLANTNET_MAX_IMAGES,
   type SpeciesCandidate,
 } from '../lib/plantnet'
+import plantnetLogo from '../assets/powered-by-plantnet-dark.svg'
 
 type Step = 'capture' | 'locate' | 'confirm' | 'uploading' | 'done' | 'error'
 
@@ -209,10 +231,14 @@ const resizeError = ref<string | null>(null)
 const initialLat = ref(0)
 const initialLng = ref(0)
 const initialAccuracy = ref<number | null>(null)
+const userLat = ref(0)
+const userLng = ref(0)
+const userAccuracy = ref<number | null>(null)
 const lat = ref(0)
 const lng = ref(0)
 const refinedByUser = ref(false)
 const detectedCity = ref<string | null>(null)
+const hasInitialFix = ref(false)
 
 const species = ref('')
 const notes = ref('')
@@ -229,6 +255,8 @@ interface AdditionalPhoto {
 
 const additionalPhotos = ref<AdditionalPhoto[]>([])
 const additionalPhotoError = ref<string | null>(null)
+const { sharedPosition } = useSharedPosition()
+let releaseSharedPositionWatch: (() => void) | null = null
 
 const canAddMorePhotos = computed(
   () => additionalPhotos.value.length < PLANTNET_MAX_IMAGES - 1,
@@ -312,21 +340,47 @@ async function handleFilePicked(event: Event) {
   }
 }
 
+function ensureSharedPositionWatch() {
+  if (releaseSharedPositionWatch) return
+  releaseSharedPositionWatch = acquireSharedPositionWatch()
+}
+
+function applyLiveLocation(location: SharedPosition, options: { captureInitial?: boolean } = {}) {
+  userLat.value = location.lat
+  userLng.value = location.lng
+  userAccuracy.value = location.accuracy
+  detectedCity.value = closestCityTo(location.lat, location.lng)
+
+  if (options.captureInitial) {
+    initialLat.value = location.lat
+    initialLng.value = location.lng
+    initialAccuracy.value = location.accuracy
+    hasInitialFix.value = true
+  }
+
+  if (step.value !== 'capture' && !refinedByUser.value) {
+    lat.value = location.lat
+    lng.value = location.lng
+  }
+}
+
 async function advanceToLocate() {
   const fallback = CITY_CONFIG[selectedCity.value as keyof typeof CITY_CONFIG]?.center
   try {
-    const pos = await getCurrentPosition()
-    initialLat.value = pos.coords.latitude
-    initialLng.value = pos.coords.longitude
-    initialAccuracy.value = pos.coords.accuracy ?? null
-    detectedCity.value = closestCityTo(pos.coords.latitude, pos.coords.longitude)
+    ensureSharedPositionWatch()
+    const location = await refreshSharedPosition()
+    applyLiveLocation(location, { captureInitial: true })
   } catch {
     initialAccuracy.value = null
+    userAccuracy.value = null
     detectedCity.value = selectedCity.value ?? null
     if (fallback) {
       initialLng.value = fallback[0]
       initialLat.value = fallback[1]
+      userLng.value = fallback[0]
+      userLat.value = fallback[1]
     }
+    hasInitialFix.value = true
   }
   lat.value = initialLat.value
   lng.value = initialLng.value
@@ -334,11 +388,12 @@ async function advanceToLocate() {
   step.value = 'locate'
 }
 
-function handleLocationUpdate(payload: { lat: number; lng: number }) {
+function handleLocationUpdate(payload: { lat: number; lng: number; source: 'drag' | 'recenter' }) {
   lat.value = payload.lat
   lng.value = payload.lng
-  refinedByUser.value =
-    payload.lat !== initialLat.value || payload.lng !== initialLng.value
+  refinedByUser.value = payload.source === 'drag'
+    ? payload.lat !== userLat.value || payload.lng !== userLng.value
+    : false
 }
 
 async function handleSubmit() {
@@ -388,6 +443,16 @@ function reset() {
   progress.value = 0
   errorMessage.value = ''
   refinedByUser.value = false
+  hasInitialFix.value = false
+  initialLat.value = 0
+  initialLng.value = 0
+  initialAccuracy.value = null
+  userLat.value = 0
+  userLng.value = 0
+  userAccuracy.value = null
+  lat.value = 0
+  lng.value = 0
+  detectedCity.value = null
   candidates.value = []
   identifyError.value = null
   identifyAttempted.value = false
@@ -406,9 +471,20 @@ function handleBack() {
   }
 }
 
+watch(
+  sharedPosition,
+  (location) => {
+    if (!location) return
+    applyLiveLocation(location, { captureInitial: !hasInitialFix.value && step.value !== 'capture' })
+  },
+  { immediate: true },
+)
+
 onBeforeUnmount(() => {
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
   clearAdditionalPhotos()
+  releaseSharedPositionWatch?.()
+  releaseSharedPositionWatch = null
 })
 </script>
 
@@ -769,6 +845,35 @@ onBeforeUnmount(() => {
   font-size: 0.78rem;
 }
 
+.plantnet-credit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(167, 227, 178, 0.1);
+  flex-wrap: wrap;
+}
+
+.plantnet-credit__logo {
+  height: 24px;
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.plantnet-credit__text {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--color-muted);
+  flex: 1;
+  min-width: 200px;
+  line-height: 1.4;
+}
+
+.plantnet-credit__text a {
+  color: var(--color-leaf);
+}
+
 .submit-disclaimer {
   font-size: 0.78rem;
 }
@@ -833,3 +938,4 @@ onBeforeUnmount(() => {
   font-size: 0.88rem;
 }
 </style>
+
