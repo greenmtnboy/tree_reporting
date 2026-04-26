@@ -34,6 +34,7 @@ export interface Submission {
   userId: string
   city: string
   photoPath: string
+  additionalPhotoPaths: string[]
   initialLat: number
   initialLng: number
   initialAccuracy: number | null
@@ -72,6 +73,7 @@ export interface CheckinInput {
 
 export interface SubmitInput {
   photoBlob: Blob
+  additionalPhotoBlobs?: Blob[]
   city: string
   initialLat: number
   initialLng: number
@@ -84,38 +86,72 @@ export interface SubmitInput {
   onProgress?: (fraction: number) => void
 }
 
-export async function submitPhoto(input: SubmitInput): Promise<string> {
-  const { db: firestore, storage: bucket } = requireFirebase()
-  const user = await signInIfNeeded()
-  const submissionId =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
-
-  const contentType = input.photoBlob.type || 'image/jpeg'
-  const ext = contentType.split('/')[1] ?? 'jpg'
-  const photoPath = `submissions/${user.uid}/${submissionId}.${ext}`
-
-  const sref = storageRef(bucket, photoPath)
-  const uploadTask = uploadBytesResumable(sref, input.photoBlob, { contentType })
-
-  await new Promise<void>((resolve, reject) => {
-    uploadTask.on(
+function uploadOne(
+  bucket: FirebaseStorage,
+  path: string,
+  blob: Blob,
+  onProgress?: (fraction: number) => void,
+): Promise<void> {
+  const contentType = blob.type || 'image/jpeg'
+  const sref = storageRef(bucket, path)
+  const task = uploadBytesResumable(sref, blob, { contentType })
+  return new Promise<void>((resolve, reject) => {
+    task.on(
       'state_changed',
       (snap) => {
-        if (input.onProgress && snap.totalBytes > 0) {
-          input.onProgress(snap.bytesTransferred / snap.totalBytes)
+        if (onProgress && snap.totalBytes > 0) {
+          onProgress(snap.bytesTransferred / snap.totalBytes)
         }
       },
       (err) => reject(err),
       () => resolve(),
     )
   })
+}
+
+function makeId(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function extFor(blob: Blob): string {
+  const contentType = blob.type || 'image/jpeg'
+  return contentType.split('/')[1] ?? 'jpg'
+}
+
+export async function submitPhoto(input: SubmitInput): Promise<string> {
+  const { db: firestore, storage: bucket } = requireFirebase()
+  const user = await signInIfNeeded()
+  const submissionId = makeId()
+
+  const allBlobs: Blob[] = [input.photoBlob, ...(input.additionalPhotoBlobs ?? [])]
+  const paths = allBlobs.map((blob, i) => {
+    const suffix = i === 0 ? '' : `-${i}`
+    return `submissions/${user.uid}/${submissionId}${suffix}.${extFor(blob)}`
+  })
+
+  const fractions = allBlobs.map(() => 0)
+  const reportProgress = () => {
+    if (!input.onProgress) return
+    const total = fractions.reduce((sum, f) => sum + f, 0) / fractions.length
+    input.onProgress(total)
+  }
+
+  await Promise.all(
+    allBlobs.map((blob, i) =>
+      uploadOne(bucket, paths[i], blob, (f) => {
+        fractions[i] = f
+        reportProgress()
+      }),
+    ),
+  )
 
   const docData = {
     userId: user.uid,
     city: input.city,
-    photoPath,
+    photoPath: paths[0],
+    additionalPhotoPaths: paths.slice(1),
     initialLat: input.initialLat,
     initialLng: input.initialLng,
     initialAccuracy: input.initialAccuracy,
@@ -138,6 +174,9 @@ function mapSubmissionDoc(id: string, data: Record<string, unknown>): Submission
     userId: String(data.userId ?? ''),
     city: String(data.city ?? ''),
     photoPath: String(data.photoPath ?? ''),
+    additionalPhotoPaths: Array.isArray(data.additionalPhotoPaths)
+      ? (data.additionalPhotoPaths as unknown[]).map((p) => String(p))
+      : [],
     initialLat: Number(data.initialLat ?? 0),
     initialLng: Number(data.initialLng ?? 0),
     initialAccuracy:

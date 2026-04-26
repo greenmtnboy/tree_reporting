@@ -14,12 +14,13 @@ import maplibregl from 'maplibre-gl'
 const props = defineProps<{
   lat: number
   lng: number
-  initialLat: number
-  initialLng: number
+  userLat: number
+  userLng: number
   zoom?: number
+  maxZoom?: number
 }>()
 const emit = defineEmits<{
-  (e: 'update', payload: { lat: number; lng: number }): void
+  (e: 'update', payload: { lat: number; lng: number; source: 'drag' | 'recenter' }): void
 }>()
 
 const container = ref<HTMLDivElement | null>(null)
@@ -45,14 +46,15 @@ onMounted(() => {
     container: container.value,
     style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
     center: [props.lng, props.lat],
-    zoom: props.zoom ?? 18,
+    zoom: props.zoom ?? 19,
+    maxZoom: props.maxZoom ?? 21,
     attributionControl: false,
   })
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
   map.on('load', () => {
     if (!map) return
     userMarker = new maplibregl.Marker({ element: makeUserDotEl() })
-      .setLngLat([props.initialLng, props.initialLat])
+      .setLngLat([props.userLng, props.userLat])
       .addTo(map)
     marker = new maplibregl.Marker({ draggable: true, color: '#A7E3B2' })
       .setLngLat([props.lng, props.lat])
@@ -60,7 +62,7 @@ onMounted(() => {
     marker.on('dragend', () => {
       if (!marker) return
       const { lng, lat } = marker.getLngLat()
-      emit('update', { lat, lng })
+      emit('update', { lat, lng, source: 'drag' })
     })
   })
 })
@@ -73,7 +75,7 @@ watch(
 )
 
 watch(
-  () => [props.initialLat, props.initialLng],
+  () => [props.userLat, props.userLng],
   ([lat, lng]) => {
     if (userMarker) userMarker.setLngLat([lng, lat])
   },
@@ -81,10 +83,13 @@ watch(
 
 function recenter() {
   if (!map) return
-  map.flyTo({ center: [props.initialLng, props.initialLat], zoom: props.zoom ?? 18 })
+  map.flyTo({
+    center: [props.userLng, props.userLat],
+    zoom: Math.max(map.getZoom(), props.zoom ?? 19),
+  })
   if (marker) {
-    marker.setLngLat([props.initialLng, props.initialLat])
-    emit('update', { lat: props.initialLat, lng: props.initialLng })
+    marker.setLngLat([props.userLng, props.userLat])
+    emit('update', { lat: props.userLat, lng: props.userLng, source: 'recenter' })
   }
 }
 

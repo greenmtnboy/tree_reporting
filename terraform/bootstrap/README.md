@@ -28,6 +28,22 @@ terraform output -json firebase_web_config
 
 Paste that into the frontend's Firebase initializer (e.g. `src/src/lib/firebase.ts`).
 
+## Google sign-in
+
+The frontend supports Google account sign-in and anonymous-account upgrade, but it is currently enabled manually in Firebase Console rather than managed by Terraform.
+
+1. Open Firebase Console for `sf-tree-reporting-prod`.
+2. Go to `Authentication` -> `Sign-in method` -> `Google`.
+3. Enable the provider, choose the public-facing app name, set a support email, and save.
+4. Go to `Authentication` -> `Settings` -> `Authorized domains`.
+5. Add every runtime host used by the web app.
+
+Notes:
+
+- Projects created after April 28, 2025 no longer include `localhost` as an authorized domain by default, so add it manually for local development if needed.
+- Enter hostnames only in Authorized domains, for example `localhost` or `greenmtnboy.github.io`, not full URLs, ports, or paths.
+- The app links a signed-in anonymous user to Google when possible so existing submissions keep the same Firebase `uid`.
+
 ## One-way doors
 
 - **Firestore location** (`us-central1`): cannot be changed after the database is created without a migration.

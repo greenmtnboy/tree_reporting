@@ -174,6 +174,11 @@ import { resolveBootstrapCity } from '../composables/bootstrapCity'
 import CitySelector from './CitySelector.vue'
 import CheckinDialog from './CheckinDialog.vue'
 import { firebaseAvailable } from '../lib/firebase'
+import {
+  acquireSharedPositionWatch,
+  getGeolocationPermissionState,
+  refreshSharedPosition,
+} from '../lib/geo'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
 
 const props = defineProps<{
@@ -243,6 +248,7 @@ let landmarkInteractionsBound = false
 let globeMarkersBound = false
 let zoomControlLabelEl: HTMLDivElement | null = null
 let pendingSwoopFlyTimeout: number | null = null
+let releaseSharedPositionWatch: (() => void) | null = null
 const lastVisibleRangeSigByZoom = new Map<number, string>()
 const introLockedRangeByZoom = new Map<number, { minX: number; maxX: number; minY: number; maxY: number }>()
 
@@ -1056,22 +1062,18 @@ watch(
 // --- Geolocation ---
 
 async function restoreGrantedUserLocation(applyCity: boolean): Promise<void> {
-  if (!navigator.geolocation || !navigator.permissions) return
+  if (typeof navigator === 'undefined' || !navigator.geolocation) return
   try {
-    const result = await navigator.permissions.query({ name: 'geolocation' })
-    if (result.state !== 'granted') return
-    await new Promise<void>((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setUserLocation(pos.coords.latitude, pos.coords.longitude)
-          if (applyCity) {
-            silentlyApplyCity(pos.coords.latitude, pos.coords.longitude)
-          }
-          resolve()
-        },
-        () => resolve(),
-      )
-    })
+    const permissionState = await getGeolocationPermissionState()
+    if (permissionState !== 'granted') return
+    if (!releaseSharedPositionWatch) {
+      releaseSharedPositionWatch = acquireSharedPositionWatch()
+    }
+    const location = await refreshSharedPosition()
+    setUserLocation(location.lat, location.lng, location.accuracy)
+    if (applyCity) {
+      silentlyApplyCity(location.lat, location.lng)
+    }
   } catch {
     // best-effort, ignore errors
   }
@@ -1095,12 +1097,11 @@ function silentlyApplyCity(lat: number, lng: number): void {
  * This is the single authoritative path for GPS-driven navigation.
  */
 function navigateToLocation(lat: number, lng: number): void {
-  setUserLocation(lat, lng)
   const city = closestCityTo(lat, lng)
   if (city !== selectedCity.value) {
     void switchCity(city, [lng, lat])
   } else {
-    flyTo({ lat, lng, zoom: 15 })
+    flyTo({ lat, lng, zoom: props.simplified ? 18 : 15 })
   }
 }
 
@@ -1123,15 +1124,17 @@ watch([userLocation, mapRef], ([loc, map]) => {
 
 function toggleUserLocation() {
   if (!navigator.geolocation) return
+  if (!releaseSharedPositionWatch) {
+    releaseSharedPositionWatch = acquireSharedPositionWatch()
+  }
   if (userLocation.value) {
     // Already have a location — re-navigate so a city change is detected if needed.
     navigateToLocation(userLocation.value.lat, userLocation.value.lng)
     return
   }
-  navigator.geolocation.getCurrentPosition(
-    (pos) => navigateToLocation(pos.coords.latitude, pos.coords.longitude),
-    (err) => { console.warn('[Geolocation]', err.message) },
-  )
+  refreshSharedPosition()
+    .then((location) => navigateToLocation(location.lat, location.lng))
+    .catch((err) => { console.warn('[Geolocation]', (err as Error).message) })
 }
 
 // --- Camera fly-to ---
@@ -1287,6 +1290,7 @@ onMounted(async () => {
     const resolvedBootstrapCity = (lifecycleRequestedCity.value ?? mountedRouteCity ?? selectedCity.value) as CityCode
     commitResolvedCity(resolvedBootstrapCity)
   }
+  void restoreGrantedUserLocation(false)
 
   // Kick off DuckDB init now that the city is known so it runs in parallel with
   // map style loading instead of waiting until the map's 'load' event fires.
@@ -1309,7 +1313,7 @@ onMounted(async () => {
     pitch: props.simplified ? 0 : 60,
     bearing: props.simplified ? 0 : -20,
     maxPitch: props.simplified ? 0 : 70,
-    maxZoom: 19,
+    maxZoom: 21,
     keyboard: true,
   })
   mapRef.value = map
@@ -1451,6 +1455,8 @@ onUnmounted(() => {
   zoomControlLabelEl = null
   landmarkInteractionsBound = false
   globeMarkersBound = false
+  releaseSharedPositionWatch?.()
+  releaseSharedPositionWatch = null
   mapRef.value?.remove()
   mapRef.value = null
 })
