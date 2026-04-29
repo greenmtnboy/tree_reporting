@@ -1,1 +1,2 @@
 pytrilogy>=0.3.153
+duckdb<1.5.0
