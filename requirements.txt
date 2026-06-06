@@ -1,2 +1,9 @@
-pytrilogy>=0.3.153
-duckdb<1.5.0
+# pytrilogy <=0.3.276 capped duckdb<1.5.0; 0.3.279 lifted that cap, so the
+# duckdb>=1.5.3 pin below now resolves cleanly. Keep this floor at the
+# cap-lifting release so a fresh `pip install -r requirements.txt` cannot
+# silently resolve back to a duckdb<1.5.0 pytrilogy.
+pytrilogy>=0.3.279
+# DuckDB 1.5.3+ is the first 1.5.x with the `nanoarrow` community extension
+# published for linux_amd64 (1.5.0 ships `arrow` but not `nanoarrow`, so
+# `LOAD arrow` fails with "Nested load of nanoarrow failed" on the runner).
+duckdb>=1.5.3

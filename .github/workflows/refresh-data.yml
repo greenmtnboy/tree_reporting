@@ -11,15 +11,15 @@ permissions:
 
 jobs:
   refresh:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: prod-refresh
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.13'
 
@@ -28,22 +28,46 @@ jobs:
 
       - id: auth
         name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           workload_identity_provider: 'projects/734709568634/locations/global/workloadIdentityPools/github/providers/trilogy-public-models'
           project_id: 'preqldata'
+
+      # Install the DuckDB community extensions serially up front so the
+      # parallel refresh connections only LOAD (not INSTALL) them. Without this,
+      # the concurrent INSTALLs race on the shared ~/.duckdb/extensions dir and
+      # fail intermittently with: "Could not remove file .../arrow.duckdb_extension".
+      - name: Pre-warm DuckDB community extensions
+        working-directory: data
+        run: python prewarm_extensions.py
 
       - name: Refresh data
         working-directory: data
         run: |
           set +e
-          trilogy refresh raw \
-            --env GOOGLE_HMAC_KEY=${{ secrets.GOOGLE_HMAC_KEY }} \
-            --env GOOGLE_HMAC_SECRET=${{ secrets.GOOGLE_HMAC_SECRET }}
-          EXIT_CODE=$?
-          # Exit code 2 = data already fresh; treat as success.
-          if [ $EXIT_CODE -eq 2 ]; then
-            echo "Data is already fresh."
-            exit 0
-          fi
-          exit $EXIT_CODE
+          max_attempts=3
+          attempt=0
+          while :; do
+            attempt=$((attempt + 1))
+            echo "::group::trilogy refresh raw (attempt ${attempt}/${max_attempts})"
+            trilogy refresh raw \
+              --env GOOGLE_HMAC_KEY=${{ secrets.GOOGLE_HMAC_KEY }} \
+              --env GOOGLE_HMAC_SECRET=${{ secrets.GOOGLE_HMAC_SECRET }}
+            EXIT_CODE=$?
+            echo "::endgroup::"
+            # Exit code 2 = data already fresh; treat as success.
+            if [ $EXIT_CODE -eq 2 ]; then
+              echo "Data is already fresh."
+              exit 0
+            fi
+            if [ $EXIT_CODE -eq 0 ]; then
+              exit 0
+            fi
+            if [ $attempt -ge $max_attempts ]; then
+              echo "Refresh failed after ${attempt} attempt(s) (exit ${EXIT_CODE})."
+              exit $EXIT_CODE
+            fi
+            wait=$((attempt * 30))
+            echo "Refresh failed (exit ${EXIT_CODE}); retrying in ${wait}s..."
+            sleep $wait
+          done
