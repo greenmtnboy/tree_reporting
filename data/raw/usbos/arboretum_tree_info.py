@@ -10,7 +10,7 @@ import pyarrow as pa
 from datetime import date, timezone, datetime
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, normalize_species, validate_coordinates
+from _ingest_shared import emit, enforce_tree_schema, normalize_species, validate_coordinates
 
 BASE_URL = "https://gis.arboretum.harvard.edu/arcgis/rest/services/Maps/Explorer/MapServer/34/query"
 PAGE_SIZE = 100_000
@@ -125,4 +125,5 @@ if __name__ == "__main__":
     records = fetch_all()
     table = build_table(records)
     table = validate_coordinates(table, city="Arboretum", city_code="USBOS")
+    table = enforce_tree_schema(table, city="Arboretum")
     emit(table)

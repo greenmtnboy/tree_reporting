@@ -29,6 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
     emit,
+    enforce_tree_schema,
     normalize_species_parts,
     validate_coordinates,
     download_parquet as _download_parquet,
@@ -124,4 +125,5 @@ if __name__ == "__main__":
     raw = pq.read_table(buf)
     table = transform(raw)
     table = validate_coordinates(table, city="Vancouver", city_code="CAVAN")
+    table = enforce_tree_schema(table, city="Vancouver")
     emit(table)

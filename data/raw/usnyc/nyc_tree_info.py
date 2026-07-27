@@ -15,7 +15,12 @@ import pyarrow.csv as pv
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, normalize_species, validate_coordinates
+from _ingest_shared import (
+    emit,
+    enforce_tree_schema,
+    normalize_species,
+    validate_coordinates,
+)
 
 DATASET_ID = "hn5i-inap"
 DATASET_URL = f"https://data.cityofnewyork.us/resource/{DATASET_ID}.csv"
@@ -88,11 +93,11 @@ def cast_columns(table: pa.Table) -> pa.Table:
         )
         table = table.set_column(table.schema.get_field_index(id_col), id_col, prefixed)
 
-    # dbh: ensure int64.
+    # dbh arrives as text; parse to the canonical float64 (see enforce_tree_schema).
     dbh_col = next((c for c in table.schema.names if c.lower() == "dbh"), None)
     if dbh_col is not None:
         idx = table.schema.get_field_index(dbh_col)
-        table = table.set_column(idx, dbh_col, pc.cast(table[dbh_col], pa.int64()))
+        table = table.set_column(idx, dbh_col, pc.cast(table[dbh_col], pa.float64()))
 
     # genusspecies: split "scientific - common name" and store each part separately.
     genus_col = next((c for c in table.schema.names if c.lower() == "genusspecies"), None)
@@ -181,4 +186,14 @@ if __name__ == "__main__":
     table = load_all_arrow_tables()
     table = add_city_column(table)
     table = validate_coordinates(table, city="New York City", city_code="USNYC")
+    table = enforce_tree_schema(
+        table,
+        city="New York City",
+        columns={
+            "tree_id": "objectid",
+            "species": "genusspecies",
+            "plant_date": "planteddate",
+            "diameter_at_breast_height": "dbh",
+        },
+    )
     emit(table)

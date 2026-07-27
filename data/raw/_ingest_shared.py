@@ -77,6 +77,97 @@ def normalize_species_parts(genus: str | None, epithet: str | None) -> str | Non
 
 
 # ---------------------------------------------------------------------------
+# Canonical tree output schema
+# ---------------------------------------------------------------------------
+
+# Arrow types every city's tree ingest must emit, mirroring the property
+# declarations in tree_common.preql.  Trilogy passes these types through to the
+# materialised parquet unchanged, so a column left to inference silently
+# changes the parquet's physical type: an all-null pa.null() plant_date lands
+# as INT32 (breaking year()), and a whole-number dbh read from CSV lands as
+# BIGINT instead of DOUBLE.  Enforce rather than infer.
+TREE_COLUMN_TYPES: dict[str, pa.DataType] = {
+    "tree_id": pa.string(),
+    "city": pa.string(),
+    "species": pa.string(),
+    "tree_name": pa.string(),
+    "plant_date": pa.date32(),
+    "latitude": pa.float64(),
+    "longitude": pa.float64(),
+    "diameter_at_breast_height": pa.float64(),
+}
+
+# Columns without a `?` prefix in the preql datasources — absence is a bug.
+REQUIRED_TREE_COLUMNS = ("tree_id", "city", "species")
+
+
+def enforce_tree_schema(
+    table: pa.Table,
+    *,
+    columns: dict[str, str] | None = None,
+    city: str = "",
+) -> pa.Table:
+    """Cast the tree ingest columns to their canonical Arrow types.
+
+    Every city script calls this immediately before ``emit`` so all cities'
+    parquets share identical column types.
+
+    Parameters
+    ----------
+    table:    The Arrow table about to be emitted.
+    columns:  Maps a canonical name to the actual column name in *table*, for
+              scripts that emit source-native names — e.g. SF passes
+              ``{"tree_id": "treeid", "diameter_at_breast_height": "dbh"}``.
+              Canonical names not listed are looked up as-is.
+    city:     Optional city name used in error messages.
+
+    Extra columns (``borough``, ``usbos_source``, …) pass through untouched.
+    Casts are *safe*: a lossy conversion raises rather than silently
+    truncating values.
+    """
+    import pyarrow.compute as pc
+
+    prefix = f"{city} ingest" if city else "Ingest"
+    overrides = columns or {}
+    unknown = set(overrides) - set(TREE_COLUMN_TYPES)
+    if unknown:
+        raise ValueError(
+            f"{prefix}: enforce_tree_schema got unknown canonical column(s) "
+            f"{sorted(unknown)}; expected any of {sorted(TREE_COLUMN_TYPES)}"
+        )
+
+    resolved = {c: overrides.get(c, c) for c in TREE_COLUMN_TYPES}
+    names = set(table.schema.names)
+
+    for canonical in REQUIRED_TREE_COLUMNS:
+        actual = resolved[canonical]
+        if actual not in names:
+            raise ValueError(
+                f"{prefix}: required column '{actual}' ({canonical}) is missing "
+                f"from the emitted table"
+            )
+
+    for canonical, target in TREE_COLUMN_TYPES.items():
+        actual = resolved[canonical]
+        if actual not in names:
+            continue
+        idx = table.schema.get_field_index(actual)
+        current = table.schema.field(idx).type
+        if current.equals(target):
+            continue
+        try:
+            cast = pc.cast(table.column(idx), target)
+        except (pa.ArrowInvalid, pa.ArrowNotImplementedError) as e:
+            raise ValueError(
+                f"{prefix}: column '{actual}' ({canonical}) has type {current}, "
+                f"which cannot be safely cast to the canonical {target}: {e}"
+            ) from e
+        table = table.set_column(idx, actual, cast)
+
+    return table
+
+
+# ---------------------------------------------------------------------------
 # Coordinate validation & bounding-box filtering
 # ---------------------------------------------------------------------------
 

@@ -34,6 +34,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
     emit,
+    enforce_tree_schema,
     normalize_species,
     validate_coordinates,
     get_with_retry,
@@ -209,4 +210,5 @@ if __name__ == "__main__":
             file=sys.stderr,
         )
     table = validate_coordinates(table, city="Amsterdam", city_code="NLAMS")
+    table = enforce_tree_schema(table, city="Amsterdam")
     emit(table)
