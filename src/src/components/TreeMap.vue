@@ -503,7 +503,10 @@ function updateZoomLevel() {
     return { minX, maxX, minY, maxY }
   }
 
-  const z = Math.round(mapRef.value.getZoom())
+  // floor, not round: MapLibre floors the camera zoom to pick the displayed
+  // tile level (zoom 15.7 renders z15 tiles), and the visible range we report
+  // to the worker must track the tile level actually on screen.
+  const z = Math.floor(mapRef.value.getZoom())
   const sourceZ = Math.min(TREES_SOURCE_MAXZOOM, z)
   if (sourceZ >= 13 && sourceZ <= 20) {
     const candidateZooms = new Set<number>([sourceZ])

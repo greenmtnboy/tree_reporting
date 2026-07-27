@@ -19,7 +19,7 @@ type WorkerMethodMap = {
   setAutoTileFetchEnabled: { params: { enabled: boolean }; result: void }
   invalidateTileCaches: { params: Record<string, never>; result: void }
   query: { params: { sql: string }; result: { columns: string[]; rows: Record<string, unknown>[] } }
-  getTile: { params: { z: number; x: number; y: number }; result: { tileBuffer: ArrayBuffer } }
+  getTile: { params: { z: number; x: number; y: number }; result: { tileBuffer: ArrayBuffer; transient?: boolean } }
 }
 
 type WorkerRequest<K extends keyof WorkerMethodMap> = {
@@ -191,6 +191,9 @@ async function prewarmLodCaches(): Promise<void> {
   await rpc('prewarmLodCaches', {})
 }
 
+/** How long MapLibre may cache a tile that was answered while fetching was paused. */
+const TRANSIENT_TILE_TTL_MS = 4000
+
 async function ensureTileProtocolRegistered(initialCity?: string) {
   if (protocolRegistered) return
   await ensureInit(initialCity)
@@ -200,7 +203,14 @@ async function ensureTileProtocolRegistered(initialCity?: string) {
     if (!parsed) return { data: new Uint8Array() }
 
     const result = await rpc('getTile', parsed)
-    return { data: new Uint8Array(result.tileBuffer) }
+    const data = new Uint8Array(result.tileBuffer)
+    if (result.transient) {
+      // Empty response produced while auto tile fetch was paused (intro/swoop).
+      // Give it a short expiry so MapLibre re-requests it instead of caching
+      // the empty as if the tile genuinely had no trees.
+      return { data, expires: new Date(Date.now() + TRANSIENT_TILE_TTL_MS) }
+    }
+    return { data }
   })
 
   protocolRegistered = true

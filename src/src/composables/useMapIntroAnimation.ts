@@ -333,6 +333,10 @@ export function useMapIntroAnimation({
             pitch: startPitch,
           })
         }
+        // Tiles requested during the motion were answered with empties while
+        // auto-fetch was off and are now cached by MapLibre; bump the URL nonce
+        // so every tile is fetched fresh.
+        forceTreesTileRefetchPass()
         introActive.value = false
         setMapInteractions(true)
       }
@@ -391,6 +395,8 @@ export function useMapIntroAnimation({
 
     const cleanup = (cancelled: boolean) => {
       setAutoTileFetchEnabled(true)
+      // Flush MapLibre-cached empties accumulated while auto-fetch was off.
+      forceTreesTileRefetchPass()
       if (cancelled) introActive.value = false
       setMapInteractions(true)
     }

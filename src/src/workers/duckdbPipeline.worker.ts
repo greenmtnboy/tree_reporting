@@ -314,7 +314,9 @@ function tileBounds3857(z: number, x: number, y: number): { minX: number; minY: 
 function pickNextQueuedTileIndex(): number {
   if (pendingTileQueue.length <= 1) return 0
   const viewport = activeViewportCenter
-  const viewportZoom = Math.round(activeViewportZoom)
+  // floor, not round: MapLibre floors the camera zoom to choose the displayed
+  // tile level, so e.g. zoom 15.7 renders z15 tiles and those must win priority.
+  const viewportZoom = Math.floor(activeViewportZoom)
   const now = Date.now()
   let bestIdx = 0
   let bestScore = Number.POSITIVE_INFINITY
@@ -829,8 +831,14 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   let minY = Math.max(0, blockY * blockSize)
   let maxY = Math.min(tileCount - 1, minY + blockSize - 1)
 
+  // Batch over the reported visible range only when it contains the requested
+  // tile — a stale range (pan or zoom drift since the last report) would
+  // otherwise batch the wrong area and leave the requested tile to a slow
+  // single-tile fallback query.
   const visibleRange = getVisibleTileRange(z)
-  if (visibleRange) {
+  if (visibleRange
+    && x >= visibleRange.minX && x <= visibleRange.maxX
+    && y >= visibleRange.minY && y <= visibleRange.maxY) {
     minX = visibleRange.minX
     maxX = visibleRange.maxX
     minY = visibleRange.minY
@@ -1162,8 +1170,6 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
 
   const key = tileCacheKey(z, x, y)
   if (isTileOutsideDataBounds(z, x, y)) return new Uint8Array()
-
-  if (activeViewportZoom >= 16 && z <= 12) return new Uint8Array()
 
   const cached = getCachedTile(key)
   if (cached) return cached
@@ -1545,7 +1551,7 @@ async function prewarmLodCaches(): Promise<void> {
   const baseQuery = effectiveBaseQuery(tileQuerySql)
   prewarmPromise = (async () => {
     const viewport = activeViewportCenter
-    const focusZoom = Math.max(PREPARED_FEATURE_TABLE_ZOOM, Math.min(19, Math.round(activeViewportZoom)))
+    const focusZoom = Math.max(PREPARED_FEATURE_TABLE_ZOOM, Math.min(19, Math.floor(activeViewportZoom)))
 
     if (focusZoom === PREPARED_FEATURE_TABLE_ZOOM) {
       await ensurePreparedFeatureTableForZoom(PREPARED_FEATURE_TABLE_ZOOM, baseQuery)
@@ -1640,14 +1646,18 @@ async function runQuery(sql: string): Promise<{ columns: string[]; rows: Record<
   return { columns, rows }
 }
 
-async function getTile(z: number, x: number, y: number): Promise<Uint8Array> {
+async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Array; transient: boolean }> {
   await ensureInit()
   await waitForCityContext()
   if (!autoTileFetchEnabled) {
+    // Tile fetching is paused (intro/swoop). Serve from cache when possible;
+    // otherwise return an empty tile flagged transient so the client can give
+    // it a short expiry in MapLibre's tile cache rather than letting the empty
+    // response persist as if the tile had no trees.
     const cached = getCachedTile(tileCacheKey(z, x, y))
-    return cached ?? new Uint8Array()
+    return { tile: cached ?? new Uint8Array(), transient: cached == null }
   }
-  return queueTileRequest(z, x, y)
+  return { tile: await queueTileRequest(z, x, y), transient: false }
 }
 
 type WorkerMethodMap = {
@@ -1667,7 +1677,7 @@ type WorkerMethodMap = {
   setAutoTileFetchEnabled: { params: { enabled: boolean }; result: void }
   invalidateTileCaches: { params: Record<string, never>; result: void }
   query: { params: { sql: string }; result: { columns: string[]; rows: Record<string, unknown>[] } }
-  getTile: { params: { z: number; x: number; y: number }; result: { tileBuffer: ArrayBuffer } }
+  getTile: { params: { z: number; x: number; y: number }; result: { tileBuffer: ArrayBuffer; transient: boolean } }
 }
 
 type WorkerRequest = {
@@ -1784,10 +1794,10 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       }
       case 'getTile': {
         const { z, x, y } = msg.params as WorkerMethodMap['getTile']['params']
-        const tile = await getTile(z, x, y)
+        const { tile, transient } = await getTile(z, x, y)
         const clone = new Uint8Array(tile)
         send(
-          { type: 'response', requestId: msg.requestId, ok: true, result: { tileBuffer: clone.buffer } },
+          { type: 'response', requestId: msg.requestId, ok: true, result: { tileBuffer: clone.buffer, transient } },
           [clone.buffer],
         )
         break
