@@ -155,7 +155,7 @@ type MobileAction = {
 
 const route = useRoute()
 const router = useRouter()
-const { selectedCity } = useMapData()
+const { displayCity } = useMapData()
 const { landmarks, loading: landmarkLoading } = useLandmarkData()
 const { flyTo } = useFlyTo()
 
@@ -275,7 +275,8 @@ function goToScreen(screen: MobileScreen) {
   }
   void router.push({
     name: screen,
-    query: { ...route.query, city: selectedCity.value },
+    // displayCity so a screen change mid city-switch follows the destination city.
+    query: { ...route.query, city: displayCity.value },
   })
 }
 

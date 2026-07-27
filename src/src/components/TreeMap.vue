@@ -1069,6 +1069,9 @@ watch(
     const city = Array.isArray(newCity) ? newCity[0] : newCity
     if (typeof city !== 'string' || !(city in CITY_CONFIG)) return
     if (city === lifecycleRequestedCity.value && city === selectedCity.value) return
+    // A switch to this city is already mid-flight (its swoop hasn't committed the
+    // context yet) — a link that echoes the destination city must not restart it.
+    if (city === lifecycleRequestedCity.value && lifecyclePhase.value === 'switching') return
     lifecycleRequestCity(city)
     if (lifecyclePhase.value === 'initializing' || lifecyclePhase.value === 'loading') {
       jumpMapToCity(city as CityCode)

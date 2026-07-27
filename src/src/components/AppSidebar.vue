@@ -111,7 +111,7 @@ import type { Landmark } from '../types'
 
 const { landmarks, loading: landmarkLoading } = useLandmarkData()
 const { flyTo } = useFlyTo()
-const { selectedCity } = useMapData()
+const { displayCity } = useMapData()
 const { user, authReady, isAnonymous, isGoogleLinked } = useAuth()
 const route = useRoute()
 
@@ -130,7 +130,9 @@ const profileSubLabel = computed(() => {
   return null
 })
 
-const routeQuery = computed(() => ({ city: selectedCity.value }))
+// displayCity, not selectedCity: mid-swoop the committed city still lags behind
+// the city we're flying to, and these links must carry the destination city.
+const routeQuery = computed(() => ({ city: displayCity.value }))
 const mapRoute = computed(() => ({ path: '/', query: routeQuery.value }))
 const summaryRoute = computed(() => ({ path: '/summary', query: routeQuery.value }))
 const speciesRoute = computed(() => ({ path: '/species', query: routeQuery.value }))
