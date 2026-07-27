@@ -13,7 +13,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, normalize_species, validate_coordinates
+from _ingest_shared import emit, enforce_tree_schema, normalize_species, validate_coordinates
 
 DATASET_URL = 'https://data.lacity.org/resource/vt5t-mscf.json'
 PAGE_SIZE = 50000
@@ -125,4 +125,5 @@ if __name__ == '__main__':
             file=sys.stderr,
         )
     table = validate_coordinates(table, city='Los Angeles', city_code='USLAX')
+    table = enforce_tree_schema(table, city='Los Angeles')
     emit(table)

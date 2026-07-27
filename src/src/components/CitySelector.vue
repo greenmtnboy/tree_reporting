@@ -1,7 +1,7 @@
 <template>
   <select
     class="city-select"
-    :value="displayedCity"
+    :value="displayCity"
     :disabled="isDisabled"
     aria-label="Select city"
     data-testid="city-select"
@@ -32,9 +32,8 @@ const COUNTRY_BY_PREFIX: Record<string, string> = {
 
 const router = useRouter()
 const route = useRoute()
-const { selectedCity } = useMapData()
-const { requestedCity, canManuallySelectCity, activateCity } = useMapLifecycle()
-const displayedCity = computed(() => requestedCity.value ?? selectedCity.value)
+const { displayCity } = useMapData()
+const { canManuallySelectCity, activateCity } = useMapLifecycle()
 const isDisabled = computed(() => route.name === 'map' && !canManuallySelectCity.value)
 
 function formatCityLabel(code: string, name: string) {

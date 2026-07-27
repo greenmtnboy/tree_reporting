@@ -1,5 +1,12 @@
 <template>
   <div ref="mapContainer" class="tree-map"></div>
+  <MapCompass
+    v-if="!displayError"
+    :bearing="mapBearing"
+    :disabled="cameraLocked"
+    :collapsible="!!props.simplified"
+    @select="swoopToBearing"
+  />
   <div v-if="isInitialLoading" class="map-loading">{{ loadingMessage }}</div>
   <div v-else-if="tileRefreshing" class="map-loading map-refreshing">{{ tileRefreshMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
@@ -169,9 +176,10 @@ import { useMapLifecycle } from '../composables/useMapLifecycle'
 import { useMapLayers, TREES_SOURCE_MAXZOOM, addLandmarkLayer, removeLandmarkLayer, registerLandmarkEyeIcon } from '../composables/useMapLayers'
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { addCityMarkers, updateCityMarkersSelected, removeCityMarkers, bindCityMarkerInteractions } from '../composables/useGlobeCityMarkers'
-import { useMapIntroAnimation, INTRO_START_ZOOM } from '../composables/useMapIntroAnimation'
+import { useMapIntroAnimation, INTRO_START_ZOOM, INTRO_START_BEARING, INTRO_END_BEARING } from '../composables/useMapIntroAnimation'
 import { resolveBootstrapCity } from '../composables/bootstrapCity'
 import CitySelector from './CitySelector.vue'
+import MapCompass from './MapCompass.vue'
 import CheckinDialog from './CheckinDialog.vue'
 import { firebaseAvailable } from '../lib/firebase'
 import {
@@ -190,6 +198,7 @@ const props = defineProps<{
 const mapContainer = ref<HTMLDivElement>()
 const mapRef = shallowRef<maplibregl.Map | null>(null)
 const zoomLevel = ref(13)
+const mapBearing = ref(0)
 const mapError = ref<string | null>(null)
 const {
   phase: lifecyclePhase,
@@ -260,6 +269,7 @@ const WASD_MAX_SPEED = 22
 const WASD_FRICTION = 0.82
 const MOBILE_TREE_CARD_EDGE_MARGIN = 12
 const MOBILE_TREE_CARD_POINTER_GAP = 18
+const COMPASS_SWOOP_MS = 1600
 
 const WASD_DIRS: Record<string, [number, number]> = {
   w: [0, -1],
@@ -325,6 +335,10 @@ const introCenterRef = computed((): [number, number] => CITY_CONFIG[mapDisplayCi
 
 const displayError = computed(() => mapError.value)
 const isInitialLoading = computed(() => showLoadingOverlay.value)
+// The compass is always on screen and always tracks the live bearing, but while a
+// scripted camera move owns the camera (intro sweep, globe swoop, city switch)
+// its buttons are inert — a mid-flight easeTo would fight the animation.
+const cameraLocked = computed(() => introActive.value || lifecyclePhase.value !== 'ready')
 
 const activeHeatmapColors = computed(() => {
   return workerDistinctColors.value.length > 0 ? workerDistinctColors.value : []
@@ -410,7 +424,7 @@ function jumpMapToCity(city: CityCode) {
     center: CITY_CONFIG[city].center,
     zoom: props.simplified ? 13 : INTRO_START_ZOOM,
     pitch: props.simplified ? 0 : 60,
-    bearing: props.simplified ? 0 : -20,
+    bearing: props.simplified ? INTRO_END_BEARING : INTRO_START_BEARING,
   })
 }
 
@@ -456,6 +470,7 @@ function ensureZoomControlLabel() {
 function updateZoomLevel() {
   if (!mapRef.value) return
   zoomLevel.value = mapRef.value.getZoom()
+  mapBearing.value = mapRef.value.getBearing()
   updateTreeCardPosition()
   ensureZoomControlLabel()
   if (zoomControlLabelEl) zoomControlLabelEl.textContent = zoomLevel.value.toFixed(2)
@@ -1013,6 +1028,7 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
         mapRef.value.flyTo({
           center: landingCoords ?? center,
           zoom: 13.5,
+          bearing: INTRO_END_BEARING,
           duration: 5000,
           essential: true,
         })
@@ -1053,6 +1069,9 @@ watch(
     const city = Array.isArray(newCity) ? newCity[0] : newCity
     if (typeof city !== 'string' || !(city in CITY_CONFIG)) return
     if (city === lifecycleRequestedCity.value && city === selectedCity.value) return
+    // A switch to this city is already mid-flight (its swoop hasn't committed the
+    // context yet) — a link that echoes the destination city must not restart it.
+    if (city === lifecycleRequestedCity.value && lifecyclePhase.value === 'switching') return
     lifecycleRequestCity(city)
     if (lifecyclePhase.value === 'initializing' || lifecyclePhase.value === 'loading') {
       jumpMapToCity(city as CityCode)
@@ -1153,6 +1172,27 @@ function bearingTo(from: [number, number], to: [number, number]): number {
   return (toDeg(Math.atan2(y, x)) + 360) % 360
 }
 
+/**
+ * Rotate the camera to face `bearing`, pivoting around the ground point the
+ * camera is currently centred on so the view swings in place rather than
+ * translating. Driven by the compass overlay's cardinal buttons.
+ */
+function swoopToBearing(bearing: number) {
+  if (!mapRef.value) return
+  if (pendingSwoopFlyTimeout != null) {
+    window.clearTimeout(pendingSwoopFlyTimeout)
+    pendingSwoopFlyTimeout = null
+  }
+  mapRef.value.stop()
+  mapRef.value.easeTo({
+    bearing,
+    around: mapRef.value.getCenter(),
+    duration: COMPASS_SWOOP_MS,
+    easing: (x) => x * (2 - x),
+    essential: true,
+  })
+}
+
 // Swoop camera to landmark — pivot to face the target first, then fly
 watch(flyToTarget, (t) => {
   if (!mapRef.value || !t) return
@@ -1187,14 +1227,19 @@ watch([currentMapQuery, publishedTreeIdFilterSql, mapQueryRevision], async ([que
   } else {
     startTileRefreshMessage()
   }
-  mapQueryChangedAt = nowMs()
-  firstTreesSourceLoadedLogged = false
-  firstMapIdleAfterPublishLogged = false
   lastVisibleRangeSigByZoom.clear()
   introLockedRangeByZoom.clear()
   await setColorOverrideSql(colorOverrideSql.value)
   await setTileQuery(query)
   await setPublishedTreeIdFilterSql(filterSql)
+  // Re-arm the "trees source loaded" one-shot only once the worker is actually
+  // configured for the new query and the refetch is about to be issued. Arming it
+  // before the awaits let tiles still in flight from the PREVIOUS query satisfy it —
+  // on a city switch that meant the lifecycle reached 'ready' (overlay hidden, chat
+  // unlocked) on an empty tile pass built from the old city's data.
+  mapQueryChangedAt = nowMs()
+  firstTreesSourceLoadedLogged = false
+  firstMapIdleAfterPublishLogged = false
   // Use forceTreesTileRefetchPass instead of addTreeLayers so the tile URL nonce is always
   // incremented after a publish. setTiles/reload alone can leave MapLibre's internal tile
   // cache serving stale data (old filtered trees popping in); a new nonce forces a clean fetch.
@@ -1314,12 +1359,15 @@ onMounted(async () => {
     zoom: props.simplified ? 13 : INTRO_START_ZOOM,
     center: CITY_CONFIG[mapDisplayCity.value].center,
     pitch: props.simplified ? 0 : 60,
-    bearing: props.simplified ? 0 : -20,
+    bearing: props.simplified ? INTRO_END_BEARING : INTRO_START_BEARING,
     maxPitch: props.simplified ? 0 : 70,
     maxZoom: 21,
     keyboard: true,
   })
   mapRef.value = map
+  // Seed the compass before the first 'move' so it doesn't briefly read north
+  // while the camera actually starts at INTRO_START_BEARING.
+  mapBearing.value = map.getBearing()
 
   if (!props.simplified) setMapInteractions(false)
 
@@ -1338,7 +1386,8 @@ onMounted(async () => {
     }
   })
 
-  map.addControl(new maplibregl.NavigationControl(), 'top-right')
+  // The MapCompass overlay replaces the built-in compass button on both layouts.
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
   ensureZoomControlLabel()
   map.on('zoom', updateZoomLevel)
   map.on('move', updateZoomLevel)

@@ -10,7 +10,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, normalize_species, validate_coordinates
+from _ingest_shared import emit, enforce_tree_schema, normalize_species, validate_coordinates
 
 DATASET_URL = 'https://data.tempe.gov/api/download/v1/items/542d8f16fff2466fb3115f209df03fd6/geojson?layers=0'
 
@@ -59,4 +59,5 @@ def transform(payload: dict) -> pa.Table:
 if __name__ == '__main__':
     table = transform(download_geojson())
     table = validate_coordinates(table, city='Tempe', city_code='USTEM')
+    table = enforce_tree_schema(table, city='Tempe')
     emit(table)

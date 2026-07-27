@@ -72,7 +72,21 @@ function commitResolvedCity(city: CityCode) {
   applyCommittedCity(city)
 }
 
-const { contextCity } = useMapLifecycle()
+const { contextCity, requestedCity } = useMapLifecycle()
+
+/**
+ * The city the UI should present *right now*.
+ *
+ * During a city switch the globe swoop runs for several seconds before the new
+ * city's data context is committed, so `selectedCity` still reports the old
+ * city for the whole animation. Navigation links, titles, and anything else the
+ * user can act on mid-swoop must follow the requested city instead — otherwise
+ * clicking through to another view lands on the city we're flying away from.
+ *
+ * Use `selectedCity` only when you need the city whose data context is actually
+ * committed (queries, DuckDB context).
+ */
+const displayCity = computed<CityCode>(() => (requestedCity.value ?? selectedCity.value) as CityCode)
 
 watch(
   contextCity,
@@ -134,6 +148,7 @@ export function useMapData() {
 
   return {
     selectedCity,
+    displayCity,
     currentMapQuery,
     publishedTreeIdFilterSql,
     colorOverrideSql,

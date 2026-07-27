@@ -27,6 +27,7 @@ import pyarrow.parquet as pq
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
     emit,
+    enforce_tree_schema,
     normalize_species,
     validate_coordinates,
     download_parquet as _download_parquet,
@@ -89,7 +90,7 @@ def transform(table: pa.Table) -> pa.Table:
                 "city": pa.array([], type=pa.string()),
                 "species": pa.array([], type=pa.string()),
                 "tree_name": pa.array([], type=pa.string()),
-                "plant_date": pa.array([], type=pa.null()),
+                "plant_date": pa.array([], type=pa.date32()),
                 "latitude": pa.array([], type=pa.float64()),
                 "longitude": pa.array([], type=pa.float64()),
                 "diameter_at_breast_height": pa.array([], type=pa.float64()),
@@ -145,7 +146,9 @@ def transform(table: pa.Table) -> pa.Table:
             "city": pa.array(["FRPAR"] * n, type=pa.string()),
             "species": species,
             "tree_name": tree_name,
-            "plant_date": pa.array([None] * n, type=pa.null()),
+            # Paris has no planting date; emit a typed all-null DATE column so the
+            # materialised parquet keeps a DATE logical type (pa.null() lands as INT32).
+            "plant_date": pa.array([None] * n, type=pa.date32()),
             "latitude": lat,
             "longitude": lon,
             "diameter_at_breast_height": dbh,
@@ -158,4 +161,5 @@ if __name__ == "__main__":
     raw = pq.read_table(buf)
     table = transform(raw)
     table = validate_coordinates(table, city="Paris", city_code="FRPAR")
+    table = enforce_tree_schema(table, city="Paris")
     emit(table)

@@ -10,7 +10,7 @@ import pyarrow as pa
 from datetime import date, datetime
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, normalize_species, validate_coordinates
+from _ingest_shared import emit, enforce_tree_schema, normalize_species, validate_coordinates
 
 DATASET_ID = "82zb-7qc9"
 # Only current (non-removed) trees; request all fields we need
@@ -161,4 +161,5 @@ if __name__ == "__main__":
             file=sys.stderr,
         )
     table = validate_coordinates(table, city="Cambridge", city_code="USBOS")
+    table = enforce_tree_schema(table, city="Cambridge")
     emit(table)

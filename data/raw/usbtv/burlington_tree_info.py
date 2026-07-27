@@ -10,7 +10,7 @@ import pyarrow as pa
 from datetime import date
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, normalize_species, validate_coordinates
+from _ingest_shared import emit, enforce_tree_schema, normalize_species, validate_coordinates
 
 BASE_URL = "https://maps.burlingtonvt.gov/arcgis/rest/services/Tree_Sites_Public_View/FeatureServer/0/query"
 PAGE_SIZE = 2_000
@@ -120,4 +120,5 @@ if __name__ == "__main__":
     attrs, geoms = fetch_all()
     table = build_table(attrs, geoms)
     table = validate_coordinates(table, city="Burlington", city_code="USBTV")
+    table = enforce_tree_schema(table, city="Burlington")
     emit(table)

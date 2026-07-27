@@ -37,6 +37,7 @@ import requests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
     emit,
+    enforce_tree_schema,
     normalize_species,
     validate_coordinates,
     circumference_cm_to_dbh_inches,
@@ -345,4 +346,5 @@ if __name__ == "__main__":
     rows = download_csv()
     table = transform(rows)
     table = validate_coordinates(table, city="London", city_code="GBLON")
+    table = enforce_tree_schema(table, city="London")
     emit(table)

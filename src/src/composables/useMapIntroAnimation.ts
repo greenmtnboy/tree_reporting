@@ -7,6 +7,10 @@ export const INTRO_START_ZOOM = 18.5
 export const INTRO_END_ZOOM = 13.5
 const INTRO_DURATION_MS = 10_000
 const INTRO_ROTATION_DEG = 240
+/** Bearing every camera animation settles on, so each city lands north-up. */
+export const INTRO_END_BEARING = 0
+/** Bearing the map is created at so the intro's fixed sweep lands exactly on north. */
+export const INTRO_START_BEARING = INTRO_END_BEARING - INTRO_ROTATION_DEG
 const CENTER_ICON_GRID_RADIUS_PX = 96
 const CENTER_ICON_GRID_SIZE = 3
 const CENTER_ICON_GRID_MIN_POPULATED_CELLS = 5
@@ -75,6 +79,18 @@ export function useMapIntroAnimation({
 
   function nowMs(): number {
     return typeof performance !== 'undefined' ? performance.now() : Date.now()
+  }
+
+  /**
+   * Rotation to sweep so a spin starting at `startBearing` finishes facing north,
+   * staying as close as possible to INTRO_ROTATION_DEG. The map is created at
+   * INTRO_START_BEARING so this normally resolves to exactly INTRO_ROTATION_DEG,
+   * but it also keeps the landing north-up if the camera starts anywhere else.
+   */
+  function introRotationFrom(startBearing: number): number {
+    const naiveEnd = startBearing + INTRO_ROTATION_DEG
+    const correction = ((((INTRO_END_BEARING - naiveEnd) % 360) + 540) % 360) - 180
+    return INTRO_ROTATION_DEG + correction
   }
 
   function resetIntroPrefetchStats() {
@@ -265,6 +281,7 @@ export function useMapIntroAnimation({
     setMapInteractions(false)
 
     const startBearing = map.value.getBearing()
+    const introRotationDeg = introRotationFrom(startBearing)
     const startPitch = map.value.getPitch()
     const introCenterSnapshot: [number, number] = [introCenter.value[0], introCenter.value[1]]
     let didRunIntroMotion = false
@@ -308,7 +325,7 @@ export function useMapIntroAnimation({
         await runIntroZoomSegment(
           INTRO_START_ZOOM, INTRO_END_ZOOM, 0, 1,
           INTRO_DURATION_MS, startBearing, startPitch,
-          introCenterSnapshot, INTRO_ROTATION_DEG,
+          introCenterSnapshot, introRotationDeg,
           (globalT) => {
             if (!didSetFinalPhase && globalT >= 0.72) {
               didSetFinalPhase = true
@@ -329,7 +346,7 @@ export function useMapIntroAnimation({
           map.value.jumpTo({
             center: introCenterSnapshot,
             zoom: INTRO_END_ZOOM,
-            bearing: startBearing + INTRO_ROTATION_DEG,
+            bearing: INTRO_END_BEARING,
             pitch: startPitch,
           })
         }
@@ -395,8 +412,13 @@ export function useMapIntroAnimation({
 
     const cleanup = (cancelled: boolean) => {
       setAutoTileFetchEnabled(true)
-      // Flush MapLibre-cached empties accumulated while auto-fetch was off.
-      forceTreesTileRefetchPass()
+      // NOTE: deliberately no forceTreesTileRefetchPass() here. The swoop lands on the
+      // new city while the worker still holds the PREVIOUS city's context, so a refetch
+      // at this point queries old-city data over the new city's viewport and yields an
+      // all-empty pass. Its sourcedata events were being mistaken for "the new city's
+      // tiles are loaded", flipping the lifecycle to ready on a blank map. The caller
+      // (switchCity → setCityContext → query-revision watcher) bumps the tile nonce once
+      // the new context is live, which flushes the empties cached during the swoop.
       if (cancelled) introActive.value = false
       setMapInteractions(true)
     }
@@ -419,6 +441,7 @@ export function useMapIntroAnimation({
       map.value.flyTo({
         center: landingCenter ?? targetCenter,
         zoom: 13.5,
+        bearing: INTRO_END_BEARING,
         duration: FLY_ACROSS_MS,
         essential: true,
         curve: 1.6,

@@ -152,7 +152,7 @@ import cityConfig from '../cityConfig.json'
 
 const route = useRoute()
 const router = useRouter()
-const { selectedCity } = useMapData()
+const { selectedCity, displayCity } = useMapData()
 const { activateCity } = useMapLifecycle()
 const { initialize, connectionId, queryExecutionService, setDashboardContext } = useSummaryDashboardExecution()
 
@@ -279,7 +279,12 @@ if (initialRouteCity) {
     activateCity(initialRouteCity)
   }
 } else {
-  cityFilter.value = selectedCity.value
+  // No city in the URL: follow the city the map is flying to, not the one it is
+  // flying away from, then commit it so the dashboard queries the right context.
+  cityFilter.value = displayCity.value
+  if (displayCity.value !== selectedCity.value) {
+    activateCity(displayCity.value)
+  }
 }
 
 onMounted(() => {

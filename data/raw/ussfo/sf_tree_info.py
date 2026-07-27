@@ -14,7 +14,12 @@ import pyarrow.csv as pv
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, normalize_species, validate_coordinates
+from _ingest_shared import (
+    emit,
+    enforce_tree_schema,
+    normalize_species,
+    validate_coordinates,
+)
 
 DATASET_ID = "tkzw-k3nq"
 DATASET_URL = f"https://data.sfgov.org/resource/{DATASET_ID}.csv"
@@ -130,4 +135,14 @@ if __name__ == "__main__":
     table = load_arrow_table(csv_bytes)
     table = add_city_column(table)
     table = validate_coordinates(table, city="San Francisco", city_code="USSFO")
+    table = enforce_tree_schema(
+        table,
+        city="San Francisco",
+        columns={
+            "tree_id": "treeid",
+            "species": "qspecies",
+            "plant_date": "plantdate",
+            "diameter_at_breast_height": "dbh",
+        },
+    )
     emit(table)

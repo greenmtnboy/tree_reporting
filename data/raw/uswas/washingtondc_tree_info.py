@@ -11,7 +11,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, normalize_species, validate_coordinates
+from _ingest_shared import emit, enforce_tree_schema, normalize_species, validate_coordinates
 
 DATASET_URL = 'https://opendata.dc.gov/api/download/v1/items/f6c3c04113944f23a7993f2e603abaf2/geojson?layers=23'
 
@@ -81,4 +81,5 @@ def transform(payload: dict) -> pa.Table:
 if __name__ == '__main__':
     table = transform(download_geojson())
     table = validate_coordinates(table, city='Washington DC', city_code='USWAS')
+    table = enforce_tree_schema(table, city='Washington DC')
     emit(table)

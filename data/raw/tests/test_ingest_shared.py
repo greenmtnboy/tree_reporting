@@ -25,9 +25,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from _ingest_shared import (
+    TREE_COLUMN_TYPES,
     circumference_cm_to_dbh_inches,
     cm_to_inches,
     emit,
+    enforce_tree_schema,
     make_point_wkt,
     normalize_species,
     normalize_species_parts,
@@ -363,6 +365,108 @@ class TestEmit:
         assert result.num_rows == 1
         assert result.column("city")[0].as_py() == "TEST"
         assert result.column("value")[0].as_py() == 42
+
+
+# ---------------------------------------------------------------------------
+# enforce_tree_schema
+# ---------------------------------------------------------------------------
+
+def _tree_table(**overrides) -> pa.Table:
+    """A minimal canonical tree table; pass kwargs to swap in off-type columns."""
+    cols = {
+        "tree_id": pa.array(["t-1"], type=pa.string()),
+        "city": pa.array(["USSFO"], type=pa.string()),
+        "species": pa.array(["Platanus x hispanica"], type=pa.string()),
+        "tree_name": pa.array(["London Plane"], type=pa.string()),
+        "plant_date": pa.array([date(2001, 5, 4)], type=pa.date32()),
+        "latitude": pa.array([37.77], type=pa.float64()),
+        "longitude": pa.array([-122.42], type=pa.float64()),
+        "diameter_at_breast_height": pa.array([12.5], type=pa.float64()),
+    }
+    cols.update(overrides)
+    return pa.table(cols)
+
+
+class TestEnforceTreeSchema:
+    def test_canonical_table_is_unchanged(self):
+        table = _tree_table()
+        assert enforce_tree_schema(table).schema.equals(table.schema)
+
+    def test_all_canonical_columns_have_declared_types(self):
+        out = enforce_tree_schema(_tree_table())
+        for name, expected in TREE_COLUMN_TYPES.items():
+            assert out.schema.field(name).type.equals(expected), name
+
+    def test_int_dbh_is_widened_to_float(self):
+        """USNYC/USSFO regression: whole-number dbh inferred as int64 → BIGINT parquet."""
+        table = _tree_table(
+            diameter_at_breast_height=pa.array([12], type=pa.int64())
+        )
+        out = enforce_tree_schema(table)
+        assert out.schema.field("diameter_at_breast_height").type.equals(pa.float64())
+        assert out.column("diameter_at_breast_height")[0].as_py() == 12.0
+
+    def test_null_typed_plant_date_becomes_date32(self):
+        """FRPAR regression: pa.null() plant_date materialised as INT32, breaking year()."""
+        table = _tree_table(plant_date=pa.array([None], type=pa.null()))
+        out = enforce_tree_schema(table)
+        assert out.schema.field("plant_date").type.equals(pa.date32())
+        assert out.column("plant_date")[0].as_py() is None
+
+    def test_string_dbh_is_parsed(self):
+        table = _tree_table(
+            diameter_at_breast_height=pa.array(["12.5"], type=pa.string())
+        )
+        out = enforce_tree_schema(table)
+        assert out.column("diameter_at_breast_height")[0].as_py() == 12.5
+
+    def test_column_overrides_map_source_native_names(self):
+        table = pa.table({
+            "treeid": pa.array(["sf-1"], type=pa.string()),
+            "city": pa.array(["USSFO"], type=pa.string()),
+            "qspecies": pa.array(["Platanus x hispanica"], type=pa.string()),
+            "plantdate": pa.array([None], type=pa.null()),
+            "dbh": pa.array([12], type=pa.int64()),
+        })
+        out = enforce_tree_schema(
+            table,
+            columns={
+                "tree_id": "treeid",
+                "species": "qspecies",
+                "plant_date": "plantdate",
+                "diameter_at_breast_height": "dbh",
+            },
+        )
+        assert out.schema.field("dbh").type.equals(pa.float64())
+        assert out.schema.field("plantdate").type.equals(pa.date32())
+
+    def test_extra_columns_pass_through_untouched(self):
+        table = _tree_table().append_column(
+            "usbos_source", pa.array(["CITY"], type=pa.string())
+        )
+        out = enforce_tree_schema(table)
+        assert out.column("usbos_source")[0].as_py() == "CITY"
+
+    def test_optional_columns_may_be_absent(self):
+        table = _tree_table().drop_columns(["plant_date", "tree_name"])
+        out = enforce_tree_schema(table)
+        assert "plant_date" not in out.schema.names
+
+    def test_missing_required_column_raises(self):
+        table = _tree_table().drop_columns(["species"])
+        with pytest.raises(ValueError, match="required column 'species'"):
+            enforce_tree_schema(table, city="Testville")
+
+    def test_unknown_override_key_raises(self):
+        with pytest.raises(ValueError, match="unknown canonical column"):
+            enforce_tree_schema(_tree_table(), columns={"dbh": "dbh"})
+
+    def test_lossy_cast_raises_rather_than_truncating(self):
+        table = _tree_table(
+            diameter_at_breast_height=pa.array(["not-a-number"], type=pa.string())
+        )
+        with pytest.raises(ValueError, match="cannot be safely cast"):
+            enforce_tree_schema(table, city="Testville")
 
 
 # ---------------------------------------------------------------------------

@@ -12,7 +12,12 @@ import pyarrow.compute as pc
 import pyarrow.csv as pv
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, normalize_species, validate_coordinates
+from _ingest_shared import (
+    emit,
+    enforce_tree_schema,
+    normalize_species,
+    validate_coordinates,
+)
 
 DATASET_URL = (
     "https://data.boston.gov/dataset/e4c76e72-dcf1-40a0-b426-97c52214a9fe"
@@ -60,12 +65,12 @@ def cast_columns(table: pa.Table) -> pa.Table:
                     parsed.append(None)
         table = table.set_column(idx, date_col, pa.array(parsed, type=pa.date32()))
 
-    # dbh: ensure int64
+    # dbh arrives as text; parse to the canonical float64 (see enforce_tree_schema).
+    # Keep the fractional part — `_raw_dbh` is declared float in boston_tree_info.preql.
     dbh_col = next((c for c in table.schema.names if c.lower() == "dbh"), None)
     if dbh_col is not None:
         idx = table.schema.get_field_index(dbh_col)
-        as_float = pc.cast(table[dbh_col], pa.float64())
-        table = table.set_column(idx, dbh_col, pc.cast(as_float, pa.int64(), safe=False))
+        table = table.set_column(idx, dbh_col, pc.cast(table[dbh_col], pa.float64()))
 
     # spp_com: common name in "Genus, Qualifier" order — invert to "Qualifier Genus"
     spp_com_col = next((c for c in table.schema.names if c.lower() == "spp_com"), None)
@@ -141,4 +146,14 @@ if __name__ == "__main__":
     table = load_arrow_table(csv_bytes)
     table = add_city_column(table)
     table = validate_coordinates(table, city="Boston", city_code="USBOS")
+    table = enforce_tree_schema(
+        table,
+        city="Boston",
+        columns={
+            "tree_id": "id",
+            "species": "spp_bot",
+            "plant_date": "date_plant",
+            "diameter_at_breast_height": "dbh",
+        },
+    )
     emit(table)

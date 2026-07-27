@@ -172,12 +172,35 @@ The script must:
 | `tree_id` | `string` | Prefix with `{abbr}-` e.g. `par-12345` for global uniqueness |
 | `city` | `string` | The city code, e.g. `FRPAR` |
 | `species` | `string` | **Scientific name only** — e.g. `"Platanus x hispanica"`. No `:: Common Name` suffix. |
-| `plant_date` | `date32` or `null` | `null` if unavailable |
+| `plant_date` | `date32` | All-null is fine, but the column must still be `date32` — never `pa.null()` |
 | `latitude` | `float64` | |
 | `longitude` | `float64` | |
 | `diameter_at_breast_height` | `float64` | Inches; `null` if unavailable |
 
-3. Emit the Arrow IPC stream to `sys.stdout.buffer` via `pa.ipc.new_stream`.
+3. Call `enforce_tree_schema(table, city="{City}")` immediately before `emit`.
+4. Emit the Arrow IPC stream to `sys.stdout.buffer` via `pa.ipc.new_stream`.
+
+**Column types are enforced, not inferred (important):** Trilogy passes the Arrow types from your script straight through to the materialised parquet — it does *not* coerce them to the types declared in `tree_common.preql`. A column left to inference silently produces the wrong parquet type, and the failure surfaces much later as a DuckDB binder error in the browser. Two real cases:
+
+- Paris emitted an all-null `plant_date` as `pa.null()`. A null-typed Arrow column carries no type, so it materialised as `INT32` and every `year(plant_date)` query failed with `No function matches the given name and argument types 'year(INTEGER)'`.
+- SF's `dbh` came from CSV inference; every value was a whole number, so pyarrow chose `int64` and the parquet column became `BIGINT` instead of `DOUBLE`.
+
+`enforce_tree_schema` (in `data/raw/_ingest_shared.py`) is the single chokepoint that prevents this. It casts each canonical column to the type in `TREE_COLUMN_TYPES`, raises if a required column (`tree_id`, `city`, `species`) is missing, and passes city-specific extras (`borough`, `usbos_source`, …) through untouched. Casts are *safe* — a lossy conversion raises rather than corrupting values.
+
+Scripts that emit source-native column names rather than canonical ones pass a `columns` map:
+
+```python
+table = enforce_tree_schema(
+    table,
+    city="San Francisco",
+    columns={
+        "tree_id": "treeid",
+        "species": "qspecies",
+        "plant_date": "plantdate",
+        "diameter_at_breast_height": "dbh",
+    },
+)
+```
 
 **Species key rule:** The `species` field must contain only the Latin binomial (e.g. `"Platanus x hispanica"`). The `:: Common Name` convention was retired — common names now come exclusively from the enrichment table. If source data has a `:: suffix` (SF does), strip it: `v.split("::")[0].strip()`. For cities that provide genus and species epithet as separate fields (Paris), concatenate them: `f"{genre} {espece}".strip()`. Empty or null species should be emitted as `None`.
 
@@ -411,4 +434,8 @@ cd data/raw && uv run tree_enrichment.py --limit 50 --output tree_enrichment.par
 ### 2. `core.preql` City Enum Is Easy to Miss
 **Problem:** The `city` key in `data/raw/core.preql` is a typed enum. Forgetting to add the new code there causes Trilogy to reject every `complete where city = '...'` clause in the new preql files — but the error message points at the preql files, not `core.preql`.
 **Suggestion:** Do this as step 3 (it already is), and double-check it's the very first edit before creating any other files.
+
+### 3. Parquet Column Types Drift Silently
+**Problem:** Trilogy does not coerce a raw script's Arrow types to the types declared in `tree_common.preql` — whatever the script emits is what lands in the parquet. Inference-driven types (`pa.null()` for an all-null column, `int64` for a whole-number CSV column) therefore produce parquets that disagree with the model and with each other, and the failure only surfaces as a DuckDB binder error in the browser, one city at a time.
+**Suggestion:** Never rely on inference for a canonical column. `enforce_tree_schema` is called by every tree ingest script before `emit` and is the place to add any new canonical column — add it to `TREE_COLUMN_TYPES` and every city is covered at once. To audit the live parquets, `DESCRIBE SELECT * FROM read_parquet(...)` each city's GCS file and diff the column types.
 

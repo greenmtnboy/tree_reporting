@@ -29,6 +29,7 @@ import requests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
     emit,
+    enforce_tree_schema,
     normalize_species,
     validate_coordinates,
     parse_plant_date_year,
@@ -130,4 +131,5 @@ if __name__ == "__main__":
     features = fetch_all_features()
     table = transform(features)
     table = validate_coordinates(table, city="Berlin", city_code="DEBER")
+    table = enforce_tree_schema(table, city="Berlin")
     emit(table)
