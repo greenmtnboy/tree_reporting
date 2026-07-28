@@ -1,4 +1,7 @@
 import ..tree_common;
+import ..community_tree_info;
+
+auto usbtv_published_data_updated_through <- greatest(usbtv_data_updated_through, community_data_updated_through);
 
 root datasource burlington_update_time (
     data_updated_through: usbtv_data_updated_through
@@ -28,9 +31,9 @@ partial datasource burlington_tree_info (
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
-    usbtv_data_updated_through,
+    usbtv_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'USBTV'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbtv_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbtv_tree_info_v{data_version}.parquet`
-freshness by usbtv_data_updated_through;
+freshness by usbtv_published_data_updated_through;

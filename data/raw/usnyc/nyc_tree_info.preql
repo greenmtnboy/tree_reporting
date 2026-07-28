@@ -1,4 +1,7 @@
 import ..tree_common;
+import ..community_tree_info;
+
+auto usnyc_published_data_updated_through <- greatest(usnyc_data_updated_through, community_data_updated_through);
 
 root datasource nyc_update_time (
     data_updated_through: usnyc_data_updated_through
@@ -35,7 +38,7 @@ partial datasource nyc_tree_info (
     ?plant_date,
     ?latitude,
     ?longitude,
-    usnyc_data_updated_through,
+    usnyc_published_data_updated_through,
     # ?condition,
     # ?structure,
     # ?stump_diameter,
@@ -46,7 +49,7 @@ partial datasource nyc_tree_info (
 grain (tree_id)
 complete where city = 'USNYC'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnyc_tree_info_v{data_version}.parquet`
-freshness by usnyc_data_updated_through;
+freshness by usnyc_published_data_updated_through;
 
 #trilogy refresh C:\Users\ethan\coding_projects\sf_tree_reporting\data\raw\nyc\nyc_tree_info.preql --force=nyc_tree_info
 # trilogy refresh C:\Users\ethan\coding_projects\sf_tree_reporting\data\raw\tree_info.preql --force=nyc_tree_info

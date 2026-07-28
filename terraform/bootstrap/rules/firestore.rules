@@ -2,23 +2,61 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function rateLimitPath(uid) {
+      return /databases/$(database)/documents/submissionRateLimits/$(uid);
+    }
+
+    function rateLimitAllows(uid) {
+      return !exists(rateLimitPath(uid))
+        || get(rateLimitPath(uid)).data.submittedAt <= request.time - duration.value(30, 's');
+    }
 
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if isOwner(uid);
     }
 
     match /submissions/{submissionId} {
-      allow create: if request.auth != null
+      allow create: if signedIn()
                     && request.resource.data.userId == request.auth.uid
                     && request.resource.data.status == 'pending'
-                    && request.resource.data.keys().hasAll(['userId', 'city', 'lat', 'lng', 'submittedAt', 'status']);
-      allow read: if request.auth != null
-                  && resource.data.userId == request.auth.uid;
+                    && request.resource.data.submittedAt == request.time
+                    && request.resource.data.keys().hasAll(['userId', 'city', 'lat', 'lng', 'submittedAt', 'status'])
+                    && rateLimitAllows(request.auth.uid)
+                    && getAfter(rateLimitPath(request.auth.uid)).data.userId == request.auth.uid
+                    && getAfter(rateLimitPath(request.auth.uid)).data.lastSubmissionId == submissionId
+                    && getAfter(rateLimitPath(request.auth.uid)).data.submittedAt == request.time;
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }
 
+    match /submissionRateLimits/{uid} {
+      allow create, update: if isOwner(uid)
+                            && request.resource.data.keys().hasOnly(['userId', 'lastSubmissionId', 'submittedAt'])
+                            && request.resource.data.userId == uid
+                            && request.resource.data.submittedAt == request.time
+                            && rateLimitAllows(uid)
+                            && existsAfter(/databases/$(database)/documents/submissions/$(request.resource.data.lastSubmissionId))
+                            && getAfter(/databases/$(database)/documents/submissions/$(request.resource.data.lastSubmissionId)).data.userId == uid;
+      allow read, delete: if false;
+    }
+
+    // Approved records are immutable from the public client. The local review
+    // service uses the Admin SDK and therefore does not depend on these rules.
+    match /publishedTrees/{treeId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /checkins/{checkinId} {
-      allow create: if request.auth != null
+      allow create: if signedIn()
                     && request.resource.data.userId == request.auth.uid
                     && request.resource.data.keys().hasAll(['userId', 'treeId', 'at']);
       allow read: if request.auth != null

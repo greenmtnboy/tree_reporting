@@ -27,6 +27,20 @@ src/src/workers/parquetUrls.ts  ← builds versioned GCS URL from city code + DA
 
 The browser never touches raw source data — it only fetches the pre-built parquet from GCS and queries it locally with DuckDB-WASM.
 
+### Approved community submissions
+
+The local reviewer promotes accepted submissions from `submissions` into the
+rules-public `publishedTrees` Firestore collection. Approval itself does not
+refresh public data.
+
+During the normal scheduled refresh, `data/raw/community_tree_info.py` exports
+approved records into the canonical Arrow tree schema. Each city tree model
+imports `community_tree_info.preql`; its existing `complete where city = ...`
+condition filters the shared rows before the municipal and community sources
+are materialized into that city's usual Parquet. The latest Firestore
+`publishedAt` timestamp participates in freshness checks through
+`community_update_time.py`.
+
 ---
 
 ## Data Versioning

@@ -1,4 +1,7 @@
 import ..tree_common;
+import ..community_tree_info;
+
+auto aumel_published_data_updated_through <- greatest(aumel_data_updated_through, community_data_updated_through);
 
 root datasource melbourne_update_time (
     data_updated_through: aumel_data_updated_through
@@ -29,9 +32,9 @@ partial datasource melbourne_tree_info (
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
-    aumel_data_updated_through,
+    aumel_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'AUMEL'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aumel_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/aumel_tree_info_v{data_version}.parquet`
-freshness by aumel_data_updated_through;
+freshness by aumel_published_data_updated_through;

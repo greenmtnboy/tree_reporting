@@ -1,4 +1,7 @@
 import ..tree_common;
+import ..community_tree_info;
+
+auto uswas_published_data_updated_through <- greatest(uswas_data_updated_through, community_data_updated_through);
 
 root datasource washingtondc_update_time (
     data_updated_through: uswas_data_updated_through
@@ -28,9 +31,9 @@ partial datasource washingtondc_tree_info (
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
-    uswas_data_updated_through,
+    uswas_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'USWAS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uswas_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uswas_tree_info_v{data_version}.parquet`
-freshness by uswas_data_updated_through;
+freshness by uswas_published_data_updated_through;

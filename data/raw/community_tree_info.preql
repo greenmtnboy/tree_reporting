@@ -1,0 +1,24 @@
+import tree_common;
+
+property <*>.community_data_updated_through datetime;
+
+root datasource community_update_time (
+    data_updated_through: community_data_updated_through
+)
+file `./community_update_time.py`;
+
+# Approved submissions are a shared partial source. Each city materialization
+# imports this module and its own `complete where city = ...` clause limits the
+# community rows included in that city's Parquet.
+root partial datasource community_raw_tree_info (
+    tree_id: tree_id,
+    city: city,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+)
+grain (tree_id)
+file `./community_tree_info.py`;

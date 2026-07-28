@@ -15,20 +15,20 @@ import uswas.washingtondc_tree_info;
 import ustem.tempe_tree_info;
 
 auto latest_update_through <- greatest(
-ussfo_data_updated_through, 
-usnyc_data_updated_through, 
-usbos_data_updated_through, 
-frpar_data_updated_through, 
-usbtv_data_updated_through, 
-cavan_data_updated_through, 
-deber_data_updated_through, 
-nlams_data_updated_through, 
-gblon_data_updated_through, 
-aumel_data_updated_through,
-arbue_data_updated_through,
-uslax_data_updated_through,
-uswas_data_updated_through,
-ustem_data_updated_through);
+ussfo_published_data_updated_through,
+usnyc_published_data_updated_through,
+usbos_published_data_updated_through,
+frpar_published_data_updated_through,
+usbtv_published_data_updated_through,
+cavan_published_data_updated_through,
+deber_published_data_updated_through,
+nlams_published_data_updated_through,
+gblon_published_data_updated_through,
+aumel_published_data_updated_through,
+arbue_published_data_updated_through,
+uslax_published_data_updated_through,
+uswas_published_data_updated_through,
+ustem_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

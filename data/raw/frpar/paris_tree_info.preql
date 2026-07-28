@@ -1,4 +1,7 @@
 import ..tree_common;
+import ..community_tree_info;
+
+auto frpar_published_data_updated_through <- greatest(frpar_data_updated_through, community_data_updated_through);
 
 root datasource paris_update_time (
     data_updated_through: frpar_data_updated_through
@@ -29,9 +32,9 @@ partial datasource paris_tree_info (
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
-    frpar_data_updated_through,
+    frpar_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'FRPAR'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frpar_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/frpar_tree_info_v{data_version}.parquet`
-freshness by frpar_data_updated_through;
+freshness by frpar_published_data_updated_through;

@@ -1,4 +1,7 @@
 import ..tree_common;
+import ..community_tree_info;
+
+auto ussfo_published_data_updated_through <- greatest(ussfo_data_updated_through, community_data_updated_through);
 
 root datasource sf_update_time (
     data_updated_through: ussfo_data_updated_through
@@ -30,10 +33,10 @@ partial datasource sf_tree_info (
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
-    ussfo_data_updated_through,
+    ussfo_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'USSFO'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ussfo_tree_info_v{data_version}.parquet`
-freshness by ussfo_data_updated_through;
+freshness by ussfo_published_data_updated_through;
 

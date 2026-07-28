@@ -1,4 +1,7 @@
 import ..tree_common;
+import ..community_tree_info;
+
+auto cavan_published_data_updated_through <- greatest(cavan_data_updated_through, community_data_updated_through);
 
 root datasource vancouver_update_time (
     data_updated_through: cavan_data_updated_through
@@ -29,9 +32,9 @@ partial datasource vancouver_tree_info (
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
-    cavan_data_updated_through,
+    cavan_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'CAVAN'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavan_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cavan_tree_info_v{data_version}.parquet`
-freshness by cavan_data_updated_through;
+freshness by cavan_published_data_updated_through;

@@ -76,3 +76,24 @@ resource "google_firestore_index" "checkins_by_user_recent" {
     order      = "DESCENDING"
   }
 }
+
+resource "google_firestore_index" "submissions_pending_oldest" {
+  project    = var.project_id
+  database   = google_firestore_database.default.name
+  collection = "submissions"
+
+  fields {
+    field_path = "status"
+    order      = "ASCENDING"
+  }
+
+  fields {
+    field_path = "submittedAt"
+    order      = "ASCENDING"
+  }
+
+  fields {
+    field_path = "__name__"
+    order      = "ASCENDING"
+  }
+}
