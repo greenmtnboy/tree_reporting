@@ -1,6 +1,6 @@
 import usbos.boston_tree_info;
 
-WHERE usbos_source ='ARBORETUM'
+WHERE usbos_source ='ARNOLD_ARBORETUM'
 SELECT
     usbos_source,
     latitude,

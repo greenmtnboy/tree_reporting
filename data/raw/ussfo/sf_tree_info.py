@@ -138,6 +138,7 @@ if __name__ == "__main__":
     table = enforce_tree_schema(
         table,
         city="San Francisco",
+        data_source="SF_OPENDATA",
         columns={
             "tree_id": "treeid",
             "species": "qspecies",

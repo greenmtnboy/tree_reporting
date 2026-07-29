@@ -4,6 +4,7 @@
 # dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
 
+import math
 import sys
 from pathlib import Path
 
@@ -13,6 +14,20 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import emit, enforce_tree_schema, normalize_species, validate_coordinates
 
 DATASET_URL = 'https://data.tempe.gov/api/download/v1/items/542d8f16fff2466fb3115f209df03fd6/geojson?layers=0'
+
+# Tempe serves this layer in Web Mercator metres, not the degrees GeoJSON
+# normally implies — coordinates arrive as e.g. [-12460605.69, 3942222.75].
+# Read as-is they are far outside the USTEM bounding box, so every row gets
+# dropped and the city Parquet materialises empty.
+WEB_MERCATOR = 'EPSG:3857'
+EARTH_RADIUS_M = 6378137.0
+
+
+def web_mercator_to_wgs84(x: float, y: float) -> tuple[float, float]:
+    """Convert EPSG:3857 metres to (longitude, latitude) degrees."""
+    lon = math.degrees(x / EARTH_RADIUS_M)
+    lat = math.degrees(2.0 * math.atan(math.exp(y / EARTH_RADIUS_M)) - math.pi / 2.0)
+    return lon, lat
 
 
 def download_geojson() -> dict:
@@ -24,6 +39,14 @@ def download_geojson() -> dict:
 
 
 def transform(payload: dict) -> pa.Table:
+    # Fail loudly if the portal ever changes projection: silently trusting the
+    # numbers is what made this ship an empty city.
+    crs_name = ((payload.get('crs') or {}).get('properties') or {}).get('name')
+    if crs_name != WEB_MERCATOR:
+        raise ValueError(
+            f'Tempe ingest: expected {WEB_MERCATOR} coordinates, got {crs_name!r}'
+        )
+
     tree_id: list[str | None] = []
     species: list[str | None] = []
     tree_name: list[str | None] = []
@@ -39,8 +62,12 @@ def transform(payload: dict) -> pa.Table:
         tree_id.append(f"tem-{props.get('Tree_ID')}" if props.get('Tree_ID') is not None else None)
         species.append(sci)
         tree_name.append(sci)
-        longitude.append(coords[0] if len(coords) > 0 else None)
-        latitude.append(coords[1] if len(coords) > 1 else None)
+        if len(coords) > 1 and coords[0] is not None and coords[1] is not None:
+            lon, lat = web_mercator_to_wgs84(coords[0], coords[1])
+        else:
+            lon, lat = None, None
+        longitude.append(lon)
+        latitude.append(lat)
         dbh.append(float(props['DBH__in_']) if props.get('DBH__in_') is not None else None)
 
     n = len(tree_id)
@@ -59,5 +86,5 @@ def transform(payload: dict) -> pa.Table:
 if __name__ == '__main__':
     table = transform(download_geojson())
     table = validate_coordinates(table, city='Tempe', city_code='USTEM')
-    table = enforce_tree_schema(table, city='Tempe')
+    table = enforce_tree_schema(table, city='Tempe', data_source="TEMPE_OPENDATA")
     emit(table)

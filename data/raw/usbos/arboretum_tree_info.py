@@ -85,7 +85,6 @@ def fetch_all() -> list[dict]:
 def build_table(records: list[dict]) -> pa.Table:
     tree_ids: list[str | None] = []
     cities: list[str] = []
-    sources: list[str] = []
     species_list: list[str | None] = []
     tree_names: list[str | None] = []
     plant_dates: list[date | None] = []
@@ -97,7 +96,6 @@ def build_table(records: list[dict]) -> pa.Table:
         obj_id = rec.get("OBJECTID")
         tree_ids.append(f"arb-{obj_id}" if obj_id is not None else None)
         cities.append("USBOS")
-        sources.append("ARBORETUM")
         species_list.append(normalize_species(strip_cultivar(rec.get("SCIENTIFIC_NAME"))))
         raw_common = rec.get("COMMON_NAME")
         tree_names.append(raw_common.strip() if raw_common and raw_common.strip() else None)
@@ -110,7 +108,6 @@ def build_table(records: list[dict]) -> pa.Table:
         {
             "tree_id": pa.array(tree_ids, type=pa.string()),
             "city": pa.array(cities, type=pa.string()),
-            "usbos_source": pa.array(sources, type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
             "tree_name": pa.array(tree_names, type=pa.string()),
             "plant_date": pa.array(plant_dates, type=pa.date32()),
@@ -125,5 +122,5 @@ if __name__ == "__main__":
     records = fetch_all()
     table = build_table(records)
     table = validate_coordinates(table, city="Arboretum", city_code="USBOS")
-    table = enforce_tree_schema(table, city="Arboretum")
+    table = enforce_tree_schema(table, city="Arboretum", data_source="ARNOLD_ARBORETUM")
     emit(table)

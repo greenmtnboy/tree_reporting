@@ -1,14 +1,16 @@
 import { ref } from 'vue'
 import {
-  addDoc,
   collection,
+  doc,
   getDocs,
   limit,
   orderBy,
   query,
   serverTimestamp,
+  writeBatch,
   Timestamp,
   where,
+  addDoc,
 } from 'firebase/firestore'
 import {
   getDownloadURL,
@@ -109,12 +111,6 @@ function uploadOne(
   })
 }
 
-function makeId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
-}
-
 function extFor(blob: Blob): string {
   const contentType = blob.type || 'image/jpeg'
   return contentType.split('/')[1] ?? 'jpg'
@@ -123,7 +119,8 @@ function extFor(blob: Blob): string {
 export async function submitPhoto(input: SubmitInput): Promise<string> {
   const { db: firestore, storage: bucket } = requireFirebase()
   const user = await signInIfNeeded()
-  const submissionId = makeId()
+  const submissionRef = doc(collection(firestore, 'submissions'))
+  const submissionId = submissionRef.id
 
   const allBlobs: Blob[] = [input.photoBlob, ...(input.additionalPhotoBlobs ?? [])]
   const paths = allBlobs.map((blob, i) => {
@@ -163,8 +160,18 @@ export async function submitPhoto(input: SubmitInput): Promise<string> {
     submittedAt: serverTimestamp(),
     status: 'pending' as SubmissionStatus,
   }
-  const docRef = await addDoc(collection(firestore, 'submissions'), docData)
-  return docRef.id
+  // The submission and the user's rate-limit marker must be committed together.
+  // Firestore rules validate both documents with getAfter(), so bypassing this
+  // client-side code cannot bypass the 30-second limit.
+  const batch = writeBatch(firestore)
+  batch.set(submissionRef, docData)
+  batch.set(doc(firestore, 'submissionRateLimits', user.uid), {
+    userId: user.uid,
+    lastSubmissionId: submissionId,
+    submittedAt: serverTimestamp(),
+  })
+  await batch.commit()
+  return submissionId
 }
 
 function mapSubmissionDoc(id: string, data: Record<string, unknown>): Submission {

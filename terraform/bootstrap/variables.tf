@@ -21,3 +21,9 @@ variable "photo_bucket_name" {
   type        = string
   default     = "sf-tree-reporting-submissions"
 }
+
+variable "published_bucket_name" {
+  description = "Public GCS bucket for reviewer-approved trees and their photos. Must be globally unique."
+  type        = string
+  default     = "sf-tree-reporting-published"
+}

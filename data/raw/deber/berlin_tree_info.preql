@@ -1,37 +1,73 @@
 import ..tree_common;
+import ..community_tree_info;
+
+auto deber_published_data_updated_through <- greatest(deber_data_updated_through, deber_community_data_updated_through);
+
+key deber_source enum<string>['BERLIN_OPENDATA', 'COMMUNITY_DEBER']; # originating dataset for the row
 
 root datasource berlin_update_time (
     data_updated_through: deber_data_updated_through
 )
 file `./berlin_update_time.py`;
 
+# Only this city's column, so an approval elsewhere does not mark DEBER's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource deber_community_update_time (
+    deber_community_data_updated_through: deber_community_data_updated_through
+)
+file `../community_update_time.py`;
+
 root partial datasource berlin_raw_tree_info (
     tree_id: tree_id,
     city: city,
+    data_source: deber_source,
     species: species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
     diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
-complete where city = 'DEBER'
+complete where city = 'DEBER' and deber_source = 'BERLIN_OPENDATA'
 file `./berlin_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script
+# emits every city's rows; the `complete where` clause narrows it to DEBER
+# and makes it a disjoint partition alongside berlin_raw_tree_info.
+root partial datasource deber_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: deber_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'DEBER' and deber_source = 'COMMUNITY_DEBER'
+file `../community_tree_info.py`;
 
 
 partial datasource berlin_tree_info (
     tree_id,
     city,
+    data_source: deber_source,
     species,
     ?tree_name,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
-    deber_data_updated_through,
+    ?submission_photo_url,
+    deber_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'DEBER'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/deber_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/deber_tree_info_v{data_version}.parquet`
-freshness by deber_data_updated_through;
+freshness by deber_published_data_updated_through;

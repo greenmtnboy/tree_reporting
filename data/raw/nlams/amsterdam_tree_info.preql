@@ -1,37 +1,73 @@
 import ..tree_common;
+import ..community_tree_info;
+
+auto nlams_published_data_updated_through <- greatest(nlams_data_updated_through, nlams_community_data_updated_through);
+
+key nlams_source enum<string>['AMSTERDAM_OPENDATA', 'COMMUNITY_NLAMS']; # originating dataset for the row
 
 root datasource amsterdam_update_time (
     data_updated_through: nlams_data_updated_through
 )
 file `./amsterdam_update_time.py`;
 
+# Only this city's column, so an approval elsewhere does not mark NLAMS's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource nlams_community_update_time (
+    nlams_community_data_updated_through: nlams_community_data_updated_through
+)
+file `../community_update_time.py`;
+
 root partial datasource amsterdam_raw_tree_info (
     tree_id: tree_id,
     city: city,
+    data_source: nlams_source,
     species: species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
     diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
-complete where city = 'NLAMS'
+complete where city = 'NLAMS' and nlams_source = 'AMSTERDAM_OPENDATA'
 file `./amsterdam_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script
+# emits every city's rows; the `complete where` clause narrows it to NLAMS
+# and makes it a disjoint partition alongside amsterdam_raw_tree_info.
+root partial datasource nlams_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: nlams_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'NLAMS' and nlams_source = 'COMMUNITY_NLAMS'
+file `../community_tree_info.py`;
 
 
 partial datasource amsterdam_tree_info (
     tree_id,
     city,
+    data_source: nlams_source,
     species,
     ?tree_name,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
-    nlams_data_updated_through,
+    ?submission_photo_url,
+    nlams_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'NLAMS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlams_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/nlams_tree_info_v{data_version}.parquet`
-freshness by nlams_data_updated_through;
+freshness by nlams_published_data_updated_through;

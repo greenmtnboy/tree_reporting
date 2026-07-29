@@ -81,5 +81,5 @@ def transform(payload: dict) -> pa.Table:
 if __name__ == '__main__':
     table = transform(download_geojson())
     table = validate_coordinates(table, city='Washington DC', city_code='USWAS')
-    table = enforce_tree_schema(table, city='Washington DC')
+    table = enforce_tree_schema(table, city='Washington DC', data_source="WASHINGTONDC_OPENDATA")
     emit(table)

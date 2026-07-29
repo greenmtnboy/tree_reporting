@@ -77,6 +77,60 @@ def normalize_species_parts(genus: str | None, epithet: str | None) -> str | Non
 
 
 # ---------------------------------------------------------------------------
+# Data source labels
+# ---------------------------------------------------------------------------
+
+# Every tree row carries the dataset it came from.  These values are the
+# picklist: they must stay byte-identical to the per-city `{code}_source` enums
+# declared in each city's tree model, and each one is the sole source label of
+# exactly one raw datasource.  That one-to-one mapping is not cosmetic — a
+# city's raw sources declare `complete where city = 'X' and {code}_source = 'Y'`,
+# and it is the disjoint source partition that lets Trilogy UNION a city's
+# municipal and community rows into one Parquet.  A city whose only source
+# claimed `complete where city = 'X'` would leave no room for community rows,
+# which is exactly how the first cut of this feature silently dropped every one.
+#
+# The enums are per-city rather than one global enum because Trilogy proves a
+# Parquet complete by checking its sources cover every value of the partitioning
+# enum; a 30-value global enum is never covered by one city's two sources.
+#
+# Keyed by city code so `community_source_for` can derive the community label
+# and so tests can assert the two lists agree.
+MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USSFO": ("SF_OPENDATA",),
+    "USNYC": ("NYC_OPENDATA",),
+    "USBOS": ("CITY_OF_BOSTON", "ARNOLD_ARBORETUM", "CAMBRIDGE", "BROOKLINE"),
+    "FRPAR": ("PARIS_OPENDATA",),
+    "USBTV": ("BURLINGTON_OPENDATA",),
+    "CAVAN": ("VANCOUVER_OPENDATA",),
+    "DEBER": ("BERLIN_OPENDATA",),
+    "NLAMS": ("AMSTERDAM_OPENDATA",),
+    "GBLON": ("LONDON_OPENDATA",),
+    "AUMEL": ("MELBOURNE_OPENDATA",),
+    "ARBUE": ("BUENOSAIRES_OPENDATA",),
+    "USLAX": ("LOSANGELES_OPENDATA",),
+    "USWAS": ("WASHINGTONDC_OPENDATA",),
+    "USTEM": ("TEMPE_OPENDATA",),
+}
+
+
+def community_source_for(city_code: str) -> str:
+    """The `data_source` label for approved community trees in *city_code*."""
+    return f"COMMUNITY_{city_code}"
+
+
+COMMUNITY_DATA_SOURCES: dict[str, str] = {
+    code: community_source_for(code) for code in MUNICIPAL_DATA_SOURCES
+}
+
+DATA_SOURCES: tuple[str, ...] = tuple(
+    label
+    for code in MUNICIPAL_DATA_SOURCES
+    for label in (*MUNICIPAL_DATA_SOURCES[code], COMMUNITY_DATA_SOURCES[code])
+)
+
+
+# ---------------------------------------------------------------------------
 # Canonical tree output schema
 # ---------------------------------------------------------------------------
 
@@ -89,16 +143,18 @@ def normalize_species_parts(genus: str | None, epithet: str | None) -> str | Non
 TREE_COLUMN_TYPES: dict[str, pa.DataType] = {
     "tree_id": pa.string(),
     "city": pa.string(),
+    "data_source": pa.string(),
     "species": pa.string(),
     "tree_name": pa.string(),
     "plant_date": pa.date32(),
     "latitude": pa.float64(),
     "longitude": pa.float64(),
     "diameter_at_breast_height": pa.float64(),
+    "submission_photo_url": pa.string(),
 }
 
 # Columns without a `?` prefix in the preql datasources — absence is a bug.
-REQUIRED_TREE_COLUMNS = ("tree_id", "city", "species")
+REQUIRED_TREE_COLUMNS = ("tree_id", "city", "data_source", "species")
 
 
 def enforce_tree_schema(
@@ -106,6 +162,7 @@ def enforce_tree_schema(
     *,
     columns: dict[str, str] | None = None,
     city: str = "",
+    data_source: str | None = None,
 ) -> pa.Table:
     """Cast the tree ingest columns to their canonical Arrow types.
 
@@ -120,8 +177,13 @@ def enforce_tree_schema(
               ``{"tree_id": "treeid", "diameter_at_breast_height": "dbh"}``.
               Canonical names not listed are looked up as-is.
     city:     Optional city name used in error messages.
+    data_source: The ``data_source`` enum value every row of this ingest
+              carries (e.g. ``"SF_OPENDATA"``).  Appended as a constant column,
+              which is what lets Trilogy union a city's municipal and community
+              sources as disjoint partitions.  Scripts that emit a per-row
+              ``data_source`` column (only the community ingest does) omit it.
 
-    Extra columns (``borough``, ``usbos_source``, …) pass through untouched.
+    Extra columns (``borough``, …) pass through untouched.
     Casts are *safe*: a lossy conversion raises rather than silently
     truncating values.
     """
@@ -129,6 +191,19 @@ def enforce_tree_schema(
 
     prefix = f"{city} ingest" if city else "Ingest"
     overrides = columns or {}
+    if data_source is not None:
+        if data_source not in DATA_SOURCES:
+            raise ValueError(
+                f"{prefix}: data_source {data_source!r} is not a known source "
+                f"label; add it to MUNICIPAL_DATA_SOURCES here and to that "
+                f"city's `{{code}}_source` enum in its tree model together"
+            )
+        if "data_source" in table.schema.names:
+            table = table.drop_columns(["data_source"])
+        table = table.append_column(
+            "data_source",
+            pa.array([data_source] * table.num_rows, type=pa.string()),
+        )
     unknown = set(overrides) - set(TREE_COLUMN_TYPES)
     if unknown:
         raise ValueError(
@@ -163,6 +238,18 @@ def enforce_tree_schema(
                 f"which cannot be safely cast to the canonical {target}: {e}"
             ) from e
         table = table.set_column(idx, actual, cast)
+
+    # Backfill the optional columns this source has no value for, as typed
+    # nulls.  Every ingest then emits the identical column set, so a preql
+    # datasource can map `submission_photo_url: ?submission_photo_url` uniformly across cities that do
+    # and don't have photos without the SELECT failing on a missing column.
+    for canonical, target in TREE_COLUMN_TYPES.items():
+        actual = resolved[canonical]
+        if actual in table.schema.names:
+            continue
+        table = table.append_column(
+            actual, pa.nulls(table.num_rows, type=target)
+        )
 
     return table
 

@@ -210,5 +210,5 @@ if __name__ == "__main__":
             file=sys.stderr,
         )
     table = validate_coordinates(table, city="Amsterdam", city_code="NLAMS")
-    table = enforce_tree_schema(table, city="Amsterdam")
+    table = enforce_tree_schema(table, city="Amsterdam", data_source="AMSTERDAM_OPENDATA")
     emit(table)

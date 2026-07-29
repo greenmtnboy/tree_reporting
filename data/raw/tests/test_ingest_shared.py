@@ -376,12 +376,14 @@ def _tree_table(**overrides) -> pa.Table:
     cols = {
         "tree_id": pa.array(["t-1"], type=pa.string()),
         "city": pa.array(["USSFO"], type=pa.string()),
+        "data_source": pa.array(["SF_OPENDATA"], type=pa.string()),
         "species": pa.array(["Platanus x hispanica"], type=pa.string()),
         "tree_name": pa.array(["London Plane"], type=pa.string()),
         "plant_date": pa.array([date(2001, 5, 4)], type=pa.date32()),
         "latitude": pa.array([37.77], type=pa.float64()),
         "longitude": pa.array([-122.42], type=pa.float64()),
         "diameter_at_breast_height": pa.array([12.5], type=pa.float64()),
+        "submission_photo_url": pa.array([None], type=pa.string()),
     }
     cols.update(overrides)
     return pa.table(cols)
@@ -430,6 +432,7 @@ class TestEnforceTreeSchema:
         })
         out = enforce_tree_schema(
             table,
+            data_source="SF_OPENDATA",
             columns={
                 "tree_id": "treeid",
                 "species": "qspecies",
@@ -442,15 +445,46 @@ class TestEnforceTreeSchema:
 
     def test_extra_columns_pass_through_untouched(self):
         table = _tree_table().append_column(
-            "usbos_source", pa.array(["CITY"], type=pa.string())
+            "borough", pa.array(["Camden"], type=pa.string())
         )
         out = enforce_tree_schema(table)
-        assert out.column("usbos_source")[0].as_py() == "CITY"
+        assert out.column("borough")[0].as_py() == "Camden"
 
-    def test_optional_columns_may_be_absent(self):
+    def test_absent_optional_columns_are_backfilled_as_typed_nulls(self):
+        """Every ingest must emit the identical column set.
+
+        The preql datasources map `submission_photo_url: ?submission_photo_url`
+        for every city, including the ones with no photos, so the column has to
+        exist or the generated SELECT fails on a missing column.
+        """
         table = _tree_table().drop_columns(["plant_date", "tree_name"])
         out = enforce_tree_schema(table)
-        assert "plant_date" not in out.schema.names
+        assert set(TREE_COLUMN_TYPES).issubset(out.schema.names)
+        assert out.schema.field("plant_date").type.equals(pa.date32())
+        assert out.column("plant_date")[0].as_py() is None
+        assert out.column("tree_name")[0].as_py() is None
+
+    def test_backfill_respects_column_overrides(self):
+        table = pa.table({
+            "treeid": pa.array(["sf-1"], type=pa.string()),
+            "city": pa.array(["USSFO"], type=pa.string()),
+            "qspecies": pa.array(["Platanus x hispanica"], type=pa.string()),
+        })
+        out = enforce_tree_schema(
+            table,
+            data_source="SF_OPENDATA",
+            columns={"tree_id": "treeid", "species": "qspecies", "diameter_at_breast_height": "dbh"},
+        )
+        assert out.schema.field("dbh").type.equals(pa.float64())
+        assert "diameter_at_breast_height" not in out.schema.names
+
+    def test_data_source_kwarg_is_validated_against_the_picklist(self):
+        with pytest.raises(ValueError, match="not a known source label"):
+            enforce_tree_schema(_tree_table(), data_source="NOT_A_REAL_SOURCE")
+
+    def test_data_source_kwarg_overrides_any_existing_column(self):
+        out = enforce_tree_schema(_tree_table(), data_source="NYC_OPENDATA")
+        assert out.column("data_source").to_pylist() == ["NYC_OPENDATA"]
 
     def test_missing_required_column_raises(self):
         table = _tree_table().drop_columns(["species"])

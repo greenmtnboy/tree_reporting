@@ -346,5 +346,5 @@ if __name__ == "__main__":
     rows = download_csv()
     table = transform(rows)
     table = validate_coordinates(table, city="London", city_code="GBLON")
-    table = enforce_tree_schema(table, city="London")
+    table = enforce_tree_schema(table, city="London", data_source="LONDON_OPENDATA")
     emit(table)

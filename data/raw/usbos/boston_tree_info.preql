@@ -1,11 +1,13 @@
 import ..tree_common;
+import ..community_tree_info;
 
 property <*>.arboretum_data_updated_through datetime; # when Arnold Arboretum data is through
 property <*>.boston_city_data_updated_through datetime; # when Boston city open-data is through
 property <*>.cambridge_data_updated_through datetime; # when Cambridge open-data is through
 property <*>.brookline_data_updated_through datetime; # when Brookline open-data is through
 auto usbos_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through, cambridge_data_updated_through, brookline_data_updated_through);
-key usbos_source enum<string>['CITY', 'ARBORETUM', 'CAMBRIDGE', 'BROOKLINE']; # data source within Boston metro (CITY = Boston municipal, ARBORETUM = Arnold Arboretum, CAMBRIDGE = Cambridge municipal, BROOKLINE = Brookline municipal)
+auto usbos_published_data_updated_through <- greatest(usbos_data_updated_through, usbos_community_data_updated_through);
+key usbos_source enum<string>['CITY_OF_BOSTON', 'ARNOLD_ARBORETUM', 'CAMBRIDGE', 'BROOKLINE', 'COMMUNITY_USBOS']; # originating dataset within the Boston metro; materialized as the uniform `data_source` column
 
 
 property tree_id._raw_dbh float; # raw value 
@@ -21,6 +23,13 @@ root datasource boston_update_time (
     data_updated_through: boston_city_data_updated_through
 )
 file `./boston_update_time.py`;
+
+# Only this city's column, so an approval elsewhere does not mark USBOS's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource usbos_community_update_time (
+    usbos_community_data_updated_through: usbos_community_data_updated_through
+)
+file `../community_update_time.py`;
 
 root datasource arboretum_update_time (
     data_updated_through: arboretum_data_updated_through
@@ -42,7 +51,7 @@ file `./brookline_update_time.py`;
 root partial datasource city_raw_tree_info (
     id: tree_id,
     city: city,
-    usbos_source: usbos_source,
+    data_source: usbos_source,
     spp_bot: species,
     tree_name: ?tree_name,
     
@@ -50,36 +59,39 @@ root partial datasource city_raw_tree_info (
     latitude: ?latitude,
     longitude: ?longitude,
     dbh: ?_raw_dbh,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
-complete where city = 'USBOS' and usbos_source = 'CITY'
+complete where city = 'USBOS' and usbos_source = 'CITY_OF_BOSTON'
 file `./boston_tree_info.py`;
 
 root partial datasource arboretum_raw_tree_info (
     tree_id: tree_id,
     city: city,
-    usbos_source: usbos_source,
+    data_source: usbos_source,
     species: species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
     diameter_at_breast_height: ?_raw_dbh,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
-complete where city = 'USBOS' and usbos_source = 'ARBORETUM'
+complete where city = 'USBOS' and usbos_source = 'ARNOLD_ARBORETUM'
 file `./arboretum_tree_info.py`;
 
 root partial datasource cambridge_raw_tree_info (
     tree_id: tree_id,
     city: city,
-    usbos_source: usbos_source,
+    data_source: usbos_source,
     species: species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
     diameter_at_breast_height: ?_raw_dbh,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'CAMBRIDGE'
@@ -88,34 +100,59 @@ file `./cambridge_tree_info.py`;
 root partial datasource brookline_raw_tree_info (
     tree_id: tree_id,
     city: city,
-    usbos_source: usbos_source,
+    data_source: usbos_source,
     species: species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
     diameter_at_breast_height: ?_raw_dbh,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'BROOKLINE'
 file `./brookline_tree_info.py`;
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to USBOS and makes
+# it a disjoint partition alongside the four municipal sources. `diameter_at_breast_height`
+# maps to `_raw_dbh` (not the canonical concept) so community rows go through the
+# same species-average imputation. Mapping it directly would leave
+# `diameter_at_breast_height` resolvable only from partial sources and make the
+# whole Boston model unresolvable.
+root partial datasource usbos_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: usbos_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?_raw_dbh,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'USBOS' and usbos_source = 'COMMUNITY_USBOS'
+file `../community_tree_info.py`;
 
 # --- Merged materialized parquet (all Boston sources) ---
 
 partial datasource boston_tree_info (
     tree_id,
     city,
-    usbos_source,
+    data_source: usbos_source,
     species,
     ?tree_name,
     ?diameter_at_breast_height,
     ?plant_date,
     ?latitude,
     ?longitude,
-    usbos_data_updated_through
+    ?submission_photo_url,
+    usbos_published_data_updated_through
 )
 grain (tree_id)
 complete where city = 'USBOS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`
-freshness by usbos_data_updated_through;
+freshness by usbos_published_data_updated_through;
 

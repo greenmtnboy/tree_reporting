@@ -67,7 +67,6 @@ def yr_to_date(yr: int | None) -> date | None:
 def build_table(features: list[dict]) -> pa.Table:
     tree_ids: list[str | None] = []
     cities: list[str] = []
-    sources: list[str] = []
     species_list: list[str | None] = []
     tree_names: list[str | None] = []
     plant_dates: list[date | None] = []
@@ -92,7 +91,6 @@ def build_table(features: list[dict]) -> pa.Table:
 
         tree_ids.append(f"bkl-{obj_id}" if obj_id is not None else None)
         cities.append("USBOS")
-        sources.append("BROOKLINE")
         species_list.append(species)
 
         cn = attrs.get("CommonNameTxt")
@@ -116,7 +114,6 @@ def build_table(features: list[dict]) -> pa.Table:
         {
             "tree_id": pa.array(tree_ids, type=pa.string()),
             "city": pa.array(cities, type=pa.string()),
-            "usbos_source": pa.array(sources, type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
             "tree_name": pa.array(tree_names, type=pa.string()),
             "plant_date": pa.array(plant_dates, type=pa.date32()),
@@ -164,5 +161,5 @@ if __name__ == "__main__":
         )
     table = build_table(features)
     table = validate_coordinates(table, city="Brookline", city_code="USBOS")
-    table = enforce_tree_schema(table, city="Brookline")
+    table = enforce_tree_schema(table, city="Brookline", data_source="BROOKLINE")
     emit(table)

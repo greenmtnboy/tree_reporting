@@ -125,5 +125,5 @@ if __name__ == '__main__':
             file=sys.stderr,
         )
     table = validate_coordinates(table, city='Los Angeles', city_code='USLAX')
-    table = enforce_tree_schema(table, city='Los Angeles')
+    table = enforce_tree_schema(table, city='Los Angeles', data_source="LOSANGELES_OPENDATA")
     emit(table)

@@ -1,36 +1,72 @@
 import ..tree_common;
+import ..community_tree_info;
+
+auto uslax_published_data_updated_through <- greatest(uslax_data_updated_through, uslax_community_data_updated_through);
+
+key uslax_source enum<string>['LOSANGELES_OPENDATA', 'COMMUNITY_USLAX']; # originating dataset for the row
 
 root datasource losangeles_update_time (
     data_updated_through: uslax_data_updated_through
 )
 file `./losangeles_update_time.py`;
 
+# Only this city's column, so an approval elsewhere does not mark USLAX's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource uslax_community_update_time (
+    uslax_community_data_updated_through: uslax_community_data_updated_through
+)
+file `../community_update_time.py`;
+
 root partial datasource losangeles_raw_tree_info (
     tree_id: tree_id,
     city: city,
+    data_source: uslax_source,
     species: species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
     diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
-complete where city = 'USLAX'
+complete where city = 'USLAX' and uslax_source = 'LOSANGELES_OPENDATA'
 file `./losangeles_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script
+# emits every city's rows; the `complete where` clause narrows it to USLAX
+# and makes it a disjoint partition alongside losangeles_raw_tree_info.
+root partial datasource uslax_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: uslax_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'USLAX' and uslax_source = 'COMMUNITY_USLAX'
+file `../community_tree_info.py`;
 
 partial datasource losangeles_tree_info (
     tree_id,
     city,
+    data_source: uslax_source,
     species,
     ?tree_name,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
-    uslax_data_updated_through,
+    ?submission_photo_url,
+    uslax_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'USLAX'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslax_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uslax_tree_info_v{data_version}.parquet`
-freshness by uslax_data_updated_through;
+freshness by uslax_published_data_updated_through;

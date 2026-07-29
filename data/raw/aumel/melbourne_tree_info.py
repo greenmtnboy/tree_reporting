@@ -177,5 +177,5 @@ if __name__ == "__main__":
     raw = pq.read_table(buf)
     table = transform(raw)
     table = validate_coordinates(table, city="Melbourne", city_code="AUMEL")
-    table = enforce_tree_schema(table, city="Melbourne")
+    table = enforce_tree_schema(table, city="Melbourne", data_source="MELBOURNE_OPENDATA")
     emit(table)

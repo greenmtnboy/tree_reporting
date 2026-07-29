@@ -1,13 +1,26 @@
 import ..tree_common;
+import ..community_tree_info;
+
+auto gblon_published_data_updated_through <- greatest(gblon_data_updated_through, gblon_community_data_updated_through);
+
+key gblon_source enum<string>['LONDON_OPENDATA', 'COMMUNITY_GBLON']; # originating dataset for the row
 
 root datasource london_update_time (
     data_updated_through: gblon_data_updated_through
 )
 file `./london_update_time.py`;
 
+# Only this city's column, so an approval elsewhere does not mark GBLON's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource gblon_community_update_time (
+    gblon_community_data_updated_through: gblon_community_data_updated_through
+)
+file `../community_update_time.py`;
+
 root partial datasource london_raw_tree_info (
     tree_id: tree_id,
     city: city,
+    data_source: gblon_source,
     species: species,
     tree_name: ?tree_name,
     borough: ?borough,
@@ -15,15 +28,38 @@ root partial datasource london_raw_tree_info (
     latitude: ?latitude,
     longitude: ?longitude,
     diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
-complete where city = 'GBLON'
+complete where city = 'GBLON' and gblon_source = 'LONDON_OPENDATA'
 file `./london_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script
+# emits every city's rows; the `complete where` clause narrows it to GBLON
+# and makes it a disjoint partition alongside london_raw_tree_info.
+root partial datasource gblon_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: gblon_source,
+    species: species,
+    tree_name: ?tree_name,
+    borough: ?borough,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'GBLON' and gblon_source = 'COMMUNITY_GBLON'
+file `../community_tree_info.py`;
 
 
 partial datasource london_tree_info (
     tree_id,
     city,
+    data_source: gblon_source,
     species,
     ?tree_name,
     ?borough,
@@ -31,9 +67,10 @@ partial datasource london_tree_info (
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
-    gblon_data_updated_through,
+    ?submission_photo_url,
+    gblon_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'GBLON'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gblon_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/gblon_tree_info_v{data_version}.parquet`
-freshness by gblon_data_updated_through;
+freshness by gblon_published_data_updated_through;

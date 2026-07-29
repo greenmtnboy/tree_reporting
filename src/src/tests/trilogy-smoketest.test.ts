@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { ALL_MODEL_SOURCES } from '../trilogyModels'
 import { buildDashboardContextSource } from '../composables/dashboardContextSource'
+// Read the version rather than hardcoding it, so a DATA_VERSION bump does not
+// require editing an assertion that has nothing to do with what is being tested.
+import { TREE_DATA_VERSION } from '../workers/parquetUrls'
 
 const TRILOGY_RESOLVER_URL = 'https://trilogy-service.fly.dev'
 
@@ -109,7 +112,7 @@ ORDER BY tree_count desc
     )
     expect(sql).toBeTruthy()
     expect(sql.toLowerCase()).toContain('native_locality_bucket')
-    expect(sql.toLowerCase()).toContain('tree_enrichment_v2.parquet')
+    expect(sql.toLowerCase()).toContain(`tree_enrichment_v${TREE_DATA_VERSION}.parquet`)
   }, 30_000)
 
   it('checks whether resolver returns parameters for dashboard context constants', async () => {

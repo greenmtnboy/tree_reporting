@@ -9,6 +9,7 @@ property tree_id.diameter_at_breast_height float; # diameter at breast height - 
 property tree_id.latitude float::latitude; # geographic latitude for mapping
 property tree_id.longitude float::longitude; # geographic longitude for mapping
 property tree_id.borough string; # administrative borough/district (London)
+property tree_id.submission_photo_url string; # publicly readable photo of this specific tree, from an approved community submission; null for municipal sources. Distinct from species.photo_url in tree_enrichment.preql, which is a stock photo of the species.
 
 
 
