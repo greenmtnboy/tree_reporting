@@ -131,5 +131,5 @@ if __name__ == "__main__":
     features = fetch_all_features()
     table = transform(features)
     table = validate_coordinates(table, city="Berlin", city_code="DEBER")
-    table = enforce_tree_schema(table, city="Berlin")
+    table = enforce_tree_schema(table, city="Berlin", data_source="BERLIN_OPENDATA")
     emit(table)

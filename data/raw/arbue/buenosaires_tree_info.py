@@ -69,5 +69,5 @@ def transform(table: pa.Table) -> pa.Table:
 if __name__ == '__main__':
     table = transform(load_table(download_csv()))
     table = validate_coordinates(table, city='Buenos Aires', city_code='ARBUE')
-    table = enforce_tree_schema(table, city='Buenos Aires')
+    table = enforce_tree_schema(table, city='Buenos Aires', data_source="BUENOSAIRES_OPENDATA")
     emit(table)

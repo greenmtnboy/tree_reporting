@@ -59,5 +59,5 @@ def transform(payload: dict) -> pa.Table:
 if __name__ == '__main__':
     table = transform(download_geojson())
     table = validate_coordinates(table, city='Tempe', city_code='USTEM')
-    table = enforce_tree_schema(table, city='Tempe')
+    table = enforce_tree_schema(table, city='Tempe', data_source="TEMPE_OPENDATA")
     emit(table)

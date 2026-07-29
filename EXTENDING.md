@@ -30,16 +30,83 @@ The browser never touches raw source data — it only fetches the pre-built parq
 ### Approved community submissions
 
 The local reviewer promotes accepted submissions from `submissions` into the
-rules-public `publishedTrees` Firestore collection. Approval itself does not
-refresh public data.
+`publishedTrees` Firestore collection. On approval it also:
 
-During the normal scheduled refresh, `data/raw/community_tree_info.py` exports
-approved records into the canonical Arrow tree schema. Each city tree model
-imports `community_tree_info.preql`; its existing `complete where city = ...`
-condition filters the shared rows before the municipal and community sources
-are materialized into that city's usual Parquet. The latest Firestore
-`publishedAt` timestamp participates in freshness checks through
-`community_update_time.py`.
+1. Re-encodes each submission photo with `sharp` and writes it to the **public**
+   `sf-tree-reporting-published` bucket under `community/photos/`.
+2. Rewrites `community/published_trees.ndjson` (the approved-tree export) and
+   `community/manifest.json` (the freshness timestamp) in the same bucket.
+
+Approval itself does not refresh map data. During the normal scheduled refresh,
+`data/raw/community_tree_info.py` reads that public export into the canonical
+Arrow tree schema, and `community_update_time.py` reads the manifest as a
+freshness input, so a new approval makes the affected city Parquet stale on the
+next run.
+
+**Freshness is per city.** `community_update_time.py` emits one *column* per
+city (`ussfo_community_data_updated_through`, …) and each city's model probes
+only its own, so approving a tree in Boston rebuilds Boston alone. A shared
+scalar would mark all fourteen city Parquets stale and re-download every
+municipal dataset to publish one tree.
+
+Note the shape: per-city *columns*, not one row per city with a
+`complete where city = 'X'` filter. Trilogy pushes a `complete where` clause
+into row queries but **not** into the watermark probe, which stays a plain
+`SELECT MAX(col) FROM uv_run(...)` over every row the script emits. The
+row-per-city version was tried and measured — a Boston-only approval moved San
+Francisco's watermark too. `data/raw/tests/test_data_sources.py` guards this.
+
+**Why a public GCS export rather than reading Firestore directly.** The first
+cut of this pipeline hit `firestore.googleapis.com/v1` on the theory that a
+`allow read: if true` security rule made `publishedTrees` world-readable. It
+does not: the Cloud REST API enforces IAM, and security rules only apply to
+Firebase SDK clients, so an unauthenticated pipeline gets
+`403 PERMISSION_DENIED`. Because every city's freshness now depends on the
+community probe, that 403 aborted the *entire* `trilogy refresh raw` run — all
+cities, plus landmarks and enrichment. Reading a public object keeps the
+pipeline credential-free, keeps Firestore private, and gives the photos a
+public URL in the same step. Both community scripts also treat a missing export
+as zero rows rather than raising, so an optional source can never take the
+whole refresh down again.
+
+**Photos.** `submission_photo_url` on a tree row is a photo of *that specific
+tree*, distinct from `species.photo_url` in `tree_enrichment.preql`, which is a
+stock photo of the species. `TreeMap.vue` prefers the submission photo when
+present. Private submission uploads are never made public: the `submissions`
+bucket keeps `public_access_prevention = "enforced"`, and a reviewer approval is
+the only thing that copies a photo into the public bucket.
+
+**EXIF.** The web client strips metadata by re-encoding through a canvas
+(`src/src/lib/image.ts`), which every upload path uses. The reviewer strips it
+again server-side at the publish gate, because the storage rules only check
+`contentType` — anything speaking the Storage API can upload a JPEG with intact
+GPS tags, and publishing is the point where that stops being private.
+
+### The `data_source` column
+
+Every tree row carries the dataset it came from, materialized as a uniformly
+named `data_source` column in every tree Parquet. The value list lives in
+`DATA_SOURCES` in `data/raw/_ingest_shared.py`; display labels live in
+`src/src/data/dataSources.ts`. `data/raw/tests/test_data_sources.py` asserts the
+Python picklist, the preql enums, and the `complete where` clauses all agree.
+
+The concept is modelled as a **per-city** enum key (`ussfo_source`,
+`usbos_source`, …) declared in each city's tree model, *not* as one global enum
+in `core.preql`. This is not a style choice: Trilogy proves a city's Parquet is
+complete by checking that its raw sources cover every value of the partitioning
+enum. A 30-value global enum is never covered by one city's two sources, and the
+model fails with `UnresolvableQueryException: no complete sources found` — as
+does a plain `key data_source string`. Both were tried. Each city then aliases
+its key to the physical column (`data_source: ussfo_source`) so the Parquets
+still share one column name, and `tree_info.preql` merges the 14 keys into a
+single `data_source` concept for the cross-city Parquet. Do not add that merge
+to a city model — it re-breaks that city's resolution.
+
+This partitioning is also what makes community rows appear at all. A city whose
+only source claims `complete where city = 'X'` leaves no room for a second
+source: Trilogy treats the municipal source as covering the whole city and
+silently emits **zero** community rows, with no error anywhere. Each raw source
+must claim `complete where city = 'X' and {code}_source = 'Y'`.
 
 ---
 
@@ -49,8 +116,11 @@ All GCS parquet files use a versioned naming scheme: `{name}_v{DATA_VERSION}.par
 
 The version is a single integer defined in two places — keep them in sync when bumping:
 
-- **`data/raw/enrichment/_tree_shared.py`** — `DATA_VERSION = 1` (used by the tree enrichment Python scripts)
-- **`src/src/workers/parquetUrls.ts`** — `const DATA_VERSION = 1` (used by the browser worker)
+- **`data/raw/core.preql`** — `param data_version string default '2';` (the preql
+  models interpolate it; `data/raw/enrichment/_tree_shared.py` reads it from here)
+- **`src/src/workers/parquetUrls.ts`** — `TREE_DATA_VERSION` and
+  `LANDMARK_DATA_VERSION` (used by the browser worker). Both track the single
+  preql `data_version`, so bump all three together.
 
 Preql datasource files use the `f\`` template syntax to interpolate the version:
 
@@ -58,7 +128,11 @@ Preql datasource files use the `f\`` template syntax to interpolate the version:
 file f`https://.../trees/{code}_tree_info_v{data_version}.parquet`:f`gcs://.../{code}_tree_info_v{data_version}.parquet`
 ```
 
-**When to bump the version:** Any schema-breaking change to a parquet (column rename, type change, key refactor). Bump the integer in both places, rebuild all parquets, and the old files remain on GCS untouched as a rollback path.
+**When to bump the version:** Any change that makes an existing consumer fail — a type change, or removing/renaming a column something actually reads. Bump the integer in both places, rebuild all parquets, and the old files remain on GCS untouched as a rollback path.
+
+**When not to.** Purely additive columns do not need one. The deployed app selects columns by name, so it ignores new ones, and rolling the app back after a rebuild still works because its column set is a subset. Bumping is not free: `data_version` is a single param shared by *all* parquets, so a bump re-materializes the LLM-backed enrichment table and every landmark parquet too. The `data_source` / `submission_photo_url` addition deliberately stayed on v2 for this reason.
+
+Either way, **refresh before you deploy** — the worker selects new columns by name and fails to load against a parquet that has not been rebuilt yet.
 
 ---
 
@@ -107,6 +181,11 @@ key city enum<string>['USSFO', 'USNYC', 'USBOS', 'FRPAR'];
 ```
 
 Trilogy will reject any `complete where city = '...'` clause whose value isn't in this enum, so this must be done before the preql files in the next steps will validate.
+
+Also add the new city's source labels to `MUNICIPAL_DATA_SOURCES` in
+**`data/raw/_ingest_shared.py`** (the community label is derived automatically)
+and a display label to **`src/src/data/dataSources.ts`**. See "The `data_source`
+column" above for why the enum values themselves live per-city rather than here.
 
 ### 4. Create the Freshness Probe
 
@@ -233,35 +312,82 @@ complete where city = '{CODE}'
 file `./{city}_update_time.py`
 freshness by {city}_data_updated_through;
 
+key {code}_source enum<string>['{CITY}_OPENDATA', 'COMMUNITY_{CODE}'];
+
+auto {code}_published_data_updated_through <- greatest({code}_data_updated_through, {code}_community_data_updated_through);
+
+# Only this city's column, so an approval elsewhere does not rebuild it.
+root datasource {code}_community_update_time (
+    {code}_community_data_updated_through: {code}_community_data_updated_through
+)
+file `../community_update_time.py`;
+
 root partial datasource {city}_raw_tree_info (
     tree_id: tree_id,
     city: city,
+    data_source: {code}_source,
     species: species,
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
     diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
-complete where city = '{CODE}'
+complete where city = '{CODE}' and {code}_source = '{CITY}_OPENDATA'
 file `./{city}_tree_info.py`;
+
+
+# Mandatory. Without this partition, approved community trees for this city are
+# silently dropped — see "The `data_source` column" above.
+root partial datasource {code}_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: {code}_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = '{CODE}' and {code}_source = 'COMMUNITY_{CODE}'
+file `../community_tree_info.py`;
 
 
 partial datasource {city}_tree_info (
     tree_id,
     city,
+    data_source: {code}_source,
     species,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
-    {city}_data_updated_through,
+    ?submission_photo_url,
+    {code}_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = '{CODE}'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{code}_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{code}_tree_info_v{data_version}.parquet`
-freshness by {city}_data_updated_through;
+freshness by {code}_published_data_updated_through;
 ```
+
+Also add `import ..community_tree_info;` at the top, declare
+`property <*>.{code}_community_data_updated_through datetime;` in
+`community_tree_info.preql`, and pass `data_source="{CITY}_OPENDATA"` to
+`enforce_tree_schema` in the fetch script.
+
+Verify before moving on — a missing community partition produces no error:
+
+```bash
+cd data && trilogy refresh raw/{city}/{city}_tree_info.preql --dry-run -f {city}_tree_info
+```
+
+The generated SQL must contain a `UNION ALL` and reference
+`community_tree_info.py`. If it doesn't, the community partition isn't wired up.
 
 ### 7. Import in the Merged Data Model
 

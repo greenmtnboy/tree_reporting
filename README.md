@@ -67,6 +67,9 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Paris | Paris Open Data - Les Arbres | https://opendata.paris.fr/explore/dataset/les-arbres/ |
 | Buenos Aires | Buenos Aires Data - Arbolado publico lineal | https://data.buenosaires.gob.ar/dataset/arbolado-publico-lineal |
+| All cities | Community submissions, reviewed and approved before publication | (contributed via the app) |
+
+Every tree row carries a `data_source` column identifying which of the above it came from.
 
 ### Landmarks
 

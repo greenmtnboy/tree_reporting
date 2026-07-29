@@ -14,6 +14,26 @@ import uslax.losangeles_tree_info;
 import uswas.washingtondc_tree_info;
 import ustem.tempe_tree_info;
 
+# Each city models its originating dataset as its own enum key so Trilogy can
+# prove per-city partition coverage (see core.preql). Merging them here — and
+# only here — gives the cross-city Parquet a single `data_source` concept
+# without disturbing how each city model resolves.
+key data_source string; # originating dataset for the tree record
+merge ussfo_source into data_source;
+merge usnyc_source into data_source;
+merge usbos_source into data_source;
+merge frpar_source into data_source;
+merge usbtv_source into data_source;
+merge cavan_source into data_source;
+merge deber_source into data_source;
+merge nlams_source into data_source;
+merge gblon_source into data_source;
+merge aumel_source into data_source;
+merge arbue_source into data_source;
+merge uslax_source into data_source;
+merge uswas_source into data_source;
+merge ustem_source into data_source;
+
 auto latest_update_through <- greatest(
 ussfo_published_data_updated_through,
 usnyc_published_data_updated_through,
@@ -34,12 +54,14 @@ ustem_published_data_updated_through);
 datasource tree_info (
     tree_id,
     city,
+    data_source,
     species,
     tree_name,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
+    ?submission_photo_url,
     latest_update_through
 )
 grain (tree_id)

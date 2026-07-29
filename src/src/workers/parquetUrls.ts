@@ -1,6 +1,6 @@
 // Multi-city tree data and enrichment (combined dataset in new bucket)
 const REMOTE_TREES_BASE_URL = 'https://storage.googleapis.com/trilogy_public_models/duckdb/trees'
-const TREE_DATA_VERSION = 2
+export const TREE_DATA_VERSION = 2
 export const REMOTE_TREES_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/full_tree_info_v${TREE_DATA_VERSION}.parquet`
 export const REMOTE_SPECIES_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/tree_enrichment_v${TREE_DATA_VERSION}.parquet`
 export const REMOTE_ECOREGION_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/ecoregion_info_v${TREE_DATA_VERSION}.parquet`

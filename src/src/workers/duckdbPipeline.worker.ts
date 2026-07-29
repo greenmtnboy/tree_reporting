@@ -449,12 +449,14 @@ async function loadCityTrees(city?: string): Promise<void> {
     SELECT
       tree_id,
       city,
+      data_source,
       tree_name,
       plant_date,
       species,
       latitude,
       longitude,
-      diameter_at_breast_height
+      diameter_at_breast_height,
+      submission_photo_url
     FROM read_parquet('${parquetUrl}')
     WHERE latitude IS NOT NULL AND longitude IS NOT NULL
   `)
@@ -468,6 +470,8 @@ async function loadCityTrees(city?: string): Promise<void> {
       SELECT
         t.tree_id,
         t.city,
+        t.data_source,
+        t.submission_photo_url,
         COALESCE(NULLIF(TRIM(CAST(list_extract(se.common_names, 1) AS VARCHAR)), ''), t.tree_name, t.species) AS tree_name,
         t.plant_date,
         t.species,

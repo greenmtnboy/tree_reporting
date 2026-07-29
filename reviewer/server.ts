@@ -2,9 +2,11 @@ import express from 'express'
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
+import sharp from 'sharp'
 
 const projectId = process.env.GOOGLE_CLOUD_PROJECT ?? 'sf-tree-reporting-prod'
 const storageBucket = process.env.FIREBASE_STORAGE_BUCKET ?? 'sf-tree-reporting-submissions'
+const publishedBucketName = process.env.PUBLISHED_BUCKET ?? 'sf-tree-reporting-published'
 const port = Number(process.env.REVIEWER_PORT ?? 4174)
 const firebaseApp = getApps()[0] ?? initializeApp({
   credential: applicationDefault(),
@@ -12,8 +14,21 @@ const firebaseApp = getApps()[0] ?? initializeApp({
   storageBucket,
 })
 const db = getFirestore(firebaseApp)
-const bucket = getStorage(firebaseApp).bucket(storageBucket)
+const storage = getStorage(firebaseApp)
+const bucket = storage.bucket(storageBucket)
+const publishedBucket = storage.bucket(publishedBucketName)
 const app = express()
+
+// Mirrors the `city` enum in data/raw/core.preql. The ingest silently drops
+// rows for unknown cities, so reject them at approval where a human can see it.
+const CITY_CODES = new Set([
+  'USSFO', 'USNYC', 'USBOS', 'FRPAR', 'USBTV', 'CAVAN', 'DEBER',
+  'NLAMS', 'GBLON', 'AUMEL', 'ARBUE', 'USLAX', 'USWAS', 'USTEM',
+])
+
+const EXPORT_PATH = 'community/published_trees.ndjson'
+const MANIFEST_PATH = 'community/manifest.json'
+const PUBLISHED_PHOTO_MAX_DIM = 1600
 
 app.use(express.json({ limit: '32kb' }))
 
@@ -40,6 +55,87 @@ function assertDecisionBody(body: unknown): { reason: string | null } {
 
 function localPhotoUrl(path: string): string {
   return `/api/photos?path=${encodeURIComponent(path)}`
+}
+
+function publishedPhotoUrl(objectPath: string): string {
+  return `https://storage.googleapis.com/${publishedBucketName}/${objectPath}`
+}
+
+/**
+ * Copy a submission photo into the public bucket, re-encoded.
+ *
+ * The web client already strips EXIF by re-encoding through a canvas, but the
+ * storage rules only check `contentType`, so anything speaking the Storage API
+ * can upload a JPEG with intact GPS tags. Publishing is the point where a photo
+ * stops being private, so it is also where the guarantee has to hold: sharp
+ * decodes to raw pixels and re-encodes, which carries no EXIF, IPTC, or XMP
+ * across. `rotate()` first so the orientation tag is baked in before it is
+ * dropped.
+ */
+async function publishPhoto(sourcePath: string, treeId: string, index: number): Promise<string> {
+  const [original] = await bucket.file(sourcePath).download()
+  const cleaned = await sharp(original)
+    .rotate()
+    .resize({
+      width: PUBLISHED_PHOTO_MAX_DIM,
+      height: PUBLISHED_PHOTO_MAX_DIM,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .jpeg({ quality: 85 })
+    .toBuffer()
+
+  const objectPath = `community/photos/${treeId}${index === 0 ? '' : `-${index}`}.jpg`
+  await publishedBucket.file(objectPath).save(cleaned, {
+    contentType: 'image/jpeg',
+    metadata: { cacheControl: 'public, max-age=86400' },
+  })
+  return publishedPhotoUrl(objectPath)
+}
+
+/**
+ * Rewrite the public approved-tree export the data pipeline reads.
+ *
+ * Firestore itself is not readable by the pipeline: `firestore.googleapis.com`
+ * enforces IAM rather than security rules, so a public `allow read` rule still
+ * returns 403 to an unauthenticated caller. Publishing a plain GCS object keeps
+ * the pipeline credential-free and Firestore private.
+ */
+async function rewritePublicExport(): Promise<number> {
+  const snapshot = await db.collection('publishedTrees').orderBy('publishedAt', 'asc').get()
+  const lines: string[] = []
+  let latestPublishedAt: string | null = null
+  // Per city, so approving a tree in one city does not mark all fourteen city
+  // Parquets stale and re-materialize every one of them.
+  const latestPublishedAtByCity: Record<string, string> = {}
+  for (const document of snapshot.docs) {
+    const data = document.data()
+    const publishedAt = data.publishedAt instanceof Timestamp ? data.publishedAt.toDate().toISOString() : null
+    if (publishedAt) {
+      latestPublishedAt = publishedAt
+      const city = typeof data.city === 'string' ? data.city.toUpperCase() : null
+      // Docs are ordered by publishedAt ascending, so the last write per city wins.
+      if (city) latestPublishedAtByCity[city] = publishedAt
+    }
+    lines.push(JSON.stringify({
+      treeId: data.treeId ?? document.id,
+      city: data.city ?? null,
+      species: data.species ?? null,
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+      photoUrl: data.photoUrl ?? null,
+      additionalPhotoUrls: data.additionalPhotoUrls ?? [],
+      publishedAt,
+    }))
+  }
+  // No cache: the freshness probe must observe an approval on the next run.
+  const writeOptions = { contentType: 'application/json', metadata: { cacheControl: 'no-cache' } }
+  await publishedBucket.file(EXPORT_PATH).save(`${lines.join('\n')}\n`, writeOptions)
+  await publishedBucket.file(MANIFEST_PATH).save(
+    JSON.stringify({ count: lines.length, latestPublishedAt, latestPublishedAtByCity }),
+    writeOptions,
+  )
+  return lines.length
 }
 
 app.get('/api/submissions', async (_req, res, next) => {
@@ -86,6 +182,22 @@ app.post('/api/submissions/:id/approve', async (req, res, next) => {
     const submissionId = req.params.id
     const submissionRef = db.collection('submissions').doc(submissionId)
     const publishedRef = db.collection('publishedTrees').doc(`community-${submissionId}`)
+
+    const pending = await submissionRef.get()
+    if (!pending.exists) throw new Error('Submission not found')
+    const submissionData = pending.data() as PendingSubmission
+    if (submissionData.status !== 'pending') throw new Error(`Submission is already ${submissionData.status}`)
+    if (!CITY_CODES.has(submissionData.city)) {
+      throw new Error(`Submission city ${submissionData.city} is not a supported city code`)
+    }
+
+    // Copy photos to the public bucket before the transaction records their
+    // URLs. If the transaction then fails, the copies are simply unreferenced.
+    const sourcePaths = [submissionData.photoPath, ...(submissionData.additionalPhotoPaths ?? [])]
+    const publishedUrls = await Promise.all(
+      sourcePaths.map((path, i) => publishPhoto(path, publishedRef.id, i)),
+    )
+
     await db.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(submissionRef)
       if (!snapshot.exists) throw new Error('Submission not found')
@@ -101,6 +213,8 @@ app.post('/api/submissions/:id/approve', async (req, res, next) => {
         species: submission.species ?? null,
         photoPath: submission.photoPath,
         additionalPhotoPaths: submission.additionalPhotoPaths ?? [],
+        photoUrl: publishedUrls[0] ?? null,
+        additionalPhotoUrls: publishedUrls.slice(1),
         submittedAt: submission.submittedAt ?? null,
         publishedAt: FieldValue.serverTimestamp(),
       })
@@ -111,7 +225,9 @@ app.post('/api/submissions/:id/approve', async (req, res, next) => {
         publishedTreeId: publishedRef.id,
       })
     })
-    res.json({ ok: true, publishedTreeId: publishedRef.id })
+
+    const published = await rewritePublicExport()
+    res.json({ ok: true, publishedTreeId: publishedRef.id, published })
   } catch (error) {
     next(error)
   }
@@ -133,6 +249,16 @@ app.post('/api/submissions/:id/reject', async (req, res, next) => {
       })
     })
     res.json({ ok: true })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// Rebuild the export from Firestore without approving anything — for the first
+// run, or to recover if an approval committed but the export write failed.
+app.post('/api/republish', async (_req, res, next) => {
+  try {
+    res.json({ ok: true, published: await rewritePublicExport() })
   } catch (error) {
     next(error)
   }

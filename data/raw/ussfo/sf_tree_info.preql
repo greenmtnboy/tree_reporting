@@ -1,42 +1,74 @@
 import ..tree_common;
 import ..community_tree_info;
 
-auto ussfo_published_data_updated_through <- greatest(ussfo_data_updated_through, community_data_updated_through);
+key ussfo_source enum<string>['SF_OPENDATA', 'COMMUNITY_USSFO'];
+
+auto ussfo_published_data_updated_through <- greatest(ussfo_data_updated_through, ussfo_community_data_updated_through);
 
 root datasource sf_update_time (
     data_updated_through: ussfo_data_updated_through
 )
 file `./sf_update_time.py`;
 
+# Only this city's column, so an approval elsewhere does not mark USSFO's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource ussfo_community_update_time (
+    ussfo_community_data_updated_through: ussfo_community_data_updated_through
+)
+file `../community_update_time.py`;
+
 
 root partial datasource sf_raw_tree_info (
     treeid: tree_id,
     city: city,
+    data_source: ussfo_source,
     qspecies: species,
     tree_name: ?tree_name,
     plantdate: ?plant_date,
     dbh: ?diameter_at_breast_height,
     latitude: ?latitude,
     longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
-complete where city = 'USSFO'
+complete where city = 'USSFO' and ussfo_source = 'SF_OPENDATA'
 file `./sf_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause is what narrows it to SF and
+# makes this a disjoint partition alongside sf_raw_tree_info.
+root partial datasource sf_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: ussfo_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'USSFO' and ussfo_source = 'COMMUNITY_USSFO'
+file `../community_tree_info.py`;
 
 
 partial datasource sf_tree_info (
     tree_id,
     city,
+    data_source: ussfo_source,
     species,
     ?tree_name,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
+    ?submission_photo_url,
     ussfo_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'USSFO'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ussfo_tree_info_v{data_version}.parquet`
 freshness by ussfo_published_data_updated_through;
-

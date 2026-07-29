@@ -120,5 +120,5 @@ if __name__ == "__main__":
     attrs, geoms = fetch_all()
     table = build_table(attrs, geoms)
     table = validate_coordinates(table, city="Burlington", city_code="USBTV")
-    table = enforce_tree_schema(table, city="Burlington")
+    table = enforce_tree_schema(table, city="Burlington", data_source="BURLINGTON_OPENDATA")
     emit(table)

@@ -1,36 +1,69 @@
 import ..tree_common;
 import ..community_tree_info;
 
-auto arbue_published_data_updated_through <- greatest(arbue_data_updated_through, community_data_updated_through);
+auto arbue_published_data_updated_through <- greatest(arbue_data_updated_through, arbue_community_data_updated_through);
+
+key arbue_source enum<string>['BUENOSAIRES_OPENDATA', 'COMMUNITY_ARBUE']; # originating dataset for the row
 
 root datasource buenosaires_update_time (
     data_updated_through: arbue_data_updated_through
 )
 file `./buenosaires_update_time.py`;
 
+# Only this city's column, so an approval elsewhere does not mark ARBUE's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource arbue_community_update_time (
+    arbue_community_data_updated_through: arbue_community_data_updated_through
+)
+file `../community_update_time.py`;
+
 root partial datasource buenosaires_raw_tree_info (
     tree_id: tree_id,
     city: city,
+    data_source: arbue_source,
     species: species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
     diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
-complete where city = 'ARBUE'
+complete where city = 'ARBUE' and arbue_source = 'BUENOSAIRES_OPENDATA'
 file `./buenosaires_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script
+# emits every city's rows; the `complete where` clause narrows it to ARBUE
+# and makes it a disjoint partition alongside buenosaires_raw_tree_info.
+root partial datasource arbue_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: arbue_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'ARBUE' and arbue_source = 'COMMUNITY_ARBUE'
+file `../community_tree_info.py`;
 
 partial datasource buenosaires_tree_info (
     tree_id,
     city,
+    data_source: arbue_source,
     species,
     ?tree_name,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
+    ?submission_photo_url,
     arbue_published_data_updated_through,
 )
 grain (tree_id)

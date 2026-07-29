@@ -89,7 +89,6 @@ def canonicalize_records(records: list[dict]) -> tuple[list[dict], int, int]:
 def build_table(records: list[dict]) -> pa.Table:
     tree_ids: list[str | None] = []
     cities: list[str] = []
-    sources: list[str] = []
     species_list: list[str | None] = []
     tree_names: list[str | None] = []
     plant_dates: list[date | None] = []
@@ -105,7 +104,6 @@ def build_table(records: list[dict]) -> pa.Table:
         raw_id = rec.get("treeid")
         tree_ids.append(f"cam-{raw_id}" if raw_id else None)
         cities.append("USBOS")
-        sources.append("CAMBRIDGE")
         species_list.append(species)
 
         cn = rec.get("commonname")
@@ -129,7 +127,6 @@ def build_table(records: list[dict]) -> pa.Table:
         {
             "tree_id": pa.array(tree_ids, type=pa.string()),
             "city": pa.array(cities, type=pa.string()),
-            "usbos_source": pa.array(sources, type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
             "tree_name": pa.array(tree_names, type=pa.string()),
             "plant_date": pa.array(plant_dates, type=pa.date32()),
@@ -161,5 +158,5 @@ if __name__ == "__main__":
             file=sys.stderr,
         )
     table = validate_coordinates(table, city="Cambridge", city_code="USBOS")
-    table = enforce_tree_schema(table, city="Cambridge")
+    table = enforce_tree_schema(table, city="Cambridge", data_source="CAMBRIDGE")
     emit(table)

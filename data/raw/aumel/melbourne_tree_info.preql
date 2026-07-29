@@ -1,37 +1,70 @@
 import ..tree_common;
 import ..community_tree_info;
 
-auto aumel_published_data_updated_through <- greatest(aumel_data_updated_through, community_data_updated_through);
+auto aumel_published_data_updated_through <- greatest(aumel_data_updated_through, aumel_community_data_updated_through);
+
+key aumel_source enum<string>['MELBOURNE_OPENDATA', 'COMMUNITY_AUMEL']; # originating dataset for the row
 
 root datasource melbourne_update_time (
     data_updated_through: aumel_data_updated_through
 )
 file `./melbourne_update_time.py`;
 
+# Only this city's column, so an approval elsewhere does not mark AUMEL's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource aumel_community_update_time (
+    aumel_community_data_updated_through: aumel_community_data_updated_through
+)
+file `../community_update_time.py`;
+
 root partial datasource melbourne_raw_tree_info (
     tree_id: tree_id,
     city: city,
+    data_source: aumel_source,
     species: species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
     diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
-complete where city = 'AUMEL'
+complete where city = 'AUMEL' and aumel_source = 'MELBOURNE_OPENDATA'
 file `./melbourne_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script
+# emits every city's rows; the `complete where` clause narrows it to AUMEL
+# and makes it a disjoint partition alongside melbourne_raw_tree_info.
+root partial datasource aumel_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: aumel_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'AUMEL' and aumel_source = 'COMMUNITY_AUMEL'
+file `../community_tree_info.py`;
 
 
 partial datasource melbourne_tree_info (
     tree_id,
     city,
+    data_source: aumel_source,
     species,
     ?tree_name,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
+    ?submission_photo_url,
     aumel_published_data_updated_through,
 )
 grain (tree_id)

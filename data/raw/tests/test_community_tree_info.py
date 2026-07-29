@@ -23,6 +23,7 @@ def test_records_to_table_emits_canonical_city_rows():
                 "species": "platanus X HISPANICA",
                 "latitude": 37.77,
                 "longitude": -122.42,
+                "photoUrl": "https://storage.googleapis.com/pub/community/photos/x.jpg",
             }
         ]
     )
@@ -31,12 +32,17 @@ def test_records_to_table_emits_canonical_city_rows():
         {
             "tree_id": "community-abc",
             "city": "USSFO",
+            # The per-city community label is what makes this row a disjoint
+            # partition that Trilogy will union into the SF Parquet.
+            "data_source": "COMMUNITY_USSFO",
             "species": "Platanus x hispanica",
             "tree_name": "Platanus x hispanica",
             "plant_date": None,
             "diameter_at_breast_height": None,
             "latitude": 37.77,
             "longitude": -122.42,
+            "submission_photo_url": "https://storage.googleapis.com/pub/community/photos/x.jpg",
+            "borough": None,
         }
     ]
     assert table.schema.field("plant_date").type == pa.date32()

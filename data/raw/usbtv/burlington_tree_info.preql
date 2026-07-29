@@ -1,36 +1,69 @@
 import ..tree_common;
 import ..community_tree_info;
 
-auto usbtv_published_data_updated_through <- greatest(usbtv_data_updated_through, community_data_updated_through);
+auto usbtv_published_data_updated_through <- greatest(usbtv_data_updated_through, usbtv_community_data_updated_through);
+
+key usbtv_source enum<string>['BURLINGTON_OPENDATA', 'COMMUNITY_USBTV']; # originating dataset for the row
 
 root datasource burlington_update_time (
     data_updated_through: usbtv_data_updated_through
 )
 file `./burlington_update_time.py`;
 
+# Only this city's column, so an approval elsewhere does not mark USBTV's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource usbtv_community_update_time (
+    usbtv_community_data_updated_through: usbtv_community_data_updated_through
+)
+file `../community_update_time.py`;
+
 root partial datasource burlington_raw_tree_info (
     tree_id: tree_id,
     city: city,
+    data_source: usbtv_source,
     species: species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
     diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
-complete where city = 'USBTV'
+complete where city = 'USBTV' and usbtv_source = 'BURLINGTON_OPENDATA'
 file `./burlington_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script
+# emits every city's rows; the `complete where` clause narrows it to USBTV
+# and makes it a disjoint partition alongside burlington_raw_tree_info.
+root partial datasource usbtv_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: usbtv_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'USBTV' and usbtv_source = 'COMMUNITY_USBTV'
+file `../community_tree_info.py`;
 
 partial datasource burlington_tree_info (
     tree_id,
     city,
+    data_source: usbtv_source,
     species,
     ?tree_name,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
+    ?submission_photo_url,
     usbtv_published_data_updated_through,
 )
 grain (tree_id)

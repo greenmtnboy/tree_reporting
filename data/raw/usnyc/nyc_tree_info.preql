@@ -1,16 +1,26 @@
 import ..tree_common;
 import ..community_tree_info;
 
-auto usnyc_published_data_updated_through <- greatest(usnyc_data_updated_through, community_data_updated_through);
+auto usnyc_published_data_updated_through <- greatest(usnyc_data_updated_through, usnyc_community_data_updated_through);
+
+key usnyc_source enum<string>['NYC_OPENDATA', 'COMMUNITY_USNYC']; # originating dataset for the row
 
 root datasource nyc_update_time (
     data_updated_through: usnyc_data_updated_through
 )
 file `./nyc_update_time.py`;
 
+# Only this city's column, so an approval elsewhere does not mark USNYC's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource usnyc_community_update_time (
+    usnyc_community_data_updated_through: usnyc_community_data_updated_through
+)
+file `../community_update_time.py`;
+
 root partial datasource nyc_raw_tree_info (
     objectid: tree_id,
     city: city,
+    data_source: usnyc_source,
     genusspecies: species,
     tree_name: ?tree_name,
     dbh: ?diameter_at_breast_height,
@@ -23,21 +33,44 @@ root partial datasource nyc_raw_tree_info (
     # riskrating: ?risk_rating,
     # riskratingdate: ?risk_rating_date,
     # globalid: ?global_id,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
-complete where city = 'USNYC'
+complete where city = 'USNYC' and usnyc_source = 'NYC_OPENDATA'
 file `./nyc_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script
+# emits every city's rows; the `complete where` clause narrows it to USNYC
+# and makes it a disjoint partition alongside nyc_raw_tree_info.
+root partial datasource usnyc_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: usnyc_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'USNYC' and usnyc_source = 'COMMUNITY_USNYC'
+file `../community_tree_info.py`;
 
 
 partial datasource nyc_tree_info (
     tree_id,
     city,
+    data_source: usnyc_source,
     species,
     ?tree_name,
     ?diameter_at_breast_height,
     ?plant_date,
     ?latitude,
     ?longitude,
+    ?submission_photo_url,
     usnyc_published_data_updated_through,
     # ?condition,
     # ?structure,

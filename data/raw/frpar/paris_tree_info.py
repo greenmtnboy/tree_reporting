@@ -161,5 +161,5 @@ if __name__ == "__main__":
     raw = pq.read_table(buf)
     table = transform(raw)
     table = validate_coordinates(table, city="Paris", city_code="FRPAR")
-    table = enforce_tree_schema(table, city="Paris")
+    table = enforce_tree_schema(table, city="Paris", data_source="PARIS_OPENDATA")
     emit(table)

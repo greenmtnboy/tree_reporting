@@ -72,6 +72,9 @@
           <template v-if="selectedTree.tree_id">
             <span class="tc-label">ID</span><span class="tc-value">{{ selectedTree.tree_id }}</span>
           </template>
+          <template v-if="formatDataSource(selectedTree.data_source)">
+            <span class="tc-label">Source</span><span class="tc-value">{{ formatDataSource(selectedTree.data_source) }}</span>
+          </template>
           <template v-if="formatPlantDate(selectedTree.plant_date)">
             <span class="tc-label">Planted</span><span class="tc-value">{{ formatPlantDate(selectedTree.plant_date) }}</span>
           </template>
@@ -133,10 +136,24 @@
         </div>
       </div>
 
-      <!-- Right pane: photo -->
+      <!-- Right pane: photo. A community submission has a photo of this exact
+           tree; everything else can only show a stock photo of the species. -->
       <div class="tree-card-pane tree-card-pane--photos">
-        <div class="tree-card-section-label">Example species photo</div>
-        <div v-if="selectedTree.photo_url" class="tc-photo-wrap">
+        <div class="tree-card-section-label">
+          {{ selectedTree.submission_photo_url ? 'Photo of this tree' : 'Example species photo' }}
+        </div>
+        <div v-if="selectedTree.submission_photo_url" class="tc-photo-wrap">
+          <img
+            :src="selectedTree.submission_photo_url"
+            :alt="`Submitted photo of ${selectedTree.species || 'this tree'}`"
+            class="tc-photo"
+            loading="lazy"
+          />
+          <div class="tc-photo-footer">
+            <span class="tc-photo-attr">Submitted by a community contributor</span>
+          </div>
+        </div>
+        <div v-else-if="selectedTree.photo_url" class="tc-photo-wrap">
           <img
             :src="selectedTree.photo_url"
             :alt="selectedTree.species || 'tree photo'"
@@ -182,6 +199,7 @@ import CitySelector from './CitySelector.vue'
 import MapCompass from './MapCompass.vue'
 import CheckinDialog from './CheckinDialog.vue'
 import { firebaseAvailable } from '../lib/firebase'
+import { formatDataSource } from '../data/dataSources'
 import {
   acquireSharedPositionWatch,
   getGeolocationPermissionState,
@@ -609,6 +627,8 @@ interface PopupTreeRow {
   photo_url: string | null
   photo_license: string | null
   photo_attribution: string | null
+  data_source: string | null
+  submission_photo_url: string | null
 }
 
 const selectedTree = ref<PopupTreeRow | null>(null)
@@ -853,6 +873,8 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
         tf.bloom_months,
         tf.wildlife_value,
         tf.fire_risk,
+        tf.data_source,
+        tf.submission_photo_url,
         se.description,
         se.photo_url,
         se.photo_license,

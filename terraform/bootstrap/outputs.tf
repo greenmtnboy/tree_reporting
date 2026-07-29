@@ -23,3 +23,8 @@ output "firebase_web_config" {
 output "photo_bucket" {
   value = google_storage_bucket.photos.name
 }
+
+output "published_bucket" {
+  description = "Public bucket the reviewer writes approved trees and photos to; read by data/raw/community_tree_info.py."
+  value       = google_storage_bucket.published.name
+}

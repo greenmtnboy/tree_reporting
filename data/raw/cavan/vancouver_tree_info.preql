@@ -1,37 +1,70 @@
 import ..tree_common;
 import ..community_tree_info;
 
-auto cavan_published_data_updated_through <- greatest(cavan_data_updated_through, community_data_updated_through);
+auto cavan_published_data_updated_through <- greatest(cavan_data_updated_through, cavan_community_data_updated_through);
+
+key cavan_source enum<string>['VANCOUVER_OPENDATA', 'COMMUNITY_CAVAN']; # originating dataset for the row
 
 root datasource vancouver_update_time (
     data_updated_through: cavan_data_updated_through
 )
 file `./vancouver_update_time.py`;
 
+# Only this city's column, so an approval elsewhere does not mark CAVAN's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource cavan_community_update_time (
+    cavan_community_data_updated_through: cavan_community_data_updated_through
+)
+file `../community_update_time.py`;
+
 root partial datasource vancouver_raw_tree_info (
     tree_id: tree_id,
     city: city,
+    data_source: cavan_source,
     species: species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
     longitude: ?longitude,
     diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
 )
 grain (tree_id)
-complete where city = 'CAVAN'
+complete where city = 'CAVAN' and cavan_source = 'VANCOUVER_OPENDATA'
 file `./vancouver_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script
+# emits every city's rows; the `complete where` clause narrows it to CAVAN
+# and makes it a disjoint partition alongside vancouver_raw_tree_info.
+root partial datasource cavan_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: cavan_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'CAVAN' and cavan_source = 'COMMUNITY_CAVAN'
+file `../community_tree_info.py`;
 
 
 partial datasource vancouver_tree_info (
     tree_id,
     city,
+    data_source: cavan_source,
     species,
     ?tree_name,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,
     ?longitude,
+    ?submission_photo_url,
     cavan_published_data_updated_through,
 )
 grain (tree_id)
