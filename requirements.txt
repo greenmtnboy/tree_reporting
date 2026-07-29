@@ -1,8 +1,19 @@
 # pytrilogy <=0.3.276 capped duckdb<1.5.0; 0.3.279 lifted that cap, so the
-# duckdb>=1.5.3 pin below now resolves cleanly. Keep this floor at the
+# duckdb>=1.5.3 pin below now resolves cleanly. Keep this floor at or above the
 # cap-lifting release so a fresh `pip install -r requirements.txt` cannot
 # silently resolve back to a duckdb<1.5.0 pytrilogy.
-pytrilogy>=0.3.279
+#
+# Raised to 0.3.305, the first version verified to build the cross-city rollups.
+# An older release generated SQL that bound a city's freshness column to the CTE
+# reading that city's Parquet, while building that CTE's select list with only
+# the row columns:
+#   Binder Error: Values list "cheerful" does not have a column named
+#                 "arbue_landmark_data_updated_through"
+#   Binder Error: Values list "rambunctious" does not have a column named "tree_id"
+# Both `landmark_info` and `tree_info` hit it; per-city Parquets were unaffected,
+# so it only showed up when full_*_info was rebuilt. If those reappear, check the
+# installed version first — the models are fine.
+pytrilogy>=0.3.305
 # DuckDB 1.5.3+ is the first 1.5.x with the `nanoarrow` community extension
 # published for linux_amd64 (1.5.0 ships `arrow` but not `nanoarrow`, so
 # `LOAD arrow` fails with "Nested load of nanoarrow failed" on the runner).
