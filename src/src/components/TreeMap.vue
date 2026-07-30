@@ -46,7 +46,7 @@
   >&#x25CE; Find Me</button>
 
   <!-- Three-pane tree info card -->
-  <div v-if="selectedTree" class="tree-card" :style="treeCardStyle" @click.stop>
+  <div v-if="selectedTree" ref="treeCardEl" class="tree-card" :style="treeCardStyle" @click.stop>
     <div class="tree-card-header">
       <div class="tree-card-header-main">
         <div class="tree-card-title-wrap">
@@ -634,6 +634,7 @@ interface PopupTreeRow {
 const selectedTree = ref<PopupTreeRow | null>(null)
 const selectedTreeAnchor = ref<[number, number] | null>(null)
 const selectedTreeScreenPoint = ref<{ x: number; y: number } | null>(null)
+const treeCardEl = ref<HTMLElement | null>(null)
 const checkinDialog = ref<{ treeId: string; lat: number; lng: number } | null>(null)
 
 const CHECKIN_MAX_METERS = 50
@@ -658,13 +659,45 @@ function openCheckin(): void {
   }
 }
 
+// Gap between the card and the map container edge when the anchor is close
+// enough that the card would otherwise overflow.
+const TREE_CARD_EDGE_MARGIN = 12
+// Matches the `translate(-50%, calc(-100% - 18px))` offset in .tree-card.
+const TREE_CARD_ANCHOR_GAP = 18
+
 function updateTreeCardPosition(): void {
   if (!mapRef.value || !selectedTreeAnchor.value) {
     selectedTreeScreenPoint.value = null
     return
   }
   const point = mapRef.value.project(selectedTreeAnchor.value)
-  selectedTreeScreenPoint.value = { x: point.x, y: point.y }
+  selectedTreeScreenPoint.value = clampTreeCardPoint(point.x, point.y)
+}
+
+/**
+ * The card is absolutely positioned at the tree's screen point and drawn above
+ * it. Without clamping, a tree near the top or side of the map pushes the card
+ * header — including the close button — outside the viewport, which reads as
+ * "the popup didn't open". Keep the whole card inside the map container.
+ */
+function clampTreeCardPoint(x: number, y: number): { x: number; y: number } {
+  const container = mapRef.value?.getContainer()
+  const card = treeCardEl.value
+  if (!container || !card) return { x, y }
+
+  const { clientWidth: containerWidth, clientHeight: containerHeight } = container
+  const halfCard = card.offsetWidth / 2
+  const margin = TREE_CARD_EDGE_MARGIN
+
+  const minX = halfCard + margin
+  const maxX = containerWidth - halfCard - margin
+  const minY = card.offsetHeight + TREE_CARD_ANCHOR_GAP + margin
+  const maxY = containerHeight - margin
+
+  return {
+    x: maxX >= minX ? Math.min(Math.max(x, minX), maxX) : containerWidth / 2,
+    y: maxY >= minY ? Math.min(Math.max(y, minY), maxY) : minY,
+  }
 }
 
 const treeCardStyle = computed(() => {
@@ -680,6 +713,9 @@ function selectTree(row: PopupTreeRow, coords: [number, number]): void {
   selectedTree.value = row
   selectedTreeAnchor.value = coords
   updateTreeCardPosition()
+  // The card element does not exist yet on the first call, so clamping has no
+  // dimensions to work with. Re-run once it has been rendered and measured.
+  void nextTick(() => updateTreeCardPosition())
   void ensureTreeCardVisibleOnMobile(coords)
 }
 
@@ -1387,6 +1423,9 @@ onMounted(async () => {
     keyboard: true,
   })
   mapRef.value = map
+  // Debug / e2e handle. Playwright needs the live map to hit-test a rendered
+  // tree and click its exact pixel — see e2e/tree-card.spec.ts.
+  ;(window as unknown as { __treeMap?: maplibregl.Map }).__treeMap = map
   // Seed the compass before the first 'move' so it doesn't briefly read north
   // while the camera actually starts at INTRO_START_BEARING.
   mapBearing.value = map.getBearing()
