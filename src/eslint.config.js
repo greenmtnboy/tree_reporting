@@ -4,7 +4,8 @@ import pluginVue from 'eslint-plugin-vue'
 import globals from 'globals'
 
 export default [
-  { ignores: ['dist/**', 'node_modules/**', 'public/**'] },
+  // .tmp holds Playwright's transform cache, written on every e2e run.
+  { ignores: ['dist/**', 'node_modules/**', 'public/**', '.tmp/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...pluginVue.configs['flat/essential'],
