@@ -518,6 +518,8 @@ async function loadCityTrees(city?: string): Promise<void> {
     SELECT
       tree_id,
       city,
+      data_source,
+      submission_photo_url,
       tree_name,
       plant_date,
       species,
