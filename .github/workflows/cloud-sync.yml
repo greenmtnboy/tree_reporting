@@ -1,0 +1,142 @@
+# Deploy the data refresh to trilogy-cloud.
+#
+# The refresh no longer runs in GitHub Actions. `data/trilogy.toml` declares a
+# `[cloud]` block (operation, schedule, secrets) and `trilogy cloud sync`
+# upserts it as a scheduled job on trilogy-cloud, which runs the daily refresh
+# on its own workers using the org's GOOGLE_HMAC_* secrets.
+#
+# Which environment a sync targets comes from the branch:
+#
+#   main            -> production (unprefixed parquets; what the schedule runs)
+#   any other branch -> its own namespace, so a PR build can never write over
+#                       production's parquets.
+#
+# Teardown runs on PR close (merged or not) and on branch delete, because a
+# branch environment's jobs would otherwise pile up invisibly.
+
+name: Cloud Sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'data/**'
+      - '.github/workflows/cloud-sync.yml'
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - 'data/**'
+  delete:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Report what would change without writing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# One sync per ref at a time. Two pushes in quick succession would otherwise
+# race on the same jobs, and the loser's content would win.
+concurrency:
+  group: cloud-sync-${{ github.event.pull_request.head.ref || github.ref }}
+  cancel-in-progress: false
+
+env:
+  SYNC_ROOT: data
+  # data/trilogy.toml's [cloud] block names the org (trilogy-data, the prod
+  # org); TRILOGY_CLOUD_API defaults to production.
+  TRILOGY_CLOUD_TOKEN: ${{ secrets.TRILOGY_CLOUD_TOKEN }}
+  # First release carrying `trilogy cloud sync` / `env label`. Pinned to a
+  # floor rather than an exact version so a CLI fix does not need a commit
+  # here, and never to a git ref — CI installing from a branch means the
+  # deployment depends on whatever that branch happens to say today.
+  TRILOGY_CLI: 'pytrilogy>=0.3.317'
+  # pytrilogy publishes real platform wheels only for cp311-cp313; the cp314
+  # "wheel" is wasm32, so an unpinned interpreter can silently fall back to a
+  # slow, fragile source build. Pin to one that has wheels.
+  TRILOGY_CLI_PYTHON: '3.13'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  sync:
+    name: Sync refresh job
+    # Everything except the teardown events.
+    if: >-
+      github.event_name != 'delete' &&
+      (github.event_name != 'pull_request' || github.event.action != 'closed')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # `sync` reads the branch and remote out of .git to derive the
+          # environment, so it needs a real checkout — not a detached tarball.
+          # A PR is checked out at its merge commit by default, whose HEAD is
+          # detached and therefore has no branch to derive from.
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          fetch-depth: 1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Install trilogy CLI
+        run: uv tool install --python "$TRILOGY_CLI_PYTHON" "$TRILOGY_CLI"
+
+      - name: Show what would change
+        run: trilogy cloud sync "$SYNC_ROOT" --dry-run
+
+      - name: Sync
+        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.dry_run }}
+        # --prune deletes jobs in *this* environment whose directory is gone,
+        # which is what makes a deleted model directory actually leave the
+        # cloud. It cannot touch another environment's jobs.
+        run: trilogy cloud sync "$SYNC_ROOT" --prune
+
+  # ---------------------------------------------------------------------------
+  teardown:
+    name: Tear down branch environment
+    # A merged PR, an abandoned PR, and a deleted branch all mean the same
+    # thing: nobody is working on that branch any more, so its jobs should stop
+    # existing. Deliberately not gated on `merged` — an abandoned branch leaks
+    # exactly as much as a merged one.
+    if: >-
+      (github.event_name == 'pull_request' && github.event.action == 'closed') ||
+      (github.event_name == 'delete' && github.event.ref_type == 'branch')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Install trilogy CLI
+        run: uv tool install --python "$TRILOGY_CLI_PYTHON" "$TRILOGY_CLI"
+
+      - name: Delete the branch's environment and its jobs
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref || github.event.ref }}
+        run: |
+          # The environment label is a sanitized, digest-suffixed form of the
+          # branch name — the CLI owns that derivation, so ask it rather than
+          # reimplementing the sanitizing in shell and getting it subtly wrong.
+          #
+          # The exit status is checked SEPARATELY from the output being empty.
+          # Both look like "" to the shell, and they mean opposite things: an
+          # empty success is "this is a default branch, there is nothing to
+          # tear down", while a failure is "I could not find out" — and
+          # treating the second as the first exits 0 and leaks the branch's
+          # jobs forever, which is precisely the leak this job exists to stop.
+          if ! LABEL="$(trilogy cloud env label "$BRANCH")"; then
+            echo "::error::could not resolve an environment label for $BRANCH"
+            exit 1
+          fi
+          if [ -z "$LABEL" ]; then
+            echo "$BRANCH is a default branch; nothing to tear down."
+            exit 0
+          fi
+          echo "Tearing down environment $LABEL for branch $BRANCH"
+          # Not an error if it never existed: a branch with no model changes
+          # never synced, and a workflow that failed here would fail on every
+          # unrelated PR.
+          trilogy cloud env delete "$LABEL" --with-jobs --yes || \
+            echo "No environment $LABEL to delete."

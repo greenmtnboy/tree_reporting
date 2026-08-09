@@ -15,3 +15,24 @@ gcs_cache_bust = true
 
 [serve]
 studio_url="http://localhost:5173/trilogy-studio-core/"
+
+# How this directory is deployed to trilogy-cloud by `trilogy cloud sync` (see
+# .github/workflows/cloud-sync.yml). There is deliberately no `name`: the job's
+# name comes from this directory's path under the sync root, and its identity
+# from the repository plus that path.
+#
+# On a non-default branch the sync targets that branch's environment and the
+# parquets it builds are namespaced, so a PR rebuilds beside production's
+# parquets rather than over them.
+[cloud]
+org = "trilogy-data"
+operation = "refresh"
+# Daily at 6 AM UTC — the same tick the retired GitHub Actions cron used.
+schedule = "0 0 6 * * *"
+# A fully stale rebuild downloads every municipal dataset (~50MB each across
+# fourteen cities); the common case is a couple of stale cities or a clean
+# "already fresh" exit.
+timeout_seconds = 3600
+# DuckDB writes the parquets to gcs:// itself; these org secrets are the only
+# credentials that work for that bucket.
+secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET"]
