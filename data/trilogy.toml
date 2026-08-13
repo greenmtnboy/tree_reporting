@@ -21,9 +21,7 @@ studio_url="http://localhost:5173/trilogy-studio-core/"
 # name comes from this directory's path under the sync root, and its identity
 # from the repository plus that path.
 #
-# On a non-default branch the sync targets that branch's environment and the
-# parquets it builds are namespaced, so a PR rebuilds beside production's
-# parquets rather than over them.
+# Only main syncs, into production. There is no per-branch dev deploy flow yet.
 [cloud]
 org = "trilogy-data"
 operation = "refresh"
