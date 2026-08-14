@@ -17,13 +17,14 @@ gcs_cache_bust = true
 studio_url="http://localhost:5173/trilogy-studio-core/"
 
 # How this directory is deployed to trilogy-cloud by `trilogy cloud sync` (see
-# .github/workflows/cloud-sync.yml). There is deliberately no `name`: the job's
-# name comes from this directory's path under the sync root, and its identity
-# from the repository plus that path.
+# .github/workflows/cloud-sync.yml). `name` is display-only; the job's identity
+# is the repository plus this directory's path under the sync root, so the
+# rename keeps the same job id and schedule binding.
 #
 # Only main syncs, into production. There is no per-branch dev deploy flow yet.
 [cloud]
 org = "trilogy-data"
+name = "urban-tree-data"
 operation = "refresh"
 # Daily at 6 AM UTC — the same tick the retired GitHub Actions cron used.
 schedule = "0 0 6 * * *"

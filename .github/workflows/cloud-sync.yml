@@ -38,11 +38,12 @@ env:
   # data/trilogy.toml's [cloud] block names the org (trilogy-data, the prod
   # org); TRILOGY_CLOUD_API defaults to production.
   TRILOGY_CLOUD_TOKEN: ${{ secrets.TRILOGY_CLOUD_TOKEN }}
-  # First release carrying `trilogy cloud sync`. Pinned to a floor rather than
+  # First release carrying the `[cloud]` `name` setting (job display names;
+  # `cloud sync` itself shipped in 0.3.317). Pinned to a floor rather than
   # an exact version so a CLI fix does not need a commit here, and never to a
   # git ref — CI installing from a branch means the deployment depends on
   # whatever that branch happens to say today.
-  TRILOGY_CLI: 'pytrilogy>=0.3.317'
+  TRILOGY_CLI: 'pytrilogy>=0.3.327'
   # pytrilogy publishes real platform wheels only for cp311-cp313; the cp314
   # "wheel" is wasm32, so an unpinned interpreter can silently fall back to a
   # slow, fragile source build. Pin to one that has wheels.
