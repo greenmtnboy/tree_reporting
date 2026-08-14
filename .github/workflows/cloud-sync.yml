@@ -36,7 +36,9 @@ concurrency:
 env:
   SYNC_ROOT: data
   # data/trilogy.toml's [cloud] block names the org (trilogy-data, the prod
-  # org); TRILOGY_CLOUD_API defaults to production.
+  # org); TRILOGY_CLOUD_API defaults to production. The token lives in the
+  # prod-refresh environment (see the job's `environment:` binding), not in
+  # repo secrets.
   TRILOGY_CLOUD_TOKEN: ${{ secrets.TRILOGY_CLOUD_TOKEN }}
   # First release carrying the `[cloud]` `name` setting (job display names;
   # `cloud sync` itself shipped in 0.3.317). Pinned to a floor rather than
@@ -53,6 +55,10 @@ jobs:
   sync:
     name: Sync refresh job
     runs-on: ubuntu-24.04
+    # The environment the retired in-Actions refresh used; its deployment
+    # branch policy allows only main, so a workflow_dispatch from any other
+    # branch cannot reach TRILOGY_CLOUD_TOKEN (the run fails at job start).
+    environment: prod-refresh
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
