@@ -112,11 +112,16 @@ import { getCurrentPosition } from '../lib/geo'
 import { resizeImage } from '../lib/image'
 import { recordCheckin } from '../composables/useSubmissions'
 import { haversineKm, closestCityTo } from '../composables/useMapData'
+import { useDuckDB } from '../composables/useDuckDB'
 
 const props = defineProps<{
   treeId: string
   treeLat: number
   treeLng: number
+  species?: string | null
+  treeForm?: string | null
+  dbhInches?: number | null
+  plantYear?: number | null
 }>()
 
 const emit = defineEmits<{
@@ -146,6 +151,26 @@ const photoError = ref<string | null>(null)
 const photoInputRef = ref<HTMLInputElement | null>(null)
 const progress = ref(0)
 const submitError = ref<string>('')
+
+// Best-effort rarity snapshot: how many trees of this species exist in the
+// currently loaded city. Null if the query fails or the tree has no species —
+// the check-in must never be blocked on this.
+const speciesCityCount = ref<number | null>(null)
+
+async function fetchSpeciesCityCount() {
+  const species = props.species?.trim()
+  if (!species) return
+  try {
+    const { query } = useDuckDB()
+    const { rows } = await query(
+      `SELECT count(*) AS n FROM trees_fast WHERE species = '${species.replace(/'/g, "''")}'`,
+    )
+    const n = Number(rows[0]?.n)
+    if (Number.isFinite(n) && n > 0) speciesCityCount.value = n
+  } catch {
+    // Achievements simply won't see a rarity value for this check-in.
+  }
+}
 
 function formatMeters(m: number): string {
   if (m < 1000) return `${Math.round(m)} m`
@@ -204,6 +229,11 @@ async function handleSubmit() {
       distanceMeters: Math.round(distance.value),
       city,
       photoBlob: photoBlob.value ?? undefined,
+      species: props.species ?? null,
+      treeForm: props.treeForm ?? null,
+      dbhInches: props.dbhInches ?? null,
+      plantYear: props.plantYear ?? null,
+      speciesCityCount: speciesCityCount.value,
       onProgress: (fraction) => {
         progress.value = fraction
       },
@@ -228,6 +258,7 @@ function handleKey(e: KeyboardEvent) {
 onMounted(() => {
   window.addEventListener('keydown', handleKey)
   void startLocation()
+  void fetchSpeciesCityCount()
 })
 
 onBeforeUnmount(() => {

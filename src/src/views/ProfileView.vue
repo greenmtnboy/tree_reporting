@@ -44,6 +44,26 @@
             <dt>Account ID</dt>
             <dd><code>{{ user.uid }}</code></dd>
           </dl>
+          <router-link :to="{ name: 'contributions' }" class="badge-strip">
+            <template v-if="contributionsLoading">
+              <span class="muted">Loading badges…</span>
+            </template>
+            <template v-else-if="earnedBadges.length">
+              <span class="badge-strip__count">{{ earnedBadges.length }} / {{ totalBadges }}</span>
+              <span class="badge-strip__label">badges</span>
+              <span class="badge-strip__emojis">
+                <span
+                  v-for="b in earnedBadges"
+                  :key="b.id"
+                  class="badge-strip__emoji"
+                  :title="`${b.title} — ${b.description}`"
+                >{{ b.emoji }}</span>
+              </span>
+            </template>
+            <template v-else>
+              <span class="muted">No badges yet — submit a tree or check in to start earning.</span>
+            </template>
+          </router-link>
           <div class="profile-actions">
             <router-link class="btn-primary" :to="{ name: 'contributions' }">
               My contributions
@@ -121,9 +141,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { firebaseAvailable } from '../lib/firebase'
+import { useMyContributions } from '../composables/useSubmissions'
+import {
+  ACHIEVEMENTS,
+  evaluateAchievements,
+  toAchievementCheckin,
+  toAchievementSubmission,
+} from '../lib/achievements'
 
 const {
   user,
@@ -146,6 +173,34 @@ const googleButtonLabel = computed(() => {
 const signedInSummary = computed(() =>
   isAnonymous.value ? 'Signed in anonymously.' : 'Signed in with Google.',
 )
+
+const {
+  submissions,
+  checkins,
+  loading: contributionsLoading,
+  refresh: refreshContributions,
+} = useMyContributions()
+
+const totalBadges = ACHIEVEMENTS.length
+
+const earnedBadges = computed(() =>
+  evaluateAchievements(
+    submissions.value.map(toAchievementSubmission),
+    checkins.value.map(toAchievementCheckin),
+  ).filter((a) => a.earned),
+)
+
+onMounted(() => {
+  if (user.value) void refreshContributions()
+})
+
+watch(user, (u) => {
+  if (u) void refreshContributions()
+  else {
+    submissions.value = []
+    checkins.value = []
+  }
+})
 
 async function handleAnonymousSignIn() {
   pending.value = true
@@ -245,6 +300,51 @@ async function handleSignOut() {
 .kv code {
   font-family: var(--font-mono, ui-monospace, monospace);
   color: var(--color-leaf);
+}
+
+.badge-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(167, 227, 178, 0.14);
+  background: rgba(28, 31, 36, 0.6);
+  text-decoration: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.badge-strip:hover {
+  border-color: var(--color-leaf);
+  background: rgba(47, 125, 79, 0.1);
+}
+
+.badge-strip__count {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  color: var(--color-leaf);
+}
+
+.badge-strip__label {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.badge-strip__emojis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: 4px;
+}
+
+.badge-strip__emoji {
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: help;
 }
 
 .profile-actions {

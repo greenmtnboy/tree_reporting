@@ -1,9 +1,9 @@
 import ..tree_common;
 import ..community_tree_info;
 
-auto ustem_published_data_updated_through <- greatest(ustem_data_updated_through, ustem_community_data_updated_through);
+auto ustem_published_data_updated_through <- greatest(ustem_data_updated_through, ustem_community_data_updated_through, ustem_osm_data_updated_through);
 
-key ustem_source enum<string>['TEMPE_OPENDATA', 'COMMUNITY_USTEM']; # originating dataset for the row
+key ustem_source enum<string>['TEMPE_OPENDATA', 'COMMUNITY_USTEM', 'OSM_USTEM']; # originating dataset for the row
 
 root datasource tempe_update_time (
     data_updated_through: ustem_data_updated_through
@@ -16,6 +16,13 @@ root datasource ustem_community_update_time (
     ustem_community_data_updated_through: ustem_community_data_updated_through
 )
 file `../community_update_time.py`;
+
+# mtime of the committed OSM staging parquet (see tempe_osm_extract.py); the
+# staging file only moves when an extraction is re-run and committed.
+root datasource ustem_osm_update_time (
+    data_updated_through: ustem_osm_data_updated_through
+)
+file `./tempe_osm_probe.py`;
 
 root partial datasource tempe_raw_tree_info (
     tree_id: tree_id,
@@ -53,6 +60,62 @@ grain (tree_id)
 complete where city = 'USTEM' and ustem_source = 'COMMUNITY_USTEM'
 file `../community_tree_info.py`;
 
+
+# OpenStreetMap trees, read from the committed staging parquet rather than
+# Overpass — extraction is decoupled from refresh (Overpass is flaky and its
+# global timestamp advances continuously; see tempe_osm_extract.py).  OSM
+# overlaps the municipal inventory by construction; overlapping rows are kept
+# and flagged via ustem_is_duplicate below, never dropped.
+root partial datasource ustem_osm_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: ustem_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'USTEM' and ustem_source = 'OSM_USTEM'
+file `./ustem_osm_staging.parquet`;
+
+
+# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+#
+# An OSM row is a duplicate when an authoritative (non-OSM) tree sits in the
+# same ~20m grid cell in ANY of four copies of the grid, offset by half a cell
+# in x, y, and both.  Two points within half a cell (~10m) of each other are
+# guaranteed to share a cell in at least one of the four grids, so this is an
+# equi-join-shaped stand-in for "within 10m", with possible matches out to one
+# cell diagonal (~28m).  Chosen over a true spatial anti-join because Trilogy
+# joins are equality-only, and over unnest-based 3x3 neighborhoods because
+# merged-unnest is the planner's known fragile path.
+#
+# Cell sizes: 20m of latitude is 20/111320 deg; longitude shrinks by
+# cos(33.4 deg) at Tempe.
+const ustem_cell_lat_deg <- 0.00017966;
+const ustem_cell_lon_deg <- 0.00021517;
+
+auto ustem_cell_a <- concat(cast(floor(longitude / ustem_cell_lon_deg) as string), ':', cast(floor(latitude / ustem_cell_lat_deg) as string));
+auto ustem_cell_b <- concat(cast(floor(longitude / ustem_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / ustem_cell_lat_deg) as string));
+auto ustem_cell_c <- concat(cast(floor(longitude / ustem_cell_lon_deg) as string), ':', cast(floor(latitude / ustem_cell_lat_deg + 0.5) as string));
+auto ustem_cell_d <- concat(cast(floor(longitude / ustem_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / ustem_cell_lat_deg + 0.5) as string));
+
+auto ustem_anchor_count_a <- count(tree_id ? ustem_source != 'OSM_USTEM') by ustem_cell_a;
+auto ustem_anchor_count_b <- count(tree_id ? ustem_source != 'OSM_USTEM') by ustem_cell_b;
+auto ustem_anchor_count_c <- count(tree_id ? ustem_source != 'OSM_USTEM') by ustem_cell_c;
+auto ustem_anchor_count_d <- count(tree_id ? ustem_source != 'OSM_USTEM') by ustem_cell_d;
+
+auto ustem_is_duplicate <- ustem_source = 'OSM_USTEM' and (
+    ustem_anchor_count_a > 0
+    or ustem_anchor_count_b > 0
+    or ustem_anchor_count_c > 0
+    or ustem_anchor_count_d > 0
+);
+
 partial datasource tempe_tree_info (
     tree_id,
     city,
@@ -64,6 +127,7 @@ partial datasource tempe_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    is_duplicate: ustem_is_duplicate,
     ustem_published_data_updated_through,
 )
 grain (tree_id)

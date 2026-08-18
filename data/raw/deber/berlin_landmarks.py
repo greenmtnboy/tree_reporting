@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
     emit,
     validate_coordinates,
-    post_with_retry,
+    post_json_with_retry,
     make_point_wkt,
     OVERPASS_HEADERS,
 )
@@ -45,8 +45,8 @@ out center;
 
 
 def fetch_elements() -> list[dict]:
-    r = post_with_retry(OVERPASS_URL, data={"data": QUERY}, timeout=240, headers=OVERPASS_HEADERS)
-    return r.json()["elements"]
+    payload = post_json_with_retry(OVERPASS_URL, data={"data": QUERY}, timeout=240, headers=OVERPASS_HEADERS)
+    return payload["elements"]
 
 
 def transform(elements: list[dict]) -> pa.Table:

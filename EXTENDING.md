@@ -108,6 +108,63 @@ source: Trilogy treats the municipal source as covering the whole city and
 silently emits **zero** community rows, with no error anywhere. Each raw source
 must claim `complete where city = 'X' and {code}_source = 'Y'`.
 
+### Supplemental OpenStreetMap sources (opt-in per city)
+
+A city can carry a third partition of `natural=tree` nodes from OSM, labelled
+`OSM_{CODE}`. Unlike community (which every city gets), OSM is opt-in: a city
+appears in `OSM_DATA_SOURCES` in `data/raw/_ingest_shared.py` once its wiring
+exists. Tempe (`ustem/`) is the reference implementation;
+`test_osm_city_is_fully_wired` asserts every half of the wiring below.
+
+**Extraction is decoupled from refresh.** `{city}_osm_extract.py` queries
+Overpass and writes a committed `{code}_osm_staging.parquet`; the refresh
+pipeline only ever reads that file. Two reasons: Overpass 429/504s routinely
+under load (fetching at refresh time would couple every municipal rebuild to
+Overpass being up), and the only cheap OSM watermark is the global database
+timestamp, which advances every minute and would mark the city stale on every
+tick. Instead `{city}_osm_probe.py` emits the staging file's mtime, so
+re-running the extract and committing is what makes the Parquet stale. The
+extract is deliberately self-contained so it can later move onto a weekly
+`[[cloud.job]]` without a rewrite.
+
+**Dedup is stacking + aggregate, not an anti-join.** OSM overlaps the
+municipal inventory by construction. Trilogy's joins are equality-only (a
+non-`=` join key is rejected at hydration), so a spatial anti-join cannot be
+expressed in the model — and doing it in a script against the published
+Parquet would dedup one rebuild cycle stale. The model instead derives a grid
+cell from lat/lon in **four copies of a ~20m grid staggered by half a cell**
+(x, y, and both), counts non-OSM anchors per cell with a filtered aggregate,
+and flags an OSM row whose cell in *any* grid contains an anchor. Two points
+within half a cell (~10m) always share a cell in at least one grid, so this is
+an equi-join-shaped stand-in for "within 10m", with possible matches out to a
+cell diagonal (~28m). Measured against exact haversine distances for Tempe:
+100% of OSM trees within 10m flagged, 0% beyond 28m flagged, and the 10-28m
+gray zone was 137 trees (~52% flagged). An unnest-based 3x3 neighborhood would
+give an exact radius but sits on the merged-unnest planner path that has
+regressed twice upstream; don't.
+
+**Flag, never drop.** The dedup materializes as an `is_duplicate` boolean
+column (aliased from `{code}_is_duplicate`), and the Parquet keeps every row.
+Dropping rows would break the partition-completeness proof (the Parquet must
+contain the union of its declared sources); the flag also makes dedup tunable
+and auditable — toggle flagged rows on the map to evaluate the cell size.
+Because the flag is computed from the same materialization's source rows, a
+municipal update dedups against itself in the same rebuild; there is no
+staleness window.
+
+**Frontend sequencing warning:** the worker must not `SELECT is_duplicate`
+until *every* city's Parquet has been rebuilt with the column — DuckDB binder
+errors on the cities that lack it, one city at a time. Either roll the column
+out everywhere first, or have the worker filter per-city.
+
+Other details: OSM `circumference` defaults to metres but is frequently
+mis-entered as bare centimetres — the extract treats a unitless value > 10 as
+cm. The staging schema keeps the node's `ref` tag (`osm_ref`): empty for
+Tempe, but Berlin (~6k) and Paris (~4k) carry the municipal inventory id
+there, enabling exact-id dedup when those cities are wired. OSM data is ODbL:
+add "(c) OpenStreetMap contributors" attribution in `README.md` and
+`src/src/data/sourceCatalog.ts` when wiring a city.
+
 ---
 
 ## Data Versioning
@@ -197,11 +254,15 @@ Create `data/raw/{city}/{city}_update_time.py`:
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
 
-import sys, requests, pyarrow as pa
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import emit_freshness, get_json_with_retry
 
 def fetch_modified_at() -> datetime:
     # Hit the lightest metadata endpoint your open data platform exposes.
@@ -216,17 +277,53 @@ def fetch_modified_at() -> datetime:
     #   Read: .rowsUpdatedAt  (Unix timestamp)
     raise NotImplementedError
 
-def emit(updated_at: datetime) -> None:
-    table = pa.table({
-        "city": pa.array(["{CODE}"], type=pa.string()),
-        "data_updated_through": pa.array([updated_at], type=pa.timestamp("us", tz="UTC")),
-    })
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
-
 if __name__ == "__main__":
-    emit(fetch_modified_at())
+    emit_freshness("{CODE}", fetch_modified_at)
 ```
+
+**Fetch JSON with `get_json_with_retry`, and emit with `emit_freshness`** — do
+not hand-roll `requests.get(...).json()` or the Arrow table.  Both helpers exist
+because of the same failure: every probe is a root datasource, and Trilogy
+collects root watermarks in one planning phase that has no per-probe error
+handling, so *one* probe raising ends the whole `trilogy refresh raw` run before
+any city is refreshed.
+
+- `get_json_with_retry` treats a 2xx whose body isn't JSON as a transient
+  outage, because that is what it usually is: portals in maintenance answer
+  every path with an HTML holding page and HTTP 200 (gdi.berlin.de serves a
+  1.4 KB "Wartungsarbeiten" page for its WFS *and* its metadata API).  It
+  retries with backoff and, when it gives up, raises `UpstreamUnavailable`
+  naming the URL, status, content type and first line of the body — where
+  `.json()` raised a bare `JSONDecodeError: Expecting value: line 2 column 9`.
+- `get_json_with_retry` also classifies a 200 that carries a provider *error
+  envelope* — ArcGIS's `{"error": {"code": 500, ...}}`, Socrata's
+  `{"error": true}`, CKAN's `{"success": false}` — as an outage. Burlington's
+  ArcGIS answered a statistics query exactly that way during an outage; because
+  the body was valid JSON it reached the probe's "no features" guard, which
+  raised a fatal `RuntimeError` and took the whole refresh down. Probes should
+  keep their "missing field" guards, but they must never be the thing that sees
+  a portal outage first.
+- `emit_freshness` catches `UpstreamUnavailable` and emits the epoch instead.
+  The epoch loses every `greatest()`, so the city's Parquet compares as fresh,
+  sits out this run, and is picked up by the next tick once the portal is back —
+  while the other thirteen cities refresh normally.
+
+Anything that is *not* an availability problem must keep raising.  A missing
+field or an unparseable date means the portal changed its schema and our mapping
+is stale; degrading there would freeze that city's Parquet silently and forever.
+Raise `RuntimeError` (as the existing probes do for a missing timestamp field),
+not `UpstreamUnavailable`.
+
+For a probe whose endpoint returns something other than JSON, classify the
+failure yourself — see `deber/berlin_landmarks_probe.py`, which raises
+`UpstreamUnavailable` when Overpass returns a body that is not an ISO timestamp.
+
+**Check the portal's maintenance window before assuming the schedule is fine.**
+Berlin publishes one (Thursdays 08:00-10:00 local), and the refresh's original
+06:00 UTC tick sat inside it every summer Thursday.  The tick times in
+`data/trilogy.toml` avoid the 06:00-09:00 UTC band for that reason; if a new
+city's portal publishes a window that collides, move a tick rather than adding
+one.
 
 Also add the city's freshness property to **`data/raw/tree_common.preql`**:
 

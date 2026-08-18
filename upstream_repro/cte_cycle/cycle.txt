@@ -1,0 +1,23 @@
+# reorder_ctes cycle, pytrilogy 0.3.327, target datasource 'tree_info'
+# produced by: python repro_refresh.py raw/tree_info.preql tree_info  (run from data/)
+
+  badger [UnionCTE]
+      outputs: ['local.city', 'local.data_source', 'local.diameter_at_breast_height', 'local.latitude', 'local.longitude', 'local.plant_date', 'local.species', 'local.submission_photo_url']
+      * cycles with boa
+  barracuda [CTE <- badger]
+      outputs: ['local.city']
+      * cycles with badger
+  bear [CTE <- badger]
+      outputs: ['local.data_source']
+      * cycles with badger
+  boa [CTE <- badger]
+      outputs: ['local.species']
+      * cycles with badger
+  cheetah [CTE <- barracuda]
+      outputs: ['local.city', 'local.data_source', 'local.diameter_at_breast_height', 'local.latest_update_through', 'local.latitude', 'local.longitude', 'local.plant_date', 'local.species']
+      * cycles with badger
+      * cycles with barracuda
+      * cycles with bear
+      * cycles with sloppy
+      depends on ['sloppy']
+

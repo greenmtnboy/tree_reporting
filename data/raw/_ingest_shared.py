@@ -18,13 +18,15 @@ import math
 import struct
 import sys
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
 import pyarrow as pa
 from trilogy.io.arrow import emit_arrow as emit  # noqa: F401  (re-exported)
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import requests
 
 
@@ -123,10 +125,25 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
     code: community_source_for(code) for code in MUNICIPAL_DATA_SOURCES
 }
 
+# Cities with a supplemental OpenStreetMap source, keyed to its label.  Opt-in
+# per city (unlike community, which every city gets): a city appears here once
+# its OSM staging parquet is committed and its tree model declares the
+# `OSM_{code}` enum value and staging datasource.  OSM rows overlap the
+# municipal inventory by construction, so each wired city also derives an
+# `is_duplicate` flag in its model — see the four-grid dedup block in
+# ustem/tempe_tree_info.preql for the reference implementation.
+OSM_DATA_SOURCES: dict[str, str] = {
+    "USTEM": "OSM_USTEM",
+}
+
 DATA_SOURCES: tuple[str, ...] = tuple(
     label
     for code in MUNICIPAL_DATA_SOURCES
-    for label in (*MUNICIPAL_DATA_SOURCES[code], COMMUNITY_DATA_SOURCES[code])
+    for label in (
+        *MUNICIPAL_DATA_SOURCES[code],
+        COMMUNITY_DATA_SOURCES[code],
+        *((OSM_DATA_SOURCES[code],) if code in OSM_DATA_SOURCES else ()),
+    )
 )
 
 
@@ -362,41 +379,181 @@ OVERPASS_HEADERS = {
     "User-Agent": "sf-tree-reporting/1.0 (https://github.com/greenmtnboy/sf_tree_reporting)"
 }
 
+
+class UpstreamUnavailable(RuntimeError):
+    """An open data portal did not serve usable data.
+
+    Covers everything that is the *portal's* problem rather than ours: connection
+    errors, 5xx, 429, and 2xx responses whose body is not what the endpoint
+    documents (a maintenance page served with HTTP 200 is the common one).
+    Distinct from a parse error against a genuine payload, which means our field
+    mapping is wrong and must stay loud.
+
+    Subclasses RuntimeError so callers that only catch RuntimeError still work.
+    """
+
+
+def _body_snippet(response: requests.Response, limit: int = 160) -> str:
+    """A one-line, truncated preview of a response body for error messages."""
+    text = " ".join((response.text or "").split())
+    # ASCII ellipsis: probe stderr lands in job logs with unpredictable encodings.
+    return text[:limit] + ("..." if len(text) > limit else "")
+
+
+def error_envelope(payload) -> str | None:
+    """A server-side error reported *inside* an HTTP 200 JSON body, if present.
+
+    The GIS platforms these ingests use all answer a failed query with 200 and
+    an error object rather than a 5xx — ArcGIS returns
+    ``{"error": {"code": 500, "message": "Error performing query operation"}}``
+    for a statistics query its backend could not run.  Left unclassified, that
+    reaches the caller as a well-formed payload with no rows, and every probe's
+    "no features" guard turns a portal hiccup into a fatal error.
+    """
+    if not isinstance(payload, dict):
+        return None
+    error = payload.get("error")
+    # ArcGIS / CKAN: a nested error object.
+    if isinstance(error, dict) and (error.get("message") or error.get("code")):
+        return f"{error.get('code', 'error')}: {error.get('message', '')}".strip()
+    # Socrata: {"error": true, "message": "..."}
+    if error is True:
+        return str(payload.get("message") or "error")
+    # CKAN failure with no error object.
+    if payload.get("success") is False:
+        return str(error or "success=false")
+    return None
+
+
+def response_json(response: requests.Response, url: str):
+    """Decode a JSON response, or raise UpstreamUnavailable describing the body.
+
+    ``response.json()`` on an HTML maintenance page raises a bare
+    ``JSONDecodeError: Expecting value: line 2 column 9``, which names neither
+    the host nor what it actually served — the failure mode that made a
+    gdi.berlin.de outage read like a bug in the probe.  This reports the status,
+    content type, size and the first line of the body instead.
+
+    A 200 carrying a provider error envelope is treated the same way: it is the
+    portal saying it could not serve the request, so it is worth retrying and
+    worth degrading on, not worth failing the whole refresh over.
+    """
+    try:
+        payload = response.json()
+    except ValueError as e:
+        content_type = response.headers.get("Content-Type") or "unset"
+        raise UpstreamUnavailable(
+            f"{url} returned HTTP {response.status_code} with a non-JSON body "
+            f"(content-type {content_type}, {len(response.content)} bytes): "
+            f"{_body_snippet(response)!r} ({e})"
+        ) from e
+    detail = error_envelope(payload)
+    if detail:
+        raise UpstreamUnavailable(
+            f"{url} returned HTTP {response.status_code} with an error payload: "
+            f"{detail}"
+        )
+    return payload
+
+
+def _retry(
+    attempt: "Callable[[], object]",
+    *,
+    url: str,
+    what: str,
+    max_retries: int,
+    backoff: float,
+):
+    """Call *attempt* until it succeeds, backing off on UpstreamUnavailable.
+
+    *attempt* raises UpstreamUnavailable for a failure worth retrying; any other
+    exception (a 4xx, a bad field mapping) propagates on the first try.
+    """
+    err = ""
+    for i in range(max_retries):
+        try:
+            return attempt()
+        except UpstreamUnavailable as e:
+            err = str(e)
+        if i < max_retries - 1:
+            wait = backoff * (2 ** i)
+            print(
+                f"[retry {i + 1}/{max_retries}] {err}, waiting {wait:.0f}s",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
+    raise UpstreamUnavailable(
+        f"Failed to {what} {url} after {max_retries} attempts: {err}"
+    )
+
+
+def _send(method: str, url: str, **kwargs) -> requests.Response:
+    """One HTTP attempt, classified: retryable failures raise UpstreamUnavailable.
+
+    4xx other than 429 raise HTTPError immediately — auth, forbidden and not
+    found are client-side problems that retrying cannot fix.
+    """
+    import requests
+
+    try:
+        r = requests.request(method, url, **kwargs)
+    except requests.exceptions.RequestException as e:
+        raise UpstreamUnavailable(str(e)) from e
+    if r.status_code < 400:
+        return r
+    if 400 <= r.status_code < 500 and r.status_code != 429:
+        r.raise_for_status()  # raises immediately, no retry
+    raise UpstreamUnavailable(f"HTTP {r.status_code}")
+
+
 def get_with_retry(
     url: str,
     timeout: int = 120,
     max_retries: int = 5,
     backoff: float = 2.0,
     headers: dict | None = None,
+    params: dict | None = None,
 ) -> requests.Response:
     """GET with exponential backoff on 5xx / connection errors.
 
     4xx errors (except 429 Too Many Requests) are not retried — they indicate
     a client-side problem (auth, forbidden, not found) that retrying won't fix.
-    """
-    import requests
 
-    err = ""
-    for attempt in range(max_retries):
-        try:
-            r = requests.get(url, timeout=timeout, headers=headers)
-            if r.status_code < 400:
-                return r
-            if 400 <= r.status_code < 500 and r.status_code != 429:
-                r.raise_for_status()  # raises immediately, no retry
-            err = f"HTTP {r.status_code}"
-        except requests.exceptions.HTTPError:
-            raise  # 4xx non-429: propagate immediately
-        except requests.exceptions.RequestException as e:
-            err = str(e)
-        if attempt < max_retries - 1:
-            wait = backoff * (2 ** attempt)
-            print(
-                f"[retry {attempt + 1}/{max_retries}] {err}, waiting {wait:.0f}s",
-                file=sys.stderr,
-            )
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to fetch {url} after {max_retries} attempts: {err}")
+    Callers expecting JSON should use `get_json_with_retry`, which also retries
+    a 2xx whose body isn't JSON.
+    """
+    return _retry(
+        lambda: _send("GET", url, timeout=timeout, headers=headers, params=params),
+        url=url,
+        what="fetch",
+        max_retries=max_retries,
+        backoff=backoff,
+    )
+
+
+def get_json_with_retry(
+    url: str,
+    timeout: int = 120,
+    max_retries: int = 5,
+    backoff: float = 2.0,
+    headers: dict | None = None,
+    params: dict | None = None,
+):
+    """GET and decode JSON, retrying non-JSON 2xx bodies as well as 5xx.
+
+    Portals in maintenance often answer *every* path with HTTP 200 and an HTML
+    holding page — gdi.berlin.de serves a 1.4 KB "Wartungsarbeiten" page for the
+    WFS and the metadata API alike.  That is a transient outage, so it is worth
+    the same backoff as a 503, and worth an error message that says so.
+    """
+
+    def attempt():
+        response = _send("GET", url, timeout=timeout, headers=headers, params=params)
+        return response_json(response, url)
+
+    return _retry(
+        attempt, url=url, what="fetch JSON from", max_retries=max_retries, backoff=backoff
+    )
 
 
 def post_with_retry(
@@ -412,29 +569,40 @@ def post_with_retry(
     Longer default backoff than get_with_retry — suited to Overpass API.
     4xx errors (except 429) are not retried.
     """
-    import requests
+    return _retry(
+        lambda: _send("POST", url, data=data, timeout=timeout, headers=headers),
+        url=url,
+        what="POST",
+        max_retries=max_retries,
+        backoff=backoff,
+    )
 
-    err = ""
-    for attempt in range(max_retries):
-        try:
-            r = requests.post(url, data=data, timeout=timeout, headers=headers)
-            if r.status_code < 400:
-                return r
-            if 400 <= r.status_code < 500 and r.status_code != 429:
-                r.raise_for_status()  # raises immediately, no retry
-            err = f"HTTP {r.status_code}"
-        except requests.exceptions.HTTPError:
-            raise  # 4xx non-429: propagate immediately
-        except requests.exceptions.RequestException as e:
-            err = str(e)
-        if attempt < max_retries - 1:
-            wait = backoff * (2 ** attempt)
-            print(
-                f"[retry {attempt + 1}/{max_retries}] {err}, waiting {wait:.0f}s",
-                file=sys.stderr,
-            )
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to POST {url} after {max_retries} attempts: {err}")
+
+def post_json_with_retry(
+    url: str,
+    data: dict,
+    timeout: int = 240,
+    max_retries: int = 5,
+    backoff: float = 10.0,
+    headers: dict | None = None,
+):
+    """POST and decode JSON, retrying non-JSON 2xx bodies as well as 5xx.
+
+    Overpass in particular answers an overloaded instance with a 200 HTML error
+    page rather than the JSON its API documents.
+    """
+
+    def attempt():
+        response = _send("POST", url, data=data, timeout=timeout, headers=headers)
+        return response_json(response, url)
+
+    return _retry(
+        attempt,
+        url=url,
+        what="POST JSON to",
+        max_retries=max_retries,
+        backoff=backoff,
+    )
 
 
 def download_parquet(url: str, timeout: int = 300) -> io.BytesIO:
@@ -449,6 +617,64 @@ def download_parquet(url: str, timeout: int = 300) -> io.BytesIO:
             buf.write(chunk)
     buf.seek(0)
     return buf
+
+
+# ---------------------------------------------------------------------------
+# Freshness probes
+# ---------------------------------------------------------------------------
+
+# What a probe emits when its portal is unreachable.  It loses every
+# `greatest()` against a real timestamp, so the city's Parquet compares as fresh
+# and is skipped for this run rather than rebuilt from a portal that is down.
+PORTAL_UNAVAILABLE_TIMESTAMP = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def emit_freshness(
+    city_code: str | None,
+    fetch: "Callable[[], datetime]",
+    *,
+    label: str = "",
+) -> None:
+    """Emit the one-row freshness table Trilogy probes, tolerating a dead portal.
+
+    *city_code* is the five-letter code the probe reports for, emitted as the
+    `city` column; pass None for a probe with no city (the ecoregion layer) and
+    name it with *label* for the log line instead.
+
+    Every tree and landmark probe is a root datasource feeding some Parquet's
+    `freshness by`, and Trilogy collects those watermarks in one un-isolated
+    planning phase: `_collect_root_watermarks` calls `future.result()` with no
+    per-probe guard, so a single probe raising ends the whole `trilogy refresh
+    raw` command before any asset is refreshed.  One city's portal being in
+    maintenance therefore fails all fourteen cities plus landmarks and
+    enrichment — the same blast radius the community 403 had (see EXTENDING.md).
+
+    So an *availability* failure (connection error, 5xx, 429, or a 2xx that
+    isn't the documented payload) degrades to PORTAL_UNAVAILABLE_TIMESTAMP with
+    a loud stderr note: this city sits out the run and the next scheduled tick
+    picks it up once the portal is back.
+
+    A *parse* failure does not degrade.  A KeyError or a bad date against a
+    genuine payload means our field mapping drifted from the portal's schema,
+    and silently reporting "no new data" would freeze the city's Parquet
+    indefinitely with nothing in the logs.  Those still abort, loudly.
+    """
+    try:
+        updated_at = fetch()
+    except UpstreamUnavailable as e:
+        print(
+            f"{label or city_code} freshness probe: portal unavailable ({e}); "
+            "reporting no new data so the rest of the refresh can proceed",
+            file=sys.stderr,
+        )
+        updated_at = PORTAL_UNAVAILABLE_TIMESTAMP
+    columns = {}
+    if city_code is not None:
+        columns["city"] = pa.array([city_code], type=pa.string())
+    columns["data_updated_through"] = pa.array(
+        [updated_at], type=pa.timestamp("us", tz="UTC")
+    )
+    emit(pa.table(columns))
 
 
 # ---------------------------------------------------------------------------

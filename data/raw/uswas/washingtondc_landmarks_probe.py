@@ -7,11 +7,10 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pyarrow as pa
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit
+from _ingest_shared import emit_freshness
 
 CSV_PATH = Path(__file__).parent / 'washingtondc_landmarks.csv'
 
@@ -22,8 +21,5 @@ def modified_at() -> datetime:
     return datetime.fromtimestamp(CSV_PATH.stat().st_mtime, tz=timezone.utc)
 
 
-if __name__ == '__main__':
-    emit(pa.table({
-        'city': pa.array(['USWAS'], type=pa.string()),
-        'data_updated_through': pa.array([modified_at()], type=pa.timestamp('us', tz='UTC')),
-    }))
+if __name__ == "__main__":
+    emit_freshness("USWAS", modified_at)

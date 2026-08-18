@@ -15,7 +15,8 @@ or standalone:
 import io
 import struct
 import sys
-from datetime import date
+import time
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pyarrow as pa
@@ -25,11 +26,16 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from _ingest_shared import (
+    PORTAL_UNAVAILABLE_TIMESTAMP,
     TREE_COLUMN_TYPES,
+    UpstreamUnavailable,
     circumference_cm_to_dbh_inches,
     cm_to_inches,
     emit,
+    emit_freshness,
     enforce_tree_schema,
+    get_json_with_retry,
+    response_json,
     make_point_wkt,
     normalize_species,
     normalize_species_parts,
@@ -365,6 +371,171 @@ class TestEmit:
         assert result.num_rows == 1
         assert result.column("city")[0].as_py() == "TEST"
         assert result.column("value")[0].as_py() == 42
+
+
+# ---------------------------------------------------------------------------
+# JSON responses and freshness probes
+# ---------------------------------------------------------------------------
+
+# The exact body gdi.berlin.de serves — HTTP 200, no content-type, HTML — for
+# every path (WFS and metadata API alike) while the platform is in maintenance.
+MAINTENANCE_PAGE = (
+    "\n        <!DOCTYPE html>\n        <html lang=\"de\">\n"
+    "        <head><title>Wartungsarbeiten</title></head>\n        </html>"
+)
+
+
+class _FakeResponse:
+    def __init__(self, text: str, status_code: int = 200, headers: dict | None = None):
+        self.text = text
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.content = text.encode()
+
+    def json(self):
+        import json
+
+        return json.loads(self.text)
+
+    def raise_for_status(self):
+        import requests
+
+        if self.status_code >= 400:
+            raise requests.exceptions.HTTPError(f"HTTP {self.status_code}")
+
+
+def _capture_stdout(monkeypatch) -> io.BytesIO:
+    buf = io.BytesIO()
+
+    class _FakeStdout:
+        buffer = buf
+
+    monkeypatch.setattr(sys, "stdout", _FakeStdout())
+    return buf
+
+
+class TestResponseJson:
+    def test_parses_json(self):
+        assert response_json(_FakeResponse('{"a": 1}'), "http://x") == {"a": 1}
+
+    def test_arcgis_error_envelope_raises_upstream_unavailable(self):
+        """A 200 carrying {"error": {...}} is the portal failing, not our schema.
+
+        Burlington's ArcGIS answered a statistics query this way during an
+        outage; classified as a payload, it reached the probe's "no features"
+        guard and aborted the whole refresh.
+        """
+        body = '{"error":{"code":500,"message":"Error performing query operation"}}'
+        with pytest.raises(UpstreamUnavailable) as e:
+            response_json(_FakeResponse(body), "http://arcgis/query")
+        assert "Error performing query operation" in str(e.value)
+
+    def test_socrata_error_flag_raises(self):
+        with pytest.raises(UpstreamUnavailable):
+            response_json(
+                _FakeResponse('{"error": true, "message": "backend down"}'), "http://x"
+            )
+
+    def test_ckan_success_false_raises(self):
+        with pytest.raises(UpstreamUnavailable):
+            response_json(_FakeResponse('{"success": false}'), "http://x")
+
+    def test_payload_with_unrelated_error_field_is_returned(self):
+        """Only an error *envelope* counts; a data column named error does not."""
+        payload = response_json(
+            _FakeResponse('{"features": [{"error": 0.5}], "success": true}'),
+            "http://x",
+        )
+        assert payload["features"] == [{"error": 0.5}]
+
+    def test_maintenance_page_raises_upstream_unavailable(self):
+        with pytest.raises(UpstreamUnavailable) as e:
+            response_json(_FakeResponse(MAINTENANCE_PAGE), "http://portal/api")
+        # The message must name the host and what it served — the bare
+        # JSONDecodeError this replaces said only "line 2 column 9".
+        assert "http://portal/api" in str(e.value)
+        assert "HTTP 200" in str(e.value)
+        assert "Wartungsarbeiten" in str(e.value)
+
+
+class TestGetJsonWithRetry:
+    def test_retries_non_json_body_then_raises(self, monkeypatch):
+        calls = []
+
+        def fake_request(method, url, **kwargs):
+            calls.append(url)
+            return _FakeResponse(MAINTENANCE_PAGE)
+
+        import requests
+
+        monkeypatch.setattr(requests, "request", fake_request)
+        monkeypatch.setattr(time, "sleep", lambda _s: None)
+
+        with pytest.raises(UpstreamUnavailable):
+            get_json_with_retry("http://portal/api", max_retries=3)
+        assert len(calls) == 3
+
+    def test_returns_payload_once_the_portal_recovers(self, monkeypatch):
+        bodies = [MAINTENANCE_PAGE, '{"ok": true}']
+
+        import requests
+
+        monkeypatch.setattr(
+            requests, "request", lambda method, url, **kw: _FakeResponse(bodies.pop(0))
+        )
+        monkeypatch.setattr(time, "sleep", lambda _s: None)
+
+        assert get_json_with_retry("http://portal/api") == {"ok": True}
+
+
+class TestEmitFreshness:
+    def _read(self, buf: io.BytesIO) -> pa.Table:
+        buf.seek(0)
+        return pa.ipc.open_stream(buf).read_all()
+
+    def test_emits_the_fetched_timestamp(self, monkeypatch):
+        buf = _capture_stdout(monkeypatch)
+        ts = datetime(2025, 11, 19, tzinfo=timezone.utc)
+        emit_freshness("DEBER", lambda: ts)
+
+        table = self._read(buf)
+        assert table.column("city")[0].as_py() == "DEBER"
+        assert table.column("data_updated_through")[0].as_py() == ts
+        assert table.schema.field("data_updated_through").type.equals(
+            pa.timestamp("us", tz="UTC")
+        )
+
+    def test_unavailable_portal_degrades_instead_of_raising(self, monkeypatch):
+        """A dead portal must not abort the run — one raising probe fails every city."""
+        buf = _capture_stdout(monkeypatch)
+
+        def fetch():
+            raise UpstreamUnavailable("portal in maintenance")
+
+        emit_freshness("DEBER", fetch)
+
+        table = self._read(buf)
+        assert (
+            table.column("data_updated_through")[0].as_py()
+            == PORTAL_UNAVAILABLE_TIMESTAMP
+        )
+
+    def test_parse_failure_still_raises(self, monkeypatch):
+        """A payload we can't read means our field mapping drifted: stay loud."""
+        _capture_stdout(monkeypatch)
+
+        def fetch():
+            raise KeyError("gmd:dateStamp")
+
+        with pytest.raises(KeyError):
+            emit_freshness("DEBER", fetch)
+
+    def test_city_is_omitted_when_none(self, monkeypatch):
+        buf = _capture_stdout(monkeypatch)
+        emit_freshness(
+            None, lambda: datetime(2025, 1, 1, tzinfo=timezone.utc), label="ecoregion"
+        )
+        assert self._read(buf).schema.names == ["data_updated_through"]
 
 
 # ---------------------------------------------------------------------------

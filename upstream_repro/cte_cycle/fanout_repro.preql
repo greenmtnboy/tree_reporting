@@ -1,0 +1,43 @@
+# Minimal repro: union source + WHERE on a coarser-grain derived property
+# => the property is projected into its own species-grain CTE that is NOT
+#    deduped, and the final merge joins it on `species`, fanning out rows.
+#
+# Expected: 5 rows (one per tree). Actual: 11.
+# Remove the `where` clause and the plan is correct; replace the two partial
+# datasources with one complete datasource and the plan is correct.
+
+key tree_id string;
+key species string;
+key city enum<string>['A', 'B'];
+property tree_id.dbh float;
+property species.species_upper <- upper(species);
+
+partial datasource a_tree_info (
+    tree_id,
+    city,
+    species,
+    dbh
+)
+grain (tree_id)
+complete where city = 'A'
+address a_tree_info;
+
+partial datasource b_tree_info (
+    tree_id,
+    city,
+    species,
+    dbh
+)
+grain (tree_id)
+complete where city = 'B'
+address b_tree_info;
+
+select
+    tree_id,
+    city,
+    species,
+    species_upper,
+    dbh
+where
+    species_upper != 'X'
+;

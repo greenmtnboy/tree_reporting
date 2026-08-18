@@ -28,6 +28,7 @@ property <*>.arbue_data_updated_through datetime; # when Buenos Aires data is th
 property <*>.uslax_data_updated_through datetime; # when Los Angeles data is through
 property <*>.uswas_data_updated_through datetime; # when Washington DC data is through
 property <*>.ustem_data_updated_through datetime; # when Tempe data is through
+property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 
 
 

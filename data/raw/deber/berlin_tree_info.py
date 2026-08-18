@@ -25,11 +25,11 @@ from datetime import date
 from pathlib import Path
 
 import pyarrow as pa
-import requests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
     emit,
     enforce_tree_schema,
+    get_json_with_retry,
     normalize_species,
     validate_coordinates,
     parse_plant_date_year,
@@ -56,9 +56,9 @@ def fetch_all_features() -> list[dict]:
             "COUNT": str(PAGE_SIZE),
             "startIndex": str(start),
         }
-        r = requests.get(WFS_BASE, params=params, timeout=120)
-        r.raise_for_status()
-        page = r.json()
+        # The WFS serves the platform-wide HTML maintenance page with HTTP 200,
+        # so a non-JSON body here means "portal down", not "bad request".
+        page = get_json_with_retry(WFS_BASE, params=params)
         batch = page.get("features", [])
         features.extend(batch)
         if len(batch) < PAGE_SIZE:

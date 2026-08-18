@@ -59,6 +59,14 @@ export interface Checkin {
   distanceMeters: number | null
   photoPath: string | null
   at: Date | null
+  // Tree facts snapshotted at check-in time (null on older check-ins).
+  // Achievements read these because the tree's city parquet may not be
+  // loaded when they are evaluated.
+  species: string | null
+  treeForm: string | null
+  dbhInches: number | null
+  plantYear: number | null
+  speciesCityCount: number | null
 }
 
 export interface CheckinInput {
@@ -70,6 +78,11 @@ export interface CheckinInput {
   distanceMeters: number
   city: string
   photoBlob?: Blob
+  species?: string | null
+  treeForm?: string | null
+  dbhInches?: number | null
+  plantYear?: number | null
+  speciesCityCount?: number | null
   onProgress?: (fraction: number) => void
 }
 
@@ -215,6 +228,11 @@ function mapCheckinDoc(id: string, data: Record<string, unknown>): Checkin {
         : Number(data.distanceMeters),
     photoPath: (data.photoPath as string | null) ?? null,
     at: at instanceof Timestamp ? at.toDate() : null,
+    species: (data.species as string | null) ?? null,
+    treeForm: (data.treeForm as string | null) ?? null,
+    dbhInches: data.dbhInches == null ? null : Number(data.dbhInches),
+    plantYear: data.plantYear == null ? null : Number(data.plantYear),
+    speciesCityCount: data.speciesCityCount == null ? null : Number(data.speciesCityCount),
   }
 }
 
@@ -257,6 +275,11 @@ export async function recordCheckin(input: CheckinInput): Promise<string> {
     city: input.city,
     distanceMeters: input.distanceMeters,
     photoPath,
+    species: input.species ?? null,
+    treeForm: input.treeForm ?? null,
+    dbhInches: input.dbhInches ?? null,
+    plantYear: input.plantYear ?? null,
+    speciesCityCount: input.speciesCityCount ?? null,
     at: serverTimestamp(),
   }
   const docRef = await addDoc(collection(firestore, 'checkins'), docData)

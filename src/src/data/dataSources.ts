@@ -34,10 +34,16 @@ export function isCommunitySource(value: string | null | undefined): boolean {
   return typeof value === 'string' && value.startsWith('COMMUNITY_')
 }
 
+/** True for the OpenStreetMap supplemental sources (`OSM_<CITY>`). */
+export function isOsmSource(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.startsWith('OSM_')
+}
+
 /** Human-readable label for a `data_source` value; null when there is none. */
 export function formatDataSource(value: string | null | undefined): string | null {
   if (!value) return null
   if (isCommunitySource(value)) return 'Community submission'
+  if (isOsmSource(value)) return 'OpenStreetMap'
   return (
     DATA_SOURCE_LABELS[value] ??
     value

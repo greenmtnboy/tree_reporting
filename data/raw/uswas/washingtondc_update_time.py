@@ -8,10 +8,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import get_with_retry
+from _ingest_shared import emit_freshness, get_json_with_retry
 
 STATS_URL = (
     'https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Urban_Tree_Canopy/MapServer/23/query'
@@ -22,21 +21,12 @@ STATS_URL = (
 
 
 def fetch_modified_at() -> datetime:
-    payload = get_with_retry(STATS_URL).json()
+    payload = get_json_with_retry(STATS_URL)
     raw = payload['features'][0]['attributes'].get('MAX_EDIT')
     if raw is None:
         raise RuntimeError('MAX_EDIT missing from Washington DC statistics response')
     return datetime.fromtimestamp(raw / 1000, tz=timezone.utc)
 
 
-def emit(updated_at: datetime) -> None:
-    table = pa.table({
-        'city': pa.array(['USWAS'], type=pa.string()),
-        'data_updated_through': pa.array([updated_at], type=pa.timestamp('us', tz='UTC')),
-    })
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
-
-
-if __name__ == '__main__':
-    emit(fetch_modified_at())
+if __name__ == "__main__":
+    emit_freshness("USWAS", fetch_modified_at)

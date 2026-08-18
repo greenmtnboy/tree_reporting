@@ -19,10 +19,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pyarrow as pa
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import get_with_retry
+from _ingest_shared import emit_freshness, get_json_with_retry
 
 METADATA_URL = (
     "https://gdi.berlin.de/geonetwork/srv/api/records/"
@@ -31,26 +29,17 @@ METADATA_URL = (
 
 
 def fetch_modified_at() -> datetime:
-    r = get_with_retry(METADATA_URL, headers={"Accept": "application/json"})
-    data = r.json()
+    # Berlin's whole geodata platform (this API, the WFS, and FIS-Broker) answers
+    # every path with an HTTP 200 "Wartungsarbeiten" HTML page during
+    # maintenance, so JSON decoding is part of the availability check, not a
+    # detail of parsing — get_json_with_retry retries it and reports what came
+    # back instead of a bare JSONDecodeError character offset.
+    data = get_json_with_retry(METADATA_URL, headers={"Accept": "application/json"})
     # Path: gmd:dateStamp → gco:DateTime → #text  e.g. "2025-11-19T00:00:00Z"
     ts_str = data["gmd:dateStamp"]["gco:DateTime"]["#text"]
     dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
     return dt.astimezone(timezone.utc)
 
 
-def emit(updated_at: datetime) -> None:
-    table = pa.table(
-        {
-            "city": pa.array(["DEBER"], type=pa.string()),
-            "data_updated_through": pa.array(
-                [updated_at], type=pa.timestamp("us", tz="UTC")
-            ),
-        }
-    )
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
-
-
 if __name__ == "__main__":
-    emit(fetch_modified_at())
+    emit_freshness("DEBER", fetch_modified_at)

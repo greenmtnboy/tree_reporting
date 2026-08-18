@@ -17,12 +17,11 @@ Fallback: Last-Modified response header from the monumenten API endpoint.
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pyarrow as pa
 import requests
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit
+from _ingest_shared import emit_freshness
 
 CATALOG_URL = "https://data.amsterdam.nl/api/catalog/v3/datasets/monumenten/"
 PROBE_URL = "https://api.data.amsterdam.nl/v1/monumenten/monumenten/?_format=json&page_size=1"
@@ -59,13 +58,4 @@ def fetch_last_modified() -> datetime:
 
 
 if __name__ == "__main__":
-    emit(
-        pa.table(
-            {
-                "city": pa.array(["NLAMS"], type=pa.string()),
-                "data_updated_through": pa.array(
-                    [fetch_last_modified()], type=pa.timestamp("us", tz="UTC")
-                ),
-            }
-        )
-    )
+    emit_freshness("NLAMS", fetch_last_modified)
