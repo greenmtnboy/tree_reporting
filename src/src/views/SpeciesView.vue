@@ -203,6 +203,7 @@ import {
 import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
 import SummaryMarkdownCard from '../components/SummaryMarkdownCard.vue'
 import SpeciesCarousel from '../components/SpeciesCarousel.vue'
+import { REAL_SPECIES_PREDICATE } from '../data/species'
 import SpeciesSearchFilter from '../components/SpeciesSearchFilter.vue'
 import TreeDotMap from '../components/TreeDotMap.vue'
 import { buildDashboardContextParameters } from '../composables/dashboardContextSource'
@@ -237,14 +238,14 @@ const GENUS_QUERY = `SELECT
   ${SPECIES_GENUS_EXPR} as option_value,
   ${SPECIES_GENUS_EXPR} as option_label,
   count(tree_id) as tree_count
-WHERE species IS NOT NULL
+WHERE ${REAL_SPECIES_PREDICATE}
 ORDER BY tree_count DESC;`
 
 const TOP_GENUS_QUERY = `SELECT
   ${SPECIES_GENUS_EXPR} as option_value,
   ${SPECIES_GENUS_EXPR} as option_label,
   count(tree_id) as tree_count
-WHERE species IS NOT NULL
+WHERE ${REAL_SPECIES_PREDICATE}
 ORDER BY tree_count DESC
 LIMIT 1;`
 
@@ -252,14 +253,14 @@ const SPECIES_QUERY = `SELECT
   species as option_value,
   species as option_label,
   count(tree_id) as tree_count
-WHERE species IS NOT NULL
+WHERE ${REAL_SPECIES_PREDICATE}
 ORDER BY tree_count DESC;`
 
 const TOP_SPECIES_QUERY = `SELECT
   species as option_value,
   species as option_label,
   count(tree_id) as tree_count
-WHERE species IS NOT NULL
+WHERE ${REAL_SPECIES_PREDICATE}
 ORDER BY tree_count DESC
 LIMIT 1;`
 
@@ -342,7 +343,7 @@ async function loadSpeciesContext(species: string | null) {
       connectionId,
       [{
         label: 'species-context',
-        query: `SELECT common_names[1] as common_name, tree_form, growth_rate WHERE species IS NOT NULL LIMIT 1;`,
+        query: `SELECT common_names[1] as common_name, tree_form, growth_rate WHERE ${REAL_SPECIES_PREDICATE} LIMIT 1;`,
         extra_filters: [getSpeciesSqlFilter(species)],
       }],
       'trilogy',
