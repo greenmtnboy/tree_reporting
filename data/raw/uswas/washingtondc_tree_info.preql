@@ -51,7 +51,8 @@ root partial datasource uswas_community_tree_info (
 )
 grain (tree_id)
 complete where city = 'USWAS' and uswas_source = 'COMMUNITY_USWAS'
-file `../community_tree_info.py`;
+file `../community_tree_info.py`
+where city = 'USWAS';
 
 partial datasource washingtondc_tree_info (
     tree_id,

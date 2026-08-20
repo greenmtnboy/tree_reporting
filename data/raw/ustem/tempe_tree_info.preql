@@ -58,7 +58,8 @@ root partial datasource ustem_community_tree_info (
 )
 grain (tree_id)
 complete where city = 'USTEM' and ustem_source = 'COMMUNITY_USTEM'
-file `../community_tree_info.py`;
+file `../community_tree_info.py`
+where city = 'USTEM';
 
 
 # OpenStreetMap trees, read from the committed staging parquet rather than

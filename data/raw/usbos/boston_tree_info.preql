@@ -141,7 +141,8 @@ root partial datasource usbos_community_tree_info (
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'COMMUNITY_USBOS'
-file `../community_tree_info.py`;
+file `../community_tree_info.py`
+where city = 'USBOS';
 
 # OpenStreetMap trees, read from the committed staging parquet rather than
 # Overpass — extraction is decoupled from refresh (see boston_osm_extract.py

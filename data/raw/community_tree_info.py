@@ -139,5 +139,45 @@ def records_to_table(records: Iterable[Mapping[str, Any]]) -> pa.Table:
     return enforce_tree_schema(table, city="Community")
 
 
+def parse_pushdown_filters(argv: list[str]) -> dict[str, str]:
+    """Read `--filter key=value` pairs Trilogy pushes down from the model.
+
+    A datasource-level `where city = 'USTEM'` is compiled into both a SQL
+    predicate and a `--filter 'city=USTEM'` argument here, so honouring it is
+    an optimisation, not a correctness requirement: the SQL predicate filters
+    the rows either way.  That is why an unrecognised key is ignored rather
+    than fatal — a filter this script does not understand still gets applied
+    one layer up.
+
+    Every city's datasource runs this script, so without the pushdown all
+    fourteen read and emit the whole export to have thirteen fourteenths of it
+    discarded downstream.
+    """
+    filters: dict[str, str] = {}
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--filter" and i + 1 < len(argv):
+            key, _, value = argv[i + 1].partition("=")
+            if value:
+                filters[key.strip().lower()] = value.strip()
+            i += 2
+        else:
+            i += 1
+    return filters
+
+
+def main(argv: list[str] | None = None) -> None:
+    filters = parse_pushdown_filters(list(sys.argv[1:] if argv is None else argv))
+    records = load_published_records()
+    city = filters.get("city")
+    if city:
+        wanted = city.upper()
+        records = [
+            r for r in records
+            if str(r.get("city") or "").upper().strip() == wanted
+        ]
+    emit(records_to_table(records))
+
+
 if __name__ == "__main__":
-    emit(records_to_table(load_published_records()))
+    main()

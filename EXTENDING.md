@@ -173,25 +173,36 @@ Because the flag is computed from the same materialization's source rows, a
 municipal update dedups against itself in the same rebuild; there is no
 staleness window.
 
-**Known bug — the `is_duplicate` column drops the city partition filter.**
-Declaring `is_duplicate: {code}_is_duplicate` on a city's materialized
-datasource makes Trilogy emit that city's persist projection with **no `WHERE`
-clause at all**, so `complete where city = '{CODE}'` stops filtering. The
-visible effect is that `community_tree_info.py` — a shared feed that returns
-*every* city's approved submissions, relying on each city's `complete where` to
-exclude the rest — leaks its whole output into both OSM cities' Parquets.
-`ustem_tree_info_v2.parquet` currently carries three `city = 'USBOS'` rows for
-this reason; non-OSM cities are unaffected and contain zero foreign rows.
+**`complete where` asserts; `where` filters.** These are different clauses and
+a shared source needs both. `complete where city = 'X' and {code}_source = 'Y'`
+is a *model-level assertion* — "this source holds the complete set of rows for
+that partition" — and does not promise the planner will inject a predicate.
+`community_tree_info.py` is read by all fourteen cities and returns *every*
+city's approved submissions, so each city's datasource has to restrict its rows
+itself, with a `where` clause after the file clause:
 
-Removing that one column restores `WHERE "yummy"."city" = 'USTEM'`; making it
-optional or adding `city` to the aggregate grain does not. Full write-up and an
-offline repro in `upstream_repro/partition_filter_dropped/`. Until it is fixed
-upstream, **check the rendered SQL for the `WHERE` when wiring OSM into a new
-city**, and expect foreign community rows in that city's Parquet:
-
-```bash
-cd data && trilogy refresh raw/{city}/{city}_tree_info.preql -f {city}_tree_info --dry-run
+```preql
+root partial datasource {code}_community_tree_info (
+    ...
+)
+grain (tree_id)
+complete where city = '{CODE}' and {code}_source = 'COMMUNITY_{CODE}'
+file `../community_tree_info.py`
+where city = '{CODE}';
 ```
+
+Read together: "only {CODE}'s trees, and this is all of them."
+
+This was missing for a long time without visible symptoms, because the planner
+*happened* to inject a predicate for the twelve cities with no OSM partition
+and not for the two with one — the presence of the `is_duplicate` column, whose
+value comes from an aggregate across the stacked partitions, is what decides it.
+Tempe's Parquet accordingly shipped three `city = 'USBOS'` rows. Do not rely on
+the injection: write the `where`. Trilogy compiles it into both a SQL predicate
+and a `--filter 'city={CODE}'` argument to the script, which
+`community_tree_info.py` honours so that fourteen invocations do not each read
+and emit the whole export. Write-up in
+`upstream_repro/partition_filter_dropped/`.
 
 **Frontend sequencing warning:** the worker must not `SELECT is_duplicate`
 until *every* city's Parquet has been rebuilt with the column — DuckDB binder

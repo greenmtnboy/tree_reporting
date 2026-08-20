@@ -51,7 +51,8 @@ root partial datasource usbtv_community_tree_info (
 )
 grain (tree_id)
 complete where city = 'USBTV' and usbtv_source = 'COMMUNITY_USBTV'
-file `../community_tree_info.py`;
+file `../community_tree_info.py`
+where city = 'USBTV';
 
 partial datasource burlington_tree_info (
     tree_id,

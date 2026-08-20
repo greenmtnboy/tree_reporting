@@ -51,7 +51,8 @@ root partial datasource frpar_community_tree_info (
 )
 grain (tree_id)
 complete where city = 'FRPAR' and frpar_source = 'COMMUNITY_FRPAR'
-file `../community_tree_info.py`;
+file `../community_tree_info.py`
+where city = 'FRPAR';
 
 
 partial datasource paris_tree_info (
