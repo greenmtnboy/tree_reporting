@@ -5,9 +5,9 @@ property <*>.arboretum_data_updated_through datetime; # when Arnold Arboretum da
 property <*>.boston_city_data_updated_through datetime; # when Boston city open-data is through
 property <*>.cambridge_data_updated_through datetime; # when Cambridge open-data is through
 property <*>.brookline_data_updated_through datetime; # when Brookline open-data is through
+auto usbos_published_data_updated_through <- greatest(usbos_data_updated_through, usbos_community_data_updated_through, usbos_osm_data_updated_through);
 auto usbos_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through, cambridge_data_updated_through, brookline_data_updated_through);
-auto usbos_published_data_updated_through <- greatest(usbos_data_updated_through, usbos_community_data_updated_through);
-key usbos_source enum<string>['CITY_OF_BOSTON', 'ARNOLD_ARBORETUM', 'CAMBRIDGE', 'BROOKLINE', 'COMMUNITY_USBOS']; # originating dataset within the Boston metro; materialized as the uniform `data_source` column
+key usbos_source enum<string>['CITY_OF_BOSTON', 'ARNOLD_ARBORETUM', 'CAMBRIDGE', 'BROOKLINE', 'COMMUNITY_USBOS', 'OSM_USBOS']; # originating dataset within the Boston metro; materialized as the uniform `data_source` column
 
 
 property tree_id._raw_dbh float; # raw value 
@@ -46,13 +46,20 @@ root datasource brookline_update_time (
 )
 file `./brookline_update_time.py`;
 
+# mtime of the committed OSM staging parquet (see boston_osm_extract.py); the
+# staging file only moves when an extraction is re-run and committed.
+root datasource usbos_osm_update_time (
+    data_updated_through: usbos_osm_data_updated_through
+)
+file `./boston_osm_probe.py`;
+
 # --- Raw sources ---
 
 root partial datasource city_raw_tree_info (
     id: tree_id,
     city: city,
     data_source: usbos_source,
-    spp_bot: species,
+    spp_bot: ?species,
     tree_name: ?tree_name,
     
     date_plant: ?plant_date,
@@ -69,7 +76,7 @@ root partial datasource arboretum_raw_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: usbos_source,
-    species: species,
+    species: ?species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
@@ -85,7 +92,7 @@ root partial datasource cambridge_raw_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: usbos_source,
-    species: species,
+    species: ?species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
@@ -101,7 +108,7 @@ root partial datasource brookline_raw_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: usbos_source,
-    species: species,
+    species: ?species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
@@ -124,7 +131,7 @@ root partial datasource usbos_community_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: usbos_source,
-    species: species,
+    species: ?species,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     diameter_at_breast_height: ?_raw_dbh,
@@ -136,19 +143,74 @@ grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'COMMUNITY_USBOS'
 file `../community_tree_info.py`;
 
+# OpenStreetMap trees, read from the committed staging parquet rather than
+# Overpass — extraction is decoupled from refresh (see boston_osm_extract.py
+# and EXTENDING.md).  Overlapping rows are kept and flagged via
+# usbos_is_duplicate below, never dropped.  `diameter_at_breast_height` maps
+# to `_raw_dbh` like every other Boston source so OSM rows go through the same
+# species-average imputation.
+root partial datasource usbos_osm_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: usbos_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?_raw_dbh,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'USBOS' and usbos_source = 'OSM_USBOS'
+file `./usbos_osm_staging.parquet`;
+
+# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+#
+# Same construction as ustem/tempe_tree_info.preql (see the full rationale
+# there and in EXTENDING.md): an OSM row is a duplicate when a non-OSM tree
+# shares its ~10m grid cell in ANY of four half-cell-staggered grid copies —
+# a guaranteed match within 5m, possible out to a ~14m diagonal.  The 5m
+# guarantee is grounded per-city with the dedup validation script: duplicates
+# (re-mapped inventory trees) sit at GPS-offset scale, while matches beyond
+# ~5m are mostly distinct neighbors at planting-row spacing.
+#
+# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
+# cos(42.36 deg) at Boston.
+const usbos_cell_lat_deg <- 0.00008983;
+const usbos_cell_lon_deg <- 0.00012157;
+
+auto usbos_cell_a <- concat(cast(floor(longitude / usbos_cell_lon_deg) as string), ':', cast(floor(latitude / usbos_cell_lat_deg) as string));
+auto usbos_cell_b <- concat(cast(floor(longitude / usbos_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / usbos_cell_lat_deg) as string));
+auto usbos_cell_c <- concat(cast(floor(longitude / usbos_cell_lon_deg) as string), ':', cast(floor(latitude / usbos_cell_lat_deg + 0.5) as string));
+auto usbos_cell_d <- concat(cast(floor(longitude / usbos_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / usbos_cell_lat_deg + 0.5) as string));
+
+auto usbos_anchor_count_a <- count(tree_id ? usbos_source != 'OSM_USBOS') by usbos_cell_a;
+auto usbos_anchor_count_b <- count(tree_id ? usbos_source != 'OSM_USBOS') by usbos_cell_b;
+auto usbos_anchor_count_c <- count(tree_id ? usbos_source != 'OSM_USBOS') by usbos_cell_c;
+auto usbos_anchor_count_d <- count(tree_id ? usbos_source != 'OSM_USBOS') by usbos_cell_d;
+
+auto usbos_is_duplicate <- usbos_source = 'OSM_USBOS' and (
+    usbos_anchor_count_a > 0
+    or usbos_anchor_count_b > 0
+    or usbos_anchor_count_c > 0
+    or usbos_anchor_count_d > 0
+);
+
 # --- Merged materialized parquet (all Boston sources) ---
 
 partial datasource boston_tree_info (
     tree_id,
     city,
     data_source: usbos_source,
-    species,
+    ?species,
     ?tree_name,
     ?diameter_at_breast_height,
     ?plant_date,
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    is_duplicate: usbos_is_duplicate,
     usbos_published_data_updated_through
 )
 grain (tree_id)

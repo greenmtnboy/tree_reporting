@@ -86,18 +86,31 @@ file `./ustem_osm_staging.parquet`;
 # --- Cross-source dedup: stack + aggregate over four staggered grids -------
 #
 # An OSM row is a duplicate when an authoritative (non-OSM) tree sits in the
-# same ~20m grid cell in ANY of four copies of the grid, offset by half a cell
-# in x, y, and both.  Two points within half a cell (~10m) of each other are
+# same ~10m grid cell in ANY of four copies of the grid, offset by half a cell
+# in x, y, and both.  Two points within half a cell (~5m) of each other are
 # guaranteed to share a cell in at least one of the four grids, so this is an
-# equi-join-shaped stand-in for "within 10m", with possible matches out to one
-# cell diagonal (~28m).  Chosen over a true spatial anti-join because Trilogy
+# equi-join-shaped stand-in for "within 5m", with possible matches out to one
+# cell diagonal (~14m).  Chosen over a true spatial anti-join because Trilogy
 # joins are equality-only, and over unnest-based 3x3 neighborhoods because
 # merged-unnest is the planner's known fragile path.
 #
-# Cell sizes: 20m of latitude is 20/111320 deg; longitude shrinks by
+# Why a 5m guarantee and not 10m: distance alone cannot separate "same tree"
+# from "the next tree in the row" — Tempe's inventory has a MEDIAN planting
+# spacing of 6.5m, and 79.5% of inventory trees have another inventory tree
+# within 10m.  What does separate them is pair structure, measured with
+# tempe_dedup_validation.py: OSM points within 5m of an inventory tree are
+# mutual nearest neighbors with it >=88% of the time (99.7% at <2m) and sit
+# ~3-8x closer to it than to the runner-up — re-mapped inventory trees, offset
+# by GPS/imagery error.  In the 5-10m band mutual-NN collapses to 25%, i.e.
+# ~3/4 of those are distinct neighbors at planting-row spacing.  A 10m cell
+# keeps essentially all high-confidence duplicates while cutting the
+# neighbor-contaminated reach; the error asymmetry also favors it (a missed
+# duplicate double-renders one visible dot, a false flag hides a real tree).
+#
+# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
 # cos(33.4 deg) at Tempe.
-const ustem_cell_lat_deg <- 0.00017966;
-const ustem_cell_lon_deg <- 0.00021517;
+const ustem_cell_lat_deg <- 0.00008983;
+const ustem_cell_lon_deg <- 0.00010759;
 
 auto ustem_cell_a <- concat(cast(floor(longitude / ustem_cell_lon_deg) as string), ':', cast(floor(latitude / ustem_cell_lat_deg) as string));
 auto ustem_cell_b <- concat(cast(floor(longitude / ustem_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / ustem_cell_lat_deg) as string));

@@ -4,6 +4,9 @@ import sys
 
 import pyarrow as pa
 
+sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parents[1]))
+from _ingest_shared import UNKNOWN_SPECIES  # noqa: E402
+
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 SPEC = importlib.util.spec_from_file_location(
@@ -84,4 +87,7 @@ def test_records_to_table_keeps_unidentified_approved_trees():
         ]
     )
 
-    assert table.column("species").to_pylist() == ["Unknown"]
+    # An unidentified submission still publishes; enforce_tree_schema gives it
+    # the shared UNKNOWN_SPECIES sentinel rather than a null, and
+    # SKIP_SPECIES keeps that sentinel out of enrichment.
+    assert table.column("species").to_pylist() == [UNKNOWN_SPECIES]

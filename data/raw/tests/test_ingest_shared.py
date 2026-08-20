@@ -43,6 +43,8 @@ from _ingest_shared import (
     parse_wkb_point,
     rd_centroid,
     rd_to_wgs84,
+    UNKNOWN_SPECIES,
+    sanitize_species,
     validate_coordinates,
 )
 
@@ -88,6 +90,97 @@ class TestNormalizeSpecies:
         # We don't strip cultivar notation — that's left to individual scripts
         result = normalize_species("Betula pendula 'youngii'")
         assert result == "Betula pendula 'youngii'"
+
+
+# ---------------------------------------------------------------------------
+# sanitize_species
+# ---------------------------------------------------------------------------
+
+class TestSanitizeSpecies:
+    """The `species` value is the join key into the enrichment table, so the
+    question this answers is not "how is it spelled" but "is it a taxon at
+    all".  Anything that is not becomes null."""
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("Acer platanoides", "Acer platanoides"),
+            ("Acer", "Acer"),                       # genus alone is a real answer
+            ("quercus ROBUR", "Quercus robur"),
+            ("Quercus robur - English Oak", "Quercus robur"),
+            ("Platanus x hispanica :: London Plane", "Platanus x hispanica"),
+        ],
+    )
+    def test_keeps_scientific_names(self, raw, expected):
+        assert sanitize_species(raw) == expected
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            # Both hybrid spellings survive verbatim.  The enrichment table is
+            # keyed on whichever form a city emitted, so normalising one into
+            # the other would orphan every already-enriched hybrid.
+            ("Platanus x hispanica", "Platanus x hispanica"),
+            ("Citrus × limon", "Citrus × limon"),
+            ("Tilia × euchlora", "Tilia × euchlora"),
+            ("X amelasorbus jackii", "X amelasorbus jackii"),   # nothogenus
+        ],
+    )
+    def test_preserves_hybrid_marks(self, raw, expected):
+        assert sanitize_species(raw) == expected
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("Gleditsia triacanthos var. inermis", "Gleditsia triacanthos"),
+            ("Rhododendron degronianum ssp. yakushimanum", "Rhododendron degronianum"),
+            ("Lonicera chrysantha forma villosa", "Lonicera chrysantha"),
+            ("Viburnum cf. corylifolium", "Viburnum"),
+            ("Fagus spp", "Fagus"),
+            ("Tilia spec.", "Tilia"),
+        ],
+    )
+    def test_truncates_to_species_rank(self, raw, expected):
+        assert sanitize_species(raw) == expected
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("Prunus serrulata 'kwanzan'", "Prunus serrulata"),
+            # The note trailing a cultivar goes with it, rather than being
+            # mistaken for the epithet.
+            ("Malus 'spring snow' high brnch", "Malus"),
+            ("Arbutus 'marina'", "Arbutus"),
+        ],
+    )
+    def test_drops_cultivars_and_trailing_notes(self, raw, expected):
+        assert sanitize_species(raw) == expected
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            # Inventory placeholders for an empty or unidentifiable site.
+            "Vacant", "Vacant well", "Vacant/ok to replant", "Unknown",
+            "Unknown tree", "Unbekannt", "Onbekend", "No identificado",
+            "Other", "Dead tree", "Stump stump", "Empty pit/planting site",
+            # OSM contributors free-type into the species tag.
+            "Pin oak", "Red maple", "Serviceberry or dogwood?",
+            "Gymnocladus dioicus espresso or amur maackia",
+            # An abbreviated genus cannot be resolved to a real name.
+            "Amel. laevis 'spring flurry'",
+            # Numeric content is never part of a name.
+            "Tree(s) 2",
+            None, "", "   ",
+        ],
+    )
+    def test_drops_non_taxa(self, raw):
+        assert sanitize_species(raw) is None
+
+    def test_common_name_rule_only_applies_to_the_epithet(self):
+        """"Maple" as an epithet means a common name; as a genus it is real."""
+        assert sanitize_species("Red maple") is None
+        assert sanitize_species("Magnolia grandiflora") == "Magnolia grandiflora"
+        assert sanitize_species("Catalpa speciosa") == "Catalpa speciosa"
 
 
 # ---------------------------------------------------------------------------
@@ -558,6 +651,52 @@ def _tree_table(**overrides) -> pa.Table:
     }
     cols.update(overrides)
     return pa.table(cols)
+
+
+class TestEnforceTreeSchemaSpecies:
+    """The species column is cleaned at this one chokepoint, for every city."""
+
+    def _table(self, species):
+        return pa.table(
+            {
+                "tree_id": pa.array(["t%d" % i for i in range(len(species))]),
+                "city": pa.array(["USBOS"] * len(species)),
+                "species": pa.array(species, type=pa.string()),
+            }
+        )
+
+    def test_non_taxa_become_the_sentinel(self):
+        out = enforce_tree_schema(
+            self._table(["Acer rubrum", "Vacant", "Pin oak", None]),
+            city="Test",
+            data_source="CITY_OF_BOSTON",
+        )
+        assert out.column("species").to_pylist() == [
+            "Acer rubrum",
+            UNKNOWN_SPECIES,
+            UNKNOWN_SPECIES,
+            UNKNOWN_SPECIES,
+        ]
+
+    def test_species_column_is_never_null(self):
+        """`species` is a Trilogy key; a null there is what silently dropped
+        rows from Boston's species-keyed dbh imputation."""
+        out = enforce_tree_schema(
+            self._table([None, "", "   ", "Quercus robur"]),
+            city="Test",
+            data_source="CITY_OF_BOSTON",
+        )
+        assert out.column("species").null_count == 0
+
+    def test_cleanup_is_reported(self, capsys):
+        enforce_tree_schema(
+            self._table(["Vacant", "Prunus serrulata 'kwanzan'"]),
+            city="Test",
+            data_source="CITY_OF_BOSTON",
+        )
+        err = capsys.readouterr().err
+        assert "species cleanup" in err
+        assert "1 value(s)" in err
 
 
 class TestEnforceTreeSchema:

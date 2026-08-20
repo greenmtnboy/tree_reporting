@@ -113,7 +113,9 @@ must claim `complete where city = 'X' and {code}_source = 'Y'`.
 A city can carry a third partition of `natural=tree` nodes from OSM, labelled
 `OSM_{CODE}`. Unlike community (which every city gets), OSM is opt-in: a city
 appears in `OSM_DATA_SOURCES` in `data/raw/_ingest_shared.py` once its wiring
-exists. Tempe (`ustem/`) is the reference implementation;
+exists. Tempe (`ustem/`) is the reference implementation and Boston (`usbos/`)
+the second wired city (note how its OSM partition maps dbh to `_raw_dbh` so
+OSM rows share the city's imputation);
 `test_osm_city_is_fully_wired` asserts every half of the wiring below.
 
 **Extraction is decoupled from refresh.** `{city}_osm_extract.py` queries
@@ -132,16 +134,35 @@ municipal inventory by construction. Trilogy's joins are equality-only (a
 non-`=` join key is rejected at hydration), so a spatial anti-join cannot be
 expressed in the model — and doing it in a script against the published
 Parquet would dedup one rebuild cycle stale. The model instead derives a grid
-cell from lat/lon in **four copies of a ~20m grid staggered by half a cell**
+cell from lat/lon in **four copies of a ~10m grid staggered by half a cell**
 (x, y, and both), counts non-OSM anchors per cell with a filtered aggregate,
 and flags an OSM row whose cell in *any* grid contains an anchor. Two points
-within half a cell (~10m) always share a cell in at least one grid, so this is
-an equi-join-shaped stand-in for "within 10m", with possible matches out to a
-cell diagonal (~28m). Measured against exact haversine distances for Tempe:
-100% of OSM trees within 10m flagged, 0% beyond 28m flagged, and the 10-28m
-gray zone was 137 trees (~52% flagged). An unnest-based 3x3 neighborhood would
-give an exact radius but sits on the merged-unnest planner path that has
-regressed twice upstream; don't.
+within half a cell (~5m) always share a cell in at least one grid, so this is
+an equi-join-shaped stand-in for "within 5m", with possible matches out to a
+cell diagonal (~14m). An unnest-based 3x3 neighborhood would give an exact
+radius but sits on the merged-unnest planner path that has regressed twice
+upstream; don't.
+
+**Why the cell is 10m (5m guarantee), not 20m.** Distance alone cannot
+distinguish a re-mapped inventory tree from the next tree in a planted row:
+Tempe's inventory has a *median* nearest-neighbor spacing of 6.5m, and 79.5%
+of inventory trees have another inventory tree within 10m. What does separate
+the populations is pair structure, measured by
+`data/raw/ustem/tempe_dedup_validation.py` (exact haversine, mutual-NN, 1:1
+matching, local density): OSM points within 5m of an inventory tree are
+mutual nearest neighbors with it >=88% of the time (99.7% below 2m), sit
+3-8x closer to it than to the second-closest, and appear where OSM:inventory
+local density is 1:1 — the inventory re-mapped with GPS/imagery offset. In the
+5-10m band mutual-NN collapses to 25%, meaning roughly three quarters of those
+matches are distinct neighbors at planting-row spacing. A 20m cell (10m
+guarantee, 28m reach) flagged ~80 more OSM rows, most of them likely real
+trees; the error asymmetry favors the smaller cell, since a missed duplicate
+double-renders one visible, toggleable dot while a false flag hides a real
+tree. When wiring a new city, re-run the validation script against that city's
+inventory before copying the cell size — the 5m break reflects Tempe's small
+OSM positional offsets, and a city traced from misaligned imagery may need a
+larger cell (Berlin and Paris can calibrate against `osm_ref` exact-id
+matches). Per-city thresholds are expected as OSM rolls out.
 
 **Flag, never drop.** The dedup materializes as an `is_duplicate` boolean
 column (aliased from `{code}_is_duplicate`), and the Parquet keeps every row.
@@ -649,6 +670,69 @@ The `species` field in all tree parquets **must be the scientific name only** (n
 - NYC/Boston already emit scientific names directly
 
 If you add a city whose source data embeds a common name in the species field (any `::` pattern), strip it in the fetch script before emitting.
+
+### Species hygiene is enforced centrally, not per city
+
+`normalize_species` only fixes casing.  Deciding whether a value is a taxon at
+all is `sanitize_species`, called for every city from `enforce_tree_schema`, so
+a new city inherits it without doing anything.  It drops what is not a
+scientific name — inventory placeholders (`Vacant`, `Unknown`, `Onbekend`,
+`No identificado`, `Empty pit/planting site`), free-typed OSM tags (`Pin oak`,
+`Serviceberry or dogwood?`), abbreviated genera (`Amel. laevis 'spring
+flurry'`) — and truncates the rest to species rank, so
+`Gleditsia triacanthos var. inermis` and `Prunus serrulata 'kwanzan'` collapse
+onto the binomial the enrichment table is keyed on.  Applied to the published
+data this cut distinct species 6,418 → 3,776 and the enrichment backlog
+1,568 → 734 city/species pairs.
+
+Both hybrid spellings are preserved verbatim: SF publishes
+`Platanus x hispanica`, OSM publishes `Citrus × limon` (U+00D7).  Normalising
+one into the other would orphan every already-enriched hybrid, so don't.
+
+Anything that survives as a non-taxon becomes `UNKNOWN_SPECIES` (`"Unknown"`),
+never null — see the next section for why — and that sentinel is excluded from
+enrichment **by name** in `SKIP_SPECIES` / `SPECIES_EXCLUSION_SQL`
+(`enrichment/_tree_shared.py`), which is also where a new placeholder value
+belongs.  `enforce_tree_schema` prints a per-ingest summary of how many values
+it reshaped, so a run that rewrites a tenth of its species column says so in
+the refresh log rather than doing it quietly.
+
+### Mark a nullable column `?` or Trilogy will silently drop rows
+
+A datasource column declared without `?` is non-nullable, and Trilogy generates
+plain `=` joins for it.  `NULL = NULL` is never true, so **every row with a
+null in that column vanishes from the materialised Parquet, with no error**.
+
+Boston is the worked example.  Its dbh imputation
+(`auto processed_dbh <- coalesce(_cleaned_db, avg(_cleaned_db) by city, species)`)
+compiles to a join of the species-average CTE back onto the rows:
+
+```sql
+INNER JOIN "abhorrent" on "macho"."city" = "abhorrent"."city"
+                      AND "macho"."species" = "abhorrent"."species"
+```
+
+Boston's municipal sources always carry a species, so this was invisible for
+months.  Wiring OSM exposed it: OSM `natural=tree` nodes are ~99% species-less,
+and the first rebuild wrote **349 of 28,163** OSM rows.  Declaring
+`spp_bot: ?species` (and the same on every other Boston datasource) changes the
+generated predicate to `is not distinct from`, which matches null to null:
+
+```sql
+AND "macho"."species" is not distinct from "abhorrent"."species"
+```
+
+Boston is currently the only city with a species-keyed aggregate, so it is the
+only one that needed it — but the rule is general.  If a city adds an aggregate
+keyed on a column that any of its sources can leave empty, mark that column
+`?` in **every** datasource that maps it, and check the rendered SQL:
+
+```bash
+cd data && trilogy refresh raw/{city}/{city}_tree_info.preql -f {city}_tree_info --dry-run
+```
+
+Row counts are the cheap tell — compare each `data_source` partition in the new
+Parquet against the source row count before assuming a rebuild succeeded.
 
 ### After Adding a New City
 

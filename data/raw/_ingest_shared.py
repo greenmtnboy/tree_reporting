@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import math
+import re
 import struct
 import sys
 import time
@@ -78,6 +79,148 @@ def normalize_species_parts(genus: str | None, epithet: str | None) -> str | Non
     return " ".join(parts)
 
 
+# Inventory placeholders that several portals use for an empty or
+# unidentifiable planting site.  They are not taxa and must never reach the
+# `species` key, where they would be handed to the enrichment LLM every run.
+_SPECIES_PLACEHOLDERS = frozenset(
+    {
+        "unknown", "unknown tree", "unbekannt", "onbekend",
+        "onbekend (algemeen)", "no identificado", "unidentified",
+        "unidentified unidentified", "undetermined", "not identified",
+        "none", "n/a", "na", "other", "vacant", "dead", "stump", "empty",
+    }
+)
+
+# English common-name nouns that never occur as a Latin specific epithet.  A
+# two-word value ending in one of these is a common name ("Pin oak", "Red
+# maple"), not a binomial.  Genus-shaped entries (magnolia, catalpa) are safe
+# here because they are only ever tested in *epithet* position.
+_COMMON_NAME_NOUNS = frozenset(
+    {
+        "oak", "maple", "elm", "ash", "pine", "spruce", "fir", "cedar",
+        "cherry", "plum", "birch", "beech", "linden", "locust", "willow",
+        "poplar", "hawthorn", "dogwood", "sycamore", "walnut", "hickory",
+        "gum", "holly", "plane", "tree", "palm", "cypress", "hemlock",
+        "larch", "alder", "aspen", "buckeye", "chestnut", "catalpa",
+        "redbud", "pear", "apple", "crabapple", "magnolia", "ginkgo",
+        "juniper", "yew", "laurel", "sweetgum", "cottonwood", "boxelder",
+        "fruit", "flower", "fleur", "shrub", "hedge",
+    }
+)
+
+# Both spellings of the hybrid mark occur in the wild and both are kept
+# verbatim: SF publishes "Platanus x hispanica", OSM publishes
+# "Citrus × limon", and the enrichment table is already keyed on
+# whichever form its city emitted.  Rewriting one into the other here would
+# orphan every already-enriched hybrid.
+_HYBRID_MARKS = frozenset({"x", "×"})
+
+# Rank qualifiers introduce infraspecific detail the species key does not
+# carry; the name is truncated in front of them ("Viburnum cf. corylifolium"
+# -> "Viburnum corylifolium" is wrong, so it becomes "Viburnum").
+_RANK_QUALIFIERS = frozenset(
+    {"cf", "var", "subsp", "ssp", "forma", "f", "spp", "sp", "group", "x"}
+)
+
+# A cultivar epithet is always quoted, and whatever trails it is a note
+# ("Malus 'spring snow' high brnch"), so the name is truncated at the quote
+# rather than having the quoted run excised from the middle.
+_QUOTE_CHARS = "'\"‘’“”"
+
+
+# What a tree whose species we do not know is called.  `species` is a Trilogy
+# key, and carrying a real value rather than a null keeps it join-safe
+# everywhere without relying on null-matching semantics.  It is excluded from
+# enrichment by name via SKIP_SPECIES / SPECIES_EXCLUSION_SQL in
+# enrichment/_tree_shared.py -- an explicit, greppable exclusion rather than a
+# silent skip.
+UNKNOWN_SPECIES = "Unknown"
+
+
+def sanitize_species(value: str | None) -> str | None:
+    """Reduce a raw species string to a Latin binomial, or ``None``.
+
+    ``normalize_species`` fixes *casing*; this decides whether the value is a
+    scientific name at all.  Sources disagree wildly on what they put in a
+    species field -- OSM contributors free-type ("Serviceberry or dogwood?",
+    "Pin oak", "Malus 'spring snow' high brnch"), and municipal inventories
+    use placeholders for empty sites ("Vacant", "Onbekend").  Everything that
+    is not a binomial is dropped to ``None`` rather than kept, because the
+    `species` key is the join key into the enrichment table: junk there is
+    both a permanent LLM cost and a wrong label on the map.
+
+    Returns the genus, optionally followed by a hybrid mark and an epithet.
+    Cultivars, rank qualifiers and trailing notes are truncated away.
+
+    Examples:
+        "Acer platanoides"              -> "Acer platanoides"
+        "Citrus × limon"                -> "Citrus × limon"   (mark preserved)
+        "Platanus x hispanica"          -> "Platanus x hispanica"
+        "X amelasorbus jackii"          -> "X amelasorbus jackii"
+        "Fagus spp"                     -> "Fagus"
+        "Malus 'spring snow' high brnch"-> "Malus"
+        "Pin oak"                       -> None  (common name)
+        "Serviceberry or dogwood?"      -> None
+        "Amel. laevis 'spring flurry'"  -> None  (abbreviated genus)
+        "Vacant"                        -> None
+    """
+    s = normalize_species(value)
+    if s is None:
+        return None
+
+    if s.lower() in _SPECIES_PLACEHOLDERS:
+        return None
+    # Free-typed uncertainty and any numeric content are never taxa.
+    if "?" in s or "/" in s or any(ch.isdigit() for ch in s):
+        return None
+    if " or " in s.lower():
+        return None
+
+    # Truncate at a cultivar quote, dropping the cultivar and any trailing note.
+    cut = [s.find(q) for q in _QUOTE_CHARS if s.find(q) != -1]
+    if cut:
+        s = s[: min(cut)]
+    tokens = s.split()
+    if not tokens:
+        return None
+
+    prefix = ""
+    # A leading hybrid mark denotes a nothogenus ("X amelasorbus jackii").
+    if tokens[0].lower() in _HYBRID_MARKS:
+        prefix = tokens[0]
+        tokens = tokens[1:]
+        if not tokens:
+            return None
+
+    genus = tokens[0]
+    # An abbreviated or one/two-letter genus cannot be resolved to a real name.
+    if genus.endswith(".") or len(genus) < 3 or not genus.isalpha():
+        return None
+    if genus.lower() in _SPECIES_PLACEHOLDERS:
+        return None
+
+    hybrid = ""
+    epithet = ""
+    for tok in tokens[1:]:
+        low = tok.rstrip(".").lower()
+        if tok.lower() in _HYBRID_MARKS and not epithet:
+            hybrid = tok
+            continue
+        if low in _RANK_QUALIFIERS or tok.endswith("."):
+            break
+        if not tok.isalpha():
+            break
+        epithet = tok
+        break
+
+    # "Pin oak" / "Red maple": a Latin epithet is never an English tree noun.
+    if epithet and not hybrid and epithet.lower() in _COMMON_NAME_NOUNS:
+        return None
+
+    parts = [p for p in (prefix, genus, hybrid, epithet) if p]
+    return " ".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # Data source labels
 # ---------------------------------------------------------------------------
@@ -134,6 +277,7 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # ustem/tempe_tree_info.preql for the reference implementation.
 OSM_DATA_SOURCES: dict[str, str] = {
     "USTEM": "OSM_USTEM",
+    "USBOS": "OSM_USBOS",
 }
 
 DATA_SOURCES: tuple[str, ...] = tuple(
@@ -237,6 +381,41 @@ def enforce_tree_schema(
             raise ValueError(
                 f"{prefix}: required column '{actual}' ({canonical}) is missing "
                 f"from the emitted table"
+            )
+
+    # Species hygiene, applied for every city at the one chokepoint rather than
+    # per source.  The raw value is the join key into the enrichment table, so
+    # a non-taxon there is both a permanent LLM cost and a wrong map label; see
+    # sanitize_species.  Sources vary in how much junk they carry -- OSM's
+    # free-typed tags and the municipal "Vacant"/"Onbekend" placeholders are the
+    # two big ones -- but none of them are exempt from the binomial contract.
+    species_col = resolved["species"]
+    if species_col in names:
+        sidx = table.schema.get_field_index(species_col)
+        raw_species = table.column(sidx).to_pylist()
+        cleaned: list[str] = []
+        dropped = rewritten = 0
+        for value in raw_species:
+            keep = sanitize_species(value)
+            if keep is None:
+                if value is not None:
+                    dropped += 1
+                cleaned.append(UNKNOWN_SPECIES)
+            else:
+                if keep != value:
+                    rewritten += 1
+                cleaned.append(keep)
+        table = table.set_column(
+            sidx, species_col, pa.array(cleaned, type=pa.string())
+        )
+        # Never silent: a run that reshapes a tenth of its species column
+        # should say so in the refresh log.
+        if dropped or rewritten:
+            print(
+                f"{prefix}: species cleanup -- {dropped} value(s) were not "
+                f"scientific names and became {UNKNOWN_SPECIES!r}, "
+                f"{rewritten} normalised to species rank",
+                file=sys.stderr,
             )
 
     for canonical, target in TREE_COLUMN_TYPES.items():

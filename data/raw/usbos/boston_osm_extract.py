@@ -9,9 +9,9 @@ Extract Tempe's OpenStreetMap trees into the committed staging parquet.
 
 NOT a refresh-time ingest: this is the (for now, manually run) extraction pass
 that the refresh pipeline reads from.  It queries Overpass for `natural=tree`
-nodes in the USTEM bounding box, normalises them to the canonical tree schema,
-and writes `ustem_osm_staging.parquet` next to itself.  Commit the parquet;
-`tempe_osm_probe.py` reports its mtime as the freshness watermark, so a re-run
+nodes in the USBOS bounding box, normalises them to the canonical tree schema,
+and writes `usbos_osm_staging.parquet` next to itself.  Commit the parquet;
+`boston_osm_probe.py` reports its mtime as the freshness watermark, so a re-run
 plus commit is what makes the city's Parquet stale.
 
 Overpass is flaky (429/504 under load) and its DB timestamp advances every
@@ -42,14 +42,14 @@ from _ingest_shared import (
     validate_coordinates,
 )
 
-CITY_CODE = "USTEM"
-CITY_NAME = "Tempe OSM"
+CITY_CODE = "USBOS"
+CITY_NAME = "Boston OSM"
 # Default is the main instance; point OVERPASS_URL at a mirror (e.g.
 # https://overpass.kumi.systems/api/interpreter) when it is overloaded.
 OVERPASS_URL = os.environ.get(
     "OVERPASS_URL", "https://overpass-api.de/api/interpreter"
 )
-OUTPUT = Path(__file__).parent / "ustem_osm_staging.parquet"
+OUTPUT = Path(__file__).parent / "usbos_osm_staging.parquet"
 
 _CIRCUMFERENCE_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(cm|m)?\s*$", re.I)
 
@@ -131,7 +131,7 @@ def main() -> None:
             )
         )
         # The municipal inventory id this node was imported from, where tagged.
-        # Unused for Tempe (nothing carries it) but kept in the staging schema
+        # Boston is the first city where this may be populated (Cambridge had an early OSM import) but kept in the staging schema
         # so ref-rich cities (Berlin: ~6k, Paris: ~4k) can dedup on it exactly.
         rows["osm_ref"].append(tags.get("ref"))
 
@@ -150,7 +150,7 @@ def main() -> None:
         }
     )
     table = validate_coordinates(table, city=CITY_NAME, city_code=CITY_CODE)
-    table = enforce_tree_schema(table, city=CITY_NAME, data_source="OSM_USTEM")
+    table = enforce_tree_schema(table, city=CITY_NAME, data_source="OSM_USBOS")
     pq.write_table(table, OUTPUT)
     with_species = table.num_rows - table.column("species").null_count
     print(

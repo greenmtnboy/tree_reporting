@@ -70,9 +70,10 @@ def records_to_table(records: Iterable[Mapping[str, Any]]) -> pa.Table:
     for record in records:
         tree_id = str(record.get("treeId") or "").strip()
         city = str(record.get("city") or "").upper().strip()
-        # `species` is a Trilogy key and must remain non-null even though the
-        # submission form allows an unidentified tree.
-        species = normalize_species(record.get("species")) or "Unknown"
+        # The submission form allows an unidentified tree.  No sentinel here:
+        # enforce_tree_schema applies the shared UNKNOWN_SPECIES one for every
+        # source at once, so this stays a plain normalisation.
+        species = normalize_species(record.get("species"))
         try:
             latitude = float(record["latitude"])
             longitude = float(record["longitude"])
