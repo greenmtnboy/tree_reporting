@@ -17,6 +17,7 @@ Field mapping:
   lat/lon or center lat/lon                -> latitude, longitude, geometry_raw
 """
 
+import os
 import sys
 import pyarrow as pa
 from pathlib import Path
@@ -30,7 +31,11 @@ from _ingest_shared import (
     OVERPASS_HEADERS,
 )
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# Default is the main instance; point OVERPASS_URL at a mirror (e.g.
+# https://overpass.kumi.systems/api/interpreter) when it is overloaded.
+OVERPASS_URL = os.environ.get(
+    "OVERPASS_URL", "https://overpass-api.de/api/interpreter"
+)
 
 # Greater London bounding box (south, west, north, east)
 BBOX = "51.28,-0.56,51.70,0.35"

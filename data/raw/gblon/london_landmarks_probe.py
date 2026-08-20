@@ -12,13 +12,18 @@ Runs the same Overpass filter as london_landmarks.py but with `out ids meta`
 date the most recently edited matching landmark was changed in OSM.
 """
 
+import os
 import sys
 from pathlib import Path
 from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import OVERPASS_HEADERS, emit_freshness, post_json_with_retry
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# Default is the main instance; point OVERPASS_URL at a mirror (e.g.
+# https://overpass.kumi.systems/api/interpreter) when it is overloaded.
+OVERPASS_URL = os.environ.get(
+    "OVERPASS_URL", "https://overpass-api.de/api/interpreter"
+)
 
 QUERY = """
 [out:json][timeout:60];

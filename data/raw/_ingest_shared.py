@@ -579,6 +579,13 @@ def _body_snippet(response: requests.Response, limit: int = 160) -> str:
     return text[:limit] + ("..." if len(text) > limit else "")
 
 
+# Overpass reports overload the same way whether it ran out of time or memory;
+# anything else in `remark` (attribution notes, tag advisories) is not a failure.
+_OVERPASS_FAILURE_RE = re.compile(
+    r"runtime error|timed out|out of memory|too many requests", re.I
+)
+
+
 def error_envelope(payload) -> str | None:
     """A server-side error reported *inside* an HTTP 200 JSON body, if present.
 
@@ -601,6 +608,17 @@ def error_envelope(payload) -> str | None:
     # CKAN failure with no error object.
     if payload.get("success") is False:
         return str(error or "success=false")
+    # Overpass: an overloaded or timed-out query is HTTP 200 with a well-formed
+    # body, an empty `elements` list and the failure in `remark`:
+    #   {"elements": [], "remark": "runtime error: Query timed out in
+    #    \"query\" at line 3 after 180 seconds."}
+    # There is no `error` key, so without this the caller sees a valid payload
+    # with no rows and its own "no features" guard turns an Overpass hiccup
+    # into a fatal, unretried error.  `remark` is also used for benign notes,
+    # so only the failure wordings count.
+    remark = payload.get("remark")
+    if isinstance(remark, str) and _OVERPASS_FAILURE_RE.search(remark):
+        return f"overpass remark: {remark.strip()}"
     return None
 
 

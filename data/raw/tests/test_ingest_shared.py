@@ -511,6 +511,34 @@ class TestResponseJson:
     def test_parses_json(self):
         assert response_json(_FakeResponse('{"a": 1}'), "http://x") == {"a": 1}
 
+    def test_overpass_remark_raises_upstream_unavailable(self):
+        """Overpass reports an overloaded/timed-out query as HTTP 200 with a
+        well-formed body, an empty `elements` list and the failure in `remark`.
+
+        Unclassified, that reaches the caller as a valid payload with no rows,
+        and the script's own "no features" guard turns a transient Overpass
+        hiccup into a fatal error with no retry -- which is exactly how the
+        London landmarks refresh failed.
+        """
+        body = (
+            '{"version": 0.6, "elements": [], "remark": "runtime error: Query '
+            'timed out in \\"query\\" at line 3 after 180 seconds."}'
+        )
+        with pytest.raises(UpstreamUnavailable) as e:
+            response_json(_FakeResponse(body), "http://overpass")
+        assert "timed out" in str(e.value)
+
+    def test_overpass_benign_remark_is_not_an_error(self):
+        """`remark` also carries attribution and tag advisories."""
+        body = (
+            '{"elements": [{"id": 1}], '
+            '"remark": "Please note: data is licensed ODbL."}'
+        )
+        assert response_json(_FakeResponse(body), "http://overpass") == {
+            "elements": [{"id": 1}],
+            "remark": "Please note: data is licensed ODbL.",
+        }
+
     def test_arcgis_error_envelope_raises_upstream_unavailable(self):
         """A 200 carrying {"error": {...}} is the portal failing, not our schema.
 
