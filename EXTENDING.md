@@ -664,6 +664,34 @@ data/raw/{city}/{city}_landmarks_probe.py    ← freshness probe (same pattern a
 data/raw/{city}/{city}_landmarks.preql       ← datasource with versioned GCS URL
 ```
 
+**If the source is Overpass, stage it instead** — the same decoupling the OSM
+tree extracts use, for the same reason:
+
+```
+data/raw/{city}/{city}_landmarks_extract.py  ← queries Overpass, writes the staging parquet
+data/raw/{city}/{code}_landmarks_staging.parquet  ← committed; the refresh only ever reads this
+data/raw/{city}/{city}_landmarks_probe.py    ← emits the staging file's mtime, no network
+```
+
+Overpass allows **two concurrent slots per client IP** (`GET /api/status`
+reports them), and answers an over-budget request with HTTP 200 carrying either
+an HTML page or a body whose `remark` is a `runtime error` — never a 4xx/5xx.
+London and Berlin both fetched at refresh time, which meant a full refresh with
+`parallelism = 3` could put three Overpass callers in flight against those two
+slots and fail a city on a transient: `london_landmark_info` died that way and
+took `full_landmark_info` with it as a failed dependency, while the same script
+run alone finished in **6.8s**. The query was never the problem; the concurrency
+was.
+
+Staging removes Overpass from the refresh path entirely, and re-running the
+extract and committing the result becomes what marks the city stale — the OSM
+watermark alternative (the global database timestamp) advances every minute and
+would rebuild the city on every tick.
+
+```bash
+cd data/raw && uv run {city}/{city}_landmarks_extract.py   # then commit the parquet
+```
+
 Add the city's landmark freshness property and update the `greatest()` expression in **`data/raw/landmark_common.preql`**:
 
 ```preql

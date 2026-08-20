@@ -20,11 +20,11 @@ Field mapping:
 import os
 import sys
 import pyarrow as pa
+import pyarrow.parquet as pq
 from pathlib import Path
 from typing import Any
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
-    emit,
     validate_coordinates,
     post_json_with_retry,
     make_point_wkt,
@@ -131,8 +131,19 @@ def validate(table: pa.Table) -> None:
     validate_coordinates(table, city="London landmarks")
 
 
-if __name__ == "__main__":
+OUTPUT = Path(__file__).parent / "gblon_landmarks_staging.parquet"
+
+
+def main() -> None:
     elements = fetch_elements()
     table = transform(elements)
     validate(table)
-    emit(table)
+    pq.write_table(table, OUTPUT)
+    print(
+        f"London landmarks: wrote {table.num_rows} rows to {OUTPUT.name}",
+        file=sys.stderr,
+    )
+
+
+if __name__ == "__main__":
+    main()
