@@ -174,6 +174,10 @@
     :tree-id="checkinDialog.treeId"
     :tree-lat="checkinDialog.lat"
     :tree-lng="checkinDialog.lng"
+    :species="checkinDialog.species"
+    :tree-form="checkinDialog.treeForm"
+    :dbh-inches="checkinDialog.dbhInches"
+    :plant-year="checkinDialog.plantYear"
     @close="checkinDialog = null"
     @success="checkinDialog = null"
   />
@@ -200,6 +204,7 @@ import MapCompass from './MapCompass.vue'
 import CheckinDialog from './CheckinDialog.vue'
 import { firebaseAvailable } from '../lib/firebase'
 import { formatDataSource } from '../data/dataSources'
+import { plantYearFrom } from '../lib/achievements'
 import {
   acquireSharedPositionWatch,
   getGeolocationPermissionState,
@@ -635,7 +640,15 @@ const selectedTree = ref<PopupTreeRow | null>(null)
 const selectedTreeAnchor = ref<[number, number] | null>(null)
 const selectedTreeScreenPoint = ref<{ x: number; y: number } | null>(null)
 const treeCardEl = ref<HTMLElement | null>(null)
-const checkinDialog = ref<{ treeId: string; lat: number; lng: number } | null>(null)
+const checkinDialog = ref<{
+  treeId: string
+  lat: number
+  lng: number
+  species: string | null
+  treeForm: string | null
+  dbhInches: number | null
+  plantYear: number | null
+} | null>(null)
 
 const CHECKIN_MAX_METERS = 50
 
@@ -656,6 +669,10 @@ function openCheckin(): void {
     treeId: selectedTree.value.tree_id,
     lat,
     lng,
+    species: selectedTree.value.species,
+    treeForm: selectedTree.value.tree_form,
+    dbhInches: selectedTree.value.dbh,
+    plantYear: plantYearFrom(selectedTree.value.plant_date),
   }
 }
 

@@ -6,11 +6,10 @@
 
 import sys
 from pathlib import Path
-import pyarrow as pa
 from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import get_with_retry
+from _ingest_shared import emit_freshness, get_json_with_retry
 
 # ArcGIS statistics query — fetches MAX(SDE_DT) without downloading the full dataset
 STATS_URL = (
@@ -22,8 +21,7 @@ STATS_URL = (
 
 
 def fetch_modified_at() -> datetime:
-    r = get_with_retry(STATS_URL)
-    data = r.json()
+    data = get_json_with_retry(STATS_URL)
 
     features = data.get("features", [])
     if not features:
@@ -37,17 +35,5 @@ def fetch_modified_at() -> datetime:
     return datetime.fromtimestamp(raw / 1000, tz=timezone.utc)
 
 
-def emit(updated_at: datetime) -> None:
-    table = pa.table(
-        {
-            "city": pa.array(["USBOS"], type=pa.string()),
-            "usbos_source": pa.array(["ARBORETUM"], type=pa.string()),
-            "data_updated_through": pa.array([updated_at], type=pa.timestamp("us", tz="UTC")),
-        }
-    )
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
-
-
 if __name__ == "__main__":
-    emit(fetch_modified_at())
+    emit_freshness("USBOS", fetch_modified_at)

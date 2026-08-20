@@ -5,6 +5,10 @@ root datasource london_landmarks_update_time (
 )
 file `./london_landmarks_probe.py`;
 
+# Read from the committed staging Parquet, not Overpass: extraction is
+# decoupled from refresh (see the *_landmarks_extract.py sibling and
+# EXTENDING.md).  Re-running the extract and committing the result is what
+# makes this city's published Parquet stale.
 root partial datasource raw_london_landmark_info (
     landmark_id: landmark_id,
     city: city,
@@ -13,7 +17,7 @@ root partial datasource raw_london_landmark_info (
 )
 grain (landmark_id)
 complete where city = 'GBLON'
-file `./london_landmarks.py`;
+file `./gblon_landmarks_staging.parquet`;
 
 partial datasource london_landmark_info (
     landmark_id,

@@ -57,7 +57,8 @@ root partial datasource usnyc_community_tree_info (
 )
 grain (tree_id)
 complete where city = 'USNYC' and usnyc_source = 'COMMUNITY_USNYC'
-file `../community_tree_info.py`;
+file `../community_tree_info.py`
+where city = 'USNYC';
 
 
 partial datasource nyc_tree_info (

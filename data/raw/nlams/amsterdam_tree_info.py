@@ -35,11 +35,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
     emit,
     enforce_tree_schema,
+    get_json_with_retry,
     normalize_species,
-    validate_coordinates,
-    get_with_retry,
-    rd_to_wgs84,
     parse_plant_date_year,
+    rd_to_wgs84,
+    validate_coordinates,
 )
 
 BASE_URL = "https://api.data.amsterdam.nl/v1/bomen/stamgegevens/"
@@ -127,8 +127,7 @@ def download_all_pages() -> list[dict]:
     url: str | None = f"{BASE_URL}?_format=json&page_size={PAGE_SIZE}"
     results: list[dict] = []
     while url:
-        r = get_with_retry(url)
-        data = r.json()
+        data = get_json_with_retry(url)
         embedded = data.get("_embedded", {})
         page_rows = embedded.get("stamgegevens", [])
         results.extend(page_rows)

@@ -17,19 +17,24 @@ Field mapping:
   lat/lon or center lat/lon        -> latitude, longitude, geometry_raw
 """
 
+import os
 import sys
 import pyarrow as pa
+import pyarrow.parquet as pq
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
-    emit,
     validate_coordinates,
-    post_with_retry,
+    post_json_with_retry,
     make_point_wkt,
     OVERPASS_HEADERS,
 )
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# Default is the main instance; point OVERPASS_URL at a mirror (e.g.
+# https://overpass.kumi.systems/api/interpreter) when it is overloaded.
+OVERPASS_URL = os.environ.get(
+    "OVERPASS_URL", "https://overpass-api.de/api/interpreter"
+)
 
 # Berlin bounding box (south, west, north, east)
 BBOX = "52.3,13.0,52.7,13.8"
@@ -45,8 +50,8 @@ out center;
 
 
 def fetch_elements() -> list[dict]:
-    r = post_with_retry(OVERPASS_URL, data={"data": QUERY}, timeout=240, headers=OVERPASS_HEADERS)
-    return r.json()["elements"]
+    payload = post_json_with_retry(OVERPASS_URL, data={"data": QUERY}, timeout=240, headers=OVERPASS_HEADERS)
+    return payload["elements"]
 
 
 def transform(elements: list[dict]) -> pa.Table:
@@ -93,8 +98,19 @@ def validate(table: pa.Table) -> None:
     validate_coordinates(table, city="Berlin landmarks")
 
 
-if __name__ == "__main__":
+OUTPUT = Path(__file__).parent / "deber_landmarks_staging.parquet"
+
+
+def main() -> None:
     elements = fetch_elements()
     table = transform(elements)
     validate(table)
-    emit(table)
+    pq.write_table(table, OUTPUT)
+    print(
+        f"Berlin landmarks: wrote {table.num_rows} rows to {OUTPUT.name}",
+        file=sys.stderr,
+    )
+
+
+if __name__ == "__main__":
+    main()

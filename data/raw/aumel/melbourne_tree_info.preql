@@ -51,7 +51,8 @@ root partial datasource aumel_community_tree_info (
 )
 grain (tree_id)
 complete where city = 'AUMEL' and aumel_source = 'COMMUNITY_AUMEL'
-file `../community_tree_info.py`;
+file `../community_tree_info.py`
+where city = 'AUMEL';
 
 
 partial datasource melbourne_tree_info (

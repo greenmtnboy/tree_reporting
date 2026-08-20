@@ -24,6 +24,7 @@ from _ingest_shared import (  # noqa: E402
     COMMUNITY_DATA_SOURCES,
     DATA_SOURCES,
     MUNICIPAL_DATA_SOURCES,
+    OSM_DATA_SOURCES,
     community_source_for,
 )
 
@@ -62,6 +63,8 @@ def test_every_city_bounds_entry_has_a_community_source():
 @pytest.mark.parametrize("code", sorted(MUNICIPAL_DATA_SOURCES))
 def test_preql_enum_matches_python_picklist(code: str):
     expected = [*MUNICIPAL_DATA_SOURCES[code], community_source_for(code)]
+    if code in OSM_DATA_SOURCES:
+        expected.append(OSM_DATA_SOURCES[code])
     assert sorted(enum_values(city_models()[code])) == sorted(expected)
 
 
@@ -107,7 +110,8 @@ def test_city_freshness_uses_its_own_community_column(code: str):
     """
     text = city_models()[code].read_text(encoding="utf-8")
     column = f"{code.lower()}_community_data_updated_through"
-    assert f"greatest({code.lower()}_data_updated_through, {column})" in text
+    # Prefix match: cities with an OSM staging source append a third argument.
+    assert f"greatest({code.lower()}_data_updated_through, {column}" in text
     assert f"{column}: {column}" in text
     # The bare shared name would silently re-couple every city.
     assert ", community_data_updated_through)" not in text
@@ -125,3 +129,31 @@ def test_probe_emits_one_column_per_city():
     )
     assert declared == expected
     assert {column_for(c) for c in fetch_published_at_by_city()} == expected
+
+
+@pytest.mark.parametrize("code", sorted(OSM_DATA_SOURCES))
+def test_osm_city_is_fully_wired(code: str):
+    """A city in OSM_DATA_SOURCES must have every half of the OSM wiring.
+
+    The failure modes mirror the community ones: a missing staging datasource
+    silently emits zero OSM rows, a shared/missing freshness column either
+    re-couples cities or never marks the Parquet stale, and a dropped
+    is_duplicate derivation publishes overlapping rows with no flag for the
+    frontend to filter on.
+    """
+    lower = code.lower()
+    text = city_models()[code].read_text(encoding="utf-8")
+    assert f"'{OSM_DATA_SOURCES[code]}'" in text
+    assert f"{lower}_osm_staging.parquet" in text, (
+        f"{code} declares an OSM source label but no staging datasource"
+    )
+    column = f"{lower}_osm_data_updated_through"
+    assert f"data_updated_through: {column}" in text
+    assert column in text.split("greatest(", 1)[1].split(")", 1)[0], (
+        f"{code}'s published watermark must include {column} or a re-extraction "
+        "never rebuilds the Parquet"
+    )
+    assert f"{lower}_is_duplicate" in text
+    assert f"is_duplicate: {lower}_is_duplicate" in text, (
+        f"{code} derives is_duplicate but does not materialize it as a column"
+    )

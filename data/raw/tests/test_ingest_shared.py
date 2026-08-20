@@ -15,7 +15,8 @@ or standalone:
 import io
 import struct
 import sys
-from datetime import date
+import time
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pyarrow as pa
@@ -25,11 +26,16 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from _ingest_shared import (
+    PORTAL_UNAVAILABLE_TIMESTAMP,
     TREE_COLUMN_TYPES,
+    UpstreamUnavailable,
     circumference_cm_to_dbh_inches,
     cm_to_inches,
     emit,
+    emit_freshness,
     enforce_tree_schema,
+    get_json_with_retry,
+    response_json,
     make_point_wkt,
     normalize_species,
     normalize_species_parts,
@@ -37,6 +43,8 @@ from _ingest_shared import (
     parse_wkb_point,
     rd_centroid,
     rd_to_wgs84,
+    UNKNOWN_SPECIES,
+    sanitize_species,
     validate_coordinates,
 )
 
@@ -82,6 +90,97 @@ class TestNormalizeSpecies:
         # We don't strip cultivar notation — that's left to individual scripts
         result = normalize_species("Betula pendula 'youngii'")
         assert result == "Betula pendula 'youngii'"
+
+
+# ---------------------------------------------------------------------------
+# sanitize_species
+# ---------------------------------------------------------------------------
+
+class TestSanitizeSpecies:
+    """The `species` value is the join key into the enrichment table, so the
+    question this answers is not "how is it spelled" but "is it a taxon at
+    all".  Anything that is not becomes null."""
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("Acer platanoides", "Acer platanoides"),
+            ("Acer", "Acer"),                       # genus alone is a real answer
+            ("quercus ROBUR", "Quercus robur"),
+            ("Quercus robur - English Oak", "Quercus robur"),
+            ("Platanus x hispanica :: London Plane", "Platanus x hispanica"),
+        ],
+    )
+    def test_keeps_scientific_names(self, raw, expected):
+        assert sanitize_species(raw) == expected
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            # Both hybrid spellings survive verbatim.  The enrichment table is
+            # keyed on whichever form a city emitted, so normalising one into
+            # the other would orphan every already-enriched hybrid.
+            ("Platanus x hispanica", "Platanus x hispanica"),
+            ("Citrus × limon", "Citrus × limon"),
+            ("Tilia × euchlora", "Tilia × euchlora"),
+            ("X amelasorbus jackii", "X amelasorbus jackii"),   # nothogenus
+        ],
+    )
+    def test_preserves_hybrid_marks(self, raw, expected):
+        assert sanitize_species(raw) == expected
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("Gleditsia triacanthos var. inermis", "Gleditsia triacanthos"),
+            ("Rhododendron degronianum ssp. yakushimanum", "Rhododendron degronianum"),
+            ("Lonicera chrysantha forma villosa", "Lonicera chrysantha"),
+            ("Viburnum cf. corylifolium", "Viburnum"),
+            ("Fagus spp", "Fagus"),
+            ("Tilia spec.", "Tilia"),
+        ],
+    )
+    def test_truncates_to_species_rank(self, raw, expected):
+        assert sanitize_species(raw) == expected
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("Prunus serrulata 'kwanzan'", "Prunus serrulata"),
+            # The note trailing a cultivar goes with it, rather than being
+            # mistaken for the epithet.
+            ("Malus 'spring snow' high brnch", "Malus"),
+            ("Arbutus 'marina'", "Arbutus"),
+        ],
+    )
+    def test_drops_cultivars_and_trailing_notes(self, raw, expected):
+        assert sanitize_species(raw) == expected
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            # Inventory placeholders for an empty or unidentifiable site.
+            "Vacant", "Vacant well", "Vacant/ok to replant", "Unknown",
+            "Unknown tree", "Unbekannt", "Onbekend", "No identificado",
+            "Other", "Dead tree", "Stump stump", "Empty pit/planting site",
+            # OSM contributors free-type into the species tag.
+            "Pin oak", "Red maple", "Serviceberry or dogwood?",
+            "Gymnocladus dioicus espresso or amur maackia",
+            # An abbreviated genus cannot be resolved to a real name.
+            "Amel. laevis 'spring flurry'",
+            # Numeric content is never part of a name.
+            "Tree(s) 2",
+            None, "", "   ",
+        ],
+    )
+    def test_drops_non_taxa(self, raw):
+        assert sanitize_species(raw) is None
+
+    def test_common_name_rule_only_applies_to_the_epithet(self):
+        """"Maple" as an epithet means a common name; as a genus it is real."""
+        assert sanitize_species("Red maple") is None
+        assert sanitize_species("Magnolia grandiflora") == "Magnolia grandiflora"
+        assert sanitize_species("Catalpa speciosa") == "Catalpa speciosa"
 
 
 # ---------------------------------------------------------------------------
@@ -368,6 +467,199 @@ class TestEmit:
 
 
 # ---------------------------------------------------------------------------
+# JSON responses and freshness probes
+# ---------------------------------------------------------------------------
+
+# The exact body gdi.berlin.de serves — HTTP 200, no content-type, HTML — for
+# every path (WFS and metadata API alike) while the platform is in maintenance.
+MAINTENANCE_PAGE = (
+    "\n        <!DOCTYPE html>\n        <html lang=\"de\">\n"
+    "        <head><title>Wartungsarbeiten</title></head>\n        </html>"
+)
+
+
+class _FakeResponse:
+    def __init__(self, text: str, status_code: int = 200, headers: dict | None = None):
+        self.text = text
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.content = text.encode()
+
+    def json(self):
+        import json
+
+        return json.loads(self.text)
+
+    def raise_for_status(self):
+        import requests
+
+        if self.status_code >= 400:
+            raise requests.exceptions.HTTPError(f"HTTP {self.status_code}")
+
+
+def _capture_stdout(monkeypatch) -> io.BytesIO:
+    buf = io.BytesIO()
+
+    class _FakeStdout:
+        buffer = buf
+
+    monkeypatch.setattr(sys, "stdout", _FakeStdout())
+    return buf
+
+
+class TestResponseJson:
+    def test_parses_json(self):
+        assert response_json(_FakeResponse('{"a": 1}'), "http://x") == {"a": 1}
+
+    def test_overpass_remark_raises_upstream_unavailable(self):
+        """Overpass reports an overloaded/timed-out query as HTTP 200 with a
+        well-formed body, an empty `elements` list and the failure in `remark`.
+
+        Unclassified, that reaches the caller as a valid payload with no rows,
+        and the script's own "no features" guard turns a transient Overpass
+        hiccup into a fatal error with no retry -- which is exactly how the
+        London landmarks refresh failed.
+        """
+        body = (
+            '{"version": 0.6, "elements": [], "remark": "runtime error: Query '
+            'timed out in \\"query\\" at line 3 after 180 seconds."}'
+        )
+        with pytest.raises(UpstreamUnavailable) as e:
+            response_json(_FakeResponse(body), "http://overpass")
+        assert "timed out" in str(e.value)
+
+    def test_overpass_benign_remark_is_not_an_error(self):
+        """`remark` also carries attribution and tag advisories."""
+        body = (
+            '{"elements": [{"id": 1}], '
+            '"remark": "Please note: data is licensed ODbL."}'
+        )
+        assert response_json(_FakeResponse(body), "http://overpass") == {
+            "elements": [{"id": 1}],
+            "remark": "Please note: data is licensed ODbL.",
+        }
+
+    def test_arcgis_error_envelope_raises_upstream_unavailable(self):
+        """A 200 carrying {"error": {...}} is the portal failing, not our schema.
+
+        Burlington's ArcGIS answered a statistics query this way during an
+        outage; classified as a payload, it reached the probe's "no features"
+        guard and aborted the whole refresh.
+        """
+        body = '{"error":{"code":500,"message":"Error performing query operation"}}'
+        with pytest.raises(UpstreamUnavailable) as e:
+            response_json(_FakeResponse(body), "http://arcgis/query")
+        assert "Error performing query operation" in str(e.value)
+
+    def test_socrata_error_flag_raises(self):
+        with pytest.raises(UpstreamUnavailable):
+            response_json(
+                _FakeResponse('{"error": true, "message": "backend down"}'), "http://x"
+            )
+
+    def test_ckan_success_false_raises(self):
+        with pytest.raises(UpstreamUnavailable):
+            response_json(_FakeResponse('{"success": false}'), "http://x")
+
+    def test_payload_with_unrelated_error_field_is_returned(self):
+        """Only an error *envelope* counts; a data column named error does not."""
+        payload = response_json(
+            _FakeResponse('{"features": [{"error": 0.5}], "success": true}'),
+            "http://x",
+        )
+        assert payload["features"] == [{"error": 0.5}]
+
+    def test_maintenance_page_raises_upstream_unavailable(self):
+        with pytest.raises(UpstreamUnavailable) as e:
+            response_json(_FakeResponse(MAINTENANCE_PAGE), "http://portal/api")
+        # The message must name the host and what it served — the bare
+        # JSONDecodeError this replaces said only "line 2 column 9".
+        assert "http://portal/api" in str(e.value)
+        assert "HTTP 200" in str(e.value)
+        assert "Wartungsarbeiten" in str(e.value)
+
+
+class TestGetJsonWithRetry:
+    def test_retries_non_json_body_then_raises(self, monkeypatch):
+        calls = []
+
+        def fake_request(method, url, **kwargs):
+            calls.append(url)
+            return _FakeResponse(MAINTENANCE_PAGE)
+
+        import requests
+
+        monkeypatch.setattr(requests, "request", fake_request)
+        monkeypatch.setattr(time, "sleep", lambda _s: None)
+
+        with pytest.raises(UpstreamUnavailable):
+            get_json_with_retry("http://portal/api", max_retries=3)
+        assert len(calls) == 3
+
+    def test_returns_payload_once_the_portal_recovers(self, monkeypatch):
+        bodies = [MAINTENANCE_PAGE, '{"ok": true}']
+
+        import requests
+
+        monkeypatch.setattr(
+            requests, "request", lambda method, url, **kw: _FakeResponse(bodies.pop(0))
+        )
+        monkeypatch.setattr(time, "sleep", lambda _s: None)
+
+        assert get_json_with_retry("http://portal/api") == {"ok": True}
+
+
+class TestEmitFreshness:
+    def _read(self, buf: io.BytesIO) -> pa.Table:
+        buf.seek(0)
+        return pa.ipc.open_stream(buf).read_all()
+
+    def test_emits_the_fetched_timestamp(self, monkeypatch):
+        buf = _capture_stdout(monkeypatch)
+        ts = datetime(2025, 11, 19, tzinfo=timezone.utc)
+        emit_freshness("DEBER", lambda: ts)
+
+        table = self._read(buf)
+        assert table.column("city")[0].as_py() == "DEBER"
+        assert table.column("data_updated_through")[0].as_py() == ts
+        assert table.schema.field("data_updated_through").type.equals(
+            pa.timestamp("us", tz="UTC")
+        )
+
+    def test_unavailable_portal_degrades_instead_of_raising(self, monkeypatch):
+        """A dead portal must not abort the run — one raising probe fails every city."""
+        buf = _capture_stdout(monkeypatch)
+
+        def fetch():
+            raise UpstreamUnavailable("portal in maintenance")
+
+        emit_freshness("DEBER", fetch)
+
+        table = self._read(buf)
+        assert (
+            table.column("data_updated_through")[0].as_py()
+            == PORTAL_UNAVAILABLE_TIMESTAMP
+        )
+
+    def test_parse_failure_still_raises(self, monkeypatch):
+        """A payload we can't read means our field mapping drifted: stay loud."""
+        _capture_stdout(monkeypatch)
+
+        def fetch():
+            raise KeyError("gmd:dateStamp")
+
+        with pytest.raises(KeyError):
+            emit_freshness("DEBER", fetch)
+
+    def test_city_is_omitted_when_none(self, monkeypatch):
+        buf = _capture_stdout(monkeypatch)
+        emit_freshness(
+            None, lambda: datetime(2025, 1, 1, tzinfo=timezone.utc), label="ecoregion"
+        )
+        assert self._read(buf).schema.names == ["data_updated_through"]
+
+
+# ---------------------------------------------------------------------------
 # enforce_tree_schema
 # ---------------------------------------------------------------------------
 
@@ -387,6 +679,52 @@ def _tree_table(**overrides) -> pa.Table:
     }
     cols.update(overrides)
     return pa.table(cols)
+
+
+class TestEnforceTreeSchemaSpecies:
+    """The species column is cleaned at this one chokepoint, for every city."""
+
+    def _table(self, species):
+        return pa.table(
+            {
+                "tree_id": pa.array(["t%d" % i for i in range(len(species))]),
+                "city": pa.array(["USBOS"] * len(species)),
+                "species": pa.array(species, type=pa.string()),
+            }
+        )
+
+    def test_non_taxa_become_the_sentinel(self):
+        out = enforce_tree_schema(
+            self._table(["Acer rubrum", "Vacant", "Pin oak", None]),
+            city="Test",
+            data_source="CITY_OF_BOSTON",
+        )
+        assert out.column("species").to_pylist() == [
+            "Acer rubrum",
+            UNKNOWN_SPECIES,
+            UNKNOWN_SPECIES,
+            UNKNOWN_SPECIES,
+        ]
+
+    def test_species_column_is_never_null(self):
+        """`species` is a Trilogy key; a null there is what silently dropped
+        rows from Boston's species-keyed dbh imputation."""
+        out = enforce_tree_schema(
+            self._table([None, "", "   ", "Quercus robur"]),
+            city="Test",
+            data_source="CITY_OF_BOSTON",
+        )
+        assert out.column("species").null_count == 0
+
+    def test_cleanup_is_reported(self, capsys):
+        enforce_tree_schema(
+            self._table(["Vacant", "Prunus serrulata 'kwanzan'"]),
+            city="Test",
+            data_source="CITY_OF_BOSTON",
+        )
+        err = capsys.readouterr().err
+        assert "species cleanup" in err
+        assert "1 value(s)" in err
 
 
 class TestEnforceTreeSchema:

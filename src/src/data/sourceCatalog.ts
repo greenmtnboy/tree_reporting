@@ -28,6 +28,10 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   // Community submissions are reviewed and approved before they reach the map;
   // each published tree carries a COMMUNITY_<CITY> value in its data_source column.
   { city: 'All cities', label: 'Community submissions, reviewed before publication' },
+  // Supplemental OSM trees (OSM_<CITY> in data_source) are ODbL-licensed;
+  // this attribution line is required, keep it whenever any city has OSM wired.
+  { city: 'Tempe', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
+  { city: 'Boston', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [

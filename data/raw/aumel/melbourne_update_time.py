@@ -15,11 +15,10 @@ Reads: .metas.default.modified  (ISO 8601 string)
 
 import sys
 from pathlib import Path
-import pyarrow as pa
 from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import get_with_retry
+from _ingest_shared import emit_freshness, get_json_with_retry
 
 METADATA_URL = (
     "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets/"
@@ -28,8 +27,7 @@ METADATA_URL = (
 
 
 def fetch_modified_at() -> datetime:
-    r = get_with_retry(METADATA_URL)
-    meta = r.json()
+    meta = get_json_with_retry(METADATA_URL)
 
     ts = meta.get("metas", {}).get("default", {}).get("modified")
     if ts is None:
@@ -38,18 +36,5 @@ def fetch_modified_at() -> datetime:
     return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
-def emit(updated_at: datetime) -> None:
-    table = pa.table(
-        {
-            "city": pa.array(["AUMEL"], type=pa.string()),
-            "data_updated_through": pa.array(
-                [updated_at], type=pa.timestamp("us", tz="UTC")
-            ),
-        }
-    )
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
-
-
 if __name__ == "__main__":
-    emit(fetch_modified_at())
+    emit_freshness("AUMEL", fetch_modified_at)

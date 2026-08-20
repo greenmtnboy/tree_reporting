@@ -51,7 +51,8 @@ root partial datasource deber_community_tree_info (
 )
 grain (tree_id)
 complete where city = 'DEBER' and deber_source = 'COMMUNITY_DEBER'
-file `../community_tree_info.py`;
+file `../community_tree_info.py`
+where city = 'DEBER';
 
 
 partial datasource berlin_tree_info (

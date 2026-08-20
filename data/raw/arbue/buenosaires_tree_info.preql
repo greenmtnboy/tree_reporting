@@ -51,7 +51,8 @@ root partial datasource arbue_community_tree_info (
 )
 grain (tree_id)
 complete where city = 'ARBUE' and arbue_source = 'COMMUNITY_ARBUE'
-file `../community_tree_info.py`;
+file `../community_tree_info.py`
+where city = 'ARBUE';
 
 partial datasource buenosaires_tree_info (
     tree_id,

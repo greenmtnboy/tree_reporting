@@ -35,6 +35,11 @@ SKIP_SPECIES: set[str] = {
     "Scheduled Planting Site - Spring 2026",
     "Vacant Unacceptable/Retired",
     "Vacant site medium",
+    # The sentinel every ingest writes for a tree with no identifiable
+    # species (_ingest_shared.UNKNOWN_SPECIES).  It is a real value in the
+    # `species` key so joins stay null-free, but it is not a taxon and must
+    # never be sent to the enrichment LLM.
+    "Unknown",
 }
 
 # SQL fragment for use in WHERE clauses when selecting from tree_info parquet.
@@ -44,7 +49,8 @@ SPECIES_EXCLUSION_SQL = (
     " AND trim(species) != ''"
     " AND lower(trim(species)) NOT IN ("
     "  '::', 'tree', 'to be determine''d',"
-    "  ':: tree', ':: brisbane box', ':: to be determine'"
+    "  ':: tree', ':: brisbane box', ':: to be determine',"
+    "  'unknown'"
     ")"
 )
 

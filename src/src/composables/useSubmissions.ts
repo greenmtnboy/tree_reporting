@@ -18,6 +18,7 @@ import {
   uploadBytesResumable,
 } from 'firebase/storage'
 import { db, storage } from '../lib/firebase'
+import { e2eCheckins, e2ePhotoUrl, e2eSubmissions } from '../lib/e2eFixtures'
 import type { Firestore } from 'firebase/firestore'
 import type { FirebaseStorage } from 'firebase/storage'
 import { signInIfNeeded, useAuth } from './useAuth'
@@ -59,6 +60,14 @@ export interface Checkin {
   distanceMeters: number | null
   photoPath: string | null
   at: Date | null
+  // Tree facts snapshotted at check-in time (null on older check-ins).
+  // Achievements read these because the tree's city parquet may not be
+  // loaded when they are evaluated.
+  species: string | null
+  treeForm: string | null
+  dbhInches: number | null
+  plantYear: number | null
+  speciesCityCount: number | null
 }
 
 export interface CheckinInput {
@@ -70,6 +79,11 @@ export interface CheckinInput {
   distanceMeters: number
   city: string
   photoBlob?: Blob
+  species?: string | null
+  treeForm?: string | null
+  dbhInches?: number | null
+  plantYear?: number | null
+  speciesCityCount?: number | null
   onProgress?: (fraction: number) => void
 }
 
@@ -215,6 +229,11 @@ function mapCheckinDoc(id: string, data: Record<string, unknown>): Checkin {
         : Number(data.distanceMeters),
     photoPath: (data.photoPath as string | null) ?? null,
     at: at instanceof Timestamp ? at.toDate() : null,
+    species: (data.species as string | null) ?? null,
+    treeForm: (data.treeForm as string | null) ?? null,
+    dbhInches: data.dbhInches == null ? null : Number(data.dbhInches),
+    plantYear: data.plantYear == null ? null : Number(data.plantYear),
+    speciesCityCount: data.speciesCityCount == null ? null : Number(data.speciesCityCount),
   }
 }
 
@@ -257,6 +276,11 @@ export async function recordCheckin(input: CheckinInput): Promise<string> {
     city: input.city,
     distanceMeters: input.distanceMeters,
     photoPath,
+    species: input.species ?? null,
+    treeForm: input.treeForm ?? null,
+    dbhInches: input.dbhInches ?? null,
+    plantYear: input.plantYear ?? null,
+    speciesCityCount: input.speciesCityCount ?? null,
     at: serverTimestamp(),
   }
   const docRef = await addDoc(collection(firestore, 'checkins'), docData)
@@ -264,6 +288,10 @@ export async function recordCheckin(input: CheckinInput): Promise<string> {
 }
 
 export async function listMySubmissions(maxResults = 50): Promise<Submission[]> {
+  // Playwright fixtures stand in for Firestore; no-op in a normal build.
+  const seeded = e2eSubmissions()
+  if (seeded) return seeded.slice(0, maxResults)
+
   const { db: firestore } = requireFirebase()
   const user = await signInIfNeeded()
   const q = query(
@@ -277,6 +305,9 @@ export async function listMySubmissions(maxResults = 50): Promise<Submission[]> 
 }
 
 export async function listMyCheckins(maxResults = 50): Promise<Checkin[]> {
+  const seeded = e2eCheckins()
+  if (seeded) return seeded.slice(0, maxResults)
+
   const { db: firestore } = requireFirebase()
   const user = await signInIfNeeded()
   const q = query(
@@ -290,6 +321,9 @@ export async function listMyCheckins(maxResults = 50): Promise<Checkin[]> {
 }
 
 export async function getSubmissionPhotoUrl(photoPath: string): Promise<string> {
+  const seeded = e2ePhotoUrl(photoPath)
+  if (seeded) return seeded
+
   const { storage: bucket } = requireFirebase()
   return getDownloadURL(storageRef(bucket, photoPath))
 }

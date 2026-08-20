@@ -16,12 +16,10 @@ Reads: .metas.default.modified  (ISO 8601 string)
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pyarrow as pa
-import requests
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit
+from _ingest_shared import emit_freshness, get_json_with_retry
 
 METADATA_URL = (
     "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/heritage-sites"
@@ -29,9 +27,7 @@ METADATA_URL = (
 
 
 def fetch_last_modified() -> datetime:
-    r = requests.get(METADATA_URL, timeout=30)
-    r.raise_for_status()
-    meta = r.json()
+    meta = get_json_with_retry(METADATA_URL, timeout=30)
     ts = meta.get("metas", {}).get("default", {}).get("modified")
     if ts is None:
         raise RuntimeError("Dataset metadata missing metas.default.modified")
@@ -39,13 +35,4 @@ def fetch_last_modified() -> datetime:
 
 
 if __name__ == "__main__":
-    emit(
-        pa.table(
-            {
-                "city": pa.array(["CAVAN"], type=pa.string()),
-                "data_updated_through": pa.array(
-                    [fetch_last_modified()], type=pa.timestamp("us", tz="UTC")
-                ),
-            }
-        )
-    )
+    emit_freshness("CAVAN", fetch_last_modified)

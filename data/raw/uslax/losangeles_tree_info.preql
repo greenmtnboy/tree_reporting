@@ -51,7 +51,8 @@ root partial datasource uslax_community_tree_info (
 )
 grain (tree_id)
 complete where city = 'USLAX' and uslax_source = 'COMMUNITY_USLAX'
-file `../community_tree_info.py`;
+file `../community_tree_info.py`
+where city = 'USLAX';
 
 partial datasource losangeles_tree_info (
     tree_id,

@@ -12,11 +12,10 @@ parquet as stale and rebuilds it (producing an empty dataset).
 
 from datetime import datetime, timezone
 from pathlib import Path
-import pyarrow as pa
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit
+from _ingest_shared import emit_freshness
 
 CSV_PATH = Path(__file__).parent / "burlington_landmarks.csv"
 
@@ -28,13 +27,4 @@ def modified_at() -> datetime:
 
 
 if __name__ == "__main__":
-    emit(
-        pa.table(
-            {
-                "city": pa.array(["USBTV"], type=pa.string()),
-                "data_updated_through": pa.array(
-                    [modified_at()], type=pa.timestamp("us", tz="UTC")
-                ),
-            }
-        )
-    )
+    emit_freshness("USBTV", modified_at)

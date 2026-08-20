@@ -1,0 +1,53 @@
+# Minimal repro: `merge <derived auto> into <declared property>` breaks persist
+# resolution when the persisted datasource also carries a root-probe watermark.
+#
+# Three ingredients, all required (remove any one and the plan resolves):
+#   1. A property populated only via `merge derived_measure into measure;`
+#      (no datasource maps `measure` directly).
+#   2. A `<*>`-scoped datetime property sourced from a *separate* root
+#      datasource (the freshness-watermark pattern).
+#   3. A managed (non-root) datasource declaring BOTH concepts as columns.
+#
+# Refreshing the managed datasource then fails (0.3.331+) with:
+#   UnresolvableQueryException: Persist to merged_rows_out would write 2 of 3
+#   declared columns: the plan's final projection has no source for measure
+#   (local.measure). Writing it would shift every later column into the wrong
+#   field.
+# On 0.3.316-0.3.330 the same plan "succeeds" but silently omits `measure`
+# from the INSERT projection; 0.3.315 generates correct SQL.
+#
+# The derivation itself is irrelevant: raw_measure + 1.0 here, but a
+# partitioned imputation aggregate (coalesce(x, avg(x) by k)) fails
+# identically. Declaring `auto measure <- ...` directly (no merge) works, as
+# does dropping the watermark column from the managed datasource.
+
+key entity_id string;
+
+property <*>.updated_through datetime;
+
+property entity_id.raw_measure float;
+property entity_id.measure float;
+
+auto derived_measure <- raw_measure + 1.0;
+merge derived_measure into measure;
+
+root datasource update_time (
+    updated_at: updated_through
+)
+query '''SELECT TIMESTAMP '2026-08-01 00:00:00' AS updated_at''';
+
+root datasource raw_rows (
+    entity_id: entity_id,
+    raw_measure: raw_measure,
+)
+grain (entity_id)
+query '''SELECT * FROM (VALUES ('p1', 10.0)) t(entity_id, raw_measure)''';
+
+datasource merged_rows (
+    entity_id,
+    measure,
+    updated_through,
+)
+grain (entity_id)
+address merged_rows_out
+freshness by updated_through;

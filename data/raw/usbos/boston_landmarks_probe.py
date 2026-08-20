@@ -7,21 +7,17 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pyarrow as pa
-import requests
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit
+from _ingest_shared import emit_freshness, get_json_with_retry
 
 RESOURCE_ID = "fb53d967-ead6-4b4e-ab17-506521434038"
 METADATA_URL = f"https://data.boston.gov/api/3/action/resource_show?id={RESOURCE_ID}"
 
 
 def fetch_rows_updated_at() -> datetime:
-    r = requests.get(METADATA_URL, timeout=30)
-    r.raise_for_status()
-    meta = r.json()
+    meta = get_json_with_retry(METADATA_URL, timeout=30)
 
     result = meta.get("result", {})
     ts = result.get("last_modified") or result.get("created")
@@ -35,13 +31,4 @@ def fetch_rows_updated_at() -> datetime:
 
 
 if __name__ == "__main__":
-    emit(
-        pa.table(
-            {
-                "city": pa.array(["USBOS"], type=pa.string()),
-                "data_updated_through": pa.array(
-                    [fetch_rows_updated_at()], type=pa.timestamp("us", tz="UTC")
-                ),
-            }
-        )
-    )
+    emit_freshness("USBOS", fetch_rows_updated_at)

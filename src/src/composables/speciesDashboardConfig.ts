@@ -1,6 +1,7 @@
 import type { ChartConfig, DashboardImport } from '@trilogy-data/trilogy-studio-components/dashboard'
 import { CITY_CONFIG, type CityCode } from './useMapData'
 import { treeFormColorSql } from '../treeFormColors'
+import { REAL_SPECIES_PREDICATE } from '../data/species'
 
 export type SpeciesDashboardChart = {
   id: string
@@ -79,7 +80,7 @@ SELECT
   coalesce(common_names[1], species) as display_name,
   count(tree_id) as tree_count,
   (cast(count(tree_id) as float) / cast(count(tree_id) by * as float))::float::percent as pct_of_total
-WHERE species IS NOT NULL
+WHERE ${REAL_SPECIES_PREDICATE}
 ORDER BY tree_count DESC
 LIMIT 15;`,
     chartConfig: {

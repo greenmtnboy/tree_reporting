@@ -26,8 +26,30 @@ studio_url="http://localhost:5173/trilogy-studio-core/"
 org = "trilogy-data"
 name = "urban-tree-data"
 operation = "refresh"
-# Daily at 6 AM UTC — the same tick the retired GitHub Actions cron used.
-schedule = "0 0 6 * * *"
+# Three ticks, none of them in a portal's published maintenance window:
+# municipal portals 503 intermittently (Buenos Aires especially) or go down for
+# maintenance, and a tick that finds nothing stale exits up_to_date in a few
+# minutes, so extra attempts are close to free.
+#
+# The morning tick moved off 06:00 UTC (inherited from the retired GitHub
+# Actions cron) because Berlin publishes a *weekly* window — "Regelmäßiges
+# Wartungsfenster: Donnerstags von 8:00 bis 10:00 Uhr"
+# (berlin.de/sen/stadt/stadtdaten/geodaten-berlin/geoportal-daten-und-dienste/).
+# That is 06:00-08:00 UTC in CEST and 07:00-09:00 UTC in CET, so 06:00 UTC sat
+# inside it every Thursday of the summer. 04:00 / 12:00 / 20:00 clear the whole
+# 06:00-09:00 UTC band year-round.
+#
+# One job for the whole directory, deliberately. pytrilogy >=0.3.328 can declare
+# several jobs over one tree as a `[[cloud.job]]` array — a natural fit for
+# giving an outage-prone city (Berlin) its own cheap catch-up ticks, or for
+# splitting trees / landmarks / enrichment into lanes that cannot eat each
+# other's timeout. It is all-or-nothing: once one entry exists this block is
+# defaults only, every job must name its own `entrypoint`, and identity moves
+# from the path to `path::key`, so a `--prune` sync replaces this job rather
+# than editing it. Not worth that churn while the probes degrade instead of
+# aborting (data/raw/_ingest_shared.py::emit_freshness) and three daily ticks
+# already give every city three chances.
+schedule = "0 0 4,12,20 * * *"
 # A fully stale rebuild downloads every municipal dataset (~50MB each across
 # fourteen cities); the common case is a couple of stale cities or a clean
 # "already fresh" exit.

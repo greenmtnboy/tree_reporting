@@ -53,7 +53,8 @@ root partial datasource gblon_community_tree_info (
 )
 grain (tree_id)
 complete where city = 'GBLON' and gblon_source = 'COMMUNITY_GBLON'
-file `../community_tree_info.py`;
+file `../community_tree_info.py`
+where city = 'GBLON';
 
 
 partial datasource london_tree_info (

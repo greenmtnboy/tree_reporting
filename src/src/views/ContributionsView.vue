@@ -18,6 +18,12 @@
       </section>
       <template v-else>
         <section class="section">
+          <h2 class="section-title">Achievements</h2>
+          <p v-if="loading" class="muted">Loading…</p>
+          <AchievementGrid v-else :submissions="submissions" :checkins="checkins" />
+        </section>
+
+        <section class="section">
           <h2 class="section-title">Submissions</h2>
           <p v-if="loading" class="muted">Loading…</p>
           <p v-else-if="error" class="error-text">{{ error.message }}</p>
@@ -73,6 +79,7 @@ import { useAuth } from '../composables/useAuth'
 import { useMyContributions } from '../composables/useSubmissions'
 import { firebaseAvailable } from '../lib/firebase'
 import SubmissionThumbnail from '../components/SubmissionThumbnail.vue'
+import AchievementGrid from '../components/AchievementGrid.vue'
 
 const { user, authReady } = useAuth()
 const { submissions, checkins, loading, error, refresh } = useMyContributions()

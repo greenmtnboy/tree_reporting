@@ -108,6 +108,115 @@ source: Trilogy treats the municipal source as covering the whole city and
 silently emits **zero** community rows, with no error anywhere. Each raw source
 must claim `complete where city = 'X' and {code}_source = 'Y'`.
 
+### Supplemental OpenStreetMap sources (opt-in per city)
+
+A city can carry a third partition of `natural=tree` nodes from OSM, labelled
+`OSM_{CODE}`. Unlike community (which every city gets), OSM is opt-in: a city
+appears in `OSM_DATA_SOURCES` in `data/raw/_ingest_shared.py` once its wiring
+exists. Tempe (`ustem/`) is the reference implementation and Boston (`usbos/`)
+the second wired city (note how its OSM partition maps dbh to `_raw_dbh` so
+OSM rows share the city's imputation);
+`test_osm_city_is_fully_wired` asserts every half of the wiring below.
+
+**Extraction is decoupled from refresh.** `{city}_osm_extract.py` queries
+Overpass and writes a committed `{code}_osm_staging.parquet`; the refresh
+pipeline only ever reads that file. Two reasons: Overpass 429/504s routinely
+under load (fetching at refresh time would couple every municipal rebuild to
+Overpass being up), and the only cheap OSM watermark is the global database
+timestamp, which advances every minute and would mark the city stale on every
+tick. Instead `{city}_osm_probe.py` emits the staging file's mtime, so
+re-running the extract and committing is what makes the Parquet stale. The
+extract is deliberately self-contained so it can later move onto a weekly
+`[[cloud.job]]` without a rewrite.
+
+**Dedup is stacking + aggregate, not an anti-join.** OSM overlaps the
+municipal inventory by construction. Trilogy's joins are equality-only (a
+non-`=` join key is rejected at hydration), so a spatial anti-join cannot be
+expressed in the model — and doing it in a script against the published
+Parquet would dedup one rebuild cycle stale. The model instead derives a grid
+cell from lat/lon in **four copies of a ~10m grid staggered by half a cell**
+(x, y, and both), counts non-OSM anchors per cell with a filtered aggregate,
+and flags an OSM row whose cell in *any* grid contains an anchor. Two points
+within half a cell (~5m) always share a cell in at least one grid, so this is
+an equi-join-shaped stand-in for "within 5m", with possible matches out to a
+cell diagonal (~14m). An unnest-based 3x3 neighborhood would give an exact
+radius but sits on the merged-unnest planner path that has regressed twice
+upstream; don't.
+
+**Why the cell is 10m (5m guarantee), not 20m.** Distance alone cannot
+distinguish a re-mapped inventory tree from the next tree in a planted row:
+Tempe's inventory has a *median* nearest-neighbor spacing of 6.5m, and 79.5%
+of inventory trees have another inventory tree within 10m. What does separate
+the populations is pair structure, measured by
+`data/raw/ustem/tempe_dedup_validation.py` (exact haversine, mutual-NN, 1:1
+matching, local density): OSM points within 5m of an inventory tree are
+mutual nearest neighbors with it >=88% of the time (99.7% below 2m), sit
+3-8x closer to it than to the second-closest, and appear where OSM:inventory
+local density is 1:1 — the inventory re-mapped with GPS/imagery offset. In the
+5-10m band mutual-NN collapses to 25%, meaning roughly three quarters of those
+matches are distinct neighbors at planting-row spacing. A 20m cell (10m
+guarantee, 28m reach) flagged ~80 more OSM rows, most of them likely real
+trees; the error asymmetry favors the smaller cell, since a missed duplicate
+double-renders one visible, toggleable dot while a false flag hides a real
+tree. When wiring a new city, re-run the validation script against that city's
+inventory before copying the cell size — the 5m break reflects Tempe's small
+OSM positional offsets, and a city traced from misaligned imagery may need a
+larger cell (Berlin and Paris can calibrate against `osm_ref` exact-id
+matches). Per-city thresholds are expected as OSM rolls out.
+
+**Flag, never drop.** The dedup materializes as an `is_duplicate` boolean
+column (aliased from `{code}_is_duplicate`), and the Parquet keeps every row.
+Dropping rows would break the partition-completeness proof (the Parquet must
+contain the union of its declared sources); the flag also makes dedup tunable
+and auditable — toggle flagged rows on the map to evaluate the cell size.
+Because the flag is computed from the same materialization's source rows, a
+municipal update dedups against itself in the same rebuild; there is no
+staleness window.
+
+**`complete where` asserts; `where` filters.** These are different clauses and
+a shared source needs both. `complete where city = 'X' and {code}_source = 'Y'`
+is a *model-level assertion* — "this source holds the complete set of rows for
+that partition" — and does not promise the planner will inject a predicate.
+`community_tree_info.py` is read by all fourteen cities and returns *every*
+city's approved submissions, so each city's datasource has to restrict its rows
+itself, with a `where` clause after the file clause:
+
+```preql
+root partial datasource {code}_community_tree_info (
+    ...
+)
+grain (tree_id)
+complete where city = '{CODE}' and {code}_source = 'COMMUNITY_{CODE}'
+file `../community_tree_info.py`
+where city = '{CODE}';
+```
+
+Read together: "only {CODE}'s trees, and this is all of them."
+
+This was missing for a long time without visible symptoms, because the planner
+*happened* to inject a predicate for the twelve cities with no OSM partition
+and not for the two with one — the presence of the `is_duplicate` column, whose
+value comes from an aggregate across the stacked partitions, is what decides it.
+Tempe's Parquet accordingly shipped three `city = 'USBOS'` rows. Do not rely on
+the injection: write the `where`. Trilogy compiles it into both a SQL predicate
+and a `--filter 'city={CODE}'` argument to the script, which
+`community_tree_info.py` honours so that fourteen invocations do not each read
+and emit the whole export. Write-up in
+`upstream_repro/partition_filter_dropped/`.
+
+**Frontend sequencing warning:** the worker must not `SELECT is_duplicate`
+until *every* city's Parquet has been rebuilt with the column — DuckDB binder
+errors on the cities that lack it, one city at a time. Either roll the column
+out everywhere first, or have the worker filter per-city.
+
+Other details: OSM `circumference` defaults to metres but is frequently
+mis-entered as bare centimetres — the extract treats a unitless value > 10 as
+cm. The staging schema keeps the node's `ref` tag (`osm_ref`): empty for
+Tempe, but Berlin (~6k) and Paris (~4k) carry the municipal inventory id
+there, enabling exact-id dedup when those cities are wired. OSM data is ODbL:
+add "(c) OpenStreetMap contributors" attribution in `README.md` and
+`src/src/data/sourceCatalog.ts` when wiring a city.
+
 ---
 
 ## Data Versioning
@@ -197,11 +306,15 @@ Create `data/raw/{city}/{city}_update_time.py`:
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests"]
+# dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
 
-import sys, requests, pyarrow as pa
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _ingest_shared import emit_freshness, get_json_with_retry
 
 def fetch_modified_at() -> datetime:
     # Hit the lightest metadata endpoint your open data platform exposes.
@@ -216,17 +329,53 @@ def fetch_modified_at() -> datetime:
     #   Read: .rowsUpdatedAt  (Unix timestamp)
     raise NotImplementedError
 
-def emit(updated_at: datetime) -> None:
-    table = pa.table({
-        "city": pa.array(["{CODE}"], type=pa.string()),
-        "data_updated_through": pa.array([updated_at], type=pa.timestamp("us", tz="UTC")),
-    })
-    with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-        writer.write_table(table)
-
 if __name__ == "__main__":
-    emit(fetch_modified_at())
+    emit_freshness("{CODE}", fetch_modified_at)
 ```
+
+**Fetch JSON with `get_json_with_retry`, and emit with `emit_freshness`** — do
+not hand-roll `requests.get(...).json()` or the Arrow table.  Both helpers exist
+because of the same failure: every probe is a root datasource, and Trilogy
+collects root watermarks in one planning phase that has no per-probe error
+handling, so *one* probe raising ends the whole `trilogy refresh raw` run before
+any city is refreshed.
+
+- `get_json_with_retry` treats a 2xx whose body isn't JSON as a transient
+  outage, because that is what it usually is: portals in maintenance answer
+  every path with an HTML holding page and HTTP 200 (gdi.berlin.de serves a
+  1.4 KB "Wartungsarbeiten" page for its WFS *and* its metadata API).  It
+  retries with backoff and, when it gives up, raises `UpstreamUnavailable`
+  naming the URL, status, content type and first line of the body — where
+  `.json()` raised a bare `JSONDecodeError: Expecting value: line 2 column 9`.
+- `get_json_with_retry` also classifies a 200 that carries a provider *error
+  envelope* — ArcGIS's `{"error": {"code": 500, ...}}`, Socrata's
+  `{"error": true}`, CKAN's `{"success": false}` — as an outage. Burlington's
+  ArcGIS answered a statistics query exactly that way during an outage; because
+  the body was valid JSON it reached the probe's "no features" guard, which
+  raised a fatal `RuntimeError` and took the whole refresh down. Probes should
+  keep their "missing field" guards, but they must never be the thing that sees
+  a portal outage first.
+- `emit_freshness` catches `UpstreamUnavailable` and emits the epoch instead.
+  The epoch loses every `greatest()`, so the city's Parquet compares as fresh,
+  sits out this run, and is picked up by the next tick once the portal is back —
+  while the other thirteen cities refresh normally.
+
+Anything that is *not* an availability problem must keep raising.  A missing
+field or an unparseable date means the portal changed its schema and our mapping
+is stale; degrading there would freeze that city's Parquet silently and forever.
+Raise `RuntimeError` (as the existing probes do for a missing timestamp field),
+not `UpstreamUnavailable`.
+
+For a probe whose endpoint returns something other than JSON, classify the
+failure yourself — see `deber/berlin_landmarks_probe.py`, which raises
+`UpstreamUnavailable` when Overpass returns a body that is not an ISO timestamp.
+
+**Check the portal's maintenance window before assuming the schedule is fine.**
+Berlin publishes one (Thursdays 08:00-10:00 local), and the refresh's original
+06:00 UTC tick sat inside it every summer Thursday.  The tick times in
+`data/trilogy.toml` avoid the 06:00-09:00 UTC band for that reason; if a new
+city's portal publishes a window that collides, move a tick rather than adding
+one.
 
 Also add the city's freshness property to **`data/raw/tree_common.preql`**:
 
@@ -515,6 +664,34 @@ data/raw/{city}/{city}_landmarks_probe.py    ← freshness probe (same pattern a
 data/raw/{city}/{city}_landmarks.preql       ← datasource with versioned GCS URL
 ```
 
+**If the source is Overpass, stage it instead** — the same decoupling the OSM
+tree extracts use, for the same reason:
+
+```
+data/raw/{city}/{city}_landmarks_extract.py  ← queries Overpass, writes the staging parquet
+data/raw/{city}/{code}_landmarks_staging.parquet  ← committed; the refresh only ever reads this
+data/raw/{city}/{city}_landmarks_probe.py    ← emits the staging file's mtime, no network
+```
+
+Overpass allows **two concurrent slots per client IP** (`GET /api/status`
+reports them), and answers an over-budget request with HTTP 200 carrying either
+an HTML page or a body whose `remark` is a `runtime error` — never a 4xx/5xx.
+London and Berlin both fetched at refresh time, which meant a full refresh with
+`parallelism = 3` could put three Overpass callers in flight against those two
+slots and fail a city on a transient: `london_landmark_info` died that way and
+took `full_landmark_info` with it as a failed dependency, while the same script
+run alone finished in **6.8s**. The query was never the problem; the concurrency
+was.
+
+Staging removes Overpass from the refresh path entirely, and re-running the
+extract and committing the result becomes what marks the city stale — the OSM
+watermark alternative (the global database timestamp) advances every minute and
+would rebuild the city on every tick.
+
+```bash
+cd data/raw && uv run {city}/{city}_landmarks_extract.py   # then commit the parquet
+```
+
 Add the city's landmark freshness property and update the `greatest()` expression in **`data/raw/landmark_common.preql`**:
 
 ```preql
@@ -552,6 +729,69 @@ The `species` field in all tree parquets **must be the scientific name only** (n
 - NYC/Boston already emit scientific names directly
 
 If you add a city whose source data embeds a common name in the species field (any `::` pattern), strip it in the fetch script before emitting.
+
+### Species hygiene is enforced centrally, not per city
+
+`normalize_species` only fixes casing.  Deciding whether a value is a taxon at
+all is `sanitize_species`, called for every city from `enforce_tree_schema`, so
+a new city inherits it without doing anything.  It drops what is not a
+scientific name — inventory placeholders (`Vacant`, `Unknown`, `Onbekend`,
+`No identificado`, `Empty pit/planting site`), free-typed OSM tags (`Pin oak`,
+`Serviceberry or dogwood?`), abbreviated genera (`Amel. laevis 'spring
+flurry'`) — and truncates the rest to species rank, so
+`Gleditsia triacanthos var. inermis` and `Prunus serrulata 'kwanzan'` collapse
+onto the binomial the enrichment table is keyed on.  Applied to the published
+data this cut distinct species 6,418 → 3,776 and the enrichment backlog
+1,568 → 734 city/species pairs.
+
+Both hybrid spellings are preserved verbatim: SF publishes
+`Platanus x hispanica`, OSM publishes `Citrus × limon` (U+00D7).  Normalising
+one into the other would orphan every already-enriched hybrid, so don't.
+
+Anything that survives as a non-taxon becomes `UNKNOWN_SPECIES` (`"Unknown"`),
+never null — see the next section for why — and that sentinel is excluded from
+enrichment **by name** in `SKIP_SPECIES` / `SPECIES_EXCLUSION_SQL`
+(`enrichment/_tree_shared.py`), which is also where a new placeholder value
+belongs.  `enforce_tree_schema` prints a per-ingest summary of how many values
+it reshaped, so a run that rewrites a tenth of its species column says so in
+the refresh log rather than doing it quietly.
+
+### Mark a nullable column `?` or Trilogy will silently drop rows
+
+A datasource column declared without `?` is non-nullable, and Trilogy generates
+plain `=` joins for it.  `NULL = NULL` is never true, so **every row with a
+null in that column vanishes from the materialised Parquet, with no error**.
+
+Boston is the worked example.  Its dbh imputation
+(`auto processed_dbh <- coalesce(_cleaned_db, avg(_cleaned_db) by city, species)`)
+compiles to a join of the species-average CTE back onto the rows:
+
+```sql
+INNER JOIN "abhorrent" on "macho"."city" = "abhorrent"."city"
+                      AND "macho"."species" = "abhorrent"."species"
+```
+
+Boston's municipal sources always carry a species, so this was invisible for
+months.  Wiring OSM exposed it: OSM `natural=tree` nodes are ~99% species-less,
+and the first rebuild wrote **349 of 28,163** OSM rows.  Declaring
+`spp_bot: ?species` (and the same on every other Boston datasource) changes the
+generated predicate to `is not distinct from`, which matches null to null:
+
+```sql
+AND "macho"."species" is not distinct from "abhorrent"."species"
+```
+
+Boston is currently the only city with a species-keyed aggregate, so it is the
+only one that needed it — but the rule is general.  If a city adds an aggregate
+keyed on a column that any of its sources can leave empty, mark that column
+`?` in **every** datasource that maps it, and check the rendered SQL:
+
+```bash
+cd data && trilogy refresh raw/{city}/{city}_tree_info.preql -f {city}_tree_info --dry-run
+```
+
+Row counts are the cheap tell — compare each `data_source` partition in the new
+Parquet against the source row count before assuming a rebuild succeeded.
 
 ### After Adding a New City
 

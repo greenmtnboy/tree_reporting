@@ -3,53 +3,40 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
+"""Freshness probe for London landmarks.
 
-"""
-Freshness probe for London landmarks.
+Emits the mtime of gblon_landmarks_staging.parquet.  Extraction is decoupled
+from refresh -- london_landmarks_extract.py queries Overpass and commits
+the staging file, and this probe never touches the network -- so the moment the
+published Parquet becomes stale is the moment that file changes.
 
-Runs the same Overpass filter as london_landmarks.py but with `out ids meta`
-(no geometry, no tags) to cheaply get the max element timestamp — the actual
-date the most recently edited matching landmark was changed in OSM.
+Two reasons, both the same ones the OSM tree extracts already follow (see
+EXTENDING.md).  Overpass allows two concurrent slots per client IP and answers
+an over-budget request with a 200 carrying an HTML page or a `runtime error`
+remark; with three Overpass callers reachable at refresh time and
+`parallelism = 3`, a full refresh could throttle itself and fail a city on a
+transient.  And the only cheap OSM-wide watermark is the database timestamp,
+which advances every minute and would mark the city stale on every tick.
+
+A missing staging file emits the epoch (the city sits out this run) rather than
+raising: one absent optional source must never abort the whole refresh.
 """
 
 import sys
-from pathlib import Path
 from datetime import datetime, timezone
-import pyarrow as pa
+from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, post_with_retry, OVERPASS_HEADERS
+from _ingest_shared import emit_freshness  # noqa: E402
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
-
-QUERY = """
-[out:json][timeout:60];
-(
-  node["heritage:operator"="Historic England"](51.28,-0.56,51.70,0.35);
-  way["heritage:operator"="Historic England"](51.28,-0.56,51.70,0.35);
-  relation["heritage:operator"="Historic England"](51.28,-0.56,51.70,0.35);
-);
-out ids meta;
-"""
+STAGING_PATH = Path(__file__).parent / "gblon_landmarks_staging.parquet"
 
 
-def fetch_modified_at() -> datetime:
-    r = post_with_retry(OVERPASS_URL, data={"data": QUERY}, timeout=90, headers=OVERPASS_HEADERS)
-    elements = r.json().get("elements", [])
-    timestamps = [e["timestamp"] for e in elements if "timestamp" in e]
-    if not timestamps:
-        return datetime.now(tz=timezone.utc)
-    latest = max(timestamps)
-    return datetime.fromisoformat(latest.replace("Z", "+00:00")).astimezone(timezone.utc)
+def modified_at() -> datetime:
+    if not STAGING_PATH.exists():
+        return datetime.fromtimestamp(0, tz=timezone.utc)
+    return datetime.fromtimestamp(STAGING_PATH.stat().st_mtime, tz=timezone.utc)
 
 
 if __name__ == "__main__":
-    emit(
-        pa.table(
-            {
-                "city": pa.array(["GBLON"], type=pa.string()),
-                "data_updated_through": pa.array(
-                    [fetch_modified_at()], type=pa.timestamp("us", tz="UTC")
-                ),
-            }
-        )
-    )
+    emit_freshness("GBLON", modified_at, label="GBLON landmarks staging")

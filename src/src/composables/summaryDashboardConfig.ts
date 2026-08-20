@@ -1,6 +1,7 @@
 import type { ChartConfig, DashboardImport } from '@trilogy-data/trilogy-studio-components/dashboard'
 import { CITY_CONFIG, type CityCode } from './useMapData'
 import { treeFormColorSql } from '../treeFormColors'
+import { REAL_SPECIES_PREDICATE } from '../data/species'
 
 export type SummaryDashboardChart = {
   id: string
@@ -51,7 +52,7 @@ export const SUMMARY_KPI_CHARTS: SummaryDashboardKpi[] = [
     id: 'unique-species',
     label: 'Diversity',
     title: 'Unique Species',
-    query: 'SELECT count(species ? count(tree_id) by species > 0) as unique_species WHERE species IS NOT NULL;',
+    query: `SELECT count(species ? count(tree_id) by species > 0) as unique_species WHERE ${REAL_SPECIES_PREDICATE};`,
     xField: 'unique_species',
   },
   {

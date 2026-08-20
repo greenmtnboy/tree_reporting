@@ -51,7 +51,8 @@ root partial datasource cavan_community_tree_info (
 )
 grain (tree_id)
 complete where city = 'CAVAN' and cavan_source = 'COMMUNITY_CAVAN'
-file `../community_tree_info.py`;
+file `../community_tree_info.py`
+where city = 'CAVAN';
 
 
 partial datasource vancouver_tree_info (

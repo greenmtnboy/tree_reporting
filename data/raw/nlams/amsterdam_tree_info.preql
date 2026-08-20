@@ -51,7 +51,8 @@ root partial datasource nlams_community_tree_info (
 )
 grain (tree_id)
 complete where city = 'NLAMS' and nlams_source = 'COMMUNITY_NLAMS'
-file `../community_tree_info.py`;
+file `../community_tree_info.py`
+where city = 'NLAMS';
 
 
 partial datasource amsterdam_tree_info (

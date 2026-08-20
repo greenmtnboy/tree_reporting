@@ -15,16 +15,19 @@ from __future__ import annotations
 
 import io
 import math
+import re
 import struct
 import sys
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
 import pyarrow as pa
 from trilogy.io.arrow import emit_arrow as emit  # noqa: F401  (re-exported)
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import requests
 
 
@@ -76,6 +79,148 @@ def normalize_species_parts(genus: str | None, epithet: str | None) -> str | Non
     return " ".join(parts)
 
 
+# Inventory placeholders that several portals use for an empty or
+# unidentifiable planting site.  They are not taxa and must never reach the
+# `species` key, where they would be handed to the enrichment LLM every run.
+_SPECIES_PLACEHOLDERS = frozenset(
+    {
+        "unknown", "unknown tree", "unbekannt", "onbekend",
+        "onbekend (algemeen)", "no identificado", "unidentified",
+        "unidentified unidentified", "undetermined", "not identified",
+        "none", "n/a", "na", "other", "vacant", "dead", "stump", "empty",
+    }
+)
+
+# English common-name nouns that never occur as a Latin specific epithet.  A
+# two-word value ending in one of these is a common name ("Pin oak", "Red
+# maple"), not a binomial.  Genus-shaped entries (magnolia, catalpa) are safe
+# here because they are only ever tested in *epithet* position.
+_COMMON_NAME_NOUNS = frozenset(
+    {
+        "oak", "maple", "elm", "ash", "pine", "spruce", "fir", "cedar",
+        "cherry", "plum", "birch", "beech", "linden", "locust", "willow",
+        "poplar", "hawthorn", "dogwood", "sycamore", "walnut", "hickory",
+        "gum", "holly", "plane", "tree", "palm", "cypress", "hemlock",
+        "larch", "alder", "aspen", "buckeye", "chestnut", "catalpa",
+        "redbud", "pear", "apple", "crabapple", "magnolia", "ginkgo",
+        "juniper", "yew", "laurel", "sweetgum", "cottonwood", "boxelder",
+        "fruit", "flower", "fleur", "shrub", "hedge",
+    }
+)
+
+# Both spellings of the hybrid mark occur in the wild and both are kept
+# verbatim: SF publishes "Platanus x hispanica", OSM publishes
+# "Citrus × limon", and the enrichment table is already keyed on
+# whichever form its city emitted.  Rewriting one into the other here would
+# orphan every already-enriched hybrid.
+_HYBRID_MARKS = frozenset({"x", "×"})
+
+# Rank qualifiers introduce infraspecific detail the species key does not
+# carry; the name is truncated in front of them ("Viburnum cf. corylifolium"
+# -> "Viburnum corylifolium" is wrong, so it becomes "Viburnum").
+_RANK_QUALIFIERS = frozenset(
+    {"cf", "var", "subsp", "ssp", "forma", "f", "spp", "sp", "group", "x"}
+)
+
+# A cultivar epithet is always quoted, and whatever trails it is a note
+# ("Malus 'spring snow' high brnch"), so the name is truncated at the quote
+# rather than having the quoted run excised from the middle.
+_QUOTE_CHARS = "'\"‘’“”"
+
+
+# What a tree whose species we do not know is called.  `species` is a Trilogy
+# key, and carrying a real value rather than a null keeps it join-safe
+# everywhere without relying on null-matching semantics.  It is excluded from
+# enrichment by name via SKIP_SPECIES / SPECIES_EXCLUSION_SQL in
+# enrichment/_tree_shared.py -- an explicit, greppable exclusion rather than a
+# silent skip.
+UNKNOWN_SPECIES = "Unknown"
+
+
+def sanitize_species(value: str | None) -> str | None:
+    """Reduce a raw species string to a Latin binomial, or ``None``.
+
+    ``normalize_species`` fixes *casing*; this decides whether the value is a
+    scientific name at all.  Sources disagree wildly on what they put in a
+    species field -- OSM contributors free-type ("Serviceberry or dogwood?",
+    "Pin oak", "Malus 'spring snow' high brnch"), and municipal inventories
+    use placeholders for empty sites ("Vacant", "Onbekend").  Everything that
+    is not a binomial is dropped to ``None`` rather than kept, because the
+    `species` key is the join key into the enrichment table: junk there is
+    both a permanent LLM cost and a wrong label on the map.
+
+    Returns the genus, optionally followed by a hybrid mark and an epithet.
+    Cultivars, rank qualifiers and trailing notes are truncated away.
+
+    Examples:
+        "Acer platanoides"              -> "Acer platanoides"
+        "Citrus × limon"                -> "Citrus × limon"   (mark preserved)
+        "Platanus x hispanica"          -> "Platanus x hispanica"
+        "X amelasorbus jackii"          -> "X amelasorbus jackii"
+        "Fagus spp"                     -> "Fagus"
+        "Malus 'spring snow' high brnch"-> "Malus"
+        "Pin oak"                       -> None  (common name)
+        "Serviceberry or dogwood?"      -> None
+        "Amel. laevis 'spring flurry'"  -> None  (abbreviated genus)
+        "Vacant"                        -> None
+    """
+    s = normalize_species(value)
+    if s is None:
+        return None
+
+    if s.lower() in _SPECIES_PLACEHOLDERS:
+        return None
+    # Free-typed uncertainty and any numeric content are never taxa.
+    if "?" in s or "/" in s or any(ch.isdigit() for ch in s):
+        return None
+    if " or " in s.lower():
+        return None
+
+    # Truncate at a cultivar quote, dropping the cultivar and any trailing note.
+    cut = [s.find(q) for q in _QUOTE_CHARS if s.find(q) != -1]
+    if cut:
+        s = s[: min(cut)]
+    tokens = s.split()
+    if not tokens:
+        return None
+
+    prefix = ""
+    # A leading hybrid mark denotes a nothogenus ("X amelasorbus jackii").
+    if tokens[0].lower() in _HYBRID_MARKS:
+        prefix = tokens[0]
+        tokens = tokens[1:]
+        if not tokens:
+            return None
+
+    genus = tokens[0]
+    # An abbreviated or one/two-letter genus cannot be resolved to a real name.
+    if genus.endswith(".") or len(genus) < 3 or not genus.isalpha():
+        return None
+    if genus.lower() in _SPECIES_PLACEHOLDERS:
+        return None
+
+    hybrid = ""
+    epithet = ""
+    for tok in tokens[1:]:
+        low = tok.rstrip(".").lower()
+        if tok.lower() in _HYBRID_MARKS and not epithet:
+            hybrid = tok
+            continue
+        if low in _RANK_QUALIFIERS or tok.endswith("."):
+            break
+        if not tok.isalpha():
+            break
+        epithet = tok
+        break
+
+    # "Pin oak" / "Red maple": a Latin epithet is never an English tree noun.
+    if epithet and not hybrid and epithet.lower() in _COMMON_NAME_NOUNS:
+        return None
+
+    parts = [p for p in (prefix, genus, hybrid, epithet) if p]
+    return " ".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # Data source labels
 # ---------------------------------------------------------------------------
@@ -123,10 +268,26 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
     code: community_source_for(code) for code in MUNICIPAL_DATA_SOURCES
 }
 
+# Cities with a supplemental OpenStreetMap source, keyed to its label.  Opt-in
+# per city (unlike community, which every city gets): a city appears here once
+# its OSM staging parquet is committed and its tree model declares the
+# `OSM_{code}` enum value and staging datasource.  OSM rows overlap the
+# municipal inventory by construction, so each wired city also derives an
+# `is_duplicate` flag in its model — see the four-grid dedup block in
+# ustem/tempe_tree_info.preql for the reference implementation.
+OSM_DATA_SOURCES: dict[str, str] = {
+    "USTEM": "OSM_USTEM",
+    "USBOS": "OSM_USBOS",
+}
+
 DATA_SOURCES: tuple[str, ...] = tuple(
     label
     for code in MUNICIPAL_DATA_SOURCES
-    for label in (*MUNICIPAL_DATA_SOURCES[code], COMMUNITY_DATA_SOURCES[code])
+    for label in (
+        *MUNICIPAL_DATA_SOURCES[code],
+        COMMUNITY_DATA_SOURCES[code],
+        *((OSM_DATA_SOURCES[code],) if code in OSM_DATA_SOURCES else ()),
+    )
 )
 
 
@@ -220,6 +381,41 @@ def enforce_tree_schema(
             raise ValueError(
                 f"{prefix}: required column '{actual}' ({canonical}) is missing "
                 f"from the emitted table"
+            )
+
+    # Species hygiene, applied for every city at the one chokepoint rather than
+    # per source.  The raw value is the join key into the enrichment table, so
+    # a non-taxon there is both a permanent LLM cost and a wrong map label; see
+    # sanitize_species.  Sources vary in how much junk they carry -- OSM's
+    # free-typed tags and the municipal "Vacant"/"Onbekend" placeholders are the
+    # two big ones -- but none of them are exempt from the binomial contract.
+    species_col = resolved["species"]
+    if species_col in names:
+        sidx = table.schema.get_field_index(species_col)
+        raw_species = table.column(sidx).to_pylist()
+        cleaned: list[str] = []
+        dropped = rewritten = 0
+        for value in raw_species:
+            keep = sanitize_species(value)
+            if keep is None:
+                if value is not None:
+                    dropped += 1
+                cleaned.append(UNKNOWN_SPECIES)
+            else:
+                if keep != value:
+                    rewritten += 1
+                cleaned.append(keep)
+        table = table.set_column(
+            sidx, species_col, pa.array(cleaned, type=pa.string())
+        )
+        # Never silent: a run that reshapes a tenth of its species column
+        # should say so in the refresh log.
+        if dropped or rewritten:
+            print(
+                f"{prefix}: species cleanup -- {dropped} value(s) were not "
+                f"scientific names and became {UNKNOWN_SPECIES!r}, "
+                f"{rewritten} normalised to species rank",
+                file=sys.stderr,
             )
 
     for canonical, target in TREE_COLUMN_TYPES.items():
@@ -362,41 +558,199 @@ OVERPASS_HEADERS = {
     "User-Agent": "sf-tree-reporting/1.0 (https://github.com/greenmtnboy/sf_tree_reporting)"
 }
 
+
+class UpstreamUnavailable(RuntimeError):
+    """An open data portal did not serve usable data.
+
+    Covers everything that is the *portal's* problem rather than ours: connection
+    errors, 5xx, 429, and 2xx responses whose body is not what the endpoint
+    documents (a maintenance page served with HTTP 200 is the common one).
+    Distinct from a parse error against a genuine payload, which means our field
+    mapping is wrong and must stay loud.
+
+    Subclasses RuntimeError so callers that only catch RuntimeError still work.
+    """
+
+
+def _body_snippet(response: requests.Response, limit: int = 160) -> str:
+    """A one-line, truncated preview of a response body for error messages."""
+    text = " ".join((response.text or "").split())
+    # ASCII ellipsis: probe stderr lands in job logs with unpredictable encodings.
+    return text[:limit] + ("..." if len(text) > limit else "")
+
+
+# Overpass reports overload the same way whether it ran out of time or memory;
+# anything else in `remark` (attribution notes, tag advisories) is not a failure.
+_OVERPASS_FAILURE_RE = re.compile(
+    r"runtime error|timed out|out of memory|too many requests", re.I
+)
+
+
+def error_envelope(payload) -> str | None:
+    """A server-side error reported *inside* an HTTP 200 JSON body, if present.
+
+    The GIS platforms these ingests use all answer a failed query with 200 and
+    an error object rather than a 5xx — ArcGIS returns
+    ``{"error": {"code": 500, "message": "Error performing query operation"}}``
+    for a statistics query its backend could not run.  Left unclassified, that
+    reaches the caller as a well-formed payload with no rows, and every probe's
+    "no features" guard turns a portal hiccup into a fatal error.
+    """
+    if not isinstance(payload, dict):
+        return None
+    error = payload.get("error")
+    # ArcGIS / CKAN: a nested error object.
+    if isinstance(error, dict) and (error.get("message") or error.get("code")):
+        return f"{error.get('code', 'error')}: {error.get('message', '')}".strip()
+    # Socrata: {"error": true, "message": "..."}
+    if error is True:
+        return str(payload.get("message") or "error")
+    # CKAN failure with no error object.
+    if payload.get("success") is False:
+        return str(error or "success=false")
+    # Overpass: an overloaded or timed-out query is HTTP 200 with a well-formed
+    # body, an empty `elements` list and the failure in `remark`:
+    #   {"elements": [], "remark": "runtime error: Query timed out in
+    #    \"query\" at line 3 after 180 seconds."}
+    # There is no `error` key, so without this the caller sees a valid payload
+    # with no rows and its own "no features" guard turns an Overpass hiccup
+    # into a fatal, unretried error.  `remark` is also used for benign notes,
+    # so only the failure wordings count.
+    remark = payload.get("remark")
+    if isinstance(remark, str) and _OVERPASS_FAILURE_RE.search(remark):
+        return f"overpass remark: {remark.strip()}"
+    return None
+
+
+def response_json(response: requests.Response, url: str):
+    """Decode a JSON response, or raise UpstreamUnavailable describing the body.
+
+    ``response.json()`` on an HTML maintenance page raises a bare
+    ``JSONDecodeError: Expecting value: line 2 column 9``, which names neither
+    the host nor what it actually served — the failure mode that made a
+    gdi.berlin.de outage read like a bug in the probe.  This reports the status,
+    content type, size and the first line of the body instead.
+
+    A 200 carrying a provider error envelope is treated the same way: it is the
+    portal saying it could not serve the request, so it is worth retrying and
+    worth degrading on, not worth failing the whole refresh over.
+    """
+    try:
+        payload = response.json()
+    except ValueError as e:
+        content_type = response.headers.get("Content-Type") or "unset"
+        raise UpstreamUnavailable(
+            f"{url} returned HTTP {response.status_code} with a non-JSON body "
+            f"(content-type {content_type}, {len(response.content)} bytes): "
+            f"{_body_snippet(response)!r} ({e})"
+        ) from e
+    detail = error_envelope(payload)
+    if detail:
+        raise UpstreamUnavailable(
+            f"{url} returned HTTP {response.status_code} with an error payload: "
+            f"{detail}"
+        )
+    return payload
+
+
+def _retry(
+    attempt: "Callable[[], object]",
+    *,
+    url: str,
+    what: str,
+    max_retries: int,
+    backoff: float,
+):
+    """Call *attempt* until it succeeds, backing off on UpstreamUnavailable.
+
+    *attempt* raises UpstreamUnavailable for a failure worth retrying; any other
+    exception (a 4xx, a bad field mapping) propagates on the first try.
+    """
+    err = ""
+    for i in range(max_retries):
+        try:
+            return attempt()
+        except UpstreamUnavailable as e:
+            err = str(e)
+        if i < max_retries - 1:
+            wait = backoff * (2 ** i)
+            print(
+                f"[retry {i + 1}/{max_retries}] {err}, waiting {wait:.0f}s",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
+    raise UpstreamUnavailable(
+        f"Failed to {what} {url} after {max_retries} attempts: {err}"
+    )
+
+
+def _send(method: str, url: str, **kwargs) -> requests.Response:
+    """One HTTP attempt, classified: retryable failures raise UpstreamUnavailable.
+
+    4xx other than 429 raise HTTPError immediately — auth, forbidden and not
+    found are client-side problems that retrying cannot fix.
+    """
+    import requests
+
+    try:
+        r = requests.request(method, url, **kwargs)
+    except requests.exceptions.RequestException as e:
+        raise UpstreamUnavailable(str(e)) from e
+    if r.status_code < 400:
+        return r
+    if 400 <= r.status_code < 500 and r.status_code != 429:
+        r.raise_for_status()  # raises immediately, no retry
+    raise UpstreamUnavailable(f"HTTP {r.status_code}")
+
+
 def get_with_retry(
     url: str,
     timeout: int = 120,
     max_retries: int = 5,
     backoff: float = 2.0,
     headers: dict | None = None,
+    params: dict | None = None,
 ) -> requests.Response:
     """GET with exponential backoff on 5xx / connection errors.
 
     4xx errors (except 429 Too Many Requests) are not retried — they indicate
     a client-side problem (auth, forbidden, not found) that retrying won't fix.
-    """
-    import requests
 
-    err = ""
-    for attempt in range(max_retries):
-        try:
-            r = requests.get(url, timeout=timeout, headers=headers)
-            if r.status_code < 400:
-                return r
-            if 400 <= r.status_code < 500 and r.status_code != 429:
-                r.raise_for_status()  # raises immediately, no retry
-            err = f"HTTP {r.status_code}"
-        except requests.exceptions.HTTPError:
-            raise  # 4xx non-429: propagate immediately
-        except requests.exceptions.RequestException as e:
-            err = str(e)
-        if attempt < max_retries - 1:
-            wait = backoff * (2 ** attempt)
-            print(
-                f"[retry {attempt + 1}/{max_retries}] {err}, waiting {wait:.0f}s",
-                file=sys.stderr,
-            )
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to fetch {url} after {max_retries} attempts: {err}")
+    Callers expecting JSON should use `get_json_with_retry`, which also retries
+    a 2xx whose body isn't JSON.
+    """
+    return _retry(
+        lambda: _send("GET", url, timeout=timeout, headers=headers, params=params),
+        url=url,
+        what="fetch",
+        max_retries=max_retries,
+        backoff=backoff,
+    )
+
+
+def get_json_with_retry(
+    url: str,
+    timeout: int = 120,
+    max_retries: int = 5,
+    backoff: float = 2.0,
+    headers: dict | None = None,
+    params: dict | None = None,
+):
+    """GET and decode JSON, retrying non-JSON 2xx bodies as well as 5xx.
+
+    Portals in maintenance often answer *every* path with HTTP 200 and an HTML
+    holding page — gdi.berlin.de serves a 1.4 KB "Wartungsarbeiten" page for the
+    WFS and the metadata API alike.  That is a transient outage, so it is worth
+    the same backoff as a 503, and worth an error message that says so.
+    """
+
+    def attempt():
+        response = _send("GET", url, timeout=timeout, headers=headers, params=params)
+        return response_json(response, url)
+
+    return _retry(
+        attempt, url=url, what="fetch JSON from", max_retries=max_retries, backoff=backoff
+    )
 
 
 def post_with_retry(
@@ -412,29 +766,40 @@ def post_with_retry(
     Longer default backoff than get_with_retry — suited to Overpass API.
     4xx errors (except 429) are not retried.
     """
-    import requests
+    return _retry(
+        lambda: _send("POST", url, data=data, timeout=timeout, headers=headers),
+        url=url,
+        what="POST",
+        max_retries=max_retries,
+        backoff=backoff,
+    )
 
-    err = ""
-    for attempt in range(max_retries):
-        try:
-            r = requests.post(url, data=data, timeout=timeout, headers=headers)
-            if r.status_code < 400:
-                return r
-            if 400 <= r.status_code < 500 and r.status_code != 429:
-                r.raise_for_status()  # raises immediately, no retry
-            err = f"HTTP {r.status_code}"
-        except requests.exceptions.HTTPError:
-            raise  # 4xx non-429: propagate immediately
-        except requests.exceptions.RequestException as e:
-            err = str(e)
-        if attempt < max_retries - 1:
-            wait = backoff * (2 ** attempt)
-            print(
-                f"[retry {attempt + 1}/{max_retries}] {err}, waiting {wait:.0f}s",
-                file=sys.stderr,
-            )
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to POST {url} after {max_retries} attempts: {err}")
+
+def post_json_with_retry(
+    url: str,
+    data: dict,
+    timeout: int = 240,
+    max_retries: int = 5,
+    backoff: float = 10.0,
+    headers: dict | None = None,
+):
+    """POST and decode JSON, retrying non-JSON 2xx bodies as well as 5xx.
+
+    Overpass in particular answers an overloaded instance with a 200 HTML error
+    page rather than the JSON its API documents.
+    """
+
+    def attempt():
+        response = _send("POST", url, data=data, timeout=timeout, headers=headers)
+        return response_json(response, url)
+
+    return _retry(
+        attempt,
+        url=url,
+        what="POST JSON to",
+        max_retries=max_retries,
+        backoff=backoff,
+    )
 
 
 def download_parquet(url: str, timeout: int = 300) -> io.BytesIO:
@@ -449,6 +814,64 @@ def download_parquet(url: str, timeout: int = 300) -> io.BytesIO:
             buf.write(chunk)
     buf.seek(0)
     return buf
+
+
+# ---------------------------------------------------------------------------
+# Freshness probes
+# ---------------------------------------------------------------------------
+
+# What a probe emits when its portal is unreachable.  It loses every
+# `greatest()` against a real timestamp, so the city's Parquet compares as fresh
+# and is skipped for this run rather than rebuilt from a portal that is down.
+PORTAL_UNAVAILABLE_TIMESTAMP = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def emit_freshness(
+    city_code: str | None,
+    fetch: "Callable[[], datetime]",
+    *,
+    label: str = "",
+) -> None:
+    """Emit the one-row freshness table Trilogy probes, tolerating a dead portal.
+
+    *city_code* is the five-letter code the probe reports for, emitted as the
+    `city` column; pass None for a probe with no city (the ecoregion layer) and
+    name it with *label* for the log line instead.
+
+    Every tree and landmark probe is a root datasource feeding some Parquet's
+    `freshness by`, and Trilogy collects those watermarks in one un-isolated
+    planning phase: `_collect_root_watermarks` calls `future.result()` with no
+    per-probe guard, so a single probe raising ends the whole `trilogy refresh
+    raw` command before any asset is refreshed.  One city's portal being in
+    maintenance therefore fails all fourteen cities plus landmarks and
+    enrichment — the same blast radius the community 403 had (see EXTENDING.md).
+
+    So an *availability* failure (connection error, 5xx, 429, or a 2xx that
+    isn't the documented payload) degrades to PORTAL_UNAVAILABLE_TIMESTAMP with
+    a loud stderr note: this city sits out the run and the next scheduled tick
+    picks it up once the portal is back.
+
+    A *parse* failure does not degrade.  A KeyError or a bad date against a
+    genuine payload means our field mapping drifted from the portal's schema,
+    and silently reporting "no new data" would freeze the city's Parquet
+    indefinitely with nothing in the logs.  Those still abort, loudly.
+    """
+    try:
+        updated_at = fetch()
+    except UpstreamUnavailable as e:
+        print(
+            f"{label or city_code} freshness probe: portal unavailable ({e}); "
+            "reporting no new data so the rest of the refresh can proceed",
+            file=sys.stderr,
+        )
+        updated_at = PORTAL_UNAVAILABLE_TIMESTAMP
+    columns = {}
+    if city_code is not None:
+        columns["city"] = pa.array([city_code], type=pa.string())
+    columns["data_updated_through"] = pa.array(
+        [updated_at], type=pa.timestamp("us", tz="UTC")
+    )
+    emit(pa.table(columns))
 
 
 # ---------------------------------------------------------------------------
