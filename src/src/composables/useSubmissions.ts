@@ -18,6 +18,7 @@ import {
   uploadBytesResumable,
 } from 'firebase/storage'
 import { db, storage } from '../lib/firebase'
+import { e2eCheckins, e2ePhotoUrl, e2eSubmissions } from '../lib/e2eFixtures'
 import type { Firestore } from 'firebase/firestore'
 import type { FirebaseStorage } from 'firebase/storage'
 import { signInIfNeeded, useAuth } from './useAuth'
@@ -287,6 +288,10 @@ export async function recordCheckin(input: CheckinInput): Promise<string> {
 }
 
 export async function listMySubmissions(maxResults = 50): Promise<Submission[]> {
+  // Playwright fixtures stand in for Firestore; no-op in a normal build.
+  const seeded = e2eSubmissions()
+  if (seeded) return seeded.slice(0, maxResults)
+
   const { db: firestore } = requireFirebase()
   const user = await signInIfNeeded()
   const q = query(
@@ -300,6 +305,9 @@ export async function listMySubmissions(maxResults = 50): Promise<Submission[]> 
 }
 
 export async function listMyCheckins(maxResults = 50): Promise<Checkin[]> {
+  const seeded = e2eCheckins()
+  if (seeded) return seeded.slice(0, maxResults)
+
   const { db: firestore } = requireFirebase()
   const user = await signInIfNeeded()
   const q = query(
@@ -313,6 +321,9 @@ export async function listMyCheckins(maxResults = 50): Promise<Checkin[]> {
 }
 
 export async function getSubmissionPhotoUrl(photoPath: string): Promise<string> {
+  const seeded = e2ePhotoUrl(photoPath)
+  if (seeded) return seeded
+
   const { storage: bucket } = requireFirebase()
   return getDownloadURL(storageRef(bucket, photoPath))
 }

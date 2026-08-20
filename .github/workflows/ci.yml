@@ -122,17 +122,9 @@ jobs:
       working-directory: ./src
       run: pnpm exec playwright install --with-deps chromium
 
-    - name: Build app
-      working-directory: ./src
-      env:
-        VITE_FIREBASE_API_KEY: test-api-key
-        VITE_FIREBASE_AUTH_DOMAIN: test.firebaseapp.com
-        VITE_FIREBASE_PROJECT_ID: test-project
-        VITE_FIREBASE_STORAGE_BUCKET: test.appspot.com
-        VITE_FIREBASE_MESSAGING_SENDER_ID: "0"
-        VITE_FIREBASE_APP_ID: test-app-id
-      run: pnpm build
-
+    # The build is Playwright's webServer command (src/playwright.config.ts):
+    # `pnpm build:e2e`, which loads src/.env.e2e for the placeholder Firebase
+    # config and the fixture seam the achievement specs drive.
     - name: Run Playwright tests
       working-directory: ./src
       run: pnpm test:e2e

@@ -36,9 +36,13 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: `pnpm preview --port ${PORT}`,
+    // Builds in e2e mode so the auth/contribution fixture seam is compiled in
+    // (see src/lib/e2eFixtures.ts). A plain `pnpm build` dist cannot drive the
+    // achievement specs, so the build is part of starting the server rather
+    // than a step everyone has to remember.
+    command: `pnpm build:e2e && pnpm preview --port ${PORT}`,
     port: PORT,
     reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
+    timeout: 300_000,
   },
 })

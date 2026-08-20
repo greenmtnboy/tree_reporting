@@ -14,6 +14,7 @@ import {
   type User,
 } from 'firebase/auth'
 import { auth, firebaseAvailable } from '../lib/firebase'
+import { e2eEnabled, e2eFixtures, e2eUser } from '../lib/e2eFixtures'
 
 const GOOGLE_PROVIDER_ID = 'google.com'
 
@@ -50,6 +51,14 @@ function normalizeGoogleSignInError(err: unknown, currentUser: User | null | und
 }
 
 async function initializeAuthState(): Promise<void> {
+  // Playwright seeds a session before app code runs; no-op in a normal build.
+  const seededUser = e2eUser()
+  if (seededUser !== undefined) {
+    user.value = seededUser
+    authReady.value = true
+    return
+  }
+
   if (typeof window === 'undefined' || !auth) {
     authReady.value = true
     return
@@ -150,6 +159,11 @@ export async function signInWithGoogle(): Promise<User | null> {
 }
 
 export async function signOut(): Promise<void> {
+  if (e2eEnabled && e2eFixtures()) {
+    user.value = null
+    signInPromise = null
+    return
+  }
   if (!auth) return
   await firebaseSignOut(auth)
   signInPromise = null

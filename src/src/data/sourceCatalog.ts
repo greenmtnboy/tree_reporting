@@ -31,6 +31,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   // Supplemental OSM trees (OSM_<CITY> in data_source) are ODbL-licensed;
   // this attribution line is required, keep it whenever any city has OSM wired.
   { city: 'Tempe', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
+  { city: 'Boston', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
