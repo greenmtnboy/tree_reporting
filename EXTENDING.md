@@ -173,6 +173,26 @@ Because the flag is computed from the same materialization's source rows, a
 municipal update dedups against itself in the same rebuild; there is no
 staleness window.
 
+**Known bug — the `is_duplicate` column drops the city partition filter.**
+Declaring `is_duplicate: {code}_is_duplicate` on a city's materialized
+datasource makes Trilogy emit that city's persist projection with **no `WHERE`
+clause at all**, so `complete where city = '{CODE}'` stops filtering. The
+visible effect is that `community_tree_info.py` — a shared feed that returns
+*every* city's approved submissions, relying on each city's `complete where` to
+exclude the rest — leaks its whole output into both OSM cities' Parquets.
+`ustem_tree_info_v2.parquet` currently carries three `city = 'USBOS'` rows for
+this reason; non-OSM cities are unaffected and contain zero foreign rows.
+
+Removing that one column restores `WHERE "yummy"."city" = 'USTEM'`; making it
+optional or adding `city` to the aggregate grain does not. Full write-up and an
+offline repro in `upstream_repro/partition_filter_dropped/`. Until it is fixed
+upstream, **check the rendered SQL for the `WHERE` when wiring OSM into a new
+city**, and expect foreign community rows in that city's Parquet:
+
+```bash
+cd data && trilogy refresh raw/{city}/{city}_tree_info.preql -f {city}_tree_info --dry-run
+```
+
 **Frontend sequencing warning:** the worker must not `SELECT is_duplicate`
 until *every* city's Parquet has been rebuilt with the column — DuckDB binder
 errors on the cities that lack it, one city at a time. Either roll the column
