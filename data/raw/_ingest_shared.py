@@ -616,9 +616,41 @@ def validate_coordinates(
         filtered = table.filter(mask)
         dropped = n - filtered.num_rows
         if dropped:
+            # Break the count down by cause.  A null or (0, 0) coordinate fails
+            # the comparisons above just like a genuinely distant one, so
+            # reporting them all as "outside bounds" says the bounding box is
+            # too tight when the real answer is that the source has no location
+            # for those rows.  LA drops 262,112 rows here and every one of them
+            # is a missing or null-island coordinate -- 120,000 sampled records
+            # contained no valid coordinate outside the box at all -- but the
+            # message read as a geography problem and cost an investigation.
+            lat_col, lon_col = table["latitude"], table["longitude"]
+            missing = pc.sum(
+                pc.cast(pc.or_(pc.is_null(lat_col), pc.is_null(lon_col)), pa.int64())
+            ).as_py() or 0
+            at_origin = pc.sum(
+                pc.cast(
+                    pc.and_(
+                        pc.fill_null(pc.equal(lat_col, 0), False),
+                        pc.fill_null(pc.equal(lon_col, 0), False),
+                    ),
+                    pa.int64(),
+                )
+            ).as_py() or 0
+            elsewhere = dropped - missing - at_origin
+            parts = []
+            if missing:
+                parts.append(f"{missing} missing a coordinate")
+            if at_origin:
+                parts.append(f"{at_origin} at (0, 0)")
+            if elsewhere:
+                parts.append(
+                    f"{elsewhere} outside {lat_min}–{lat_max}°N, "
+                    f"{lon_min}–{lon_max}°E"
+                )
             print(
-                f"{prefix}: dropped {dropped} rows outside {city_code} bounds "
-                f"({lat_min}–{lat_max}°N, {lon_min}–{lon_max}°E)",
+                f"{prefix}: dropped {dropped} rows without a usable "
+                f"{city_code} location (" + ", ".join(parts) + ")",
                 file=sys.stderr,
             )
         return filtered

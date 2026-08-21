@@ -916,3 +916,41 @@ class TestFormSentinels:
         """Values measured in the published data that survived as fake genera."""
         assert sanitize_species(raw) is None
         assert form_sentinel_for(raw) is None
+
+
+class TestCoordinateDropReporting:
+    """A dropped row's *cause* matters more than the count.
+
+    Null and (0, 0) coordinates fail the bounding-box comparison exactly like a
+    genuinely distant one, so reporting every drop as "outside bounds" reads as
+    a too-tight bounding box. LA drops 262,112 rows and every one of them is a
+    missing or null-island coordinate -- 120,000 sampled records contained no
+    valid coordinate outside the box at all -- but the message said geography
+    and cost a real investigation to disprove.
+    """
+
+    @staticmethod
+    def _table(lat, lon):
+        return pa.table(
+            {
+                "latitude": pa.array(lat, type=pa.float64()),
+                "longitude": pa.array(lon, type=pa.float64()),
+            }
+        )
+
+    def test_breaks_the_count_down_by_cause(self, capsys):
+        table = self._table(
+            [34.0] * 90 + [None] * 3 + [0.0] * 5 + [40.0] * 2,
+            [-118.3] * 93 + [0.0] * 5 + [-70.0] * 2,
+        )
+        kept = validate_coordinates(table, city="Test", city_code="USLAX")
+        err = capsys.readouterr().err
+        assert kept.num_rows == 90
+        assert "3 missing a coordinate" in err
+        assert "5 at (0, 0)" in err
+        assert "2 outside" in err
+
+    def test_says_nothing_when_every_row_is_usable(self, capsys):
+        table = self._table([34.0, 34.1], [-118.3, -118.2])
+        assert validate_coordinates(table, city="Test", city_code="USLAX").num_rows == 2
+        assert capsys.readouterr().err == ""
