@@ -33,6 +33,7 @@ from enrichment._tree_shared import (
     TREE_INFO_PARQUET,
     SKIP_SPECIES,
     SPECIES_EXCLUSION_SQL,
+    purge_non_taxa,
     should_skip_species,
 )
 from enrichment._tree_enrichment_helpers import (
@@ -473,7 +474,7 @@ def load_existing_table(source: str) -> pa.Table | None:
     # and ensures all column types match exactly before concat.
     table = table.cast(SCHEMA)
 
-    return table
+    return purge_non_taxa(table)
 
 
 def merge_with_existing(existing: pa.Table | None, new_rows: list[dict]) -> pa.Table:

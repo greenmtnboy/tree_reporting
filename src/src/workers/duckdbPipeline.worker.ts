@@ -14,6 +14,7 @@ FROM trees
 WHERE latitude IS NOT NULL AND longitude IS NOT NULL
 `
 
+import { sentinelLabelSql, sentinelTreeFormSql } from '../data/species'
 import {
   REMOTE_TREES_PARQUET_URL,
   REMOTE_SPECIES_PARQUET_URL,
@@ -442,7 +443,18 @@ async function loadCityTrees(city?: string): Promise<void> {
   zoomBatchReady.clear()
   dataTileBoundsByZoom.clear()
 
-  const parquetUrl = city ? (cityTreeParquetUrl(city) ?? REMOTE_TREES_PARQUET_URL) : REMOTE_TREES_PARQUET_URL
+  const cityUrl = city ? cityTreeParquetUrl(city) : null
+  const parquetUrl = cityUrl ?? REMOTE_TREES_PARQUET_URL
+
+  // Only the per-city Parquets carry `is_duplicate`. The cross-city
+  // full_tree_info does not, and cannot: merging the fourteen per-city keys
+  // into one makes the planner resolve a city's grid aggregate over the union
+  // of all fourteen and it fails to plan at all (keyless join between
+  // row-bearing sources -- the same class of breakage as merging data_source
+  // into a city model). This URL is only reached for a malformed city code, so
+  // the cost of not filtering there is a fallback that shows duplicates rather
+  // than one that fails to load.
+  const dedupFilter = cityUrl ? 'AND NOT COALESCE(is_duplicate, false)' : ''
 
   await conn.query(`
     CREATE OR REPLACE TABLE trees AS
@@ -459,6 +471,7 @@ async function loadCityTrees(city?: string): Promise<void> {
       submission_photo_url
     FROM read_parquet('${parquetUrl}')
     WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+      ${dedupFilter}
   `)
 
   loadedCity = city ?? null
@@ -472,13 +485,22 @@ async function loadCityTrees(city?: string): Promise<void> {
         t.city,
         t.data_source,
         t.submission_photo_url,
-        COALESCE(NULLIF(TRIM(CAST(list_extract(se.common_names, 1) AS VARCHAR)), ''), t.tree_name, t.species) AS tree_name,
+        COALESCE(
+          NULLIF(TRIM(CAST(list_extract(se.common_names, 1) AS VARCHAR)), ''),
+          t.tree_name,
+          -- A placeholder species has no enrichment row by design, so name it
+          -- here rather than falling through to the bare sentinel string.
+          ${sentinelLabelSql('t.species')},
+          t.species
+        ) AS tree_name,
         t.plant_date,
         t.species,
         t.latitude,
         t.longitude,
         COALESCE(t.diameter_at_breast_height, 3) AS dbh,
-        CASE lower(trim(COALESCE(se.tree_form, 'default')))
+        -- "Palm"/"Shrub"/"Cactus" name a growth form the source recorded
+        -- without a species; that is worth an icon even with no enrichment row.
+        CASE lower(trim(COALESCE(se.tree_form, ${sentinelTreeFormSql('t.species')}, 'default')))
           WHEN 'palm' THEN 'palm'
           WHEN 'broadleaf' THEN 'broadleaf'
           WHEN 'conifer' THEN 'conifer'

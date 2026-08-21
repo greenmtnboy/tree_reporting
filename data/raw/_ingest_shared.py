@@ -84,10 +84,12 @@ def normalize_species_parts(genus: str | None, epithet: str | None) -> str | Non
 # `species` key, where they would be handed to the enrichment LLM every run.
 _SPECIES_PLACEHOLDERS = frozenset(
     {
-        "unknown", "unknown tree", "unbekannt", "onbekend",
-        "onbekend (algemeen)", "no identificado", "unidentified",
+        "unknown", "unknown tree", "unknown tree species", "unbekannt",
+        "onbekend", "onbekend (algemeen)", "no identificado", "unidentified",
         "unidentified unidentified", "undetermined", "not identified",
-        "none", "n/a", "na", "other", "vacant", "dead", "stump", "empty",
+        "none", "n/a", "na", "nvt", "other", "vacant", "dead", "stump",
+        "empty", "tree", "trees", "tree(s)", "arbol", "árbol", "arbre",
+        "boom", "baum", "privet", "--", "-",
     }
 )
 
@@ -136,6 +138,67 @@ _QUOTE_CHARS = "'\"‘’“”"
 # silent skip.
 UNKNOWN_SPECIES = "Unknown"
 
+# Some non-taxa still carry real information: a source that gives up on the
+# species but records "Palm" or "Shrub" has told us the growth form, which is
+# what drives the map icon and colour.  Merging those into UNKNOWN_SPECIES
+# throws that away, so they get their own sentinels instead.  Like
+# UNKNOWN_SPECIES they are excluded from enrichment by name -- their
+# presentation is hardcoded in src/src/data/species.ts rather than
+# guessed by an LLM, because "Palm" is not a taxon and asking a model to
+# describe one yields a plausible, specific and wrong answer: the "Unknown"
+# row came back as Orania timikae, a critically endangered New Guinea palm,
+# and labelled 189k trees across every city until it was purged.
+PALM_SPECIES = "Palm"
+SHRUB_SPECIES = "Shrub"
+CACTUS_SPECIES = "Cactus"
+
+# Values that name a growth form rather than a taxon, in the languages the
+# wired cities publish in.  Anything not listed here that fails
+# `sanitize_species` merges into UNKNOWN_SPECIES.
+_FORM_SENTINEL_ALIASES: dict[str, str] = {
+    "palm": PALM_SPECIES,
+    "palms": PALM_SPECIES,
+    "palm tree": PALM_SPECIES,
+    "palmera": PALM_SPECIES,   # es
+    "palmeira": PALM_SPECIES,  # pt
+    "palmier": PALM_SPECIES,   # fr
+    "palme": PALM_SPECIES,     # de
+    "shrub": SHRUB_SPECIES,
+    "shrubs": SHRUB_SPECIES,
+    "bush": SHRUB_SPECIES,
+    "hedge": SHRUB_SPECIES,
+    "arbusto": SHRUB_SPECIES,  # es/pt
+    "arbuste": SHRUB_SPECIES,  # fr
+    "struik": SHRUB_SPECIES,   # nl
+    "strauch": SHRUB_SPECIES,  # de
+    "cactus": CACTUS_SPECIES,
+    "cacti": CACTUS_SPECIES,
+    "cactaceae": CACTUS_SPECIES,
+}
+
+# Every value the `species` key can hold that is not a scientific name.  The
+# enrichment scripts and the frontend both key off this set, so a new sentinel
+# is added here and picked up in both places.
+SPECIES_SENTINELS: frozenset[str] = frozenset(
+    {UNKNOWN_SPECIES, PALM_SPECIES, SHRUB_SPECIES, CACTUS_SPECIES}
+)
+
+
+def form_sentinel_for(value: str | None) -> str | None:
+    """Return the growth-form sentinel *value* names, or ``None``.
+
+    Called only for values `sanitize_species` has already rejected as taxa, to
+    decide whether they merge into ``UNKNOWN_SPECIES`` or keep their form.
+
+    Examples:
+        "Palm"    -> "Palm"
+        "arbusto" -> "Shrub"
+        "Vacant"  -> None   (says nothing about a plant)
+    """
+    if value is None:
+        return None
+    return _FORM_SENTINEL_ALIASES.get(value.strip().lower())
+
 
 def sanitize_species(value: str | None) -> str | None:
     """Reduce a raw species string to a Latin binomial, or ``None``.
@@ -163,12 +226,18 @@ def sanitize_species(value: str | None) -> str | None:
         "Serviceberry or dogwood?"      -> None
         "Amel. laevis 'spring flurry'"  -> None  (abbreviated genus)
         "Vacant"                        -> None
+        "Palm"                          -> None  (a form, not a taxon; see
+                                                  form_sentinel_for)
     """
     s = normalize_species(value)
     if s is None:
         return None
 
     if s.lower() in _SPECIES_PLACEHOLDERS:
+        return None
+    # "Palm" / "Shrub" / "Cactus" are genus-shaped and would otherwise survive
+    # as invented genera; enforce_tree_schema maps them to a form sentinel.
+    if s.lower() in _FORM_SENTINEL_ALIASES:
         return None
     # Free-typed uncertainty and any numeric content are never taxa.
     if "?" in s or "/" in s or any(ch.isdigit() for ch in s):
@@ -394,27 +463,36 @@ def enforce_tree_schema(
         sidx = table.schema.get_field_index(species_col)
         raw_species = table.column(sidx).to_pylist()
         cleaned: list[str] = []
-        dropped = rewritten = 0
+        dropped = rewritten = formed = 0
         for value in raw_species:
             keep = sanitize_species(value)
-            if keep is None:
-                if value is not None:
-                    dropped += 1
-                cleaned.append(UNKNOWN_SPECIES)
-            else:
+            if keep is not None:
                 if keep != value:
                     rewritten += 1
                 cleaned.append(keep)
+                continue
+            # Not a taxon.  Keep the growth form if the source named one --
+            # "Palm" says less than a binomial but far more than "Unknown",
+            # and it is what the map icon is chosen from.
+            sentinel = form_sentinel_for(value)
+            if sentinel is not None:
+                formed += 1
+                cleaned.append(sentinel)
+                continue
+            if value is not None:
+                dropped += 1
+            cleaned.append(UNKNOWN_SPECIES)
         table = table.set_column(
             sidx, species_col, pa.array(cleaned, type=pa.string())
         )
         # Never silent: a run that reshapes a tenth of its species column
         # should say so in the refresh log.
-        if dropped or rewritten:
+        if dropped or rewritten or formed:
             print(
                 f"{prefix}: species cleanup -- {dropped} value(s) were not "
                 f"scientific names and became {UNKNOWN_SPECIES!r}, "
-                f"{rewritten} normalised to species rank",
+                f"{rewritten} normalised to species rank, "
+                f"{formed} kept as a growth-form sentinel",
                 file=sys.stderr,
             )
 

@@ -168,7 +168,8 @@ matches). Per-city thresholds are expected as OSM rolls out.
 column (aliased from `{code}_is_duplicate`), and the Parquet keeps every row.
 Dropping rows would break the partition-completeness proof (the Parquet must
 contain the union of its declared sources); the flag also makes dedup tunable
-and auditable — toggle flagged rows on the map to evaluate the cell size.
+and auditable — flagged rows stay queryable, so the cell size can be evaluated
+against real data rather than re-derived.
 Because the flag is computed from the same materialization's source rows, a
 municipal update dedups against itself in the same rebuild; there is no
 staleness window.
@@ -204,10 +205,35 @@ and a `--filter 'city={CODE}'` argument to the script, which
 and emit the whole export. Write-up in
 `upstream_repro/partition_filter_dropped/`.
 
-**Frontend sequencing warning:** the worker must not `SELECT is_duplicate`
-until *every* city's Parquet has been rebuilt with the column — DuckDB binder
-errors on the cities that lack it, one city at a time. Either roll the column
-out everywhere first, or have the worker filter per-city.
+**Every city carries the column; the frontend hides the flagged rows.** The
+flag is only useful if something reads it, and for a while nothing did: Boston's
+first OSM rebuild flagged 7,369 rows correctly and the map rendered all of them
+anyway, stacked on top of the municipal trees on Boston Common. `is_duplicate`
+is therefore materialized by **all fourteen** city models — the twelve with no
+OSM partition emit `auto {code}_is_duplicate <- False;` — and
+`duckdbPipeline.worker.ts` filters with a single
+`AND NOT COALESCE(is_duplicate, false)` when it loads a city.
+
+A missing column does not degrade: DuckDB raises a binder error and that city's
+map fails to load entirely. So **refresh every city before deploying** a worker
+change that selects it. `src/src/workers/parquetSchema.test.ts` asserts the
+column against the live GCS Parquet for every city in `CITY_CONFIG`, which is
+what turns "I forgot to refresh" into a red test rather than a broken city.
+
+**Do not merge `is_duplicate` in `tree_info.preql`.** `data_source` is merged
+there, and doing the same for the dedup flag looks symmetric but does not plan:
+
+```
+UnresolvableQueryException: Planner emitted a keyless join between row-bearing
+sources that share a join axis: ...unioned_at_local_data_source_local_tree_id
+_grouped_by_local.usbos_cell_a... This would render as a cross join (ON 1=1)
+and fan out; the join axis was lost upstream.
+```
+
+The flag comes from a per-city grid aggregate over that city's own rows;
+merging the keys asks the planner to resolve that aggregate over the union of
+all fourteen cities. The cross-city `full_tree_info` Parquet accordingly has no
+`is_duplicate`, and the worker skips the filter on that fallback path.
 
 Other details: OSM `circumference` defaults to metres but is frequently
 mis-entered as bare centimetres — the extract treats a unitless value > 10 as
@@ -748,13 +774,58 @@ Both hybrid spellings are preserved verbatim: SF publishes
 `Platanus x hispanica`, OSM publishes `Citrus × limon` (U+00D7).  Normalising
 one into the other would orphan every already-enriched hybrid, so don't.
 
-Anything that survives as a non-taxon becomes `UNKNOWN_SPECIES` (`"Unknown"`),
-never null — see the next section for why — and that sentinel is excluded from
-enrichment **by name** in `SKIP_SPECIES` / `SPECIES_EXCLUSION_SQL`
-(`enrichment/_tree_shared.py`), which is also where a new placeholder value
-belongs.  `enforce_tree_schema` prints a per-ingest summary of how many values
-it reshaped, so a run that rewrites a tenth of its species column says so in
-the refresh log rather than doing it quietly.
+Anything that survives as a non-taxon becomes a **sentinel**, never null — see
+the next section for why.  `enforce_tree_schema` prints a per-ingest summary of
+how many values it reshaped, so a run that rewrites a tenth of its species
+column says so in the refresh log rather than doing it quietly.
+
+Most non-taxa merge into `UNKNOWN_SPECIES` (`"Unknown"`), but a value that
+names a *growth form* keeps it: `Palm`, `Shrub` and `Cactus` are their own
+sentinels, because the form is what the map icon and colour are chosen from and
+merging throws away the one fact the source did record.
+`_FORM_SENTINEL_ALIASES` carries the multilingual spellings (`arbusto`,
+`struik`, `palmera`, …); the full set is `SPECIES_SENTINELS`, and a new
+sentinel added there needs a matching entry in `src/src/data/species.ts`.
+
+### Sentinels are excluded from enrichment, and purged from it
+
+A sentinel is not a taxon, and `species` is the join key into the enrichment
+table, so an enrichment row for one is not inert — it labels **every** tree
+carrying that value.  This is not hypothetical.  A row keyed `Unknown` was
+enriched in April 2026 and came back as *Orania timikae*, a critically
+endangered single-stemmed palm from the heath forests of western New Guinea:
+
+```
+species='Unknown'  genus='Unknown'  tree_form='palm'
+description='Orania timikae is a small, single-stemmed palm reaching up to 4
+             meters tall, distinctive for its subdistichous crown…'
+photo_url=<an iNaturalist photo of a palm>
+```
+
+Once `UNKNOWN_SPECIES` adopted the same string, that one row labelled **189,139
+trees across all fourteen cities** — 67.6k in LA, 37.9k in NYC, 27.9k of
+Boston's OSM rows — each rendered with a palm icon, a palm photo, and a
+description of an endangered New Guinea palm.
+
+Two mechanisms, and you need both:
+
+- **Exclusion** keeps a sentinel out of the enrichment queue.  It lives in
+  `SKIP_SPECIES` / `SPECIES_EXCLUSION_SQL` (`enrichment/_tree_shared.py`),
+  which are now derived from `SPECIES_SENTINELS` so the two cannot drift.  A
+  new *non-sentinel* placeholder value belongs in `SKIP_SPECIES` directly.
+- **Purge** removes a row that is already there.  Exclusion alone does not:
+  `get_already_enriched` reads whatever the Parquet holds and
+  `merge_with_existing` concatenates it forward, so a row that got in before
+  the exclusion existed survives every run for ever.  `purge_non_taxa` runs
+  inside `load_existing_table`, so the removal lands on the next enrichment run
+  whether or not any new species were processed.
+
+Presentation for the sentinels is **hardcoded** in `src/src/data/species.ts` —
+label, `tree_form`, and the note shown where a description would go — rather
+than fetched.  Asking a model to describe "Palm" does not fail loudly; it
+returns a plausible, specific and wrong species, which is exactly how this
+happened.  The worker applies the label and form once in `trees_fast`, and
+`REAL_SPECIES_PREDICATE` keeps all four sentinels out of every species rollup.
 
 ### Mark a nullable column `?` or Trilogy will silently drop rows
 
