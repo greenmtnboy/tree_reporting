@@ -10,7 +10,6 @@ from datetime import date
 from pathlib import Path
 
 import pyarrow as pa
-import pyarrow.compute as pc
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
@@ -25,6 +24,16 @@ from _ingest_shared import (
 DATASET_URL = 'https://data.lacity.org/resource/vt5t-mscf.json'
 PAGE_SIZE = 50000
 PLACEHOLDER_NAMES = {'NULL', 'VACANT/INADEQUATE SPACING', 'STUMP'}
+
+# Of those placeholders, two mean "this record is not a tree" and one means
+# "this is a tree whose species we do not know".  `normalize_botanical`
+# collapses all three to None, so filtering on a null species afterwards
+# discarded ~19,900 rows without distinguishing them -- the same conflation
+# Amsterdam had, where ~17,400 real trees were being dropped alongside its
+# stumps.  Filter on the raw value instead: a stump or a vacant planting site
+# never becomes a row, and a tree with no recorded species takes the
+# UNKNOWN_SPECIES sentinel like every other city's.
+NOT_A_TREE_NAMES = {'VACANT/INADEQUATE SPACING', 'STUMP'}
 
 
 def parse_dbh(value: str | None) -> float | None:
@@ -132,16 +141,11 @@ def transform(rows: list[dict]) -> pa.Table:
 
 if __name__ == '__main__':
     table = stream_to_table(
-        iter_row_chunks(), transform, label='Los Angeles ingest'
+        iter_row_chunks(),
+        transform,
+        keep=lambda r: (r.get('botanical') or '').upper() not in NOT_A_TREE_NAMES,
+        label='Los Angeles ingest',
     )
-    before = table.num_rows
-    table = table.filter(pc.is_valid(table['species']))
-    dropped = before - table.num_rows
-    if dropped:
-        print(
-            f"Los Angeles ingest: dropped {dropped} rows with null species",
-            file=sys.stderr,
-        )
     table = validate_coordinates(table, city='Los Angeles', city_code='USLAX')
     table = enforce_tree_schema(table, city='Los Angeles', data_source="LOSANGELES_OPENDATA")
     emit(table)
