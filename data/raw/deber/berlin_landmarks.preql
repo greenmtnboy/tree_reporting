@@ -5,7 +5,7 @@ root datasource berlin_landmarks_update_time (
 )
 file `./berlin_landmarks_probe.py`;
 
-# Read from the committed staging Parquet, not Overpass: extraction is
+# Read from the staged Parquet in GCS, not Overpass: extraction is
 # decoupled from refresh (see the *_landmarks_extract.py sibling and
 # EXTENDING.md).  Re-running the extract and committing the result is what
 # makes this city's published Parquet stale.
@@ -17,7 +17,7 @@ root partial datasource raw_berlin_landmark_info (
 )
 grain (landmark_id)
 complete where city = 'DEBER'
-file `./deber_landmarks_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/deber_landmarks_staging.parquet`;
 
 partial datasource berlin_landmark_info (
     landmark_id,

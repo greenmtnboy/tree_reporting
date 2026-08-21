@@ -3,39 +3,30 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
-"""Freshness probe for London landmarks.
+"""Freshness probe for London's staged Overpass landmarks.
 
-Emits the mtime of gblon_landmarks_staging.parquet.  Extraction is decoupled
-from refresh -- london_landmarks_extract.py queries Overpass and commits
-the staging file, and this probe never touches the network -- so the moment the
-published Parquet becomes stale is the moment that file changes.
+Emits the GCS publication time of gblon_landmarks_staging.parquet, which only
+changes when london_landmarks_extract.py is re-run and its output uploaded.
+Overpass is never contacted during a refresh -- fetching it inline is what
+killed london_landmark_info and took full_landmark_info with it.
 
-Two reasons, both the same ones the OSM tree extracts already follow (see
-EXTENDING.md).  Overpass allows two concurrent slots per client IP and answers
-an over-budget request with a 200 carrying an HTML page or a `runtime error`
-remark; with three Overpass callers reachable at refresh time and
-`parallelism = 3`, a full refresh could throttle itself and fail a city on a
-transient.  And the only cheap OSM-wide watermark is the database timestamp,
-which advances every minute and would mark the city stale on every tick.
-
-A missing staging file emits the epoch (the city sits out this run) rather than
-raising: one absent optional source must never abort the whole refresh.
+The watermark is the object's Last-Modified rather than a local file mtime:
+the staging parquets used to be committed, and git does not preserve mtime, so
+every fresh clone stamped the checkout time.  A missing object emits the epoch.
 """
 
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness  # noqa: E402
+from _ingest_shared import emit_freshness, staging_modified_at  # noqa: E402
 
-STAGING_PATH = Path(__file__).parent / "gblon_landmarks_staging.parquet"
+STAGING_NAME = "gblon_landmarks_staging.parquet"
 
 
 def modified_at() -> datetime:
-    if not STAGING_PATH.exists():
-        return datetime.fromtimestamp(0, tz=timezone.utc)
-    return datetime.fromtimestamp(STAGING_PATH.stat().st_mtime, tz=timezone.utc)
+    return staging_modified_at(STAGING_NAME)
 
 
 if __name__ == "__main__":

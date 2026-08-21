@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests", "pytrilogy"]
+# dependencies = ["google-cloud-storage", "pyarrow", "requests", "pytrilogy"]
 # ///
 
 """
@@ -19,11 +19,13 @@ Field mapping:
 
 import os
 import sys
+import tempfile
 import pyarrow as pa
 import pyarrow.parquet as pq
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
+    upload_staging,
     validate_coordinates,
     post_json_with_retry,
     make_point_wkt,
@@ -98,7 +100,12 @@ def validate(table: pa.Table) -> None:
     validate_coordinates(table, city="Berlin landmarks")
 
 
-OUTPUT = Path(__file__).parent / "deber_landmarks_staging.parquet"
+STAGING_NAME = "deber_landmarks_staging.parquet"
+# Written locally first, then published. The GCS object is the artifact --
+# uploading it is what makes the city's Parquet stale, and it is what the
+# refresh reads. Nothing is committed: git does not preserve mtime, so a
+# committed staging file made every fresh clone look like new data.
+OUTPUT = Path(tempfile.gettempdir()) / STAGING_NAME
 
 
 def main() -> None:
@@ -106,6 +113,7 @@ def main() -> None:
     table = transform(elements)
     validate(table)
     pq.write_table(table, OUTPUT)
+    upload_staging(OUTPUT, STAGING_NAME)
     print(
         f"Berlin landmarks: wrote {table.num_rows} rows to {OUTPUT.name}",
         file=sys.stderr,

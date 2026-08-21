@@ -147,6 +147,16 @@ def test_osm_city_is_fully_wired(code: str):
     assert f"{lower}_osm_staging.parquet" in text, (
         f"{code} declares an OSM source label but no staging datasource"
     )
+    # Staged in GCS, never a repo-relative path.  The probe's watermark is the
+    # object's Last-Modified; a committed copy would be read at its mtime, which
+    # git does not preserve, so every fresh clone would look like new data and
+    # the city would rebuild on every tick.
+    assert f"file `./{lower}_osm_staging.parquet`" not in text, (
+        f"{code} reads its OSM staging parquet from the repo; it belongs in GCS"
+    )
+    assert f"staging/{lower}_osm_staging.parquet`" in text, (
+        f"{code}'s OSM staging datasource must point at the GCS staging prefix"
+    )
     column = f"{lower}_osm_data_updated_through"
     assert f"data_updated_through: {column}" in text
     assert column in text.split("greatest(", 1)[1].split(")", 1)[0], (
@@ -201,4 +211,21 @@ def test_cross_city_model_does_not_merge_is_duplicate():
     assert not merged, (
         f"{merged} merge is_duplicate in tree_info.preql; this breaks planning "
         "for every city model that derives the flag"
+    )
+
+
+def test_no_staging_parquet_is_committed():
+    """Staged sources live in GCS, not the repo.
+
+    They were committed at first and it worked, but the probes read the file's
+    mtime as the freshness watermark and **git does not preserve mtime**: every
+    fresh clone -- which is every cloud job run -- stamped the checkout time, so
+    the watermark advanced on every tick and Boston and Tempe rebuilt three
+    times a day.  That is the same every-tick thrash staging was introduced to
+    avoid, just sourced from a checkout instead of Overpass's clock.
+    """
+    committed = sorted(p.name for p in RAW_DIR.glob("*/*_staging.parquet"))
+    assert not committed, (
+        f"{committed} are in the working tree; publish them with "
+        "_ingest_shared.upload_staging and let .gitignore keep them out"
     )

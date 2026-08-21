@@ -20,6 +20,7 @@ import struct
 import sys
 import time
 from datetime import date, datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING
 
 import pyarrow as pa
@@ -892,6 +893,92 @@ def download_parquet(url: str, timeout: int = 300) -> io.BytesIO:
             buf.write(chunk)
     buf.seek(0)
     return buf
+
+
+# ---------------------------------------------------------------------------
+# Staged sources
+# ---------------------------------------------------------------------------
+
+# Some sources are too fragile to hit during a refresh.  Overpass allows two
+# concurrent slots per client IP and answers an over-budget request with HTTP
+# 200 carrying an error remark, so a refresh at `parallelism = 3` could fail a
+# city on a transient -- `london_landmark_info` died that way and took
+# `full_landmark_info` with it, while the same script run alone finished in
+# 6.8s.  Those sources are *staged*: an extract script fetches them on its own
+# schedule and writes a parquet here, and the refresh only ever reads the
+# staged copy.
+#
+# The staging objects live in GCS rather than in the repo.  They were committed
+# at first, which worked but made the freshness signal a lie: the probes read
+# the file's mtime, and **git does not preserve mtime**.  Every fresh clone --
+# which is every cloud job run -- stamps the checkout time, so the watermark
+# advanced on every tick and Boston and Tempe rebuilt three times a day.  That
+# is the same every-tick thrash the staging design set out to avoid; it had
+# only swapped Overpass's minute-resolution timestamp for a checkout timestamp.
+# A GCS object's Last-Modified is a real publication time that survives
+# cloning, so `staging_modified_at` is a watermark that only moves when an
+# extract is actually re-run.
+STAGING_BASE_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/staging"
+STAGING_GCS_PREFIX = "gs://trilogy_public_models/duckdb/staging"
+
+
+def staging_url(name: str) -> str:
+    """Public read URL for a staged parquet, for a preql `file` clause."""
+    return f"{STAGING_BASE_URL}/{name}"
+
+
+def staging_gcs_uri(name: str) -> str:
+    """`gs://` write URI for a staged parquet."""
+    return f"{STAGING_GCS_PREFIX}/{name}"
+
+
+def staging_modified_at(name: str) -> datetime:
+    """Publication time of a staged parquet, from the GCS object metadata.
+
+    Returns the epoch when the object does not exist, matching how a missing
+    staging file behaved when these lived on disk: an absent optional source
+    sits out the run rather than aborting it.  A transport failure raises
+    `UpstreamUnavailable` so `emit_freshness` degrades the same way.
+
+    The objects are served with `Cache-Control: max-age=3600`, so the request
+    carries a cache-buster -- without one a probe run just after an extract
+    would read the previous publication time and call the city fresh.
+    """
+    import requests
+
+    url = f"{staging_url(name)}?cb={int(time.time())}"
+    try:
+        response = requests.head(url, timeout=30, allow_redirects=True)
+    except requests.RequestException as err:
+        raise UpstreamUnavailable(f"Failed to HEAD staged object {name}: {err}") from err
+    if response.status_code == 404:
+        return datetime.fromtimestamp(0, tz=timezone.utc)
+    if response.status_code >= 400:
+        raise UpstreamUnavailable(
+            f"HEAD {url} returned HTTP {response.status_code}"
+        )
+    header = response.headers.get("Last-Modified")
+    if not header:
+        # Not an availability problem: GCS always sends this, so its absence
+        # means the URL is not the object we think it is.
+        raise RuntimeError(f"staged object {name} has no Last-Modified header")
+    return parsedate_to_datetime(header).astimezone(timezone.utc)
+
+
+def upload_staging(local_path, name: str) -> None:
+    """Publish a locally written staging parquet to GCS.
+
+    Called by the extract scripts, which run on their own schedule and are the
+    only writers.  Uploading is what makes the city's Parquet stale, so it is
+    also the moment the refresh is allowed to notice the new data.
+    """
+    from google.cloud import storage as gcs
+
+    uri = staging_gcs_uri(name)
+    bucket_name, _, blob_name = uri[len("gs://"):].partition("/")
+    blob = gcs.Client().bucket(bucket_name).blob(blob_name)
+    blob.upload_from_filename(str(local_path))
+    print(f"uploaded {local_path} -> {uri}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------

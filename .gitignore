@@ -26,3 +26,8 @@ data/raw/*.parquet
 .vscode/settings.json
 
 scripts/*.png
+# Staged source parquets live in GCS (see _ingest_shared.staging_url), not in
+# git: the probes read the object Last-Modified as the freshness watermark, and
+# git does not preserve mtime, so a committed copy made every fresh clone look
+# like newly extracted data.
+*_staging.parquet

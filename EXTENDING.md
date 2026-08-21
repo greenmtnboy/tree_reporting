@@ -119,15 +119,37 @@ OSM rows share the city's imputation);
 `test_osm_city_is_fully_wired` asserts every half of the wiring below.
 
 **Extraction is decoupled from refresh.** `{city}_osm_extract.py` queries
-Overpass and writes a committed `{code}_osm_staging.parquet`; the refresh
-pipeline only ever reads that file. Two reasons: Overpass 429/504s routinely
+Overpass and publishes `{code}_osm_staging.parquet` to GCS; the refresh
+pipeline only ever reads that object. Two reasons: Overpass 429/504s routinely
 under load (fetching at refresh time would couple every municipal rebuild to
 Overpass being up), and the only cheap OSM watermark is the global database
 timestamp, which advances every minute and would mark the city stale on every
-tick. Instead `{city}_osm_probe.py` emits the staging file's mtime, so
-re-running the extract and committing is what makes the Parquet stale. The
-extract is deliberately self-contained so it can later move onto a weekly
-`[[cloud.job]]` without a rewrite.
+tick. Instead `{city}_osm_probe.py` emits the staged object's publication time,
+so re-running the extract is what makes the Parquet stale. The extract is
+deliberately self-contained so it can later move onto a weekly `[[cloud.job]]`
+without a rewrite.
+
+**Staged parquets live in GCS, not in git — and the reason is the watermark.**
+The first cut committed them next to the extract script and had the probe emit
+the file's `st_mtime`. That works locally and is wrong everywhere else, because
+**git does not preserve mtime**: a fresh clone stamps every file with the
+checkout time. Every cloud job run is a fresh clone, so the watermark advanced
+on each of the three daily ticks and Boston and Tempe rebuilt every time —
+precisely the every-tick thrash staging was introduced to prevent, having merely
+swapped Overpass's minute-resolution clock for a checkout clock. It is invisible
+locally, where mtimes happen to be stable, and it was caught only by noticing
+that four staging files committed at 08:55 and 10:24 all carried an mtime of
+20:17, matching a branch switch.
+
+A GCS object's `Last-Modified` is a real publication time that survives cloning.
+`_ingest_shared` holds the three helpers — `staging_url` for the preql `file`
+clause, `staging_modified_at` for the probe, `upload_staging` for the extract —
+and `.gitignore` carries `*_staging.parquet` so a copy cannot drift back in.
+`test_no_staging_parquet_is_committed` fails if one does.
+
+The probe's HEAD request carries a cache-buster: the objects are served with
+`Cache-Control: max-age=3600`, so a probe run just after an extract would
+otherwise read the previous publication time and call the city fresh.
 
 **Dedup is stacking + aggregate, not an anti-join.** OSM overlaps the
 municipal inventory by construction. Trilogy's joins are equality-only (a
@@ -708,9 +730,9 @@ data/raw/{city}/{city}_landmarks.preql       ← datasource with versioned GCS U
 tree extracts use, for the same reason:
 
 ```
-data/raw/{city}/{city}_landmarks_extract.py  ← queries Overpass, writes the staging parquet
-data/raw/{city}/{code}_landmarks_staging.parquet  ← committed; the refresh only ever reads this
-data/raw/{city}/{city}_landmarks_probe.py    ← emits the staging file's mtime, no network
+data/raw/{city}/{city}_landmarks_extract.py  ← queries Overpass, publishes the staging parquet to GCS
+gs://…/duckdb/staging/{code}_landmarks_staging.parquet  ← the refresh only ever reads this
+data/raw/{city}/{city}_landmarks_probe.py    ← emits the staged object's publication time
 ```
 
 Overpass allows **two concurrent slots per client IP** (`GET /api/status`
@@ -724,12 +746,13 @@ run alone finished in **6.8s**. The query was never the problem; the concurrency
 was.
 
 Staging removes Overpass from the refresh path entirely, and re-running the
-extract and committing the result becomes what marks the city stale — the OSM
-watermark alternative (the global database timestamp) advances every minute and
-would rebuild the city on every tick.
+extract becomes what marks the city stale — the OSM watermark alternative (the
+global database timestamp) advances every minute and would rebuild the city on
+every tick. Publish the staged parquet to GCS rather than committing it; see
+the watermark note above for why a committed copy reintroduces that same thrash.
 
 ```bash
-cd data/raw && uv run {city}/{city}_landmarks_extract.py   # then commit the parquet
+cd data/raw && uv run {city}/{city}_landmarks_extract.py   # publishes to GCS; nothing to commit
 ```
 
 Add the city's landmark freshness property and update the `greatest()` expression in **`data/raw/landmark_common.preql`**:
