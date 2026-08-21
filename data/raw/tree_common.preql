@@ -29,7 +29,19 @@ property <*>.uslax_data_updated_through datetime; # when Los Angeles data is thr
 property <*>.uswas_data_updated_through datetime; # when Washington DC data is through
 property <*>.ustem_data_updated_through datetime; # when Tempe data is through
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
-property <*>.usbos_osm_data_updated_through datetime; # mtime of Boston's committed OSM staging parquet
+property <*>.usbos_osm_data_updated_through datetime;
+property <*>.uswas_osm_data_updated_through datetime; # GCS publication time of Washington DC's staged OSM parquet
+property <*>.uslax_osm_data_updated_through datetime; # GCS publication time of Los Angeles's staged OSM parquet
+property <*>.arbue_osm_data_updated_through datetime; # GCS publication time of Buenos Aires's staged OSM parquet
+property <*>.aumel_osm_data_updated_through datetime; # GCS publication time of Melbourne's staged OSM parquet
+property <*>.gblon_osm_data_updated_through datetime; # GCS publication time of London's staged OSM parquet
+property <*>.nlams_osm_data_updated_through datetime; # GCS publication time of Amsterdam's staged OSM parquet
+property <*>.deber_osm_data_updated_through datetime; # GCS publication time of Berlin's staged OSM parquet
+property <*>.cavan_osm_data_updated_through datetime; # GCS publication time of Vancouver's staged OSM parquet
+property <*>.usbtv_osm_data_updated_through datetime; # GCS publication time of Burlington's staged OSM parquet
+property <*>.frpar_osm_data_updated_through datetime; # GCS publication time of Paris's staged OSM parquet
+property <*>.usnyc_osm_data_updated_through datetime; # GCS publication time of New York City's staged OSM parquet
+property <*>.ussfo_osm_data_updated_through datetime; # GCS publication time of San Francisco's staged OSM parquet # mtime of Boston's committed OSM staging parquet
 
 
 

@@ -1,9 +1,9 @@
 import ..tree_common;
 import ..community_tree_info;
 
-auto arbue_published_data_updated_through <- greatest(arbue_data_updated_through, arbue_community_data_updated_through);
+auto arbue_published_data_updated_through <- greatest(arbue_data_updated_through, arbue_community_data_updated_through, arbue_osm_data_updated_through);
 
-key arbue_source enum<string>['BUENOSAIRES_OPENDATA', 'COMMUNITY_ARBUE']; # originating dataset for the row
+key arbue_source enum<string>['BUENOSAIRES_OPENDATA', 'COMMUNITY_ARBUE', 'OSM_ARBUE']; # originating dataset for the row
 
 root datasource buenosaires_update_time (
     data_updated_through: arbue_data_updated_through
@@ -18,13 +18,35 @@ root datasource arbue_community_update_time (
 file `../community_update_time.py`;
 
 
-# This city has no OpenStreetMap partition, so no row can be a cross-source
-# duplicate.  The column is still emitted as a constant so every city's Parquet
-# carries `is_duplicate` and the browser worker can select it unconditionally;
-# a per-city column set is what forces the worker into city-specific SQL.
-# A city that later gains an OSM partition replaces this with the staggered-grid
-# derivation in ustem/tempe_tree_info.preql.
-auto arbue_is_duplicate <- False;
+
+
+# GCS publication time of the staged OSM parquet (see buenosaires_osm_extract.py);
+# it only moves when an extraction is re-run and uploaded.
+root datasource arbue_osm_update_time (
+    data_updated_through: arbue_osm_data_updated_through
+)
+file `./buenosaires_osm_probe.py`;
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than
+# Overpass -- extraction is decoupled from refresh (see _osm_shared.py and
+# EXTENDING.md).  Overlapping rows are kept and flagged via
+# arbue_is_duplicate below, never dropped: the Parquet must contain the union
+# of its declared sources, and the flag keeps the dedup tunable and auditable.
+root partial datasource arbue_osm_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: arbue_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'ARBUE' and arbue_source = 'OSM_ARBUE'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/arbue_osm_staging.parquet`;
 
 root partial datasource buenosaires_raw_tree_info (
     tree_id: tree_id,
@@ -62,6 +84,42 @@ grain (tree_id)
 complete where city = 'ARBUE' and arbue_source = 'COMMUNITY_ARBUE'
 file `../community_tree_info.py`
 where city = 'ARBUE';
+
+
+# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+#
+# Same construction as ustem/tempe_tree_info.preql (full rationale there and in
+# EXTENDING.md): an OSM row is a duplicate when a non-OSM tree shares its
+# ~10m grid cell in ANY of four half-cell-staggered grid copies -- a guaranteed
+# match within 5m, possible out to a ~14m diagonal.
+#
+# The 10m cell is PROVISIONAL until this city is calibrated:
+#     cd data/raw && uv run osm_dedup_validation.py --city ARBUE
+# The break between re-mapped duplicates and interstitial neighbours sits
+# wherever this city's OSM positional error ends and its planting spacing
+# begins, so it has to be measured rather than copied from Tempe.
+#
+# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
+# cos(-34.62 deg) here.
+const arbue_cell_lat_deg <- 0.00008983;
+const arbue_cell_lon_deg <- 0.00010917;
+
+auto arbue_cell_a <- concat(cast(floor(longitude / arbue_cell_lon_deg) as string), ':', cast(floor(latitude / arbue_cell_lat_deg) as string));
+auto arbue_cell_b <- concat(cast(floor(longitude / arbue_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / arbue_cell_lat_deg) as string));
+auto arbue_cell_c <- concat(cast(floor(longitude / arbue_cell_lon_deg) as string), ':', cast(floor(latitude / arbue_cell_lat_deg + 0.5) as string));
+auto arbue_cell_d <- concat(cast(floor(longitude / arbue_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / arbue_cell_lat_deg + 0.5) as string));
+
+auto arbue_anchor_count_a <- count(tree_id ? arbue_source != 'OSM_ARBUE') by arbue_cell_a;
+auto arbue_anchor_count_b <- count(tree_id ? arbue_source != 'OSM_ARBUE') by arbue_cell_b;
+auto arbue_anchor_count_c <- count(tree_id ? arbue_source != 'OSM_ARBUE') by arbue_cell_c;
+auto arbue_anchor_count_d <- count(tree_id ? arbue_source != 'OSM_ARBUE') by arbue_cell_d;
+
+auto arbue_is_duplicate <- arbue_source = 'OSM_ARBUE' and (
+    arbue_anchor_count_a > 0
+    or arbue_anchor_count_b > 0
+    or arbue_anchor_count_c > 0
+    or arbue_anchor_count_d > 0
+);
 
 partial datasource buenosaires_tree_info (
     tree_id,

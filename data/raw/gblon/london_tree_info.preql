@@ -1,9 +1,9 @@
 import ..tree_common;
 import ..community_tree_info;
 
-auto gblon_published_data_updated_through <- greatest(gblon_data_updated_through, gblon_community_data_updated_through);
+auto gblon_published_data_updated_through <- greatest(gblon_data_updated_through, gblon_community_data_updated_through, gblon_osm_data_updated_through);
 
-key gblon_source enum<string>['LONDON_OPENDATA', 'COMMUNITY_GBLON']; # originating dataset for the row
+key gblon_source enum<string>['LONDON_OPENDATA', 'COMMUNITY_GBLON', 'OSM_GBLON']; # originating dataset for the row
 
 root datasource london_update_time (
     data_updated_through: gblon_data_updated_through
@@ -18,13 +18,35 @@ root datasource gblon_community_update_time (
 file `../community_update_time.py`;
 
 
-# This city has no OpenStreetMap partition, so no row can be a cross-source
-# duplicate.  The column is still emitted as a constant so every city's Parquet
-# carries `is_duplicate` and the browser worker can select it unconditionally;
-# a per-city column set is what forces the worker into city-specific SQL.
-# A city that later gains an OSM partition replaces this with the staggered-grid
-# derivation in ustem/tempe_tree_info.preql.
-auto gblon_is_duplicate <- False;
+
+
+# GCS publication time of the staged OSM parquet (see london_osm_extract.py);
+# it only moves when an extraction is re-run and uploaded.
+root datasource gblon_osm_update_time (
+    data_updated_through: gblon_osm_data_updated_through
+)
+file `./london_osm_probe.py`;
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than
+# Overpass -- extraction is decoupled from refresh (see _osm_shared.py and
+# EXTENDING.md).  Overlapping rows are kept and flagged via
+# gblon_is_duplicate below, never dropped: the Parquet must contain the union
+# of its declared sources, and the flag keeps the dedup tunable and auditable.
+root partial datasource gblon_osm_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: gblon_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'GBLON' and gblon_source = 'OSM_GBLON'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/gblon_osm_staging.parquet`;
 
 root partial datasource london_raw_tree_info (
     tree_id: tree_id,
@@ -65,6 +87,42 @@ complete where city = 'GBLON' and gblon_source = 'COMMUNITY_GBLON'
 file `../community_tree_info.py`
 where city = 'GBLON';
 
+
+
+# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+#
+# Same construction as ustem/tempe_tree_info.preql (full rationale there and in
+# EXTENDING.md): an OSM row is a duplicate when a non-OSM tree shares its
+# ~10m grid cell in ANY of four half-cell-staggered grid copies -- a guaranteed
+# match within 5m, possible out to a ~14m diagonal.
+#
+# The 10m cell is PROVISIONAL until this city is calibrated:
+#     cd data/raw && uv run osm_dedup_validation.py --city GBLON
+# The break between re-mapped duplicates and interstitial neighbours sits
+# wherever this city's OSM positional error ends and its planting spacing
+# begins, so it has to be measured rather than copied from Tempe.
+#
+# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
+# cos(51.50 deg) here.
+const gblon_cell_lat_deg <- 0.00008983;
+const gblon_cell_lon_deg <- 0.00014430;
+
+auto gblon_cell_a <- concat(cast(floor(longitude / gblon_cell_lon_deg) as string), ':', cast(floor(latitude / gblon_cell_lat_deg) as string));
+auto gblon_cell_b <- concat(cast(floor(longitude / gblon_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / gblon_cell_lat_deg) as string));
+auto gblon_cell_c <- concat(cast(floor(longitude / gblon_cell_lon_deg) as string), ':', cast(floor(latitude / gblon_cell_lat_deg + 0.5) as string));
+auto gblon_cell_d <- concat(cast(floor(longitude / gblon_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / gblon_cell_lat_deg + 0.5) as string));
+
+auto gblon_anchor_count_a <- count(tree_id ? gblon_source != 'OSM_GBLON') by gblon_cell_a;
+auto gblon_anchor_count_b <- count(tree_id ? gblon_source != 'OSM_GBLON') by gblon_cell_b;
+auto gblon_anchor_count_c <- count(tree_id ? gblon_source != 'OSM_GBLON') by gblon_cell_c;
+auto gblon_anchor_count_d <- count(tree_id ? gblon_source != 'OSM_GBLON') by gblon_cell_d;
+
+auto gblon_is_duplicate <- gblon_source = 'OSM_GBLON' and (
+    gblon_anchor_count_a > 0
+    or gblon_anchor_count_b > 0
+    or gblon_anchor_count_c > 0
+    or gblon_anchor_count_d > 0
+);
 
 partial datasource london_tree_info (
     tree_id,
