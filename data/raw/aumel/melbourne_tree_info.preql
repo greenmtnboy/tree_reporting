@@ -1,9 +1,9 @@
 import ..tree_common;
 import ..community_tree_info;
 
-auto aumel_published_data_updated_through <- greatest(aumel_data_updated_through, aumel_community_data_updated_through);
+auto aumel_published_data_updated_through <- greatest(aumel_data_updated_through, aumel_community_data_updated_through, aumel_osm_data_updated_through);
 
-key aumel_source enum<string>['MELBOURNE_OPENDATA', 'COMMUNITY_AUMEL']; # originating dataset for the row
+key aumel_source enum<string>['MELBOURNE_OPENDATA', 'COMMUNITY_AUMEL', 'OSM_AUMEL']; # originating dataset for the row
 
 root datasource melbourne_update_time (
     data_updated_through: aumel_data_updated_through
@@ -18,13 +18,35 @@ root datasource aumel_community_update_time (
 file `../community_update_time.py`;
 
 
-# This city has no OpenStreetMap partition, so no row can be a cross-source
-# duplicate.  The column is still emitted as a constant so every city's Parquet
-# carries `is_duplicate` and the browser worker can select it unconditionally;
-# a per-city column set is what forces the worker into city-specific SQL.
-# A city that later gains an OSM partition replaces this with the staggered-grid
-# derivation in ustem/tempe_tree_info.preql.
-auto aumel_is_duplicate <- False;
+
+
+# GCS publication time of the staged OSM parquet (see melbourne_osm_extract.py);
+# it only moves when an extraction is re-run and uploaded.
+root datasource aumel_osm_update_time (
+    data_updated_through: aumel_osm_data_updated_through
+)
+file `./melbourne_osm_probe.py`;
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than
+# Overpass -- extraction is decoupled from refresh (see _osm_shared.py and
+# EXTENDING.md).  Overlapping rows are kept and flagged via
+# aumel_is_duplicate below, never dropped: the Parquet must contain the union
+# of its declared sources, and the flag keeps the dedup tunable and auditable.
+root partial datasource aumel_osm_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: aumel_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'AUMEL' and aumel_source = 'OSM_AUMEL'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/aumel_osm_staging.parquet`;
 
 root partial datasource melbourne_raw_tree_info (
     tree_id: tree_id,
@@ -63,6 +85,42 @@ complete where city = 'AUMEL' and aumel_source = 'COMMUNITY_AUMEL'
 file `../community_tree_info.py`
 where city = 'AUMEL';
 
+
+
+# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+#
+# Same construction as ustem/tempe_tree_info.preql (full rationale there and in
+# EXTENDING.md): an OSM row is a duplicate when a non-OSM tree shares its
+# ~10m grid cell in ANY of four half-cell-staggered grid copies -- a guaranteed
+# match within 5m, possible out to a ~14m diagonal.
+#
+# CALIBRATED at 10m. This city's 5-10m band is 47.6% mutual-NN over
+# n=884 -- a coin flip, so leaving it unflagged: a false flag hides a real tree
+# while a missed duplicate only double-renders one, so a band that is not
+# clearly duplicate-dominated should not be flagged. Re-check with:
+#     cd data/raw && uv run ./osm_dedup_validation.py --city AUMEL
+#
+# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
+# cos(-37.83 deg) here.
+const aumel_cell_lat_deg <- 0.00008983;
+const aumel_cell_lon_deg <- 0.00011373;
+
+auto aumel_cell_a <- concat(cast(floor(longitude / aumel_cell_lon_deg) as string), ':', cast(floor(latitude / aumel_cell_lat_deg) as string));
+auto aumel_cell_b <- concat(cast(floor(longitude / aumel_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / aumel_cell_lat_deg) as string));
+auto aumel_cell_c <- concat(cast(floor(longitude / aumel_cell_lon_deg) as string), ':', cast(floor(latitude / aumel_cell_lat_deg + 0.5) as string));
+auto aumel_cell_d <- concat(cast(floor(longitude / aumel_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / aumel_cell_lat_deg + 0.5) as string));
+
+auto aumel_anchor_count_a <- count(tree_id ? aumel_source != 'OSM_AUMEL') by aumel_cell_a;
+auto aumel_anchor_count_b <- count(tree_id ? aumel_source != 'OSM_AUMEL') by aumel_cell_b;
+auto aumel_anchor_count_c <- count(tree_id ? aumel_source != 'OSM_AUMEL') by aumel_cell_c;
+auto aumel_anchor_count_d <- count(tree_id ? aumel_source != 'OSM_AUMEL') by aumel_cell_d;
+
+auto aumel_is_duplicate <- aumel_source = 'OSM_AUMEL' and (
+    aumel_anchor_count_a > 0
+    or aumel_anchor_count_b > 0
+    or aumel_anchor_count_c > 0
+    or aumel_anchor_count_d > 0
+);
 
 partial datasource melbourne_tree_info (
     tree_id,

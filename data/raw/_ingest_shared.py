@@ -349,6 +349,18 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 OSM_DATA_SOURCES: dict[str, str] = {
     "USTEM": "OSM_USTEM",
     "USBOS": "OSM_USBOS",
+    "USSFO": "OSM_USSFO",
+    "USNYC": "OSM_USNYC",
+    "FRPAR": "OSM_FRPAR",
+    "USBTV": "OSM_USBTV",
+    "CAVAN": "OSM_CAVAN",
+    "DEBER": "OSM_DEBER",
+    "NLAMS": "OSM_NLAMS",
+    "GBLON": "OSM_GBLON",
+    "AUMEL": "OSM_AUMEL",
+    "ARBUE": "OSM_ARBUE",
+    "USLAX": "OSM_USLAX",
+    "USWAS": "OSM_USWAS",
 }
 
 DATA_SOURCES: tuple[str, ...] = tuple(

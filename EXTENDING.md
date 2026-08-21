@@ -108,15 +108,29 @@ source: Trilogy treats the municipal source as covering the whole city and
 silently emits **zero** community rows, with no error anywhere. Each raw source
 must claim `complete where city = 'X' and {code}_source = 'Y'`.
 
-### Supplemental OpenStreetMap sources (opt-in per city)
+### Supplemental OpenStreetMap sources
 
-A city can carry a third partition of `natural=tree` nodes from OSM, labelled
-`OSM_{CODE}`. Unlike community (which every city gets), OSM is opt-in: a city
-appears in `OSM_DATA_SOURCES` in `data/raw/_ingest_shared.py` once its wiring
-exists. Tempe (`ustem/`) is the reference implementation and Boston (`usbos/`)
-the second wired city (note how its OSM partition maps dbh to `_raw_dbh` so
-OSM rows share the city's imputation);
-`test_osm_city_is_fully_wired` asserts every half of the wiring below.
+Every city carries a third partition of `natural=tree` nodes from OSM, labelled
+`OSM_{CODE}` and listed in `OSM_DATA_SOURCES` in `data/raw/_ingest_shared.py`
+— ~1.37M staged trees across the fourteen. It was opt-in while only Tempe and
+Boston were wired; it no longer is, and a new city should wire it at the same
+time as its municipal source. `test_osm_city_is_fully_wired` parametrises over
+every city in `OSM_DATA_SOURCES` and asserts each half of the wiring below, so
+a half-wired city fails loudly rather than silently emitting zero OSM rows.
+
+The extraction itself lives once, in `_osm_shared.extract_city`; each city
+keeps a ~28-line shim. They were 160-line copies differing in five lines, which
+is how Boston's shipped with a docstring claiming it extracted Tempe's trees.
+
+**A city-specific column has to be declared on the OSM partition too.** London's
+municipal and community sources declare `borough`; its OSM source did not, so
+that partition dropped out of the union and the remaining two stopped covering
+the source enum. Trilogy reports this as `complete where` clauses "not provably
+exhaustive over that type", which is a long way from "you forgot a column".
+Pass it through `extract_city(..., extra_null_columns={"borough": pa.string()})`
+and declare `borough: ?borough` on the datasource. London is the only instance
+today. Dry-run every city after wiring from a template — per-city divergence is
+exactly what a template hides.
 
 **Extraction is decoupled from refresh.** `{city}_osm_extract.py` queries
 Overpass and publishes `{code}_osm_staging.parquet` to GCS; the refresh
@@ -185,6 +199,31 @@ inventory before copying the cell size — the 5m break reflects Tempe's small
 OSM positional offsets, and a city traced from misaligned imagery may need a
 larger cell (Berlin and Paris can calibrate against `osm_ref` exact-id
 matches). Per-city thresholds are expected as OSM rolls out.
+
+**Calibrate every city; the answer differs.** `osm_dedup_validation.py --city
+CODE` measures the mutual-NN rate per distance band against the staged extract
+and the published inventory. Across the fourteen it split three ways:
+
+| cell | cities | 5-10m mutual-NN |
+|------|--------|-----------------|
+| 10m | Paris, Berlin, Vancouver, Amsterdam, DC, SF, Melbourne | 15.9%-47.6% |
+| 10m | London, NYC | 51.5%, 53.3% — coin flips, see below |
+| 20m | Burlington, Buenos Aires, LA | 61.0%-67.2% |
+
+**The threshold is 60%, not 50%, and that matters.** The first version of this
+script used a bare `mutual-NN < 50%` cut and sent London (51.5% over n=18,076)
+and New York (53.3% over n=5,059) to a 20m cell. Those readings are coin flips,
+and the errors are not symmetric: flagging a 50/50 band hides about as many
+real trees as duplicates it removes — roughly 8,800 in London and 2,400 in New
+York. Only flag a band that is *clearly* duplicate-dominated; when the
+measurement is ambiguous the asymmetry says leave the rows visible. The script
+now reports which regime it saw ("coin flip" or "neighbour-dominated") rather
+than emitting a bare number, because the number alone invited exactly this
+mistake.
+
+Berlin (6,157) and Paris (3,906) carry enough `osm_ref` values to cross-check
+the geometric break against exact municipal-id matches; both break sharply at
+5m (18.4% and 15.9%), which is the strongest confirmation the method has.
 
 **Flag, never drop.** The dedup materializes as an `is_duplicate` boolean
 column (aliased from `{code}_is_duplicate`), and the Parquet keeps every row.
