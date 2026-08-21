@@ -159,10 +159,28 @@ def test_osm_city_is_fully_wired(code: str):
     )
     column = f"{lower}_osm_data_updated_through"
     assert f"data_updated_through: {column}" in text
-    assert column in text.split("greatest(", 1)[1].split(")", 1)[0], (
-        f"{code}'s published watermark must include {column} or a re-extraction "
-        "never rebuilds the Parquet"
-    )
+    # A city whose municipal portal is down cannot be allowed to demand a
+    # rebuild it cannot complete.  The published watermark is a greatest()
+    # across sources, so one fresh source marks the Parquet stale and the
+    # rebuild then needs *every* partition -- which is how wiring Berlin's OSM
+    # source made it permanently stale against a dead gdi.berlin.de and took
+    # full_tree_info down with it on every tick.  Dropping the OSM term is the
+    # documented escape hatch, and it costs the city its "re-extraction rebuilds
+    # the Parquet" property, so it is listed here rather than left implicit.
+    WATERMARK_EXEMPT = {
+        "DEBER": "gdi.berlin.de has been in maintenance for days; see the "
+                 "comment in deber/berlin_tree_info.preql",
+    }
+    if code in WATERMARK_EXEMPT:
+        assert column not in text.split("greatest(", 1)[1].split(")", 1)[0], (
+            f"{code} is watermark-exempt ({WATERMARK_EXEMPT[code]}) but "
+            f"{column} is back in greatest(); remove the exemption instead"
+        )
+    else:
+        assert column in text.split("greatest(", 1)[1].split(")", 1)[0], (
+            f"{code}'s published watermark must include {column} or a "
+            "re-extraction never rebuilds the Parquet"
+        )
     assert f"{lower}_is_duplicate" in text
     assert f"is_duplicate: {lower}_is_duplicate" in text, (
         f"{code} derives is_duplicate but does not materialize it as a column"
