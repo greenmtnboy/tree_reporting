@@ -1024,9 +1024,20 @@ def emit_freshness(
     try:
         updated_at = fetch()
     except UpstreamUnavailable as e:
+        # One line, and short.  A degrading probe is the *expected* path when a
+        # portal is down, but the retry helper's message quotes the offending
+        # body, and a run's captured stderr is a tail: Berlin in maintenance
+        # printed its 1.4 KB holding page ten times over and pushed the
+        # traceback of a genuinely failing asset clean out of the window, which
+        # cost two diagnostic round trips on an unrelated bug.  A probe that is
+        # working as designed must not be able to hide the errors of one that
+        # is not.
+        detail = " ".join(str(e).split())
+        if len(detail) > 200:
+            detail = detail[:200] + "…"
         print(
-            f"{label or city_code} freshness probe: portal unavailable ({e}); "
-            "reporting no new data so the rest of the refresh can proceed",
+            f"{label or city_code} freshness probe: portal unavailable "
+            f"({detail}); reporting no new data so the refresh can proceed",
             file=sys.stderr,
         )
         updated_at = PORTAL_UNAVAILABLE_TIMESTAMP

@@ -27,8 +27,9 @@ Coordinate notes:
 """
 
 import sys
+from collections.abc import Iterator
+
 import pyarrow as pa
-import pyarrow.compute as pc
 from datetime import date
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -122,18 +123,29 @@ def extract_coords(geometrie: dict | None) -> tuple[float | None, float | None]:
 # Download
 # ---------------------------------------------------------------------------
 
-def download_all_pages() -> list[dict]:
-    """Paginate through the Amsterdam stamgegevens REST API."""
+def iter_pages() -> Iterator[list[dict]]:
+    """Yield one page of stamgegevens records at a time.
+
+    A generator rather than a list because Amsterdam is the largest ingest in
+    the repo: holding all ~325k records as dicts peaked at 882 MB of Python
+    heap (tracemalloc, so excluding interpreter overhead and pyarrow's own
+    buffers).  That is fine on a workstation and evidently not fine in a cloud
+    executor, where this ingest failed every time it actually rebuilt while
+    passing locally.  The caller converts each page to Arrow and drops the
+    dicts, so peak memory is one page plus the accumulated columnar data.
+    """
     url: str | None = f"{BASE_URL}?_format=json&page_size={PAGE_SIZE}"
-    results: list[dict] = []
     while url:
         data = get_json_with_retry(url)
-        embedded = data.get("_embedded", {})
-        page_rows = embedded.get("stamgegevens", [])
-        results.extend(page_rows)
+        yield data.get("_embedded", {}).get("stamgegevens", [])
         next_link = data.get("_links", {}).get("next", {})
         url = next_link.get("href") if isinstance(next_link, dict) else None
-    return results
+
+
+def download_all_pages() -> list[dict]:
+    """Every record, as one list.  Kept for callers that want it all in memory
+    (the dedup/analysis scripts); the ingest itself streams via `iter_pages`."""
+    return [row for page in iter_pages() for row in page]
 
 
 # ---------------------------------------------------------------------------
@@ -198,16 +210,37 @@ def transform(rows: list[dict]) -> pa.Table:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    rows = download_all_pages()
-    table = transform(rows)
-    before = table.num_rows
-    table = table.filter(pc.is_valid(table["species"]))
-    dropped = before - table.num_rows
-    if dropped:
+    # Drop stumps, not unidentified trees.
+    #
+    # This used to filter on a null `species`, which conflated two very
+    # different records.  Of the 21,592 rows it removed, ~17,400 were real
+    # trees the inventory simply has no species for (`typeObject` "Boom …",
+    # "Vormboom", "Fruitboom", "Knotboom") — every other city keeps those and
+    # `enforce_tree_schema` gives them the UNKNOWN_SPECIES sentinel, so
+    # dropping them made Amsterdam under-report by ~6% for no reason.
+    #
+    # The other ~4,160 were `Stobbe` — tree stumps — which are not trees and
+    # should not be on the map whether or not the inventory recorded what they
+    # used to be.  `_ingest_shared._SPECIES_PLACEHOLDERS` already treats
+    # "stump" as a non-taxon; filtering on the record type applies the same
+    # rule, and catches the far larger group the null test never saw: 25,454
+    # records are Stobbe in total, so ~21,300 stumps *with* a species were
+    # being published as living trees.  Net effect is -3,872 for Amsterdam.
+    pages: list[pa.Table] = []
+    seen = stumps = 0
+    for page in iter_pages():
+        seen += len(page)
+        keep = [r for r in page if (r.get("typeObject") or "").strip() != "Stobbe"]
+        stumps += len(page) - len(keep)
+        if keep:
+            pages.append(transform(keep))
+    if stumps:
         print(
-            f"Amsterdam ingest: dropped {dropped} rows with null species",
+            f"Amsterdam ingest: dropped {stumps} stump (Stobbe) records "
+            f"of {seen} total",
             file=sys.stderr,
         )
+    table = pa.concat_tables(pages)
     table = validate_coordinates(table, city="Amsterdam", city_code="NLAMS")
     table = enforce_tree_schema(table, city="Amsterdam", data_source="AMSTERDAM_OPENDATA")
     emit(table)
