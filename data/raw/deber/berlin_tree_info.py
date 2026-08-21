@@ -27,13 +27,15 @@ from pathlib import Path
 import pyarrow as pa
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
+    circumference_cm_to_dbh_inches,
     emit,
     enforce_tree_schema,
     get_json_with_retry,
+    iter_offset_pages,
     normalize_species,
-    validate_coordinates,
     parse_plant_date_year,
-    circumference_cm_to_dbh_inches,
+    stream_to_table,
+    validate_coordinates,
 )
 
 WFS_BASE = "https://gdi.berlin.de/services/wfs/baumbestand"
@@ -41,30 +43,38 @@ TYPENAMES = "baumbestand:strassenbaeume"
 PAGE_SIZE = 10_000
 
 
-def fetch_all_features() -> list[dict]:
-    """Paginate through the WFS and return all GeoJSON features."""
-    features = []
-    start = 0
-    while True:
-        params = {
-            "SERVICE": "WFS",
-            "VERSION": "2.0.0",
-            "REQUEST": "GetFeature",
-            "TYPENAMES": TYPENAMES,
-            "SRSNAME": "EPSG:4326",
-            "outputFormat": "application/json",
-            "COUNT": str(PAGE_SIZE),
-            "startIndex": str(start),
-        }
+def iter_feature_chunks():
+    """One WFS page of GeoJSON features at a time.
+
+    A generator rather than a list: 434,765 features, each a nested dict with
+    its own geometry, is the same accumulate-everything shape that made
+    Amsterdam fail every cloud rebuild.  See `_ingest_shared.stream_to_table`.
+    """
+
+    def fetch_page(start: int) -> list[dict]:
         # The WFS serves the platform-wide HTML maintenance page with HTTP 200,
         # so a non-JSON body here means "portal down", not "bad request".
-        page = get_json_with_retry(WFS_BASE, params=params)
-        batch = page.get("features", [])
-        features.extend(batch)
-        if len(batch) < PAGE_SIZE:
-            break
-        start += PAGE_SIZE
-    return features
+        page = get_json_with_retry(
+            WFS_BASE,
+            params={
+                "SERVICE": "WFS",
+                "VERSION": "2.0.0",
+                "REQUEST": "GetFeature",
+                "TYPENAMES": TYPENAMES,
+                "SRSNAME": "EPSG:4326",
+                "outputFormat": "application/json",
+                "COUNT": str(PAGE_SIZE),
+                "startIndex": str(start),
+            },
+        )
+        return page.get("features", [])
+
+    return iter_offset_pages(fetch_page, page_size=PAGE_SIZE)
+
+
+def fetch_all_features() -> list[dict]:
+    """Every feature at once, for callers that want it (analysis scripts)."""
+    return [f for chunk in iter_feature_chunks() for f in chunk]
 
 
 def parse_plant_date(val) -> date | None:
@@ -128,8 +138,7 @@ def transform(features: list[dict]) -> pa.Table:
 
 
 if __name__ == "__main__":
-    features = fetch_all_features()
-    table = transform(features)
+    table = stream_to_table(iter_feature_chunks(), transform, label="Berlin ingest")
     table = validate_coordinates(table, city="Berlin", city_code="DEBER")
     table = enforce_tree_schema(table, city="Berlin", data_source="BERLIN_OPENDATA")
     emit(table)

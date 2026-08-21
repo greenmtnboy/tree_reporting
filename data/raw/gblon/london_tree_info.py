@@ -36,11 +36,13 @@ import pyarrow as pa
 import requests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
+    circumference_cm_to_dbh_inches,
     emit,
     enforce_tree_schema,
+    iter_csv_row_chunks,
     normalize_species,
+    stream_to_table,
     validate_coordinates,
-    circumference_cm_to_dbh_inches,
 )
 
 PACKAGE_URL = "https://data.london.gov.uk/api/3/action/package_show?id=2r45m"
@@ -184,26 +186,21 @@ def resolve_csv_url() -> str:
     return FALLBACK_URL
 
 
+def iter_csv_chunks():
+    """Chunks of CSV rows from the London Datastore.
+
+    The previous version held the entire decoded file as one Python string
+    *and* `list(csv.DictReader(...))` over it -- at 1,136,049 rows, the largest
+    ingest in the repo doing the most expensive thing available.  This is the
+    shape that made Amsterdam fail every cloud rebuild while passing locally;
+    London had it worse and had simply not gone stale yet.
+    """
+    return iter_csv_row_chunks(resolve_csv_url())
+
+
 def download_csv() -> list[dict]:
-    """Resolve and download the current CSV from the London Datastore."""
-    url = resolve_csv_url()
-    r = requests.get(url, stream=True, timeout=600)
-    r.raise_for_status()
-    buf = io.BytesIO()
-    for chunk in r.iter_content(chunk_size=1024 * 1024):
-        if chunk:
-            buf.write(chunk)
-    raw_bytes = buf.getvalue()
-    try:
-        text = raw_bytes.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        text = raw_bytes.decode("latin-1")
-    first_line = text.split("\n")[0]
-    delimiter = detect_delimiter(first_line)
-    rows = list(csv.DictReader(io.StringIO(text), delimiter=delimiter))
-    if not rows:
-        raise RuntimeError(f"London tree CSV produced 0 rows (url={url})")
-    return rows
+    """Every row at once, for callers that want it (analysis scripts)."""
+    return [row for chunk in iter_csv_chunks() for row in chunk]
 
 
 # ---------------------------------------------------------------------------
@@ -343,8 +340,7 @@ def transform(rows: list[dict]) -> pa.Table:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    rows = download_csv()
-    table = transform(rows)
+    table = stream_to_table(iter_csv_chunks(), transform, label="London ingest")
     table = validate_coordinates(table, city="London", city_code="GBLON")
     table = enforce_tree_schema(table, city="London", data_source="LONDON_OPENDATA")
     emit(table)
