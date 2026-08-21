@@ -51,6 +51,36 @@ uv run urban-tree-ml inventory export --config configs/sf_naip_baseline.yaml
 uv run urban-tree-ml imagery index --config configs/sf_naip_baseline.yaml
 ```
 
+## Upstream data changed 2026-08-21 (read before re-running the audit)
+
+The SF v2 parquet this config reads moved underneath the cohort numbers above.
+They were measured before the change; re-run the export before trusting them.
+
+What changed:
+
+- **SF grew 193,378 -> 205,975 rows.** All fourteen cities gained an
+  OpenStreetMap partition (`data_source` like `OSM_%`), adding 12,597 rows to
+  SF and ~1.08M across the dataset.
+- **A new `is_duplicate` column** flags OSM rows that duplicate a municipal
+  tree, via a per-city calibrated spatial grid. SF flags 2,362.
+- **`species` is never null now.** Every ingest writes a sentinel -- `Unknown`,
+  or `Palm`/`Shrub`/`Cactus` where the source recorded a growth form -- so the
+  `species is not null` predicate in `_read_inventory` no longer excludes
+  anything. SF has 22,858 `Unknown` rows. This config's `excluded_species`
+  already lists all four sentinels, so the cohort is unaffected, but the
+  null check is now dead weight rather than a filter.
+
+**The trainable cohort is unchanged.** Zero OSM rows survive the export:
+`diameter_at_breast_height is not null` removes them all, because OSM tree
+nodes essentially never carry a `circumference` tag. Verified against the
+published parquet, not assumed.
+
+That is luck rather than design, though. If OSM ever gains DBH coverage, or a
+future task drops the DBH requirement, OSM rows and their flagged duplicates
+would enter the training set -- neither authoritative for a supervised target
+nor independent of the municipal rows they duplicate. Worth adding
+`and data_source not like 'OSM_%'` to `_read_inventory` while it is free.
+
 ## First tile
 
 Start with this NAIP item:
