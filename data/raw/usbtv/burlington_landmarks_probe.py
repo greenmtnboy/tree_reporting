@@ -10,20 +10,22 @@ If the CSV does not exist, emits Unix epoch so Trilogy treats the
 parquet as stale and rebuilds it (producing an empty dataset).
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness
+from _ingest_shared import emit_freshness, staging_modified_at
 
-CSV_PATH = Path(__file__).parent / "burlington_landmarks.csv"
+STAGING_NAME = "burlington_landmarks.csv"
 
 
 def modified_at() -> datetime:
-    if not CSV_PATH.exists():
-        return datetime.fromtimestamp(0, tz=timezone.utc)
-    return datetime.fromtimestamp(CSV_PATH.stat().st_mtime, tz=timezone.utc)
+    # The GCS object's publication time, not the local file's mtime.
+    # The CSV is committed, and git does not preserve mtime, so a fresh
+    # clone -- which is every cloud job run -- stamped the checkout time
+    # and rebuilt this city's landmarks on every tick, for ever.
+    return staging_modified_at(STAGING_NAME)
 
 
 if __name__ == "__main__":

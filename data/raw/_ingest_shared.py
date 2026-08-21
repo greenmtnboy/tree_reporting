@@ -1072,6 +1072,37 @@ def stream_to_table(
     return table
 
 
+def stream_table_batches(
+    table: pa.Table,
+    transform: Callable[[pa.Table], pa.Table],
+    *,
+    chunk_rows: int = DEFAULT_CHUNK_ROWS,
+    label: str = "",
+) -> pa.Table:
+    """Run a table-shaped `transform` over slices, concatenating the results.
+
+    The counterpart of `stream_to_table` for cities whose source is one bulk
+    file read with `pyarrow.csv` rather than a paged API.  The Arrow table
+    itself is compact -- a million rows is unremarkable -- but these transforms
+    call `.to_pylist()` on each column, which materialises a Python object per
+    value and is where the memory actually goes.  Slicing bounds that to one
+    chunk at a time; a zero-copy slice costs nothing, and the Python objects
+    for each chunk become garbage as soon as its Arrow output exists.
+    """
+    if table.num_rows == 0:
+        raise RuntimeError(f"{label or 'ingest'}: source produced no rows")
+    out: list[pa.Table] = []
+    for start in range(0, table.num_rows, chunk_rows):
+        out.append(transform(table.slice(start, chunk_rows)))
+    result = pa.concat_tables(out)
+    print(
+        f"{label or 'ingest'}: transformed {table.num_rows} row(s) "
+        f"in {len(out)} chunk(s)",
+        file=sys.stderr,
+    )
+    return result
+
+
 def iter_link_pages(
     url: str, *, rows_key: str, next_key: str = "next", **kwargs
 ) -> Iterator[list[dict]]:

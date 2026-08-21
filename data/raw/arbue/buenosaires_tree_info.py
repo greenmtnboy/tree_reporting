@@ -12,7 +12,14 @@ import pyarrow as pa
 import pyarrow.csv as pv
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import cm_to_inches, emit, enforce_tree_schema, normalize_species, validate_coordinates
+from _ingest_shared import (
+    cm_to_inches,
+    emit,
+    enforce_tree_schema,
+    normalize_species,
+    stream_table_batches,
+    validate_coordinates,
+)
 
 DATASET_URL = 'https://cdn.buenosaires.gob.ar/datosabiertos/datasets/atencion-ciudadana/arbolado-publico-lineal/arbolado-publico-lineal-2017-2018.csv'
 
@@ -67,7 +74,12 @@ def transform(table: pa.Table) -> pa.Table:
 
 
 if __name__ == '__main__':
-    table = transform(load_table(download_csv()))
+    # Batched: the Arrow table is compact, but `transform` calls
+    # `.to_pylist()` on each column, materialising a Python object per
+    # value across all ~355k rows. See _ingest_shared.stream_table_batches.
+    table = stream_table_batches(
+        load_table(download_csv()), transform, label='Buenos Aires ingest'
+    )
     table = validate_coordinates(table, city='Buenos Aires', city_code='ARBUE')
     table = enforce_tree_schema(table, city='Buenos Aires', data_source="BUENOSAIRES_OPENDATA")
     emit(table)
