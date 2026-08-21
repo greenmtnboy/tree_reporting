@@ -90,19 +90,19 @@ where city = 'USBTV';
 #
 # Same construction as ustem/tempe_tree_info.preql (full rationale there and in
 # EXTENDING.md): an OSM row is a duplicate when a non-OSM tree shares its
-# ~10m grid cell in ANY of four half-cell-staggered grid copies -- a guaranteed
-# match within 5m, possible out to a ~14m diagonal.
+# ~20m grid cell in ANY of four half-cell-staggered grid copies -- a guaranteed
+# match within 10m, possible out to a ~28m diagonal.
 #
-# The 10m cell is PROVISIONAL until this city is calibrated:
-#     cd data/raw && uv run osm_dedup_validation.py --city USBTV
-# The break between re-mapped duplicates and interstitial neighbours sits
-# wherever this city's OSM positional error ends and its planting spacing
-# begins, so it has to be measured rather than copied from Tempe.
+# CALIBRATED at 20m, unlike most cities. This city's 5-10m band is
+# 63.6% mutual-NN over n=22 -- duplicate-dominated, so those matches are
+# re-mapped inventory trees rather than neighbours at planting spacing, and
+# a 10m cell would miss them. Re-check with:
+#     cd data/raw && uv run ./osm_dedup_validation.py --city USBTV
 #
-# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
+# Cell sizes: 20m of latitude is 20/111320 deg; longitude shrinks by
 # cos(44.48 deg) here.
-const usbtv_cell_lat_deg <- 0.00008983;
-const usbtv_cell_lon_deg <- 0.00012589;
+const usbtv_cell_lat_deg <- 0.00017966;
+const usbtv_cell_lon_deg <- 0.00025178;
 
 auto usbtv_cell_a <- concat(cast(floor(longitude / usbtv_cell_lon_deg) as string), ':', cast(floor(latitude / usbtv_cell_lat_deg) as string));
 auto usbtv_cell_b <- concat(cast(floor(longitude / usbtv_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / usbtv_cell_lat_deg) as string));

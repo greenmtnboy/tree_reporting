@@ -184,17 +184,33 @@ def main() -> None:
             f"{int(((d1 > diag) & fl).sum()):4d}"
         )
 
-    # The break is where mutual-NN falls off; report it rather than making the
-    # caller eyeball the table.
+    # Where the break sits, reported so the caller does not have to eyeball the
+    # table -- but the threshold is deliberately NOT 50%.
+    #
+    # The two errors are not symmetric.  A missed duplicate double-renders one
+    # visible, toggleable dot; a false flag *hides a real tree*.  So a band that
+    # is a coin flip should be left unflagged: at 52% mutual-NN, flagging it
+    # hides about as many real trees as duplicates it removes.  London sits at
+    # 51.5% over 18,076 rows and New York at 53.3% over 5,059 -- a bare 50% cut
+    # sent both to a 20m cell, which would have hidden roughly 8,800 and 2,400
+    # real trees respectively.
+    #
+    # Only flag a band that is clearly duplicate-dominated.
+    CONFIDENT = 0.60
     print("\n--- suggested guarantee")
     for lo, hi in [(0, 2), (2, 5), (5, 10), (10, 20)]:
         m = (d1 > lo) & (d1 <= hi)
-        if int(m.sum()) and mutual[m].mean() < 0.5:
-            print(f"  mutual-NN drops below 50% in the {lo}-{hi}m band")
+        n = int(m.sum())
+        if not n:
+            continue
+        rate = mutual[m].mean()
+        if rate < CONFIDENT:
+            note = "coin flip" if rate >= 0.45 else "neighbour-dominated"
+            print(f"  mutual-NN is {rate:.1%} in the {lo}-{hi}m band ({note}, n={n})")
             print(f"  -> guarantee {lo}m, i.e. a {lo * 2}m cell")
             break
     else:
-        print("  mutual-NN stays high through 20m; inspect manually")
+        print("  mutual-NN stays above 60% through 20m; inspect manually")
 
 
 if __name__ == "__main__":

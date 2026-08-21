@@ -94,11 +94,11 @@ where city = 'DEBER';
 # ~10m grid cell in ANY of four half-cell-staggered grid copies -- a guaranteed
 # match within 5m, possible out to a ~14m diagonal.
 #
-# The 10m cell is PROVISIONAL until this city is calibrated:
-#     cd data/raw && uv run osm_dedup_validation.py --city DEBER
-# The break between re-mapped duplicates and interstitial neighbours sits
-# wherever this city's OSM positional error ends and its planting spacing
-# begins, so it has to be measured rather than copied from Tempe.
+# CALIBRATED at 10m. This city's 5-10m band is 18.4% mutual-NN over
+# n=12630 -- neighbour-dominated: a false flag hides a real tree
+# while a missed duplicate only double-renders one, so a band that is not
+# clearly duplicate-dominated should not be flagged. Re-check with:
+#     cd data/raw && uv run ./osm_dedup_validation.py --city DEBER
 #
 # Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
 # cos(52.50 deg) here.

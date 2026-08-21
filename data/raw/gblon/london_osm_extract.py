@@ -16,12 +16,20 @@ bbox, an extra tag) has somewhere to do it.
 import sys
 from pathlib import Path
 
+import pyarrow as pa
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _osm_shared import extract_city  # noqa: E402
 
 CITY_CODE = "GBLON"
 CITY_NAME = "London OSM"
 
+# London's municipal and community partitions both declare `borough`, so this
+# one must too -- a partition that cannot supply a requested column drops out
+# of the union and the rest stop covering the source enum. OSM has no borough,
+# so it is all-null.
+EXTRA_NULL_COLUMNS = {"borough": pa.string()}
+
 
 if __name__ == "__main__":
-    extract_city(CITY_CODE, CITY_NAME)
+    extract_city(CITY_CODE, CITY_NAME, EXTRA_NULL_COLUMNS)

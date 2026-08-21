@@ -110,8 +110,22 @@ def fetch_osm_trees(city_code: str, timeout_s: int = 300) -> list[dict]:
     return elements
 
 
-def build_table(elements: list[dict], city_code: str, city_name: str) -> pa.Table:
-    """Normalise Overpass nodes to the canonical tree schema."""
+def build_table(
+    elements: list[dict],
+    city_code: str,
+    city_name: str,
+    extra_null_columns: dict | None = None,
+) -> pa.Table:
+    """Normalise Overpass nodes to the canonical tree schema.
+
+    `extra_null_columns` maps a city-specific column name to its Arrow type and
+    adds it as all-null.  OSM carries no such field, but a city whose other
+    partitions declare one needs its OSM partition to declare it too: a source
+    that cannot supply a requested column drops out of the union, and the
+    remaining partitions then fail to cover the source enum -- Trilogy reports
+    that as `complete where` clauses "not provably exhaustive", a long way from
+    the actual cause.  London's `borough` is the only instance today.
+    """
     rows: dict[str, list] = {
         "tree_id": [],
         "city": [],
@@ -157,13 +171,19 @@ def build_table(elements: list[dict], city_code: str, city_name: str) -> pa.Tabl
             "osm_ref": pa.array(rows["osm_ref"], type=pa.string()),
         }
     )
+    for name, dtype in (extra_null_columns or {}).items():
+        table = table.append_column(name, pa.nulls(table.num_rows, type=dtype))
     table = validate_coordinates(table, city=city_name, city_code=city_code)
     return enforce_tree_schema(
         table, city=city_name, data_source=OSM_DATA_SOURCES[city_code]
     )
 
 
-def extract_city(city_code: str, city_name: str | None = None) -> pa.Table:
+def extract_city(
+    city_code: str,
+    city_name: str | None = None,
+    extra_null_columns: dict | None = None,
+) -> pa.Table:
     """Fetch, normalise and publish one city's OSM trees.
 
     The whole body of a `{city}_osm_extract.py`.  Publishing to GCS is the last
@@ -175,7 +195,9 @@ def extract_city(city_code: str, city_name: str | None = None) -> pa.Table:
             f"{city_code} is not in OSM_DATA_SOURCES; add it there and to that "
             f"city's `{city_code.lower()}_source` enum before extracting"
         )
-    table = build_table(fetch_osm_trees(city_code), city_code, name)
+    table = build_table(
+        fetch_osm_trees(city_code), city_code, name, extra_null_columns
+    )
     name_on_gcs = staging_name(city_code)
     # Written locally first, then published. The GCS object is the artifact;
     # nothing is committed, because git does not preserve mtime and a committed
