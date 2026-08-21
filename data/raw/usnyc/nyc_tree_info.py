@@ -16,6 +16,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
+    stream_table_batches,
     emit,
     enforce_tree_schema,
     normalize_species,
@@ -148,16 +149,16 @@ def load_arrow_table(csv_bytes: io.BytesIO) -> tuple[pa.Table, int]:
         ),
     )
     raw_count = table.num_rows
-    table = cast_columns(table)
-    if "genusspecies" in table.schema.names:
-        before = table.num_rows
-        table = table.filter(pc.is_valid(table["genusspecies"]))
-        dropped = before - table.num_rows
-        if dropped:
-            print(
-                f"New York City ingest: dropped {dropped} rows with null species",
-                file=sys.stderr,
-            )
+    # Batched: PAGE_SIZE is 500,000 and `cast_columns` calls `.to_pylist()`
+    # on each column, so a single page materialised more Python objects
+    # than Amsterdam's entire dataset did before it started failing every
+    # cloud rebuild. See _ingest_shared.stream_table_batches.
+    table = stream_table_batches(table, cast_columns, label='New York City page')
+    # No null-species filter. A null species means "we do not know what this
+    # tree is", not "this is not a tree", and `enforce_tree_schema` gives those
+    # rows the UNKNOWN_SPECIES sentinel like every other city's. The same
+    # filter cost Amsterdam 17,433 real trees and LA 5,479; NYC only 36, but
+    # the rule should not have an exception left in it.
     return table, raw_count
 
 

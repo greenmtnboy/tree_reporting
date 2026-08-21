@@ -13,7 +13,7 @@ root partial datasource raw_washingtondc_landmark_info (
 )
 grain (landmark_id)
 complete where city = 'USWAS'
-file `./washingtondc_landmarks.csv`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/washingtondc_landmarks.csv`;
 
 partial datasource washingtondc_landmark_info (
     landmark_id,

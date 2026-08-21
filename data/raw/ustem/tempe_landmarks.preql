@@ -13,7 +13,7 @@ root partial datasource raw_tempe_landmark_info (
 )
 grain (landmark_id)
 complete where city = 'USTEM'
-file `./tempe_landmarks.csv`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/tempe_landmarks.csv`;
 
 partial datasource tempe_landmark_info (
     landmark_id,
