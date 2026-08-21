@@ -1,7 +1,33 @@
 import ..tree_common;
 import ..community_tree_info;
 
-auto deber_published_data_updated_through <- greatest(deber_data_updated_through, deber_community_data_updated_through, deber_osm_data_updated_through);
+# deber_osm_data_updated_through is deliberately NOT in this greatest().
+#
+# A published watermark is the greatest across a city's sources, so any one
+# fresh source marks the Parquet stale -- and a rebuild needs *every* partition,
+# including the municipal one. Wiring Berlin's OSM partition therefore made the
+# city permanently stale against a `gdi.berlin.de` that has been serving its
+# maintenance page for days, so every refresh tried to rebuild Berlin, failed on
+# the dead portal, and took full_tree_info and tree_enrichment down with it as
+# skipped dependencies.
+#
+# This is worth being precise about, because it defeats a safeguard that looks
+# like it should cover the case: `emit_freshness` degrades an unreachable
+# probe to the epoch so its city sits out the run, but the epoch loses every
+# greatest() -- and it only protects while *all* of a city's sources are quiet.
+# One genuinely fresh source is enough to demand a rebuild that an unreachable
+# source cannot satisfy.
+#
+# Dropping the OSM term restores that: Berlin's watermark is now the degrading
+# municipal probe and the community column, so the city sits out cleanly while
+# the portal is down and the other thirteen keep publishing.
+#
+# THE COST: re-running berlin_osm_extract.py no longer makes Berlin stale, so a
+# fresh OSM extract is not picked up until something else rebuilds the city.
+# Put the term back when gdi.berlin.de returns -- that is also the moment the
+# municipal rebuild clears the 1,601 NULL species and 25 'Unbekannt' left in
+# the hand-patched Parquet.
+auto deber_published_data_updated_through <- greatest(deber_data_updated_through, deber_community_data_updated_through);
 
 key deber_source enum<string>['BERLIN_OPENDATA', 'COMMUNITY_DEBER', 'OSM_DEBER']; # originating dataset for the row
 
