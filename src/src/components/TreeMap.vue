@@ -51,7 +51,7 @@
       <div class="tree-card-header-main">
         <div class="tree-card-title-wrap">
           <div class="tree-card-title">{{ selectedTree.tree_name || 'Unknown tree' }}</div>
-          <div v-if="selectedTree.species" class="tree-card-species">{{ selectedTree.species }}</div>
+          <div v-if="scientificName" class="tree-card-species">{{ scientificName }}</div>
         </div>
         <div class="tree-card-header-actions">
           <button
@@ -94,7 +94,7 @@
       <div class="tree-card-pane tree-card-pane--species">
         <div class="tree-card-section-label">Species</div>
 
-        <p v-if="selectedTree.description" class="tc-description">{{ selectedTree.description }}</p>
+        <p v-if="speciesDescription" class="tc-description">{{ speciesDescription }}</p>
 
         <div class="tc-grid">
           <template v-if="formatTitleCase(selectedTree.tree_form)">
@@ -204,6 +204,7 @@ import MapCompass from './MapCompass.vue'
 import CheckinDialog from './CheckinDialog.vue'
 import { firebaseAvailable } from '../lib/firebase'
 import { formatDataSource } from '../data/dataSources'
+import { speciesSentinel } from '../data/species'
 import { plantYearFrom } from '../lib/achievements'
 import {
   acquireSharedPositionWatch,
@@ -637,6 +638,21 @@ interface PopupTreeRow {
 }
 
 const selectedTree = ref<PopupTreeRow | null>(null)
+
+// A placeholder `species` is not a taxon and has no enrichment row (see
+// src/src/data/species.ts). Showing the raw sentinel in the italic
+// binomial slot reads as a species called "Unknown", so suppress it there and
+// explain the gap where the description would be.
+const scientificName = computed(() => {
+  const species = selectedTree.value?.species
+  return speciesSentinel(species) ? null : (species ?? null)
+})
+
+const speciesDescription = computed(() => {
+  const tree = selectedTree.value
+  if (!tree) return null
+  return tree.description ?? speciesSentinel(tree.species)?.note ?? null
+})
 const selectedTreeAnchor = ref<[number, number] | null>(null)
 const selectedTreeScreenPoint = ref<{ x: number; y: number } | null>(null)
 const treeCardEl = ref<HTMLElement | null>(null)

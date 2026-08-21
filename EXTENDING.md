@@ -119,15 +119,37 @@ OSM rows share the city's imputation);
 `test_osm_city_is_fully_wired` asserts every half of the wiring below.
 
 **Extraction is decoupled from refresh.** `{city}_osm_extract.py` queries
-Overpass and writes a committed `{code}_osm_staging.parquet`; the refresh
-pipeline only ever reads that file. Two reasons: Overpass 429/504s routinely
+Overpass and publishes `{code}_osm_staging.parquet` to GCS; the refresh
+pipeline only ever reads that object. Two reasons: Overpass 429/504s routinely
 under load (fetching at refresh time would couple every municipal rebuild to
 Overpass being up), and the only cheap OSM watermark is the global database
 timestamp, which advances every minute and would mark the city stale on every
-tick. Instead `{city}_osm_probe.py` emits the staging file's mtime, so
-re-running the extract and committing is what makes the Parquet stale. The
-extract is deliberately self-contained so it can later move onto a weekly
-`[[cloud.job]]` without a rewrite.
+tick. Instead `{city}_osm_probe.py` emits the staged object's publication time,
+so re-running the extract is what makes the Parquet stale. The extract is
+deliberately self-contained so it can later move onto a weekly `[[cloud.job]]`
+without a rewrite.
+
+**Staged parquets live in GCS, not in git — and the reason is the watermark.**
+The first cut committed them next to the extract script and had the probe emit
+the file's `st_mtime`. That works locally and is wrong everywhere else, because
+**git does not preserve mtime**: a fresh clone stamps every file with the
+checkout time. Every cloud job run is a fresh clone, so the watermark advanced
+on each of the three daily ticks and Boston and Tempe rebuilt every time —
+precisely the every-tick thrash staging was introduced to prevent, having merely
+swapped Overpass's minute-resolution clock for a checkout clock. It is invisible
+locally, where mtimes happen to be stable, and it was caught only by noticing
+that four staging files committed at 08:55 and 10:24 all carried an mtime of
+20:17, matching a branch switch.
+
+A GCS object's `Last-Modified` is a real publication time that survives cloning.
+`_ingest_shared` holds the three helpers — `staging_url` for the preql `file`
+clause, `staging_modified_at` for the probe, `upload_staging` for the extract —
+and `.gitignore` carries `*_staging.parquet` so a copy cannot drift back in.
+`test_no_staging_parquet_is_committed` fails if one does.
+
+The probe's HEAD request carries a cache-buster: the objects are served with
+`Cache-Control: max-age=3600`, so a probe run just after an extract would
+otherwise read the previous publication time and call the city fresh.
 
 **Dedup is stacking + aggregate, not an anti-join.** OSM overlaps the
 municipal inventory by construction. Trilogy's joins are equality-only (a
@@ -168,7 +190,8 @@ matches). Per-city thresholds are expected as OSM rolls out.
 column (aliased from `{code}_is_duplicate`), and the Parquet keeps every row.
 Dropping rows would break the partition-completeness proof (the Parquet must
 contain the union of its declared sources); the flag also makes dedup tunable
-and auditable — toggle flagged rows on the map to evaluate the cell size.
+and auditable — flagged rows stay queryable, so the cell size can be evaluated
+against real data rather than re-derived.
 Because the flag is computed from the same materialization's source rows, a
 municipal update dedups against itself in the same rebuild; there is no
 staleness window.
@@ -204,10 +227,49 @@ and a `--filter 'city={CODE}'` argument to the script, which
 and emit the whole export. Write-up in
 `upstream_repro/partition_filter_dropped/`.
 
-**Frontend sequencing warning:** the worker must not `SELECT is_duplicate`
-until *every* city's Parquet has been rebuilt with the column — DuckDB binder
-errors on the cities that lack it, one city at a time. Either roll the column
-out everywhere first, or have the worker filter per-city.
+**Every city carries the column; the frontend hides the flagged rows.** The
+flag is only useful if something reads it, and for a while nothing did: Boston's
+first OSM rebuild flagged 7,369 rows correctly and the map rendered all of them
+anyway, stacked on top of the municipal trees on Boston Common. `is_duplicate`
+is therefore materialized by **all fourteen** city models — the twelve with no
+OSM partition emit `auto {code}_is_duplicate <- False;` — and
+`duckdbPipeline.worker.ts` filters with a single
+`AND NOT COALESCE(is_duplicate, false)` when it loads a city.
+
+A missing column does not degrade: DuckDB raises a binder error and that city's
+map fails to load entirely. So **refresh every city before deploying** a worker
+change that selects it. `src/src/workers/parquetSchema.test.ts` asserts the
+column against the live GCS Parquet for every city in `CITY_CONFIG`, which is
+what turns "I forgot to refresh" into a red test rather than a broken city.
+
+**A new column does not make a Parquet stale.** Staleness is decided by the
+freshness probes, which watch the *source data*, so a plain `trilogy refresh
+raw` after a model change reports every unchanged city "up to date" and rebuilds
+nothing. Rolling this column out looked like it worked — the run exited 0 with
+"All scripts executed successfully" — while twelve of the fourteen Parquets were
+never touched. Force each one by name:
+
+```bash
+cd data && trilogy refresh raw/{city}/{city}_tree_info.preql -f {city}_tree_info
+```
+
+Then rebuild `full_tree_info`, which reads the per-city Parquets and would
+otherwise still hold the pre-change rows.
+
+**Do not merge `is_duplicate` in `tree_info.preql`.** `data_source` is merged
+there, and doing the same for the dedup flag looks symmetric but does not plan:
+
+```
+UnresolvableQueryException: Planner emitted a keyless join between row-bearing
+sources that share a join axis: ...unioned_at_local_data_source_local_tree_id
+_grouped_by_local.usbos_cell_a... This would render as a cross join (ON 1=1)
+and fan out; the join axis was lost upstream.
+```
+
+The flag comes from a per-city grid aggregate over that city's own rows;
+merging the keys asks the planner to resolve that aggregate over the union of
+all fourteen cities. The cross-city `full_tree_info` Parquet accordingly has no
+`is_duplicate`, and the worker skips the filter on that fallback path.
 
 Other details: OSM `circumference` defaults to metres but is frequently
 mis-entered as bare centimetres — the extract treats a unitless value > 10 as
@@ -668,9 +730,9 @@ data/raw/{city}/{city}_landmarks.preql       ← datasource with versioned GCS U
 tree extracts use, for the same reason:
 
 ```
-data/raw/{city}/{city}_landmarks_extract.py  ← queries Overpass, writes the staging parquet
-data/raw/{city}/{code}_landmarks_staging.parquet  ← committed; the refresh only ever reads this
-data/raw/{city}/{city}_landmarks_probe.py    ← emits the staging file's mtime, no network
+data/raw/{city}/{city}_landmarks_extract.py  ← queries Overpass, publishes the staging parquet to GCS
+gs://…/duckdb/staging/{code}_landmarks_staging.parquet  ← the refresh only ever reads this
+data/raw/{city}/{city}_landmarks_probe.py    ← emits the staged object's publication time
 ```
 
 Overpass allows **two concurrent slots per client IP** (`GET /api/status`
@@ -684,12 +746,13 @@ run alone finished in **6.8s**. The query was never the problem; the concurrency
 was.
 
 Staging removes Overpass from the refresh path entirely, and re-running the
-extract and committing the result becomes what marks the city stale — the OSM
-watermark alternative (the global database timestamp) advances every minute and
-would rebuild the city on every tick.
+extract becomes what marks the city stale — the OSM watermark alternative (the
+global database timestamp) advances every minute and would rebuild the city on
+every tick. Publish the staged parquet to GCS rather than committing it; see
+the watermark note above for why a committed copy reintroduces that same thrash.
 
 ```bash
-cd data/raw && uv run {city}/{city}_landmarks_extract.py   # then commit the parquet
+cd data/raw && uv run {city}/{city}_landmarks_extract.py   # publishes to GCS; nothing to commit
 ```
 
 Add the city's landmark freshness property and update the `greatest()` expression in **`data/raw/landmark_common.preql`**:
@@ -748,13 +811,58 @@ Both hybrid spellings are preserved verbatim: SF publishes
 `Platanus x hispanica`, OSM publishes `Citrus × limon` (U+00D7).  Normalising
 one into the other would orphan every already-enriched hybrid, so don't.
 
-Anything that survives as a non-taxon becomes `UNKNOWN_SPECIES` (`"Unknown"`),
-never null — see the next section for why — and that sentinel is excluded from
-enrichment **by name** in `SKIP_SPECIES` / `SPECIES_EXCLUSION_SQL`
-(`enrichment/_tree_shared.py`), which is also where a new placeholder value
-belongs.  `enforce_tree_schema` prints a per-ingest summary of how many values
-it reshaped, so a run that rewrites a tenth of its species column says so in
-the refresh log rather than doing it quietly.
+Anything that survives as a non-taxon becomes a **sentinel**, never null — see
+the next section for why.  `enforce_tree_schema` prints a per-ingest summary of
+how many values it reshaped, so a run that rewrites a tenth of its species
+column says so in the refresh log rather than doing it quietly.
+
+Most non-taxa merge into `UNKNOWN_SPECIES` (`"Unknown"`), but a value that
+names a *growth form* keeps it: `Palm`, `Shrub` and `Cactus` are their own
+sentinels, because the form is what the map icon and colour are chosen from and
+merging throws away the one fact the source did record.
+`_FORM_SENTINEL_ALIASES` carries the multilingual spellings (`arbusto`,
+`struik`, `palmera`, …); the full set is `SPECIES_SENTINELS`, and a new
+sentinel added there needs a matching entry in `src/src/data/species.ts`.
+
+### Sentinels are excluded from enrichment, and purged from it
+
+A sentinel is not a taxon, and `species` is the join key into the enrichment
+table, so an enrichment row for one is not inert — it labels **every** tree
+carrying that value.  This is not hypothetical.  A row keyed `Unknown` was
+enriched in April 2026 and came back as *Orania timikae*, a critically
+endangered single-stemmed palm from the heath forests of western New Guinea:
+
+```
+species='Unknown'  genus='Unknown'  tree_form='palm'
+description='Orania timikae is a small, single-stemmed palm reaching up to 4
+             meters tall, distinctive for its subdistichous crown…'
+photo_url=<an iNaturalist photo of a palm>
+```
+
+Once `UNKNOWN_SPECIES` adopted the same string, that one row labelled **189,139
+trees across all fourteen cities** — 67.6k in LA, 37.9k in NYC, 27.9k of
+Boston's OSM rows — each rendered with a palm icon, a palm photo, and a
+description of an endangered New Guinea palm.
+
+Two mechanisms, and you need both:
+
+- **Exclusion** keeps a sentinel out of the enrichment queue.  It lives in
+  `SKIP_SPECIES` / `SPECIES_EXCLUSION_SQL` (`enrichment/_tree_shared.py`),
+  which are now derived from `SPECIES_SENTINELS` so the two cannot drift.  A
+  new *non-sentinel* placeholder value belongs in `SKIP_SPECIES` directly.
+- **Purge** removes a row that is already there.  Exclusion alone does not:
+  `get_already_enriched` reads whatever the Parquet holds and
+  `merge_with_existing` concatenates it forward, so a row that got in before
+  the exclusion existed survives every run for ever.  `purge_non_taxa` runs
+  inside `load_existing_table`, so the removal lands on the next enrichment run
+  whether or not any new species were processed.
+
+Presentation for the sentinels is **hardcoded** in `src/src/data/species.ts` —
+label, `tree_form`, and the note shown where a description would go — rather
+than fetched.  Asking a model to describe "Palm" does not fail loudly; it
+returns a plausible, specific and wrong species, which is exactly how this
+happened.  The worker applies the label and form once in `trees_fast`, and
+`REAL_SPECIES_PREDICATE` keeps all four sentinels out of every species rollup.
 
 ### Mark a nullable column `?` or Trilogy will silently drop rows
 

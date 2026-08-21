@@ -34,6 +34,22 @@ merge uslax_source into data_source;
 merge uswas_source into data_source;
 merge ustem_source into data_source;
 
+# `is_duplicate` is deliberately NOT merged the same way, and the cross-city
+# Parquet does not carry it.  Merging the fourteen per-city keys makes the
+# planner resolve a city's dedup aggregate over the union of all fourteen
+# cities, and it fails outright:
+#
+#   UnresolvableQueryException: Planner emitted a keyless join between
+#   row-bearing sources that share a join axis: ...unioned_at_local_data_source
+#   _local_tree_id_grouped_by_local.usbos_cell_a... This would render as a
+#   cross join (ON 1=1) and fan out; the join axis was lost upstream.
+#
+# The flag exists per city because it is derived from a per-city grid aggregate
+# over that city's own rows (see ustem/tempe_tree_info.preql); there is no
+# cross-city meaning to give it.  The browser worker only ever loads the
+# per-city Parquet, so it filters on the per-city column and skips the filter
+# on the full-file fallback path.
+
 auto latest_update_through <- greatest(
 ussfo_published_data_updated_through,
 usnyc_published_data_updated_through,

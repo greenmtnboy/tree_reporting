@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "pytrilogy", "requests"]
+# dependencies = ["google-cloud-storage", "pyarrow", "pytrilogy", "requests"]
 # ///
 
 """
@@ -24,6 +24,7 @@ move is a scheduling change, not a rewrite.
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 import pyarrow as pa
@@ -31,6 +32,7 @@ import pyarrow.parquet as pq
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
+    upload_staging,
     CITY_BOUNDS,
     OVERPASS_HEADERS,
     circumference_cm_to_dbh_inches,
@@ -49,7 +51,12 @@ CITY_NAME = "Boston OSM"
 OVERPASS_URL = os.environ.get(
     "OVERPASS_URL", "https://overpass-api.de/api/interpreter"
 )
-OUTPUT = Path(__file__).parent / "usbos_osm_staging.parquet"
+STAGING_NAME = "usbos_osm_staging.parquet"
+# Written locally first, then published. The GCS object is the artifact --
+# uploading it is what makes the city's Parquet stale, and it is what the
+# refresh reads. Nothing is committed: git does not preserve mtime, so a
+# committed staging file made every fresh clone look like new data.
+OUTPUT = Path(tempfile.gettempdir()) / STAGING_NAME
 
 _CIRCUMFERENCE_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(cm|m)?\s*$", re.I)
 
@@ -152,6 +159,7 @@ def main() -> None:
     table = validate_coordinates(table, city=CITY_NAME, city_code=CITY_CODE)
     table = enforce_tree_schema(table, city=CITY_NAME, data_source="OSM_USBOS")
     pq.write_table(table, OUTPUT)
+    upload_staging(OUTPUT, STAGING_NAME)
     with_species = table.num_rows - table.column("species").null_count
     print(
         f"{CITY_NAME}: wrote {table.num_rows} rows "

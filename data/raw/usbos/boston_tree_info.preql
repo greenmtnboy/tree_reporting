@@ -46,8 +46,10 @@ root datasource brookline_update_time (
 )
 file `./brookline_update_time.py`;
 
-# mtime of the committed OSM staging parquet (see boston_osm_extract.py); the
-# staging file only moves when an extraction is re-run and committed.
+# GCS publication time of the staged OSM parquet (see boston_osm_extract.py); it
+# only moves when an extraction is re-run and uploaded.  Not a local
+# mtime: the staging parquets used to be committed, and git does not
+# preserve mtime, so every fresh clone looked like new data.
 root datasource usbos_osm_update_time (
     data_updated_through: usbos_osm_data_updated_through
 )
@@ -144,7 +146,7 @@ complete where city = 'USBOS' and usbos_source = 'COMMUNITY_USBOS'
 file `../community_tree_info.py`
 where city = 'USBOS';
 
-# OpenStreetMap trees, read from the committed staging parquet rather than
+# OpenStreetMap trees, read from the staged parquet in GCS rather than
 # Overpass — extraction is decoupled from refresh (see boston_osm_extract.py
 # and EXTENDING.md).  Overlapping rows are kept and flagged via
 # usbos_is_duplicate below, never dropped.  `diameter_at_breast_height` maps
@@ -164,7 +166,7 @@ root partial datasource usbos_osm_tree_info (
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'OSM_USBOS'
-file `./usbos_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbos_osm_staging.parquet`;
 
 # --- Cross-source dedup: stack + aggregate over four staggered grids -------
 #

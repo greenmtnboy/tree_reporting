@@ -1,7 +1,9 @@
 import { describe, test, expect } from 'vitest'
 import { DuckDBInstance } from '@duckdb/node-api'
-import { REMOTE_TREES_PARQUET_URL, REMOTE_SPECIES_PARQUET_URL } from './parquetUrls'
+import { REMOTE_TREES_PARQUET_URL, REMOTE_SPECIES_PARQUET_URL, cityTreeParquetUrl } from './parquetUrls'
 import { formatDataSource } from '../data/dataSources'
+import { CITY_CONFIG } from '../composables/useMapData'
+import { SPECIES_SENTINELS } from '../data/species'
 
 async function withDuckDB<T>(fn: (conn: Awaited<ReturnType<DuckDBInstance['connect']>>) => Promise<T>): Promise<T> {
   const instance = await DuckDBInstance.create(':memory:')
@@ -49,6 +51,44 @@ describe('parquet schema', () => {
       for (const source of sources) {
         expect(formatDataSource(source), `unlabelled data_source: ${source}`).toBeTruthy()
       }
+    })
+  }, 60_000)
+
+  // The worker filters flagged cross-source duplicates out of every per-city
+  // load with `AND NOT COALESCE(is_duplicate, false)`. A Parquet without the
+  // column does not degrade -- DuckDB raises a binder error and that city's map
+  // fails to load -- so this is the deploy gate: refresh all cities first.
+  test.each(Object.keys(CITY_CONFIG))('%s tree parquet carries is_duplicate', async (city) => {
+    const url = cityTreeParquetUrl(city)
+    expect(url, `no per-city parquet url for ${city}`).toBeTruthy()
+    await withDuckDB(async (conn) => {
+      const result = await conn.runAndReadAll(
+        `SELECT column_name FROM (DESCRIBE SELECT * FROM read_parquet('${url}'))`,
+      )
+      const cols = result.getRowObjects().map((r) => r.column_name as string)
+      expect(
+        cols,
+        `${city}'s parquet has no is_duplicate column -- run the Trilogy refresh ` +
+          `before deploying, or the worker binder-errors on this city`,
+      ).toContain('is_duplicate')
+    })
+  }, 60_000)
+
+  // A sentinel is not a taxon, and `species` is the join key: one enrichment row
+  // for "Unknown" labelled 189,139 trees across every city as Orania timikae.
+  // purge_non_taxa() in data/raw/enrichment/_tree_shared.py removes them.
+  test('tree_enrichment holds no row for a species sentinel', async () => {
+    await withDuckDB(async (conn) => {
+      const literals = SPECIES_SENTINELS.map((s) => `'${s.species.replace(/'/g, "''")}'`).join(', ')
+      const result = await conn.runAndReadAll(
+        `SELECT species FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}') WHERE species IN (${literals})`,
+      )
+      const found = result.getRowObjects().map((r) => r.species as string)
+      expect(
+        found,
+        'the enrichment table has a row for a placeholder species; every tree ' +
+          'carrying that sentinel inherits its description, icon and photo',
+      ).toEqual([])
     })
   }, 60_000)
 

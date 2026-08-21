@@ -18,6 +18,15 @@ root datasource ussfo_community_update_time (
 file `../community_update_time.py`;
 
 
+
+# This city has no OpenStreetMap partition, so no row can be a cross-source
+# duplicate.  The column is still emitted as a constant so every city's Parquet
+# carries `is_duplicate` and the browser worker can select it unconditionally;
+# a per-city column set is what forces the worker into city-specific SQL.
+# A city that later gains an OSM partition replaces this with the staggered-grid
+# derivation in ustem/tempe_tree_info.preql.
+auto ussfo_is_duplicate <- False;
+
 root partial datasource sf_raw_tree_info (
     treeid: tree_id,
     city: city,
@@ -67,6 +76,7 @@ partial datasource sf_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    is_duplicate: ussfo_is_duplicate,
     ussfo_published_data_updated_through,
 )
 grain (tree_id)

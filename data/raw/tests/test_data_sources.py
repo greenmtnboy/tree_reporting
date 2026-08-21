@@ -147,6 +147,16 @@ def test_osm_city_is_fully_wired(code: str):
     assert f"{lower}_osm_staging.parquet" in text, (
         f"{code} declares an OSM source label but no staging datasource"
     )
+    # Staged in GCS, never a repo-relative path.  The probe's watermark is the
+    # object's Last-Modified; a committed copy would be read at its mtime, which
+    # git does not preserve, so every fresh clone would look like new data and
+    # the city would rebuild on every tick.
+    assert f"file `./{lower}_osm_staging.parquet`" not in text, (
+        f"{code} reads its OSM staging parquet from the repo; it belongs in GCS"
+    )
+    assert f"staging/{lower}_osm_staging.parquet`" in text, (
+        f"{code}'s OSM staging datasource must point at the GCS staging prefix"
+    )
     column = f"{lower}_osm_data_updated_through"
     assert f"data_updated_through: {column}" in text
     assert column in text.split("greatest(", 1)[1].split(")", 1)[0], (
@@ -156,4 +166,66 @@ def test_osm_city_is_fully_wired(code: str):
     assert f"{lower}_is_duplicate" in text
     assert f"is_duplicate: {lower}_is_duplicate" in text, (
         f"{code} derives is_duplicate but does not materialize it as a column"
+    )
+
+
+@pytest.mark.parametrize("code", sorted(MUNICIPAL_DATA_SOURCES))
+def test_every_city_materializes_is_duplicate(code: str):
+    """`is_duplicate` must be a column in every city's Parquet, OSM or not.
+
+    The browser worker filters flagged rows out with a single
+    `AND NOT COALESCE(is_duplicate, false)` for whichever city is loaded.  A
+    city that omits the column does not degrade -- DuckDB raises a binder error
+    and that city's map fails to load -- so the twelve cities with no OSM
+    partition still emit a constant false rather than nothing.
+    """
+    lower = code.lower()
+    text = city_models()[code].read_text(encoding="utf-8")
+    assert f"is_duplicate: {lower}_is_duplicate" in text, (
+        f"{code} does not materialize an is_duplicate column; the worker "
+        "selects it for every city"
+    )
+    if code in OSM_DATA_SOURCES:
+        # Derived from the staggered-grid anchor counts, not a constant.
+        assert f"auto {lower}_is_duplicate <- {lower}_source =" in text
+    else:
+        assert f"auto {lower}_is_duplicate <- False;" in text, (
+            f"{code} has no OSM partition, so its is_duplicate must be the "
+            "constant false"
+        )
+
+
+def test_cross_city_model_does_not_merge_is_duplicate():
+    """The opposite of data_source: this merge must stay out of tree_info.preql.
+
+    `is_duplicate` is derived from a per-city grid aggregate over that city's
+    own rows.  Merging the fourteen keys into one makes the planner resolve
+    that aggregate over the union of all fourteen cities and it fails to plan
+    at all -- `UnresolvableQueryException: Planner emitted a keyless join
+    between row-bearing sources`.  Measured, not assumed; the comment in
+    tree_info.preql carries the error.
+    """
+    text = (RAW_DIR / "tree_info.preql").read_text(encoding="utf-8")
+    merged = [c for c in MUNICIPAL_DATA_SOURCES
+              if f"merge {c.lower()}_is_duplicate into" in text]
+    assert not merged, (
+        f"{merged} merge is_duplicate in tree_info.preql; this breaks planning "
+        "for every city model that derives the flag"
+    )
+
+
+def test_no_staging_parquet_is_committed():
+    """Staged sources live in GCS, not the repo.
+
+    They were committed at first and it worked, but the probes read the file's
+    mtime as the freshness watermark and **git does not preserve mtime**: every
+    fresh clone -- which is every cloud job run -- stamped the checkout time, so
+    the watermark advanced on every tick and Boston and Tempe rebuilt three
+    times a day.  That is the same every-tick thrash staging was introduced to
+    avoid, just sourced from a checkout instead of Overpass's clock.
+    """
+    committed = sorted(p.name for p in RAW_DIR.glob("*/*_staging.parquet"))
+    assert not committed, (
+        f"{committed} are in the working tree; publish them with "
+        "_ingest_shared.upload_staging and let .gitignore keep them out"
     )

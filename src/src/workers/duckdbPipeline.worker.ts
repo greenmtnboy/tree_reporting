@@ -14,6 +14,7 @@ FROM trees
 WHERE latitude IS NOT NULL AND longitude IS NOT NULL
 `
 
+import { sentinelLabelSql, sentinelTreeFormSql } from '../data/species'
 import {
   REMOTE_TREES_PARQUET_URL,
   REMOTE_SPECIES_PARQUET_URL,
@@ -422,6 +423,26 @@ function setCachedTile(key: string, tile: Uint8Array): void {
 }
 
 /**
+ * True when `url`'s parquet has `column`. Reads only the file footer, so this
+ * is a metadata round trip rather than a scan. Returns false on any error: the
+ * caller uses it to decide whether to add an optional predicate, and guessing
+ * "absent" degrades where guessing "present" would break the load.
+ */
+async function parquetHasColumn(url: string, column: string): Promise<boolean> {
+  if (!conn) return false
+  try {
+    const result = await conn.query(`
+      SELECT 1 FROM (DESCRIBE SELECT * FROM read_parquet('${url}'))
+      WHERE column_name = '${column}'
+      LIMIT 1
+    `)
+    return result.numRows > 0
+  } catch {
+    return false
+  }
+}
+
+/**
  * Load (or reload) the `trees` and `trees_fast` tables for `city` from the
  * per-city optimised parquet. Pass undefined to load all cities from the full
  * file (only as a last-resort fallback when city is genuinely unknown).
@@ -442,7 +463,25 @@ async function loadCityTrees(city?: string): Promise<void> {
   zoomBatchReady.clear()
   dataTileBoundsByZoom.clear()
 
-  const parquetUrl = city ? (cityTreeParquetUrl(city) ?? REMOTE_TREES_PARQUET_URL) : REMOTE_TREES_PARQUET_URL
+  const cityUrl = city ? cityTreeParquetUrl(city) : null
+  const parquetUrl = cityUrl ?? REMOTE_TREES_PARQUET_URL
+
+  // Cross-source duplicates are flagged, not dropped, so hiding them is this
+  // query's job -- see the staggered-grid dedup in
+  // data/raw/ustem/tempe_tree_info.preql.
+  //
+  // The column is probed rather than assumed. Selecting it unconditionally is
+  // a hard dependency on every Parquet having been rebuilt, and a Parquet that
+  // lacks it does not degrade -- DuckDB binder-errors and the city fails to
+  // load entirely. Three ways that bites: the cross-city full_tree_info
+  // fallback genuinely cannot carry the column (merging the per-city keys
+  // makes the planner resolve a city's grid aggregate over all fourteen and it
+  // fails to plan); a newly added city has no Parquet until its first refresh;
+  // and a rebuild can simply fail, which is what happened when Berlin's portal
+  // was mid-`Wartungsarbeiten` during this rollout. None of those should take
+  // a city's map down, so a missing column means "show everything" instead.
+  const hasDedupFlag = await parquetHasColumn(parquetUrl, 'is_duplicate')
+  const dedupFilter = hasDedupFlag ? 'AND NOT COALESCE(is_duplicate, false)' : ''
 
   await conn.query(`
     CREATE OR REPLACE TABLE trees AS
@@ -459,6 +498,7 @@ async function loadCityTrees(city?: string): Promise<void> {
       submission_photo_url
     FROM read_parquet('${parquetUrl}')
     WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+      ${dedupFilter}
   `)
 
   loadedCity = city ?? null
@@ -472,13 +512,22 @@ async function loadCityTrees(city?: string): Promise<void> {
         t.city,
         t.data_source,
         t.submission_photo_url,
-        COALESCE(NULLIF(TRIM(CAST(list_extract(se.common_names, 1) AS VARCHAR)), ''), t.tree_name, t.species) AS tree_name,
+        COALESCE(
+          NULLIF(TRIM(CAST(list_extract(se.common_names, 1) AS VARCHAR)), ''),
+          t.tree_name,
+          -- A placeholder species has no enrichment row by design, so name it
+          -- here rather than falling through to the bare sentinel string.
+          ${sentinelLabelSql('t.species')},
+          t.species
+        ) AS tree_name,
         t.plant_date,
         t.species,
         t.latitude,
         t.longitude,
         COALESCE(t.diameter_at_breast_height, 3) AS dbh,
-        CASE lower(trim(COALESCE(se.tree_form, 'default')))
+        -- "Palm"/"Shrub"/"Cactus" name a growth form the source recorded
+        -- without a species; that is worth an icon even with no enrichment row.
+        CASE lower(trim(COALESCE(se.tree_form, ${sentinelTreeFormSql('t.species')}, 'default')))
           WHEN 'palm' THEN 'palm'
           WHEN 'broadleaf' THEN 'broadleaf'
           WHEN 'conifer' THEN 'conifer'

@@ -45,6 +45,11 @@ from _ingest_shared import (
     rd_to_wgs84,
     UNKNOWN_SPECIES,
     sanitize_species,
+    form_sentinel_for,
+    SPECIES_SENTINELS,
+    PALM_SPECIES,
+    SHRUB_SPECIES,
+    CACTUS_SPECIES,
     validate_coordinates,
 )
 
@@ -706,6 +711,24 @@ class TestEnforceTreeSchemaSpecies:
             UNKNOWN_SPECIES,
         ]
 
+    def test_growth_form_values_keep_their_own_sentinel(self):
+        """"Palm" is not a taxon, but it is not nothing either.
+
+        Merging it into UNKNOWN_SPECIES throws away the one fact the source did
+        record, which is what the map icon is chosen from.
+        """
+        out = enforce_tree_schema(
+            self._table(["Palm", "arbusto", "Cactus", "Vacant"]),
+            city="Test",
+            data_source="CITY_OF_BOSTON",
+        )
+        assert out.column("species").to_pylist() == [
+            PALM_SPECIES,
+            SHRUB_SPECIES,
+            CACTUS_SPECIES,
+            UNKNOWN_SPECIES,
+        ]
+
     def test_species_column_is_never_null(self):
         """`species` is a Trilogy key; a null there is what silently dropped
         rows from Boston's species-keyed dbh imputation."""
@@ -847,3 +870,49 @@ class TestEnforceTreeSchema:
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+# ---------------------------------------------------------------------------
+# Growth-form sentinels
+
+
+class TestFormSentinels:
+    """Non-taxa that still name a growth form keep it; the rest merge."""
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("Palm", PALM_SPECIES),
+            ("palm tree", PALM_SPECIES),
+            ("Palmera", PALM_SPECIES),
+            ("Shrub", SHRUB_SPECIES),
+            ("arbusto", SHRUB_SPECIES),
+            ("Struik", SHRUB_SPECIES),
+            ("Cactus", CACTUS_SPECIES),
+            ("Cactaceae", CACTUS_SPECIES),
+            ("Vacant", None),
+            ("Unbekannt", None),
+            ("Acer rubrum", None),
+        ],
+    )
+    def test_form_sentinel_for(self, raw, expected):
+        assert form_sentinel_for(raw) == expected
+
+    @pytest.mark.parametrize("raw", ["Palm", "Shrub", "Cactus", "arbusto"])
+    def test_a_form_value_is_never_kept_as_a_genus(self, raw):
+        """These are genus-shaped and would otherwise pass the genus test,
+        landing in the species key as invented genera."""
+        assert sanitize_species(raw) is None
+
+    def test_sentinels_are_the_full_set(self):
+        assert SPECIES_SENTINELS == frozenset(
+            {UNKNOWN_SPECIES, PALM_SPECIES, SHRUB_SPECIES, CACTUS_SPECIES}
+        )
+
+    @pytest.mark.parametrize(
+        "raw", ["Unbekannt", "Nvt", "Privet", "Tree(s)", "--", "Unknown tree species"]
+    )
+    def test_leaked_non_taxa_are_placeholders(self, raw):
+        """Values measured in the published data that survived as fake genera."""
+        assert sanitize_species(raw) is None
+        assert form_sentinel_for(raw) is None
