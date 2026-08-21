@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import math
+import os
 import re
 import struct
 import sys
@@ -27,7 +28,7 @@ import pyarrow as pa
 from trilogy.io.arrow import emit_arrow as emit  # noqa: F401  (re-exported)
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable, Iterator
 
     import requests
 
@@ -979,6 +980,161 @@ def upload_staging(local_path, name: str) -> None:
     blob = gcs.Client().bucket(bucket_name).blob(blob_name)
     blob.upload_from_filename(str(local_path))
     print(f"uploaded {local_path} -> {uri}", file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# Streaming ingest
+# ---------------------------------------------------------------------------
+
+# A city ingest that accumulates every source record before transforming holds
+# the whole dataset as Python dicts, which is the most expensive representation
+# available: Amsterdam's 325k records peaked at 882 MB of Python heap and failed
+# every cloud refresh that actually rebuilt it, while passing locally every
+# time.  The failure is latent rather than absent for the others -- a city is
+# only rebuilt when its source updates, so an ingest can sit oversized for
+# months and break the day its portal publishes.
+#
+# The fix is always the same shape: yield a chunk of records, convert it to
+# Arrow, drop the dicts.  Peak memory becomes one chunk plus the accumulated
+# columnar data, which is roughly a tenth of the dict form and does not grow
+# with the number of chunks.  These helpers exist so a new city gets that for
+# free instead of reinventing the accumulate-everything loop.
+
+DEFAULT_CHUNK_ROWS = 50_000
+
+
+def stream_to_table(
+    chunks: Iterable[list[dict]],
+    transform: Callable[[list[dict]], pa.Table],
+    *, keep: Callable[[dict], bool] | None = None,
+    label: str = "",
+) -> pa.Table:
+    """Transform each chunk to Arrow and concatenate.
+
+    The counterpart to the `iter_*` helpers below and the piece that actually
+    bounds memory: `transform` runs per chunk, so the dicts for a chunk become
+    garbage as soon as its Arrow table exists.
+
+    `keep` filters records before transforming, for sources that carry rows
+    which are not trees at all (Amsterdam publishes tree stumps alongside
+    trees).  Filtering here rather than after the concat means the dropped rows
+    never occupy a column.
+    """
+    tables: list[pa.Table] = []
+    seen = kept = 0
+    for chunk in chunks:
+        seen += len(chunk)
+        if keep is not None:
+            chunk = [r for r in chunk if keep(r)]
+        kept += len(chunk)
+        if chunk:
+            tables.append(transform(chunk))
+    if not tables:
+        raise RuntimeError(f"{label or 'ingest'}: source produced no rows")
+    table = pa.concat_tables(tables)
+    print(
+        f"{label or 'ingest'}: streamed {seen} record(s) in {len(tables)} chunk(s)"
+        + (f", {seen - kept} filtered out" if seen != kept else ""),
+        file=sys.stderr,
+    )
+    return table
+
+
+def iter_link_pages(
+    url: str, *, rows_key: str, next_key: str = "next", **kwargs
+) -> Iterator[list[dict]]:
+    """Pages from an API that advertises the next page as a link.
+
+    The HAL/DSO shape: `_embedded.<rows_key>` holds the records and
+    `_links.<next_key>.href` the next page, absent on the last.
+    """
+    while url:
+        data = get_json_with_retry(url, **kwargs)
+        yield data.get("_embedded", {}).get(rows_key, [])
+        link = data.get("_links", {}).get(next_key, {})
+        url = link.get("href") if isinstance(link, dict) else None
+
+
+def iter_offset_pages(
+    fetch_page: Callable[[int], list[dict]], *, page_size: int
+) -> Iterator[list[dict]]:
+    """Pages from an API paged by offset, stopping on a short or empty page.
+
+    `fetch_page(offset)` returns that page's records.  Covers both the Socrata
+    `$offset`/`$limit` and WFS `startIndex`/`COUNT` spellings -- the caller
+    supplies the request, this owns the loop and the termination rule.
+    """
+    offset = 0
+    while True:
+        batch = fetch_page(offset)
+        if not batch:
+            return
+        yield batch
+        if len(batch) < page_size:
+            return
+        offset += page_size
+
+
+def iter_csv_row_chunks(
+    url: str,
+    *,
+    chunk_rows: int = DEFAULT_CHUNK_ROWS,
+    delimiter: str | None = None,
+    timeout: int = 600,
+) -> Iterator[list[dict]]:
+    """Chunks of dict rows from a remote CSV, without holding the whole file.
+
+    Streams the body to a temporary file and reads it back with
+    `csv.DictReader`, so peak memory is one chunk rather than the file text
+    *and* a dict per row simultaneously -- London's 1.1M-row CSV was doing
+    both.  The temporary file is removed on the way out.
+
+    The delimiter is sniffed from the header when not given, since these
+    exports are inconsistently comma- and semicolon-separated.
+    """
+    import csv
+    import tempfile
+
+    import requests
+
+    handle, path = tempfile.mkstemp(suffix=".csv")
+    os.close(handle)
+    try:
+        with requests.get(url, stream=True, timeout=timeout) as r:
+            r.raise_for_status()
+            with open(path, "wb") as fh:
+                for block_ in r.iter_content(chunk_size=1024 * 1024):
+                    if block_:
+                        fh.write(block_)
+        # utf-8-sig strips a BOM when present; latin-1 never fails, so it is a
+        # safe last resort for these municipal exports.
+        for encoding in ("utf-8-sig", "latin-1"):
+            try:
+                with open(path, "r", encoding=encoding, newline="") as fh:
+                    header = fh.readline()
+                    if delimiter is None:
+                        sep = max(",;	|", key=header.count)
+                    else:
+                        sep = delimiter
+                    fh.seek(0)
+                    reader = csv.DictReader(fh, delimiter=sep)
+                    chunk: list[dict] = []
+                    for row in reader:
+                        chunk.append(row)
+                        if len(chunk) >= chunk_rows:
+                            yield chunk
+                            chunk = []
+                    if chunk:
+                        yield chunk
+                return
+            except UnicodeDecodeError:
+                continue
+        raise RuntimeError(f"could not decode CSV at {url}")
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------

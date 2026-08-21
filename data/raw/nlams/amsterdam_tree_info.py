@@ -37,9 +37,11 @@ from _ingest_shared import (
     emit,
     enforce_tree_schema,
     get_json_with_retry,
+    iter_link_pages,
     normalize_species,
     parse_plant_date_year,
     rd_to_wgs84,
+    stream_to_table,
     validate_coordinates,
 )
 
@@ -134,12 +136,9 @@ def iter_pages() -> Iterator[list[dict]]:
     passing locally.  The caller converts each page to Arrow and drops the
     dicts, so peak memory is one page plus the accumulated columnar data.
     """
-    url: str | None = f"{BASE_URL}?_format=json&page_size={PAGE_SIZE}"
-    while url:
-        data = get_json_with_retry(url)
-        yield data.get("_embedded", {}).get("stamgegevens", [])
-        next_link = data.get("_links", {}).get("next", {})
-        url = next_link.get("href") if isinstance(next_link, dict) else None
+    return iter_link_pages(
+        f"{BASE_URL}?_format=json&page_size={PAGE_SIZE}", rows_key="stamgegevens"
+    )
 
 
 def download_all_pages() -> list[dict]:
@@ -226,21 +225,12 @@ if __name__ == "__main__":
     # rule, and catches the far larger group the null test never saw: 25,454
     # records are Stobbe in total, so ~21,300 stumps *with* a species were
     # being published as living trees.  Net effect is -3,872 for Amsterdam.
-    pages: list[pa.Table] = []
-    seen = stumps = 0
-    for page in iter_pages():
-        seen += len(page)
-        keep = [r for r in page if (r.get("typeObject") or "").strip() != "Stobbe"]
-        stumps += len(page) - len(keep)
-        if keep:
-            pages.append(transform(keep))
-    if stumps:
-        print(
-            f"Amsterdam ingest: dropped {stumps} stump (Stobbe) records "
-            f"of {seen} total",
-            file=sys.stderr,
-        )
-    table = pa.concat_tables(pages)
+    table = stream_to_table(
+        iter_pages(),
+        transform,
+        keep=lambda r: (r.get("typeObject") or "").strip() != "Stobbe",
+        label="Amsterdam ingest",
+    )
     table = validate_coordinates(table, city="Amsterdam", city_code="NLAMS")
     table = enforce_tree_schema(table, city="Amsterdam", data_source="AMSTERDAM_OPENDATA")
     emit(table)
