@@ -220,6 +220,20 @@ change that selects it. `src/src/workers/parquetSchema.test.ts` asserts the
 column against the live GCS Parquet for every city in `CITY_CONFIG`, which is
 what turns "I forgot to refresh" into a red test rather than a broken city.
 
+**A new column does not make a Parquet stale.** Staleness is decided by the
+freshness probes, which watch the *source data*, so a plain `trilogy refresh
+raw` after a model change reports every unchanged city "up to date" and rebuilds
+nothing. Rolling this column out looked like it worked — the run exited 0 with
+"All scripts executed successfully" — while twelve of the fourteen Parquets were
+never touched. Force each one by name:
+
+```bash
+cd data && trilogy refresh raw/{city}/{city}_tree_info.preql -f {city}_tree_info
+```
+
+Then rebuild `full_tree_info`, which reads the per-city Parquets and would
+otherwise still hold the pre-change rows.
+
 **Do not merge `is_duplicate` in `tree_info.preql`.** `data_source` is merged
 there, and doing the same for the dedup flag looks symmetric but does not plan:
 
