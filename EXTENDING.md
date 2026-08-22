@@ -909,6 +909,47 @@ not a combining character, so the hybrid mark survives.
 Against the August 2026 published data these removed 141 of the 795 species
 queued for enrichment: 114 that name no taxon, and 27 the ingest rewrites.
 
+### "A row exists" is not "it is enriched"
+
+`get_already_enriched` answers *is there a row*.  The freshness probe answers
+*does that row have a common name and a growth form*.  Those are different
+questions, and for months they disagreed: 226 species carried a row with a null
+`common_names`, written between March and August 2026, so the script skipped
+them as done while the probe reported them missing on every single run.  The
+probe could never return `true` — not for want of runs, but because nothing
+would ever revisit those rows.
+
+Three pieces fix it, and you need all three:
+
+- **One definition of complete.**  `ENRICHMENT_COMPLETE_SQL` lives in
+  `enrichment/_tree_shared.py` and both scripts read it, so what the probe
+  reports missing is exactly what the next run picks up.  The bar is
+  deliberately low — a common name and a growth form, which is what the map
+  renders.  A stricter bar would be permanently unmet: plenty of real taxa have
+  no published canopy spread, and asking again does not conjure one.
+- **`get_incomplete_species`**, which puts those rows back in the queue.
+- **`merge_with_existing` replaces rather than refuses.**  It used to raise on
+  any overlap ("re-processing is not expected"), which is what made
+  re-enrichment impossible; it now drops the existing row first.  It must —
+  `species` is the grain of this table and the join key from every tree row, so
+  two rows for one species would double every tree carrying it.
+
+**The retry is bounded by a date, not a counter.**
+`REENRICH_INCOMPLETE_BEFORE` converges without a schema change: a row rewritten
+by this run carries today's `enriched_at` and falls out of scope on the next
+one, so a species the model still cannot name is retried exactly once.  Without
+that bound an unnameable species would be re-enriched on every refresh tick,
+for ever — three times a day, at roughly a minute each.  Moving the date is how
+you ask for another attempt: a deliberate, greppable edit, like
+`SENTINEL_ENRICHED_AT`.
+
+The rows were not unfixable, which is what made this worth doing rather than
+relaxing the probe.  Asked directly, a model names *Hovenia tomentella* the
+downy Japanese raisin tree, *Enkianthus deflexus* the bent enkianthus and
+*Corylopsis glandulifera* the Chinese fragrant winterhazel.  The first instinct
+was that these obscure Asian taxa simply have no English common name and the
+probe was asking for the impossible; they do, and it was not.
+
 ### The enrichment queue asks `sanitize_species`, not a second list
 
 `SKIP_SPECIES` names specific values.  `is_enrichable_species` is the general

@@ -80,6 +80,39 @@ SPECIES_EXCLUSION_SQL = (
 )
 
 
+# What "enriched" means, as one SQL fragment both scripts read.
+#
+# The bar is deliberately low: a common name and a growth form.  Those two are
+# what the map renders -- the worker derives `common_name` from
+# `split_part(common_names, ',', 1)` and picks the icon and colour from
+# `tree_form` -- and everything else on the row is detail a page shows if it
+# has it.  A stricter bar would be permanently unmet: plenty of real taxa have
+# no published canopy spread, and asking again does not conjure one.
+ENRICHMENT_COMPLETE_SQL = (
+    "common_names IS NOT NULL"
+    " AND array_length(common_names) > 0"
+    " AND tree_form IS NOT NULL"
+)
+
+# Incomplete rows enriched before this are tried once more.
+#
+# 226 species carried a row with a null `common_names`, written between March
+# and August 2026.  `get_already_enriched` treated "a row exists" as "done", so
+# nothing ever revisited them -- and because the freshness probe wants a common
+# name, it could never report `true` no matter how many runs completed.  The
+# rows were not unfixable: asked directly, a model names *Hovenia tomentella*
+# the downy Japanese raisin tree and *Corylopsis glandulifera* the Chinese
+# fragrant winterhazel.
+#
+# A fixed date rather than a retry counter, because it converges without a
+# schema change: a row rewritten today carries today's `enriched_at` and falls
+# out of scope, so a species the model still cannot name is retried exactly
+# once and then left alone.  Without that, an unnameable species would be
+# re-enriched on every refresh tick, for ever.  Moving this date is how you ask
+# for another attempt -- a deliberate, greppable edit, like SENTINEL_ENRICHED_AT.
+REENRICH_INCOMPLETE_BEFORE = datetime(2026, 8, 22, tzinfo=timezone.utc)
+
+
 def should_skip_species(species: str) -> bool:
     return species.strip().lower() in EXCLUDED_SPECIES
 

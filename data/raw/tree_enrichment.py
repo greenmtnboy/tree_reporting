@@ -31,6 +31,8 @@ from enrichment._tree_shared import (
     ENRICHMENT_PARQUET,
     ENRICHMENT_GCS_URI,
     TREE_INFO_PARQUET,
+    ENRICHMENT_COMPLETE_SQL,
+    REENRICH_INCOMPLETE_BEFORE,
     SKIP_SPECIES,
     SPECIES_EXCLUSION_SQL,
     is_enrichable_species,
@@ -393,6 +395,38 @@ def get_already_enriched(source: str = ENRICHMENT_PARQUET) -> set[str]:
         conn.close()
 
 
+def get_incomplete_species(source: str = ENRICHMENT_PARQUET) -> set[str]:
+    """Species whose row exists but is missing what the freshness probe wants.
+
+    `get_already_enriched` answers "is there a row", which is not the same
+    question.  226 species had a row with a null `common_names` and were
+    therefore never revisited, while the probe -- which wants a common name --
+    reported them missing on every run.  The two now read the same definition
+    of complete, so what the probe reports is what the next run picks up.
+
+    Bounded by REENRICH_INCOMPLETE_BEFORE: a row rewritten today falls out of
+    scope, so a species the model cannot name is retried once, not for ever.
+    """
+    if not parquet_exists(source):
+        return set()
+    conn = duckdb.connect()
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT species
+            FROM read_parquet(?)
+            WHERE species IS NOT NULL
+              AND NOT ({ENRICHMENT_COMPLETE_SQL})
+              AND (enriched_at IS NULL OR enriched_at < ?)
+            """,
+            [source, REENRICH_INCOMPLETE_BEFORE],
+        ).fetchall()
+    finally:
+        conn.close()
+    # A sentinel's row is authored, not enriched -- see purge_non_taxa.
+    return {row[0] for row in rows} - set(SKIP_SPECIES)
+
+
 def _pa_type_to_duckdb_sql(t: pa.DataType) -> str:
     """Convert a PyArrow type to the equivalent DuckDB SQL type string."""
     if pa.types.is_boolean(t):
@@ -494,17 +528,22 @@ def merge_with_existing(existing: pa.Table | None, new_rows: list[dict]) -> pa.T
     if existing is None or existing_count == 0:
         return new_table
     re_processed = pa.array([row["species"] for row in new_rows], type=pa.string())
-    overlap = pc.sum(pc.is_in(existing.column("species"), re_processed)).as_py() or 0
+    is_re_processed = pc.fill_null(pc.is_in(existing.column("species"), re_processed), False)
+    overlap = pc.sum(is_re_processed).as_py() or 0
     if overlap > 0:
-        raise RuntimeError(
-            f"merge_with_existing: {overlap} species in new_rows already exist in existing table — "
-            f"re-processing is not expected. Aborting to avoid data loss."
-        )
+        # A re-enriched species replaces its row rather than joining it.
+        # `species` is the grain of this table and the join key from every tree
+        # row, so two rows for one species would double every tree carrying it.
+        print(f"[merge] replacing {overlap} re-enriched row(s)", file=sys.stderr)
+        existing = existing.filter(pc.invert(is_re_processed))
     merged = pa.concat_tables([existing, new_table])
     print(f"[merge] result={len(merged)} rows", file=sys.stderr)
-    if len(merged) != existing_count + len(new_rows):
+    expected = existing_count - overlap + len(new_rows)
+    if len(merged) != expected:
         raise RuntimeError(
-            f"merge_with_existing: expected {existing_count + len(new_rows)} rows after concat, got {len(merged)}"
+            f"merge_with_existing: expected {expected} rows after concat "
+            f"({existing_count} existing − {overlap} replaced + {len(new_rows)} new), "
+            f"got {len(merged)}"
         )
     return merged
 
@@ -661,14 +700,25 @@ if __name__ == "__main__":
         enrichment_source = ENRICHMENT_PARQUET
 
     already_enriched = get_already_enriched(enrichment_source)
+    # A row that exists but is missing a common name is not done -- it is the
+    # reason the freshness probe never reported `true`.  Kept separate from
+    # `already_enriched` so the per-species status below stays honest about
+    # which of the two this is.
+    incomplete = get_incomplete_species(enrichment_source)
     all_species = get_all_species()
-    to_process = [s for s in all_species if parse_scientific_name(s) not in already_enriched]
+    to_process = [
+        s
+        for s in all_species
+        if parse_scientific_name(s) not in already_enriched
+        or parse_scientific_name(s) in incomplete
+    ]
     if local_mode:
         to_process = to_process[:args.limit]
 
     print(
         f"[info] {len(all_species)} total species | "
         f"{len(already_enriched)} already enriched | "
+        f"{len(incomplete)} incomplete | "
         f"{len(to_process)} to process",
         file=sys.stderr,
     )

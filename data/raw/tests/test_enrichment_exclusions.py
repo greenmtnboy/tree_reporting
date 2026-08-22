@@ -27,6 +27,8 @@ sys.path.insert(0, str(RAW_DIR))
 
 from _ingest_shared import SENTINEL_ENRICHMENT, SPECIES_SENTINELS  # noqa: E402
 from enrichment._tree_shared import (  # noqa: E402
+    ENRICHMENT_COMPLETE_SQL,
+    REENRICH_INCOMPLETE_BEFORE,
     SKIP_SPECIES,
     SPECIES_EXCLUSION_SQL,
     is_enrichable_species,
@@ -239,3 +241,80 @@ def test_the_queue_rule_and_the_ingest_cannot_drift():
 
     for value in ("Acer rubrum", "Oak", "Acer unidentified", "Crateagus monogyna"):
         assert is_enrichable_species(value) is (sanitize_species(value) == value)
+
+
+# ---------------------------------------------------------------------------
+# ENRICHMENT_COMPLETE_SQL / REENRICH_INCOMPLETE_BEFORE
+# ---------------------------------------------------------------------------
+#
+# 226 species carried a row with a null `common_names`.  `get_already_enriched`
+# read that as "done" and never revisited them; the freshness probe wanted a
+# common name and reported them missing on every run.  Neither side was wrong
+# on its own -- they were answering different questions.  These pin the shared
+# answer, and the bound that stops the retry looping.
+
+
+def _rows(conn, table_sql: str, where: str, *params):
+    conn.execute(f"CREATE OR REPLACE TABLE t AS {table_sql}")
+    rows = conn.execute(f"SELECT species FROM t WHERE {where}", list(params)).fetchall()
+    return [r[0] for r in rows]
+
+
+@pytest.fixture()
+def conn():
+    duckdb = pytest.importorskip("duckdb")
+    c = duckdb.connect()
+    yield c
+    c.close()
+
+
+ROWS_SQL = """
+SELECT * FROM (VALUES
+    ('Acer rubrum',   ['red maple'], 'broadleaf'),
+    ('Hovenia tomentella', NULL,     'broadleaf'),
+    ('Enkianthus deflexus', [],      'broadleaf'),
+    ('Corylopsis glandulifera', ['winterhazel'], NULL)
+) AS v(species, common_names, tree_form)
+"""
+
+
+def test_complete_means_a_common_name_and_a_form(conn):
+    """The bar is what the map renders: the worker takes `common_name` from the
+    first entry of `common_names` and the icon and colour from `tree_form`.
+    Everything else is detail a page shows if it has it -- a stricter bar would
+    be permanently unmet, because plenty of real taxa have no published canopy
+    spread and asking again does not conjure one."""
+    assert _rows(conn, ROWS_SQL, ENRICHMENT_COMPLETE_SQL) == ["Acer rubrum"]
+
+
+def test_an_empty_common_names_list_is_not_a_common_name(conn):
+    """A null and an empty list mean the same thing and must classify alike."""
+    incomplete = _rows(conn, ROWS_SQL, f"NOT ({ENRICHMENT_COMPLETE_SQL})")
+    assert "Enkianthus deflexus" in incomplete
+    assert "Hovenia tomentella" in incomplete
+
+
+def test_the_retry_window_closes_behind_itself(conn):
+    """Why a date and not a retry counter: it converges with no schema change.
+
+    A row rewritten by this run carries today's `enriched_at`, so it falls out
+    of scope on the next one.  A species the model still cannot name is retried
+    exactly once -- without the bound it would be re-enriched on every refresh
+    tick, for ever.
+    """
+    stamped = """
+    SELECT * FROM (VALUES
+        ('Retried today',  TIMESTAMPTZ '2026-08-22 12:00:00+00'),
+        ('Never revisited', TIMESTAMPTZ '2026-03-29 14:25:12+00')
+    ) AS v(species, enriched_at)
+    """
+    eligible = _rows(
+        conn, stamped, "enriched_at IS NULL OR enriched_at < ?", REENRICH_INCOMPLETE_BEFORE
+    )
+    assert eligible == ["Never revisited"]
+
+
+def test_the_probe_reads_the_shared_definition():
+    """The run and the probe must not disagree about what the table is owed."""
+    probe = (RAW_DIR / "tree_enrichment_probe.py").read_text(encoding="utf-8")
+    assert "ENRICHMENT_COMPLETE_SQL" in probe
