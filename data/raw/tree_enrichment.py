@@ -33,6 +33,7 @@ from enrichment._tree_shared import (
     TREE_INFO_PARQUET,
     SKIP_SPECIES,
     SPECIES_EXCLUSION_SQL,
+    is_enrichable_species,
     purge_non_taxa,
     with_sentinel_rows,
     should_skip_species,
@@ -346,7 +347,7 @@ def get_all_species() -> list[str]:
             """,
             [TREE_INFO_PARQUET],
         ).fetchall()
-        return [row[0] for row in rows if not should_skip_species(row[0])]
+        return [row[0] for row in rows if is_enrichable_species(row[0])]
     finally:
         conn.close()
 

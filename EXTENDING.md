@@ -863,6 +863,71 @@ merging throws away the one fact the source did record.
 `struik`, `palmera`, …); the full set is `SPECIES_SENTINELS`, and a new
 sentinel added there needs a matching entry in `src/src/data/species.ts`.
 
+#### Some non-taxa are only recognisable by name
+
+The rules above are *shape*-based, and shape runs out.  `Japonica` is a
+specific epithet whose genus was dropped upstream; `Kastanie` is German for
+chestnut; `Oak` is an English common name.  All three are a single capitalised
+Latin-looking word, indistinguishable from a real genus — and the
+`_COMMON_NAME_NOUNS` check does not catch them because it is only ever tested
+in *epithet* position (that is deliberate: `Magnolia` and `Catalpa` are genuine
+genera and would fail it in genus position).
+
+Deciding those needs a list of names, and the only honest source for one is the
+published data.  `_NON_TAXON_REWRITES` is that list — every entry was observed
+in the fourteen wired inventories.  It maps a value to the genus worth keeping,
+or to `None` when there is none: a source that wrote `Callistemon king` still
+recorded the genus, while `Tai haku` is a cherry cultivar with no genus
+attached.
+
+A **misspelled binomial stays out of it**.  `Crateagus monogyna` and
+`Sequioa sempervirens` are real names badly typed; the enrichment step resolves
+those, and dropping them to `Unknown` would lose a tree we can identify.  The
+list is only for values that name no genus at all.
+
+The structural rules gained four cases at the same time, each of which
+generalises where a list would not:
+
+- a **placeholder in epithet position** truncates to the genus rather than
+  dropping the value — `Acer unidentified` is an `Acer`, and thirteen cities
+  publish some spelling of that;
+- a **leading hybrid mark needs two tokens after it**.  A nothogenus name is
+  still genus + epithet, so `X ambigua` is a `Genus × ambigua` that lost its
+  genus, not a nothogenus.  This costs two real names (`× Chitalpa`,
+  `× Cupressocyparis`), both of which also appear unmarked in the data;
+- a **dangling mark** is dropped: `Parkinsonia x` is a genus, not a hybrid;
+- a **family** (`-aceae`) is not a species-rank name.  Left in, `Platanaceae`
+  would be handed to the enrichment LLM to describe as though it were a tree.
+
+**Accents are stripped before any of this.**  A scientific name is ASCII by
+convention — the botanical code requires transliteration — so an accent means a
+typo or a common name in the portal's own language.  Stripping first lets one
+rule cover both: `Mālus` becomes the real genus `Malus`, and `Néflier` becomes
+`Neflier`, which the list recognises as the French for medlar.  U+00D7 (×) is
+not a combining character, so the hybrid mark survives.
+
+Against the August 2026 published data these removed 141 of the 795 species
+queued for enrichment: 114 that name no taxon, and 27 the ingest rewrites.
+
+### The enrichment queue asks `sanitize_species`, not a second list
+
+`SKIP_SPECIES` names specific values.  `is_enrichable_species` is the general
+rule, and it defers to the ingest: a species is enrichable when
+`sanitize_species` would keep it **exactly as written**.  Both
+`tree_enrichment.py` and `tree_enrichment_probe.py` queue from it.
+
+Tying the two together is the point.  An improvement to the ingest's idea of
+"is this a taxon" shrinks the enrichment backlog in the same edit, with no
+second list to keep in step — which is how a queue of 795 came to contain
+`Oak`, `Japonica`, `Kastanie` and `X ambigua` in the first place.
+
+A value `sanitize_species` *rewrites* is skipped too, rather than enriched
+under its raw spelling.  `Acer unidentified` is a row the next refresh will
+publish as `Acer`, so a row keyed on the raw string is dead on arrival — a
+duplicate of an entry that already exists, paid for.  Both cases leave those
+trees unenriched until a refresh rewrites their species, which is where they
+already were.
+
 ### Sentinels are excluded from enrichment, and purged from it
 
 A sentinel is not a taxon, and `species` is the join key into the enrichment

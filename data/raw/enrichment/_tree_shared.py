@@ -9,7 +9,11 @@ from pathlib import Path
 from random import randint
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _ingest_shared import SENTINEL_ENRICHMENT, SPECIES_SENTINELS  # noqa: E402
+from _ingest_shared import (  # noqa: E402
+    SENTINEL_ENRICHMENT,
+    SPECIES_SENTINELS,
+    sanitize_species,
+)
 
 env = Environment(working_path=Path(__file__).resolve().parent.parent)
 
@@ -78,6 +82,31 @@ SPECIES_EXCLUSION_SQL = (
 
 def should_skip_species(species: str) -> bool:
     return species.strip().lower() in EXCLUDED_SPECIES
+
+
+def is_enrichable_species(value: str | None) -> bool:
+    """Is *value* a taxon worth asking the LLM about?
+
+    The lists above name specific values.  This is the general rule, and it
+    defers to the ingest: a species is enrichable when `sanitize_species`
+    would keep it exactly as written.  Tying the two together means an
+    improvement to the ingest's idea of "is this a taxon" shrinks the
+    enrichment queue in the same edit, with no second list to keep in step --
+    and 141 of the 795 species queued in August 2026 turned out to be things
+    like "Oak", "Japonica", "Kastanie" and "X ambigua".
+
+    A value `sanitize_species` *rewrites* is skipped too, not enriched under
+    its raw spelling.  "Acer unidentified" is a row the next refresh will
+    publish as "Acer", so a row keyed on the raw string is dead on arrival --
+    it buys a duplicate of an entry that already exists, and pays the LLM for
+    it.  Both cases leave those trees unenriched until the refresh rewrites
+    their species, which is where they already were.
+    """
+    if not value:
+        return False
+    if value in SKIP_SPECIES or should_skip_species(value):
+        return False
+    return sanitize_species(value) == value
 
 
 def purge_non_taxa(table):

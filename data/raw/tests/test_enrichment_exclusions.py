@@ -29,6 +29,7 @@ from _ingest_shared import SENTINEL_ENRICHMENT, SPECIES_SENTINELS  # noqa: E402
 from enrichment._tree_shared import (  # noqa: E402
     SKIP_SPECIES,
     SPECIES_EXCLUSION_SQL,
+    is_enrichable_species,
     purge_non_taxa,
     sentinel_enrichment_rows,
     with_sentinel_rows,
@@ -175,3 +176,66 @@ def test_sentinel_rows_match_the_frontend():
         assert authored["common_names"][0] == values["label"], species
         assert authored["tree_form"] == values["tree_form"], species
         assert authored["description"] == values["note"], species
+
+
+# ---------------------------------------------------------------------------
+# is_enrichable_species
+# ---------------------------------------------------------------------------
+#
+# The lists above name specific values.  This is the general rule, and it is
+# the one that keeps the queue honest as new cities land: a species is
+# enrichable when the ingest would keep it exactly as written.  It is the same
+# question `sanitize_species` answers, asked from the other side.
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "Acer rubrum",
+        "Platanus x hispanica",
+        "Citrus × limon",
+        "Quercus",
+        # Badly typed is not the same as not a taxon -- the LLM resolves these,
+        # and skipping them would lose a tree we can identify.
+        "Crateagus monogyna",
+        "Sequioa sempervirens",
+    ],
+)
+def test_a_taxon_is_enrichable(value: str):
+    assert is_enrichable_species(value) is True
+
+
+@pytest.mark.parametrize("value", sorted(SPECIES_SENTINELS))
+def test_a_sentinel_is_never_enrichable(value: str):
+    assert is_enrichable_species(value) is False
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        # Not a taxon at all: the ingest drops these to a sentinel.
+        "Oak", "Japonica", "Kastanie", "X ambigua", "Platanaceae",
+        "Mixed species", "Tai haku",
+        # A value the ingest *rewrites* is skipped too, rather than enriched
+        # under its raw spelling: the next refresh publishes these trees as
+        # "Acer" and "Prunus", so a row keyed on the raw string is dead on
+        # arrival -- a duplicate of an entry that already exists, paid for.
+        "Acer unidentified", "Prunus tai", "Parkinsonia x",
+        None, "", "   ",
+    ],
+)
+def test_a_non_taxon_is_not_enrichable(value):
+    assert is_enrichable_species(value) is False
+
+
+def test_the_queue_rule_and_the_ingest_cannot_drift():
+    """Not a restatement of the cases above: this is the property they sample.
+
+    Tying the queue to `sanitize_species` is what makes an improvement to the
+    ingest's idea of "is this a taxon" shrink the enrichment backlog in the
+    same edit, with no second list to keep in step.
+    """
+    from _ingest_shared import sanitize_species
+
+    for value in ("Acer rubrum", "Oak", "Acer unidentified", "Crateagus monogyna"):
+        assert is_enrichable_species(value) is (sanitize_species(value) == value)

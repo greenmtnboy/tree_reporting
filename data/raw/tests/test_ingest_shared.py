@@ -187,6 +187,92 @@ class TestSanitizeSpecies:
         assert sanitize_species("Magnolia grandiflora") == "Magnolia grandiflora"
         assert sanitize_species("Catalpa speciosa") == "Catalpa speciosa"
 
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            # A common name standing alone is genus-shaped and the structural
+            # rules cannot see it; _NON_TAXON_REWRITES names them.
+            "Oak", "Willow", "Cedar", "Redwood", "Eucalypt", "Greengage",
+            # ...including the adjective half of one.
+            "Red", "White", "Northern red", "Eastern white", "European horse",
+            # ...and the same thing in the languages the wired cities publish
+            # in.  Accents are stripped before the lookup.
+            "Kastanie", "Kiefer", "Birke", "Néflier", "Süsskirsche",
+            "Gewone esdoorn", "Pin maritime",
+            # A specific epithet whose genus was lost upstream.  "Japonica" is
+            # not a genus, but nothing about its shape says so.
+            "Japonica", "Nigra", "Biloba", "Serrulata", "Negundo",
+            # Cultivar and marketing names with no genus attached.
+            "Tai haku", "Sunset boulevard", "James grieve", "Heaven scent",
+            # Free text an inventory left in the species column.
+            "Misc", "Mixed species", "Scheduled planting", "Uknown taxus",
+        ],
+    )
+    def test_drops_values_that_name_no_genus(self, raw):
+        assert sanitize_species(raw) is None
+
+    def test_family_is_not_a_species_rank_name(self):
+        """A family would otherwise be handed to the LLM as if it were a tree."""
+        assert sanitize_species("Platanaceae") is None
+        assert sanitize_species("Platanus") == "Platanus"
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            # A placeholder in epithet position says the source gave up on the
+            # species -- but it did record the genus, which is a real answer.
+            ("Acer unidentified", "Acer"),
+            ("Quercus unidentified", "Quercus"),
+            ("Ceanothus species", "Ceanothus"),
+            ("Thuja type", "Thuja"),
+            ("Malus spec", "Malus"),
+            ("Yucca no", "Yucca"),
+            # Same for a cultivar name that is not a Latin epithet.
+            ("Callistemon king", "Callistemon"),
+            ("Cydonia champion", "Cydonia"),
+            ("Prunus tai", "Prunus"),
+            # A mark with nothing after it is dangling, not a hybrid.
+            ("Parkinsonia x", "Parkinsonia"),
+        ],
+    )
+    def test_keeps_the_genus_when_only_the_epithet_is_junk(self, raw, expected):
+        assert sanitize_species(raw) == expected
+
+    @pytest.mark.parametrize(
+        "raw",
+        ["X ambigua", "X media", "X soulangeana", "× acerifolia"],
+    )
+    def test_drops_a_hybrid_epithet_whose_genus_is_missing(self, raw):
+        """A nothogenus name is still genus + epithet.
+
+        With one token after the mark, the genus is what went missing: these
+        are `Genus × epithet` values that lost their genus upstream, and
+        reading them as a nothogenus would invent one.
+        """
+        assert sanitize_species(raw) is None
+
+    def test_a_real_nothogenus_still_survives(self):
+        assert sanitize_species("X amelasorbus jackii") == "X amelasorbus jackii"
+        assert sanitize_species("× chitalpa tashkentensis") == "× chitalpa tashkentensis"
+
+    def test_accents_are_stripped_from_a_latin_name(self):
+        """A scientific name is ASCII; an accent means a typo or a common name.
+
+        Stripping first lets one rule cover both -- "Mālus" is the real genus
+        misspelled, "Néflier" is French for medlar.
+        """
+        assert sanitize_species("Mālus") == "Malus"
+        assert sanitize_species("Néflier") is None
+
+    def test_a_misspelled_binomial_is_left_for_enrichment(self):
+        """Badly typed is not the same as not a taxon.
+
+        Dropping these to Unknown would lose a tree we can identify; the
+        enrichment step resolves the spelling.
+        """
+        assert sanitize_species("Crateagus monogyna") == "Crateagus monogyna"
+        assert sanitize_species("Sequioa sempervirens") == "Sequioa sempervirens"
+
 
 # ---------------------------------------------------------------------------
 # normalize_species_parts

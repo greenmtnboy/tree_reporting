@@ -12,8 +12,8 @@ import duckdb
 from enrichment._tree_shared import (
     ENRICHMENT_PARQUET,
     TREE_INFO_PARQUET,
-    SKIP_SPECIES,
     SPECIES_EXCLUSION_SQL,
+    is_enrichable_species,
 )
 
 _COMPLETENESS_EXPRESSIONS = [
@@ -44,7 +44,9 @@ def main() -> None:
                 [TREE_INFO_PARQUET],
             ).fetchall()
         }
-        all_species.difference_update(SKIP_SPECIES)
+        # The SQL above filters the values named in SKIP_SPECIES; this is the
+        # general rule, and it is the same one tree_enrichment.py queues from.
+        all_species = {s for s in all_species if is_enrichable_species(s)}
 
         complete_enriched: set[str] | None = None
         for completeness_expr in _COMPLETENESS_EXPRESSIONS:
