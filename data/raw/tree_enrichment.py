@@ -34,6 +34,7 @@ from enrichment._tree_shared import (
     SKIP_SPECIES,
     SPECIES_EXCLUSION_SQL,
     purge_non_taxa,
+    with_sentinel_rows,
     should_skip_species,
 )
 from enrichment._tree_enrichment_helpers import (
@@ -474,7 +475,11 @@ def load_existing_table(source: str) -> pa.Table | None:
     # and ensures all column types match exactly before concat.
     table = table.cast(SCHEMA)
 
-    return purge_non_taxa(table)
+    # purge_non_taxa strips every sentinel row the parquet held; with_sentinel_rows
+    # puts the authored ones back, so both the checkpoint and the final merge
+    # carry them. On a first run there is no parquet to load and they arrive on
+    # the run after — there is nothing to join to yet either.
+    return with_sentinel_rows(purge_non_taxa(table))
 
 
 def merge_with_existing(existing: pa.Table | None, new_rows: list[dict]) -> pa.Table:

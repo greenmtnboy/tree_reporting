@@ -186,6 +186,54 @@ SPECIES_SENTINELS: frozenset[str] = frozenset(
 )
 
 
+# What a sentinel looks like in the enrichment table.
+#
+# `species` is the join key into enrichment, so a sentinel with no row there
+# resolves to NULL in any query that reads an enrichment column -- the
+# dashboards showed a null species and a null common name for ~190k trees that
+# do carry a value.  These rows fix that, and they are *authored*: the values
+# below are the ones the frontend hardcodes in src/src/data/species.ts, not
+# something an LLM produced.  That distinction is the whole point.  The row
+# that motivated the purge was an LLM answer for "Unknown" (Orania timikae, a
+# New Guinea palm, joined to 189,139 trees); these carry no taxonomy, no photo
+# and no ecological claims -- only the label and the growth form the source
+# actually recorded.
+#
+# purge_non_taxa() still removes every sentinel row it reads from the parquet
+# before these are re-appended, so a drifted or model-written row cannot
+# survive a run.
+SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
+    UNKNOWN_SPECIES: {
+        "common_names": ["Species not recorded"],
+        "description": (
+            "This tree is in the inventory, but its source did not record a species."
+        ),
+        "tree_form": "default",
+    },
+    PALM_SPECIES: {
+        "common_names": ["Palm (species not recorded)"],
+        "description": (
+            "The source recorded this as a palm without identifying the species."
+        ),
+        "tree_form": "palm",
+    },
+    SHRUB_SPECIES: {
+        "common_names": ["Shrub (species not recorded)"],
+        "description": (
+            "The source recorded this as a shrub without identifying the species."
+        ),
+        "tree_form": "multi_trunk",
+    },
+    CACTUS_SPECIES: {
+        "common_names": ["Cactus (species not recorded)"],
+        "description": (
+            "The source recorded this as a cactus without identifying the species."
+        ),
+        "tree_form": "columnar",
+    },
+}
+
+
 def form_sentinel_for(value: str | None) -> str | None:
     """Return the growth-form sentinel *value* names, or ``None``.
 

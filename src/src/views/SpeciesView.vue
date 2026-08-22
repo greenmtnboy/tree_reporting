@@ -29,7 +29,7 @@
             :imports="SPECIES_DASHBOARD_IMPORTS as DashboardImport[]"
             :base-filters="genusSelectorFilters"
             :top-query="TOP_GENUS_QUERY"
-            :full-query="GENUS_QUERY"
+            :full-query="GENUS_OPTIONS_QUERY"
             :include-all-option="true"
             all-option-label="All genera"
             placeholder="Search genera"
@@ -49,7 +49,7 @@
             :imports="SPECIES_DASHBOARD_IMPORTS as DashboardImport[]"
             :base-filters="speciesSelectorBaseFilters"
             :top-query="TOP_SPECIES_QUERY"
-            :full-query="SPECIES_QUERY"
+            :full-query="SPECIES_OPTIONS_QUERY"
             :auto-select-top="false"
             :include-all-option="true"
             all-option-label="All species"
@@ -203,14 +203,17 @@ import {
 import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
 import SummaryMarkdownCard from '../components/SummaryMarkdownCard.vue'
 import SpeciesCarousel from '../components/SpeciesCarousel.vue'
-import { REAL_SPECIES_PREDICATE } from '../data/species'
 import SpeciesSearchFilter from '../components/SpeciesSearchFilter.vue'
 import TreeDotMap from '../components/TreeDotMap.vue'
 import { buildDashboardContextParameters } from '../composables/dashboardContextSource'
 import { useMapData, type CityCode } from '../composables/useMapData'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
 import {
-  SPECIES_GENUS_EXPR,
+  GENUS_OPTIONS_QUERY,
+  SPECIES_CONTEXT_QUERY,
+  SPECIES_OPTIONS_QUERY,
+  TOP_GENUS_QUERY,
+  TOP_SPECIES_QUERY,
   SPECIES_CHARTS_BY_ID,
   SPECIES_DASHBOARD_IMPORTS,
   SPECIES_KPI_CHARTS,
@@ -233,36 +236,6 @@ type FilterOption = {
   value: string
   count: number | null
 }
-
-const GENUS_QUERY = `SELECT
-  ${SPECIES_GENUS_EXPR} as option_value,
-  ${SPECIES_GENUS_EXPR} as option_label,
-  count(tree_id) as tree_count
-WHERE ${REAL_SPECIES_PREDICATE}
-ORDER BY tree_count DESC;`
-
-const TOP_GENUS_QUERY = `SELECT
-  ${SPECIES_GENUS_EXPR} as option_value,
-  ${SPECIES_GENUS_EXPR} as option_label,
-  count(tree_id) as tree_count
-WHERE ${REAL_SPECIES_PREDICATE}
-ORDER BY tree_count DESC
-LIMIT 1;`
-
-const SPECIES_QUERY = `SELECT
-  species as option_value,
-  species as option_label,
-  count(tree_id) as tree_count
-WHERE ${REAL_SPECIES_PREDICATE}
-ORDER BY tree_count DESC;`
-
-const TOP_SPECIES_QUERY = `SELECT
-  species as option_value,
-  species as option_label,
-  count(tree_id) as tree_count
-WHERE ${REAL_SPECIES_PREDICATE}
-ORDER BY tree_count DESC
-LIMIT 1;`
 
 const route = useRoute()
 const router = useRouter()
@@ -343,7 +316,7 @@ async function loadSpeciesContext(species: string | null) {
       connectionId,
       [{
         label: 'species-context',
-        query: `SELECT common_names[1] as common_name, tree_form, growth_rate WHERE ${REAL_SPECIES_PREDICATE} LIMIT 1;`,
+        query: SPECIES_CONTEXT_QUERY,
         extra_filters: [getSpeciesSqlFilter(species)],
       }],
       'trilogy',

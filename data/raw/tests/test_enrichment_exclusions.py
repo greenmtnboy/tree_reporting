@@ -15,6 +15,7 @@ forward on every run.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -24,12 +25,16 @@ import pytest
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
-from _ingest_shared import SPECIES_SENTINELS  # noqa: E402
+from _ingest_shared import SENTINEL_ENRICHMENT, SPECIES_SENTINELS  # noqa: E402
 from enrichment._tree_shared import (  # noqa: E402
     SKIP_SPECIES,
     SPECIES_EXCLUSION_SQL,
     purge_non_taxa,
+    sentinel_enrichment_rows,
+    with_sentinel_rows,
 )
+
+SPECIES_TS = RAW_DIR.parents[1] / "src" / "src" / "data" / "species.ts"
 
 
 def _table(species: list[str | None]) -> pa.Table:
@@ -71,3 +76,102 @@ def test_purge_handles_an_empty_table():
 def test_purge_reports_what_it_dropped(capsys):
     purge_non_taxa(_table(["Acer rubrum", "Unknown"]))
     assert "Unknown" in capsys.readouterr().err
+
+
+# ── Authored sentinel rows ─────────────────────────────────────────────────────
+#
+# A sentinel row is the opposite of the one that caused the purge: purge_non_taxa
+# removes whatever the parquet holds for a sentinel, and these put back a row
+# nobody guessed.  The tests below pin both halves — the values, and the fact
+# that the row says nothing it has no business saying.
+
+
+def _sentinel_table(species: list[str | None]) -> pa.Table:
+    """A table shaped like the enrichment parquet's relevant columns."""
+    return pa.table(
+        {
+            "species": pa.array(species, type=pa.string()),
+            "common_names": pa.array([None] * len(species), type=pa.list_(pa.string())),
+            "description": pa.array([None] * len(species), type=pa.string()),
+            "tree_form": pa.array([None] * len(species), type=pa.string()),
+            "is_complete": pa.array([None] * len(species), type=pa.bool_()),
+            "enriched_at": pa.array(
+                [None] * len(species), type=pa.timestamp("us", tz="UTC")
+            ),
+        }
+    )
+
+
+def test_every_sentinel_has_an_authored_row():
+    assert set(SENTINEL_ENRICHMENT) == set(SPECIES_SENTINELS)
+    assert {row["species"] for row in sentinel_enrichment_rows()} == set(SPECIES_SENTINELS)
+
+
+@pytest.mark.parametrize("row", sentinel_enrichment_rows(), ids=lambda r: r["species"])
+def test_sentinel_row_carries_a_label_and_a_form(row: dict):
+    assert row["common_names"] and row["common_names"][0].strip()
+    assert row["tree_form"].strip()
+    assert row["description"].strip()
+
+
+@pytest.mark.parametrize("row", sentinel_enrichment_rows(), ids=lambda r: r["species"])
+def test_sentinel_row_claims_nothing_it_cannot_know(row: dict):
+    """The Orania timikae row had a genus, a photo and a description of a real
+    palm. A sentinel is not a taxon: it may name itself and the growth form its
+    source recorded, and nothing else."""
+    for field in (
+        "genus",
+        "species_epithet",
+        "family",
+        "photo_url",
+        "photo_attribution",
+        "native_ecoregions",
+        "usda_zone_min",
+        "usda_zone_max",
+    ):
+        assert row.get(field) is None, f"{row['species']} claims {field}"
+    assert row["is_complete"] is False
+
+
+def test_purge_then_append_replaces_a_drifted_row():
+    """The self-healing property: whatever the parquet holds for a sentinel is
+    dropped and the authored row put back, so one bad row cannot persist."""
+    drifted = _sentinel_table(["Acer rubrum", "Unknown"])
+    drifted = drifted.set_column(
+        drifted.schema.get_field_index("tree_form"),
+        "tree_form",
+        pa.array([None, "palm"], type=pa.string()),
+    )
+
+    out = with_sentinel_rows(purge_non_taxa(drifted))
+    by_species = {
+        row["species"]: row for row in out.to_pylist()
+    }
+
+    assert by_species["Acer rubrum"]["tree_form"] is None
+    assert by_species["Unknown"]["tree_form"] == SENTINEL_ENRICHMENT["Unknown"]["tree_form"]
+    assert len(out) == 1 + len(SPECIES_SENTINELS)
+    assert out.column("species").to_pylist().count("Unknown") == 1
+
+
+def test_sentinel_rows_match_the_frontend():
+    """src/src/data/species.ts hardcodes the same labels for the map. The two
+    are edited by hand in different languages; this is what catches the drift."""
+    source = SPECIES_TS.read_text(encoding="utf-8")
+    entries = re.findall(
+        r"species:\s*(\w+),\s*label:\s*'([^']*)',\s*treeForm:\s*'([^']*)',\s*note:\s*'([^']*)'",
+        source,
+    )
+    constants = dict(re.findall(r"export const (\w+_SPECIES) = '([^']*)'", source))
+    assert entries, f"could not parse sentinels out of {SPECIES_TS}"
+
+    frontend = {
+        constants[name]: {"label": label, "tree_form": form, "note": note}
+        for name, label, form, note in entries
+    }
+    assert set(frontend) == set(SENTINEL_ENRICHMENT)
+    for species, values in frontend.items():
+        authored = SENTINEL_ENRICHMENT[species]
+        assert authored["common_names"][0] == values["label"], species
+        assert authored["tree_form"] == values["tree_form"], species
+        assert authored["description"] == values["note"], species

@@ -2,12 +2,14 @@
 # Both scripts import from here so exclusion logic stays in one place.
 
 import sys
+from datetime import datetime, timezone
+
 from trilogy import Environment
 from pathlib import Path
 from random import randint
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _ingest_shared import SPECIES_SENTINELS  # noqa: E402
+from _ingest_shared import SENTINEL_ENRICHMENT, SPECIES_SENTINELS  # noqa: E402
 
 env = Environment(working_path=Path(__file__).resolve().parent.parent)
 
@@ -120,3 +122,51 @@ def purge_non_taxa(table):
             file=sys.stderr,
         )
     return purged
+
+
+# Authored sentinel rows carry a fixed timestamp rather than "now": they are not
+# the product of an enrichment run, and a moving value would rewrite the parquet
+# on every run for no reason.
+SENTINEL_ENRICHED_AT = datetime(2026, 8, 21, tzinfo=timezone.utc)
+
+
+def sentinel_enrichment_rows() -> list[dict]:
+    """The canonical enrichment row for each species sentinel.
+
+    A sentinel is a real value in the `species` key, and `species` is the join
+    key into enrichment — so with no row here, every enrichment column comes
+    back NULL for the ~190k trees whose source did not identify them, including
+    `species` itself once a query reads any enrichment field.  These rows give
+    the join something to land on.
+
+    They are deliberately thin: the label, the growth form the source actually
+    recorded, and a description saying so.  No taxonomy, no photo, no ecological
+    claims — a sentinel is not a taxon, and the values here are authored to
+    match src/src/data/species.ts rather than generated.
+    """
+    return [
+        {
+            "species": species,
+            **values,
+            "is_complete": False,
+            "enriched_at": SENTINEL_ENRICHED_AT,
+        }
+        for species, values in sorted(SENTINEL_ENRICHMENT.items())
+    ]
+
+
+def with_sentinel_rows(table):
+    """Append the canonical sentinel rows to *table*.
+
+    Call it right after purge_non_taxa, which has just removed every sentinel
+    row the parquet held: together they replace whatever was there with the
+    authored values, so a drifted row — or one the LLM wrote before the
+    exclusion existed — cannot survive a run.
+
+    The rows are built against *table*'s own schema rather than a copy of it,
+    so a schema change cannot leave these behind.
+    """
+    import pyarrow as pa
+
+    rows = pa.Table.from_pylist(sentinel_enrichment_rows(), schema=table.schema)
+    return pa.concat_tables([table, rows])

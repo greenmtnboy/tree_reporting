@@ -43,3 +43,7 @@ imagery_model/**/*.tiff
 # git does not preserve mtime, so a committed copy made every fresh clone look
 # like newly extracted data.
 *_staging.parquet
+
+# Upstream bug repros and handoffs. They are worked on locally and sent to the
+# upstream project rather than carried in this repo's history.
+upstream_repro/

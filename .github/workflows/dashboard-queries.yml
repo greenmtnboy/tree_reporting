@@ -1,0 +1,48 @@
+name: Dashboard queries
+
+# Compiles every summary and species dashboard query against the hosted Trilogy
+# resolver and runs the SQL it returns against seeded fixtures. It is out of the
+# CI `test` job because it needs the network and takes tens of minutes — the
+# resolver is a shared single instance and slows down under load.
+#
+# Nightly plus on demand, deliberately not on every PR: nothing here depends on
+# a pull request, and running it per-push would hammer the shared resolver.
+on:
+  schedule:
+    - cron: '20 4 * * *'
+  workflow_dispatch:
+
+jobs:
+  dashboard-queries:
+    timeout-minutes: 75
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version: 22
+
+    - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
+      with:
+        version: 10.33.0
+
+    - name: Cache pnpm store
+      uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: ~/.local/share/pnpm/store/v3
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('src/pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-store-${{ runner.os }}-
+
+    - name: Install dependencies
+      working-directory: ./src
+      run: pnpm install --frozen-lockfile
+
+    # Two failures are expected until trilogy-service.fly.dev deploys a newer
+    # pytrilogy: the Dominance Curve and Top 5 Share KPI hit a nested-window
+    # plan DuckDB rejects, and the dot map hits a keyless join under a
+    # nativeness cross-filter. Both are upstream and neither is worked around
+    # here; this job going green is the signal that the fix landed.
+    - name: Compile and run every dashboard query
+      working-directory: ./src
+      run: pnpm test:queries

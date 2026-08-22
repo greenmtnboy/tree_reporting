@@ -74,21 +74,40 @@ describe('parquet schema', () => {
     })
   }, 60_000)
 
-  // A sentinel is not a taxon, and `species` is the join key: one enrichment row
-  // for "Unknown" labelled 189,139 trees across every city as Orania timikae.
-  // purge_non_taxa() in data/raw/enrichment/_tree_shared.py removes them.
-  test('tree_enrichment holds no row for a species sentinel', async () => {
+  // A sentinel is not a taxon, but `species` is the join key — so with no row
+  // here every enrichment column comes back NULL for the ~190k trees whose
+  // source did not identify them, including `species` itself once a query reads
+  // any enrichment field. The row exists to give that join something to land
+  // on, and it is authored (data/raw/_ingest_shared.py SENTINEL_ENRICHMENT,
+  // mirroring src/src/data/species.ts) rather than generated: one *generated*
+  // row for "Unknown" labelled 189,139 trees across every city as Orania
+  // timikae, and purge_non_taxa() drops whatever the parquet holds before the
+  // authored rows go back.
+  //
+  // Red until the next enrichment run rewrites the parquet.
+  test('tree_enrichment holds one authored row per species sentinel', async () => {
     await withDuckDB(async (conn) => {
       const literals = SPECIES_SENTINELS.map((s) => `'${s.species.replace(/'/g, "''")}'`).join(', ')
       const result = await conn.runAndReadAll(
-        `SELECT species FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}') WHERE species IN (${literals})`,
+        `SELECT species, common_names[1] AS label, tree_form, genus, photo_url
+         FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}') WHERE species IN (${literals})`,
       )
-      const found = result.getRowObjects().map((r) => r.species as string)
+      const rows = result.getRowObjects()
       expect(
-        found,
-        'the enrichment table has a row for a placeholder species; every tree ' +
-          'carrying that sentinel inherits its description, icon and photo',
-      ).toEqual([])
+        rows.map((r) => r.species as string).sort(),
+        'the enrichment table is missing a sentinel row -- run the enrichment ' +
+          'pipeline, or every unidentified tree resolves to a null species',
+      ).toEqual(SPECIES_SENTINELS.map((s) => s.species).sort())
+
+      for (const row of rows) {
+        const sentinel = SPECIES_SENTINELS.find((s) => s.species === row.species)!
+        expect(row.label, `${row.species} label`).toBe(sentinel.label)
+        expect(row.tree_form, `${row.species} tree_form`).toBe(sentinel.treeForm)
+        // The Orania row had both. A sentinel names itself and its growth form,
+        // and claims nothing else.
+        expect(row.genus, `${row.species} must claim no genus`).toBeNull()
+        expect(row.photo_url, `${row.species} must carry no photo`).toBeNull()
+      }
     })
   }, 60_000)
 
