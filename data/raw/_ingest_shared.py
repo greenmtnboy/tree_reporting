@@ -215,12 +215,25 @@ _NON_TAXON_REWRITES: dict[str, str | None] = {
 }
 
 
-# Both spellings of the hybrid mark occur in the wild and both are kept
-# verbatim: SF publishes "Platanus x hispanica", OSM publishes
-# "Citrus × limon", and the enrichment table is already keyed on
-# whichever form its city emitted.  Rewriting one into the other here would
-# orphan every already-enriched hybrid.
+# Both spellings of the hybrid mark occur in the wild -- SF publishes
+# "Platanus x hispanica", Paris publishes "Platanus × hispanica" (U+00D7) --
+# and both are recognised here.  Only the ASCII "x" is ever *emitted*.
+#
+# They were preserved verbatim for a long time, on the grounds that rewriting
+# one into the other would orphan every already-enriched hybrid.  That is true,
+# and it is the smaller cost: the same taxon under two spellings is two rows in
+# the enrichment table, two LLM calls, and two entries in every species rollup.
+# Three were already being paid for twice (Alnus x spaethii, Osmanthus x
+# burkwoodii, Quercus x kewensis).  ASCII is the majority form -- 228 distinct
+# taxa against 68 -- and the safe one: it survives SQL literals, CSV, filenames
+# and a Windows console, which has already mangled U+00D7 to "?" in this repo.
+#
+# Emitting one spelling only takes effect on the next full refresh; until then
+# the published parquets still carry U+00D7.  with_hybrid_aliases() in the
+# enrichment pipeline bridges that window.
 _HYBRID_MARKS = frozenset({"x", "×"})
+
+CANONICAL_HYBRID_MARK = "x"
 
 # Rank qualifiers introduce infraspecific detail the species key does not
 # carry; the name is truncated in front of them ("Viburnum cf. corylifolium"
@@ -429,7 +442,8 @@ def sanitize_species(value: str | None) -> str | None:
     # this way ("× Chitalpa", "× Cupressocyparis"), but both also appear in the
     # data spelled without the mark, where they resolve normally.
     if tokens[0].lower() in _HYBRID_MARKS:
-        prefix = tokens[0]
+        # Leading, so it is the first word and takes normalize_species' capital.
+        prefix = CANONICAL_HYBRID_MARK.upper()
         tokens = tokens[1:]
         if len(tokens) < 2:
             return None
@@ -450,7 +464,7 @@ def sanitize_species(value: str | None) -> str | None:
     for tok in tokens[1:]:
         low = tok.rstrip(".").lower()
         if tok.lower() in _HYBRID_MARKS and not epithet:
-            hybrid = tok
+            hybrid = CANONICAL_HYBRID_MARK
             continue
         if low in _RANK_QUALIFIERS or low in _SPECIES_PLACEHOLDERS or tok.endswith("."):
             break

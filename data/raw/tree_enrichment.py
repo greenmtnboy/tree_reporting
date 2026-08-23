@@ -37,6 +37,7 @@ from enrichment._tree_shared import (
     SPECIES_EXCLUSION_SQL,
     is_enrichable_species,
     purge_non_taxa,
+    with_hybrid_aliases,
     with_sentinel_rows,
     should_skip_species,
 )
@@ -395,6 +396,51 @@ def get_already_enriched(source: str = ENRICHMENT_PARQUET) -> set[str]:
         conn.close()
 
 
+# A ceiling on one invocation, so a run started by `trilogy refresh` cannot
+# turn into an unbounded LLM bill on a day when a city publishes a few thousand
+# new species.  It used to be a bare `if counter>250: break` with no message,
+# which is a silent cap: the run exits 0 having quietly done a fraction of the
+# work, and nothing says so.  It now says so.
+MAX_SPECIES_PER_RUN = 250
+
+
+def assert_checkpoint_is_not_stale(path: str) -> None:
+    """Refuse to resume from a checkpoint that holds less than the published table.
+
+    Local mode reads `--output` in preference to GCS and uploads the result at
+    the end, so a stale file there does not merely get ignored -- it *replaces*
+    the published table with its own contents.  `--output` defaults to
+    `tree_enrichment.parquet` in the working directory, and a months-old one
+    with a third of the rows was sitting there gitignored, one default
+    invocation away from reverting every city's species labels.
+
+    A checkpoint written by a real run is always a superset of what it read, so
+    fewer rows than the remote means it is not this run's checkpoint at all.
+    """
+    remote_rows = _row_count(ENRICHMENT_PARQUET)
+    local_rows = _row_count(path)
+    if remote_rows is None or local_rows is None or local_rows >= remote_rows:
+        return
+    raise SystemExit(
+        f"[abort] {path} holds {local_rows} rows but the published table has "
+        f"{remote_rows}. Local mode uploads this file at the end, so resuming "
+        f"from it would drop {remote_rows - local_rows} rows from every city's "
+        f"species labels. Delete it, or pass a fresh --output path."
+    )
+
+
+def _row_count(source: str) -> int | None:
+    if not parquet_exists(source):
+        return None
+    conn = duckdb.connect()
+    try:
+        return conn.execute("SELECT count(*) FROM read_parquet(?)", [source]).fetchone()[0]
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
 def get_incomplete_species(source: str = ENRICHMENT_PARQUET) -> set[str]:
     """Species whose row exists but is missing what the freshness probe wants.
 
@@ -514,7 +560,7 @@ def load_existing_table(source: str) -> pa.Table | None:
     # puts the authored ones back, so both the checkpoint and the final merge
     # carry them. On a first run there is no parquet to load and they arrive on
     # the run after — there is nothing to join to yet either.
-    return with_sentinel_rows(purge_non_taxa(table))
+    return with_sentinel_rows(with_hybrid_aliases(purge_non_taxa(table)))
 
 
 def merge_with_existing(existing: pa.Table | None, new_rows: list[dict]) -> pa.Table:
@@ -696,6 +742,7 @@ if __name__ == "__main__":
     if local_mode and os.path.exists(args.output):
         enrichment_source = args.output
         print(f"[info] local mode: reading progress from {args.output}", file=sys.stderr)
+        assert_checkpoint_is_not_stale(args.output)
     else:
         enrichment_source = ENRICHMENT_PARQUET
 
@@ -743,7 +790,12 @@ if __name__ == "__main__":
         if enrichment is None:
             continue
         counter += 1
-        if counter>250:
+        if counter > MAX_SPECIES_PER_RUN:
+            print(
+                f"[cap] stopping at {MAX_SPECIES_PER_RUN} species; "
+                f"{len(to_process) - counter + 1} left in the queue for the next run",
+                file=sys.stderr,
+            )
             break
         is_complete, missing = compute_is_complete(enrichment)
         if missing:

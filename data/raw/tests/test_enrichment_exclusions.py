@@ -28,6 +28,7 @@ sys.path.insert(0, str(RAW_DIR))
 from _ingest_shared import SENTINEL_ENRICHMENT, SPECIES_SENTINELS  # noqa: E402
 from enrichment._tree_shared import (  # noqa: E402
     ENRICHMENT_COMPLETE_SQL,
+    with_hybrid_aliases,
     REENRICH_INCOMPLETE_BEFORE,
     SKIP_SPECIES,
     SPECIES_EXCLUSION_SQL,
@@ -195,7 +196,7 @@ def test_sentinel_rows_match_the_frontend():
     [
         "Acer rubrum",
         "Platanus x hispanica",
-        "Citrus × limon",
+        "Citrus x limon",
         "Quercus",
         # Badly typed is not the same as not a taxon -- the LLM resolves these,
         # and skipping them would lose a tree we can identify.
@@ -223,6 +224,10 @@ def test_a_sentinel_is_never_enrichable(value: str):
         # "Acer" and "Prunus", so a row keyed on the raw string is dead on
         # arrival -- a duplicate of an entry that already exists, paid for.
         "Acer unidentified", "Prunus tai", "Parkinsonia x",
+        # Same reason: the ingest now emits one hybrid spelling, so a U+00D7
+        # value is one it rewrites.  with_hybrid_aliases keeps the join working
+        # in the meantime -- see test_hybrid_alias_bridges_both_spellings.
+        "Citrus × limon",
         None, "", "   ",
     ],
 )
@@ -318,3 +323,47 @@ def test_the_probe_reads_the_shared_definition():
     """The run and the probe must not disagree about what the table is owed."""
     probe = (RAW_DIR / "tree_enrichment_probe.py").read_text(encoding="utf-8")
     assert "ENRICHMENT_COMPLETE_SQL" in probe
+
+
+# ---------------------------------------------------------------------------
+# with_hybrid_aliases
+# ---------------------------------------------------------------------------
+
+
+def _hybrid_table(species: list[str]) -> pa.Table:
+    return pa.table({
+        "species": pa.array(species, type=pa.string()),
+        "common_names": pa.array([["london plane"]] * len(species), type=pa.list_(pa.string())),
+    })
+
+
+def test_hybrid_alias_bridges_both_spellings():
+    """The ingest emits one spelling; the published data still carries the other
+    until a refresh. `species` is the join key, so without the alias the most
+    common tree in the dataset -- Paris publishes 38,845 rows of
+    "Platanus × hispanica" -- loses its common name the moment that city
+    rebuilds."""
+    out = with_hybrid_aliases(_hybrid_table(["Platanus × hispanica"]))
+    assert sorted(out.column("species").to_pylist()) == [
+        "Platanus x hispanica",
+        "Platanus × hispanica",
+    ]
+    assert out.column("common_names").to_pylist() == [["london plane"]] * 2
+
+
+def test_hybrid_alias_works_in_both_directions():
+    """Cities are refreshed one at a time and in no particular order, so the
+    row that exists first may be either spelling."""
+    out = with_hybrid_aliases(_hybrid_table(["Platanus x hispanica"]))
+    assert "Platanus × hispanica" in out.column("species").to_pylist()
+
+
+def test_hybrid_alias_does_not_duplicate_an_existing_twin():
+    both = ["Alnus x spaethii", "Alnus × spaethii"]
+    out = with_hybrid_aliases(_hybrid_table(both))
+    assert sorted(out.column("species").to_pylist()) == sorted(both)
+
+
+def test_hybrid_alias_leaves_non_hybrids_alone():
+    out = with_hybrid_aliases(_hybrid_table(["Acer rubrum"]))
+    assert out.column("species").to_pylist() == ["Acer rubrum"]

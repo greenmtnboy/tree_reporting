@@ -846,9 +846,30 @@ onto the binomial the enrichment table is keyed on.  Applied to the published
 data this cut distinct species 6,418 → 3,776 and the enrichment backlog
 1,568 → 734 city/species pairs.
 
-Both hybrid spellings are preserved verbatim: SF publishes
-`Platanus x hispanica`, OSM publishes `Citrus × limon` (U+00D7).  Normalising
-one into the other would orphan every already-enriched hybrid, so don't.
+**One hybrid spelling is emitted: ASCII `x`.**  Both are recognised on input —
+SF publishes `Platanus x hispanica`, Paris publishes `Platanus × hispanica`
+(U+00D7) — and `sanitize_species` collapses them onto the ASCII form.
+
+This reverses an earlier decision to preserve both verbatim, whose reasoning was
+that normalising would orphan every already-enriched hybrid.  That is true, and
+it is the smaller cost: the same taxon under two spellings is two rows in the
+enrichment table, two LLM calls and two entries in every species rollup.  Three
+were already being paid for twice (`Alnus x spaethii`, `Osmanthus x burkwoodii`,
+`Quercus x kewensis`).  ASCII is both the majority form — 228 distinct taxa
+against 68 — and the safe one: it survives SQL literals, CSV, filenames and a
+Windows console, which mangled U+00D7 to `?` while this very change was being
+measured.  A leading mark keeps its capital (`X amelasorbus jackii`), because it
+is the first word and takes the capital `normalize_species` gives one.
+
+**The orphaning is real and is bridged, not ignored.**  Emitting one spelling
+only reaches the data on the next full refresh, so there is a window where the
+published parquets still carry U+00D7 while new enrichment rows are keyed on
+ASCII.  `with_hybrid_aliases` copies every hybrid row under both keys — 68 rows,
+no LLM call, and symmetric, so the order cities are refreshed in does not
+matter.  Without it, Paris's 38,845 `Platanus × hispanica` rows — the most
+common tree in the dataset — would lose their common name the moment that city
+rebuilt.  It is transitional: once every city is refreshed past the change, the
+U+00D7 rows are orphans and it should become a purge.
 
 Anything that survives as a non-taxon becomes a **sentinel**, never null — see
 the next section for why.  `enforce_tree_schema` prints a per-ingest summary of
@@ -908,6 +929,56 @@ not a combining character, so the hybrid mark survives.
 
 Against the August 2026 published data these removed 141 of the 795 species
 queued for enrichment: 114 that name no taxon, and 27 the ingest rewrites.
+
+### The prompt has to ask for the field
+
+`common_names` and `tree_form` are both **required** by the response model, and
+the prompt named neither.  An empty list satisfies `list[str]` and `"default"`
+is a legal `tree_form`, so for a taxon the sources cover thinly the model took
+the free exit: of 159 species that came back without a common name, **148 also
+carried `tree_form = "default"`** and 71 had no description at all.  That is not
+a taxonomy problem, it is an unasked question — `Fagus lucida`, `Magnolia zenii`
+and `Emmenopterys henryi` are all well documented.
+
+The prompt now asks for both, tells the model where to find a fallback name (a
+`Quercus` hybrid is a hybrid oak), and `parse_enrichment_from_text_v2` re-asks
+once when `common_names` comes back empty.
+
+**The retry keeps the escape hatch open on purpose.**  Some published values are
+not taxa but chimeras welded from two real names — `Erythrina camaldulensis`
+(that is a *Eucalyptus*), `Pinus abies` (a *Picea*), `Acer implexa` (an
+*Acacia*), `Laurus lucidum` (a *Ligustrum*).  There is nothing to find, and
+`sanitize_species` cannot catch them because both halves are real Latin.
+Pushing harder for a name would get one invented, which is the Orania failure in
+miniature.  So the retry explicitly permits an empty answer, and a species that
+returns one twice is taken at its word — the row still lands, so it is not
+re-queued for ever.
+
+**Model choice.**  `google/gemini-2.5-flash`, overridable with
+`TREE_ENRICHMENT_MODEL`.  As of August 2026 the only models reachable in
+`preqldata`/`us-central1` are `gemini-2.5-flash` and `gemini-2.5-flash-lite`;
+no Gemini 3 publisher model resolves there.  Lite is cheaper and is the wrong
+direction for this workload — the failure mode is a thin answer on an obscure
+taxon, which is exactly what a smaller model does more of.
+
+### Two ways this script could quietly destroy the table
+
+Both were live until August 2026 and both are now guarded, because neither
+failed loudly:
+
+- **A stale `--output` checkpoint.**  Local mode reads `--output` in preference
+  to GCS *and uploads it at the end*, so a stale file there does not get
+  ignored, it replaces the published table.  The default is
+  `tree_enrichment.parquet` in the working directory, and a gitignored
+  months-old one with 1,404 rows was sitting there — one default invocation away
+  from reverting all fourteen cities' species labels to a March snapshot.
+  `assert_checkpoint_is_not_stale` refuses to resume from a checkpoint holding
+  fewer rows than the published table, since a real checkpoint is always a
+  superset of what it read.
+- **A silent cap.**  The run stopped after 250 species with a bare
+  `if counter>250: break` and no message, so it exited 0 having done a fraction
+  of the queue with nothing saying so.  It is now `MAX_SPECIES_PER_RUN` and it
+  reports what it left behind.
 
 ### "A row exists" is not "it is enriched"
 

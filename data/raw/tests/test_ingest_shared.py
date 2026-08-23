@@ -122,17 +122,25 @@ class TestSanitizeSpecies:
     @pytest.mark.parametrize(
         "raw,expected",
         [
-            # Both hybrid spellings survive verbatim.  The enrichment table is
-            # keyed on whichever form a city emitted, so normalising one into
-            # the other would orphan every already-enriched hybrid.
+            # Both spellings are recognised; only ASCII is emitted.  The same
+            # taxon under two spellings was two rows in the enrichment table,
+            # two LLM calls and two entries in every species rollup.
             ("Platanus x hispanica", "Platanus x hispanica"),
-            ("Citrus × limon", "Citrus × limon"),
-            ("Tilia × euchlora", "Tilia × euchlora"),
+            ("Citrus × limon", "Citrus x limon"),
+            ("Tilia × euchlora", "Tilia x euchlora"),
+            ("Quercus × kewensis", "Quercus x kewensis"),
+            # A leading mark is the first word, so it takes the capital that
+            # normalize_species gives one.
             ("X amelasorbus jackii", "X amelasorbus jackii"),   # nothogenus
+            ("× chitalpa tashkentensis", "X chitalpa tashkentensis"),
         ],
     )
-    def test_preserves_hybrid_marks(self, raw, expected):
+    def test_canonicalises_the_hybrid_mark(self, raw, expected):
         assert sanitize_species(raw) == expected
+
+    def test_both_spellings_collapse_onto_one_key(self):
+        """The point of the change: one taxon, one row, one enrichment call."""
+        assert sanitize_species("Alnus × spaethii") == sanitize_species("Alnus x spaethii")
 
     @pytest.mark.parametrize(
         "raw,expected",
@@ -253,7 +261,7 @@ class TestSanitizeSpecies:
 
     def test_a_real_nothogenus_still_survives(self):
         assert sanitize_species("X amelasorbus jackii") == "X amelasorbus jackii"
-        assert sanitize_species("× chitalpa tashkentensis") == "× chitalpa tashkentensis"
+        assert sanitize_species("× chitalpa tashkentensis") == "X chitalpa tashkentensis"
 
     def test_accents_are_stripped_from_a_latin_name(self):
         """A scientific name is ASCII; an accent means a typo or a common name.

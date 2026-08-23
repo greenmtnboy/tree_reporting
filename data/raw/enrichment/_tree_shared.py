@@ -217,6 +217,45 @@ def sentinel_enrichment_rows() -> list[dict]:
     ]
 
 
+def with_hybrid_aliases(table):
+    """Give every U+00D7-keyed row an ASCII twin, and vice versa.
+
+    The ingest emits one hybrid spelling now (ASCII "x"), but that only reaches
+    the data on the next full refresh -- until then the published parquets still
+    carry "Platanus × hispanica" while a freshly enriched row would be keyed
+    "Platanus x hispanica".  `species` is the join key, so during that window one
+    of the two finds nothing: Paris alone has 38,845 rows under the U+00D7
+    spelling, and the most common tree in the dataset would silently lose its
+    common name the moment that city rebuilt.
+
+    Copying the row under both keys costs 68 rows and no LLM call, and works in
+    either direction, so the order in which cities get refreshed does not matter.
+
+    **This is transitional.**  Once every city has been refreshed past the
+    change, the U+00D7 rows are orphans and this should become a purge instead.
+    """
+    import pyarrow as pa
+
+    rows = table.to_pylist()
+    have = {row["species"] for row in rows}
+    aliases = []
+    for row in rows:
+        species = row["species"] or ""
+        for a, b in ((" × ", " x "), (" x ", " × ")):
+            if a in species:
+                twin = species.replace(a, b)
+                if twin not in have:
+                    have.add(twin)
+                    aliases.append({**row, "species": twin})
+    if not aliases:
+        return table
+    print(
+        f"[hybrid] added {len(aliases)} alias row(s) so both mark spellings join",
+        file=sys.stderr,
+    )
+    return pa.concat_tables([table, pa.Table.from_pylist(aliases, schema=table.schema)])
+
+
 def with_sentinel_rows(table):
     """Append the canonical sentinel rows to *table*.
 
