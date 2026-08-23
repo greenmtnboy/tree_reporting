@@ -10,6 +10,7 @@
 <script setup lang="ts">
 import { ref, watch, watchEffect, onMounted, onBeforeUnmount, nextTick, toValue, computed } from 'vue'
 import type { DashboardImport, DashboardExecutionService, SqlFilterLike, EmbeddedDashboardGroup } from '@trilogy-data/trilogy-studio-components/dashboard'
+import { TREE_DOT_MAP_QUERY } from '../composables/summaryDashboardConfig'
 
 const props = withDefaults(
   defineProps<{
@@ -36,7 +37,7 @@ const latestLoadId = ref(0)
 const activeCancellation = ref<{ cancel: () => void } | null>(null)
 const lastPoints = ref<Array<{ latitude: number; longitude: number }>>([])
 
-const QUERY = 'SELECT latitude, longitude WHERE latitude IS NOT NULL AND longitude IS NOT NULL;'
+const QUERY = TREE_DOT_MAP_QUERY
 
 const dashboardId = computed(() => props.dashboardGroup?.dashboard.id ?? '')
 

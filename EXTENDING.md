@@ -846,9 +846,30 @@ onto the binomial the enrichment table is keyed on.  Applied to the published
 data this cut distinct species 6,418 → 3,776 and the enrichment backlog
 1,568 → 734 city/species pairs.
 
-Both hybrid spellings are preserved verbatim: SF publishes
-`Platanus x hispanica`, OSM publishes `Citrus × limon` (U+00D7).  Normalising
-one into the other would orphan every already-enriched hybrid, so don't.
+**One hybrid spelling is emitted: ASCII `x`.**  Both are recognised on input —
+SF publishes `Platanus x hispanica`, Paris publishes `Platanus × hispanica`
+(U+00D7) — and `sanitize_species` collapses them onto the ASCII form.
+
+This reverses an earlier decision to preserve both verbatim, whose reasoning was
+that normalising would orphan every already-enriched hybrid.  That is true, and
+it is the smaller cost: the same taxon under two spellings is two rows in the
+enrichment table, two LLM calls and two entries in every species rollup.  Three
+were already being paid for twice (`Alnus x spaethii`, `Osmanthus x burkwoodii`,
+`Quercus x kewensis`).  ASCII is both the majority form — 228 distinct taxa
+against 68 — and the safe one: it survives SQL literals, CSV, filenames and a
+Windows console, which mangled U+00D7 to `?` while this very change was being
+measured.  A leading mark keeps its capital (`X amelasorbus jackii`), because it
+is the first word and takes the capital `normalize_species` gives one.
+
+**The orphaning is real and is bridged, not ignored.**  Emitting one spelling
+only reaches the data on the next full refresh, so there is a window where the
+published parquets still carry U+00D7 while new enrichment rows are keyed on
+ASCII.  `with_hybrid_aliases` copies every hybrid row under both keys — 68 rows,
+no LLM call, and symmetric, so the order cities are refreshed in does not
+matter.  Without it, Paris's 38,845 `Platanus × hispanica` rows — the most
+common tree in the dataset — would lose their common name the moment that city
+rebuilt.  It is transitional: once every city is refreshed past the change, the
+U+00D7 rows are orphans and it should become a purge.
 
 Anything that survives as a non-taxon becomes a **sentinel**, never null — see
 the next section for why.  `enforce_tree_schema` prints a per-ingest summary of
@@ -862,6 +883,212 @@ merging throws away the one fact the source did record.
 `_FORM_SENTINEL_ALIASES` carries the multilingual spellings (`arbusto`,
 `struik`, `palmera`, …); the full set is `SPECIES_SENTINELS`, and a new
 sentinel added there needs a matching entry in `src/src/data/species.ts`.
+
+#### Some non-taxa are only recognisable by name
+
+The rules above are *shape*-based, and shape runs out.  `Japonica` is a
+specific epithet whose genus was dropped upstream; `Kastanie` is German for
+chestnut; `Oak` is an English common name.  All three are a single capitalised
+Latin-looking word, indistinguishable from a real genus — and the
+`_COMMON_NAME_NOUNS` check does not catch them because it is only ever tested
+in *epithet* position (that is deliberate: `Magnolia` and `Catalpa` are genuine
+genera and would fail it in genus position).
+
+Deciding those needs a list of names, and the only honest source for one is the
+published data.  `_NON_TAXON_REWRITES` is that list — every entry was observed
+in the fourteen wired inventories.  It maps a value to the genus worth keeping,
+or to `None` when there is none: a source that wrote `Callistemon king` still
+recorded the genus, while `Tai haku` is a cherry cultivar with no genus
+attached.
+
+A **misspelled binomial stays out of it**.  `Crateagus monogyna` and
+`Sequioa sempervirens` are real names badly typed; the enrichment step resolves
+those, and dropping them to `Unknown` would lose a tree we can identify.  The
+list is only for values that name no genus at all.
+
+The structural rules gained four cases at the same time, each of which
+generalises where a list would not:
+
+- a **placeholder in epithet position** truncates to the genus rather than
+  dropping the value — `Acer unidentified` is an `Acer`, and thirteen cities
+  publish some spelling of that;
+- a **leading hybrid mark needs two tokens after it**.  A nothogenus name is
+  still genus + epithet, so `X ambigua` is a `Genus × ambigua` that lost its
+  genus, not a nothogenus.  This costs two real names (`× Chitalpa`,
+  `× Cupressocyparis`), both of which also appear unmarked in the data;
+- a **dangling mark** is dropped: `Parkinsonia x` is a genus, not a hybrid;
+- a **family** (`-aceae`) is not a species-rank name.  Left in, `Platanaceae`
+  would be handed to the enrichment LLM to describe as though it were a tree.
+
+**Accents are stripped before any of this.**  A scientific name is ASCII by
+convention — the botanical code requires transliteration — so an accent means a
+typo or a common name in the portal's own language.  Stripping first lets one
+rule cover both: `Mālus` becomes the real genus `Malus`, and `Néflier` becomes
+`Neflier`, which the list recognises as the French for medlar.  U+00D7 (×) is
+not a combining character, so the hybrid mark survives.
+
+Against the August 2026 published data these removed 141 of the 795 species
+queued for enrichment: 114 that name no taxon, and 27 the ingest rewrites.
+
+### The prompt has to ask for the field
+
+`common_names` and `tree_form` are both **required** by the response model, and
+the prompt named neither.  An empty list satisfies `list[str]` and `"default"`
+is a legal `tree_form`, so for a taxon the sources cover thinly the model took
+the free exit: of 159 species that came back without a common name, **148 also
+carried `tree_form = "default"`** and 71 had no description at all.  That is not
+a taxonomy problem, it is an unasked question — `Fagus lucida`, `Magnolia zenii`
+and `Emmenopterys henryi` are all well documented.
+
+The prompt now asks for both, tells the model where to find a fallback name (a
+`Quercus` hybrid is a hybrid oak), and `parse_enrichment_from_text_v2` re-asks
+once when `common_names` comes back empty.
+
+**The retry keeps the escape hatch open on purpose.**  Some published values are
+not taxa but chimeras welded from two real names — `Erythrina camaldulensis`
+(that is a *Eucalyptus*), `Pinus abies` (a *Picea*), `Acer implexa` (an
+*Acacia*), `Laurus lucidum` (a *Ligustrum*).  There is nothing to find, and
+`sanitize_species` cannot catch them because both halves are real Latin.
+Pushing harder for a name would get one invented, which is the Orania failure in
+miniature.  So the retry explicitly permits an empty answer, and a species that
+returns one twice is taken at its word — the row still lands, so it is not
+re-queued for ever.
+
+**Model choice.**  `google/gemini-2.5-flash`, overridable with
+`TREE_ENRICHMENT_MODEL`.  As of August 2026 the only models reachable in
+`preqldata`/`us-central1` are `gemini-2.5-flash` and `gemini-2.5-flash-lite`;
+no Gemini 3 publisher model resolves there.  Lite is cheaper and is the wrong
+direction for this workload — the failure mode is a thin answer on an obscure
+taxon, which is exactly what a smaller model does more of.
+
+### Nine names with nothing behind them
+
+The August 2026 backlog closed at 795 queued, 786 enriched, nine left — and the
+nine are all the same thing: a real genus welded to an epithet from a different
+species.  `Erythrina camaldulensis` is a *Eucalyptus*, `Acer implexa` an
+*Acacia*, `Laurus lucidum` a *Ligustrum*, `Pinus excelsior` a *Fraxinus*,
+`Melaleuca azedarach` a *Melia*, `Cupressus plicata` a *Thuja*.  There is no
+such tree, so there is nothing to find, and asked twice under a prompt that
+explicitly requests a common name all nine still came back empty.  That is the
+model being right.
+
+`CHIMERA_SPECIES` keeps them out of the queue.  It has to be a list: both
+halves are real Latin and the shape is indistinguishable from a correct
+binomial, so `sanitize_species` cannot catch them and should not try — only
+knowing the taxonomy separates `Acer implexa` from `Acer campestre`.
+Truncating to the genus is wrong rather than conservative, since calling an
+*Acacia* an *Acer* asserts something false.
+
+They are deliberately **not** in `SKIP_SPECIES`, which would also purge their
+rows.  Whatever description the model did manage beats nothing for the 30 trees
+involved, and the map falls back to the scientific name for the label — the
+honest answer when we do not know what the tree is.
+
+With those nine excluded the probe returns `true` for the first time, which
+also stops the every-tick re-run described below.
+
+### The scheduled refresh runs `main`, and will undo you
+
+`data/trilogy.toml` ticks at 04:00, 12:00 and 20:00 UTC, and because the
+enrichment probe reports `false` while any species is short of a common name,
+**every tick re-runs the enrichment script** — from whatever is on `main`, not
+from your branch.
+
+So a change to the *shape* of the published table is reverted on the next tick
+until it merges.  The sentinel rows are the worked example: a branch run
+published 7,485 rows with the four authored sentinels, the noon tick loaded that
+table, ran `main`'s `load_existing_table` (which ends at `return
+purge_non_taxa(table)`, purging sentinels and not re-adding them) and
+republished 7,481 without them.  CI ran eight minutes later and the sentinel
+test went red — correctly: it was reporting that production runs code without
+the fix.
+
+Two things follow.  A data-shape change is not done when the parquet looks
+right; it is done when it **merges**, and until then expect any test asserting
+the new shape to flap on a three-hour cycle.  And `assert_published_matches`
+reads the object back after every upload and checks the row count and the
+sentinel set, because an upload that lands short is otherwise invisible — the
+script reports the count it *wrote*, exits 0, and the damage shows up as null
+common names on the map.
+
+### Two ways this script could quietly destroy the table
+
+Both were live until August 2026 and both are now guarded, because neither
+failed loudly:
+
+- **A stale `--output` checkpoint.**  Local mode reads `--output` in preference
+  to GCS *and uploads it at the end*, so a stale file there does not get
+  ignored, it replaces the published table.  The default is
+  `tree_enrichment.parquet` in the working directory, and a gitignored
+  months-old one with 1,404 rows was sitting there — one default invocation away
+  from reverting all fourteen cities' species labels to a March snapshot.
+  `assert_checkpoint_is_not_stale` refuses to resume from a checkpoint holding
+  fewer rows than the published table, since a real checkpoint is always a
+  superset of what it read.
+- **A silent cap.**  The run stopped after 250 species with a bare
+  `if counter>250: break` and no message, so it exited 0 having done a fraction
+  of the queue with nothing saying so.  It is now `MAX_SPECIES_PER_RUN` and it
+  reports what it left behind.
+
+### "A row exists" is not "it is enriched"
+
+`get_already_enriched` answers *is there a row*.  The freshness probe answers
+*does that row have a common name and a growth form*.  Those are different
+questions, and for months they disagreed: 226 species carried a row with a null
+`common_names`, written between March and August 2026, so the script skipped
+them as done while the probe reported them missing on every single run.  The
+probe could never return `true` — not for want of runs, but because nothing
+would ever revisit those rows.
+
+Three pieces fix it, and you need all three:
+
+- **One definition of complete.**  `ENRICHMENT_COMPLETE_SQL` lives in
+  `enrichment/_tree_shared.py` and both scripts read it, so what the probe
+  reports missing is exactly what the next run picks up.  The bar is
+  deliberately low — a common name and a growth form, which is what the map
+  renders.  A stricter bar would be permanently unmet: plenty of real taxa have
+  no published canopy spread, and asking again does not conjure one.
+- **`get_incomplete_species`**, which puts those rows back in the queue.
+- **`merge_with_existing` replaces rather than refuses.**  It used to raise on
+  any overlap ("re-processing is not expected"), which is what made
+  re-enrichment impossible; it now drops the existing row first.  It must —
+  `species` is the grain of this table and the join key from every tree row, so
+  two rows for one species would double every tree carrying it.
+
+**The retry is bounded by a date, not a counter.**
+`REENRICH_INCOMPLETE_BEFORE` converges without a schema change: a row rewritten
+by this run carries today's `enriched_at` and falls out of scope on the next
+one, so a species the model still cannot name is retried exactly once.  Without
+that bound an unnameable species would be re-enriched on every refresh tick,
+for ever — three times a day, at roughly a minute each.  Moving the date is how
+you ask for another attempt: a deliberate, greppable edit, like
+`SENTINEL_ENRICHED_AT`.
+
+The rows were not unfixable, which is what made this worth doing rather than
+relaxing the probe.  Asked directly, a model names *Hovenia tomentella* the
+downy Japanese raisin tree, *Enkianthus deflexus* the bent enkianthus and
+*Corylopsis glandulifera* the Chinese fragrant winterhazel.  The first instinct
+was that these obscure Asian taxa simply have no English common name and the
+probe was asking for the impossible; they do, and it was not.
+
+### The enrichment queue asks `sanitize_species`, not a second list
+
+`SKIP_SPECIES` names specific values.  `is_enrichable_species` is the general
+rule, and it defers to the ingest: a species is enrichable when
+`sanitize_species` would keep it **exactly as written**.  Both
+`tree_enrichment.py` and `tree_enrichment_probe.py` queue from it.
+
+Tying the two together is the point.  An improvement to the ingest's idea of
+"is this a taxon" shrinks the enrichment backlog in the same edit, with no
+second list to keep in step — which is how a queue of 795 came to contain
+`Oak`, `Japonica`, `Kastanie` and `X ambigua` in the first place.
+
+A value `sanitize_species` *rewrites* is skipped too, rather than enriched
+under its raw spelling.  `Acer unidentified` is a row the next refresh will
+publish as `Acer`, so a row keyed on the raw string is dead on arrival — a
+duplicate of an entry that already exists, paid for.  Both cases leave those
+trees unenriched until a refresh rewrites their species, which is where they
+already were.
 
 ### Sentinels are excluded from enrichment, and purged from it
 

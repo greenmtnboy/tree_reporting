@@ -69,6 +69,32 @@ export const SPECIES_KPI_CHARTS: SpeciesDashboardKpi[] = [
   },
 ]
 
+// Taxonomy selector queries, rendered by SpeciesSearchFilter in SpeciesView.
+// They live here rather than inline in the view so the dashboard-query
+// compile test can enumerate every query the page issues.
+export const GENUS_OPTIONS_QUERY = `SELECT
+  ${SPECIES_GENUS_EXPR} as option_value,
+  ${SPECIES_GENUS_EXPR} as option_label,
+  count(tree_id) as tree_count
+WHERE ${REAL_SPECIES_PREDICATE}
+ORDER BY tree_count DESC;`
+
+export const TOP_GENUS_QUERY = `${GENUS_OPTIONS_QUERY.slice(0, -1)}
+LIMIT 1;`
+
+export const SPECIES_OPTIONS_QUERY = `SELECT
+  species as option_value,
+  species as option_label,
+  count(tree_id) as tree_count
+WHERE ${REAL_SPECIES_PREDICATE}
+ORDER BY tree_count DESC;`
+
+export const TOP_SPECIES_QUERY = `${SPECIES_OPTIONS_QUERY.slice(0, -1)}
+LIMIT 1;`
+
+// Enrichment lookup for the selected species, issued by SpeciesView.
+export const SPECIES_CONTEXT_QUERY = `SELECT common_names[1] as common_name, tree_form, growth_rate WHERE ${REAL_SPECIES_PREDICATE} LIMIT 1;`
+
 export const SPECIES_CHARTS: SpeciesDashboardChart[] = [
   // Top 15 species bar chart with % of total
   {

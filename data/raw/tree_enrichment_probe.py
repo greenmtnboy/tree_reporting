@@ -10,18 +10,18 @@ import sys
 
 import duckdb
 from enrichment._tree_shared import (
+    ENRICHMENT_COMPLETE_SQL,
     ENRICHMENT_PARQUET,
     TREE_INFO_PARQUET,
-    SKIP_SPECIES,
     SPECIES_EXCLUSION_SQL,
+    is_enrichable_species,
 )
 
+# The current definition, shared with tree_enrichment.py so the run and the
+# probe cannot disagree about what it is still owed, followed by the legacy
+# one for a parquet whose `common_names` is still a comma-joined string.
 _COMPLETENESS_EXPRESSIONS = [
-    (
-        "common_names IS NOT NULL"
-        " AND array_length(common_names) > 0"
-        " AND tree_form IS NOT NULL"
-    ),
+    ENRICHMENT_COMPLETE_SQL,
     (
         "common_names IS NOT NULL AND trim(common_names) != ''"
         " AND tree_form IS NOT NULL"
@@ -44,7 +44,9 @@ def main() -> None:
                 [TREE_INFO_PARQUET],
             ).fetchall()
         }
-        all_species.difference_update(SKIP_SPECIES)
+        # The SQL above filters the values named in SKIP_SPECIES; this is the
+        # general rule, and it is the same one tree_enrichment.py queues from.
+        all_species = {s for s in all_species if is_enrichable_species(s)}
 
         complete_enriched: set[str] | None = None
         for completeness_expr in _COMPLETENESS_EXPRESSIONS:

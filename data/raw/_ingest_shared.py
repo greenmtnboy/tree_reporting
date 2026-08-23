@@ -20,6 +20,7 @@ import re
 import struct
 import sys
 import time
+import unicodedata
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING
@@ -81,6 +82,24 @@ def normalize_species_parts(genus: str | None, epithet: str | None) -> str | Non
     return " ".join(parts)
 
 
+def _strip_diacritics(s: str) -> str:
+    """Drop combining accents from *s*, leaving the hybrid mark alone.
+
+    A scientific name is ASCII by convention -- the botanical code requires
+    non-Latin characters to be transliterated -- so an accent is a sign the
+    value came from a common name in the portal's own language, or from a typo.
+    Stripping it lets one rule catch both: "Mālus" becomes the real genus
+    "Malus", and "Néflier" becomes "Neflier", which _NON_TAXON_REWRITES then
+    recognises as the French for medlar.  U+00D7 (×) is not a combining
+    character, so the hybrid mark survives untouched.
+    """
+    return "".join(
+        ch
+        for ch in unicodedata.normalize("NFD", s)
+        if not unicodedata.combining(ch)
+    )
+
+
 # Inventory placeholders that several portals use for an empty or
 # unidentifiable planting site.  They are not taxa and must never reach the
 # `species` key, where they would be handed to the enrichment LLM every run.
@@ -92,6 +111,8 @@ _SPECIES_PLACEHOLDERS = frozenset(
         "none", "n/a", "na", "nvt", "other", "vacant", "dead", "stump",
         "empty", "tree", "trees", "tree(s)", "arbol", "árbol", "arbre",
         "boom", "baum", "privet", "--", "-",
+        # Inventories that record "we planted a mix here" rather than a taxon.
+        "mixed", "misc", "no",
     }
 )
 
@@ -112,18 +133,114 @@ _COMMON_NAME_NOUNS = frozenset(
     }
 )
 
-# Both spellings of the hybrid mark occur in the wild and both are kept
-# verbatim: SF publishes "Platanus x hispanica", OSM publishes
-# "Citrus × limon", and the enrichment table is already keyed on
-# whichever form its city emitted.  Rewriting one into the other here would
-# orphan every already-enriched hybrid.
+# Values that survive every structural rule below and are still not taxa.
+#
+# The rules above are shape-based -- they can see that "Serviceberry or
+# dogwood?" is free text and that "Amel. laevis" has an abbreviated genus.
+# What they cannot see is that "Japonica" is a specific epithet whose genus was
+# dropped upstream, or that "Kastanie" is German for chestnut: both are a
+# single capitalised Latin-looking word, exactly like a real genus.  Deciding
+# those needs a list of names, and the only honest place to get one is the
+# published data -- every entry here was observed in the fourteen wired
+# inventories.
+#
+# The value is the genus to keep, or None when there is none to keep.  A
+# source that recorded "Callistemon king" still told us the genus, and merging
+# that into UNKNOWN_SPECIES throws away a fact it did record; "Tai haku" is a
+# cherry cultivar with no genus attached and has nothing to keep.
+#
+# Nothing here is a judgement call about a *taxon* -- a value belongs in this
+# map only when it names no genus at all.  A misspelled binomial
+# ("Crateagus monogyna", "Sequioa sempervirens") is a real name badly typed and
+# stays out: the enrichment step resolves those, and dropping them to Unknown
+# would lose a tree we can identify.
+_NON_TAXON_REWRITES: dict[str, str | None] = {
+    # Specific epithets that reached the species column with the genus lost.
+    "acerifolia": None, "anagynroides": None, "antarctica": None,
+    "arizonica": None, "bignonioides": None, "bilboa": None, "biloba": None,
+    "colurna": None, "communis": None, "daniellii": None, "dasystyla": None,
+    "davidii": None, "glabra": None, "intermedia": None, "involucrata": None,
+    "japonica": None, "negundo": None, "nigra": None, "obliqua": None,
+    "orientalis": None, "persica": None, "phillus": None,
+    "phillyreoides": None, "pungens": None, "robor": None, "serrulata": None,
+    "siliquastrum": None, "szechuanica": None, "trichotomum": None,
+    # English common names and the adjectives that qualify them, standing on
+    # their own.  ("Oak" and friends are in _COMMON_NAME_NOUNS too, but that
+    # set is only ever tested in epithet position -- see the note there.)
+    "anders": None, "austrian": None, "birch": None, "blue": None,
+    "burning": None, "callery": None, "cedar": None, "chestnut": None,
+    "common": None, "eastern": None, "eucalypt": None, "fir": None,
+    "fruit": None, "green": None, "greengage": None, "japanese": None,
+    "kentucky": None, "lombardy": None, "mullberry": None, "nordman": None,
+    "norway": None, "oak": None, "ontario": None, "pear": None, "red": None,
+    "redwood": None, "siberian": None, "thornless": None, "white": None,
+    "willow": None,
+    # The same thing in the languages the wired cities publish in.  Accents are
+    # already stripped by the time this is consulted, so the keys are ASCII.
+    "birke": None,          # de: birch
+    "fleur": None,          # fr: flower
+    "haselnuss": None,      # de: hazel
+    "kastanie": None,       # de: chestnut
+    "kiefer": None,         # de: pine
+    "kirsche": None,        # de: cherry
+    "klarapfel": None,      # de: an apple cultivar
+    "linde": None,          # de: linden
+    "neflier": None,        # fr: medlar
+    "susskirsche": None,    # de: sweet cherry
+    # Multi-word common names and free text with no genus in them.
+    "campestre licenco": None,
+    "eastern white": None,
+    "european horse": None,
+    "evergreen holm": None,
+    "gewone esdoorn": None,   # nl: sycamore maple
+    "heaven scent": None,
+    "james grieve": None,
+    "northern red": None,
+    "pin maritime": None,     # fr: maritime pine
+    "scheduled planting": None,
+    "sunset boulevard": None,
+    "tai haku": None,
+    "uknown taxus": None,
+    "winter flowering": None,
+    # A real genus followed by a cultivar name or a truncated note.  The genus
+    # is real information and is kept.
+    "callistemon king": "Callistemon",
+    "crataegus x gri": "Crataegus",
+    "cydonia champion": "Cydonia",
+    "gleditsia trican": "Gleditsia",
+    "malus riesenboiken": "Malus",
+    "prunus sunset": "Prunus",
+    "prunus tai": "Prunus",
+    "sophora du": "Sophora",
+}
+
+
+# Both spellings of the hybrid mark occur in the wild -- SF publishes
+# "Platanus x hispanica", Paris publishes "Platanus × hispanica" (U+00D7) --
+# and both are recognised here.  Only the ASCII "x" is ever *emitted*.
+#
+# They were preserved verbatim for a long time, on the grounds that rewriting
+# one into the other would orphan every already-enriched hybrid.  That is true,
+# and it is the smaller cost: the same taxon under two spellings is two rows in
+# the enrichment table, two LLM calls, and two entries in every species rollup.
+# Three were already being paid for twice (Alnus x spaethii, Osmanthus x
+# burkwoodii, Quercus x kewensis).  ASCII is the majority form -- 228 distinct
+# taxa against 68 -- and the safe one: it survives SQL literals, CSV, filenames
+# and a Windows console, which has already mangled U+00D7 to "?" in this repo.
+#
+# Emitting one spelling only takes effect on the next full refresh; until then
+# the published parquets still carry U+00D7.  with_hybrid_aliases() in the
+# enrichment pipeline bridges that window.
 _HYBRID_MARKS = frozenset({"x", "×"})
+
+CANONICAL_HYBRID_MARK = "x"
 
 # Rank qualifiers introduce infraspecific detail the species key does not
 # carry; the name is truncated in front of them ("Viburnum cf. corylifolium"
 # -> "Viburnum corylifolium" is wrong, so it becomes "Viburnum").
 _RANK_QUALIFIERS = frozenset(
-    {"cf", "var", "subsp", "ssp", "forma", "f", "spp", "sp", "group", "x"}
+    {"cf", "var", "subsp", "ssp", "forma", "f", "spp", "sp", "spec", "species",
+     "type", "group", "x"}
 )
 
 # A cultivar epithet is always quoted, and whatever trails it is a note
@@ -186,6 +303,54 @@ SPECIES_SENTINELS: frozenset[str] = frozenset(
 )
 
 
+# What a sentinel looks like in the enrichment table.
+#
+# `species` is the join key into enrichment, so a sentinel with no row there
+# resolves to NULL in any query that reads an enrichment column -- the
+# dashboards showed a null species and a null common name for ~190k trees that
+# do carry a value.  These rows fix that, and they are *authored*: the values
+# below are the ones the frontend hardcodes in src/src/data/species.ts, not
+# something an LLM produced.  That distinction is the whole point.  The row
+# that motivated the purge was an LLM answer for "Unknown" (Orania timikae, a
+# New Guinea palm, joined to 189,139 trees); these carry no taxonomy, no photo
+# and no ecological claims -- only the label and the growth form the source
+# actually recorded.
+#
+# purge_non_taxa() still removes every sentinel row it reads from the parquet
+# before these are re-appended, so a drifted or model-written row cannot
+# survive a run.
+SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
+    UNKNOWN_SPECIES: {
+        "common_names": ["Species not recorded"],
+        "description": (
+            "This tree is in the inventory, but its source did not record a species."
+        ),
+        "tree_form": "default",
+    },
+    PALM_SPECIES: {
+        "common_names": ["Palm (species not recorded)"],
+        "description": (
+            "The source recorded this as a palm without identifying the species."
+        ),
+        "tree_form": "palm",
+    },
+    SHRUB_SPECIES: {
+        "common_names": ["Shrub (species not recorded)"],
+        "description": (
+            "The source recorded this as a shrub without identifying the species."
+        ),
+        "tree_form": "multi_trunk",
+    },
+    CACTUS_SPECIES: {
+        "common_names": ["Cactus (species not recorded)"],
+        "description": (
+            "The source recorded this as a cactus without identifying the species."
+        ),
+        "tree_form": "columnar",
+    },
+}
+
+
 def form_sentinel_for(value: str | None) -> str | None:
     """Return the growth-form sentinel *value* names, or ``None``.
 
@@ -224,7 +389,15 @@ def sanitize_species(value: str | None) -> str | None:
         "X amelasorbus jackii"          -> "X amelasorbus jackii"
         "Fagus spp"                     -> "Fagus"
         "Malus 'spring snow' high brnch"-> "Malus"
+        "Acer unidentified"             -> "Acer"
+        "Parkinsonia x"                 -> "Parkinsonia"  (dangling mark)
+        "Callistemon king"              -> "Callistemon"  (cultivar name)
         "Pin oak"                       -> None  (common name)
+        "Oak"                           -> None  (common name, no genus)
+        "Japonica"                      -> None  (epithet, genus lost)
+        "X ambigua"                     -> None  (hybrid epithet, genus lost)
+        "Kastanie"                      -> None  (de: chestnut)
+        "Platanaceae"                   -> None  (a family, not a species)
         "Serviceberry or dogwood?"      -> None
         "Amel. laevis 'spring flurry'"  -> None  (abbreviated genus)
         "Vacant"                        -> None
@@ -234,13 +407,18 @@ def sanitize_species(value: str | None) -> str | None:
     s = normalize_species(value)
     if s is None:
         return None
+    s = _strip_diacritics(s)
 
     if s.lower() in _SPECIES_PLACEHOLDERS:
         return None
     # "Palm" / "Shrub" / "Cactus" are genus-shaped and would otherwise survive
     # as invented genera; enforce_tree_schema maps them to a form sentinel.
+    # Checked before _NON_TAXON_REWRITES so a value that names a growth form
+    # keeps it rather than merging into UNKNOWN_SPECIES.
     if s.lower() in _FORM_SENTINEL_ALIASES:
         return None
+    if s.lower() in _NON_TAXON_REWRITES:
+        return _NON_TAXON_REWRITES[s.lower()]
     # Free-typed uncertainty and any numeric content are never taxa.
     if "?" in s or "/" in s or any(ch.isdigit() for ch in s):
         return None
@@ -256,11 +434,18 @@ def sanitize_species(value: str | None) -> str | None:
         return None
 
     prefix = ""
-    # A leading hybrid mark denotes a nothogenus ("X amelasorbus jackii").
+    # A leading hybrid mark denotes a nothogenus ("X amelasorbus jackii"), and
+    # a nothogenus name is still genus + epithet.  With one token after the
+    # mark the genus is the thing that went missing -- "X ambigua" is some
+    # city's `Genus × ambigua` with the genus dropped upstream, and reading it
+    # as a nothogenus would invent one.  Two real nothogenus names are lost
+    # this way ("× Chitalpa", "× Cupressocyparis"), but both also appear in the
+    # data spelled without the mark, where they resolve normally.
     if tokens[0].lower() in _HYBRID_MARKS:
-        prefix = tokens[0]
+        # Leading, so it is the first word and takes normalize_species' capital.
+        prefix = CANONICAL_HYBRID_MARK.upper()
         tokens = tokens[1:]
-        if not tokens:
+        if len(tokens) < 2:
             return None
 
     genus = tokens[0]
@@ -269,15 +454,19 @@ def sanitize_species(value: str | None) -> str | None:
         return None
     if genus.lower() in _SPECIES_PLACEHOLDERS:
         return None
+    # "-aceae" is a family, a rank the species key does not carry.  Keeping it
+    # would hand the enrichment LLM a family to describe as if it were a tree.
+    if genus.lower().endswith("aceae"):
+        return None
 
     hybrid = ""
     epithet = ""
     for tok in tokens[1:]:
         low = tok.rstrip(".").lower()
         if tok.lower() in _HYBRID_MARKS and not epithet:
-            hybrid = tok
+            hybrid = CANONICAL_HYBRID_MARK
             continue
-        if low in _RANK_QUALIFIERS or tok.endswith("."):
+        if low in _RANK_QUALIFIERS or low in _SPECIES_PLACEHOLDERS or tok.endswith("."):
             break
         if not tok.isalpha():
             break
@@ -287,6 +476,10 @@ def sanitize_species(value: str | None) -> str | None:
     # "Pin oak" / "Red maple": a Latin epithet is never an English tree noun.
     if epithet and not hybrid and epithet.lower() in _COMMON_NAME_NOUNS:
         return None
+
+    # "Parkinsonia x" is a genus with a dangling mark, not a hybrid.
+    if not epithet:
+        hybrid = ""
 
     parts = [p for p in (prefix, genus, hybrid, epithet) if p]
     return " ".join(parts)

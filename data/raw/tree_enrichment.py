@@ -17,6 +17,7 @@ import pyarrow.parquet as pq
 import requests
 import duckdb
 from datetime import datetime, timezone
+from random import randint
 from ecoregion_matcher import (
     EcoregionReference,
     build_native_range_evidence as build_native_range_evidence_for_entries,
@@ -31,9 +32,15 @@ from enrichment._tree_shared import (
     ENRICHMENT_PARQUET,
     ENRICHMENT_GCS_URI,
     TREE_INFO_PARQUET,
+    ENRICHMENT_COMPLETE_SQL,
+    REENRICH_INCOMPLETE_BEFORE,
     SKIP_SPECIES,
     SPECIES_EXCLUSION_SQL,
+    SPECIES_SENTINELS,
+    is_enrichable_species,
     purge_non_taxa,
+    with_hybrid_aliases,
+    with_sentinel_rows,
     should_skip_species,
 )
 from enrichment._tree_enrichment_helpers import (
@@ -345,7 +352,7 @@ def get_all_species() -> list[str]:
             """,
             [TREE_INFO_PARQUET],
         ).fetchall()
-        return [row[0] for row in rows if not should_skip_species(row[0])]
+        return [row[0] for row in rows if is_enrichable_species(row[0])]
     finally:
         conn.close()
 
@@ -389,6 +396,83 @@ def get_already_enriched(source: str = ENRICHMENT_PARQUET) -> set[str]:
         return {row[0] for row in rows}.union(SKIP_SPECIES)
     finally:
         conn.close()
+
+
+# A ceiling on one invocation, so a run started by `trilogy refresh` cannot
+# turn into an unbounded LLM bill on a day when a city publishes a few thousand
+# new species.  It used to be a bare `if counter>250: break` with no message,
+# which is a silent cap: the run exits 0 having quietly done a fraction of the
+# work, and nothing says so.  It now says so.
+MAX_SPECIES_PER_RUN = 250
+
+
+def assert_checkpoint_is_not_stale(path: str) -> None:
+    """Refuse to resume from a checkpoint that holds less than the published table.
+
+    Local mode reads `--output` in preference to GCS and uploads the result at
+    the end, so a stale file there does not merely get ignored -- it *replaces*
+    the published table with its own contents.  `--output` defaults to
+    `tree_enrichment.parquet` in the working directory, and a months-old one
+    with a third of the rows was sitting there gitignored, one default
+    invocation away from reverting every city's species labels.
+
+    A checkpoint written by a real run is always a superset of what it read, so
+    fewer rows than the remote means it is not this run's checkpoint at all.
+    """
+    remote_rows = _row_count(ENRICHMENT_PARQUET)
+    local_rows = _row_count(path)
+    if remote_rows is None or local_rows is None or local_rows >= remote_rows:
+        return
+    raise SystemExit(
+        f"[abort] {path} holds {local_rows} rows but the published table has "
+        f"{remote_rows}. Local mode uploads this file at the end, so resuming "
+        f"from it would drop {remote_rows - local_rows} rows from every city's "
+        f"species labels. Delete it, or pass a fresh --output path."
+    )
+
+
+def _row_count(source: str) -> int | None:
+    if not parquet_exists(source):
+        return None
+    conn = duckdb.connect()
+    try:
+        return conn.execute("SELECT count(*) FROM read_parquet(?)", [source]).fetchone()[0]
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
+def get_incomplete_species(source: str = ENRICHMENT_PARQUET) -> set[str]:
+    """Species whose row exists but is missing what the freshness probe wants.
+
+    `get_already_enriched` answers "is there a row", which is not the same
+    question.  226 species had a row with a null `common_names` and were
+    therefore never revisited, while the probe -- which wants a common name --
+    reported them missing on every run.  The two now read the same definition
+    of complete, so what the probe reports is what the next run picks up.
+
+    Bounded by REENRICH_INCOMPLETE_BEFORE: a row rewritten today falls out of
+    scope, so a species the model cannot name is retried once, not for ever.
+    """
+    if not parquet_exists(source):
+        return set()
+    conn = duckdb.connect()
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT species
+            FROM read_parquet(?)
+            WHERE species IS NOT NULL
+              AND NOT ({ENRICHMENT_COMPLETE_SQL})
+              AND (enriched_at IS NULL OR enriched_at < ?)
+            """,
+            [source, REENRICH_INCOMPLETE_BEFORE],
+        ).fetchall()
+    finally:
+        conn.close()
+    # A sentinel's row is authored, not enriched -- see purge_non_taxa.
+    return {row[0] for row in rows} - set(SKIP_SPECIES)
 
 
 def _pa_type_to_duckdb_sql(t: pa.DataType) -> str:
@@ -474,7 +558,11 @@ def load_existing_table(source: str) -> pa.Table | None:
     # and ensures all column types match exactly before concat.
     table = table.cast(SCHEMA)
 
-    return purge_non_taxa(table)
+    # purge_non_taxa strips every sentinel row the parquet held; with_sentinel_rows
+    # puts the authored ones back, so both the checkpoint and the final merge
+    # carry them. On a first run there is no parquet to load and they arrive on
+    # the run after — there is nothing to join to yet either.
+    return with_sentinel_rows(with_hybrid_aliases(purge_non_taxa(table)))
 
 
 def merge_with_existing(existing: pa.Table | None, new_rows: list[dict]) -> pa.Table:
@@ -488,19 +576,71 @@ def merge_with_existing(existing: pa.Table | None, new_rows: list[dict]) -> pa.T
     if existing is None or existing_count == 0:
         return new_table
     re_processed = pa.array([row["species"] for row in new_rows], type=pa.string())
-    overlap = pc.sum(pc.is_in(existing.column("species"), re_processed)).as_py() or 0
+    is_re_processed = pc.fill_null(pc.is_in(existing.column("species"), re_processed), False)
+    overlap = pc.sum(is_re_processed).as_py() or 0
     if overlap > 0:
-        raise RuntimeError(
-            f"merge_with_existing: {overlap} species in new_rows already exist in existing table — "
-            f"re-processing is not expected. Aborting to avoid data loss."
-        )
+        # A re-enriched species replaces its row rather than joining it.
+        # `species` is the grain of this table and the join key from every tree
+        # row, so two rows for one species would double every tree carrying it.
+        print(f"[merge] replacing {overlap} re-enriched row(s)", file=sys.stderr)
+        existing = existing.filter(pc.invert(is_re_processed))
     merged = pa.concat_tables([existing, new_table])
     print(f"[merge] result={len(merged)} rows", file=sys.stderr)
-    if len(merged) != existing_count + len(new_rows):
+    expected = existing_count - overlap + len(new_rows)
+    if len(merged) != expected:
         raise RuntimeError(
-            f"merge_with_existing: expected {existing_count + len(new_rows)} rows after concat, got {len(merged)}"
+            f"merge_with_existing: expected {expected} rows after concat "
+            f"({existing_count} existing − {overlap} replaced + {len(new_rows)} new), "
+            f"got {len(merged)}"
         )
     return merged
+
+
+def assert_published_matches(local_path: str) -> None:
+    """Read the object back and check it is what we just wrote.
+
+    This table is the join target for every tree row in fourteen cities, and an
+    upload that lands short is invisible: the script reports the row count it
+    *wrote*, the run exits 0, and the damage only shows up as null common names
+    on the map. It has already happened once -- a run that wrote 7,485 rows
+    published 7,481, dropping exactly the four sentinels, which is the one class
+    of row nothing else would re-create.
+
+    Row count and the sentinel set, because those are the two invariants the
+    rest of the pipeline depends on and both are cheap to check.
+    """
+    published = ENRICHMENT_GCS_URI.replace(
+        "gs://", "https://storage.googleapis.com/"
+    ) + f"?cb={randint(0, 2**32)}"
+    conn = duckdb.connect()
+    try:
+        local_rows, local_sentinels = _shape(conn, local_path)
+        remote_rows, remote_sentinels = _shape(conn, published)
+    finally:
+        conn.close()
+
+    if (local_rows, local_sentinels) == (remote_rows, remote_sentinels):
+        print(f"[verify] published {remote_rows} rows, sentinels intact", file=sys.stderr)
+        return
+    raise RuntimeError(
+        f"published object does not match what was written: "
+        f"{local_rows} rows / sentinels {sorted(local_sentinels)} locally, "
+        f"{remote_rows} rows / sentinels {sorted(remote_sentinels)} published. "
+        f"The local file at {local_path} is the good copy - re-upload it."
+    )
+
+
+def _shape(conn, source: str) -> tuple[int, set[str]]:
+    rows = conn.execute("SELECT count(*) FROM read_parquet(?)", [source]).fetchone()[0]
+    sentinels = {
+        row[0]
+        for row in conn.execute(
+            "SELECT species FROM read_parquet(?) WHERE species IN "
+            "(SELECT unnest(?))",
+            [source, sorted(SPECIES_SENTINELS)],
+        ).fetchall()
+    }
+    return rows, sentinels
 
 
 def upload_to_gcs(local_path: str, gcs_uri: str) -> None:
@@ -519,6 +659,7 @@ def upload_to_gcs(local_path: str, gcs_uri: str) -> None:
     blob = bucket.blob(blob_name)
     blob.upload_from_filename(local_path)
     print("[info] upload complete", file=sys.stderr)
+    assert_published_matches(local_path)
 
 
 # ── Arrow table ────────────────────────────────────────────────────────────────
@@ -651,18 +792,30 @@ if __name__ == "__main__":
     if local_mode and os.path.exists(args.output):
         enrichment_source = args.output
         print(f"[info] local mode: reading progress from {args.output}", file=sys.stderr)
+        assert_checkpoint_is_not_stale(args.output)
     else:
         enrichment_source = ENRICHMENT_PARQUET
 
     already_enriched = get_already_enriched(enrichment_source)
+    # A row that exists but is missing a common name is not done -- it is the
+    # reason the freshness probe never reported `true`.  Kept separate from
+    # `already_enriched` so the per-species status below stays honest about
+    # which of the two this is.
+    incomplete = get_incomplete_species(enrichment_source)
     all_species = get_all_species()
-    to_process = [s for s in all_species if parse_scientific_name(s) not in already_enriched]
+    to_process = [
+        s
+        for s in all_species
+        if parse_scientific_name(s) not in already_enriched
+        or parse_scientific_name(s) in incomplete
+    ]
     if local_mode:
         to_process = to_process[:args.limit]
 
     print(
         f"[info] {len(all_species)} total species | "
         f"{len(already_enriched)} already enriched | "
+        f"{len(incomplete)} incomplete | "
         f"{len(to_process)} to process",
         file=sys.stderr,
     )
@@ -687,7 +840,12 @@ if __name__ == "__main__":
         if enrichment is None:
             continue
         counter += 1
-        if counter>250:
+        if counter > MAX_SPECIES_PER_RUN:
+            print(
+                f"[cap] stopping at {MAX_SPECIES_PER_RUN} species; "
+                f"{len(to_process) - counter + 1} left in the queue for the next run",
+                file=sys.stderr,
+            )
             break
         is_complete, missing = compute_is_complete(enrichment)
         if missing:
