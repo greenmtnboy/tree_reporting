@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 import pyarrow as pa
@@ -307,10 +308,15 @@ def test_the_retry_window_closes_behind_itself(conn):
     exactly once -- without the bound it would be re-enriched on every refresh
     tick, for ever.
     """
-    stamped = """
+    # Derived from the constant rather than hardcoded: the date moves whenever
+    # someone deliberately asks for another attempt, and this property holds
+    # across every such move.
+    after = (REENRICH_INCOMPLETE_BEFORE + timedelta(hours=1)).isoformat()
+    before = (REENRICH_INCOMPLETE_BEFORE - timedelta(days=1)).isoformat()
+    stamped = f"""
     SELECT * FROM (VALUES
-        ('Retried today',  TIMESTAMPTZ '2026-08-22 12:00:00+00'),
-        ('Never revisited', TIMESTAMPTZ '2026-03-29 14:25:12+00')
+        ('Retried today',   TIMESTAMPTZ '{after}'),
+        ('Never revisited', TIMESTAMPTZ '{before}')
     ) AS v(species, enriched_at)
     """
     eligible = _rows(

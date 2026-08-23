@@ -110,7 +110,15 @@ ENRICHMENT_COMPLETE_SQL = (
 # once and then left alone.  Without that, an unnameable species would be
 # re-enriched on every refresh tick, for ever.  Moving this date is how you ask
 # for another attempt -- a deliberate, greppable edit, like SENTINEL_ENRICHED_AT.
-REENRICH_INCOMPLETE_BEFORE = datetime(2026, 8, 22, tzinfo=timezone.utc)
+#
+# Moved once, on 2026-08-23, after the prompt was fixed to ask for
+# `common_names` and `tree_form` at all.  The 189 rows still short at that point
+# were written by the older prompt -- 176 of them carrying tree_form="default",
+# the signature of an answer produced without being asked -- so they deserved
+# one attempt under the new one.  The value must sit *after* the rows being
+# re-queued and *before* the run that rewrites them, or the retry stops
+# converging: pick a timestamp, not a date, when moving it the same day.
+REENRICH_INCOMPLETE_BEFORE = datetime(2026, 8, 23, 12, 0, tzinfo=timezone.utc)
 
 
 def should_skip_species(species: str) -> bool:
