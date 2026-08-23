@@ -17,6 +17,7 @@ import pyarrow.parquet as pq
 import requests
 import duckdb
 from datetime import datetime, timezone
+from random import randint
 from ecoregion_matcher import (
     EcoregionReference,
     build_native_range_evidence as build_native_range_evidence_for_entries,
@@ -35,6 +36,7 @@ from enrichment._tree_shared import (
     REENRICH_INCOMPLETE_BEFORE,
     SKIP_SPECIES,
     SPECIES_EXCLUSION_SQL,
+    SPECIES_SENTINELS,
     is_enrichable_species,
     purge_non_taxa,
     with_hybrid_aliases,
@@ -594,6 +596,53 @@ def merge_with_existing(existing: pa.Table | None, new_rows: list[dict]) -> pa.T
     return merged
 
 
+def assert_published_matches(local_path: str) -> None:
+    """Read the object back and check it is what we just wrote.
+
+    This table is the join target for every tree row in fourteen cities, and an
+    upload that lands short is invisible: the script reports the row count it
+    *wrote*, the run exits 0, and the damage only shows up as null common names
+    on the map. It has already happened once -- a run that wrote 7,485 rows
+    published 7,481, dropping exactly the four sentinels, which is the one class
+    of row nothing else would re-create.
+
+    Row count and the sentinel set, because those are the two invariants the
+    rest of the pipeline depends on and both are cheap to check.
+    """
+    published = ENRICHMENT_GCS_URI.replace(
+        "gs://", "https://storage.googleapis.com/"
+    ) + f"?cb={randint(0, 2**32)}"
+    conn = duckdb.connect()
+    try:
+        local_rows, local_sentinels = _shape(conn, local_path)
+        remote_rows, remote_sentinels = _shape(conn, published)
+    finally:
+        conn.close()
+
+    if (local_rows, local_sentinels) == (remote_rows, remote_sentinels):
+        print(f"[verify] published {remote_rows} rows, sentinels intact", file=sys.stderr)
+        return
+    raise RuntimeError(
+        f"published object does not match what was written: "
+        f"{local_rows} rows / sentinels {sorted(local_sentinels)} locally, "
+        f"{remote_rows} rows / sentinels {sorted(remote_sentinels)} published. "
+        f"The local file at {local_path} is the good copy - re-upload it."
+    )
+
+
+def _shape(conn, source: str) -> tuple[int, set[str]]:
+    rows = conn.execute("SELECT count(*) FROM read_parquet(?)", [source]).fetchone()[0]
+    sentinels = {
+        row[0]
+        for row in conn.execute(
+            "SELECT species FROM read_parquet(?) WHERE species IN "
+            "(SELECT unnest(?))",
+            [source, sorted(SPECIES_SENTINELS)],
+        ).fetchall()
+    }
+    return rows, sentinels
+
+
 def upload_to_gcs(local_path: str, gcs_uri: str) -> None:
     """Upload *local_path* to *gcs_uri* using the google-cloud-storage Python library."""
     from google.cloud import storage as gcs
@@ -610,6 +659,7 @@ def upload_to_gcs(local_path: str, gcs_uri: str) -> None:
     blob = bucket.blob(blob_name)
     blob.upload_from_filename(local_path)
     print("[info] upload complete", file=sys.stderr)
+    assert_published_matches(local_path)
 
 
 # ── Arrow table ────────────────────────────────────────────────────────────────

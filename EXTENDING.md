@@ -961,6 +961,30 @@ no Gemini 3 publisher model resolves there.  Lite is cheaper and is the wrong
 direction for this workload — the failure mode is a thin answer on an obscure
 taxon, which is exactly what a smaller model does more of.
 
+### The scheduled refresh runs `main`, and will undo you
+
+`data/trilogy.toml` ticks at 04:00, 12:00 and 20:00 UTC, and because the
+enrichment probe reports `false` while any species is short of a common name,
+**every tick re-runs the enrichment script** — from whatever is on `main`, not
+from your branch.
+
+So a change to the *shape* of the published table is reverted on the next tick
+until it merges.  The sentinel rows are the worked example: a branch run
+published 7,485 rows with the four authored sentinels, the noon tick loaded that
+table, ran `main`'s `load_existing_table` (which ends at `return
+purge_non_taxa(table)`, purging sentinels and not re-adding them) and
+republished 7,481 without them.  CI ran eight minutes later and the sentinel
+test went red — correctly: it was reporting that production runs code without
+the fix.
+
+Two things follow.  A data-shape change is not done when the parquet looks
+right; it is done when it **merges**, and until then expect any test asserting
+the new shape to flap on a three-hour cycle.  And `assert_published_matches`
+reads the object back after every upload and checks the row count and the
+sentinel set, because an upload that lands short is otherwise invisible — the
+script reports the count it *wrote*, exits 0, and the damage shows up as null
+common names on the map.
+
 ### Two ways this script could quietly destroy the table
 
 Both were live until August 2026 and both are now guarded, because neither
