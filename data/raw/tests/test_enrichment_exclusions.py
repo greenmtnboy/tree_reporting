@@ -28,6 +28,7 @@ sys.path.insert(0, str(RAW_DIR))
 
 from _ingest_shared import SENTINEL_ENRICHMENT, SPECIES_SENTINELS  # noqa: E402
 from enrichment._tree_shared import (  # noqa: E402
+    CHIMERA_SPECIES,
     ENRICHMENT_COMPLETE_SQL,
     with_hybrid_aliases,
     REENRICH_INCOMPLETE_BEFORE,
@@ -373,3 +374,36 @@ def test_hybrid_alias_does_not_duplicate_an_existing_twin():
 def test_hybrid_alias_leaves_non_hybrids_alone():
     out = with_hybrid_aliases(_hybrid_table(["Acer rubrum"]))
     assert out.column("species").to_pylist() == ["Acer rubrum"]
+
+
+# ---------------------------------------------------------------------------
+# CHIMERA_SPECIES
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", sorted(CHIMERA_SPECIES))
+def test_a_chimera_is_never_queued(value: str):
+    """Asked twice under a prompt that explicitly requests a common name, all
+    of these came back empty -- because there is no such tree. "Acer implexa"
+    is an Acacia, "Erythrina camaldulensis" a Eucalyptus, "Pinus excelsior" a
+    Fraxinus."""
+    assert is_enrichable_species(value) is False
+
+
+def test_a_chimera_keeps_its_row():
+    """Excluded from the queue but deliberately not from SKIP_SPECIES, which
+    would purge the row. Whatever the model did manage beats nothing, and the
+    map falls back to the scientific name for the label."""
+    assert not (CHIMERA_SPECIES & SKIP_SPECIES)
+    kept = purge_non_taxa(_table(sorted(CHIMERA_SPECIES)))
+    assert len(kept) == len(CHIMERA_SPECIES)
+
+
+def test_a_chimera_is_shaped_like_a_real_binomial():
+    """Why this has to be a list and not a rule: sanitize_species sees a real
+    genus and a real Latin epithet, exactly like a correct name. Only knowing
+    the taxonomy separates "Acer implexa" from "Acer campestre"."""
+    from _ingest_shared import sanitize_species
+
+    for value in CHIMERA_SPECIES:
+        assert sanitize_species(value) == value, value

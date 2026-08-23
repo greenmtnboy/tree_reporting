@@ -961,6 +961,32 @@ no Gemini 3 publisher model resolves there.  Lite is cheaper and is the wrong
 direction for this workload — the failure mode is a thin answer on an obscure
 taxon, which is exactly what a smaller model does more of.
 
+### Nine names with nothing behind them
+
+The August 2026 backlog closed at 795 queued, 786 enriched, nine left — and the
+nine are all the same thing: a real genus welded to an epithet from a different
+species.  `Erythrina camaldulensis` is a *Eucalyptus*, `Acer implexa` an
+*Acacia*, `Laurus lucidum` a *Ligustrum*, `Pinus excelsior` a *Fraxinus*,
+`Melaleuca azedarach` a *Melia*, `Cupressus plicata` a *Thuja*.  There is no
+such tree, so there is nothing to find, and asked twice under a prompt that
+explicitly requests a common name all nine still came back empty.  That is the
+model being right.
+
+`CHIMERA_SPECIES` keeps them out of the queue.  It has to be a list: both
+halves are real Latin and the shape is indistinguishable from a correct
+binomial, so `sanitize_species` cannot catch them and should not try — only
+knowing the taxonomy separates `Acer implexa` from `Acer campestre`.
+Truncating to the genus is wrong rather than conservative, since calling an
+*Acacia* an *Acer* asserts something false.
+
+They are deliberately **not** in `SKIP_SPECIES`, which would also purge their
+rows.  Whatever description the model did manage beats nothing for the 30 trees
+involved, and the map falls back to the scientific name for the label — the
+honest answer when we do not know what the tree is.
+
+With those nine excluded the probe returns `true` for the first time, which
+also stops the every-tick re-run described below.
+
 ### The scheduled refresh runs `main`, and will undo you
 
 `data/trilogy.toml` ticks at 04:00, 12:00 and 20:00 UTC, and because the

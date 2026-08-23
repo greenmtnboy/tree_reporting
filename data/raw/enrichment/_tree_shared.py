@@ -121,6 +121,43 @@ ENRICHMENT_COMPLETE_SQL = (
 REENRICH_INCOMPLETE_BEFORE = datetime(2026, 8, 23, 12, 0, tzinfo=timezone.utc)
 
 
+# Names that pair a real genus with an epithet from a different species.
+#
+# These are the residue of the August 2026 backlog: 795 species queued, 786
+# enriched, and these nine left. Each is a chimera the source data invented --
+# "Erythrina camaldulensis" is a Eucalyptus, "Pinus abies" a Picea, "Acer
+# implexa" an Acacia, "Laurus lucidum" a Ligustrum, "Pinus excelsior" a
+# Fraxinus, "Melaleuca azedarach" a Melia, "Cupressus plicata" a Thuja. There
+# is no such tree, so there is nothing to find, and the model is right to
+# return nothing: asked twice under a prompt that explicitly requests a common
+# name, all nine still came back empty.
+#
+# `sanitize_species` cannot catch them, and should not try: both halves are
+# real Latin, and the shape is indistinguishable from a correct binomial. Only
+# knowing the taxonomy separates "Acer implexa" from "Acer campestre".
+#
+# Kept out of the *queue* but deliberately not out of SKIP_SPECIES, because
+# that would also purge their rows. Whatever description the model did manage
+# is better than nothing for the 30 trees involved, and the map falls back to
+# the scientific name for the label -- which is the honest answer when we do
+# not know what the tree is.
+#
+# Truncating them to the genus is wrong, not conservative: an "Acer implexa" is
+# an Acacia, so calling it an Acer asserts something false.
+CHIMERA_SPECIES: set[str] = {
+    "Acer implexa",
+    "Cupressus plicata",
+    "Erythrina camaldulensis",
+    "Laurus lucidum",
+    "Melaleuca azedarach",
+    "Pinus aberdoniae",
+    "Pinus abies",
+    "Pinus excelsior",
+    "Tamerix angelica",
+    "Ulmus paradoxa",
+}
+
+
 def should_skip_species(species: str) -> bool:
     return species.strip().lower() in EXCLUDED_SPECIES
 
@@ -136,6 +173,10 @@ def is_enrichable_species(value: str | None) -> bool:
     and 141 of the 795 species queued in August 2026 turned out to be things
     like "Oak", "Japonica", "Kastanie" and "X ambigua".
 
+    CHIMERA_SPECIES is the one thing this rule cannot derive: a genus welded to
+    another species' epithet is shaped exactly like a real binomial, so only
+    knowing the taxonomy tells them apart.
+
     A value `sanitize_species` *rewrites* is skipped too, not enriched under
     its raw spelling.  "Acer unidentified" is a row the next refresh will
     publish as "Acer", so a row keyed on the raw string is dead on arrival --
@@ -146,6 +187,8 @@ def is_enrichable_species(value: str | None) -> bool:
     if not value:
         return False
     if value in SKIP_SPECIES or should_skip_species(value):
+        return False
+    if value in CHIMERA_SPECIES:
         return False
     return sanitize_species(value) == value
 
