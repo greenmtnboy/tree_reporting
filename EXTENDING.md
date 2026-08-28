@@ -774,6 +774,17 @@ Every city **must** have a landmarks preql file, even if it yields zero rows. Th
 >
 > Commit `{city}_landmarks.csv` to the repo so the pipeline can run without re-geocoding. Re-run the geocode script periodically to pick up new entries.
 > See `data/raw/burlington/` for the reference implementation.
+>
+> **Athens/Milos variant — ad-hoc cloud publish, no local credentials:** the
+> Greek cities' landmark models read a staging *parquet* instead, published
+> from the committed CSV by an unscheduled `[[cloud.job]]`
+> (`landmark_staging/{code}_landmarks_staging.preql`;
+> `trilogy cloud jobs run urban-tree-landmarks-{code} --wait`). The job's
+> freshness is its own run timestamp, so a firing always republishes — which
+> is why it carries no cron: republishing an unchanged CSV still moves the
+> staging object's Last-Modified and would rebuild the city's landmark
+> parquet for nothing. Prefer this variant for new cities; it keeps
+> `upload_staging` credentials out of the loop entirely.
 
 ### Landmark Data Schema
 

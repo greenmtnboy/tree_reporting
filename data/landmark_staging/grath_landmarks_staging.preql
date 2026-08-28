@@ -1,0 +1,51 @@
+# Ad-hoc staging publish for Athens's landmarks, run by the `landmarks-grath`
+# [[cloud.job]] in ../trilogy.toml — NOT by the main refresh, and on no cron.
+#
+# The curated CSV is committed (raw/grath/athens_landmarks.csv, written by
+# athens_landmarks_geocode.py) and travels to the cloud workspace on every
+# sync, so firing this job republishes it as the staging parquet the city's
+# landmark model reads — with the job's HMAC credentials, no local Google
+# credential anywhere. The flow after editing the CSV: merge, let the sync
+# run, then `trilogy cloud jobs run urban-tree-landmarks-grath --wait`.
+#
+# Freshness is the run timestamp (see run_timestamp.py): every firing is
+# stale by definition, which is what an ad-hoc republish means — and why this
+# model must never be reachable from a scheduled refresh entrypoint.
+
+key landmark_id string;
+property landmark_id.name string;
+property landmark_id.city string;
+property landmark_id.geometry_raw string;
+property landmark_id.latitude float;
+property landmark_id.longitude float;
+
+property <*>.landmarks_staged_through datetime; # when this staging copy was published
+
+root datasource run_timestamp (
+    data_updated_through: landmarks_staged_through
+)
+file `./run_timestamp.py`;
+
+root datasource grath_landmarks_csv (
+    landmark_id: landmark_id,
+    name: name,
+    city: city,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    geometry_raw: ?geometry_raw,
+)
+grain (landmark_id)
+file `../raw/grath/athens_landmarks.csv`;
+
+datasource grath_landmarks_staging (
+    landmark_id,
+    name,
+    city,
+    ?latitude,
+    ?longitude,
+    ?geometry_raw,
+    landmarks_staged_through,
+)
+grain (landmark_id)
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grath_landmarks_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/grath_landmarks_staging.parquet`
+freshness by landmarks_staged_through;

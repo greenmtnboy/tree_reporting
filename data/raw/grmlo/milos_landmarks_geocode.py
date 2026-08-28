@@ -12,11 +12,11 @@ entry via Nominatim and write milos_landmarks.csv.
 
 Re-runnable: entries already present in the CSV are skipped, so you can
 interrupt and resume without re-hitting Nominatim.  After changing the CSV,
-publish it so the refresh sees it (the preql reads the GCS staging copy, and
-uploading is what moves the freshness watermark):
+commit it, merge, and fire the ad-hoc cloud job so the refresh sees it (the
+preql reads the GCS staging parquet, and publishing it is what moves the
+freshness watermark — see landmark_staging/grmlo_landmarks_staging.preql):
 
-    python -c "import sys; sys.path.insert(0, '..'); from _ingest_shared \
-        import upload_staging; upload_staging('milos_landmarks.csv', 'milos_landmarks.csv')"
+    trilogy cloud jobs run urban-tree-landmarks-grmlo --wait
 """
 
 import csv

@@ -12,14 +12,15 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import emit_freshness, staging_modified_at
 
-STAGING_NAME = "milos_landmarks.csv"
+STAGING_NAME = "grmlo_landmarks_staging.parquet"
 
 
 def modified_at() -> datetime:
-    # The GCS object's publication time, not the local file's mtime.
-    # The CSV is committed, and git does not preserve mtime, so a fresh
-    # clone -- which is every cloud job run -- stamped the checkout time
-    # and rebuilt this city's landmarks on every tick, for ever.
+    # The GCS object's publication time, not the committed CSV's mtime (git
+    # does not preserve mtime, so a fresh clone -- which is every cloud job
+    # run -- would stamp the checkout time and rebuild on every tick).  The
+    # object is published from the CSV by the ad-hoc `landmarks-grmlo` cloud
+    # job; firing it is what moves this watermark.
     return staging_modified_at(STAGING_NAME)
 
 

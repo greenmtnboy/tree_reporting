@@ -6,9 +6,10 @@ root datasource milos_landmarks_update_time (
 file `./milos_landmarks_probe.py`;
 
 # Curated + Nominatim-geocoded (see milos_landmarks_geocode.py): Milos
-# publishes no landmark dataset.  The refresh reads the GCS staging copy of
-# the committed CSV; re-uploading it via _ingest_shared.upload_staging is what
-# marks this city's Parquet stale.
+# publishes no landmark dataset.  The refresh reads the GCS staging parquet,
+# which the ad-hoc `landmarks-grmlo` cloud job publishes from the committed
+# CSV (see landmark_staging/grmlo_landmarks_staging.preql); firing that job
+# is what marks this city's landmark Parquet stale.
 root partial datasource raw_milos_landmark_info (
     landmark_id: landmark_id,
     city: city,
@@ -17,7 +18,7 @@ root partial datasource raw_milos_landmark_info (
 )
 grain (landmark_id)
 complete where city = 'GRMLO'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/milos_landmarks.csv`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grmlo_landmarks_staging.parquet`;
 
 partial datasource milos_landmark_info (
     landmark_id,
