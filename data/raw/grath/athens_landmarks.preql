@@ -8,8 +8,10 @@ file `./athens_landmarks_probe.py`;
 # Curated + Nominatim-geocoded (see athens_landmarks_geocode.py): Greece's
 # national monuments registry has no machine-readable export, and the city
 # portal's only heritage layer is the Acropolis protection-zone polygon.
-# The refresh reads the GCS staging copy of the committed CSV; re-uploading it
-# via _ingest_shared.upload_staging is what marks this city's Parquet stale.
+# The refresh reads the GCS staging parquet, which the ad-hoc
+# `landmarks-grath` cloud job publishes from the committed CSV (see
+# landmark_staging/grath_landmarks_staging.preql); firing that job is what
+# marks this city's landmark Parquet stale.
 root partial datasource raw_athens_landmark_info (
     landmark_id: landmark_id,
     city: city,
@@ -18,7 +20,7 @@ root partial datasource raw_athens_landmark_info (
 )
 grain (landmark_id)
 complete where city = 'GRATH'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/athens_landmarks.csv`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grath_landmarks_staging.parquet`;
 
 partial datasource athens_landmark_info (
     landmark_id,

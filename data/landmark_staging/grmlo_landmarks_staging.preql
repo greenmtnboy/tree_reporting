@@ -1,0 +1,35 @@
+# Ad-hoc staging publish for Milos's landmarks, run by the `landmarks-grmlo`
+# [[cloud.job]] in ../trilogy.toml — NOT by the main refresh, and on no cron.
+# Same shape and rationale as grath_landmarks_staging.preql: the committed
+# CSV (raw/grmlo/milos_landmarks.csv) rides the workspace sync, and a firing
+# republishes it as the staging parquet with the job's HMAC credentials —
+# `copy into` under `operation = "run"`, so every execution copies
+# unconditionally and the firing itself is the republish decision.
+
+key landmark_id string;
+property landmark_id.name string;
+property landmark_id.city string;
+property landmark_id.geometry_raw string;
+property landmark_id.latitude float;
+property landmark_id.longitude float;
+
+root datasource grmlo_landmarks_csv (
+    landmark_id: landmark_id,
+    name: name,
+    city: city,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    geometry_raw: ?geometry_raw,
+)
+grain (landmark_id)
+file `../raw/grmlo/milos_landmarks.csv`;
+
+copy into parquet `gcs://trilogy_public_models/duckdb/staging/grmlo_landmarks_staging.parquet` from
+select
+    landmark_id,
+    name,
+    city,
+    latitude,
+    longitude,
+    geometry_raw,
+;

@@ -1,0 +1,47 @@
+# Ad-hoc staging publish for Athens's landmarks, run by the `landmarks-grath`
+# [[cloud.job]] in ../trilogy.toml — NOT by the main refresh, and on no cron.
+#
+# The curated CSV is committed (raw/grath/athens_landmarks.csv, written by
+# athens_landmarks_geocode.py) and travels to the cloud workspace on every
+# sync, so firing this job republishes it as the staging parquet the city's
+# landmark model reads — with the job's HMAC credentials, no local Google
+# credential anywhere. The flow after editing the CSV: merge, let the sync
+# run, then `trilogy cloud jobs run urban-tree-landmarks-grath --wait`.
+#
+# `copy into` under `operation = "run"` rather than a materialised datasource
+# under `refresh`, deliberately: a refresh target needs a freshness watermark
+# to ever rebuild once its object exists (verified — a no-freshness target is
+# only built while missing), and the only honest watermark for "republish
+# when a person fires the job" is the firing itself. `run` says exactly that:
+# every execution copies, unconditionally. It is also why this job must never
+# gain a frequent cron — republishing an unchanged CSV still moves the
+# staging object's Last-Modified, which the city's landmark probe reads, and
+# the city's landmark parquet would rebuild for nothing.
+
+key landmark_id string;
+property landmark_id.name string;
+property landmark_id.city string;
+property landmark_id.geometry_raw string;
+property landmark_id.latitude float;
+property landmark_id.longitude float;
+
+root datasource grath_landmarks_csv (
+    landmark_id: landmark_id,
+    name: name,
+    city: city,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    geometry_raw: ?geometry_raw,
+)
+grain (landmark_id)
+file `../raw/grath/athens_landmarks.csv`;
+
+copy into parquet `gcs://trilogy_public_models/duckdb/staging/grath_landmarks_staging.parquet` from
+select
+    landmark_id,
+    name,
+    city,
+    latitude,
+    longitude,
+    geometry_raw,
+;

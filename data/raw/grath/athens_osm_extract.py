@@ -6,6 +6,11 @@
 
 """Extract Athens's OpenStreetMap trees into the staged parquet in GCS.
 
+The normal path is the scheduled `osm-grath` cloud job, which refreshes
+osm_staging/grath_osm_staging.preql on its own cron with the pipeline's GCS
+credentials — this script is the manual fallback, and it needs
+application-default Google credentials for the upload.
+
 Everything lives in `_osm_shared.extract_city`; this file exists so each city
 has a discoverable entry point, and so a city that needs to diverge (a tighter
 bbox, an extra tag) has somewhere to do it.

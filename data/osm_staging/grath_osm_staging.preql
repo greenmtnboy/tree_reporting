@@ -1,0 +1,71 @@
+# Scheduled OSM extraction for Athens, run by the `osm-grath` [[cloud.job]] in
+# ../trilogy.toml — NOT by the main refresh.  This file materialises the same
+# staging parquet raw/grath/athens_osm_extract.py uploads manually, but through
+# `trilogy refresh`, so DuckDB writes GCS with the job's HMAC credentials and
+# no google-cloud-storage credential is needed anywhere.
+#
+# Deliberately standalone: it imports none of the raw/ models, so the main
+# refresh job (entrypoint `raw`) never reaches it and this job's refresh
+# adopts nothing but its own asset.  The concepts mirror the canonical tree
+# columns by name because the staging parquet's *column names* are the
+# contract raw/grath/athens_tree_info.preql reads.
+#
+# Freshness is Overpass's global osm_base timestamp, which advances about
+# every minute.  That is the watermark the per-city models must never use —
+# it would rebuild the city on every tick — and exactly right here: every
+# scheduled firing sees a newer timestamp and re-extracts, so the job's cron
+# in trilogy.toml IS the extraction cadence, and an unreachable Overpass
+# degrades to the epoch and the firing no-ops instead of failing.
+
+key tree_id string;
+property tree_id.city string;
+property tree_id.data_source string;
+property tree_id.species string;
+property tree_id.tree_name string;
+property tree_id.plant_date date;
+property tree_id.latitude float;
+property tree_id.longitude float;
+property tree_id.diameter_at_breast_height float;
+property tree_id.submission_photo_url string;
+property tree_id.osm_ref string; # municipal inventory id where the node carries a ref tag
+
+property <*>.osm_extracted_through datetime; # Overpass osm_base time at extraction
+
+root datasource overpass_timestamp (
+    data_updated_through: osm_extracted_through
+)
+file `./overpass_timestamp.py`;
+
+root datasource grath_osm_rows (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
+    osm_ref: ?osm_ref,
+)
+grain (tree_id)
+file `./grath_osm_rows.py`;
+
+datasource grath_osm_staging (
+    tree_id,
+    city,
+    data_source,
+    ?species,
+    ?tree_name,
+    ?plant_date,
+    ?latitude,
+    ?longitude,
+    ?diameter_at_breast_height,
+    ?submission_photo_url,
+    ?osm_ref,
+    osm_extracted_through,
+)
+grain (tree_id)
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grath_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/grath_osm_staging.parquet`
+freshness by osm_extracted_through;
