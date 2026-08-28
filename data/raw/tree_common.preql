@@ -28,6 +28,9 @@ property <*>.arbue_data_updated_through datetime; # when Buenos Aires data is th
 property <*>.uslax_data_updated_through datetime; # when Los Angeles data is through
 property <*>.uswas_data_updated_through datetime; # when Washington DC data is through
 property <*>.ustem_data_updated_through datetime; # when Tempe data is through
+property <*>.grath_data_updated_through datetime; # when Athens data is through
+# GRMLO (Milos) has no municipal source, so no municipal freshness property:
+# its published watermark is grmlo_community_data_updated_through alone.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
 property <*>.uswas_osm_data_updated_through datetime; # GCS publication time of Washington DC's staged OSM parquet
@@ -42,6 +45,8 @@ property <*>.usbtv_osm_data_updated_through datetime; # GCS publication time of 
 property <*>.frpar_osm_data_updated_through datetime; # GCS publication time of Paris's staged OSM parquet
 property <*>.usnyc_osm_data_updated_through datetime; # GCS publication time of New York City's staged OSM parquet
 property <*>.ussfo_osm_data_updated_through datetime; # GCS publication time of San Francisco's staged OSM parquet # mtime of Boston's committed OSM staging parquet
+property <*>.grath_osm_data_updated_through datetime; # GCS publication time of Athens's staged OSM parquet
+property <*>.grmlo_osm_data_updated_through datetime; # GCS publication time of Milos's staged OSM parquet
 
 
 

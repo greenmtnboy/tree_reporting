@@ -280,6 +280,13 @@ map fails to load entirely. So **refresh every city before deploying** a worker
 change that selects it. `src/src/workers/parquetSchema.test.ts` asserts the
 column against the live GCS Parquet for every city in `CITY_CONFIG`, which is
 what turns "I forgot to refresh" into a red test rather than a broken city.
+A city whose parquet does not exist *at all* (brand-new, first build pending)
+is the one carve-out: for a 404 the test instead asserts the city's model
+materialises the column, so a city-addition PR is not red until its first
+credentialed build — the hard failure is reserved for a parquet that exists
+without the column, the stale-build case the gate was written for. The flip
+side: a green build no longer proves a brand-new city's parquet exists, so a
+just-added city stays broken in a deploy until its first refresh runs.
 
 **A new column does not make a Parquet stale.** Staleness is decided by the
 freshness probes, which watch the *source data*, so a plain `trilogy refresh
@@ -696,6 +703,45 @@ Do not stop after the parquet and city config are working. Every city addition m
 - `src/src/data/sourceCatalog.ts` - add or update the portal metadata that powers the Info page attribution. `InfoView.vue` renders from this catalog; avoid hardcoding new portal links directly in the view.
 
 If you change the source story significantly, review `src/src/components/WelcomeModal.vue` as well so the onboarding copy does not drift.
+
+## Community-only cities (no municipal inventory)
+
+A city can exist with **no municipal dataset at all** — Milos (`GRMLO`) is the
+reference: no Greek portal publishes a tree inventory for it, and the city is
+on the map so that community submissions recorded there can be published.
+Differences from the standard runbook, all visible in
+`data/raw/grmlo/milos_tree_info.preql`:
+
+- `MUNICIPAL_DATA_SOURCES[code]` is an **empty tuple**; the community label is
+  still derived automatically and `CITY_BOUNDS` still needs an entry (the
+  community ingest drops rows for cities missing from either map).
+- No municipal fetch script, no municipal freshness probe, and no
+  `{code}_data_updated_through` property in `tree_common.preql`. The published
+  watermark has no municipal term — for GRMLO it is
+  `greatest({code}_community_data_updated_through, {code}_osm_data_updated_through)`
+  (a `greatest()` over a municipal column nothing feeds would never resolve).
+- **If the city has exactly one partition** (community only, no OSM), one more
+  wrinkle applies: a multi-partition city proves its Parquet complete by
+  unioning the sources that cover its enum, but **a lone partial source is
+  never a union candidate** — with `complete where city = '{CODE}'` alone the
+  refresh fails with `no complete sources found … could only be resolved from
+  partial sources`. The fix is to pin the single enum value on the *published
+  target* too: `complete where city = '{CODE}' and {code}_source =
+  'COMMUNITY_{CODE}'`, which makes the materialisation query imply the
+  community source's own `complete where`. GRMLO shipped that way first and
+  the failure was verified both ways; once its OSM partition was added the
+  standard union proof applied and the pin came out again.
+- `tests/test_data_sources.py` knows about both wrinkles: the freshness test
+  branches on an empty municipal tuple, and the one-claim-per-enum-value test
+  counts only `root` datasource claims so a pinned published target does not
+  read as a duplicate claim.
+
+Everything else is unchanged: the city still needs the enum entry in
+`core.preql`, an `is_duplicate` column (derived from the dedup grids when OSM
+is wired, constant `False` otherwise), landmarks, frontend config, and
+attribution. For GRMLO's dedup the only non-OSM anchors are community
+submissions — a flag fires exactly when someone records a tree OSM already
+maps, and the submission wins, which is the intended outcome.
 
 ## Landmarks (Mandatory)
 

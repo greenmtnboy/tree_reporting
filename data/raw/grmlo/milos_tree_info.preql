@@ -1,0 +1,132 @@
+import ..tree_common;
+import ..community_tree_info;
+
+# Milos has no municipal tree inventory — no Greek portal publishes one (the
+# nearest is Athens's National Garden layer; see grath/).  The city exists so
+# trees recorded on the island can be published: its partitions are approved
+# community submissions plus the staged OSM extract (~230 natural=tree nodes),
+# and the published watermark combines those two columns, with no municipal
+# term.
+#
+# Historical note, for the next community-only city: while GRMLO had *only*
+# the community partition, the published target additionally had to pin
+# `grmlo_source = 'COMMUNITY_GRMLO'` in its `complete where` — a lone partial
+# source is never a union candidate, and without the pin the refresh failed
+# with "no complete sources found ... could only be resolved from partial
+# sources".  With a second partition the standard union proof applies and the
+# pin is gone.  Verified all three ways; see EXTENDING.md.
+auto grmlo_published_data_updated_through <- greatest(grmlo_community_data_updated_through, grmlo_osm_data_updated_through);
+
+key grmlo_source enum<string>['COMMUNITY_GRMLO', 'OSM_GRMLO']; # originating dataset for the row
+
+# Only this city's column, so an approval elsewhere does not mark GRMLO's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource grmlo_community_update_time (
+    grmlo_community_data_updated_through: grmlo_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# GCS publication time of the staged OSM parquet (see milos_osm_extract.py);
+# it only moves when an extraction is re-run and uploaded.
+root datasource grmlo_osm_update_time (
+    data_updated_through: grmlo_osm_data_updated_through
+)
+file `./milos_osm_probe.py`;
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than
+# Overpass -- extraction is decoupled from refresh (see _osm_shared.py and
+# EXTENDING.md).  Overlapping rows are kept and flagged via
+# grmlo_is_duplicate below, never dropped: the Parquet must contain the union
+# of its declared sources, and the flag keeps the dedup tunable and auditable.
+root partial datasource grmlo_osm_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: grmlo_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'GRMLO' and grmlo_source = 'OSM_GRMLO'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grmlo_osm_staging.parquet`;
+
+# Approved community submissions for this city. The shared ingest script
+# emits every city's rows; the `where` clause narrows it to GRMLO and the
+# `complete where` makes it a disjoint partition alongside the OSM staging.
+root partial datasource grmlo_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: grmlo_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'GRMLO' and grmlo_source = 'COMMUNITY_GRMLO'
+file `../community_tree_info.py`
+where city = 'GRMLO';
+
+
+# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+#
+# Same construction as ustem/tempe_tree_info.preql (full rationale there and in
+# EXTENDING.md): an OSM row is a duplicate when a non-OSM tree shares its
+# ~10m grid cell in ANY of four half-cell-staggered grid copies -- a guaranteed
+# match within 5m, possible out to a ~14m diagonal.
+#
+# 10m is the uncalibrated default (the error asymmetry favours it: a missed
+# duplicate double-renders one toggleable dot, a false flag hides a real
+# tree).  The only non-OSM anchors here are community submissions, so a flag
+# fires exactly when someone records a tree OSM already maps — which is the
+# right outcome: the submission (with its photo) wins.  Re-check once enough
+# submissions exist to measure:
+#     cd data/raw && uv run ./osm_dedup_validation.py --city GRMLO
+#
+# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
+# cos(36.73 deg) here.
+const grmlo_cell_lat_deg <- 0.00008983;
+const grmlo_cell_lon_deg <- 0.00011208;
+
+auto grmlo_cell_a <- concat(cast(floor(longitude / grmlo_cell_lon_deg) as string), ':', cast(floor(latitude / grmlo_cell_lat_deg) as string));
+auto grmlo_cell_b <- concat(cast(floor(longitude / grmlo_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / grmlo_cell_lat_deg) as string));
+auto grmlo_cell_c <- concat(cast(floor(longitude / grmlo_cell_lon_deg) as string), ':', cast(floor(latitude / grmlo_cell_lat_deg + 0.5) as string));
+auto grmlo_cell_d <- concat(cast(floor(longitude / grmlo_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / grmlo_cell_lat_deg + 0.5) as string));
+
+auto grmlo_anchor_count_a <- count(tree_id ? grmlo_source != 'OSM_GRMLO') by grmlo_cell_a;
+auto grmlo_anchor_count_b <- count(tree_id ? grmlo_source != 'OSM_GRMLO') by grmlo_cell_b;
+auto grmlo_anchor_count_c <- count(tree_id ? grmlo_source != 'OSM_GRMLO') by grmlo_cell_c;
+auto grmlo_anchor_count_d <- count(tree_id ? grmlo_source != 'OSM_GRMLO') by grmlo_cell_d;
+
+auto grmlo_is_duplicate <- grmlo_source = 'OSM_GRMLO' and (
+    grmlo_anchor_count_a > 0
+    or grmlo_anchor_count_b > 0
+    or grmlo_anchor_count_c > 0
+    or grmlo_anchor_count_d > 0
+);
+
+partial datasource milos_tree_info (
+    tree_id,
+    city,
+    data_source: grmlo_source,
+    species,
+    ?tree_name,
+    ?plant_date,
+    ?diameter_at_breast_height,
+    ?latitude,
+    ?longitude,
+    ?submission_photo_url,
+    is_duplicate: grmlo_is_duplicate,
+    grmlo_published_data_updated_through,
+)
+grain (tree_id)
+complete where city = 'GRMLO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grmlo_tree_info_v{data_version}.parquet`
+freshness by grmlo_published_data_updated_through;

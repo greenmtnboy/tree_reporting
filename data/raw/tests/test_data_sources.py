@@ -74,11 +74,24 @@ def test_every_enum_value_is_claimed_by_exactly_one_raw_source(code: str):
 
     A value with no source leaves the city's Parquet unprovable and the model
     unresolvable; a value claimed twice makes the union ambiguous.
+
+    Only `root` datasources count as claims.  A city whose enum ever shrinks
+    to a single value must additionally pin that value on the *published*
+    target's `complete where`, because a lone partial source is never a union
+    candidate — the materialisation query has to imply the source's
+    completeness clause directly.  GRMLO shipped that way before its OSM
+    partition existed (see the historical note in grmlo/milos_tree_info.preql);
+    counting only root claims keeps such a pin from reading as a duplicate.
     """
     path = city_models()[code]
+    text = path.read_text(encoding="utf-8")
+    root_blocks = re.findall(
+        r"^root\b.*?;", text, flags=re.S | re.M
+    )
     claimed = [
         source
-        for city, _key, source in COMPLETE_RE.findall(path.read_text(encoding="utf-8"))
+        for block in root_blocks
+        for city, _key, source in COMPLETE_RE.findall(block)
         if city == code
     ]
     assert sorted(claimed) == sorted(enum_values(path))
@@ -110,8 +123,18 @@ def test_city_freshness_uses_its_own_community_column(code: str):
     """
     text = city_models()[code].read_text(encoding="utf-8")
     column = f"{code.lower()}_community_data_updated_through"
-    # Prefix match: cities with an OSM staging source append a third argument.
-    assert f"greatest({code.lower()}_data_updated_through, {column}" in text
+    if MUNICIPAL_DATA_SOURCES[code]:
+        # Prefix match: cities with an OSM staging source append a third argument.
+        assert f"greatest({code.lower()}_data_updated_through, {column}" in text
+    else:
+        # A city with no municipal source (GRMLO) has no municipal probe, so
+        # its watermark must not include a municipal column nothing feeds —
+        # the community column leads instead, either alone or as the first
+        # arm of a greatest() with the OSM staging column.
+        assert (
+            f"_published_data_updated_through <- {column}" in text
+            or f"_published_data_updated_through <- greatest({column}" in text
+        )
     assert f"{column}: {column}" in text
     # The bare shared name would silently re-couple every city.
     assert ", community_data_updated_through)" not in text

@@ -12,5 +12,7 @@
   "ARBUE": { "name": "Buenos Aires", "center": [-58.3816, -34.6037] },
   "USLAX": { "name": "Los Angeles", "center": [-118.2437, 34.0522] },
   "USWAS": { "name": "Washington, DC", "center": [-77.0369, 38.9072] },
-  "USTEM": { "name": "Tempe", "center": [-111.9400, 33.4255] }
+  "USTEM": { "name": "Tempe", "center": [-111.9400, 33.4255] },
+  "GRATH": { "name": "Athens", "center": [23.7375, 37.9725] },
+  "GRMLO": { "name": "Milos", "center": [24.4472, 36.7263] }
 }

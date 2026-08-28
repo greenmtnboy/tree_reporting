@@ -4,6 +4,7 @@ import { REMOTE_TREES_PARQUET_URL, REMOTE_SPECIES_PARQUET_URL, cityTreeParquetUr
 import { formatDataSource } from '../data/dataSources'
 import { CITY_CONFIG } from '../composables/useMapData'
 import { SPECIES_SENTINELS } from '../data/species'
+import { ALL_MODEL_SOURCES } from '../trilogyModels'
 
 async function withDuckDB<T>(fn: (conn: Awaited<ReturnType<DuckDBInstance['connect']>>) => Promise<T>): Promise<T> {
   const instance = await DuckDBInstance.create(':memory:')
@@ -58,9 +59,35 @@ describe('parquet schema', () => {
   // load with `AND NOT COALESCE(is_duplicate, false)`. A Parquet without the
   // column does not degrade -- DuckDB raises a binder error and that city's map
   // fails to load -- so this is the deploy gate: refresh all cities first.
+  //
+  // A parquet that does not exist at all is the one carve-out. A brand-new
+  // city has nothing on GCS until the pipeline's first credentialed build, so
+  // hard-failing on the 404 turned every city-addition PR red for its whole
+  // lifetime. For a 404 the gate instead asserts the city's Trilogy model
+  // materialises the column, so the first build cannot ship without it. A
+  // parquet that *exists* without the column still fails hard -- that is a
+  // stale build one deploy away from a broken city, the case this test was
+  // written for.
   test.each(Object.keys(CITY_CONFIG))('%s tree parquet carries is_duplicate', async (city) => {
     const url = cityTreeParquetUrl(city)
     expect(url, `no per-city parquet url for ${city}`).toBeTruthy()
+    if (!url) return
+    const head = await fetch(url, { method: 'HEAD' })
+    if (head.status === 404) {
+      console.warn(
+        `${city}'s tree parquet is not on GCS yet -- run the Trilogy refresh before ` +
+          'deploying this city; asserting its model materialises is_duplicate instead',
+      )
+      const materialises = ALL_MODEL_SOURCES.some((m) =>
+        m.contents.includes(`is_duplicate: ${city.toLowerCase()}_is_duplicate`),
+      )
+      expect(
+        materialises,
+        `${city} has no parquet on GCS yet and no tree model materialising ` +
+          'is_duplicate, so its first build would ship without the column',
+      ).toBe(true)
+      return
+    }
     await withDuckDB(async (conn) => {
       const result = await conn.runAndReadAll(
         `SELECT column_name FROM (DESCRIBE SELECT * FROM read_parquet('${url}'))`,
