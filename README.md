@@ -23,6 +23,8 @@ Currently has data from the following cities:
 - [Melbourne, Australia](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=AUMEL)
 - [Paris, France](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=FRPAR)
 - [Buenos Aires, Argentina](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=ARBUE)
+- [Athens, Greece](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=GRATH)
+- [Milos, Greece](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=GRMLO)
 
 **[Live page](https://greenmtnboy.github.io/sf_tree_reporting/)**
 
@@ -69,6 +71,8 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Paris | Paris Open Data - Les Arbres | https://opendata.paris.fr/explore/dataset/les-arbres/ |
 | Buenos Aires | Buenos Aires Data - Arbolado publico lineal | https://data.buenosaires.gob.ar/dataset/arbolado-publico-lineal |
+| Athens | City of Athens Open Data - Trees of the National Garden | https://opendata.cityofathens.gr/dataset/gis-athens-8303d4c8-371b-11ec-b388-0242ac120009 |
+| Milos | Community submissions only (no municipal inventory published) | (contributed via the app) |
 | All cities | Community submissions, reviewed and approved before publication | (contributed via the app) |
 
 Every tree row carries a `data_source` column identifying which of the above it came from.
@@ -91,6 +95,8 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Melbourne | Melbourne Open Data - Landmarks and Places of Interest | https://data.melbourne.vic.gov.au/explore/dataset/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/ |
 | Paris | Ile-de-France Open Data - Monuments Historiques | https://data.iledefrance.fr/ |
 | Buenos Aires | No landmark dataset in production yet | n/a |
+| Athens | Curated landmark list + Nominatim geocoding | https://nominatim.openstreetmap.org/ |
+| Milos | Curated landmark list + Nominatim geocoding | https://nominatim.openstreetmap.org/ |
 
 ### Species enrichment
 

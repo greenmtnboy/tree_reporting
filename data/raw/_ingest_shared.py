@@ -293,6 +293,16 @@ _FORM_SENTINEL_ALIASES: dict[str, str] = {
     "cactus": CACTUS_SPECIES,
     "cacti": CACTUS_SPECIES,
     "cactaceae": CACTUS_SPECIES,
+    # el — Athens's National Garden inventory records self-sown palms as
+    # "Αυτοφυής φοίνικας".  Two spellings per phrase because the two lookups
+    # normalise differently: sanitize_species strips diacritics first, while
+    # form_sentinel_for sees the raw value.
+    "φοίνικας": PALM_SPECIES,
+    "φοινικας": PALM_SPECIES,
+    "αυτοφυής φοίνικας": PALM_SPECIES,
+    "αυτοφυης φοινικας": PALM_SPECIES,
+    "θάμνος": SHRUB_SPECIES,
+    "θαμνος": SHRUB_SPECIES,
 }
 
 # Every value the `species` key can hold that is not a scientific name.  The
@@ -520,6 +530,13 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "USLAX": ("LOSANGELES_OPENDATA",),
     "USWAS": ("WASHINGTONDC_OPENDATA",),
     "USTEM": ("TEMPE_OPENDATA",),
+    "GRATH": ("ATHENS_OPENDATA",),
+    # Milos has no municipal tree inventory — no Greek portal publishes one
+    # (checked opendata.thessaloniki.gr, data.gov.gr, geodata.gov.gr, and the
+    # Athens portal, whose only tree dataset is the National Garden).  The city
+    # exists so residents can record trees: its Parquet is built entirely from
+    # approved community submissions, and its enum has just the community value.
+    "GRMLO": (),
 }
 
 
@@ -757,6 +774,10 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "USLAX": (33.70, 34.35, -118.70, -118.10),
     "USWAS": (38.78, 39.01, -77.15, -76.88),
     "USTEM": (33.30, 33.48, -112.05, -111.80),
+    "GRATH": (37.85, 38.10, 23.60, 23.90),
+    # The whole island (community submissions can come from anywhere on it),
+    # including Antimilos to the northwest.
+    "GRMLO": (36.55, 36.90, 24.15, 24.65),
 }
 
 

@@ -13,6 +13,8 @@ import arbue.buenosaires_landmarks;
 import uslax.losangeles_landmarks;
 import uswas.washingtondc_landmarks;
 import ustem.tempe_landmarks;
+import grath.athens_landmarks;
+import grmlo.milos_landmarks;
 
 
 # --- Merged union datasource ---

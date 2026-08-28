@@ -1,0 +1,83 @@
+import ..tree_common;
+import ..community_tree_info;
+
+auto grath_published_data_updated_through <- greatest(grath_data_updated_through, grath_community_data_updated_through);
+
+key grath_source enum<string>['ATHENS_OPENDATA', 'COMMUNITY_GRATH']; # originating dataset for the row
+
+root datasource athens_update_time (
+    data_updated_through: grath_data_updated_through
+)
+file `./athens_update_time.py`;
+
+# Only this city's column, so an approval elsewhere does not mark GRATH's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource grath_community_update_time (
+    grath_community_data_updated_through: grath_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# The National Garden inventory — the only tree dataset any Greek open data
+# portal publishes (Aug 2026), so the municipal partition covers the garden's
+# ~6,350 trees rather than a citywide street inventory.
+root partial datasource athens_raw_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: grath_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'GRATH' and grath_source = 'ATHENS_OPENDATA'
+file `./athens_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script
+# emits every city's rows; the `where` clause narrows it to GRATH and the
+# `complete where` makes it a disjoint partition alongside athens_raw_tree_info.
+root partial datasource grath_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: grath_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'GRATH' and grath_source = 'COMMUNITY_GRATH'
+file `../community_tree_info.py`
+where city = 'GRATH';
+
+
+# No OSM partition yet, so no cross-source overlap to flag — but the browser
+# worker selects is_duplicate for every city, and a missing column is a DuckDB
+# binder error rather than a degrade.
+auto grath_is_duplicate <- False;
+
+partial datasource athens_tree_info (
+    tree_id,
+    city,
+    data_source: grath_source,
+    species,
+    ?tree_name,
+    ?plant_date,
+    ?diameter_at_breast_height,
+    ?latitude,
+    ?longitude,
+    ?submission_photo_url,
+    is_duplicate: grath_is_duplicate,
+    grath_published_data_updated_through,
+)
+grain (tree_id)
+complete where city = 'GRATH'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grath_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grath_tree_info_v{data_version}.parquet`
+freshness by grath_published_data_updated_through;

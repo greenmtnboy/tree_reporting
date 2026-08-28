@@ -74,11 +74,22 @@ def test_every_enum_value_is_claimed_by_exactly_one_raw_source(code: str):
 
     A value with no source leaves the city's Parquet unprovable and the model
     unresolvable; a value claimed twice makes the union ambiguous.
+
+    Only `root` datasources count as claims.  A community-only city (GRMLO)
+    also pins its single enum value on the *published* target's `complete
+    where`, because a lone partial source is never a union candidate — the
+    materialisation query has to imply the source's completeness clause
+    directly (see grmlo/milos_tree_info.preql).
     """
     path = city_models()[code]
+    text = path.read_text(encoding="utf-8")
+    root_blocks = re.findall(
+        r"^root\b.*?;", text, flags=re.S | re.M
+    )
     claimed = [
         source
-        for city, _key, source in COMPLETE_RE.findall(path.read_text(encoding="utf-8"))
+        for block in root_blocks
+        for city, _key, source in COMPLETE_RE.findall(block)
         if city == code
     ]
     assert sorted(claimed) == sorted(enum_values(path))
@@ -110,8 +121,15 @@ def test_city_freshness_uses_its_own_community_column(code: str):
     """
     text = city_models()[code].read_text(encoding="utf-8")
     column = f"{code.lower()}_community_data_updated_through"
-    # Prefix match: cities with an OSM staging source append a third argument.
-    assert f"greatest({code.lower()}_data_updated_through, {column}" in text
+    if MUNICIPAL_DATA_SOURCES[code]:
+        # Prefix match: cities with an OSM staging source append a third argument.
+        assert f"greatest({code.lower()}_data_updated_through, {column}" in text
+    else:
+        # A community-only city (GRMLO) has no municipal probe, so its
+        # community column *is* the published watermark rather than one arm
+        # of a greatest() — a greatest() over a municipal column that no
+        # datasource feeds would never resolve.
+        assert f"_published_data_updated_through <- {column}" in text
     assert f"{column}: {column}" in text
     # The bare shared name would silently re-couple every city.
     assert ", community_data_updated_through)" not in text

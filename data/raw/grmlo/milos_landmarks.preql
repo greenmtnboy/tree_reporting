@@ -1,0 +1,34 @@
+import ..landmark_common;
+
+root datasource milos_landmarks_update_time (
+    data_updated_through: grmlo_landmark_data_updated_through
+)
+file `./milos_landmarks_probe.py`;
+
+# Curated + Nominatim-geocoded (see milos_landmarks_geocode.py): Milos
+# publishes no landmark dataset.  The refresh reads the GCS staging copy of
+# the committed CSV; re-uploading it via _ingest_shared.upload_staging is what
+# marks this city's Parquet stale.
+root partial datasource raw_milos_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+)
+grain (landmark_id)
+complete where city = 'GRMLO'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/milos_landmarks.csv`;
+
+partial datasource milos_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    grmlo_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'GRMLO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/grmlo_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/grmlo_landmark_info_v{data_version}.parquet`
+freshness by grmlo_landmark_data_updated_through;

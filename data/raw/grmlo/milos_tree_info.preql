@@ -1,0 +1,71 @@
+import ..tree_common;
+import ..community_tree_info;
+
+# Milos has no municipal tree inventory — no Greek portal publishes one (the
+# nearest is Athens's National Garden layer; see grath/).  The city exists so
+# trees recorded on the island can be published: its Parquet is built entirely
+# from approved community submissions, so its source enum has one value, that
+# single partition covers it, and the published watermark is the community
+# column alone rather than a greatest() with a municipal probe.
+auto grmlo_published_data_updated_through <- grmlo_community_data_updated_through;
+
+key grmlo_source enum<string>['COMMUNITY_GRMLO']; # originating dataset for the row
+
+# Only this city's column, so an approval elsewhere does not mark GRMLO's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource grmlo_community_update_time (
+    grmlo_community_data_updated_through: grmlo_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# Approved community submissions for this city. The shared ingest script
+# emits every city's rows; the `where` clause narrows it to GRMLO and the
+# `complete where` makes it the city's sole partition.
+root partial datasource grmlo_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: grmlo_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'GRMLO' and grmlo_source = 'COMMUNITY_GRMLO'
+file `../community_tree_info.py`
+where city = 'GRMLO';
+
+
+# No OSM partition, so no cross-source overlap to flag — but the browser
+# worker selects is_duplicate for every city, and a missing column is a DuckDB
+# binder error rather than a degrade.
+auto grmlo_is_duplicate <- False;
+
+partial datasource milos_tree_info (
+    tree_id,
+    city,
+    data_source: grmlo_source,
+    species,
+    ?tree_name,
+    ?plant_date,
+    ?diameter_at_breast_height,
+    ?latitude,
+    ?longitude,
+    ?submission_photo_url,
+    is_duplicate: grmlo_is_duplicate,
+    grmlo_published_data_updated_through,
+)
+grain (tree_id)
+# Unlike the other cities, the published target pins grmlo_source as well as
+# city.  A multi-partition city proves its Parquet complete by unioning the
+# sources that cover its enum, but a lone partial source is never a union
+# candidate — with `complete where city = 'GRMLO'` alone the refresh fails
+# with "no complete sources found ... could only be resolved from partial
+# sources".  Pinning the single enum value makes the materialisation query
+# imply the community source's own complete-where, which is what admits it.
+complete where city = 'GRMLO' and grmlo_source = 'COMMUNITY_GRMLO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grmlo_tree_info_v{data_version}.parquet`
+freshness by grmlo_published_data_updated_through;

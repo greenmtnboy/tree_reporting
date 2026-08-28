@@ -697,6 +697,41 @@ Do not stop after the parquet and city config are working. Every city addition m
 
 If you change the source story significantly, review `src/src/components/WelcomeModal.vue` as well so the onboarding copy does not drift.
 
+## Community-only cities (no municipal inventory)
+
+A city can exist with **no municipal dataset at all** — Milos (`GRMLO`) is the
+reference: no Greek portal publishes a tree inventory for it, and the city is
+on the map so that community submissions recorded there can be published.
+Differences from the standard runbook, all visible in
+`data/raw/grmlo/milos_tree_info.preql`:
+
+- `MUNICIPAL_DATA_SOURCES[code]` is an **empty tuple**; the community label is
+  still derived automatically and `CITY_BOUNDS` still needs an entry (the
+  community ingest drops rows for cities missing from either map).
+- No municipal fetch script, no municipal freshness probe, and no
+  `{code}_data_updated_through` property in `tree_common.preql`. The published
+  watermark is the community column *alone*:
+  `auto {code}_published_data_updated_through <- {code}_community_data_updated_through;`
+  (a `greatest()` over a municipal column nothing feeds would never resolve).
+- The source enum has the single value `COMMUNITY_{CODE}`, and the published
+  target's completeness clause pins it:
+  `complete where city = '{CODE}' and {code}_source = 'COMMUNITY_{CODE}'`.
+  This is the subtle part. A multi-partition city proves its Parquet complete
+  by unioning the sources that cover its enum, but **a lone partial source is
+  never a union candidate** — with `complete where city = '{CODE}'` alone the
+  refresh fails with `no complete sources found … could only be resolved from
+  partial sources`. Pinning the single enum value on the target makes the
+  materialisation query imply the community source's own `complete where`,
+  which is what admits it. Verified both ways.
+- `tests/test_data_sources.py` knows about both wrinkles: the freshness test
+  branches on an empty municipal tuple, and the one-claim-per-enum-value test
+  counts only `root` datasource claims so the published target's pin does not
+  read as a duplicate claim.
+
+Everything else is unchanged: the city still needs the enum entry in
+`core.preql`, an `is_duplicate <- False` column, landmarks, frontend config,
+and attribution.
+
 ## Landmarks (Mandatory)
 
 Every city **must** have a landmarks preql file, even if it yields zero rows. The worker silently skips missing landmark *parquets* at runtime, but a missing preql file will cause the Trilogy pipeline to fail and the agent will have no geographic context for the city. A landmarks dataset with zero rows is acceptable; a missing file is not.

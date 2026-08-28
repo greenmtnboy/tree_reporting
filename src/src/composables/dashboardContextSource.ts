@@ -104,6 +104,18 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Deserts & Xeric Shrublands',
     realm: 'nearctic',
   },
+  GRATH: {
+    ecoregionId: 785,
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'palearctic',
+  },
+  GRMLO: {
+    ecoregionId: 785,
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'palearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

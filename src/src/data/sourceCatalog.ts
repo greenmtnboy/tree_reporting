@@ -25,6 +25,10 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'Los Angeles', label: 'Los Angeles Open Data (Street Tree Inventory - 1990s)', url: 'https://data.lacity.org/api/views/vt5t-mscf' },
   { city: 'Washington, DC', label: 'Open Data DC (Urban Forestry Street Trees)', url: 'https://opendata.dc.gov/datasets/DCGIS::urban-forestry-street-trees' },
   { city: 'Tempe', label: 'City of Tempe Tree Inventory', url: 'https://data.tempe.gov/datasets/tempegov::tree-inventory' },
+  { city: 'Athens', label: 'City of Athens Open Data (Trees of the National Garden)', url: 'https://opendata.cityofathens.gr/dataset/gis-athens-8303d4c8-371b-11ec-b388-0242ac120009' },
+  // Milos has no published tree inventory anywhere in Greece's open data
+  // portals; every tree there is an approved community submission.
+  { city: 'Milos', label: 'Community submissions only (no municipal inventory)' },
   // Community submissions are reviewed and approved before they reach the map;
   // each published tree carries a COMMUNITY_<CITY> value in its data_source column.
   { city: 'All cities', label: 'Community submissions, reviewed before publication' },
@@ -49,6 +53,8 @@ export const LANDMARK_SOURCES: CitySourceLink[] = [
   { city: 'Los Angeles', label: 'No landmark dataset in production yet (empty placeholder parquet)' },
   { city: 'Washington, DC', label: 'No landmark dataset in production yet (empty placeholder parquet)' },
   { city: 'Tempe', label: 'No landmark dataset in production yet (empty placeholder parquet)' },
+  { city: 'Athens', label: 'Curated landmark list geocoded via Nominatim' },
+  { city: 'Milos', label: 'Curated landmark list geocoded via Nominatim' },
 ]
 
 export const SPECIES_ENRICHMENT_SOURCES: AttributionSourceLink[] = [
