@@ -1,9 +1,9 @@
 import ..tree_common;
 import ..community_tree_info;
 
-auto grath_published_data_updated_through <- greatest(grath_data_updated_through, grath_community_data_updated_through);
+auto grath_published_data_updated_through <- greatest(grath_data_updated_through, grath_community_data_updated_through, grath_osm_data_updated_through);
 
-key grath_source enum<string>['ATHENS_OPENDATA', 'COMMUNITY_GRATH']; # originating dataset for the row
+key grath_source enum<string>['ATHENS_OPENDATA', 'COMMUNITY_GRATH', 'OSM_GRATH']; # originating dataset for the row
 
 root datasource athens_update_time (
     data_updated_through: grath_data_updated_through
@@ -16,6 +16,34 @@ root datasource grath_community_update_time (
     grath_community_data_updated_through: grath_community_data_updated_through
 )
 file `../community_update_time.py`;
+
+# GCS publication time of the staged OSM parquet (see athens_osm_extract.py);
+# it only moves when an extraction is re-run and uploaded.
+root datasource grath_osm_update_time (
+    data_updated_through: grath_osm_data_updated_through
+)
+file `./athens_osm_probe.py`;
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than
+# Overpass -- extraction is decoupled from refresh (see _osm_shared.py and
+# EXTENDING.md).  Overlapping rows are kept and flagged via
+# grath_is_duplicate below, never dropped: the Parquet must contain the union
+# of its declared sources, and the flag keeps the dedup tunable and auditable.
+root partial datasource grath_osm_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: grath_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'GRATH' and grath_source = 'OSM_GRATH'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grath_osm_staging.parquet`;
 
 # The National Garden inventory — the only tree dataset any Greek open data
 # portal publishes (Aug 2026), so the municipal partition covers the garden's
@@ -58,10 +86,41 @@ file `../community_tree_info.py`
 where city = 'GRATH';
 
 
-# No OSM partition yet, so no cross-source overlap to flag — but the browser
-# worker selects is_duplicate for every city, and a missing column is a DuckDB
-# binder error rather than a degrade.
-auto grath_is_duplicate <- False;
+# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+#
+# Same construction as ustem/tempe_tree_info.preql (full rationale there and in
+# EXTENDING.md): an OSM row is a duplicate when a non-OSM tree shares its
+# ~10m grid cell in ANY of four half-cell-staggered grid copies -- a guaranteed
+# match within 5m, possible out to a ~14m diagonal.
+#
+# 10m is the uncalibrated default (the error asymmetry favours it: a missed
+# duplicate double-renders one toggleable dot, a false flag hides a real
+# tree).  The municipal partition only covers the National Garden, so that is
+# also the only place a flag can fire.  Re-check once the staged extract and
+# the published inventory both exist:
+#     cd data/raw && uv run ./osm_dedup_validation.py --city GRATH
+#
+# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
+# cos(37.97 deg) here.
+const grath_cell_lat_deg <- 0.00008983;
+const grath_cell_lon_deg <- 0.00011395;
+
+auto grath_cell_a <- concat(cast(floor(longitude / grath_cell_lon_deg) as string), ':', cast(floor(latitude / grath_cell_lat_deg) as string));
+auto grath_cell_b <- concat(cast(floor(longitude / grath_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / grath_cell_lat_deg) as string));
+auto grath_cell_c <- concat(cast(floor(longitude / grath_cell_lon_deg) as string), ':', cast(floor(latitude / grath_cell_lat_deg + 0.5) as string));
+auto grath_cell_d <- concat(cast(floor(longitude / grath_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / grath_cell_lat_deg + 0.5) as string));
+
+auto grath_anchor_count_a <- count(tree_id ? grath_source != 'OSM_GRATH') by grath_cell_a;
+auto grath_anchor_count_b <- count(tree_id ? grath_source != 'OSM_GRATH') by grath_cell_b;
+auto grath_anchor_count_c <- count(tree_id ? grath_source != 'OSM_GRATH') by grath_cell_c;
+auto grath_anchor_count_d <- count(tree_id ? grath_source != 'OSM_GRATH') by grath_cell_d;
+
+auto grath_is_duplicate <- grath_source = 'OSM_GRATH' and (
+    grath_anchor_count_a > 0
+    or grath_anchor_count_b > 0
+    or grath_anchor_count_c > 0
+    or grath_anchor_count_d > 0
+);
 
 partial datasource athens_tree_info (
     tree_id,

@@ -710,27 +710,31 @@ Differences from the standard runbook, all visible in
   community ingest drops rows for cities missing from either map).
 - No municipal fetch script, no municipal freshness probe, and no
   `{code}_data_updated_through` property in `tree_common.preql`. The published
-  watermark is the community column *alone*:
-  `auto {code}_published_data_updated_through <- {code}_community_data_updated_through;`
+  watermark has no municipal term — for GRMLO it is
+  `greatest({code}_community_data_updated_through, {code}_osm_data_updated_through)`
   (a `greatest()` over a municipal column nothing feeds would never resolve).
-- The source enum has the single value `COMMUNITY_{CODE}`, and the published
-  target's completeness clause pins it:
-  `complete where city = '{CODE}' and {code}_source = 'COMMUNITY_{CODE}'`.
-  This is the subtle part. A multi-partition city proves its Parquet complete
-  by unioning the sources that cover its enum, but **a lone partial source is
+- **If the city has exactly one partition** (community only, no OSM), one more
+  wrinkle applies: a multi-partition city proves its Parquet complete by
+  unioning the sources that cover its enum, but **a lone partial source is
   never a union candidate** — with `complete where city = '{CODE}'` alone the
   refresh fails with `no complete sources found … could only be resolved from
-  partial sources`. Pinning the single enum value on the target makes the
-  materialisation query imply the community source's own `complete where`,
-  which is what admits it. Verified both ways.
+  partial sources`. The fix is to pin the single enum value on the *published
+  target* too: `complete where city = '{CODE}' and {code}_source =
+  'COMMUNITY_{CODE}'`, which makes the materialisation query imply the
+  community source's own `complete where`. GRMLO shipped that way first and
+  the failure was verified both ways; once its OSM partition was added the
+  standard union proof applied and the pin came out again.
 - `tests/test_data_sources.py` knows about both wrinkles: the freshness test
   branches on an empty municipal tuple, and the one-claim-per-enum-value test
-  counts only `root` datasource claims so the published target's pin does not
+  counts only `root` datasource claims so a pinned published target does not
   read as a duplicate claim.
 
 Everything else is unchanged: the city still needs the enum entry in
-`core.preql`, an `is_duplicate <- False` column, landmarks, frontend config,
-and attribution.
+`core.preql`, an `is_duplicate` column (derived from the dedup grids when OSM
+is wired, constant `False` otherwise), landmarks, frontend config, and
+attribution. For GRMLO's dedup the only non-OSM anchors are community
+submissions — a flag fires exactly when someone records a tree OSM already
+maps, and the submission wins, which is the intended outcome.
 
 ## Landmarks (Mandatory)
 

@@ -72,7 +72,9 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Paris | Paris Open Data - Les Arbres | https://opendata.paris.fr/explore/dataset/les-arbres/ |
 | Buenos Aires | Buenos Aires Data - Arbolado publico lineal | https://data.buenosaires.gob.ar/dataset/arbolado-publico-lineal |
 | Athens | City of Athens Open Data - Trees of the National Garden | https://opendata.cityofathens.gr/dataset/gis-athens-8303d4c8-371b-11ec-b388-0242ac120009 |
-| Milos | Community submissions only (no municipal inventory published) | (contributed via the app) |
+| Athens (supplemental) | © OpenStreetMap contributors (ODbL) | https://www.openstreetmap.org/copyright |
+| Milos | Community submissions (no municipal inventory published) | (contributed via the app) |
+| Milos (supplemental) | © OpenStreetMap contributors (ODbL) | https://www.openstreetmap.org/copyright |
 | All cities | Community submissions, reviewed and approved before publication | (contributed via the app) |
 
 Every tree row carries a `data_source` column identifying which of the above it came from.

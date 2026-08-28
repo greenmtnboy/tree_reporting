@@ -571,6 +571,8 @@ OSM_DATA_SOURCES: dict[str, str] = {
     "ARBUE": "OSM_ARBUE",
     "USLAX": "OSM_USLAX",
     "USWAS": "OSM_USWAS",
+    "GRATH": "OSM_GRATH",
+    "GRMLO": "OSM_GRMLO",
 }
 
 DATA_SOURCES: tuple[str, ...] = tuple(

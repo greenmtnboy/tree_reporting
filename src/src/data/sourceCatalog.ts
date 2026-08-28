@@ -27,8 +27,9 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'Tempe', label: 'City of Tempe Tree Inventory', url: 'https://data.tempe.gov/datasets/tempegov::tree-inventory' },
   { city: 'Athens', label: 'City of Athens Open Data (Trees of the National Garden)', url: 'https://opendata.cityofathens.gr/dataset/gis-athens-8303d4c8-371b-11ec-b388-0242ac120009' },
   // Milos has no published tree inventory anywhere in Greece's open data
-  // portals; every tree there is an approved community submission.
-  { city: 'Milos', label: 'Community submissions only (no municipal inventory)' },
+  // portals; its trees are approved community submissions plus supplemental
+  // OpenStreetMap nodes.
+  { city: 'Milos', label: 'Community submissions (no municipal inventory)' },
   // Community submissions are reviewed and approved before they reach the map;
   // each published tree carries a COMMUNITY_<CITY> value in its data_source column.
   { city: 'All cities', label: 'Community submissions, reviewed before publication' },
@@ -36,6 +37,8 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   // this attribution line is required, keep it whenever any city has OSM wired.
   { city: 'Tempe', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
   { city: 'Boston', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
+  { city: 'Athens', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
+  { city: 'Milos', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
