@@ -8,8 +8,8 @@ import type { Landmark, TreeForm } from '../types'
 export const TREES_SOURCE_MAXZOOM = 16
 // Below this zoom no tree tiles are requested; the city markers carry the map
 // on their own. The worker grid-aggregates every z <= 13 tile at 32m, so these
-// coarse tiles stay cheap (a whole city is one or two tiles at z8).
-export const TREES_SOURCE_MINZOOM = 8
+// coarse tiles stay cheap (a whole city fits in a single tile at z6).
+export const TREES_SOURCE_MINZOOM = 6
 export const LANDMARK_ZOOM_MIN = 11
 
 // --- Internal constants ---
@@ -55,12 +55,15 @@ const ICON_ZOOM_OPACITY_START = ICON_ZOOM_MIN
 const ICON_ZOOM_OPACITY_MID = ICON_ZOOM_SIZE_MID
 const ICON_ZOOM_OPACITY_END = ICON_ZOOM_SIZE_MAX
 
-// Fades out toward TREES_SOURCE_MINZOOM as the city markers fade in over the
-// same band (see useGlobeCityMarkers), so zooming out crossfades from heat to
-// city dots instead of hitting a blank map.
+// Holds full strength down to z8 — a city's urban outline is still legible on
+// the basemap around z7, so the heat should still be there to fill it — then
+// fades out toward TREES_SOURCE_MINZOOM as the city markers fade in over the
+// same 6-8 band (see useGlobeCityMarkers), so zooming out crossfades from heat
+// to city dots instead of hitting a blank map.
 const HEATMAP_OPACITY_NORMAL: any[] = [
   'interpolate', ['linear'], ['zoom'],
   TREES_SOURCE_MINZOOM, 0,
+  TREES_SOURCE_MINZOOM + 2, 0.48,
   HEATMAP_ZOOM_OPACITY_START, 0.48,
   HEATMAP_ZOOM_OPACITY_MID, 0.33,
   HEATMAP_ZOOM_OPACITY_END, 0,
