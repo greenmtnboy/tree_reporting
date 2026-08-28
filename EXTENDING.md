@@ -280,6 +280,13 @@ map fails to load entirely. So **refresh every city before deploying** a worker
 change that selects it. `src/src/workers/parquetSchema.test.ts` asserts the
 column against the live GCS Parquet for every city in `CITY_CONFIG`, which is
 what turns "I forgot to refresh" into a red test rather than a broken city.
+A city whose parquet does not exist *at all* (brand-new, first build pending)
+is the one carve-out: for a 404 the test instead asserts the city's model
+materialises the column, so a city-addition PR is not red until its first
+credentialed build — the hard failure is reserved for a parquet that exists
+without the column, the stale-build case the gate was written for. The flip
+side: a green build no longer proves a brand-new city's parquet exists, so a
+just-added city stays broken in a deploy until its first refresh runs.
 
 **A new column does not make a Parquet stale.** Staleness is decided by the
 freshness probes, which watch the *source data*, so a plain `trilogy refresh
