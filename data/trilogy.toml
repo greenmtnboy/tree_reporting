@@ -121,17 +121,21 @@ memory_mb = 1024
 # republishes a committed, Nominatim-geocoded landmark CSV as the staging
 # parquet its city's landmark model reads — the whole workspace tree syncs on
 # merge, CSVs included, so this is how a CSV edit reaches GCS without any
-# local Google credential. The freshness watermark is the run timestamp
-# (landmark_staging/run_timestamp.py): every firing is stale by definition,
-# which is correct for a job whose trigger is a person and exactly why it
-# must never gain a frequent cron — an unchanged CSV republished still moves
-# the staging object's Last-Modified, and the city's landmark parquet would
+# local Google credential.
+#
+# `operation = "run"` with a `copy into parquet` script, not `refresh`: a
+# refresh target needs a freshness watermark to ever rebuild once its object
+# exists, and the only honest watermark for "republish when a person fires
+# the job" is the firing itself — which is what `run` says natively. Every
+# execution copies, unconditionally; that is also why these must never gain
+# a frequent cron, since republishing an unchanged CSV still moves the
+# staging object's Last-Modified and the city's landmark parquet would
 # rebuild for nothing.
 [[cloud.job]]
 key = "landmarks-grath"
 name = "urban-tree-landmarks-grath"
 entrypoint = "landmark_staging/grath_landmarks_staging.preql"
-operation = "refresh"
+operation = "run"
 timeout_seconds = 600
 memory_mb = 1024
 
@@ -139,6 +143,6 @@ memory_mb = 1024
 key = "landmarks-grmlo"
 name = "urban-tree-landmarks-grmlo"
 entrypoint = "landmark_staging/grmlo_landmarks_staging.preql"
-operation = "refresh"
+operation = "run"
 timeout_seconds = 600
 memory_mb = 1024

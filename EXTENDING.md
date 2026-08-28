@@ -779,9 +779,12 @@ Every city **must** have a landmarks preql file, even if it yields zero rows. Th
 > Greek cities' landmark models read a staging *parquet* instead, published
 > from the committed CSV by an unscheduled `[[cloud.job]]`
 > (`landmark_staging/{code}_landmarks_staging.preql`;
-> `trilogy cloud jobs run urban-tree-landmarks-{code} --wait`). The job's
-> freshness is its own run timestamp, so a firing always republishes — which
-> is why it carries no cron: republishing an unchanged CSV still moves the
+> `trilogy cloud jobs run urban-tree-landmarks-{code} --wait`). The job is
+> `operation = "run"` over a `copy into parquet ... from select` script, not
+> a refresh: a refresh target needs a freshness watermark to ever rebuild
+> once its object exists, and for "republish when a person fires the job"
+> the firing itself is the decision — `run` copies unconditionally. That is
+> also why it carries no cron: republishing an unchanged CSV still moves the
 > staging object's Last-Modified and would rebuild the city's landmark
 > parquet for nothing. Prefer this variant for new cities; it keeps
 > `upload_staging` credentials out of the loop entirely.
