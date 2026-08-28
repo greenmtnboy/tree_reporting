@@ -128,9 +128,10 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
 }
 
 /* Mobile stacks a city-selector bar across the top, so drop down past it and
-   sit alongside the zoom-level readout instead. */
+   sit alongside the zoom-level readout instead. The bar is ~45px tall
+   (8px offset + the select's height), so 54px clears it. */
 .map-compass--mobile {
-  top: 44px;
+  top: 54px;
 }
 
 .compass-dial {
