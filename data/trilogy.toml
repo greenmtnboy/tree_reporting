@@ -17,64 +17,99 @@ gcs_cache_bust = true
 studio_url="http://localhost:5173/trilogy-studio-core/"
 
 # How this directory is deployed to trilogy-cloud by `trilogy cloud sync` (see
-# .github/workflows/cloud-sync.yml). `name` is display-only; the job's identity
-# is the repository plus this directory's path under the sync root, so the
-# rename keeps the same job id and schedule binding.
+# .github/workflows/cloud-sync.yml). Only main syncs, into production; there is
+# no per-branch dev deploy flow yet.
 #
-# Only main syncs, into production. There is no per-branch dev deploy flow yet.
+# This block holds what every job shares (the org, the workspace, the GCS
+# secrets); each [[cloud.job]] below says only what makes it different. The
+# array form is all-or-nothing — every entry must name its own key, name and
+# entrypoint, and identity is `path::key` rather than the bare path — which is
+# why the first sync after this conversion REPLACES the old single
+# path-identified job (`--prune` removes it) instead of editing it: run
+# history resets once, schedules rebind to the new identities. That cost was
+# deferred while one job sufficed; it stopped sufficing when OSM extraction
+# needed its own cadence.
+#
+# DuckDB writes the parquets to gcs:// itself; these org secrets are the only
+# credentials that work for that bucket, and they serve the extract jobs'
+# staging writes exactly as they serve the refresh job's.
 [cloud]
 org = "trilogy-data"
-name = "urban-tree-data"
-operation = "refresh"
-# Three ticks, none of them in a portal's published maintenance window:
-# municipal portals 503 intermittently (Buenos Aires especially) or go down for
-# maintenance, and a tick that finds nothing stale exits up_to_date in a few
-# minutes, so extra attempts are close to free.
-#
-# The morning tick moved off 06:00 UTC (inherited from the retired GitHub
-# Actions cron) because Berlin publishes a *weekly* window — "Regelmäßiges
-# Wartungsfenster: Donnerstags von 8:00 bis 10:00 Uhr"
-# (berlin.de/sen/stadt/stadtdaten/geodaten-berlin/geoportal-daten-und-dienste/).
-# That is 06:00-08:00 UTC in CEST and 07:00-09:00 UTC in CET, so 06:00 UTC sat
-# inside it every Thursday of the summer. 04:00 / 12:00 / 20:00 clear the whole
-# 06:00-09:00 UTC band year-round.
-#
-# One job for the whole directory, deliberately. pytrilogy >=0.3.328 can declare
-# several jobs over one tree as a `[[cloud.job]]` array — a natural fit for
-# giving an outage-prone city (Berlin) its own cheap catch-up ticks, or for
-# splitting trees / landmarks / enrichment into lanes that cannot eat each
-# other's timeout. It is all-or-nothing: once one entry exists this block is
-# defaults only, every job must name its own `entrypoint`, and identity moves
-# from the path to `path::key`, so a `--prune` sync replaces this job rather
-# than editing it. Not worth that churn while the probes degrade instead of
-# aborting (data/raw/_ingest_shared.py::emit_freshness) and three daily ticks
-# already give every city three chances.
-schedule = "0 0 4,12,20 * * *"
-# A fully stale rebuild downloads every municipal dataset (~50MB each across
-# fourteen cities); the common case is a couple of stale cities or a clean
-# "already fresh" exit.
-timeout_seconds = 3600
-# The default 1 GiB container was killed by the OOM reaper part-way through a
-# full rebuild:
-#
-#   Out of memory: the kernel killed the job (SIGKILL) because the container
-#   exceeded its memory limit -- peak 1024.0 MiB against a 1.00 GiB limit
-#
-# It died on Berlin, which is the high-water mark: 330,178 staged OSM rows
-# stacked against a 434,765-row municipal inventory, with the dedup grid
-# aggregate running over the union. Three cities had completed first, all small.
-#
-# Oversized Python ingests were a real and separate problem -- Amsterdam alone
-# held 882 MiB of dicts before it was streamed -- but fixing those only moved
-# the failure, because the remaining pressure is DuckDB's own aggregate memory
-# and no amount of Python-side streaming touches that.
-#
-# 4 GiB against a measured 1 GiB peak, and `parallelism = 3` means up to three
-# asset builds share it, so this is ~1.3 GiB each rather than 4. Worth revisiting
-# once a full-rebuild run reports its own peak: the first run after an OSM-style
-# schema change rebuilds all fourteen cities, while an ordinary tick rebuilds
-# the one or two that went stale.
-memory_mb = 4096
-# DuckDB writes the parquets to gcs:// itself; these org secrets are the only
-# credentials that work for that bucket.
+workspace = "urban-tree-data"
 secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET"]
+
+# --- The main refresh: every city, landmarks, enrichment -------------------
+#
+# Entrypoint is the raw/ tree, NOT the project root: refresh adopts every
+# managed datasource it can reach from its entrypoint, and the osm_staging/
+# extract models must stay out of its reach or their ever-advancing Overpass
+# watermark would re-extract every city on every tick — the exact thrash the
+# staging design exists to prevent. osm_staging/ imports nothing from raw/
+# and vice versa, so the two lanes cannot adopt each other's assets.
+#
+# Three ticks, none of them in a portal's published maintenance window:
+# municipal portals 503 intermittently (Buenos Aires especially) or go down
+# for maintenance, and a tick that finds nothing stale exits up_to_date in a
+# few minutes, so extra attempts are close to free. The morning tick moved off
+# 06:00 UTC because Berlin publishes a weekly window — "Donnerstags von 8:00
+# bis 10:00 Uhr" (berlin.de/sen/stadt/stadtdaten/geodaten-berlin/) — which is
+# 06:00-08:00 UTC in CEST and 07:00-09:00 UTC in CET; 04:00 / 12:00 / 20:00
+# clear the whole 06:00-09:00 UTC band year-round.
+#
+# timeout: a fully stale rebuild downloads every municipal dataset (~50MB
+# each across sixteen cities); the common case is a couple of stale cities or
+# a clean "already fresh" exit.
+#
+# memory: the default 1 GiB container was OOM-killed part-way through a full
+# rebuild — it died on Berlin, the high-water mark: 330,178 staged OSM rows
+# stacked against a 434,765-row municipal inventory with the dedup grid
+# aggregate running over the union. 4 GiB against a measured 1 GiB peak, and
+# `parallelism = 3` means up to three asset builds share it, so this is
+# ~1.3 GiB each rather than 4.
+[[cloud.job]]
+key = "refresh"
+name = "urban-tree-data"
+entrypoint = "raw"
+operation = "refresh"
+schedule = "0 0 4,12,20 * * *"
+timeout_seconds = 3600
+memory_mb = 4096
+
+# --- Scheduled OSM extraction, one job per city ----------------------------
+#
+# Each job refreshes one osm_staging/{code}_osm_staging.preql, which fetches
+# the city's Overpass trees and materialises the staging parquet the city's
+# tree model reads — the cloud-credentialed replacement for running
+# raw/{city}/{city}_osm_extract.py by hand. Per-city jobs so each city gets
+# its own cadence; add a city by copying an osm_staging/ pair and one entry
+# here (see EXTENDING.md).
+#
+# Schedules are STAGGERED, never concurrent: Overpass allows two slots per
+# client IP and answers an over-budget request with HTTP 200 carrying an
+# error remark, so two extract jobs firing together can fail each other on a
+# transient. Keep new entries off other jobs' minutes and off the refresh
+# ticks (the extract must land before a refresh tick can pick it up, but any
+# gap works — the next of three daily ticks always comes).
+#
+# Weekly is the deliberate default cadence: OSM tree edits trickle, and every
+# extract firing re-publishes the staging object, which marks the city stale
+# and rebuilds its full municipal union on the next refresh tick — a cheap
+# extract buys a not-cheap rebuild, so the schedule below is the knob that
+# prices it.
+[[cloud.job]]
+key = "osm-grath"
+name = "urban-tree-osm-grath"
+entrypoint = "osm_staging/grath_osm_staging.preql"
+operation = "refresh"
+schedule = "0 0 2 * * 1"    # Mondays 02:00 UTC
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "osm-grmlo"
+name = "urban-tree-osm-grmlo"
+entrypoint = "osm_staging/grmlo_osm_staging.preql"
+operation = "refresh"
+schedule = "0 30 2 * * 1"   # Mondays 02:30 UTC — staggered off osm-grath
+timeout_seconds = 1800
+memory_mb = 1024

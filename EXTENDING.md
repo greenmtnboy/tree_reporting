@@ -132,16 +132,35 @@ and declare `borough: ?borough` on the datasource. London is the only instance
 today. Dry-run every city after wiring from a template — per-city divergence is
 exactly what a template hides.
 
-**Extraction is decoupled from refresh.** `{city}_osm_extract.py` queries
-Overpass and publishes `{code}_osm_staging.parquet` to GCS; the refresh
-pipeline only ever reads that object. Two reasons: Overpass 429/504s routinely
-under load (fetching at refresh time would couple every municipal rebuild to
-Overpass being up), and the only cheap OSM watermark is the global database
-timestamp, which advances every minute and would mark the city stale on every
-tick. Instead `{city}_osm_probe.py` emits the staged object's publication time,
-so re-running the extract is what makes the Parquet stale. The extract is
-deliberately self-contained so it can later move onto a weekly `[[cloud.job]]`
-without a rewrite.
+**Extraction is decoupled from refresh.** The extraction publishes
+`{code}_osm_staging.parquet` to GCS; the refresh pipeline only ever reads that
+object. Two reasons: Overpass 429/504s routinely under load (fetching at
+refresh time would couple every municipal rebuild to Overpass being up), and
+the only cheap OSM watermark is the global database timestamp, which advances
+every minute and would mark the city stale on every tick. Instead
+`{city}_osm_probe.py` emits the staged object's publication time, so
+publishing a new extract is what makes the city's Parquet stale.
+
+**Extraction runs two ways, and new cities should use the scheduled one.**
+The fourteen cities wired first use `{city}_osm_extract.py` — a manual run
+from a workstation with application-default GCS credentials, which fetches
+Overpass and `upload_staging`s the parquet. Athens and Milos instead run as
+**scheduled `[[cloud.job]]` entries** (see `data/trilogy.toml`): each job
+refreshes one `osm_staging/{code}_osm_staging.preql`, a standalone model
+whose python datasource (`osm_staging/{code}_osm_rows.py`, a shim over
+`_osm_shared.stage_city_rows`) emits the normalised rows and whose target is
+the staging parquet — so DuckDB writes GCS with the job's HMAC secrets and no
+local credential is involved. Its `freshness by` is Overpass's global
+osm_base timestamp (`osm_staging/overpass_timestamp.py`) — the watermark the
+*city* models must never use — which always advances, so the job's own cron
+is the extraction cadence and each city gets its own schedule. Both paths
+share `fetch_osm_trees`/`build_table`, so they cannot drift on content. To
+migrate a legacy city: copy the two `osm_staging/` files, add a
+`[[cloud.job]]` entry with a schedule staggered off the others (Overpass
+allows two concurrent slots per IP), and compare row counts against the last
+manual extract before deleting the old script. The extract models import
+nothing from `raw/` and vice versa, which is what keeps the main refresh job
+(entrypoint `raw`) from ever adopting them.
 
 **Staged parquets live in GCS, not in git — and the reason is the watermark.**
 The first cut committed them next to the extract script and had the probe emit

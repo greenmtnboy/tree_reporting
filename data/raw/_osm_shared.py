@@ -217,3 +217,33 @@ def extract_city(
         file=sys.stderr,
     )
     return table
+
+
+def stage_city_rows(
+    city_code: str,
+    city_name: str | None = None,
+    extra_null_columns: dict | None = None,
+) -> None:
+    """Fetch and normalise one city's OSM trees, emitted as an Arrow stream.
+
+    The body of an `osm_staging/{code}_osm_rows.py` datasource script — the
+    scheduled extract jobs (see `[[cloud.job]]` in data/trilogy.toml)
+    materialise the staging parquet through `trilogy refresh`, so DuckDB
+    writes it to GCS with the job's HMAC credentials and no
+    google-cloud-storage credential is needed anywhere.
+
+    `extract_city` above is the manual counterpart (fetch + upload from a
+    workstation with application-default credentials); the fourteen cities
+    wired before the cloud jobs existed still use it.  Both paths share
+    `fetch_osm_trees` / `build_table`, so they cannot drift on content —
+    the only difference is who writes the GCS object.
+    """
+    from _ingest_shared import emit
+
+    name = city_name or f"{city_code} OSM"
+    if city_code not in OSM_DATA_SOURCES:
+        raise ValueError(
+            f"{city_code} is not in OSM_DATA_SOURCES; add it there and to that "
+            f"city's `{city_code.lower()}_source` enum before extracting"
+        )
+    emit(build_table(fetch_osm_trees(city_code), city_code, name, extra_null_columns))

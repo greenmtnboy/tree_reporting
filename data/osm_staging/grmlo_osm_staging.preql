@@ -1,0 +1,59 @@
+# Scheduled OSM extraction for Milos, run by the `osm-grmlo` [[cloud.job]] in
+# ../trilogy.toml — NOT by the main refresh.  Same shape and rationale as
+# grath_osm_staging.preql: standalone model, canonical column names as the
+# contract raw/grmlo/milos_tree_info.preql reads, Overpass's ever-advancing
+# osm_base timestamp as the watermark so the job's cron is the extraction
+# cadence and a dead Overpass no-ops the firing.
+
+key tree_id string;
+property tree_id.city string;
+property tree_id.data_source string;
+property tree_id.species string;
+property tree_id.tree_name string;
+property tree_id.plant_date date;
+property tree_id.latitude float;
+property tree_id.longitude float;
+property tree_id.diameter_at_breast_height float;
+property tree_id.submission_photo_url string;
+property tree_id.osm_ref string; # municipal inventory id where the node carries a ref tag
+
+property <*>.osm_extracted_through datetime; # Overpass osm_base time at extraction
+
+root datasource overpass_timestamp (
+    data_updated_through: osm_extracted_through
+)
+file `./overpass_timestamp.py`;
+
+root datasource grmlo_osm_rows (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
+    osm_ref: ?osm_ref,
+)
+grain (tree_id)
+file `./grmlo_osm_rows.py`;
+
+datasource grmlo_osm_staging (
+    tree_id,
+    city,
+    data_source,
+    ?species,
+    ?tree_name,
+    ?plant_date,
+    ?latitude,
+    ?longitude,
+    ?diameter_at_breast_height,
+    ?submission_photo_url,
+    ?osm_ref,
+    osm_extracted_through,
+)
+grain (tree_id)
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grmlo_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/grmlo_osm_staging.parquet`
+freshness by osm_extracted_through;
