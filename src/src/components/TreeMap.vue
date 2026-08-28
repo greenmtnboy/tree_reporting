@@ -1384,12 +1384,13 @@ async function initializeRequestedCity(map: maplibregl.Map): Promise<void> {
     addTreeLayers()
     bindTreeInteractions()
 
-    if (!props.simplified) {
-      addCityMarkers(map, city)
-      if (!globeMarkersBound) {
-        globeMarkersBound = true
-        bindCityMarkerInteractions(map, (code) => { void switchCity(code) })
-      }
+    // Both layouts: below TREES_SOURCE_MINZOOM the tree tiles cut out, and the
+    // city markers are the only thing left to render — without them the mobile
+    // map went completely blank when zoomed out past the heatmap.
+    addCityMarkers(map, city)
+    if (!globeMarkersBound) {
+      globeMarkersBound = true
+      bindCityMarkerInteractions(map, (code) => { void switchCity(code) })
     }
 
     if (landmarks.value.length > 0) {
@@ -1755,6 +1756,23 @@ onUnmounted(() => {
 .city-selector--mobile {
   flex-wrap: nowrap;
   gap: 6px;
+  /* Stop short of the MapLibre zoom control in the top-right corner
+     (29px wide + 10px margin), so the row never slides under it. */
+  right: 56px;
+}
+
+/* On narrow screens the select must be able to shrink below its desktop
+   min-width so the Find Me button stays beside it instead of being pushed
+   under the top-right map controls. */
+.city-selector--mobile :deep(.city-select) {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 0.78rem;
+  padding: 10px 30px 10px 12px;
+  background-position: right 10px center;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .cache-refresh-wrap {
@@ -1889,6 +1907,13 @@ onUnmounted(() => {
 
 .locate-btn {
   font-size: 0.78rem;
+  flex: 0 0 auto;
+  /* Match the select's height exactly — the button's own padding left it
+     visibly shorter than the dropdown next to it. */
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
 }
 
 .locate-btn.active {

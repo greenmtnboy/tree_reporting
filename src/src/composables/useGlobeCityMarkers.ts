@@ -2,9 +2,11 @@ import maplibregl from 'maplibre-gl'
 import { CITY_CONFIG, type CityCode } from './useMapData'
 
 // City markers appear below this zoom; fully hidden at or above it.
-// This aligns with HEATMAP_ZOOM_INTENSITY_START (10) so markers fill the gap
-// when tree heatmaps are not yet visible.
-export const GLOBE_MARKERS_MAX_ZOOM = 10
+// Markers fade in over the same 6-8 band the tree heatmap fades out across
+// (from TREES_SOURCE_MINZOOM in useMapLayers), so zooming out crossfades from
+// heat to city dots with no blank stretch. The dot is fully in by z6, where a
+// city's footprint is too small on the basemap for the heat to say anything.
+export const GLOBE_MARKERS_MAX_ZOOM = 8
 
 function cityMarkersGeoJSON(selectedCity?: CityCode): GeoJSON.FeatureCollection {
   return {
