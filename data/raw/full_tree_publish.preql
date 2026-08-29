@@ -1,0 +1,319 @@
+# Publisher for the cross-city full_tree_info parquet, run by the
+# `urban-tree-full` [[cloud.job]] in ../../trilogy.toml as an unconditional
+# `copy into` after each trees-lane tick.
+#
+# This file deliberately re-declares the sixteen published city parquets as
+# thin root datasources over shared concepts and imports NO city models: the
+# environments that hold the per-city raw partitions and the `data_source`
+# merge cannot build this rollup correctly (the planner drops partitions
+# silently there — the parquet shipped as OSM-only for 15 of 16 cities), so
+# the rollup is built where the city parquets are the only sources that
+# exist. The parquets already carry a physical `data_source` column, so no
+# merge is needed here. Column parity with the city parquets is what makes
+# these stubs valid; `enforce_tree_schema` keeps the city side stable.
+
+import core;
+
+key tree_id string;
+property tree_id.data_source string;
+property tree_id.species string;
+property tree_id.tree_name string;
+property tree_id.plant_date date;
+property tree_id.diameter_at_breast_height float;
+property tree_id.latitude float;
+property tree_id.longitude float;
+property tree_id.submission_photo_url string;
+# Each row keeps its own city's published watermark; the max over the column
+# is the cross-city high-water mark a reader would want.
+property tree_id.published_watermark datetime;
+
+auto latest_update_through <- max(published_watermark);
+
+root partial datasource ussfo_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    ussfo_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'USSFO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_info_v{data_version}.parquet`;
+
+root partial datasource usnyc_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    usnyc_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'USNYC'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_info_v{data_version}.parquet`;
+
+root partial datasource usbos_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    usbos_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'USBOS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`;
+
+root partial datasource frpar_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    frpar_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'FRPAR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frpar_tree_info_v{data_version}.parquet`;
+
+root partial datasource usbtv_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    usbtv_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'USBTV'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbtv_tree_info_v{data_version}.parquet`;
+
+root partial datasource cavan_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    cavan_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'CAVAN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavan_tree_info_v{data_version}.parquet`;
+
+root partial datasource deber_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    deber_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'DEBER'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/deber_tree_info_v{data_version}.parquet`;
+
+root partial datasource nlams_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    nlams_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'NLAMS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlams_tree_info_v{data_version}.parquet`;
+
+root partial datasource gblon_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    gblon_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'GBLON'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gblon_tree_info_v{data_version}.parquet`;
+
+root partial datasource aumel_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    aumel_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'AUMEL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aumel_tree_info_v{data_version}.parquet`;
+
+root partial datasource arbue_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    arbue_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'ARBUE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/arbue_tree_info_v{data_version}.parquet`;
+
+root partial datasource uslax_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    uslax_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'USLAX'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslax_tree_info_v{data_version}.parquet`;
+
+root partial datasource uswas_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    uswas_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'USWAS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uswas_tree_info_v{data_version}.parquet`;
+
+root partial datasource ustem_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    ustem_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'USTEM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ustem_tree_info_v{data_version}.parquet`;
+
+root partial datasource grath_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    grath_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'GRATH'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grath_tree_info_v{data_version}.parquet`;
+
+root partial datasource grmlo_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    grmlo_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'GRMLO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_info_v{data_version}.parquet`;
+
+# `copy into` does not take an f-string target, so the version is literal
+# here: bump it together with `data_version` in core.preql.
+copy into parquet `gcs://trilogy_public_models/duckdb/trees/full_tree_info_v2.parquet` from
+select
+    tree_id,
+    city,
+    data_source,
+    species,
+    tree_name,
+    plant_date,
+    diameter_at_breast_height,
+    latitude,
+    longitude,
+    submission_photo_url,
+    latest_update_through,
+;
