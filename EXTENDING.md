@@ -164,9 +164,12 @@ nothing from `raw/` and vice versa, which is what keeps the refresh lanes
 adopting them.
 
 **A new city's tree model must be imported in `raw/tree_cities.preql` as well
-as `raw/tree_info.preql`.** The trees lane refreshes city parquets from
+as `raw/tree_info.preql`, and given a stub datasource in
+`raw/full_tree_publish.preql`.** The trees lane refreshes city parquets from
 `tree_cities.preql` (city imports only — never the `data_source` merge; see
-its header); a city missing from it never rebuilds on schedule.
+its header); a city missing from it never rebuilds on schedule. The cross-city
+rollup is republished from the city parquets by the `urban-tree-full` job; a
+city missing from the publisher's stubs never appears in `full_tree_info`.
 
 **Staged parquets live in GCS, not in git — and the reason is the watermark.**
 The first cut committed them next to the extract script and had the probe emit
@@ -324,8 +327,10 @@ never touched. Force each one by name:
 cd data && trilogy refresh raw/{city}/{city}_tree_info.preql -f {city}_tree_info
 ```
 
-Then rebuild `full_tree_info`, which reads the per-city Parquets and would
-otherwise still hold the pre-change rows.
+Then republish `full_tree_info`, which reads the per-city Parquets and would
+otherwise still hold the pre-change rows — it is built only by the
+`urban-tree-full` cloud job (`trilogy cloud jobs run urban-tree-full --wait`),
+never by a refresh lane; see `raw/full_tree_publish.preql`.
 
 **Do not merge `is_duplicate` in `tree_info.preql`.** `data_source` is merged
 there, and doing the same for the dedup flag looks symmetric but does not plan:

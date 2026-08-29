@@ -58,12 +58,12 @@ secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET"]
 # with no cross-city merge — NOT raw/tree_info.preql. Load-bearing: with the
 # `data_source` merge in scope, city parquets plan without their partition
 # union and publish incomplete, silently (see tree_cities.preql's header and
-# the upstream pytrilogy issue). full_tree_info is built by the enrichment
-# lane instead: tree_enrichment.preql imports tree_info, so its refresh, an
-# hour after the cities land, picks up the stale rollup. A city going stale
-# inside that hour gets recycled from the rollup — content frozen until its
-# portal next publishes — so treat a red trees run as urgent, not "next
-# tick's problem".
+# the upstream pytrilogy issue). The same bug hit the full rollup itself,
+# which needs the merge and so cannot be refreshed safely from ANY lane:
+# tree_info's datasource carries no freshness watermark (never stale in a
+# refresh), and the `urban-tree-full` job below republishes it
+# unconditionally from the sixteen city parquets 45 minutes after each
+# trees tick (see raw/full_tree_publish.preql).
 #
 # The osm_staging/ and landmark_staging/ models stay out of every lane's
 # reach (no imports either direction) or their ever-advancing watermarks
@@ -103,6 +103,19 @@ name = "urban-tree-data-landmarks"
 entrypoint = "raw/landmark_info.preql"
 operation = "refresh"
 schedule = "0 0 4,12,20 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
+
+# Rebuilds the cross-city rollup from the city parquets, unconditionally
+# (`run` + `copy into`). 45 minutes after the trees ticks so the city
+# parquets have landed; before the enrichment ticks so enrichment reads the
+# fresh rollup.
+[[cloud.job]]
+key = "publish-full"
+name = "urban-tree-full"
+entrypoint = "raw/full_tree_publish.preql"
+operation = "run"
+schedule = "0 45 4,12,20 * * *"
 timeout_seconds = 1800
 memory_mb = 2048
 

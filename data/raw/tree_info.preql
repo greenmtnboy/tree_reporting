@@ -87,5 +87,11 @@ datasource tree_info (
     latest_update_through
 )
 grain (tree_id)
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/full_tree_info_v{data_version}.parquet`
-freshness by latest_update_through;
+# No `freshness by`, deliberately: this rollup is NOT built from this
+# environment. Planned here, with the merge in scope, the planner loses the
+# partition-completeness proofs and published the rollup as OSM-only for 15
+# of 16 cities. raw/full_tree_publish.preql (the `urban-tree-full` cloud
+# job) copies it unconditionally from the sixteen city parquets instead;
+# without a watermark this datasource is never stale, so no refresh lane
+# that imports this file can rebuild it wrongly.
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/full_tree_info_v{data_version}.parquet`;
