@@ -159,8 +159,14 @@ migrate a legacy city: copy the two `osm_staging/` files, add a
 `[[cloud.job]]` entry with a schedule staggered off the others (Overpass
 allows two concurrent slots per IP), and compare row counts against the last
 manual extract before deleting the old script. The extract models import
-nothing from `raw/` and vice versa, which is what keeps the main refresh job
-(entrypoint `raw`) from ever adopting them.
+nothing from `raw/` and vice versa, which is what keeps the refresh lanes
+(entrypoints `raw/tree_cities.preql`, `raw/landmark_info.preql`, …) from ever
+adopting them.
+
+**A new city's tree model must be imported in `raw/tree_cities.preql` as well
+as `raw/tree_info.preql`.** The trees lane refreshes city parquets from
+`tree_cities.preql` (city imports only — never the `data_source` merge; see
+its header); a city missing from it never rebuilds on schedule.
 
 **Staged parquets live in GCS, not in git — and the reason is the watermark.**
 The first cut committed them next to the extract script and had the probe emit
