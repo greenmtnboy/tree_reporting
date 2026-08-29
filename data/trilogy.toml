@@ -45,10 +45,34 @@ secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET"]
 # every model does not work: merged bare the models collide (tree latitude vs
 # landmark latitude), and namespaced imports leak their prefix into
 # materialised parquet column names (verified — full_tree_info came out with
-# `enrichment_latitude`). So the refresh is four jobs, one per top-level
-# model file, each materialising its own disjoint asset set with bare column
-# names — the trees/landmarks/enrichment lane split this file previously
-# mused about, forced by the entrypoint rule.
+# `enrichment_latitude`). So the refresh is four jobs, one per lane, each
+# materialising its own disjoint asset set with bare column names — the
+# trees/landmarks/enrichment lane split this file previously mused about,
+# forced by the entrypoint rule.
+#
+# The trees lane's entrypoint is raw/tree_cities.preql — the city models
+# with no cross-city merge — NOT raw/tree_info.preql. This is load-bearing:
+# planned inside tree_info.preql's environment, the `data_source` merge and
+# the full rollup datasource break per-city resolution, and a city's parquet
+# materialises FROM full_tree_info_v2.parquet — the rollup built from the
+# city parquets. Athens's first cloud build went exactly that way: an
+# OSM-staging-only parquet (zero municipal rows) with its watermark advanced
+# so nothing ever looked stale, rebuilt identically on every forced retry.
+# The old single job dodged this because directory execution plans each
+# preql file in its own environment; a file entrypoint holding the merge
+# does not. See the header of raw/tree_cities.preql.
+#
+# full_tree_info is NOT built by the trees lane as a result — the enrichment
+# lane builds it: tree_enrichment.preql imports tree_info, so its refresh
+# picks up the stale rollup an hour after the cities land and builds it from
+# their parquets (verified: the rollup plans identically through either
+# file's environment). The residual hazard of that environment is the same
+# circular plan — a city that goes stale between the trees tick and the
+# enrichment tick is "rebuilt" from the rollup, recycling its rows and
+# advancing its watermark, freezing that city's content until its portal
+# publishes again and the trees lane picks it up. That window is an hour,
+# needs a portal to publish inside it, and self-heals; a trees-lane failure
+# widens it, so treat a red trees run as urgent rather than waiting a tick.
 #
 # The osm_staging/ and landmark_staging/ models stay out of every lane's
 # reach (no imports either direction) or their ever-advancing watermarks
@@ -76,7 +100,7 @@ secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET"]
 [[cloud.job]]
 key = "refresh"
 name = "urban-tree-data"
-entrypoint = "raw/tree_info.preql"
+entrypoint = "raw/tree_cities.preql"
 operation = "refresh"
 schedule = "0 0 4,12,20 * * *"
 timeout_seconds = 3600

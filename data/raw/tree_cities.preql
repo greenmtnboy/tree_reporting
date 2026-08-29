@@ -1,0 +1,46 @@
+# Entrypoint for the cloud trees lane: the sixteen city models and NOTHING
+# else — no cross-city `data_source` merge, no full_tree_info rollup. That
+# absence is the entire point of this file, so do not "complete" it by
+# importing tree_info or copying its merge block.
+#
+# A city's parquet build proves completeness by unioning its partitions
+# (municipal + community + OSM) over the city's per-city source enum. That
+# proof only resolves in an environment where the city's keys are unmerged
+# and the cross-city rollup datasource is out of scope. Planned through
+# tree_info.preql instead, the planner satisfies a city's rows from
+# full_tree_info_v2.parquet — the rollup built FROM the city parquets — and
+# the build goes circular: Athens's first cloud build this way produced a
+# parquet holding only the OSM staging partition (13,248 rows, zero
+# municipal), with its watermark advanced so nothing ever looked stale.
+# Verified both ways by dry-run: through this file Athens plans as the
+# three-partition UNION ALL; through tree_info.preql it plans as a read of
+# the rollup (or, declared partial, of the staging parquet alone).
+#
+# The old single cloud job never hit this because its entrypoint was the
+# `raw` directory, and directory execution plans each preql file in its own
+# environment. The platform's [[cloud.job]] entries require a file
+# entrypoint, so this file recreates that isolation explicitly.
+#
+# full_tree_info still rebuilds every tick: tree_enrichment.preql imports
+# tree_info, so the enrichment lane (offset an hour after this one) picks up
+# the stale rollup and builds it from the city parquets this lane just
+# refreshed. The residual hazard — a city going stale between the two lanes
+# gets circularly recycled by the enrichment lane's environment — is
+# documented on that job in ../trilogy.toml.
+
+import ussfo.sf_tree_info;
+import usnyc.nyc_tree_info;
+import usbos.boston_tree_info;
+import frpar.paris_tree_info;
+import usbtv.burlington_tree_info;
+import cavan.vancouver_tree_info;
+import deber.berlin_tree_info;
+import nlams.amsterdam_tree_info;
+import gblon.london_tree_info;
+import aumel.melbourne_tree_info;
+import arbue.buenosaires_tree_info;
+import uslax.losangeles_tree_info;
+import uswas.washingtondc_tree_info;
+import ustem.tempe_tree_info;
+import grath.athens_tree_info;
+import grmlo.milos_tree_info;
