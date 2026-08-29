@@ -17,15 +17,12 @@ gcs_cache_bust = true
 studio_url="http://localhost:5173/trilogy-studio-core/"
 
 # How this directory is deployed to trilogy-cloud by `trilogy cloud sync` (see
-# .github/workflows/cloud-sync.yml). Only main syncs, into production — the
-# target environment is derived from the current git branch, so a sync run
-# from a feature-branch checkout lands in a branch-scoped environment, NOT
-# production. Two footguns found the hard way: passing `--environment
-# production` from a branch checkout does not update the production jobs, it
-# creates a parallel workspace and a duplicate job set with live schedules;
-# and `env delete` without `--with-jobs` orphans the environment's jobs into
-# production rather than removing them. Tear a branch environment down with
-# `trilogy cloud env delete <name> --with-jobs`.
+# .github/workflows/cloud-sync.yml). The target environment derives from the
+# git branch: main syncs into production, any other branch into its own
+# environment. To deploy to production by hand, sync from a main checkout —
+# `--environment production` from a branch creates a DUPLICATE job set, and
+# tearing a branch environment down needs `env delete <name> --with-jobs` or
+# its jobs (schedules included) are orphaned into production.
 #
 # This block holds what every job shares (the org, the workspace, the GCS
 # secrets); each [[cloud.job]] below says only what makes it different. The
@@ -58,28 +55,15 @@ secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET"]
 # forced by the entrypoint rule.
 #
 # The trees lane's entrypoint is raw/tree_cities.preql — the city models
-# with no cross-city merge — NOT raw/tree_info.preql. This is load-bearing:
-# planned inside tree_info.preql's environment, the `data_source` merge and
-# the full rollup datasource break per-city resolution, and a city's parquet
-# materialises FROM full_tree_info_v2.parquet — the rollup built from the
-# city parquets. Athens's first cloud build went exactly that way: an
-# OSM-staging-only parquet (zero municipal rows) with its watermark advanced
-# so nothing ever looked stale, rebuilt identically on every forced retry.
-# The old single job dodged this because directory execution plans each
-# preql file in its own environment; a file entrypoint holding the merge
-# does not. See the header of raw/tree_cities.preql.
-#
-# full_tree_info is NOT built by the trees lane as a result — the enrichment
-# lane builds it: tree_enrichment.preql imports tree_info, so its refresh
-# picks up the stale rollup an hour after the cities land and builds it from
-# their parquets (verified: the rollup plans identically through either
-# file's environment). The residual hazard of that environment is the same
-# circular plan — a city that goes stale between the trees tick and the
-# enrichment tick is "rebuilt" from the rollup, recycling its rows and
-# advancing its watermark, freezing that city's content until its portal
-# publishes again and the trees lane picks it up. That window is an hour,
-# needs a portal to publish inside it, and self-heals; a trees-lane failure
-# widens it, so treat a red trees run as urgent rather than waiting a tick.
+# with no cross-city merge — NOT raw/tree_info.preql. Load-bearing: with the
+# `data_source` merge in scope, city parquets plan without their partition
+# union and publish incomplete, silently (see tree_cities.preql's header and
+# the upstream pytrilogy issue). full_tree_info is built by the enrichment
+# lane instead: tree_enrichment.preql imports tree_info, so its refresh, an
+# hour after the cities land, picks up the stale rollup. A city going stale
+# inside that hour gets recycled from the rollup — content frozen until its
+# portal next publishes — so treat a red trees run as urgent, not "next
+# tick's problem".
 #
 # The osm_staging/ and landmark_staging/ models stay out of every lane's
 # reach (no imports either direction) or their ever-advancing watermarks
