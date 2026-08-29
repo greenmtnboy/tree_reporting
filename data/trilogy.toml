@@ -17,8 +17,15 @@ gcs_cache_bust = true
 studio_url="http://localhost:5173/trilogy-studio-core/"
 
 # How this directory is deployed to trilogy-cloud by `trilogy cloud sync` (see
-# .github/workflows/cloud-sync.yml). Only main syncs, into production; there is
-# no per-branch dev deploy flow yet.
+# .github/workflows/cloud-sync.yml). Only main syncs, into production — the
+# target environment is derived from the current git branch, so a sync run
+# from a feature-branch checkout lands in a branch-scoped environment, NOT
+# production. Two footguns found the hard way: passing `--environment
+# production` from a branch checkout does not update the production jobs, it
+# creates a parallel workspace and a duplicate job set with live schedules;
+# and `env delete` without `--with-jobs` orphans the environment's jobs into
+# production rather than removing them. Tear a branch environment down with
+# `trilogy cloud env delete <name> --with-jobs`.
 #
 # This block holds what every job shares (the org, the workspace, the GCS
 # secrets); each [[cloud.job]] below says only what makes it different. The
