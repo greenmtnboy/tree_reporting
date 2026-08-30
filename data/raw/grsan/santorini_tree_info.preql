@@ -1,0 +1,136 @@
+import ..tree_common;
+import ..community_tree_info;
+
+# Santorini has no municipal tree inventory — the same search that came up
+# empty for Milos (opendata.thessaloniki.gr, data.gov.gr, geodata.gov.gr, and
+# the Athens portal, whose only tree dataset is the National Garden) comes up
+# empty for the Cyclades generally.  The city exists so trees recorded on the
+# island can be published: its partitions are approved community submissions
+# plus the staged OSM extract (~155 natural=tree nodes across the caldera
+# group when wired, counted via the ohsome API), and the published watermark
+# combines those two columns, with no municipal term.
+#
+# It ships with both partitions from the start, so the single-partition
+# wrinkle GRMLO hit — a lone partial source is never a union candidate, and
+# the published target has to pin the one enum value in its `complete where`
+# — does not apply here.  See the historical note in
+# grmlo/milos_tree_info.preql and EXTENDING.md if the OSM partition is ever
+# removed.
+auto grsan_published_data_updated_through <- greatest(grsan_community_data_updated_through, grsan_osm_data_updated_through);
+
+key grsan_source enum<string>['COMMUNITY_GRSAN', 'OSM_GRSAN']; # originating dataset for the row
+
+# Only this city's column, so an approval elsewhere does not mark GRSAN's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource grsan_community_update_time (
+    grsan_community_data_updated_through: grsan_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# GCS publication time of the staged OSM parquet (see santorini_osm_extract.py
+# and the scheduled `osm-grsan` cloud job); it only moves when an extraction is
+# re-run and published.
+root datasource grsan_osm_update_time (
+    data_updated_through: grsan_osm_data_updated_through
+)
+file `./santorini_osm_probe.py`;
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than
+# Overpass -- extraction is decoupled from refresh (see _osm_shared.py and
+# EXTENDING.md).  Overlapping rows are kept and flagged via
+# grsan_is_duplicate below, never dropped: the Parquet must contain the union
+# of its declared sources, and the flag keeps the dedup tunable and auditable.
+root partial datasource grsan_osm_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: grsan_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'GRSAN' and grsan_source = 'OSM_GRSAN'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grsan_osm_staging.parquet`;
+
+# Approved community submissions for this city. The shared ingest script
+# emits every city's rows; the `where` clause narrows it to GRSAN and the
+# `complete where` makes it a disjoint partition alongside the OSM staging.
+root partial datasource grsan_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: grsan_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id)
+complete where city = 'GRSAN' and grsan_source = 'COMMUNITY_GRSAN'
+file `../community_tree_info.py`
+where city = 'GRSAN';
+
+
+# --- Cross-source dedup: stacking + aggregate over four staggered grids -----
+#
+# Same construction as grmlo/milos_tree_info.preql and
+# ustem/tempe_tree_info.preql (full rationale there and in EXTENDING.md): an
+# OSM row is a duplicate when a non-OSM tree shares its ~10m grid cell in ANY
+# of four half-cell-staggered grid copies -- a guaranteed match within 5m,
+# possible out to a ~14m diagonal.
+#
+# 10m is the uncalibrated default, as on Milos: osm_dedup_validation.py needs
+# an inventory to measure against and there is none here, so the error
+# asymmetry decides it (a missed duplicate double-renders one toggleable dot,
+# a false flag hides a real tree).  The only non-OSM anchors are community
+# submissions, so a flag fires exactly when someone records a tree OSM already
+# maps — which is the right outcome: the submission, with its photo, wins.
+# Re-check once enough submissions exist to measure:
+#     cd data/raw && uv run ./osm_dedup_validation.py --city GRSAN
+#
+# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
+# cos(36.40 deg) here.
+const grsan_cell_lat_deg <- 0.00008983;
+const grsan_cell_lon_deg <- 0.00011161;
+
+auto grsan_cell_a <- concat(cast(floor(longitude / grsan_cell_lon_deg) as string), ':', cast(floor(latitude / grsan_cell_lat_deg) as string));
+auto grsan_cell_b <- concat(cast(floor(longitude / grsan_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / grsan_cell_lat_deg) as string));
+auto grsan_cell_c <- concat(cast(floor(longitude / grsan_cell_lon_deg) as string), ':', cast(floor(latitude / grsan_cell_lat_deg + 0.5) as string));
+auto grsan_cell_d <- concat(cast(floor(longitude / grsan_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / grsan_cell_lat_deg + 0.5) as string));
+
+auto grsan_anchor_count_a <- count(tree_id ? grsan_source != 'OSM_GRSAN') by grsan_cell_a;
+auto grsan_anchor_count_b <- count(tree_id ? grsan_source != 'OSM_GRSAN') by grsan_cell_b;
+auto grsan_anchor_count_c <- count(tree_id ? grsan_source != 'OSM_GRSAN') by grsan_cell_c;
+auto grsan_anchor_count_d <- count(tree_id ? grsan_source != 'OSM_GRSAN') by grsan_cell_d;
+
+auto grsan_is_duplicate <- grsan_source = 'OSM_GRSAN' and (
+    grsan_anchor_count_a > 0
+    or grsan_anchor_count_b > 0
+    or grsan_anchor_count_c > 0
+    or grsan_anchor_count_d > 0
+);
+
+partial datasource santorini_tree_info (
+    tree_id,
+    city,
+    data_source: grsan_source,
+    species,
+    ?tree_name,
+    ?plant_date,
+    ?diameter_at_breast_height,
+    ?latitude,
+    ?longitude,
+    ?submission_photo_url,
+    is_duplicate: grsan_is_duplicate,
+    grsan_published_data_updated_through,
+)
+grain (tree_id)
+complete where city = 'GRSAN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grsan_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grsan_tree_info_v{data_version}.parquet`
+freshness by grsan_published_data_updated_through;

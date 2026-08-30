@@ -28,6 +28,7 @@ const COUNTRY_BY_PREFIX: Record<string, string> = {
   NL: 'Netherlands',
   GB: 'United Kingdom',
   AU: 'Australia',
+  GR: 'Greece',
 }
 
 const router = useRouter()
