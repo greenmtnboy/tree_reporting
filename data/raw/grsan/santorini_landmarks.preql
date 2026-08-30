@@ -1,0 +1,35 @@
+import ..landmark_common;
+
+root datasource santorini_landmarks_update_time (
+    data_updated_through: grsan_landmark_data_updated_through
+)
+file `./santorini_landmarks_probe.py`;
+
+# Curated + Nominatim-geocoded (see santorini_landmarks_geocode.py): Santorini
+# publishes no landmark dataset.  The refresh reads the GCS staging parquet,
+# which the ad-hoc `landmarks-grsan` cloud job publishes from the committed
+# CSV (see landmark_staging/grsan_landmarks_staging.preql); firing that job
+# is what marks this city's landmark Parquet stale.
+root partial datasource raw_santorini_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+)
+grain (landmark_id)
+complete where city = 'GRSAN'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grsan_landmarks_staging.parquet`;
+
+partial datasource santorini_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    grsan_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'GRSAN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/grsan_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/grsan_landmark_info_v{data_version}.parquet`
+freshness by grsan_landmark_data_updated_through;

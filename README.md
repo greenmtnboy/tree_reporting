@@ -25,6 +25,7 @@ Currently has data from the following cities:
 - [Buenos Aires, Argentina](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=ARBUE)
 - [Athens, Greece](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=GRATH)
 - [Milos, Greece](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=GRMLO)
+- [Santorini, Greece](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=GRSAN)
 
 **[Live page](https://greenmtnboy.github.io/sf_tree_reporting/)**
 
@@ -75,6 +76,8 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Athens (supplemental) | © OpenStreetMap contributors (ODbL) | https://www.openstreetmap.org/copyright |
 | Milos | Community submissions (no municipal inventory published) | (contributed via the app) |
 | Milos (supplemental) | © OpenStreetMap contributors (ODbL) | https://www.openstreetmap.org/copyright |
+| Santorini | Community submissions (no municipal inventory published) | (contributed via the app) |
+| Santorini (supplemental) | © OpenStreetMap contributors (ODbL) | https://www.openstreetmap.org/copyright |
 | All cities | Community submissions, reviewed and approved before publication | (contributed via the app) |
 
 Every tree row carries a `data_source` column identifying which of the above it came from.
@@ -99,6 +102,7 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Buenos Aires | No landmark dataset in production yet | n/a |
 | Athens | Curated landmark list + Nominatim geocoding | https://nominatim.openstreetmap.org/ |
 | Milos | Curated landmark list + Nominatim geocoding | https://nominatim.openstreetmap.org/ |
+| Santorini | Curated landmark list + Nominatim geocoding | https://nominatim.openstreetmap.org/ |
 
 ### Species enrichment
 

@@ -22,3 +22,4 @@ import uswas.washingtondc_tree_info;
 import ustem.tempe_tree_info;
 import grath.athens_tree_info;
 import grmlo.milos_tree_info;
+import grsan.santorini_tree_info;

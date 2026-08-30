@@ -391,6 +391,7 @@ Either way, **refresh before you deploy** — the worker selects new columns by 
 | New York City | `USNYC` | |
 | Boston | `USBOS` | |
 | Paris | `FRPAR` | |
+| Santorini | `GRSAN` | 3-letter abbreviation, not the IATA `JTR` — same call Vancouver's `CAVAN` made over `YVR`, since the code shows up in the URL |
 
 All codes are **5 uppercase letters**: 2-letter country code + 3-letter city abbreviation. The parquet file name is the lowercase code: `frpar_tree_info_v1.parquet`.
 
@@ -737,8 +738,12 @@ If you change the source story significantly, review `src/src/components/Welcome
 ## Community-only cities (no municipal inventory)
 
 A city can exist with **no municipal dataset at all** — Milos (`GRMLO`) is the
-reference: no Greek portal publishes a tree inventory for it, and the city is
-on the map so that community submissions recorded there can be published.
+reference and Santorini (`GRSAN`) the second: no Greek portal publishes a tree
+inventory for either, and they are on the map so that community submissions
+recorded there can be published.  Santorini shipped with its OSM partition
+from the first commit, so it skipped the single-partition wrinkle below;
+`grsan/santorini_tree_info.preql` is the copy to start from for a city wired
+that way.
 Differences from the standard runbook, all visible in
 `data/raw/grmlo/milos_tree_info.preql`:
 

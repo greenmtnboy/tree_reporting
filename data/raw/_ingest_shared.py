@@ -537,6 +537,10 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     # exists so residents can record trees: its Parquet is built entirely from
     # approved community submissions, and its enum has just the community value.
     "GRMLO": (),
+    # Santorini, same story as Milos and checked against the same portals: the
+    # Cyclades publish no municipal tree inventory, so its rows are approved
+    # community submissions plus the supplemental OSM extract.
+    "GRSAN": (),
 }
 
 
@@ -573,6 +577,7 @@ OSM_DATA_SOURCES: dict[str, str] = {
     "USWAS": "OSM_USWAS",
     "GRATH": "OSM_GRATH",
     "GRMLO": "OSM_GRMLO",
+    "GRSAN": "OSM_GRSAN",
 }
 
 DATA_SOURCES: tuple[str, ...] = tuple(
@@ -780,6 +785,9 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     # The whole island (community submissions can come from anywhere on it),
     # including Antimilos to the northwest.
     "GRMLO": (36.55, 36.90, 24.15, 24.65),
+    # The whole Santorini caldera group: Thira, Thirasia, Aspronisi and the
+    # two Kameni islets.
+    "GRSAN": (36.30, 36.50, 25.30, 25.55),
 }
 
 

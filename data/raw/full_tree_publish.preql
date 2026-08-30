@@ -2,7 +2,7 @@
 # `urban-tree-full` [[cloud.job]] in ../../trilogy.toml as an unconditional
 # `copy into` after each trees-lane tick.
 #
-# This file deliberately re-declares the sixteen published city parquets as
+# This file deliberately re-declares the seventeen published city parquets as
 # thin root datasources over shared concepts and imports NO city models: the
 # environments that hold the per-city raw partitions and the `data_source`
 # merge cannot build this rollup correctly (the planner drops partitions
@@ -300,6 +300,23 @@ root partial datasource grmlo_published (
 grain (tree_id)
 complete where city = 'GRMLO'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_info_v{data_version}.parquet`;
+
+root partial datasource grsan_published (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    grsan_published_data_updated_through: ?published_watermark,
+)
+grain (tree_id)
+complete where city = 'GRSAN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grsan_tree_info_v{data_version}.parquet`;
 
 # `copy into` does not take an f-string target, so the version is literal
 # here: bump it together with `data_version` in core.preql.

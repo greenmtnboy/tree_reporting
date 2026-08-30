@@ -62,7 +62,7 @@ secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET"]
 # which needs the merge and so cannot be refreshed safely from ANY lane:
 # tree_info's datasource carries no freshness watermark (never stale in a
 # refresh), and the `urban-tree-full` job below republishes it
-# unconditionally from the sixteen city parquets 45 minutes after each
+# unconditionally from the seventeen city parquets 45 minutes after each
 # trees tick (see raw/full_tree_publish.preql).
 #
 # The osm_staging/ and landmark_staging/ models stay out of every lane's
@@ -176,6 +176,15 @@ schedule = "0 30 2 * * 1"   # Mondays 02:30 UTC — staggered off osm-grath
 timeout_seconds = 1800
 memory_mb = 1024
 
+[[cloud.job]]
+key = "osm-grsan"
+name = "urban-tree-osm-grsan"
+entrypoint = "osm_staging/grsan_osm_staging.preql"
+operation = "refresh"
+schedule = "0 0 3 * * 1"    # Mondays 03:00 UTC — staggered off osm-grmlo
+timeout_seconds = 1800
+memory_mb = 1024
+
 # --- Ad-hoc landmark staging publish, one job per city ---------------------
 #
 # NO schedule, deliberately: these fire only by hand
@@ -205,6 +214,14 @@ memory_mb = 1024
 key = "landmarks-grmlo"
 name = "urban-tree-landmarks-grmlo"
 entrypoint = "landmark_staging/grmlo_landmarks_staging.preql"
+operation = "run"
+timeout_seconds = 600
+memory_mb = 1024
+
+[[cloud.job]]
+key = "landmarks-grsan"
+name = "urban-tree-landmarks-grsan"
+entrypoint = "landmark_staging/grsan_landmarks_staging.preql"
 operation = "run"
 timeout_seconds = 600
 memory_mb = 1024

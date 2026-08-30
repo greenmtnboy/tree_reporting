@@ -28,8 +28,9 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   WASHINGTONDC_OPENDATA: 'Open Data DC',
   TEMPE_OPENDATA: 'City of Tempe',
   // Athens's municipal partition is the National Garden inventory — the only
-  // tree dataset any Greek portal publishes. Milos (GRMLO) has no municipal
-  // source at all; its rows are COMMUNITY_GRMLO, labelled by the prefix rule.
+  // tree dataset any Greek portal publishes. Milos (GRMLO) and Santorini
+  // (GRSAN) have no municipal source at all; their rows are COMMUNITY_* and
+  // OSM_*, labelled by the prefix rules below.
   ATHENS_OPENDATA: 'City of Athens GIS (National Garden)',
 }
 
