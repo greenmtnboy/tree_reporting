@@ -2,7 +2,6 @@
   <select
     class="city-select"
     :value="displayCity"
-    :disabled="isDisabled"
     aria-label="Select city"
     data-testid="city-select"
     @change="handleChange"
@@ -33,9 +32,8 @@ const COUNTRY_BY_PREFIX: Record<string, string> = {
 
 const router = useRouter()
 const route = useRoute()
-const { displayCity } = useMapData()
-const { canManuallySelectCity, activateCity } = useMapLifecycle()
-const isDisabled = computed(() => route.name === 'map' && !canManuallySelectCity.value)
+const { displayCity, markInitialUserCityDetectionDone } = useMapData()
+const { activateCity } = useMapLifecycle()
 
 function formatCityLabel(code: string, name: string) {
   const country = COUNTRY_BY_PREFIX[code.slice(0, 2)]
@@ -49,8 +47,10 @@ const sortedCities = computed(() =>
 )
 
 function handleChange(e: Event) {
-  if (isDisabled.value) return
   const city = (e.target as HTMLSelectElement).value as CityCode
+  // A manual pick settles the initial-city question — IP/geolocation detection
+  // still in flight must not override it.
+  markInitialUserCityDetectionDone()
   if (route.name !== 'map') {
     activateCity(city)
   }
@@ -98,11 +98,5 @@ function handleChange(e: Event) {
 .city-select option {
   background: var(--color-asphalt);
   color: var(--color-ink);
-}
-
-.city-select:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
-  transform: none;
 }
 </style>

@@ -32,7 +32,6 @@ const requestedCity = ref<string | null>(null)
 const contextCity = ref<string | null>(null)
 const renderedCity = ref<string | null>(null)
 const transitionId = ref(0)
-const manualCitySelectionReady = ref(false)
 
 export function useMapLifecycle() {
   // --- Derived state -------------------------------------------------------
@@ -59,9 +58,6 @@ export function useMapLifecycle() {
   const hasRenderedRequestedCity = computed(() =>
     requestedCity.value !== null && requestedCity.value === renderedCity.value,
   )
-
-  /** True once the map/bootstrap flow can safely honor manual city selection. */
-  const canManuallySelectCity = computed(() => manualCitySelectionReady.value)
 
   function snapshotFor(city: string): MapTransitionSnapshot {
     return { id: transitionId.value, city }
@@ -98,10 +94,6 @@ export function useMapLifecycle() {
       phase.value = 'loading'
     }
     return snapshot
-  }
-
-  function setManualCitySelectionReady(ready: boolean) {
-    manualCitySelectionReady.value = ready
   }
 
   // --- Transitions ---------------------------------------------------------
@@ -192,11 +184,9 @@ export function useMapLifecycle() {
     loadingCity,
     activeCity,
     hasRenderedRequestedCity,
-    canManuallySelectCity,
     initialize,
     requestCity,
     activateCity,
-    setManualCitySelectionReady,
     currentSnapshot,
     matches,
     startLoading,
