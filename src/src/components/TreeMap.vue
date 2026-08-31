@@ -1,5 +1,5 @@
 <template>
-  <div ref="mapContainer" class="tree-map"></div>
+  <div ref="mapContainer" class="tree-map" :class="{ 'tree-map--mobile': props.simplified }"></div>
   <MapCompass
     v-if="!displayError"
     :bearing="mapBearing"
@@ -10,7 +10,7 @@
   <div v-if="isInitialLoading" class="map-loading">{{ loadingMessage }}</div>
   <div v-else-if="tileRefreshing" class="map-loading map-refreshing">{{ tileRefreshMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
-  <div v-if="!isInitialLoading" class="map-legend">
+  <div v-if="!isInitialLoading" class="map-legend" :class="{ 'map-legend--mobile': props.simplified }">
     <div v-for="entry in legendEntries" :key="entry.color" class="legend-entry">
       <span class="legend-swatch" :style="{ background: entry.color }"></span>
       <span class="legend-label">{{ entry.label }}</span>
@@ -231,7 +231,6 @@ const {
   showLoadingOverlay,
   initialize: lifecycleInitialize,
   requestCity: lifecycleRequestCity,
-  setManualCitySelectionReady: lifecycleSetManualCitySelectionReady,
   currentSnapshot: lifecycleCurrentSnapshot,
   startLoading: lifecycleStartLoading,
   commitContextCity: lifecycleCommitContextCity,
@@ -1197,6 +1196,9 @@ async function restoreGrantedUserLocation(applyCity: boolean): Promise<void> {
  * Used for IP detection and background geolocation restores.
  */
 function silentlyApplyCity(lat: number, lng: number): void {
+  // A manual selection made while detection was in flight settles the city —
+  // geolocation must not override it.
+  if (initialUserCityDetectionDone.value) return
   const city = closestCityTo(lat, lng)
   if (city !== lifecycleRequestedCity.value) {
     lifecycleRequestCity(city)
@@ -1406,7 +1408,6 @@ async function initializeRequestedCity(map: maplibregl.Map): Promise<void> {
 // --- Lifecycle ---
 
 onMounted(async () => {
-  lifecycleSetManualCitySelectionReady(false)
   window.addEventListener('keydown', onWasdKeyDown)
   window.addEventListener('keyup', onWasdKeyUp)
   // Resolve the initial city before hydrating any map or query state.
@@ -1421,11 +1422,17 @@ onMounted(async () => {
         return lifecycleRequestedCity.value as CityCode | null
       },
     })
-    commitResolvedCity(bootstrapResolution.city)
-    if (bootstrapResolution.source !== 'route' && readRouteCity(route.query.city) !== bootstrapResolution.city) {
-      await router.replace({ query: { ...route.query, city: bootstrapResolution.city } })
+    if (initialUserCityDetectionDone.value) {
+      // The user picked a city from the (never-disabled) selector while
+      // detection was in flight — their choice wins over the detected city.
+      commitResolvedCity((lifecycleRequestedCity.value ?? selectedCity.value) as CityCode)
+    } else {
+      commitResolvedCity(bootstrapResolution.city)
+      if (bootstrapResolution.source !== 'route' && readRouteCity(route.query.city) !== bootstrapResolution.city) {
+        await router.replace({ query: { ...route.query, city: bootstrapResolution.city } })
+      }
+      markInitialUserCityDetectionDone()
     }
-    markInitialUserCityDetectionDone()
   } else {
     const resolvedBootstrapCity = (lifecycleRequestedCity.value ?? mountedRouteCity ?? selectedCity.value) as CityCode
     commitResolvedCity(resolvedBootstrapCity)
@@ -1572,7 +1579,6 @@ onMounted(async () => {
           }
         }
 
-        lifecycleSetManualCitySelectionReady(true)
         await initializeRequestedCity(map)
       })
       .catch((e) => {
@@ -1583,7 +1589,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  lifecycleSetManualCitySelectionReady(false)
   window.removeEventListener('keydown', onWasdKeyDown)
   window.removeEventListener('keyup', onWasdKeyUp)
   if (wasdRafId !== null) cancelAnimationFrame(wasdRafId)
@@ -1903,6 +1908,18 @@ onUnmounted(() => {
   font-size: 0.72rem;
   color: rgba(237, 242, 235, 0.84);
   white-space: nowrap;
+}
+
+/* The mobile bottom action bar (16px inset + ~50px tall buttons) overlays the
+   map's lower edge. Lift the OSM/Carto attribution above it, and the legend
+   above the attribution, so neither sits behind the buttons. */
+.tree-map--mobile :deep(.maplibregl-ctrl-bottom-right),
+.tree-map--mobile :deep(.maplibregl-ctrl-bottom-left) {
+  bottom: 62px;
+}
+
+.map-legend--mobile {
+  bottom: 104px;
 }
 
 .locate-btn {

@@ -9,10 +9,6 @@ const CITY_CODE: Record<string, string> = {
   'Burlington':    'USBTV',
 }
 
-async function waitForManualCitySelection(page: Page, timeoutMs: number): Promise<void> {
-  await expect(page.getByTestId('city-select')).toBeEnabled({ timeout: timeoutMs })
-}
-
 /**
  * Selects the city from the dropdown and waits until the map container's
  * `data-trees-loaded-for` attribute equals the destination city code.
@@ -77,9 +73,10 @@ test.describe('City navigation — desktop', () => {
 
   test('switching city during initial animation unlocks the chat', async ({ page }) => {
     test.setTimeout(180_000)
+    // The selector is never disabled — switch as soon as it renders, while the
+    // initial city may still be loading or mid-intro.
     const citySelect = page.getByTestId('city-select')
     await expect(citySelect).toBeVisible({ timeout: 30_000 })
-    await waitForManualCitySelection(page, 30_000)
     await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
   })
 })
@@ -113,9 +110,10 @@ test.describe('City navigation — mobile', () => {
 
   test('switching city during initial load unlocks the chat', async ({ page }) => {
     test.setTimeout(120_000)
+    // The selector is never disabled — switch as soon as it renders, without
+    // waiting for the initial city to finish loading.
     const citySelect = page.getByTestId('city-select')
     await expect(citySelect).toBeVisible({ timeout: 30_000 })
-    await waitForManualCitySelection(page, 30_000)
     await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
   })
 })
