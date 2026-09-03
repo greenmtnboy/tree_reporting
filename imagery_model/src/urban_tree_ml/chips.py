@@ -11,7 +11,7 @@ from pyproj import Transformer
 
 from urban_tree_ml.config import ProjectConfig
 from urban_tree_ml.feedback import load_training_feedback
-from urban_tree_ml.targets import PointLabel, build_targets
+from urban_tree_ml.targets import PointLabel, build_targets, find_collision_groups
 
 
 def build_chips(
@@ -48,7 +48,9 @@ def build_chips(
     records: list[dict[str, object]] = []
     skipped_mixed_split = 0
     skipped_invalid = 0
-    collisions = 0
+    collision_cells = 0
+    collision_excluded_points = 0
+    collision_records: list[dict[str, object]] = []
     channel_sum: np.ndarray | None = None
     channel_sum_squares: np.ndarray | None = None
     channel_pixel_count = 0
@@ -141,6 +143,7 @@ def build_chips(
                 continue
             row_off = int(chip_row * chip_pixels)
             col_off = int(chip_col * chip_pixels)
+            chip_id = f"r{chip_row:06d}_c{chip_col:06d}"
             if row_off + chip_pixels > source.height or col_off + chip_pixels > source.width:
                 skipped_invalid += 1
                 continue
@@ -174,6 +177,30 @@ def build_chips(
                 )
                 for row in positive_group.itertuples(index=False)
             ]
+            collision_groups = find_collision_groups(
+                labels,
+                image_height=chip_pixels,
+                image_width=chip_pixels,
+                stride=config.targets.output_stride,
+            )
+            chip_collision_indices = {
+                index for indices in collision_groups.values() for index in indices
+            }
+            for (output_x, output_y), indices in collision_groups.items():
+                for index in indices:
+                    row = positive_group.iloc[index]
+                    collision_records.append(
+                        {
+                            "tree_id": str(row["tree_id"]),
+                            "split": str(row["split"]),
+                            "chip_id": chip_id,
+                            "pixel_col": float(row["pixel_col"]),
+                            "pixel_row": float(row["pixel_row"]),
+                            "output_x": output_x,
+                            "output_y": output_y,
+                            "collision_size": len(indices),
+                        }
+                    )
             ignored_locations = [
                 (float(row.pixel_col - col_off), float(row.pixel_row - row_off))
                 for row in group[group["feedback_excluded"]].itertuples(index=False)
@@ -192,8 +219,16 @@ def build_chips(
                 ignored_locations=ignored_locations,
                 background_mode=config.targets.background_mode,
                 background_ndvi_max=config.targets.background_ndvi_max,
+                collision_policy=config.targets.collision_policy,
             )
-            collisions += int(targets.pop("collisions"))
+            target_collision_cells = int(targets.pop("collision_cells"))
+            target_collision_excluded = int(targets.pop("collision_excluded_points"))
+            if target_collision_cells != len(collision_groups):
+                raise RuntimeError("collision accounting differs from target generation")
+            if target_collision_excluded != len(chip_collision_indices):
+                raise RuntimeError("collision exclusion accounting differs from target generation")
+            collision_cells += target_collision_cells
+            collision_excluded_points += target_collision_excluded
             split = str(splits[0])
             if split == "train":
                 if channel_sum is None:
@@ -207,7 +242,6 @@ def build_chips(
                 channel_pixel_count += valid_count
             split_dir = output_root / split
             split_dir.mkdir(parents=True, exist_ok=True)
-            chip_id = f"r{chip_row:06d}_c{chip_col:06d}"
             chip_path = split_dir / f"{chip_id}.npz"
             temporary_chip = chip_path.with_name(f".{chip_path.name}.{uuid4().hex}.part")
             try:
@@ -223,7 +257,10 @@ def build_chips(
                     "chip_id": chip_id,
                     "split": split,
                     "path": str(chip_path.relative_to(output_root)),
-                    "tree_count": len(labels),
+                    "candidate_tree_count": len(labels),
+                    "tree_count": len(labels) - target_collision_excluded,
+                    "collision_cell_count": target_collision_cells,
+                    "collision_excluded_count": target_collision_excluded,
                     "feedback_ignored_count": len(ignored_locations),
                     "valid_fraction": valid_fraction,
                     "row_offset": row_off,
@@ -233,6 +270,20 @@ def build_chips(
 
     manifest_path = output_root / "chips.parquet"
     pd.DataFrame.from_records(records).to_parquet(manifest_path, index=False)
+    collision_exclusions_path = output_root / "collision-exclusions.parquet"
+    collision_columns = [
+        "tree_id",
+        "split",
+        "chip_id",
+        "pixel_col",
+        "pixel_row",
+        "output_x",
+        "output_y",
+        "collision_size",
+    ]
+    pd.DataFrame.from_records(collision_records, columns=collision_columns).to_parquet(
+        collision_exclusions_path, index=False
+    )
     if channel_sum is None or channel_sum_squares is None or channel_pixel_count == 0:
         raise ValueError(
             "no training pixels were materialized; check the split and raster coverage"
@@ -252,7 +303,11 @@ def build_chips(
     summary: dict[str, object] = {
         "chips": len(records),
         "trees": sum(int(record["tree_count"]) for record in records),
-        "attribute_collisions": collisions,
+        "candidate_trees": sum(int(record["candidate_tree_count"]) for record in records),
+        "collision_policy": config.targets.collision_policy,
+        "collision_cells": collision_cells,
+        "collision_excluded_points": collision_excluded_points,
+        "collision_exclusions": str(collision_exclusions_path),
         "skipped_mixed_split": skipped_mixed_split,
         "skipped_invalid": skipped_invalid,
         "registration_feedback": str(selected_feedback_path) if feedback is not None else None,

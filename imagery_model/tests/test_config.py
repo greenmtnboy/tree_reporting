@@ -11,7 +11,8 @@ def test_checked_in_config_loads_with_local_default(monkeypatch: pytest.MonkeyPa
     config = load_config(config_path)
 
     assert config.inventory.city == "USSFO"
-    assert config.dataset == "sf-naip-rgbn-species-v1"
+    assert config.dataset == "sf-naip-rgbn-species-v2"
+    assert config.targets.collision_policy == "discard"
     assert config.model.input_channels == len(config.imagery.bands) == 4
     assert config.paths.root == (Path(__file__).parents[1] / "artifacts").resolve()
 

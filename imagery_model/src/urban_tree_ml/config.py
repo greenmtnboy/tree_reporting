@@ -90,6 +90,7 @@ class TargetsConfig(StrictModel):
     output_stride: Literal[2]
     gaussian_sigma_px: float = Field(gt=0)
     positive_supervision_radius_m: float = Field(gt=0)
+    collision_policy: Literal["discard"]
     background_mode: Literal["ndvi_positive_unlabeled", "all"]
     background_ndvi_max: float = Field(ge=-1, le=1)
 

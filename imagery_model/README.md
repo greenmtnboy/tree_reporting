@@ -52,7 +52,10 @@ The default target builder uses positive-unlabeled supervision:
 - unlabeled vegetation is ignored by the detection loss.
 
 This prevents an unlisted backyard tree from becoming a false background label. Genus, species,
-and DBH losses each use their own validity mask at known stem points.
+and DBH losses each use their own validity mask at known stem points. When two or more records
+quantize to the same output cell, every record in that collision is excluded from all four tasks
+and the surrounding neighborhood is ignored rather than treated as background. The chip build
+records those rows in `collision-exclusions.parquet` for audit and evaluation.
 
 ## Local workflow
 

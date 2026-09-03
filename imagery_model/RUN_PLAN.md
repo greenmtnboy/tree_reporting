@@ -99,7 +99,7 @@ filesystem with the same relative paths.
 The Lambda preparation stage will produce:
 
 ```text
-artifacts/chips/sf-naip-rgbn-species-v1/
+artifacts/chips/sf-naip-rgbn-species-v2/
 ├── train/*.npz
 ├── validation/*.npz
 ├── test/*.npz

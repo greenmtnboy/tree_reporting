@@ -1,5 +1,5 @@
-experiment: sf-naip-rgbn-species-smoke-v1
-dataset: sf-naip-rgbn-species-v1
+experiment: sf-naip-rgbn-species-smoke-v2
+dataset: sf-naip-rgbn-species-v2
 seed: 20260820
 
 paths:
@@ -39,6 +39,7 @@ targets:
   output_stride: 2
   gaussian_sigma_px: 1.5
   positive_supervision_radius_m: 5.0
+  collision_policy: discard
   background_mode: ndvi_positive_unlabeled
   background_ndvi_max: 0.05
 

@@ -1,5 +1,5 @@
-experiment: sf-naip-rgbn-species-v1
-dataset: sf-naip-rgbn-species-v1
+experiment: sf-naip-rgbn-species-v2
+dataset: sf-naip-rgbn-species-v2
 seed: 20260820
 
 paths:
@@ -43,6 +43,8 @@ targets:
   output_stride: 2
   gaussian_sigma_px: 1.5
   positive_supervision_radius_m: 5.0
+  # Ambiguous co-located records supervise neither detection nor attributes.
+  collision_policy: discard
   # The municipal inventory does not label private trees. Only low-NDVI pixels
   # are trusted negatives; other unlabeled vegetation is ignored by detection.
   background_mode: ndvi_positive_unlabeled

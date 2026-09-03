@@ -52,7 +52,22 @@ def test_detection_labels_do_not_require_dbh_or_taxonomy() -> None:
     assert targets["species_mask"][6, 6] == 0
 
 
-def test_larger_dbh_wins_an_output_cell_collision() -> None:
+def test_point_inside_chip_is_clamped_to_last_output_cell() -> None:
+    targets = build_targets(
+        8,
+        8,
+        [PointLabel(x=7.8, y=7.8)],
+        stride=2,
+        gaussian_sigma_px=1,
+        supervision_radius_px=2,
+        ndvi=np.zeros((8, 8), dtype=np.float32),
+    )
+
+    assert targets["center"][3, 3] == 1
+    assert targets["detection_mask"][3, 3] == 1
+
+
+def test_every_label_in_an_output_cell_collision_is_ignored() -> None:
     labels = [
         PointLabel(x=4.0, y=4.0, dbh_log1p=1.0, genus_id=0, species_id=0),
         PointLabel(x=4.4, y=4.4, dbh_log1p=3.0, genus_id=1, species_id=2),
@@ -67,9 +82,13 @@ def test_larger_dbh_wins_an_output_cell_collision() -> None:
         ndvi=np.zeros((8, 8), dtype=np.float32),
     )
 
-    assert targets["collisions"] == 1
-    assert targets["dbh"][2, 2] == 3.0
-    assert targets["species"][2, 2] == 2
+    assert targets["collision_cells"] == 1
+    assert targets["collision_excluded_points"] == 2
+    assert targets["center"][2, 2] == 0
+    assert targets["detection_mask"][2, 2] == 0
+    assert targets["dbh_mask"][2, 2] == 0
+    assert targets["genus_mask"][2, 2] == 0
+    assert targets["species_mask"][2, 2] == 0
 
 
 def test_rejected_inventory_points_are_ignored_without_erasing_retained_positives() -> None:

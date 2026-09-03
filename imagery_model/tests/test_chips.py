@@ -23,21 +23,28 @@ def test_build_chips_materializes_targets_and_training_statistics(tmp_path: Path
     projected = [
         (origin_x + 128 * 0.6, origin_y - 128 * 0.6),
         (origin_x + 140 * 0.6, origin_y - 128 * 0.6),
+        (origin_x + 160.0 * 0.6, origin_y - 160.0 * 0.6),
+        (origin_x + 160.4 * 0.6, origin_y - 160.4 * 0.6),
     ]
     coordinates = [inverse.transform(x, y) for x, y in projected]
     pd.DataFrame(
         {
-            "tree_id": ["complete-tree", "detection-only-tree"],
+            "tree_id": [
+                "complete-tree",
+                "detection-only-tree",
+                "collision-a",
+                "collision-b",
+            ],
             "longitude": [value[0] for value in coordinates],
             "latitude": [value[1] for value in coordinates],
-            "split_eligible": [True, True],
-            "split": ["train", "train"],
-            "dbh_log1p": [2.0, np.nan],
-            "genus_id": [1, -1],
-            "species_id": [2, -1],
-            "dbh_eligible": [True, False],
-            "genus_eligible": [True, False],
-            "species_eligible": [True, False],
+            "split_eligible": [True, True, True, True],
+            "split": ["train", "train", "train", "train"],
+            "dbh_log1p": [2.0, np.nan, 1.0, 3.0],
+            "genus_id": [1, -1, 0, 1],
+            "species_id": [2, -1, 0, 2],
+            "dbh_eligible": [True, False, True, True],
+            "genus_eligible": [True, False, True, True],
+            "species_eligible": [True, False, True, True],
         }
     ).to_parquet(inventory_dir / "inventory.parquet", index=False)
 
@@ -69,6 +76,17 @@ def test_build_chips_materializes_targets_and_training_statistics(tmp_path: Path
         assert chip["dbh_mask"][64, 70] == 0
         assert chip["genus_mask"][64, 70] == 0
         assert chip["species_mask"][64, 70] == 0
+        assert chip["center"][80, 80] == 0
+        assert chip["dbh_mask"][80, 80] == 0
+        assert chip["genus_mask"][80, 80] == 0
+        assert chip["species_mask"][80, 80] == 0
+    assert summary["candidate_trees"] == 4
+    assert summary["trees"] == 2
+    assert summary["collision_cells"] == 1
+    assert summary["collision_excluded_points"] == 2
+    collision_exclusions = pd.read_parquet(summary["collision_exclusions"])
+    assert set(collision_exclusions["tree_id"]) == {"collision-a", "collision-b"}
+    assert set(collision_exclusions["collision_size"]) == {2}
 
 
 def test_build_chips_applies_finalized_registration_feedback(tmp_path: Path) -> None:
