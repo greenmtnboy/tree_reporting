@@ -121,6 +121,14 @@ class EvaluationConfig(StrictModel):
     match_radii_m: list[float]
     dbh_tolerance_in: float = Field(gt=0)
     confidence_threshold: float = Field(gt=0, lt=1)
+    nms_kernel: int = Field(default=3, ge=3)
+    max_detections_per_chip: int = Field(default=512, ge=1)
+
+    @model_validator(mode="after")
+    def nms_kernel_is_odd(self) -> EvaluationConfig:
+        if self.nms_kernel % 2 == 0:
+            raise ValueError("nms_kernel must be odd")
+        return self
 
 
 class ProjectConfig(StrictModel):

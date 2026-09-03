@@ -15,7 +15,7 @@ class PointLabel:
     species_id: int | None = None
 
 
-def _output_cell(
+def point_label_output_cell(
     label: PointLabel,
     *,
     image_height: int,
@@ -41,7 +41,7 @@ def find_collision_groups(
     """Return every in-bounds output cell occupied by multiple input labels."""
     grouped: dict[tuple[int, int], list[int]] = defaultdict(list)
     for index, label in enumerate(labels):
-        cell = _output_cell(
+        cell = point_label_output_cell(
             label,
             image_height=image_height,
             image_width=image_width,
@@ -132,7 +132,7 @@ def build_targets(
     for index, label in enumerate(labels):
         if index in collision_indices:
             continue
-        cell = _output_cell(
+        cell = point_label_output_cell(
             label,
             image_height=image_height,
             image_width=image_width,
@@ -157,7 +157,7 @@ def build_targets(
             species[y, x] = label.species_id
 
     for ignored_x, ignored_y in [*(ignored_locations or []), *collision_locations]:
-        cell = _output_cell(
+        cell = point_label_output_cell(
             PointLabel(x=ignored_x, y=ignored_y),
             image_height=image_height,
             image_width=image_width,

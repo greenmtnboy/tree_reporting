@@ -55,7 +55,8 @@ This prevents an unlisted backyard tree from becoming a false background label. 
 and DBH losses each use their own validity mask at known stem points. When two or more records
 quantize to the same output cell, every record in that collision is excluded from all four tasks
 and the surrounding neighborhood is ignored rather than treated as background. The chip build
-records those rows in `collision-exclusions.parquet` for audit and evaluation.
+records those rows in `collision-exclusions.parquet` and the retained rows in `labels.parquet`
+for audit and evaluation.
 
 ## Local workflow
 
@@ -148,6 +149,20 @@ container, exposes the GPU with `--gpus all`, mounts the persistent data root, a
 `last.ckpt` when present. GPU configurations fail fast if CUDA is unavailable.
 It deliberately does not contain or request a Lambda API key. Terminate the GPU instance when
 training is done; the attached filesystem is billed separately until it is deleted.
+
+Evaluate the selected checkpoint against validation before opening the test split:
+
+```bash
+uv run urban-tree-ml evaluate \
+  --config configs/sf_naip_smoke.yaml \
+  --checkpoint "$TREE_ML_DATA_ROOT/runs/sf-naip-rgbn-species-smoke-v2/checkpoints/002.ckpt" \
+  --split validation
+```
+
+The command decodes local maxima from the center heatmap, performs one-to-one geographic
+matching, and writes metrics, matched tree IDs, and georeferenced predictions under the run's
+`evaluation/validation/` directory. Test evaluation fails unless `--allow-test` is explicitly
+passed after preprocessing and threshold decisions are frozen.
 
 ## What counts as success
 

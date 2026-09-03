@@ -221,5 +221,38 @@ def train(
     _print(run_training(load_config(config_path), resume=resume))
 
 
+@app.command("evaluate")
+def evaluate(
+    config_path: ConfigPath,
+    checkpoint: Annotated[
+        Path,
+        typer.Option("--checkpoint", exists=True, dir_okay=False),
+    ],
+    split: Annotated[str, typer.Option("--split")] = "validation",
+    device: Annotated[
+        str,
+        typer.Option("--device", help="auto, cpu, cuda, or CUDA device"),
+    ] = "auto",
+    allow_test: Annotated[
+        bool,
+        typer.Option(
+            "--allow-test",
+            help="Unlock the sealed test split after decisions are frozen",
+        ),
+    ] = False,
+) -> None:
+    from urban_tree_ml.evaluation import run_evaluation
+
+    _print(
+        run_evaluation(
+            load_config(config_path),
+            checkpoint,
+            split=split,
+            device_name=device,
+            allow_test=allow_test,
+        )
+    )
+
+
 if __name__ == "__main__":
     app()

@@ -87,6 +87,8 @@ def test_build_chips_materializes_targets_and_training_statistics(tmp_path: Path
     collision_exclusions = pd.read_parquet(summary["collision_exclusions"])
     assert set(collision_exclusions["tree_id"]) == {"collision-a", "collision-b"}
     assert set(collision_exclusions["collision_size"]) == {2}
+    labels = pd.read_parquet(summary["labels"])
+    assert set(labels["tree_id"]) == {"complete-tree", "detection-only-tree"}
 
 
 def test_build_chips_applies_finalized_registration_feedback(tmp_path: Path) -> None:

@@ -11,7 +11,12 @@ from pyproj import Transformer
 
 from urban_tree_ml.config import ProjectConfig
 from urban_tree_ml.feedback import load_training_feedback
-from urban_tree_ml.targets import PointLabel, build_targets, find_collision_groups
+from urban_tree_ml.targets import (
+    PointLabel,
+    build_targets,
+    find_collision_groups,
+    point_label_output_cell,
+)
 
 
 def build_chips(
@@ -51,6 +56,7 @@ def build_chips(
     collision_cells = 0
     collision_excluded_points = 0
     collision_records: list[dict[str, object]] = []
+    label_records: list[dict[str, object]] = []
     channel_sum: np.ndarray | None = None
     channel_sum_squares: np.ndarray | None = None
     channel_pixel_count = 0
@@ -201,6 +207,34 @@ def build_chips(
                             "collision_size": len(indices),
                         }
                     )
+            for index, label in enumerate(labels):
+                if index in chip_collision_indices:
+                    continue
+                cell = point_label_output_cell(
+                    label,
+                    image_height=chip_pixels,
+                    image_width=chip_pixels,
+                    stride=config.targets.output_stride,
+                )
+                if cell is None:
+                    continue
+                row = positive_group.iloc[index]
+                label_records.append(
+                    {
+                        "tree_id": str(row["tree_id"]),
+                        "split": str(row["split"]),
+                        "chip_id": chip_id,
+                        "longitude": float(row["longitude"]),
+                        "latitude": float(row["latitude"]),
+                        "pixel_col": float(row["pixel_col"]),
+                        "pixel_row": float(row["pixel_row"]),
+                        "output_x": cell[0],
+                        "output_y": cell[1],
+                        "dbh_log1p": label.dbh_log1p,
+                        "genus_id": label.genus_id,
+                        "species_id": label.species_id,
+                    }
+                )
             ignored_locations = [
                 (float(row.pixel_col - col_off), float(row.pixel_row - row_off))
                 for row in group[group["feedback_excluded"]].itertuples(index=False)
@@ -284,6 +318,24 @@ def build_chips(
     pd.DataFrame.from_records(collision_records, columns=collision_columns).to_parquet(
         collision_exclusions_path, index=False
     )
+    labels_path = output_root / "labels.parquet"
+    label_columns = [
+        "tree_id",
+        "split",
+        "chip_id",
+        "longitude",
+        "latitude",
+        "pixel_col",
+        "pixel_row",
+        "output_x",
+        "output_y",
+        "dbh_log1p",
+        "genus_id",
+        "species_id",
+    ]
+    pd.DataFrame.from_records(label_records, columns=label_columns).to_parquet(
+        labels_path, index=False
+    )
     if channel_sum is None or channel_sum_squares is None or channel_pixel_count == 0:
         raise ValueError(
             "no training pixels were materialized; check the split and raster coverage"
@@ -308,6 +360,7 @@ def build_chips(
         "collision_cells": collision_cells,
         "collision_excluded_points": collision_excluded_points,
         "collision_exclusions": str(collision_exclusions_path),
+        "labels": str(labels_path),
         "skipped_mixed_split": skipped_mixed_split,
         "skipped_invalid": skipped_invalid,
         "registration_feedback": str(selected_feedback_path) if feedback is not None else None,
