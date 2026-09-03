@@ -159,3 +159,7 @@ def test_studio_html_links_registration_and_model_views() -> None:
     assert 'href="/model"' in registration
     assert "/api/model/summary" in MODEL_DEBUG_HTML
     assert "/api/model/chip/" in MODEL_DEBUG_HTML
+    assert "Inventory truth" in MODEL_DEBUG_HTML
+    assert "Match radius" in MODEL_DEBUG_HTML
+    assert 'id="modal"' in MODEL_DEBUG_HTML
+    assert 'role="tooltip"' in MODEL_DEBUG_HTML
