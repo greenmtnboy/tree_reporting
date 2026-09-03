@@ -37,13 +37,12 @@ confirms that the `image` asset is ordered red, green, blue, NIR.
 
 ## Data reality check
 
-The repository's v2 SF parquet currently has 193,378 records. About 149,000 have coordinates,
-a positive DBH, and a non-placeholder taxon; before the clean-cohort DBH bounds, 49 species have
-at least 500 examples. The checked-in 4–60 inch filter leaves 108,157 rows. The deterministic
-spatial guard leaves 90,431 eligible rows (68,494 train / 10,351 validation / 11,586 test), and
-training-only frequency selection retains 33 species in 28 genera. Those are encouraging numbers,
-but not 90,431 independent examples: neighboring trees share scene, street, maintenance, and
-neighborhood effects. The blocked holdout is therefore mandatory.
+The repository's v2 SF parquet currently has 193,378 records, of which roughly 149,000 have
+coordinates. Every coordinate-valid row now remains a detection label. DBH is supervised only
+when it falls within the configured credible range; genus and species have independent masks
+derived from the training-only taxonomy. The exact post-guard counts for all four label cohorts
+are written to `inventory/ussfo/summary.json` on export. Neighboring trees still share scene,
+street, maintenance, and neighborhood effects, so the blocked holdout remains mandatory.
 
 The inventory is also not a complete tree map. In particular, private trees are usually absent.
 The default target builder uses positive-unlabeled supervision:
@@ -53,7 +52,11 @@ The default target builder uses positive-unlabeled supervision:
 - unlabeled vegetation is ignored by the detection loss.
 
 This prevents an unlisted backyard tree from becoming a false background label. Genus, species,
-and DBH losses are evaluated only at labeled stem points.
+and DBH losses each use their own validity mask at known stem points. When two or more records
+quantize to the same output cell, every record in that collision is excluded from all four tasks
+and the surrounding neighborhood is ignored rather than treated as background. The chip build
+records those rows in `collision-exclusions.parquet` and the retained rows in `labels.parquet`
+for audit and evaluation.
 
 ## Local workflow
 
@@ -66,28 +69,59 @@ uv sync --group dev --group imagery
 uv run urban-tree-ml check-config --config configs/sf_naip_baseline.yaml
 uv run urban-tree-ml inventory export --config configs/sf_naip_baseline.yaml
 uv run urban-tree-ml imagery index --config configs/sf_naip_baseline.yaml
+uv run urban-tree-ml imagery fetch \
+  --config configs/sf_naip_baseline.yaml \
+  --item-id ca_m_3712213_sw_10_060_20220518
 ```
 
 `imagery index` records matching STAC item IDs and acquisition metadata without persisting
-short-lived signed URLs. Select the newest clear, well-registered coverage and create an aligned
-four-band mosaic/COG. Then materialize deterministic chips:
+short-lived signed URLs. `imagery fetch` signs the selected URL only in memory, streams it to a
+temporary file, validates the size and RGB-NIR raster metadata, and atomically publishes the TIFF
+with an unsigned provenance manifest.
+
+Before building chips, generate the registration review. It selects spatially and taxonomically
+diverse image scenes and makes every eligible tree in each scene reviewable; test points are
+excluded unless `--include-test` is explicit. `--samples` is an approximate minimum tree count
+because the final scene is kept intact. Serve the returned UI so button presses and click-derived
+offsets are saved atomically to `reviews.json`:
 
 ```bash
-uv run urban-tree-ml chips build \
+uv run urban-tree-ml qa registration \
   --config configs/sf_naip_baseline.yaml \
-  --raster /path/to/sf-naip-rgbn.tif
+  --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif \
+  --samples 100
+
+uv run urban-tree-ml qa serve \
+  --config configs/sf_naip_baseline.yaml \
+  --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif
 ```
 
-Chip building rejects mixed-split and nodata-heavy windows. Channel normalization statistics are
-computed from training pixels only. Generated inventories, rasters, chips, and checkpoints live
-under `artifacts/` by default and are gitignored.
+Open `http://127.0.0.1:8765`; the Model Studio landing page links registration curation and any
+available model-validation run. Registration samples default to aligned, so only exceptions need
+attention. The server auto-detects validation artifacts for the configured experiment; use
+`--evaluation-dir` to inspect a different run.
+Each numbered ring selects an inventory tree in the shared image. Click its apparent tree center
+to mark it offset, or use the buttons to mark it aligned, not-tree, or uncertain. Finalization
+turns each explicit offset into an exact correction for that reviewed tree, estimates the
+tile-wide correction from training reviews only, reports validation residuals, and records
+`not-tree`/`uncertain` points as supervision exclusions. It never mutates the source inventory or
+uses test reviews.
 
-To train locally or on a GPU host:
+Real-tile materialization is intended for Lambda, not a local smoke test. Chip building
+automatically applies the finalized `training-feedback.json`; pass `--without-feedback` only for
+a deliberate ablation. The smoke and baseline configurations share one `dataset` identifier, so
+they reuse the same chips while writing checkpoints to separate experiment directories.
+
+The bounded local check uses only synthetic 256-pixel rasters plus a 64-pixel model pass:
 
 ```bash
-uv sync --group imagery --group train
-uv run urban-tree-ml train --config configs/sf_naip_baseline.yaml --resume auto
+uv run --frozen --no-sync pytest \
+  tests/test_inventory.py tests/test_targets.py tests/test_feedback.py \
+  tests/test_chips.py tests/test_model.py -q
 ```
+
+Do not use the full NAIP tile as a local smoke test. Chip building is CPU/RAM-heavy even though
+training is GPU-heavy. Generated inventories, rasters, chips, and checkpoints are gitignored.
 
 ## Lambda Cloud
 
@@ -98,19 +132,65 @@ statistics, and checkpoints should all use the attached filesystem. See Lambda's
 [on-demand storage documentation](https://docs.lambda.ai/public-cloud/on-demand/) and
 [filesystem guide](https://docs.lambda.ai/public-cloud/filesystems/).
 
+Copy the selected raster, its provenance manifest, and the finalized QA directory into the
+attached data root while preserving their paths under `imagery/` and `qa/`. Inventory export and
+chip construction then happen on Lambda; the 400+ MB raster is never committed to Git.
+
 On the instance:
 
 ```bash
 git clone <this-repository>
 cd sf_tree_reporting/imagery_model
 export TREE_ML_DATA_ROOT=/lambda/nfs/<FILESYSTEM_NAME>/urban-tree-ml
+export TREE_ML_RASTER="$TREE_ML_DATA_ROOT/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif"
+export TREE_ML_PREPARE_DATA=1
 bash lambda/run.sh
 ```
 
-The script builds the pinned CUDA container, exposes the GPU with `--gpus all`, mounts the
-persistent data root, and resumes `last.ckpt` when present. It deliberately does not contain or
-request a Lambda API key. Terminate the GPU instance when training is done; the attached
-filesystem is billed separately until it is deleted.
+The launcher defaults to `configs/sf_naip_smoke.yaml`. Pass a different checked-in configuration
+as its first argument, for example `bash lambda/run.sh configs/sf_naip_baseline.yaml`. With
+`TREE_ML_PREPARE_DATA=1`, the script re-exports the inventory under the new label schema and builds
+chips before training. Omit that flag on later resumptions. The script builds the pinned CUDA
+container, exposes the GPU with `--gpus all`, mounts the persistent data root, and resumes
+`last.ckpt` when present. GPU configurations fail fast if CUDA is unavailable.
+
+`configs/sf_naip_augmented.yaml` is the controlled overfitting follow-up. It reuses the same v2
+chips but writes to its own run directory and applies a random member of the eight exact square
+symmetries (90-degree rotations and reflections) to every training image and all of its target
+maps together. Validation imagery is never augmented.
+
+After fetching every indexed tile for a year, build a zero-copy VRT and its per-item provenance
+manifest. The citywide config points at this VRT and uses a new dataset identity so it cannot
+overwrite one-tile chips:
+
+```bash
+uv run urban-tree-ml imagery mosaic --config configs/sf_naip_citywide.yaml --year 2022
+uv run urban-tree-ml qa registration \
+  --config configs/sf_naip_citywide.yaml \
+  --raster "$TREE_ML_DATA_ROOT/imagery/ussfo/2022/ussfo-2022-mosaic.vrt" \
+  --samples 160
+```
+
+Finalize that citywide registration review before materializing chips. This separately checks
+alignment across the tile footprint while keeping the test partition out of the review.
+It deliberately does not contain or request a Lambda API key. Terminate the GPU instance when
+training is done; the attached filesystem is billed separately until it is deleted.
+
+Evaluate the selected checkpoint against validation before opening the test split:
+
+```bash
+uv run urban-tree-ml evaluate \
+  --config configs/sf_naip_smoke.yaml \
+  --checkpoint "$TREE_ML_DATA_ROOT/runs/sf-naip-rgbn-species-smoke-v2/checkpoints/002.ckpt" \
+  --split validation
+```
+
+The command decodes local maxima from the center heatmap, performs one-to-one geographic
+matching, and writes metrics, matched tree IDs, georeferenced predictions, the evaluated ground
+truth, and a taxonomy snapshot under the run's `evaluation/validation/` directory. The Model
+Studio visualizes those artifacts as training curves, metrics, and filterable NAIP overlays. Test
+evaluation fails unless `--allow-test` is explicitly passed after preprocessing and threshold
+decisions are frozen.
 
 ## What counts as success
 

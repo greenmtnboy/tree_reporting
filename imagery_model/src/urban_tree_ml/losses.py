@@ -29,20 +29,20 @@ def multitask_loss(
     genus_weight: float,
     species_weight: float,
 ) -> dict[str, torch.Tensor]:
-    attribute_mask = batch["attribute_mask"]
+    dbh_mask = batch["dbh_mask"]
     center = masked_centernet_focal_loss(
         prediction["center_logits"], batch["center"], batch["detection_mask"]
     )
 
-    if attribute_mask.any():
+    if dbh_mask.any():
         dbh = functional.smooth_l1_loss(
-            prediction["dbh_log1p"][attribute_mask], batch["dbh"][attribute_mask]
+            prediction["dbh_log1p"][dbh_mask], batch["dbh"][dbh_mask]
         )
     else:
         dbh = prediction["dbh_log1p"].sum() * 0
 
-    genus_mask = attribute_mask & batch["genus"].ge(0)
-    species_mask = attribute_mask & batch["species"].ge(0)
+    genus_mask = batch["genus_mask"] & batch["genus"].ge(0)
+    species_mask = batch["species_mask"] & batch["species"].ge(0)
     genus_logits = prediction["genus_logits"].permute(0, 2, 3, 1)
     species_logits = prediction["species_logits"].permute(0, 2, 3, 1)
     genus = (

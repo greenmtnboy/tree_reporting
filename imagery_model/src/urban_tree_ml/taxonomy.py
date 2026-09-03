@@ -43,6 +43,8 @@ def encode_taxonomy(frame: pd.DataFrame, taxonomy: Taxonomy) -> pd.DataFrame:
     genus_ids = {name: index for index, name in enumerate(taxonomy.genera)}
     result = frame.copy()
     result["species_id"] = result["species"].map(species_ids).fillna(-1).astype("int32")
-    result["genus"] = result["species"].map(genus_for_species)
+    result["genus"] = result["species"].map(
+        lambda value: genus_for_species(value) if isinstance(value, str) and value.strip() else None
+    )
     result["genus_id"] = result["genus"].map(genus_ids).fillna(-1).astype("int32")
     return result

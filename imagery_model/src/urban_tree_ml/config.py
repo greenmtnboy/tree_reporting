@@ -90,6 +90,7 @@ class TargetsConfig(StrictModel):
     output_stride: Literal[2]
     gaussian_sigma_px: float = Field(gt=0)
     positive_supervision_radius_m: float = Field(gt=0)
+    collision_policy: Literal["discard"]
     background_mode: Literal["ndvi_positive_unlabeled", "all"]
     background_ndvi_max: float = Field(ge=-1, le=1)
 
@@ -102,6 +103,7 @@ class ModelConfig(StrictModel):
 
 
 class TrainingConfig(StrictModel):
+    accelerator: Literal["auto", "cpu", "gpu"]
     batch_size: int = Field(ge=1)
     workers: int = Field(ge=0)
     epochs: int = Field(ge=1)
@@ -109,6 +111,7 @@ class TrainingConfig(StrictModel):
     weight_decay: float = Field(ge=0)
     precision: str
     accumulate_grad_batches: int = Field(ge=1)
+    random_dihedral: bool = False
     center_loss_weight: float = Field(ge=0)
     dbh_loss_weight: float = Field(ge=0)
     genus_loss_weight: float = Field(ge=0)
@@ -119,10 +122,19 @@ class EvaluationConfig(StrictModel):
     match_radii_m: list[float]
     dbh_tolerance_in: float = Field(gt=0)
     confidence_threshold: float = Field(gt=0, lt=1)
+    nms_kernel: int = Field(default=3, ge=3)
+    max_detections_per_chip: int = Field(default=512, ge=1)
+
+    @model_validator(mode="after")
+    def nms_kernel_is_odd(self) -> EvaluationConfig:
+        if self.nms_kernel % 2 == 0:
+            raise ValueError("nms_kernel must be odd")
+        return self
 
 
 class ProjectConfig(StrictModel):
     experiment: str
+    dataset: str
     seed: int
     paths: PathsConfig
     inventory: InventoryConfig
