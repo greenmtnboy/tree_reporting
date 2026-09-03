@@ -95,7 +95,10 @@ uv run urban-tree-ml qa serve \
   --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif
 ```
 
-Open `http://127.0.0.1:8765`; samples default to aligned, so only exceptions need attention.
+Open `http://127.0.0.1:8765`; the Model Studio landing page links registration curation and any
+available model-validation run. Registration samples default to aligned, so only exceptions need
+attention. The server auto-detects validation artifacts for the configured experiment; use
+`--evaluation-dir` to inspect a different run.
 Click the apparent tree center before choosing an offset verdict. Finalization turns each explicit
 offset into an exact correction for that reviewed tree, estimates the tile-wide correction from
 training reviews only, reports validation residuals, and records `not-tree`/`uncertain` points as
@@ -160,9 +163,11 @@ uv run urban-tree-ml evaluate \
 ```
 
 The command decodes local maxima from the center heatmap, performs one-to-one geographic
-matching, and writes metrics, matched tree IDs, and georeferenced predictions under the run's
-`evaluation/validation/` directory. Test evaluation fails unless `--allow-test` is explicitly
-passed after preprocessing and threshold decisions are frozen.
+matching, and writes metrics, matched tree IDs, georeferenced predictions, the evaluated ground
+truth, and a taxonomy snapshot under the run's `evaluation/validation/` directory. The Model
+Studio visualizes those artifacts as training curves, metrics, and filterable NAIP overlays. Test
+evaluation fails unless `--allow-test` is explicitly passed after preprocessing and threshold
+decisions are frozen.
 
 ## What counts as success
 

@@ -456,11 +456,17 @@ def run_evaluation(
     output_dir.mkdir(parents=True, exist_ok=True)
     predictions_path = output_dir / "predictions.parquet"
     matches_path = output_dir / "matches.parquet"
+    ground_truth_path = output_dir / "ground-truth.parquet"
+    taxonomy_output_path = output_dir / "taxonomy.json"
     predictions.to_parquet(predictions_path, index=True)
+    ground_truth.to_parquet(ground_truth_path, index=False)
     pd.DataFrame.from_records(
         match_records,
         columns=["radius_m", "prediction_index", "tree_id", "distance_m"],
     ).to_parquet(matches_path, index=False)
+    taxonomy_output_path.write_text(
+        json.dumps(taxonomy, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     result: dict[str, object] = {
         "checkpoint": str(checkpoint),
         "split": split,
@@ -474,6 +480,8 @@ def run_evaluation(
         "metrics_by_match_radius_m": metrics_by_radius,
         "predictions": str(predictions_path),
         "matches": str(matches_path),
+        "ground_truth": str(ground_truth_path),
+        "taxonomy": str(taxonomy_output_path),
     }
     metrics_path = output_dir / "metrics.json"
     metrics_path.write_text(

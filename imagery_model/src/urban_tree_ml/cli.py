@@ -156,6 +156,15 @@ def qa_serve(
         Path | None,
         typer.Option("--review-dir", exists=True, file_okay=False),
     ] = None,
+    evaluation_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--evaluation-dir",
+            exists=True,
+            file_okay=False,
+            help="Validation evaluation bundle (auto-detected from the configured run)",
+        ),
+    ] = None,
     bind: Annotated[str, typer.Option("--bind")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", min=1, max=65535)] = 8765,
 ) -> None:
@@ -165,6 +174,7 @@ def qa_serve(
         load_config(config_path),
         raster,
         review_dir=review_dir,
+        evaluation_dir=evaluation_dir,
         bind=bind,
         port=port,
     )
