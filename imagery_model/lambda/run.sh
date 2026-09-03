@@ -22,9 +22,11 @@ echo "Launching ${MODEL_CONFIG} with persistent data at ${TREE_ML_DATA_ROOT}"
 docker build --tag urban-tree-ml:local .
 
 run_model() {
+  # uv's pinned interpreter is installed under /root in the image. Keep the
+  # image's default user so uv can resolve it; generated artifacts remain on
+  # the isolated, persistent Lambda filesystem.
   docker run --rm --gpus all \
     --ipc=host \
-    --user "$(id -u):$(id -g)" \
     --volume "${TREE_ML_DATA_ROOT}:${TREE_ML_DATA_ROOT}" \
     --env TREE_ML_DATA_ROOT \
     --env "TORCH_HOME=${TREE_ML_DATA_ROOT}/cache/torch" \
