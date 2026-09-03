@@ -65,6 +65,61 @@ def _rgb_preview(raw: np.ndarray, input_scale: float) -> np.ndarray:
     return np.rint(np.clip(rgb, 0, 1) * 255).astype(np.uint8)
 
 
+def _mosaic_context(
+    source_path: Path,
+    xs: np.ndarray,
+    ys: np.ndarray,
+) -> tuple[list[list[str]], list[float | None], int]:
+    manifest_path = source_path.with_suffix(".manifest.json")
+    if not manifest_path.exists():
+        return ([[] for _ in xs], [None for _ in xs], 0)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    sources = [
+        source
+        for source in manifest.get("sources", [])
+        if isinstance(source, dict)
+        and isinstance(source.get("bounds"), list)
+        and len(source["bounds"]) == 4
+    ]
+    if not sources:
+        return ([[] for _ in xs], [None for _ in xs], 0)
+
+    bounds = [tuple(float(value) for value in source["bounds"]) for source in sources]
+    global_left = min(bound[0] for bound in bounds)
+    global_bottom = min(bound[1] for bound in bounds)
+    global_right = max(bound[2] for bound in bounds)
+    global_top = max(bound[3] for bound in bounds)
+    internal_x = sorted(
+        {
+            edge
+            for bound in bounds
+            for edge in (bound[0], bound[2])
+            if not np.isclose(edge, global_left) and not np.isclose(edge, global_right)
+        }
+    )
+    internal_y = sorted(
+        {
+            edge
+            for bound in bounds
+            for edge in (bound[1], bound[3])
+            if not np.isclose(edge, global_bottom) and not np.isclose(edge, global_top)
+        }
+    )
+    item_ids: list[list[str]] = []
+    seam_distances: list[float | None] = []
+    for x, y in zip(xs, ys, strict=True):
+        covering = [
+            str(source.get("item_id", "unknown"))
+            for source, bound in zip(sources, bounds, strict=True)
+            if bound[0] <= x <= bound[2] and bound[1] <= y <= bound[3]
+        ]
+        distances = [abs(float(x) - edge) for edge in internal_x]
+        distances.extend(abs(float(y) - edge) for edge in internal_y)
+        item_ids.append(covering)
+        seam_distances.append(min(distances) if distances else None)
+    return item_ids, seam_distances, len(sources)
+
+
 def _render_registration_html(samples: list[dict[str, object]], metadata: dict[str, object]) -> str:
     payload = json.dumps(samples, separators=(",", ":")).replace("<", "\\u003c")
     metadata_payload = json.dumps(metadata, separators=(",", ":")).replace("<", "\\u003c")
@@ -357,6 +412,11 @@ def build_registration_review(
             )
         transformer = Transformer.from_crs("EPSG:4326", source.crs, always_xy=True)
         xs, ys = transformer.transform(frame["longitude"].to_numpy(), frame["latitude"].to_numpy())
+        xs = np.asarray(xs)
+        ys = np.asarray(ys)
+        source_item_ids, seam_distances, mosaic_sources = _mosaic_context(source_path, xs, ys)
+        frame["source_item_ids"] = source_item_ids
+        frame["tile_seam_distance_m"] = seam_distances
         inverse = ~source.transform
         locations = [inverse * (x, y) for x, y in zip(xs, ys, strict=True)]
         frame["pixel_col"] = [location[0] for location in locations]
@@ -372,6 +432,16 @@ def build_registration_review(
             raise ValueError("no eligible inventory points fall inside the QA raster")
 
         ordered = _diverse_order(frame, config.seed)
+        seam_prioritized_ids: set[str] = set()
+        if mosaic_sources:
+            seam_budget = max(1, samples // 4)
+            seam_pool = frame[frame["tile_seam_distance_m"].notna()].nsmallest(
+                min(len(frame), seam_budget * 4),
+                "tile_seam_distance_m",
+            )
+            seam_order = _diverse_order(seam_pool, config.seed + 1).head(seam_budget)
+            seam_prioritized_ids = set(seam_order["tree_id"].astype(str))
+            ordered = pd.concat([seam_order, ordered]).drop_duplicates("tree_id")
         for row in ordered.itertuples(index=False):
             col_off = int(np.floor(row.pixel_col - window_pixels / 2))
             row_off = int(np.floor(row.pixel_row - window_pixels / 2))
@@ -433,6 +503,13 @@ def build_registration_review(
                     "transform_e": float(source.transform.e),
                     "nearby_inventory_count": len(nearby),
                     "valid_fraction": valid_fraction,
+                    "source_item_ids": list(row.source_item_ids),
+                    "tile_seam_distance_m": (
+                        float(row.tile_seam_distance_m)
+                        if pd.notna(row.tile_seam_distance_m)
+                        else None
+                    ),
+                    "seam_priority": str(row.tree_id) in seam_prioritized_ids,
                 }
             )
             if len(generated) >= samples:
@@ -451,6 +528,10 @@ def build_registration_review(
         "window_pixels": window_pixels,
         "included_splits": allowed_splits,
         "test_labels_included": include_test,
+        "mosaic_sources": mosaic_sources,
+        "seam_prioritized_samples": sum(
+            bool(sample["seam_priority"]) for sample in generated
+        ),
         "instruction": (
             "Estimate any registration correction using training samples only; use validation "
             "to verify it and do not tune against test samples."

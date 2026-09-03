@@ -45,3 +45,15 @@ def test_augmented_config_reuses_labels_and_enables_dihedral_transforms() -> Non
     assert augmented.experiment != baseline.experiment
     assert augmented.training.random_dihedral
     assert not baseline.training.random_dihedral
+
+
+def test_citywide_config_uses_an_isolated_dataset_and_vrt() -> None:
+    config_dir = Path(__file__).parents[1] / "configs"
+    baseline = load_config(config_dir / "sf_naip_baseline.yaml")
+    citywide = load_config(config_dir / "sf_naip_citywide.yaml")
+
+    assert citywide.dataset != baseline.dataset
+    assert citywide.experiment != baseline.experiment
+    assert citywide.imagery.local_raster is not None
+    assert citywide.imagery.local_raster.name == "ussfo-2022-mosaic.vrt"
+    assert citywide.training.random_dihedral

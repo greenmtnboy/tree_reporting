@@ -102,3 +102,43 @@ def test_registration_review_requires_explicit_opt_in_for_test_labels(tmp_path: 
 
     assert result["test_labels_included"] is True
     assert result["splits"]["test"] == 2
+
+
+def test_registration_review_prioritizes_and_records_mosaic_seams(tmp_path: Path) -> None:
+    config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
+    config.paths.root = tmp_path / "artifacts"
+    raster_path = _write_qa_fixture(config.paths.root)
+    origin_x, origin_y = 550_000.0, 4_185_000.0
+    split_x = origin_x + 128 * 0.6
+    raster_path.with_suffix(".manifest.json").write_text(
+        json.dumps(
+            {
+                "sources": [
+                    {
+                        "item_id": "west",
+                        "bounds": [origin_x, origin_y - 256 * 0.6, split_x, origin_y],
+                    },
+                    {
+                        "item_id": "east",
+                        "bounds": [
+                            split_x,
+                            origin_y - 256 * 0.6,
+                            origin_x + 256 * 0.6,
+                            origin_y,
+                        ],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = build_registration_review(config, raster_path, samples=6, window_pixels=64)
+
+    manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+    assert manifest["metadata"]["mosaic_sources"] == 2
+    assert manifest["metadata"]["seam_prioritized_samples"] >= 1
+    seam_samples = [sample for sample in manifest["samples"] if sample["seam_priority"]]
+    assert seam_samples
+    assert all(sample["source_item_ids"] for sample in seam_samples)
+    assert all(sample["tile_seam_distance_m"] is not None for sample in seam_samples)

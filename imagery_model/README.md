@@ -155,6 +155,21 @@ container, exposes the GPU with `--gpus all`, mounts the persistent data root, a
 chips but writes to its own run directory and applies a random member of the eight exact square
 symmetries (90-degree rotations and reflections) to every training image and all of its target
 maps together. Validation imagery is never augmented.
+
+After fetching every indexed tile for a year, build a zero-copy VRT and its per-item provenance
+manifest. The citywide config points at this VRT and uses a new dataset identity so it cannot
+overwrite one-tile chips:
+
+```bash
+uv run urban-tree-ml imagery mosaic --config configs/sf_naip_citywide.yaml --year 2022
+uv run urban-tree-ml qa registration \
+  --config configs/sf_naip_citywide.yaml \
+  --raster "$TREE_ML_DATA_ROOT/imagery/ussfo/2022/ussfo-2022-mosaic.vrt" \
+  --samples 160
+```
+
+Finalize that citywide registration review before materializing chips. This separately checks
+alignment across the tile footprint while keeping the test partition out of the review.
 It deliberately does not contain or request a Lambda API key. Terminate the GPU instance when
 training is done; the attached filesystem is billed separately until it is deleted.
 

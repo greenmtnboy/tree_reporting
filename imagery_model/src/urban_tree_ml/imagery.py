@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -13,6 +14,15 @@ import pandas as pd
 from urban_tree_ml.config import ProjectConfig
 
 _EXPECTED_NAIP_BANDS = ("red", "green", "blue", "nir")
+_GDAL_DATA_TYPES = {
+    "uint8": "Byte",
+    "uint16": "UInt16",
+    "int16": "Int16",
+    "uint32": "UInt32",
+    "int32": "Int32",
+    "float32": "Float32",
+    "float64": "Float64",
+}
 
 
 def _asset_band_names(asset: object) -> list[str]:
@@ -327,5 +337,214 @@ def fetch_stac_item(
         "manifest": str(manifest_path),
         "bytes": downloaded,
         "sha256": sha256,
+        "raster": raster,
+    }
+
+
+def build_vrt_mosaic(
+    config: ProjectConfig,
+    year: str,
+    *,
+    output: str | Path | None = None,
+    overwrite: bool = False,
+) -> dict[str, object]:
+    """Build a lightweight, validated VRT over the downloaded tiles for one year."""
+    if len(year) != 4 or not year.isdigit():
+        raise ValueError("year must contain exactly four digits")
+    try:
+        import rasterio
+    except ImportError as error:  # pragma: no cover - exercised by CLI installations
+        raise RuntimeError(
+            "Install the imagery dependency group: uv sync --group imagery"
+        ) from error
+
+    city = config.inventory.city.lower()
+    imagery_dir = config.paths.root / "imagery" / city / year
+    sources = sorted(imagery_dir.glob("*.tif"))
+    if not sources:
+        raise FileNotFoundError(f"no downloaded GeoTIFFs found under {imagery_dir}")
+
+    destination = (
+        Path(output)
+        if output is not None
+        else imagery_dir / f"{city}-{year}-mosaic.vrt"
+    )
+    destination = destination.resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path = destination.with_suffix(".manifest.json")
+    if destination.exists() and not overwrite:
+        with rasterio.open(destination) as mosaic:
+            raster = {
+                "width": mosaic.width,
+                "height": mosaic.height,
+                "crs": mosaic.crs.to_string() if mosaic.crs else None,
+                "resolution": [abs(float(value)) for value in mosaic.res],
+                "raster_band_count": mosaic.count,
+                "selected_bands": config.imagery.bands,
+            }
+        return {
+            "status": "existing",
+            "path": str(destination),
+            "manifest": str(manifest_path) if manifest_path.exists() else None,
+            "sources": len(sources),
+            "raster": raster,
+        }
+
+    source_records: list[dict[str, object]] = []
+    reference_crs = None
+    reference_count = 0
+    reference_dtypes: tuple[str, ...] = ()
+    x_resolution = 0.0
+    y_resolution = 0.0
+    left = float("inf")
+    top = float("-inf")
+    for source_path in sources:
+        with rasterio.open(source_path) as source:
+            if source.crs is None:
+                raise ValueError(f"source raster has no CRS: {source_path}")
+            if source.transform.b != 0 or source.transform.d != 0:
+                raise ValueError(f"rotated source rasters are not supported: {source_path}")
+            source_x_resolution, source_y_resolution = (
+                abs(float(value)) for value in source.res
+            )
+            if not source_records:
+                reference_crs = source.crs
+                reference_count = source.count
+                reference_dtypes = tuple(source.dtypes)
+                x_resolution = source_x_resolution
+                y_resolution = source_y_resolution
+            elif (
+                source.crs != reference_crs
+                or source.count != reference_count
+                or tuple(source.dtypes) != reference_dtypes
+                or abs(source_x_resolution - x_resolution) > 1e-9
+                or abs(source_y_resolution - y_resolution) > 1e-9
+            ):
+                raise ValueError("mosaic sources must share CRS, band count, dtype, and resolution")
+            left = min(left, float(source.bounds.left))
+            top = max(top, float(source.bounds.top))
+            source_records.append(
+                {
+                    "path": source_path.resolve(),
+                    "width": source.width,
+                    "height": source.height,
+                    "left": float(source.bounds.left),
+                    "top": float(source.bounds.top),
+                    "color_interpretations": [value.name for value in source.colorinterp],
+                }
+            )
+
+    for record in source_records:
+        column_offset = (float(record["left"]) - left) / x_resolution
+        row_offset = (top - float(record["top"])) / y_resolution
+        rounded_column = round(column_offset)
+        rounded_row = round(row_offset)
+        if abs(column_offset - rounded_column) > 1e-6 or abs(row_offset - rounded_row) > 1e-6:
+            raise ValueError("mosaic sources are not aligned to a common pixel grid")
+        record["column_offset"] = rounded_column
+        record["row_offset"] = rounded_row
+
+    width = max(int(record["column_offset"]) + int(record["width"]) for record in source_records)
+    height = max(int(record["row_offset"]) + int(record["height"]) for record in source_records)
+    vrt = ET.Element("VRTDataset", rasterXSize=str(width), rasterYSize=str(height))
+    ET.SubElement(vrt, "SRS").text = reference_crs.to_wkt()  # type: ignore[union-attr]
+    ET.SubElement(vrt, "GeoTransform").text = (
+        f"{left:.15g}, {x_resolution:.15g}, 0, {top:.15g}, 0, {-y_resolution:.15g}"
+    )
+    for band_index, dtype in enumerate(reference_dtypes, start=1):
+        try:
+            data_type = _GDAL_DATA_TYPES[dtype]
+        except KeyError:
+            raise ValueError(f"unsupported VRT source dtype: {dtype}") from None
+        band = ET.SubElement(
+            vrt,
+            "VRTRasterBand",
+            dataType=data_type,
+            band=str(band_index),
+        )
+        color_interpretation = str(source_records[0]["color_interpretations"][band_index - 1])
+        if color_interpretation != "undefined":
+            ET.SubElement(band, "ColorInterp").text = color_interpretation.title()
+        for record in source_records:
+            simple_source = ET.SubElement(band, "SimpleSource")
+            relative_path = os.path.relpath(record["path"], destination.parent).replace(os.sep, "/")
+            ET.SubElement(
+                simple_source,
+                "SourceFilename",
+                relativeToVRT="1",
+            ).text = relative_path
+            ET.SubElement(simple_source, "SourceBand").text = str(band_index)
+            ET.SubElement(
+                simple_source,
+                "SrcRect",
+                xOff="0",
+                yOff="0",
+                xSize=str(record["width"]),
+                ySize=str(record["height"]),
+            )
+            ET.SubElement(
+                simple_source,
+                "DstRect",
+                xOff=str(record["column_offset"]),
+                yOff=str(record["row_offset"]),
+                xSize=str(record["width"]),
+                ySize=str(record["height"]),
+            )
+
+    temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
+    try:
+        ET.indent(vrt)
+        ET.ElementTree(vrt).write(temporary, encoding="utf-8", xml_declaration=True)
+        raster = _validate_raster(
+            temporary,
+            config,
+            {
+                "collection": "naip",
+                "asset_key": "image",
+                "band_names": list(_EXPECTED_NAIP_BANDS),
+            },
+        )
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+    provenance: list[dict[str, object]] = []
+    for record in source_records:
+        source_path = Path(record["path"])
+        source_manifest_path = source_path.with_suffix(".manifest.json")
+        source_manifest = (
+            json.loads(source_manifest_path.read_text(encoding="utf-8"))
+            if source_manifest_path.exists()
+            else {}
+        )
+        provenance.append(
+            {
+                "item_id": source_manifest.get("item_id", source_path.stem),
+                "path": str(source_path),
+                "manifest": str(source_manifest_path) if source_manifest_path.exists() else None,
+                "bytes": source_path.stat().st_size,
+                "sha256": source_manifest.get("sha256"),
+                "bounds": [
+                    float(record["left"]),
+                    float(record["top"]) - int(record["height"]) * y_resolution,
+                    float(record["left"]) + int(record["width"]) * x_resolution,
+                    float(record["top"]),
+                ],
+            }
+        )
+    manifest = {
+        "city": config.inventory.city,
+        "year": year,
+        "created_at": datetime.now(UTC).isoformat(),
+        "path": str(destination),
+        "sources": provenance,
+        "raster": raster,
+    }
+    _write_json_atomic(manifest_path, manifest)
+    return {
+        "status": "created",
+        "path": str(destination),
+        "manifest": str(manifest_path),
+        "sources": len(source_records),
         "raster": raster,
     }

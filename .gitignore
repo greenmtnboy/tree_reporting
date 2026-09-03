@@ -40,6 +40,7 @@ imagery_model/wandb/
 imagery_model/**/*.ckpt
 imagery_model/**/*.tif
 imagery_model/**/*.tiff
+imagery_model/**/*.vrt
 # Staged source parquets live in GCS (see _ingest_shared.staging_url), not in
 # git: the probes read the object Last-Modified as the freshness watermark, and
 # git does not preserve mtime, so a committed copy made every fresh clone look

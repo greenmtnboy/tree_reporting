@@ -59,6 +59,31 @@ def imagery_fetch(
     _print(fetch_stac_item(load_config(config_path), item_id, overwrite=overwrite))
 
 
+@imagery_app.command("mosaic")
+def imagery_mosaic(
+    config_path: ConfigPath,
+    year: Annotated[str, typer.Option("--year", help="Four-digit acquisition year")],
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", dir_okay=False, help="Output VRT path"),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace an existing VRT and manifest"),
+    ] = False,
+) -> None:
+    from urban_tree_ml.imagery import build_vrt_mosaic
+
+    _print(
+        build_vrt_mosaic(
+            load_config(config_path),
+            year,
+            output=output,
+            overwrite=overwrite,
+        )
+    )
+
+
 @chips_app.command("build")
 def chips_build(
     config_path: ConfigPath,
