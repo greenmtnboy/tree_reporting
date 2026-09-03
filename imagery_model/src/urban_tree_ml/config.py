@@ -111,6 +111,7 @@ class TrainingConfig(StrictModel):
     weight_decay: float = Field(ge=0)
     precision: str
     accumulate_grad_batches: int = Field(ge=1)
+    random_dihedral: bool = False
     center_loss_weight: float = Field(ge=0)
     dbh_loss_weight: float = Field(ge=0)
     genus_loss_weight: float = Field(ge=0)

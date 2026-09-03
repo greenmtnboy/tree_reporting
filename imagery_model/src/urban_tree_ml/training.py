@@ -50,7 +50,11 @@ def run_training(config: ProjectConfig, resume: str | None = None) -> dict[str, 
     )
     taxonomy = json.loads(taxonomy_path.read_text(encoding="utf-8"))
     manifest_path = config.paths.root / "chips" / config.dataset / "chips.parquet"
-    train_dataset = NpzChipDataset(manifest_path, "train")
+    train_dataset = NpzChipDataset(
+        manifest_path,
+        "train",
+        random_dihedral=config.training.random_dihedral,
+    )
     validation_dataset = NpzChipDataset(manifest_path, "validation")
     if not train_dataset or not validation_dataset:
         raise ValueError("training and validation chip splits must both be non-empty")

@@ -34,3 +34,14 @@ def test_smoke_config_reuses_the_dataset_but_has_an_isolated_run() -> None:
     assert smoke.training.accelerator == "gpu"
     assert smoke.training.epochs == 3
     assert smoke.training.batch_size == 8
+
+
+def test_augmented_config_reuses_labels_and_enables_dihedral_transforms() -> None:
+    config_dir = Path(__file__).parents[1] / "configs"
+    baseline = load_config(config_dir / "sf_naip_baseline.yaml")
+    augmented = load_config(config_dir / "sf_naip_augmented.yaml")
+
+    assert augmented.dataset == baseline.dataset
+    assert augmented.experiment != baseline.experiment
+    assert augmented.training.random_dihedral
+    assert not baseline.training.random_dihedral

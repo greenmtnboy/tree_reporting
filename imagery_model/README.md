@@ -150,6 +150,11 @@ as its first argument, for example `bash lambda/run.sh configs/sf_naip_baseline.
 chips before training. Omit that flag on later resumptions. The script builds the pinned CUDA
 container, exposes the GPU with `--gpus all`, mounts the persistent data root, and resumes
 `last.ckpt` when present. GPU configurations fail fast if CUDA is unavailable.
+
+`configs/sf_naip_augmented.yaml` is the controlled overfitting follow-up. It reuses the same v2
+chips but writes to its own run directory and applies a random member of the eight exact square
+symmetries (90-degree rotations and reflections) to every training image and all of its target
+maps together. Validation imagery is never augmented.
 It deliberately does not contain or request a Lambda API key. Terminate the GPU instance when
 training is done; the attached filesystem is billed separately until it is deleted.
 

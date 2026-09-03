@@ -1,0 +1,70 @@
+experiment: sf-naip-rgbn-species-augmented-v2
+dataset: sf-naip-rgbn-species-v2
+seed: 20260820
+
+paths:
+  root: ${TREE_ML_DATA_ROOT:-./artifacts}
+
+inventory:
+  city: USSFO
+  parquet_url: https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_info_v2.parquet
+  min_dbh_in: 4.0
+  max_dbh_in: 60.0
+  excluded_species: [Unknown, Palm, Shrub, Cactus]
+  min_species_examples: 500
+  max_species_classes: 64
+
+split:
+  projected_crs: EPSG:32610
+  block_size_m: 768.0
+  guard_m: 64.0
+  train_fraction: 0.70
+  validation_fraction: 0.15
+  test_fraction: 0.15
+
+imagery:
+  provider: planetary_computer
+  stac_url: https://planetarycomputer.microsoft.com/api/stac/v1
+  collection: naip
+  datetime: 2020-01-01/2026-12-31
+  asset_key: image
+  bands: [1, 2, 3, 4]
+  input_scale: 0.00392156862745098
+  resolution_m: 0.6
+  chip_pixels: 256
+  minimum_valid_fraction: 0.99
+  local_raster: null
+
+targets:
+  output_stride: 2
+  gaussian_sigma_px: 1.5
+  positive_supervision_radius_m: 5.0
+  collision_policy: discard
+  background_mode: ndvi_positive_unlabeled
+  background_ndvi_max: 0.05
+
+model:
+  input_channels: 4
+  backbone: resnet34
+  feature_channels: 128
+  pretrained: true
+
+training:
+  accelerator: gpu
+  batch_size: 16
+  workers: 8
+  epochs: 80
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  precision: bf16-mixed
+  accumulate_grad_batches: 2
+  random_dihedral: true
+  center_loss_weight: 1.0
+  dbh_loss_weight: 0.5
+  genus_loss_weight: 0.25
+  species_loss_weight: 1.0
+
+evaluation:
+  match_radii_m: [2.0, 4.0]
+  dbh_tolerance_in: 2.0
+  confidence_threshold: 0.35
