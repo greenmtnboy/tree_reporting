@@ -77,6 +77,8 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "Every sample starts aligned" in html
     assert 'status: "offset", image_x: x' in html
     assert "Reset all to aligned" in html
+    assert 'id="coverage-filter"' in html
+    assert "Tile seams" in html
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
     assert manifest["metadata"]["test_labels_included"] is False
     assert all(sample["split"] != "test" for sample in manifest["samples"])

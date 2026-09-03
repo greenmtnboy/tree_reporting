@@ -155,6 +155,9 @@ def _render_registration_html(samples: list[dict[str, object]], metadata: dict[s
     .identity span, .details {{ color: #aebfb3; font-size: 12px; }}
     .split {{ align-self: start; padding: 3px 7px; border-radius: 999px; background: #293a31;
       font-size: 11px; text-transform: uppercase; }}
+    .badges {{ display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }}
+    .seam {{ align-self: start; padding: 3px 7px; border-radius: 999px; background: #614d22;
+      color: #ffe5a0; font-size: 11px; text-transform: uppercase; cursor: help; }}
     .image-wrap {{ position: relative; width: 100%; aspect-ratio: 1; background: #050806; cursor: crosshair; }}
     .image-wrap img {{ display: block; width: 100%; height: 100%; object-fit: contain;
       image-rendering: auto; user-select: none; }}
@@ -178,6 +181,10 @@ def _render_registration_html(samples: list[dict[str, object]], metadata: dict[s
       Every sample starts aligned. Click an apparent tree center to mark and correct an offset.</p>
     <div class="toolbar">
       <select id="split-filter"><option value="">All splits</option></select>
+      <select id="coverage-filter">
+        <option value="">All coverage</option><option value="seam">Tile seams</option>
+        <option value="interior">Tile interiors</option>
+      </select>
       <select id="status-filter">
         <option value="">All statuses</option><option value="unreviewed">Unreviewed</option>
         <option value="aligned">Aligned</option><option value="offset">Offset</option>
@@ -200,6 +207,7 @@ def _render_registration_html(samples: list[dict[str, object]], metadata: dict[s
     let syncTimer = null;
     const cards = document.getElementById("cards");
     const splitFilter = document.getElementById("split-filter");
+    const coverageFilter = document.getElementById("coverage-filter");
     const statusFilter = document.getElementById("status-filter");
     const escapeText = value => value == null ? "" : String(value);
     const withAlignedDefaults = source => Object.fromEntries(samples.map(sample => [
@@ -236,7 +244,9 @@ def _render_registration_html(samples: list[dict[str, object]], metadata: dict[s
       document.querySelectorAll(".card").forEach(card => {{
         const review = reviews[card.dataset.id] || {{}};
         const status = review.status || "unreviewed";
+        const isSeam = card.dataset.seam === "true";
         const visible = (!splitFilter.value || card.dataset.split === splitFilter.value)
+          && (!coverageFilter.value || (coverageFilter.value === "seam") === isSeam)
           && (!statusFilter.value || status === statusFilter.value);
         card.classList.toggle("hidden", !visible);
         card.classList.toggle("reviewed", status !== "unreviewed");
@@ -263,6 +273,7 @@ def _render_registration_html(samples: list[dict[str, object]], metadata: dict[s
       const card = document.createElement("article");
       card.className = "card";
       card.dataset.id = sample.sample_id; card.dataset.split = sample.split;
+      card.dataset.seam = Boolean(sample.seam_priority);
       card.dataset.imageWidth = sample.image_width; card.dataset.imageHeight = sample.image_height;
       const head = document.createElement("div"); head.className = "card-head";
       const identity = document.createElement("div"); identity.className = "identity";
@@ -270,7 +281,14 @@ def _render_registration_html(samples: list[dict[str, object]], metadata: dict[s
       const tree = document.createElement("span"); tree.textContent = escapeText(sample.tree_id);
       identity.append(title, tree);
       const split = document.createElement("span"); split.className = "split"; split.textContent = sample.split;
-      head.append(identity, split);
+      const badges = document.createElement("div"); badges.className = "badges";
+      badges.append(split);
+      if (sample.seam_priority) {{
+        const seam = document.createElement("span"); seam.className = "seam"; seam.textContent = "tile seam";
+        seam.title = `Priority review: inventory point is ${{sample.tile_seam_distance_m.toFixed(1)}} m from a source-tile seam`;
+        badges.append(seam);
+      }}
+      head.append(identity, badges);
       const wrap = document.createElement("div"); wrap.className = "image-wrap";
       const image = document.createElement("img"); image.src = sample.image; image.alt = `NAIP crop for ${{sample.tree_id}}`;
       image.draggable = false;
@@ -309,7 +327,8 @@ def _render_registration_html(samples: list[dict[str, object]], metadata: dict[s
       const option = document.createElement("option"); option.value = value; option.textContent = value; splitFilter.append(option);
     }});
     samples.forEach(sample => cards.append(createCard(sample)));
-    splitFilter.addEventListener("change", update); statusFilter.addEventListener("change", update);
+    splitFilter.addEventListener("change", update); coverageFilter.addEventListener("change", update);
+    statusFilter.addEventListener("change", update);
     document.getElementById("export").addEventListener("click", () => {{
       const result = {{schema_version: 1, metadata, exported_at: new Date().toISOString(),
         reviews: samples.map(sample => ({{...sample, ...(reviews[sample.sample_id] || {{}})}}))}};
