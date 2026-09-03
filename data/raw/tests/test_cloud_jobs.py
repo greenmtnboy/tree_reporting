@@ -194,6 +194,18 @@ def test_city_refresh_entrypoints_are_the_city_models():
 STAGING_DIR = DATA_DIR / "osm_staging"
 
 
+def staging_model(code: str) -> Path:
+    """The staging model for a city, from the upper-case code the tests use.
+
+    Lower-casing here rather than at each call site is not tidiness: the codes
+    in `OSM_DATA_SOURCES` are upper-case and the filenames are lower-case, so
+    an f-string built straight from the code resolves on a case-insensitive
+    filesystem (Windows, macOS) and raises `FileNotFoundError` on Linux CI.
+    That is exactly how this shipped the first time.
+    """
+    return STAGING_DIR / f"{code.lower()}_osm_staging.preql"
+
+
 @pytest.mark.parametrize("code", sorted(OSM_DATA_SOURCES))
 def test_every_staging_model_pushes_down_its_city(code: str):
     """The `where` is what tells the shared extract script which city to fetch.
@@ -208,7 +220,7 @@ def test_every_staging_model_pushes_down_its_city(code: str):
     The script refuses to run without a filter rather than defaulting to all
     cities, so the real failure is loud; this keeps it from happening at all.
     """
-    model = STAGING_DIR / f"{code}_osm_staging.preql"
+    model = staging_model(code)
     text = statements(model)
     assert "file `./osm_rows.py`" in text, (
         f"{model.name} should read the shared extract script, not a per-city shim"
@@ -236,7 +248,7 @@ def test_extra_osm_columns_are_declared_in_the_model(code: str):
         f"{code} has no OSM_CITY_NAMES entry, so the shared extract script "
         "would refuse to fetch it"
     )
-    text = statements(STAGING_DIR / f"{code}_osm_staging.preql")
+    text = statements(staging_model(code))
     for column in OSM_EXTRA_NULL_COLUMNS.get(code, {}):
         assert f"property tree_id.{column} " in text, (
             f"{code} emits {column} but its staging model does not declare it"
