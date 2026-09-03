@@ -43,3 +43,20 @@ def test_larger_dbh_wins_an_output_cell_collision() -> None:
     assert targets["collisions"] == 1
     assert targets["dbh"][2, 2] == 3.0
     assert targets["species"][2, 2] == 2
+
+
+def test_rejected_inventory_points_are_ignored_without_erasing_retained_positives() -> None:
+    targets = build_targets(
+        16,
+        16,
+        [PointLabel(x=8, y=8, dbh_log1p=2.0, genus_id=0, species_id=0)],
+        stride=2,
+        gaussian_sigma_px=1,
+        supervision_radius_px=4,
+        ndvi=np.full((16, 16), -0.2, dtype=np.float32),
+        ignored_locations=[(0, 0), (8, 8)],
+    )
+
+    assert targets["detection_mask"][0, 0] == 0
+    assert targets["detection_mask"][4, 4] == 1
+    assert targets["center"][4, 4] == 1

@@ -11,6 +11,7 @@ def test_checked_in_config_loads_with_local_default(monkeypatch: pytest.MonkeyPa
     config = load_config(config_path)
 
     assert config.inventory.city == "USSFO"
+    assert config.dataset == "sf-naip-rgbn-species-v1"
     assert config.model.input_channels == len(config.imagery.bands) == 4
     assert config.paths.root == (Path(__file__).parents[1] / "artifacts").resolve()
 
@@ -20,3 +21,15 @@ def test_environment_overrides_data_root(tmp_path: Path, monkeypatch: pytest.Mon
     config_path = Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml"
 
     assert load_config(config_path).paths.root == tmp_path
+
+
+def test_smoke_config_reuses_the_dataset_but_has_an_isolated_run() -> None:
+    config_dir = Path(__file__).parents[1] / "configs"
+    baseline = load_config(config_dir / "sf_naip_baseline.yaml")
+    smoke = load_config(config_dir / "sf_naip_smoke.yaml")
+
+    assert smoke.dataset == baseline.dataset
+    assert smoke.experiment != baseline.experiment
+    assert smoke.training.accelerator == "gpu"
+    assert smoke.training.epochs == 3
+    assert smoke.training.batch_size == 8

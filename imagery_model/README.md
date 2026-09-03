@@ -66,11 +66,43 @@ uv sync --group dev --group imagery
 uv run urban-tree-ml check-config --config configs/sf_naip_baseline.yaml
 uv run urban-tree-ml inventory export --config configs/sf_naip_baseline.yaml
 uv run urban-tree-ml imagery index --config configs/sf_naip_baseline.yaml
+uv run urban-tree-ml imagery fetch \
+  --config configs/sf_naip_baseline.yaml \
+  --item-id ca_m_3712213_sw_10_060_20220518
 ```
 
 `imagery index` records matching STAC item IDs and acquisition metadata without persisting
-short-lived signed URLs. Select the newest clear, well-registered coverage and create an aligned
-four-band mosaic/COG. Then materialize deterministic chips:
+short-lived signed URLs. `imagery fetch` signs the selected URL only in memory, streams it to a
+temporary file, validates the size and RGB-NIR raster metadata, and atomically publishes the TIFF
+with an unsigned provenance manifest.
+
+Before building chips, generate the registration review. It samples spatially and taxonomically
+diverse training/validation points; test points are excluded unless `--include-test` is explicit.
+Serve the returned UI so button presses and click-derived offsets are saved atomically to
+`reviews.json`:
+
+```bash
+uv run urban-tree-ml qa registration \
+  --config configs/sf_naip_baseline.yaml \
+  --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif \
+  --samples 100
+
+uv run urban-tree-ml qa serve \
+  --config configs/sf_naip_baseline.yaml \
+  --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif
+```
+
+Open `http://127.0.0.1:8765`, click the apparent tree center for offset verdicts, and record a
+verdict. The UI retains browser-local state, synchronizes it to disk, and can still import/export
+portable review JSON. Select **Finalize training feedback** after reviewing at least 20 training
+examples. Finalization estimates a robust tile-wide correction from training only, reports
+validation residuals, and records `not-tree`/`uncertain` points as supervision exclusions. It
+never mutates the source inventory or uses test reviews.
+
+Then materialize deterministic chips. The smoke and baseline configurations share one `dataset`
+identifier, so they reuse the same chip files while writing checkpoints to separate experiment
+directories. Chip building automatically applies the finalized `training-feedback.json`; pass
+`--without-feedback` only for a deliberate ablation:
 
 ```bash
 uv run urban-tree-ml chips build \
@@ -86,7 +118,7 @@ To train locally or on a GPU host:
 
 ```bash
 uv sync --group imagery --group train
-uv run urban-tree-ml train --config configs/sf_naip_baseline.yaml --resume auto
+uv run urban-tree-ml train --config configs/sf_naip_smoke.yaml --resume auto
 ```
 
 ## Lambda Cloud
@@ -107,10 +139,12 @@ export TREE_ML_DATA_ROOT=/lambda/nfs/<FILESYSTEM_NAME>/urban-tree-ml
 bash lambda/run.sh
 ```
 
-The script builds the pinned CUDA container, exposes the GPU with `--gpus all`, mounts the
-persistent data root, and resumes `last.ckpt` when present. It deliberately does not contain or
-request a Lambda API key. Terminate the GPU instance when training is done; the attached
-filesystem is billed separately until it is deleted.
+The launcher defaults to `configs/sf_naip_smoke.yaml`. Pass a different checked-in configuration
+as its first argument, for example `bash lambda/run.sh configs/sf_naip_baseline.yaml`. The script
+builds the pinned CUDA container, exposes the GPU with `--gpus all`, mounts the persistent data
+root, and resumes `last.ckpt` when present. GPU configurations fail fast if CUDA is unavailable.
+It deliberately does not contain or request a Lambda API key. Terminate the GPU instance when
+training is done; the attached filesystem is billed separately until it is deleted.
 
 ## What counts as success
 

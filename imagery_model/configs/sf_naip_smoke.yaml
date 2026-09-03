@@ -1,10 +1,8 @@
-experiment: sf-naip-rgbn-species-v1
+experiment: sf-naip-rgbn-species-smoke-v1
 dataset: sf-naip-rgbn-species-v1
 seed: 20260820
 
 paths:
-  # On Lambda Cloud, set TREE_ML_DATA_ROOT to an attached filesystem such as
-  # /lambda/nfs/urban-tree-ml. Local runs default to imagery_model/artifacts.
   root: ${TREE_ML_DATA_ROOT:-./artifacts}
 
 inventory:
@@ -17,8 +15,6 @@ inventory:
   max_species_classes: 64
 
 split:
-  # 768 m blocks and a half-chip guard prevent train/validation/test chips from
-  # sharing pixels. Classes are selected from the training split only.
   projected_crs: EPSG:32610
   block_size_m: 768.0
   guard_m: 64.0
@@ -32,8 +28,8 @@ imagery:
   collection: naip
   datetime: 2020-01-01/2026-12-31
   asset_key: image
-  bands: [1, 2, 3, 4]  # red, green, blue, near infrared
-  input_scale: 0.00392156862745098  # uint8 / 255
+  bands: [1, 2, 3, 4]
+  input_scale: 0.00392156862745098
   resolution_m: 0.6
   chip_pixels: 256
   minimum_valid_fraction: 0.99
@@ -43,8 +39,6 @@ targets:
   output_stride: 2
   gaussian_sigma_px: 1.5
   positive_supervision_radius_m: 5.0
-  # The municipal inventory does not label private trees. Only low-NDVI pixels
-  # are trusted negatives; other unlabeled vegetation is ignored by detection.
   background_mode: ndvi_positive_unlabeled
   background_ndvi_max: 0.05
 
@@ -56,13 +50,13 @@ model:
 
 training:
   accelerator: gpu
-  batch_size: 16
-  workers: 8
-  epochs: 80
+  batch_size: 8
+  workers: 4
+  epochs: 3
   learning_rate: 0.0003
   weight_decay: 0.0001
   precision: bf16-mixed
-  accumulate_grad_batches: 2
+  accumulate_grad_batches: 1
   center_loss_weight: 1.0
   dbh_loss_weight: 0.5
   genus_loss_weight: 0.25

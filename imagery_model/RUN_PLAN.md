@@ -25,7 +25,9 @@ Completed and verified:
 - deterministic 768 m spatial train/validation/test blocks with 64 m guards;
 - training-only species vocabulary and channel-statistics policy;
 - Planetary Computer NAIP STAC discovery;
+- atomic, signed-at-runtime NAIP download and raster validation;
 - GeoTIFF-to-chip materialization;
+- a static registration-review UI with click-derived offset measurements;
 - four-head ResNet/FPN model and multitask losses;
 - resumable Lightning training and Lambda Cloud container scaffolding; and
 - eight unit/smoke tests, including synthetic raster materialization and model/loss shapes.
@@ -73,9 +75,9 @@ avoids making the first run primarily a downtown building-shadow test.
 
 ## Execution sequence
 
-### 1. Add imagery acquisition
+### 1. Fetch the selected imagery
 
-Implement an `urban-tree-ml imagery fetch` command that:
+The `urban-tree-ml imagery fetch` command:
 
 - selects a STAC item by ID from `stac-items.json`;
 - signs the Planetary Computer asset URL at runtime;
@@ -85,6 +87,12 @@ Implement an `urban-tree-ml imagery fetch` command that:
 
 Do not persist signed URLs because their SAS tokens expire. Record the item ID and unsigned source
 URL in a sidecar manifest.
+
+```powershell
+uv run urban-tree-ml imagery fetch `
+  --config configs/sf_naip_baseline.yaml `
+  --item-id ca_m_3712213_sw_10_060_20220518
+```
 
 ### 2. Materialize one-tile chips
 
@@ -111,8 +119,8 @@ collisions are common.
 
 ### 3. Perform registration QA
 
-Before training, render at least 100 randomly selected inventory points over their chips, sampled
-across split, neighborhood, DBH, and species. Record:
+Before training, render at least 100 deterministically sampled inventory points over their chips,
+balanced across development split, spatial block, DBH, and species. Record:
 
 - median and tail georegistration offset;
 - points falling on obvious non-tree pixels;
@@ -124,9 +132,28 @@ across split, neighborhood, DBH, and species. Record:
 Do not tune offsets against test labels. Estimate any correction on training blocks and verify it
 on validation blocks.
 
+```powershell
+uv run urban-tree-ml qa registration `
+  --config configs/sf_naip_baseline.yaml `
+  --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif `
+  --samples 100
+```
+
+Serve the review with `urban-tree-ml qa serve`, click the apparent center of offset trees, and
+assign each sample a verdict. Reviews auto-save to disk while retaining browser-local and portable
+export copies. Select **Finalize training feedback** after at least 20 training examples are
+reviewed. The resulting `training-feedback.json` contains a training-only robust tile correction,
+validation residuals, and explicit `not-tree`/`uncertain` exclusions. Test labels are omitted by
+default and never contribute to finalized feedback.
+
+`chips build` auto-detects this finalized manifest for the selected raster. Excluded points are
+removed from attribute/center targets while their neighborhoods remain ignored—not converted into
+background negatives. The original inventory parquet is never modified.
+
 ### 4. Run a short GPU smoke test
 
-Add a smoke configuration derived from `sf_naip_baseline.yaml` with:
+The checked-in `sf_naip_smoke.yaml` reuses the baseline chip dataset but writes to an isolated run
+directory. It uses:
 
 ```yaml
 training:

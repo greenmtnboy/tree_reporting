@@ -40,6 +40,7 @@ def build_targets(
     supervision_radius_px: float,
     valid_mask: np.ndarray | None = None,
     ndvi: np.ndarray | None = None,
+    ignored_locations: list[tuple[float, float]] | None = None,
     background_mode: str = "ndvi_positive_unlabeled",
     background_ndvi_max: float = 0.05,
 ) -> dict[str, np.ndarray | int]:
@@ -90,6 +91,17 @@ def build_targets(
         genus[y, x] = label.genus_id
         species[y, x] = label.species_id
 
+    for ignored_x, ignored_y in ignored_locations or []:
+        x = int(round(ignored_x / stride))
+        y = int(round(ignored_y / stride))
+        if not (0 <= x < output_width and 0 <= y < output_height):
+            continue
+        grid_y, grid_x = np.ogrid[:output_height, :output_width]
+        ignored = (grid_x - x) ** 2 + (grid_y - y) ** 2 <= radius**2
+        detection_mask[ignored] = 0.0
+
+    # A retained positive always wins if its supervision neighborhood overlaps
+    # a rejected/uncertain inventory point.
     detection_mask[center > 0] = 1.0
     return {
         "center": center,

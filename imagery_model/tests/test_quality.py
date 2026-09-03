@@ -1,0 +1,100 @@
+import json
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import rasterio
+from pyproj import Transformer
+from rasterio.transform import from_origin
+
+from urban_tree_ml.config import load_config
+from urban_tree_ml.quality import build_registration_review
+
+
+def _write_qa_fixture(root: Path) -> Path:
+    inventory_dir = root / "inventory" / "ussfo"
+    inventory_dir.mkdir(parents=True)
+    origin_x, origin_y = 550_000.0, 4_185_000.0
+    pixels = [(40 + index * 14, 45 + index * 13) for index in range(12)]
+    inverse = Transformer.from_crs("EPSG:32610", "EPSG:4326", always_xy=True)
+    coordinates = [
+        inverse.transform(origin_x + col * 0.6, origin_y - row * 0.6) for col, row in pixels
+    ]
+    splits = ["train"] * 6 + ["validation"] * 4 + ["test"] * 2
+    pd.DataFrame(
+        {
+            "tree_id": [f"tree-{index}" for index in range(12)],
+            "species": [f"Genus{index % 4} species{index}" for index in range(12)],
+            "genus": [f"Genus{index % 4}" for index in range(12)],
+            "diameter_at_breast_height": [float(4 + index * 2) for index in range(12)],
+            "longitude": [coordinate[0] for coordinate in coordinates],
+            "latitude": [coordinate[1] for coordinate in coordinates],
+            "split": splits,
+            "split_eligible": [True] * 12,
+            "split_block_x": [index // 2 for index in range(12)],
+            "split_block_y": [index // 3 for index in range(12)],
+        }
+    ).to_parquet(inventory_dir / "inventory.parquet", index=False)
+
+    raster_path = root / "image.tif"
+    image = np.zeros((4, 256, 256), dtype=np.uint8)
+    image[0] = np.arange(256, dtype=np.uint8)[None, :]
+    image[1] = 100
+    image[2] = np.arange(256, dtype=np.uint8)[:, None]
+    image[3] = 180
+    with rasterio.open(
+        raster_path,
+        "w",
+        driver="GTiff",
+        width=256,
+        height=256,
+        count=4,
+        dtype="uint8",
+        crs="EPSG:32610",
+        transform=from_origin(origin_x, origin_y, 0.6, 0.6),
+    ) as target:
+        target.write(image)
+    return raster_path
+
+
+def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: Path) -> None:
+    config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
+    config.paths.root = tmp_path / "artifacts"
+    raster_path = _write_qa_fixture(config.paths.root)
+
+    result = build_registration_review(config, raster_path, samples=6, window_pixels=64)
+
+    assert result["samples"] == 6
+    assert set(result["splits"]) == {"train", "validation"}
+    assert result["test_labels_included"] is False
+    html = Path(result["html"]).read_text(encoding="utf-8")
+    assert "Export reviews" in html
+    assert "Finalize training feedback" in html
+    assert "/api/reviews" in html
+    assert "/api/finalize" in html
+    assert "localStorage" in html
+    manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+    assert manifest["metadata"]["test_labels_included"] is False
+    assert all(sample["split"] != "test" for sample in manifest["samples"])
+    assert all(
+        (Path(result["html"]).parent / sample["image"]).exists()
+        for sample in manifest["samples"]
+    )
+
+
+def test_registration_review_requires_explicit_opt_in_for_test_labels(tmp_path: Path) -> None:
+    config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
+    config.paths.root = tmp_path / "artifacts"
+    raster_path = _write_qa_fixture(config.paths.root)
+
+    result = build_registration_review(
+        config,
+        raster_path,
+        samples=12,
+        window_pixels=64,
+        include_test=True,
+        output_dir=tmp_path / "with-test",
+    )
+
+    assert result["test_labels_included"] is True
+    assert result["splits"]["test"] == 2

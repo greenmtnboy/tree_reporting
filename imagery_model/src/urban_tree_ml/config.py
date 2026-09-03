@@ -102,6 +102,7 @@ class ModelConfig(StrictModel):
 
 
 class TrainingConfig(StrictModel):
+    accelerator: Literal["auto", "cpu", "gpu"]
     batch_size: int = Field(ge=1)
     workers: int = Field(ge=0)
     epochs: int = Field(ge=1)
@@ -123,6 +124,7 @@ class EvaluationConfig(StrictModel):
 
 class ProjectConfig(StrictModel):
     experiment: str
+    dataset: str
     seed: int
     paths: PathsConfig
     inventory: InventoryConfig

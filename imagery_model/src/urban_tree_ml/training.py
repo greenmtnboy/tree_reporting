@@ -49,11 +49,16 @@ def run_training(config: ProjectConfig, resume: str | None = None) -> dict[str, 
         config.paths.root / "inventory" / config.inventory.city.lower() / "taxonomy.json"
     )
     taxonomy = json.loads(taxonomy_path.read_text(encoding="utf-8"))
-    manifest_path = config.paths.root / "chips" / config.experiment / "chips.parquet"
+    manifest_path = config.paths.root / "chips" / config.dataset / "chips.parquet"
     train_dataset = NpzChipDataset(manifest_path, "train")
     validation_dataset = NpzChipDataset(manifest_path, "validation")
     if not train_dataset or not validation_dataset:
         raise ValueError("training and validation chip splits must both be non-empty")
+    if config.training.accelerator == "gpu" and not torch.cuda.is_available():
+        raise RuntimeError(
+            "training.accelerator is 'gpu', but PyTorch cannot access CUDA; "
+            "check the Lambda GPU/container configuration"
+        )
 
     class TreeTask(lightning.LightningModule):
         def __init__(self) -> None:
@@ -155,7 +160,7 @@ def run_training(config: ProjectConfig, resume: str | None = None) -> dict[str, 
         auto_insert_metric_name=False,
     )
     trainer = lightning.Trainer(
-        accelerator="auto",
+        accelerator=config.training.accelerator,
         devices=1,
         max_epochs=config.training.epochs,
         precision=config.training.precision,

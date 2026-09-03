@@ -24,6 +24,7 @@ urban-tree-ml = "urban_tree_ml.cli:app"
 
 [dependency-groups]
 imagery = [
+  "pillow>=11",
   "planetary-computer>=1.0",
   "pystac-client>=0.9",
   "rasterio>=1.4",

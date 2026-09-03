@@ -1,17 +1,26 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
 from pyproj import Transformer
 
 from urban_tree_ml.config import ProjectConfig
+from urban_tree_ml.feedback import load_training_feedback
 from urban_tree_ml.targets import PointLabel, build_targets
 
 
-def build_chips(config: ProjectConfig, raster_path: str | Path) -> dict[str, object]:
+def build_chips(
+    config: ProjectConfig,
+    raster_path: str | Path,
+    *,
+    feedback_path: str | Path | None = None,
+    use_default_feedback: bool = True,
+) -> dict[str, object]:
     try:
         import rasterio
         from rasterio.windows import Window
@@ -26,7 +35,7 @@ def build_chips(config: ProjectConfig, raster_path: str | Path) -> dict[str, obj
     frame = pd.read_parquet(inventory_path)
     frame = frame[frame["split_eligible"]].copy()
     chip_pixels = config.imagery.chip_pixels
-    output_root = config.paths.root / "chips" / config.experiment
+    output_root = config.paths.root / "chips" / config.dataset
     output_root.mkdir(parents=True, exist_ok=True)
 
     records: list[dict[str, object]] = []
@@ -36,8 +45,37 @@ def build_chips(config: ProjectConfig, raster_path: str | Path) -> dict[str, obj
     channel_sum: np.ndarray | None = None
     channel_sum_squares: np.ndarray | None = None
     channel_pixel_count = 0
-    source_path = Path(raster_path)
-    with rasterio.open(source_path) as source:
+    source_path = Path(raster_path).resolve()
+    selected_feedback_path = Path(feedback_path) if feedback_path is not None else None
+    if selected_feedback_path is None and use_default_feedback:
+        default_feedback = (
+            config.paths.root
+            / "qa"
+            / "registration"
+            / source_path.stem
+            / "training-feedback.json"
+        )
+        if default_feedback.exists():
+            selected_feedback_path = default_feedback
+    feedback = (
+        load_training_feedback(selected_feedback_path, source_path, config.dataset)
+        if selected_feedback_path is not None
+        else None
+    )
+    registration = feedback["registration"] if feedback is not None else {}
+    correction_east_m = float(registration.get("east_m", 0.0))
+    correction_north_m = float(registration.get("north_m", 0.0))
+    exclusion_records = feedback["exclusions"] if feedback is not None else []
+    excluded_tree_ids = {
+        str(exclusion["tree_id"])
+        for exclusion in exclusion_records
+        if isinstance(exclusion, dict) and "tree_id" in exclusion
+    }
+    frame["feedback_excluded"] = frame["tree_id"].astype(str).isin(excluded_tree_ids)
+    # Random reads across a large COG can otherwise let GDAL consume a substantial
+    # fraction of host memory. A small cache is enough for 256-pixel windows and
+    # keeps local preparation reliable on memory-constrained machines.
+    with rasterio.Env(GDAL_CACHEMAX=128 * 1024 * 1024), rasterio.open(source_path) as source:
         if source.crs is None:
             raise ValueError("imagery raster must declare a CRS")
         if max(config.imagery.bands) > source.count:
@@ -46,6 +84,8 @@ def build_chips(config: ProjectConfig, raster_path: str | Path) -> dict[str, obj
             )
         transformer = Transformer.from_crs("EPSG:4326", source.crs, always_xy=True)
         xs, ys = transformer.transform(frame["longitude"].to_numpy(), frame["latitude"].to_numpy())
+        xs = np.asarray(xs) + correction_east_m
+        ys = np.asarray(ys) + correction_north_m
         inverse = ~source.transform
         pixel_locations = [inverse * (x, y) for x, y in zip(xs, ys, strict=True)]
         frame["pixel_col"] = [location[0] for location in pixel_locations]
@@ -62,7 +102,10 @@ def build_chips(config: ProjectConfig, raster_path: str | Path) -> dict[str, obj
         for (chip_row, chip_col), group in frame.groupby(
             ["chip_row", "chip_col"], sort=True, observed=True
         ):
-            splits = group["split"].unique()
+            positive_group = group[~group["feedback_excluded"]]
+            if positive_group.empty:
+                continue
+            splits = positive_group["split"].unique()
             if len(splits) != 1:
                 skipped_mixed_split += 1
                 continue
@@ -99,7 +142,11 @@ def build_chips(config: ProjectConfig, raster_path: str | Path) -> dict[str, obj
                     genus_id=int(row.genus_id),
                     species_id=int(row.species_id),
                 )
-                for row in group.itertuples(index=False)
+                for row in positive_group.itertuples(index=False)
+            ]
+            ignored_locations = [
+                (float(row.pixel_col - col_off), float(row.pixel_row - row_off))
+                for row in group[group["feedback_excluded"]].itertuples(index=False)
             ]
             targets = build_targets(
                 chip_pixels,
@@ -112,30 +159,42 @@ def build_chips(config: ProjectConfig, raster_path: str | Path) -> dict[str, obj
                 ),
                 valid_mask=valid_mask,
                 ndvi=ndvi,
+                ignored_locations=ignored_locations,
                 background_mode=config.targets.background_mode,
                 background_ndvi_max=config.targets.background_ndvi_max,
             )
             collisions += int(targets.pop("collisions"))
             split = str(splits[0])
             if split == "train":
-                valid_pixels = image[:, valid_mask].astype(np.float64)
                 if channel_sum is None:
                     channel_sum = np.zeros(image.shape[0], dtype=np.float64)
                     channel_sum_squares = np.zeros(image.shape[0], dtype=np.float64)
-                channel_sum += valid_pixels.sum(axis=1)
-                channel_sum_squares += np.square(valid_pixels).sum(axis=1)
-                channel_pixel_count += valid_pixels.shape[1]
+                valid_count = int(valid_mask.sum())
+                for band_index in range(image.shape[0]):
+                    valid_band = image[band_index, valid_mask].astype(np.float64)
+                    channel_sum[band_index] += valid_band.sum()
+                    channel_sum_squares[band_index] += np.square(valid_band).sum()
+                channel_pixel_count += valid_count
             split_dir = output_root / split
             split_dir.mkdir(parents=True, exist_ok=True)
             chip_id = f"r{chip_row:06d}_c{chip_col:06d}"
             chip_path = split_dir / f"{chip_id}.npz"
-            np.savez_compressed(chip_path, image=image, **targets)
+            temporary_chip = chip_path.with_name(f".{chip_path.name}.{uuid4().hex}.part")
+            try:
+                with temporary_chip.open("wb") as output:
+                    np.savez_compressed(output, image=image, **targets)
+                    output.flush()
+                    os.fsync(output.fileno())
+                os.replace(temporary_chip, chip_path)
+            finally:
+                temporary_chip.unlink(missing_ok=True)
             records.append(
                 {
                     "chip_id": chip_id,
                     "split": split,
                     "path": str(chip_path.relative_to(output_root)),
                     "tree_count": len(labels),
+                    "feedback_ignored_count": len(ignored_locations),
                     "valid_fraction": valid_fraction,
                     "row_offset": row_off,
                     "column_offset": col_off,
@@ -166,6 +225,12 @@ def build_chips(config: ProjectConfig, raster_path: str | Path) -> dict[str, obj
         "attribute_collisions": collisions,
         "skipped_mixed_split": skipped_mixed_split,
         "skipped_invalid": skipped_invalid,
+        "registration_feedback": str(selected_feedback_path) if feedback is not None else None,
+        "registration_correction_m": {
+            "east": correction_east_m,
+            "north": correction_north_m,
+        },
+        "feedback_excluded_points": int(frame["feedback_excluded"].sum()),
         "source_raster": str(source_path.resolve()),
         "manifest": str(manifest_path),
         "normalization": str(output_root / "normalization.json"),
