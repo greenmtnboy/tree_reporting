@@ -15,7 +15,13 @@ RUN apt-get update \
 COPY --from=ghcr.io/astral-sh/uv:0.10.10 /uv /uvx /bin/
 
 WORKDIR /workspace/imagery_model
-COPY .python-version pyproject.toml uv.lock README.md ./
+COPY .python-version pyproject.toml uv.lock ./
+
+# Keep the large PyTorch/CUDA dependency layer reusable when only application
+# source, configs, or documentation change.
+RUN uv sync --frozen --no-dev --group imagery --group train --no-install-project
+
+COPY README.md ./
 COPY src ./src
 COPY configs ./configs
 
