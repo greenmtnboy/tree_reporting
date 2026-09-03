@@ -6,6 +6,7 @@ import pytest
 from urban_tree_ml.config import load_config
 from urban_tree_ml.feedback import (
     finalize_registration_feedback,
+    load_persisted_reviews,
     persist_review_payload,
 )
 
@@ -102,6 +103,30 @@ def test_finalize_rejects_offset_verdict_without_a_clicked_location(tmp_path: Pa
     )
 
     with pytest.raises(ValueError, match="clicked location"):
+        finalize_registration_feedback(
+            config,
+            raster,
+            review_dir=review_dir,
+            minimum_training_reviews=1,
+        )
+
+
+def test_stale_reviews_are_not_applied_to_a_regenerated_review(tmp_path: Path) -> None:
+    config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
+    raster = tmp_path / "tile.tif"
+    review_dir = tmp_path / "review"
+    _write_review_manifest(review_dir, raster)
+    persist_review_payload(
+        review_dir,
+        {"reviews": {"train-aligned": {"status": "aligned"}}},
+    )
+    manifest_path = review_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["metadata"]["review_id"] = "regenerated-review"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    assert load_persisted_reviews(review_dir)["reviews"] == {}
+    with pytest.raises(ValueError, match="do not match"):
         finalize_registration_feedback(
             config,
             raster,

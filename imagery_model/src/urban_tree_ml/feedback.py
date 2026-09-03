@@ -127,6 +127,16 @@ def load_persisted_reviews(review_dir: str | Path) -> dict[str, object]:
         return {"schema_version": 1, "reviews": {}}
     manifest = _read_manifest(directory)
     payload = json.loads(path.read_text(encoding="utf-8"))
+    payload_metadata = payload.get("metadata", {})
+    if isinstance(payload_metadata, dict) and payload_metadata.get("review_id") not in (
+        None,
+        manifest["metadata"].get("review_id"),
+    ):
+        return {
+            "schema_version": 1,
+            "metadata": manifest["metadata"],
+            "reviews": {},
+        }
     return {
         "schema_version": 1,
         "metadata": manifest["metadata"],
@@ -187,6 +197,12 @@ def finalize_registration_feedback(
             f"no saved reviews found at {source_reviews}; use the served UI or export its JSON"
         )
     raw_payload = json.loads(source_reviews.read_text(encoding="utf-8"))
+    payload_metadata = raw_payload.get("metadata", {})
+    if isinstance(payload_metadata, dict) and payload_metadata.get("review_id") not in (
+        None,
+        metadata.get("review_id"),
+    ):
+        raise ValueError("saved reviews do not match this registration review")
     reviews = normalize_review_payload(raw_payload, manifest)
     canonical = {
         "schema_version": 1,

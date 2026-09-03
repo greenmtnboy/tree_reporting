@@ -135,7 +135,14 @@ def qa_registration(
         Path,
         typer.Option("--raster", exists=True, dir_okay=False, help="NAIP GeoTIFF to review"),
     ],
-    samples: Annotated[int, typer.Option("--samples", min=1)] = 100,
+    samples: Annotated[
+        int,
+        typer.Option(
+            "--samples",
+            min=1,
+            help="Approximate minimum tree count; complete spatial scenes stay together",
+        ),
+    ] = 100,
     window_pixels: Annotated[
         int,
         typer.Option("--window-pixels", min=32, help="Even-sized source-pixel review window"),

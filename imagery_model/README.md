@@ -79,10 +79,11 @@ short-lived signed URLs. `imagery fetch` signs the selected URL only in memory, 
 temporary file, validates the size and RGB-NIR raster metadata, and atomically publishes the TIFF
 with an unsigned provenance manifest.
 
-Before building chips, generate the registration review. It samples spatially and taxonomically
-diverse training/validation points; test points are excluded unless `--include-test` is explicit.
-Serve the returned UI so button presses and click-derived offsets are saved atomically to
-`reviews.json`:
+Before building chips, generate the registration review. It selects spatially and taxonomically
+diverse image scenes and makes every eligible tree in each scene reviewable; test points are
+excluded unless `--include-test` is explicit. `--samples` is an approximate minimum tree count
+because the final scene is kept intact. Serve the returned UI so button presses and click-derived
+offsets are saved atomically to `reviews.json`:
 
 ```bash
 uv run urban-tree-ml qa registration \
@@ -99,10 +100,12 @@ Open `http://127.0.0.1:8765`; the Model Studio landing page links registration c
 available model-validation run. Registration samples default to aligned, so only exceptions need
 attention. The server auto-detects validation artifacts for the configured experiment; use
 `--evaluation-dir` to inspect a different run.
-Click the apparent tree center before choosing an offset verdict. Finalization turns each explicit
-offset into an exact correction for that reviewed tree, estimates the tile-wide correction from
-training reviews only, reports validation residuals, and records `not-tree`/`uncertain` points as
-supervision exclusions. It never mutates the source inventory or uses test reviews.
+Each numbered ring selects an inventory tree in the shared image. Click its apparent tree center
+to mark it offset, or use the buttons to mark it aligned, not-tree, or uncertain. Finalization
+turns each explicit offset into an exact correction for that reviewed tree, estimates the
+tile-wide correction from training reviews only, reports validation residuals, and records
+`not-tree`/`uncertain` points as supervision exclusions. It never mutates the source inventory or
+uses test reviews.
 
 Real-tile materialization is intended for Lambda, not a local smoke test. Chip building
 automatically applies the finalized `training-feedback.json`; pass `--without-feedback` only for

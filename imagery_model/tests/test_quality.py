@@ -64,7 +64,8 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
 
     result = build_registration_review(config, raster_path, samples=6, window_pixels=64)
 
-    assert result["samples"] == 6
+    assert result["samples"] >= 6
+    assert 1 <= result["scenes"] < result["samples"]
     assert set(result["splits"]) == {"train", "validation"}
     assert result["test_labels_included"] is False
     html = Path(result["html"]).read_text(encoding="utf-8")
@@ -74,17 +75,25 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "/api/finalize" in html
     assert "localStorage" in html
     assert 'status: "aligned"' in html
-    assert "Every sample starts aligned" in html
+    assert "Each numbered ring is one inventory tree" in html
     assert 'status: "offset", image_x: x' in html
     assert "Reset all to aligned" in html
     assert 'id="coverage-filter"' in html
     assert "Tile seams" in html
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
     assert manifest["metadata"]["test_labels_included"] is False
+    assert manifest["metadata"]["rendered_scenes"] == len(manifest["scenes"])
     assert all(sample["split"] != "test" for sample in manifest["samples"])
+    assert {sample["sample_id"] for sample in manifest["samples"]} == {
+        sample_id for scene in manifest["scenes"] for sample_id in scene["sample_ids"]
+    }
+    assert any(scene["tree_count"] > 1 for scene in manifest["scenes"])
+    assert len({sample["image"] for sample in manifest["samples"]}) == len(
+        manifest["scenes"]
+    )
     assert all(
-        (Path(result["html"]).parent / sample["image"]).exists()
-        for sample in manifest["samples"]
+        (Path(result["html"]).parent / scene["image"]).exists()
+        for scene in manifest["scenes"]
     )
 
 
@@ -141,6 +150,9 @@ def test_registration_review_prioritizes_and_records_mosaic_seams(tmp_path: Path
     assert manifest["metadata"]["mosaic_sources"] == 2
     assert manifest["metadata"]["seam_prioritized_samples"] >= 1
     seam_samples = [sample for sample in manifest["samples"] if sample["seam_priority"]]
+    seam_scenes = [scene for scene in manifest["scenes"] if scene["seam_priority"]]
     assert seam_samples
+    assert seam_scenes
     assert all(sample["source_item_ids"] for sample in seam_samples)
     assert all(sample["tile_seam_distance_m"] is not None for sample in seam_samples)
+    assert sum(scene["tree_count"] for scene in seam_scenes) == len(seam_samples)
