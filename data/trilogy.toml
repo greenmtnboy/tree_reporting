@@ -16,154 +16,493 @@ gcs_cache_bust = true
 [serve]
 studio_url="http://localhost:5173/trilogy-studio-core/"
 
-# How this directory is deployed to trilogy-cloud by `trilogy cloud sync` (see
-# .github/workflows/cloud-sync.yml). The target environment derives from the
-# git branch: main syncs into production, any other branch into its own
+# ===========================================================================
+# How this directory is deployed to trilogy-cloud by `trilogy cloud sync`
+# (see .github/workflows/cloud-sync.yml). The target environment derives from
+# the git branch: main syncs into production, any other branch into its own
 # environment. To deploy to production by hand, sync from a main checkout —
 # `--environment production` from a branch creates a DUPLICATE job set, and
 # tearing a branch environment down needs `env delete <name> --with-jobs` or
 # its jobs (schedules included) are orphaned into production.
 #
+# ---------------------------------------------------------------------------
+# The shape: per-city ingest pipelines, one unified core
+# ---------------------------------------------------------------------------
+#
+# A city is three independent jobs, each on its own cadence:
+#
+#   osm-{code}      extracts that city's OpenStreetMap trees into the staging
+#                   parquet its tree model reads.  Weekly, staggered.
+#   city-{code}     refreshes that city's published tree parquet from its
+#                   municipal portal + approved community submissions + the
+#                   staged OSM parquet.  Cadence matched to the portal.
+#   landmarks-{code}  (only for cities whose landmarks are a curated CSV)
+#                   republishes that CSV as a staging parquet.  No cron.
+#
+# and then ONE core that takes the seventeen published city parquets and
+# publishes the cross-city rollup, the species enrichment and the ecoregion
+# dimension the app actually reads.
+#
+# This replaced a single `urban-tree-data` job that refreshed all seventeen
+# cities together, three times a day.  Three things were wrong with it and
+# all three are structural, not tuning:
+#
+#   * **One failure was every failure.** Every city shared a container, a
+#     timeout and a memory limit. Berlin — 330,178 staged OSM rows stacked
+#     against a 434,765-row municipal inventory, with the dedup grid
+#     aggregate running over the union — is the high-water mark, so the lane
+#     carried 4 GiB for all seventeen and still OOM-died part-way through a
+#     full rebuild, taking sixteen healthy cities with it.
+#   * **Every city was polled on the fastest city's schedule.** Measured with
+#     `raw/portal_cadence.py` (which is committed precisely so this is not a
+#     guess): San Francisco, Boston, Amsterdam and Cambridge move daily,
+#     while Los Angeles last published in 2016, Tempe in 2024 and Burlington
+#     in 2024. Eleven of the seventeen portals move on a scale of months to
+#     years and were being asked three times a day.
+#   * **Ordering was wall clock.** The rollup ran 45 minutes after the trees
+#     tick and enrichment an hour after that, on the assumption the earlier
+#     work had finished.
+#
+# The per-city split fixes the first two outright. The third is fixed by the
+# core sharing one cron and the platform ordering that tick from the models'
+# own declared inputs and outputs — see "The core" below for how that edge
+# is derived, and why it took a change to the rollup's shape to make it
+# derivable at all.
+#
+# ---------------------------------------------------------------------------
+# Setting a city's cadence
+# ---------------------------------------------------------------------------
+#
+# Three things can make a city's parquet stale, and its cron has to cover the
+# fastest of them, not just the portal:
+#
+#   1. the municipal portal publishing        (per city; measured, see below)
+#   2. a community submission being approved   (any time, any city)
+#   3. its own weekly OSM extract landing      (weekly, per city)
+#
+# So the floor is not "however often the portal moves" — a city whose portal
+# has been dormant since 2016 still has to notice an approved community tree
+# and its own OSM extract. Two tiers:
+#
+#   daily          the portal itself moves on a scale of days
+#                  USSFO USNYC USBOS FRPAR NLAMS USWAS
+#   twice weekly   the portal moves on a scale of months or years; the
+#                  binding inputs are the OSM extract and community
+#                  approvals, so the two firings are placed to follow that
+#                  city's own OSM day and to bound community-approval
+#                  latency at ~3 days
+#                  ARBUE CAVAN GRATH DEBER AUMEL GBLON USBTV USLAX USTEM
+#                  GRMLO GRSAN
+#
+# Re-measure before re-tiering, and record the measurement:
+#
+#     cd data/raw && uv run ./portal_cadence.py --record
+#
+# A single sample cannot measure a cadence, so that script keeps a history in
+# `raw/portal_cadence.json` and derives the interval from *changes* to each
+# watermark. It reads the crons back out of this file, so its `verdict`
+# column is a live comparison rather than a second copy of the schedule.
+#
+# A firing that finds nothing stale exits `up_to_date` in seconds, so an
+# over-polled city is cheap rather than broken — it just pays a VM boot for
+# an answer we could have predicted. Under-polled is the one that matters:
+# it means the map is carrying data older than it needs to be.
+#
+# ---------------------------------------------------------------------------
+# Times
+# ---------------------------------------------------------------------------
+#
+# Six-field crons (seconds first), UTC. Three windows, and the separation is
+# load-bearing in each:
+#
+#   02:00-04:00  OSM extraction. Staggered 30 minutes apart with at most four
+#                cities on any one day: Overpass allows two concurrent slots
+#                per client IP and answers an over-budget request with HTTP
+#                200 carrying an error remark, so two extract jobs firing
+#                together can fail each other on a transient.
+#   04:00-08:00  The core. Reads only published parquets, so it touches no
+#                portal and cannot be hurt by one being down.
+#   10:00-16:00  City refreshes, 20 minutes apart. Deliberately clear of
+#                06:00-09:00 UTC, which is when Berlin publishes a weekly
+#                maintenance window ("Donnerstags von 8:00 bis 10:00 Uhr" —
+#                06:00-08:00 UTC in CEST, 07:00-09:00 in CET), and after that
+#                day's OSM extract so a fresh extract lands the same day.
+#
+# Nothing depends on a city refresh finishing before the core runs: the core
+# reads whatever each city last published, and a city that lands after it
+# simply appears in tomorrow's rollup. That is the point of decoupling them.
+#
+# ---------------------------------------------------------------------------
+# What the first sync after the split does
+# ---------------------------------------------------------------------------
+#
+# Job identity is `path::key`, so a key that changed is a different job. Three
+# consequences, all one-time, and the first is the one to be deliberate about:
+#
+#   * The old combined `refresh` job (`urban-tree-data`) has no key here any
+#     more, so `trilogy cloud sync --prune` — which is what CI runs — DELETES
+#     it, and its run history goes with it. The seventeen `city-*` jobs that
+#     replace it start with none. That is the cost of the split and it is paid
+#     once; nothing published is affected, since history is a record of runs
+#     rather than an input to them.
+#   * `publish-full`, `refresh-enrichment`, `refresh-ecoregions` and
+#     `refresh-landmarks` keep their keys, so they are updated in place with
+#     their history intact. Only their crons move.
+#   * Fourteen cities gain a scheduled OSM extract for the first time. Their
+#     staging objects were last published by hand, so the first firing
+#     republishes each one, which marks that city stale and buys a full
+#     municipal rebuild on its next city tick. Expect a burst of real work in
+#     the first week and steady state after.
+#
+# ---------------------------------------------------------------------------
+# Shared settings
+# ---------------------------------------------------------------------------
+#
 # This block holds what every job shares (the org, the workspace, the GCS
-# secrets); each [[cloud.job]] below says only what makes it different. The
-# array form is all-or-nothing — every entry must name its own key, name and
-# entrypoint, and identity is `path::key` rather than the bare path — which is
-# why the first sync after this conversion REPLACES the old single
-# path-identified job (`--prune` removes it) instead of editing it: run
-# history resets once, schedules rebind to the new identities. That cost was
-# deferred while one job sufficed; it stopped sufficing when OSM extraction
-# needed its own cadence.
+# secrets); each [[cloud.job]] below says only what makes it different.
+# The array form is all-or-nothing — every entry must name its own key, name
+# and entrypoint, and identity is `path::key` rather than the bare path.
 #
 # DuckDB writes the parquets to gcs:// itself; these org secrets are the only
 # credentials that work for that bucket, and they serve the extract jobs'
-# staging writes exactly as they serve the refresh job's.
+# staging writes exactly as they serve the refresh jobs'.
 [cloud]
 org = "trilogy-data"
 workspace = "urban-tree-data"
 secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET"]
 
-# --- The main refresh, split into lanes ------------------------------------
+# ===========================================================================
+# The core
+# ===========================================================================
 #
-# The platform requires a job's entrypoint to be a *file* in the workspace
-# (a directory like `raw` is rejected), and a single umbrella file importing
-# every model does not work: merged bare the models collide (tree latitude vs
-# landmark latitude), and namespaced imports leak their prefix into
-# materialised parquet column names (verified — full_tree_info came out with
-# `enrichment_latitude`). So the refresh is four jobs, one per lane, each
-# materialising its own disjoint asset set with bare column names — the
-# trees/landmarks/enrichment lane split this file previously mused about,
-# forced by the entrypoint rule.
+# Everything here reads published parquets and nothing else — no municipal
+# portal, no Overpass, no staging object. That is what lets it run on one
+# daily cadence regardless of what any individual city is doing.
 #
-# The trees lane's entrypoint is raw/tree_cities.preql — the city models
-# with no cross-city merge — NOT raw/tree_info.preql. Load-bearing: with the
-# `data_source` merge in scope, city parquets plan without their partition
-# union and publish incomplete, silently (see tree_cities.preql's header and
-# the upstream pytrilogy issue). The same bug hit the full rollup itself,
-# which needs the merge and so cannot be refreshed safely from ANY lane:
-# tree_info's datasource carries no freshness watermark (never stale in a
-# refresh), and the `urban-tree-full` job below republishes it
-# unconditionally from the seventeen city parquets 45 minutes after each
-# trees tick (see raw/full_tree_publish.preql).
+# All three jobs share one cron. `trilogy cloud sync` binds the jobs a toml
+# declares on one cron to a single schedule **row**, and a schedule row is
+# what the platform fires as one tick and orders by dependency — so this is
+# not three jobs that happen to start together, it is one ordered firing:
 #
-# The osm_staging/ and landmark_staging/ models stay out of every lane's
-# reach (no imports either direction) or their ever-advancing watermarks
-# would re-extract/republish on every tick.
+#     publish-full ──▶ refresh-enrichment        (derived edge)
+#     refresh-ecoregions                          (independent, runs alongside)
 #
-# Three ticks, none in a portal's published maintenance window: municipal
-# portals 503 intermittently (Buenos Aires especially), and a tick that finds
-# nothing stale exits up_to_date in minutes, so extra attempts are close to
-# free. The ticks avoid 06:00-09:00 UTC because Berlin publishes a weekly
-# window — "Donnerstags von 8:00 bis 10:00 Uhr" — which is 06:00-08:00 UTC in
-# CEST and 07:00-09:00 UTC in CET.
+# The edge is derived, not declared, and it exists because of how the two
+# models name the rollup. trilogy-cloud reads a job's outputs from its managed
+# datasources and its inputs from its root ones, keyed by physical address —
+# except that an address built from an f-string is not a join key, so a
+# templated address keys on the datasource's *name* instead. Both sides call
+# the rollup `full_tree_info`: `raw/full_tree_publish.preql` declares it
+# managed (an output), `raw/full_tree_info_source.preql` declares it root (an
+# input) and `raw/tree_enrichment.preql` imports that. Names match, edge
+# forms, enrichment holds `pending` until the rollup lands — and skips
+# entirely when the rollup was `up_to_date`, because nothing new was
+# published for it to enrich.
 #
-# trees lane memory: the default 1 GiB container was OOM-killed part-way
-# through a full rebuild — it died on Berlin, the high-water mark: 330,178
-# staged OSM rows stacked against a 434,765-row municipal inventory with the
-# dedup grid aggregate running over the union. 4 GiB against a measured 1 GiB
-# peak, and `parallelism = 3` means up to three asset builds share it.
-#
-# enrichment lane: tree_enrichment.preql imports tree_info, so this lane can
-# reach the city parquets as dependencies. Its ticks are offset an hour after
-# the trees lane so the cities are already fresh and it no-ops on them —
-# never two jobs building the same parquet concurrently. Isolating it also
-# means the slow LLM enrichment runs can no longer eat the trees lane's
-# timeout.
-[[cloud.job]]
-key = "refresh"
-name = "urban-tree-data"
-entrypoint = "raw/tree_cities.preql"
-operation = "refresh"
-schedule = "0 0 4,12,20 * * *"
-timeout_seconds = 3600
-memory_mb = 4096
+# This is why the rollup is a `refresh` rather than the `copy into` it used to
+# be. A copy is not a persist as far as the parser is concerned, so the job had
+# no derivable output at all, and its consumers could only be spaced out by
+# wall clock — an hour's gap and the hope that 1.4M rows had finished writing.
 
-[[cloud.job]]
-key = "refresh-landmarks"
-name = "urban-tree-data-landmarks"
-entrypoint = "raw/landmark_info.preql"
-operation = "refresh"
-schedule = "0 0 4,12,20 * * *"
-timeout_seconds = 1800
-memory_mb = 2048
-
-# Rebuilds the cross-city rollup from the city parquets, unconditionally
-# (`run` + `copy into`). 45 minutes after the trees ticks so the city
-# parquets have landed; before the enrichment ticks so enrichment reads the
-# fresh rollup.
+# Rebuilds the cross-city rollup from the seventeen published city parquets
+# when any of them has moved. It re-declares those parquets as thin root
+# datasources and imports NO city models: an environment holding the per-city
+# raw partitions and the `data_source` merge cannot build this rollup
+# correctly (the planner drops partitions silently there — the parquet shipped
+# as OSM-only for 15 of 16 cities), so it is built where the city parquets are
+# the only sources that exist. See raw/full_tree_publish.preql.
 [[cloud.job]]
 key = "publish-full"
 name = "urban-tree-full"
 entrypoint = "raw/full_tree_publish.preql"
-operation = "run"
-schedule = "0 45 4,12,20 * * *"
+operation = "refresh"
+schedule = "0 0 6 * * *"
 timeout_seconds = 1800
 memory_mb = 2048
 
+# The ecoregion dimension: one global source, nothing city-scoped, so it is
+# independent of everything else in the tick.
 [[cloud.job]]
 key = "refresh-ecoregions"
 name = "urban-tree-data-ecoregions"
 entrypoint = "raw/ecoregion_info.preql"
 operation = "refresh"
-schedule = "0 0 4,12,20 * * *"
+schedule = "0 0 6 * * *"
+timeout_seconds = 900
+memory_mb = 1024
+
+# Species enrichment. Consumes the rollup `publish-full` produces, in the same
+# tick and ordered after it (see above).
+#
+# Its entrypoint is the thin `raw/enrichment_refresh.preql` rather than the
+# enrichment model itself, and that indirection is load-bearing: the entrypoint
+# declares the rollup as a root input so the platform can order this job, while
+# keeping it out of `raw/tree_enrichment.preql`, which the *app* resolves its
+# dashboard queries against. Putting the rollup in the app's scope gives the
+# planner a second way to answer a tree question and it returns a different
+# answer — a summary chart came back 2 where the fixtures say 3. Full story in
+# the entrypoint's header.
+#
+# Either way it does not import the city models, so this job can no longer probe
+# a municipal portal or rebuild a city parquet in its own container. Its LLM calls are the slowest thing in
+# the file, which is the other reason it is its own job: they can no longer eat
+# a city refresh's timeout.
+[[cloud.job]]
+key = "refresh-enrichment"
+name = "urban-tree-data-enrichment"
+entrypoint = "raw/enrichment_refresh.preql"
+operation = "refresh"
+schedule = "0 0 6 * * *"
+timeout_seconds = 3600
+memory_mb = 2048
+
+# Landmarks: per-city parquets plus the cross-city union, still one lane.
+#
+# Unlike trees, this has not been split per city, and the reason is that the
+# split would be a code-sharing refactor rather than a scheduling one. Tree
+# extraction lives once in `raw/_osm_shared.py`, which is what made seventeen
+# scheduled OSM jobs a matter of seventeen thin shims; the landmark sources
+# are still seventeen bespoke scripts (a live ArcGIS query here, an inline
+# list there, two separate Overpass fetches in deber/gblon that have never
+# been shared). Landmark sources also change on a scale of years.
+#
+# Weekly rather than three times a day because that is the cadence the data
+# actually has, and independent of every city cron because nothing about a
+# tree refresh has any bearing on it.
+[[cloud.job]]
+key = "refresh-landmarks"
+name = "urban-tree-data-landmarks"
+entrypoint = "raw/landmark_info.preql"
+operation = "refresh"
+schedule = "0 0 4 * * 0"    # Sundays 04:00 UTC
+timeout_seconds = 1800
+memory_mb = 2048
+
+# ===========================================================================
+# Per-city tree refresh — one job per city
+# ===========================================================================
+#
+# Entrypoint is the city's own tree model. That file imports `tree_common`
+# and `community_tree_info` and nothing else, so the job's bundle is exactly
+# one city: one municipal probe, one community column, one staged OSM object,
+# one published parquet. It reaches no other city and no cross-city merge.
+#
+# The merge is the reason there is no umbrella entrypoint here. With the
+# `data_source` merge in scope pytrilogy plans a city's parquet from sources
+# other than its own partition union and publishes it incomplete, silently
+# (Athens shipped OSM-only that way). A per-city entrypoint makes that
+# structurally impossible rather than something a comment has to warn about.
+#
+# `memory_mb` is per city because the cities are not the same size. Berlin
+# and London carry the two largest municipal inventories and stack a large
+# OSM extract on top of them through a grid aggregate; the rest are
+# comfortable in 1-2 GiB. Sizing each one is the direct payoff of the split
+# — the combined lane had to carry Berlin's 4 GiB for all seventeen.
+
+# --- daily: the portal itself moves on a scale of days ---------------------
+
+[[cloud.job]]
+key = "city-ussfo"
+name = "urban-tree-city-ussfo"
+entrypoint = "raw/ussfo/sf_tree_info.preql"
+operation = "refresh"
+schedule = "0 0 10 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-usnyc"
+name = "urban-tree-city-usnyc"
+entrypoint = "raw/usnyc/nyc_tree_info.preql"
+operation = "refresh"
+schedule = "0 20 10 * * *"
+timeout_seconds = 2400
+memory_mb = 3072
+
+# Four municipal inventories in one model (Boston, the Arnold Arboretum,
+# Cambridge and Brookline), so four probes and four partitions — but still
+# one city parquet and one job.
+[[cloud.job]]
+key = "city-usbos"
+name = "urban-tree-city-usbos"
+entrypoint = "raw/usbos/boston_tree_info.preql"
+operation = "refresh"
+schedule = "0 40 10 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-frpar"
+name = "urban-tree-city-frpar"
+entrypoint = "raw/frpar/paris_tree_info.preql"
+operation = "refresh"
+schedule = "0 0 11 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-nlams"
+name = "urban-tree-city-nlams"
+entrypoint = "raw/nlams/amsterdam_tree_info.preql"
+operation = "refresh"
+schedule = "0 20 11 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-uswas"
+name = "urban-tree-city-uswas"
+entrypoint = "raw/uswas/washingtondc_tree_info.preql"
+operation = "refresh"
+schedule = "0 40 11 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
+
+# --- twice weekly: dormant or slow portals ---------------------------------
+#
+# Each pair is placed the day after that city's own OSM extract and again
+# mid-week, so a new extract is picked up within a day and an approved
+# community submission waits at most about three days.
+
+[[cloud.job]]
+key = "city-grath"
+name = "urban-tree-city-grath"
+entrypoint = "raw/grath/athens_tree_info.preql"
+operation = "refresh"
+schedule = "0 0 12 * * 2,5"   # Tue/Fri, after Monday's osm-grath
+timeout_seconds = 1200
+memory_mb = 1024
+
+[[cloud.job]]
+key = "city-grmlo"
+name = "urban-tree-city-grmlo"
+entrypoint = "raw/grmlo/milos_tree_info.preql"
+operation = "refresh"
+schedule = "0 20 12 * * 2,5"
 timeout_seconds = 900
 memory_mb = 1024
 
 [[cloud.job]]
-key = "refresh-enrichment"
-name = "urban-tree-data-enrichment"
-entrypoint = "raw/tree_enrichment.preql"
+key = "city-grsan"
+name = "urban-tree-city-grsan"
+entrypoint = "raw/grsan/santorini_tree_info.preql"
 operation = "refresh"
-schedule = "0 0 5,13,21 * * *"
+schedule = "0 40 12 * * 2,5"
+timeout_seconds = 900
+memory_mb = 1024
+
+[[cloud.job]]
+key = "city-usbtv"
+name = "urban-tree-city-usbtv"
+entrypoint = "raw/usbtv/burlington_tree_info.preql"
+operation = "refresh"
+schedule = "0 0 13 * * 3,6"   # Wed/Sat, after Tuesday's osm-usbtv
+timeout_seconds = 1200
+memory_mb = 1024
+
+# Berlin: the largest rebuild in the set. 330,178 staged OSM rows against a
+# 434,765-row municipal inventory, with the four-grid dedup aggregate running
+# over the union; `parallelism = 3` means up to three asset builds share the
+# container. 4 GiB against a measured 1 GiB peak.
+#
+# Berlin is also the one city whose published watermark deliberately omits
+# its OSM term (see WATERMARK_EXEMPT in raw/tests/test_data_sources.py):
+# gdi.berlin.de was in maintenance for days and the greatest() over sources
+# left the city permanently stale against a portal that could not answer. So
+# a fresh osm-deber extract does NOT by itself mark Berlin stale — that is
+# the documented cost of the exemption, not a scheduling mistake here.
+[[cloud.job]]
+key = "city-deber"
+name = "urban-tree-city-deber"
+entrypoint = "raw/deber/berlin_tree_info.preql"
+operation = "refresh"
+schedule = "0 20 13 * * 4,0"  # Thu/Sun, after Wednesday's osm-deber
 timeout_seconds = 3600
+memory_mb = 4096
+
+[[cloud.job]]
+key = "city-gblon"
+name = "urban-tree-city-gblon"
+entrypoint = "raw/gblon/london_tree_info.preql"
+operation = "refresh"
+schedule = "0 40 13 * * 5,1"  # Fri/Mon, after Thursday's osm-gblon
+timeout_seconds = 3600
+memory_mb = 4096
+
+[[cloud.job]]
+key = "city-aumel"
+name = "urban-tree-city-aumel"
+entrypoint = "raw/aumel/melbourne_tree_info.preql"
+operation = "refresh"
+schedule = "0 0 14 * * 5,1"
+timeout_seconds = 1800
 memory_mb = 2048
 
-# --- Scheduled OSM extraction, one job per city ----------------------------
+[[cloud.job]]
+key = "city-arbue"
+name = "urban-tree-city-arbue"
+entrypoint = "raw/arbue/buenosaires_tree_info.preql"
+operation = "refresh"
+schedule = "0 20 14 * * 5,1"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-uslax"
+name = "urban-tree-city-uslax"
+entrypoint = "raw/uslax/losangeles_tree_info.preql"
+operation = "refresh"
+schedule = "0 40 14 * * 6,2"  # Sat/Tue, after Friday's osm-uslax
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-ustem"
+name = "urban-tree-city-ustem"
+entrypoint = "raw/ustem/tempe_tree_info.preql"
+operation = "refresh"
+schedule = "0 0 15 * * 6,2"
+timeout_seconds = 1200
+memory_mb = 1024
+
+[[cloud.job]]
+key = "city-cavan"
+name = "urban-tree-city-cavan"
+entrypoint = "raw/cavan/vancouver_tree_info.preql"
+operation = "refresh"
+schedule = "0 20 15 * * 0,3"  # Sun/Wed, after Saturday's osm-cavan
+timeout_seconds = 1800
+memory_mb = 2048
+
+# ===========================================================================
+# Per-city OSM extraction — one job per city
+# ===========================================================================
 #
 # Each job refreshes one osm_staging/{code}_osm_staging.preql, which fetches
 # the city's Overpass trees and materialises the staging parquet the city's
-# tree model reads — the cloud-credentialed replacement for running
-# raw/{city}/{city}_osm_extract.py by hand. Per-city jobs so each city gets
-# its own cadence; add a city by copying an osm_staging/ pair and one entry
-# here (see EXTENDING.md).
+# tree model reads. Those models import nothing from raw/ and nothing in raw/
+# imports them, so no city refresh can ever adopt one — which matters,
+# because their watermark is Overpass's global osm_base timestamp and it
+# advances about every minute. That watermark is exactly wrong for a city
+# model (it would rebuild the city on every tick) and exactly right here:
+# every scheduled firing sees a newer timestamp and re-extracts, so **the
+# cron below IS the extraction cadence**.
 #
-# Schedules are STAGGERED, never concurrent: Overpass allows two slots per
-# client IP and answers an over-budget request with HTTP 200 carrying an
-# error remark, so two extract jobs firing together can fail each other on a
-# transient. Keep new entries off other jobs' minutes and off the refresh
-# ticks (the extract must land before a refresh tick can pick it up, but any
-# gap works — the next of three daily ticks always comes).
+# Weekly is the deliberate default: OSM tree edits trickle, and every extract
+# firing re-publishes the staging object, which marks the city stale and
+# rebuilds its full municipal union on the next city tick — a cheap extract
+# buys a not-cheap rebuild, so this schedule is the knob that prices it.
 #
-# Weekly is the deliberate default cadence: OSM tree edits trickle, and every
-# extract firing re-publishes the staging object, which marks the city stale
-# and rebuilds its full municipal union on the next refresh tick — a cheap
-# extract buys a not-cheap rebuild, so the schedule below is the knob that
-# prices it.
+# Staggered, never concurrent, at most four cities a day: Overpass allows two
+# slots per client IP. Keep new entries off other extract minutes.
+
+# --- Monday ----------------------------------------------------------------
 [[cloud.job]]
 key = "osm-grath"
 name = "urban-tree-osm-grath"
 entrypoint = "osm_staging/grath_osm_staging.preql"
 operation = "refresh"
-schedule = "0 0 2 * * 1"    # Mondays 02:00 UTC
+schedule = "0 0 2 * * 1"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -172,7 +511,7 @@ key = "osm-grmlo"
 name = "urban-tree-osm-grmlo"
 entrypoint = "osm_staging/grmlo_osm_staging.preql"
 operation = "refresh"
-schedule = "0 30 2 * * 1"   # Mondays 02:30 UTC — staggered off osm-grath
+schedule = "0 30 2 * * 1"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -181,11 +520,148 @@ key = "osm-grsan"
 name = "urban-tree-osm-grsan"
 entrypoint = "osm_staging/grsan_osm_staging.preql"
 operation = "refresh"
-schedule = "0 0 3 * * 1"    # Mondays 03:00 UTC — staggered off osm-grmlo
+schedule = "0 0 3 * * 1"
 timeout_seconds = 1800
 memory_mb = 1024
 
-# --- Ad-hoc landmark staging publish, one job per city ---------------------
+[[cloud.job]]
+key = "osm-ussfo"
+name = "urban-tree-osm-ussfo"
+entrypoint = "osm_staging/ussfo_osm_staging.preql"
+operation = "refresh"
+schedule = "0 30 3 * * 1"
+timeout_seconds = 1800
+memory_mb = 1024
+
+# --- Tuesday ---------------------------------------------------------------
+[[cloud.job]]
+key = "osm-usnyc"
+name = "urban-tree-osm-usnyc"
+entrypoint = "osm_staging/usnyc_osm_staging.preql"
+operation = "refresh"
+schedule = "0 0 2 * * 2"
+timeout_seconds = 2400
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-usbos"
+name = "urban-tree-osm-usbos"
+entrypoint = "osm_staging/usbos_osm_staging.preql"
+operation = "refresh"
+schedule = "0 30 2 * * 2"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "osm-usbtv"
+name = "urban-tree-osm-usbtv"
+entrypoint = "osm_staging/usbtv_osm_staging.preql"
+operation = "refresh"
+schedule = "0 0 3 * * 2"
+timeout_seconds = 1800
+memory_mb = 1024
+
+# --- Wednesday -------------------------------------------------------------
+[[cloud.job]]
+key = "osm-frpar"
+name = "urban-tree-osm-frpar"
+entrypoint = "osm_staging/frpar_osm_staging.preql"
+operation = "refresh"
+schedule = "0 0 2 * * 3"
+timeout_seconds = 2400
+memory_mb = 2048
+
+# Berlin's is the largest extract in the set (~330k nodes).
+[[cloud.job]]
+key = "osm-deber"
+name = "urban-tree-osm-deber"
+entrypoint = "osm_staging/deber_osm_staging.preql"
+operation = "refresh"
+schedule = "0 30 2 * * 3"
+timeout_seconds = 3600
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-nlams"
+name = "urban-tree-osm-nlams"
+entrypoint = "osm_staging/nlams_osm_staging.preql"
+operation = "refresh"
+schedule = "0 0 3 * * 3"
+timeout_seconds = 2400
+memory_mb = 2048
+
+# --- Thursday --------------------------------------------------------------
+# London's OSM partition carries `borough` — its municipal and community
+# sources declare it, and a partition missing a column drops out of the union
+# and stops the remaining two covering the source enum.
+[[cloud.job]]
+key = "osm-gblon"
+name = "urban-tree-osm-gblon"
+entrypoint = "osm_staging/gblon_osm_staging.preql"
+operation = "refresh"
+schedule = "0 0 2 * * 4"
+timeout_seconds = 3600
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-aumel"
+name = "urban-tree-osm-aumel"
+entrypoint = "osm_staging/aumel_osm_staging.preql"
+operation = "refresh"
+schedule = "0 30 2 * * 4"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "osm-arbue"
+name = "urban-tree-osm-arbue"
+entrypoint = "osm_staging/arbue_osm_staging.preql"
+operation = "refresh"
+schedule = "0 0 3 * * 4"
+timeout_seconds = 1800
+memory_mb = 1024
+
+# --- Friday ----------------------------------------------------------------
+[[cloud.job]]
+key = "osm-uslax"
+name = "urban-tree-osm-uslax"
+entrypoint = "osm_staging/uslax_osm_staging.preql"
+operation = "refresh"
+schedule = "0 0 2 * * 5"
+timeout_seconds = 2400
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-uswas"
+name = "urban-tree-osm-uswas"
+entrypoint = "osm_staging/uswas_osm_staging.preql"
+operation = "refresh"
+schedule = "0 30 2 * * 5"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "osm-ustem"
+name = "urban-tree-osm-ustem"
+entrypoint = "osm_staging/ustem_osm_staging.preql"
+operation = "refresh"
+schedule = "0 0 3 * * 5"
+timeout_seconds = 1800
+memory_mb = 1024
+
+# --- Saturday --------------------------------------------------------------
+[[cloud.job]]
+key = "osm-cavan"
+name = "urban-tree-osm-cavan"
+entrypoint = "osm_staging/cavan_osm_staging.preql"
+operation = "refresh"
+schedule = "0 0 2 * * 6"
+timeout_seconds = 1800
+memory_mb = 1024
+
+# ===========================================================================
+# Ad-hoc landmark staging publish — one job per curated-CSV city
+# ===========================================================================
 #
 # NO schedule, deliberately: these fire only by hand
 # (`trilogy cloud jobs run urban-tree-landmarks-{code} --wait`). Each one
@@ -202,6 +678,13 @@ memory_mb = 1024
 # a frequent cron, since republishing an unchanged CSV still moves the
 # staging object's Last-Modified and the city's landmark parquet would
 # rebuild for nothing.
+#
+# Only the three Greek cities are on this path. The other curated-CSV cities
+# (USBTV, USTEM, USWAS) still read a hand-uploaded CSV from the staging
+# prefix, and DEBER/GBLON still stage from a hand-run Overpass fetch —
+# converting those is a code-sharing job (their fetch logic has never been
+# shared the way `raw/_osm_shared.py` is), not a scheduling one. Listed in
+# EXTENDING.md under the landmarks section as the remaining work.
 [[cloud.job]]
 key = "landmarks-grath"
 name = "urban-tree-landmarks-grath"

@@ -1,0 +1,35 @@
+# Shared declarations for every ad-hoc landmark staging publish model.
+#
+# One `{code}_landmarks_staging.preql` per curated-CSV city, each run by its
+# own `landmarks-{code}` [[cloud.job]] in ../trilogy.toml. This file holds
+# what they all share; a city's own file is just its CSV source and the
+# `copy into` that publishes it.
+#
+# The curated CSV is committed (raw/{code}/{city}_landmarks.csv, written by
+# that city's `_landmarks_geocode.py`) and travels to the cloud workspace on
+# every sync, so firing the job republishes it as the staging parquet the
+# city's landmark model reads — with the job's HMAC credentials, no local
+# Google credential anywhere. The flow after editing a CSV: merge, let the
+# sync run, then `trilogy cloud jobs run urban-tree-landmarks-{code} --wait`.
+#
+# `copy into` under `operation = "run"` rather than a materialised datasource
+# under `refresh`, deliberately: a refresh target needs a freshness watermark
+# to ever rebuild once its object exists (verified — a no-freshness target is
+# only built while missing), and the only honest watermark for "republish
+# when a person fires the job" is the firing itself. `run` says exactly that:
+# every execution copies, unconditionally. It is also why these jobs must
+# never gain a frequent cron — republishing an unchanged CSV still moves the
+# staging object's Last-Modified, which the city's landmark probe reads, and
+# the city's landmark parquet would rebuild for nothing.
+#
+# Standalone like the OSM staging models: nothing here imports raw/, so no
+# landmark refresh can adopt a staging asset. The concepts mirror the
+# canonical landmark columns by name because the staging parquet's column
+# names are the contract raw/{code}/{city}_landmarks.preql reads.
+
+key landmark_id string;
+property landmark_id.name string;
+property landmark_id.city string;
+property landmark_id.geometry_raw string;
+property landmark_id.latitude float;
+property landmark_id.longitude float;

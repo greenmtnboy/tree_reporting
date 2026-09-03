@@ -12,6 +12,13 @@ bbox, an extra tag) has somewhere to do it.  See `_osm_shared` for why
 extraction is decoupled from the refresh.
 
     cd data/raw && uv run ustem/tempe_osm_extract.py
+
+The scheduled `osm-ustem` [[cloud.job]] is the normal path (see
+../trilogy.toml and osm_staging/ustem_osm_staging.preql); this script is the
+manual counterpart, for bootstrapping a city before its job is deployed or
+re-extracting from a workstation. Both share `_osm_shared.fetch_osm_trees` /
+`build_table`, so they cannot differ on content -- only on who writes the GCS
+object.
 """
 
 import sys

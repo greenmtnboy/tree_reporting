@@ -1,12 +1,12 @@
-# Scheduled OSM extraction for Athens, run by the `osm-grath` [[cloud.job]] in
+# Scheduled OSM extraction for New York City, run by the `osm-usnyc` [[cloud.job]] in
 # ../trilogy.toml. Everything shared with the other sixteen cities -- the
 # canonical tree concepts, the Overpass freshness probe, and why extraction is
 # a separate job at all -- lives in staging_common.preql; this file is just
-# Athens's rows and the staging object they land in.
+# New York City's rows and the staging object they land in.
 
 import staging_common;
 
-root datasource grath_osm_rows (
+root datasource usnyc_osm_rows (
     tree_id: tree_id,
     city: city,
     data_source: data_source,
@@ -21,9 +21,9 @@ root datasource grath_osm_rows (
 )
 grain (tree_id)
 file `./osm_rows.py`
-where city = 'GRATH';
+where city = 'USNYC';
 
-datasource grath_osm_staging (
+datasource usnyc_osm_staging (
     tree_id,
     city,
     data_source,
@@ -38,5 +38,5 @@ datasource grath_osm_staging (
     osm_extracted_through,
 )
 grain (tree_id)
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grath_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/grath_osm_staging.parquet`
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usnyc_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/usnyc_osm_staging.parquet`
 freshness by osm_extracted_through;

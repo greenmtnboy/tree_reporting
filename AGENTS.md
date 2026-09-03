@@ -1,5 +1,48 @@
 # Project Context
 
+## Data ingest
+
+The map's parquets are built by scheduled jobs on trilogy-cloud, declared as
+`[[cloud.job]]` entries in `data/trilogy.toml` and deployed by
+`.github/workflows/cloud-sync.yml` on merge to main. Read that file's header
+before changing anything under `data/` — it carries the rationale for every
+cadence — and `EXTENDING.md` for the city-addition runbook.
+
+The shape, in one paragraph: **each city is an independent pipeline** with its
+own three jobs (`osm-{code}` weekly extraction, `city-{code}` refresh on a
+cadence matched to its portal, and a `landmarks-{code}` publish with no cron
+where the landmarks are a curated CSV), and a **daily core** (`publish-full`,
+`refresh-enrichment`, `refresh-ecoregions`, plus weekly `refresh-landmarks`)
+that reads only published parquets.
+
+Four things about that are load-bearing, and each replaced something that broke:
+
+- **A job's bundle is its entrypoint's reachable imports.** `trilogy refresh`
+  adopts every managed datasource it can reach, so what a model imports decides
+  what a job builds, probes and needs memory for. A city model importing only
+  `tree_common` and `community_tree_info` is what makes `city-{code}` exactly
+  one city. Check with `trilogy refresh --dry-run <entrypoint>`: more than one
+  asset for a city job means an import reaches too far.
+- **The core must not reach a portal.** `raw/full_tree_publish.preql` reads the
+  published city parquets directly (one `file [...]` multi-file scan) and the
+  enrichment job's entrypoint reaches the rollup through a root datasource;
+  neither imports the city models. While enrichment imported `tree_info` it
+  could rebuild any city's parquet inside its own container.
+  `data/raw/tests/test_cloud_jobs.py` pins this.
+- **The job's file set and the browser's are different on purpose.** The
+  enrichment *job* runs `raw/enrichment_refresh.preql`, which imports the
+  enrichment model plus `raw/full_tree_info_source.preql`; the *browser* bundles
+  `raw/tree_enrichment.preql`, which is species-only. Collapsing the two puts a
+  second tree source in the planner's scope and changes what the charts return —
+  see the join-type bug under Dashboard query compilation below.
+- **Cadence is measured.** `data/raw/portal_cadence.py --record` samples every
+  freshness probe and derives each portal's real publishing interval from the
+  distinct watermarks it has recorded in `portal_cadence.json`. Do not retune a
+  cron from a single observation.
+- **A missing job is silent.** Nothing errors when a city has no schedule; its
+  parquet simply stops updating. `test_cloud_jobs.py` is the only thing that
+  catches it, so run `cd data/raw && uv run --with pytest python -m pytest tests -q`
+  after touching the job table.
 
 ## Tech
 
@@ -62,6 +105,24 @@ Each one gets a self-contained repro under `upstream_repro/`, which is
 gitignored: those go to the upstream project rather than into this repo's
 history, so a path named here is a local working directory, not something a
 fresh clone will have.
+
+A third lives in `upstream_repro/join_type_varies_by_source/`, and it is the
+reason `src/src/tests/dashboard-pushdown.test.ts` exists. Declaring a second
+datasource that satisfies the same concepts — a cross-city rollup beside the
+seventeen per-city partitions — changes the JOIN TYPE on the enrichment side
+from `RIGHT OUTER` to `INNER`, which drops every tree whose species has no
+enrichment row. The query never names the second source and it contributes no
+rows; the count simply comes back lower. `uv run repro_query.py` in that
+directory reproduces it offline in about a second (2 vs 1) and exits non-zero
+while the bug stands.
+
+We are not exposed today, because the enrichment job's file set and the
+browser's model bundle are deliberately kept apart (see the data ingest section
+above). `dashboard-pushdown.test.ts` is what keeps them apart: it asserts that
+a per-city dashboard, and a chat query that filters to a city dynamically, both
+resolve to that city's own Parquet, and that only the all-cities view reads the
+rollup. That is worth pinning for its own sake — the browser downloads whatever
+the SQL names, and the rollup is 5.9M rows against San Francisco's 206k.
 
 The queries come from `dashboardQueryCatalog.ts`, which derives them from the
 same constants the views render — a new chart is covered automatically as long

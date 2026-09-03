@@ -1,0 +1,60 @@
+# Shared declarations for every scheduled OSM extract model.
+#
+# One `{code}_osm_staging.preql` per city, each run by its own `osm-{code}`
+# [[cloud.job]] in ../trilogy.toml — never by a city refresh. This file holds
+# everything those models have in common so a city's own file is just its two
+# datasources: the rows script and the staging target it writes.
+#
+# Deliberately standalone. Nothing here imports raw/, and nothing in raw/
+# imports this, which is what keeps a city refresh job from ever adopting an
+# extract asset. The concepts below mirror the canonical tree columns *by
+# name* because the staging parquet's column names are the contract
+# raw/{code}/{city}_tree_info.preql reads — they are not the same concepts as
+# tree_common.preql's, and importing that file here would drag the raw model
+# tree in behind them.
+#
+# The freshness watermark is Overpass's global `osm_base` timestamp, which
+# advances about every minute. That is the watermark a *city* model must
+# never use — it would rebuild the city on every tick, which is what made
+# Boston and Tempe rebuild three times a day before staging existed — and it
+# is exactly right here: every scheduled firing sees a newer timestamp and
+# re-extracts, so a city's cron IS its extraction cadence. An unreachable
+# Overpass degrades to the epoch (see overpass_timestamp.py), so the staging
+# parquet compares fresh and the firing no-ops instead of failing.
+
+# One script serves every city. Each city's model points its rows datasource
+# at `./osm_rows.py` and adds `where city = '<CODE>'`, which Trilogy compiles
+# into both a SQL predicate and a `--filter 'city=<CODE>'` argument -- that
+# argument is how the script knows what to fetch. It replaced seventeen
+# eight-line shims that differed only in a string.
+#
+# The `where` is mandatory here in a way it is not elsewhere. For
+# `community_tree_info.py` a pushdown filter is an optimisation: that script
+# reads a static export, and the SQL predicate applies the same restriction
+# even if the argument never arrives. Here the filter decides what we *fetch*,
+# so its absence would mean querying Overpass for all seventeen bounding boxes
+# on every firing -- against an API that allows two concurrent slots per IP.
+# `osm_rows.py` therefore refuses to run without it rather than defaulting to
+# everything, and `test_every_staging_model_pushes_down_its_city` checks that
+# each model supplies one.
+
+key tree_id string;
+property tree_id.city string;
+property tree_id.data_source string;
+property tree_id.species string;
+property tree_id.tree_name string;
+property tree_id.plant_date date;
+property tree_id.latitude float;
+property tree_id.longitude float;
+property tree_id.diameter_at_breast_height float;
+property tree_id.submission_photo_url string;
+property tree_id.osm_ref string; # municipal inventory id where the node carries a ref tag
+
+property <*>.osm_extracted_through datetime; # Overpass osm_base time at extraction
+
+# City-agnostic on purpose: the timestamp is global, so every extract model
+# maps this one script onto the one freshness property.
+root datasource overpass_timestamp (
+    data_updated_through: osm_extracted_through
+)
+file `./overpass_timestamp.py`;

@@ -1,0 +1,31 @@
+# Entrypoint for the `refresh-enrichment` [[cloud.job]], and nothing else.
+#
+# It exists to say two things the enrichment model itself must not:
+#
+#   * this job's target is `tree_enrichment` (via the import below), and
+#   * this job *consumes* the published cross-city rollup.
+#
+# The second is what lets trilogy-cloud order the daily core. It reads a job's
+# outputs from its managed datasources and its inputs from its root ones, so
+# `publish-full` (which declares `full_tree_info` managed) and this job (which
+# reaches it as a root, through full_tree_info_source) form an edge, and the
+# platform holds enrichment `pending` until the rollup lands — inside one
+# schedule tick, instead of two crons an hour apart and the hope that 1.4M
+# rows finished writing.
+#
+# **Why the import lives here rather than in tree_enrichment.preql.** That
+# file is also what the app resolves its dashboard queries against
+# (`src/src/trilogyModels.ts` bundles it, and `dashboard_context` imports it).
+# Putting the rollup in its scope gives the planner a second way to answer a
+# tree question, alongside the seventeen per-city partitions — and it does not
+# merely pick the slower one, it gets a different answer: the summary page's
+# tree count under a nativeness cross-filter came back 2 where the fixtures
+# say 3. Measured with `pnpm test:queries`; the smoke tests missed it.
+#
+# So the two views are kept apart, which is what they always should have been.
+# Neither this file nor full_tree_info_source.preql is in the frontend bundle;
+# what the platform orders on and what the browser plans against are different
+# sets, and a file being in one is not a reason to put it in the other.
+
+import tree_enrichment;
+import full_tree_info_source;

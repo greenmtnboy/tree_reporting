@@ -1,29 +1,14 @@
-# Ad-hoc staging publish for Athens's landmarks, run by the `landmarks-grath`
-# [[cloud.job]] in ../trilogy.toml — NOT by the main refresh, and on no cron.
+# Ad-hoc staging publish for Athens's landmarks, run by the
+# `landmarks-grath` [[cloud.job]] in ../trilogy.toml — NOT by the landmarks
+# refresh, and on no cron. Everything shared with the other curated-CSV
+# cities, including why this is `copy into` under `run` rather than a refresh
+# target, lives in staging_common.preql.
 #
-# The curated CSV is committed (raw/grath/athens_landmarks.csv, written by
-# athens_landmarks_geocode.py) and travels to the cloud workspace on every
-# sync, so firing this job republishes it as the staging parquet the city's
-# landmark model reads — with the job's HMAC credentials, no local Google
-# credential anywhere. The flow after editing the CSV: merge, let the sync
-# run, then `trilogy cloud jobs run urban-tree-landmarks-grath --wait`.
-#
-# `copy into` under `operation = "run"` rather than a materialised datasource
-# under `refresh`, deliberately: a refresh target needs a freshness watermark
-# to ever rebuild once its object exists (verified — a no-freshness target is
-# only built while missing), and the only honest watermark for "republish
-# when a person fires the job" is the firing itself. `run` says exactly that:
-# every execution copies, unconditionally. It is also why this job must never
-# gain a frequent cron — republishing an unchanged CSV still moves the
-# staging object's Last-Modified, which the city's landmark probe reads, and
-# the city's landmark parquet would rebuild for nothing.
+# Why Athens has a curated CSV at all: Greece's national monuments registry
+# has no machine-readable export, so raw/grath/athens_landmarks_geocode.py
+# geocodes a hand-written list through Nominatim and commits the result.
 
-key landmark_id string;
-property landmark_id.name string;
-property landmark_id.city string;
-property landmark_id.geometry_raw string;
-property landmark_id.latitude float;
-property landmark_id.longitude float;
+import staging_common;
 
 root datasource grath_landmarks_csv (
     landmark_id: landmark_id,

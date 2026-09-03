@@ -1,5 +1,43 @@
-import tree_info;
+import tree_common;
 import ecoregion_common;
+
+# --- Species only, deliberately -------------------------------------------
+#
+# This file used to `import tree_info`, the seventeen-city union model, so
+# that a reader of `tree_enrichment` also had the tree rows in scope. That
+# import pulled every city model into the enrichment *job's* bundle, and
+# `trilogy refresh` adopts every managed datasource it can reach — so the
+# enrichment lane probed all seventeen municipal portals on every tick and
+# could rebuild a city's Parquet itself: concurrently with that city's own
+# job, and inside the enrichment lane's container rather than the city's
+# (Berlin is sized at 4 GiB; enrichment runs with 2, and a full Berlin
+# rebuild is what OOM-killed the old combined lane). With per-city ingest
+# jobs that reach is the whole problem, not a convenience.
+#
+# So enrichment now declares the species dimension and nothing else. It is a
+# pure consumer of published data — `tree_enrichment.py` and
+# `tree_enrichment_probe.py` read `full_tree_info` by URL, not through the
+# model — and its refresh resolves to exactly one asset, this file's own
+# parquet. Verify with:
+#
+#     cd data && trilogy refresh --dry-run raw/tree_enrichment.preql
+#
+# A reader that wants trees *and* enrichment imports both, which is what
+# `src/src/composables/dashboardContextSource.ts` does.
+#
+# Do not add a `full_tree_info` root datasource to this file. It was tried, to
+# give the enrichment *job* a declared input the platform could order on, and
+# it broke a chart: with the rollup and the seventeen city models both in
+# scope the planner has two ways to answer the same question, and the summary
+# page's tree count under a nativeness cross-filter came back 2 where the
+# fixtures say 3. The smoke tests did not catch it (they check the base
+# per-city queries); `pnpm test:queries` did.
+#
+# The job's input is declared where the job can see it and the app cannot:
+# `raw/enrichment_refresh.preql`, the entrypoint, imports this file *and*
+# `raw/full_tree_info_source.preql`. Neither is in the frontend's model
+# bundle, so what the platform orders on and what the browser plans against
+# are now two different sets — which is what they always should have been.
 
 # Species dimension. The existing `species` key already serves as the canonical
 # scientific-name identifier, so we extend it instead of introducing a separate

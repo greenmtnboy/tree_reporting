@@ -27,6 +27,82 @@ src/src/workers/parquetUrls.ts  ← builds versioned GCS URL from city code + DA
 
 The browser never touches raw source data — it only fetches the pre-built parquet from GCS and queries it locally with DuckDB-WASM.
 
+### Per-city ingest pipelines, one unified core
+
+The scheduling shape is the other half of the architecture, and adding a city
+means adding to it. Each city is an **independent pipeline** — its own jobs, on
+its own cadences, reaching no other city — and everything cross-city happens in
+a **core** that reads only published parquets:
+
+```
+per city, three independent schedules
+────────────────────────────────────────────────────────────────────
+  osm-{code}       weekly, staggered      osm_staging/{code}_osm_staging.preql
+        │                                   └─ Overpass → staging/{code}_osm_staging.parquet
+        ▼
+  city-{code}      daily or twice weekly  raw/{code}/{city}_tree_info.preql
+        │                                   └─ municipal portal + community + staged OSM
+        ▼                                      → trees/{code}_tree_info_v{n}.parquet
+  landmarks-{code} no cron, by hand       landmark_staging/{code}_landmarks_staging.preql
+
+the core, daily, reading only published parquets
+────────────────────────────────────────────────────────────────────
+  06:00  publish-full         raw/full_tree_publish.preql   → full_tree_info_v{n}.parquet
+  06:00  refresh-ecoregions   raw/ecoregion_info.preql
+  07:00  refresh-enrichment   raw/tree_enrichment.preql     → tree_enrichment_v{n}.parquet
+  Sun    refresh-landmarks    raw/landmark_info.preql       → landmark parquets + union
+```
+
+Every job in that picture is a `[[cloud.job]]` entry in `data/trilogy.toml`,
+which carries the full rationale for each cadence. Three properties are
+load-bearing rather than tidy:
+
+**A city job's bundle is exactly one city.** `trilogy refresh` adopts every
+managed datasource it can reach from its entrypoint, so a city's model importing
+only `tree_common` and `community_tree_info` is what makes `city-{code}` build
+one parquet, probe one portal, and be sized for one city. This replaced a single
+lane refreshing all seventeen: it carried Berlin's 4 GiB for everyone and still
+OOM-died part-way through a full rebuild, taking sixteen healthy cities with it.
+
+**The core cannot reach a portal.** `full_tree_publish.preql` reads the
+published city parquets directly (one `file [...]` multi-file scan) and
+`raw/enrichment_refresh.preql` reaches the rollup through a root datasource,
+rather than either of them importing the city models. That is what lets the core
+run daily on one cadence no matter what any city is doing — and it is not
+cosmetic: while enrichment imported `tree_info` it could rebuild a city's parquet
+inside its own 2 GiB container, concurrently with that city's own job.
+`test_the_core_reads_only_published_parquets` pins it.
+
+**The core's own ordering is derived, from names.** The platform reads a job's
+outputs from its managed datasources and its inputs from its root ones, keyed by
+physical address — except that an f-string address is not a join key, so a
+templated address keys on the datasource's *name*. `full_tree_publish.preql`
+declares `full_tree_info` managed; `full_tree_info_source.preql` declares the
+same name root; the enrichment entrypoint imports it. Names match, the edge
+forms, and the two jobs share one cron so the platform orders them in one tick
+instead of us leaving an hour's gap and hoping.
+
+That is also why the enrichment *job* has a separate entrypoint from the
+enrichment *model*. `tree_enrichment.preql` is in the frontend's model bundle,
+and putting the rollup in its scope gives the browser's planner a second way to
+answer a tree question — it returned 2 where the fixtures say 3. Job view and
+app view are two different file sets on purpose.
+
+**Cadence is measured, not guessed.** `data/raw/portal_cadence.py --record`
+runs every city's freshness probe, keeps the distinct watermarks it has seen in
+`portal_cadence.json`, and derives each portal's real publishing interval from
+the changes. It reads the crons back out of `trilogy.toml`, so its verdict
+column compares against the live schedule rather than a second copy of it. The
+measurement that motivated the split: San Francisco, Boston, Amsterdam and
+Cambridge publish daily, while Los Angeles last published in 2016, Tempe in 2024
+and Burlington in 2024 — eleven of seventeen portals move on a scale of months
+to years and were being polled three times a day.
+
+A city's cron still has a floor below the portal's own rhythm, because two other
+things make its parquet stale: an approved community submission (any time) and
+its own weekly OSM extract. That is why the slow tier is twice weekly rather
+than monthly.
+
 ### Approved community submissions
 
 The local reviewer promotes accepted submissions from `submissions` into the
@@ -127,10 +203,19 @@ municipal and community sources declare `borough`; its OSM source did not, so
 that partition dropped out of the union and the remaining two stopped covering
 the source enum. Trilogy reports this as `complete where` clauses "not provably
 exhaustive over that type", which is a long way from "you forgot a column".
-Pass it through `extract_city(..., extra_null_columns={"borough": pa.string()})`
-and declare `borough: ?borough` on the datasource. London is the only instance
-today. Dry-run every city after wiring from a template — per-city divergence is
-exactly what a template hides.
+Add it to `OSM_EXTRA_NULL_COLUMNS` in `data/raw/_osm_shared.py` (keyed by city
+code, so the shared row script emits it for that city alone) and declare the
+property plus `borough: ?borough` in `osm_staging/gblon_osm_staging.preql`.
+London is the only instance today, which is why the shared
+`osm_staging/staging_common.preql` does *not* declare it — a city-unique column
+stays in the city's own file. `test_extra_osm_columns_are_declared_in_the_model`
+pins the two halves together. Dry-run every
+city after wiring from a template — per-city divergence is exactly what a
+template hides:
+
+```bash
+cd data && trilogy refresh --dry-run osm_staging/gblon_osm_staging.preql
+```
 
 **Extraction is decoupled from refresh.** The extraction publishes
 `{code}_osm_staging.parquet` to GCS; the refresh pipeline only ever reads that
@@ -141,35 +226,65 @@ every minute and would mark the city stale on every tick. Instead
 `{city}_osm_probe.py` emits the staged object's publication time, so
 publishing a new extract is what makes the city's Parquet stale.
 
-**Extraction runs two ways, and new cities should use the scheduled one.**
-The fourteen cities wired first use `{city}_osm_extract.py` — a manual run
-from a workstation with application-default GCS credentials, which fetches
-Overpass and `upload_staging`s the parquet. Athens and Milos instead run as
-**scheduled `[[cloud.job]]` entries** (see `data/trilogy.toml`): each job
-refreshes one `osm_staging/{code}_osm_staging.preql`, a standalone model
-whose python datasource (`osm_staging/{code}_osm_rows.py`, a shim over
-`_osm_shared.stage_city_rows`) emits the normalised rows and whose target is
-the staging parquet — so DuckDB writes GCS with the job's HMAC secrets and no
-local credential is involved. Its `freshness by` is Overpass's global
-osm_base timestamp (`osm_staging/overpass_timestamp.py`) — the watermark the
-*city* models must never use — which always advances, so the job's own cron
-is the extraction cadence and each city gets its own schedule. Both paths
-share `fetch_osm_trees`/`build_table`, so they cannot drift on content. To
-migrate a legacy city: copy the two `osm_staging/` files, add a
-`[[cloud.job]]` entry with a schedule staggered off the others (Overpass
-allows two concurrent slots per IP), and compare row counts against the last
-manual extract before deleting the old script. The extract models import
-nothing from `raw/` and vice versa, which is what keeps the refresh lanes
-(entrypoints `raw/tree_cities.preql`, `raw/landmark_info.preql`, …) from ever
-adopting them.
+**Extraction is a scheduled job per city, and that job's cron is the cadence.**
+Every city runs an `osm-{code}` `[[cloud.job]]` (see `data/trilogy.toml`) that
+refreshes one `osm_staging/{code}_osm_staging.preql`: a standalone model whose
+python datasource is the *shared* `osm_staging/osm_rows.py` (a thin wrapper over
+`_osm_shared.stage_city_rows`) and whose target is the staging parquet — so
+DuckDB writes GCS with the job's HMAC secrets and no local credential is
+involved. Which city that script fetches comes from the datasource's
+`where city = '{CODE}'`, which Trilogy pushes down as `--filter`; there is no
+per-city copy of it, and a missing filter is a hard failure rather than
+seventeen Overpass queries.
 
-**A new city's tree model must be imported in `raw/tree_cities.preql` as well
-as `raw/tree_info.preql`, and given a stub datasource in
-`raw/full_tree_publish.preql`.** The trees lane refreshes city parquets from
-`tree_cities.preql` (city imports only — never the `data_source` merge; see
-its header); a city missing from it never rebuilds on schedule. The cross-city
-rollup is republished from the city parquets by the `urban-tree-full` job; a
-city missing from the publisher's stubs never appears in `full_tree_info`.
+Everything those seventeen models share — the canonical tree concepts and the
+Overpass freshness probe — lives in `osm_staging/staging_common.preql`, so a
+city's own file is two datasources and (for London) one extra column. The
+`freshness by` is Overpass's global `osm_base` timestamp
+(`osm_staging/overpass_timestamp.py`), the watermark the *city* models must
+never use: it always advances, so every firing re-extracts and **the cron is the
+extraction cadence**. An unreachable Overpass degrades to the epoch, so the
+staging parquet compares fresh and the firing no-ops instead of failing.
+
+Schedules are staggered, never concurrent, at most four cities a day: Overpass
+allows two slots per client IP and answers an over-budget request with HTTP 200
+carrying an error remark, so a collision does not look like a failure — it looks
+like a city with no trees in OSM. `test_osm_extract_jobs_never_fire_together`
+in `data/raw/tests/test_cloud_jobs.py` checks this, because these entries are
+copy-pasted by definition.
+
+The extract models import nothing from `raw/` and nothing in `raw/` imports
+them, which is what keeps a city refresh job from ever adopting an extract
+asset.
+
+`{city}_osm_extract.py` still exists in each city directory as the manual
+counterpart — a run from a workstation with application-default GCS credentials,
+which fetches Overpass and `upload_staging`s the parquet. It is the bootstrap
+path: a brand-new city needs its staging object to exist before its tree model
+can build, and its `osm-{code}` job does not exist in production until the sync
+runs on merge. Both paths share `fetch_osm_trees`/`build_table`, so they cannot
+drift on content — the only difference is who writes the GCS object. Once the
+job is deployed, prefer firing it:
+
+```bash
+trilogy cloud jobs run urban-tree-osm-ussfo --wait
+```
+
+**A new city's tree model must be imported in `raw/tree_info.preql` and given a
+stub datasource in `raw/full_tree_publish.preql`.** `tree_info.preql` is the
+cross-city union model the app's dashboard queries resolve against; it is not a
+refresh entrypoint and never has been. The published rollup is republished from
+the city parquets by the `urban-tree-full` job, so a city missing from that
+publisher's stubs never appears in `full_tree_info` no matter how healthy its own
+pipeline is.
+
+There used to be a third list, `raw/tree_cities.preql`, whose only job was to be
+the trees lane's entrypoint (city imports and never the `data_source` merge, or
+the planner would build the city parquets from the wrong sources). Per-city
+entrypoints made it unnecessary and it was deleted: a city model *is* the
+entrypoint now, and it structurally cannot have the merge in scope. What the
+import list used to catch — a city that silently never rebuilds — is now
+`test_every_city_has_a_refresh_job`.
 
 **Staged parquets live in GCS, not in git — and the reason is the watermark.**
 The first cut committed them next to the extract script and had the probe emit
@@ -317,9 +432,8 @@ side: a green build no longer proves a brand-new city's parquet exists, so a
 just-added city stays broken in a deploy until its first refresh runs.
 
 **A new column does not make a Parquet stale.** Staleness is decided by the
-freshness probes, which watch the *source data*, so a plain `trilogy refresh
-raw` after a model change reports every unchanged city "up to date" and rebuilds
-nothing. Rolling this column out looked like it worked — the run exited 0 with
+freshness probes, which watch the *source data*, so refreshing a city after a
+model change reports it "up to date" and rebuilds nothing. Rolling this column out looked like it worked — the run exited 0 with
 "All scripts executed successfully" — while twelve of the fourteen Parquets were
 never touched. Force each one by name:
 
@@ -328,9 +442,15 @@ cd data && trilogy refresh raw/{city}/{city}_tree_info.preql -f {city}_tree_info
 ```
 
 Then republish `full_tree_info`, which reads the per-city Parquets and would
-otherwise still hold the pre-change rows — it is built only by the
-`urban-tree-full` cloud job (`trilogy cloud jobs run urban-tree-full --wait`),
-never by a refresh lane; see `raw/full_tree_publish.preql`.
+otherwise still hold the pre-change rows. It is built only by the
+`urban-tree-full` cloud job (`trilogy cloud jobs run urban-tree-full --wait`);
+see `raw/full_tree_publish.preql`.
+
+The rollup is less exposed to this trap than the cities are, because its
+watermark is the *publication time* of the city objects rather than a column
+inside them — a rebuild that changes only the schema still republishes the
+object, and the rollup notices. Force it anyway if you are unsure:
+`trilogy refresh raw/full_tree_publish.preql -f full_tree_info`.
 
 **Do not merge `is_duplicate` in `tree_info.preql`.** `data_source` is merged
 there, and doing the same for the dedup flag looks symmetric but does not plan:
@@ -677,23 +797,112 @@ cd data && trilogy refresh raw/{city}/{city}_tree_info.preql --dry-run -f {city}
 The generated SQL must contain a `UNION ALL` and reference
 `community_tree_info.py`. If it doesn't, the community partition isn't wired up.
 
-### 7. Import in the Merged Data Model
+### 7. Register in the Cross-City Models
 
-Add to `data/raw/tree_info.preql`:
+Two files, and both are needed for different reasons:
+
+**`data/raw/tree_info.preql`** — the union model the app's dashboard queries
+resolve against. Add the import *and* the `data_source` merge:
 
 ```preql
 import {city}.{city}_tree_info;
+merge {code}_source into data_source;
 ```
 
-### 8. Build and Upload the Parquet via Trilogy
+**`data/raw/full_tree_publish.preql`** — the publisher that builds
+`full_tree_info` from the per-city parquets. One line in its file list:
 
-Run the Trilogy pipeline to materialise the per-city parquet and push it to GCS:
+```preql
+root datasource city_published_trees (...)
+file [
+    ...,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{code}_tree_info_v{data_version}.parquet`
+];
+```
+
+`file [...]` is read as a single DuckDB multi-file scan, so seventeen cities are
+one datasource rather than seventeen stubs. A mixed schema is fine — London's
+parquet carries a `borough` column the others do not, and projecting the shared
+columns unions them without complaint.
+
+A city missing from that list has a perfectly healthy pipeline of its own and
+never appears on the map's cross-city view, which is why
+`test_rollup_reads_every_city` compares the list against
+`MUNICIPAL_DATA_SOURCES`.
+
+### 8. Create the OSM Extract Model
+
+Copy an existing pair in `data/osm_staging/` — they are deliberately thin,
+because everything shared lives in `staging_common.preql`:
+
+- `{code}_osm_staging.preql` — the only new file. `import staging_common;` plus
+  the two datasources: `{code}_osm_rows`, reading the shared
+  `./osm_rows.py` with `where city = '{CODE}'`, and `{code}_osm_staging`
+  writing `staging/{code}_osm_staging.parquet` with
+  `freshness by osm_extracted_through`.
+
+The row script is shared by every city — do **not** add a per-city copy. The
+`where` clause is what selects the city, and `CITY_BOUNDS` / `OSM_CITY_NAMES`
+in `data/raw/` are what it looks the city up in.
+
+Add the city to `OSM_DATA_SOURCES` in `data/raw/_ingest_shared.py`, declare the
+`OSM_{CODE}` value in its source enum and the staging partition in its tree
+model, and derive `is_duplicate` (see the four-grid block above — calibrate the
+cell size for this city, do not copy a number).
+
+### 9. Schedule It
+
+Three `[[cloud.job]]` entries in `data/trilogy.toml`. Nothing runs without
+them, and nothing *errors* without them either — a job that does not exist
+cannot fail, so `data/raw/tests/test_cloud_jobs.py` is what turns a forgotten
+entry into a red test.
+
+```toml
+[[cloud.job]]
+key = "city-{code}"
+name = "urban-tree-city-{code}"
+entrypoint = "raw/{code}/{city}_tree_info.preql"
+operation = "refresh"
+schedule = "0 0 12 * * 2,5"     # see "picking a cadence" below
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-{code}"
+name = "urban-tree-osm-{code}"
+entrypoint = "osm_staging/{code}_osm_staging.preql"
+operation = "refresh"
+schedule = "0 30 2 * * 4"       # weekly, on a minute no other extract uses
+timeout_seconds = 1800
+memory_mb = 1024
+```
+
+plus a `landmarks-{code}` entry with **no** schedule if the city's landmarks
+are a curated CSV (see the Landmarks section).
+
+**Picking a cadence.** Start the city in the twice-weekly tier, placed the day
+after its own OSM extract and again mid-week. Then measure rather than guess:
 
 ```bash
-trilogy run data/raw/tree_info.preql --city {CODE}
+cd data/raw && uv run ./portal_cadence.py --record --city {CODE}
 ```
 
-### 9. Update the Frontend
+Run it repeatedly over a few weeks. It records each distinct watermark the
+portal has published in `portal_cadence.json` and derives the real interval
+from the changes; its `verdict` column compares that against the cron you just
+wrote. Move the city to daily when the portal turns out to move daily.
+
+Do not set the cadence from the portal alone. Two other things make a city's
+parquet stale — an approved community submission, which can land any day, and
+the city's own weekly OSM extract — so twice weekly is the floor even for a
+portal that last published in 2016.
+
+**Pick an OSM minute nothing else uses.** Overpass allows two concurrent slots
+per client IP and answers an over-budget request with HTTP 200 carrying an error
+remark, so two extract jobs firing together do not look like a failure — they
+look like a city with no trees in OSM.
+
+### 10. Update the Frontend
 
 **a) `src/src/workers/parquetUrls.ts`** — the `cityTreeParquetUrl` and `cityLandmarkParquetUrl` functions use a regex `/^[a-z]{2}[a-z]{3}$/` to validate city codes (5 lowercase letters). No code changes needed for new cities — just ensure the `DATA_VERSION` constant matches `data/raw/enrichment/_tree_shared.py`.
 
@@ -726,7 +935,7 @@ That's it — the city button appears automatically in the UI, the worker loads 
 
 ---
 
-### 10. Update Attribution and Docs
+### 11. Update Attribution and Docs
 
 Do not stop after the parquet and city config are working. Every city addition must also update the public attribution surfaces:
 
@@ -903,6 +1112,42 @@ import {city}.{city}_landmarks;
 ```
 
 The landmark preql follows the same versioned `f\`` URL pattern as tree files. See `paris_landmarks.preql` as the reference implementation.
+
+**If the source is a curated CSV, add a `landmark_staging/` publish job.** The
+Greek cities are the model: the geocoded CSV is committed, rides the workspace
+sync, and a `landmarks-{code}` `[[cloud.job]]` with **no cron** republishes it
+as the staging parquet on demand.
+
+```
+data/landmark_staging/{code}_landmarks_staging.preql  ← import staging_common; CSV source + copy into
+```
+
+Everything shared lives in `landmark_staging/staging_common.preql`, including
+why this is `copy into` under `operation = "run"` rather than a refresh target:
+a refresh target needs a freshness watermark to rebuild once its object exists,
+and the only honest watermark for "republish when a person fires the job" is the
+firing. Which is also why it must never gain a cron — an unconditional copy
+moves the staging object's `Last-Modified`, and that is exactly the watermark
+the city's landmark probe reads, so the city's landmark parquet would rebuild
+every firing for nothing. The flow after editing a CSV: merge, let the sync run,
+then
+
+```bash
+trilogy cloud jobs run urban-tree-landmarks-{code} --wait
+```
+
+**Landmarks are still one refresh lane, unlike trees.** `refresh-landmarks`
+rebuilds every city's landmark parquet plus the union, weekly (landmark sources
+change on a scale of years, and its per-city freshness columns mean it only
+rebuilds cities that actually moved). Splitting it per city the way trees were
+split is a *code-sharing* job rather than a scheduling one: tree extraction lives
+once in `_osm_shared.py`, which is what made seventeen scheduled OSM jobs a
+matter of seventeen thin shims, whereas the landmark sources are seventeen
+bespoke scripts. Three cities are still on hand-run paths that the Greek model
+would replace — `USBTV`, `USTEM` and `USWAS` read a hand-uploaded CSV from the
+staging prefix, and `DEBER`/`GBLON` stage from a hand-run Overpass fetch whose
+logic has never been shared. Sharing that fetch the way `_osm_shared` shares the
+tree one is the prerequisite; the scheduling is the easy half.
 
 ---
 
@@ -1084,10 +1329,10 @@ also stops the every-tick re-run described below.
 
 ### The scheduled refresh runs `main`, and will undo you
 
-`data/trilogy.toml` ticks at 04:00, 12:00 and 20:00 UTC, and because the
-enrichment probe reports `false` while any species is short of a common name,
-**every tick re-runs the enrichment script** — from whatever is on `main`, not
-from your branch.
+The `refresh-enrichment` job in `data/trilogy.toml` ticks daily at 07:00 UTC,
+and because the enrichment probe reports `false` while any species is short of a
+common name, **every tick re-runs the enrichment script** — from whatever is on
+`main`, not from your branch.
 
 So a change to the *shape* of the published table is reverted on the next tick
 until it merges.  The sentinel rows are the worked example: a branch run
@@ -1100,7 +1345,7 @@ the fix.
 
 Two things follow.  A data-shape change is not done when the parquet looks
 right; it is done when it **merges**, and until then expect any test asserting
-the new shape to flap on a three-hour cycle.  And `assert_published_matches`
+the new shape to flap on a daily cycle.  And `assert_published_matches`
 reads the object back after every upload and checks the row count and the
 sentinel set, because an upload that lands short is otherwise invisible — the
 script reports the count it *wrote*, exits 0, and the damage shows up as null
@@ -1155,7 +1400,7 @@ Three pieces fix it, and you need all three:
 by this run carries today's `enriched_at` and falls out of scope on the next
 one, so a species the model still cannot name is retried exactly once.  Without
 that bound an unnameable species would be re-enriched on every refresh tick,
-for ever — three times a day, at roughly a minute each.  Moving the date is how
+for ever, at roughly a minute each.  Moving the date is how
 you ask for another attempt: a deliberate, greppable edit, like
 `SENTINEL_ENRICHED_AT`.
 
@@ -1264,7 +1509,20 @@ Parquet against the source row count before assuming a rebuild succeeded.
 
 ### After Adding a New City
 
-Run the enrichment probe to measure coverage:
+Check the wiring before checking the data — the schedule tests are instant and
+catch the failure that is otherwise silent:
+
+```bash
+cd data/raw && uv run --with pytest python -m pytest tests -q
+cd data && trilogy refresh --dry-run raw/{code}/{city}_tree_info.preql
+cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql
+```
+
+Each dry run should report exactly **one** asset for that city. More than one
+means the entrypoint reaches something it should not — most likely an import
+that pulled in another city's model or the cross-city merge.
+
+Then run the enrichment probe to measure coverage:
 
 ```bash
 cd data/raw && uv run tree_enrichment_probe.py
