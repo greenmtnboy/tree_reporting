@@ -775,27 +775,44 @@ def build_registration_review(
                 ["scene_col", "scene_row"], sort=False
             )
         }
-        ordered = _diverse_order(frame, config.seed)
+        minimum_scenes = min(len(scene_groups), max(len(allowed_splits), int(np.ceil(samples / 4))))
+
+        def balanced_scene_order(candidates: pd.DataFrame, seed: int) -> list[tuple[int, int]]:
+            per_split: list[list[tuple[int, int]]] = []
+            for split_index, split in enumerate(allowed_splits):
+                split_frame = candidates[candidates["split"] == split]
+                keys: list[tuple[int, int]] = []
+                if not split_frame.empty:
+                    for row in _diverse_order(split_frame, seed + split_index).itertuples(
+                        index=False
+                    ):
+                        key = (int(row.scene_col), int(row.scene_row))
+                        if key not in keys:
+                            keys.append(key)
+                per_split.append(keys)
+            ordered_keys: list[tuple[int, int]] = []
+            while any(per_split):
+                for keys in per_split:
+                    while keys and keys[0] in ordered_keys:
+                        keys.pop(0)
+                    if keys:
+                        ordered_keys.append(keys.pop(0))
+            return ordered_keys
+
+        ordered_scene_keys = balanced_scene_order(frame, config.seed)
         seam_scene_keys: list[tuple[int, int]] = []
         if mosaic_sources:
-            seam_budget = max(1, samples // 4)
+            seam_scene_budget = max(1, minimum_scenes // 4)
             seam_pool = frame[frame["tile_seam_distance_m"].notna()].nsmallest(
-                min(len(frame), max(32, seam_budget * 4)),
+                min(len(frame), max(32, seam_scene_budget * 16)),
                 "tile_seam_distance_m",
             )
-            seam_owned_trees = 0
-            for row in _diverse_order(seam_pool, config.seed + 1).itertuples(index=False):
-                scene_key = (int(row.scene_col), int(row.scene_row))
-                if scene_key in seam_scene_keys:
-                    continue
-                seam_scene_keys.append(scene_key)
-                seam_owned_trees += len(scene_groups[scene_key])
-                if seam_owned_trees >= seam_budget:
-                    break
+            seam_scene_keys = balanced_scene_order(seam_pool, config.seed + 1)[
+                :seam_scene_budget
+            ]
 
         scene_order = list(seam_scene_keys)
-        for row in ordered.itertuples(index=False):
-            scene_key = (int(row.scene_col), int(row.scene_row))
+        for scene_key in ordered_scene_keys:
             if scene_key not in scene_order:
                 scene_order.append(scene_key)
 
@@ -884,7 +901,7 @@ def build_registration_review(
                     }
                 ),
             })
-            if len(generated) >= samples:
+            if len(generated) >= samples and len(generated_scenes) >= minimum_scenes:
                 break
 
     if not generated:
@@ -899,6 +916,7 @@ def build_registration_review(
         "source_raster": str(source_path.resolve()),
         "inventory": str(inventory_path.resolve()),
         "requested_samples": samples,
+        "minimum_scenes": minimum_scenes,
         "rendered_samples": len(generated),
         "rendered_scenes": len(generated_scenes),
         "window_pixels": window_pixels,
