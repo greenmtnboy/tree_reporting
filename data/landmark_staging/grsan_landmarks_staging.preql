@@ -1,17 +1,14 @@
-# Ad-hoc staging publish for Santorini's landmarks, run by the `landmarks-grsan`
-# [[cloud.job]] in ../trilogy.toml — NOT by the main refresh, and on no cron.
-# Same shape and rationale as grath_landmarks_staging.preql: the committed
-# CSV (raw/grsan/santorini_landmarks.csv) rides the workspace sync, and a firing
-# republishes it as the staging parquet with the job's HMAC credentials —
-# `copy into` under `operation = "run"`, so every execution copies
-# unconditionally and the firing itself is the republish decision.
+# Ad-hoc staging publish for Santorini's landmarks, run by the
+# `landmarks-grsan` [[cloud.job]] in ../trilogy.toml — NOT by the landmarks
+# refresh, and on no cron. Everything shared with the other curated-CSV
+# cities, including why this is `copy into` under `run` rather than a refresh
+# target, lives in staging_common.preql.
+#
+# Why Santorini has a curated CSV at all: Greece's national monuments registry
+# has no machine-readable export, so raw/grsan/santorini_landmarks_geocode.py
+# geocodes a hand-written list through Nominatim and commits the result.
 
-key landmark_id string;
-property landmark_id.name string;
-property landmark_id.city string;
-property landmark_id.geometry_raw string;
-property landmark_id.latitude float;
-property landmark_id.longitude float;
+import staging_common;
 
 root datasource grsan_landmarks_csv (
     landmark_id: landmark_id,

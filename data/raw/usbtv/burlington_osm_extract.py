@@ -11,6 +11,13 @@ has a discoverable entry point, and so a city that needs to diverge (a tighter
 bbox, an extra tag) has somewhere to do it.
 
     cd data/raw && uv run usbtv/burlington_osm_extract.py
+
+The scheduled `osm-usbtv` [[cloud.job]] is the normal path (see
+../trilogy.toml and osm_staging/usbtv_osm_staging.preql); this script is the
+manual counterpart, for bootstrapping a city before its job is deployed or
+re-extracting from a workstation. Both share `_osm_shared.fetch_osm_trees` /
+`build_table`, so they cannot differ on content -- only on who writes the GCS
+object.
 """
 
 import sys

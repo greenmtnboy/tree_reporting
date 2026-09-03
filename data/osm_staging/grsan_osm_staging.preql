@@ -1,28 +1,10 @@
 # Scheduled OSM extraction for Santorini, run by the `osm-grsan` [[cloud.job]] in
-# ../trilogy.toml — NOT by the main refresh.  Same shape and rationale as
-# grath_osm_staging.preql: standalone model, canonical column names as the
-# contract raw/grsan/santorini_tree_info.preql reads, Overpass's ever-advancing
-# osm_base timestamp as the watermark so the job's cron is the extraction
-# cadence and a dead Overpass no-ops the firing.
+# ../trilogy.toml. Everything shared with the other sixteen cities -- the
+# canonical tree concepts, the Overpass freshness probe, and why extraction is
+# a separate job at all -- lives in staging_common.preql; this file is just
+# Santorini's rows and the staging object they land in.
 
-key tree_id string;
-property tree_id.city string;
-property tree_id.data_source string;
-property tree_id.species string;
-property tree_id.tree_name string;
-property tree_id.plant_date date;
-property tree_id.latitude float;
-property tree_id.longitude float;
-property tree_id.diameter_at_breast_height float;
-property tree_id.submission_photo_url string;
-property tree_id.osm_ref string; # municipal inventory id where the node carries a ref tag
-
-property <*>.osm_extracted_through datetime; # Overpass osm_base time at extraction
-
-root datasource overpass_timestamp (
-    data_updated_through: osm_extracted_through
-)
-file `./overpass_timestamp.py`;
+import staging_common;
 
 root datasource grsan_osm_rows (
     tree_id: tree_id,
@@ -38,7 +20,8 @@ root datasource grsan_osm_rows (
     osm_ref: ?osm_ref,
 )
 grain (tree_id)
-file `./grsan_osm_rows.py`;
+file `./osm_rows.py`
+where city = 'GRSAN';
 
 datasource grsan_osm_staging (
     tree_id,

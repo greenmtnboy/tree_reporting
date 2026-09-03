@@ -6,11 +6,6 @@
 
 """Extract Milos's OpenStreetMap trees into the staged parquet in GCS.
 
-The normal path is the scheduled `osm-grmlo` cloud job, which refreshes
-osm_staging/grmlo_osm_staging.preql on its own cron with the pipeline's GCS
-credentials — this script is the manual fallback, and it needs
-application-default Google credentials for the upload.
-
 Everything lives in `_osm_shared.extract_city`; this file exists so each city
 has a discoverable entry point, and so a city that needs to diverge (a tighter
 bbox, an extra tag) has somewhere to do it.
@@ -21,6 +16,13 @@ empty result, which for Milos would mean the nodes were deleted or the bbox
 drifted — either way worth a look rather than an empty publish.
 
     cd data/raw && uv run grmlo/milos_osm_extract.py
+
+The scheduled `osm-grmlo` [[cloud.job]] is the normal path (see
+../trilogy.toml and osm_staging/grmlo_osm_staging.preql); this script is the
+manual counterpart, for bootstrapping a city before its job is deployed or
+re-extracting from a workstation. Both share `_osm_shared.fetch_osm_trees` /
+`build_table`, so they cannot differ on content -- only on who writes the GCS
+object.
 """
 
 import sys

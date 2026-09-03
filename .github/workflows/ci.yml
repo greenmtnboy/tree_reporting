@@ -34,6 +34,28 @@ jobs:
       working-directory: ./src
       run: pnpm lint
 
+  # The ingest models and the job table these deploy from have no other gate.
+  # `data/raw/tests` asserts things whose failure mode is silence rather than an
+  # error: a data_source value with no partition emits zero rows, a city with no
+  # [[cloud.job]] simply stops updating. Offline and ~7s, so it runs on every PR.
+  data-tests:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+    - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+    - name: Run data model tests
+      working-directory: ./data/raw
+      # --no-project: these are uv inline scripts and loose modules, not a
+      # packaged project, so uv has nothing to install from. The dependency
+      # list mirrors the `# /// script` blocks the tests import through.
+      run: >
+        uv run --no-project
+        --with pytest --with pyarrow --with pytrilogy --with duckdb --with requests
+        python -m pytest tests -q
+
   build:
     timeout-minutes: 15
     runs-on: ubuntu-latest

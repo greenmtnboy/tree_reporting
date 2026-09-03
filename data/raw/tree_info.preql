@@ -94,7 +94,13 @@ grain (tree_id)
 # environment. Planned here, with the merge in scope, the planner loses the
 # partition-completeness proofs and published the rollup as OSM-only for 15
 # of 16 cities. raw/full_tree_publish.preql (the `urban-tree-full` cloud
-# job) copies it unconditionally from the sixteen city parquets instead;
-# without a watermark this datasource is never stale, so no refresh lane
-# that imports this file can rebuild it wrongly.
+# job) copies it unconditionally from the seventeen city parquets instead;
+# without a watermark this datasource is never stale, so no refresh that
+# imports this file can rebuild it wrongly.
+#
+# This file is not an entrypoint for any job, and must not become one. It is
+# the model the *app's* dashboard queries resolve against: `dashboard_context`
+# imports it, and it is the per-city `complete where city = 'X'` partitions it
+# brings with it that let the planner answer a single-city chart from that
+# city's parquet rather than downloading this whole rollup into the browser.
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/full_tree_info_v{data_version}.parquet`;

@@ -553,11 +553,15 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
     code: community_source_for(code) for code in MUNICIPAL_DATA_SOURCES
 }
 
-# Cities with a supplemental OpenStreetMap source, keyed to its label.  Opt-in
-# per city (unlike community, which every city gets): a city appears here once
-# its OSM staging parquet is committed and its tree model declares the
-# `OSM_{code}` enum value and staging datasource.  OSM rows overlap the
-# municipal inventory by construction, so each wired city also derives an
+# Cities with a supplemental OpenStreetMap source, keyed to its label.  All
+# seventeen are wired; the map stays keyed rather than derived from the city
+# list because a city is briefly in one and not the other while it is being
+# added.  A city belongs here once it has an `osm-{code}` [[cloud.job]]
+# publishing its staging parquet and its tree model declares the `OSM_{code}`
+# enum value and the staging datasource — `test_osm_city_is_fully_wired` and
+# `test_every_osm_city_has_an_extract_job` check each half, because a
+# half-wired city emits zero OSM rows rather than an error.  OSM rows overlap
+# the municipal inventory by construction, so each wired city also derives an
 # `is_duplicate` flag in its model — see the four-grid dedup block in
 # ustem/tempe_tree_info.preql for the reference implementation.
 OSM_DATA_SOURCES: dict[str, str] = {
@@ -1434,6 +1438,38 @@ def iter_csv_row_chunks(
             os.remove(path)
         except OSError:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Pushdown filters
+# ---------------------------------------------------------------------------
+
+def parse_pushdown_filters(argv: list[str]) -> dict[str, str]:
+    """Read `--filter key=value` pairs Trilogy pushes down from the model.
+
+    A datasource-level `where city = 'USTEM'` is compiled into both a SQL
+    predicate and a `--filter 'city=USTEM'` argument here, so honouring it is
+    an optimisation, not a correctness requirement: the SQL predicate filters
+    the rows either way.  That is why an unrecognised key is ignored rather
+    than fatal — a filter this script does not understand still gets applied
+    one layer up.
+
+    Every city's datasource runs this script, so without the pushdown all
+    fourteen read and emit the whole export to have thirteen fourteenths of it
+    discarded downstream.
+    """
+    filters: dict[str, str] = {}
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--filter" and i + 1 < len(argv):
+            key, _, value = argv[i + 1].partition("=")
+            if value:
+                filters[key.strip().lower()] = value.strip()
+            i += 2
+        else:
+            i += 1
+    return filters
+
 
 
 # ---------------------------------------------------------------------------

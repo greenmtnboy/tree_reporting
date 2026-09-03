@@ -157,17 +157,47 @@ https://github.com/greenmtnboy/sf_tree_reporting
 
 ### City Additions
 
-Update ingest pipelines with city source.
-- ingest watermark script
-- data ingest script for trees
+Each city is an independent ingest pipeline: its own freshness probe, its own
+model, its own OSM extract, and its own three entries in `data/trilogy.toml`
+that schedule them. Full runbook in [EXTENDING.md](EXTENDING.md); the short
+version is
+
+- ingest watermark script (`{city}_update_time.py`)
+- data ingest script for trees (`{city}_tree_info.py`)
 - optional - landmark script or empty CSV
-- trilogy file + imports and merge
+- trilogy model (`{city}_tree_info.preql`) + its import in `raw/tree_info.preql`
+  and its stub in `raw/full_tree_publish.preql`
+- OSM extract model (`osm_staging/{code}_osm_staging.preql`; the row script
+  `osm_staging/osm_rows.py` is shared and selects the city from a `where` clause)
+- three `[[cloud.job]]` entries in `data/trilogy.toml`: `city-{code}`,
+  `osm-{code}`, and a `landmarks-{code}` if the landmarks are a curated CSV
 - update `README.md` links/attribution and `src/src/data/sourceCatalog.ts` so the info page stays in sync
+
+`data/raw/tests/test_cloud_jobs.py` fails if a city is missing a job, so a
+half-added city is a red test rather than a parquet that quietly never
+rebuilds.
 
 ### Update Data
 
-TODO: instructions that would work for anyone else. (GCS writes; bucket/locations would need to be parameterized)
+The scheduled refresh runs on trilogy-cloud — `data/trilogy.toml` declares one
+job per city plus a daily core, and `.github/workflows/cloud-sync.yml` deploys
+them on merge to main. Nothing needs to run locally for data to stay current.
+
+To rebuild one city by hand (GCS writes; bucket/locations would need to be
+parameterized for anyone else):
 
 ```bash
-trilogy refresh data\raw\tree_info.preql
+cd data && trilogy refresh raw/ussfo/sf_tree_info.preql
+```
+
+or fire the deployed job, which needs no local Google credential at all:
+
+```bash
+trilogy cloud jobs run urban-tree-city-ussfo --wait
+```
+
+How often each portal actually publishes, measured rather than assumed:
+
+```bash
+cd data/raw && uv run ./portal_cadence.py --record
 ```

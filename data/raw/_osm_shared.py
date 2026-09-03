@@ -1,5 +1,5 @@
 """
-Shared OpenStreetMap tree extraction, used by every city's `{city}_osm_extract.py`.
+Shared OpenStreetMap tree extraction, behind both of the ways a city extracts.
 
 NOT a uv inline script — a regular importable module, like `_ingest_shared`.
 
@@ -13,11 +13,25 @@ is what makes the city's Parquet stale.
 Overpass is flaky (429/504 under load, and it answers an over-budget request
 with HTTP 200 carrying an error remark rather than a 4xx) and its database
 timestamp advances every minute, which is why extraction is decoupled from
-`trilogy refresh` instead of fetching inline — see EXTENDING.md.  Each city's
-extract stays a thin shim over this module so the eventual move to a weekly
-`[[cloud.job]]` is a scheduling change rather than fourteen rewrites.
+a city's refresh instead of fetching inline — see EXTENDING.md.
 
-The per-city scripts used to be 160-line copies of each other differing in five
+Two callers, one body:
+
+* `stage_city_rows` is the scheduled path and the normal one.  Every city has
+  a weekly `osm-{code}` [[cloud.job]] whose `trilogy refresh` materialises
+  `osm_staging/{code}_osm_staging.preql`.  All seventeen models point at one
+  datasource script (`osm_staging/osm_rows.py`) and name their city in a
+  `where` clause, so DuckDB writes the GCS object with the job's own HMAC
+  credentials.
+* `extract_city` is the manual counterpart, `raw/{code}/{city}_osm_extract.py`,
+  which fetches and uploads from a workstation with application-default
+  credentials.  It stays because a brand-new city needs its staging object
+  before its tree model can build, and its cloud job does not exist until the
+  sync runs on merge.
+
+Both share `fetch_osm_trees` / `build_table`, so they cannot drift on content —
+the only difference is who writes the object.  Keeping the per-city files thin
+is the point: they used to be 160-line copies of each other differing in five
 lines, which is how Boston's shipped with a docstring claiming it extracted
 Tempe's trees.
 """
@@ -54,6 +68,48 @@ from _ingest_shared import (  # noqa: E402
 OVERPASS_URL = os.environ.get("OVERPASS_URL", "https://overpass-api.de/api/interpreter")
 
 _CIRCUMFERENCE_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(cm|m)?\s*$", re.I)
+
+# What each city is called in logs, and any column its OSM partition has to
+# carry beyond the canonical tree schema.  Both used to be arguments passed by
+# a per-city shim script; they live here because the shims are gone -- one
+# `osm_staging/osm_rows.py` now serves every city and learns which one from the
+# model's pushed-down `where city = '<CODE>'`.
+#
+# An extra column is not decoration.  A column a city's municipal and community
+# sources declare has to exist on its OSM partition too, or that partition
+# drops out of the union and the remaining two stop covering the source enum --
+# Trilogy reports it as `complete where` clauses "not provably exhaustive over
+# that type", which is a long way from "you forgot a column".  London is the
+# only instance today.
+OSM_CITY_NAMES: dict[str, str] = {
+    "USSFO": "San Francisco",
+    "USNYC": "New York City",
+    "USBOS": "Boston",
+    "FRPAR": "Paris",
+    "USBTV": "Burlington",
+    "CAVAN": "Vancouver",
+    "DEBER": "Berlin",
+    "NLAMS": "Amsterdam",
+    "GBLON": "London",
+    "AUMEL": "Melbourne",
+    "ARBUE": "Buenos Aires",
+    "USLAX": "Los Angeles",
+    "USWAS": "Washington DC",
+    "USTEM": "Tempe",
+    "GRATH": "Athens",
+    "GRMLO": "Milos",
+    "GRSAN": "Santorini",
+}
+
+OSM_EXTRA_NULL_COLUMNS: dict[str, dict[str, "pa.DataType"]] = {
+    "GBLON": {"borough": pa.string()},
+}
+
+
+def osm_city_label(city_code: str) -> str:
+    """The name used in log lines, e.g. "London OSM"."""
+    return f"{OSM_CITY_NAMES.get(city_code, city_code)} OSM"
+
 
 
 def staging_name(city_code: str) -> str:
@@ -226,24 +282,31 @@ def stage_city_rows(
 ) -> None:
     """Fetch and normalise one city's OSM trees, emitted as an Arrow stream.
 
-    The body of an `osm_staging/{code}_osm_rows.py` datasource script — the
-    scheduled extract jobs (see `[[cloud.job]]` in data/trilogy.toml)
-    materialise the staging parquet through `trilogy refresh`, so DuckDB
-    writes it to GCS with the job's HMAC credentials and no
-    google-cloud-storage credential is needed anywhere.
+    The body of `osm_staging/osm_rows.py`, the one datasource script behind
+    every city's scheduled extract job: `trilogy refresh` materialises the
+    staging parquet from this stream, so DuckDB writes it to GCS with the job's
+    HMAC credentials and no google-cloud-storage credential is needed anywhere.
 
     `extract_city` above is the manual counterpart (fetch + upload from a
-    workstation with application-default credentials); the fourteen cities
-    wired before the cloud jobs existed still use it.  Both paths share
-    `fetch_osm_trees` / `build_table`, so they cannot drift on content —
-    the only difference is who writes the GCS object.
+    workstation with application-default credentials).  Both paths share
+    `fetch_osm_trees` / `build_table`, so they cannot drift on content -- the
+    only difference is who writes the GCS object.
+
+    *city_name* and *extra_null_columns* default from `OSM_CITY_NAMES` /
+    `OSM_EXTRA_NULL_COLUMNS` and are arguments only so a caller can override
+    them; the shared script passes neither.
     """
     from _ingest_shared import emit
 
-    name = city_name or f"{city_code} OSM"
     if city_code not in OSM_DATA_SOURCES:
         raise ValueError(
             f"{city_code} is not in OSM_DATA_SOURCES; add it there and to that "
             f"city's `{city_code.lower()}_source` enum before extracting"
         )
-    emit(build_table(fetch_osm_trees(city_code), city_code, name, extra_null_columns))
+    name = city_name or osm_city_label(city_code)
+    extras = (
+        extra_null_columns
+        if extra_null_columns is not None
+        else OSM_EXTRA_NULL_COLUMNS.get(city_code)
+    )
+    emit(build_table(fetch_osm_trees(city_code), city_code, name, extras))

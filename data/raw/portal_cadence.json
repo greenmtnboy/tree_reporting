@@ -1,0 +1,59 @@
+{
+  "_comment": "Distinct freshness watermarks observed per probe, oldest first, written by portal_cadence.py --record. Each entry is one upstream publication; the gaps between them are the measured cadence the per-city crons in ../trilogy.toml are set from. Append-only in practice -- deleting entries throws away the only cadence measurement this project has.",
+  "watermarks": {
+    "portal:arbue/buenosaires_update_time.py": [
+      "2026-06-18T17:52:39.010742+00:00"
+    ],
+    "portal:aumel/melbourne_update_time.py": [
+      "2025-09-22T02:55:40+00:00"
+    ],
+    "portal:cavan/vancouver_update_time.py": [
+      "2026-06-22T13:50:25+00:00"
+    ],
+    "portal:deber/berlin_update_time.py": [
+      "2026-04-15T13:45:35.453081+00:00"
+    ],
+    "portal:frpar/paris_update_time.py": [
+      "2026-08-28T08:35:28+00:00"
+    ],
+    "portal:gblon/london_update_time.py": [
+      "2025-12-01T14:13:14.988000+00:00"
+    ],
+    "portal:grath/athens_update_time.py": [
+      "2026-05-28T16:25:07.837714+00:00"
+    ],
+    "portal:nlams/amsterdam_update_time.py": [
+      "2026-09-02T22:15:15.823424+00:00"
+    ],
+    "portal:usbos/arboretum_update_time.py": [
+      "2026-09-03T03:00:42+00:00"
+    ],
+    "portal:usbos/boston_update_time.py": [
+      "2026-09-03T03:02:13.163624+00:00"
+    ],
+    "portal:usbos/brookline_update_time.py": [
+      "2026-03-06T16:19:05.133000+00:00"
+    ],
+    "portal:usbos/cambridge_update_time.py": [
+      "2026-09-02T04:09:39+00:00"
+    ],
+    "portal:usbtv/burlington_update_time.py": [
+      "2024-02-21T15:06:22+00:00"
+    ],
+    "portal:uslax/losangeles_update_time.py": [
+      "2016-03-24T04:52:05+00:00"
+    ],
+    "portal:usnyc/nyc_update_time.py": [
+      "2026-08-26T13:24:01+00:00"
+    ],
+    "portal:ussfo/sf_update_time.py": [
+      "2026-09-02T14:47:12+00:00"
+    ],
+    "portal:ustem/tempe_update_time.py": [
+      "2024-09-24T20:24:21.874000+00:00"
+    ],
+    "portal:uswas/washingtondc_update_time.py": [
+      "2026-08-28T18:53:14+00:00"
+    ]
+  }
+}

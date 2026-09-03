@@ -25,7 +25,14 @@ async function compilePreQLFull(
     query,
     dialect: 'duckdb',
     full_model: { name: '', sources: [...ALL_MODEL_SOURCES, ...(options?.extraSources ?? [])] },
-    imports: options?.imports ?? [{ name: 'tree_enrichment', alias: '' }],
+    // Trees and enrichment are two imports, not one: `tree_enrichment` is the
+    // species dimension only, and `tree_info` is the union model whose
+    // per-city partitions are what the assertions below are about. The app
+    // imports both the same way, through `dashboard_context`.
+    imports: options?.imports ?? [
+      { name: 'tree_enrichment', alias: '' },
+      { name: 'tree_info', alias: '' },
+    ],
     extra_filters: [],
     parameters: options?.parameters ?? {},
   }

@@ -174,7 +174,18 @@ export function buildDashboardContextSource(city: CityCode | null): DashboardCon
 
   return {
     alias: 'dashboard_context',
+    // `tree_info` is imported explicitly rather than inherited through
+    // `tree_enrichment`, which used to import it. Enrichment is now
+    // species-only, because that import also decided what its *refresh job*
+    // built — see the header of data/raw/tree_enrichment.preql. The import has
+    // to be here, and it has to be `tree_info` rather than the cross-city
+    // rollup: tree_info brings the seventeen per-city models with it, and it is
+    // their `complete where city = 'X'` partitions that let the planner answer
+    // a single-city query from that city's parquet instead of downloading the
+    // whole 1.4M-row rollup into the browser. `trilogy-smoketest.test.ts`
+    // asserts the per-city choice for exactly this reason.
     contents: `import tree_enrichment;
+import tree_info;
 import ecoregion_info;
 import std.display;
 
