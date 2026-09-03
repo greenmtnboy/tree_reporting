@@ -138,10 +138,15 @@ def _render_grouped_registration_html(
     :root {{ color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }}
     * {{ box-sizing: border-box; }}
     body {{ margin: 0; background: #101613; color: #eef5ef; }}
+    body.modal-open {{ overflow: hidden; }}
     header {{ position: sticky; top: 0; z-index: 20; padding: 16px 22px; background: #17211cf2;
       backdrop-filter: blur(12px); border-bottom: 1px solid #33453a; }}
     h1 {{ margin: 0 0 5px; font-size: 21px; }}
     .lede {{ margin: 0; color: #b7c8bc; font-size: 14px; }}
+    .guide {{ margin-top: 9px; color: #c5d4ca; font-size: 13px; }}
+    .guide summary {{ width: fit-content; color: #dce9df; cursor: pointer; }}
+    .guide ul {{ max-width: 1050px; margin: 8px 0 0; padding-left: 20px; line-height: 1.45; }}
+    .guide li + li {{ margin-top: 3px; }}
     .toolbar {{ display: flex; flex-wrap: wrap; gap: 9px; margin-top: 12px; align-items: center; }}
     button, select, .file-label {{ border: 1px solid #496252; border-radius: 7px; padding: 7px 10px;
       color: #eef5ef; background: #203027; cursor: pointer; font: inherit; }}
@@ -161,6 +166,7 @@ def _render_grouped_registration_html(
     .badge {{ align-self: start; padding: 3px 7px; border-radius: 999px; background: #293a31;
       font-size: 11px; text-transform: uppercase; }}
     .seam {{ background: #614d22; color: #ffe5a0; cursor: help; }}
+    .expand-button {{ align-self: start; padding: 3px 7px; font-size: 11px; text-transform: uppercase; }}
     .image-wrap {{ position: relative; width: 100%; aspect-ratio: 1; background: #050806; cursor: crosshair; }}
     .image-wrap img {{ display: block; width: 100%; height: 100%; object-fit: contain;
       image-rendering: auto; user-select: none; }}
@@ -189,8 +195,23 @@ def _render_grouped_registration_html(
     .offset-hint {{ color: #ffe6a3; }}
     textarea {{ width: calc(100% - 24px); min-height: 48px; margin: 0 12px 12px; resize: vertical;
       border: 1px solid #3b5144; border-radius: 6px; padding: 7px; color: #eef5ef; background: #101713; }}
+    .card.fullscreen {{ position: fixed; inset: 0; z-index: 100; display: grid; overflow: auto;
+      grid-template-columns: minmax(0, 1fr) minmax(330px, 420px); grid-template-rows: auto auto auto auto 1fr;
+      grid-template-areas: "head head" "image list" "image details" "image actions" "image note";
+      border: 0; border-radius: 0; background: #101713; }}
+    .card.fullscreen .card-head {{ grid-area: head; border-bottom: 1px solid #30443a; }}
+    .card.fullscreen .image-wrap {{ grid-area: image; align-self: start; justify-self: center;
+      width: min(calc(100vw - 440px), calc(100vh - 72px)); max-width: 100%; }}
+    .card.fullscreen .tree-list {{ grid-area: list; padding-top: 14px; }}
+    .card.fullscreen .details {{ grid-area: details; }}
+    .card.fullscreen .actions {{ grid-area: actions; }}
+    .card.fullscreen textarea {{ grid-area: note; align-self: start; }}
     .hidden {{ display: none; }}
-    @media (max-width: 600px) {{ main {{ padding: 8px; grid-template-columns: 1fr; }} #stats {{ width: 100%; }} }}
+    @media (max-width: 850px) {{
+      main {{ padding: 8px; grid-template-columns: 1fr; }} #stats {{ width: 100%; }}
+      .card.fullscreen {{ display: block; }}
+      .card.fullscreen .image-wrap {{ width: min(100vw, calc(100vh - 72px)); }}
+    }}
   </style>
 </head>
 <body>
@@ -198,6 +219,15 @@ def _render_grouped_registration_html(
     <h1>Grouped registration review</h1>
     <p class="lede">Each numbered ring is one inventory tree. Select a ring, then click its apparent
       tree center to record an offset. Cyan = aligned, yellow = offset, red = not tree, orange = uncertain.</p>
+    <details class="guide">
+      <summary>How should I classify ambiguous trees?</summary>
+      <ul>
+        <li><strong>Aligned:</strong> the ring plausibly belongs to the visible tree. Do not move a point merely from the trunk side to the canopy center in an angled image.</li>
+        <li><strong>Offset:</strong> the same tree is clearly identifiable at a genuinely different location. Select its ring, then click that location.</li>
+        <li><strong>Uncertain:</strong> use this when a small, shadowed, overhung, merged, or off-nadir tree cannot be located confidently. It will be excluded from supervision.</li>
+        <li><strong>Not tree:</strong> use only when you are confident no matching tree existed when the imagery was captured. Unnumbered nearby trees are outside this inventory review.</li>
+      </ul>
+    </details>
     <div class="toolbar">
       <select id="split-filter"><option value="">All splits</option></select>
       <select id="coverage-filter"><option value="">All coverage</option><option value="seam">Tile seams</option>
@@ -268,6 +298,19 @@ def _render_grouped_registration_html(
       reviews[sampleId] = next; persist();
     }}
     function selectSample(sceneId, sampleId) {{ activeByScene[sceneId] = sampleId; update(); }}
+    function setExpanded(card, expanded) {{
+      document.querySelectorAll(".card.fullscreen").forEach(openCard => {{
+        openCard.classList.remove("fullscreen");
+        const openButton = openCard.querySelector(".expand-button");
+        openButton.textContent = "Full screen"; openButton.setAttribute("aria-expanded", "false");
+      }});
+      if (expanded) {{
+        card.classList.add("fullscreen");
+        const button = card.querySelector(".expand-button");
+        button.textContent = "Close"; button.setAttribute("aria-expanded", "true"); card.scrollTop = 0;
+      }}
+      document.body.classList.toggle("modal-open", Boolean(document.querySelector(".card.fullscreen")));
+    }}
     function update() {{
       let reviewed = 0, visibleScenes = 0;
       const east = [], north = [];
@@ -283,6 +326,7 @@ def _render_grouped_registration_html(
         const visible = (!splitFilter.value || scene.splits.includes(splitFilter.value))
           && (!coverageFilter.value || (coverageFilter.value === "seam") === Boolean(scene.seam_priority))
           && statusMatches.length > 0;
+        if (!visible && card.classList.contains("fullscreen")) setExpanded(card, false);
         card.classList.toggle("hidden", !visible);
         if (visible) visibleScenes += 1;
         if (statusFilter.value && !statusMatches.some(sample => sample.sample_id === activeByScene[scene.scene_id])) {{
@@ -340,6 +384,9 @@ def _render_grouped_registration_html(
         badge.title = `Priority review: nearest inventory point is ${{scene.tile_seam_distance_m.toFixed(1)}} m from a source-tile seam`;
         badges.append(badge);
       }}
+      const expand = document.createElement("button"); expand.className = "expand-button"; expand.textContent = "Full screen";
+      expand.setAttribute("aria-expanded", "false"); expand.title = "Open a large review view with the same per-tree controls";
+      expand.addEventListener("click", () => setExpanded(card, !card.classList.contains("fullscreen"))); badges.append(expand);
       head.append(identity, badges);
       const wrap = document.createElement("div"); wrap.className = "image-wrap";
       const image = document.createElement("img"); image.src = scene.image; image.alt = `NAIP scene with ${{scene.tree_count}} inventory trees`; image.draggable = false;
@@ -387,6 +434,9 @@ def _render_grouped_registration_html(
       const option = document.createElement("option"); option.value = value; option.textContent = value; splitFilter.append(option);
     }});
     scenes.forEach((scene, index) => cards.append(createCard(scene, index)));
+    document.addEventListener("keydown", event => {{
+      if (event.key === "Escape") {{ const openCard = document.querySelector(".card.fullscreen"); if (openCard) setExpanded(openCard, false); }}
+    }});
     splitFilter.addEventListener("change", update); coverageFilter.addEventListener("change", update); statusFilter.addEventListener("change", update);
     document.getElementById("export").addEventListener("click", () => {{
       const result = {{schema_version: 1, metadata, exported_at: new Date().toISOString(),
