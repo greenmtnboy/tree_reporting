@@ -44,12 +44,17 @@ the eventual strongest claim would hold out an entire compatible city.
 
 ## Label policy
 
-- Keep DBH in 4–60 inches for the initial clean cohort. The lower bound follows the mixed-pixel
-  concern in the paper; the upper bound removes obvious SF source errors such as DBH=9999.
-- Keep all otherwise eligible stems as center/DBH labels.
+- Keep every coordinate-valid, spatially eligible inventory stem as a center label, even when its
+  DBH or taxonomy is absent or unsuitable.
+- Supervise DBH only in the configured 4–60 inch credible range. The lower bound follows the
+  mixed-pixel concern in the paper; the upper bound removes source errors such as DBH=9999.
 - Train species only for classes with at least 500 examples in training blocks. Rare taxa get
   `species_id=-1` and do not contribute species loss; they remain useful detection labels.
-- Build genus classes from the selected training species and use genus as auxiliary supervision.
+- Build genus classes from the selected training species. A rare species can still supervise the
+  genus head when its genus is supported; DBH, genus, and species use separate masks.
+- Apply a robust global registration correction learned from training reviews only. An explicitly
+  clicked offset overrides that correction for the reviewed development point itself; validation
+  corrections clean labels but never influence the global estimate, and test labels stay sealed.
 - Preserve plant date for later temporal QA. A tree planted after image acquisition cannot be a
   valid visual label.
 - Never convert unlabeled vegetation into background. Low NDVI is the conservative default

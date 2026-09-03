@@ -21,7 +21,7 @@ def test_taxonomy_uses_only_supported_training_species() -> None:
     assert taxonomy.genera == ["Platanus", "Prunus"]
 
     encoded = encode_taxonomy(
-        pd.DataFrame({"species": ["Prunus serrulata", "Private unknown"]}), taxonomy
+        pd.DataFrame({"species": ["Prunus serrulata", "Private unknown", None]}), taxonomy
     )
-    assert encoded["species_id"].tolist() == [1, -1]
-    assert encoded["genus_id"].tolist() == [1, -1]
+    assert encoded["species_id"].tolist() == [1, -1, -1]
+    assert encoded["genus_id"].tolist() == [1, -1, -1]

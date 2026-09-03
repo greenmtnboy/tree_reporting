@@ -20,17 +20,21 @@ def _diverse_order(frame: pd.DataFrame, seed: int) -> pd.DataFrame:
     candidates = frame.copy()
     rng = np.random.default_rng(seed)
     candidates["_random"] = rng.random(len(candidates))
-    quantiles = min(4, int(candidates["diameter_at_breast_height"].nunique()))
-    candidates["_dbh_bin"] = (
-        pd.qcut(
-            candidates["diameter_at_breast_height"],
-            q=max(1, quantiles),
-            labels=False,
-            duplicates="drop",
+    dbh = pd.to_numeric(candidates["diameter_at_breast_height"], errors="coerce")
+    quantiles = min(4, int(dbh.nunique()))
+    if quantiles:
+        candidates["_dbh_bin"] = (
+            pd.qcut(
+                dbh,
+                q=quantiles,
+                labels=False,
+                duplicates="drop",
+            )
+            .fillna(-1)
+            .astype(int)
         )
-        .fillna(0)
-        .astype(int)
-    )
+    else:
+        candidates["_dbh_bin"] = -1
 
     buckets: list[list[int]] = []
     for _, group in candidates.groupby(["split", "_dbh_bin"], sort=True, observed=True):
@@ -116,7 +120,7 @@ def _render_registration_html(samples: list[dict[str, object]], metadata: dict[s
   <header>
     <h1>Registration review</h1>
     <p class="lede">Red cross = selected inventory point; cyan rings = nearby inventory points.
-      Click the apparent center of the selected tree to measure an offset, choose a verdict, then export.</p>
+      Every sample starts aligned. Click an apparent tree center to mark and correct an offset.</p>
     <div class="toolbar">
       <select id="split-filter"><option value="">All splits</option></select>
       <select id="status-filter">
@@ -127,7 +131,7 @@ def _render_registration_html(samples: list[dict[str, object]], metadata: dict[s
       <button id="export">Export reviews</button>
       <label class="file-label" for="import">Import reviews</label><input id="import" type="file" accept="application/json">
       <button id="finalize">Finalize training feedback</button>
-      <button id="clear">Clear local reviews</button>
+      <button id="clear">Reset all to aligned</button>
       <span id="sync">Loading saved reviews…</span>
       <span id="stats"></span>
     </div>
@@ -143,6 +147,9 @@ def _render_registration_html(samples: list[dict[str, object]], metadata: dict[s
     const splitFilter = document.getElementById("split-filter");
     const statusFilter = document.getElementById("status-filter");
     const escapeText = value => value == null ? "" : String(value);
+    const withAlignedDefaults = source => Object.fromEntries(samples.map(sample => [
+      sample.sample_id, {{status: "aligned", ...(source[sample.sample_id] || {{}})}}
+    ]));
     const median = values => {{
       if (!values.length) return null;
       const sorted = [...values].sort((a, b) => a - b), middle = Math.floor(sorted.length / 2);
@@ -218,14 +225,15 @@ def _render_registration_html(samples: list[dict[str, object]], metadata: dict[s
         const x = (event.clientX - rect.left) / rect.width * sample.image_width;
         const y = (event.clientY - rect.top) / rect.height * sample.image_height;
         const dx = x - sample.target_x, dy = y - sample.target_y;
-        reviews[sample.sample_id] = {{...(reviews[sample.sample_id] || {{}}), image_x: x, image_y: y,
+        reviews[sample.sample_id] = {{...(reviews[sample.sample_id] || {{}}), status: "offset", image_x: x, image_y: y,
           east_m: sample.transform_a * dx + sample.transform_b * dy,
           north_m: sample.transform_d * dx + sample.transform_e * dy}};
         persist();
       }});
       const details = document.createElement("div"); details.className = "details";
       const facts = document.createElement("div");
-      facts.textContent = `${{sample.dbh_in.toFixed(1)}} in DBH · ${{sample.nearby_inventory_count}} inventory points in view`;
+      const dbh = sample.dbh_in == null ? "DBH unknown" : `${{sample.dbh_in.toFixed(1)}} in DBH`;
+      facts.textContent = `${{dbh}} · ${{sample.nearby_inventory_count}} inventory points in view`;
       const offset = document.createElement("div"); offset.className = "offset";
       details.append(facts, offset);
       const actions = document.createElement("div"); actions.className = "actions";
@@ -257,9 +265,10 @@ def _render_registration_html(samples: list[dict[str, object]], metadata: dict[s
     document.getElementById("import").addEventListener("change", event => {{
       const reader = new FileReader(); reader.onload = () => {{
         const imported = JSON.parse(reader.result);
-        reviews = Array.isArray(imported.reviews)
+        const importedReviews = Array.isArray(imported.reviews)
           ? Object.fromEntries(imported.reviews.map(review => [review.sample_id, review]))
           : (imported.reviews || {{}});
+        reviews = withAlignedDefaults(importedReviews);
         persist();
       }}; if (event.target.files[0]) reader.readAsText(event.target.files[0]);
     }});
@@ -271,21 +280,24 @@ def _render_registration_html(samples: list[dict[str, object]], metadata: dict[s
       if (!response.ok) {{ alert(`Finalization failed: ${{result.error}}`); return; }}
       alert(`Training feedback finalized. Registration: ${{result.registration_status}}; ` +
         `correction ${{result.correction_m.east.toFixed(2)}} m E, ${{result.correction_m.north.toFixed(2)}} m N; ` +
-        `${{result.excluded_points}} points excluded. Rebuild chips before training.`);
+        `${{result.point_corrected_points}} point corrections and ${{result.excluded_points}} exclusions. ` +
+        `Rebuild chips before training.`);
     }});
     document.getElementById("clear").addEventListener("click", () => {{
-      if (confirm("Clear all locally stored decisions for this review?")) {{ reviews = {{}}; persist(); }}
+      if (confirm("Reset every decision to aligned?")) {{ reviews = withAlignedDefaults({{}}); persist(); }}
     }});
     async function hydrateServerReviews() {{
       try {{
         const response = await fetch("/api/reviews");
         if (!response.ok) throw new Error(`HTTP ${{response.status}}`);
         const persisted = await response.json();
-        reviews = {{...(persisted.reviews || {{}}), ...reviews}};
+        reviews = withAlignedDefaults({{...(persisted.reviews || {{}}), ...reviews}});
         localStorage.setItem(storageKey, JSON.stringify(reviews));
         update();
         await syncReviews();
       }} catch (_) {{
+        reviews = withAlignedDefaults(reviews);
+        localStorage.setItem(storageKey, JSON.stringify(reviews));
         document.getElementById("sync").textContent = "Local only — serve the UI to auto-save";
         update();
       }}
@@ -397,9 +409,15 @@ def build_registration_review(
                     "sample_id": f"sample-{len(generated):03d}",
                     "tree_id": str(row.tree_id),
                     "split": str(row.split),
-                    "species": str(row.species),
-                    "genus": str(row.genus),
-                    "dbh_in": float(row.diameter_at_breast_height),
+                    "species": (
+                        str(row.species) if not pd.isna(row.species) else "Unknown species"
+                    ),
+                    "genus": str(row.genus) if not pd.isna(row.genus) else "Unknown genus",
+                    "dbh_in": (
+                        float(row.diameter_at_breast_height)
+                        if pd.notna(row.diameter_at_breast_height)
+                        else None
+                    ),
                     "longitude": float(row.longitude),
                     "latitude": float(row.latitude),
                     "split_block_x": int(row.split_block_x),

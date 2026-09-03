@@ -21,7 +21,7 @@ canopy-segmentation layer.
 
 Completed and verified:
 
-- SF inventory export from the repository's v2 parquet;
+- SF inventory export with all located trees retained for detection and independent attribute masks;
 - deterministic 768 m spatial train/validation/test blocks with 64 m guards;
 - training-only species vocabulary and channel-statistics policy;
 - Planetary Computer NAIP STAC discovery;
@@ -32,15 +32,10 @@ Completed and verified:
 - resumable Lightning training and Lambda Cloud container scaffolding; and
 - eight unit/smoke tests, including synthetic raster materialization and model/loss shapes.
 
-The current inventory audit contains:
-
-| Cohort | Rows |
-|---|---:|
-| DBH/taxon clean cohort | 108,157 |
-| Spatially eligible | 90,431 |
-| Train | 68,494 |
-| Validation | 10,351 |
-| Test | 11,586 |
+The earlier clean-cohort export had 90,431 spatially eligible rows. Re-exporting under the new
+schema retains every coordinate-valid tree for detection and reports separate detection, DBH,
+genus, and species counts in `inventory/ussfo/summary.json`; those regenerated counts supersede
+the old table.
 
 The training-only taxonomy currently retains 33 species in 28 genera.
 
@@ -94,15 +89,14 @@ uv run urban-tree-ml imagery fetch `
   --item-id ca_m_3712213_sw_10_060_20220518
 ```
 
-### 2. Materialize one-tile chips
+### 2. Stage the one-tile inputs
 
-```powershell
-uv run urban-tree-ml chips build `
-  --config configs/sf_naip_baseline.yaml `
-  --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif
-```
+Keep the selected raster and provenance manifest under `imagery/ussfo/2022/`. Do not materialize
+the real chips locally or before registration feedback has been finalized. Copy the raster,
+manifest, and finalized `qa/registration/<RASTER_STEM>/` directory to the attached Lambda
+filesystem with the same relative paths.
 
-Expected output:
+The Lambda preparation stage will produce:
 
 ```text
 artifacts/chips/sf-naip-rgbn-species-v1/
@@ -116,6 +110,9 @@ artifacts/chips/sf-naip-rgbn-species-v1/
 
 Stop if any split is empty, if a surprising fraction of windows is invalid, or if output-cell
 collisions are common.
+
+Locally, run only the bounded synthetic inventory/target/feedback/chip/model tests documented in
+`README.md`.
 
 ### 3. Perform registration QA
 
@@ -143,12 +140,13 @@ Serve the review with `urban-tree-ml qa serve`, click the apparent center of off
 assign each sample a verdict. Reviews auto-save to disk while retaining browser-local and portable
 export copies. Select **Finalize training feedback** after at least 20 training examples are
 reviewed. The resulting `training-feedback.json` contains a training-only robust tile correction,
-validation residuals, and explicit `not-tree`/`uncertain` exclusions. Test labels are omitted by
-default and never contribute to finalized feedback.
+exact per-tree corrections for explicit offset verdicts, validation residuals, and explicit
+`not-tree`/`uncertain` exclusions. Test labels are omitted by default and never contribute.
 
-`chips build` auto-detects this finalized manifest for the selected raster. Excluded points are
-removed from attribute/center targets while their neighborhoods remain ignored—not converted into
-background negatives. The original inventory parquet is never modified.
+`chips build` auto-detects this finalized manifest for the selected raster. Explicit point
+corrections replace the global correction for those trees, avoiding double shifts. Excluded points
+are removed from attribute/center targets while their neighborhoods remain ignored—not converted
+into background negatives. The original source inventory is never modified.
 
 ### 4. Run a short GPU smoke test
 
@@ -167,8 +165,13 @@ Run it on one Lambda GPU:
 
 ```bash
 export TREE_ML_DATA_ROOT=/lambda/nfs/<FILESYSTEM_NAME>/urban-tree-ml
-uv run urban-tree-ml train --config configs/sf_naip_smoke.yaml --resume auto
+export TREE_ML_RASTER="$TREE_ML_DATA_ROOT/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif"
+export TREE_ML_PREPARE_DATA=1
+bash lambda/run.sh
 ```
+
+This re-exports the full detection cohort, builds real chips with finalized feedback, and starts
+the GPU smoke run. Set `TREE_ML_PREPARE_DATA=0` for subsequent checkpoint resumptions.
 
 The run is a plumbing and learning-signal test, not a benchmark. Confirm:
 

@@ -136,12 +136,12 @@ def load_persisted_reviews(review_dir: str | Path) -> dict[str, object]:
 
 def _offset_for_review(review: dict[str, object]) -> tuple[float, float]:
     status = review.get("status")
+    if status != "offset":
+        return 0.0, 0.0
     east = review.get("east_m")
     north = review.get("north_m")
-    if status == "offset" and (east is None or north is None):
-        raise ValueError("reviews marked offset must include a clicked location")
     if east is None or north is None:
-        return 0.0, 0.0
+        raise ValueError("reviews marked offset must include a clicked location")
     return float(east), float(north)
 
 
@@ -201,6 +201,7 @@ def finalize_registration_feedback(
     training_offsets: list[tuple[float, float]] = []
     validation_offsets: list[tuple[float, float]] = []
     exclusions: list[dict[str, str]] = []
+    point_corrections: list[dict[str, str | float]] = []
     ignored_test_reviews = 0
     for sample_id, review in reviews.items():
         status = review.get("status")
@@ -221,10 +222,22 @@ def finalize_registration_feedback(
                     "sample_id": sample_id,
                 }
             )
-        elif split == "train":
-            training_offsets.append(_offset_for_review(review))
-        elif split == "validation":
-            validation_offsets.append(_offset_for_review(review))
+        else:
+            offset = _offset_for_review(review)
+            if status == "offset":
+                point_corrections.append(
+                    {
+                        "tree_id": str(sample["tree_id"]),
+                        "split": split,
+                        "sample_id": sample_id,
+                        "east_m": offset[0],
+                        "north_m": offset[1],
+                    }
+                )
+            if split == "train":
+                training_offsets.append(offset)
+            elif split == "validation":
+                validation_offsets.append(offset)
 
     training_summary = _offset_summary(training_offsets)
     enough_reviews = len(training_offsets) >= minimum_training_reviews
@@ -253,6 +266,7 @@ def finalize_registration_feedback(
             "validation_residual": _offset_summary(validation_residuals),
         },
         "exclusions": exclusions,
+        "point_corrections": point_corrections,
     }
     feedback_path = directory / "training-feedback.json"
     _write_json_atomic(feedback_path, feedback)
@@ -263,6 +277,7 @@ def finalize_registration_feedback(
         "training_registration_reviews": len(training_offsets),
         "validation_registration_reviews": len(validation_offsets),
         "excluded_points": len(exclusions),
+        "point_corrected_points": len(point_corrections),
         "ignored_test_reviews": ignored_test_reviews,
     }
 
@@ -286,4 +301,23 @@ def load_training_feedback(
     exclusions = feedback.get("exclusions")
     if not isinstance(exclusions, list):
         raise ValueError("registration feedback exclusions must be a list")
+    point_corrections = feedback.get("point_corrections", [])
+    if not isinstance(point_corrections, list):
+        raise ValueError("registration feedback point corrections must be a list")
+    correction_keys: set[tuple[str, str]] = set()
+    for correction in point_corrections:
+        if not isinstance(correction, dict):
+            raise ValueError("every registration point correction must be an object")
+        required = {"tree_id", "split", "east_m", "north_m"}
+        if not required.issubset(correction):
+            raise ValueError("registration point correction is missing required fields")
+        split = str(correction["split"])
+        if split not in {"train", "validation"}:
+            raise ValueError("registration point corrections may only target development splits")
+        _finite_optional(correction["east_m"], "east_m")
+        _finite_optional(correction["north_m"], "north_m")
+        key = (str(correction["tree_id"]), split)
+        if key in correction_keys:
+            raise ValueError(f"duplicate registration point correction for {key!r}")
+        correction_keys.add(key)
     return feedback

@@ -45,7 +45,11 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
         {
             "metadata": {"review_id": "fixture-review"},
             "reviews": {
-                "train-aligned": {"status": "aligned"},
+                "train-aligned": {
+                    "status": "aligned",
+                    "east_m": 50,
+                    "north_m": 50,
+                },
                 "train-offset": {"status": "offset", "east_m": 2, "north_m": 4},
                 "validation-offset": {"status": "offset", "east_m": 100, "north_m": 100},
                 "train-bad": {"status": "not-tree"},
@@ -67,6 +71,23 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
     assert result["ignored_test_reviews"] == 1
     feedback = json.loads(Path(result["feedback"]).read_text(encoding="utf-8"))
     assert {entry["tree_id"] for entry in feedback["exclusions"]} == {"d", "e"}
+    assert feedback["point_corrections"] == [
+        {
+            "east_m": 2.0,
+            "north_m": 4.0,
+            "sample_id": "train-offset",
+            "split": "train",
+            "tree_id": "b",
+        },
+        {
+            "east_m": 100.0,
+            "north_m": 100.0,
+            "sample_id": "validation-offset",
+            "split": "validation",
+            "tree_id": "c",
+        },
+    ]
+    assert result["point_corrected_points"] == 2
     assert feedback["registration"]["validation_residual"]["east_median"] == 99.0
 
 

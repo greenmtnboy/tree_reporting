@@ -73,6 +73,10 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "/api/reviews" in html
     assert "/api/finalize" in html
     assert "localStorage" in html
+    assert 'status: "aligned"' in html
+    assert "Every sample starts aligned" in html
+    assert 'status: "offset", image_x: x' in html
+    assert "Reset all to aligned" in html
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
     assert manifest["metadata"]["test_labels_included"] is False
     assert all(sample["split"] != "test" for sample in manifest["samples"])

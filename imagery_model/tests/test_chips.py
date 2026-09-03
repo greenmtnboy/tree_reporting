@@ -19,20 +19,25 @@ def test_build_chips_materializes_targets_and_training_statistics(tmp_path: Path
     inventory_dir = tmp_path / "inventory" / "ussfo"
     inventory_dir.mkdir(parents=True)
     origin_x, origin_y = 550_000.0, 4_185_000.0
-    center_x = origin_x + 128 * 0.6
-    center_y = origin_y - 128 * 0.6
     inverse = Transformer.from_crs("EPSG:32610", "EPSG:4326", always_xy=True)
-    longitude, latitude = inverse.transform(center_x, center_y)
+    projected = [
+        (origin_x + 128 * 0.6, origin_y - 128 * 0.6),
+        (origin_x + 140 * 0.6, origin_y - 128 * 0.6),
+    ]
+    coordinates = [inverse.transform(x, y) for x, y in projected]
     pd.DataFrame(
         {
-            "tree_id": ["tree-1"],
-            "longitude": [longitude],
-            "latitude": [latitude],
-            "split_eligible": [True],
-            "split": ["train"],
-            "dbh_log1p": [2.0],
-            "genus_id": [1],
-            "species_id": [2],
+            "tree_id": ["complete-tree", "detection-only-tree"],
+            "longitude": [value[0] for value in coordinates],
+            "latitude": [value[1] for value in coordinates],
+            "split_eligible": [True, True],
+            "split": ["train", "train"],
+            "dbh_log1p": [2.0, np.nan],
+            "genus_id": [1, -1],
+            "species_id": [2, -1],
+            "dbh_eligible": [True, False],
+            "genus_eligible": [True, False],
+            "species_eligible": [True, False],
         }
     ).to_parquet(inventory_dir / "inventory.parquet", index=False)
 
@@ -60,6 +65,10 @@ def test_build_chips_materializes_targets_and_training_statistics(tmp_path: Path
         assert chip["image"].shape == (4, 256, 256)
         assert chip["center"].max() == 1
         assert chip["species"].max() == 2
+        assert chip["center"][64, 70] == 1
+        assert chip["dbh_mask"][64, 70] == 0
+        assert chip["genus_mask"][64, 70] == 0
+        assert chip["species_mask"][64, 70] == 0
 
 
 def test_build_chips_applies_finalized_registration_feedback(tmp_path: Path) -> None:
@@ -85,6 +94,9 @@ def test_build_chips_applies_finalized_registration_feedback(tmp_path: Path) -> 
             "dbh_log1p": [2.0, 1.5],
             "genus_id": [1, 1],
             "species_id": [2, 2],
+            "dbh_eligible": [True, True],
+            "genus_eligible": [True, True],
+            "species_eligible": [True, True],
         }
     ).to_parquet(inventory_dir / "inventory.parquet", index=False)
 
@@ -114,6 +126,14 @@ def test_build_chips_applies_finalized_registration_feedback(tmp_path: Path) -> 
                 "source_raster_name": raster_path.name,
                 "registration": {"east_m": 1.2, "north_m": 0.0},
                 "exclusions": [{"tree_id": "reject", "split": "train", "reason": "not-tree"}],
+                "point_corrections": [
+                    {
+                        "tree_id": "keep",
+                        "split": "train",
+                        "east_m": 2.4,
+                        "north_m": 0.0,
+                    }
+                ],
             }
         ),
         encoding="utf-8",
@@ -123,8 +143,9 @@ def test_build_chips_applies_finalized_registration_feedback(tmp_path: Path) -> 
 
     manifest = pd.read_parquet(summary["manifest"])
     with np.load(Path(summary["manifest"]).parent / manifest.iloc[0]["path"]) as chip:
-        assert chip["center"][64, 65] == 1
+        assert chip["center"][64, 66] == 1
         assert chip["center"][32, 33] == 0
         assert chip["detection_mask"][32, 33] == 0
     assert summary["feedback_excluded_points"] == 1
+    assert summary["feedback_point_corrected_points"] == 1
     assert summary["registration_correction_m"] == {"east": 1.2, "north": 0.0}

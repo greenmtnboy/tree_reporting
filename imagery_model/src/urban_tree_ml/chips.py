@@ -33,6 +33,13 @@ def build_chips(
         config.paths.root / "inventory" / config.inventory.city.lower() / "inventory.parquet"
     )
     frame = pd.read_parquet(inventory_path)
+    label_columns = {"dbh_eligible", "genus_eligible", "species_eligible"}
+    missing_label_columns = label_columns - set(frame.columns)
+    if missing_label_columns:
+        raise ValueError(
+            "inventory uses the old shared-attribute label schema; rerun inventory export "
+            f"(missing {sorted(missing_label_columns)})"
+        )
     frame = frame[frame["split_eligible"]].copy()
     chip_pixels = config.imagery.chip_pixels
     output_root = config.paths.root / "chips" / config.dataset
@@ -72,6 +79,14 @@ def build_chips(
         if isinstance(exclusion, dict) and "tree_id" in exclusion
     }
     frame["feedback_excluded"] = frame["tree_id"].astype(str).isin(excluded_tree_ids)
+    point_correction_records = feedback.get("point_corrections", []) if feedback is not None else []
+    point_corrections = {
+        (str(correction["tree_id"]), str(correction["split"])): (
+            float(correction["east_m"]),
+            float(correction["north_m"]),
+        )
+        for correction in point_correction_records
+    }
     # Random reads across a large COG can otherwise let GDAL consume a substantial
     # fraction of host memory. A small cache is enough for 256-pixel windows and
     # keeps local preparation reliable on memory-constrained machines.
@@ -83,9 +98,24 @@ def build_chips(
                 f"configured band {max(config.imagery.bands)} exceeds raster count {source.count}"
             )
         transformer = Transformer.from_crs("EPSG:4326", source.crs, always_xy=True)
-        xs, ys = transformer.transform(frame["longitude"].to_numpy(), frame["latitude"].to_numpy())
-        xs = np.asarray(xs) + correction_east_m
-        ys = np.asarray(ys) + correction_north_m
+        source_xs, source_ys = transformer.transform(
+            frame["longitude"].to_numpy(), frame["latitude"].to_numpy()
+        )
+        source_xs = np.asarray(source_xs)
+        source_ys = np.asarray(source_ys)
+        xs = source_xs + correction_east_m
+        ys = source_ys + correction_north_m
+        point_corrected = np.zeros(len(frame), dtype=bool)
+        for position, (tree_id, split) in enumerate(
+            zip(frame["tree_id"].astype(str), frame["split"].astype(str), strict=True)
+        ):
+            correction = point_corrections.get((tree_id, split))
+            if correction is None:
+                continue
+            xs[position] = source_xs[position] + correction[0]
+            ys[position] = source_ys[position] + correction[1]
+            point_corrected[position] = True
+        frame["feedback_point_corrected"] = point_corrected
         inverse = ~source.transform
         pixel_locations = [inverse * (x, y) for x, y in zip(xs, ys, strict=True)]
         frame["pixel_col"] = [location[0] for location in pixel_locations]
@@ -138,9 +168,9 @@ def build_chips(
                 PointLabel(
                     x=float(row.pixel_col - col_off),
                     y=float(row.pixel_row - row_off),
-                    dbh_log1p=float(row.dbh_log1p),
-                    genus_id=int(row.genus_id),
-                    species_id=int(row.species_id),
+                    dbh_log1p=float(row.dbh_log1p) if row.dbh_eligible else None,
+                    genus_id=int(row.genus_id) if row.genus_eligible else None,
+                    species_id=int(row.species_id) if row.species_eligible else None,
                 )
                 for row in positive_group.itertuples(index=False)
             ]
@@ -231,6 +261,7 @@ def build_chips(
             "north": correction_north_m,
         },
         "feedback_excluded_points": int(frame["feedback_excluded"].sum()),
+        "feedback_point_corrected_points": int(frame["feedback_point_corrected"].sum()),
         "source_raster": str(source_path.resolve()),
         "manifest": str(manifest_path),
         "normalization": str(output_root / "normalization.json"),

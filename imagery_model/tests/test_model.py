@@ -27,7 +27,9 @@ def test_model_and_multitask_loss_shapes() -> None:
     batch = {
         "center": center,
         "detection_mask": torch.ones_like(center),
-        "attribute_mask": attributes,
+        "dbh_mask": attributes,
+        "genus_mask": attributes,
+        "species_mask": attributes,
         "dbh": torch.ones_like(center),
         "genus": torch.where(attributes, 1, -1),
         "species": torch.where(attributes, 2, -1),

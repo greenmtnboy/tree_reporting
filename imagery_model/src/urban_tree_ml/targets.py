@@ -9,9 +9,9 @@ import numpy as np
 class PointLabel:
     x: float
     y: float
-    dbh_log1p: float
-    genus_id: int
-    species_id: int
+    dbh_log1p: float | None = None
+    genus_id: int | None = None
+    species_id: int | None = None
 
 
 def _downsample_mean(array: np.ndarray, stride: int) -> np.ndarray:
@@ -49,7 +49,9 @@ def build_targets(
     shape = (output_height, output_width)
     center = np.zeros(shape, dtype=np.float32)
     detection_mask = np.zeros(shape, dtype=np.float32)
-    attribute_mask = np.zeros(shape, dtype=np.float32)
+    dbh_mask = np.zeros(shape, dtype=np.float32)
+    genus_mask = np.zeros(shape, dtype=np.float32)
+    species_mask = np.zeros(shape, dtype=np.float32)
     dbh = np.zeros(shape, dtype=np.float32)
     genus = np.full(shape, -1, dtype=np.int64)
     species = np.full(shape, -1, dtype=np.int64)
@@ -70,6 +72,8 @@ def build_targets(
         raise ValueError(f"unknown background mode: {background_mode}")
 
     collisions = 0
+    occupied = np.zeros(shape, dtype=bool)
+    winning_dbh = np.full(shape, -np.inf, dtype=np.float32)
     radius = supervision_radius_px / stride
     for label in labels:
         x = int(round(label.x / stride))
@@ -81,15 +85,30 @@ def build_targets(
         local = (grid_x - x) ** 2 + (grid_y - y) ** 2 <= radius**2
         detection_mask[np.logical_and(local, downsampled_valid)] = 1.0
 
-        if attribute_mask[y, x] > 0:
+        candidate_dbh = label.dbh_log1p if label.dbh_log1p is not None else -np.inf
+        if occupied[y, x]:
             collisions += 1
             # The larger stem is a more plausible dominant crown in a collision.
-            if label.dbh_log1p <= dbh[y, x]:
+            # Prefer a stem with known DBH over one whose DBH is unavailable.
+            if candidate_dbh <= winning_dbh[y, x]:
                 continue
-        attribute_mask[y, x] = 1.0
-        dbh[y, x] = label.dbh_log1p
-        genus[y, x] = label.genus_id
-        species[y, x] = label.species_id
+        occupied[y, x] = True
+        winning_dbh[y, x] = candidate_dbh
+        dbh_mask[y, x] = 0.0
+        genus_mask[y, x] = 0.0
+        species_mask[y, x] = 0.0
+        dbh[y, x] = 0.0
+        genus[y, x] = -1
+        species[y, x] = -1
+        if label.dbh_log1p is not None:
+            dbh_mask[y, x] = 1.0
+            dbh[y, x] = label.dbh_log1p
+        if label.genus_id is not None and label.genus_id >= 0:
+            genus_mask[y, x] = 1.0
+            genus[y, x] = label.genus_id
+        if label.species_id is not None and label.species_id >= 0:
+            species_mask[y, x] = 1.0
+            species[y, x] = label.species_id
 
     for ignored_x, ignored_y in ignored_locations or []:
         x = int(round(ignored_x / stride))
@@ -106,7 +125,9 @@ def build_targets(
     return {
         "center": center,
         "detection_mask": detection_mask,
-        "attribute_mask": attribute_mask,
+        "dbh_mask": dbh_mask,
+        "genus_mask": genus_mask,
+        "species_mask": species_mask,
         "dbh": dbh,
         "genus": genus,
         "species": species,

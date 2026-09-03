@@ -23,6 +23,33 @@ def test_positive_unlabeled_mask_does_not_mark_green_pixels_as_background() -> N
     assert targets["detection_mask"][0, 0] == 1  # trusted low-NDVI negative
     assert targets["detection_mask"][0, 4] == 0  # unlabeled vegetation is ignored
     assert targets["species"][4, 6] == 3
+    assert targets["dbh_mask"][4, 6] == 1
+    assert targets["genus_mask"][4, 6] == 1
+    assert targets["species_mask"][4, 6] == 1
+
+
+def test_detection_labels_do_not_require_dbh_or_taxonomy() -> None:
+    targets = build_targets(
+        16,
+        16,
+        [
+            PointLabel(x=4, y=4),
+            PointLabel(x=12, y=12, dbh_log1p=2.0, genus_id=1),
+        ],
+        stride=2,
+        gaussian_sigma_px=1,
+        supervision_radius_px=2,
+        ndvi=np.zeros((16, 16), dtype=np.float32),
+    )
+
+    assert targets["center"][2, 2] == 1
+    assert targets["dbh_mask"][2, 2] == 0
+    assert targets["genus_mask"][2, 2] == 0
+    assert targets["species_mask"][2, 2] == 0
+    assert targets["center"][6, 6] == 1
+    assert targets["dbh_mask"][6, 6] == 1
+    assert targets["genus_mask"][6, 6] == 1
+    assert targets["species_mask"][6, 6] == 0
 
 
 def test_larger_dbh_wins_an_output_cell_collision() -> None:
