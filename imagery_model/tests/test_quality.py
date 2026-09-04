@@ -86,6 +86,11 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert 'event.key === "ArrowRight"' in html
     assert 'event.key === "ArrowLeft"' in html
     assert 'id="coverage-filter"' in html
+    assert 'id="scene-status-filter"' in html
+    assert 'className = "done-button"' in html
+    assert "images done" in html
+    assert "scene_reviews: sceneReviews" in html
+    assert "repeat(auto-fill, minmax(38px, 1fr))" in html
     assert "Tile seams" in html
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
     assert manifest["metadata"]["test_labels_included"] is False

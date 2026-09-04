@@ -150,6 +150,8 @@ def _render_grouped_registration_html(
     .toolbar {{ display: flex; flex-wrap: wrap; gap: 9px; margin-top: 12px; align-items: center; }}
     button, select, .file-label {{ border: 1px solid #496252; border-radius: 7px; padding: 7px 10px;
       color: #eef5ef; background: #203027; cursor: pointer; font: inherit; }}
+    .toolbar button, .toolbar select, .toolbar .file-label {{ display: inline-flex; align-items: center;
+      justify-content: center; min-height: 38px; }}
     button:hover, .file-label:hover {{ background: #2b4234; }}
     input[type=file] {{ display: none; }}
     #sync {{ color: #9eb6a5; font-size: 12px; }}
@@ -157,16 +159,20 @@ def _render_grouped_registration_html(
     main {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr));
       gap: 16px; padding: 18px; align-items: start; }}
     .card {{ overflow: hidden; border: 1px solid #30443a; border-radius: 10px; background: #18231d; }}
-    .card.reviewed {{ border-color: #698c76; }}
+    .card.completed {{ border-color: #78b68b; box-shadow: 0 0 0 1px #78b68b55; }}
+    .card.completed .card-head {{ background: #203229; }}
     .card-head {{ padding: 10px 12px; display: flex; justify-content: space-between; gap: 10px; }}
     .identity {{ min-width: 0; }}
     .identity strong, .identity span {{ display: block; }}
     .identity span, .details {{ color: #aebfb3; font-size: 12px; }}
     .badges {{ display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }}
+    .badges button {{ align-self: start; min-height: 28px; padding: 3px 8px; font-size: 11px; }}
     .badge {{ align-self: start; padding: 3px 7px; border-radius: 999px; background: #293a31;
       font-size: 11px; text-transform: uppercase; }}
     .seam {{ background: #614d22; color: #ffe5a0; cursor: help; }}
-    .expand-button {{ align-self: start; padding: 3px 7px; font-size: 11px; text-transform: uppercase; }}
+    .scene-previous, .scene-next, .done-button {{ min-width: 92px; }}
+    .expand-button {{ min-width: 82px; text-transform: uppercase; }}
+    .done-button.active {{ background: #d5ebda; border-color: #d5ebda; color: #102016; }}
     .fullscreen-only {{ display: none; }}
     .image-wrap {{ position: relative; width: 100%; aspect-ratio: 1; background: #050806; cursor: crosshair; }}
     .image-wrap img {{ display: block; width: 100%; height: 100%; object-fit: contain;
@@ -182,8 +188,9 @@ def _render_grouped_registration_html(
     .picked {{ display: none; position: absolute; width: 18px; height: 18px; border: 2px solid #ffe34e;
       transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; z-index: 4;
       box-shadow: 0 0 0 1px #111; }}
-    .tree-list {{ display: flex; gap: 6px; padding: 9px 12px 0; overflow-x: auto; }}
-    .tree-choice {{ flex: 0 0 auto; min-width: 34px; padding: 5px 8px; font-size: 11px; }}
+    .tree-list {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 6px;
+      max-height: 132px; padding: 9px 12px 0; overflow-y: auto; }}
+    .tree-choice {{ width: 100%; min-width: 0; height: 32px; padding: 0; font-size: 11px; }}
     .tree-choice.active {{ background: #d5ebda; border-color: #d5ebda; color: #102016; }}
     .tree-choice[data-status="offset"] {{ border-color: #ffe34e; }}
     .tree-choice[data-status="not-tree"] {{ border-color: #ff5757; }}
@@ -191,7 +198,7 @@ def _render_grouped_registration_html(
     .details {{ padding: 9px 12px 0; line-height: 1.5; min-height: 70px; }}
     .selected-species {{ color: #eef5ef; font-size: 14px; font-weight: 700; }}
     .actions {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 10px 12px; }}
-    .actions button {{ padding: 6px 3px; font-size: 12px; }}
+    .actions button {{ min-height: 40px; padding: 6px 3px; font-size: 12px; }}
     .actions button.active {{ background: #d5ebda; border-color: #d5ebda; color: #102016; }}
     .offset-hint {{ color: #ffe6a3; }}
     textarea {{ width: calc(100% - 24px); min-height: 48px; margin: 0 12px 12px; resize: vertical;
@@ -237,6 +244,8 @@ def _render_grouped_registration_html(
       <select id="status-filter"><option value="">All statuses</option><option value="unreviewed">Unreviewed</option>
         <option value="aligned">Aligned</option><option value="offset">Offset</option>
         <option value="not-tree">Not tree</option><option value="uncertain">Uncertain</option></select>
+      <select id="scene-status-filter"><option value="">All images</option><option value="pending">To review</option>
+        <option value="done">Done</option></select>
       <button id="export">Export reviews</button>
       <label class="file-label" for="import">Import reviews</label><input id="import" type="file" accept="application/json">
       <button id="finalize">Finalize training feedback</button>
@@ -253,12 +262,17 @@ def _render_grouped_registration_html(
     const scenesById = Object.fromEntries(scenes.map(scene => [scene.scene_id, scene]));
     const activeByScene = Object.fromEntries(scenes.map(scene => [scene.scene_id, scene.sample_ids[0]]));
     const storageKey = `urban-tree-registration:${{metadata.review_id}}`;
-    let reviews = JSON.parse(localStorage.getItem(storageKey) || "{{}}");
+    const storedState = JSON.parse(localStorage.getItem(storageKey) || "{{}}");
+    const hasWrappedState = storedState && typeof storedState === "object"
+      && Object.prototype.hasOwnProperty.call(storedState, "reviews");
+    let reviews = hasWrappedState ? (storedState.reviews || {{}}) : (storedState || {{}});
+    let sceneReviews = hasWrappedState ? (storedState.scene_reviews || {{}}) : {{}};
     let syncTimer = null;
     const cards = document.getElementById("cards");
     const splitFilter = document.getElementById("split-filter");
     const coverageFilter = document.getElementById("coverage-filter");
     const statusFilter = document.getElementById("status-filter");
+    const sceneStatusFilter = document.getElementById("scene-status-filter");
     const statusOf = sampleId => (reviews[sampleId] || {{}}).status || "unreviewed";
     const withAlignedDefaults = source => Object.fromEntries(samples.map(sample => [
       sample.sample_id, {{status: "aligned", ...(source[sample.sample_id] || {{}})}}
@@ -277,18 +291,21 @@ def _render_grouped_registration_html(
       const sync = document.getElementById("sync");
       try {{
         const response = await fetch("/api/reviews", {{method: "PUT", headers: {{"Content-Type": "application/json"}},
-          body: JSON.stringify({{schema_version: 1, metadata, reviews}})}});
+          body: JSON.stringify({{schema_version: 1, metadata, reviews, scene_reviews: sceneReviews}})}});
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || `HTTP ${{response.status}}`);
-        sync.textContent = `Saved ${{result.reviews}} tree reviews`;
+        sync.textContent = `Saved ${{result.reviews}} tree reviews · ${{result.completed_scenes}} images done`;
         return true;
       }} catch (error) {{
         sync.textContent = location.protocol === "file:" ? "Local only — serve the UI to auto-save" : `Save failed: ${{error.message}}`;
         return false;
       }}
     }}
+    function storeLocalState() {{
+      localStorage.setItem(storageKey, JSON.stringify({{reviews, scene_reviews: sceneReviews}}));
+    }}
     function persist() {{
-      localStorage.setItem(storageKey, JSON.stringify(reviews)); update();
+      storeLocalState(); update();
       document.getElementById("sync").textContent = "Saving…";
       clearTimeout(syncTimer); syncTimer = setTimeout(syncReviews, 250);
     }}
@@ -300,6 +317,11 @@ def _render_grouped_registration_html(
       reviews[sampleId] = next; persist();
     }}
     function selectSample(sceneId, sampleId) {{ activeByScene[sceneId] = sampleId; update(); }}
+    function setSceneDone(sceneId, done) {{
+      if (done) sceneReviews[sceneId] = {{done: true, completed_at: new Date().toISOString()}};
+      else delete sceneReviews[sceneId];
+      persist();
+    }}
     function setExpanded(card, expanded) {{
       document.querySelectorAll(".card.fullscreen").forEach(openCard => {{
         openCard.classList.remove("fullscreen");
@@ -321,19 +343,21 @@ def _render_grouped_registration_html(
       setExpanded(visibleCards[nextIndex], true);
     }}
     function update() {{
-      let reviewed = 0, visibleScenes = 0;
+      let visibleScenes = 0;
+      const completedScenes = scenes.filter(scene => Boolean(sceneReviews[scene.scene_id]?.done)).length;
       const east = [], north = [];
       samples.forEach(sample => {{
         const review = reviews[sample.sample_id] || {{}};
-        if ((review.status || "unreviewed") !== "unreviewed") reviewed += 1;
         if (review.status === "offset" && review.east_m != null) {{ east.push(review.east_m); north.push(review.north_m); }}
       }});
       document.querySelectorAll(".card").forEach(card => {{
         const scene = scenesById[card.dataset.scene];
+        const sceneDone = Boolean(sceneReviews[scene.scene_id]?.done);
         const sceneSamples = scene.sample_ids.map(sampleId => samplesById[sampleId]);
         const statusMatches = sceneSamples.filter(sample => !statusFilter.value || statusOf(sample.sample_id) === statusFilter.value);
         const visible = (!splitFilter.value || scene.splits.includes(splitFilter.value))
           && (!coverageFilter.value || (coverageFilter.value === "seam") === Boolean(scene.seam_priority))
+          && (!sceneStatusFilter.value || (sceneStatusFilter.value === "done") === sceneDone)
           && statusMatches.length > 0;
         if (!visible && card.classList.contains("fullscreen")) setExpanded(card, false);
         card.classList.toggle("hidden", !visible);
@@ -344,7 +368,11 @@ def _render_grouped_registration_html(
         const activeId = activeByScene[scene.scene_id];
         const selected = samplesById[activeId];
         const selectedReview = reviews[activeId] || {{}};
-        card.classList.toggle("reviewed", sceneSamples.every(sample => statusOf(sample.sample_id) !== "unreviewed"));
+        card.classList.toggle("completed", sceneDone);
+        const doneButton = card.querySelector(".done-button");
+        doneButton.textContent = sceneDone ? "Done ✓" : "Mark done";
+        doneButton.classList.toggle("active", sceneDone);
+        doneButton.setAttribute("aria-pressed", sceneDone ? "true" : "false");
         card.querySelectorAll(".tree-marker").forEach(marker => {{
           const markerSample = samplesById[marker.dataset.sampleId];
           marker.dataset.status = statusOf(markerSample.sample_id);
@@ -375,7 +403,8 @@ def _render_grouped_registration_html(
         }} else picked.style.display = "none";
       }});
       const eastMedian = median(east), northMedian = median(north);
-      document.getElementById("stats").textContent = `${{reviewed}}/${{samples.length}} trees · ${{visibleScenes}}/${{scenes.length}} scenes` +
+      document.getElementById("stats").textContent = `${{completedScenes}}/${{scenes.length}} images done · ` +
+        `${{visibleScenes}} shown · ${{samples.length}} trees` +
         (eastMedian == null ? "" : ` · median ${{eastMedian.toFixed(2)}} m E, ${{northMedian.toFixed(2)}} m N`);
     }}
     function createCard(scene, sceneIndex) {{
@@ -383,7 +412,7 @@ def _render_grouped_registration_html(
       const card = document.createElement("article"); card.className = "card"; card.dataset.scene = scene.scene_id;
       const head = document.createElement("div"); head.className = "card-head";
       const identity = document.createElement("div"); identity.className = "identity";
-      const title = document.createElement("strong"); title.textContent = `Scene ${{sceneIndex + 1}}`;
+      const title = document.createElement("strong"); title.textContent = `Image ${{sceneIndex + 1}} of ${{scenes.length}}`;
       const count = document.createElement("span"); count.textContent = `${{scene.tree_count}} tree${{scene.tree_count === 1 ? "" : "s"}} in this image`;
       identity.append(title, count);
       const badges = document.createElement("div"); badges.className = "badges";
@@ -393,6 +422,11 @@ def _render_grouped_registration_html(
         badge.title = `Priority review: nearest inventory point is ${{scene.tile_seam_distance_m.toFixed(1)}} m from a source-tile seam`;
         badges.append(badge);
       }}
+      const done = document.createElement("button"); done.className = "done-button";
+      done.textContent = "Mark done"; done.setAttribute("aria-pressed", "false");
+      done.title = "Mark this entire image as reviewed";
+      done.addEventListener("click", () => setSceneDone(scene.scene_id, !sceneReviews[scene.scene_id]?.done));
+      badges.append(done);
       const previous = document.createElement("button"); previous.className = "scene-previous fullscreen-only";
       previous.textContent = "← Previous"; previous.title = "Previous visible scene (Left Arrow)";
       previous.addEventListener("click", () => moveScene(card, -1)); badges.append(previous);
@@ -458,10 +492,12 @@ def _render_grouped_registration_html(
       if (event.key === "ArrowRight") {{ event.preventDefault(); moveScene(openCard, 1); }}
       if (event.key === "ArrowLeft") {{ event.preventDefault(); moveScene(openCard, -1); }}
     }});
-    splitFilter.addEventListener("change", update); coverageFilter.addEventListener("change", update); statusFilter.addEventListener("change", update);
+    splitFilter.addEventListener("change", update); coverageFilter.addEventListener("change", update);
+    statusFilter.addEventListener("change", update); sceneStatusFilter.addEventListener("change", update);
     document.getElementById("export").addEventListener("click", () => {{
       const result = {{schema_version: 1, metadata, exported_at: new Date().toISOString(),
-        reviews: samples.map(sample => ({{...sample, ...(reviews[sample.sample_id] || {{}})}}))}};
+        reviews: samples.map(sample => ({{...sample, ...(reviews[sample.sample_id] || {{}})}})),
+        scene_reviews: sceneReviews}};
       const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([JSON.stringify(result, null, 2)], {{type: "application/json"}}));
       link.download = "registration-reviews.json"; link.click(); URL.revokeObjectURL(link.href);
     }});
@@ -470,7 +506,7 @@ def _render_grouped_registration_html(
         const imported = JSON.parse(reader.result);
         const importedReviews = Array.isArray(imported.reviews)
           ? Object.fromEntries(imported.reviews.map(review => [review.sample_id, review])) : (imported.reviews || {{}});
-        reviews = withAlignedDefaults(importedReviews); persist();
+        reviews = withAlignedDefaults(importedReviews); sceneReviews = imported.scene_reviews || {{}}; persist();
       }}; if (event.target.files[0]) reader.readAsText(event.target.files[0]);
     }});
     document.getElementById("finalize").addEventListener("click", async () => {{
@@ -483,15 +519,18 @@ def _render_grouped_registration_html(
         `${{result.point_corrected_points}} point corrections and ${{result.excluded_points}} exclusions. Rebuild chips before training.`);
     }});
     document.getElementById("clear").addEventListener("click", () => {{
-      if (confirm("Reset every tree decision to aligned?")) {{ reviews = withAlignedDefaults({{}}); persist(); }}
+      if (confirm("Reset every tree decision to aligned and mark every image to review?")) {{
+        reviews = withAlignedDefaults({{}}); sceneReviews = {{}}; persist();
+      }}
     }});
     async function hydrateServerReviews() {{
       try {{
         const response = await fetch("/api/reviews"); if (!response.ok) throw new Error(`HTTP ${{response.status}}`);
         const persisted = await response.json(); reviews = withAlignedDefaults({{...(persisted.reviews || {{}}), ...reviews}});
-        localStorage.setItem(storageKey, JSON.stringify(reviews)); document.getElementById("sync").textContent = "Loaded saved reviews";
+        sceneReviews = {{...(persisted.scene_reviews || {{}}), ...sceneReviews}};
+        storeLocalState(); document.getElementById("sync").textContent = "Loaded saved reviews";
       }} catch (error) {{
-        reviews = withAlignedDefaults(reviews); localStorage.setItem(storageKey, JSON.stringify(reviews));
+        reviews = withAlignedDefaults(reviews); storeLocalState();
         document.getElementById("sync").textContent = location.protocol === "file:" ? "Local only — serve the UI to auto-save" : `Load failed: ${{error.message}}`;
       }} finally {{ update(); syncTimer = setTimeout(syncReviews, 250); }}
     }}

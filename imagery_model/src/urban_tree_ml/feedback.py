@@ -98,6 +98,45 @@ def normalize_review_payload(
     return normalized
 
 
+def normalize_scene_review_payload(
+    payload: dict[str, object],
+    manifest: dict[str, object],
+) -> dict[str, dict[str, object]]:
+    """Validate persistent scene-level completion state from the review UI."""
+    raw_scene_reviews = payload.get("scene_reviews", {})
+    if raw_scene_reviews is None:
+        raw_scene_reviews = {}
+    if not isinstance(raw_scene_reviews, dict):
+        raise ValueError("scene_reviews must be an object")
+
+    scenes = manifest.get("scenes", [])
+    if not isinstance(scenes, list):
+        raise ValueError("registration review manifest scenes must be a list")
+    scene_ids = {
+        str(scene["scene_id"])
+        for scene in scenes
+        if isinstance(scene, dict) and "scene_id" in scene
+    }
+    normalized: dict[str, dict[str, object]] = {}
+    for raw_scene_id, raw_review in raw_scene_reviews.items():
+        scene_id = str(raw_scene_id)
+        if scene_id not in scene_ids:
+            raise ValueError(f"scene review refers to unknown scene {scene_id!r}")
+        if not isinstance(raw_review, dict):
+            raise ValueError(f"scene review {scene_id!r} must be an object")
+        done = raw_review.get("done")
+        if done is None or done is False:
+            continue
+        if done is not True:
+            raise ValueError(f"scene review {scene_id!r} done must be a boolean")
+        review: dict[str, object] = {"done": True}
+        completed_at = raw_review.get("completed_at")
+        if completed_at is not None:
+            review["completed_at"] = str(completed_at)[:100]
+        normalized[scene_id] = review
+    return normalized
+
+
 def persist_review_payload(review_dir: str | Path, payload: dict[str, object]) -> dict[str, object]:
     directory = Path(review_dir)
     manifest = _read_manifest(directory)
@@ -109,22 +148,33 @@ def persist_review_payload(review_dir: str | Path, payload: dict[str, object]) -
     ):
         raise ValueError("review payload does not match this registration review")
     reviews = normalize_review_payload(payload, manifest)
+    path = directory / "reviews.json"
+    if "scene_reviews" in payload:
+        scene_reviews = normalize_scene_review_payload(payload, manifest)
+    elif path.exists():
+        scene_reviews = load_persisted_reviews(directory)["scene_reviews"]
+    else:
+        scene_reviews = {}
     persisted = {
         "schema_version": 1,
         "metadata": metadata,
         "saved_at": datetime.now(UTC).isoformat(),
         "reviews": reviews,
+        "scene_reviews": scene_reviews,
     }
-    path = directory / "reviews.json"
     _write_json_atomic(path, persisted)
-    return {"path": str(path), "reviews": len(reviews)}
+    return {
+        "path": str(path),
+        "reviews": len(reviews),
+        "completed_scenes": len(scene_reviews),
+    }
 
 
 def load_persisted_reviews(review_dir: str | Path) -> dict[str, object]:
     directory = Path(review_dir)
     path = directory / "reviews.json"
     if not path.exists():
-        return {"schema_version": 1, "reviews": {}}
+        return {"schema_version": 1, "reviews": {}, "scene_reviews": {}}
     manifest = _read_manifest(directory)
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload_metadata = payload.get("metadata", {})
@@ -136,11 +186,13 @@ def load_persisted_reviews(review_dir: str | Path) -> dict[str, object]:
             "schema_version": 1,
             "metadata": manifest["metadata"],
             "reviews": {},
+            "scene_reviews": {},
         }
     return {
         "schema_version": 1,
         "metadata": manifest["metadata"],
         "reviews": normalize_review_payload(payload, manifest),
+        "scene_reviews": normalize_scene_review_payload(payload, manifest),
     }
 
 
@@ -204,11 +256,13 @@ def finalize_registration_feedback(
     ):
         raise ValueError("saved reviews do not match this registration review")
     reviews = normalize_review_payload(raw_payload, manifest)
+    scene_reviews = normalize_scene_review_payload(raw_payload, manifest)
     canonical = {
         "schema_version": 1,
         "metadata": metadata,
         "saved_at": datetime.now(UTC).isoformat(),
         "reviews": reviews,
+        "scene_reviews": scene_reviews,
     }
     _write_json_atomic(directory / "reviews.json", canonical)
 
@@ -272,6 +326,7 @@ def finalize_registration_feedback(
         "reviews": {
             "status_counts": status_counts,
             "ignored_test_reviews": ignored_test_reviews,
+            "completed_scenes": len(scene_reviews),
         },
         "registration": {
             "status": "applied" if enough_reviews else "insufficient-training-reviews",
@@ -295,6 +350,7 @@ def finalize_registration_feedback(
         "excluded_points": len(exclusions),
         "point_corrected_points": len(point_corrections),
         "ignored_test_reviews": ignored_test_reviews,
+        "completed_scenes": len(scene_reviews),
     }
 
 

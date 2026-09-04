@@ -29,6 +29,17 @@ def _write_review_manifest(review_dir: Path, raster: Path) -> None:
                     "source_raster": str(raster),
                 },
                 "samples": samples,
+                "scenes": [
+                    {
+                        "scene_id": "scene-train",
+                        "sample_ids": ["train-aligned", "train-offset", "train-bad"],
+                    },
+                    {
+                        "scene_id": "scene-validation",
+                        "sample_ids": ["validation-offset", "validation-uncertain"],
+                    },
+                    {"scene_id": "scene-test", "sample_ids": ["test-offset"]},
+                ],
             }
         ),
         encoding="utf-8",
@@ -56,6 +67,12 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
                 "train-bad": {"status": "not-tree"},
                 "validation-uncertain": {"status": "uncertain"},
                 "test-offset": {"status": "offset", "east_m": -100, "north_m": -100},
+            },
+            "scene_reviews": {
+                "scene-train": {
+                    "done": True,
+                    "completed_at": "2026-09-03T15:00:00+00:00",
+                }
             },
         },
     )
@@ -89,7 +106,46 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
         },
     ]
     assert result["point_corrected_points"] == 2
+    assert result["completed_scenes"] == 1
+    assert load_persisted_reviews(review_dir)["scene_reviews"] == {
+        "scene-train": {
+            "done": True,
+            "completed_at": "2026-09-03T15:00:00+00:00",
+        }
+    }
+    assert feedback["reviews"]["completed_scenes"] == 1
     assert feedback["registration"]["validation_residual"]["east_median"] == 99.0
+
+
+def test_persist_rejects_completion_for_an_unknown_scene(tmp_path: Path) -> None:
+    raster = tmp_path / "tile.tif"
+    review_dir = tmp_path / "review"
+    _write_review_manifest(review_dir, raster)
+
+    with pytest.raises(ValueError, match="unknown scene"):
+        persist_review_payload(
+            review_dir,
+            {"scene_reviews": {"missing-scene": {"done": True}}},
+        )
+
+
+def test_legacy_review_save_preserves_scene_completion(tmp_path: Path) -> None:
+    raster = tmp_path / "tile.tif"
+    review_dir = tmp_path / "review"
+    _write_review_manifest(review_dir, raster)
+    persist_review_payload(
+        review_dir,
+        {"scene_reviews": {"scene-train": {"done": True}}},
+    )
+
+    persist_review_payload(
+        review_dir,
+        {"reviews": {"train-aligned": {"status": "aligned"}}},
+    )
+
+    assert load_persisted_reviews(review_dir)["scene_reviews"] == {
+        "scene-train": {"done": True}
+    }
 
 
 def test_finalize_rejects_offset_verdict_without_a_clicked_location(tmp_path: Path) -> None:
