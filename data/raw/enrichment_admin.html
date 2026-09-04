@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Species enrichment admin</title>
+<style>
+  :root {
+    --bg: #fafaf7; --panel: #fff; --line: #e3e1da; --text: #1d1d1b; --muted: #6b6b66;
+    --brand: #2f6b3a; --brand-soft: #e6f1e8; --warn: #b45309; --warn-soft: #fff3e0; --bad: #b91c1c; --bad-soft: #fee2e2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); background: var(--bg); }
+  a { color: var(--brand); }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; padding: 0.4rem 0.8rem; }
+  button:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+  button.primary:hover:not(:disabled) { color: #fff; filter: brightness(1.08); }
+  button.danger:hover:not(:disabled) { border-color: var(--bad); color: var(--bad); }
+  input, select, textarea { font: inherit; color: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 0.35rem 0.5rem; background: var(--panel); width: 100%; }
+  textarea { min-height: 7rem; resize: vertical; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand-soft); border-color: var(--brand); }
+
+  .top { display: flex; align-items: center; gap: 1rem; padding: 0.6rem 1rem; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
+  .top h1 { font-size: 1rem; margin: 0; }
+  .top .meta { color: var(--muted); font-size: 0.8rem; }
+  .top .spacer { flex: 1; }
+  .pill { font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.55rem; border-radius: 999px; background: var(--brand-soft); color: var(--brand); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.muted { background: #eee; color: var(--muted); }
+
+  .layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); height: calc(100vh - 49px); }
+  .side { border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .side .tools { padding: 0.75rem; border-bottom: 1px solid var(--line); display: grid; gap: 0.5rem; }
+  .side .tools .filters { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+  .side .tools .filters button { padding: 0.2rem 0.55rem; font-size: 0.78rem; border-radius: 999px; }
+  .side .tools .filters button.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+  .list { overflow: auto; flex: 1; margin: 0; padding: 0; list-style: none; }
+  .list li { padding: 0.45rem 0.75rem; border-bottom: 1px solid var(--line); cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem; align-items: center; }
+  .list li:hover { background: var(--bg); }
+  .list li.on { background: var(--brand-soft); }
+  .list li em { display: block; font-style: italic; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .list li span { display: block; font-size: 0.78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .list li .flags { display: flex; gap: 0.25rem; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.pending { background: var(--warn); }
+  .dot.incomplete { background: #c4c4c0; }
+  .list .empty { padding: 1rem; color: var(--muted); }
+
+  .main { overflow: auto; padding: 1.25rem 1.5rem 4rem; }
+  .main .blank { color: var(--muted); max-width: 40rem; }
+  .head { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.25rem; }
+  .head h2 { margin: 0; font-size: 1.5rem; font-style: italic; }
+  .head .links { font-size: 0.82rem; display: flex; gap: 0.75rem; }
+  .note { font-size: 0.82rem; color: var(--muted); margin: 0 0 1rem; }
+  .banner { padding: 0.6rem 0.9rem; border-radius: 8px; margin: 0 0 1rem; font-size: 0.9rem; }
+  .banner.warn { background: var(--warn-soft); color: var(--warn); }
+  .banner.bad { background: var(--bad-soft); color: var(--bad); white-space: pre-wrap; }
+  .banner.ok { background: var(--brand-soft); color: var(--brand); }
+
+  fieldset { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 0.75rem 1rem 1rem; margin: 0 0 1rem; }
+  legend { font-weight: 600; padding: 0 0.4rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.7rem 1rem; }
+  .grid .wide { grid-column: 1 / -1; }
+  label.f { display: block; }
+  label.f > span, .f > .lbl { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 0.2rem; }
+  .f.changed > span::after, .f.changed > .lbl::after { content: " · changed"; color: var(--warn); text-transform: none; letter-spacing: 0; }
+  .checks { display: flex; gap: 0.4rem 0.9rem; flex-wrap: wrap; padding-top: 0.3rem; }
+  .checks label { display: inline-flex; gap: 0.3rem; align-items: center; font-size: 0.9rem; }
+  .checks input { width: auto; }
+  .hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.2rem; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
+  .chip { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; padding: 0.15rem 0.5rem; border-radius: 999px; background: var(--brand-soft); color: var(--brand); }
+  .chip b { font-weight: 500; }
+  .chip button { border: 0; background: none; padding: 0 0.1rem; line-height: 1; color: inherit; font-size: 1rem; }
+  .eco-results { border: 1px solid var(--line); border-radius: 6px; max-height: 12rem; overflow: auto; margin-top: 0.3rem; background: var(--panel); }
+  .eco-results div { padding: 0.3rem 0.5rem; cursor: pointer; font-size: 0.85rem; border-bottom: 1px solid var(--line); }
+  .eco-results div:hover { background: var(--bg); }
+  .eco-results small { color: var(--muted); }
+
+  .photo { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 1rem; align-items: start; }
+  .photo img.preview { width: 220px; height: 220px; object-fit: cover; border-radius: 10px; background: var(--bg); display: block; }
+  .photo .nophoto { width: 220px; height: 220px; border-radius: 10px; background: var(--bg); display: grid; place-items: center; color: var(--muted); font-size: 0.85rem; }
+  .cands { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 0.5rem; margin-top: 0.6rem; }
+  .cand { border: 2px solid transparent; border-radius: 8px; padding: 2px; cursor: pointer; background: none; text-align: left; }
+  .cand:hover, .cand.on { border-color: var(--brand); }
+  .cand img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; display: block; }
+  .cand small { display: block; font-size: 0.68rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .actions { position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); margin: 0 -1.5rem -4rem; padding: 0.75rem 1.5rem; display: flex; gap: 0.6rem; align-items: center; }
+  .actions .spacer { flex: 1; }
+  .actions .msg { font-size: 0.85rem; color: var(--muted); }
+  kbd { font: inherit; font-size: 0.75rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3rem; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>Species enrichment</h1>
+  <span class="meta" id="meta">loading…</span>
+  <span class="spacer"></span>
+  <span class="pill muted" id="pendingPill">0 staged</span>
+  <button id="reloadBtn" title="Re-read the published table. Staged edits are kept.">Reload</button>
+  <button id="publishBtn" class="primary" disabled>Publish to GCS</button>
+</header>
+
+<div class="layout">
+  <aside class="side">
+    <div class="tools">
+      <input id="q" type="search" placeholder="Search species or common name…" autofocus>
+      <div class="filters" id="filters">
+        <button data-f="" class="on">All</button>
+        <button data-f="pending">Staged</button>
+        <button data-f="incomplete">Incomplete</button>
+        <button data-f="nophoto">No photo</button>
+        <button data-f="nodesc">No description</button>
+      </div>
+    </div>
+    <ul class="list" id="list"></ul>
+  </aside>
+
+  <main class="main" id="main">
+    <div class="blank">
+      <p>Pick a species on the left, or open <code>/?species=Acer%20rubrum</code> directly.</p>
+      <p>Saving stages the row locally. Nothing reaches GCS until you press <b>Publish</b>, which re-reads the live table, patches the staged rows in, uploads, and verifies.</p>
+    </div>
+  </main>
+</div>
+
+<script>
+(() => {
+  const $ = (s, el = document) => el.querySelector(s)
+  const api = async (path, opts = {}) => {
+    const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw Object.assign(new Error(data.error || res.statusText), { problems: data.problems || [] })
+    return data
+  }
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const LABELS = {
+    species_epithet: 'Epithet', common_names: 'Common names (most familiar first)',
+    mature_height_min_ft: 'Mature height min (ft)', mature_height_max_ft: 'Mature height max (ft)',
+    canopy_spread_min_ft: 'Canopy spread min (ft)', canopy_spread_max_ft: 'Canopy spread max (ft)',
+    lifespan_min_years: 'Lifespan min (years)', lifespan_max_years: 'Lifespan max (years)',
+    usda_zone_min: 'USDA zone min', usda_zone_max: 'USDA zone max', is_evergreen: 'Foliage',
+    photo_url: 'Photo URL', photo_license: 'Photo licence', photo_attribution: 'Photo attribution',
+  }
+  const label = (n) => LABELS[n] || n.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
+
+  let schema = null, ecoregions = null, status = null
+  let filter = '', selected = null, detail = null, dirty = false
+
+  // ── status bar ──────────────────────────────────────────────────────────────
+  async function refreshStatus() {
+    status = await api('/api/status')
+    $('#meta').textContent = `${status.row_count.toLocaleString()} rows · loaded ${new Date(status.loaded_at).toLocaleTimeString()} · ${status.gcs_uri}`
+    const n = status.pending.length
+    const pill = $('#pendingPill')
+    pill.textContent = `${n} staged`
+    pill.className = 'pill ' + (n ? 'warn' : 'muted')
+    $('#publishBtn').disabled = n === 0
+    $('#publishBtn').textContent = n ? `Publish ${n} to GCS` : 'Publish to GCS'
+  }
+
+  $('#reloadBtn').onclick = async () => {
+    $('#reloadBtn').disabled = true
+    try { await api('/api/reload', { method: 'POST', body: '{}' }); await refreshStatus(); await search(); if (selected) await open(selected) }
+    catch (e) { alert(e.message) }
+    finally { $('#reloadBtn').disabled = false }
+  }
+
+  $('#publishBtn').onclick = async () => {
+    const n = status.pending.length
+    if (!confirm(`Publish ${n} edited row(s) to\n${status.gcs_uri}?\n\nThe live table is re-read first, so rows added by the daily job since you loaded are kept.`)) return
+    $('#publishBtn').disabled = true
+    $('#publishBtn').textContent = 'Publishing…'
+    try {
+      const r = await api('/api/publish', { method: 'POST', body: '{}' })
+      alert(`Published ${r.rows.toLocaleString()} rows.\nReplaced: ${r.replaced.join(', ') || 'none'}\nHybrid twins kept in step: ${r.twinned.join(', ') || 'none'}\nAppended (no row existed): ${r.appended.join(', ') || 'none'}`)
+    } catch (e) { alert('Publish failed: ' + e.message) }
+    await refreshStatus(); await search(); if (selected) await open(selected)
+  }
+
+  // ── list ────────────────────────────────────────────────────────────────────
+  let searchTimer = null
+  $('#q').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(search, 120) })
+  $('#filters').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return
+    filter = b.dataset.f
+    for (const x of $('#filters').children) x.classList.toggle('on', x === b)
+    search()
+  })
+
+  async function search() {
+    const rows = await api(`/api/species?q=${encodeURIComponent($('#q').value)}&filter=${filter}&limit=300`)
+    const ul = $('#list')
+    ul.innerHTML = rows.length ? '' : '<li class="empty">No species match.</li>'
+    for (const r of rows) {
+      const li = document.createElement('li')
+      li.dataset.species = r.species
+      li.classList.toggle('on', r.species === selected)
+      li.innerHTML = `<div><em>${esc(r.species)}</em><span>${esc(r.common_name || (r.sentinel ? 'sentinel' : 'no common name'))}${r.tree_form ? ' · ' + esc(r.tree_form) : ''}</span></div>
+        <div class="flags">${r.pending ? '<i class="dot pending" title="staged edit"></i>' : ''}${!r.is_complete ? '<i class="dot incomplete" title="incomplete"></i>' : ''}</div>`
+      li.onclick = () => open(r.species)
+      ul.appendChild(li)
+    }
+  }
+
+  // ── detail form ─────────────────────────────────────────────────────────────
+  async function open(species) {
+    if (dirty && species !== selected && !confirm('Discard unsaved changes to this form?')) return
+    selected = species
+    history.replaceState(null, '', `/?species=${encodeURIComponent(species)}`)
+    for (const li of $('#list').children) li.classList.toggle('on', li.dataset.species === species)
+    try { detail = await api(`/api/species/${encodeURIComponent(species)}`) }
+    catch (e) { $('#main').innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; return }
+    render()
+  }
+
+  function render() {
+    const d = detail, row = d.row
+    const changed = new Set(d.changed)
+    const main = $('#main')
+    dirty = false
+    const parts = []
+    parts.push(`<div class="head"><h2>${esc(d.species)}</h2>
+      ${d.pending ? '<span class="pill warn">staged</span>' : ''}
+      ${row.is_complete ? '' : '<span class="pill muted">incomplete</span>'}
+      <span class="links">
+        <a href="https://arborary.world/species/index.html?q=${encodeURIComponent(d.species)}" target="_blank" rel="noopener">arborary.world</a>
+        <a href="https://www.inaturalist.org/search?q=${encodeURIComponent(d.species)}" target="_blank" rel="noopener">iNaturalist</a>
+        <a href="https://powo.science.kew.org/results?q=${encodeURIComponent(d.species)}" target="_blank" rel="noopener">POWO</a>
+      </span></div>`)
+    parts.push(`<p class="note">Last enriched ${row.enriched_at ? new Date(row.enriched_at).toLocaleString() : 'never'}.${d.twin ? ` Also keyed as <i>${esc(d.twin)}</i>; publishing updates both spellings.` : ''}</p>`)
+    if (d.sentinel) parts.push(`<div class="banner warn">This is a sentinel row, authored in <code>_ingest_shared.py</code> and rewritten on every run. It cannot be edited here.</div>`)
+    parts.push(`<div id="problems"></div>`)
+
+    parts.push('<form id="form">')
+    for (const [title, names] of schema.groups) {
+      parts.push(`<fieldset><legend>${esc(title)}</legend><div class="grid">`)
+      for (const name of names) parts.push(field(name, row[name], changed.has(name)))
+      if (title === 'Photo') parts.push(photoPanel(row))
+      parts.push('</div></fieldset>')
+    }
+    parts.push('</form>')
+    parts.push(`<div class="actions">
+      <button type="button" class="primary" id="saveBtn" ${d.sentinel ? 'disabled' : ''}>Save (stage)</button>
+      ${d.pending ? '<button type="button" class="danger" id="discardBtn">Discard staged edit</button>' : ''}
+      <span class="msg" id="saveMsg"></span>
+      <span class="spacer"></span>
+      <span class="msg"><kbd>Ctrl</kbd>+<kbd>S</kbd> saves</span>
+    </div>`)
+    main.innerHTML = parts.join('')
+    main.scrollTop = 0
+
+    $('#form').addEventListener('input', () => { dirty = true; $('#saveMsg').textContent = 'unsaved' })
+    $('#saveBtn').onclick = save
+    if ($('#discardBtn')) $('#discardBtn').onclick = async () => {
+      if (!confirm('Discard the staged edit and go back to the published row?')) return
+      await api(`/api/species/${encodeURIComponent(d.species)}/edit`, { method: 'DELETE' })
+      await refreshStatus(); await search(); await open(d.species)
+    }
+    wireEcoregions(row.native_ecoregions || [])
+    wirePhoto(row)
+  }
+
+  const spec = (name) => schema.fields.find((f) => f.name === name)
+
+  function field(name, value, changed) {
+    const s = spec(name)
+    const cls = `f${changed ? ' changed' : ''}${s.kind === 'text' || name === 'common_names' || name === 'soil_preferences' || name === 'native_ecoregions' || name === 'photo_url' || name === 'photo_attribution' ? ' wide' : ''}`
+    const lbl = `<span>${esc(label(name))}</span>`
+    switch (s.kind) {
+      case 'enum':
+        return `<label class="${cls}">${lbl}<select name="${name}"><option value="">— unknown —</option>${s.options.map((o) => `<option ${o === value ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></label>`
+      case 'bool': {
+        const opts = name === 'is_evergreen' ? [['true', 'Evergreen'], ['false', 'Deciduous']] : [['true', 'Yes'], ['false', 'No']]
+        return `<label class="${cls}">${lbl}<select name="${name}"><option value="">— unknown —</option>${opts.map(([v, t]) => `<option value="${v}" ${String(value) === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`
+      }
+      case 'list<enum>':
+        return `<div class="${cls}"><span class="lbl">${esc(label(name))}</span><div class="checks">${s.options.map((o) => `<label><input type="checkbox" name="${name}" value="${esc(o)}" ${(value || []).includes(o) ? 'checked' : ''}>${esc(o)}</label>`).join('')}</div></div>`
+      case 'list<int>':
+        if (name === 'bloom_months')
+          return `<div class="${cls} wide"><span class="lbl">Bloom months</span><div class="checks">${MONTHS.map((m, i) => `<label><input type="checkbox" name="bloom_months" value="${i + 1}" ${(value || []).includes(i + 1) ? 'checked' : ''}>${m}</label>`).join('')}</div></div>`
+        if (name === 'native_ecoregions')
+          return `<div class="${cls}"><span class="lbl">Native ecoregions</span><input type="search" id="ecoSearch" placeholder="Type to search ecoregions by name, biome or realm…"><div class="eco-results" id="ecoResults" hidden></div><div class="chips" id="ecoChips"></div></div>`
+        return `<label class="${cls}">${lbl}<input name="${name}" value="${esc((value || []).join(', '))}"><div class="hint">comma separated</div></label>`
+      case 'list<string>':
+        return `<label class="${cls}">${lbl}<input name="${name}" value="${esc((value || []).join(', '))}"><div class="hint">comma separated</div></label>`
+      case 'int':
+        return `<label class="${cls}">${lbl}<input name="${name}" type="number" step="1" value="${value ?? ''}"></label>`
+      case 'float':
+        return `<label class="${cls}">${lbl}<input name="${name}" type="number" step="any" value="${value ?? ''}"></label>`
+      case 'text':
+        return `<label class="${cls}">${lbl}<textarea name="${name}">${esc(value ?? '')}</textarea></label>`
+      default:
+        return `<label class="${cls}">${lbl}<input name="${name}" value="${esc(value ?? '')}"></label>`
+    }
+  }
+
+  function collect() {
+    const form = $('#form'), out = {}
+    for (const s of schema.fields) {
+      const name = s.name
+      if (name === 'native_ecoregions') { out[name] = ecoSelected.slice(); continue }
+      if (s.kind === 'list<enum>' || name === 'bloom_months') {
+        out[name] = [...form.querySelectorAll(`input[name="${name}"]:checked`)].map((i) => s.kind === 'list<enum>' ? i.value : Number(i.value))
+        continue
+      }
+      const el = form.elements[name]
+      if (!el) continue
+      out[name] = el.value === '' ? null : el.value
+    }
+    return out
+  }
+
+  async function save() {
+    const btn = $('#saveBtn'); btn.disabled = true
+    $('#problems').innerHTML = ''
+    try {
+      detail = await api(`/api/species/${encodeURIComponent(detail.species)}`, { method: 'PUT', body: JSON.stringify(collect()) })
+      await refreshStatus(); await search()
+      render()
+      $('#saveMsg').textContent = detail.pending ? `staged · ${detail.changed.length} field(s) differ from published` : 'no change from published'
+    } catch (e) {
+      $('#problems').innerHTML = `<div class="banner bad">${esc(e.problems.join('\n'))}</div>`
+      $('#problems').scrollIntoView({ block: 'nearest' })
+    } finally { btn.disabled = false }
+  }
+  document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's' && detail) { e.preventDefault(); save() } })
+
+  // ── ecoregion picker ────────────────────────────────────────────────────────
+  let ecoSelected = []
+  function wireEcoregions(ids) {
+    ecoSelected = ids.slice()
+    const byId = new Map(ecoregions.map((e) => [e.id, e]))
+    const draw = () => {
+      $('#ecoChips').innerHTML = ecoSelected.map((id) => {
+        const e = byId.get(id)
+        return `<span class="chip"><b>${e ? esc(e.name) : 'ecoregion ' + id}</b><button type="button" data-id="${id}" title="remove">×</button></span>`
+      }).join('')
+    }
+    draw()
+    $('#ecoChips').onclick = (ev) => { const b = ev.target.closest('button'); if (!b) return; ecoSelected = ecoSelected.filter((x) => x !== Number(b.dataset.id)); dirty = true; draw() }
+    const input = $('#ecoSearch'), box = $('#ecoResults')
+    input.oninput = () => {
+      const q = input.value.trim().toLowerCase()
+      if (!q) { box.hidden = true; return }
+      const hits = ecoregions.filter((e) => !ecoSelected.includes(e.id) && `${e.name} ${e.biome} ${e.realm}`.toLowerCase().includes(q)).slice(0, 30)
+      box.innerHTML = hits.map((e) => `<div data-id="${e.id}">${esc(e.name)} <small>· ${esc(e.biome || '')} · ${esc(e.realm || '')}</small></div>`).join('') || '<div><small>no match</small></div>'
+      box.hidden = false
+    }
+    box.onclick = (ev) => { const d = ev.target.closest('[data-id]'); if (!d) return; ecoSelected.push(Number(d.dataset.id)); ecoSelected.sort((a, b) => a - b); dirty = true; draw(); input.value = ''; box.hidden = true }
+  }
+
+  // ── photo picker ────────────────────────────────────────────────────────────
+  function photoPanel(row) {
+    return `<div class="wide photo">
+      <div id="photoPreview"></div>
+      <div>
+        <button type="button" id="inatBtn">Find openly licensed photos on iNaturalist</button>
+        <button type="button" id="clearPhotoBtn">Clear photo</button>
+        <div class="hint">Only the medium-size iNaturalist URL shape (…/photos/&lt;id&gt;/medium.jpg) renders on arborary.world; any http(s) URL is accepted here.</div>
+        <div id="inatInfo" class="hint"></div>
+        <div class="cands" id="cands"></div>
+      </div></div>`
+  }
+  function drawPreview() {
+    const url = $('#form').elements.photo_url.value
+    $('#photoPreview').innerHTML = url ? `<img class="preview" src="${esc(url)}" alt=""><div class="hint">${esc($('#form').elements.photo_attribution.value)} · ${esc($('#form').elements.photo_license.value)}</div>` : '<div class="nophoto">no photo</div>'
+    const ok = /^https:\/\/inaturalist-open-data\.s3\.amazonaws\.com\/photos\/\d+\/medium\.\w+$/i.test(url)
+    if (url && !ok) $('#photoPreview').insertAdjacentHTML('beforeend', '<div class="hint" style="color:var(--warn)">Not the iNaturalist medium URL shape: the website will show no photo.</div>')
+  }
+  function wirePhoto() {
+    const form = $('#form')
+    drawPreview()
+    form.elements.photo_url.addEventListener('input', drawPreview)
+    $('#clearPhotoBtn').onclick = () => { for (const n of ['photo_url', 'photo_license', 'photo_attribution']) form.elements[n].value = ''; dirty = true; drawPreview() }
+    $('#inatBtn').onclick = async () => {
+      $('#inatBtn').disabled = true; $('#inatInfo').textContent = 'searching…'
+      try {
+        const r = await api(`/api/inat?species=${encodeURIComponent(detail.species)}`)
+        if (!r.taxon) { $('#inatInfo').textContent = 'No taxon found on iNaturalist.'; return }
+        $('#inatInfo').innerHTML = `Taxon <a href="${esc(r.taxon.url)}" target="_blank" rel="noopener"><i>${esc(r.taxon.name)}</i>${r.taxon.common_name ? ' (' + esc(r.taxon.common_name) + ')' : ''}</a> · ${r.photos.length} licensed photo(s). Click one to use it.`
+        $('#cands').innerHTML = r.photos.map((p, i) => `<button type="button" class="cand" data-i="${i}" title="${esc(p.attribution || '')} · ${esc(p.license)} · ${esc(p.source)}"><img src="${esc(p.thumb)}" alt=""><small>${esc(p.license)}</small></button>`).join('')
+        $('#cands').onclick = (ev) => {
+          const b = ev.target.closest('.cand'); if (!b) return
+          const p = r.photos[Number(b.dataset.i)]
+          form.elements.photo_url.value = p.url
+          form.elements.photo_license.value = p.license
+          form.elements.photo_attribution.value = p.attribution || ''
+          for (const c of $('#cands').children) c.classList.toggle('on', c === b)
+          dirty = true; $('#saveMsg').textContent = 'unsaved'; drawPreview()
+        }
+      } catch (e) { $('#inatInfo').textContent = 'iNaturalist lookup failed: ' + e.message }
+      finally { $('#inatBtn').disabled = false }
+    }
+  }
+
+  window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = '' } })
+
+  // ── boot ────────────────────────────────────────────────────────────────────
+  ;(async () => {
+    ;[schema, ecoregions] = await Promise.all([api('/api/schema'), api('/api/ecoregions')])
+    await refreshStatus()
+    await search()
+    const want = new URLSearchParams(location.search).get('species')
+    if (want) open(want)
+  })().catch((e) => { $('#main').innerHTML = `<div class="banner bad">${esc(e.message)}</div>` })
+})()
+</script>
+</body>
+</html>
