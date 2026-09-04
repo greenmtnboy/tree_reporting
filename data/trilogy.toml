@@ -112,8 +112,24 @@ studio_url="http://localhost:5173/trilogy-studio-core/"
 # Times
 # ---------------------------------------------------------------------------
 #
-# Six-field crons (seconds first), UTC. Three windows, and the separation is
-# load-bearing in each:
+# Six-field crons (seconds first), UTC.
+#
+# **Days of the week are written as names, and that is not cosmetic.** The
+# platform parses these with the Rust `cron` crate, which follows Quartz
+# rather than Vixie: day-of-week is 1-7 with **1 = Sunday**, not the 0-6 with
+# 0 = Sunday that every other cron on a unix box uses. The seconds-first
+# layout is the tell that this is Quartz's shape and not crontab's.
+#
+# Numeric days therefore mean something one day off from what a reader
+# assumes, and only one of the seven is rejected: `0` is out of range and
+# fails the sync with `Days of Week must be greater than or equal to 1`,
+# while `1` through `6` are accepted and silently fire a day early. That is
+# how this file shipped with an `osm-grmlo` commented "Mondays" whose live
+# schedule reported a Sunday next-run. Names (`SUN`..`SAT`) are unambiguous
+# in both dialects and are checked by
+# `raw/tests/test_cloud_jobs.py::test_day_of_week_is_written_as_a_name`.
+#
+# Three windows, and the separation is load-bearing in each:
 #
 #   02:00-04:00  OSM extraction. Staggered 30 minutes apart with at most four
 #                cities on any one day: Overpass allows two concurrent slots
@@ -153,6 +169,25 @@ studio_url="http://localhost:5173/trilogy-studio-core/"
 #     republishes each one, which marks that city stale and buys a full
 #     municipal rebuild on its next city tick. Expect a burst of real work in
 #     the first week and steady state after.
+#
+# ---------------------------------------------------------------------------
+# A job's identity includes the repository it was synced from
+# ---------------------------------------------------------------------------
+#
+# `source_key` is `{location}#{subpath}::{key}`, where location is the git
+# remote. It deliberately excludes branch and revision -- but not the remote
+# URL, so **a stale `origin` forks a parallel job set rather than updating
+# the existing one**, silently, with `--prune` unable to see the orphans (it
+# prunes only within the repository the sync root covers).
+#
+# This is not hypothetical: the repo was renamed `sf_tree_reporting` ->
+# `tree_reporting`, GitHub redirects so git never complains, and a local
+# `sync --production` from a clone that predated the rename created a second
+# complete 41-job set beside CI's, every one of them scheduled. Both sets
+# fire. Before syncing production by hand, check that origin matches what CI
+# checks out:
+#
+#     git remote get-url origin        # must be the repo's current name
 #
 # ---------------------------------------------------------------------------
 # Shared settings
@@ -274,7 +309,7 @@ key = "refresh-landmarks"
 name = "urban-tree-data-landmarks"
 entrypoint = "raw/landmark_info.preql"
 operation = "refresh"
-schedule = "0 0 4 * * 0"    # Sundays 04:00 UTC
+schedule = "0 0 4 * * SUN"    # Sundays 04:00 UTC
 timeout_seconds = 1800
 memory_mb = 2048
 
@@ -369,7 +404,7 @@ key = "city-grath"
 name = "urban-tree-city-grath"
 entrypoint = "raw/grath/athens_tree_info.preql"
 operation = "refresh"
-schedule = "0 0 12 * * 2,5"   # Tue/Fri, after Monday's osm-grath
+schedule = "0 0 12 * * TUE,FRI"   # Tue/Fri, after Monday's osm-grath
 timeout_seconds = 1200
 memory_mb = 1024
 
@@ -378,7 +413,7 @@ key = "city-grmlo"
 name = "urban-tree-city-grmlo"
 entrypoint = "raw/grmlo/milos_tree_info.preql"
 operation = "refresh"
-schedule = "0 20 12 * * 2,5"
+schedule = "0 20 12 * * TUE,FRI"
 timeout_seconds = 900
 memory_mb = 1024
 
@@ -387,7 +422,7 @@ key = "city-grsan"
 name = "urban-tree-city-grsan"
 entrypoint = "raw/grsan/santorini_tree_info.preql"
 operation = "refresh"
-schedule = "0 40 12 * * 2,5"
+schedule = "0 40 12 * * TUE,FRI"
 timeout_seconds = 900
 memory_mb = 1024
 
@@ -396,7 +431,7 @@ key = "city-usbtv"
 name = "urban-tree-city-usbtv"
 entrypoint = "raw/usbtv/burlington_tree_info.preql"
 operation = "refresh"
-schedule = "0 0 13 * * 3,6"   # Wed/Sat, after Tuesday's osm-usbtv
+schedule = "0 0 13 * * WED,SAT"   # Wed/Sat, after Tuesday's osm-usbtv
 timeout_seconds = 1200
 memory_mb = 1024
 
@@ -416,7 +451,7 @@ key = "city-deber"
 name = "urban-tree-city-deber"
 entrypoint = "raw/deber/berlin_tree_info.preql"
 operation = "refresh"
-schedule = "0 20 13 * * 4,0"  # Thu/Sun, after Wednesday's osm-deber
+schedule = "0 20 13 * * THU,SUN"  # Thu/Sun, after Wednesday's osm-deber
 timeout_seconds = 3600
 memory_mb = 4096
 
@@ -425,7 +460,7 @@ key = "city-gblon"
 name = "urban-tree-city-gblon"
 entrypoint = "raw/gblon/london_tree_info.preql"
 operation = "refresh"
-schedule = "0 40 13 * * 5,1"  # Fri/Mon, after Thursday's osm-gblon
+schedule = "0 40 13 * * FRI,MON"  # Fri/Mon, after Thursday's osm-gblon
 timeout_seconds = 3600
 memory_mb = 4096
 
@@ -434,7 +469,7 @@ key = "city-aumel"
 name = "urban-tree-city-aumel"
 entrypoint = "raw/aumel/melbourne_tree_info.preql"
 operation = "refresh"
-schedule = "0 0 14 * * 5,1"
+schedule = "0 0 14 * * FRI,MON"
 timeout_seconds = 1800
 memory_mb = 2048
 
@@ -443,7 +478,7 @@ key = "city-arbue"
 name = "urban-tree-city-arbue"
 entrypoint = "raw/arbue/buenosaires_tree_info.preql"
 operation = "refresh"
-schedule = "0 20 14 * * 5,1"
+schedule = "0 20 14 * * FRI,MON"
 timeout_seconds = 1800
 memory_mb = 2048
 
@@ -452,7 +487,7 @@ key = "city-uslax"
 name = "urban-tree-city-uslax"
 entrypoint = "raw/uslax/losangeles_tree_info.preql"
 operation = "refresh"
-schedule = "0 40 14 * * 6,2"  # Sat/Tue, after Friday's osm-uslax
+schedule = "0 40 14 * * SAT,TUE"  # Sat/Tue, after Friday's osm-uslax
 timeout_seconds = 1800
 memory_mb = 2048
 
@@ -461,7 +496,7 @@ key = "city-ustem"
 name = "urban-tree-city-ustem"
 entrypoint = "raw/ustem/tempe_tree_info.preql"
 operation = "refresh"
-schedule = "0 0 15 * * 6,2"
+schedule = "0 0 15 * * SAT,TUE"
 timeout_seconds = 1200
 memory_mb = 1024
 
@@ -470,7 +505,7 @@ key = "city-cavan"
 name = "urban-tree-city-cavan"
 entrypoint = "raw/cavan/vancouver_tree_info.preql"
 operation = "refresh"
-schedule = "0 20 15 * * 0,3"  # Sun/Wed, after Saturday's osm-cavan
+schedule = "0 20 15 * * SUN,WED"  # Sun/Wed, after Saturday's osm-cavan
 timeout_seconds = 1800
 memory_mb = 2048
 
@@ -502,7 +537,7 @@ key = "osm-grath"
 name = "urban-tree-osm-grath"
 entrypoint = "osm_staging/grath_osm_staging.preql"
 operation = "refresh"
-schedule = "0 0 2 * * 1"
+schedule = "0 0 2 * * MON"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -511,7 +546,7 @@ key = "osm-grmlo"
 name = "urban-tree-osm-grmlo"
 entrypoint = "osm_staging/grmlo_osm_staging.preql"
 operation = "refresh"
-schedule = "0 30 2 * * 1"
+schedule = "0 30 2 * * MON"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -520,7 +555,7 @@ key = "osm-grsan"
 name = "urban-tree-osm-grsan"
 entrypoint = "osm_staging/grsan_osm_staging.preql"
 operation = "refresh"
-schedule = "0 0 3 * * 1"
+schedule = "0 0 3 * * MON"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -529,7 +564,7 @@ key = "osm-ussfo"
 name = "urban-tree-osm-ussfo"
 entrypoint = "osm_staging/ussfo_osm_staging.preql"
 operation = "refresh"
-schedule = "0 30 3 * * 1"
+schedule = "0 30 3 * * MON"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -539,7 +574,7 @@ key = "osm-usnyc"
 name = "urban-tree-osm-usnyc"
 entrypoint = "osm_staging/usnyc_osm_staging.preql"
 operation = "refresh"
-schedule = "0 0 2 * * 2"
+schedule = "0 0 2 * * TUE"
 timeout_seconds = 2400
 memory_mb = 2048
 
@@ -548,7 +583,7 @@ key = "osm-usbos"
 name = "urban-tree-osm-usbos"
 entrypoint = "osm_staging/usbos_osm_staging.preql"
 operation = "refresh"
-schedule = "0 30 2 * * 2"
+schedule = "0 30 2 * * TUE"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -557,7 +592,7 @@ key = "osm-usbtv"
 name = "urban-tree-osm-usbtv"
 entrypoint = "osm_staging/usbtv_osm_staging.preql"
 operation = "refresh"
-schedule = "0 0 3 * * 2"
+schedule = "0 0 3 * * TUE"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -567,7 +602,7 @@ key = "osm-frpar"
 name = "urban-tree-osm-frpar"
 entrypoint = "osm_staging/frpar_osm_staging.preql"
 operation = "refresh"
-schedule = "0 0 2 * * 3"
+schedule = "0 0 2 * * WED"
 timeout_seconds = 2400
 memory_mb = 2048
 
@@ -577,7 +612,7 @@ key = "osm-deber"
 name = "urban-tree-osm-deber"
 entrypoint = "osm_staging/deber_osm_staging.preql"
 operation = "refresh"
-schedule = "0 30 2 * * 3"
+schedule = "0 30 2 * * WED"
 timeout_seconds = 3600
 memory_mb = 2048
 
@@ -586,7 +621,7 @@ key = "osm-nlams"
 name = "urban-tree-osm-nlams"
 entrypoint = "osm_staging/nlams_osm_staging.preql"
 operation = "refresh"
-schedule = "0 0 3 * * 3"
+schedule = "0 0 3 * * WED"
 timeout_seconds = 2400
 memory_mb = 2048
 
@@ -599,7 +634,7 @@ key = "osm-gblon"
 name = "urban-tree-osm-gblon"
 entrypoint = "osm_staging/gblon_osm_staging.preql"
 operation = "refresh"
-schedule = "0 0 2 * * 4"
+schedule = "0 0 2 * * THU"
 timeout_seconds = 3600
 memory_mb = 2048
 
@@ -608,7 +643,7 @@ key = "osm-aumel"
 name = "urban-tree-osm-aumel"
 entrypoint = "osm_staging/aumel_osm_staging.preql"
 operation = "refresh"
-schedule = "0 30 2 * * 4"
+schedule = "0 30 2 * * THU"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -617,7 +652,7 @@ key = "osm-arbue"
 name = "urban-tree-osm-arbue"
 entrypoint = "osm_staging/arbue_osm_staging.preql"
 operation = "refresh"
-schedule = "0 0 3 * * 4"
+schedule = "0 0 3 * * THU"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -627,7 +662,7 @@ key = "osm-uslax"
 name = "urban-tree-osm-uslax"
 entrypoint = "osm_staging/uslax_osm_staging.preql"
 operation = "refresh"
-schedule = "0 0 2 * * 5"
+schedule = "0 0 2 * * FRI"
 timeout_seconds = 2400
 memory_mb = 2048
 
@@ -636,7 +671,7 @@ key = "osm-uswas"
 name = "urban-tree-osm-uswas"
 entrypoint = "osm_staging/uswas_osm_staging.preql"
 operation = "refresh"
-schedule = "0 30 2 * * 5"
+schedule = "0 30 2 * * FRI"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -645,7 +680,7 @@ key = "osm-ustem"
 name = "urban-tree-osm-ustem"
 entrypoint = "osm_staging/ustem_osm_staging.preql"
 operation = "refresh"
-schedule = "0 0 3 * * 5"
+schedule = "0 0 3 * * FRI"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -655,7 +690,7 @@ key = "osm-cavan"
 name = "urban-tree-osm-cavan"
 entrypoint = "osm_staging/cavan_osm_staging.preql"
 operation = "refresh"
-schedule = "0 0 2 * * 6"
+schedule = "0 0 2 * * SAT"
 timeout_seconds = 1800
 memory_mb = 1024
 

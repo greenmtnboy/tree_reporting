@@ -128,7 +128,28 @@ def run_probe(script: Path) -> tuple[datetime | None, str]:
 # Cron
 # ---------------------------------------------------------------------------
 
-def _field(spec: str, low: int, high: int) -> set[int]:
+#: The platform parses these crons with the Rust `cron` crate, which is
+#: Quartz-shaped: day-of-week runs 1-7 with **1 = Sunday**, not the unix 0-6.
+#: trilogy.toml writes days as names for exactly that reason (see its "Times"
+#: header), so this reads names and resolves them to the platform's ordinals
+#: rather than to crontab's -- otherwise every weekly verdict here would be
+#: computed for a different day than the one that actually fires.
+DAY_ORDINALS = {
+    "SUN": 1, "MON": 2, "TUE": 3, "WED": 4, "THU": 5, "FRI": 6, "SAT": 7,
+}
+
+
+def _bound(token: str, names: dict[str, int] | None) -> int:
+    if names is not None:
+        resolved = names.get(token.upper())
+        if resolved is not None:
+            return resolved
+    return int(token)
+
+
+def _field(
+    spec: str, low: int, high: int, names: dict[str, int] | None = None
+) -> set[int]:
     values: set[int] = set()
     for part in spec.split(","):
         step = 1
@@ -139,9 +160,9 @@ def _field(spec: str, low: int, high: int) -> set[int]:
             start, end = low, high
         elif "-" in part:
             start_s, _, end_s = part.partition("-")
-            start, end = int(start_s), int(end_s)
+            start, end = _bound(start_s, names), _bound(end_s, names)
         else:
-            start = end = int(part)
+            start = end = _bound(part, names)
         values.update(v for v in range(start, end + 1) if (v - start) % step == 0)
     return values
 
@@ -159,9 +180,12 @@ def shortest_gap(cron: str) -> timedelta | None:
         return None
     try:
         _sec, minute, hour, dom, month, dow = (
-            _field(part, low, high)
-            for part, low, high in zip(
-                parts, (0, 0, 0, 1, 1, 0), (59, 59, 23, 31, 12, 6)
+            _field(part, low, high, names)
+            for part, low, high, names in zip(
+                parts,
+                (0, 0, 0, 1, 1, 1),
+                (59, 59, 23, 31, 12, 7),
+                (None, None, None, None, None, DAY_ORDINALS),
             )
         )
     except ValueError:
@@ -175,7 +199,8 @@ def shortest_gap(cron: str) -> timedelta | None:
             and moment.hour in hour
             and moment.day in dom
             and moment.month in month
-            and (moment.weekday() + 1) % 7 in dow
+            # weekday() is 0=Monday; the platform is 1=Sunday.
+            and (moment.weekday() + 1) % 7 + 1 in dow
         ):
             fires.append(moment)
     if len(fires) < 2:

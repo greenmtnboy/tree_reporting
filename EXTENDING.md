@@ -863,7 +863,7 @@ key = "city-{code}"
 name = "urban-tree-city-{code}"
 entrypoint = "raw/{code}/{city}_tree_info.preql"
 operation = "refresh"
-schedule = "0 0 12 * * 2,5"     # see "picking a cadence" below
+schedule = "0 0 12 * * TUE,FRI" # see "picking a cadence" below
 timeout_seconds = 1800
 memory_mb = 2048
 
@@ -872,13 +872,23 @@ key = "osm-{code}"
 name = "urban-tree-osm-{code}"
 entrypoint = "osm_staging/{code}_osm_staging.preql"
 operation = "refresh"
-schedule = "0 30 2 * * 4"       # weekly, on a minute no other extract uses
+schedule = "0 30 2 * * THU"     # weekly, on a minute no other extract uses
 timeout_seconds = 1800
 memory_mb = 1024
 ```
 
 plus a `landmarks-{code}` entry with **no** schedule if the city's landmarks
 are a curated CSV (see the Landmarks section).
+
+**Write the day of the week as a name.** The platform parses these with the
+Rust `cron` crate, which is Quartz-shaped rather than crontab-shaped: six
+fields with seconds first, and day-of-week numbered **1-7 from Sunday**. A
+numeric day therefore fires one day earlier than a reader coming from a unix
+crontab expects, and six of the seven do it silently — only `0` is rejected,
+and only at sync time, with `Invalid cron expression … Days of Week must be
+greater than or equal to 1`, after the jobs themselves have been created.
+`SUN`..`SAT` mean the same thing in both dialects;
+`test_day_of_week_is_written_as_a_name` enforces it.
 
 **Picking a cadence.** Start the city in the twice-weekly tier, placed the day
 after its own OSM extract and again mid-week. Then measure rather than guess:

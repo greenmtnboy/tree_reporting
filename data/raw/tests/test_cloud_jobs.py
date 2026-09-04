@@ -118,6 +118,39 @@ def test_schedules_are_six_field(job: dict):
     )
 
 
+DAY_NAMES = ("SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT")
+
+
+@pytest.mark.parametrize("job", jobs(), ids=lambda job: job["key"])
+def test_day_of_week_is_written_as_a_name(job: dict):
+    """The platform's cron dialect is Quartz's, not crontab's.
+
+    It parses with the Rust `cron` crate, where day-of-week is 1-7 with
+    **1 = Sunday** -- so a numeric day means one day earlier than a reader
+    coming from a unix crontab assumes.  Only `0` is caught by the platform,
+    and it is caught late: the sync rejects the whole POST with `Days of Week
+    must be greater than or equal to 1`, after it has already created the
+    jobs.  `1` through `6` are accepted and quietly fire a day early -- an
+    `osm-grmlo` commented "Mondays" as `* * 1` reported a Sunday next-run.
+
+    Names mean the same thing in both dialects, so requiring them removes the
+    ambiguity rather than encoding the off-by-one somewhere a reader has to
+    remember it.
+    """
+    cron = job.get("schedule")
+    if cron is None:
+        return  # ad-hoc job, fired by hand
+    dow = cron.split()[5]
+    if dow == "*":
+        return
+    bad = [part for part in dow.split(",") if part not in DAY_NAMES]
+    assert not bad, (
+        f"{job['key']}'s cron {cron!r} uses {bad} for the day of week; write "
+        f"names ({'/'.join(DAY_NAMES)}) -- the platform numbers days 1-7 from "
+        "Sunday, so a numeric day fires one day off"
+    )
+
+
 def test_osm_extract_jobs_never_fire_together():
     """Overpass allows two concurrent slots per client IP.
 
