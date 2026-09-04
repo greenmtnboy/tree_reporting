@@ -12,6 +12,7 @@ from urban_tree_ml.feedback import (
     finalize_registration_feedback,
     load_persisted_reviews,
     persist_review_payload,
+    snapshot_registration_annotations,
 )
 from urban_tree_ml.model_debug import (
     MODEL_DEBUG_HTML,
@@ -163,6 +164,13 @@ def serve_registration_review(
                 return
             try:
                 result = persist_review_payload(directory, self._read_payload())
+                result.update(
+                    snapshot_registration_annotations(
+                        config,
+                        raster,
+                        review_dir=directory,
+                    )
+                )
                 self._json_response(HTTPStatus.OK, result)
             except (OSError, ValueError, json.JSONDecodeError) as error:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
@@ -185,7 +193,11 @@ def serve_registration_review(
     server = ThreadingHTTPServer((bind, port), handler)
     server.daemon_threads = True
     print(f"Urban Tree Model Studio: http://{bind}:{port}/", flush=True)
-    print("Registration reviews auto-save to reviews.json; Ctrl+C stops the server.", flush=True)
+    print(
+        "Registration reviews auto-save to reviews.json and the tracked annotation bundle; "
+        "Ctrl+C stops the server.",
+        flush=True,
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

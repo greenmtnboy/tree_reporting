@@ -112,12 +112,25 @@ Open `http://127.0.0.1:8765`; the Model Studio landing page links registration c
 available model-validation run. Registration samples default to aligned, so only exceptions need
 attention. The server auto-detects validation artifacts for the configured experiment; use
 `--evaluation-dir` to inspect a different run.
+Every served save also refreshes a compact annotation bundle under
+`annotations/<city>/<review-id>/`. That directory is intentionally tracked by Git and contains
+the normalized reviews, their exact sample manifest, and checksums, but no NAIP pixels. Commit and
+push it periodically during a long review. To create the bundle without running the UI, use:
+
+```bash
+uv run urban-tree-ml qa snapshot \
+  --config configs/sf_naip_citywide.yaml \
+  --raster artifacts/imagery/ussfo/2022/ussfo-2022-mosaic.vrt
+```
+
 Each numbered ring selects an inventory tree in the shared image. Click its apparent tree center
 to mark it offset, or use the buttons to mark it aligned, not-tree, uncertain, or duplicate.
 Finalization turns each explicit offset into an exact correction for that reviewed tree, estimates the
 tile-wide correction from training reviews only, reports validation residuals, and records
 `not-tree`/`uncertain`/`duplicate` points as supervision exclusions. It never mutates the source
-inventory or uses test reviews.
+inventory or uses test reviews. Finalization also places `training-feedback.json` in the tracked
+annotation bundle. Later edits invalidate and remove that derived file from the bundle until the
+reviews are finalized again.
 Use a scene's **Full screen** control for dense or visually ambiguous imagery. The Previous/Next
 buttons and Left/Right Arrow keys move through the scenes allowed by the active filters while all
 marker and feedback controls remain available. Arrow keys are left alone while editing a note or

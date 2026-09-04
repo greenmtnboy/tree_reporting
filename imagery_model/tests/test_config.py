@@ -15,6 +15,7 @@ def test_checked_in_config_loads_with_local_default(monkeypatch: pytest.MonkeyPa
     assert config.targets.collision_policy == "discard"
     assert config.model.input_channels == len(config.imagery.bands) == 4
     assert config.paths.root == (Path(__file__).parents[1] / "artifacts").resolve()
+    assert config.paths.annotations == (Path(__file__).parents[1] / "annotations").resolve()
 
 
 def test_environment_overrides_data_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

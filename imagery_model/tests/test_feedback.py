@@ -8,6 +8,7 @@ from urban_tree_ml.feedback import (
     finalize_registration_feedback,
     load_persisted_reviews,
     persist_review_payload,
+    snapshot_registration_annotations,
 )
 
 
@@ -55,6 +56,7 @@ def _write_review_manifest(review_dir: Path, raster: Path) -> None:
 def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: Path) -> None:
     config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
     config.paths.root = tmp_path / "artifacts"
+    config.paths.annotations = tmp_path / "annotations"
     raster = tmp_path / "tile.tif"
     review_dir = tmp_path / "review"
     _write_review_manifest(review_dir, raster)
@@ -141,6 +143,32 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
     assert heuristic_exclusion["source"] == "heuristic"
     assert heuristic_exclusion["heuristic_id"] == "fixture-heuristic-v1"
     assert feedback["registration"]["validation_residual"]["east_median"] == 99.0
+    bundle_dir = Path(result["annotation_bundle"])
+    bundle = json.loads((bundle_dir / "bundle.json").read_text(encoding="utf-8"))
+    assert bundle_dir == tmp_path / "annotations" / "ussfo" / "fixture-review"
+    assert bundle["feedback_current"] is True
+    assert bundle["summary"]["completed_scenes"] == 1
+    assert set(bundle["files"]) == {
+        "manifest.json",
+        "reviews.json",
+        "training-feedback.json",
+    }
+    assert not (bundle_dir / "images").exists()
+
+    persist_review_payload(
+        review_dir,
+        {"reviews": {"train-aligned": {"status": "not-tree"}}},
+    )
+    snapshot_result = snapshot_registration_annotations(
+        config,
+        raster,
+        review_dir=review_dir,
+    )
+    stale_bundle = json.loads(
+        Path(snapshot_result["bundle_manifest"]).read_text(encoding="utf-8")
+    )
+    assert stale_bundle["feedback_current"] is False
+    assert not (bundle_dir / "training-feedback.json").exists()
 
 
 def test_persist_rejects_completion_for_an_unknown_scene(tmp_path: Path) -> None:

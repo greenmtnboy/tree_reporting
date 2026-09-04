@@ -392,7 +392,7 @@ def _render_grouped_registration_html(
           body: JSON.stringify({{schema_version: 1, metadata, reviews, scene_reviews: sceneReviews}})}});
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || `HTTP ${{response.status}}`);
-        sync.textContent = `Saved ${{result.reviews}} tree reviews · ${{result.completed_scenes}} images done`;
+        sync.textContent = `Saved ${{result.reviews}} tree reviews · ${{result.completed_scenes}} images done · durable snapshot updated`;
         return true;
       }} catch (error) {{
         sync.textContent = location.protocol === "file:" ? "Local only — serve the UI to auto-save" : `Save failed: ${{error.message}}`;
