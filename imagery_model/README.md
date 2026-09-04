@@ -106,6 +106,10 @@ turns each explicit offset into an exact correction for that reviewed tree, esti
 tile-wide correction from training reviews only, reports validation residuals, and records
 `not-tree`/`uncertain` points as supervision exclusions. It never mutates the source inventory or
 uses test reviews.
+Use a scene's **Full screen** control for dense or visually ambiguous imagery. The Previous/Next
+buttons and Left/Right Arrow keys move through the scenes allowed by the active filters while all
+marker and feedback controls remain available. Arrow keys are left alone while editing a note or
+using a form control.
 
 Real-tile materialization is intended for Lambda, not a local smoke test. Chip building
 automatically applies the finalized `training-feedback.json`; pass `--without-feedback` only for

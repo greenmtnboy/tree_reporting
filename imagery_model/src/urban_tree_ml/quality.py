@@ -167,6 +167,7 @@ def _render_grouped_registration_html(
       font-size: 11px; text-transform: uppercase; }}
     .seam {{ background: #614d22; color: #ffe5a0; cursor: help; }}
     .expand-button {{ align-self: start; padding: 3px 7px; font-size: 11px; text-transform: uppercase; }}
+    .fullscreen-only {{ display: none; }}
     .image-wrap {{ position: relative; width: 100%; aspect-ratio: 1; background: #050806; cursor: crosshair; }}
     .image-wrap img {{ display: block; width: 100%; height: 100%; object-fit: contain;
       image-rendering: auto; user-select: none; }}
@@ -200,6 +201,7 @@ def _render_grouped_registration_html(
       grid-template-areas: "head head" "image list" "image details" "image actions" "image note";
       border: 0; border-radius: 0; background: #101713; }}
     .card.fullscreen .card-head {{ grid-area: head; border-bottom: 1px solid #30443a; }}
+    .card.fullscreen .fullscreen-only {{ display: inline-block; }}
     .card.fullscreen .image-wrap {{ grid-area: image; align-self: start; justify-self: center;
       width: min(calc(100vw - 440px), calc(100vh - 72px)); max-width: 100%; }}
     .card.fullscreen .tree-list {{ grid-area: list; padding-top: 14px; }}
@@ -311,6 +313,13 @@ def _render_grouped_registration_html(
       }}
       document.body.classList.toggle("modal-open", Boolean(document.querySelector(".card.fullscreen")));
     }}
+    function moveScene(card, direction) {{
+      const visibleCards = [...document.querySelectorAll(".card:not(.hidden)")];
+      if (visibleCards.length < 2) return;
+      const currentIndex = visibleCards.indexOf(card);
+      const nextIndex = (currentIndex + direction + visibleCards.length) % visibleCards.length;
+      setExpanded(visibleCards[nextIndex], true);
+    }}
     function update() {{
       let reviewed = 0, visibleScenes = 0;
       const east = [], north = [];
@@ -384,6 +393,12 @@ def _render_grouped_registration_html(
         badge.title = `Priority review: nearest inventory point is ${{scene.tile_seam_distance_m.toFixed(1)}} m from a source-tile seam`;
         badges.append(badge);
       }}
+      const previous = document.createElement("button"); previous.className = "scene-previous fullscreen-only";
+      previous.textContent = "← Previous"; previous.title = "Previous visible scene (Left Arrow)";
+      previous.addEventListener("click", () => moveScene(card, -1)); badges.append(previous);
+      const next = document.createElement("button"); next.className = "scene-next fullscreen-only";
+      next.textContent = "Next →"; next.title = "Next visible scene (Right Arrow)";
+      next.addEventListener("click", () => moveScene(card, 1)); badges.append(next);
       const expand = document.createElement("button"); expand.className = "expand-button"; expand.textContent = "Full screen";
       expand.setAttribute("aria-expanded", "false"); expand.title = "Open a large review view with the same per-tree controls";
       expand.addEventListener("click", () => setExpanded(card, !card.classList.contains("fullscreen"))); badges.append(expand);
@@ -435,7 +450,13 @@ def _render_grouped_registration_html(
     }});
     scenes.forEach((scene, index) => cards.append(createCard(scene, index)));
     document.addEventListener("keydown", event => {{
-      if (event.key === "Escape") {{ const openCard = document.querySelector(".card.fullscreen"); if (openCard) setExpanded(openCard, false); }}
+      const openCard = document.querySelector(".card.fullscreen");
+      if (!openCard) return;
+      if (event.key === "Escape") {{ setExpanded(openCard, false); return; }}
+      const editing = event.target.matches("textarea, input, select") || event.target.isContentEditable;
+      if (editing) return;
+      if (event.key === "ArrowRight") {{ event.preventDefault(); moveScene(openCard, 1); }}
+      if (event.key === "ArrowLeft") {{ event.preventDefault(); moveScene(openCard, -1); }}
     }});
     splitFilter.addEventListener("change", update); coverageFilter.addEventListener("change", update); statusFilter.addEventListener("change", update);
     document.getElementById("export").addEventListener("click", () => {{

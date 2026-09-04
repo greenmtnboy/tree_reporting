@@ -82,6 +82,9 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "It will be excluded from supervision" in html
     assert "Full screen" in html
     assert 'classList.add("fullscreen")' in html
+    assert 'className = "scene-next fullscreen-only"' in html
+    assert 'event.key === "ArrowRight"' in html
+    assert 'event.key === "ArrowLeft"' in html
     assert 'id="coverage-filter"' in html
     assert "Tile seams" in html
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
