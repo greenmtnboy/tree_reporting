@@ -56,9 +56,9 @@ This is critical - NO NPM.
 
 From `src/`: `pnpm test` (vitest), `pnpm test:e2e` (Playwright), `pnpm lint`.
 `pnpm test:queries` is separate — see Dashboard query compilation below. It is
-excluded from `pnpm test` because it needs the network and takes tens of
-minutes, which does not fit the CI `test` job's ten-minute budget; it runs
-nightly and on demand via `.github/workflows/dashboard-queries.yml`.
+excluded from `pnpm test` because it needs the network, not because it is slow:
+it compiles the whole 820-query catalog in under two minutes, and it gates every
+pull request as the `dashboard-queries` job in `.github/workflows/ci.yml`.
 
 Playwright's webServer runs `pnpm build:e2e` — a `--mode e2e` build that loads
 `src/.env.e2e` and compiles in the fixture seam in `src/src/lib/e2eFixtures.ts`.
@@ -82,7 +82,8 @@ are string constants, and TypeScript has no opinion about them.
 `src/src/tests/dashboard-queries.test.ts` compiles the whole catalog against the
 live resolver and then **runs the SQL it gets back**. Compiling proves the
 planner produced SQL; only executing proves the SQL answers the question. Both
-halves have caught a live bug:
+halves have caught a live bug, and both bugs were execution-side — they compiled
+perfectly:
 
 - a keyless join (`on 1=1`) compiles fine and then evaluates the filter against
   unrelated rows — the dot map returns all 7 of San Francisco's fixture trees
@@ -90,12 +91,14 @@ halves have caught a live bug:
 - `cumulative_tree_share_pct` compiles to a `rank() over (...)` nested inside
   another window's `ORDER BY`, which DuckDB rejects outright ("window functions
   are not allowed in window definitions"), so the Dominance Curve and the Top 5
-  Share KPI are broken on every city while compiling perfectly. That one is an
-  upstream planner bug, fixed in pytrilogy after the version
-  `trilogy-service.fly.dev` currently runs — the test stays red on those two
-  charts until the service picks the fix up, which is the point of having it.
+  Share KPI were broken on every city.
 
-Both are upstream bugs and **neither is worked around here**. Aggregating the
+Both were upstream planner bugs; `trilogy-service.fly.dev` has since picked up
+the pytrilogy releases that fix them and the suite runs green, which is what
+made it fit to gate pull requests. The test going red on those charts again
+means the service's floating pin moved backwards.
+
+Neither was **worked around here**, and that is the standing rule. Aggregating the
 dot map query avoids the first, and ordering the cumulative sum by the
 underlying expression avoids the second; both were tried, both work, and both
 were reverted deliberately — hiding a planner bug behind a query rewrite takes
@@ -155,19 +158,72 @@ cd src
 pnpm test:queries                                            # the default sweep
 DASHBOARD_QUERY_CROSS_FILTERS=all pnpm test:queries          # every cross-filter dimension
 DASHBOARD_QUERY_CROSS_FILTERS=pairs pnpm test:queries        # every pair of dimensions
-DASHBOARD_QUERY_ALL_CITIES=1 pnpm test:queries               # interactive states in all 14 cities
+DASHBOARD_QUERY_ALL_CITIES=1 pnpm test:queries               # interactive states in all 17 cities
 ```
 
-The default run is the base state for every city plus one cross-filter
-dimension (nativeness — the one that reaches enrichment through the
-`unnest(native_ecoregions)` merge, where both planner failures have lived). It
-needs network: a live check against `https://trilogy-service.fly.dev`, whose
-pytrilogy pin floats, so a failure with no local change means an upstream
-release moved under us.
+The default run is **820 queries**: 697 base-state (34 for the all-cities view
+plus 39 for each of the seventeen cities) and 123 interactive (a species
+selection, and one cross-filter dimension — nativeness, the one that reaches
+enrichment through the `unnest(native_ecoregions)` merge, where both planner
+failures have lived). Deduplicating buys nothing; 807 of the 820 request bodies
+are distinct, because a city's context source and filters are part of the
+request. It needs network: a live check against
+`https://trilogy-service.fly.dev`, whose pytrilogy pin floats, so a failure with
+no local change means an upstream release moved under us.
 
-Compiles run about 0.4s against an idle resolver, but the service drops to
-10-60s per compile after a few hundred requests and takes tens of minutes to
-recover, which turns a three-minute run into an hours-long one. That is being
-tracked as its own upstream handoff, not worked around by tuning
-`DASHBOARD_QUERY_CONCURRENCY` (throughput barely moves with it: 0.04 → 0.13
-compiles/s from 1 to 8 clients).
+**Those 820 queries are 21 requests, and that is the whole performance story.**
+A lone `/generate_query` costs ~560ms against an idle resolver, of which ~375ms
+is parsing the 43 preql sources in `ALL_MODEL_SOURCES` and only ~190ms is
+planning. Paying that parse 820 times was what made this suite feel like an
+overnight job. `/generate_queries` takes one model plus a list of queries, each
+with its own `extra_filters` and `parameters`, and hydrates the model once — so
+the suite batches per (page state, imports) and finishes in about 70 seconds.
+
+That comes to one request per `it` block today, because the summary and species
+pages happen to declare the same two imports. The grouping still keys on imports
+rather than assuming that: `imports` is a property of the whole batch in the
+request schema, so a page that adds one has to be sent separately or it compiles
+against the wrong scope.
+
+It is the same planner reached the same way: a batch of one returns SQL
+byte-identical to `/generate_query`, and a batch of many differs only in the
+generated CTE names, which come off a per-response counter. A query that cannot
+plan comes back inside a 200 with its own `error` and the rest of the batch
+still returns SQL, so batching does not hide a failure or blur which chart
+failed.
+
+**`DASHBOARD_QUERY_CONCURRENCY` is a ceiling at 4, not a tuning knob.** The
+service is a single shared instance whose throughput does not improve with
+fan-out, so extra clients only queue. Measured on the same catalog against the
+same deploy: four clients compile in 56s (1m12s wall); eight take 261s (4m29s
+wall), with per-batch latency climbing from ~8s to 232s as the queue backs up.
+Both pass. Raising it does not make the suite faster, it makes it four times
+slower.
+
+**The slow-after-load behaviour is Fly CPU throttling, not the planner.** The
+service runs on a shared-CPU Fly instance with a burst quota: sustained
+compiling drains it, and once drained every request is throttled until it
+refills. That is the whole shape — a fast first sweep, a slow one right after,
+and recovery from nothing but leaving it alone. It is being fixed on the service
+side; until it is, the symptom is a property of the host, so **a slow run is not
+evidence of a query regression**. Read the per-batch timings before concluding
+anything: throttling makes every batch slow together, while a real regression
+shows up as a failure, not a stall.
+
+A September 2026 deploy improved the picture without removing the throttle:
+eight clients no longer return HTTP 502 and the run passes at roughly twice the
+old speed. But do not read a single good probe as "fixed" — a compile taken
+immediately after each of the first two sweeps came back in 0.4s, and a third
+sweep shortly afterwards ran past eight minutes and left the service at 92s per
+compile. Quota, not state.
+
+Practical consequences: **do not run this suite in a tight loop**, leave a few
+minutes between sweeps when iterating on it, and expect the CI job to be
+genuinely slow now and then. The suite retries a 5xx or a dropped connection
+twice (that is the instance being unwell, not a verdict) and never retries a
+200.
+
+`GET /health` is sub-second no matter how loaded the service is, so it tells you
+nothing about compile latency. The only honest readout is a real compile against
+the full model — `POST /generate_query` with `ALL_MODEL_SOURCES` — which is
+~0.4-1.0s warm and tens of seconds when the service is unwell.
