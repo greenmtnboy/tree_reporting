@@ -113,9 +113,12 @@ available model-validation run. Registration samples default to aligned, so only
 attention. The server auto-detects validation artifacts for the configured experiment; use
 `--evaluation-dir` to inspect a different run.
 Every served save also refreshes a compact annotation bundle under
-`annotations/<city>/<review-id>/`. That directory is intentionally tracked by Git and contains
-the normalized reviews, their exact sample manifest, and checksums, but no NAIP pixels. Commit and
-push it periodically during a long review. To create the bundle without running the UI, use:
+`$TREE_ML_ANNOTATIONS_ROOT/<city>/<review-id>/`. Set that variable to the `annotations` directory
+of a local [`arborary-world/training-data`](https://github.com/arborary-world/training-data)
+checkout. The bundle contains the normalized reviews, their exact sample manifest, and checksums,
+but no NAIP pixels. Commit and push that data repository periodically during a long review. If the
+variable is unset, bundles fall back to this package's Git-ignored `annotations/` directory. To
+create the bundle without running the UI, use:
 
 ```bash
 uv run urban-tree-ml qa snapshot \
@@ -129,7 +132,7 @@ Finalization turns each explicit offset into an exact correction for that review
 tile-wide correction from training reviews only, reports validation residuals, and records
 `not-tree`/`uncertain`/`duplicate` points as supervision exclusions. It never mutates the source
 inventory or uses test reviews. Finalization also places `training-feedback.json` in the tracked
-annotation bundle. Later edits invalidate and remove that derived file from the bundle until the
+training-data bundle. Later edits invalidate and remove that derived file from the bundle until the
 reviews are finalized again.
 Use a scene's **Full screen** control for dense or visually ambiguous imagery. The Previous/Next
 buttons and Left/Right Arrow keys move through the scenes allowed by the active filters while all

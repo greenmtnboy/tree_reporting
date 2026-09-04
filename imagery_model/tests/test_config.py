@@ -25,6 +25,15 @@ def test_environment_overrides_data_root(tmp_path: Path, monkeypatch: pytest.Mon
     assert load_config(config_path).paths.root == tmp_path
 
 
+def test_environment_overrides_annotations_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TREE_ML_ANNOTATIONS_ROOT", str(tmp_path))
+    config_path = Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml"
+
+    assert load_config(config_path).paths.annotations == tmp_path
+
+
 def test_smoke_config_reuses_the_dataset_but_has_an_isolated_run() -> None:
     config_dir = Path(__file__).parents[1] / "configs"
     baseline = load_config(config_dir / "sf_naip_baseline.yaml")
