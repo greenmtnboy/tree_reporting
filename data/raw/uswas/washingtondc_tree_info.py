@@ -11,23 +11,19 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from _arcgis_shared import FeatureLayer, iter_features
 from _ingest_shared import (
     emit,
     enforce_tree_schema,
-    get_json_with_retry,
-    iter_offset_pages,
     normalize_species,
     stream_to_table,
     validate_coordinates,
 )
 
-LAYER_URL = (
+LAYER = FeatureLayer(
     'https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/'
-    'Urban_Tree_Canopy/MapServer/23/query'
+    'Urban_Tree_Canopy/MapServer/23'
 )
-# The layer's own `maxRecordCount`; asking for more is silently capped, which
-# would make `iter_offset_pages`' short-page rule fire on the first page.
-PAGE_SIZE = 2000
 OUT_FIELDS = 'FACILITYID,SCI_NM,CMMN_NM,DATE_PLANT,DBH'
 
 
@@ -68,33 +64,23 @@ def iter_row_chunks():
     (`Pipe process exited abnormally code=137`) while passing locally, which
     is the same failure `_ingest_shared.stream_to_table` was written for.
 
-    `orderByFields` is required, not tidiness: ArcGIS offset paging over an
-    unordered result may repeat or skip rows between requests, and a short
-    page from that would end the loop early -- a silently truncated city that
-    looks exactly like a portal publishing less.
+    Paging, ordering and the page size are `_arcgis_shared`'s -- see there for
+    why the size comes from the layer rather than a constant and why the loop
+    ends on `exceededTransferLimit`. Both matter here: this layer's
+    `maxRecordCount` is exactly the 2000 that used to be hardcoded, so the two
+    agreed by luck rather than by construction.
 
     Retired trees are excluded server-side rather than skipped after transfer,
     which is both the old behaviour (`RETIREDDT is not None` was dropped) and
     ~5,400 rows we no longer move.
     """
-    def fetch_page(offset: int) -> list[dict]:
-        payload = get_json_with_retry(
-            LAYER_URL,
-            params={
-                'where': 'RETIREDDT IS NULL',
-                'outFields': OUT_FIELDS,
-                'returnGeometry': 'true',
-                'outSR': '4326',
-                'orderByFields': 'OBJECTID',
-                'resultOffset': str(offset),
-                'resultRecordCount': str(PAGE_SIZE),
-                'f': 'json',
-            },
-            timeout=120,
-        )
-        return payload.get('features', [])
-
-    return iter_offset_pages(fetch_page, page_size=PAGE_SIZE)
+    return iter_features(
+        LAYER,
+        where='RETIREDDT IS NULL',
+        out_fields=OUT_FIELDS,
+        return_geometry=True,
+        out_sr=4326,
+    )
 
 
 def transform(rows: list[dict]) -> pa.Table:

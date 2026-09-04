@@ -3,27 +3,24 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
+"""Freshness probe for LA's Historic-Cultural Monuments layer."""
 
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, get_json_with_retry
+from _arcgis_shared import FeatureLayer, layer_last_edit
+from _ingest_shared import emit_freshness
 
-LAYER_URL = (
+LAYER = FeatureLayer(
     "https://services5.arcgis.com/7nsPwEMP38bSkCjy/ArcGIS/rest/services/"
     "Historic_Cultural_Monuments/FeatureServer/4"
 )
 
 
 def fetch_modified_at() -> datetime:
-    data = get_json_with_retry(LAYER_URL + "?f=json")
-    ms = data.get("editingInfo", {}).get("dataLastEditDate")
-    if ms is None:
-        raise RuntimeError("dataLastEditDate missing from ArcGIS layer metadata")
-    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
+    return layer_last_edit(LAYER)
 
 
 if __name__ == "__main__":

@@ -3,36 +3,28 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
+"""Freshness probe for Burlington's tree inventory.
+
+The layer publishes no `editingInfo`, so the watermark is MAX(EditDate) via an
+`outStatistics` query -- one row rather than the table.
+"""
 
 import sys
+from datetime import datetime
 from pathlib import Path
-from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, get_json_with_retry
+from _arcgis_shared import FeatureLayer, field_max
+from _ingest_shared import emit_freshness
 
-# ArcGIS statistics query — fetches MAX(EditDate) without downloading the full dataset
-STATS_URL = (
-    "https://maps.burlingtonvt.gov/arcgis/rest/services/Tree_Sites_Public_View/FeatureServer/0/query"
-    "?where=1%3D1"
-    "&outStatistics=%5B%7B%22statisticType%22%3A%22max%22%2C%22onStatisticField%22%3A%22EditDate%22%2C%22outStatisticFieldName%22%3A%22max_edit_date%22%7D%5D"
-    "&f=json"
+LAYER = FeatureLayer(
+    "https://maps.burlingtonvt.gov/arcgis/rest/services/"
+    "Tree_Sites_Public_View/FeatureServer/0"
 )
 
 
 def fetch_modified_at() -> datetime:
-    data = get_json_with_retry(STATS_URL)
-
-    features = data.get("features", [])
-    if not features:
-        raise RuntimeError("No features returned from ArcGIS statistics query")
-
-    raw = features[0].get("attributes", {}).get("max_edit_date")
-    if raw is None:
-        raise RuntimeError("max_edit_date missing from statistics response")
-
-    # ArcGIS returns dates as Unix milliseconds
-    return datetime.fromtimestamp(raw / 1000, tz=timezone.utc)
+    return field_max(LAYER, "EditDate")
 
 
 if __name__ == "__main__":
