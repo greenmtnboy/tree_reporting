@@ -1,0 +1,34 @@
+{
+  "city": "USSFO",
+  "created_at": "2026-09-04T14:11:44.028216+00:00",
+  "dataset": "sf-naip-rgbn-species-v2",
+  "experiment": "sf-naip-rgbn-species-augmented-v2",
+  "feedback_current": false,
+  "files": {
+    "manifest.json": {
+      "bytes": 975308,
+      "sha256": "5d575b707305a00f11a8bbcf923b993d14d071b704fffba99b51b6548891023a"
+    },
+    "reviews.json": {
+      "bytes": 64739,
+      "sha256": "ecdb6a710c489276b28fa493b63748c1a9c72ff7d9dd96835d7dbdc14a78cc74"
+    }
+  },
+  "images_included": false,
+  "review_id": "ussfo-2022-mosaic-20260820-grouped-v2-development",
+  "review_state_sha256": "90b2e95b6f02c3836c7270c6b321883d31aee0b7da8f14760d1fdb0dca60e531",
+  "schema_version": 1,
+  "source_manifest_sha256": "b4f4c6dcc4fefc42d102f577aabd0d505229fe6c7beb51be5861f5b6e6a38928",
+  "source_raster_name": "ussfo-2022-mosaic.vrt",
+  "summary": {
+    "completed_scenes": 14,
+    "samples": 859,
+    "status_counts": {
+      "aligned": 646,
+      "duplicate": 1,
+      "not-tree": 13,
+      "offset": 103,
+      "uncertain": 96
+    }
+  }
+}

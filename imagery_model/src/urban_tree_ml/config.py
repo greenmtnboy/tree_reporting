@@ -36,6 +36,7 @@ class StrictModel(BaseModel):
 
 class PathsConfig(StrictModel):
     root: Path
+    annotations: Path = Path("./annotations")
 
 
 class InventoryConfig(StrictModel):
@@ -161,6 +162,10 @@ def load_config(path: str | Path) -> ProjectConfig:
     config = ProjectConfig.model_validate(expanded)
     if not config.paths.root.is_absolute():
         config.paths.root = (config_path.parent.parent / config.paths.root).resolve()
+    if not config.paths.annotations.is_absolute():
+        config.paths.annotations = (
+            config_path.parent.parent / config.paths.annotations
+        ).resolve()
     if config.imagery.local_raster is not None and not config.imagery.local_raster.is_absolute():
         config.imagery.local_raster = (
             config_path.parent.parent / config.imagery.local_raster

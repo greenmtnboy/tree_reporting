@@ -288,6 +288,39 @@ def qa_finalize(
     )
 
 
+@qa_app.command("snapshot")
+def qa_snapshot(
+    config_path: ConfigPath,
+    raster: Annotated[
+        Path,
+        typer.Option("--raster", exists=True, dir_okay=False, help="Reviewed NAIP raster"),
+    ],
+    review_dir: Annotated[
+        Path | None,
+        typer.Option("--review-dir", exists=True, file_okay=False),
+    ] = None,
+    reviews: Annotated[
+        Path | None,
+        typer.Option(
+            "--reviews",
+            exists=True,
+            dir_okay=False,
+            help="Exported review JSON; omit when reviews were saved by qa serve",
+        ),
+    ] = None,
+) -> None:
+    from urban_tree_ml.feedback import snapshot_registration_annotations
+
+    _print(
+        snapshot_registration_annotations(
+            load_config(config_path),
+            raster,
+            review_dir=review_dir,
+            reviews_path=reviews,
+        )
+    )
+
+
 @app.command("train")
 def train(
     config_path: ConfigPath,
