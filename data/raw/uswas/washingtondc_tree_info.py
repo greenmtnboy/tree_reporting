@@ -5,30 +5,48 @@
 # ///
 
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, enforce_tree_schema, normalize_species, validate_coordinates
+from _ingest_shared import (
+    emit,
+    enforce_tree_schema,
+    get_json_with_retry,
+    iter_offset_pages,
+    normalize_species,
+    stream_to_table,
+    validate_coordinates,
+)
 
-DATASET_URL = 'https://opendata.dc.gov/api/download/v1/items/f6c3c04113944f23a7993f2e603abaf2/geojson?layers=23'
+LAYER_URL = (
+    'https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/'
+    'Urban_Tree_Canopy/MapServer/23/query'
+)
+# The layer's own `maxRecordCount`; asking for more is silently capped, which
+# would make `iter_offset_pages`' short-page rule fire on the first page.
+PAGE_SIZE = 2000
+OUT_FIELDS = 'FACILITYID,SCI_NM,CMMN_NM,DATE_PLANT,DBH'
 
 
-def download_geojson() -> dict:
-    import requests
+def parse_plant_date(value) -> date | None:
+    """DC publishes planting dates two different ways.
 
-    response = requests.get(DATASET_URL, timeout=300)
-    response.raise_for_status()
-    return response.json()
-
-
-def parse_plant_date(value: str | None) -> date | None:
-    if not value:
+    The GeoJSON export this ingest used to read renders them as ISO strings;
+    the `f=json` query API returns Esri's native epoch milliseconds. Accept
+    both, so the parser does not depend on which endpoint fed it.
+    """
+    if value in (None, ''):
         return None
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value / 1000, tz=timezone.utc).date()
+        except (OverflowError, OSError, ValueError):
+            return None
     try:
-        return date.fromisoformat(value[:10].replace('/', '-'))
+        return date.fromisoformat(str(value)[:10].replace('/', '-'))
     except ValueError:
         return None
 
@@ -40,7 +58,46 @@ def normalize_common_name(value: str | None) -> str | None:
     return stripped.capitalize() if stripped.islower() else stripped
 
 
-def transform(payload: dict) -> pa.Table:
+def iter_row_chunks():
+    """One ArcGIS page at a time.
+
+    A generator rather than one bulk read: the previous version fetched the
+    whole layer as GeoJSON and called `response.json()`, so 216k features
+    existed simultaneously as the response body, a dict per feature and a
+    Python list per column. That OOM-killed the 2 GiB city container
+    (`Pipe process exited abnormally code=137`) while passing locally, which
+    is the same failure `_ingest_shared.stream_to_table` was written for.
+
+    `orderByFields` is required, not tidiness: ArcGIS offset paging over an
+    unordered result may repeat or skip rows between requests, and a short
+    page from that would end the loop early -- a silently truncated city that
+    looks exactly like a portal publishing less.
+
+    Retired trees are excluded server-side rather than skipped after transfer,
+    which is both the old behaviour (`RETIREDDT is not None` was dropped) and
+    ~5,400 rows we no longer move.
+    """
+    def fetch_page(offset: int) -> list[dict]:
+        payload = get_json_with_retry(
+            LAYER_URL,
+            params={
+                'where': 'RETIREDDT IS NULL',
+                'outFields': OUT_FIELDS,
+                'returnGeometry': 'true',
+                'outSR': '4326',
+                'orderByFields': 'OBJECTID',
+                'resultOffset': str(offset),
+                'resultRecordCount': str(PAGE_SIZE),
+                'f': 'json',
+            },
+            timeout=120,
+        )
+        return payload.get('features', [])
+
+    return iter_offset_pages(fetch_page, page_size=PAGE_SIZE)
+
+
+def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
     tree_name: list[str | None] = []
@@ -49,23 +106,22 @@ def transform(payload: dict) -> pa.Table:
     longitude: list[float | None] = []
     dbh: list[float | None] = []
 
-    for feature in payload['features']:
-        props = feature.get('properties', {})
-        if props.get('RETIREDDT') is not None:
-            continue
+    for feature in rows:
+        props = feature.get('attributes', {})
         geom = feature.get('geometry') or {}
-        coords = geom.get('coordinates') or [None, None]
         sci = normalize_species(props.get('SCI_NM'))
         common = normalize_common_name(props.get('CMMN_NM'))
-        tree_id.append(f"was-{props.get('FACILITYID')}" if props.get('FACILITYID') else None)
+        facility_id = props.get('FACILITYID')
+        tree_id.append(f"was-{facility_id}" if facility_id else None)
         species.append(sci)
         tree_name.append(common or sci)
         plant_date.append(parse_plant_date(props.get('DATE_PLANT')))
-        longitude.append(coords[0] if len(coords) > 0 else None)
-        latitude.append(coords[1] if len(coords) > 1 else None)
-        dbh.append(float(props['DBH']) if props.get('DBH') not in (None, '') else None)
+        longitude.append(geom.get('x'))
+        latitude.append(geom.get('y'))
+        raw_dbh = props.get('DBH')
+        dbh.append(float(raw_dbh) if raw_dbh not in (None, '') else None)
 
-    n = len(tree_id)
+    n = len(rows)
     return pa.table({
         'tree_id': pa.array(tree_id, type=pa.string()),
         'city': pa.array(['USWAS'] * n, type=pa.string()),
@@ -79,7 +135,9 @@ def transform(payload: dict) -> pa.Table:
 
 
 if __name__ == '__main__':
-    table = transform(download_geojson())
+    table = stream_to_table(
+        iter_row_chunks(), transform, label='Washington DC OpenData'
+    )
     table = validate_coordinates(table, city='Washington DC', city_code='USWAS')
     table = enforce_tree_schema(table, city='Washington DC', data_source="WASHINGTONDC_OPENDATA")
     emit(table)
