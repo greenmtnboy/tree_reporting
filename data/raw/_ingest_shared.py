@@ -661,7 +661,6 @@ def enforce_tree_schema(
     columns: dict[str, str] | None = None,
     city: str = "",
     data_source: str | None = None,
-    unique_tree_ids: bool = False,
 ) -> pa.Table:
     """Cast the tree ingest columns to their canonical Arrow types.
 
@@ -681,15 +680,13 @@ def enforce_tree_schema(
               which is what lets Trilogy union a city's municipal and community
               sources as disjoint partitions.  Scripts that emit a per-row
               ``data_source`` column (only the community ingest does) omit it.
-    unique_tree_ids: Raise if ``tree_id`` repeats.  ``tree_id`` is the declared
-              ``grain`` of every city datasource, and a repeat there does not
-              error anywhere -- it fans out the joins Trilogy builds on that
-              grain, so the city's Parquet comes back with more rows than the
-              portal published and every count on the map is quietly wrong.
-              Off by default only because the sixteen cities that predate this
-              check have not been measured; they get the stderr line below, and
-              a city should be switched to ``True`` once a refresh has shown it
-              clean.  A new city should pass ``True`` from the start.
+    Raises if ``tree_id`` repeats or is null.  ``tree_id`` is the declared
+    ``grain`` of every city datasource and neither failure errors anywhere: a
+    repeat fans out the joins Trilogy builds on that grain, so the Parquet comes
+    back with more rows than the portal published, and a null drops its row
+    entirely, because the generated join is a plain ``=`` and ``NULL = NULL`` is
+    never true.  Washington DC shipped 63,527 of the first and 8,280 of the
+    second for months; Boston was quietly losing 43 rows a rebuild.
 
     Extra columns (``borough``, …) pass through untouched.
     Casts are *safe*: a lossy conversion raises rather than silently
@@ -803,43 +800,61 @@ def enforce_tree_schema(
             actual, pa.nulls(table.num_rows, type=target)
         )
 
-    _check_tree_id_grain(
-        table, resolved["tree_id"], prefix=prefix, strict=unique_tree_ids
-    )
+    _check_tree_id_grain(table, resolved["tree_id"], prefix=prefix)
 
     return table
 
 
-def _check_tree_id_grain(
-    table: pa.Table, column: str, *, prefix: str, strict: bool
-) -> None:
-    """Report (or refuse) a repeated ``tree_id``.
+def _check_tree_id_grain(table: pa.Table, column: str, *, prefix: str) -> None:
+    """Refuse a repeated ``tree_id``.
 
-    See the ``unique_tree_ids`` note on ``enforce_tree_schema``: this is a
-    grain violation, and Trilogy has no way to notice one.
+    A grain violation, and Trilogy has no way to notice one -- see the note on
+    ``enforce_tree_schema``.
+
+    Every city's published Parquet was measured before this became fatal
+    (2026-09-04, `count(*)` vs `count(DISTINCT tree_id)` over each object in
+    GCS): seventeen of eighteen were already clean, and the eighteenth was
+    Washington DC, fixed in the same change that made this raise.  So no
+    currently-wired city's refresh starts failing because of it -- but a portal
+    that begins publishing a duplicate id will now stop that city rather than
+    inflate its counts, which is the trade this repo makes everywhere else.
     """
     if column not in table.schema.names:
         return
     ids = table.column(column).to_pylist()
     seen: set[str] = set()
     repeats: set[str] = set()
+    nulls = 0
     for value in ids:
-        if value is None:
-            continue
-        if value in seen:
+        if value is None or value == "":
+            nulls += 1
+        elif value in seen:
             repeats.add(value)
         else:
             seen.add(value)
-    if not repeats:
+    if not repeats and not nulls:
         return
-    sample = ", ".join(sorted(repeats)[:5])
-    message = (
-        f"{prefix}: '{column}' is the declared grain but {len(repeats)} "
-        f"value(s) repeat (e.g. {sample}); joins on that grain will fan out"
+
+    problems = []
+    if repeats:
+        sample = ", ".join(sorted(repeats)[:5])
+        problems.append(
+            f"{len(repeats)} value(s) repeat (e.g. {sample}), so joins on that "
+            f"grain will fan out"
+        )
+    if nulls:
+        problems.append(
+            f"{nulls} row(s) have no value, and Trilogy joins the grain with a "
+            f"plain `=`, so those rows are dropped from the Parquet silently"
+        )
+    raise ValueError(
+        f"{prefix}: '{column}' is the declared grain but " + "; ".join(problems)
+        + ". If the source has no unique per-tree column, look for a GlobalID "
+        "or equivalent before falling back to a positional one (see "
+        "uswas/washingtondc_tree_info.py); if the source simply leaves some "
+        "rows unidentified, drop them in the ingest with a logged count rather "
+        "than letting the join do it quietly (see usbos/boston_tree_info.py)"
     )
-    if strict:
-        raise ValueError(message)
-    print(message, file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------

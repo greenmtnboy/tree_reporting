@@ -347,7 +347,7 @@ if __name__ == "__main__":
     table = stream_to_table(iter_row_chunks(), transform, label="{name} OpenData")
     table = validate_coordinates(table, city="{name}", city_code="{code}")
     table = enforce_tree_schema(
-        table, city="{name}", data_source="{source}", unique_tree_ids=True
+        table, city="{name}", data_source="{source}"
     )
     emit(table)
 '''

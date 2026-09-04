@@ -24,7 +24,7 @@ LAYER = FeatureLayer(
     'https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/'
     'Urban_Tree_Canopy/MapServer/23'
 )
-OUT_FIELDS = 'FACILITYID,SCI_NM,CMMN_NM,DATE_PLANT,DBH'
+OUT_FIELDS = 'GLOBALID,SCI_NM,CMMN_NM,DATE_PLANT,DBH'
 
 
 def parse_plant_date(value) -> date | None:
@@ -45,6 +45,31 @@ def parse_plant_date(value) -> date | None:
         return date.fromisoformat(str(value)[:10].replace('/', '-'))
     except ValueError:
         return None
+
+
+def tree_id_for(global_id: str | None) -> str | None:
+    """DC's stable per-feature identifier, normalised.
+
+    **Not FACILITYID.** That is a facility/site id, and using it produced a
+    Parquet where 63,527 of 215,583 rows had NO tree_id at all (29.8% of the
+    layer has no FACILITYID) and 8,280 more shared one with a different tree:
+    `was-35778-290-3005-0057-000` covered 127 rows, including a witch-hazel and
+    a black walnut 50m apart. `tree_id` is the declared grain of every city
+    datasource, so that fanned out every join built on it -- silently, because
+    Trilogy has no way to notice a grain violation.
+
+    GLOBALID is populated on all 216,725 rows and all 216,725 are distinct
+    (measured, not assumed). It is also the right *kind* of identifier: an
+    ArcGIS GlobalID is assigned once per feature and preserved across
+    replication and republishing, where OBJECTID is a local row number that can
+    be reassigned by a rebuild. GIS_ID is present in the schema but 100% null.
+
+    Esri renders it braced and upper-case, `{926038DA-...}`; strip and lowercase
+    so the id is URL- and log-friendly.
+    """
+    if not global_id:
+        return None
+    return f"was-{global_id.strip().strip('{}').lower()}"
 
 
 def normalize_common_name(value: str | None) -> str | None:
@@ -97,8 +122,7 @@ def transform(rows: list[dict]) -> pa.Table:
         geom = feature.get('geometry') or {}
         sci = normalize_species(props.get('SCI_NM'))
         common = normalize_common_name(props.get('CMMN_NM'))
-        facility_id = props.get('FACILITYID')
-        tree_id.append(f"was-{facility_id}" if facility_id else None)
+        tree_id.append(tree_id_for(props.get('GLOBALID')))
         species.append(sci)
         tree_name.append(common or sci)
         plant_date.append(parse_plant_date(props.get('DATE_PLANT')))

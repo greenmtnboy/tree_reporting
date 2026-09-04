@@ -1596,6 +1596,62 @@ cd data && trilogy refresh raw/{city}/{city}_tree_info.preql -f {city}_tree_info
 Row counts are the cheap tell — compare each `data_source` partition in the new
 Parquet against the source row count before assuming a rebuild succeeded.
 
+### `tree_id` is the grain, and the source's obvious id is often not unique
+
+`enforce_tree_schema` refuses a `tree_id` that repeats *or* is null. It has to:
+`tree_id` is the declared `grain` of every city datasource, Trilogy has no way
+to notice a violation, and neither symptom is an error.
+
+- **A repeat fans out** every join built on that grain, so the Parquet comes
+  back with more rows than the portal published and every count is quietly high.
+- **A null drops its row.** The generated join is a plain `=` and `NULL = NULL`
+  is never true, so the row vanishes from the Parquet with nothing reporting it
+  — the same mechanism as the nullable-column trap above, applied to the grain
+  itself. Boston was losing 43 rows a rebuild this way.
+
+If a source genuinely leaves some rows unidentified, drop them in the ingest
+with a logged count (`usbos/boston_tree_info.py`) rather than letting the join
+do it quietly. Do not synthesise an id from position: it is one the city cannot
+confirm, and it churns the moment the city assigns a real one.
+
+**Do not assume the field named like an id is one.** Washington DC used
+`FACILITYID`, which is a *facility* id, and shipped for months with 63,527 of
+215,583 rows carrying no `tree_id` at all (29.8% of the layer has no
+FACILITYID) and 8,280 more sharing one with a different tree —
+`was-35778-290-3005-0057-000` covered 127 rows, including a witch-hazel and a
+black walnut 50m apart.
+
+The preference order for a new city:
+
+1. **A stable per-feature id the publisher guarantees.** On ArcGIS that is
+   `GLOBALID` — assigned once per feature and preserved across replication and
+   republishing. DC's is populated and distinct on all 216,725 rows.
+2. **The source's own asset id**, once you have checked it is unique *and*
+   non-null across the whole layer, not just the first page.
+3. **`OBJECTID` only as a last resort.** It is unique but it is a local row
+   number, so a rebuild on the publisher's side can reassign it and churn every
+   `tree_id` you derive from it.
+
+Prefer any of those to a positional hash: coordinates get corrected, and two
+records stacked at one point collide.
+
+Checking a candidate before you commit to it costs one query:
+
+```bash
+cd data/raw && python -c "
+import sys; sys.path.insert(0,'.')
+from _arcgis_shared import FeatureLayer, feature_count
+L = FeatureLayer('<layer url>')
+print('total    ', feature_count(L))
+print('id null  ', feature_count(L, where=\"GLOBALID IS NULL\"))
+"
+```
+
+and uniqueness needs the full column, which `iter_attributes` will page for you.
+Changing a city's id scheme afterwards rewrites every one of its `tree_id`s,
+which orphans any check-in recorded against the old value — so it is worth the
+query up front.
+
 ### After Adding a New City
 
 Check the wiring before checking the data — the schedule tests are instant and
