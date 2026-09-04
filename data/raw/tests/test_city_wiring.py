@@ -304,9 +304,23 @@ def test_city_is_attributed(code: str):
     """
     name = display_name(code)
     for const in ("TREE_INVENTORY_SOURCES", "LANDMARK_SOURCES"):
-        assert f"city: '{name}'" in catalog_block(const), (
+        lines = [
+            line
+            for line in catalog_block(const).splitlines()
+            if f"city: '{name}'" in line
+        ]
+        assert lines, (
             f"{code} ({name}) has no entry in {const} in "
             f"src/src/data/sourceCatalog.ts"
+        )
+        # `new_city.py` writes a TODO placeholder so the entry exists and this
+        # test names what is still owed.  A placeholder is not attribution, so
+        # it has to fail: otherwise the scaffolder's own output satisfies the
+        # gate and the city ships crediting nobody.
+        unfilled = [line for line in lines if "TODO" in line]
+        assert not unfilled, (
+            f"{code} ({name}) still has a scaffolder placeholder in {const}:\n"
+            + "\n".join(line.strip() for line in unfilled)
         )
 
 
