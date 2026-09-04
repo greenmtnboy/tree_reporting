@@ -158,3 +158,52 @@ jobs:
         name: playwright-report
         path: src/playwright-report/
         retention-days: 14
+
+  # Compiles every summary and species dashboard query against the hosted
+  # Trilogy resolver and runs the SQL it returns against seeded fixtures. The
+  # queries are string constants and TypeScript has no opinion about them, so a
+  # query that fails to plan reaches production as a "trilogy generation error"
+  # in the UI with nothing else in the way.
+  #
+  # It is a separate job from `test` only because it needs the network: the
+  # whole 820-query catalog compiles in about 70 seconds. It used to take three
+  # and a half minutes and was believed to take tens, because each query was a
+  # separate /generate_query call and each of those re-parsed all 43 preql
+  # sources. The suite now batches through /generate_queries, which hydrates the
+  # model once per request — 820 queries in 21 requests. See
+  # src/src/tests/dashboard-queries.test.ts.
+  #
+  # This runs alongside `test`, which has resolver-backed suites of its own, so
+  # the two are part of each other's load. That is survivable rather than
+  # serialised: every resolver call in both goes through
+  # src/src/tests/resolverFetch.ts, which retries a 5xx with backoff, and their
+  # timeouts have the headroom that needs. The first CI run without that had
+  # `test` fail on an HTTP 502 and two 30s timeouts while this job passed.
+  dashboard-queries:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version: 22
+
+    - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
+      with:
+        version: 10.33.0
+
+    - name: Cache pnpm store
+      uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: ~/.local/share/pnpm/store/v3
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('src/pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-store-${{ runner.os }}-
+
+    - name: Install dependencies
+      working-directory: ./src
+      run: pnpm install --frozen-lockfile
+
+    - name: Compile and run every dashboard query
+      working-directory: ./src
+      run: pnpm test:queries

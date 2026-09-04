@@ -43,12 +43,12 @@ export const SUMMARY_DASHBOARD_IMPORTS: DashboardImport[] = [
 // Rendered by TreeDotMap on both the summary and species pages. Declared here
 // so the dashboard-query compile test covers it alongside the chart queries.
 //
-// Known broken under a nativeness cross-filter: filtering on a concept reached
-// through the enrichment -> ecoregion unnest+merge loses the join axis, and the
-// planner emits a keyless join, so the map shows every tree instead of the
-// native ones. That is an upstream planner bug, not something to work around
-// here — it is handed off upstream with a repro, and dashboard-queries.test.ts
-// fails on it until the resolver picks up a fix.
+// Was broken under a nativeness cross-filter: filtering on a concept reached
+// through the enrichment -> ecoregion unnest+merge lost the join axis, and the
+// planner emitted a keyless join, so the map showed every tree instead of the
+// native ones. That was an upstream planner bug, handed off with a repro rather
+// than worked around here, and the deployed resolver has since fixed it —
+// dashboard-queries.test.ts is what would notice it coming back.
 export const TREE_DOT_MAP_QUERY =
   'SELECT latitude, longitude WHERE latitude IS NOT NULL AND longitude IS NOT NULL;'
 
