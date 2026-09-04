@@ -20,6 +20,7 @@ def _write_review_manifest(review_dir: Path, raster: Path) -> None:
         {"sample_id": "train-bad", "tree_id": "d", "split": "train"},
         {"sample_id": "validation-uncertain", "tree_id": "e", "split": "validation"},
         {"sample_id": "test-offset", "tree_id": "f", "split": "test"},
+        {"sample_id": "train-duplicate", "tree_id": "g", "split": "train"},
     ]
     (review_dir / "manifest.json").write_text(
         json.dumps(
@@ -32,7 +33,12 @@ def _write_review_manifest(review_dir: Path, raster: Path) -> None:
                 "scenes": [
                     {
                         "scene_id": "scene-train",
-                        "sample_ids": ["train-aligned", "train-offset", "train-bad"],
+                        "sample_ids": [
+                            "train-aligned",
+                            "train-offset",
+                            "train-bad",
+                            "train-duplicate",
+                        ],
                     },
                     {
                         "scene_id": "scene-validation",
@@ -67,6 +73,7 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
                 "train-bad": {"status": "not-tree"},
                 "validation-uncertain": {"status": "uncertain"},
                 "test-offset": {"status": "offset", "east_m": -100, "north_m": -100},
+                "train-duplicate": {"status": "duplicate"},
             },
             "scene_reviews": {
                 "scene-train": {
@@ -88,7 +95,10 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
     assert result["correction_m"] == {"east": 1.0, "north": 2.0}
     assert result["ignored_test_reviews"] == 1
     feedback = json.loads(Path(result["feedback"]).read_text(encoding="utf-8"))
-    assert {entry["tree_id"] for entry in feedback["exclusions"]} == {"d", "e"}
+    assert {entry["tree_id"] for entry in feedback["exclusions"]} == {"d", "e", "g"}
+    assert next(
+        entry for entry in feedback["exclusions"] if entry["tree_id"] == "g"
+    )["reason"] == "duplicate"
     assert feedback["point_corrections"] == [
         {
             "east_m": 2.0,

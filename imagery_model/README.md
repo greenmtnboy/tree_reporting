@@ -101,11 +101,11 @@ available model-validation run. Registration samples default to aligned, so only
 attention. The server auto-detects validation artifacts for the configured experiment; use
 `--evaluation-dir` to inspect a different run.
 Each numbered ring selects an inventory tree in the shared image. Click its apparent tree center
-to mark it offset, or use the buttons to mark it aligned, not-tree, or uncertain. Finalization
-turns each explicit offset into an exact correction for that reviewed tree, estimates the
+to mark it offset, or use the buttons to mark it aligned, not-tree, uncertain, or duplicate.
+Finalization turns each explicit offset into an exact correction for that reviewed tree, estimates the
 tile-wide correction from training reviews only, reports validation residuals, and records
-`not-tree`/`uncertain` points as supervision exclusions. It never mutates the source inventory or
-uses test reviews.
+`not-tree`/`uncertain`/`duplicate` points as supervision exclusions. It never mutates the source
+inventory or uses test reviews.
 Use a scene's **Full screen** control for dense or visually ambiguous imagery. The Previous/Next
 buttons and Left/Right Arrow keys move through the scenes allowed by the active filters while all
 marker and feedback controls remain available. Arrow keys are left alone while editing a note or

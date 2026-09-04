@@ -184,6 +184,7 @@ def _render_grouped_registration_html(
     .tree-marker[data-status="offset"] {{ border-color: #ffe34e; color: #ffe34e; }}
     .tree-marker[data-status="not-tree"] {{ border-color: #ff5757; color: #ff9c9c; }}
     .tree-marker[data-status="uncertain"] {{ border-color: #ff9f43; color: #ffd0a1; }}
+    .tree-marker[data-status="duplicate"] {{ border-color: #c084fc; color: #e9d5ff; }}
     .tree-marker.active {{ box-shadow: 0 0 0 3px #fff, 0 0 0 5px #102016; z-index: 5; }}
     .picked {{ display: none; position: absolute; width: 18px; height: 18px; border: 2px solid #ffe34e;
       transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; z-index: 4;
@@ -195,9 +196,10 @@ def _render_grouped_registration_html(
     .tree-choice[data-status="offset"] {{ border-color: #ffe34e; }}
     .tree-choice[data-status="not-tree"] {{ border-color: #ff5757; }}
     .tree-choice[data-status="uncertain"] {{ border-color: #ff9f43; }}
+    .tree-choice[data-status="duplicate"] {{ border-color: #c084fc; }}
     .details {{ padding: 9px 12px 0; line-height: 1.5; min-height: 70px; }}
     .selected-species {{ color: #eef5ef; font-size: 14px; font-weight: 700; }}
-    .actions {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 10px 12px; }}
+    .actions {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 10px 12px; }}
     .actions button {{ min-height: 40px; padding: 6px 3px; font-size: 12px; }}
     .actions button.active {{ background: #d5ebda; border-color: #d5ebda; color: #102016; }}
     .offset-hint {{ color: #ffe6a3; }}
@@ -227,7 +229,8 @@ def _render_grouped_registration_html(
   <header>
     <h1>Grouped registration review</h1>
     <p class="lede">Each numbered ring is one inventory tree. Select a ring, then click its apparent
-      tree center to record an offset. Cyan = aligned, yellow = offset, red = not tree, orange = uncertain.</p>
+      tree center to record an offset. Cyan = aligned, yellow = offset, red = not tree,
+      orange = uncertain, purple = duplicate.</p>
     <details class="guide">
       <summary>How should I classify ambiguous trees?</summary>
       <ul>
@@ -235,6 +238,7 @@ def _render_grouped_registration_html(
         <li><strong>Offset:</strong> the same tree is clearly identifiable at a genuinely different location. Select its ring, then click that location.</li>
         <li><strong>Uncertain:</strong> use this when a small, shadowed, overhung, merged, or off-nadir tree cannot be located confidently. It will be excluded from supervision.</li>
         <li><strong>Not tree:</strong> use only when you are confident no matching tree existed when the imagery was captured. Unnumbered nearby trees are outside this inventory review.</li>
+        <li><strong>Duplicate:</strong> the point repeats another numbered inventory record for the same physical tree. Keep one record aligned or offset, and mark only the extra record(s) duplicate.</li>
       </ul>
     </details>
     <div class="toolbar">
@@ -243,7 +247,8 @@ def _render_grouped_registration_html(
         <option value="interior">Tile interiors</option></select>
       <select id="status-filter"><option value="">All statuses</option><option value="unreviewed">Unreviewed</option>
         <option value="aligned">Aligned</option><option value="offset">Offset</option>
-        <option value="not-tree">Not tree</option><option value="uncertain">Uncertain</option></select>
+        <option value="not-tree">Not tree</option><option value="uncertain">Uncertain</option>
+        <option value="duplicate">Duplicate</option></select>
       <select id="scene-status-filter"><option value="">All images</option><option value="pending">To review</option>
         <option value="done">Done</option></select>
       <button id="export">Export reviews</button>
@@ -469,7 +474,8 @@ def _render_grouped_registration_html(
       const facts = document.createElement("div"); facts.className = "selected-facts";
       const offset = document.createElement("div"); offset.className = "offset"; details.append(species, facts, offset);
       const actions = document.createElement("div"); actions.className = "actions";
-      [["aligned", "Aligned"], ["not-tree", "Not tree"], ["uncertain", "Uncertain"]].forEach(([status, label]) => {{
+      [["aligned", "Aligned"], ["not-tree", "Not tree"], ["uncertain", "Uncertain"],
+        ["duplicate", "Duplicate"]].forEach(([status, label]) => {{
         const button = document.createElement("button"); button.dataset.reviewStatus = status; button.textContent = label;
         button.addEventListener("click", () => setStatus(activeByScene[scene.scene_id], status)); actions.append(button);
       }});
@@ -592,7 +598,7 @@ def _render_registration_html(
       border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none;
       box-shadow: 0 0 0 1px #111; }}
     .details {{ padding: 9px 12px 0; line-height: 1.45; }}
-    .actions {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 10px 12px; }}
+    .actions {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 5px; padding: 10px 12px; }}
     .actions button {{ padding: 6px 3px; font-size: 12px; }}
     .actions button.active {{ background: #d5ebda; border-color: #d5ebda; color: #102016; }}
     textarea {{ width: calc(100% - 24px); min-height: 48px; margin: 0 12px 12px; resize: vertical;
@@ -616,6 +622,7 @@ def _render_registration_html(
         <option value="">All statuses</option><option value="unreviewed">Unreviewed</option>
         <option value="aligned">Aligned</option><option value="offset">Offset</option>
         <option value="not-tree">Not tree</option><option value="uncertain">Uncertain</option>
+        <option value="duplicate">Duplicate</option>
       </select>
       <button id="export">Export reviews</button>
       <label class="file-label" for="import">Import reviews</label><input id="import" type="file" accept="application/json">
@@ -737,7 +744,8 @@ def _render_registration_html(
       const offset = document.createElement("div"); offset.className = "offset";
       details.append(facts, offset);
       const actions = document.createElement("div"); actions.className = "actions";
-      [["aligned", "Aligned"], ["offset", "Offset"], ["not-tree", "Not tree"], ["uncertain", "Uncertain"]]
+      [["aligned", "Aligned"], ["offset", "Offset"], ["not-tree", "Not tree"],
+        ["uncertain", "Uncertain"], ["duplicate", "Duplicate"]]
         .forEach(([status, label]) => {{
           const button = document.createElement("button"); button.dataset.status = status; button.textContent = label;
           button.addEventListener("click", () => {{

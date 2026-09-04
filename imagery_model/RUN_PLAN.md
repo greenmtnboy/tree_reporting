@@ -141,7 +141,8 @@ assign each sample a verdict. Reviews auto-save to disk while retaining browser-
 export copies. Select **Finalize training feedback** after at least 20 training examples are
 reviewed. The resulting `training-feedback.json` contains a training-only robust tile correction,
 exact per-tree corrections for explicit offset verdicts, validation residuals, and explicit
-`not-tree`/`uncertain` exclusions. Test labels are omitted by default and never contribute.
+`not-tree`/`uncertain`/`duplicate` exclusions. Test labels are omitted by default and never
+contribute.
 
 `chips build` auto-detects this finalized manifest for the selected raster. Explicit point
 corrections replace the global correction for those trees, avoiding double shifts. Excluded points

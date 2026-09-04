@@ -79,6 +79,8 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert 'status: "offset", image_x: x' in html
     assert "Reset all to aligned" in html
     assert "How should I classify ambiguous trees?" in html
+    assert '<option value="duplicate">Duplicate</option>' in html
+    assert "mark only the extra record(s) duplicate" in html
     assert "It will be excluded from supervision" in html
     assert "Full screen" in html
     assert 'classList.add("fullscreen")' in html

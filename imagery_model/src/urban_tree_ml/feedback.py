@@ -11,7 +11,7 @@ import numpy as np
 
 from urban_tree_ml.config import ProjectConfig
 
-REVIEW_STATUSES = frozenset({"aligned", "offset", "not-tree", "uncertain"})
+REVIEW_STATUSES = frozenset({"aligned", "offset", "not-tree", "uncertain", "duplicate"})
 _REVIEW_FIELDS = frozenset(
     {"status", "note", "image_x", "image_y", "east_m", "north_m"}
 )
@@ -283,7 +283,7 @@ def finalize_registration_feedback(
         if split == "test":
             ignored_test_reviews += 1
             continue
-        if status in {"not-tree", "uncertain"}:
+        if status in {"not-tree", "uncertain", "duplicate"}:
             exclusions.append(
                 {
                     "tree_id": str(sample["tree_id"]),
