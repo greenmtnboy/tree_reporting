@@ -140,7 +140,7 @@ On the instance:
 
 ```bash
 git clone <this-repository>
-cd sf_tree_reporting/imagery_model
+cd tree_reporting/imagery_model
 export TREE_ML_DATA_ROOT=/lambda/nfs/<FILESYSTEM_NAME>/urban-tree-ml
 export TREE_ML_RASTER="$TREE_ML_DATA_ROOT/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif"
 export TREE_ML_PREPARE_DATA=1
