@@ -137,7 +137,9 @@ reviews are finalized again.
 Use a scene's **Full screen** control for dense or visually ambiguous imagery. The Previous/Next
 buttons and Left/Right Arrow keys move through the scenes allowed by the active filters while all
 marker and feedback controls remain available. Arrow keys are left alone while editing a note or
-using a form control.
+using a form control. Shift-click markers or numbered selectors to build a multi-selection, or use
+**Select all**; classification buttons then update the selection together, while image-click offset
+marking is disabled. In full-screen mode, A/N/U/D apply aligned/not-tree/uncertain/duplicate.
 
 Real-tile materialization is intended for Lambda, not a local smoke test. Chip building
 automatically applies the finalized `training-feedback.json`; pass `--without-feedback` only for

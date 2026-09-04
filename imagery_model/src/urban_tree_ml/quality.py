@@ -244,7 +244,7 @@ def _render_grouped_registration_html(
     .stack-badge {{ background: #493953; color: #ead8f3; cursor: help; }}
     .scene-previous, .scene-next, .done-button {{ min-width: 92px; }}
     .expand-button {{ min-width: 82px; text-transform: uppercase; }}
-    .done-button.active {{ background: #d5ebda; border-color: #d5ebda; color: #102016; }}
+    .done-button.active, .select-all-button.active {{ background: #d5ebda; border-color: #d5ebda; color: #102016; }}
     .heuristic-button.preview {{ border-color: #ffcf66; color: #ffdf91; }}
     .heuristic-button.applied {{ border-color: #ff9f43; color: #ffd0a1; }}
     .fullscreen-only {{ display: none; }}
@@ -264,6 +264,7 @@ def _render_grouped_registration_html(
     body:not(.show-stacks) .tree-marker.stacked, body:not(.show-stacks) .tree-choice.stacked {{ display: none; }}
     .tree-marker.heuristic-suggestion {{ box-shadow: 0 0 0 3px #ffcf66, 0 0 0 5px #17140d; z-index: 6; }}
     .tree-marker.active {{ box-shadow: 0 0 0 3px #fff, 0 0 0 5px #102016; z-index: 5; }}
+    .image-wrap.multi-select {{ cursor: not-allowed; }}
     .picked {{ display: none; position: absolute; width: 18px; height: 18px; border: 2px solid #ffe34e;
       transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; z-index: 4;
       box-shadow: 0 0 0 1px #111; }}
@@ -309,7 +310,7 @@ def _render_grouped_registration_html(
     <h1>Grouped registration review</h1>
     <p class="lede">Each numbered ring is one inventory tree. Select a ring, then click its apparent
       tree center to record an offset. Cyan = aligned, yellow = offset, red = not tree,
-      orange = uncertain, purple = duplicate.</p>
+      orange = uncertain, purple = duplicate. Shift-click rings or numbers to select several.</p>
     <details class="guide">
       <summary>How should I classify ambiguous trees?</summary>
       <ul>
@@ -320,6 +321,7 @@ def _render_grouped_registration_html(
         <li><strong>Duplicate:</strong> the point repeats another numbered inventory record for the same physical tree. Keep one record aligned or offset, and mark only the extra record(s) duplicate.</li>
         <li><strong>Non-vegetation helper:</strong> “Check non-veg” previews conservative low-NIR gray candidates in gold. Review the highlights, then explicitly apply them as uncertain; they never become hard not-tree negatives.</li>
         <li><strong>Coordinate stacks:</strong> exact lat/lon stacks are hidden by default. Unresolved stacks are excluded by target collision handling; show them when you want to split resolvable records with explicit offsets.</li>
+        <li><strong>Bulk review:</strong> Shift-click markers or numbered buttons to add or remove trees from the selection, or use <em>Select all</em>. A/N/U/D mark the selected trees aligned/not-tree/uncertain/duplicate in full-screen mode. Center marking and notes are disabled while several trees are selected.</li>
       </ul>
     </details>
     <div class="toolbar">
@@ -352,6 +354,9 @@ def _render_grouped_registration_html(
     const activeByScene = Object.fromEntries(scenes.map(scene => [scene.scene_id,
       scene.sample_ids.find(sampleId => !isStacked(samplesById[sampleId])) || scene.sample_ids[0]
     ]));
+    const selectedByScene = Object.fromEntries(Object.entries(activeByScene).map(
+      ([sceneId, sampleId]) => [sceneId, new Set([sampleId])]
+    ));
     const storageKey = `urban-tree-registration:${{metadata.review_id}}`;
     const storedState = JSON.parse(localStorage.getItem(storageKey) || "{{}}");
     const hasWrappedState = storedState && typeof storedState === "object"
@@ -407,13 +412,20 @@ def _render_grouped_registration_html(
       document.getElementById("sync").textContent = "Saving…";
       clearTimeout(syncTimer); syncTimer = setTimeout(syncReviews, 250);
     }}
-    function setStatus(sampleId, status) {{
-      const next = {{...(reviews[sampleId] || {{}}), status, source: "human"}};
-      delete next.heuristic_id;
-      if (status !== "offset") {{
-        ["image_x", "image_y", "east_m", "north_m"].forEach(field => delete next[field]);
+    function selectionFor(sceneId) {{
+      if (!selectedByScene[sceneId]?.size) {{
+        selectedByScene[sceneId] = new Set([activeByScene[sceneId]]);
       }}
-      reviews[sampleId] = next; persist();
+      return selectedByScene[sceneId];
+    }}
+    function setStatus(sceneId, status) {{
+      selectionFor(sceneId).forEach(sampleId => {{
+        const next = {{...(reviews[sampleId] || {{}}), status, source: "human"}};
+        delete next.heuristic_id;
+        ["image_x", "image_y", "east_m", "north_m"].forEach(field => delete next[field]);
+        reviews[sampleId] = next;
+      }});
+      persist();
     }}
     function runVegetationHeuristic(sceneId) {{
       const scene = scenesById[sceneId];
@@ -444,7 +456,35 @@ def _render_grouped_registration_html(
       ).map(sample => sample.sample_id);
       update();
     }}
-    function selectSample(sceneId, sampleId) {{ activeByScene[sceneId] = sampleId; update(); }}
+    function selectSample(sceneId, sampleId, extend = false) {{
+      const selected = selectionFor(sceneId);
+      if (!extend) {{
+        selected.clear(); selected.add(sampleId);
+      }} else if (selected.has(sampleId) && selected.size > 1) {{
+        selected.delete(sampleId);
+      }} else {{
+        selected.add(sampleId);
+      }}
+      activeByScene[sceneId] = selected.has(sampleId) ? sampleId : [...selected][0];
+      update();
+    }}
+    function toggleSelectAll(sceneId) {{
+      const available = scenesById[sceneId].sample_ids.filter(
+        sampleId => showStacks.checked || !isStacked(samplesById[sampleId])
+      );
+      if (!available.length) return;
+      const selected = selectionFor(sceneId);
+      const allSelected = available.length > 1 && available.every(sampleId => selected.has(sampleId));
+      if (allSelected) {{
+        selectedByScene[sceneId] = new Set([activeByScene[sceneId]]);
+      }} else {{
+        selectedByScene[sceneId] = new Set(available);
+        if (!selectedByScene[sceneId].has(activeByScene[sceneId])) {{
+          activeByScene[sceneId] = available[0];
+        }}
+      }}
+      update();
+    }}
     function setSceneDone(sceneId, done) {{
       if (done) sceneReviews[sceneId] = {{done: true, completed_at: new Date().toISOString()}};
       else delete sceneReviews[sceneId];
@@ -491,18 +531,39 @@ def _render_grouped_registration_html(
         if (!visible && card.classList.contains("fullscreen")) setExpanded(card, false);
         card.classList.toggle("hidden", !visible);
         if (visible) visibleScenes += 1;
+        let activeChanged = false;
         if (!statusMatches.some(sample => sample.sample_id === activeByScene[scene.scene_id])) {{
           activeByScene[scene.scene_id] = statusMatches[0]?.sample_id
             || selectableSamples[0]?.sample_id || scene.sample_ids[0];
+          activeChanged = true;
         }}
         const activeId = activeByScene[scene.scene_id];
         const selected = samplesById[activeId];
         const selectedReview = reviews[activeId] || {{}};
+        const selectableIds = new Set(selectableSamples.map(sample => sample.sample_id));
+        const sceneSelection = selectionFor(scene.scene_id);
+        [...sceneSelection].filter(sampleId => !selectableIds.has(sampleId)).forEach(
+          sampleId => sceneSelection.delete(sampleId)
+        );
+        if (activeChanged || !sceneSelection.size) {{
+          sceneSelection.clear(); sceneSelection.add(activeId);
+        }} else if (!sceneSelection.has(activeId)) {{
+          sceneSelection.add(activeId);
+        }}
+        const selectedIds = [...sceneSelection];
+        const multiSelect = selectedIds.length > 1;
         card.classList.toggle("completed", sceneDone);
         const doneButton = card.querySelector(".done-button");
         doneButton.textContent = sceneDone ? "Done ✓" : "Mark done";
         doneButton.classList.toggle("active", sceneDone);
         doneButton.setAttribute("aria-pressed", sceneDone ? "true" : "false");
+        const selectAllButton = card.querySelector(".select-all-button");
+        const allSelected = selectableSamples.length > 1
+          && selectableSamples.every(sample => sceneSelection.has(sample.sample_id));
+        selectAllButton.disabled = selectableSamples.length < 2;
+        selectAllButton.textContent = allSelected ? "Single select" : "Select all";
+        selectAllButton.classList.toggle("active", allSelected);
+        selectAllButton.setAttribute("aria-pressed", allSelected ? "true" : "false");
         const heuristicButton = card.querySelector(".heuristic-button");
         const heuristicId = metadata.vegetation_heuristic?.id;
         const appliedCount = sceneSamples.filter(sample => {{
@@ -522,37 +583,56 @@ def _render_grouped_registration_html(
         card.querySelectorAll(".tree-marker").forEach(marker => {{
           const markerSample = samplesById[marker.dataset.sampleId];
           marker.dataset.status = statusOf(markerSample.sample_id);
-          marker.classList.toggle("active", markerSample.sample_id === activeId);
+          marker.classList.toggle("active", sceneSelection.has(markerSample.sample_id));
           marker.classList.toggle("heuristic-suggestion", Boolean(
             suggestedByScene[scene.scene_id]?.includes(markerSample.sample_id)
           ));
           marker.title = sampleTitle(markerSample) + (isStacked(markerSample)
-            ? ` · exact coordinate stack ×${{markerSample.coordinate_stack_size}} · excluded unless split with offsets` : "");
-          marker.setAttribute("aria-pressed", markerSample.sample_id === activeId ? "true" : "false");
+            ? ` · exact coordinate stack ×${{markerSample.coordinate_stack_size}} · excluded unless split with offsets` : "")
+            + " · Shift-click to add or remove from selection";
+          marker.setAttribute("aria-pressed", sceneSelection.has(markerSample.sample_id) ? "true" : "false");
         }});
         card.querySelectorAll(".tree-choice").forEach(choice => {{
           choice.dataset.status = statusOf(choice.dataset.sampleId);
-          choice.classList.toggle("active", choice.dataset.sampleId === activeId);
+          choice.classList.toggle("active", sceneSelection.has(choice.dataset.sampleId));
           choice.classList.toggle("heuristic-suggestion", Boolean(
             suggestedByScene[scene.scene_id]?.includes(choice.dataset.sampleId)
           ));
           const choiceSample = samplesById[choice.dataset.sampleId];
           choice.title = sampleTitle(choiceSample) + (isStacked(choiceSample)
-            ? ` · exact coordinate stack ×${{choiceSample.coordinate_stack_size}} · excluded unless split with offsets` : "");
+            ? ` · exact coordinate stack ×${{choiceSample.coordinate_stack_size}} · excluded unless split with offsets` : "")
+            + " · Shift-click to add or remove from selection";
         }});
-        card.querySelector(".selected-species").textContent = selected.species;
+        card.querySelector(".selected-species").textContent = multiSelect
+          ? `${{selectedIds.length}} trees selected` : selected.species;
         const dbh = selected.dbh_in == null ? "DBH unknown" : `${{selected.dbh_in.toFixed(1)}} in DBH`;
-        card.querySelector(".selected-facts").textContent = `${{selected.tree_id}} · ${{dbh}} · ${{selected.split}} · ${{statusOf(activeId)}}` +
-          (isStacked(selected) ? ` · coordinate stack ×${{selected.coordinate_stack_size}} (excluded unless split)` : "");
+        card.querySelector(".selected-facts").textContent = multiSelect
+          ? "Choose a classification below to apply it to the entire selection."
+          : `${{selected.tree_id}} · ${{dbh}} · ${{selected.split}} · ${{statusOf(activeId)}}` +
+            (isStacked(selected) ? ` · coordinate stack ×${{selected.coordinate_stack_size}} (excluded unless split)` : "");
         const offset = card.querySelector(".offset");
-        offset.textContent = selectedReview.east_m == null ? "Select this ring, then click the apparent center if it is offset." :
-          `Measured offset: ${{selectedReview.east_m.toFixed(2)}} m east, ${{selectedReview.north_m.toFixed(2)}} m north`;
-        offset.classList.toggle("offset-hint", selectedReview.east_m == null);
-        card.querySelectorAll("[data-review-status]").forEach(button =>
-          button.classList.toggle("active", button.dataset.reviewStatus === statusOf(activeId)));
-        card.querySelector("textarea").value = selectedReview.note || "";
+        offset.textContent = multiSelect ? "Center marking is disabled for a multi-selection."
+          : selectedReview.east_m == null ? "Select this ring, then click the apparent center if it is offset."
+          : `Measured offset: ${{selectedReview.east_m.toFixed(2)}} m east, ${{selectedReview.north_m.toFixed(2)}} m north`;
+        offset.classList.toggle("offset-hint", multiSelect || selectedReview.east_m == null);
+        card.querySelector(".image-wrap").classList.toggle("multi-select", multiSelect);
+        card.querySelectorAll("[data-review-status]").forEach(button => {{
+          const selectedStatus = selectedIds.every(
+            sampleId => statusOf(sampleId) === button.dataset.reviewStatus
+          );
+          button.classList.toggle("active", selectedStatus);
+          button.textContent = multiSelect
+            ? `${{button.dataset.reviewLabel}} (${{selectedIds.length}})`
+            : button.dataset.reviewLabel;
+        }});
+        const note = card.querySelector("textarea");
+        note.disabled = multiSelect;
+        note.value = multiSelect ? "" : selectedReview.note || "";
+        note.placeholder = multiSelect
+          ? "Notes are disabled while multiple trees are selected."
+          : note.dataset.singlePlaceholder;
         const picked = card.querySelector(".picked");
-        if (selectedReview.status === "offset" && selectedReview.image_x != null) {{
+        if (!multiSelect && selectedReview.status === "offset" && selectedReview.image_x != null) {{
           picked.style.display = "block";
           picked.style.left = `${{100 * selectedReview.image_x / scene.image_width}}%`;
           picked.style.top = `${{100 * selectedReview.image_y / scene.image_height}}%`;
@@ -592,6 +672,10 @@ def _render_grouped_registration_html(
       heuristic.textContent = "Check non-veg";
       heuristic.title = "Preview conservative low-NIR gray candidates; click again to mark them uncertain";
       heuristic.addEventListener("click", () => runVegetationHeuristic(scene.scene_id)); badges.append(heuristic);
+      const selectAll = document.createElement("button"); selectAll.className = "select-all-button";
+      selectAll.textContent = "Select all"; selectAll.setAttribute("aria-pressed", "false");
+      selectAll.title = "Select every currently available tree in this image";
+      selectAll.addEventListener("click", () => toggleSelectAll(scene.scene_id)); badges.append(selectAll);
       const done = document.createElement("button"); done.className = "done-button";
       done.textContent = "Mark done"; done.setAttribute("aria-pressed", "false");
       done.title = "Mark this entire image as reviewed";
@@ -615,11 +699,14 @@ def _render_grouped_registration_html(
         marker.classList.toggle("stacked", isStacked(sample));
         marker.style.left = `${{100 * sample.target_x / scene.image_width}}%`; marker.style.top = `${{100 * sample.target_y / scene.image_height}}%`;
         marker.textContent = index + 1; marker.setAttribute("aria-label", `Select tree ${{index + 1}}: ${{sample.species}}`);
-        marker.addEventListener("click", event => {{ event.stopPropagation(); selectSample(scene.scene_id, sample.sample_id); }});
+        marker.addEventListener("click", event => {{
+          event.stopPropagation(); selectSample(scene.scene_id, sample.sample_id, event.shiftKey);
+        }});
         wrap.append(marker);
       }});
       const picked = document.createElement("span"); picked.className = "picked"; wrap.append(picked);
       wrap.addEventListener("click", event => {{
+        if (selectionFor(scene.scene_id).size !== 1) return;
         const sampleId = activeByScene[scene.scene_id], sample = samplesById[sampleId];
         const rect = image.getBoundingClientRect();
         const x = (event.clientX - rect.left) / rect.width * scene.image_width;
@@ -635,7 +722,8 @@ def _render_grouped_registration_html(
       sceneSamples.forEach((sample, index) => {{
         const choice = document.createElement("button"); choice.className = "tree-choice"; choice.dataset.sampleId = sample.sample_id;
         choice.classList.toggle("stacked", isStacked(sample));
-        choice.textContent = index + 1; choice.addEventListener("click", () => selectSample(scene.scene_id, sample.sample_id)); treeList.append(choice);
+        choice.textContent = index + 1; choice.addEventListener("click", event =>
+          selectSample(scene.scene_id, sample.sample_id, event.shiftKey)); treeList.append(choice);
       }});
       const details = document.createElement("div"); details.className = "details";
       const species = document.createElement("div"); species.className = "selected-species";
@@ -644,11 +732,14 @@ def _render_grouped_registration_html(
       const actions = document.createElement("div"); actions.className = "actions";
       [["aligned", "Aligned"], ["not-tree", "Not tree"], ["uncertain", "Uncertain"],
         ["duplicate", "Duplicate"]].forEach(([status, label]) => {{
-        const button = document.createElement("button"); button.dataset.reviewStatus = status; button.textContent = label;
-        button.addEventListener("click", () => setStatus(activeByScene[scene.scene_id], status)); actions.append(button);
+        const button = document.createElement("button"); button.dataset.reviewStatus = status;
+        button.dataset.reviewLabel = label; button.textContent = label;
+        button.addEventListener("click", () => setStatus(scene.scene_id, status)); actions.append(button);
       }});
       const note = document.createElement("textarea"); note.placeholder = "Shadow, stale inventory, merged crowns, systematic shift…";
+      note.dataset.singlePlaceholder = note.placeholder;
       note.addEventListener("change", () => {{
+        if (selectionFor(scene.scene_id).size !== 1) return;
         const sampleId = activeByScene[scene.scene_id]; reviews[sampleId] = {{...(reviews[sampleId] || {{}}), note: note.value}}; persist();
       }});
       card.append(head, wrap, treeList, details, actions, note); return card;
@@ -663,6 +754,11 @@ def _render_grouped_registration_html(
       if (event.key === "Escape") {{ setExpanded(openCard, false); return; }}
       const editing = event.target.matches("textarea, input, select") || event.target.isContentEditable;
       if (editing) return;
+      const reviewHotkeys = {{a: "aligned", n: "not-tree", u: "uncertain", d: "duplicate"}};
+      const reviewStatus = reviewHotkeys[event.key.toLowerCase()];
+      if (reviewStatus && !event.ctrlKey && !event.metaKey && !event.altKey) {{
+        event.preventDefault(); setStatus(openCard.dataset.scene, reviewStatus); return;
+      }}
       if (event.key === "ArrowRight") {{ event.preventDefault(); moveScene(openCard, 1); }}
       if (event.key === "ArrowLeft") {{ event.preventDefault(); moveScene(openCard, -1); }}
     }});

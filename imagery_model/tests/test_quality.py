@@ -92,12 +92,18 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert 'id="scene-status-filter"' in html
     assert 'className = "done-button"' in html
     assert 'className = "heuristic-button"' in html
+    assert 'className = "select-all-button"' in html
     assert 'id="show-stacks"' in html
     assert "Check non-veg" in html
     assert "images done" in html
     assert "scene_reviews: sceneReviews" in html
     assert "repeat(auto-fill, minmax(38px, 1fr))" in html
     assert "Tile seams" in html
+    assert "event.shiftKey" in html
+    assert "selectedByScene" in html
+    assert "Center marking is disabled for a multi-selection." in html
+    assert "selectionFor(scene.scene_id).size !== 1" in html
+    assert 'a: "aligned", n: "not-tree", u: "uncertain", d: "duplicate"' in html
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
     assert manifest["metadata"]["test_labels_included"] is False
     assert manifest["metadata"]["rendered_scenes"] == len(manifest["scenes"])
