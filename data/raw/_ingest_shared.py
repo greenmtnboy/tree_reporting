@@ -116,6 +116,49 @@ _SPECIES_PLACEHOLDERS = frozenset(
     }
 )
 
+# Values that say the *site* holds no tree at all: an empty planting pit, a
+# stump, a scheduled or vacant planting site.  Different in kind from the
+# placeholders above -- "Unknown" means there is a tree and the source could
+# not name it; "Vacant" means there is nothing to put on a map.  Rows carrying
+# one are dropped by enforce_tree_schema rather than published as
+# UNKNOWN_SPECIES.  Several ingests already drop the same records from a
+# dedicated column (Amsterdam's `Stobbe` record type, Brookline's `IsStump`,
+# Burlington's site type, Denver's `_` prefix, LA's NOT_A_TREE_NAMES); this
+# catches the portals that only say so in the species field, SF above all
+# ("Vacant site medium", "Scheduled Planting Site - Spring 2026").
+_NOT_A_TREE_MARKERS = frozenset(
+    {"vacant", "stump", "empty", "empty pit", "planting site", "stobbe"}
+)
+_NOT_A_TREE_PREFIXES = (
+    "vacant", "stump", "empty pit", "planting site", "scheduled planting",
+)
+_NOT_A_TREE_SUBSTRINGS = ("planting site", "empty pit")
+
+
+def is_not_a_tree(value: str | None) -> bool:
+    """True when a species value records an empty site rather than a tree.
+
+    Examples:
+        "Vacant"                                -> True
+        "Vacant site medium"                    -> True
+        "Scheduled Planting Site - Spring 2026" -> True
+        "Empty pit/planting site"               -> True
+        "Stump"                                 -> True
+        "Unknown"                               -> False  (a tree, unnamed)
+        "Dead tree"                             -> False  (a tree, dead)
+        "Acer rubrum"                           -> False
+    """
+    s = normalize_species(value)
+    if s is None:
+        return False
+    s = _strip_diacritics(s).lower()
+    if s in _NOT_A_TREE_MARKERS:
+        return True
+    if any(s.startswith(p) for p in _NOT_A_TREE_PREFIXES):
+        return True
+    return any(sub in s for sub in _NOT_A_TREE_SUBSTRINGS)
+
+
 # English common-name nouns that never occur as a Latin specific epithet.  A
 # two-word value ending in one of these is a common name ("Pin oak", "Red
 # maple"), not a binomial.  Genus-shaped entries (magnolia, catalpa) are safe
@@ -270,6 +313,12 @@ UNKNOWN_SPECIES = "Unknown"
 PALM_SPECIES = "Palm"
 SHRUB_SPECIES = "Shrub"
 CACTUS_SPECIES = "Cactus"
+# Not a growth form but the same kind of fact: the source recorded a standing
+# tree and that it is dead, without a species.  It stays on the map -- a dead
+# tree is still a tree at that spot -- under its own sentinel rather than as
+# "Unknown", so the condition is not lost.  An empty site or stump is a
+# different thing and is dropped; see is_not_a_tree.
+DEAD_SPECIES = "Dead"
 
 # Values that name a growth form rather than a taxon, in the languages the
 # wired cities publish in.  Anything not listed here that fails
@@ -303,13 +352,27 @@ _FORM_SENTINEL_ALIASES: dict[str, str] = {
     "αυτοφυης φοινικας": PALM_SPECIES,
     "θάμνος": SHRUB_SPECIES,
     "θαμνος": SHRUB_SPECIES,
+    "dead": DEAD_SPECIES,
+    "dead tree": DEAD_SPECIES,
+    "dood": DEAD_SPECIES,            # nl
+    "dode boom": DEAD_SPECIES,       # nl
+    "abgestorben": DEAD_SPECIES,     # de
+    "tot": DEAD_SPECIES,             # de
+    "toter baum": DEAD_SPECIES,      # de
+    "muerto": DEAD_SPECIES,          # es
+    "arbol muerto": DEAD_SPECIES,    # es
+    "árbol muerto": DEAD_SPECIES,    # es
+    "mort": DEAD_SPECIES,            # fr
+    "arbre mort": DEAD_SPECIES,      # fr
+    "νεκρό": DEAD_SPECIES,           # el
+    "νεκρο": DEAD_SPECIES,
 }
 
 # Every value the `species` key can hold that is not a scientific name.  The
 # enrichment scripts and the frontend both key off this set, so a new sentinel
 # is added here and picked up in both places.
 SPECIES_SENTINELS: frozenset[str] = frozenset(
-    {UNKNOWN_SPECIES, PALM_SPECIES, SHRUB_SPECIES, CACTUS_SPECIES}
+    {UNKNOWN_SPECIES, PALM_SPECIES, SHRUB_SPECIES, CACTUS_SPECIES, DEAD_SPECIES}
 )
 
 
@@ -357,6 +420,13 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
             "The source recorded this as a cactus without identifying the species."
         ),
         "tree_form": "columnar",
+    },
+    DEAD_SPECIES: {
+        "common_names": ["Dead tree"],
+        "description": (
+            "The source recorded this tree as dead, without identifying the species."
+        ),
+        "tree_form": "default",
     },
 }
 
@@ -737,6 +807,19 @@ def enforce_tree_schema(
     if species_col in names:
         sidx = table.schema.get_field_index(species_col)
         raw_species = table.column(sidx).to_pylist()
+        # An empty planting site or a stump is not a tree; there is nothing
+        # to place on the map and nothing to count.  Drop the row rather than
+        # publish it as an unidentified tree.
+        keep_rows = [not is_not_a_tree(v) for v in raw_species]
+        not_a_tree = len(keep_rows) - sum(keep_rows)
+        if not_a_tree:
+            table = table.filter(pa.array(keep_rows, type=pa.bool_()))
+            raw_species = table.column(sidx).to_pylist()
+            print(
+                f"{prefix}: dropped {not_a_tree} row(s) whose species field "
+                f"records an empty site or stump rather than a tree",
+                file=sys.stderr,
+            )
         cleaned: list[str] = []
         dropped = rewritten = formed = 0
         for value in raw_species:

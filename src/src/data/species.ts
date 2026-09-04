@@ -39,6 +39,7 @@ export const UNKNOWN_SPECIES = 'Unknown'
 export const PALM_SPECIES = 'Palm'
 export const SHRUB_SPECIES = 'Shrub'
 export const CACTUS_SPECIES = 'Cactus'
+export const DEAD_SPECIES = 'Dead'
 
 export const SPECIES_SENTINELS: readonly SpeciesSentinel[] = [
   {
@@ -64,6 +65,12 @@ export const SPECIES_SENTINELS: readonly SpeciesSentinel[] = [
     label: 'Cactus (species not recorded)',
     treeForm: 'columnar',
     note: 'The source recorded this as a cactus without identifying the species.',
+  },
+  {
+    species: DEAD_SPECIES,
+    label: 'Dead tree',
+    treeForm: 'default',
+    note: 'The source recorded this tree as dead, without identifying the species.',
   },
 ]
 

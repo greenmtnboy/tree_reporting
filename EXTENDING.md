@@ -1266,8 +1266,8 @@ If you add a city whose source data embeds a common name in the species field (a
 `normalize_species` only fixes casing.  Deciding whether a value is a taxon at
 all is `sanitize_species`, called for every city from `enforce_tree_schema`, so
 a new city inherits it without doing anything.  It drops what is not a
-scientific name — inventory placeholders (`Vacant`, `Unknown`, `Onbekend`,
-`No identificado`, `Empty pit/planting site`), free-typed OSM tags (`Pin oak`,
+scientific name — inventory placeholders (`Unknown`, `Onbekend`,
+`No identificado`), free-typed OSM tags (`Pin oak`,
 `Serviceberry or dogwood?`), abbreviated genera (`Amel. laevis 'spring
 flurry'`) — and truncates the rest to species rank, so
 `Gleditsia triacanthos var. inermis` and `Prunus serrulata 'kwanzan'` collapse
@@ -1308,10 +1308,24 @@ column says so in the refresh log rather than doing it quietly.
 Most non-taxa merge into `UNKNOWN_SPECIES` (`"Unknown"`), but a value that
 names a *growth form* keeps it: `Palm`, `Shrub` and `Cactus` are their own
 sentinels, because the form is what the map icon and colour are chosen from and
-merging throws away the one fact the source did record.
-`_FORM_SENTINEL_ALIASES` carries the multilingual spellings (`arbusto`,
-`struik`, `palmera`, …); the full set is `SPECIES_SENTINELS`, and a new
-sentinel added there needs a matching entry in `src/src/data/species.ts`.
+merging throws away the one fact the source did record.  `Dead` is a fourth,
+for the same reason with a different fact: the source recorded a standing tree
+and that it is dead.  `_FORM_SENTINEL_ALIASES` carries the multilingual
+spellings (`arbusto`, `struik`, `palmera`, `dood`, `arbre mort`, …); the full
+set is `SPECIES_SENTINELS`, and a new sentinel added there needs a matching
+entry in `src/src/data/species.ts`.
+
+**An empty site is not an unidentified tree, and is dropped.**  `Vacant`,
+`Vacant site medium`, `Scheduled Planting Site - Spring 2026`, `Empty
+pit/planting site` and `Stump` describe a spot with nothing in it; there is
+nothing to place on the map and nothing to count, so `enforce_tree_schema`
+removes the row (`is_not_a_tree`) instead of publishing it as `Unknown`.
+Several ingests already dropped the same records from a dedicated column
+(Amsterdam's `Stobbe` record type, Brookline's `IsStump`, Burlington's site
+type, Denver's `_` prefix, LA's `NOT_A_TREE_NAMES`); the shared rule catches
+the portals that only say so in the species field, SF above all.  The count is
+reported on stderr alongside the species cleanup summary.  `Unknown` and `Dead`
+are deliberately *not* in that set: both describe a tree that is there.
 
 #### Some non-taxa are only recognisable by name
 
