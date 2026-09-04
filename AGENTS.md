@@ -223,6 +223,15 @@ genuinely slow now and then. The suite retries a 5xx or a dropped connection
 twice (that is the instance being unwell, not a verdict) and never retries a
 200.
 
+It also means **`dashboard-queries` and `test` must not run concurrently**,
+which is what `needs: test` in `ci.yml` is for. `test` carries its own
+resolver-backed suites — `trilogy-smoketest.test.ts` and
+`dashboard-pushdown.test.ts`, both on a 30s per-test timeout — and the first CI
+run with the two as siblings tripped the throttle between them: the sweep passed
+and `test` failed with an HTTP 502 and two timeouts. It costs nothing on the
+critical path, because `e2e` is seven minutes and runs alongside both. A third
+job that talks to the resolver needs the same treatment.
+
 `GET /health` is sub-second no matter how loaded the service is, so it tells you
 nothing about compile latency. The only honest readout is a real compile against
 the full model — `POST /generate_query` with `ALL_MODEL_SOURCES` — which is

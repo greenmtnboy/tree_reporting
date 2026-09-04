@@ -172,7 +172,17 @@ jobs:
   # sources. The suite now batches through /generate_queries, which hydrates the
   # model once per request — 820 queries in 21 requests. See
   # src/src/tests/dashboard-queries.test.ts.
+  #
+  # `needs: test` is not about ordering, it is about not sharing the resolver.
+  # `test` carries its own resolver-backed suites (trilogy-smoketest,
+  # dashboard-pushdown) on a 30s timeout, and the first run of this job as a
+  # sibling had the two firing at once: the sweep's four clients plus test's own
+  # were enough to trip the throttle, and `test` failed with an HTTP 502 and two
+  # timeouts while this job passed. Serialising the only two jobs that touch
+  # trilogy-service costs nothing on the critical path -- e2e is 7m and runs in
+  # parallel with both.
   dashboard-queries:
+    needs: test
     timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
