@@ -173,16 +173,13 @@ jobs:
   # model once per request — 820 queries in 21 requests. See
   # src/src/tests/dashboard-queries.test.ts.
   #
-  # `needs: test` is not about ordering, it is about not sharing the resolver.
-  # `test` carries its own resolver-backed suites (trilogy-smoketest,
-  # dashboard-pushdown) on a 30s timeout, and the first run of this job as a
-  # sibling had the two firing at once: the sweep's four clients plus test's own
-  # were enough to trip the throttle, and `test` failed with an HTTP 502 and two
-  # timeouts while this job passed. Serialising the only two jobs that touch
-  # trilogy-service costs nothing on the critical path -- e2e is 7m and runs in
-  # parallel with both.
+  # This runs alongside `test`, which has resolver-backed suites of its own, so
+  # the two are part of each other's load. That is survivable rather than
+  # serialised: every resolver call in both goes through
+  # src/src/tests/resolverFetch.ts, which retries a 5xx with backoff, and their
+  # timeouts have the headroom that needs. The first CI run without that had
+  # `test` fail on an HTTP 502 and two 30s timeouts while this job passed.
   dashboard-queries:
-    needs: test
     timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:

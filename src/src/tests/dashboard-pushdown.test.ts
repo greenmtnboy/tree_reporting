@@ -41,35 +41,31 @@ import {
   buildDashboardContextSource,
 } from '../composables/dashboardContextSource'
 import { summaryQueryCases, speciesQueryCases, type DashboardQueryCase } from './dashboardQueryCatalog'
+import { postToResolverOrThrow } from './resolverFetch'
 import type { CityCode } from '../composables/useMapData'
-
-const RESOLVER_URL = 'https://trilogy-service.fly.dev'
 
 /** Tree parquets named by the generated SQL, without the version suffix. */
 async function treeParquets(
   queryCase: DashboardQueryCase,
   city: CityCode | null,
 ): Promise<string[]> {
-  const response = await fetch(`${RESOLVER_URL}/generate_query`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      query: queryCase.query,
-      dialect: 'duckdb',
-      full_model: {
-        name: '',
-        sources: [...ALL_MODEL_SOURCES, buildDashboardContextSource(city)],
-      },
-      imports: queryCase.imports,
-      extra_filters: queryCase.filters,
-      parameters: {
-        ...buildDashboardContextParameters(city),
-        ...(queryCase.parameters ?? {}),
-      },
-    }),
+  // Retries a 5xx or a dropped connection; see resolverFetch for why, and why
+  // the tests below carry a 120s timeout rather than 30s.
+  const text = await postToResolverOrThrow('/generate_query', {
+    query: queryCase.query,
+    dialect: 'duckdb',
+    full_model: {
+      name: '',
+      sources: [...ALL_MODEL_SOURCES, buildDashboardContextSource(city)],
+    },
+    imports: queryCase.imports,
+    extra_filters: queryCase.filters,
+    parameters: {
+      ...buildDashboardContextParameters(city),
+      ...(queryCase.parameters ?? {}),
+    },
   })
-  if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`)
-  const { generated_sql: sql, error } = await response.json()
+  const { generated_sql: sql, error } = JSON.parse(text)
   if (error) throw new Error(`compile error for ${queryCase.id}: ${error}`)
   return [
     ...new Set(

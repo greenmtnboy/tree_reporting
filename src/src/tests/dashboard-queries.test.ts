@@ -24,6 +24,7 @@ import {
 import type { CityCode } from '../composables/useMapData'
 import { cityTreeParquetUrl } from '../workers/parquetUrls'
 import { FixtureDatabase, checkResult } from './dashboardExecution'
+import { postToResolver } from './resolverFetch'
 import {
   ALL_CITIES,
   cityCrossFilterCases,
@@ -40,7 +41,6 @@ import {
 // catalog for every city, then runs the SQL it gets back against the fixtures
 // in `dashboardFixtures.ts`, so both a failure to plan and a plan that answers
 // the wrong question show up here rather than in prod.
-const TRILOGY_RESOLVER_URL = process.env.TRILOGY_RESOLVER_URL ?? 'https://trilogy-service.fly.dev'
 
 // How many resolver requests are in flight at once. Four is a ceiling, not a
 // tuning knob. The resolver is a single shared instance whose throughput does
@@ -49,11 +49,6 @@ const TRILOGY_RESOLVER_URL = process.env.TRILOGY_RESOLVER_URL ?? 'https://trilog
 // latency climbing from ~8s to 232s as the queue backs up. Batching is what
 // made this suite fast; concurrency is not the lever.
 const CONCURRENCY = Number(process.env.DASHBOARD_QUERY_CONCURRENCY ?? 4)
-
-// A 5xx or a dropped connection is the shared instance being unwell, not a
-// query that failed to plan — a query that cannot plan comes back inside a 200
-// with its own `error`. Retry the transport, never the verdict.
-const TRANSPORT_RETRIES = 2
 
 // The whole catalog is compiled once in beforeAll, so that is where the budget
 // lives; the it() blocks only execute SQL against an in-process DuckDB.
@@ -129,50 +124,18 @@ async function compileBatch(
   const failAll = (error: string) =>
     new Map(cases.map((testCase) => [testCase.id, { error }] as const))
 
-  let text = ''
-  let transportError = 'the batch was never sent'
-  let sent = false
-  for (let attempt = 0; attempt <= TRANSPORT_RETRIES; attempt += 1) {
-    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 2_000 * attempt))
-    let response: Response
-    try {
-      response = await fetch(`${TRILOGY_RESOLVER_URL}/generate_queries`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-    } catch (error) {
-      transportError = `request failed: ${(error as Error).message}`
-      continue
-    }
-    text = await response.text()
-    if (response.ok) {
-      sent = true
-      break
-    }
-    // A per-query compile failure comes back inside a 200 (see below); a
-    // non-2xx means the batch itself was rejected, so every case in it is
-    // unanswered rather than failed.
-    let detail = text
-    try {
-      const parsed = JSON.parse(text) as { detail?: unknown }
-      if (parsed.detail != null) {
-        detail = typeof parsed.detail === 'string' ? parsed.detail : JSON.stringify(parsed.detail)
-      }
-    } catch {
-      // Not JSON — keep the raw body.
-    }
-    transportError = `HTTP ${response.status}: ${detail.slice(0, 600)}`
-    // 4xx is the request being wrong, and retrying will not change that.
-    if (response.status < 500) break
-  }
-  if (!sent) return failAll(transportError)
+  // A per-query compile failure comes back inside a 200 (see below), so a
+  // non-2xx means the batch itself was rejected and every case in it is
+  // unanswered rather than failed. postToResolver retries that; it never
+  // retries a 200.
+  const result = await postToResolver('/generate_queries', body)
+  if (!result.ok) return failAll(result.error)
 
   let parsed: { queries?: Array<{ label?: string; generated_sql?: string; error?: string }> }
   try {
-    parsed = JSON.parse(text) as typeof parsed
+    parsed = JSON.parse(result.text) as typeof parsed
   } catch {
-    return failAll(`resolver returned a non-JSON body: ${text.slice(0, 600)}`)
+    return failAll(`resolver returned a non-JSON body: ${result.text.slice(0, 600)}`)
   }
 
   // Results carry the label they were sent with, and a query that fails to plan

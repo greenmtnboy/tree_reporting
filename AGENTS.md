@@ -223,14 +223,19 @@ genuinely slow now and then. The suite retries a 5xx or a dropped connection
 twice (that is the instance being unwell, not a verdict) and never retries a
 200.
 
-It also means **`dashboard-queries` and `test` must not run concurrently**,
-which is what `needs: test` in `ci.yml` is for. `test` carries its own
-resolver-backed suites — `trilogy-smoketest.test.ts` and
-`dashboard-pushdown.test.ts`, both on a 30s per-test timeout — and the first CI
-run with the two as siblings tripped the throttle between them: the sweep passed
-and `test` failed with an HTTP 502 and two timeouts. It costs nothing on the
-critical path, because `e2e` is seven minutes and runs alongside both. A third
-job that talks to the resolver needs the same treatment.
+It also means CI's two resolver-touching jobs — `dashboard-queries` and `test`,
+which carries `trilogy-smoketest.test.ts` and `dashboard-pushdown.test.ts` — are
+part of each other's load, because they run concurrently. The first CI run with
+both had `test` fail on an HTTP 502 and two 30s timeouts while the sweep passed.
+
+They are kept concurrent and made survivable instead of serialised. Every
+resolver call in all three suites goes through `src/src/tests/resolverFetch.ts`,
+which retries a 5xx or a dropped connection with 2s/4s/8s backoff and never
+retries a 200 — the transport is the instance being unwell, a 200 is a verdict.
+Retrying costs time, so those tests carry a 120s timeout rather than 30s: under
+throttling a single compile can take tens of seconds on its own, and 30s could
+absorb neither the compile nor the backoff. A new suite that talks to the
+resolver should use the same helper and budget.
 
 `GET /health` is sub-second no matter how loaded the service is, so it tells you
 nothing about compile latency. The only honest readout is a real compile against
