@@ -980,6 +980,87 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Cross-source dedup: grid cell per city
+# ---------------------------------------------------------------------------
+
+# The grid cell, in metres, that raw/tree_dedup.preql matches rows across
+# sources with.  Two points within HALF a cell always share a cell in one of
+# the four staggered grids, so 10 m is a 5 m guarantee (possible matches out to
+# a ~14 m diagonal) and 20 m is a 10 m guarantee (~28 m).
+#
+# CALIBRATED PER CITY, never copied.  Distance alone cannot separate a
+# re-mapped inventory tree from the next tree in a planted row; what does is
+# pair structure, measured by `uv run osm_dedup_validation.py --city CODE`:
+# the mutual-nearest-neighbour rate in the 5-10 m band.  Below ~50% that band
+# is mostly planting-row neighbours and the cell stays at 10 m; only a band
+# that is *clearly* duplicate-dominated (the script's bar is 60%) earns 20 m.
+# The errors are not symmetric -- a missed duplicate double-renders one dot,
+# a false match hides a real tree -- so an ambiguous band is left alone, which
+# is why London (51.5%) and New York (53.3%) sit at 10 m.
+#
+# `dedup_cells.py` turns these into degrees at each city's latitude, so the
+# model never carries a hand-computed constant that can drift from the
+# calibration written next to it.  A new city needs an entry here (start at
+# 10, then measure); `test_dedup_cells.py` checks the table covers every city.
+DEDUP_CELL_METRES: dict[str, int] = {
+    # Tempe is the reference calibration: mutual-NN >=88% below 5 m (99.7%
+    # under 2 m), collapsing to 25% in the 5-10 m band.
+    "USTEM": 10,
+    # 5-10 m band 43.0% mutual-NN over n=300: neighbour-dominated.
+    "USSFO": 10,
+    # 53.3% over n=5,059: a coin flip, so the band is left unmatched.
+    "USNYC": 10,
+    # Grounded with the validation script at the 5 m break; four municipal
+    # partitions share the one cell.
+    "USBOS": 10,
+    # 15.9% over n=5,042, and Paris's 3,906 osm_ref exact-id matches break at
+    # the same 5 m line -- the strongest confirmation the method has.
+    "FRPAR": 10,
+    # 63.6% over n=22: duplicate-dominated, on a very small band.
+    "USBTV": 20,
+    # 26.7% over n=2,883.
+    "CAVAN": 10,
+    # 18.4% over n=12,630; Berlin's 6,157 osm_ref matches confirm the break.
+    "DEBER": 10,
+    # 29.9% over n=2,508.
+    "NLAMS": 10,
+    # 51.5% over n=18,076: a coin flip, left unmatched (~8,800 real trees at
+    # stake if it were flagged).
+    "GBLON": 10,
+    # 47.6% over n=884: a coin flip.
+    "AUMEL": 10,
+    # 61.0% over n=421: duplicate-dominated.
+    "ARBUE": 20,
+    # 67.2% over n=296: duplicate-dominated.
+    "USLAX": 20,
+    # 35.1% over n=558.
+    "USWAS": 10,
+    # National Garden inventory is small and dense; not yet measured, default.
+    "GRATH": 10,
+    # 76.4% mutual-NN in the 2-5 m band collapsing to 17.3% in 5-10 m
+    # (n=20,233) -- as sharp a break as any wired city.  Median planting
+    # spacing 8.2 m, so 20 m would reach the next tree in the row.  No osm_ref.
+    "USDEN": 10,
+    # Community submissions are the only anchors; a match means someone
+    # recorded a tree OSM already maps, and the submission wins.  Default.
+    "GRMLO": 10,
+    "GRSAN": 10,
+}
+
+
+def dedup_cell_degrees(city_code: str) -> tuple[float, float]:
+    """(cell_lat_deg, cell_lon_deg) for *city_code*'s dedup grid.
+
+    A degree of latitude is ~111,320 m everywhere; a degree of longitude
+    shrinks by cos(latitude), taken at the centre of the city's CITY_BOUNDS box.
+    """
+    metres = DEDUP_CELL_METRES[city_code]
+    lat_min, lat_max, _, _ = CITY_BOUNDS[city_code]
+    lat = math.radians((lat_min + lat_max) / 2)
+    return metres / 111320.0, metres / (111320.0 * math.cos(lat))
+
+
 def validate_coordinates(
     table: pa.Table,
     city: str = "",

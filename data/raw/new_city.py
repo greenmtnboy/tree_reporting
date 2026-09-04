@@ -123,10 +123,16 @@ class Edits:
 
 TREE_MODEL = '''import ..tree_common;
 import ..community_tree_info;
+import ..tree_dedup;
 
 auto {lc}_published_data_updated_through <- greatest({lc}_data_updated_through, {lc}_community_data_updated_through, {lc}_osm_data_updated_through);
 
 key {lc}_source enum<string>['{source}', 'COMMUNITY_{code}', 'OSM_{code}']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto {lc}_source_label <- concat({lc}_source, '');
+merge {lc}_source_label into source_label;
 
 root datasource {slug}_update_time (
     data_updated_through: {lc}_data_updated_through
@@ -152,13 +158,13 @@ root partial datasource {slug}_raw_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: {lc}_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = '{code}' and {lc}_source = '{source}'
@@ -173,13 +179,13 @@ root partial datasource {lc}_community_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: {lc}_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = '{code}' and {lc}_source = 'COMMUNITY_{code}'
@@ -189,66 +195,32 @@ where city = '{code}';
 
 # OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
 # -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
-# by construction; overlapping rows are kept and flagged, never dropped.
+# by construction; the overlap is resolved by ../tree_dedup.preql.
 root partial datasource {lc}_osm_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: {lc}_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = '{code}' and {lc}_source = 'OSM_{code}'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/{lc}_osm_staging.parquet`;
 
 
-# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+# --- Cross-source dedup and attribute merge --------------------------------
 #
-# An OSM row is a duplicate when an authoritative (non-OSM) tree sits in the
-# same grid cell in ANY of four copies of the grid, offset by half a cell in x,
-# y, and both -- an equi-join-shaped stand-in for a radius query. See
-# ustem/tempe_tree_info.preql for why the shape is this one.
-#
-# !!! CALIBRATE BEFORE YOU TRUST THESE NUMBERS !!!
-#
-# The cell size is a property of THIS city's OSM positional error versus its
-# own planting spacing, and copying one is how a city ends up hiding real
-# trees. Measure it:
-#
-#     cd data/raw && uv run osm_dedup_validation.py --city {code}
-#
-# (add --osm-parquet / --inventory-parquet to calibrate from local files before
-# this city's first credentialed build). Paste the band table it prints in here
-# and set the constants to the guarantee it suggests. The values below are a
-# 10m cell at this city's latitude, which is the most common answer and is not
-# evidence for anything.
-#
-# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
-# cos({lat:.2f} deg).
-const {lc}_cell_lat_deg <- {cell_lat:.8f};
-const {lc}_cell_lon_deg <- {cell_lon:.8f};
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# The only per-city line is the dbh merge, because Boston imputes it.
+merge merged_dbh into diameter_at_breast_height;
 
-auto {lc}_cell_a <- concat(cast(floor(longitude / {lc}_cell_lon_deg) as string), ':', cast(floor(latitude / {lc}_cell_lat_deg) as string));
-auto {lc}_cell_b <- concat(cast(floor(longitude / {lc}_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / {lc}_cell_lat_deg) as string));
-auto {lc}_cell_c <- concat(cast(floor(longitude / {lc}_cell_lon_deg) as string), ':', cast(floor(latitude / {lc}_cell_lat_deg + 0.5) as string));
-auto {lc}_cell_d <- concat(cast(floor(longitude / {lc}_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / {lc}_cell_lat_deg + 0.5) as string));
-
-auto {lc}_anchor_count_a <- count(tree_id ? {lc}_source != 'OSM_{code}') by {lc}_cell_a;
-auto {lc}_anchor_count_b <- count(tree_id ? {lc}_source != 'OSM_{code}') by {lc}_cell_b;
-auto {lc}_anchor_count_c <- count(tree_id ? {lc}_source != 'OSM_{code}') by {lc}_cell_c;
-auto {lc}_anchor_count_d <- count(tree_id ? {lc}_source != 'OSM_{code}') by {lc}_cell_d;
-
-auto {lc}_is_duplicate <- {lc}_source = 'OSM_{code}' and (
-    {lc}_anchor_count_a > 0
-    or {lc}_anchor_count_b > 0
-    or {lc}_anchor_count_c > 0
-    or {lc}_anchor_count_d > 0
-);
 
 partial datasource {slug}_tree_info (
     tree_id,
@@ -261,7 +233,9 @@ partial datasource {slug}_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
-    is_duplicate: {lc}_is_duplicate,
+    merged_sources,
+    ?merged_tree_ids,
+    is_duplicate,
     {lc}_published_data_updated_through,
 )
 grain (tree_id)
@@ -554,14 +528,7 @@ def build(args) -> Edits:
     code, lc, slug, name = args.code, args.code.lower(), args.slug, args.name
     source = args.source_label
     lat, lon = args.center
-    import math
-
-    cell_lat = 10.0 / 111320.0
-    cell_lon = 10.0 / (111320.0 * math.cos(math.radians(lat)))
-    fields = dict(
-        code=code, lc=lc, slug=slug, name=name, source=source,
-        lat=lat, cell_lat=cell_lat, cell_lon=cell_lon,
-    )
+    fields = dict(code=code, lc=lc, slug=slug, name=name, source=source, lat=lat)
 
     e = Edits()
     city = RAW / lc
@@ -598,6 +565,16 @@ def build(args) -> Edits:
         r"(CITY_BOUNDS: dict\[str, tuple\[float, float, float, float\]\] = \{\n)",
         rf'\1    "{code}": ({lo_lat}, {hi_lat}, {lo_lon}, {hi_lon}),\n',
         what="CITY_BOUNDS", marker=f'"{code}": ({lo_lat}, {hi_lat}',
+    )
+    # The dedup grid cell starts at the common 10 m and is a placeholder until
+    # measured: `uv run osm_dedup_validation.py --city {code}` after the first
+    # build, then move it to 20 m only if the 5-10 m band is clearly
+    # duplicate-dominated.  tree_dedup.preql reads it through dedup_cells.py.
+    e.sub_once(
+        shared,
+        r"(DEDUP_CELL_METRES: dict\[str, int\] = \{\n)",
+        rf'\1    # NOT YET CALIBRATED: default; measure after the first build.\n    "{code}": 10,\n',
+        what="DEDUP_CELL_METRES", marker=f'"{code}": 10',
     )
 
     # --- _osm_shared.py ---------------------------------------------------

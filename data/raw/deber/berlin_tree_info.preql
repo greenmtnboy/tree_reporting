@@ -1,5 +1,6 @@
 import ..tree_common;
 import ..community_tree_info;
+import ..tree_dedup;
 
 # deber_osm_data_updated_through was dropped from this greatest() while
 # gdi.berlin.de was serving its platform-wide maintenance page, and is now
@@ -33,6 +34,11 @@ auto deber_published_data_updated_through <- greatest(deber_data_updated_through
 
 key deber_source enum<string>['BERLIN_OPENDATA', 'COMMUNITY_DEBER', 'OSM_DEBER']; # originating dataset for the row
 
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto deber_source_label <- concat(deber_source, '');
+merge deber_source_label into source_label;
+
 root datasource berlin_update_time (
     data_updated_through: deber_data_updated_through
 )
@@ -57,20 +63,19 @@ file `./berlin_osm_probe.py`;
 
 # OpenStreetMap trees, read from the staged parquet in GCS rather than
 # Overpass -- extraction is decoupled from refresh (see _osm_shared.py and
-# EXTENDING.md).  Overlapping rows are kept and flagged via
-# deber_is_duplicate below, never dropped: the Parquet must contain the union
-# of its declared sources, and the flag keeps the dedup tunable and auditable.
+# EXTENDING.md).  Overlapping rows are resolved by the
+# shared cluster merge (../tree_dedup.preql).
 root partial datasource deber_osm_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: deber_source,
-    species: ?species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
+    species: ?raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'DEBER' and deber_source = 'OSM_DEBER'
@@ -80,13 +85,13 @@ root partial datasource berlin_raw_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: deber_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'DEBER' and deber_source = 'BERLIN_OPENDATA'
@@ -100,13 +105,13 @@ root partial datasource deber_community_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: deber_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'DEBER' and deber_source = 'COMMUNITY_DEBER'
@@ -115,41 +120,18 @@ where city = 'DEBER';
 
 
 
-# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+# --- Cross-source dedup and attribute merge --------------------------------
 #
-# Same construction as ustem/tempe_tree_info.preql (full rationale there and in
-# EXTENDING.md): an OSM row is a duplicate when a non-OSM tree shares its
-# ~10m grid cell in ANY of four half-cell-staggered grid copies -- a guaranteed
-# match within 5m, possible out to a ~14m diagonal.
-#
-# CALIBRATED at 10m. This city's 5-10m band is 18.4% mutual-NN over
-# n=12630 -- neighbour-dominated: a false flag hides a real tree
-# while a missed duplicate only double-renders one, so a band that is not
-# clearly duplicate-dominated should not be flagged. Re-check with:
-#     cd data/raw && uv run ./osm_dedup_validation.py --city DEBER
-#
-# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
-# cos(52.50 deg) here.
-const deber_cell_lat_deg <- 0.00008983;
-const deber_cell_lon_deg <- 0.00014756;
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# The only per-city line is the dbh merge, because Boston imputes it.
+merge merged_dbh into diameter_at_breast_height;
 
-auto deber_cell_a <- concat(cast(floor(longitude / deber_cell_lon_deg) as string), ':', cast(floor(latitude / deber_cell_lat_deg) as string));
-auto deber_cell_b <- concat(cast(floor(longitude / deber_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / deber_cell_lat_deg) as string));
-auto deber_cell_c <- concat(cast(floor(longitude / deber_cell_lon_deg) as string), ':', cast(floor(latitude / deber_cell_lat_deg + 0.5) as string));
-auto deber_cell_d <- concat(cast(floor(longitude / deber_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / deber_cell_lat_deg + 0.5) as string));
 
-auto deber_anchor_count_a <- count(tree_id ? deber_source != 'OSM_DEBER') by deber_cell_a;
-auto deber_anchor_count_b <- count(tree_id ? deber_source != 'OSM_DEBER') by deber_cell_b;
-auto deber_anchor_count_c <- count(tree_id ? deber_source != 'OSM_DEBER') by deber_cell_c;
-auto deber_anchor_count_d <- count(tree_id ? deber_source != 'OSM_DEBER') by deber_cell_d;
-
-auto deber_is_duplicate <- deber_source = 'OSM_DEBER' and (
-    deber_anchor_count_a > 0
-    or deber_anchor_count_b > 0
-    or deber_anchor_count_c > 0
-    or deber_anchor_count_d > 0
-);
-
+# INTENDED END STATE: `where tree_id = cluster_id` on this target, so the
+# parquet holds exactly one row per tree and needs no client-side filter; see
+# "Intended end state" in ../tree_dedup.preql for what blocks it upstream.
 partial datasource berlin_tree_info (
     tree_id,
     city,
@@ -161,7 +143,9 @@ partial datasource berlin_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
-    is_duplicate: deber_is_duplicate,
+    merged_sources,
+    ?merged_tree_ids,
+    is_duplicate,
     deber_published_data_updated_through,
 )
 grain (tree_id)

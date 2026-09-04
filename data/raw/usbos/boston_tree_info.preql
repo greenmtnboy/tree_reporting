@@ -1,5 +1,6 @@
 import ..tree_common;
 import ..community_tree_info;
+import ..tree_dedup;
 
 property <*>.arboretum_data_updated_through datetime; # when Arnold Arboretum data is through
 property <*>.boston_city_data_updated_through datetime; # when Boston city open-data is through
@@ -9,15 +10,16 @@ auto usbos_published_data_updated_through <- greatest(usbos_data_updated_through
 auto usbos_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through, cambridge_data_updated_through, brookline_data_updated_through);
 key usbos_source enum<string>['CITY_OF_BOSTON', 'ARNOLD_ARBORETUM', 'CAMBRIDGE', 'BROOKLINE', 'COMMUNITY_USBOS', 'OSM_USBOS']; # originating dataset within the Boston metro; materialized as the uniform `data_source` column
 
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto usbos_source_label <- concat(usbos_source, '');
+merge usbos_source_label into source_label;
 
-property tree_id._raw_dbh float; # raw value 
 
-property tree_id._cleaned_db <- case when _raw_dbh < 0 then null else _raw_dbh end; # replace negative values with null
 
-auto processed_dbh <- coalesce(_cleaned_db, avg(_cleaned_db) by city, species); # replace 0 with null, then impute missing values with species average within each city
+
 # --- Freshness probes ---
 
-merge processed_dbh into diameter_at_breast_height;
 
 root datasource boston_update_time (
     data_updated_through: boston_city_data_updated_through
@@ -61,14 +63,14 @@ root partial datasource city_raw_tree_info (
     id: tree_id,
     city: city,
     data_source: usbos_source,
-    spp_bot: ?species,
-    tree_name: ?tree_name,
+    spp_bot: ?raw_species,
+    tree_name: ?raw_tree_name,
     
-    date_plant: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    dbh: ?_raw_dbh,
-    submission_photo_url: ?submission_photo_url,
+    date_plant: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    dbh: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'CITY_OF_BOSTON'
@@ -78,13 +80,13 @@ root partial datasource arboretum_raw_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: usbos_source,
-    species: ?species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?_raw_dbh,
-    submission_photo_url: ?submission_photo_url,
+    species: ?raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'ARNOLD_ARBORETUM'
@@ -94,13 +96,13 @@ root partial datasource cambridge_raw_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: usbos_source,
-    species: ?species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?_raw_dbh,
-    submission_photo_url: ?submission_photo_url,
+    species: ?raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'CAMBRIDGE'
@@ -110,13 +112,13 @@ root partial datasource brookline_raw_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: usbos_source,
-    species: ?species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?_raw_dbh,
-    submission_photo_url: ?submission_photo_url,
+    species: ?raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'BROOKLINE'
@@ -125,7 +127,7 @@ file `./brookline_tree_info.py`;
 # Approved community submissions for this city. The shared ingest script emits
 # every city's rows; the `complete where` clause narrows it to USBOS and makes
 # it a disjoint partition alongside the four municipal sources. `diameter_at_breast_height`
-# maps to `_raw_dbh` (not the canonical concept) so community rows go through the
+# maps to `raw_dbh` (not the canonical concept) so community rows go through the
 # same species-average imputation. Mapping it directly would leave
 # `diameter_at_breast_height` resolvable only from partial sources and make the
 # whole Boston model unresolvable.
@@ -133,13 +135,13 @@ root partial datasource usbos_community_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: usbos_source,
-    species: ?species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    diameter_at_breast_height: ?_raw_dbh,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    submission_photo_url: ?submission_photo_url,
+    species: ?raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'COMMUNITY_USBOS'
@@ -148,60 +150,48 @@ where city = 'USBOS';
 
 # OpenStreetMap trees, read from the staged parquet in GCS rather than
 # Overpass — extraction is decoupled from refresh (see boston_osm_extract.py
-# and EXTENDING.md).  Overlapping rows are kept and flagged via
-# usbos_is_duplicate below, never dropped.  `diameter_at_breast_height` maps
-# to `_raw_dbh` like every other Boston source so OSM rows go through the same
+# and EXTENDING.md).  Overlapping rows are resolved by the
+# shared cluster merge (../tree_dedup.preql).  `diameter_at_breast_height` maps
+# to `raw_dbh` like every other Boston source so OSM rows go through the same
 # species-average imputation.
 root partial datasource usbos_osm_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: usbos_source,
-    species: ?species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?_raw_dbh,
-    submission_photo_url: ?submission_photo_url,
+    species: ?raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'OSM_USBOS'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbos_osm_staging.parquet`;
 
-# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+# --- Cross-source dedup and attribute merge --------------------------------
 #
-# Same construction as ustem/tempe_tree_info.preql (see the full rationale
-# there and in EXTENDING.md): an OSM row is a duplicate when a non-OSM tree
-# shares its ~10m grid cell in ANY of four half-cell-staggered grid copies —
-# a guaranteed match within 5m, possible out to a ~14m diagonal.  The 5m
-# guarantee is grounded per-city with the dedup validation script: duplicates
-# (re-mapped inventory trees) sit at GPS-offset scale, while matches beyond
-# ~5m are mostly distinct neighbors at planting-row spacing.
-#
-# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
-# cos(42.36 deg) at Boston.
-const usbos_cell_lat_deg <- 0.00008983;
-const usbos_cell_lon_deg <- 0.00012157;
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# The only per-city line is the dbh merge, because Boston imputes it.
+# Boston imputes a missing dbh from the city-and-species average, as it always
+# has; the imputation runs on each raw row BEFORE the cross-source merge, and
+# the merge then picks across the cluster as for any other attribute.  Merging
+# first and imputing the merged value was tried and does not plan: coalescing
+# a by-cluster aggregate with a by-(city, species) aggregate in one expression
+# is the keyless-join planner bug again (upstream_repro/keyless_join_cell_aggregate).
+auto imputed_dbh <- coalesce(cleaned_dbh, avg(cleaned_dbh) by city, raw_species);
+auto processed_dbh <- @by_source(imputed_dbh);
+merge processed_dbh into diameter_at_breast_height;
 
-auto usbos_cell_a <- concat(cast(floor(longitude / usbos_cell_lon_deg) as string), ':', cast(floor(latitude / usbos_cell_lat_deg) as string));
-auto usbos_cell_b <- concat(cast(floor(longitude / usbos_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / usbos_cell_lat_deg) as string));
-auto usbos_cell_c <- concat(cast(floor(longitude / usbos_cell_lon_deg) as string), ':', cast(floor(latitude / usbos_cell_lat_deg + 0.5) as string));
-auto usbos_cell_d <- concat(cast(floor(longitude / usbos_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / usbos_cell_lat_deg + 0.5) as string));
-
-auto usbos_anchor_count_a <- count(tree_id ? usbos_source != 'OSM_USBOS') by usbos_cell_a;
-auto usbos_anchor_count_b <- count(tree_id ? usbos_source != 'OSM_USBOS') by usbos_cell_b;
-auto usbos_anchor_count_c <- count(tree_id ? usbos_source != 'OSM_USBOS') by usbos_cell_c;
-auto usbos_anchor_count_d <- count(tree_id ? usbos_source != 'OSM_USBOS') by usbos_cell_d;
-
-auto usbos_is_duplicate <- usbos_source = 'OSM_USBOS' and (
-    usbos_anchor_count_a > 0
-    or usbos_anchor_count_b > 0
-    or usbos_anchor_count_c > 0
-    or usbos_anchor_count_d > 0
-);
 
 # --- Merged materialized parquet (all Boston sources) ---
 
+# INTENDED END STATE: `where tree_id = cluster_id` on this target, so the
+# parquet holds exactly one row per tree and needs no client-side filter; see
+# "Intended end state" in ../tree_dedup.preql for what blocks it upstream.
 partial datasource boston_tree_info (
     tree_id,
     city,
@@ -213,7 +203,9 @@ partial datasource boston_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
-    is_duplicate: usbos_is_duplicate,
+    merged_sources,
+    ?merged_tree_ids,
+    is_duplicate,
     usbos_published_data_updated_through
 )
 grain (tree_id)

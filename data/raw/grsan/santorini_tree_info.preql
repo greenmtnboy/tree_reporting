@@ -1,5 +1,6 @@
 import ..tree_common;
 import ..community_tree_info;
+import ..tree_dedup;
 
 # Santorini has no municipal tree inventory — the same search that came up
 # empty for Milos (opendata.thessaloniki.gr, data.gov.gr, geodata.gov.gr, and
@@ -20,6 +21,11 @@ auto grsan_published_data_updated_through <- greatest(grsan_community_data_updat
 
 key grsan_source enum<string>['COMMUNITY_GRSAN', 'OSM_GRSAN']; # originating dataset for the row
 
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto grsan_source_label <- concat(grsan_source, '');
+merge grsan_source_label into source_label;
+
 # Only this city's column, so an approval elsewhere does not mark GRSAN's
 # Parquet stale. Trilogy probes this as MAX over the one column.
 root datasource grsan_community_update_time (
@@ -37,20 +43,19 @@ file `./santorini_osm_probe.py`;
 
 # OpenStreetMap trees, read from the staged parquet in GCS rather than
 # Overpass -- extraction is decoupled from refresh (see _osm_shared.py and
-# EXTENDING.md).  Overlapping rows are kept and flagged via
-# grsan_is_duplicate below, never dropped: the Parquet must contain the union
-# of its declared sources, and the flag keeps the dedup tunable and auditable.
+# EXTENDING.md).  Overlapping rows are resolved by the
+# shared cluster merge (../tree_dedup.preql).
 root partial datasource grsan_osm_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: grsan_source,
-    species: ?species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
+    species: ?raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'GRSAN' and grsan_source = 'OSM_GRSAN'
@@ -63,13 +68,13 @@ root partial datasource grsan_community_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: grsan_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'GRSAN' and grsan_source = 'COMMUNITY_GRSAN'
@@ -77,45 +82,18 @@ file `../community_tree_info.py`
 where city = 'GRSAN';
 
 
-# --- Cross-source dedup: stacking + aggregate over four staggered grids -----
+# --- Cross-source dedup and attribute merge --------------------------------
 #
-# Same construction as grmlo/milos_tree_info.preql and
-# ustem/tempe_tree_info.preql (full rationale there and in EXTENDING.md): an
-# OSM row is a duplicate when a non-OSM tree shares its ~10m grid cell in ANY
-# of four half-cell-staggered grid copies -- a guaranteed match within 5m,
-# possible out to a ~14m diagonal.
-#
-# 10m is the uncalibrated default, as on Milos: osm_dedup_validation.py needs
-# an inventory to measure against and there is none here, so the error
-# asymmetry decides it (a missed duplicate double-renders one toggleable dot,
-# a false flag hides a real tree).  The only non-OSM anchors are community
-# submissions, so a flag fires exactly when someone records a tree OSM already
-# maps — which is the right outcome: the submission, with its photo, wins.
-# Re-check once enough submissions exist to measure:
-#     cd data/raw && uv run ./osm_dedup_validation.py --city GRSAN
-#
-# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
-# cos(36.40 deg) here.
-const grsan_cell_lat_deg <- 0.00008983;
-const grsan_cell_lon_deg <- 0.00011161;
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# The only per-city line is the dbh merge, because Boston imputes it.
+merge merged_dbh into diameter_at_breast_height;
 
-auto grsan_cell_a <- concat(cast(floor(longitude / grsan_cell_lon_deg) as string), ':', cast(floor(latitude / grsan_cell_lat_deg) as string));
-auto grsan_cell_b <- concat(cast(floor(longitude / grsan_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / grsan_cell_lat_deg) as string));
-auto grsan_cell_c <- concat(cast(floor(longitude / grsan_cell_lon_deg) as string), ':', cast(floor(latitude / grsan_cell_lat_deg + 0.5) as string));
-auto grsan_cell_d <- concat(cast(floor(longitude / grsan_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / grsan_cell_lat_deg + 0.5) as string));
 
-auto grsan_anchor_count_a <- count(tree_id ? grsan_source != 'OSM_GRSAN') by grsan_cell_a;
-auto grsan_anchor_count_b <- count(tree_id ? grsan_source != 'OSM_GRSAN') by grsan_cell_b;
-auto grsan_anchor_count_c <- count(tree_id ? grsan_source != 'OSM_GRSAN') by grsan_cell_c;
-auto grsan_anchor_count_d <- count(tree_id ? grsan_source != 'OSM_GRSAN') by grsan_cell_d;
-
-auto grsan_is_duplicate <- grsan_source = 'OSM_GRSAN' and (
-    grsan_anchor_count_a > 0
-    or grsan_anchor_count_b > 0
-    or grsan_anchor_count_c > 0
-    or grsan_anchor_count_d > 0
-);
-
+# INTENDED END STATE: `where tree_id = cluster_id` on this target, so the
+# parquet holds exactly one row per tree and needs no client-side filter; see
+# "Intended end state" in ../tree_dedup.preql for what blocks it upstream.
 partial datasource santorini_tree_info (
     tree_id,
     city,
@@ -127,7 +105,9 @@ partial datasource santorini_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
-    is_duplicate: grsan_is_duplicate,
+    merged_sources,
+    ?merged_tree_ids,
+    is_duplicate,
     grsan_published_data_updated_through,
 )
 grain (tree_id)

@@ -20,7 +20,8 @@ Four things about that are load-bearing, and each replaced something that broke:
 - **A job's bundle is its entrypoint's reachable imports.** `trilogy refresh`
   adopts every managed datasource it can reach, so what a model imports decides
   what a job builds, probes and needs memory for. A city model importing only
-  `tree_common` and `community_tree_info` is what makes `city-{code}` exactly
+  `tree_common`, `community_tree_info` and the shared `tree_dedup` (which has
+  no managed datasource of its own) is what makes `city-{code}` exactly
   one city. Check with `trilogy refresh --dry-run <entrypoint>`: more than one
   asset for a city job means an import reaches too far.
 - **The core must not reach a portal.** `raw/full_tree_publish.preql` reads the

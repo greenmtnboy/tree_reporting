@@ -466,9 +466,10 @@ async function loadCityTrees(city?: string): Promise<void> {
   const cityUrl = city ? cityTreeParquetUrl(city) : null
   const parquetUrl = cityUrl ?? REMOTE_TREES_PARQUET_URL
 
-  // Cross-source duplicates are flagged, not dropped, so hiding them is this
-  // query's job -- see the staggered-grid dedup in
-  // data/raw/ustem/tempe_tree_info.preql.
+  // Cross-source duplicates are flagged, not yet dropped, so hiding them is
+  // this query's job -- see the shared cluster merge in
+  // data/raw/tree_dedup.preql, and its "Intended end state" for why the
+  // absorbed rows are still in the parquet.
   //
   // The column is probed rather than assumed. Selecting it unconditionally is
   // a hard dependency on every Parquet having been rebuilt, and a Parquet that

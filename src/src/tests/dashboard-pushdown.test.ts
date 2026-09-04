@@ -42,7 +42,7 @@ import {
 } from '../composables/dashboardContextSource'
 import { summaryQueryCases, speciesQueryCases, type DashboardQueryCase } from './dashboardQueryCatalog'
 import { postToResolverOrThrow } from './resolverFetch'
-import type { CityCode } from '../composables/useMapData'
+import { CITY_CONFIG, type CityCode } from '../composables/useMapData'
 
 /** Tree parquets named by the generated SQL, without the version suffix. */
 async function treeParquets(
@@ -133,14 +133,26 @@ describe('dashboard parquet pushdown', () => {
     }, 120_000)
   }
 
-  it('plans the all-cities view against the rollup', async () => {
+  it('plans the all-cities view against every city, or the rollup', async () => {
     // The other half of the contract: with no city there is no partition to
-    // push down to, and the rollup is the right source. A regression that
+    // push down to. Two plans are complete: the rollup, or the union of every
+    // city's own parquet. The planner used to pick the rollup; since the city
+    // models moved their raw sources onto the shared raw_* concepts
+    // (tree_dedup.preql) it picks the union, which downloads the same rows as
+    // eighteen files instead of one. What must never pass is a strict subset:
+    // while only some cities were converted, the resolver answered the
+    // all-cities dot map from those cities alone and silently dropped the rest
+    // (see upstream_repro/partition_subset_chosen), and a regression that
     // pointed every city at the rollup would still pass the tests above if
     // they were the only ones here.
+    const every = Object.keys(CITY_CONFIG).map((c) => `${c.toLowerCase()}_tree_info`)
     for (const queryCase of sampleCases(null)) {
       const parquets = await treeParquets(queryCase, null)
-      expect(parquets, `${queryCase.id} did not read the rollup`).toContain('full_tree_info')
+      if (parquets.includes('full_tree_info')) continue
+      expect(
+        parquets.filter((p) => p !== 'full_tree_info').sort(),
+        `${queryCase.id} read a strict subset of the cities and not the rollup`,
+      ).toEqual(every.sort())
     }
   }, 120_000)
 })
