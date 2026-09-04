@@ -212,6 +212,44 @@ def qa_serve(
     )
 
 
+@qa_app.command("heuristics")
+def qa_heuristics(
+    config_path: ConfigPath,
+    raster: Annotated[
+        Path,
+        typer.Option("--raster", exists=True, dir_okay=False, help="Reviewed RGB-NIR raster"),
+    ],
+    review_dir: Annotated[
+        Path | None,
+        typer.Option("--review-dir", exists=True, file_okay=False),
+    ] = None,
+    profile_id: Annotated[
+        str,
+        typer.Option("--profile-id", help="Identifier persisted with heuristic decisions"),
+    ] = "naip-rgbn-conservative-gray-v1",
+    ndvi_p90_max: Annotated[
+        float,
+        typer.Option("--ndvi-p90-max", min=-1, max=1),
+    ] = -0.04,
+    gray_fraction_min: Annotated[
+        float,
+        typer.Option("--gray-fraction-min", min=0, max=1),
+    ] = 0.5,
+) -> None:
+    from urban_tree_ml.quality import refresh_registration_heuristics
+
+    _print(
+        refresh_registration_heuristics(
+            load_config(config_path),
+            raster,
+            review_dir=review_dir,
+            profile_id=profile_id,
+            ndvi_p90_max=ndvi_p90_max,
+            gray_fraction_min=gray_fraction_min,
+        )
+    )
+
+
 @qa_app.command("finalize")
 def qa_finalize(
     config_path: ConfigPath,

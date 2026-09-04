@@ -71,7 +71,11 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
                 "train-offset": {"status": "offset", "east_m": 2, "north_m": 4},
                 "validation-offset": {"status": "offset", "east_m": 100, "north_m": 100},
                 "train-bad": {"status": "not-tree"},
-                "validation-uncertain": {"status": "uncertain"},
+                "validation-uncertain": {
+                    "status": "uncertain",
+                    "source": "heuristic",
+                    "heuristic_id": "fixture-heuristic-v1",
+                },
                 "test-offset": {"status": "offset", "east_m": -100, "north_m": -100},
                 "train-duplicate": {"status": "duplicate"},
             },
@@ -117,6 +121,11 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
     ]
     assert result["point_corrected_points"] == 2
     assert result["completed_scenes"] == 1
+    assert load_persisted_reviews(review_dir)["reviews"]["validation-uncertain"] == {
+        "status": "uncertain",
+        "source": "heuristic",
+        "heuristic_id": "fixture-heuristic-v1",
+    }
     assert load_persisted_reviews(review_dir)["scene_reviews"] == {
         "scene-train": {
             "done": True,
@@ -124,6 +133,13 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
         }
     }
     assert feedback["reviews"]["completed_scenes"] == 1
+    assert feedback["reviews"]["source_counts"]["heuristic"] == 1
+    assert feedback["reviews"]["heuristic_counts"] == {"fixture-heuristic-v1": 1}
+    heuristic_exclusion = next(
+        entry for entry in feedback["exclusions"] if entry["tree_id"] == "e"
+    )
+    assert heuristic_exclusion["source"] == "heuristic"
+    assert heuristic_exclusion["heuristic_id"] == "fixture-heuristic-v1"
     assert feedback["registration"]["validation_residual"]["east_median"] == 99.0
 
 

@@ -91,10 +91,22 @@ uv run urban-tree-ml qa registration \
   --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif \
   --samples 100
 
+uv run urban-tree-ml qa heuristics \
+  --config configs/sf_naip_baseline.yaml \
+  --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif
+
 uv run urban-tree-ml qa serve \
   --config configs/sf_naip_baseline.yaml \
   --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif
 ```
+
+`qa heuristics` enriches an existing review manifest with a conservative RGB-NIR profile without
+changing its scenes, sample IDs, or saved reviews. In the UI, **Check non-veg** only previews
+low-NIR gray candidates. A second click explicitly marks those candidates `uncertain`, and the
+same control can undo the batch. Exact-coordinate stacks are hidden because the configured
+collision policy excludes unresolved stacks from supervision; **Show stacked** exposes them for
+source-data inspection or manual splitting with explicit offsets. City-specific passes can set `--profile-id`,
+`--ndvi-p90-max`, and `--gray-fraction-min` while retaining provenance on applied decisions.
 
 Open `http://127.0.0.1:8765`; the Model Studio landing page links registration curation and any
 available model-validation run. Registration samples default to aligned, so only exceptions need

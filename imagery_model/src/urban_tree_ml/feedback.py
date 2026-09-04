@@ -12,9 +12,7 @@ import numpy as np
 from urban_tree_ml.config import ProjectConfig
 
 REVIEW_STATUSES = frozenset({"aligned", "offset", "not-tree", "uncertain", "duplicate"})
-_REVIEW_FIELDS = frozenset(
-    {"status", "note", "image_x", "image_y", "east_m", "north_m"}
-)
+_NUMERIC_REVIEW_FIELDS = frozenset({"image_x", "image_y", "east_m", "north_m"})
 
 
 def _write_json_atomic(path: Path, value: object) -> None:
@@ -89,7 +87,13 @@ def normalize_review_payload(
         note = raw_review.get("note")
         if note is not None:
             review["note"] = str(note)[:2000]
-        for field in _REVIEW_FIELDS - {"status", "note"}:
+        source = raw_review.get("source")
+        if source is not None:
+            review["source"] = str(source)[:100]
+        heuristic_id = raw_review.get("heuristic_id")
+        if heuristic_id is not None:
+            review["heuristic_id"] = str(heuristic_id)[:200]
+        for field in _NUMERIC_REVIEW_FIELDS:
             number = _finite_optional(raw_review.get(field), field)
             if number is not None:
                 review[field] = number
@@ -268,6 +272,8 @@ def finalize_registration_feedback(
 
     samples = {str(sample["sample_id"]): sample for sample in manifest["samples"]}
     status_counts = {status: 0 for status in sorted(REVIEW_STATUSES)}
+    source_counts: dict[str, int] = {}
+    heuristic_counts: dict[str, int] = {}
     training_offsets: list[tuple[float, float]] = []
     validation_offsets: list[tuple[float, float]] = []
     exclusions: list[dict[str, str]] = []
@@ -278,20 +284,27 @@ def finalize_registration_feedback(
         if status is None:
             continue
         status_counts[str(status)] += 1
+        source = str(review.get("source", "unspecified"))
+        source_counts[source] = source_counts.get(source, 0) + 1
+        if source == "heuristic":
+            heuristic_id = str(review.get("heuristic_id", "unspecified"))
+            heuristic_counts[heuristic_id] = heuristic_counts.get(heuristic_id, 0) + 1
         sample = samples[sample_id]
         split = str(sample["split"])
         if split == "test":
             ignored_test_reviews += 1
             continue
         if status in {"not-tree", "uncertain", "duplicate"}:
-            exclusions.append(
-                {
-                    "tree_id": str(sample["tree_id"]),
-                    "split": split,
-                    "reason": str(status),
-                    "sample_id": sample_id,
-                }
-            )
+            exclusion = {
+                "tree_id": str(sample["tree_id"]),
+                "split": split,
+                "reason": str(status),
+                "sample_id": sample_id,
+                "source": source,
+            }
+            if review.get("heuristic_id") is not None:
+                exclusion["heuristic_id"] = str(review["heuristic_id"])
+            exclusions.append(exclusion)
         else:
             offset = _offset_for_review(review)
             if status == "offset":
@@ -325,6 +338,8 @@ def finalize_registration_feedback(
         "source_raster": str(raster),
         "reviews": {
             "status_counts": status_counts,
+            "source_counts": source_counts,
+            "heuristic_counts": heuristic_counts,
             "ignored_test_reviews": ignored_test_reviews,
             "completed_scenes": len(scene_reviews),
         },

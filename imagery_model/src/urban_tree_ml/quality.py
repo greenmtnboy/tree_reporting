@@ -5,14 +5,82 @@
 from __future__ import annotations
 
 import json
+import os
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
 from pyproj import Transformer
 
 from urban_tree_ml.config import ProjectConfig
+
+VEGETATION_HEURISTIC_PROFILE: dict[str, object] = {
+    "id": "naip-rgbn-conservative-gray-v1",
+    "label": "Conservative gray + low NIR",
+    "outer_radius_px": 6,
+    "inner_radius_px": 3,
+    "ndvi_p90_max": -0.04,
+    "gray_fraction_min": 0.5,
+    "action_status": "uncertain",
+}
+
+
+def _write_json_atomic(path: Path, value: object) -> None:
+    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    try:
+        with temporary.open("w", encoding="utf-8", newline="\n") as output:
+            json.dump(value, output, indent=2, sort_keys=True)
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _vegetation_features(
+    raw: np.ndarray,
+    x: float,
+    y: float,
+    profile: dict[str, object] = VEGETATION_HEURISTIC_PROFILE,
+) -> dict[str, object]:
+    if raw.ndim != 3 or raw.shape[0] < 4:
+        raise ValueError("vegetation heuristics require RGB-NIR imagery")
+    red, green, blue, nir = raw[:4].astype(np.float32)
+    ndvi = (nir - red) / np.maximum(nir + red, 1.0)
+    maximum = np.maximum.reduce([red, green, blue])
+    minimum = np.minimum.reduce([red, green, blue])
+    saturation = (maximum - minimum) / np.maximum(maximum, 1.0)
+    brightness = (red + green + blue) / 3.0
+    rows, columns = np.ogrid[: raw.shape[1], : raw.shape[2]]
+    outer_radius = int(profile["outer_radius_px"])
+    inner_radius = int(profile["inner_radius_px"])
+    outer = (columns - x) ** 2 + (rows - y) ** 2 <= outer_radius**2
+    inner = (columns - x) ** 2 + (rows - y) ** 2 <= inner_radius**2
+    ndvi_p90 = float(np.percentile(ndvi[outer], 90))
+    gray_fraction = float(np.mean((saturation[inner] < 0.12) & (brightness[inner] > 45)))
+    candidate = ndvi_p90 < float(profile["ndvi_p90_max"])
+    candidate = candidate and gray_fraction > float(profile["gray_fraction_min"])
+    return {
+        "profile_id": profile["id"],
+        "ndvi_p90": ndvi_p90,
+        "gray_fraction": gray_fraction,
+        "candidate": candidate,
+    }
+
+
+def _attach_coordinate_stack_sizes(samples: list[dict[str, object]]) -> tuple[int, int]:
+    coordinate_counts = Counter(
+        (float(sample["longitude"]), float(sample["latitude"])) for sample in samples
+    )
+    for sample in samples:
+        key = (float(sample["longitude"]), float(sample["latitude"]))
+        sample["coordinate_stack_size"] = coordinate_counts[key]
+    stack_sizes = [size for size in coordinate_counts.values() if size > 1]
+    return len(stack_sizes), sum(stack_sizes)
 
 
 def _diverse_order(frame: pd.DataFrame, seed: int) -> pd.DataFrame:
@@ -154,6 +222,9 @@ def _render_grouped_registration_html(
       justify-content: center; min-height: 38px; }}
     button:hover, .file-label:hover {{ background: #2b4234; }}
     input[type=file] {{ display: none; }}
+    .toggle-label {{ display: inline-flex; align-items: center; gap: 7px; min-height: 38px;
+      padding: 7px 10px; border: 1px solid #496252; border-radius: 7px; background: #203027; }}
+    .toggle-label input {{ accent-color: #d5ebda; }}
     #sync {{ color: #9eb6a5; font-size: 12px; }}
     #stats {{ margin-left: auto; color: #c8d7cc; font-variant-numeric: tabular-nums; }}
     main {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr));
@@ -170,9 +241,12 @@ def _render_grouped_registration_html(
     .badge {{ align-self: start; padding: 3px 7px; border-radius: 999px; background: #293a31;
       font-size: 11px; text-transform: uppercase; }}
     .seam {{ background: #614d22; color: #ffe5a0; cursor: help; }}
+    .stack-badge {{ background: #493953; color: #ead8f3; cursor: help; }}
     .scene-previous, .scene-next, .done-button {{ min-width: 92px; }}
     .expand-button {{ min-width: 82px; text-transform: uppercase; }}
     .done-button.active {{ background: #d5ebda; border-color: #d5ebda; color: #102016; }}
+    .heuristic-button.preview {{ border-color: #ffcf66; color: #ffdf91; }}
+    .heuristic-button.applied {{ border-color: #ff9f43; color: #ffd0a1; }}
     .fullscreen-only {{ display: none; }}
     .image-wrap {{ position: relative; width: 100%; aspect-ratio: 1; background: #050806; cursor: crosshair; }}
     .image-wrap img {{ display: block; width: 100%; height: 100%; object-fit: contain;
@@ -185,6 +259,10 @@ def _render_grouped_registration_html(
     .tree-marker[data-status="not-tree"] {{ border-color: #ff5757; color: #ff9c9c; }}
     .tree-marker[data-status="uncertain"] {{ border-color: #ff9f43; color: #ffd0a1; }}
     .tree-marker[data-status="duplicate"] {{ border-color: #c084fc; color: #e9d5ff; }}
+    .tree-marker.stacked, .tree-choice.stacked {{ border-style: dashed; border-color: #a38aaa;
+      color: #d9c4df; opacity: .72; }}
+    body:not(.show-stacks) .tree-marker.stacked, body:not(.show-stacks) .tree-choice.stacked {{ display: none; }}
+    .tree-marker.heuristic-suggestion {{ box-shadow: 0 0 0 3px #ffcf66, 0 0 0 5px #17140d; z-index: 6; }}
     .tree-marker.active {{ box-shadow: 0 0 0 3px #fff, 0 0 0 5px #102016; z-index: 5; }}
     .picked {{ display: none; position: absolute; width: 18px; height: 18px; border: 2px solid #ffe34e;
       transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; z-index: 4;
@@ -197,6 +275,7 @@ def _render_grouped_registration_html(
     .tree-choice[data-status="not-tree"] {{ border-color: #ff5757; }}
     .tree-choice[data-status="uncertain"] {{ border-color: #ff9f43; }}
     .tree-choice[data-status="duplicate"] {{ border-color: #c084fc; }}
+    .tree-choice.heuristic-suggestion {{ background: #594819; border-color: #ffcf66; color: #fff1bf; }}
     .details {{ padding: 9px 12px 0; line-height: 1.5; min-height: 70px; }}
     .selected-species {{ color: #eef5ef; font-size: 14px; font-weight: 700; }}
     .actions {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 10px 12px; }}
@@ -239,6 +318,8 @@ def _render_grouped_registration_html(
         <li><strong>Uncertain:</strong> use this when a small, shadowed, overhung, merged, or off-nadir tree cannot be located confidently. It will be excluded from supervision.</li>
         <li><strong>Not tree:</strong> use only when you are confident no matching tree existed when the imagery was captured. Unnumbered nearby trees are outside this inventory review.</li>
         <li><strong>Duplicate:</strong> the point repeats another numbered inventory record for the same physical tree. Keep one record aligned or offset, and mark only the extra record(s) duplicate.</li>
+        <li><strong>Non-vegetation helper:</strong> “Check non-veg” previews conservative low-NIR gray candidates in gold. Review the highlights, then explicitly apply them as uncertain; they never become hard not-tree negatives.</li>
+        <li><strong>Coordinate stacks:</strong> exact lat/lon stacks are hidden by default. Unresolved stacks are excluded by target collision handling; show them when you want to split resolvable records with explicit offsets.</li>
       </ul>
     </details>
     <div class="toolbar">
@@ -251,6 +332,7 @@ def _render_grouped_registration_html(
         <option value="duplicate">Duplicate</option></select>
       <select id="scene-status-filter"><option value="">All images</option><option value="pending">To review</option>
         <option value="done">Done</option></select>
+      <label class="toggle-label"><input id="show-stacks" type="checkbox"> <span id="stack-toggle-label">Show stacked</span></label>
       <button id="export">Export reviews</button>
       <label class="file-label" for="import">Import reviews</label><input id="import" type="file" accept="application/json">
       <button id="finalize">Finalize training feedback</button>
@@ -265,19 +347,26 @@ def _render_grouped_registration_html(
     const metadata = {metadata_payload};
     const samplesById = Object.fromEntries(samples.map(sample => [sample.sample_id, sample]));
     const scenesById = Object.fromEntries(scenes.map(scene => [scene.scene_id, scene]));
-    const activeByScene = Object.fromEntries(scenes.map(scene => [scene.scene_id, scene.sample_ids[0]]));
+    const isStacked = sample => Number(sample.coordinate_stack_size || 1) > 1;
+    const stackedSamples = samples.filter(isStacked);
+    const activeByScene = Object.fromEntries(scenes.map(scene => [scene.scene_id,
+      scene.sample_ids.find(sampleId => !isStacked(samplesById[sampleId])) || scene.sample_ids[0]
+    ]));
     const storageKey = `urban-tree-registration:${{metadata.review_id}}`;
     const storedState = JSON.parse(localStorage.getItem(storageKey) || "{{}}");
     const hasWrappedState = storedState && typeof storedState === "object"
       && Object.prototype.hasOwnProperty.call(storedState, "reviews");
     let reviews = hasWrappedState ? (storedState.reviews || {{}}) : (storedState || {{}});
     let sceneReviews = hasWrappedState ? (storedState.scene_reviews || {{}}) : {{}};
+    const suggestedByScene = {{}};
     let syncTimer = null;
     const cards = document.getElementById("cards");
     const splitFilter = document.getElementById("split-filter");
     const coverageFilter = document.getElementById("coverage-filter");
     const statusFilter = document.getElementById("status-filter");
     const sceneStatusFilter = document.getElementById("scene-status-filter");
+    const showStacks = document.getElementById("show-stacks");
+    document.getElementById("stack-toggle-label").textContent = `Show ${{stackedSamples.length}} stacked`;
     const statusOf = sampleId => (reviews[sampleId] || {{}}).status || "unreviewed";
     const withAlignedDefaults = source => Object.fromEntries(samples.map(sample => [
       sample.sample_id, {{status: "aligned", ...(source[sample.sample_id] || {{}})}}
@@ -289,7 +378,11 @@ def _render_grouped_registration_html(
     }};
     const sampleTitle = sample => {{
       const dbh = sample.dbh_in == null ? "DBH unknown" : `${{sample.dbh_in.toFixed(1)}} in DBH`;
-      return `${{sample.species}} · ${{dbh}} · ${{sample.tree_id}} · ${{statusOf(sample.sample_id)}}`;
+      const spectral = sample.vegetation_heuristic;
+      const heuristic = spectral?.candidate
+        ? ` · non-veg candidate (NDVI p90 ${{spectral.ndvi_p90.toFixed(2)}}, gray ${{Math.round(100 * spectral.gray_fraction)}}%)`
+        : "";
+      return `${{sample.species}} · ${{dbh}} · ${{sample.tree_id}} · ${{statusOf(sample.sample_id)}}${{heuristic}}`;
     }};
     async function syncReviews() {{
       clearTimeout(syncTimer);
@@ -315,11 +408,41 @@ def _render_grouped_registration_html(
       clearTimeout(syncTimer); syncTimer = setTimeout(syncReviews, 250);
     }}
     function setStatus(sampleId, status) {{
-      const next = {{...(reviews[sampleId] || {{}}), status}};
+      const next = {{...(reviews[sampleId] || {{}}), status, source: "human"}};
+      delete next.heuristic_id;
       if (status !== "offset") {{
         ["image_x", "image_y", "east_m", "north_m"].forEach(field => delete next[field]);
       }}
       reviews[sampleId] = next; persist();
+    }}
+    function runVegetationHeuristic(sceneId) {{
+      const scene = scenesById[sceneId];
+      const sceneSamples = scene.sample_ids.map(sampleId => samplesById[sampleId]);
+      const heuristicId = metadata.vegetation_heuristic?.id;
+      const applied = sceneSamples.filter(sample => {{
+        const review = reviews[sample.sample_id] || {{}};
+        return review.source === "heuristic" && review.heuristic_id === heuristicId;
+      }});
+      if (applied.length) {{
+        applied.forEach(sample => {{
+          const next = {{...(reviews[sample.sample_id] || {{}}), status: "aligned"}};
+          delete next.source; delete next.heuristic_id; reviews[sample.sample_id] = next;
+        }});
+        delete suggestedByScene[sceneId]; persist(); return;
+      }}
+      if (Object.prototype.hasOwnProperty.call(suggestedByScene, sceneId)) {{
+        suggestedByScene[sceneId].filter(sampleId => statusOf(sampleId) === "aligned").forEach(sampleId => {{
+          reviews[sampleId] = {{...(reviews[sampleId] || {{}}), status: "uncertain",
+            source: "heuristic", heuristic_id: heuristicId}};
+          ["image_x", "image_y", "east_m", "north_m"].forEach(field => delete reviews[sampleId][field]);
+        }});
+        delete suggestedByScene[sceneId]; persist(); return;
+      }}
+      suggestedByScene[sceneId] = sceneSamples.filter(sample =>
+        !isStacked(sample) && sample.vegetation_heuristic?.candidate
+          && statusOf(sample.sample_id) === "aligned"
+      ).map(sample => sample.sample_id);
+      update();
     }}
     function selectSample(sceneId, sampleId) {{ activeByScene[sceneId] = sampleId; update(); }}
     function setSceneDone(sceneId, done) {{
@@ -359,7 +482,8 @@ def _render_grouped_registration_html(
         const scene = scenesById[card.dataset.scene];
         const sceneDone = Boolean(sceneReviews[scene.scene_id]?.done);
         const sceneSamples = scene.sample_ids.map(sampleId => samplesById[sampleId]);
-        const statusMatches = sceneSamples.filter(sample => !statusFilter.value || statusOf(sample.sample_id) === statusFilter.value);
+        const selectableSamples = sceneSamples.filter(sample => showStacks.checked || !isStacked(sample));
+        const statusMatches = selectableSamples.filter(sample => !statusFilter.value || statusOf(sample.sample_id) === statusFilter.value);
         const visible = (!splitFilter.value || scene.splits.includes(splitFilter.value))
           && (!coverageFilter.value || (coverageFilter.value === "seam") === Boolean(scene.seam_priority))
           && (!sceneStatusFilter.value || (sceneStatusFilter.value === "done") === sceneDone)
@@ -367,8 +491,9 @@ def _render_grouped_registration_html(
         if (!visible && card.classList.contains("fullscreen")) setExpanded(card, false);
         card.classList.toggle("hidden", !visible);
         if (visible) visibleScenes += 1;
-        if (statusFilter.value && !statusMatches.some(sample => sample.sample_id === activeByScene[scene.scene_id])) {{
-          activeByScene[scene.scene_id] = statusMatches[0]?.sample_id || scene.sample_ids[0];
+        if (!statusMatches.some(sample => sample.sample_id === activeByScene[scene.scene_id])) {{
+          activeByScene[scene.scene_id] = statusMatches[0]?.sample_id
+            || selectableSamples[0]?.sample_id || scene.sample_ids[0];
         }}
         const activeId = activeByScene[scene.scene_id];
         const selected = samplesById[activeId];
@@ -378,21 +503,47 @@ def _render_grouped_registration_html(
         doneButton.textContent = sceneDone ? "Done ✓" : "Mark done";
         doneButton.classList.toggle("active", sceneDone);
         doneButton.setAttribute("aria-pressed", sceneDone ? "true" : "false");
+        const heuristicButton = card.querySelector(".heuristic-button");
+        const heuristicId = metadata.vegetation_heuristic?.id;
+        const appliedCount = sceneSamples.filter(sample => {{
+          const review = reviews[sample.sample_id] || {{}};
+          return review.source === "heuristic" && review.heuristic_id === heuristicId;
+        }}).length;
+        const hasPreview = Object.prototype.hasOwnProperty.call(suggestedByScene, scene.scene_id);
+        if (hasPreview) suggestedByScene[scene.scene_id] = suggestedByScene[scene.scene_id]
+          .filter(sampleId => statusOf(sampleId) === "aligned");
+        const previewCount = hasPreview ? suggestedByScene[scene.scene_id].length : 0;
+        heuristicButton.disabled = !heuristicId;
+        heuristicButton.textContent = !heuristicId ? "Non-veg unavailable" : appliedCount
+          ? `Undo ${{appliedCount}} flags` : hasPreview
+            ? (previewCount ? `Mark ${{previewCount}} uncertain` : "No candidates") : "Check non-veg";
+        heuristicButton.classList.toggle("preview", hasPreview && previewCount > 0);
+        heuristicButton.classList.toggle("applied", appliedCount > 0);
         card.querySelectorAll(".tree-marker").forEach(marker => {{
           const markerSample = samplesById[marker.dataset.sampleId];
           marker.dataset.status = statusOf(markerSample.sample_id);
           marker.classList.toggle("active", markerSample.sample_id === activeId);
-          marker.title = sampleTitle(markerSample);
+          marker.classList.toggle("heuristic-suggestion", Boolean(
+            suggestedByScene[scene.scene_id]?.includes(markerSample.sample_id)
+          ));
+          marker.title = sampleTitle(markerSample) + (isStacked(markerSample)
+            ? ` · exact coordinate stack ×${{markerSample.coordinate_stack_size}} · excluded unless split with offsets` : "");
           marker.setAttribute("aria-pressed", markerSample.sample_id === activeId ? "true" : "false");
         }});
         card.querySelectorAll(".tree-choice").forEach(choice => {{
           choice.dataset.status = statusOf(choice.dataset.sampleId);
           choice.classList.toggle("active", choice.dataset.sampleId === activeId);
-          choice.title = sampleTitle(samplesById[choice.dataset.sampleId]);
+          choice.classList.toggle("heuristic-suggestion", Boolean(
+            suggestedByScene[scene.scene_id]?.includes(choice.dataset.sampleId)
+          ));
+          const choiceSample = samplesById[choice.dataset.sampleId];
+          choice.title = sampleTitle(choiceSample) + (isStacked(choiceSample)
+            ? ` · exact coordinate stack ×${{choiceSample.coordinate_stack_size}} · excluded unless split with offsets` : "");
         }});
         card.querySelector(".selected-species").textContent = selected.species;
         const dbh = selected.dbh_in == null ? "DBH unknown" : `${{selected.dbh_in.toFixed(1)}} in DBH`;
-        card.querySelector(".selected-facts").textContent = `${{selected.tree_id}} · ${{dbh}} · ${{selected.split}} · ${{statusOf(activeId)}}`;
+        card.querySelector(".selected-facts").textContent = `${{selected.tree_id}} · ${{dbh}} · ${{selected.split}} · ${{statusOf(activeId)}}` +
+          (isStacked(selected) ? ` · coordinate stack ×${{selected.coordinate_stack_size}} (excluded unless split)` : "");
         const offset = card.querySelector(".offset");
         offset.textContent = selectedReview.east_m == null ? "Select this ring, then click the apparent center if it is offset." :
           `Measured offset: ${{selectedReview.east_m.toFixed(2)}} m east, ${{selectedReview.north_m.toFixed(2)}} m north`;
@@ -409,7 +560,8 @@ def _render_grouped_registration_html(
       }});
       const eastMedian = median(east), northMedian = median(north);
       document.getElementById("stats").textContent = `${{completedScenes}}/${{scenes.length}} images done · ` +
-        `${{visibleScenes}} shown · ${{samples.length}} trees` +
+        `${{visibleScenes}} shown · ${{samples.length - stackedSamples.length}} reviewable · ` +
+        `${{stackedSamples.length}} stacked hidden` +
         (eastMedian == null ? "" : ` · median ${{eastMedian.toFixed(2)}} m E, ${{northMedian.toFixed(2)}} m N`);
     }}
     function createCard(scene, sceneIndex) {{
@@ -418,7 +570,10 @@ def _render_grouped_registration_html(
       const head = document.createElement("div"); head.className = "card-head";
       const identity = document.createElement("div"); identity.className = "identity";
       const title = document.createElement("strong"); title.textContent = `Image ${{sceneIndex + 1}} of ${{scenes.length}}`;
-      const count = document.createElement("span"); count.textContent = `${{scene.tree_count}} tree${{scene.tree_count === 1 ? "" : "s"}} in this image`;
+      const stackCount = sceneSamples.filter(isStacked).length;
+      const reviewableCount = sceneSamples.length - stackCount;
+      const count = document.createElement("span"); count.textContent = `${{reviewableCount}} reviewable tree${{reviewableCount === 1 ? "" : "s"}}` +
+        (stackCount ? ` · ${{stackCount}} stacked hidden` : "");
       identity.append(title, count);
       const badges = document.createElement("div"); badges.className = "badges";
       scene.splits.forEach(value => {{ const badge = document.createElement("span"); badge.className = "badge"; badge.textContent = value; badges.append(badge); }});
@@ -427,6 +582,16 @@ def _render_grouped_registration_html(
         badge.title = `Priority review: nearest inventory point is ${{scene.tile_seam_distance_m.toFixed(1)}} m from a source-tile seam`;
         badges.append(badge);
       }}
+      if (stackCount) {{
+        const badge = document.createElement("span"); badge.className = "badge stack-badge";
+        badge.textContent = `${{stackCount}} stacked`;
+        badge.title = "Unresolved exact-coordinate stacks are hidden and excluded from model supervision";
+        badges.append(badge);
+      }}
+      const heuristic = document.createElement("button"); heuristic.className = "heuristic-button";
+      heuristic.textContent = "Check non-veg";
+      heuristic.title = "Preview conservative low-NIR gray candidates; click again to mark them uncertain";
+      heuristic.addEventListener("click", () => runVegetationHeuristic(scene.scene_id)); badges.append(heuristic);
       const done = document.createElement("button"); done.className = "done-button";
       done.textContent = "Mark done"; done.setAttribute("aria-pressed", "false");
       done.title = "Mark this entire image as reviewed";
@@ -447,6 +612,7 @@ def _render_grouped_registration_html(
       wrap.append(image);
       sceneSamples.forEach((sample, index) => {{
         const marker = document.createElement("button"); marker.className = "tree-marker"; marker.dataset.sampleId = sample.sample_id;
+        marker.classList.toggle("stacked", isStacked(sample));
         marker.style.left = `${{100 * sample.target_x / scene.image_width}}%`; marker.style.top = `${{100 * sample.target_y / scene.image_height}}%`;
         marker.textContent = index + 1; marker.setAttribute("aria-label", `Select tree ${{index + 1}}: ${{sample.species}}`);
         marker.addEventListener("click", event => {{ event.stopPropagation(); selectSample(scene.scene_id, sample.sample_id); }});
@@ -459,14 +625,16 @@ def _render_grouped_registration_html(
         const x = (event.clientX - rect.left) / rect.width * scene.image_width;
         const y = (event.clientY - rect.top) / rect.height * scene.image_height;
         const dx = x - sample.target_x, dy = y - sample.target_y;
-        reviews[sampleId] = {{...(reviews[sampleId] || {{}}), status: "offset", image_x: x, image_y: y,
+        reviews[sampleId] = {{...(reviews[sampleId] || {{}}), status: "offset", source: "human", image_x: x, image_y: y,
           east_m: sample.transform_a * dx + sample.transform_b * dy,
           north_m: sample.transform_d * dx + sample.transform_e * dy}};
+        delete reviews[sampleId].heuristic_id;
         persist();
       }});
       const treeList = document.createElement("div"); treeList.className = "tree-list";
       sceneSamples.forEach((sample, index) => {{
         const choice = document.createElement("button"); choice.className = "tree-choice"; choice.dataset.sampleId = sample.sample_id;
+        choice.classList.toggle("stacked", isStacked(sample));
         choice.textContent = index + 1; choice.addEventListener("click", () => selectSample(scene.scene_id, sample.sample_id)); treeList.append(choice);
       }});
       const details = document.createElement("div"); details.className = "details";
@@ -500,6 +668,9 @@ def _render_grouped_registration_html(
     }});
     splitFilter.addEventListener("change", update); coverageFilter.addEventListener("change", update);
     statusFilter.addEventListener("change", update); sceneStatusFilter.addEventListener("change", update);
+    showStacks.addEventListener("change", () => {{
+      document.body.classList.toggle("show-stacks", showStacks.checked); update();
+    }});
     document.getElementById("export").addEventListener("click", () => {{
       const result = {{schema_version: 1, metadata, exported_at: new Date().toISOString(),
         reviews: samples.map(sample => ({{...sample, ...(reviews[sample.sample_id] || {{}})}})),
@@ -818,6 +989,119 @@ def _render_registration_html(
 """
 
 
+def refresh_registration_heuristics(
+    config: ProjectConfig,
+    raster_path: str | Path,
+    *,
+    review_dir: str | Path | None = None,
+    profile_id: str = str(VEGETATION_HEURISTIC_PROFILE["id"]),
+    ndvi_p90_max: float = float(VEGETATION_HEURISTIC_PROFILE["ndvi_p90_max"]),
+    gray_fraction_min: float = float(VEGETATION_HEURISTIC_PROFILE["gray_fraction_min"]),
+) -> dict[str, object]:
+    """Enrich an existing review without changing its scenes, sample IDs, or feedback."""
+    try:
+        import rasterio
+        from rasterio.windows import Window
+    except ImportError as error:  # pragma: no cover - exercised by CLI installations
+        raise RuntimeError(
+            "Install the imagery dependency group: uv sync --group imagery"
+        ) from error
+
+    if not -1 <= ndvi_p90_max <= 1:
+        raise ValueError("ndvi_p90_max must be between -1 and 1")
+    if not 0 <= gray_fraction_min <= 1:
+        raise ValueError("gray_fraction_min must be between 0 and 1")
+    profile = {
+        **VEGETATION_HEURISTIC_PROFILE,
+        "id": profile_id,
+        "ndvi_p90_max": ndvi_p90_max,
+        "gray_fraction_min": gray_fraction_min,
+    }
+    raster = Path(raster_path).resolve()
+    directory = (
+        Path(review_dir)
+        if review_dir is not None
+        else config.paths.root / "qa" / "registration" / raster.stem
+    )
+    manifest_path = directory / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    metadata = manifest.get("metadata")
+    samples = manifest.get("samples")
+    scenes = manifest.get("scenes")
+    if not isinstance(metadata, dict) or not isinstance(samples, list) or not isinstance(
+        scenes, list
+    ):
+        raise ValueError("registration review manifest has an invalid shape")
+    if Path(str(metadata.get("source_raster", ""))).name != raster.name:
+        raise ValueError("registration review was generated for a different raster")
+
+    samples_by_id = {
+        str(sample["sample_id"]): sample
+        for sample in samples
+        if isinstance(sample, dict) and "sample_id" in sample
+    }
+    with rasterio.open(raster) as source:
+        if source.crs is None:
+            raise ValueError("imagery raster must declare a CRS")
+        if len(config.imagery.bands) < 4 or max(config.imagery.bands) > source.count:
+            raise ValueError("vegetation heuristics require configured RGB-NIR bands")
+        transformer = Transformer.from_crs("EPSG:4326", source.crs, always_xy=True)
+        inverse = ~source.transform
+        for scene in scenes:
+            if not isinstance(scene, dict) or not scene.get("sample_ids"):
+                raise ValueError("registration review scene has no samples")
+            scene_samples = [samples_by_id[str(value)] for value in scene["sample_ids"]]
+            first = scene_samples[0]
+            first_x, first_y = transformer.transform(
+                float(first["longitude"]), float(first["latitude"])
+            )
+            first_col, first_row = inverse * (first_x, first_y)
+            col_off = round(first_col - float(first["target_x"]))
+            row_off = round(first_row - float(first["target_y"]))
+            width = int(scene["image_width"])
+            height = int(scene["image_height"])
+            raw = source.read(
+                config.imagery.bands,
+                window=Window(col_off, row_off, width, height),
+            )
+            for sample in scene_samples:
+                sample["vegetation_heuristic"] = _vegetation_features(
+                    raw,
+                    float(sample["target_x"]),
+                    float(sample["target_y"]),
+                    profile,
+                )
+
+    coordinate_stack_groups, coordinate_stack_points = _attach_coordinate_stack_sizes(samples)
+    for scene in scenes:
+        scene["coordinate_stack_points"] = sum(
+            int(samples_by_id[str(sample_id)]["coordinate_stack_size"] > 1)
+            for sample_id in scene["sample_ids"]
+        )
+    metadata["vegetation_heuristic"] = profile
+    metadata["vegetation_heuristic_candidates"] = sum(
+        int(sample["vegetation_heuristic"]["candidate"]) for sample in samples
+    )
+    metadata["coordinate_stack_groups"] = coordinate_stack_groups
+    metadata["coordinate_stack_points"] = coordinate_stack_points
+    metadata["heuristics_refreshed_at"] = datetime.now(UTC).isoformat()
+    _write_json_atomic(manifest_path, manifest)
+    html_path = directory / "index.html"
+    html_path.write_text(
+        _render_registration_html(samples, metadata, scenes),
+        encoding="utf-8",
+    )
+    return {
+        "manifest": str(manifest_path),
+        "html": str(html_path),
+        "samples": len(samples),
+        "vegetation_candidates": metadata["vegetation_heuristic_candidates"],
+        "coordinate_stack_groups": coordinate_stack_groups,
+        "coordinate_stack_points": coordinate_stack_points,
+        "reviews_preserved": (directory / "reviews.json").exists(),
+    }
+
+
 def build_registration_review(
     config: ProjectConfig,
     raster_path: str | Path,
@@ -943,7 +1227,7 @@ def build_registration_review(
             valid_fraction = float(np.all(masks > 0, axis=0).mean())
             if valid_fraction < config.imagery.minimum_valid_fraction:
                 continue
-            raw = source.read(config.imagery.bands[:3], window=window)
+            raw = source.read(config.imagery.bands, window=window)
             preview = Image.fromarray(_rgb_preview(raw, config.imagery.input_scale))
             scene_id = f"scene-{len(generated_scenes):03d}"
             image_name = f"{len(generated_scenes):03d}.png"
@@ -979,6 +1263,15 @@ def build_registration_review(
                     "image_height": window_pixels,
                     "target_x": float(row.pixel_col - col_off),
                     "target_y": float(row.pixel_row - row_off),
+                    "vegetation_heuristic": (
+                        _vegetation_features(
+                            raw,
+                            float(row.pixel_col - col_off),
+                            float(row.pixel_row - row_off),
+                        )
+                        if raw.shape[0] >= 4
+                        else None
+                    ),
                     "transform_a": float(source.transform.a),
                     "transform_b": float(source.transform.b),
                     "transform_d": float(source.transform.d),
@@ -1024,6 +1317,13 @@ def build_registration_review(
 
     if not generated:
         raise ValueError("no sufficiently valid registration QA windows could be rendered")
+    coordinate_stack_groups, coordinate_stack_points = _attach_coordinate_stack_sizes(generated)
+    generated_by_id = {str(sample["sample_id"]): sample for sample in generated}
+    for scene in generated_scenes:
+        scene["coordinate_stack_points"] = sum(
+            int(generated_by_id[str(sample_id)]["coordinate_stack_size"] > 1)
+            for sample_id in scene["sample_ids"]
+        )
     review_id = (
         f"{source_path.stem}-{config.seed}-grouped-v2-"
         f"{'with-test' if include_test else 'development'}"
@@ -1046,6 +1346,15 @@ def build_registration_review(
             for scene in generated_scenes
             if scene["seam_priority"]
         ),
+        "vegetation_heuristic": (
+            VEGETATION_HEURISTIC_PROFILE if len(config.imagery.bands) >= 4 else None
+        ),
+        "vegetation_heuristic_candidates": sum(
+            int(bool((sample.get("vegetation_heuristic") or {}).get("candidate")))
+            for sample in generated
+        ),
+        "coordinate_stack_groups": coordinate_stack_groups,
+        "coordinate_stack_points": coordinate_stack_points,
         "instruction": (
             "Estimate any registration correction using training samples only; use validation "
             "to verify it and do not tune against test samples."

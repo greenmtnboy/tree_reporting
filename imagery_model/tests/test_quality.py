@@ -8,7 +8,7 @@ from pyproj import Transformer
 from rasterio.transform import from_origin
 
 from urban_tree_ml.config import load_config
-from urban_tree_ml.quality import build_registration_review
+from urban_tree_ml.quality import build_registration_review, refresh_registration_heuristics
 
 
 def _write_qa_fixture(root: Path) -> Path:
@@ -20,6 +20,7 @@ def _write_qa_fixture(root: Path) -> Path:
     coordinates = [
         inverse.transform(origin_x + col * 0.6, origin_y - row * 0.6) for col, row in pixels
     ]
+    coordinates[1] = coordinates[0]
     splits = ["train"] * 6 + ["validation"] * 4 + ["test"] * 2
     pd.DataFrame(
         {
@@ -76,7 +77,7 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "localStorage" in html
     assert 'status: "aligned"' in html
     assert "Each numbered ring is one inventory tree" in html
-    assert 'status: "offset", image_x: x' in html
+    assert 'status: "offset", source: "human", image_x: x' in html
     assert "Reset all to aligned" in html
     assert "How should I classify ambiguous trees?" in html
     assert '<option value="duplicate">Duplicate</option>' in html
@@ -90,6 +91,9 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert 'id="coverage-filter"' in html
     assert 'id="scene-status-filter"' in html
     assert 'className = "done-button"' in html
+    assert 'className = "heuristic-button"' in html
+    assert 'id="show-stacks"' in html
+    assert "Check non-veg" in html
     assert "images done" in html
     assert "scene_reviews: sceneReviews" in html
     assert "repeat(auto-fill, minmax(38px, 1fr))" in html
@@ -102,6 +106,8 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
         sample_id for scene in manifest["scenes"] for sample_id in scene["sample_ids"]
     }
     assert any(scene["tree_count"] > 1 for scene in manifest["scenes"])
+    assert manifest["metadata"]["vegetation_heuristic"]["action_status"] == "uncertain"
+    assert all("vegetation_heuristic" in sample for sample in manifest["samples"])
     assert len({sample["image"] for sample in manifest["samples"]}) == len(
         manifest["scenes"]
     )
@@ -127,6 +133,36 @@ def test_registration_review_requires_explicit_opt_in_for_test_labels(tmp_path: 
 
     assert result["test_labels_included"] is True
     assert result["splits"]["test"] == 2
+    manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+    assert manifest["metadata"]["coordinate_stack_groups"] == 1
+    assert manifest["metadata"]["coordinate_stack_points"] == 2
+
+
+def test_heuristic_refresh_preserves_existing_reviews(tmp_path: Path) -> None:
+    config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
+    config.paths.root = tmp_path / "artifacts"
+    raster_path = _write_qa_fixture(config.paths.root)
+    result = build_registration_review(config, raster_path, samples=6, window_pixels=64)
+    review_dir = Path(result["html"]).parent
+    reviews_path = review_dir / "reviews.json"
+    reviews_path.write_text(
+        json.dumps({"reviews": {"sample-0000": {"status": "uncertain"}}}),
+        encoding="utf-8",
+    )
+    before = reviews_path.read_bytes()
+
+    refreshed = refresh_registration_heuristics(
+        config,
+        raster_path,
+        review_dir=review_dir,
+    )
+
+    assert refreshed["samples"] == result["samples"]
+    assert refreshed["reviews_preserved"] is True
+    assert reviews_path.read_bytes() == before
+    manifest = json.loads(Path(refreshed["manifest"]).read_text(encoding="utf-8"))
+    assert all("vegetation_heuristic" in sample for sample in manifest["samples"])
+    assert "heuristics_refreshed_at" in manifest["metadata"]
 
 
 def test_registration_review_prioritizes_and_records_mosaic_seams(tmp_path: Path) -> None:
