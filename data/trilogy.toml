@@ -509,6 +509,21 @@ schedule = "0 20 15 * * SUN,WED"  # Sun/Wed, after Saturday's osm-cavan
 timeout_seconds = 1800
 memory_mb = 2048
 
+[[cloud.job]]
+key = "city-usden"
+name = "urban-tree-city-usden"
+entrypoint = "raw/usden/denver_tree_info.preql"
+operation = "refresh"
+# Sun/Wed, the day after Saturday's osm-usden and again mid-week. Denver's
+# portal last edited its inventory a month before the city was wired, so it
+# starts in the twice-weekly tier; portal_cadence.py --city USDEN decides
+# whether it earns daily. 359k municipal rows stacked against 278k staged OSM
+# rows with the dedup grid aggregate over the union puts it near Berlin's
+# footprint, hence 4 GiB rather than the 2 GiB most cities take.
+schedule = "0 40 15 * * SUN,WED"
+timeout_seconds = 2400
+memory_mb = 4096
+
 # ===========================================================================
 # Per-city OSM extraction — one job per city
 # ===========================================================================
@@ -691,6 +706,15 @@ name = "urban-tree-osm-cavan"
 entrypoint = "osm_staging/cavan_osm_staging.preql"
 operation = "refresh"
 schedule = "0 0 2 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "osm-usden"
+name = "urban-tree-osm-usden"
+entrypoint = "osm_staging/usden_osm_staging.preql"
+operation = "refresh"
+schedule = "0 30 2 * * SAT"
 timeout_seconds = 1800
 memory_mb = 1024
 

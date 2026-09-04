@@ -15,5 +15,6 @@
   "USTEM": { "name": "Tempe", "center": [-111.9400, 33.4255] },
   "GRATH": { "name": "Athens", "center": [23.7375, 37.9725] },
   "GRMLO": { "name": "Milos", "center": [24.4472, 36.7263] },
-  "GRSAN": { "name": "Santorini", "center": [25.4315, 36.4072] }
+  "GRSAN": { "name": "Santorini", "center": [25.4315, 36.4072] },
+  "USDEN": { "name": "Denver", "center": [-104.9903, 39.7392] }
 }

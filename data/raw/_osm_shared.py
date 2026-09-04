@@ -97,6 +97,7 @@ OSM_CITY_NAMES: dict[str, str] = {
     "USWAS": "Washington DC",
     "USTEM": "Tempe",
     "GRATH": "Athens",
+    "USDEN": "Denver",
     "GRMLO": "Milos",
     "GRSAN": "Santorini",
 }

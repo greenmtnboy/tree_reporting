@@ -1,0 +1,42 @@
+import ..landmark_common;
+
+root datasource denver_landmarks_update_time (
+    data_updated_through: usden_landmark_data_updated_through
+)
+file `./denver_landmarks_probe.py`;
+
+# Denver's landmark register is a live ArcGIS layer on the same portal as its
+# trees, so this reads it directly: no Nominatim geocoding, no committed CSV
+# and no staging object.  Only Overpass-backed and hand-curated sources need
+# those, for reasons that do not apply to a 372-row official registry.
+root partial datasource raw_denver_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    address: ?address,
+    neighborhood: ?neighborhood,
+    year_built: ?year_built,
+    year_designated: ?year_designated,
+)
+grain (landmark_id)
+complete where city = 'USDEN'
+file `./denver_landmarks.py`;
+
+partial datasource denver_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?address,
+    ?neighborhood,
+    ?year_built,
+    ?year_designated,
+    usden_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'USDEN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usden_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usden_landmark_info_v{data_version}.parquet`
+freshness by usden_landmark_data_updated_through;

@@ -27,6 +27,7 @@ property <*>.ustem_community_data_updated_through datetime; # when approved comm
 property <*>.grath_community_data_updated_through datetime; # when approved community submissions for GRATH are through
 property <*>.grmlo_community_data_updated_through datetime; # when approved community submissions for GRMLO are through
 property <*>.grsan_community_data_updated_through datetime; # when approved community submissions for GRSAN are through
+property <*>.usden_community_data_updated_through datetime; # when approved community submissions for USDEN are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

@@ -16,6 +16,7 @@ import ustem.tempe_tree_info;
 import grath.athens_tree_info;
 import grmlo.milos_tree_info;
 import grsan.santorini_tree_info;
+import usden.denver_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -39,6 +40,7 @@ merge ustem_source into data_source;
 merge grath_source into data_source;
 merge grmlo_source into data_source;
 merge grsan_source into data_source;
+merge usden_source into data_source;
 
 # `is_duplicate` is deliberately NOT merged the same way, and the cross-city
 # Parquet does not carry it.  Merging the fourteen per-city keys makes the
@@ -73,7 +75,8 @@ uswas_published_data_updated_through,
 ustem_published_data_updated_through,
 grath_published_data_updated_through,
 grmlo_published_data_updated_through,
-grsan_published_data_updated_through);
+grsan_published_data_updated_through,
+usden_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

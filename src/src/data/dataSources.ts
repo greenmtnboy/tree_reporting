@@ -32,6 +32,7 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   // (GRSAN) have no municipal source at all; their rows are COMMUNITY_* and
   // OSM_*, labelled by the prefix rules below.
   ATHENS_OPENDATA: 'City of Athens GIS (National Garden)',
+  DENVER_OPENDATA: 'Denver Open Data',
 }
 
 /** True for the approved-community-submission sources (`COMMUNITY_<CITY>`). */

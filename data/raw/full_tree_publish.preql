@@ -118,7 +118,8 @@ file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ustem_tree_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grath_tree_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_info_v{data_version}.parquet`,
-    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grsan_tree_info_v{data_version}.parquet`
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grsan_tree_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usden_tree_info_v{data_version}.parquet`
 ];
 
 datasource full_tree_info (

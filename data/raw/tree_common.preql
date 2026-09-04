@@ -29,6 +29,7 @@ property <*>.uslax_data_updated_through datetime; # when Los Angeles data is thr
 property <*>.uswas_data_updated_through datetime; # when Washington DC data is through
 property <*>.ustem_data_updated_through datetime; # when Tempe data is through
 property <*>.grath_data_updated_through datetime; # when Athens data is through
+property <*>.usden_data_updated_through datetime; # when Denver data is through
 # GRMLO (Milos) and GRSAN (Santorini) have no municipal source, so no
 # municipal freshness property: their published watermarks combine the
 # community column with the staged OSM one and nothing else.
@@ -49,6 +50,7 @@ property <*>.ussfo_osm_data_updated_through datetime; # GCS publication time of 
 property <*>.grath_osm_data_updated_through datetime; # GCS publication time of Athens's staged OSM parquet
 property <*>.grmlo_osm_data_updated_through datetime; # GCS publication time of Milos's staged OSM parquet
 property <*>.grsan_osm_data_updated_through datetime; # GCS publication time of Santorini's staged OSM parquet
+property <*>.usden_osm_data_updated_through datetime; # GCS publication time of Denver's staged OSM parquet
 
 
 

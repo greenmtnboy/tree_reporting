@@ -91,20 +91,37 @@ def grid_flags(osm_lon, osm_lat, muni_lon, muni_lat, cell_m, city_lat):
     return flagged
 
 
-def load(city_code: str):
-    """OSM points from staging, inventory anchors from the published parquet."""
+def load(city_code: str, osm_path: str | None = None, inventory_path: str | None = None):
+    """OSM points from staging, inventory anchors from the published parquet.
+
+    Either side can be pointed at a local file instead, which is what a city
+    being *added* needs: the published parquet and the staged extract are both
+    outputs of the pipeline this cell size is an input to, so calibrating from
+    GCS alone is a deadlock -- you cannot write the model without the number,
+    and you cannot get the number without having run the model.  Run the city's
+    ingest and `_osm_shared.fetch_osm_trees` to local parquets, calibrate
+    against those, then wire the answer in.
+
+    A local inventory file has not been through the model, so it carries no
+    `data_source` column filter to apply -- and it does not need one: it is the
+    municipal ingest's own output, which is all-municipal by construction.
+    """
     con = duckdb.connect()
     con.execute("install httpfs; load httpfs;")
-    staged = staging_url(f"{city_code.lower()}_osm_staging.parquet")
+    staged = osm_path or f"{staging_url(f'{city_code.lower()}_osm_staging.parquet')}?cb=1"
     osm = con.execute(
-        f"SELECT latitude, longitude, osm_ref FROM read_parquet('{staged}?cb=1') "
+        f"SELECT latitude, longitude, osm_ref FROM read_parquet('{staged}') "
         "WHERE latitude IS NOT NULL AND longitude IS NOT NULL"
     ).fetchnumpy()
-    published = f"{TREES_URL}/{city_code.lower()}_tree_info_v2.parquet?cb=1"
+    if inventory_path:
+        published, anchors_only = inventory_path, ""
+    else:
+        published = f"{TREES_URL}/{city_code.lower()}_tree_info_v2.parquet?cb=1"
+        anchors_only = "data_source NOT LIKE 'OSM_%' AND"
     muni = con.execute(
         f"SELECT latitude, longitude FROM read_parquet('{published}') "
-        f"WHERE data_source NOT LIKE 'OSM_%' "
-        "AND latitude IS NOT NULL AND longitude IS NOT NULL"
+        f"WHERE {anchors_only} "
+        "latitude IS NOT NULL AND longitude IS NOT NULL"
     ).fetchnumpy()
     return osm, muni
 
@@ -117,12 +134,22 @@ def main() -> None:
         default="10,15,20",
         help="Comma-separated cell sizes in metres to simulate (default 10,15,20)",
     )
+    ap.add_argument(
+        "--osm-parquet",
+        help="Local OSM parquet to read instead of the staged GCS object "
+        "(for a city being added, whose staging object does not exist yet)",
+    )
+    ap.add_argument(
+        "--inventory-parquet",
+        help="Local municipal parquet to read instead of the published city "
+        "parquet (same bootstrap case; assumed all-municipal)",
+    )
     args = ap.parse_args()
     code = args.city.upper()
     lat_min, lat_max, _, _ = CITY_BOUNDS[code]
     city_lat = (lat_min + lat_max) / 2
 
-    osm, muni = load(code)
+    osm, muni = load(code, args.osm_parquet, args.inventory_parquet)
     osm_lat = np.asarray(osm["latitude"], dtype=float)
     osm_lon = np.asarray(osm["longitude"], dtype=float)
     muni_lat = np.asarray(muni["latitude"], dtype=float)
