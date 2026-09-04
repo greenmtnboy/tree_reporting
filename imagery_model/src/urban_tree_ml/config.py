@@ -160,6 +160,9 @@ def load_config(path: str | Path) -> ProjectConfig:
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     expanded = _expand_environment(raw)
     config = ProjectConfig.model_validate(expanded)
+    annotations_root = os.environ.get("TREE_ML_ANNOTATIONS_ROOT")
+    if annotations_root:
+        config.paths.annotations = Path(annotations_root)
     if not config.paths.root.is_absolute():
         config.paths.root = (config_path.parent.parent / config.paths.root).resolve()
     if not config.paths.annotations.is_absolute():

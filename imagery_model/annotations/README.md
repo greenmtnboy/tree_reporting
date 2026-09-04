@@ -1,6 +1,10 @@
 # Registration annotations
 
-This directory contains compact, human-reviewed source data and is intentionally tracked in Git.
+Canonical bundles are versioned in
+[`arborary-world/training-data`](https://github.com/arborary-world/training-data), not in this code
+repository. Set `TREE_ML_ANNOTATIONS_ROOT` to that checkout's `annotations` directory. This local
+directory is only the Git-ignored fallback when the variable is unset.
+
 The QA server and `urban-tree-ml qa snapshot` publish bundles at:
 
 ```text
