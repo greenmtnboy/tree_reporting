@@ -26,6 +26,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'Washington, DC', label: 'Open Data DC (Urban Forestry Street Trees)', url: 'https://opendata.dc.gov/datasets/DCGIS::urban-forestry-street-trees' },
   { city: 'Tempe', label: 'City of Tempe Tree Inventory', url: 'https://data.tempe.gov/datasets/tempegov::tree-inventory' },
   { city: 'Athens', label: 'City of Athens Open Data (Trees of the National Garden)', url: 'https://opendata.cityofathens.gr/dataset/gis-athens-8303d4c8-371b-11ec-b388-0242ac120009' },
+  { city: 'Denver', label: 'Denver Open Data (Parks, Medians, and Parkway Trees)', url: 'https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::parks-medians-and-parkway-trees' },
   // Milos and Santorini have no published tree inventory anywhere in Greece's
   // open data portals; their trees are approved community submissions plus
   // supplemental OpenStreetMap nodes.
@@ -34,13 +35,18 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   // Community submissions are reviewed and approved before they reach the map;
   // each published tree carries a COMMUNITY_<CITY> value in its data_source column.
   { city: 'All cities', label: 'Community submissions, reviewed before publication' },
-  // Supplemental OSM trees (OSM_<CITY> in data_source) are ODbL-licensed;
-  // this attribution line is required, keep it whenever any city has OSM wired.
-  { city: 'Tempe', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
-  { city: 'Boston', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
-  { city: 'Athens', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
-  { city: 'Milos', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
-  { city: 'Santorini', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
+  // Supplemental OSM trees (OSM_<CITY> in data_source) are ODbL-licensed and
+  // this attribution is required, not optional.
+  //
+  // One 'All cities' line rather than one per city, because every city carries
+  // an OSM partition -- a city is wired to OSM at the same time as its
+  // municipal source, and `OSM_DATA_SOURCES` in data/raw/_ingest_shared.py is
+  // the list. The per-city form was the original and it silently fell behind:
+  // OSM rolled out to every city while this list still named the first five,
+  // so twelve cities were rendering ODbL data with no attribution at all.
+  // `test_osm_city_carries_odbl_attribution` accepts either form and checks
+  // every city is covered by one of them.
+  { city: 'All cities', label: '© OpenStreetMap contributors (supplemental trees, ODbL)', url: 'https://www.openstreetmap.org/copyright' },
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
@@ -61,6 +67,7 @@ export const LANDMARK_SOURCES: CitySourceLink[] = [
   { city: 'Athens', label: 'Curated landmark list geocoded via Nominatim' },
   { city: 'Milos', label: 'Curated landmark list geocoded via Nominatim' },
   { city: 'Santorini', label: 'Curated landmark list geocoded via Nominatim' },
+  { city: 'Denver', label: 'Denver Open Data (Historic Landmark Structures)', url: 'https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::historic-landmarks' },
 ]
 
 export const SPECIES_ENRICHMENT_SOURCES: AttributionSourceLink[] = [

@@ -16,6 +16,7 @@ Currently has data from the following cities:
 - [Washington, DC, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USWAS)
 - [Los Angeles, CA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USLAX)
 - [Tempe, AZ, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USTEM)
+- [Denver, CO, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USDEN)
 - [Vancouver, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAVAN)
 - [London, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBLON)
 - [Amsterdam, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLAMS)
@@ -63,8 +64,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Washington, DC | Open Data DC - Urban Forestry Street Trees | https://opendata.dc.gov/datasets/DCGIS::urban-forestry-street-trees |
 | Los Angeles | Los Angeles Open Data - Street Tree Inventory - 1990s | https://data.lacity.org/api/views/vt5t-mscf |
 | Tempe | City of Tempe - Tree Inventory | https://data.tempe.gov/datasets/tempegov::tree-inventory |
-| Tempe (supplemental) | © OpenStreetMap contributors (ODbL) | https://www.openstreetmap.org/copyright |
-| Boston (supplemental) | © OpenStreetMap contributors (ODbL) | https://www.openstreetmap.org/copyright |
+| Denver | Denver Open Data - Parks, Medians, and Parkway Trees | https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::parks-medians-and-parkway-trees |
 | Vancouver | Vancouver Open Data - Public Trees | https://opendata.vancouver.ca/explore/dataset/public-trees/ |
 | London | London Datastore - Public Realm Trees | https://data.london.gov.uk/dataset/2r45m |
 | Amsterdam | Amsterdam Data Portal - Bomen (Stamgegevens) | https://api.data.amsterdam.nl/v1/bomen/stamgegevens/ |
@@ -73,11 +73,9 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Paris | Paris Open Data - Les Arbres | https://opendata.paris.fr/explore/dataset/les-arbres/ |
 | Buenos Aires | Buenos Aires Data - Arbolado publico lineal | https://data.buenosaires.gob.ar/dataset/arbolado-publico-lineal |
 | Athens | City of Athens Open Data - Trees of the National Garden | https://opendata.cityofathens.gr/dataset/gis-athens-8303d4c8-371b-11ec-b388-0242ac120009 |
-| Athens (supplemental) | © OpenStreetMap contributors (ODbL) | https://www.openstreetmap.org/copyright |
 | Milos | Community submissions (no municipal inventory published) | (contributed via the app) |
-| Milos (supplemental) | © OpenStreetMap contributors (ODbL) | https://www.openstreetmap.org/copyright |
 | Santorini | Community submissions (no municipal inventory published) | (contributed via the app) |
-| Santorini (supplemental) | © OpenStreetMap contributors (ODbL) | https://www.openstreetmap.org/copyright |
+| All cities (supplemental) | © OpenStreetMap contributors (ODbL) | https://www.openstreetmap.org/copyright |
 | All cities | Community submissions, reviewed and approved before publication | (contributed via the app) |
 
 Every tree row carries a `data_source` column identifying which of the above it came from.
@@ -93,6 +91,7 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Washington, DC | No landmark dataset in production yet | n/a |
 | Los Angeles | No landmark dataset in production yet | n/a |
 | Tempe | No landmark dataset in production yet | n/a |
+| Denver | Denver Open Data - Historic Landmark Structures | https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::historic-landmarks |
 | Vancouver | Vancouver Open Data - Heritage Sites | https://opendata.vancouver.ca/explore/dataset/heritage-sites/ |
 | London | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |
 | Amsterdam | Amsterdam Data Portal - Monumenten | https://api.data.amsterdam.nl/v1/monumenten/monumenten/ |

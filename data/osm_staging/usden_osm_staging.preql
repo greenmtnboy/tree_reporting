@@ -1,0 +1,42 @@
+# Scheduled OSM extraction for Denver, run by the `osm-usden` [[cloud.job]] in
+# ../trilogy.toml. Everything shared with the other seventeen cities -- the
+# canonical tree concepts, the Overpass freshness probe, and why extraction is
+# a separate job at all -- lives in staging_common.preql; this file is just
+# Denver's rows and the staging object they land in.
+
+import staging_common;
+
+root datasource usden_osm_rows (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
+    osm_ref: ?osm_ref,
+)
+grain (tree_id)
+file `./osm_rows.py`
+where city = 'USDEN';
+
+datasource usden_osm_staging (
+    tree_id,
+    city,
+    data_source,
+    ?species,
+    ?tree_name,
+    ?plant_date,
+    ?latitude,
+    ?longitude,
+    ?diameter_at_breast_height,
+    ?submission_photo_url,
+    ?osm_ref,
+    osm_extracted_through,
+)
+grain (tree_id)
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usden_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/usden_osm_staging.parquet`
+freshness by osm_extracted_through;

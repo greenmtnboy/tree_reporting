@@ -1,6 +1,67 @@
 # Extending the Tree Map: Adding a New City
 
-This document captures the steps discovered when adding Paris (FR), following SF, NYC, and Boston. Use it as a runbook for the next city addition.
+This document captures the steps discovered adding cities, from Paris after SF,
+NYC and Boston through to Denver. Use it as a runbook for the next one.
+
+**Read this first, then use the quick path below.** Everything under
+"Step-by-Step" is still accurate and is where the *reasoning* lives — why a
+partition is shaped the way it is, what broke when it was not — but you should
+not be typing those twenty edits by hand any more. `new_city.py` writes the
+mechanical ones and `tests/test_city_wiring.py` tells you what is still owed.
+
+---
+
+## The quick path
+
+```bash
+# 1. Find the portal's tree layer. For any ArcGIS Hub site, this is one command:
+cd data/raw && uv run _arcgis_shared.py opendata-geospatialdenver.hub.arcgis.com
+
+# 2. Look up the ecoregion at the city centroid (RESOLVE ECO_ID):
+curl -sG "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/Resolve_Ecoregions/FeatureServer/0/query"   --data-urlencode "geometry=-104.9903,39.7392" --data-urlencode "geometryType=esriGeometryPoint"   --data-urlencode "inSR=4326" --data-urlencode "spatialRel=esriSpatialRelIntersects"   --data-urlencode "outFields=ECO_ID,ECO_NAME" --data-urlencode "returnGeometry=false" --data-urlencode "f=json"
+
+# 3. Scaffold every registry edit and every boilerplate file:
+cd data/raw && uv run new_city.py     --code USDEN --name Denver --slug denver     --center 39.7392,-104.9903     --bounds 39.45,39.95,-105.65,-104.55     --source-label DENVER_OPENDATA     --ecoregion 402     --city-cron "0 40 15 * * SUN,WED" --osm-cron "0 30 2 * * SAT"
+```
+
+`--dry-run` first if you want to see the twenty-seven edits before they land.
+It is idempotent, and it stages everything in memory before writing, so a
+failure leaves the tree untouched rather than half-patched.
+
+**Then do the four things it deliberately does not do**, because each needs a
+measurement or a look at the portal:
+
+1. **Fill in `{slug}_tree_info.py` and `{slug}_update_time.py`.** The field
+   mapping is the actual work. For an ArcGIS portal — which is most North
+   American cities — `_arcgis_shared` covers paging, the freshness watermark
+   and Esri's epoch-milliseconds; `usden/denver_tree_info.py` is ~150 lines
+   including its comments.
+2. **Find a landmark source** and write `{slug}_landmarks.py` + its probe. See
+   "Finding a Landmarks Source" for the preference order.
+3. **Bootstrap the OSM staging object**, so the city's model has something to
+   read before its `osm-{code}` job exists in production:
+   `uv run {slug}/{slug}_osm_extract.py`.
+4. **Calibrate the dedup cell size.** Never copy one:
+   `uv run osm_dedup_validation.py --city {CODE}`. Before the city's first
+   credentialed build neither the staged extract nor the published parquet
+   exists in GCS, so pass `--osm-parquet` / `--inventory-parquet` and calibrate
+   against local files.
+
+Then check the wiring. These are fast and they catch the failures that are
+otherwise silent:
+
+```bash
+cd data/raw && uv run --with pytest python -m pytest tests -q
+cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql
+cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql
+```
+
+`test_city_wiring.py` walks every registry a city has to appear in — the enum,
+the ecoregion case, four sets of freshness properties, the cross-city imports
+and merges, the rollup file list, the frontend config, the attribution — and
+fails naming the file and the line. A half-wired city is a red test rather than
+a quiet hole in the map. Each dry run must report **exactly one** asset; more
+means an import reaches too far.
 
 ---
 
@@ -188,7 +249,7 @@ must claim `complete where city = 'X' and {code}_source = 'Y'`.
 
 Every city carries a third partition of `natural=tree` nodes from OSM, labelled
 `OSM_{CODE}` and listed in `OSM_DATA_SOURCES` in `data/raw/_ingest_shared.py`
-— ~1.37M staged trees across the fourteen. It was opt-in while only Tempe and
+— ~1.37M staged trees across them. It was opt-in while only Tempe and
 Boston were wired; it no longer is, and a new city should wire it at the same
 time as its municipal source. `test_osm_city_is_fully_wired` parametrises over
 every city in `OSM_DATA_SOURCES` and asserts each half of the wiring below, so
@@ -235,9 +296,9 @@ DuckDB writes GCS with the job's HMAC secrets and no local credential is
 involved. Which city that script fetches comes from the datasource's
 `where city = '{CODE}'`, which Trilogy pushes down as `--filter`; there is no
 per-city copy of it, and a missing filter is a hard failure rather than
-seventeen Overpass queries.
+an Overpass query per city.
 
-Everything those seventeen models share — the canonical tree concepts and the
+Everything those models share — the canonical tree concepts and the
 Overpass freshness probe — lives in `osm_staging/staging_common.preql`, so a
 city's own file is two datasources and (for London) one extra column. The
 `freshness by` is Overpass's global `osm_base` timestamp
@@ -345,7 +406,7 @@ matches). Per-city thresholds are expected as OSM rolls out.
 
 **Calibrate every city; the answer differs.** `osm_dedup_validation.py --city
 CODE` measures the mutual-NN rate per distance band against the staged extract
-and the published inventory. Across the fourteen it split three ways:
+and the published inventory. Across the wired cities it split three ways:
 
 | cell | cities | 5-10m mutual-NN |
 |------|--------|-----------------|
@@ -382,7 +443,7 @@ staleness window.
 a shared source needs both. `complete where city = 'X' and {code}_source = 'Y'`
 is a *model-level assertion* — "this source holds the complete set of rows for
 that partition" — and does not promise the planner will inject a predicate.
-`community_tree_info.py` is read by all fourteen cities and returns *every*
+`community_tree_info.py` is read by every city and returns *every*
 city's approved submissions, so each city's datasource has to restrict its rows
 itself, with a `where` clause after the file clause:
 
@@ -405,7 +466,7 @@ value comes from an aggregate across the stacked partitions, is what decides it.
 Tempe's Parquet accordingly shipped three `city = 'USBOS'` rows. Do not rely on
 the injection: write the `where`. Trilogy compiles it into both a SQL predicate
 and a `--filter 'city={CODE}'` argument to the script, which
-`community_tree_info.py` honours so that fourteen invocations do not each read
+`community_tree_info.py` honours so that one invocation per city does not each read
 and emit the whole export. Write-up in
 `upstream_repro/partition_filter_dropped/`.
 
@@ -413,7 +474,7 @@ and emit the whole export. Write-up in
 flag is only useful if something reads it, and for a while nothing did: Boston's
 first OSM rebuild flagged 7,369 rows correctly and the map rendered all of them
 anyway, stacked on top of the municipal trees on Boston Common. `is_duplicate`
-is therefore materialized by **all fourteen** city models — the twelve with no
+is therefore materialized by **every** city model — those with no
 OSM partition emit `auto {code}_is_duplicate <- False;` — and
 `duckdbPipeline.worker.ts` filters with a single
 `AND NOT COALESCE(is_duplicate, false)` when it loads a city.
@@ -464,7 +525,7 @@ and fan out; the join axis was lost upstream.
 
 The flag comes from a per-city grid aggregate over that city's own rows;
 merging the keys asks the planner to resolve that aggregate over the union of
-all fourteen cities. The cross-city `full_tree_info` Parquet accordingly has no
+every city. The cross-city `full_tree_info` Parquet accordingly has no
 `is_duplicate`, and the worker skips the filter on that fallback path.
 
 Other details: OSM `circumference` defaults to metres but is frequently
@@ -662,7 +723,26 @@ Paris probe details:
 
 ### 5. Create the Fetch Script
 
-Create `data/raw/{city}/{city}_tree_info.py`. Follow the pattern of `boston_tree_info.py`.
+Create `data/raw/{city}/{city}_tree_info.py`. `new_city.py` leaves a stub with
+the contract in its docstring; follow `usden/denver_tree_info.py` for an ArcGIS
+source or `boston_tree_info.py` for the general shape.
+
+> **If the portal is ArcGIS, use `_arcgis_shared`.** It is the platform most
+> North American cities publish on, and the module covers the whole of it:
+> `FeatureLayer` addresses a layer, `iter_features` / `iter_attributes` page it,
+> `layer_last_edit` and `field_max` are the two freshness watermarks, and
+> `esri_ms_to_date` converts Esri's epoch-milliseconds. `find_tree_layers` will
+> even locate the layer — `uv run _arcgis_shared.py <hub-host>` lists every
+> tree dataset a Hub site publishes with its REST endpoint.
+>
+> Two details in there are correctness rather than convenience, and both were
+> bugs in the hand-rolled copies it replaced. The page size comes from the
+> layer's own `maxRecordCount`, because asking for more is **silently capped**
+> and a capped page is a short page, which is the signal that the data ran out.
+> And paging stops on Esri's `exceededTransferLimit` flag rather than on the
+> short-page heuristic, which cannot tell a full last page from a truncated one.
+> `orderByFields` is likewise required, not tidy: offset paging over an
+> unordered result may repeat or skip rows between requests.
 
 The script must:
 1. Download the source data (CSV, JSON, or parquet from the open data portal)
@@ -820,8 +900,8 @@ file [
 ];
 ```
 
-`file [...]` is read as a single DuckDB multi-file scan, so seventeen cities are
-one datasource rather than seventeen stubs. A mixed schema is fine — London's
+`file [...]` is read as a single DuckDB multi-file scan, so every city is
+covered by one datasource rather than a stub each. A mixed schema is fine — London's
 parquet carries a `borough` column the others do not, and projecting the shared
 columns unions them without complaint.
 
@@ -916,30 +996,29 @@ look like a city with no trees in OSM.
 
 **a) `src/src/workers/parquetUrls.ts`** — the `cityTreeParquetUrl` and `cityLandmarkParquetUrl` functions use a regex `/^[a-z]{2}[a-z]{3}$/` to validate city codes (5 lowercase letters). No code changes needed for new cities — just ensure the `DATA_VERSION` constant matches `data/raw/enrichment/_tree_shared.py`.
 
-**b) `src/src/trilogyModels.ts`** — add raw imports and entries in `ALL_MODEL_SOURCES` for both the tree and landmarks preql files. The agent chat's query resolver loads models from this list at runtime; omitting a city here means the agent cannot resolve queries against that city's data even though the parquet is loaded in DuckDB.
+**b) `src/src/trilogyModels.ts`** — **nothing to do.** It discovers the
+per-city models with `import.meta.glob('../../data/raw/*/*_tree_info.preql')`
+and the same for landmarks, so a new city's models reach the agent chat's query
+resolver as soon as the files exist. (This step used to be two hand-maintained
+import lists. It is called out rather than deleted because the failure it
+guarded against — the agent unable to resolve queries against a city whose
+parquet is loaded — is invisible from the map.)
 
-```ts
-import {CITY}_TREE_INFO_MODEL from '../../data/raw/{city}/{city}_tree_info.preql?raw'
-import {CITY}_LANDMARKS_MODEL from '../../data/raw/{city}/{city}_landmarks.preql?raw'
+**c) `src/src/cityConfig.json`** — add the city:
+
+```json
+"USDEN": { "name": "Denver", "center": [-104.9903, 39.7392] }
 ```
 
-Add to `ALL_MODEL_SOURCES` alongside the other per-city entries:
+The `center` is `[longitude, latitude]` (GeoJSON/MapLibre order), not the
+lat-first order everything else in this repo uses. Use the city center, not a
+corner. `test_city_is_in_the_frontend_config` checks the point falls inside the
+city's `CITY_BOUNDS`, which is what catches a swapped pair — the symptom
+otherwise is a map centred in the sea.
 
-```ts
-{ alias: '{city}.{city}_tree_info', contents: {CITY}_TREE_INFO_MODEL },
-{ alias: '{city}.{city}_landmarks', contents: {CITY}_LANDMARKS_MODEL },
-```
-
-**c) `src/src/composables/useMapData.ts`** — add the city to `CITY_CONFIG`:
-
-```ts
-export const CITY_CONFIG = {
-  // ... existing cities
-  FRPAR: { name: 'Paris', center: [2.3522, 48.8566] as [number, number] },
-} as const
-```
-
-The `center` is `[longitude, latitude]` (GeoJSON/MapLibre order). Use the city center, not a corner.
+This one file drives more than the city picker: `ALL_CITIES` in
+`dashboardQueryCatalog.ts` is `Object.keys(CITY_CONFIG)`, so adding a city here
+also adds ~39 queries to the `pnpm test:queries` sweep.
 
 That's it — the city button appears automatically in the UI, the worker loads `{code}_tree_info_v{DATA_VERSION}.parquet` from GCS, and DuckDB queries it exactly like any other city.
 
@@ -1151,9 +1230,9 @@ rebuilds every city's landmark parquet plus the union, weekly (landmark sources
 change on a scale of years, and its per-city freshness columns mean it only
 rebuilds cities that actually moved). Splitting it per city the way trees were
 split is a *code-sharing* job rather than a scheduling one: tree extraction lives
-once in `_osm_shared.py`, which is what made seventeen scheduled OSM jobs a
-matter of seventeen thin shims, whereas the landmark sources are seventeen
-bespoke scripts. Three cities are still on hand-run paths that the Greek model
+once in `_osm_shared.py`, which is what made a scheduled OSM job per city a
+matter of one thin shim each, whereas the landmark sources are a bespoke
+script per city. Three cities are still on hand-run paths that the Greek model
 would replace — `USBTV`, `USTEM` and `USWAS` read a hand-uploaded CSV from the
 staging prefix, and `DEBER`/`GBLON` stage from a hand-run Overpass fetch whose
 logic has never been shared. Sharing that fetch the way `_osm_shared` shares the
@@ -1246,7 +1325,7 @@ genera and would fail it in genus position).
 
 Deciding those needs a list of names, and the only honest source for one is the
 published data.  `_NON_TAXON_REWRITES` is that list — every entry was observed
-in the fourteen wired inventories.  It maps a value to the genus worth keeping,
+in the wired inventories.  It maps a value to the genus worth keeping,
 or to `None` when there is none: a source that wrote `Callistemon king` still
 recorded the genus, while `Tai haku` is a cherry cultivar with no genus
 attached.
@@ -1371,7 +1450,7 @@ failed loudly:
   ignored, it replaces the published table.  The default is
   `tree_enrichment.parquet` in the working directory, and a gitignored
   months-old one with 1,404 rows was sitting there — one default invocation away
-  from reverting all fourteen cities' species labels to a March snapshot.
+  from reverting every city's species labels to a March snapshot.
   `assert_checkpoint_is_not_stale` refuses to resume from a checkpoint holding
   fewer rows than the published table, since a real checkpoint is always a
   superset of what it read.
@@ -1548,11 +1627,65 @@ cd data/raw && uv run tree_enrichment.py --limit 50 --output tree_enrichment.par
 
 ## What to Optimize / Streamline Next Time
 
-### 2. `core.preql` City Enum Is Easy to Miss
-**Problem:** The `city` key in `data/raw/core.preql` is a typed enum. Forgetting to add the new code there causes Trilogy to reject every `complete where city = '...'` clause in the new preql files — but the error message points at the preql files, not `core.preql`.
-**Suggestion:** Do this as step 3 (it already is), and double-check it's the very first edit before creating any other files.
+Both entries that used to live here — "the city enum is easy to miss" and
+"parquet column types drift silently" — are now enforced rather than advised:
+`test_city_is_in_the_core_enum` catches the first and `enforce_tree_schema`
+catches the second. What follows is what is still manual, roughly in order of
+how much a city addition costs today.
 
-### 3. Parquet Column Types Drift Silently
-**Problem:** Trilogy does not coerce a raw script's Arrow types to the types declared in `tree_common.preql` — whatever the script emits is what lands in the parquet. Inference-driven types (`pa.null()` for an all-null column, `int64` for a whole-number CSV column) therefore produce parquets that disagree with the model and with each other, and the failure only surfaces as a DuckDB binder error in the browser, one city at a time.
-**Suggestion:** Never rely on inference for a canonical column. `enforce_tree_schema` is called by every tree ingest script before `emit` and is the place to add any new canonical column — add it to `TREE_COLUMN_TYPES` and every city is covered at once. To audit the live parquets, `DESCRIBE SELECT * FROM read_parquet(...)` each city's GCS file and diff the column types.
+### The judgement steps are the whole cost now
 
+`new_city.py` writes twenty-seven mechanical edits in about a second, so what a
+city costs is the four things it cannot do: the field mapping, the freshness
+probe, the landmark source and the dedup calibration. Of those, only the first
+two are irreducible — they are reading a portal's schema — and both are much
+cheaper on a platform with a shared module.
+
+**So the highest-leverage next step is another `_arcgis_shared`.** That file
+took Denver's ingest from ~130 lines to ~60 and fixed two latent bugs across
+five existing cities on the way. The same is available for the other platforms
+this repo already talks to more than once:
+
+| platform | cities today | shared module? |
+|----------|--------------|----------------|
+| ArcGIS FeatureServer | Denver, Burlington, DC, Boston (×2), Tempe, LA | **yes** — `_arcgis_shared.py` |
+| OpenDataSoft | Paris, Vancouver, Melbourne | no — three hand-rolled copies |
+| Socrata | SF, NYC, LA | no — three hand-rolled copies |
+| CKAN | Boston | one, so not yet worth it |
+
+OpenDataSoft and Socrata are each three copies of the same paging loop and the
+same metadata probe, and both are common enough that the next few cities will
+want them. Write the module when the third city arrives, not the first — that
+is when the shape is knowable and the drift has started.
+
+### The landmark lane is still seventeen bespoke scripts
+
+Trees were split per city cheaply because extraction lives once in
+`_osm_shared`. Landmarks cannot be split the same way yet, because each city's
+landmark fetch is its own script — see "Landmarks are still one refresh lane".
+Sharing the Overpass fetch (Berlin, London) the way `_osm_shared` shares the
+tree one is the prerequisite; the scheduling is the easy half.
+
+Denver is the first city to take the runbook's *preferred* landmark source — an
+official designation registry on the same portal as the trees, read live with
+no staging and no geocoding. That path is both the cheapest and the best, and
+it is worth looking for it properly before falling back to a curated CSV.
+
+### Hardcoded city counts in prose go stale on every addition
+
+"all fourteen cities", "seventeen per-city partitions" — these were written
+when they were true and are wrong by the time anyone reads them. Prefer "every
+city" / "all cities" for a present-tense claim, and keep a numeral only where
+it is a *measurement at a point in time* ("11 of 17 portals move on a scale of
+months", "189,139 trees across all fourteen cities"), which stays true as
+history. This pass fixed the present-tense ones; new prose should not
+reintroduce them.
+
+### A city's first deploy is still a hole
+
+`parquetSchema.test.ts` carves out a 404 so a city-addition PR is not red
+before its first credentialed build. The flip side is that a green build no
+longer proves a brand-new city's parquet exists, so a just-added city stays
+broken in a deploy until its first refresh runs. Nothing currently reports that
+gap; the honest fix is a check that every city in `CITY_CONFIG` has a published
+parquet, run against production rather than in PR CI.

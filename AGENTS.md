@@ -44,6 +44,35 @@ Four things about that are load-bearing, and each replaced something that broke:
   catches it, so run `cd data/raw && uv run --with pytest python -m pytest tests -q`
   after touching the job table.
 
+### Adding a city
+
+Do not hand-write the twenty-odd registry edits. `data/raw/new_city.py` writes
+the mechanical ones from a single spec and `data/raw/tests/test_city_wiring.py`
+walks the same list and names anything still missing — the enum, the ecoregion
+case, four sets of freshness properties, the cross-city imports and merges, the
+rollup file list, the frontend config, the attribution. Almost every one of
+those fails *silently* when it is skipped, which is why the sweep exists.
+See the quick path at the top of `EXTENDING.md`.
+
+Two shared modules carry what used to be copied per city, and a new city should
+reach for them before writing anything:
+
+- **`_osm_shared.py`** — the Overpass extraction every city's `osm-{code}` job
+  runs, so a city's OSM wiring is one ~28-line shim.
+- **`_arcgis_shared.py`** — layer paging, both freshness watermarks, Esri's
+  epoch-milliseconds, and a Hub catalogue search
+  (`uv run _arcgis_shared.py <hub-host>` lists a portal's tree layers). ArcGIS
+  is what most North American cities publish on. Two details in it are
+  correctness rather than convenience and were bugs in the copies it replaced:
+  the page size comes from the layer's own `maxRecordCount` (asking for more is
+  silently capped, and a capped page reads as the end of the data), and paging
+  terminates on `exceededTransferLimit` rather than the short-page heuristic.
+
+The judgement steps are deliberately left manual: the field mapping, the
+freshness probe, the landmark source, and the dedup cell size — which is
+calibrated per city with `osm_dedup_validation.py` and must never be copied
+from another city.
+
 ## Tech
 
 Vite, vue, typescript
@@ -112,7 +141,7 @@ fresh clone will have.
 A third lives in `upstream_repro/join_type_varies_by_source/`, and it is the
 reason `src/src/tests/dashboard-pushdown.test.ts` exists. Declaring a second
 datasource that satisfies the same concepts — a cross-city rollup beside the
-seventeen per-city partitions — changes the JOIN TYPE on the enrichment side
+the per-city partitions — changes the JOIN TYPE on the enrichment side
 from `RIGHT OUTER` to `INNER`, which drops every tree whose species has no
 enrichment row. The query never names the second source and it contributes no
 rows; the count simply comes back lower. `uv run repro_query.py` in that
@@ -158,23 +187,35 @@ cd src
 pnpm test:queries                                            # the default sweep
 DASHBOARD_QUERY_CROSS_FILTERS=all pnpm test:queries          # every cross-filter dimension
 DASHBOARD_QUERY_CROSS_FILTERS=pairs pnpm test:queries        # every pair of dimensions
-DASHBOARD_QUERY_ALL_CITIES=1 pnpm test:queries               # interactive states in all 17 cities
+DASHBOARD_QUERY_ALL_CITIES=1 pnpm test:queries               # interactive states in every city
 ```
 
-The default run is **820 queries**: 697 base-state (34 for the all-cities view
-plus 39 for each of the seventeen cities) and 123 interactive (a species
-selection, and one cross-filter dimension — nativeness, the one that reaches
-enrichment through the `unnest(native_ecoregions)` merge, where both planner
-failures have lived). Deduplicating buys nothing; 807 of the 820 request bodies
-are distinct, because a city's context source and filters are part of the
-request. It needs network: a live check against
-`https://trilogy-service.fly.dev`, whose pytrilogy pin floats, so a failure with
-no local change means an upstream release moved under us.
+The default run is **34 queries for the all-cities view plus 39 per city**,
+then 123 interactive (a species selection, and one cross-filter dimension —
+nativeness, the one that reaches enrichment through the
+`unnest(native_ecoregions)` merge, where both planner failures have lived).
+That was 820 at seventeen cities, and it grows by 39 with each new one:
+`ALL_CITIES` in `dashboardQueryCatalog.ts` is `Object.keys(CITY_CONFIG)`, so
+adding a city to `cityConfig.json` enrols it here too.
 
-**Those 820 queries are 21 requests, and that is the whole performance story.**
+**A city whose parquet is not on GCS yet is skipped, not failed.** The
+execution harness takes each table's schema from the real Parquet, so a
+just-added city would otherwise fail on a 404 footer read; instead the suite
+prints `USDEN's tree parquet is not on GCS yet -- skipping its dashboard
+queries` and carries on. That is what keeps a city-addition PR green before its
+first credentialed build — and equally, a green run does not prove a brand-new
+city's charts work. Re-run once its refresh has published.
+
+Deduplicating buys nothing; all but a handful of request bodies are distinct,
+because a city's context source and filters are part of the request. It needs
+network: a live check against `https://trilogy-service.fly.dev`, whose
+pytrilogy pin floats, so a failure with no local change means an upstream
+release moved under us.
+
+**Those hundreds of queries are ~21 requests, and that is the whole performance story.**
 A lone `/generate_query` costs ~560ms against an idle resolver, of which ~375ms
 is parsing the 43 preql sources in `ALL_MODEL_SOURCES` and only ~190ms is
-planning. Paying that parse 820 times was what made this suite feel like an
+planning. Paying that parse once per query was what made this suite feel like an
 overnight job. `/generate_queries` takes one model plus a list of queries, each
 with its own `extra_filters` and `parameters`, and hydrates the model once — so
 the suite batches per (page state, imports) and finishes in about 70 seconds.

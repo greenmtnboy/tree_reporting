@@ -3,7 +3,12 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
-"""Freshness probe for LA's Historic-Cultural Monuments layer."""
+"""Freshness probe for Denver's historic landmark register.
+
+The layer's own `editingInfo.dataLastEditDate`, so the weekly landmark lane
+only rebuilds Denver's parquet when the Landmark Preservation Commission has
+actually edited the register.
+"""
 
 import sys
 from datetime import datetime
@@ -14,8 +19,8 @@ from _arcgis_shared import FeatureLayer, layer_last_edit
 from _ingest_shared import emit_freshness
 
 LAYER = FeatureLayer(
-    "https://services5.arcgis.com/7nsPwEMP38bSkCjy/ArcGIS/rest/services/"
-    "Historic_Cultural_Monuments/FeatureServer/4"
+    "https://services1.arcgis.com/zdB7qR0BtYrg0Xpl/arcgis/rest/services/"
+    "ODC_HIST_LANDMARKSTRUCTURE_P/FeatureServer/69"
 )
 
 
@@ -24,4 +29,4 @@ def fetch_modified_at() -> datetime:
 
 
 if __name__ == "__main__":
-    emit_freshness("USLAX", fetch_modified_at)
+    emit_freshness("USDEN", fetch_modified_at, label="USDEN landmarks")

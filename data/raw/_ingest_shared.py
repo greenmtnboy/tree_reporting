@@ -377,6 +377,27 @@ def form_sentinel_for(value: str | None) -> str | None:
     return _FORM_SENTINEL_ALIASES.get(value.strip().lower())
 
 
+def _is_epithet_token(token: str) -> bool:
+    """True for a token shaped like a specific epithet.
+
+    Letters, optionally joined by ONE internal hyphen.  The botanical code
+    permits a hyphen in an epithet compounded from two words that could stand
+    apart, and several of those are common street trees: `Crataegus crus-galli`
+    (cockspur hawthorn), `Vaccinium vitis-idaea`, `Coix lacryma-jobi`.  A bare
+    `str.isalpha()` rejected all of them, so each collapsed onto its genus and
+    silently merged with every other species in it.
+
+    One hyphen, not any number, and letters on both sides: that admits the real
+    names and still refuses nursery cultivar codes, which is what the caller
+    needs to keep out ("JFS-Caddo2" fails on the digit, "Emer-II-x" on the
+    second hyphen).
+    """
+    if not token:
+        return False
+    parts = token.split("-")
+    return len(parts) <= 2 and all(p.isalpha() for p in parts)
+
+
 def sanitize_species(value: str | None) -> str | None:
     """Reduce a raw species string to a Latin binomial, or ``None``.
 
@@ -429,9 +450,9 @@ def sanitize_species(value: str | None) -> str | None:
         return None
     if s.lower() in _NON_TAXON_REWRITES:
         return _NON_TAXON_REWRITES[s.lower()]
-    # Free-typed uncertainty and any numeric content are never taxa.
-    if "?" in s or "/" in s or any(ch.isdigit() for ch in s):
-        return None
+    # Free-typed uncertainty spanning the whole value ("Serviceberry or
+    # dogwood?").  Checked before the cultivar truncation below, because the
+    # alternatives are named on either side of it.
     if " or " in s.lower():
         return None
 
@@ -439,6 +460,16 @@ def sanitize_species(value: str | None) -> str | None:
     cut = [s.find(q) for q in _QUOTE_CHARS if s.find(q) != -1]
     if cut:
         s = s[: min(cut)]
+
+    # Free-typed uncertainty and any numeric content are never taxa -- but ask
+    # only of what is left after the cultivar came off.  A nursery cultivar code
+    # routinely carries a digit ("Acer saccharum 'JFS-Caddo2'"), and rejecting
+    # the whole value for it threw away a perfectly good binomial that was
+    # sitting right there: whether a real name survived came down to whether
+    # its cultivar happened to be spelled with a number.
+    if "?" in s or "/" in s or any(ch.isdigit() for ch in s):
+        return None
+
     tokens = s.split()
     if not tokens:
         return None
@@ -478,7 +509,7 @@ def sanitize_species(value: str | None) -> str | None:
             continue
         if low in _RANK_QUALIFIERS or low in _SPECIES_PLACEHOLDERS or tok.endswith("."):
             break
-        if not tok.isalpha():
+        if not _is_epithet_token(tok):
             break
         epithet = tok
         break
@@ -531,6 +562,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "USWAS": ("WASHINGTONDC_OPENDATA",),
     "USTEM": ("TEMPE_OPENDATA",),
     "GRATH": ("ATHENS_OPENDATA",),
+    "USDEN": ("DENVER_OPENDATA",),
     # Milos has no municipal tree inventory — no Greek portal publishes one
     # (checked opendata.thessaloniki.gr, data.gov.gr, geodata.gov.gr, and the
     # Athens portal, whose only tree dataset is the National Garden).  The city
@@ -580,6 +612,7 @@ OSM_DATA_SOURCES: dict[str, str] = {
     "USLAX": "OSM_USLAX",
     "USWAS": "OSM_USWAS",
     "GRATH": "OSM_GRATH",
+    "USDEN": "OSM_USDEN",
     "GRMLO": "OSM_GRMLO",
     "GRSAN": "OSM_GRSAN",
 }
@@ -628,6 +661,7 @@ def enforce_tree_schema(
     columns: dict[str, str] | None = None,
     city: str = "",
     data_source: str | None = None,
+    unique_tree_ids: bool = False,
 ) -> pa.Table:
     """Cast the tree ingest columns to their canonical Arrow types.
 
@@ -647,6 +681,15 @@ def enforce_tree_schema(
               which is what lets Trilogy union a city's municipal and community
               sources as disjoint partitions.  Scripts that emit a per-row
               ``data_source`` column (only the community ingest does) omit it.
+    unique_tree_ids: Raise if ``tree_id`` repeats.  ``tree_id`` is the declared
+              ``grain`` of every city datasource, and a repeat there does not
+              error anywhere -- it fans out the joins Trilogy builds on that
+              grain, so the city's Parquet comes back with more rows than the
+              portal published and every count on the map is quietly wrong.
+              Off by default only because the sixteen cities that predate this
+              check have not been measured; they get the stderr line below, and
+              a city should be switched to ``True`` once a refresh has shown it
+              clean.  A new city should pass ``True`` from the start.
 
     Extra columns (``borough``, …) pass through untouched.
     Casts are *safe*: a lossy conversion raises rather than silently
@@ -760,7 +803,43 @@ def enforce_tree_schema(
             actual, pa.nulls(table.num_rows, type=target)
         )
 
+    _check_tree_id_grain(
+        table, resolved["tree_id"], prefix=prefix, strict=unique_tree_ids
+    )
+
     return table
+
+
+def _check_tree_id_grain(
+    table: pa.Table, column: str, *, prefix: str, strict: bool
+) -> None:
+    """Report (or refuse) a repeated ``tree_id``.
+
+    See the ``unique_tree_ids`` note on ``enforce_tree_schema``: this is a
+    grain violation, and Trilogy has no way to notice one.
+    """
+    if column not in table.schema.names:
+        return
+    ids = table.column(column).to_pylist()
+    seen: set[str] = set()
+    repeats: set[str] = set()
+    for value in ids:
+        if value is None:
+            continue
+        if value in seen:
+            repeats.add(value)
+        else:
+            seen.add(value)
+    if not repeats:
+        return
+    sample = ", ".join(sorted(repeats)[:5])
+    message = (
+        f"{prefix}: '{column}' is the declared grain but {len(repeats)} "
+        f"value(s) repeat (e.g. {sample}); joins on that grain will fan out"
+    )
+    if strict:
+        raise ValueError(message)
+    print(message, file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -786,6 +865,14 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "USWAS": (38.78, 39.01, -77.15, -76.88),
     "USTEM": (33.30, 33.48, -112.05, -111.80),
     "GRATH": (37.85, 38.10, 23.60, 23.90),
+    # Denver reaches a long way past its county line, and the inventory
+    # follows it: the box spans the detached airport parcel to the north-east
+    # and the Denver Mountain Parks system 40 miles west -- Red Rocks, Genesee,
+    # Echo Lake, Evergreen Golf Course -- which is Denver-owned land carrying
+    # 3,700 city-maintained trees.  A box drawn to the county line dropped all
+    # of them as bad coordinates.  These bounds exist to catch a geocoding
+    # error, not to assert a municipal boundary.
+    "USDEN": (39.45, 39.95, -105.65, -104.55),
     # The whole island (community submissions can come from anywhere on it),
     # including Antimilos to the northwest.
     "GRMLO": (36.55, 36.90, 24.15, 24.65),

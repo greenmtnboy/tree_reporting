@@ -281,6 +281,43 @@ class TestSanitizeSpecies:
         assert sanitize_species("Crateagus monogyna") == "Crateagus monogyna"
         assert sanitize_species("Sequioa sempervirens") == "Sequioa sempervirens"
 
+    def test_a_hyphenated_epithet_survives(self):
+        """A hyphen is legal in a specific epithet, and several are street trees.
+
+        `str.isalpha()` rejected every one, so each collapsed onto its bare
+        genus and silently merged with every other species in it -- cockspur
+        hawthorn became an undifferentiated `Crataegus`.
+        """
+        assert sanitize_species("Crataegus crus-galli") == "Crataegus crus-galli"
+        assert sanitize_species("Vaccinium vitis-idaea") == "Vaccinium vitis-idaea"
+        assert sanitize_species("Coix lacryma-jobi") == "Coix lacryma-jobi"
+
+    def test_a_hyphen_does_not_admit_a_cultivar_code(self):
+        """One internal hyphen with letters on both sides, and no more."""
+        assert sanitize_species("Ulmus parvifolia 'Emer-II'") == "Ulmus parvifolia"
+        assert sanitize_species("Acer rubrum jfs-ks-x") == "Acer rubrum"
+        assert sanitize_species("Acer rubrum -galli") == "Acer rubrum"
+
+    def test_a_digit_in_the_cultivar_does_not_lose_the_binomial(self):
+        """The digit check asks only what is left after the cultivar comes off.
+
+        It used to run on the whole value, so whether a real name survived came
+        down to whether its nurseryman's cultivar code happened to contain a
+        number -- 'Caddo' lived and 'JFS-Caddo2' was dropped entirely.
+        """
+        assert sanitize_species("Acer saccharum 'Caddo'") == "Acer saccharum"
+        assert sanitize_species("Acer saccharum 'JFS-Caddo2'") == "Acer saccharum"
+        assert sanitize_species("Ulmus parvifolia 'Emer II'") == "Ulmus parvifolia"
+
+    def test_a_digit_outside_a_cultivar_is_still_not_a_taxon(self):
+        assert sanitize_species("Quercus 2") is None
+        assert sanitize_species("Site 1234") is None
+
+    def test_free_typed_uncertainty_is_still_rejected(self):
+        """The " or " check has to stay ahead of the cultivar truncation."""
+        assert sanitize_species("Serviceberry or dogwood?") is None
+        assert sanitize_species("Pin oak?") is None
+
 
 # ---------------------------------------------------------------------------
 # normalize_species_parts
@@ -842,6 +879,62 @@ class TestEnforceTreeSchemaSpecies:
         err = capsys.readouterr().err
         assert "species cleanup" in err
         assert "1 value(s)" in err
+
+
+class TestTreeIdGrain:
+    """`tree_id` is the declared grain, and nothing else checks it.
+
+    A repeat does not error anywhere -- it fans out the joins Trilogy builds on
+    that grain, so the city's Parquet comes back with more rows than the portal
+    published and every count on the map is quietly wrong.
+    """
+
+    def _table(self, ids):
+        return pa.table(
+            {
+                "tree_id": pa.array(ids, type=pa.string()),
+                "city": pa.array(["USDEN"] * len(ids)),
+                "species": pa.array(["Acer rubrum"] * len(ids)),
+            }
+        )
+
+    def test_a_repeat_raises_when_the_city_opts_in(self):
+        with pytest.raises(ValueError, match="declared grain"):
+            enforce_tree_schema(
+                self._table(["den-1", "den-2", "den-1"]),
+                city="Denver",
+                data_source="DENVER_OPENDATA",
+                unique_tree_ids=True,
+            )
+
+    def test_a_repeat_only_warns_by_default(self, capsys):
+        """Off by default: the cities predating the check are unmeasured."""
+        out = enforce_tree_schema(
+            self._table(["den-1", "den-2", "den-1"]),
+            city="Denver",
+            data_source="DENVER_OPENDATA",
+        )
+        assert out.num_rows == 3
+        assert "declared grain" in capsys.readouterr().err
+
+    def test_unique_ids_pass(self):
+        out = enforce_tree_schema(
+            self._table(["den-1", "den-2", "den-3"]),
+            city="Denver",
+            data_source="DENVER_OPENDATA",
+            unique_tree_ids=True,
+        )
+        assert out.num_rows == 3
+
+    def test_repeated_nulls_are_not_a_repeat(self):
+        """A null id is a different problem, and the required-column check owns it."""
+        out = enforce_tree_schema(
+            self._table(["den-1", None, None]),
+            city="Denver",
+            data_source="DENVER_OPENDATA",
+            unique_tree_ids=True,
+        )
+        assert out.num_rows == 3
 
 
 class TestEnforceTreeSchema:
