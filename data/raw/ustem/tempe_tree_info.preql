@@ -123,4 +123,5 @@ partial datasource tempe_tree_info (
 grain (tree_id)
 complete where city = 'USTEM'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ustem_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ustem_tree_info_v{data_version}.parquet`
+where tree_id = cluster_id
 freshness by ustem_published_data_updated_through;

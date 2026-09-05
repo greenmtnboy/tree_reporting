@@ -123,4 +123,5 @@ partial datasource denver_tree_info (
 grain (tree_id)
 complete where city = 'USDEN'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usden_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usden_tree_info_v{data_version}.parquet`
+where tree_id = cluster_id
 freshness by usden_published_data_updated_through;

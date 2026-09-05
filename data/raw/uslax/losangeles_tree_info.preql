@@ -122,4 +122,5 @@ partial datasource losangeles_tree_info (
 grain (tree_id)
 complete where city = 'USLAX'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslax_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uslax_tree_info_v{data_version}.parquet`
+where tree_id = cluster_id
 freshness by uslax_published_data_updated_through;

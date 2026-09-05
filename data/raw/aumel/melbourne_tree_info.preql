@@ -123,4 +123,5 @@ partial datasource melbourne_tree_info (
 grain (tree_id)
 complete where city = 'AUMEL'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aumel_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/aumel_tree_info_v{data_version}.parquet`
+where tree_id = cluster_id
 freshness by aumel_published_data_updated_through;

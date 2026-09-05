@@ -113,4 +113,5 @@ partial datasource santorini_tree_info (
 grain (tree_id)
 complete where city = 'GRSAN'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grsan_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grsan_tree_info_v{data_version}.parquet`
+where tree_id = cluster_id
 freshness by grsan_published_data_updated_through;

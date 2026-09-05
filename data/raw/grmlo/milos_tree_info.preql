@@ -111,4 +111,5 @@ partial datasource milos_tree_info (
 grain (tree_id)
 complete where city = 'GRMLO'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grmlo_tree_info_v{data_version}.parquet`
+where tree_id = cluster_id
 freshness by grmlo_published_data_updated_through;
