@@ -110,6 +110,11 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert 'className = "street-view-button"' in html
     assert "streetViewButton.disabled = multiSelect" in html
     assert "https://www.google.com/maps/@?" in html
+    assert "const streetViewEmbedApiKey = null;" in html
+    assert "https://www.google.com/maps/embed/v1/streetview?" in html
+    assert 'className = "street-view-panel"' in html
+    assert 'referrerPolicy = "strict-origin-when-cross-origin"' in html
+    assert "card.append(head, wrap, streetViewPanel" in html
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
     assert manifest["metadata"]["test_labels_included"] is False
     assert manifest["metadata"]["rendered_scenes"] == len(manifest["scenes"])

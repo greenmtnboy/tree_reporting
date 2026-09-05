@@ -112,6 +112,11 @@ Open `http://127.0.0.1:8765`; the Model Studio landing page links registration c
 available model-validation run. Registration samples default to aligned, so only exceptions need
 attention. The server auto-detects validation artifacts for the configured experiment; use
 `--evaluation-dir` to inspect a different run.
+In full-screen registration review, **Street View** can open an interactive panorama beside the
+overhead tile. Enable the Google Maps Embed API, restrict its browser API key to the review
+server's origin, and expose it only to the server process as `GOOGLE_MAPS_EMBED_API_KEY` (for
+example, `uv run --env-file .env urban-tree-ml qa serve ...`). Embed requests are lazy-loaded for
+the selected tree. If the variable is absent, the control retains its external Google Maps link.
 Every served save also refreshes a compact annotation bundle under
 `$TREE_ML_ANNOTATIONS_ROOT/<city>/<review-id>/`. Set that variable to the `annotations` directory
 of a local [`arborary-world/training-data`](https://github.com/arborary-world/training-data)
