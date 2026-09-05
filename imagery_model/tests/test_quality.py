@@ -8,7 +8,12 @@ from pyproj import Transformer
 from rasterio.transform import from_origin
 
 from urban_tree_ml.config import load_config
-from urban_tree_ml.quality import build_registration_review
+from urban_tree_ml.quality import (
+    append_validation_chip_to_registration_review,
+    build_registration_review,
+    refresh_registration_heuristics,
+    render_registration_review_html,
+)
 
 
 def _write_qa_fixture(root: Path) -> Path:
@@ -20,6 +25,7 @@ def _write_qa_fixture(root: Path) -> Path:
     coordinates = [
         inverse.transform(origin_x + col * 0.6, origin_y - row * 0.6) for col, row in pixels
     ]
+    coordinates[1] = coordinates[0]
     splits = ["train"] * 6 + ["validation"] * 4 + ["test"] * 2
     pd.DataFrame(
         {
@@ -76,14 +82,54 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "localStorage" in html
     assert 'status: "aligned"' in html
     assert "Each numbered ring is one inventory tree" in html
-    assert 'status: "offset", image_x: x' in html
+    assert 'status: "offset", source: "human", image_x: x' in html
     assert "Reset all to aligned" in html
     assert "How should I classify ambiguous trees?" in html
+    assert '<option value="duplicate">Duplicate</option>' in html
+    assert "mark only the extra record(s) duplicate" in html
     assert "It will be excluded from supervision" in html
     assert "Full screen" in html
     assert 'classList.add("fullscreen")' in html
+    assert 'className = "scene-next fullscreen-only"' in html
+    assert 'event.key === "ArrowRight"' in html
+    assert 'event.key === "ArrowLeft"' in html
     assert 'id="coverage-filter"' in html
+    assert 'id="scene-status-filter"' in html
+    assert 'statusFilter.value === "unreviewed"' in html
+    assert "? !sceneDone : statusOf(sample.sample_id)" in html
+    assert 'className = "done-button"' in html
+    assert 'className = "heuristic-button"' in html
+    assert 'className = "select-all-button"' in html
+    assert 'id="show-stacks"' in html
+    assert "Check non-veg" in html
+    assert "images done" in html
+    assert "scene_reviews: sceneReviews" in html
+    assert "repeat(auto-fill, minmax(38px, 1fr))" in html
     assert "Tile seams" in html
+    assert "event.shiftKey" in html
+    assert "selectedByScene" in html
+    assert "Center marking is disabled for a multi-selection." in html
+    assert "selectionFor(scene.scene_id).size !== 1" in html
+    assert 'a: "aligned", n: "not-tree", u: "uncertain", d: "duplicate"' in html
+    assert 'map_action: "pano"' in html
+    assert "https://www.google.com/maps/@?" in html
+    assert "const streetViewEmbedApiKey = null;" in html
+    assert "https://www.google.com/maps/embed/v1/streetview?" in html
+    assert 'className = "street-view-panel"' in html
+    assert 'referrerPolicy = "strict-origin-when-cross-origin"' in html
+    assert "card.append(head, wrap, streetViewPanel" in html
+    assert "maps.googleapis.com/maps/api/streetview/metadata?" in html
+    assert "bearingDegrees(location" in html
+    assert 'className = "street-view-camera"' in html
+    assert 'className = "street-view-interaction"' in html
+    assert 'streetViewFrame.classList.add("locked")' in html
+    assert 'card.classList.add("street-view-open")' in html
+    assert 'card.classList.contains("fullscreen")' in html
+    assert 'className = "street-view-button"' not in html
+    assert 'className = "tree-species-label"' in html
+    assert 'sample.species || "Unknown species"' in html
+    assert '.card.fullscreen .tree-species-label' in html
+    assert 'label.dataset.status = statusOf(label.dataset.sampleId)' in html
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
     assert manifest["metadata"]["test_labels_included"] is False
     assert manifest["metadata"]["rendered_scenes"] == len(manifest["scenes"])
@@ -92,12 +138,11 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
         sample_id for scene in manifest["scenes"] for sample_id in scene["sample_ids"]
     }
     assert any(scene["tree_count"] > 1 for scene in manifest["scenes"])
-    assert len({sample["image"] for sample in manifest["samples"]}) == len(
-        manifest["scenes"]
-    )
+    assert manifest["metadata"]["vegetation_heuristic"]["action_status"] == "uncertain"
+    assert all("vegetation_heuristic" in sample for sample in manifest["samples"])
+    assert len({sample["image"] for sample in manifest["samples"]}) == len(manifest["scenes"])
     assert all(
-        (Path(result["html"]).parent / scene["image"]).exists()
-        for scene in manifest["scenes"]
+        (Path(result["html"]).parent / scene["image"]).exists() for scene in manifest["scenes"]
     )
 
 
@@ -117,6 +162,144 @@ def test_registration_review_requires_explicit_opt_in_for_test_labels(tmp_path: 
 
     assert result["test_labels_included"] is True
     assert result["splits"]["test"] == 2
+    manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+    assert manifest["metadata"]["coordinate_stack_groups"] == 1
+    assert manifest["metadata"]["coordinate_stack_points"] == 2
+
+
+def test_registration_review_extension_preserves_existing_ids_and_reviews(
+    tmp_path: Path,
+) -> None:
+    config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
+    config.paths.root = tmp_path / "artifacts"
+    raster_path = _write_qa_fixture(config.paths.root)
+    initial = build_registration_review(config, raster_path, samples=6, window_pixels=64)
+    review_dir = Path(initial["html"]).parent
+    initial_manifest = json.loads(Path(initial["manifest"]).read_text(encoding="utf-8"))
+    reviews_path = review_dir / "reviews.json"
+    reviews_path.write_text(
+        json.dumps({"reviews": {"sample-0000": {"status": "offset"}}}),
+        encoding="utf-8",
+    )
+    reviews_before = reviews_path.read_bytes()
+
+    extended = build_registration_review(
+        config,
+        raster_path,
+        samples=16,
+        window_pixels=64,
+        output_dir=review_dir,
+        extend_existing=True,
+    )
+
+    extended_manifest = json.loads(Path(extended["manifest"]).read_text(encoding="utf-8"))
+    assert extended["extended"] is True
+    assert extended["added_scenes"] > 0
+    assert (
+        extended_manifest["samples"][: len(initial_manifest["samples"])]
+        == initial_manifest["samples"]
+    )
+    assert (
+        extended_manifest["scenes"][: len(initial_manifest["scenes"])] == initial_manifest["scenes"]
+    )
+    assert reviews_path.read_bytes() == reviews_before
+    assert extended_manifest["metadata"]["extended_from_samples"] == initial["samples"]
+    assert extended_manifest["metadata"]["extended_from_scenes"] == initial["scenes"]
+
+
+def test_validation_chip_enters_existing_registration_review(tmp_path: Path) -> None:
+    config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
+    config.paths.root = tmp_path / "artifacts"
+    raster_path = _write_qa_fixture(config.paths.root)
+    initial = build_registration_review(config, raster_path, samples=4, window_pixels=64)
+    review_dir = Path(initial["html"]).parent
+    manifest_before = json.loads(Path(initial["manifest"]).read_text(encoding="utf-8"))
+    existing_tree_ids = {sample["tree_id"] for sample in manifest_before["samples"]}
+    inventory = pd.read_parquet(config.paths.root / "inventory" / "ussfo" / "inventory.parquet")
+    row = inventory[
+        inventory["split"].isin(["train", "validation"])
+        & ~inventory["tree_id"].isin(existing_tree_ids)
+    ].iloc[0]
+    with rasterio.open(raster_path) as source:
+        transformer = Transformer.from_crs("EPSG:4326", source.crs, always_xy=True)
+        x, y = transformer.transform(row.longitude, row.latitude)
+        pixel_col, pixel_row = (~source.transform) * (x, y)
+    truth = pd.DataFrame(
+        [
+            {
+                "tree_id": row.tree_id,
+                "split": row.split,
+                "species": row.species,
+                "genus": row.genus,
+                "dbh_in": row.diameter_at_breast_height,
+                "longitude": row.longitude,
+                "latitude": row.latitude,
+                "pixel_col": pixel_col,
+                "pixel_row": pixel_row,
+            }
+        ]
+    )
+
+    added = append_validation_chip_to_registration_review(
+        config,
+        raster_path,
+        review_dir,
+        "r000000_c000000",
+        truth,
+    )
+    repeated = append_validation_chip_to_registration_review(
+        config,
+        raster_path,
+        review_dir,
+        "r000000_c000000",
+        truth,
+    )
+
+    manifest = json.loads((review_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert added["added"] is True
+    assert repeated == {"scene_id": added["scene_id"], "added": False}
+    assert len(manifest["samples"]) == len(manifest_before["samples"]) + 1
+    scene = next(scene for scene in manifest["scenes"] if scene["scene_id"] == added["scene_id"])
+    assert scene["validation_chip_id"] == "r000000_c000000"
+    assert (review_dir / scene["image"]).exists()
+    html = (review_dir / "index.html").read_text(encoding="utf-8")
+    assert "requestedSceneId" in html
+    assert "setExpanded(requestedCard, true)" in html
+    assert "Back to validation" in html
+    assert "location.href = curationReturn" in html
+    assert 'className = "prediction-marker"' in html
+    assert "/api/model/chip/" in html
+    assert "loadPredictionOverlay(card" in html
+    rerendered = render_registration_review_html(review_dir)
+    assert 'className = "prediction-marker"' in rerendered
+    assert '"validation_chip_id":"r000000_c000000"' in rerendered
+
+
+def test_heuristic_refresh_preserves_existing_reviews(tmp_path: Path) -> None:
+    config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
+    config.paths.root = tmp_path / "artifacts"
+    raster_path = _write_qa_fixture(config.paths.root)
+    result = build_registration_review(config, raster_path, samples=6, window_pixels=64)
+    review_dir = Path(result["html"]).parent
+    reviews_path = review_dir / "reviews.json"
+    reviews_path.write_text(
+        json.dumps({"reviews": {"sample-0000": {"status": "uncertain"}}}),
+        encoding="utf-8",
+    )
+    before = reviews_path.read_bytes()
+
+    refreshed = refresh_registration_heuristics(
+        config,
+        raster_path,
+        review_dir=review_dir,
+    )
+
+    assert refreshed["samples"] == result["samples"]
+    assert refreshed["reviews_preserved"] is True
+    assert reviews_path.read_bytes() == before
+    manifest = json.loads(Path(refreshed["manifest"]).read_text(encoding="utf-8"))
+    assert all("vegetation_heuristic" in sample for sample in manifest["samples"])
+    assert "heuristics_refreshed_at" in manifest["metadata"]
 
 
 def test_registration_review_prioritizes_and_records_mosaic_seams(tmp_path: Path) -> None:

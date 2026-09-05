@@ -91,21 +91,73 @@ uv run urban-tree-ml qa registration \
   --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif \
   --samples 100
 
+uv run urban-tree-ml qa heuristics \
+  --config configs/sf_naip_baseline.yaml \
+  --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif
+
 uv run urban-tree-ml qa serve \
   --config configs/sf_naip_baseline.yaml \
   --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif
 ```
 
-Open `http://127.0.0.1:8765`; the Model Studio landing page links registration curation and any
-available model-validation run. Registration samples default to aligned, so only exceptions need
-attention. The server auto-detects validation artifacts for the configured experiment; use
-`--evaluation-dir` to inspect a different run.
+`qa heuristics` enriches an existing review manifest with a conservative RGB-NIR profile without
+changing its scenes, sample IDs, or saved reviews. In the UI, **Check non-veg** only previews
+low-NIR gray candidates. A second click explicitly marks those candidates `uncertain`, and the
+same control can undo the batch. Exact-coordinate stacks are hidden because the configured
+collision policy excludes unresolved stacks from supervision; **Show stacked** exposes them for
+source-data inspection or manual splitting with explicit offsets. City-specific passes can set `--profile-id`,
+`--ndvi-p90-max`, and `--gray-fraction-min` while retaining provenance on applied decisions.
+
+Open `http://127.0.0.1:8765`; the Model Studio landing page links registration curation, run
+history, and model validation. The run-history view discovers every sibling
+`runs/*/evaluation/validation` bundle, charts compatible datasets over time, and links each row to
+its validation explorer. A chip ID can also be compared across every run. From either chip view,
+**Curate this chip** adds previously unseen inventory points to the same registration manifest and
+opens that scene directly in the fullscreen reviewer; saves and finalization continue through the
+existing annotation bundle. Registration samples default to aligned, so only exceptions need
+attention. `--evaluation-dir` chooses the initially selected run and the sibling run directory to
+scan.
+Full-screen registration review automatically opens an interactive Street View panorama beside the
+overhead tile and retargets it whenever a numbered tree is selected. Enable the Google Maps Embed
+API, restrict its browser API key to the review server's origin, and expose it only to the server
+process as `GOOGLE_MAPS_EMBED_API_KEY` (for example,
+`uv run --env-file .env urban-tree-ml qa serve ...`). Embed requests remain lazy-loaded until a
+full-screen image is opened. If the variable is absent, full-screen review remains overhead-only.
+The fullscreen overhead tile lightly labels every visible inventory marker with its species;
+the active tree is emphasized and duplicate verdicts are purple-tinted for comparison.
+When Street View Static API is also enabled for the browser key, the reviewer resolves the actual
+nearest panorama location, aims its initial heading toward the selected tree, and draws that camera
+and view direction over the overhead tile. The iframe is interaction-locked by default so the cone
+remains truthful; **Unlock** permits free panorama navigation while leaving the cone labeled as the
+initial view. Metadata-only requests do not consume Street View Static quota.
+Every served save also refreshes a compact annotation bundle under
+`$TREE_ML_ANNOTATIONS_ROOT/<city>/<review-id>/`. Set that variable to the `annotations` directory
+of a local [`arborary-world/training-data`](https://github.com/arborary-world/training-data)
+checkout. The bundle contains the normalized reviews, their exact sample manifest, and checksums,
+but no NAIP pixels. Commit and push that data repository periodically during a long review. If the
+variable is unset, bundles fall back to this package's Git-ignored `annotations/` directory. To
+create the bundle without running the UI, use:
+
+```bash
+uv run urban-tree-ml qa snapshot \
+  --config configs/sf_naip_citywide.yaml \
+  --raster artifacts/imagery/ussfo/2022/ussfo-2022-mosaic.vrt
+```
+
 Each numbered ring selects an inventory tree in the shared image. Click its apparent tree center
-to mark it offset, or use the buttons to mark it aligned, not-tree, or uncertain. Finalization
-turns each explicit offset into an exact correction for that reviewed tree, estimates the
+to mark it offset, or use the buttons to mark it aligned, not-tree, uncertain, or duplicate.
+Finalization turns each explicit offset into an exact correction for that reviewed tree, estimates the
 tile-wide correction from training reviews only, reports validation residuals, and records
-`not-tree`/`uncertain` points as supervision exclusions. It never mutates the source inventory or
-uses test reviews.
+`not-tree`/`uncertain`/`duplicate` points as supervision exclusions. It never mutates the source
+inventory or uses test reviews. Finalization also places `training-feedback.json` in the tracked
+training-data bundle. Later edits invalidate and remove that derived file from the bundle until the
+reviews are finalized again.
+Use a scene's **Full screen** control for dense or visually ambiguous imagery. The Previous/Next
+buttons and Left/Right Arrow keys move through the scenes allowed by the active filters while all
+marker and feedback controls remain available. Arrow keys are left alone while editing a note or
+using a form control. Shift-click markers or numbered selectors to build a multi-selection, or use
+**Select all**; classification buttons then update the selection together, while image-click offset
+marking is disabled. In full-screen mode, A/N/U/D apply aligned/not-tree/uncertain/duplicate.
 
 Real-tile materialization is intended for Lambda, not a local smoke test. Chip building
 automatically applies the finalized `training-feedback.json`; pass `--without-feedback` only for
@@ -170,6 +222,97 @@ uv run urban-tree-ml qa registration \
   --raster "$TREE_ML_DATA_ROOT/imagery/ussfo/2022/ussfo-2022-mosaic.vrt" \
   --samples 160
 ```
+
+After completing the grouped registration pass, use `configs/sf_naip_citywide_curated.yaml` for
+the controlled uplift run. It keeps every citywide training and evaluation setting fixed while
+writing checkpoints to a distinct experiment directory; rebuild the shared citywide chips from
+the newly finalized feedback before training.
+
+## External-city validation: Boston
+
+Boston is the first cross-city transfer cohort. It is deliberately **not** merged into the SF
+validation split or used for early stopping. `configs/boston_naip_external.yaml` gives Boston its
+own inventory, spatial splits, imagery, chips, reviews, and dataset identity while pinning the SF
+training taxonomy and normalization statistics. That lets the same checkpoint answer three
+separate questions:
+
+- can it detect Boston inventory trees at all;
+- does DBH transfer for trees with credible measurements; and
+- how well does the fixed SF vocabulary transfer where Boston labels overlap it?
+
+Inventory export reports genus and species out-of-vocabulary counts in
+`inventory/usbos/summary.json`; OOV Boston taxa remain detection/DBH examples but are masked out of
+the corresponding classification metric. Never rebuild a Boston-derived taxonomy for this
+cohort, because that would change the checkpoint's output classes.
+
+Start with a bounded 2023 footprint instead of downloading the entire city. The index command
+reports item counts by year and the twelve tiles containing the most inventory points. Choose
+roughly 6–12 adjacent, tree-dense tiles from that list. The checked-in config pins the initial
+eight-tile footprint so acquisition and mosaicking remain reproducible:
+
+```bash
+cd imagery_model
+uv run urban-tree-ml inventory export --config configs/boston_naip_external.yaml
+uv run urban-tree-ml imagery index --config configs/boston_naip_external.yaml
+uv run urban-tree-ml imagery fetch-selected --config configs/boston_naip_external.yaml
+uv run urban-tree-ml imagery mosaic \
+  --config configs/boston_naip_external.yaml \
+  --year 2023 \
+  --output "$TREE_ML_DATA_ROOT/imagery/usbos/2023/usbos-2023-external.vrt"
+```
+
+Massachusetts 2023 NAIP is native 0.3 m imagery. The Boston config records that acquisition
+resolution separately and the VRT averages it onto the SF model's 0.6 m grid. This keeps the
+checkpoint's physical field of view and meter-based decoder geometry unchanged.
+
+Then run the same registration, heuristic, serving, finalization, and chip-build workflow with the
+Boston config and VRT. Use a Boston-specific annotation checkout path under
+`$TREE_ML_ANNOTATIONS_ROOT/usbos/`; the training-data repository stores only manifests and review
+decisions, never NAIP pixels.
+
+Evaluation writes the Boston cohort into the existing SF training run rather than creating a
+second model run:
+
+```bash
+uv run urban-tree-ml chips build \
+  --config configs/boston_naip_external.yaml \
+  --raster "$TREE_ML_DATA_ROOT/imagery/usbos/2023/usbos-2023-external.vrt"
+
+uv run urban-tree-ml evaluate \
+  --config configs/boston_naip_external.yaml \
+  --checkpoint "$TREE_ML_DATA_ROOT/runs/<SF_RUN>/checkpoints/<BEST>.ckpt" \
+  --split validation \
+  --cohort external-usbos
+```
+
+The Model Studio discovers every `runs/*/evaluation/*` cohort and labels it by city and cohort.
+Chip comparisons are restricted to the same city and dataset because identical grid-style chip
+IDs from two rasters do not identify the same geography. A cohort opened from another city's
+server remains viewable, but its curation action is disabled; serve Boston's own registration
+review and raster before writing Boston feedback.
+
+On Lambda, the two-stage wrapper keeps acquisition separate from the post-curation evaluation and
+never launches a new training run:
+
+```bash
+export TREE_ML_DATA_ROOT=/lambda/nfs/<FILESYSTEM_NAME>/urban-tree-ml
+bash lambda/external-city.sh configs/boston_naip_external.yaml acquire
+
+# After syncing/finalizing the Boston review bundle back onto the filesystem:
+export TREE_ML_CHECKPOINT="$TREE_ML_DATA_ROOT/runs/<SF_RUN>/checkpoints/<BEST>.ckpt"
+bash lambda/external-city.sh configs/boston_naip_external.yaml evaluate
+```
+
+The acquire stage does not request GPU access inside Docker. The evaluate stage requires the GPU,
+writes `evaluation/external-usbos` beneath the referenced SF run, and exits when evaluation is
+complete. Instance termination remains the responsibility of the outer Lambda launcher so a shell
+failure cannot masquerade as a successful teardown.
+
+To grow a review after labeling has started, use `--extend-existing` with the same raster,
+window size, and development/test policy. The existing scene and sample IDs, rendered images,
+and `reviews.json` are preserved; only previously unseen spatial scenes are appended. Increasing
+`--samples` to 480 grows the balanced review to about 120 scenes. Re-finalize training feedback
+after an extension because the prior feedback was pinned to the old manifest.
 
 Finalize that citywide registration review before materializing chips. This separately checks
 alignment across the tile footprint while keeping the test partition out of the review.

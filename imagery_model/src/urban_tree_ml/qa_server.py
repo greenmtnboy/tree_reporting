@@ -1,26 +1,76 @@
 from __future__ import annotations
 
 import json
+import os
 from functools import partial
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 
 from urban_tree_ml.config import ProjectConfig
 from urban_tree_ml.feedback import (
     finalize_registration_feedback,
     load_persisted_reviews,
     persist_review_payload,
+    snapshot_registration_annotations,
 )
 from urban_tree_ml.model_debug import (
+    CHIP_COMPARE_HTML,
     MODEL_DEBUG_HTML,
-    ModelDebugBundle,
+    RUN_HISTORY_HTML,
+    RunDebugCatalog,
     inject_studio_navigation,
     render_studio_home,
 )
+from urban_tree_ml.quality import (
+    append_validation_chip_to_registration_review,
+    render_registration_review_html,
+)
 
 _MAX_REVIEW_PAYLOAD_BYTES = 2 * 1024 * 1024
+_CURATION_RETURN_PATHS = frozenset({"/registration", "/runs", "/compare", "/model"})
+
+
+def _safe_curation_return(value: str | None) -> str:
+    if not value:
+        return "/registration"
+    parsed = urlsplit(value)
+    if parsed.scheme or parsed.netloc or parsed.path not in _CURATION_RETURN_PATHS:
+        return "/registration"
+    return parsed.path + (f"?{parsed.query}" if parsed.query else "")
+
+
+def _validation_chip_review_status(review_dir: str | Path) -> dict[str, object]:
+    directory = Path(review_dir)
+    manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    scenes = manifest.get("scenes", [])
+    if not isinstance(scenes, list):
+        raise ValueError("registration review scenes must be a list")
+    scene_reviews = load_persisted_reviews(directory).get("scene_reviews", {})
+    if not isinstance(scene_reviews, dict):
+        scene_reviews = {}
+    chips: dict[str, dict[str, object]] = {}
+    for scene in scenes:
+        if not isinstance(scene, dict) or not scene.get("validation_chip_id"):
+            continue
+        scene_id = str(scene["scene_id"])
+        chips[str(scene["validation_chip_id"])] = {
+            "scene_id": scene_id,
+            "reviewed": bool(scene_reviews.get(scene_id, {}).get("done")),
+        }
+    return {"chips": chips}
+
+
+def _inject_street_view_embed_key(html: str, api_key: str | None) -> str:
+    if not api_key:
+        return html
+    encoded_key = json.dumps(api_key).replace("<", "\\u003c")
+    return html.replace(
+        "const streetViewEmbedApiKey = null;",
+        f"const streetViewEmbedApiKey = {encoded_key};",
+        1,
+    )
 
 
 def serve_registration_review(
@@ -53,12 +103,13 @@ def serve_registration_review(
             / "validation"
         ).resolve()
     )
-    model_bundle = None
-    if evaluation_dir is not None or (selected_evaluation_dir / "metrics.json").exists():
-        model_bundle = ModelDebugBundle(config, selected_evaluation_dir, raster)
-    registration_html = inject_studio_navigation(
-        (directory / "index.html").read_text(encoding="utf-8")
-    )
+    run_catalog = RunDebugCatalog(config, selected_evaluation_dir, raster)
+
+    def registration_html() -> str:
+        return _inject_street_view_embed_key(
+            inject_studio_navigation(render_registration_review_html(directory)),
+            os.environ.get("GOOGLE_MAPS_EMBED_API_KEY"),
+        )
 
     class ReviewHandler(SimpleHTTPRequestHandler):
         def _json_response(self, status: HTTPStatus, payload: object) -> None:
@@ -103,15 +154,66 @@ def serve_registration_review(
             return payload
 
         def do_GET(self) -> None:  # noqa: N802
-            path = urlsplit(self.path).path
+            parsed = urlsplit(self.path)
+            path = parsed.path
+            query = parse_qs(parsed.query)
+            run_id = query.get("run", [None])[0]
             if path in {"/", "/index.html"}:
-                self._html_response(render_studio_home(model_bundle is not None))
+                self._html_response(render_studio_home(len(run_catalog) > 0, len(run_catalog)))
                 return
             if path in {"/registration", "/registration/"}:
-                self._html_response(registration_html)
+                self._html_response(registration_html())
+                return
+            if path in {"/runs", "/runs/"}:
+                self._html_response(RUN_HISTORY_HTML)
+                return
+            if path in {"/compare", "/compare/"}:
+                self._html_response(CHIP_COMPARE_HTML)
                 return
             if path in {"/model", "/model/"}:
                 self._html_response(MODEL_DEBUG_HTML)
+                return
+            if path == "/curate":
+                chip_id = query.get("chip", [None])[0]
+                if not chip_id:
+                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": "chip is required"})
+                    return
+                try:
+                    bundle = run_catalog.bundle(run_id)
+                    if not run_catalog.curation_available(run_id):
+                        raise ValueError(
+                            "this evaluation belongs to a different city or raster; "
+                            "serve its registration review before curating it"
+                        )
+                    threshold = float(
+                        query.get("threshold", [bundle.metrics["confidence_threshold"]])[0]
+                    )
+                    if not 0 <= threshold <= 1:
+                        raise ValueError("prediction confidence threshold must be between 0 and 1")
+                    truth = bundle.ground_truth[bundle.ground_truth["chip_id"] == chip_id].copy()
+                    result = append_validation_chip_to_registration_review(
+                        config,
+                        raster,
+                        directory,
+                        chip_id,
+                        truth,
+                    )
+                except (KeyError, OSError, ValueError) as error:
+                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    return
+                location = "/registration?" + urlencode(
+                    {
+                        "scene": str(result["scene_id"]),
+                        "fullscreen": "1",
+                        "run": bundle.evaluation_id,
+                        "threshold": f"{threshold:.6g}",
+                        "return": _safe_curation_return(query.get("return", [None])[0]),
+                    }
+                )
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", location)
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
                 return
             if path == "/api/reviews":
                 try:
@@ -120,36 +222,52 @@ def serve_registration_review(
                     self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                 return
             if path == "/api/model/summary":
-                if model_bundle is None:
-                    self._json_response(
-                        HTTPStatus.NOT_FOUND,
-                        {"error": "no validation evaluation is loaded"},
-                    )
-                else:
-                    self._json_response(HTTPStatus.OK, model_bundle.summary())
-                return
-            if path.startswith("/api/model/chip/"):
-                if model_bundle is None:
+                try:
+                    bundle = run_catalog.bundle(run_id)
+                except KeyError:
                     self._json_response(
                         HTTPStatus.NOT_FOUND,
                         {"error": "no validation evaluation is loaded"},
                     )
                     return
+                self._json_response(
+                    HTTPStatus.OK,
+                    bundle.summary()
+                    | {"curation_available": run_catalog.curation_available(run_id)},
+                )
+                return
+            if path == "/api/runs":
+                self._json_response(HTTPStatus.OK, run_catalog.summary())
+                return
+            if path == "/api/curation-status":
+                try:
+                    self._json_response(HTTPStatus.OK, _validation_chip_review_status(directory))
+                except (OSError, ValueError, json.JSONDecodeError) as error:
+                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                return
+            if path.startswith("/api/runs/chip/"):
+                chip_id = unquote(path.removeprefix("/api/runs/chip/"))
+                try:
+                    self._json_response(
+                        HTTPStatus.OK,
+                        run_catalog.chip_comparison(chip_id, run_id),
+                    )
+                except (KeyError, OSError, ValueError) as error:
+                    self._json_response(HTTPStatus.NOT_FOUND, {"error": str(error)})
+                return
+            if path.startswith("/api/model/chip/"):
                 chip_id = unquote(path.removeprefix("/api/model/chip/"))
                 try:
-                    self._json_response(HTTPStatus.OK, model_bundle.chip(chip_id))
+                    self._json_response(HTTPStatus.OK, run_catalog.bundle(run_id).chip(chip_id))
                 except KeyError as error:
                     self._json_response(HTTPStatus.NOT_FOUND, {"error": str(error)})
                 return
             if path.startswith("/api/model/image/") and path.endswith(".png"):
-                if model_bundle is None:
-                    self.send_error(HTTPStatus.NOT_FOUND)
-                    return
                 chip_id = unquote(path.removeprefix("/api/model/image/").removesuffix(".png"))
                 try:
                     self._content_response(
                         HTTPStatus.OK,
-                        model_bundle.chip_image(chip_id),
+                        run_catalog.bundle(run_id).chip_image(chip_id),
                         "image/png",
                     )
                 except KeyError:
@@ -163,6 +281,13 @@ def serve_registration_review(
                 return
             try:
                 result = persist_review_payload(directory, self._read_payload())
+                result.update(
+                    snapshot_registration_annotations(
+                        config,
+                        raster,
+                        review_dir=directory,
+                    )
+                )
                 self._json_response(HTTPStatus.OK, result)
             except (OSError, ValueError, json.JSONDecodeError) as error:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
@@ -185,7 +310,11 @@ def serve_registration_review(
     server = ThreadingHTTPServer((bind, port), handler)
     server.daemon_threads = True
     print(f"Urban Tree Model Studio: http://{bind}:{port}/", flush=True)
-    print("Registration reviews auto-save to reviews.json; Ctrl+C stops the server.", flush=True)
+    print(
+        "Registration reviews auto-save to reviews.json and the tracked annotation bundle; "
+        "Ctrl+C stops the server.",
+        flush=True,
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

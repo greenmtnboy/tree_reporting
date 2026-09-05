@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -11,10 +13,9 @@ import numpy as np
 
 from urban_tree_ml.config import ProjectConfig
 
-REVIEW_STATUSES = frozenset({"aligned", "offset", "not-tree", "uncertain"})
-_REVIEW_FIELDS = frozenset(
-    {"status", "note", "image_x", "image_y", "east_m", "north_m"}
-)
+REVIEW_STATUSES = frozenset({"aligned", "offset", "not-tree", "uncertain", "duplicate"})
+_NUMERIC_REVIEW_FIELDS = frozenset({"image_x", "image_y", "east_m", "north_m"})
+_SAFE_PATH_SEGMENT = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def _write_json_atomic(path: Path, value: object) -> None:
@@ -29,6 +30,32 @@ def _write_json_atomic(path: Path, value: object) -> None:
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _json_sha256(value: object) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _file_record(path: Path) -> dict[str, str | int]:
+    return {
+        "bytes": path.stat().st_size,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
+
+
+def _safe_path_segment(value: object, field: str) -> str:
+    segment = _SAFE_PATH_SEGMENT.sub("-", str(value)).strip("-.")
+    if not segment:
+        raise ValueError(f"annotation bundle {field} is empty")
+    return segment
+
+
+def _review_state_sha256(
+    reviews: dict[str, dict[str, object]],
+    scene_reviews: dict[str, dict[str, object]],
+) -> str:
+    return _json_sha256({"reviews": reviews, "scene_reviews": scene_reviews})
 
 
 def _read_manifest(review_dir: Path) -> dict[str, object]:
@@ -89,12 +116,57 @@ def normalize_review_payload(
         note = raw_review.get("note")
         if note is not None:
             review["note"] = str(note)[:2000]
-        for field in _REVIEW_FIELDS - {"status", "note"}:
+        source = raw_review.get("source")
+        if source is not None:
+            review["source"] = str(source)[:100]
+        heuristic_id = raw_review.get("heuristic_id")
+        if heuristic_id is not None:
+            review["heuristic_id"] = str(heuristic_id)[:200]
+        for field in _NUMERIC_REVIEW_FIELDS:
             number = _finite_optional(raw_review.get(field), field)
             if number is not None:
                 review[field] = number
         if review:
             normalized[sample_id] = review
+    return normalized
+
+
+def normalize_scene_review_payload(
+    payload: dict[str, object],
+    manifest: dict[str, object],
+) -> dict[str, dict[str, object]]:
+    """Validate persistent scene-level completion state from the review UI."""
+    raw_scene_reviews = payload.get("scene_reviews", {})
+    if raw_scene_reviews is None:
+        raw_scene_reviews = {}
+    if not isinstance(raw_scene_reviews, dict):
+        raise ValueError("scene_reviews must be an object")
+
+    scenes = manifest.get("scenes", [])
+    if not isinstance(scenes, list):
+        raise ValueError("registration review manifest scenes must be a list")
+    scene_ids = {
+        str(scene["scene_id"])
+        for scene in scenes
+        if isinstance(scene, dict) and "scene_id" in scene
+    }
+    normalized: dict[str, dict[str, object]] = {}
+    for raw_scene_id, raw_review in raw_scene_reviews.items():
+        scene_id = str(raw_scene_id)
+        if scene_id not in scene_ids:
+            raise ValueError(f"scene review refers to unknown scene {scene_id!r}")
+        if not isinstance(raw_review, dict):
+            raise ValueError(f"scene review {scene_id!r} must be an object")
+        done = raw_review.get("done")
+        if done is None or done is False:
+            continue
+        if done is not True:
+            raise ValueError(f"scene review {scene_id!r} done must be a boolean")
+        review: dict[str, object] = {"done": True}
+        completed_at = raw_review.get("completed_at")
+        if completed_at is not None:
+            review["completed_at"] = str(completed_at)[:100]
+        normalized[scene_id] = review
     return normalized
 
 
@@ -109,22 +181,33 @@ def persist_review_payload(review_dir: str | Path, payload: dict[str, object]) -
     ):
         raise ValueError("review payload does not match this registration review")
     reviews = normalize_review_payload(payload, manifest)
+    path = directory / "reviews.json"
+    if "scene_reviews" in payload:
+        scene_reviews = normalize_scene_review_payload(payload, manifest)
+    elif path.exists():
+        scene_reviews = load_persisted_reviews(directory)["scene_reviews"]
+    else:
+        scene_reviews = {}
     persisted = {
         "schema_version": 1,
         "metadata": metadata,
         "saved_at": datetime.now(UTC).isoformat(),
         "reviews": reviews,
+        "scene_reviews": scene_reviews,
     }
-    path = directory / "reviews.json"
     _write_json_atomic(path, persisted)
-    return {"path": str(path), "reviews": len(reviews)}
+    return {
+        "path": str(path),
+        "reviews": len(reviews),
+        "completed_scenes": len(scene_reviews),
+    }
 
 
 def load_persisted_reviews(review_dir: str | Path) -> dict[str, object]:
     directory = Path(review_dir)
     path = directory / "reviews.json"
     if not path.exists():
-        return {"schema_version": 1, "reviews": {}}
+        return {"schema_version": 1, "reviews": {}, "scene_reviews": {}}
     manifest = _read_manifest(directory)
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload_metadata = payload.get("metadata", {})
@@ -136,11 +219,119 @@ def load_persisted_reviews(review_dir: str | Path) -> dict[str, object]:
             "schema_version": 1,
             "metadata": manifest["metadata"],
             "reviews": {},
+            "scene_reviews": {},
         }
     return {
         "schema_version": 1,
         "metadata": manifest["metadata"],
         "reviews": normalize_review_payload(payload, manifest),
+        "scene_reviews": normalize_scene_review_payload(payload, manifest),
+    }
+
+
+def snapshot_registration_annotations(
+    config: ProjectConfig,
+    raster_path: str | Path,
+    *,
+    review_dir: str | Path | None = None,
+    reviews_path: str | Path | None = None,
+) -> dict[str, object]:
+    """Publish a compact, Git-trackable copy of registration annotations."""
+    raster = Path(raster_path).resolve()
+    directory = (
+        Path(review_dir)
+        if review_dir is not None
+        else config.paths.root / "qa" / "registration" / raster.stem
+    )
+    manifest = _read_manifest(directory)
+    metadata = manifest["metadata"]
+    if Path(str(metadata.get("source_raster", ""))).name != raster.name:
+        raise ValueError("registration review was generated for a different raster")
+
+    source_reviews = Path(reviews_path) if reviews_path is not None else directory / "reviews.json"
+    if not source_reviews.exists():
+        raise FileNotFoundError(
+            f"no saved reviews found at {source_reviews}; use the served UI or export its JSON"
+        )
+    raw_payload = json.loads(source_reviews.read_text(encoding="utf-8"))
+    payload_metadata = raw_payload.get("metadata", {})
+    if isinstance(payload_metadata, dict) and payload_metadata.get("review_id") not in (
+        None,
+        metadata.get("review_id"),
+    ):
+        raise ValueError("saved reviews do not match this registration review")
+    reviews = normalize_review_payload(raw_payload, manifest)
+    scene_reviews = normalize_scene_review_payload(raw_payload, manifest)
+    canonical_reviews = {
+        "schema_version": 1,
+        "metadata": metadata,
+        "saved_at": raw_payload.get("saved_at", datetime.now(UTC).isoformat()),
+        "reviews": reviews,
+        "scene_reviews": scene_reviews,
+    }
+
+    city = _safe_path_segment(config.inventory.city.lower(), "city")
+    review_id = _safe_path_segment(metadata.get("review_id"), "review_id")
+    bundle_dir = config.paths.annotations / city / review_id
+    manifest_path = bundle_dir / "manifest.json"
+    reviews_output_path = bundle_dir / "reviews.json"
+    _write_json_atomic(manifest_path, manifest)
+    _write_json_atomic(reviews_output_path, canonical_reviews)
+
+    state_sha256 = _review_state_sha256(reviews, scene_reviews)
+    manifest_sha256 = _json_sha256(manifest)
+    feedback_source = directory / "training-feedback.json"
+    feedback_output = bundle_dir / "training-feedback.json"
+    current_feedback = False
+    if feedback_source.exists():
+        feedback = json.loads(feedback_source.read_text(encoding="utf-8"))
+        current_feedback = (
+            feedback.get("source_reviews_sha256") == state_sha256
+            and feedback.get("source_manifest_sha256") == manifest_sha256
+        )
+        if current_feedback:
+            _write_json_atomic(feedback_output, feedback)
+    if not current_feedback:
+        feedback_output.unlink(missing_ok=True)
+
+    status_counts = {status: 0 for status in sorted(REVIEW_STATUSES)}
+    for review in reviews.values():
+        status = review.get("status")
+        if status in status_counts:
+            status_counts[str(status)] += 1
+    files = {
+        "manifest.json": _file_record(manifest_path),
+        "reviews.json": _file_record(reviews_output_path),
+    }
+    if current_feedback:
+        files["training-feedback.json"] = _file_record(feedback_output)
+    bundle = {
+        "schema_version": 1,
+        "created_at": datetime.now(UTC).isoformat(),
+        "city": config.inventory.city,
+        "dataset": config.dataset,
+        "experiment": config.experiment,
+        "review_id": metadata.get("review_id"),
+        "source_raster_name": raster.name,
+        "images_included": False,
+        "feedback_current": current_feedback,
+        "review_state_sha256": state_sha256,
+        "source_manifest_sha256": manifest_sha256,
+        "summary": {
+            "samples": len(manifest["samples"]),
+            "completed_scenes": len(scene_reviews),
+            "status_counts": status_counts,
+        },
+        "files": files,
+    }
+    bundle_path = bundle_dir / "bundle.json"
+    _write_json_atomic(bundle_path, bundle)
+    return {
+        "annotation_bundle": str(bundle_dir),
+        "bundle_manifest": str(bundle_path),
+        "feedback_current": current_feedback,
+        "reviews": len(reviews),
+        "completed_scenes": len(scene_reviews),
     }
 
 
@@ -204,16 +395,20 @@ def finalize_registration_feedback(
     ):
         raise ValueError("saved reviews do not match this registration review")
     reviews = normalize_review_payload(raw_payload, manifest)
+    scene_reviews = normalize_scene_review_payload(raw_payload, manifest)
     canonical = {
         "schema_version": 1,
         "metadata": metadata,
         "saved_at": datetime.now(UTC).isoformat(),
         "reviews": reviews,
+        "scene_reviews": scene_reviews,
     }
     _write_json_atomic(directory / "reviews.json", canonical)
 
     samples = {str(sample["sample_id"]): sample for sample in manifest["samples"]}
     status_counts = {status: 0 for status in sorted(REVIEW_STATUSES)}
+    source_counts: dict[str, int] = {}
+    heuristic_counts: dict[str, int] = {}
     training_offsets: list[tuple[float, float]] = []
     validation_offsets: list[tuple[float, float]] = []
     exclusions: list[dict[str, str]] = []
@@ -224,20 +419,27 @@ def finalize_registration_feedback(
         if status is None:
             continue
         status_counts[str(status)] += 1
+        source = str(review.get("source", "unspecified"))
+        source_counts[source] = source_counts.get(source, 0) + 1
+        if source == "heuristic":
+            heuristic_id = str(review.get("heuristic_id", "unspecified"))
+            heuristic_counts[heuristic_id] = heuristic_counts.get(heuristic_id, 0) + 1
         sample = samples[sample_id]
         split = str(sample["split"])
         if split == "test":
             ignored_test_reviews += 1
             continue
-        if status in {"not-tree", "uncertain"}:
-            exclusions.append(
-                {
-                    "tree_id": str(sample["tree_id"]),
-                    "split": split,
-                    "reason": str(status),
-                    "sample_id": sample_id,
-                }
-            )
+        if status in {"not-tree", "uncertain", "duplicate"}:
+            exclusion = {
+                "tree_id": str(sample["tree_id"]),
+                "split": split,
+                "reason": str(status),
+                "sample_id": sample_id,
+                "source": source,
+            }
+            if review.get("heuristic_id") is not None:
+                exclusion["heuristic_id"] = str(review["heuristic_id"])
+            exclusions.append(exclusion)
         else:
             offset = _offset_for_review(review)
             if status == "offset":
@@ -269,9 +471,14 @@ def finalize_registration_feedback(
         "review_id": metadata.get("review_id"),
         "source_raster_name": raster.name,
         "source_raster": str(raster),
+        "source_reviews_sha256": _review_state_sha256(reviews, scene_reviews),
+        "source_manifest_sha256": _json_sha256(manifest),
         "reviews": {
             "status_counts": status_counts,
+            "source_counts": source_counts,
+            "heuristic_counts": heuristic_counts,
             "ignored_test_reviews": ignored_test_reviews,
+            "completed_scenes": len(scene_reviews),
         },
         "registration": {
             "status": "applied" if enough_reviews else "insufficient-training-reviews",
@@ -286,8 +493,15 @@ def finalize_registration_feedback(
     }
     feedback_path = directory / "training-feedback.json"
     _write_json_atomic(feedback_path, feedback)
+    snapshot = snapshot_registration_annotations(
+        config,
+        raster,
+        review_dir=directory,
+    )
     return {
         "feedback": str(feedback_path),
+        "annotation_bundle": snapshot["annotation_bundle"],
+        "bundle_manifest": snapshot["bundle_manifest"],
         "registration_status": feedback["registration"]["status"],
         "correction_m": {"east": east_m, "north": north_m},
         "training_registration_reviews": len(training_offsets),
@@ -295,6 +509,7 @@ def finalize_registration_feedback(
         "excluded_points": len(exclusions),
         "point_corrected_points": len(point_corrections),
         "ignored_test_reviews": ignored_test_reviews,
+        "completed_scenes": len(scene_reviews),
     }
 
 

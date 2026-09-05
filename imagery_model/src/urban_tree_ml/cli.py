@@ -59,6 +59,19 @@ def imagery_fetch(
     _print(fetch_stac_item(load_config(config_path), item_id, overwrite=overwrite))
 
 
+@imagery_app.command("fetch-selected")
+def imagery_fetch_selected(
+    config_path: ConfigPath,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace existing validated rasters"),
+    ] = False,
+) -> None:
+    from urban_tree_ml.imagery import fetch_configured_stac_items
+
+    _print(fetch_configured_stac_items(load_config(config_path), overwrite=overwrite))
+
+
 @imagery_app.command("mosaic")
 def imagery_mosaic(
     config_path: ConfigPath,
@@ -162,6 +175,13 @@ def qa_registration(
             help="Review directory (defaults under artifacts)",
         ),
     ] = None,
+    extend_existing: Annotated[
+        bool,
+        typer.Option(
+            "--extend-existing",
+            help="Append new scenes while preserving existing scene/sample IDs and reviews",
+        ),
+    ] = False,
 ) -> None:
     from urban_tree_ml.quality import build_registration_review
 
@@ -173,6 +193,7 @@ def qa_registration(
             window_pixels=window_pixels,
             include_test=include_test,
             output_dir=output,
+            extend_existing=extend_existing,
         )
     )
 
@@ -209,6 +230,44 @@ def qa_serve(
         evaluation_dir=evaluation_dir,
         bind=bind,
         port=port,
+    )
+
+
+@qa_app.command("heuristics")
+def qa_heuristics(
+    config_path: ConfigPath,
+    raster: Annotated[
+        Path,
+        typer.Option("--raster", exists=True, dir_okay=False, help="Reviewed RGB-NIR raster"),
+    ],
+    review_dir: Annotated[
+        Path | None,
+        typer.Option("--review-dir", exists=True, file_okay=False),
+    ] = None,
+    profile_id: Annotated[
+        str,
+        typer.Option("--profile-id", help="Identifier persisted with heuristic decisions"),
+    ] = "naip-rgbn-conservative-gray-v1",
+    ndvi_p90_max: Annotated[
+        float,
+        typer.Option("--ndvi-p90-max", min=-1, max=1),
+    ] = -0.04,
+    gray_fraction_min: Annotated[
+        float,
+        typer.Option("--gray-fraction-min", min=0, max=1),
+    ] = 0.5,
+) -> None:
+    from urban_tree_ml.quality import refresh_registration_heuristics
+
+    _print(
+        refresh_registration_heuristics(
+            load_config(config_path),
+            raster,
+            review_dir=review_dir,
+            profile_id=profile_id,
+            ndvi_p90_max=ndvi_p90_max,
+            gray_fraction_min=gray_fraction_min,
+        )
     )
 
 
@@ -250,6 +309,39 @@ def qa_finalize(
     )
 
 
+@qa_app.command("snapshot")
+def qa_snapshot(
+    config_path: ConfigPath,
+    raster: Annotated[
+        Path,
+        typer.Option("--raster", exists=True, dir_okay=False, help="Reviewed NAIP raster"),
+    ],
+    review_dir: Annotated[
+        Path | None,
+        typer.Option("--review-dir", exists=True, file_okay=False),
+    ] = None,
+    reviews: Annotated[
+        Path | None,
+        typer.Option(
+            "--reviews",
+            exists=True,
+            dir_okay=False,
+            help="Exported review JSON; omit when reviews were saved by qa serve",
+        ),
+    ] = None,
+) -> None:
+    from urban_tree_ml.feedback import snapshot_registration_annotations
+
+    _print(
+        snapshot_registration_annotations(
+            load_config(config_path),
+            raster,
+            review_dir=review_dir,
+            reviews_path=reviews,
+        )
+    )
+
+
 @app.command("train")
 def train(
     config_path: ConfigPath,
@@ -282,6 +374,13 @@ def evaluate(
             help="Unlock the sealed test split after decisions are frozen",
         ),
     ] = False,
+    cohort: Annotated[
+        str | None,
+        typer.Option(
+            "--cohort",
+            help="Output cohort name, such as external-usbos; defaults to the split name",
+        ),
+    ] = None,
 ) -> None:
     from urban_tree_ml.evaluation import run_evaluation
 
@@ -292,6 +391,7 @@ def evaluate(
             split=split,
             device_name=device,
             allow_test=allow_test,
+            cohort=cohort,
         )
     )
 

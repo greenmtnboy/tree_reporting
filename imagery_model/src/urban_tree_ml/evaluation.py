@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import json
 import math
+import re
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from urban_tree_ml.config import ProjectConfig
+from urban_tree_ml.config import ProjectConfig, taxonomy_path
+
+_COHORT_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 
 def _greedy_matches(
@@ -299,11 +303,18 @@ def run_evaluation(
     split: str = "validation",
     device_name: str = "auto",
     allow_test: bool = False,
+    cohort: str | None = None,
 ) -> dict[str, object]:
     if split not in {"train", "validation", "test"}:
         raise ValueError("split must be train, validation, or test")
     if split == "test" and not allow_test:
         raise ValueError("test evaluation is sealed; pass --allow-test after decisions are frozen")
+    output_cohort = cohort or split
+    if _COHORT_NAME.fullmatch(output_cohort) is None:
+        raise ValueError(
+            "evaluation cohort must start with a lowercase letter or digit and contain only "
+            "lowercase letters, digits, and hyphens"
+        )
     try:
         import torch
         from torch.utils.data import DataLoader
@@ -321,10 +332,8 @@ def run_evaluation(
     labels_path = chip_root / "labels.parquet"
     if not labels_path.exists():
         raise FileNotFoundError("labels.parquet is missing; rebuild chips with the current code")
-    taxonomy_path = (
-        config.paths.root / "inventory" / config.inventory.city.lower() / "taxonomy.json"
-    )
-    taxonomy = json.loads(taxonomy_path.read_text(encoding="utf-8"))
+    selected_taxonomy_path = taxonomy_path(config)
+    taxonomy = json.loads(selected_taxonomy_path.read_text(encoding="utf-8"))
     device = (
         torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if device_name == "auto"
@@ -452,7 +461,11 @@ def run_evaluation(
             ),
         }
 
-    output_dir = config.paths.root / "runs" / config.experiment / "evaluation" / split
+    checkpoint_run_dir = (
+        checkpoint.parent.parent if checkpoint.parent.name == "checkpoints" else None
+    )
+    run_dir = checkpoint_run_dir or (config.paths.root / "runs" / config.experiment)
+    output_dir = run_dir / "evaluation" / output_cohort
     output_dir.mkdir(parents=True, exist_ok=True)
     predictions_path = output_dir / "predictions.parquet"
     matches_path = output_dir / "matches.parquet"
@@ -469,6 +482,10 @@ def run_evaluation(
     )
     result: dict[str, object] = {
         "checkpoint": str(checkpoint),
+        "run_id": run_dir.name,
+        "cohort": output_cohort,
+        "city": config.inventory.city,
+        "dataset": config.dataset,
         "split": split,
         "device": str(device),
         "chips": len(dataset),
@@ -482,7 +499,32 @@ def run_evaluation(
         "matches": str(matches_path),
         "ground_truth": str(ground_truth_path),
         "taxonomy": str(taxonomy_output_path),
+        "taxonomy_source": str(selected_taxonomy_path),
+        "normalization_source": str(chip_root / "normalization.json"),
+        "source_raster": str(source_raster) if source_raster is not None else None,
     }
+    evaluation_metadata_path = output_dir / "evaluation-metadata.json"
+    evaluation_metadata_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "created_at": datetime.now(UTC).isoformat(),
+                "run_id": run_dir.name,
+                "cohort": output_cohort,
+                "split": split,
+                "city": config.inventory.city,
+                "dataset": config.dataset,
+                "checkpoint": str(checkpoint),
+                "source_raster": str(source_raster) if source_raster is not None else None,
+                "config": config.model_dump(mode="json"),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    result["evaluation_metadata"] = str(evaluation_metadata_path)
     metrics_path = output_dir / "metrics.json"
     metrics_path.write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
