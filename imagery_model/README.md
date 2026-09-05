@@ -205,6 +205,12 @@ uv run urban-tree-ml qa registration \
   --samples 160
 ```
 
+To grow a review after labeling has started, use `--extend-existing` with the same raster,
+window size, and development/test policy. The existing scene and sample IDs, rendered images,
+and `reviews.json` are preserved; only previously unseen spatial scenes are appended. Increasing
+`--samples` to 480 grows the balanced review to about 120 scenes. Re-finalize training feedback
+after an extension because the prior feedback was pinned to the old manifest.
+
 Finalize that citywide registration review before materializing chips. This separately checks
 alignment across the tile footprint while keeping the test partition out of the review.
 It deliberately does not contain or request a Lambda API key. Terminate the GPU instance when

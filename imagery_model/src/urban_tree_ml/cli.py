@@ -162,6 +162,13 @@ def qa_registration(
             help="Review directory (defaults under artifacts)",
         ),
     ] = None,
+    extend_existing: Annotated[
+        bool,
+        typer.Option(
+            "--extend-existing",
+            help="Append new scenes while preserving existing scene/sample IDs and reviews",
+        ),
+    ] = False,
 ) -> None:
     from urban_tree_ml.quality import build_registration_review
 
@@ -173,6 +180,7 @@ def qa_registration(
             window_pixels=window_pixels,
             include_test=include_test,
             output_dir=output,
+            extend_existing=extend_existing,
         )
     )
 

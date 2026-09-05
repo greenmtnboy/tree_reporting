@@ -1124,8 +1124,10 @@ def refresh_registration_heuristics(
     metadata = manifest.get("metadata")
     samples = manifest.get("samples")
     scenes = manifest.get("scenes")
-    if not isinstance(metadata, dict) or not isinstance(samples, list) or not isinstance(
-        scenes, list
+    if (
+        not isinstance(metadata, dict)
+        or not isinstance(samples, list)
+        or not isinstance(scenes, list)
     ):
         raise ValueError("registration review manifest has an invalid shape")
     if Path(str(metadata.get("source_raster", ""))).name != raster.name:
@@ -1206,6 +1208,7 @@ def build_registration_review(
     window_pixels: int = 128,
     include_test: bool = False,
     output_dir: str | Path | None = None,
+    extend_existing: bool = False,
 ) -> dict[str, object]:
     if samples < 1:
         raise ValueError("samples must be at least one")
@@ -1220,7 +1223,7 @@ def build_registration_review(
             "Install the imagery dependency group: uv sync --group imagery"
         ) from error
 
-    source_path = Path(raster_path)
+    source_path = Path(raster_path).resolve()
     destination = (
         Path(output_dir)
         if output_dir is not None
@@ -1229,6 +1232,36 @@ def build_registration_review(
     image_dir = destination / "images"
     image_dir.mkdir(parents=True, exist_ok=True)
 
+    manifest_path = destination / "manifest.json"
+    existing_metadata: dict[str, object] = {}
+    generated: list[dict[str, object]] = []
+    generated_scenes: list[dict[str, object]] = []
+    if extend_existing:
+        if not manifest_path.exists():
+            raise FileNotFoundError(
+                f"cannot extend a registration review without a manifest: {manifest_path}"
+            )
+        existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+        existing_metadata = existing.get("metadata", {})
+        existing_samples = existing.get("samples", [])
+        existing_scenes = existing.get("scenes", [])
+        if not isinstance(existing_metadata, dict):
+            raise ValueError("existing registration metadata has an invalid shape")
+        if not isinstance(existing_samples, list) or not isinstance(existing_scenes, list):
+            raise ValueError("existing registration manifest has an invalid shape")
+        if int(existing_metadata.get("window_pixels", -1)) != window_pixels:
+            raise ValueError("existing registration review uses a different window size")
+        if bool(existing_metadata.get("test_labels_included")) != include_test:
+            raise ValueError("existing registration review uses a different test-label policy")
+        existing_raster = existing_metadata.get("source_raster")
+        if existing_raster is None or Path(str(existing_raster)).name != source_path.name:
+            raise ValueError("existing registration review was generated for a different raster")
+        generated = [dict(sample) for sample in existing_samples]
+        generated_scenes = [dict(scene) for scene in existing_scenes]
+
+    initial_sample_count = len(generated)
+    initial_scene_count = len(generated_scenes)
+
     inventory_path = (
         config.paths.root / "inventory" / config.inventory.city.lower() / "inventory.parquet"
     )
@@ -1236,8 +1269,6 @@ def build_registration_review(
     allowed_splits = ["train", "validation"] + (["test"] if include_test else [])
     frame = frame[frame["split_eligible"] & frame["split"].isin(allowed_splits)].copy()
 
-    generated: list[dict[str, object]] = []
-    generated_scenes: list[dict[str, object]] = []
     with rasterio.open(source_path) as source:
         if source.crs is None:
             raise ValueError("imagery raster must declare a CRS")
@@ -1273,6 +1304,28 @@ def build_registration_review(
                 ["scene_col", "scene_row"], sort=False
             )
         }
+        existing_samples_by_id = {str(sample["sample_id"]): sample for sample in generated}
+        scene_key_by_tree_id = {
+            str(row.tree_id): (int(row.scene_col), int(row.scene_row))
+            for row in frame.itertuples(index=False)
+        }
+        existing_scene_keys: set[tuple[int, int]] = set()
+        for scene in generated_scenes:
+            scene_sample_ids = scene.get("sample_ids", [])
+            if not isinstance(scene_sample_ids, list) or not scene_sample_ids:
+                raise ValueError("existing registration scene has no samples")
+            try:
+                keys = {
+                    scene_key_by_tree_id[str(existing_samples_by_id[str(sample_id)]["tree_id"])]
+                    for sample_id in scene_sample_ids
+                }
+            except KeyError as error:
+                raise ValueError(
+                    "existing registration sample is absent from the current inventory"
+                ) from error
+            if len(keys) != 1:
+                raise ValueError("existing registration scene no longer maps to one image window")
+            existing_scene_keys.update(keys)
         minimum_scenes = min(len(scene_groups), max(len(allowed_splits), int(np.ceil(samples / 4))))
 
         def balanced_scene_order(candidates: pd.DataFrame, seed: int) -> list[tuple[int, int]]:
@@ -1305,9 +1358,7 @@ def build_registration_review(
                 min(len(frame), max(32, seam_scene_budget * 16)),
                 "tile_seam_distance_m",
             )
-            seam_scene_keys = balanced_scene_order(seam_pool, config.seed + 1)[
-                :seam_scene_budget
-            ]
+            seam_scene_keys = balanced_scene_order(seam_pool, config.seed + 1)[:seam_scene_budget]
 
         scene_order = list(seam_scene_keys)
         for scene_key in ordered_scene_keys:
@@ -1315,6 +1366,10 @@ def build_registration_review(
                 scene_order.append(scene_key)
 
         for scene_key in scene_order:
+            if len(generated) >= samples and len(generated_scenes) >= minimum_scenes:
+                break
+            if scene_key in existing_scene_keys:
+                continue
             scene_col, scene_row = scene_key
             col_off = scene_col * window_pixels
             row_off = scene_row * window_pixels
@@ -1329,85 +1384,87 @@ def build_registration_review(
             image_name = f"{len(generated_scenes):03d}.png"
             preview.save(image_dir / image_name, format="PNG", optimize=True)
             scene_samples: list[str] = []
-            scene_frame = scene_groups[scene_key].sort_values(
-                ["pixel_row", "pixel_col", "tree_id"]
-            )
+            scene_frame = scene_groups[scene_key].sort_values(["pixel_row", "pixel_col", "tree_id"])
             scene_is_seam = scene_key in seam_scene_keys
             for row in scene_frame.itertuples(index=False):
                 sample_id = f"sample-{len(generated):04d}"
                 scene_samples.append(sample_id)
-                generated.append({
-                    "sample_id": sample_id,
-                    "scene_id": scene_id,
-                    "tree_id": str(row.tree_id),
-                    "split": str(row.split),
-                    "species": (
-                        str(row.species) if not pd.isna(row.species) else "Unknown species"
-                    ),
-                    "genus": str(row.genus) if not pd.isna(row.genus) else "Unknown genus",
-                    "dbh_in": (
-                        float(row.diameter_at_breast_height)
-                        if pd.notna(row.diameter_at_breast_height)
-                        else None
-                    ),
-                    "longitude": float(row.longitude),
-                    "latitude": float(row.latitude),
-                    "split_block_x": int(row.split_block_x),
-                    "split_block_y": int(row.split_block_y),
-                    "image": f"images/{image_name}",
-                    "image_width": window_pixels,
-                    "image_height": window_pixels,
-                    "target_x": float(row.pixel_col - col_off),
-                    "target_y": float(row.pixel_row - row_off),
-                    "vegetation_heuristic": (
-                        _vegetation_features(
-                            raw,
-                            float(row.pixel_col - col_off),
-                            float(row.pixel_row - row_off),
-                        )
-                        if raw.shape[0] >= 4
-                        else None
-                    ),
-                    "transform_a": float(source.transform.a),
-                    "transform_b": float(source.transform.b),
-                    "transform_d": float(source.transform.d),
-                    "transform_e": float(source.transform.e),
-                    "nearby_inventory_count": len(scene_frame),
-                    "valid_fraction": valid_fraction,
-                    "source_item_ids": list(row.source_item_ids),
-                    "tile_seam_distance_m": (
-                        float(row.tile_seam_distance_m)
-                        if pd.notna(row.tile_seam_distance_m)
-                        else None
-                    ),
-                    "seam_priority": scene_is_seam,
-                })
+                generated.append(
+                    {
+                        "sample_id": sample_id,
+                        "scene_id": scene_id,
+                        "tree_id": str(row.tree_id),
+                        "split": str(row.split),
+                        "species": (
+                            str(row.species) if not pd.isna(row.species) else "Unknown species"
+                        ),
+                        "genus": str(row.genus) if not pd.isna(row.genus) else "Unknown genus",
+                        "dbh_in": (
+                            float(row.diameter_at_breast_height)
+                            if pd.notna(row.diameter_at_breast_height)
+                            else None
+                        ),
+                        "longitude": float(row.longitude),
+                        "latitude": float(row.latitude),
+                        "split_block_x": int(row.split_block_x),
+                        "split_block_y": int(row.split_block_y),
+                        "image": f"images/{image_name}",
+                        "image_width": window_pixels,
+                        "image_height": window_pixels,
+                        "target_x": float(row.pixel_col - col_off),
+                        "target_y": float(row.pixel_row - row_off),
+                        "vegetation_heuristic": (
+                            _vegetation_features(
+                                raw,
+                                float(row.pixel_col - col_off),
+                                float(row.pixel_row - row_off),
+                            )
+                            if raw.shape[0] >= 4
+                            else None
+                        ),
+                        "transform_a": float(source.transform.a),
+                        "transform_b": float(source.transform.b),
+                        "transform_d": float(source.transform.d),
+                        "transform_e": float(source.transform.e),
+                        "nearby_inventory_count": len(scene_frame),
+                        "valid_fraction": valid_fraction,
+                        "source_item_ids": list(row.source_item_ids),
+                        "tile_seam_distance_m": (
+                            float(row.tile_seam_distance_m)
+                            if pd.notna(row.tile_seam_distance_m)
+                            else None
+                        ),
+                        "seam_priority": scene_is_seam,
+                    }
+                )
             seam_distances_in_scene = pd.to_numeric(
                 scene_frame["tile_seam_distance_m"], errors="coerce"
             )
-            generated_scenes.append({
-                "scene_id": scene_id,
-                "image": f"images/{image_name}",
-                "image_width": window_pixels,
-                "image_height": window_pixels,
-                "sample_ids": scene_samples,
-                "splits": sorted(scene_frame["split"].astype(str).unique()),
-                "tree_count": len(scene_samples),
-                "valid_fraction": valid_fraction,
-                "seam_priority": scene_is_seam,
-                "tile_seam_distance_m": (
-                    float(seam_distances_in_scene.min())
-                    if seam_distances_in_scene.notna().any()
-                    else None
-                ),
-                "source_item_ids": sorted(
-                    {
-                        str(item_id)
-                        for item_ids in scene_frame["source_item_ids"]
-                        for item_id in item_ids
-                    }
-                ),
-            })
+            generated_scenes.append(
+                {
+                    "scene_id": scene_id,
+                    "image": f"images/{image_name}",
+                    "image_width": window_pixels,
+                    "image_height": window_pixels,
+                    "sample_ids": scene_samples,
+                    "splits": sorted(scene_frame["split"].astype(str).unique()),
+                    "tree_count": len(scene_samples),
+                    "valid_fraction": valid_fraction,
+                    "seam_priority": scene_is_seam,
+                    "tile_seam_distance_m": (
+                        float(seam_distances_in_scene.min())
+                        if seam_distances_in_scene.notna().any()
+                        else None
+                    ),
+                    "source_item_ids": sorted(
+                        {
+                            str(item_id)
+                            for item_ids in scene_frame["source_item_ids"]
+                            for item_id in item_ids
+                        }
+                    ),
+                }
+            )
             if len(generated) >= samples and len(generated_scenes) >= minimum_scenes:
                 break
 
@@ -1424,9 +1481,11 @@ def build_registration_review(
         f"{source_path.stem}-{config.seed}-grouped-v2-"
         f"{'with-test' if include_test else 'development'}"
     )
+    now = datetime.now(UTC).isoformat()
     metadata: dict[str, object] = {
         "review_id": review_id,
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": existing_metadata.get("generated_at", now),
+        "updated_at": now,
         "source_raster": str(source_path.resolve()),
         "inventory": str(inventory_path.resolve()),
         "requested_samples": samples,
@@ -1438,9 +1497,7 @@ def build_registration_review(
         "test_labels_included": include_test,
         "mosaic_sources": mosaic_sources,
         "seam_prioritized_samples": sum(
-            int(scene["tree_count"])
-            for scene in generated_scenes
-            if scene["seam_priority"]
+            int(scene["tree_count"]) for scene in generated_scenes if scene["seam_priority"]
         ),
         "vegetation_heuristic": (
             VEGETATION_HEURISTIC_PROFILE if len(config.imagery.bands) >= 4 else None
@@ -1456,15 +1513,12 @@ def build_registration_review(
             "to verify it and do not tune against test samples."
         ),
     }
-    manifest_path = destination / "manifest.json"
-    manifest_path.write_text(
-        json.dumps(
-            {"metadata": metadata, "scenes": generated_scenes, "samples": generated},
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
+    if extend_existing:
+        metadata["extended_from_samples"] = initial_sample_count
+        metadata["extended_from_scenes"] = initial_scene_count
+    _write_json_atomic(
+        manifest_path,
+        {"metadata": metadata, "scenes": generated_scenes, "samples": generated},
     )
     html_path = destination / "index.html"
     html_path.write_text(
@@ -1479,4 +1533,7 @@ def build_registration_review(
         "html": str(html_path),
         "manifest": str(manifest_path),
         "test_labels_included": include_test,
+        "extended": extend_existing,
+        "added_samples": len(generated) - initial_sample_count,
+        "added_scenes": len(generated_scenes) - initial_scene_count,
     }

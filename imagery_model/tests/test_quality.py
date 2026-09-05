@@ -114,12 +114,9 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert any(scene["tree_count"] > 1 for scene in manifest["scenes"])
     assert manifest["metadata"]["vegetation_heuristic"]["action_status"] == "uncertain"
     assert all("vegetation_heuristic" in sample for sample in manifest["samples"])
-    assert len({sample["image"] for sample in manifest["samples"]}) == len(
-        manifest["scenes"]
-    )
+    assert len({sample["image"] for sample in manifest["samples"]}) == len(manifest["scenes"])
     assert all(
-        (Path(result["html"]).parent / scene["image"]).exists()
-        for scene in manifest["scenes"]
+        (Path(result["html"]).parent / scene["image"]).exists() for scene in manifest["scenes"]
     )
 
 
@@ -142,6 +139,46 @@ def test_registration_review_requires_explicit_opt_in_for_test_labels(tmp_path: 
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
     assert manifest["metadata"]["coordinate_stack_groups"] == 1
     assert manifest["metadata"]["coordinate_stack_points"] == 2
+
+
+def test_registration_review_extension_preserves_existing_ids_and_reviews(
+    tmp_path: Path,
+) -> None:
+    config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
+    config.paths.root = tmp_path / "artifacts"
+    raster_path = _write_qa_fixture(config.paths.root)
+    initial = build_registration_review(config, raster_path, samples=6, window_pixels=64)
+    review_dir = Path(initial["html"]).parent
+    initial_manifest = json.loads(Path(initial["manifest"]).read_text(encoding="utf-8"))
+    reviews_path = review_dir / "reviews.json"
+    reviews_path.write_text(
+        json.dumps({"reviews": {"sample-0000": {"status": "offset"}}}),
+        encoding="utf-8",
+    )
+    reviews_before = reviews_path.read_bytes()
+
+    extended = build_registration_review(
+        config,
+        raster_path,
+        samples=16,
+        window_pixels=64,
+        output_dir=review_dir,
+        extend_existing=True,
+    )
+
+    extended_manifest = json.loads(Path(extended["manifest"]).read_text(encoding="utf-8"))
+    assert extended["extended"] is True
+    assert extended["added_scenes"] > 0
+    assert (
+        extended_manifest["samples"][: len(initial_manifest["samples"])]
+        == initial_manifest["samples"]
+    )
+    assert (
+        extended_manifest["scenes"][: len(initial_manifest["scenes"])] == initial_manifest["scenes"]
+    )
+    assert reviews_path.read_bytes() == reviews_before
+    assert extended_manifest["metadata"]["extended_from_samples"] == initial["samples"]
+    assert extended_manifest["metadata"]["extended_from_scenes"] == initial["scenes"]
 
 
 def test_heuristic_refresh_preserves_existing_reviews(tmp_path: Path) -> None:
