@@ -118,7 +118,6 @@ partial datasource sf_tree_info (
     ?submission_photo_url,
     merged_sources,
     ?merged_tree_ids,
-    is_duplicate,
     ussfo_published_data_updated_through,
 )
 grain (tree_id)

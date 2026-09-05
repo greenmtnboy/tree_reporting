@@ -67,7 +67,6 @@ function rowsForSeed(seed: Seed): Array<Record<string, unknown>> {
     case 'trees':
       return FIXTURE_TREES
         .filter((tree) => !seed.city || tree.city === seed.city)
-        .map((tree) => ({ ...tree, is_duplicate: false }))
     case 'species':
       return FIXTURE_SPECIES as unknown as Array<Record<string, unknown>>
     case 'ecoregions':

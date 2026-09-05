@@ -466,21 +466,26 @@ async function loadCityTrees(city?: string): Promise<void> {
   const cityUrl = city ? cityTreeParquetUrl(city) : null
   const parquetUrl = cityUrl ?? REMOTE_TREES_PARQUET_URL
 
-  // Cross-source duplicates are flagged, not yet dropped, so hiding them is
-  // this query's job -- see the shared cluster merge in
-  // data/raw/tree_dedup.preql, and its "Intended end state" for why the
-  // absorbed rows are still in the parquet.
+  // Cross-source duplicates are dropped at the source now -- every city's
+  // published target carries `where tree_id = cluster_id`, so the parquet holds
+  // one row per tree (see data/raw/tree_dedup.preql, "The prune").
   //
-  // The column is probed rather than assumed. Selecting it unconditionally is
-  // a hard dependency on every Parquet having been rebuilt, and a Parquet that
-  // lacks it does not degrade -- DuckDB binder-errors and the city fails to
-  // load entirely. Three ways that bites: the cross-city full_tree_info
-  // fallback genuinely cannot carry the column (merging the per-city keys
-  // makes the planner resolve a city's grid aggregate over all fourteen and it
-  // fails to plan); a newly added city has no Parquet until its first refresh;
-  // and a rebuild can simply fail, which is what happened when Berlin's portal
-  // was mid-`Wartungsarbeiten` during this rollout. None of those should take
-  // a city's map down, so a missing column means "show everything" instead.
+  // This filter is what that replaced, and it is kept only for parquets built
+  // before it. The probe is what makes the two safe to mix: a pruned parquet has
+  // no `is_duplicate` column, the probe returns false, no filter is applied, and
+  // "everything" already is the survivors; a parquet still awaiting its rebuild
+  // has the column and gets filtered exactly as before. So cities can be
+  // refreshed one at a time, in any order, with no window where the map is
+  // wrong -- which is the whole reason the column was not simply dropped in the
+  // same change.
+  //
+  // It also still covers two cases that are not transitional: the cross-city
+  // full_tree_info fallback cannot carry the column at all (merging the
+  // per-city keys makes the planner resolve a city's grid aggregate over every
+  // city, and it fails to plan), and a brand-new city has no parquet until its
+  // first credentialed build.
+  //
+  // Delete this once every city has been rebuilt past the prune.
   const hasDedupFlag = await parquetHasColumn(parquetUrl, 'is_duplicate')
   const dedupFilter = hasDedupFlag ? 'AND NOT COALESCE(is_duplicate, false)' : ''
 

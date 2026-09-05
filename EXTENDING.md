@@ -450,16 +450,19 @@ Berlin (6,157) and Paris (3,906) carry enough `osm_ref` values to cross-check
 the geometric break against exact municipal-id matches; both break sharply at
 5m (18.4% and 15.9%), which is the strongest confirmation the method has.
 
-**Flagged today, pruned once the planner allows it.** The absorbed rows are
-still published, marked `is_duplicate` (the shared `tree_id != cluster_id`),
-and the browser filters them out. The intended end state is a `where tree_id
-= cluster_id` on each city's published target so the parquet holds exactly one
-row per tree and needs no client-side filter, and it is blocked upstream:
-pytrilogy 0.3.343 silently ignores a target-side `where` when it materialises
-a managed datasource, and the same prune written as `complete where ... and
-tree_id = cluster_id` fails to plan with a keyless join. The repro is in
-`upstream_repro/keyless_join_cell_aggregate/`; when it is fixed, add the
-`where`, drop the column, and drop the worker filter.
+**Pruned, not flagged.** Each city's published target carries `where tree_id
+= cluster_id`, so the parquet holds exactly one row per tree; the rows a
+cluster absorbed are never published and no client-side filter is needed to
+hide them. `merged_tree_ids` is where an absorbed id survives, so a link to
+one still resolves to its survivor.
+
+This needs **pytrilogy 0.3.348 or later** and the failure modes below it are
+quiet, which is worth knowing if the pin ever moves back: 0.3.343 parsed the
+target-side `where` and silently did not apply it, publishing every row; 0.3.347
+applied it but then required the partial partitions to be provably exhaustive
+over the whole `city` enum — which one city's partitions never are — and failed
+with `no complete sources found`. `upstream_repro/keyless_join_cell_aggregate/`
+has the three spellings and the enum toggle that isolated it.
 Because the merge is computed from the same materialization's source rows, a
 municipal update dedups against itself in the same rebuild; there is no
 staleness window.
@@ -495,27 +498,33 @@ and a `--filter 'city={CODE}'` argument to the script, which
 and emit the whole export. Write-up in
 `upstream_repro/partition_filter_dropped/`.
 
-**Every city carries the column; the frontend hides the flagged rows.** The
-flag is only useful if something reads it, and for a while nothing did: Boston's
-first OSM rebuild flagged 7,369 rows correctly and the map rendered all of them
-anyway, stacked on top of the municipal trees on Boston Common. `is_duplicate`
-is therefore published by **every** city model (it is the shared derivation in
-`tree_dedup.preql`, so importing that file and listing the column is all a city
-does) and `duckdbPipeline.worker.ts` filters with a single
-`AND NOT COALESCE(is_duplicate, false)` when it loads a city.
+**Every city must prune, and a city that does not is silent.** Dedup is only
+useful if something acts on it, and for a while nothing did: Boston's first OSM
+rebuild flagged 7,369 rows correctly and the map rendered all of them anyway,
+stacked on top of the municipal trees on Boston Common. The prune is now the
+shared derivation in `tree_dedup.preql`, so importing that file and gating the
+published target is all a city does — and a city that skips the gate still
+builds, with counts that are simply high.
+`test_every_city_prunes_absorbed_rows` is what catches that.
 
-A missing column does not degrade: DuckDB raises a binder error and that city's
-map fails to load entirely. So **refresh every city before deploying** a worker
-change that selects it. `src/src/workers/parquetSchema.test.ts` asserts the
-column against the live GCS Parquet for every city in `CITY_CONFIG`, which is
-what turns "I forgot to refresh" into a red test rather than a broken city.
-A city whose parquet does not exist *at all* (brand-new, first build pending)
-is the one carve-out: for a 404 the test instead asserts the city's model
-materialises the column, so a city-addition PR is not red until its first
-credentialed build — the hard failure is reserved for a parquet that exists
-without the column, the stale-build case the gate was written for. The flip
-side: a green build no longer proves a brand-new city's parquet exists, so a
-just-added city stays broken in a deploy until its first refresh runs.
+**Rebuilding is per city and safe in any order.** `duckdbPipeline.worker.ts`
+probes for the old `is_duplicate` column and filters only when it is present,
+so a parquet built before the prune is filtered exactly as it always was, while
+a pruned one needs no filter because its rows are already the survivors. There
+is no window in which the map is wrong, and no need to coordinate the refresh
+with a deploy. That is why the column was not dropped and the filter deleted in
+the same change; delete the filter once every city has been rebuilt past the
+prune.
+
+`src/src/workers/parquetSchema.test.ts` asserts the *absence* of the column
+against the live GCS Parquet for every city in `CITY_CONFIG` — a parquet that
+still has it predates the prune and is publishing absorbed rows, so this turns
+"I forgot to refresh" into a red test. A city whose parquet does not exist *at
+all* (brand-new, first build pending) is the one carve-out: for a 404 the test
+asserts the city's model prunes instead, so a city-addition PR is not red until
+its first credentialed build. The flip side: a green build no longer proves a
+brand-new city's parquet exists, so a just-added city stays broken in a deploy
+until its first refresh runs.
 
 **A new column does not make a Parquet stale.** Staleness is decided by the
 freshness probes, which watch the *source data*, so refreshing a city after a
@@ -539,9 +548,8 @@ object, and the rollup notices. Force it anyway if you are unsure:
 `trilogy refresh raw/full_tree_publish.preql -f full_tree_info`.
 
 **`tree_info.preql` takes the dedup columns from the parquets and derives
-nothing.** `is_duplicate`, `merged_sources` and `merged_tree_ids` are one
-shared derivation, computed inside each city's own build over that city's
-rows. Asking the planner to resolve the cluster aggregate over the union of
+nothing.** `merged_sources` and `merged_tree_ids` are one shared derivation,
+computed inside each city's own build over that city's rows. Asking the planner to resolve the cluster aggregate over the union of
 every city fails outright:
 
 ```
@@ -1110,11 +1118,11 @@ Differences from the standard runbook, all visible in
 
 Everything else is unchanged: the city still needs the enum entry in
 `core.preql`, the shared cluster merge (`import ..tree_dedup;`, a
-`DEDUP_CELL_METRES` row and the `is_duplicate` column; derived from the grids when OSM
-is wired, constant `False` otherwise), landmarks, frontend config, and
-attribution. For GRMLO's dedup the only non-OSM anchors are community
-submissions — a flag fires exactly when someone records a tree OSM already
-maps, and the submission wins, which is the intended outcome.
+`DEDUP_CELL_METRES` row and `where tree_id = cluster_id` on the published
+target), landmarks, frontend config, and attribution. For GRMLO's dedup the
+only non-OSM anchors are community submissions — a cluster forms exactly when
+someone records a tree OSM already maps, and the submission wins, which is the
+intended outcome.
 
 ## Landmarks (Mandatory)
 

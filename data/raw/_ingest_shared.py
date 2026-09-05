@@ -663,9 +663,9 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # enum value and the staging datasource — `test_osm_city_is_fully_wired` and
 # `test_every_osm_city_has_an_extract_job` check each half, because a
 # half-wired city emits zero OSM rows rather than an error.  OSM rows overlap
-# the municipal inventory by construction, so each wired city also derives an
-# `is_duplicate` flag in its model — see the four-grid dedup block in
-# ustem/tempe_tree_info.preql for the reference implementation.
+# the municipal inventory by construction, so each wired city groups the
+# overlapping rows under one cluster id and publishes only the survivor — see
+# tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
     "USTEM": "OSM_USTEM",
     "USBOS": "OSM_USBOS",

@@ -235,12 +235,12 @@ partial datasource {slug}_tree_info (
     ?submission_photo_url,
     merged_sources,
     ?merged_tree_ids,
-    is_duplicate,
     {lc}_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = '{code}'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{lc}_tree_info_v{{data_version}}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{lc}_tree_info_v{{data_version}}.parquet`
+where tree_id = cluster_id
 freshness by {lc}_published_data_updated_through;
 '''
 

@@ -7,9 +7,8 @@
 # for all cities: rows that describe the same tree are grouped under ONE
 # canonical cluster id, every canonical attribute (`species`, `latitude`, ...)
 # is picked from the cluster's rows by a value function, and the row whose
-# tree_id equals its cluster id is the survivor.  The rows it absorbed are
-# flagged `is_duplicate` (and will be pruned outright once the planner
-# supports it -- see "Intended end state" at the bottom).
+# tree_id equals its cluster id is the survivor.  The rows it absorbed are not
+# published at all -- see "The prune" at the bottom.
 #
 # What a city model has to do to take part, and nothing else:
 #
@@ -18,7 +17,8 @@
 #   merge {lc}_source_label into source_label;
 #   ... every raw source maps `raw_species`, `raw_latitude`, ... (not the
 #       canonical concepts), and the published target maps `species`,
-#       `latitude`, ... plus `merged_sources`, `merged_tree_ids`, `is_duplicate`.
+#       `latitude`, ... plus `merged_sources` and `merged_tree_ids`, and
+#       carries `where tree_id = cluster_id` to drop the absorbed rows.
 #   merge merged_dbh into diameter_at_breast_height;   # or a city-specific dbh
 #
 # The cell size each city matches at lives in DEDUP_CELL_METRES in
@@ -224,10 +224,6 @@ auto merged_dbh <- @by_source(cleaned_dbh);
 auto merged_sources <- array_to_string(array_sort(array_distinct((array_agg(source_label) by cluster_id))), ',');
 auto merged_tree_ids <- nullif(array_to_string(array_sort((array_agg(tree_id ? tree_id != cluster_id) by cluster_id)), ','), '');
 
-# True for a row that was absorbed into another row's cluster.  The browser
-# filters these out with `AND NOT COALESCE(is_duplicate, false)`.
-auto is_duplicate <- tree_id != cluster_id;
-
 merge merged_species into species;
 merge merged_tree_name into tree_name;
 merge merged_plant_date into plant_date;
@@ -239,13 +235,21 @@ merge merged_photo_url into submission_photo_url;
 # `processed_dbh` instead, and two merges into one concept is a conflict.
 
 # ---------------------------------------------------------------------------
-# Intended end state
+# The prune
 # ---------------------------------------------------------------------------
 #
-# `where tree_id = cluster_id` on each city's published target, so the parquet
-# holds exactly one row per tree and needs no client-side filter.  Not yet
-# possible -- pytrilogy 0.3.343 does not apply a target-side `where` when it
-# materialises a managed datasource, and the same prune written as
-# `complete where ... and tree_id = cluster_id` fails to plan with a keyless
-# join.  Until that lands the absorbed rows are published and flagged.  See
-# upstream_repro/keyless_join_cell_aggregate.
+# Each city's published target carries `where tree_id = cluster_id`, so the
+# parquet holds exactly one row per tree.  Absorbed rows are not published, and
+# no client-side filter is needed to hide them; `merged_tree_ids` is where an
+# absorbed id survives, so a link to one can still be resolved to its survivor.
+#
+# This was blocked for a long time and the shape of the block is worth keeping.
+# pytrilogy 0.3.343 parsed a target-side `where` and silently did not apply it
+# when materialising; 0.3.347 applied it but then demanded the partial
+# partitions be provably exhaustive over the whole `city` enum -- which one
+# city's partitions never are -- and failed with `no complete sources found`.
+# 0.3.348 plans the gate inside the target's own partition scope, after the
+# union and the cell aggregates it depends on.  So this file needs 0.3.348 or
+# later; on an older planner the prune does not fail loudly, it either does
+# nothing or refuses to resolve.  upstream_repro/keyless_join_cell_aggregate
+# has the three spellings and the enum toggle that isolated it.

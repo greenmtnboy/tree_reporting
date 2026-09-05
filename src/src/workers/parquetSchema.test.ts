@@ -55,20 +55,21 @@ describe('parquet schema', () => {
     })
   }, 60_000)
 
-  // The worker filters flagged cross-source duplicates out of every per-city
-  // load with `AND NOT COALESCE(is_duplicate, false)`. A Parquet without the
-  // column does not degrade -- DuckDB raises a binder error and that city's map
-  // fails to load -- so this is the deploy gate: refresh all cities first.
+  // Absorbed duplicates are pruned at the source: every city's published
+  // target carries `where tree_id = cluster_id`, so a rebuilt parquet has one
+  // row per tree and no `is_duplicate` column at all.
   //
-  // A parquet that does not exist at all is the one carve-out. A brand-new
-  // city has nothing on GCS until the pipeline's first credentialed build, so
-  // hard-failing on the 404 turned every city-addition PR red for its whole
-  // lifetime. For a 404 the gate instead asserts the city's Trilogy model
-  // materialises the column, so the first build cannot ship without it. A
-  // parquet that *exists* without the column still fails hard -- that is a
-  // stale build one deploy away from a broken city, the case this test was
-  // written for.
-  test.each(Object.keys(CITY_CONFIG))('%s tree parquet carries is_duplicate', async (city) => {
+  // The presence of that column is therefore the tell that a city has NOT been
+  // rebuilt past the prune, and its rows still include the ones its clusters
+  // absorbed. Nothing breaks while that is true -- the worker probes for the
+  // column and keeps filtering when it is there -- so this is a staleness gate,
+  // not a crash gate: it says "this city still needs its forced refresh".
+  //
+  // A parquet that does not exist at all is the one carve-out, for the same
+  // reason as ever: a brand-new city has nothing on GCS until its first
+  // credentialed build, and hard-failing the 404 turns every city-addition PR
+  // red for its whole lifetime. For a 404 the gate moves to the model instead.
+  test.each(Object.keys(CITY_CONFIG))('%s tree parquet is pruned, not flagged', async (city) => {
     const url = cityTreeParquetUrl(city)
     expect(url, `no per-city parquet url for ${city}`).toBeTruthy()
     if (!url) return
@@ -76,21 +77,22 @@ describe('parquet schema', () => {
     if (head.status === 404) {
       console.warn(
         `${city}'s tree parquet is not on GCS yet -- run the Trilogy refresh before ` +
-          'deploying this city; asserting its model materialises is_duplicate instead',
+          'deploying this city; asserting its model prunes instead',
       )
-      // The flag is the shared derivation in data/raw/tree_dedup.preql; a city
-      // materialises it by importing that file and publishing the column.
+      // The prune is the shared derivation in data/raw/tree_dedup.preql; a city
+      // takes part by importing it and gating its published target.
       const model = ALL_MODEL_SOURCES.find(
         (m) => m.alias.startsWith(`${city.toLowerCase()}.`) && m.alias.endsWith('_tree_info'),
       )
-      const materialises =
+      const prunes =
         !!model &&
         model.contents.includes('import ..tree_dedup;') &&
-        /\n\s+is_duplicate,\r?\n/.test(model.contents)
+        model.contents.split(/\r?\n/).includes('where tree_id = cluster_id') &&
+        !model.contents.includes('is_duplicate')
       expect(
-        materialises,
-        `${city} has no parquet on GCS yet and no tree model materialising ` +
-          'is_duplicate, so its first build would ship without the column',
+        prunes,
+        `${city} has no parquet on GCS yet and its tree model does not prune ` +
+          'absorbed rows, so its first build would publish duplicates',
       ).toBe(true)
       return
     }
@@ -101,9 +103,10 @@ describe('parquet schema', () => {
       const cols = result.getRowObjects().map((r) => r.column_name as string)
       expect(
         cols,
-        `${city}'s parquet has no is_duplicate column -- run the Trilogy refresh ` +
-          `before deploying, or the worker binder-errors on this city`,
-      ).toContain('is_duplicate')
+        `${city}'s parquet still carries is_duplicate, so it predates the prune ` +
+          `and still holds the rows its clusters absorbed -- force a rebuild: ` +
+          `trilogy refresh raw/<city>/<city>_tree_info.preql -f <city>_tree_info`,
+      ).not.toContain('is_duplicate')
     })
   }, 60_000)
 

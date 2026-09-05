@@ -121,7 +121,6 @@ partial datasource london_tree_info (
     ?submission_photo_url,
     merged_sources,
     ?merged_tree_ids,
-    is_duplicate,
     gblon_published_data_updated_through,
 )
 grain (tree_id)

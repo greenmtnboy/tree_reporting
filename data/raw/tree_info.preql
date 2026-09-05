@@ -42,7 +42,7 @@ merge grmlo_source into data_source;
 merge grsan_source into data_source;
 merge usden_source into data_source;
 
-# The dedup columns (`is_duplicate`, `merged_sources`, `merged_tree_ids`) are
+# The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
 # own build over that city's rows; the city parquets carry them and nothing is
 # derived or merged for them here.  Asking the planner to resolve the cluster

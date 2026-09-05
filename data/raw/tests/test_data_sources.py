@@ -210,28 +210,40 @@ def test_osm_city_is_fully_wired(code: str):
     )
 
 
-def test_shared_dedup_defines_the_flag_once():
-    """A row is a duplicate when it was absorbed into another row's cluster."""
-    text = (RAW_DIR / "tree_dedup.preql").read_text(encoding="utf-8")
-    assert "auto is_duplicate <- tree_id != cluster_id;" in text
-
-
 @pytest.mark.parametrize("code", sorted(MUNICIPAL_DATA_SOURCES))
-def test_every_city_materializes_is_duplicate(code: str):
-    """`is_duplicate` must be a column in every city's Parquet.
+def test_every_city_prunes_absorbed_rows(code: str):
+    """Every city's published target drops the rows it absorbed.
 
-    The browser worker filters flagged rows out with a single
-    `AND NOT COALESCE(is_duplicate, false)` for whichever city is loaded.  A
-    city that omits the column does not degrade -- DuckDB raises a binder error
-    and that city's map fails to load.  The flag itself is the shared
-    derivation in tree_dedup.preql, so a city only has to import it and publish
-    the column.
+    `where tree_id = cluster_id` is what makes the Parquet one row per tree.
+    Without it the absorbed rows are published and the map double-renders every
+    tree that OSM and the inventory both know about -- which is what the old
+    `is_duplicate` flag and the worker's `AND NOT COALESCE(...)` existed to
+    hide.  Nothing else reports its absence: the city builds and its counts are
+    simply high, so this is the only thing between a new city and a silently
+    duplicated map.
     """
     text = city_models()[code].read_text(encoding="utf-8")
     assert "import ..tree_dedup;" in text
-    assert "\n    is_duplicate,\n" in text, (
-        f"{code} does not materialize the is_duplicate column; the worker "
-        "selects it for every city"
+    assert '\nwhere tree_id = cluster_id\n' in text, (
+        f"{code}'s published target has no `where tree_id = cluster_id`, so it "
+        "publishes the rows its clusters absorbed"
+    )
+
+
+@pytest.mark.parametrize("code", sorted(MUNICIPAL_DATA_SOURCES))
+def test_no_city_publishes_the_old_duplicate_flag(code: str):
+    """The flag is gone, and a copy-paste must not bring it back.
+
+    It was the workaround for a planner that could not apply a row gate when
+    materialising a target, fixed in pytrilogy 0.3.348.  A city still
+    publishing it would name a concept the shared model no longer derives, so
+    the build fails -- but pointing at the missing concept is a long way from
+    saying the prune replaced it.
+    """
+    text = city_models()[code].read_text(encoding="utf-8")
+    assert "is_duplicate" not in text, (
+        f"{code} still publishes is_duplicate; the absorbed rows are pruned "
+        "now, so the flag has no rows left to mark"
     )
 
 
@@ -294,7 +306,7 @@ def test_shared_dedup_merges_every_attribute_but_dbh():
 def test_cross_city_model_does_not_redefine_the_dedup():
     """The cross-city union takes the dedup columns from the published parquets.
 
-    `is_duplicate`, `merged_sources` and `merged_tree_ids` are one shared
+    `merged_sources` and `merged_tree_ids` are one shared
     derivation in tree_dedup.preql, computed inside each city's own build over
     that city's rows.  tree_info.preql must not re-derive or merge anything of
     its own for them: the published parquets carry the columns, and asking the
@@ -302,7 +314,7 @@ def test_cross_city_model_does_not_redefine_the_dedup():
     with a keyless join.
     """
     text = (RAW_DIR / "tree_info.preql").read_text(encoding="utf-8")
-    for token in ("is_duplicate", "cluster_id", "merged_sources"):
+    for token in ("cluster_id", "merged_sources", "merged_tree_ids"):
         assert f"merge {token}" not in text and f"auto {token}" not in text, (
             f"tree_info.preql redefines {token}; the city parquets already carry it"
         )
