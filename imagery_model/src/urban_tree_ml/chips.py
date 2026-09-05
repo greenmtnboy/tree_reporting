@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from pyproj import Transformer
 
-from urban_tree_ml.config import ProjectConfig
+from urban_tree_ml.config import ProjectConfig, normalization_path
 from urban_tree_ml.feedback import load_training_feedback
 from urban_tree_ml.targets import (
     PointLabel,
@@ -344,11 +344,40 @@ def build_chips(
     channel_variance = np.maximum(
         channel_sum_squares / channel_pixel_count - np.square(channel_mean), 1e-12
     )
-    normalization = {
+    local_normalization = {
         "mean": channel_mean.tolist(),
         "std": np.sqrt(channel_variance).tolist(),
         "source": "training split pixels only",
     }
+    normalization = local_normalization
+    local_normalization_path: Path | None = None
+    if config.reference is not None:
+        reference_path = normalization_path(config)
+        if not reference_path.exists():
+            raise FileNotFoundError(f"reference normalization does not exist: {reference_path}")
+        reference_normalization = json.loads(reference_path.read_text(encoding="utf-8"))
+        mean = reference_normalization.get("mean")
+        std = reference_normalization.get("std")
+        if not isinstance(mean, list) or not isinstance(std, list):
+            raise ValueError("reference normalization must contain mean and std lists")
+        if len(mean) != len(config.imagery.bands) or len(std) != len(config.imagery.bands):
+            raise ValueError(
+                "reference normalization channel count does not match configured imagery bands"
+            )
+        if any(not np.isfinite(float(value)) for value in mean + std) or any(
+            float(value) <= 0 for value in std
+        ):
+            raise ValueError("reference normalization values must be finite with positive std")
+        local_normalization_path = output_root / "normalization-local.json"
+        local_normalization_path.write_text(
+            json.dumps(local_normalization, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        normalization = {
+            "mean": [float(value) for value in mean],
+            "std": [float(value) for value in std],
+            "source": f"external reference: {reference_path.resolve()}",
+        }
     (output_root / "normalization.json").write_text(
         json.dumps(normalization, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
@@ -373,6 +402,9 @@ def build_chips(
         "source_raster": str(source_path.resolve()),
         "manifest": str(manifest_path),
         "normalization": str(output_root / "normalization.json"),
+        "local_normalization": (
+            str(local_normalization_path) if local_normalization_path is not None else None
+        ),
     }
     (output_root / "summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"

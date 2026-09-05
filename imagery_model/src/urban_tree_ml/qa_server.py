@@ -180,6 +180,11 @@ def serve_registration_review(
                     return
                 try:
                     bundle = run_catalog.bundle(run_id)
+                    if not run_catalog.curation_available(run_id):
+                        raise ValueError(
+                            "this evaluation belongs to a different city or raster; "
+                            "serve its registration review before curating it"
+                        )
                     threshold = float(
                         query.get("threshold", [bundle.metrics["confidence_threshold"]])[0]
                     )
@@ -200,7 +205,7 @@ def serve_registration_review(
                     {
                         "scene": str(result["scene_id"]),
                         "fullscreen": "1",
-                        "run": bundle.run_dir.name,
+                        "run": bundle.evaluation_id,
                         "threshold": f"{threshold:.6g}",
                         "return": _safe_curation_return(query.get("return", [None])[0]),
                     }
@@ -225,7 +230,11 @@ def serve_registration_review(
                         {"error": "no validation evaluation is loaded"},
                     )
                     return
-                self._json_response(HTTPStatus.OK, bundle.summary())
+                self._json_response(
+                    HTTPStatus.OK,
+                    bundle.summary()
+                    | {"curation_available": run_catalog.curation_available(run_id)},
+                )
                 return
             if path == "/api/runs":
                 self._json_response(HTTPStatus.OK, run_catalog.summary())
@@ -241,7 +250,7 @@ def serve_registration_review(
                 try:
                     self._json_response(
                         HTTPStatus.OK,
-                        run_catalog.chip_comparison(chip_id),
+                        run_catalog.chip_comparison(chip_id, run_id),
                     )
                 except (KeyError, OSError, ValueError) as error:
                     self._json_response(HTTPStatus.NOT_FOUND, {"error": str(error)})

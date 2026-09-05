@@ -228,6 +228,65 @@ the controlled uplift run. It keeps every citywide training and evaluation setti
 writing checkpoints to a distinct experiment directory; rebuild the shared citywide chips from
 the newly finalized feedback before training.
 
+## External-city validation: Boston
+
+Boston is the first cross-city transfer cohort. It is deliberately **not** merged into the SF
+validation split or used for early stopping. `configs/boston_naip_external.yaml` gives Boston its
+own inventory, spatial splits, imagery, chips, reviews, and dataset identity while pinning the SF
+training taxonomy and normalization statistics. That lets the same checkpoint answer three
+separate questions:
+
+- can it detect Boston inventory trees at all;
+- does DBH transfer for trees with credible measurements; and
+- how well does the fixed SF vocabulary transfer where Boston labels overlap it?
+
+Inventory export reports genus and species out-of-vocabulary counts in
+`inventory/usbos/summary.json`; OOV Boston taxa remain detection/DBH examples but are masked out of
+the corresponding classification metric. Never rebuild a Boston-derived taxonomy for this
+cohort, because that would change the checkpoint's output classes.
+
+Start with a bounded 2023 footprint instead of downloading the entire city. The index command
+reports item counts by year and the twelve tiles containing the most inventory points. Choose
+roughly 6–12 adjacent, tree-dense tiles from that list. The checked-in config pins the initial
+eight-tile footprint so acquisition and mosaicking remain reproducible:
+
+```bash
+cd imagery_model
+uv run urban-tree-ml inventory export --config configs/boston_naip_external.yaml
+uv run urban-tree-ml imagery index --config configs/boston_naip_external.yaml
+uv run urban-tree-ml imagery fetch-selected --config configs/boston_naip_external.yaml
+uv run urban-tree-ml imagery mosaic \
+  --config configs/boston_naip_external.yaml \
+  --year 2023 \
+  --output "$TREE_ML_DATA_ROOT/imagery/usbos/2023/usbos-2023-external.vrt"
+```
+
+Then run the same registration, heuristic, serving, finalization, and chip-build workflow with the
+Boston config and VRT. Use a Boston-specific annotation checkout path under
+`$TREE_ML_ANNOTATIONS_ROOT/usbos/`; the training-data repository stores only manifests and review
+decisions, never NAIP pixels.
+
+Evaluation writes the Boston cohort into the existing SF training run rather than creating a
+second model run:
+
+```bash
+uv run urban-tree-ml chips build \
+  --config configs/boston_naip_external.yaml \
+  --raster "$TREE_ML_DATA_ROOT/imagery/usbos/2023/usbos-2023-external.vrt"
+
+uv run urban-tree-ml evaluate \
+  --config configs/boston_naip_external.yaml \
+  --checkpoint "$TREE_ML_DATA_ROOT/runs/<SF_RUN>/checkpoints/<BEST>.ckpt" \
+  --split validation \
+  --cohort external-usbos
+```
+
+The Model Studio discovers every `runs/*/evaluation/*` cohort and labels it by city and cohort.
+Chip comparisons are restricted to the same city and dataset because identical grid-style chip
+IDs from two rasters do not identify the same geography. A cohort opened from another city's
+server remains viewable, but its curation action is disabled; serve Boston's own registration
+review and raster before writing Boston feedback.
+
 To grow a review after labeling has started, use `--extend-existing` with the same raster,
 window size, and development/test policy. The existing scene and sample IDs, rendered images,
 and `reviews.json` are preserved; only previously unseen spatial scenes are appended. Increasing
