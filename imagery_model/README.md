@@ -287,6 +287,23 @@ IDs from two rasters do not identify the same geography. A cohort opened from an
 server remains viewable, but its curation action is disabled; serve Boston's own registration
 review and raster before writing Boston feedback.
 
+On Lambda, the two-stage wrapper keeps acquisition separate from the post-curation evaluation and
+never launches a new training run:
+
+```bash
+export TREE_ML_DATA_ROOT=/lambda/nfs/<FILESYSTEM_NAME>/urban-tree-ml
+bash lambda/external-city.sh configs/boston_naip_external.yaml acquire
+
+# After syncing/finalizing the Boston review bundle back onto the filesystem:
+export TREE_ML_CHECKPOINT="$TREE_ML_DATA_ROOT/runs/<SF_RUN>/checkpoints/<BEST>.ckpt"
+bash lambda/external-city.sh configs/boston_naip_external.yaml evaluate
+```
+
+The acquire stage does not request GPU access inside Docker. The evaluate stage requires the GPU,
+writes `evaluation/external-usbos` beneath the referenced SF run, and exits when evaluation is
+complete. Instance termination remains the responsibility of the outer Lambda launcher so a shell
+failure cannot masquerade as a successful teardown.
+
 To grow a review after labeling has started, use `--extend-existing` with the same raster,
 window size, and development/test policy. The existing scene and sample IDs, rendered images,
 and `reviews.json` are preserved; only previously unseen spatial scenes are appended. Increasing
