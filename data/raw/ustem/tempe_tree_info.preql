@@ -101,9 +101,10 @@ file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ustem_
 merge merged_dbh into diameter_at_breast_height;
 
 
-# INTENDED END STATE: `where tree_id = cluster_id` on this target, so the
-# parquet holds exactly one row per tree and needs no client-side filter; see
-# "Intended end state" in ../tree_dedup.preql for what blocks it upstream.
+# The `where` below is the prune: this target publishes only the row that owns
+# its cluster, so the parquet holds exactly one tree per row.  It needs
+# pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
+# ../tree_dedup.preql.
 partial datasource tempe_tree_info (
     tree_id,
     city,
