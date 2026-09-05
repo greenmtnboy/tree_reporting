@@ -117,6 +117,7 @@ partial datasource sf_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    cluster_id,
     merged_sources,
     ?merged_tree_ids,
     ussfo_published_data_updated_through,

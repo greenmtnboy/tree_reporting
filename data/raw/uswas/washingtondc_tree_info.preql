@@ -115,6 +115,7 @@ partial datasource washingtondc_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    cluster_id,
     merged_sources,
     ?merged_tree_ids,
     uswas_published_data_updated_through,

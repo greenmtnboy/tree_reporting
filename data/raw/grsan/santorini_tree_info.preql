@@ -106,6 +106,7 @@ partial datasource santorini_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    cluster_id,
     merged_sources,
     ?merged_tree_ids,
     grsan_published_data_updated_through,

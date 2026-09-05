@@ -120,6 +120,7 @@ partial datasource london_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    cluster_id,
     merged_sources,
     ?merged_tree_ids,
     gblon_published_data_updated_through,
