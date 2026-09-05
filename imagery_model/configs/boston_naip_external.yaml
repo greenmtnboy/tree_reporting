@@ -31,6 +31,7 @@ imagery:
   bands: [1, 2, 3, 4]
   input_scale: 0.00392156862745098
   resolution_m: 0.6
+  source_resolution_m: 0.3
   chip_pixels: 256
   minimum_valid_fraction: 0.99
   local_raster: ${TREE_ML_DATA_ROOT:-./artifacts}/imagery/usbos/2023/usbos-2023-external.vrt

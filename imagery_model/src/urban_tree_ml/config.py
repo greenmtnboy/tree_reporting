@@ -89,6 +89,7 @@ class ImageryConfig(StrictModel):
     bands: list[int]
     input_scale: float = Field(gt=0)
     resolution_m: float = Field(gt=0)
+    source_resolution_m: float | None = Field(default=None, gt=0)
     chip_pixels: int = Field(ge=32)
     minimum_valid_fraction: float = Field(ge=0, le=1)
     local_raster: Path | None = None

@@ -229,6 +229,24 @@ def test_build_vrt_mosaic_uses_only_configured_items(tmp_path: Path) -> None:
     assert [source["item_id"] for source in manifest["sources"]] == ["west"]
 
 
+def test_build_vrt_mosaic_downsamples_native_resolution_for_model_input(
+    tmp_path: Path,
+) -> None:
+    config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
+    config.paths.root = tmp_path / "artifacts"
+    config.imagery.source_resolution_m = 0.3
+    imagery_dir = config.paths.root / "imagery" / "ussfo" / "2023"
+    imagery_dir.mkdir(parents=True)
+    _write_test_raster(imagery_dir / "native.tif", resolution=0.3)
+
+    result = build_vrt_mosaic(config, "2023")
+
+    with rasterio.open(result["path"]) as mosaic:
+        assert mosaic.res == (0.6, 0.6)
+        assert (mosaic.width, mosaic.height) == (16, 16)
+        assert np.all(mosaic.read(1) == 50)
+
+
 def test_build_vrt_mosaic_rejects_sources_on_different_pixel_grids(tmp_path: Path) -> None:
     config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
     config.paths.root = tmp_path / "artifacts"
