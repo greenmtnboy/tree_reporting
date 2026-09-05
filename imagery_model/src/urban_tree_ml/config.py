@@ -39,6 +39,13 @@ class PathsConfig(StrictModel):
     annotations: Path = Path("./annotations")
 
 
+class ReferenceConfig(StrictModel):
+    """Training-owned artifacts reused by an external validation city."""
+
+    taxonomy_path: Path
+    normalization_path: Path
+
+
 class InventoryConfig(StrictModel):
     city: str
     parquet_url: str
@@ -85,6 +92,18 @@ class ImageryConfig(StrictModel):
     chip_pixels: int = Field(ge=32)
     minimum_valid_fraction: float = Field(ge=0, le=1)
     local_raster: Path | None = None
+    item_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def item_ids_are_safe_and_unique(self) -> ImageryConfig:
+        if len(self.item_ids) != len(set(self.item_ids)):
+            raise ValueError("imagery.item_ids must be unique")
+        if any(
+            not value or Path(value).name != value or "/" in value or "\\" in value
+            for value in self.item_ids
+        ):
+            raise ValueError("imagery.item_ids must contain filename-safe STAC identifiers")
+        return self
 
 
 class TargetsConfig(StrictModel):
@@ -145,6 +164,7 @@ class ProjectConfig(StrictModel):
     model: ModelConfig
     training: TrainingConfig
     evaluation: EvaluationConfig
+    reference: ReferenceConfig | None = None
 
     @model_validator(mode="after")
     def channels_match(self) -> ProjectConfig:
@@ -173,4 +193,21 @@ def load_config(path: str | Path) -> ProjectConfig:
         config.imagery.local_raster = (
             config_path.parent.parent / config.imagery.local_raster
         ).resolve()
+    if config.reference is not None:
+        for field in ("taxonomy_path", "normalization_path"):
+            value = getattr(config.reference, field)
+            if not value.is_absolute():
+                setattr(config.reference, field, (config_path.parent.parent / value).resolve())
     return config
+
+
+def taxonomy_path(config: ProjectConfig) -> Path:
+    if config.reference is not None:
+        return config.reference.taxonomy_path
+    return config.paths.root / "inventory" / config.inventory.city.lower() / "taxonomy.json"
+
+
+def normalization_path(config: ProjectConfig) -> Path:
+    if config.reference is not None:
+        return config.reference.normalization_path
+    return config.paths.root / "chips" / config.dataset / "normalization.json"

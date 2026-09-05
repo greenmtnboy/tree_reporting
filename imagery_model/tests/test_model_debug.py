@@ -198,3 +198,57 @@ def test_run_catalog_discovers_runs_and_compares_a_chip(tmp_path: Path) -> None:
     assert comparison["selected_run_id"] == selected.run_dir.name
     assert comparison["runs"][0]["available"] is True
     assert comparison["runs"][0]["data"]["ground_truth"][0]["tree_id"] == "tree-a"
+
+
+def test_run_catalog_discovers_external_city_cohort_without_mixing_curation(
+    tmp_path: Path,
+) -> None:
+    selected, raster_path = _debug_fixture(tmp_path)
+    external_dir = selected.run_dir / "evaluation" / "external-usbos"
+    external_dir.mkdir(parents=True)
+    for name in (
+        "predictions.parquet",
+        "ground-truth.parquet",
+        "matches.parquet",
+        "taxonomy.json",
+    ):
+        (external_dir / name).write_bytes((selected.directory / name).read_bytes())
+    metrics = selected.metrics | {
+        "cohort": "external-usbos",
+        "city": "USBOS",
+        "dataset": "boston-naip-external-sf-vocab-v1",
+        "source_raster": str(raster_path),
+    }
+    (external_dir / "metrics.json").write_text(json.dumps(metrics), encoding="utf-8")
+    boston = load_config(
+        Path(__file__).parents[1] / "configs" / "boston_naip_external.yaml"
+    )
+    boston.paths.root = selected.config.paths.root
+    (external_dir / "evaluation-metadata.json").write_text(
+        json.dumps(
+            {
+                "created_at": "2026-09-05T12:00:00+00:00",
+                "source_raster": str(raster_path),
+                "config": boston.model_dump(mode="json"),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    catalog = RunDebugCatalog(selected.config, selected.directory, raster_path)
+    external_id = f"{selected.run_dir.name}::external-usbos"
+    by_id = {record["run_id"]: record for record in catalog.summary()["runs"]}
+
+    assert by_id[external_id]["city"] == "USBOS"
+    assert by_id[external_id]["cohort"] == "external-usbos"
+    assert catalog.bundle(external_id).config.inventory.city == "USBOS"
+    assert catalog.curation_available(selected.run_dir.name)
+    assert not catalog.curation_available(external_id)
+    assert len(catalog.chip_comparison("r000000_c000000")["runs"]) == 1
+    external_comparison = catalog.chip_comparison("r000000_c000000", external_id)
+    assert external_comparison["selected_run_id"] == external_id
+    assert external_comparison["curation_available"] is False
+    assert [entry["run"]["city"] for entry in external_comparison["runs"]] == ["USBOS"]
+
+    external_catalog = RunDebugCatalog(selected.config, external_dir, raster_path)
+    assert external_catalog.selected_run_id == external_id

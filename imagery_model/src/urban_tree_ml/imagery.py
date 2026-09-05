@@ -219,12 +219,22 @@ def index_stac_coverage(config: ProjectConfig) -> dict[str, object]:
         if imagery.asset_key not in item.assets:
             continue
         asset = item.assets[imagery.asset_key]
+        item_bbox = item.bbox
+        inventory_tree_count = 0
+        if item_bbox and len(item_bbox) >= 4:
+            inventory_tree_count = int(
+                (
+                    frame["longitude"].between(float(item_bbox[0]), float(item_bbox[2]))
+                    & frame["latitude"].between(float(item_bbox[1]), float(item_bbox[3]))
+                ).sum()
+            )
         records.append(
             {
                 "id": item.id,
                 "collection": item.collection_id,
                 "datetime": item.datetime.isoformat() if item.datetime else None,
                 "bbox": item.bbox,
+                "inventory_tree_count": inventory_tree_count,
                 "asset_key": imagery.asset_key,
                 "asset_href": asset.href,
                 "asset_media_type": asset.media_type,
@@ -257,7 +267,28 @@ def index_stac_coverage(config: ProjectConfig) -> dict[str, object]:
         + "\n",
         encoding="utf-8",
     )
-    return {"items": len(records), "path": str(index_path), "bbox": bbox}
+    items_by_year: dict[str, int] = {}
+    for record in records:
+        year = str(record.get("properties", {}).get("naip:year") or "unknown")
+        items_by_year[year] = items_by_year.get(year, 0) + 1
+    ranked = sorted(
+        records,
+        key=lambda record: (-int(record["inventory_tree_count"]), str(record["id"])),
+    )
+    return {
+        "items": len(records),
+        "items_by_year": items_by_year,
+        "top_items_by_inventory_count": [
+            {
+                "id": record["id"],
+                "year": record.get("properties", {}).get("naip:year"),
+                "inventory_tree_count": record["inventory_tree_count"],
+            }
+            for record in ranked[:12]
+        ],
+        "path": str(index_path),
+        "bbox": bbox,
+    }
 
 
 def fetch_stac_item(
@@ -341,6 +372,27 @@ def fetch_stac_item(
     }
 
 
+def fetch_configured_stac_items(
+    config: ProjectConfig,
+    *,
+    overwrite: bool = False,
+) -> dict[str, object]:
+    """Fetch the explicit, reproducible imagery footprint declared by a city config."""
+    if not config.imagery.item_ids:
+        raise ValueError("imagery.item_ids is empty; select indexed STAC items first")
+    results = [
+        fetch_stac_item(config, item_id, overwrite=overwrite)
+        for item_id in config.imagery.item_ids
+    ]
+    return {
+        "city": config.inventory.city,
+        "items": len(results),
+        "downloaded": sum(result["status"] == "downloaded" for result in results),
+        "existing": sum(result["status"] == "existing" for result in results),
+        "results": results,
+    }
+
+
 def build_vrt_mosaic(
     config: ProjectConfig,
     year: str,
@@ -360,7 +412,16 @@ def build_vrt_mosaic(
 
     city = config.inventory.city.lower()
     imagery_dir = config.paths.root / "imagery" / city / year
-    sources = sorted(imagery_dir.glob("*.tif"))
+    downloaded = {path.stem: path for path in imagery_dir.glob("*.tif")}
+    if config.imagery.item_ids:
+        missing = [item_id for item_id in config.imagery.item_ids if item_id not in downloaded]
+        if missing:
+            raise FileNotFoundError(
+                "configured imagery items have not been downloaded: " + ", ".join(missing)
+            )
+        sources = [downloaded[item_id] for item_id in config.imagery.item_ids]
+    else:
+        sources = sorted(downloaded.values())
     if not sources:
         raise FileNotFoundError(f"no downloaded GeoTIFFs found under {imagery_dir}")
 

@@ -63,6 +63,8 @@ class ModelDebugBundle:
         config: ProjectConfig,
         evaluation_dir: str | Path,
         raster_path: str | Path,
+        *,
+        evaluation_id: str | None = None,
     ) -> None:
         self.config = config
         self.directory = Path(evaluation_dir).resolve()
@@ -86,6 +88,13 @@ class ModelDebugBundle:
         self.ground_truth = pd.read_parquet(required["ground truth"]).copy()
         self.matches = pd.read_parquet(required["matches"]).copy()
         self.run_dir = self.directory.parent.parent
+        self.training_run_id = self.run_dir.name
+        self.cohort = str(self.metrics.get("cohort") or self.directory.name)
+        self.evaluation_id = evaluation_id or (
+            self.training_run_id
+            if self.cohort == "validation"
+            else f"{self.training_run_id}::{self.cohort}"
+        )
         metadata_path = self.run_dir / "run-metadata.json"
         self.run_metadata = (
             json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -171,7 +180,11 @@ class ModelDebugBundle:
 
     def summary(self) -> dict[str, object]:
         return {
-            "run_id": self.run_dir.name,
+            "run_id": self.evaluation_id,
+            "training_run_id": self.training_run_id,
+            "cohort": self.cohort,
+            "city": self.config.inventory.city,
+            "dataset": self.config.dataset,
             "metrics": self.metrics,
             "training_curves": _training_curves(self.run_dir),
             "run_metadata": self.run_metadata,
@@ -234,7 +247,7 @@ class ModelDebugBundle:
 
 
 class RunDebugCatalog:
-    """Discover validation runs and lazily open their larger prediction bundles."""
+    """Discover internal and external evaluations and lazily open their bundles."""
 
     def __init__(
         self,
@@ -248,7 +261,13 @@ class RunDebugCatalog:
         self.runs_root = self.selected_evaluation_dir.parents[2]
         self._bundles: dict[str, ModelDebugBundle] = {}
         self._runs = self._discover_runs()
-        selected_run_id = self.selected_evaluation_dir.parent.parent.name
+        selected_training_run = self.selected_evaluation_dir.parent.parent.name
+        selected_cohort = self.selected_evaluation_dir.name
+        selected_run_id = (
+            selected_training_run
+            if selected_cohort == "validation"
+            else f"{selected_training_run}::{selected_cohort}"
+        )
         self.selected_run_id = (
             selected_run_id
             if selected_run_id in self._runs
@@ -257,10 +276,11 @@ class RunDebugCatalog:
 
     def _discover_runs(self) -> dict[str, dict[str, object]]:
         records: list[tuple[str, dict[str, object]]] = []
-        for metrics_path in self.runs_root.glob("*/evaluation/validation/metrics.json"):
+        for metrics_path in self.runs_root.glob("*/evaluation/*/metrics.json"):
             evaluation_dir = metrics_path.parent.resolve()
             run_dir = evaluation_dir.parent.parent
             metadata_path = run_dir / "run-metadata.json"
+            evaluation_metadata_path = evaluation_dir / "evaluation-metadata.json"
             try:
                 metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
                 metadata = (
@@ -268,31 +288,88 @@ class RunDebugCatalog:
                     if metadata_path.exists()
                     else None
                 )
+                evaluation_metadata = (
+                    json.loads(evaluation_metadata_path.read_text(encoding="utf-8"))
+                    if evaluation_metadata_path.exists()
+                    else None
+                )
             except (OSError, ValueError, json.JSONDecodeError):
                 continue
-            config = metadata.get("config", {}) if isinstance(metadata, dict) else {}
+            config_data = (
+                evaluation_metadata.get("config", {})
+                if isinstance(evaluation_metadata, dict)
+                else metadata.get("config", {})
+                if isinstance(metadata, dict)
+                else {}
+            )
+            try:
+                bundle_config = ProjectConfig.model_validate(config_data)
+            except (ValueError, TypeError):
+                bundle_config = self.config
             created_at = (
-                metadata.get("created_at")
+                evaluation_metadata.get("created_at")
+                if isinstance(evaluation_metadata, dict)
+                else metadata.get("created_at")
                 if isinstance(metadata, dict)
                 else None
             ) or datetime.fromtimestamp(metrics_path.stat().st_mtime, UTC).isoformat()
-            run_id = run_dir.name
+            training_run_id = run_dir.name
+            cohort = str(metrics.get("cohort") or evaluation_dir.name)
+            evaluation_id = (
+                training_run_id
+                if cohort == "validation"
+                else f"{training_run_id}::{cohort}"
+            )
+            source_raster = metrics.get("source_raster")
+            if not source_raster and isinstance(evaluation_metadata, dict):
+                source_raster = evaluation_metadata.get("source_raster")
+            if not source_raster:
+                source_raster = bundle_config.imagery.local_raster
+            bundle_raster = self._resolve_local_raster(source_raster, bundle_config)
             records.append(
                 (
                     str(created_at),
                     {
-                        "run_id": run_id,
+                        "run_id": evaluation_id,
+                        "training_run_id": training_run_id,
+                        "cohort": cohort,
                         "created_at": str(created_at),
-                        "dataset": config.get("dataset"),
-                        "city": config.get("inventory", {}).get("city"),
-                        "backbone": config.get("model", {}).get("backbone"),
+                        "dataset": bundle_config.dataset,
+                        "city": bundle_config.inventory.city,
+                        "backbone": bundle_config.model.backbone,
                         "metrics": metrics,
                         "evaluation_dir": evaluation_dir,
+                        "bundle_config": bundle_config,
+                        "raster_path": bundle_raster,
                     },
                 )
             )
         records.sort(key=lambda item: (item[0], str(item[1]["run_id"])))
         return {str(record["run_id"]): record for _, record in records}
+
+    def _resolve_local_raster(
+        self,
+        source_raster: object,
+        bundle_config: ProjectConfig,
+    ) -> Path:
+        if source_raster:
+            configured = Path(str(source_raster)).resolve()
+            if configured.exists():
+                return configured
+            imagery_root = (
+                self.config.paths.root
+                / "imagery"
+                / bundle_config.inventory.city.lower()
+            )
+            matches = list(imagery_root.rglob(configured.name)) if imagery_root.exists() else []
+            if len(matches) == 1:
+                return matches[0].resolve()
+        if (
+            bundle_config.inventory.city == self.config.inventory.city
+            and bundle_config.dataset == self.config.dataset
+        ):
+            return self.raster_path
+        return Path(str(source_raster)).resolve() if source_raster else self.raster_path
 
     def __len__(self) -> int:
         return len(self._runs)
@@ -304,7 +381,7 @@ class RunDebugCatalog:
                 {
                     key: value
                     for key, value in record.items()
-                    if key != "evaluation_dir"
+                    if key not in {"evaluation_dir", "bundle_config", "raster_path"}
                 }
                 | {"selected": run_id == self.selected_run_id}
             )
@@ -316,15 +393,34 @@ class RunDebugCatalog:
             raise KeyError(f"unknown validation run {selected!r}")
         if selected not in self._bundles:
             self._bundles[selected] = ModelDebugBundle(
-                self.config,
+                self._runs[selected]["bundle_config"],
                 self._runs[selected]["evaluation_dir"],
-                self.raster_path,
+                self._runs[selected]["raster_path"],
+                evaluation_id=selected,
             )
         return self._bundles[selected]
 
-    def chip_comparison(self, chip_id: str) -> dict[str, object]:
+    def curation_available(self, run_id: str | None = None) -> bool:
+        """Only the city/raster used by this server can receive curation writes."""
+        bundle = self.bundle(run_id)
+        return (
+            bundle.config.inventory.city == self.config.inventory.city
+            and bundle.raster_path == self.raster_path
+        )
+
+    def chip_comparison(
+        self,
+        chip_id: str,
+        run_id: str | None = None,
+    ) -> dict[str, object]:
         runs: list[dict[str, object]] = []
+        selected_bundle = self.bundle(run_id)
         for record in self.summary()["runs"]:
+            if (
+                record["dataset"] != selected_bundle.config.dataset
+                or record["city"] != selected_bundle.config.inventory.city
+            ):
+                continue
             run_id = str(record["run_id"])
             bundle = self.bundle(run_id)
             if chip_id not in bundle.chip_ids:
@@ -340,7 +436,8 @@ class RunDebugCatalog:
             )
         return {
             "chip_id": chip_id,
-            "selected_run_id": self.selected_run_id,
+            "selected_run_id": selected_bundle.evaluation_id,
+            "curation_available": self.curation_available(selected_bundle.evaluation_id),
             "runs": runs,
         }
 
@@ -384,8 +481,8 @@ RUN_HISTORY_HTML = """<!doctype html>
 <title>Run history · Urban Tree Model Studio</title><style>
 :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#0d1410;color:#edf6ef}.nav{position:sticky;top:0;z-index:100;display:flex;gap:8px;padding:10px 22px;background:#090e0b;border-bottom:1px solid #2d4034}.nav a{color:#cce8d3;text-decoration:none;padding:5px 9px;border-radius:6px;background:#1b2a21}header,main{max-width:1400px;margin:auto;padding:22px 26px}h1{margin:0 0 5px}.lede,.note{color:#aabdaf}.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:18px}select,input,button{min-height:36px;background:#203027;color:#edf6ef;border:1px solid #486151;border-radius:7px;padding:6px 10px}.panel{background:#17231c;border:1px solid #304438;border-radius:12px;padding:16px;margin-bottom:18px}.chart{width:100%;height:250px;background:#0e1712;border-radius:8px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:right;padding:10px;border-bottom:1px solid #304438;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{color:#9eb2a4;font-weight:600}tr.selected{background:#203328}a{color:#91dda7}.delta-up{color:#68db8b}.delta-down{color:#ff7b86}.muted{color:#84978a}.chip-form{display:flex;gap:8px;flex-wrap:wrap}.chip-form input{min-width:250px}@media(max-width:700px){header,main{padding:16px 10px}}
 </style></head><body><nav class="nav"><a href="/">Studio</a><a href="/registration">Registration</a><a href="/runs">Run history</a><a href="/model">Model validation</a></nav>
-<header><h1>Validation run history</h1><p class="lede">Comparable metrics over time · validation only · test remains sealed</p><div class="controls"><label>Dataset <select id="dataset"></select></label><label>Match radius <select id="radius"></select></label><span id="summary" class="note"></span></div></header>
-<main><section class="panel"><svg id="chart" class="chart" viewBox="0 0 900 250"></svg></section><section class="panel table-wrap"><table><thead><tr><th>Run</th><th>Date</th><th>AP</th><th>Δ AP</th><th>F1</th><th>Precision</th><th>Recall</th><th>Species acc.</th><th>Species macro-F1</th><th>DBH MAE</th><th>Truth</th><th>Explore</th></tr></thead><tbody id="rows"></tbody></table></section>
+<header><h1>Evaluation history</h1><p class="lede">Internal and external validation cohorts · test remains sealed</p><div class="controls"><label>Dataset <select id="dataset"></select></label><label>Match radius <select id="radius"></select></label><span id="summary" class="note"></span></div></header>
+<main><section class="panel"><svg id="chart" class="chart" viewBox="0 0 900 250"></svg></section><section class="panel table-wrap"><table><thead><tr><th>Run</th><th>City</th><th>Cohort</th><th>Date</th><th>AP</th><th>Δ AP</th><th>F1</th><th>Precision</th><th>Recall</th><th>Species acc.</th><th>Species macro-F1</th><th>DBH MAE</th><th>Truth</th><th>Explore</th></tr></thead><tbody id="rows"></tbody></table></section>
 <section class="panel"><h2>Compare one chip across runs</h2><p class="note">Open the same validation chip side by side to see which predictions moved, appeared, or disappeared.</p><form id="chip-form" class="chip-form"><input id="chip" pattern="r[0-9]{6}_c[0-9]{6}" placeholder="r000061_c000075" required><button>Compare chip</button></form></section></main>
 <script>
 let catalog;const $=id=>document.getElementById(id),pct=v=>v==null?'—':`${(100*v).toFixed(1)}%`,num=v=>v==null?'—':Number(v).toFixed(2),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -393,21 +490,21 @@ function compatible(){return catalog.runs.filter(run=>run.dataset===$('dataset')
 function metrics(run){return run.metrics.metrics_by_match_radius_m[$('radius').value]}
 function delta(value,previous){if(previous==null)return '<span class="muted">—</span>';const d=value-previous,cls=d>0?'delta-up':d<0?'delta-down':'muted';return `<span class="${cls}">${d>=0?'+':''}${(100*d).toFixed(2)} pp</span>`}
 function chart(){const runs=compatible(),series=[['AP','#66d88a',r=>metrics(r)?.detection?.average_precision],['F1','#59bde8',r=>metrics(r)?.detection?.f1],['Species accuracy','#ffbc5b',r=>metrics(r)?.attributes_on_matched_detections?.species?.accuracy]],values=series.flatMap(s=>runs.map(s[2]).filter(v=>v!=null)),svg=$('chart');if(!runs.length||!values.length){svg.innerHTML='<text x="30" y="125" fill="#9eb2a4">No comparable metrics</text>';return}const lo=Math.min(...values),hi=Math.max(...values),x=i=>70+(runs.length<2?0:i/(runs.length-1)*770),y=v=>205-(v-lo)/(hi-lo||1)*150;svg.innerHTML='<line x1="70" y1="205" x2="840" y2="205" stroke="#496052"/>'+series.map(([name,color,get],j)=>{const points=runs.map((r,i)=>[x(i),get(r)]).filter(p=>p[1]!=null).map(p=>p.join(',')).join(' ');return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="3"/><text x="75" y="${22+j*19}" fill="${color}">${name}</text>`}).join('')+runs.map((r,i)=>`<text x="${x(i)}" y="228" fill="#9eb2a4" text-anchor="middle" font-size="10">${i+1}</text>`).join('')}
-function render(){const runs=compatible();$('summary').textContent=`${runs.length} compatible run${runs.length===1?'':'s'}; deltas compare the previous run in this dataset.`;let previous=null;$('rows').innerHTML=runs.map((run,index)=>{const m=metrics(run),d=m?.detection||{},a=m?.attributes_on_matched_detections||{},ap=d.average_precision,html=`<tr class="${run.selected?'selected':''}"><td><strong>${index+1}. ${esc(run.run_id)}</strong><br><span class="muted">${esc(run.backbone||'')}</span></td><td>${new Date(run.created_at).toLocaleString()}</td><td>${pct(ap)}</td><td>${delta(ap,previous)}</td><td>${pct(d.f1)}</td><td>${pct(d.precision)}</td><td>${pct(d.recall)}</td><td>${pct(a.species?.accuracy)}</td><td>${pct(a.species?.macro_f1)}</td><td>${a.dbh?`${num(a.dbh.mae_in)} in`:'—'}</td><td>${run.metrics.ground_truth_trees??'—'}</td><td><a href="/model?run=${encodeURIComponent(run.run_id)}">Validation</a></td></tr>`;previous=ap;return html}).join('');chart()}
-async function init(){catalog=await fetch('/api/runs').then(r=>r.json());const datasets=[...new Set(catalog.runs.map(r=>r.dataset||'unknown'))],selected=catalog.runs.find(r=>r.run_id===catalog.selected_run_id);$('dataset').innerHTML=datasets.map(d=>`<option ${d===selected?.dataset?'selected':''}>${esc(d)}</option>`).join('');const radii=[...new Set(catalog.runs.flatMap(r=>Object.keys(r.metrics.metrics_by_match_radius_m||{})))].sort((a,b)=>+a-+b);$('radius').innerHTML=radii.map(r=>`<option ${r==='4.0'?'selected':''} value="${r}">${r} m</option>`).join('');$('dataset').addEventListener('change',render);$('radius').addEventListener('change',render);$('chip-form').addEventListener('submit',event=>{event.preventDefault();location.href=`/compare?chip=${encodeURIComponent($('chip').value)}`});render()}init();
+function render(){const runs=compatible();$('summary').textContent=`${runs.length} compatible evaluation${runs.length===1?'':'s'}; deltas compare only this dataset.`;let previous=null;$('rows').innerHTML=runs.map((run,index)=>{const m=metrics(run),d=m?.detection||{},a=m?.attributes_on_matched_detections||{},ap=d.average_precision,html=`<tr class="${run.selected?'selected':''}"><td><strong>${index+1}. ${esc(run.training_run_id||run.run_id)}</strong><br><span class="muted">${esc(run.backbone||'')}</span></td><td>${esc(run.city||'—')}</td><td>${esc(run.cohort||'validation')}</td><td>${new Date(run.created_at).toLocaleString()}</td><td>${pct(ap)}</td><td>${delta(ap,previous)}</td><td>${pct(d.f1)}</td><td>${pct(d.precision)}</td><td>${pct(d.recall)}</td><td>${pct(a.species?.accuracy)}</td><td>${pct(a.species?.macro_f1)}</td><td>${a.dbh?`${num(a.dbh.mae_in)} in`:'—'}</td><td>${run.metrics.ground_truth_trees??'—'}</td><td><a href="/model?run=${encodeURIComponent(run.run_id)}">Explore</a></td></tr>`;previous=ap;return html}).join('');chart()}
+async function init(){catalog=await fetch('/api/runs').then(r=>r.json());const datasets=[...new Set(catalog.runs.map(r=>r.dataset||'unknown'))],selected=catalog.runs.find(r=>r.run_id===catalog.selected_run_id);$('dataset').innerHTML=datasets.map(d=>`<option ${d===selected?.dataset?'selected':''}>${esc(d)}</option>`).join('');const radii=[...new Set(catalog.runs.flatMap(r=>Object.keys(r.metrics.metrics_by_match_radius_m||{})))].sort((a,b)=>+a-+b);$('radius').innerHTML=radii.map(r=>`<option ${r==='4.0'?'selected':''} value="${r}">${r} m</option>`).join('');$('dataset').addEventListener('change',render);$('radius').addEventListener('change',render);$('chip-form').addEventListener('submit',event=>{event.preventDefault();const run=compatible()[0]?.run_id||catalog.selected_run_id;location.href=`/compare?chip=${encodeURIComponent($('chip').value)}&run=${encodeURIComponent(run)}`});render()}init();
 </script></body></html>"""
 
 
 CHIP_COMPARE_HTML = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chip comparison · Urban Tree Model Studio</title><style>
-:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#0d1410;color:#edf6ef}.nav{position:sticky;top:0;z-index:100;display:flex;gap:8px;padding:10px 22px;background:#090e0b;border-bottom:1px solid #2d4034}.nav a{color:#cce8d3;text-decoration:none;padding:5px 9px;border-radius:6px;background:#1b2a21}header{padding:18px 24px;border-bottom:1px solid #354b3c}h1{margin:0 0 5px}.lede,.facts{color:#aabdaf}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:13px}input,select,button{min-height:36px;background:#203027;color:#edf6ef;border:1px solid #486151;border-radius:7px;padding:6px 10px}.action-link{display:inline-flex;align-items:center;min-height:36px;background:#203027;color:#edf6ef!important;border:1px solid #486151;border-radius:7px;padding:6px 10px;text-decoration:none}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;padding:20px}.card{background:#17231c;border:1px solid #304438;border-radius:11px;overflow:hidden}.card-head,.facts{padding:10px 12px}.card-head{display:flex;justify-content:space-between;gap:8px}.image{position:relative;aspect-ratio:1;background:#050805}.image img{width:100%;height:100%;display:block}.marker{position:absolute;transform:translate(-50%,-50%);border-radius:50%;z-index:3}.truth{width:12px;height:12px;border:2px solid #35e5ee}.truth.missed{border-color:#ff5e6c;width:15px;height:15px}.prediction{width:9px;height:9px;background:#e850e8;border:1px solid #170817;z-index:4}.prediction.matched{background:#65e486}.prediction.wrong{background:#ffb44c}.halo{position:absolute;transform:translate(-50%,-50%);border:1px dashed #d7e4da99;border-radius:50%;z-index:2}.empty{padding:50px;color:#aabdaf;text-align:center}a{color:#91dda7}
+:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#0d1410;color:#edf6ef}.nav{position:sticky;top:0;z-index:100;display:flex;gap:8px;padding:10px 22px;background:#090e0b;border-bottom:1px solid #2d4034}.nav a{color:#cce8d3;text-decoration:none;padding:5px 9px;border-radius:6px;background:#1b2a21}header{padding:18px 24px;border-bottom:1px solid #354b3c}h1{margin:0 0 5px}.lede,.facts{color:#aabdaf}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:13px}input,select,button{min-height:36px;background:#203027;color:#edf6ef;border:1px solid #486151;border-radius:7px;padding:6px 10px}.action-link{display:inline-flex;align-items:center;min-height:36px;background:#203027;color:#edf6ef!important;border:1px solid #486151;border-radius:7px;padding:6px 10px;text-decoration:none}.action-link[hidden]{display:none!important}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;padding:20px}.card{background:#17231c;border:1px solid #304438;border-radius:11px;overflow:hidden}.card-head,.facts{padding:10px 12px}.card-head{display:flex;justify-content:space-between;gap:8px}.image{position:relative;aspect-ratio:1;background:#050805}.image img{width:100%;height:100%;display:block}.marker{position:absolute;transform:translate(-50%,-50%);border-radius:50%;z-index:3}.truth{width:12px;height:12px;border:2px solid #35e5ee}.truth.missed{border-color:#ff5e6c;width:15px;height:15px}.prediction{width:9px;height:9px;background:#e850e8;border:1px solid #170817;z-index:4}.prediction.matched{background:#65e486}.prediction.wrong{background:#ffb44c}.halo{position:absolute;transform:translate(-50%,-50%);border:1px dashed #d7e4da99;border-radius:50%;z-index:2}.empty{padding:50px;color:#aabdaf;text-align:center}a{color:#91dda7}
 </style></head><body><nav class="nav"><a href="/">Studio</a><a href="/registration">Registration</a><a href="/runs">Run history</a><a href="/model">Model validation</a></nav><header><h1>Cross-run chip comparison</h1><p class="lede">One image, every available model output.</p><form id="form" class="controls"><input id="chip" pattern="r[0-9]{6}_c[0-9]{6}" required><label>Radius <select id="radius"><option value="2.0">2 m</option><option selected value="4.0">4 m</option></select></label><button>Load</button><a id="curate" class="action-link" href="/registration">Curate this chip</a></form></header><main id="grid" class="grid"></main>
 <script>
-let payload;const $=id=>document.getElementById(id),params=new URLSearchParams(location.search),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let payload;const $=id=>document.getElementById(id),params=new URLSearchParams(location.search),requestedRun=params.get('run'),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function match(data,display,threshold){const radius=+$('radius').value/display.resolution_m/display.output_stride,preds=data.predictions.filter(p=>p.score>=threshold).sort((a,b)=>b.score-a.score),used=new Set(),pairs=new Map();for(const p of preds){let best=null,dist=Infinity;for(const t of data.ground_truth){if(used.has(t.tree_id))continue;const d=Math.hypot(p.output_x-t.output_x,p.output_y-t.output_y);if(d<=radius&&d<dist){best=t;dist=d}}if(best){used.add(best.tree_id);pairs.set(p.prediction_id,best)}}return{preds,used,pairs}}
 function layers(entry,m){const d=entry.display,size=d.chip_pixels,stride=d.output_stride,diameter=200*+$('radius').value/d.resolution_m/size,at=(v,a)=>`${100*v[a]*stride/size}%`,halos=entry.data.ground_truth.map(t=>`<i class="halo" style="left:${at(t,'output_x')};top:${at(t,'output_y')};width:${diameter}%;height:${diameter}%"></i>`).join(''),truth=entry.data.ground_truth.map(t=>`<i class="marker truth ${m.used.has(t.tree_id)?'':'missed'}" title="${esc(t.species||t.tree_id)}" style="left:${at(t,'output_x')};top:${at(t,'output_y')}"></i>`).join(''),preds=m.preds.map(p=>{const t=m.pairs.get(p.prediction_id),wrong=t&&t.species_id!=null&&p.species_id!==t.species_id;return `<i class="marker prediction ${t?(wrong?'wrong':'matched'):''}" title="${esc(p.species)} · ${(100*p.score).toFixed(0)}%" style="left:${at(p,'output_x')};top:${at(p,'output_y')}"></i>`}).join('');return halos+truth+preds}
-function render(){if(!payload)return;$('grid').innerHTML=payload.runs.map(entry=>{const run=entry.run;if(!entry.available)return `<article class="card"><div class="card-head"><strong>${esc(run.run_id)}</strong></div><div class="empty">Chip unavailable in this run</div></article>`;const threshold=+run.metrics.confidence_threshold,m=match(entry.data,entry.display,threshold),wrong=[...m.pairs].filter(([id,t])=>{const p=m.preds.find(v=>v.prediction_id===id);return t.species_id!=null&&p.species_id!==t.species_id}).length;return `<article class="card"><div class="card-head"><strong>${esc(run.run_id)}</strong><a href="/model?run=${encodeURIComponent(run.run_id)}&chip=${encodeURIComponent(payload.chip_id)}">Open run</a></div><div class="image"><img src="/api/model/image/${encodeURIComponent(payload.chip_id)}.png?run=${encodeURIComponent(run.run_id)}">${layers(entry,m)}</div><div class="facts">${m.pairs.size} matched · ${entry.data.ground_truth.length-m.used.size} missed · ${m.preds.length-m.pairs.size} false positive · ${wrong} wrong species · threshold ${threshold.toFixed(2)}</div></article>`}).join('')}
-async function load(){const chip=$('chip').value;history.replaceState(null,'',`/compare?chip=${encodeURIComponent(chip)}`);$('grid').innerHTML='<div class="empty">Loading run outputs…</div>';const response=await fetch(`/api/runs/chip/${encodeURIComponent(chip)}`);payload=await response.json();if(!response.ok){$('grid').innerHTML=`<div class="empty">${esc(payload.error)}</div>`;return}const returnTo=location.pathname+location.search;$('curate').href=`/curate?run=${encodeURIComponent(payload.selected_run_id||'')}&chip=${encodeURIComponent(chip)}&return=${encodeURIComponent(returnTo)}`;render()}
+function render(){if(!payload)return;$('grid').innerHTML=payload.runs.map(entry=>{const run=entry.run,label=`${run.city||'—'} · ${run.cohort||'validation'} · ${run.training_run_id||run.run_id}`;if(!entry.available)return `<article class="card"><div class="card-head"><strong>${esc(label)}</strong></div><div class="empty">Chip unavailable in this evaluation</div></article>`;const threshold=+run.metrics.confidence_threshold,m=match(entry.data,entry.display,threshold),wrong=[...m.pairs].filter(([id,t])=>{const p=m.preds.find(v=>v.prediction_id===id);return t.species_id!=null&&p.species_id!==t.species_id}).length;return `<article class="card"><div class="card-head"><strong>${esc(label)}</strong><a href="/model?run=${encodeURIComponent(run.run_id)}&chip=${encodeURIComponent(payload.chip_id)}">Open evaluation</a></div><div class="image"><img src="/api/model/image/${encodeURIComponent(payload.chip_id)}.png?run=${encodeURIComponent(run.run_id)}">${layers(entry,m)}</div><div class="facts">${m.pairs.size} matched · ${entry.data.ground_truth.length-m.used.size} missed · ${m.preds.length-m.pairs.size} false positive · ${wrong} wrong species · threshold ${threshold.toFixed(2)}</div></article>`}).join('')}
+async function load(){const chip=$('chip').value,runQuery=requestedRun?`&run=${encodeURIComponent(requestedRun)}`:'';history.replaceState(null,'',`/compare?chip=${encodeURIComponent(chip)}${runQuery}`);$('grid').innerHTML='<div class="empty">Loading evaluation outputs…</div>';const response=await fetch(`/api/runs/chip/${encodeURIComponent(chip)}?${runQuery.slice(1)}`);payload=await response.json();if(!response.ok){$('grid').innerHTML=`<div class="empty">${esc(payload.error)}</div>`;return}$('curate').hidden=!payload.curation_available;const returnTo=location.pathname+location.search;$('curate').href=`/curate?run=${encodeURIComponent(payload.selected_run_id||'')}&chip=${encodeURIComponent(chip)}&return=${encodeURIComponent(returnTo)}`;render()}
 $('chip').value=params.get('chip')||'';$('form').addEventListener('submit',e=>{e.preventDefault();load()});$('radius').addEventListener('change',render);if($('chip').value)load();
 </script></body></html>"""
 
@@ -417,7 +514,7 @@ MODEL_DEBUG_HTML = """<!doctype html>
 <title>Model validation · Urban Tree Model Studio</title><style>
 :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif}*{box-sizing:border-box}
 body{margin:0;background:#0d1410;color:#edf6ef}.nav{position:sticky;top:0;z-index:100;display:flex;gap:8px;padding:10px 22px;background:#090e0b;border-bottom:1px solid #2d4034}.nav a{color:#cce8d3;text-decoration:none;padding:5px 9px;border-radius:6px;background:#1b2a21}
-header{position:sticky;top:45px;z-index:5;background:#142019ee;backdrop-filter:blur(12px);padding:18px 24px;border-bottom:1px solid #354b3c}h1{margin:0 0 5px;font-size:23px}.lede{margin:0;color:#aabdaf}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px;padding:18px 24px}.metric,.panel{background:#17231c;border:1px solid #304438;border-radius:10px;padding:13px}.metric strong{display:block;font-size:24px}.metric span{font-size:12px;color:#9eb2a4}.workspace{display:grid;grid-template-columns:minmax(300px,1fr) minmax(460px,2fr);gap:16px;padding:0 24px 24px}.panel h2{margin:0 0 12px;font-size:16px}.chart{width:100%;height:190px;background:#0e1712;border-radius:7px}.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}select,input{accent-color:#69be83;background:#203027;color:#edf6ef;border:1px solid #486151;border-radius:6px;padding:6px}.action-link{display:inline-flex;align-items:center;min-height:36px;background:#203027;color:#edf6ef!important;border:1px solid #486151;border-radius:7px;padding:6px 10px;text-decoration:none}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:14px;padding:0 24px 30px}.card{background:#17231c;border:1px solid #304438;border-radius:10px;overflow:hidden}.card-head{display:flex;justify-content:space-between;padding:9px 11px;font-size:12px;color:#b9cabe}.image{position:relative;aspect-ratio:1;background:#050805;cursor:zoom-in}.image img{width:100%;height:100%;display:block}.marker{position:absolute;transform:translate(-50%,-50%);border-radius:50%;pointer-events:auto;cursor:help;z-index:3}.match-radius{position:absolute;transform:translate(-50%,-50%);border:1px dashed #d7e4da99;border-radius:50%;pointer-events:none;z-index:2}.truth{width:11px;height:11px;border:2px solid #35e5ee}.truth.missed{border-color:#ff5e6c;width:14px;height:14px}.prediction{width:8px;height:8px;background:#e850e8;border:1px solid #170817;z-index:4}.prediction.matched{background:#65e486}.prediction.wrong{background:#ffb44c}.facts{padding:9px 11px;color:#aebfb3;font-size:12px;line-height:1.5}.legend{display:flex;flex-wrap:wrap;gap:5px 12px;font-size:12px;color:#b6c8bb}.legend-item{display:inline-flex;align-items:center;gap:5px;cursor:help}.dot{display:inline-block;width:10px;height:10px;border-radius:50%}.cyan{border:2px solid #35e5ee}.green{background:#65e486}.orange{background:#ffb44c}.pink{background:#e850e8}.red{border:2px solid #ff5e6c}.halo{border:1px dashed #d7e4da}.empty{padding:50px;text-align:center;color:#afc1b4}.tooltip{position:fixed;display:none;z-index:130;max-width:280px;white-space:pre-line;padding:8px 10px;border-radius:7px;background:#060a08ee;border:1px solid #58705f;color:#eef7f0;font-size:12px;line-height:1.4;pointer-events:none;box-shadow:0 8px 28px #0009}.modal{position:fixed;inset:45px 0 0;z-index:120;display:grid;place-items:center;padding:24px;background:#030604e8}.modal[hidden]{display:none}.modal-panel{width:min(92vw,900px);max-height:calc(100vh - 60px);overflow:auto;background:#142019;border:1px solid #496252;border-radius:14px;box-shadow:0 20px 70px #000}.modal-head{display:flex;justify-content:space-between;align-items:center;padding:12px 15px}.modal-head h2{margin:0;font-size:17px}.modal-close{background:#26392d;color:#edf6ef;border:1px solid #56705e;border-radius:7px;padding:6px 10px;cursor:pointer}.modal .image{width:min(86vw,78vh,800px);margin:auto}.modal .match-radius{border-width:2px}.modal .prediction{width:10px;height:10px}.modal-note{padding:12px 16px 17px;color:#b9cabe}@media(max-width:850px){.workspace{grid-template-columns:1fr}.gallery{padding:0 10px}.metrics,header{padding-left:12px;padding-right:12px}}
+header{position:sticky;top:45px;z-index:5;background:#142019ee;backdrop-filter:blur(12px);padding:18px 24px;border-bottom:1px solid #354b3c}h1{margin:0 0 5px;font-size:23px}.lede{margin:0;color:#aabdaf}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px;padding:18px 24px}.metric,.panel{background:#17231c;border:1px solid #304438;border-radius:10px;padding:13px}.metric strong{display:block;font-size:24px}.metric span{font-size:12px;color:#9eb2a4}.workspace{display:grid;grid-template-columns:minmax(300px,1fr) minmax(460px,2fr);gap:16px;padding:0 24px 24px}.panel h2{margin:0 0 12px;font-size:16px}.chart{width:100%;height:190px;background:#0e1712;border-radius:7px}.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}select,input{accent-color:#69be83;background:#203027;color:#edf6ef;border:1px solid #486151;border-radius:6px;padding:6px}.action-link{display:inline-flex;align-items:center;min-height:36px;background:#203027;color:#edf6ef!important;border:1px solid #486151;border-radius:7px;padding:6px 10px;text-decoration:none}.action-link[hidden]{display:none!important}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:14px;padding:0 24px 30px}.card{background:#17231c;border:1px solid #304438;border-radius:10px;overflow:hidden}.card-head{display:flex;justify-content:space-between;padding:9px 11px;font-size:12px;color:#b9cabe}.image{position:relative;aspect-ratio:1;background:#050805;cursor:zoom-in}.image img{width:100%;height:100%;display:block}.marker{position:absolute;transform:translate(-50%,-50%);border-radius:50%;pointer-events:auto;cursor:help;z-index:3}.match-radius{position:absolute;transform:translate(-50%,-50%);border:1px dashed #d7e4da99;border-radius:50%;pointer-events:none;z-index:2}.truth{width:11px;height:11px;border:2px solid #35e5ee}.truth.missed{border-color:#ff5e6c;width:14px;height:14px}.prediction{width:8px;height:8px;background:#e850e8;border:1px solid #170817;z-index:4}.prediction.matched{background:#65e486}.prediction.wrong{background:#ffb44c}.facts{padding:9px 11px;color:#aebfb3;font-size:12px;line-height:1.5}.legend{display:flex;flex-wrap:wrap;gap:5px 12px;font-size:12px;color:#b6c8bb}.legend-item{display:inline-flex;align-items:center;gap:5px;cursor:help}.dot{display:inline-block;width:10px;height:10px;border-radius:50%}.cyan{border:2px solid #35e5ee}.green{background:#65e486}.orange{background:#ffb44c}.pink{background:#e850e8}.red{border:2px solid #ff5e6c}.halo{border:1px dashed #d7e4da}.empty{padding:50px;text-align:center;color:#afc1b4}.tooltip{position:fixed;display:none;z-index:130;max-width:280px;white-space:pre-line;padding:8px 10px;border-radius:7px;background:#060a08ee;border:1px solid #58705f;color:#eef7f0;font-size:12px;line-height:1.4;pointer-events:none;box-shadow:0 8px 28px #0009}.modal{position:fixed;inset:45px 0 0;z-index:120;display:grid;place-items:center;padding:24px;background:#030604e8}.modal[hidden]{display:none}.modal-panel{width:min(92vw,900px);max-height:calc(100vh - 60px);overflow:auto;background:#142019;border:1px solid #496252;border-radius:14px;box-shadow:0 20px 70px #000}.modal-head{display:flex;justify-content:space-between;align-items:center;padding:12px 15px}.modal-head h2{margin:0;font-size:17px}.modal-close{background:#26392d;color:#edf6ef;border:1px solid #56705e;border-radius:7px;padding:6px 10px;cursor:pointer}.modal .image{width:min(86vw,78vh,800px);margin:auto}.modal .match-radius{border-width:2px}.modal .prediction{width:10px;height:10px}.modal-note{padding:12px 16px 17px;color:#b9cabe}@media(max-width:850px){.workspace{grid-template-columns:1fr}.gallery{padding:0 10px}.metrics,header{padding-left:12px;padding-right:12px}}
 </style></head><body><nav class="nav"><a href="/">Studio</a><a href="/registration">Registration</a><a href="/runs">Run history</a><a href="/model">Model validation</a></nav>
 <header><h1>Validation explorer</h1><p class="lede">Held-out validation blocks only · test remains sealed</p><div class="controls"><label>Radius <select id="radius" title="Maximum center-to-center distance for a spatial match"></select></label><label>Confidence <input id="threshold" type="range" min="0.05" max="0.75" step="0.01" title="Only predictions at or above this center confidence are shown"><span id="threshold-value"></span></label><label>Order <select id="sort"><option selected value="worst">Worst detection F1</option><option value="missed">Most missed</option><option value="false_positive">Most false positives</option><option value="species_errors">Most species errors</option><option value="matched">Most matches</option></select></label><label>Cards <select id="limit"><option>12</option><option selected>24</option><option>48</option><option>97</option></select></label><label title="Hide validation chips whose curation scene is marked Done"><input id="unreviewed" type="checkbox"> Unreviewed only</label><span class="legend"><span class="legend-item" title="Retained municipal inventory tree"><i class="dot cyan"></i>Inventory truth</span><span class="legend-item" title="Prediction within the selected radius and with the correct species"><i class="dot green"></i>Matched</span><span class="legend-item" title="Prediction within the selected radius but with a different species"><i class="dot orange"></i>Wrong species</span><span class="legend-item" title="Prediction with no unused inventory tree inside the selected radius"><i class="dot pink"></i>False positive</span><span class="legend-item" title="Inventory tree with no prediction inside the selected radius"><i class="dot red"></i>Missed</span><span class="legend-item" title="The selected 2 m or 4 m matching tolerance around each inventory point"><i class="dot halo"></i>Match radius</span></span></div></header>
 <section id="metrics" class="metrics"></section><section class="workspace"><div class="panel"><h2>Training and validation loss</h2><svg id="curve" class="chart" viewBox="0 0 600 190"></svg></div><div class="panel"><h2>What this view answers</h2><p>Do detections land on inventory stems? Are failures spatial or taxonomic? Does DBH remain plausible? The dashed halo shows the selected center-matching tolerance. Click any chip for a larger inspection view.</p><p id="run-detail"></p></div></section><main id="gallery" class="gallery"></main>
@@ -436,10 +533,10 @@ function markerLayers(data,m){const size=state.display.chip_pixels,stride=state.
 function showTooltip(event){const tip=$('tooltip');tip.textContent=event.currentTarget.dataset.tip;tip.style.display='block';moveTooltip(event)}
 function moveTooltip(event){const tip=$('tooltip'),clientX=Number.isFinite(event.clientX)?event.clientX:window.innerWidth/2,clientY=Number.isFinite(event.clientY)?event.clientY:window.innerHeight/2,x=Math.min(clientX+14,window.innerWidth-300),y=Math.min(clientY+14,window.innerHeight-tip.offsetHeight-12);tip.style.left=`${Math.max(8,x)}px`;tip.style.top=`${Math.max(8,y)}px`}
 function bindTooltips(root){root.querySelectorAll('[data-tip]').forEach(marker=>{marker.addEventListener('pointerenter',showTooltip);marker.addEventListener('pointermove',moveTooltip);marker.addEventListener('pointerleave',()=>{$('tooltip').style.display='none'});marker.addEventListener('focus',showTooltip);marker.addEventListener('blur',()=>{$('tooltip').style.display='none'})})}
-function openModal(data){const m=matchChip(data),stats=chipStats(data,m),url=new URL(location.href);$('modal').dataset.chip=data.chip_id;$('modal-title').textContent=`${data.chip_id} · enlarged inspection`;$('modal-image').innerHTML=`<img src="${withRun(`/api/model/image/${data.chip_id}.png`)}">${markerLayers(data,m)}`;$('modal-note').textContent=`${$('radius').value} m radius · ${$('threshold').value} confidence · ${stats.matched} matched · ${stats.missed} missed · ${stats.falsePositive} false positive · ${stats.wrong} wrong species`;$('compare-chip').href=`/compare?chip=${encodeURIComponent(data.chip_id)}`;url.searchParams.set('chip',data.chip_id);history.replaceState(null,'',url);const returnTo=url.pathname+url.search;$('curate-chip').href=`/curate?run=${encodeURIComponent(state.run_id)}&chip=${encodeURIComponent(data.chip_id)}&threshold=${encodeURIComponent($('threshold').value)}&return=${encodeURIComponent(returnTo)}`;$('modal').hidden=false;bindTooltips($('modal-image'))}
+function openModal(data){const m=matchChip(data),stats=chipStats(data,m),url=new URL(location.href);$('modal').dataset.chip=data.chip_id;$('modal-title').textContent=`${data.chip_id} · enlarged inspection`;$('modal-image').innerHTML=`<img src="${withRun(`/api/model/image/${data.chip_id}.png`)}">${markerLayers(data,m)}`;$('modal-note').textContent=`${$('radius').value} m radius · ${$('threshold').value} confidence · ${stats.matched} matched · ${stats.missed} missed · ${stats.falsePositive} false positive · ${stats.wrong} wrong species`;$('compare-chip').href=`/compare?chip=${encodeURIComponent(data.chip_id)}&run=${encodeURIComponent(state.run_id)}`;url.searchParams.set('chip',data.chip_id);history.replaceState(null,'',url);const returnTo=url.pathname+url.search;$('curate-chip').href=`/curate?run=${encodeURIComponent(state.run_id)}&chip=${encodeURIComponent(data.chip_id)}&threshold=${encodeURIComponent($('threshold').value)}&return=${encodeURIComponent(returnTo)}`;$('modal').hidden=false;bindTooltips($('modal-image'))}
 function closeModal(){const url=new URL(location.href);url.searchParams.delete('chip');history.replaceState(null,'',url);$('modal').hidden=true;$('tooltip').style.display='none'}
 async function card(summary){let data=chipCache.get(summary.chip_id);if(!data){data=await fetch(withRun(`/api/model/chip/${summary.chip_id}`)).then(response=>response.json());chipCache.set(summary.chip_id,data)}const m=matchChip(data),stats=chipStats(data,m);return `<article class="card"><div class="card-head"><strong>${summary.chip_id}</strong><span>${data.ground_truth.length} trees · F1 ${(100*summary.detection_f1).toFixed(0)}%</span></div><div class="image" data-chip="${summary.chip_id}" title="Click to inspect this chip"><img loading="lazy" src="${withRun(`/api/model/image/${summary.chip_id}.png`)}">${markerLayers(data,m)}</div><div class="facts">${stats.matched} matched · ${stats.missed} missed · ${stats.falsePositive} false positive · ${stats.wrong} wrong species</div></article>`}
 async function gallery(){const key=$('sort').value,limit=+$('limit').value,eligible=state.chips.filter(chip=>!$('unreviewed').checked||!curationStatus[chip.chip_id]?.reviewed),chips=[...eligible].sort((a,b)=>key==='worst'?a.detection_f1-b.detection_f1||b.error_score-a.error_score:b[key]-a[key]).slice(0,limit);$('gallery').innerHTML=chips.length?'<div class="empty">Rendering chip overlays…</div>':'<div class="empty">No unreviewed validation chips remain.</div>';if(!chips.length)return;const cards=await Promise.all(chips.map(card));$('gallery').innerHTML=cards.join('');$('gallery').querySelectorAll('[data-chip]').forEach(image=>image.addEventListener('click',()=>openModal(chipCache.get(image.dataset.chip))));bindTooltips($('gallery'))}
 async function refresh(){showMetrics();await gallery();const chipId=$('modal').dataset.chip;if(!$('modal').hidden&&chipId)openModal(chipCache.get(chipId))}
-async function init(){const [response,statusResponse]=await Promise.all([fetch(withRun('/api/model/summary')),fetch('/api/curation-status')]);if(!response.ok){$('gallery').innerHTML='<div class="empty">No validation artifacts loaded.</div>';return}state=await response.json();if(statusResponse.ok)curationStatus=(await statusResponse.json()).chips||{};document.title=`${state.run_id} · Model validation`;$('run-detail').textContent=`${state.run_id} · ${state.metrics.ground_truth_trees} truth trees · ${state.metrics.predictions_above_threshold} predictions at the saved threshold · ${state.metrics.chips} chips`;$('unreviewed').checked=pageParams.get('unreviewed')==='1';const radii=Object.keys(state.metrics.metrics_by_match_radius_m);$('radius').innerHTML=radii.map(value=>`<option value="${value}">${value} m</option>`).join('');$('threshold').value=state.metrics.confidence_threshold;$('threshold-value').textContent=Number($('threshold').value).toFixed(2);showMetrics();chart();await gallery();const requestedChip=pageParams.get('chip');if(requestedChip&&!($('unreviewed').checked&&curationStatus[requestedChip]?.reviewed)){let data=chipCache.get(requestedChip);if(!data){const chipResponse=await fetch(withRun(`/api/model/chip/${requestedChip}`));if(chipResponse.ok){data=await chipResponse.json();chipCache.set(requestedChip,data)}}if(data)openModal(data)}for(const id of ['radius','sort','limit'])$(id).addEventListener('change',refresh);$('unreviewed').addEventListener('change',()=>{const url=new URL(location.href);if($('unreviewed').checked)url.searchParams.set('unreviewed','1');else url.searchParams.delete('unreviewed');history.replaceState(null,'',url);refresh()});$('threshold').addEventListener('input',()=>{$('threshold-value').textContent=Number($('threshold').value).toFixed(2)});$('threshold').addEventListener('change',refresh);$('modal-close').addEventListener('click',closeModal);$('modal').addEventListener('click',event=>{if(event.target===$('modal'))closeModal()});document.addEventListener('keydown',event=>{if(event.key==='Escape')closeModal()})}init();
+async function init(){const [response,statusResponse]=await Promise.all([fetch(withRun('/api/model/summary')),fetch('/api/curation-status')]);if(!response.ok){$('gallery').innerHTML='<div class="empty">No validation artifacts loaded.</div>';return}state=await response.json();$('curate-chip').hidden=!state.curation_available;if(state.curation_available&&statusResponse.ok)curationStatus=(await statusResponse.json()).chips||{};document.title=`${state.run_id} · Model validation`;$('run-detail').textContent=`${state.city} · ${state.cohort} · ${state.training_run_id} · ${state.metrics.ground_truth_trees} truth trees · ${state.metrics.predictions_above_threshold} predictions at the saved threshold · ${state.metrics.chips} chips`;$('unreviewed').checked=pageParams.get('unreviewed')==='1';$('unreviewed').disabled=!state.curation_available;const radii=Object.keys(state.metrics.metrics_by_match_radius_m);$('radius').innerHTML=radii.map(value=>`<option value="${value}">${value} m</option>`).join('');$('threshold').value=state.metrics.confidence_threshold;$('threshold-value').textContent=Number($('threshold').value).toFixed(2);showMetrics();chart();await gallery();const requestedChip=pageParams.get('chip');if(requestedChip&&!($('unreviewed').checked&&curationStatus[requestedChip]?.reviewed)){let data=chipCache.get(requestedChip);if(!data){const chipResponse=await fetch(withRun(`/api/model/chip/${requestedChip}`));if(chipResponse.ok){data=await chipResponse.json();chipCache.set(requestedChip,data)}}if(data)openModal(data)}for(const id of ['radius','sort','limit'])$(id).addEventListener('change',refresh);$('unreviewed').addEventListener('change',()=>{const url=new URL(location.href);if($('unreviewed').checked)url.searchParams.set('unreviewed','1');else url.searchParams.delete('unreviewed');history.replaceState(null,'',url);refresh()});$('threshold').addEventListener('input',()=>{$('threshold-value').textContent=Number($('threshold').value).toFixed(2)});$('threshold').addEventListener('change',refresh);$('modal-close').addEventListener('click',closeModal);$('modal').addEventListener('click',event=>{if(event.target===$('modal'))closeModal()});document.addEventListener('keydown',event=>{if(event.key==='Escape')closeModal()})}init();
 </script></body></html>"""

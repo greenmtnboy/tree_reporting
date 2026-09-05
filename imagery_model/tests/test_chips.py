@@ -3,12 +3,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 import rasterio
 from pyproj import Transformer
 from rasterio.transform import from_origin
 
 from urban_tree_ml.chips import build_chips
-from urban_tree_ml.config import load_config
+from urban_tree_ml.config import ReferenceConfig, load_config
 
 
 def test_build_chips_materializes_targets_and_training_statistics(tmp_path: Path) -> None:
@@ -89,6 +90,27 @@ def test_build_chips_materializes_targets_and_training_statistics(tmp_path: Path
     assert set(collision_exclusions["collision_size"]) == {2}
     labels = pd.read_parquet(summary["labels"])
     assert set(labels["tree_id"]) == {"complete-tree", "detection-only-tree"}
+
+    reference_normalization = tmp_path / "sf-normalization.json"
+    reference_normalization.write_text(
+        json.dumps({"mean": [10, 20, 30, 40], "std": [2, 3, 4, 5]}),
+        encoding="utf-8",
+    )
+    config.dataset = "external-city-fixture"
+    config.reference = ReferenceConfig(
+        taxonomy_path=tmp_path / "sf-taxonomy.json",
+        normalization_path=reference_normalization,
+    )
+
+    external_summary = build_chips(config, raster_path)
+
+    applied = json.loads(Path(external_summary["normalization"]).read_text(encoding="utf-8"))
+    local = json.loads(
+        Path(external_summary["local_normalization"]).read_text(encoding="utf-8")
+    )
+    assert applied["mean"] == [10.0, 20.0, 30.0, 40.0]
+    assert applied["std"] == [2.0, 3.0, 4.0, 5.0]
+    assert local["mean"] == pytest.approx([50 / 255, 50 / 255, 50 / 255, 100 / 255])
 
 
 def test_build_chips_applies_finalized_registration_feedback(tmp_path: Path) -> None:

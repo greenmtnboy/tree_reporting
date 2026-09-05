@@ -59,6 +59,19 @@ def imagery_fetch(
     _print(fetch_stac_item(load_config(config_path), item_id, overwrite=overwrite))
 
 
+@imagery_app.command("fetch-selected")
+def imagery_fetch_selected(
+    config_path: ConfigPath,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace existing validated rasters"),
+    ] = False,
+) -> None:
+    from urban_tree_ml.imagery import fetch_configured_stac_items
+
+    _print(fetch_configured_stac_items(load_config(config_path), overwrite=overwrite))
+
+
 @imagery_app.command("mosaic")
 def imagery_mosaic(
     config_path: ConfigPath,
@@ -361,6 +374,13 @@ def evaluate(
             help="Unlock the sealed test split after decisions are frozen",
         ),
     ] = False,
+    cohort: Annotated[
+        str | None,
+        typer.Option(
+            "--cohort",
+            help="Output cohort name, such as external-usbos; defaults to the split name",
+        ),
+    ] = None,
 ) -> None:
     from urban_tree_ml.evaluation import run_evaluation
 
@@ -371,6 +391,7 @@ def evaluate(
             split=split,
             device_name=device,
             allow_test=allow_test,
+            cohort=cohort,
         )
     )
 

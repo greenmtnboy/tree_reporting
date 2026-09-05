@@ -5,7 +5,7 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
-from urban_tree_ml.config import ProjectConfig
+from urban_tree_ml.config import ProjectConfig, taxonomy_path
 
 
 def _git_metadata() -> dict[str, object]:
@@ -45,10 +45,8 @@ def run_training(config: ProjectConfig, resume: str | None = None) -> dict[str, 
     from urban_tree_ml.losses import multitask_loss
     from urban_tree_ml.model import RawImageryTreeModel
 
-    taxonomy_path = (
-        config.paths.root / "inventory" / config.inventory.city.lower() / "taxonomy.json"
-    )
-    taxonomy = json.loads(taxonomy_path.read_text(encoding="utf-8"))
+    selected_taxonomy_path = taxonomy_path(config)
+    taxonomy = json.loads(selected_taxonomy_path.read_text(encoding="utf-8"))
     manifest_path = config.paths.root / "chips" / config.dataset / "chips.parquet"
     train_dataset = NpzChipDataset(
         manifest_path,
@@ -139,7 +137,10 @@ def run_training(config: ProjectConfig, resume: str | None = None) -> dict[str, 
         "created_at": datetime.now(UTC).isoformat(),
         "config": config.model_dump(mode="json"),
         "git": _git_metadata(),
-        "inventory_summary": str(taxonomy_path.with_name("summary.json")),
+        "inventory_summary": str(
+            config.paths.root / "inventory" / config.inventory.city.lower() / "summary.json"
+        ),
+        "taxonomy": str(selected_taxonomy_path),
         "imagery_index": str(
             config.paths.root / "imagery" / config.inventory.city.lower() / "stac-items.json"
         ),
