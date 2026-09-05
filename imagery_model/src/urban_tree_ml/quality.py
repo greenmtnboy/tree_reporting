@@ -279,7 +279,7 @@ def _render_grouped_registration_html(
     .tree-choice.heuristic-suggestion {{ background: #594819; border-color: #ffcf66; color: #fff1bf; }}
     .details {{ padding: 9px 12px 0; line-height: 1.5; min-height: 70px; }}
     .selected-species {{ color: #eef5ef; font-size: 14px; font-weight: 700; }}
-    .actions {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 10px 12px; }}
+    .actions {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(82px, 1fr)); gap: 5px; padding: 10px 12px; }}
     .actions button {{ min-height: 40px; padding: 6px 3px; font-size: 12px; }}
     .actions button.active {{ background: #d5ebda; border-color: #d5ebda; color: #102016; }}
     .offset-hint {{ color: #ffe6a3; }}
@@ -297,7 +297,24 @@ def _render_grouped_registration_html(
     .card.fullscreen .details {{ grid-area: details; }}
     .card.fullscreen .actions {{ grid-area: actions; }}
     .card.fullscreen textarea {{ grid-area: note; align-self: start; }}
+    .street-view-panel {{ display: none; min-width: 200px; min-height: 420px; overflow: hidden;
+      border: 1px solid #30443a; border-radius: 8px; background: #0b110e; }}
+    .street-view-head {{ display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      min-height: 42px; padding: 6px 8px; color: #c8d7cc; font-size: 12px; }}
+    .street-view-head a {{ color: #b9e6c5; }}
+    .street-view-head button {{ min-height: 28px; padding: 3px 8px; font-size: 11px; }}
+    .street-view-frame {{ display: block; width: 100%; height: calc(100% - 42px); min-height: 378px; border: 0; }}
+    .card.fullscreen.street-view-open {{ grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr) minmax(330px, 400px);
+      grid-template-areas: "head head head" "image street list" "image street details" "image street actions" "image street note"; }}
+    .card.fullscreen.street-view-open .image-wrap {{ width: min(calc(50vw - 205px), calc(100vh - 72px)); }}
+    .card.fullscreen.street-view-open .street-view-panel {{ grid-area: street; display: block; align-self: stretch; }}
+    .street-view-button.active {{ background: #d5ebda; border-color: #d5ebda; color: #102016; }}
     .hidden {{ display: none; }}
+    @media (max-width: 1100px) {{
+      .card.fullscreen.street-view-open {{ grid-template-columns: minmax(0, 1fr) minmax(330px, 420px);
+        grid-template-areas: "head head" "street list" "street details" "street actions" "street note"; }}
+      .card.fullscreen.street-view-open .image-wrap {{ display: none; }}
+    }}
     @media (max-width: 850px) {{
       main {{ padding: 8px; grid-template-columns: 1fr; }} #stats {{ width: 100%; }}
       .card.fullscreen {{ display: block; }}
@@ -347,6 +364,7 @@ def _render_grouped_registration_html(
     const samples = {payload};
     const scenes = {scene_payload};
     const metadata = {metadata_payload};
+    const streetViewEmbedApiKey = null;
     const samplesById = Object.fromEntries(samples.map(sample => [sample.sample_id, sample]));
     const scenesById = Object.fromEntries(scenes.map(scene => [scene.scene_id, scene]));
     const isStacked = sample => Number(sample.coordinate_stack_size || 1) > 1;
@@ -490,16 +508,53 @@ def _render_grouped_registration_html(
       else delete sceneReviews[sceneId];
       persist();
     }}
-    function openStreetView(sceneId) {{
-      if (selectionFor(sceneId).size !== 1) return;
-      const sample = samplesById[activeByScene[sceneId]];
+    function externalStreetViewUrl(sample) {{
       const parameters = new URLSearchParams({{
         api: "1", map_action: "pano", viewpoint: `${{sample.latitude}},${{sample.longitude}}`
       }});
-      window.open(`https://www.google.com/maps/@?${{parameters}}`, "_blank", "noopener,noreferrer");
+      return `https://www.google.com/maps/@?${{parameters}}`;
+    }}
+    function embeddedStreetViewUrl(sample) {{
+      const parameters = new URLSearchParams({{
+        key: streetViewEmbedApiKey,
+        location: `${{sample.latitude}},${{sample.longitude}}`,
+        radius: "50",
+        source: "outdoor",
+      }});
+      return `https://www.google.com/maps/embed/v1/streetview?${{parameters}}`;
+    }}
+    function closeStreetView(card) {{
+      card.classList.remove("street-view-open");
+      const frame = card.querySelector(".street-view-frame");
+      frame.src = "about:blank";
+      delete frame.dataset.viewpoint;
+    }}
+    function refreshStreetView(card, sample) {{
+      const frame = card.querySelector(".street-view-frame");
+      const viewpoint = `${{sample.latitude}},${{sample.longitude}}`;
+      if (frame.dataset.viewpoint !== viewpoint) {{
+        frame.src = embeddedStreetViewUrl(sample);
+        frame.dataset.viewpoint = viewpoint;
+      }}
+      card.querySelector(".street-view-location").textContent = viewpoint;
+      card.querySelector(".street-view-external").href = externalStreetViewUrl(sample);
+    }}
+    function toggleStreetView(sceneId) {{
+      if (selectionFor(sceneId).size !== 1) return;
+      const card = document.querySelector(`.card[data-scene="${{sceneId}}"]`);
+      const sample = samplesById[activeByScene[sceneId]];
+      if (!streetViewEmbedApiKey) {{
+        window.open(externalStreetViewUrl(sample), "_blank", "noopener,noreferrer");
+        return;
+      }}
+      if (!card.classList.contains("fullscreen")) setExpanded(card, true);
+      if (card.classList.contains("street-view-open")) closeStreetView(card);
+      else {{ card.classList.add("street-view-open"); refreshStreetView(card, sample); }}
+      update();
     }}
     function setExpanded(card, expanded) {{
       document.querySelectorAll(".card.fullscreen").forEach(openCard => {{
+        closeStreetView(openCard);
         openCard.classList.remove("fullscreen");
         const openButton = openCard.querySelector(".expand-button");
         openButton.textContent = "Full screen"; openButton.setAttribute("aria-expanded", "false");
@@ -514,9 +569,16 @@ def _render_grouped_registration_html(
     function moveScene(card, direction) {{
       const visibleCards = [...document.querySelectorAll(".card:not(.hidden)")];
       if (visibleCards.length < 2) return;
+      const keepStreetViewOpen = card.classList.contains("street-view-open");
       const currentIndex = visibleCards.indexOf(card);
       const nextIndex = (currentIndex + direction + visibleCards.length) % visibleCards.length;
-      setExpanded(visibleCards[nextIndex], true);
+      const nextCard = visibleCards[nextIndex];
+      setExpanded(nextCard, true);
+      if (keepStreetViewOpen && streetViewEmbedApiKey) {{
+        nextCard.classList.add("street-view-open");
+        refreshStreetView(nextCard, samplesById[activeByScene[nextCard.dataset.scene]]);
+        update();
+      }}
     }}
     function update() {{
       let visibleScenes = 0;
@@ -643,9 +705,19 @@ def _render_grouped_registration_html(
           : note.dataset.singlePlaceholder;
         const streetViewButton = card.querySelector(".street-view-button");
         streetViewButton.disabled = multiSelect;
+        if (multiSelect && card.classList.contains("street-view-open")) closeStreetView(card);
+        streetViewButton.classList.toggle("active", card.classList.contains("street-view-open"));
+        streetViewButton.textContent = streetViewEmbedApiKey
+          ? (card.classList.contains("street-view-open") ? "Hide Street View" : "Street View")
+          : "Street View ↗";
         streetViewButton.title = multiSelect
           ? "Street View requires a single selected tree."
-          : `Open Street View nearest ${{selected.latitude.toFixed(6)}}, ${{selected.longitude.toFixed(6)}}`;
+          : streetViewEmbedApiKey
+            ? `Show embedded Street View nearest ${{selected.latitude.toFixed(6)}}, ${{selected.longitude.toFixed(6)}}`
+            : `Open Street View nearest ${{selected.latitude.toFixed(6)}}, ${{selected.longitude.toFixed(6)}}`;
+        if (card.classList.contains("street-view-open")) {{
+          refreshStreetView(card, selected);
+        }}
         const picked = card.querySelector(".picked");
         if (!multiSelect && selectedReview.status === "offset" && selectedReview.image_x != null) {{
           picked.style.display = "block";
@@ -753,14 +825,27 @@ def _render_grouped_registration_html(
       }});
       const streetView = document.createElement("button"); streetView.className = "street-view-button";
       streetView.textContent = "Street View ↗";
-      streetView.addEventListener("click", () => openStreetView(scene.scene_id)); actions.append(streetView);
+      streetView.addEventListener("click", () => toggleStreetView(scene.scene_id)); actions.append(streetView);
+      const streetViewPanel = document.createElement("section"); streetViewPanel.className = "street-view-panel";
+      const streetViewHead = document.createElement("div"); streetViewHead.className = "street-view-head";
+      const streetViewLocation = document.createElement("span"); streetViewLocation.className = "street-view-location";
+      const streetViewExternal = document.createElement("a"); streetViewExternal.className = "street-view-external";
+      streetViewExternal.target = "_blank"; streetViewExternal.rel = "noopener noreferrer";
+      streetViewExternal.textContent = "Open in Maps ↗";
+      const streetViewClose = document.createElement("button"); streetViewClose.textContent = "Close";
+      streetViewClose.addEventListener("click", () => {{ closeStreetView(card); update(); }});
+      streetViewHead.append(streetViewLocation, streetViewExternal, streetViewClose);
+      const streetViewFrame = document.createElement("iframe"); streetViewFrame.className = "street-view-frame";
+      streetViewFrame.title = "Google Street View near selected tree"; streetViewFrame.loading = "lazy";
+      streetViewFrame.allowFullscreen = true; streetViewFrame.referrerPolicy = "strict-origin-when-cross-origin";
+      streetViewPanel.append(streetViewHead, streetViewFrame);
       const note = document.createElement("textarea"); note.placeholder = "Shadow, stale inventory, merged crowns, systematic shift…";
       note.dataset.singlePlaceholder = note.placeholder;
       note.addEventListener("change", () => {{
         if (selectionFor(scene.scene_id).size !== 1) return;
         const sampleId = activeByScene[scene.scene_id]; reviews[sampleId] = {{...(reviews[sampleId] || {{}}), note: note.value}}; persist();
       }});
-      card.append(head, wrap, treeList, details, actions, note); return card;
+      card.append(head, wrap, streetViewPanel, treeList, details, actions, note); return card;
     }}
     [...new Set(samples.map(sample => sample.split))].forEach(value => {{
       const option = document.createElement("option"); option.value = value; option.textContent = value; splitFilter.append(option);

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from functools import partial
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +23,17 @@ from urban_tree_ml.model_debug import (
 )
 
 _MAX_REVIEW_PAYLOAD_BYTES = 2 * 1024 * 1024
+
+
+def _inject_street_view_embed_key(html: str, api_key: str | None) -> str:
+    if not api_key:
+        return html
+    encoded_key = json.dumps(api_key).replace("<", "\\u003c")
+    return html.replace(
+        "const streetViewEmbedApiKey = null;",
+        f"const streetViewEmbedApiKey = {encoded_key};",
+        1,
+    )
 
 
 def serve_registration_review(
@@ -57,8 +69,9 @@ def serve_registration_review(
     model_bundle = None
     if evaluation_dir is not None or (selected_evaluation_dir / "metrics.json").exists():
         model_bundle = ModelDebugBundle(config, selected_evaluation_dir, raster)
-    registration_html = inject_studio_navigation(
-        (directory / "index.html").read_text(encoding="utf-8")
+    registration_html = _inject_street_view_embed_key(
+        inject_studio_navigation((directory / "index.html").read_text(encoding="utf-8")),
+        os.environ.get("GOOGLE_MAPS_EMBED_API_KEY"),
     )
 
     class ReviewHandler(SimpleHTTPRequestHandler):
