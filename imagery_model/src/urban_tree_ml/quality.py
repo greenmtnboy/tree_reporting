@@ -259,9 +259,18 @@ def _render_grouped_registration_html(
     .tree-marker[data-status="not-tree"] {{ border-color: #ff5757; color: #ff9c9c; }}
     .tree-marker[data-status="uncertain"] {{ border-color: #ff9f43; color: #ffd0a1; }}
     .tree-marker[data-status="duplicate"] {{ border-color: #c084fc; color: #e9d5ff; }}
+    .tree-species-label {{ display: none; position: absolute; z-index: 2; max-width: 150px;
+      padding: 2px 5px; overflow: hidden; transform: translate(14px, calc(-50% + var(--label-offset)));
+      border-radius: 4px; background: #07110da8; color: #d7e5da; font-size: 10px; line-height: 1.2;
+      text-overflow: ellipsis; white-space: nowrap; pointer-events: none; text-shadow: 0 1px 2px #000; }}
+    .tree-species-label.active {{ z-index: 6; background: #e5f3e9e8; color: #102016; font-weight: 700;
+      text-shadow: none; }}
+    .tree-species-label[data-status="duplicate"] {{ color: #e9d5ff; box-shadow: inset 2px 0 #c084fc; }}
+    .tree-species-label.active[data-status="duplicate"] {{ color: #44215f; }}
     .tree-marker.stacked, .tree-choice.stacked {{ border-style: dashed; border-color: #a38aaa;
       color: #d9c4df; opacity: .72; }}
-    body:not(.show-stacks) .tree-marker.stacked, body:not(.show-stacks) .tree-choice.stacked {{ display: none; }}
+    body:not(.show-stacks) .tree-marker.stacked, body:not(.show-stacks) .tree-choice.stacked,
+    body:not(.show-stacks) .tree-species-label.stacked {{ display: none; }}
     .tree-marker.heuristic-suggestion {{ box-shadow: 0 0 0 3px #ffcf66, 0 0 0 5px #17140d; z-index: 6; }}
     .tree-marker.active {{ box-shadow: 0 0 0 3px #fff, 0 0 0 5px #102016; z-index: 5; }}
     .image-wrap.multi-select {{ cursor: not-allowed; }}
@@ -300,6 +309,7 @@ def _render_grouped_registration_html(
       border: 0; border-radius: 0; background: #101713; }}
     .card.fullscreen .card-head {{ grid-area: head; border-bottom: 1px solid #30443a; }}
     .card.fullscreen .fullscreen-only {{ display: inline-block; }}
+    .card.fullscreen .tree-species-label {{ display: block; }}
     .card.fullscreen .image-wrap {{ grid-area: image; align-self: start; justify-self: center;
       width: min(calc(100vw - 440px), calc(100vh - 72px)); max-width: 100%; }}
     .card.fullscreen .tree-list {{ grid-area: list; padding-top: 14px; }}
@@ -762,6 +772,10 @@ def _render_grouped_registration_html(
             + " · Shift-click to add or remove from selection";
           marker.setAttribute("aria-pressed", sceneSelection.has(markerSample.sample_id) ? "true" : "false");
         }});
+        card.querySelectorAll(".tree-species-label").forEach(label => {{
+          label.dataset.status = statusOf(label.dataset.sampleId);
+          label.classList.toggle("active", sceneSelection.has(label.dataset.sampleId));
+        }});
         card.querySelectorAll(".tree-choice").forEach(choice => {{
           choice.dataset.status = statusOf(choice.dataset.sampleId);
           choice.classList.toggle("active", sceneSelection.has(choice.dataset.sampleId));
@@ -880,6 +894,14 @@ def _render_grouped_registration_html(
           event.stopPropagation(); selectSample(scene.scene_id, sample.sample_id, event.shiftKey);
         }});
         wrap.append(marker);
+        const speciesLabel = document.createElement("span"); speciesLabel.className = "tree-species-label";
+        speciesLabel.dataset.sampleId = sample.sample_id;
+        speciesLabel.classList.toggle("stacked", isStacked(sample));
+        speciesLabel.style.left = `${{100 * sample.target_x / scene.image_width}}%`;
+        speciesLabel.style.top = `${{100 * sample.target_y / scene.image_height}}%`;
+        speciesLabel.style.setProperty("--label-offset", `${{index % 2 ? 8 : -8}}px`);
+        speciesLabel.textContent = sample.species || "Unknown species";
+        wrap.append(speciesLabel);
       }});
       const picked = document.createElement("span"); picked.className = "picked"; wrap.append(picked);
       const streetViewCamera = document.createElement("span"); streetViewCamera.className = "street-view-camera";
