@@ -112,11 +112,12 @@ Open `http://127.0.0.1:8765`; the Model Studio landing page links registration c
 available model-validation run. Registration samples default to aligned, so only exceptions need
 attention. The server auto-detects validation artifacts for the configured experiment; use
 `--evaluation-dir` to inspect a different run.
-In full-screen registration review, **Street View** can open an interactive panorama beside the
-overhead tile. Enable the Google Maps Embed API, restrict its browser API key to the review
-server's origin, and expose it only to the server process as `GOOGLE_MAPS_EMBED_API_KEY` (for
-example, `uv run --env-file .env urban-tree-ml qa serve ...`). Embed requests are lazy-loaded for
-the selected tree. If the variable is absent, the control retains its external Google Maps link.
+Full-screen registration review automatically opens an interactive Street View panorama beside the
+overhead tile and retargets it whenever a numbered tree is selected. Enable the Google Maps Embed
+API, restrict its browser API key to the review server's origin, and expose it only to the server
+process as `GOOGLE_MAPS_EMBED_API_KEY` (for example,
+`uv run --env-file .env urban-tree-ml qa serve ...`). Embed requests remain lazy-loaded until a
+full-screen image is opened. If the variable is absent, full-screen review remains overhead-only.
 When Street View Static API is also enabled for the browser key, the reviewer resolves the actual
 nearest panorama location, aims its initial heading toward the selected tree, and draws that camera
 and view direction over the overhead tile. The iframe is interaction-locked by default so the cone
