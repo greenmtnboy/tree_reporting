@@ -9,26 +9,26 @@ Plus they look nice! Charismatic megaplants.
 There are several projects that collect open tree data; this one aims to be more exploratory and fun. Raw data is available in parquet, and of course also from the original sources.
 
 Currently has data from the following cities:
-- [San Francisco, CA, United States](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=USSFO)
-- [New York City, NY, United States](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=USNYC)
-- [Boston, MA, United States](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=USBOS)
-- [Burlington, VT, United States](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=USBTV)
-- [Washington, DC, United States](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=USWAS)
-- [Los Angeles, CA, United States](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=USLAX)
-- [Tempe, AZ, United States](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=USTEM)
-- [Denver, CO, United States](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=USDEN)
-- [Vancouver, Canada](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=CAVAN)
-- [London, United Kingdom](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=GBLON)
-- [Amsterdam, Netherlands](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=NLAMS)
-- [Berlin, Germany](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=DEBER)
-- [Melbourne, Australia](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=AUMEL)
-- [Paris, France](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=FRPAR)
-- [Buenos Aires, Argentina](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=ARBUE)
-- [Athens, Greece](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=GRATH)
-- [Milos, Greece](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=GRMLO)
-- [Santorini, Greece](https://greenmtnboy.github.io/sf_tree_reporting/#/?city=GRSAN)
+- [San Francisco, CA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USSFO)
+- [New York City, NY, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USNYC)
+- [Boston, MA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USBOS)
+- [Burlington, VT, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USBTV)
+- [Washington, DC, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USWAS)
+- [Los Angeles, CA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USLAX)
+- [Tempe, AZ, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USTEM)
+- [Denver, CO, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USDEN)
+- [Vancouver, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAVAN)
+- [London, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBLON)
+- [Amsterdam, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLAMS)
+- [Berlin, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEBER)
+- [Melbourne, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUMEL)
+- [Paris, France](https://greenmtnboy.github.io/tree_reporting/#/?city=FRPAR)
+- [Buenos Aires, Argentina](https://greenmtnboy.github.io/tree_reporting/#/?city=ARBUE)
+- [Athens, Greece](https://greenmtnboy.github.io/tree_reporting/#/?city=GRATH)
+- [Milos, Greece](https://greenmtnboy.github.io/tree_reporting/#/?city=GRMLO)
+- [Santorini, Greece](https://greenmtnboy.github.io/tree_reporting/#/?city=GRSAN)
 
-**[Live page](https://greenmtnboy.github.io/sf_tree_reporting/)**
+**[Live page](https://greenmtnboy.github.io/tree_reporting/)**
 
 ---
 
@@ -146,7 +146,7 @@ Data pipeline dependencies: Python 3.13, PyArrow, Pytrilogy, DuckDB, Pillow, ins
 
 ## Repository
 
-https://github.com/greenmtnboy/sf_tree_reporting
+https://github.com/greenmtnboy/tree_reporting
 
 ## Similar
 

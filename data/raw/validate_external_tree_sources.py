@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import requests
 
-HEADERS = {"User-Agent": "sf-tree-enrichment-validation/1.0 (github.com/sf-tree-reporting)"}
+HEADERS = {"User-Agent": "sf-tree-enrichment-validation/1.0 (github.com/greenmtnboy/tree_reporting)"}
 
 
 @dataclass

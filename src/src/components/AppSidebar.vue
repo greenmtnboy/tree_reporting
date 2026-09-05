@@ -4,7 +4,7 @@
       <h1>Urban Trees</h1>
       <div class="subtitle">The Concrete Jungle</div>
       <a
-        href="https://github.com/greenmtnboy/sf_tree_reporting"
+        href="https://github.com/greenmtnboy/tree_reporting"
         target="_blank"
         rel="noopener"
         class="source-link"

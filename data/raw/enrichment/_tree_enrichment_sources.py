@@ -7,7 +7,7 @@ import re
 import requests
 
 
-HEADERS = {"User-Agent": "sf-tree-enrichment/1.0 (github.com/sf-tree-reporting)"}
+HEADERS = {"User-Agent": "sf-tree-enrichment/1.0 (github.com/greenmtnboy/tree_reporting)"}
 
 
 @dataclass

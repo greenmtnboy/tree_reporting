@@ -98,12 +98,12 @@
       <section class="source-section">
         <h2>Source Code</h2>
         <a
-          href="https://github.com/greenmtnboy/sf_tree_reporting"
+          href="https://github.com/greenmtnboy/tree_reporting"
           target="_blank"
           rel="noopener"
           class="repo-link"
         >
-          github.com/greenmtnboy/sf_tree_reporting &rarr;
+          github.com/greenmtnboy/tree_reporting &rarr;
         </a>
       </section>
     </div>

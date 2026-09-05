@@ -994,7 +994,7 @@ def validate_coordinates(
 # application. Cities that fetch from Overpass should pass these headers to
 # `post_with_retry` / `get_with_retry`.
 OVERPASS_HEADERS = {
-    "User-Agent": "sf-tree-reporting/1.0 (https://github.com/greenmtnboy/sf_tree_reporting)"
+    "User-Agent": "sf-tree-reporting/1.0 (https://github.com/greenmtnboy/tree_reporting)"
 }
 
 
