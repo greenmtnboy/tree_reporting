@@ -65,8 +65,14 @@ function sqlLiteral(value: unknown): string {
 function rowsForSeed(seed: Seed): Array<Record<string, unknown>> {
   switch (seed.kind) {
     case 'trees':
+      // Every published row is its own cluster's survivor -- the city targets
+      // carry `where tree_id = cluster_id`, so the column is a tautology in the
+      // parquet and the fixtures have to agree. Seeding it null instead makes
+      // the gate `NULL = NULL`, which is never true, and every query in the
+      // suite returns zero rows rather than a wrong number.
       return FIXTURE_TREES
         .filter((tree) => !seed.city || tree.city === seed.city)
+        .map((tree) => ({ ...tree, cluster_id: tree.tree_id }))
     case 'species':
       return FIXTURE_SPECIES as unknown as Array<Record<string, unknown>>
     case 'ecoregions':
