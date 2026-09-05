@@ -106,6 +106,10 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "Center marking is disabled for a multi-selection." in html
     assert "selectionFor(scene.scene_id).size !== 1" in html
     assert 'a: "aligned", n: "not-tree", u: "uncertain", d: "duplicate"' in html
+    assert 'map_action: "pano"' in html
+    assert 'className = "street-view-button"' in html
+    assert "streetViewButton.disabled = multiSelect" in html
+    assert "https://www.google.com/maps/@?" in html
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
     assert manifest["metadata"]["test_labels_included"] is False
     assert manifest["metadata"]["rendered_scenes"] == len(manifest["scenes"])

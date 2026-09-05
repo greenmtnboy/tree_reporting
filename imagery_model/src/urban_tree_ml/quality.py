@@ -490,6 +490,14 @@ def _render_grouped_registration_html(
       else delete sceneReviews[sceneId];
       persist();
     }}
+    function openStreetView(sceneId) {{
+      if (selectionFor(sceneId).size !== 1) return;
+      const sample = samplesById[activeByScene[sceneId]];
+      const parameters = new URLSearchParams({{
+        api: "1", map_action: "pano", viewpoint: `${{sample.latitude}},${{sample.longitude}}`
+      }});
+      window.open(`https://www.google.com/maps/@?${{parameters}}`, "_blank", "noopener,noreferrer");
+    }}
     function setExpanded(card, expanded) {{
       document.querySelectorAll(".card.fullscreen").forEach(openCard => {{
         openCard.classList.remove("fullscreen");
@@ -633,6 +641,11 @@ def _render_grouped_registration_html(
         note.placeholder = multiSelect
           ? "Notes are disabled while multiple trees are selected."
           : note.dataset.singlePlaceholder;
+        const streetViewButton = card.querySelector(".street-view-button");
+        streetViewButton.disabled = multiSelect;
+        streetViewButton.title = multiSelect
+          ? "Street View requires a single selected tree."
+          : `Open Street View nearest ${{selected.latitude.toFixed(6)}}, ${{selected.longitude.toFixed(6)}}`;
         const picked = card.querySelector(".picked");
         if (!multiSelect && selectedReview.status === "offset" && selectedReview.image_x != null) {{
           picked.style.display = "block";
@@ -738,6 +751,9 @@ def _render_grouped_registration_html(
         button.dataset.reviewLabel = label; button.textContent = label;
         button.addEventListener("click", () => setStatus(scene.scene_id, status)); actions.append(button);
       }});
+      const streetView = document.createElement("button"); streetView.className = "street-view-button";
+      streetView.textContent = "Street View ↗";
+      streetView.addEventListener("click", () => openStreetView(scene.scene_id)); actions.append(streetView);
       const note = document.createElement("textarea"); note.placeholder = "Shadow, stale inventory, merged crowns, systematic shift…";
       note.dataset.singlePlaceholder = note.placeholder;
       note.addEventListener("change", () => {{
