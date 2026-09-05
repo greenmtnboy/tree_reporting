@@ -247,6 +247,35 @@ def test_build_vrt_mosaic_downsamples_native_resolution_for_model_input(
         assert np.all(mosaic.read(1) == 50)
 
 
+def test_build_vrt_mosaic_downsamples_odd_native_dimensions(tmp_path: Path) -> None:
+    config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
+    config.paths.root = tmp_path / "artifacts"
+    config.imagery.source_resolution_m = 0.3
+    imagery_dir = config.paths.root / "imagery" / "ussfo" / "2023"
+    imagery_dir.mkdir(parents=True)
+    source_path = imagery_dir / "odd-native.tif"
+    image = np.full((4, 33, 33), 50, dtype=np.uint8)
+    with rasterio.open(
+        source_path,
+        "w",
+        driver="GTiff",
+        width=33,
+        height=33,
+        count=4,
+        dtype="uint8",
+        crs="EPSG:32610",
+        transform=from_origin(550_000, 4_185_000, 0.3, 0.3),
+    ) as target:
+        target.write(image)
+
+    result = build_vrt_mosaic(config, "2023")
+
+    with rasterio.open(result["path"]) as mosaic:
+        assert mosaic.res == (0.6, 0.6)
+        assert (mosaic.width, mosaic.height) == (17, 17)
+        assert np.all(mosaic.read(1) == 50)
+
+
 def test_build_vrt_mosaic_rejects_sources_on_different_pixel_grids(tmp_path: Path) -> None:
     config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
     config.paths.root = tmp_path / "artifacts"
