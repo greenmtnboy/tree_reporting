@@ -144,6 +144,8 @@ def test_model_debug_bundle_serves_metrics_predictions_and_chip_image(tmp_path: 
             "missed": 1,
             "false_positive": 1,
             "species_errors": 0,
+            "detection_f1": 0.5,
+            "error_score": 2,
         }
     ]
     chip = bundle.chip("r000000_c000000")
@@ -169,8 +171,14 @@ def test_studio_html_links_registration_and_model_views() -> None:
     assert 'id="modal"' in MODEL_DEBUG_HTML
     assert 'role="tooltip"' in MODEL_DEBUG_HTML
     assert "Curate this chip" in MODEL_DEBUG_HTML
+    assert 'class="action-link"' in MODEL_DEBUG_HTML
+    assert 'value="worst"' in MODEL_DEBUG_HTML
+    assert "detection_f1-b.detection_f1" in MODEL_DEBUG_HTML
+    assert "return=${encodeURIComponent(returnTo)}" in MODEL_DEBUG_HTML
     assert "/api/runs" in RUN_HISTORY_HTML
     assert "/api/runs/chip/" in CHIP_COMPARE_HTML
+    assert 'class="action-link"' in CHIP_COMPARE_HTML
+    assert "Validation chip ID" in registration
 
 
 def test_run_catalog_discovers_runs_and_compares_a_chip(tmp_path: Path) -> None:

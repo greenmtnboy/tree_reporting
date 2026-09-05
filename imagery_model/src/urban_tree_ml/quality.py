@@ -385,6 +385,9 @@ def _render_grouped_registration_html(
     const scenes = {scene_payload};
     const metadata = {metadata_payload};
     const streetViewEmbedApiKey = null;
+    const pageParameters = new URLSearchParams(location.search);
+    const requestedSceneId = pageParameters.get("scene");
+    const curationReturn = pageParameters.get("return");
     const samplesById = Object.fromEntries(samples.map(sample => [sample.sample_id, sample]));
     const scenesById = Object.fromEntries(scenes.map(scene => [scene.scene_id, scene]));
     const isStacked = sample => Number(sample.coordinate_stack_size || 1) > 1;
@@ -673,7 +676,8 @@ def _render_grouped_registration_html(
       if (expanded) {{
         card.classList.add("fullscreen");
         const button = card.querySelector(".expand-button");
-        button.textContent = "Close"; button.setAttribute("aria-expanded", "true"); card.scrollTop = 0;
+        button.textContent = curationReturn ? "Back to validation" : "Close";
+        button.setAttribute("aria-expanded", "true"); card.scrollTop = 0;
         if (streetViewEmbedApiKey && selectionFor(card.dataset.scene).size === 1) {{
           card.classList.add("street-view-open");
           refreshStreetView(card, samplesById[activeByScene[card.dataset.scene]]);
@@ -880,7 +884,10 @@ def _render_grouped_registration_html(
       next.addEventListener("click", () => moveScene(card, 1)); badges.append(next);
       const expand = document.createElement("button"); expand.className = "expand-button"; expand.textContent = "Full screen";
       expand.setAttribute("aria-expanded", "false"); expand.title = "Open a large review view with the same per-tree controls";
-      expand.addEventListener("click", () => setExpanded(card, !card.classList.contains("fullscreen"))); badges.append(expand);
+      expand.addEventListener("click", () => {{
+        if (card.classList.contains("fullscreen") && curationReturn) {{ location.href = curationReturn; return; }}
+        setExpanded(card, !card.classList.contains("fullscreen"));
+      }}); badges.append(expand);
       head.append(identity, badges);
       const wrap = document.createElement("div"); wrap.className = "image-wrap";
       const image = document.createElement("img"); image.src = scene.image; image.alt = `NAIP scene with ${{scene.tree_count}} inventory trees`; image.draggable = false;
@@ -969,7 +976,11 @@ def _render_grouped_registration_html(
     document.addEventListener("keydown", event => {{
       const openCard = document.querySelector(".card.fullscreen");
       if (!openCard) return;
-      if (event.key === "Escape") {{ setExpanded(openCard, false); return; }}
+      if (event.key === "Escape") {{
+        if (curationReturn) location.href = curationReturn;
+        else setExpanded(openCard, false);
+        return;
+      }}
       const editing = event.target.matches("textarea, input, select") || event.target.isContentEditable;
       if (editing) return;
       const reviewHotkeys = {{a: "aligned", n: "not-tree", u: "uncertain", d: "duplicate"}};
@@ -1026,7 +1037,6 @@ def _render_grouped_registration_html(
       }} finally {{ update(); syncTimer = setTimeout(syncReviews, 250); }}
     }}
     hydrateServerReviews();
-    const requestedSceneId = new URLSearchParams(location.search).get("scene");
     if (requestedSceneId && scenesById[requestedSceneId]) {{
       splitFilter.value = ""; coverageFilter.value = ""; statusFilter.value = "";
       sceneStatusFilter.value = ""; update();

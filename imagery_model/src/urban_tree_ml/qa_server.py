@@ -6,7 +6,7 @@ from functools import partial
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 
 from urban_tree_ml.config import ProjectConfig
 from urban_tree_ml.feedback import (
@@ -26,6 +26,16 @@ from urban_tree_ml.model_debug import (
 from urban_tree_ml.quality import append_validation_chip_to_registration_review
 
 _MAX_REVIEW_PAYLOAD_BYTES = 2 * 1024 * 1024
+_CURATION_RETURN_PATHS = frozenset({"/registration", "/runs", "/compare", "/model"})
+
+
+def _safe_curation_return(value: str | None) -> str:
+    if not value:
+        return "/registration"
+    parsed = urlsplit(value)
+    if parsed.scheme or parsed.netloc or parsed.path not in _CURATION_RETURN_PATHS:
+        return "/registration"
+    return parsed.path + (f"?{parsed.query}" if parsed.query else "")
 
 
 def _inject_street_view_embed_key(html: str, api_key: str | None) -> str:
@@ -157,7 +167,13 @@ def serve_registration_review(
                 except (KeyError, OSError, ValueError) as error:
                     self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                     return
-                location = f"/registration?scene={quote(str(result['scene_id']))}&fullscreen=1"
+                location = "/registration?" + urlencode(
+                    {
+                        "scene": str(result["scene_id"]),
+                        "fullscreen": "1",
+                        "return": _safe_curation_return(query.get("return", [None])[0]),
+                    }
+                )
                 self.send_response(HTTPStatus.SEE_OTHER)
                 self.send_header("Location", location)
                 self.send_header("Cache-Control", "no-store")
