@@ -1026,6 +1026,15 @@ def _render_grouped_registration_html(
       }} finally {{ update(); syncTimer = setTimeout(syncReviews, 250); }}
     }}
     hydrateServerReviews();
+    const requestedSceneId = new URLSearchParams(location.search).get("scene");
+    if (requestedSceneId && scenesById[requestedSceneId]) {{
+      splitFilter.value = ""; coverageFilter.value = ""; statusFilter.value = "";
+      sceneStatusFilter.value = ""; update();
+      requestAnimationFrame(() => {{
+        const requestedCard = document.querySelector(`[data-scene="${{requestedSceneId}}"]`);
+        if (requestedCard) {{ requestedCard.scrollIntoView({{block: "center"}}); setExpanded(requestedCard, true); }}
+      }});
+    }}
   </script>
 </body>
 </html>
@@ -1301,6 +1310,155 @@ def _render_registration_html(
 </body>
 </html>
 """
+
+
+def append_validation_chip_to_registration_review(
+    config: ProjectConfig,
+    raster_path: str | Path,
+    review_dir: str | Path,
+    chip_id: str,
+    ground_truth: pd.DataFrame,
+) -> dict[str, object]:
+    """Add one model-validation chip to the existing registration review."""
+    import re
+
+    try:
+        import rasterio
+        from PIL import Image
+        from rasterio.windows import Window
+    except ImportError as error:  # pragma: no cover - exercised by CLI installations
+        raise RuntimeError(
+            "Install the imagery dependency group: uv sync --group imagery"
+        ) from error
+
+    match = re.fullmatch(r"r(?P<row>\d{6})_c(?P<column>\d{6})", chip_id)
+    if match is None:
+        raise ValueError(f"invalid validation chip id {chip_id!r}")
+    directory = Path(review_dir).resolve()
+    manifest_path = directory / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    metadata = manifest.get("metadata")
+    samples = manifest.get("samples")
+    scenes = manifest.get("scenes")
+    if not isinstance(metadata, dict) or not isinstance(samples, list) or not isinstance(scenes, list):
+        raise ValueError("registration review manifest has an invalid shape")
+    for scene in scenes:
+        if isinstance(scene, dict) and scene.get("validation_chip_id") == chip_id:
+            return {"scene_id": str(scene["scene_id"]), "added": False}
+    existing_scene_by_tree = {
+        str(sample["tree_id"]): str(sample["scene_id"])
+        for sample in samples
+        if isinstance(sample, dict) and sample.get("tree_id") is not None
+    }
+    requested_tree_ids = ground_truth["tree_id"].astype(str)
+    unreviewed_truth = ground_truth[~requested_tree_ids.isin(existing_scene_by_tree)].copy()
+    if unreviewed_truth.empty and not ground_truth.empty:
+        first_tree_id = str(ground_truth.iloc[0]["tree_id"])
+        return {
+            "scene_id": existing_scene_by_tree[first_tree_id],
+            "added": False,
+            "already_reviewed": True,
+        }
+    ground_truth = unreviewed_truth
+    if ground_truth.empty:
+        raise ValueError(f"validation chip {chip_id!r} has no retained inventory trees to curate")
+
+    raster = Path(raster_path).resolve()
+    chip_pixels = config.imagery.chip_pixels
+    row_offset = int(match.group("row")) * chip_pixels
+    column_offset = int(match.group("column")) * chip_pixels
+    with rasterio.open(raster) as source:
+        window = Window(column_offset, row_offset, chip_pixels, chip_pixels)
+        masks = source.read_masks(config.imagery.bands, window=window)
+        raw = source.read(config.imagery.bands, window=window)
+        valid_fraction = float(np.all(masks > 0, axis=0).mean())
+        transform = source.transform
+    image_dir = directory / "images"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    image_name = f"validation-{chip_id}.png"
+    Image.fromarray(_rgb_preview(raw, config.imagery.input_scale)).save(
+        image_dir / image_name,
+        format="PNG",
+        optimize=True,
+    )
+    scene_id = f"scene-{len(scenes):03d}"
+    sample_ids: list[str] = []
+    ordered_truth = ground_truth.sort_values(["pixel_row", "pixel_col", "tree_id"])
+    for row in ordered_truth.itertuples(index=False):
+        sample_id = f"sample-{len(samples):04d}"
+        sample_ids.append(sample_id)
+        target_x = float(row.pixel_col - column_offset)
+        target_y = float(row.pixel_row - row_offset)
+        samples.append(
+            {
+                "sample_id": sample_id,
+                "scene_id": scene_id,
+                "tree_id": str(row.tree_id),
+                "split": str(row.split),
+                "species": str(row.species) if pd.notna(row.species) else "Unknown species",
+                "genus": str(row.genus) if pd.notna(row.genus) else "Unknown genus",
+                "dbh_in": float(row.dbh_in) if pd.notna(row.dbh_in) else None,
+                "longitude": float(row.longitude),
+                "latitude": float(row.latitude),
+                "image": f"images/{image_name}",
+                "image_width": chip_pixels,
+                "image_height": chip_pixels,
+                "target_x": target_x,
+                "target_y": target_y,
+                "vegetation_heuristic": (
+                    _vegetation_features(raw, target_x, target_y)
+                    if raw.shape[0] >= 4
+                    else None
+                ),
+                "transform_a": float(transform.a),
+                "transform_b": float(transform.b),
+                "transform_d": float(transform.d),
+                "transform_e": float(transform.e),
+                "nearby_inventory_count": len(ordered_truth),
+                "valid_fraction": valid_fraction,
+                "source_item_ids": [],
+                "tile_seam_distance_m": None,
+                "seam_priority": False,
+                "validation_chip_id": chip_id,
+            }
+        )
+    scenes.append(
+        {
+            "scene_id": scene_id,
+            "image": f"images/{image_name}",
+            "image_width": chip_pixels,
+            "image_height": chip_pixels,
+            "sample_ids": sample_ids,
+            "splits": sorted(ground_truth["split"].astype(str).unique()),
+            "tree_count": len(sample_ids),
+            "valid_fraction": valid_fraction,
+            "seam_priority": False,
+            "tile_seam_distance_m": None,
+            "source_item_ids": [],
+            "validation_chip_id": chip_id,
+        }
+    )
+    coordinate_stack_groups, coordinate_stack_points = _attach_coordinate_stack_sizes(samples)
+    samples_by_id = {str(sample["sample_id"]): sample for sample in samples}
+    for scene in scenes:
+        scene["coordinate_stack_points"] = sum(
+            int(samples_by_id[str(sample_id)]["coordinate_stack_size"] > 1)
+            for sample_id in scene["sample_ids"]
+        )
+    metadata["rendered_samples"] = len(samples)
+    metadata["rendered_scenes"] = len(scenes)
+    metadata["coordinate_stack_groups"] = coordinate_stack_groups
+    metadata["coordinate_stack_points"] = coordinate_stack_points
+    metadata["extended_from_validation_chips"] = int(
+        metadata.get("extended_from_validation_chips", 0)
+    ) + 1
+    metadata["updated_at"] = datetime.now(UTC).isoformat()
+    _write_json_atomic(manifest_path, manifest)
+    (directory / "index.html").write_text(
+        _render_registration_html(samples, metadata, scenes),
+        encoding="utf-8",
+    )
+    return {"scene_id": scene_id, "added": True, "samples": len(sample_ids)}
 
 
 def refresh_registration_heuristics(
