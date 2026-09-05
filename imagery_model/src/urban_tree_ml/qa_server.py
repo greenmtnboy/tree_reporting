@@ -23,7 +23,10 @@ from urban_tree_ml.model_debug import (
     inject_studio_navigation,
     render_studio_home,
 )
-from urban_tree_ml.quality import append_validation_chip_to_registration_review
+from urban_tree_ml.quality import (
+    append_validation_chip_to_registration_review,
+    render_registration_review_html,
+)
 
 _MAX_REVIEW_PAYLOAD_BYTES = 2 * 1024 * 1024
 _CURATION_RETURN_PATHS = frozenset({"/registration", "/runs", "/compare", "/model"})
@@ -36,6 +39,27 @@ def _safe_curation_return(value: str | None) -> str:
     if parsed.scheme or parsed.netloc or parsed.path not in _CURATION_RETURN_PATHS:
         return "/registration"
     return parsed.path + (f"?{parsed.query}" if parsed.query else "")
+
+
+def _validation_chip_review_status(review_dir: str | Path) -> dict[str, object]:
+    directory = Path(review_dir)
+    manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    scenes = manifest.get("scenes", [])
+    if not isinstance(scenes, list):
+        raise ValueError("registration review scenes must be a list")
+    scene_reviews = load_persisted_reviews(directory).get("scene_reviews", {})
+    if not isinstance(scene_reviews, dict):
+        scene_reviews = {}
+    chips: dict[str, dict[str, object]] = {}
+    for scene in scenes:
+        if not isinstance(scene, dict) or not scene.get("validation_chip_id"):
+            continue
+        scene_id = str(scene["scene_id"])
+        chips[str(scene["validation_chip_id"])] = {
+            "scene_id": scene_id,
+            "reviewed": bool(scene_reviews.get(scene_id, {}).get("done")),
+        }
+    return {"chips": chips}
 
 
 def _inject_street_view_embed_key(html: str, api_key: str | None) -> str:
@@ -83,7 +107,7 @@ def serve_registration_review(
 
     def registration_html() -> str:
         return _inject_street_view_embed_key(
-            inject_studio_navigation((directory / "index.html").read_text(encoding="utf-8")),
+            inject_studio_navigation(render_registration_review_html(directory)),
             os.environ.get("GOOGLE_MAPS_EMBED_API_KEY"),
         )
 
@@ -156,6 +180,11 @@ def serve_registration_review(
                     return
                 try:
                     bundle = run_catalog.bundle(run_id)
+                    threshold = float(
+                        query.get("threshold", [bundle.metrics["confidence_threshold"]])[0]
+                    )
+                    if not 0 <= threshold <= 1:
+                        raise ValueError("prediction confidence threshold must be between 0 and 1")
                     truth = bundle.ground_truth[bundle.ground_truth["chip_id"] == chip_id].copy()
                     result = append_validation_chip_to_registration_review(
                         config,
@@ -171,6 +200,8 @@ def serve_registration_review(
                     {
                         "scene": str(result["scene_id"]),
                         "fullscreen": "1",
+                        "run": bundle.run_dir.name,
+                        "threshold": f"{threshold:.6g}",
                         "return": _safe_curation_return(query.get("return", [None])[0]),
                     }
                 )
@@ -198,6 +229,12 @@ def serve_registration_review(
                 return
             if path == "/api/runs":
                 self._json_response(HTTPStatus.OK, run_catalog.summary())
+                return
+            if path == "/api/curation-status":
+                try:
+                    self._json_response(HTTPStatus.OK, _validation_chip_review_status(directory))
+                except (OSError, ValueError, json.JSONDecodeError) as error:
+                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                 return
             if path.startswith("/api/runs/chip/"):
                 chip_id = unquote(path.removeprefix("/api/runs/chip/"))

@@ -12,6 +12,7 @@ from urban_tree_ml.quality import (
     append_validation_chip_to_registration_review,
     build_registration_review,
     refresh_registration_heuristics,
+    render_registration_review_html,
 )
 
 
@@ -266,6 +267,12 @@ def test_validation_chip_enters_existing_registration_review(tmp_path: Path) -> 
     assert "setExpanded(requestedCard, true)" in html
     assert "Back to validation" in html
     assert "location.href = curationReturn" in html
+    assert 'className = "prediction-marker"' in html
+    assert "/api/model/chip/" in html
+    assert "loadPredictionOverlay(card" in html
+    rerendered = render_registration_review_html(review_dir)
+    assert 'className = "prediction-marker"' in rerendered
+    assert '"validation_chip_id":"r000000_c000000"' in rerendered
 
 
 def test_heuristic_refresh_preserves_existing_reviews(tmp_path: Path) -> None:

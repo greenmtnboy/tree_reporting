@@ -259,6 +259,11 @@ def _render_grouped_registration_html(
     .tree-marker[data-status="not-tree"] {{ border-color: #ff5757; color: #ff9c9c; }}
     .tree-marker[data-status="uncertain"] {{ border-color: #ff9f43; color: #ffd0a1; }}
     .tree-marker[data-status="duplicate"] {{ border-color: #c084fc; color: #e9d5ff; }}
+    .prediction-marker {{ display: none; position: absolute; width: 13px; height: 13px; padding: 0;
+      border: 2px solid #250725; border-radius: 50%; transform: translate(-50%, -50%);
+      background: #ed55e8e6; box-shadow: 0 0 0 1px #f8d8f6cc; cursor: help; z-index: 7; }}
+    .card.fullscreen .prediction-marker {{ display: block; }}
+    .prediction-badge {{ color: #f7a3f2; border-color: #9b4b97; }}
     .tree-species-label {{ display: none; position: absolute; z-index: 2; max-width: 150px;
       padding: 2px 5px; overflow: hidden; transform: translate(14px, calc(-50% + var(--label-offset)));
       border-radius: 4px; background: #07110d70; color: #d7e5da; font-size: 10px; line-height: 1.2;
@@ -388,6 +393,8 @@ def _render_grouped_registration_html(
     const pageParameters = new URLSearchParams(location.search);
     const requestedSceneId = pageParameters.get("scene");
     const curationReturn = pageParameters.get("return");
+    const predictionRun = pageParameters.get("run");
+    const requestedPredictionThreshold = Number.parseFloat(pageParameters.get("threshold"));
     const samplesById = Object.fromEntries(samples.map(sample => [sample.sample_id, sample]));
     const scenesById = Object.fromEntries(scenes.map(scene => [scene.scene_id, scene]));
     const isStacked = sample => Number(sample.coordinate_stack_size || 1) > 1;
@@ -666,6 +673,62 @@ def _render_grouped_registration_html(
         ? "Enable panorama controls; the overhead cone shows only the initial view"
         : "Lock panorama controls so the overhead heading stays representative";
     }}
+    function predictionTitle(prediction) {{
+      const centerConfidence = Number(prediction.score);
+      const speciesConfidence = Number(prediction.species_confidence);
+      const dbh = Number(prediction.dbh_in);
+      return [
+        `Model prediction: ${{prediction.species || "Unknown species"}}`,
+        Number.isFinite(centerConfidence) ? `${{(100 * centerConfidence).toFixed(0)}}% center confidence` : null,
+        Number.isFinite(speciesConfidence) ? `${{(100 * speciesConfidence).toFixed(0)}}% species confidence` : null,
+        Number.isFinite(dbh) ? `${{dbh.toFixed(1)}} in predicted DBH` : null,
+        predictionRun ? `Run ${{predictionRun}}` : null,
+      ].filter(Boolean).join(" · ");
+    }}
+    async function loadPredictionOverlay(card, scene) {{
+      if (!scene.validation_chip_id || card.dataset.predictionsLoaded) return;
+      card.dataset.predictionsLoaded = "loading";
+      const badge = card.querySelector(".prediction-badge");
+      const apiUrl = new URL(`/api/model/chip/${{encodeURIComponent(scene.validation_chip_id)}}`, location.origin);
+      if (predictionRun) apiUrl.searchParams.set("run", predictionRun);
+      try {{
+        const response = await fetch(apiUrl);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `HTTP ${{response.status}}`);
+        const threshold = Number.isFinite(requestedPredictionThreshold)
+          ? requestedPredictionThreshold : Number(data.confidence_threshold);
+        const chipPixels = Number(data.display?.chip_pixels);
+        const outputStride = Number(data.display?.output_stride);
+        if (!Number.isFinite(chipPixels) || !Number.isFinite(outputStride)) throw new Error("prediction display metadata is unavailable");
+        const predictions = data.predictions.filter(prediction => Number(prediction.score) >= threshold);
+        const wrap = card.querySelector(".image-wrap");
+        wrap.querySelectorAll(".prediction-marker").forEach(marker => marker.remove());
+        predictions.forEach(prediction => {{
+          const marker = document.createElement("span");
+          marker.className = "prediction-marker";
+          marker.style.left = `${{100 * Number(prediction.output_x) * outputStride / chipPixels}}%`;
+          marker.style.top = `${{100 * Number(prediction.output_y) * outputStride / chipPixels}}%`;
+          marker.title = predictionTitle(prediction);
+          marker.setAttribute("aria-label", marker.title);
+          marker.setAttribute("role", "img");
+          marker.tabIndex = 0;
+          wrap.append(marker);
+        }});
+        if (badge) {{
+          badge.textContent = `${{predictions.length}} model prediction${{predictions.length === 1 ? "" : "s"}} ≥ ${{Math.round(100 * threshold)}}%`;
+          badge.title = "Magenta markers are model predictions; hover for species, DBH, and confidence";
+        }}
+        card.dataset.predictionsLoaded = "true";
+      }} catch (error) {{
+        if (badge) {{ badge.textContent = "Predictions unavailable"; badge.title = error.message; }}
+        card.dataset.predictionsLoaded = "error";
+      }}
+    }}
+    async function closeExpandedCard(card) {{
+      if (!curationReturn) {{ setExpanded(card, false); return; }}
+      await syncReviews();
+      location.href = curationReturn;
+    }}
     function setExpanded(card, expanded) {{
       document.querySelectorAll(".card.fullscreen").forEach(openCard => {{
         closeStreetView(openCard);
@@ -678,6 +741,7 @@ def _render_grouped_registration_html(
         const button = card.querySelector(".expand-button");
         button.textContent = curationReturn ? "Back to validation" : "Close";
         button.setAttribute("aria-expanded", "true"); card.scrollTop = 0;
+        loadPredictionOverlay(card, scenesById[card.dataset.scene]);
         if (streetViewEmbedApiKey && selectionFor(card.dataset.scene).size === 1) {{
           card.classList.add("street-view-open");
           refreshStreetView(card, samplesById[activeByScene[card.dataset.scene]]);
@@ -863,6 +927,12 @@ def _render_grouped_registration_html(
         badge.title = "Unresolved exact-coordinate stacks are hidden and excluded from model supervision";
         badges.append(badge);
       }}
+      if (scene.validation_chip_id) {{
+        const predictionBadge = document.createElement("span"); predictionBadge.className = "badge prediction-badge";
+        predictionBadge.textContent = "Loading model predictions…";
+        predictionBadge.title = "Predictions from the validation run that opened this curation scene";
+        badges.append(predictionBadge);
+      }}
       const heuristic = document.createElement("button"); heuristic.className = "heuristic-button";
       heuristic.textContent = "Check non-veg";
       heuristic.title = "Preview conservative low-NIR gray candidates; click again to mark them uncertain";
@@ -884,8 +954,8 @@ def _render_grouped_registration_html(
       next.addEventListener("click", () => moveScene(card, 1)); badges.append(next);
       const expand = document.createElement("button"); expand.className = "expand-button"; expand.textContent = "Full screen";
       expand.setAttribute("aria-expanded", "false"); expand.title = "Open a large review view with the same per-tree controls";
-      expand.addEventListener("click", () => {{
-        if (card.classList.contains("fullscreen") && curationReturn) {{ location.href = curationReturn; return; }}
+      expand.addEventListener("click", async () => {{
+        if (card.classList.contains("fullscreen")) {{ await closeExpandedCard(card); return; }}
         setExpanded(card, !card.classList.contains("fullscreen"));
       }}); badges.append(expand);
       head.append(identity, badges);
@@ -973,12 +1043,11 @@ def _render_grouped_registration_html(
       const option = document.createElement("option"); option.value = value; option.textContent = value; splitFilter.append(option);
     }});
     scenes.forEach((scene, index) => cards.append(createCard(scene, index)));
-    document.addEventListener("keydown", event => {{
+    document.addEventListener("keydown", async event => {{
       const openCard = document.querySelector(".card.fullscreen");
       if (!openCard) return;
       if (event.key === "Escape") {{
-        if (curationReturn) location.href = curationReturn;
-        else setExpanded(openCard, false);
+        await closeExpandedCard(openCard);
         return;
       }}
       const editing = event.target.matches("textarea, input, select") || event.target.isContentEditable;
@@ -1320,6 +1389,20 @@ def _render_registration_html(
 </body>
 </html>
 """
+
+
+def render_registration_review_html(review_dir: str | Path) -> str:
+    """Render the current manifest so served UIs always use the latest controls."""
+    manifest_path = Path(review_dir).resolve() / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    metadata = manifest.get("metadata")
+    samples = manifest.get("samples")
+    scenes = manifest.get("scenes")
+    if not isinstance(metadata, dict) or not isinstance(samples, list):
+        raise ValueError("registration review manifest has an invalid shape")
+    if scenes is not None and not isinstance(scenes, list):
+        raise ValueError("registration review scenes must be a list")
+    return _render_registration_html(samples, metadata, scenes)
 
 
 def append_validation_chip_to_registration_review(
