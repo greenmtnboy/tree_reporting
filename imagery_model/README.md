@@ -261,6 +261,10 @@ uv run urban-tree-ml imagery mosaic \
   --output "$TREE_ML_DATA_ROOT/imagery/usbos/2023/usbos-2023-external.vrt"
 ```
 
+Massachusetts 2023 NAIP is native 0.3 m imagery. The Boston config records that acquisition
+resolution separately and the VRT averages it onto the SF model's 0.6 m grid. This keeps the
+checkpoint's physical field of view and meter-based decoder geometry unchanged.
+
 Then run the same registration, heuristic, serving, finalization, and chip-build workflow with the
 Boston config and VRT. Use a Boston-specific annotation checkout path under
 `$TREE_ML_ANNOTATIONS_ROOT/usbos/`; the training-data repository stores only manifests and review

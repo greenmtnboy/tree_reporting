@@ -92,6 +92,8 @@ def test_boston_external_config_reuses_sf_model_inputs_without_mixing_datasets()
     assert boston.split.projected_crs == "EPSG:32619"
     assert boston.dataset != sf.dataset
     assert boston.imagery.datetime == "2023-01-01/2023-12-31"
+    assert boston.imagery.source_resolution_m == 0.3
+    assert boston.imagery.resolution_m == sf.imagery.resolution_m == 0.6
     assert len(boston.imagery.item_ids) == 8
     assert boston.reference is not None
     assert boston.reference.taxonomy_path == (
