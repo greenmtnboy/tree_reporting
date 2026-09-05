@@ -67,3 +67,16 @@ def test_citywide_config_uses_an_isolated_dataset_and_vrt() -> None:
     assert citywide.imagery.local_raster is not None
     assert citywide.imagery.local_raster.name == "ussfo-2022-mosaic.vrt"
     assert citywide.training.random_dihedral
+
+
+def test_curated_config_changes_only_experiment_identity() -> None:
+    config_dir = Path(__file__).parents[1] / "configs"
+    citywide = load_config(config_dir / "sf_naip_citywide.yaml")
+    curated = load_config(config_dir / "sf_naip_citywide_curated.yaml")
+
+    assert curated.experiment != citywide.experiment
+    curated_values = curated.model_dump()
+    citywide_values = citywide.model_dump()
+    curated_values.pop("experiment")
+    citywide_values.pop("experiment")
+    assert curated_values == citywide_values
