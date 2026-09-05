@@ -268,6 +268,15 @@ def _render_grouped_registration_html(
     .picked {{ display: none; position: absolute; width: 18px; height: 18px; border: 2px solid #ffe34e;
       transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; z-index: 4;
       box-shadow: 0 0 0 1px #111; }}
+    .street-view-camera {{ display: none; position: absolute; width: 46px; height: 46px;
+      transform: translate(-50%, -50%) rotate(var(--camera-heading)); pointer-events: none; z-index: 7; }}
+    .street-view-camera::before {{ content: ""; position: absolute; left: 13px; top: -18px;
+      width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent;
+      border-bottom: 31px solid #57d6ff88; filter: drop-shadow(0 0 2px #061217); }}
+    .street-view-camera::after {{ content: ""; position: absolute; left: 15px; top: 15px;
+      width: 16px; height: 16px; border: 3px solid #d8f7ff; border-radius: 50%;
+      background: #1685a6; box-shadow: 0 0 0 2px #071317; }}
+    .street-view-camera.outside {{ opacity: .72; }}
     .tree-list {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 6px;
       max-height: 132px; padding: 9px 12px 0; overflow-y: auto; }}
     .tree-choice {{ width: 100%; min-width: 0; height: 32px; padding: 0; font-size: 11px; }}
@@ -303,7 +312,9 @@ def _render_grouped_registration_html(
       min-height: 42px; padding: 6px 8px; color: #c8d7cc; font-size: 12px; }}
     .street-view-head a {{ color: #b9e6c5; }}
     .street-view-head button {{ min-height: 28px; padding: 3px 8px; font-size: 11px; }}
-    .street-view-frame {{ display: block; width: 100%; height: calc(100% - 42px); min-height: 378px; border: 0; }}
+    .street-view-frame-wrap {{ width: 100%; height: calc(100% - 42px); min-height: 378px; }}
+    .street-view-frame {{ display: block; width: 100%; height: 100%; min-height: 378px; border: 0; }}
+    .street-view-frame.locked {{ pointer-events: none; }}
     .card.fullscreen.street-view-open {{ grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr) minmax(330px, 400px);
       grid-template-areas: "head head head" "image street list" "image street details" "image street actions" "image street note"; }}
     .card.fullscreen.street-view-open .image-wrap {{ width: min(calc(50vw - 205px), calc(100vh - 72px)); }}
@@ -382,6 +393,7 @@ def _render_grouped_registration_html(
     let reviews = hasWrappedState ? (storedState.reviews || {{}}) : (storedState || {{}});
     let sceneReviews = hasWrappedState ? (storedState.scene_reviews || {{}}) : {{}};
     const suggestedByScene = {{}};
+    const streetViewMetadataCache = new Map();
     let syncTimer = null;
     const cards = document.getElementById("cards");
     const splitFilter = document.getElementById("split-filter");
@@ -514,30 +526,133 @@ def _render_grouped_registration_html(
       }});
       return `https://www.google.com/maps/@?${{parameters}}`;
     }}
-    function embeddedStreetViewUrl(sample) {{
+    function embeddedStreetViewUrl(sample, panorama = null) {{
       const parameters = new URLSearchParams({{
         key: streetViewEmbedApiKey,
         location: `${{sample.latitude}},${{sample.longitude}}`,
         radius: "50",
         source: "outdoor",
+        pitch: "0",
+        fov: "70",
       }});
+      if (panorama?.pano_id) parameters.set("pano", panorama.pano_id);
+      if (panorama?.heading != null) parameters.set("heading", panorama.heading.toFixed(2));
       return `https://www.google.com/maps/embed/v1/streetview?${{parameters}}`;
+    }}
+    function bearingDegrees(origin, destination) {{
+      const radians = value => value * Math.PI / 180;
+      const originLatitude = radians(origin.lat), destinationLatitude = radians(destination.lat);
+      const longitudeDelta = radians(destination.lng - origin.lng);
+      const y = Math.sin(longitudeDelta) * Math.cos(destinationLatitude);
+      const x = Math.cos(originLatitude) * Math.sin(destinationLatitude)
+        - Math.sin(originLatitude) * Math.cos(destinationLatitude) * Math.cos(longitudeDelta);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }}
+    function cameraPixel(sample, camera) {{
+      const earthRadiusM = 6378137;
+      const latitudeDelta = (camera.lat - sample.latitude) * Math.PI / 180;
+      const longitudeDelta = (camera.lng - sample.longitude) * Math.PI / 180;
+      const meanLatitude = (camera.lat + sample.latitude) * Math.PI / 360;
+      const eastM = earthRadiusM * longitudeDelta * Math.cos(meanLatitude);
+      const northM = earthRadiusM * latitudeDelta;
+      const determinant = sample.transform_a * sample.transform_e - sample.transform_b * sample.transform_d;
+      if (Math.abs(determinant) < 1e-12) return null;
+      return {{
+        x: sample.target_x + (sample.transform_e * eastM - sample.transform_b * northM) / determinant,
+        y: sample.target_y + (-sample.transform_d * eastM + sample.transform_a * northM) / determinant,
+      }};
+    }}
+    function renderStreetViewCamera(card, sample, panorama) {{
+      const marker = card.querySelector(".street-view-camera");
+      const pixel = cameraPixel(sample, panorama.location);
+      if (!pixel) {{ marker.style.display = "none"; return; }}
+      const scene = scenesById[card.dataset.scene];
+      const outside = pixel.x < 0 || pixel.y < 0 || pixel.x > scene.image_width || pixel.y > scene.image_height;
+      const clampedX = Math.max(8, Math.min(scene.image_width - 8, pixel.x));
+      const clampedY = Math.max(8, Math.min(scene.image_height - 8, pixel.y));
+      marker.style.display = "block";
+      marker.style.left = `${{100 * clampedX / scene.image_width}}%`;
+      marker.style.top = `${{100 * clampedY / scene.image_height}}%`;
+      marker.style.setProperty("--camera-heading", `${{panorama.heading}}deg`);
+      marker.classList.toggle("outside", outside);
+      marker.title = `Street View camera${{outside ? " (outside tile; clamped to edge)" : ""}} · `
+        + `${{panorama.heading.toFixed(0)}}° toward selected tree · ${{panorama.location.lat.toFixed(6)}}, `
+        + panorama.location.lng.toFixed(6);
+    }}
+    async function resolveStreetViewPanorama(sample) {{
+      if (streetViewMetadataCache.has(sample.sample_id)) return streetViewMetadataCache.get(sample.sample_id);
+      const request = (async () => {{
+        const parameters = new URLSearchParams({{
+          location: `${{sample.latitude}},${{sample.longitude}}`,
+          source: "outdoor",
+          key: streetViewEmbedApiKey,
+        }});
+        const response = await fetch(`https://maps.googleapis.com/maps/api/streetview/metadata?${{parameters}}`,
+          {{referrerPolicy: "strict-origin-when-cross-origin"}});
+        if (!response.ok) throw new Error(`metadata HTTP ${{response.status}}`);
+        const result = await response.json();
+        if (result.status !== "OK" || !result.location || !result.pano_id) {{
+          throw new Error(result.error_message || result.status || "no nearby panorama");
+        }}
+        const location = {{lat: Number(result.location.lat), lng: Number(result.location.lng)}};
+        return {{...result, location, heading: bearingDegrees(location,
+          {{lat: sample.latitude, lng: sample.longitude}})}};
+      }})();
+      streetViewMetadataCache.set(sample.sample_id, request);
+      try {{ return await request; }} catch (error) {{ streetViewMetadataCache.delete(sample.sample_id); throw error; }}
     }}
     function closeStreetView(card) {{
       card.classList.remove("street-view-open");
       const frame = card.querySelector(".street-view-frame");
       frame.src = "about:blank";
       delete frame.dataset.viewpoint;
+      frame.classList.add("locked");
+      const interaction = card.querySelector(".street-view-interaction");
+      interaction.textContent = "Unlock";
+      const locationLabel = card.querySelector(".street-view-location");
+      delete locationLabel.dataset.initialHeading;
+      card.querySelector(".street-view-camera").style.display = "none";
     }}
-    function refreshStreetView(card, sample) {{
+    async function refreshStreetView(card, sample) {{
       const frame = card.querySelector(".street-view-frame");
-      const viewpoint = `${{sample.latitude}},${{sample.longitude}}`;
-      if (frame.dataset.viewpoint !== viewpoint) {{
-        frame.src = embeddedStreetViewUrl(sample);
-        frame.dataset.viewpoint = viewpoint;
-      }}
-      card.querySelector(".street-view-location").textContent = viewpoint;
+      if (frame.dataset.viewpoint === sample.sample_id) return;
+      frame.dataset.viewpoint = sample.sample_id;
+      frame.src = "about:blank";
+      const locationLabel = card.querySelector(".street-view-location");
+      locationLabel.textContent = "Finding nearest street camera…";
+      locationLabel.title = "";
+      delete locationLabel.dataset.initialHeading;
       card.querySelector(".street-view-external").href = externalStreetViewUrl(sample);
+      card.querySelector(".street-view-camera").style.display = "none";
+      try {{
+        const panorama = await resolveStreetViewPanorama(sample);
+        if (frame.dataset.viewpoint !== sample.sample_id || !card.classList.contains("street-view-open")) return;
+        frame.src = embeddedStreetViewUrl(sample, panorama);
+        locationLabel.textContent = `Camera ${{panorama.heading.toFixed(0)}}° toward tree`;
+        locationLabel.dataset.initialHeading = panorama.heading.toFixed(0);
+        renderStreetViewCamera(card, sample, panorama);
+      }} catch (error) {{
+        if (frame.dataset.viewpoint !== sample.sample_id || !card.classList.contains("street-view-open")) return;
+        frame.src = embeddedStreetViewUrl(sample);
+        locationLabel.textContent = `Nearest panorama · camera metadata unavailable`;
+        locationLabel.title = error.message;
+      }}
+    }}
+    function toggleStreetViewInteraction(card) {{
+      const frame = card.querySelector(".street-view-frame");
+      const nextLocked = !frame.classList.contains("locked");
+      frame.classList.toggle("locked", nextLocked);
+      const button = card.querySelector(".street-view-interaction");
+      button.textContent = nextLocked ? "Unlock" : "Lock view";
+      const locationLabel = card.querySelector(".street-view-location");
+      if (locationLabel.dataset.initialHeading) {{
+        locationLabel.textContent = nextLocked
+          ? `Camera ${{locationLabel.dataset.initialHeading}}° toward tree`
+          : `Initial ${{locationLabel.dataset.initialHeading}}° · live view may differ`;
+      }}
+      button.title = nextLocked
+        ? "Enable panorama controls; the overhead cone shows only the initial view"
+        : "Lock panorama controls so the overhead heading stays representative";
     }}
     function toggleStreetView(sceneId) {{
       if (selectionFor(sceneId).size !== 1) return;
@@ -792,6 +907,8 @@ def _render_grouped_registration_html(
         wrap.append(marker);
       }});
       const picked = document.createElement("span"); picked.className = "picked"; wrap.append(picked);
+      const streetViewCamera = document.createElement("span"); streetViewCamera.className = "street-view-camera";
+      wrap.append(streetViewCamera);
       wrap.addEventListener("click", event => {{
         if (selectionFor(scene.scene_id).size !== 1) return;
         const sampleId = activeByScene[scene.scene_id], sample = samplesById[sampleId];
@@ -832,13 +949,19 @@ def _render_grouped_registration_html(
       const streetViewExternal = document.createElement("a"); streetViewExternal.className = "street-view-external";
       streetViewExternal.target = "_blank"; streetViewExternal.rel = "noopener noreferrer";
       streetViewExternal.textContent = "Open in Maps ↗";
+      const streetViewInteraction = document.createElement("button");
+      streetViewInteraction.className = "street-view-interaction"; streetViewInteraction.textContent = "Unlock";
+      streetViewInteraction.title = "Enable panorama controls; the overhead cone shows only the initial view";
+      streetViewInteraction.addEventListener("click", () => toggleStreetViewInteraction(card));
       const streetViewClose = document.createElement("button"); streetViewClose.textContent = "Close";
       streetViewClose.addEventListener("click", () => {{ closeStreetView(card); update(); }});
-      streetViewHead.append(streetViewLocation, streetViewExternal, streetViewClose);
+      streetViewHead.append(streetViewLocation, streetViewExternal, streetViewInteraction, streetViewClose);
+      const streetViewFrameWrap = document.createElement("div"); streetViewFrameWrap.className = "street-view-frame-wrap";
       const streetViewFrame = document.createElement("iframe"); streetViewFrame.className = "street-view-frame";
       streetViewFrame.title = "Google Street View near selected tree"; streetViewFrame.loading = "lazy";
       streetViewFrame.allowFullscreen = true; streetViewFrame.referrerPolicy = "strict-origin-when-cross-origin";
-      streetViewPanel.append(streetViewHead, streetViewFrame);
+      streetViewFrame.classList.add("locked"); streetViewFrameWrap.append(streetViewFrame);
+      streetViewPanel.append(streetViewHead, streetViewFrameWrap);
       const note = document.createElement("textarea"); note.placeholder = "Shadow, stale inventory, merged crowns, systematic shift…";
       note.dataset.singlePlaceholder = note.placeholder;
       note.addEventListener("change", () => {{
