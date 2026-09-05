@@ -121,6 +121,10 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert 'card.classList.add("street-view-open")' in html
     assert 'card.classList.contains("fullscreen")' in html
     assert 'className = "street-view-button"' not in html
+    assert 'className = "tree-species-label"' in html
+    assert 'sample.species || "Unknown species"' in html
+    assert '.card.fullscreen .tree-species-label' in html
+    assert 'label.dataset.status = statusOf(label.dataset.sampleId)' in html
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
     assert manifest["metadata"]["test_labels_included"] is False
     assert manifest["metadata"]["rendered_scenes"] == len(manifest["scenes"])

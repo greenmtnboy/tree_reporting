@@ -118,6 +118,8 @@ API, restrict its browser API key to the review server's origin, and expose it o
 process as `GOOGLE_MAPS_EMBED_API_KEY` (for example,
 `uv run --env-file .env urban-tree-ml qa serve ...`). Embed requests remain lazy-loaded until a
 full-screen image is opened. If the variable is absent, full-screen review remains overhead-only.
+The fullscreen overhead tile lightly labels every visible inventory marker with its species;
+the active tree is emphasized and duplicate verdicts are purple-tinted for comparison.
 When Street View Static API is also enabled for the browser key, the reviewer resolves the actual
 nearest panorama location, aims its initial heading toward the selected tree, and draws that camera
 and view direction over the overhead tile. The iframe is interaction-locked by default so the cone
