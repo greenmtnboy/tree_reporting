@@ -8,8 +8,11 @@ from rasterio.transform import from_origin
 
 from urban_tree_ml.config import load_config
 from urban_tree_ml.model_debug import (
+    CHIP_COMPARE_HTML,
     MODEL_DEBUG_HTML,
+    RUN_HISTORY_HTML,
     ModelDebugBundle,
+    RunDebugCatalog,
     inject_studio_navigation,
     render_studio_home,
 )
@@ -150,16 +153,35 @@ def test_model_debug_bundle_serves_metrics_predictions_and_chip_image(tmp_path: 
 
 
 def test_studio_html_links_registration_and_model_views() -> None:
-    home = render_studio_home(model_available=True)
+    home = render_studio_home(model_available=True, run_count=3)
     registration = inject_studio_navigation("<html><body>review</body></html>")
 
     assert "Urban Tree Model Studio" in home
     assert "Validation artifacts loaded" in home
     assert 'href="/registration"' in home
     assert 'href="/model"' in registration
+    assert 'href="/runs"' in registration
+    assert "3 validation runs" in home
     assert "/api/model/summary" in MODEL_DEBUG_HTML
     assert "/api/model/chip/" in MODEL_DEBUG_HTML
     assert "Inventory truth" in MODEL_DEBUG_HTML
     assert "Match radius" in MODEL_DEBUG_HTML
     assert 'id="modal"' in MODEL_DEBUG_HTML
     assert 'role="tooltip"' in MODEL_DEBUG_HTML
+    assert "Curate this chip" in MODEL_DEBUG_HTML
+    assert "/api/runs" in RUN_HISTORY_HTML
+    assert "/api/runs/chip/" in CHIP_COMPARE_HTML
+
+
+def test_run_catalog_discovers_runs_and_compares_a_chip(tmp_path: Path) -> None:
+    selected, raster_path = _debug_fixture(tmp_path)
+    catalog = RunDebugCatalog(selected.config, selected.directory, raster_path)
+
+    summary = catalog.summary()
+    assert summary["selected_run_id"] == selected.run_dir.name
+    assert [run["run_id"] for run in summary["runs"]] == [selected.run_dir.name]
+    assert catalog.bundle().summary()["run_id"] == selected.run_dir.name
+    comparison = catalog.chip_comparison("r000000_c000000")
+    assert comparison["selected_run_id"] == selected.run_dir.name
+    assert comparison["runs"][0]["available"] is True
+    assert comparison["runs"][0]["data"]["ground_truth"][0]["tree_id"] == "tree-a"

@@ -8,7 +8,11 @@ from pyproj import Transformer
 from rasterio.transform import from_origin
 
 from urban_tree_ml.config import load_config
-from urban_tree_ml.quality import build_registration_review, refresh_registration_heuristics
+from urban_tree_ml.quality import (
+    append_validation_chip_to_registration_review,
+    build_registration_review,
+    refresh_registration_heuristics,
+)
 
 
 def _write_qa_fixture(root: Path) -> Path:
@@ -200,6 +204,66 @@ def test_registration_review_extension_preserves_existing_ids_and_reviews(
     assert reviews_path.read_bytes() == reviews_before
     assert extended_manifest["metadata"]["extended_from_samples"] == initial["samples"]
     assert extended_manifest["metadata"]["extended_from_scenes"] == initial["scenes"]
+
+
+def test_validation_chip_enters_existing_registration_review(tmp_path: Path) -> None:
+    config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
+    config.paths.root = tmp_path / "artifacts"
+    raster_path = _write_qa_fixture(config.paths.root)
+    initial = build_registration_review(config, raster_path, samples=4, window_pixels=64)
+    review_dir = Path(initial["html"]).parent
+    manifest_before = json.loads(Path(initial["manifest"]).read_text(encoding="utf-8"))
+    existing_tree_ids = {sample["tree_id"] for sample in manifest_before["samples"]}
+    inventory = pd.read_parquet(config.paths.root / "inventory" / "ussfo" / "inventory.parquet")
+    row = inventory[
+        inventory["split"].isin(["train", "validation"])
+        & ~inventory["tree_id"].isin(existing_tree_ids)
+    ].iloc[0]
+    with rasterio.open(raster_path) as source:
+        transformer = Transformer.from_crs("EPSG:4326", source.crs, always_xy=True)
+        x, y = transformer.transform(row.longitude, row.latitude)
+        pixel_col, pixel_row = (~source.transform) * (x, y)
+    truth = pd.DataFrame(
+        [
+            {
+                "tree_id": row.tree_id,
+                "split": row.split,
+                "species": row.species,
+                "genus": row.genus,
+                "dbh_in": row.diameter_at_breast_height,
+                "longitude": row.longitude,
+                "latitude": row.latitude,
+                "pixel_col": pixel_col,
+                "pixel_row": pixel_row,
+            }
+        ]
+    )
+
+    added = append_validation_chip_to_registration_review(
+        config,
+        raster_path,
+        review_dir,
+        "r000000_c000000",
+        truth,
+    )
+    repeated = append_validation_chip_to_registration_review(
+        config,
+        raster_path,
+        review_dir,
+        "r000000_c000000",
+        truth,
+    )
+
+    manifest = json.loads((review_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert added["added"] is True
+    assert repeated == {"scene_id": added["scene_id"], "added": False}
+    assert len(manifest["samples"]) == len(manifest_before["samples"]) + 1
+    scene = next(scene for scene in manifest["scenes"] if scene["scene_id"] == added["scene_id"])
+    assert scene["validation_chip_id"] == "r000000_c000000"
+    assert (review_dir / scene["image"]).exists()
+    html = (review_dir / "index.html").read_text(encoding="utf-8")
+    assert "requestedSceneId" in html
+    assert "setExpanded(requestedCard, true)" in html
 
 
 def test_heuristic_refresh_preserves_existing_reviews(tmp_path: Path) -> None:

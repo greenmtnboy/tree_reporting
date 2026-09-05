@@ -108,10 +108,15 @@ collision policy excludes unresolved stacks from supervision; **Show stacked** e
 source-data inspection or manual splitting with explicit offsets. City-specific passes can set `--profile-id`,
 `--ndvi-p90-max`, and `--gray-fraction-min` while retaining provenance on applied decisions.
 
-Open `http://127.0.0.1:8765`; the Model Studio landing page links registration curation and any
-available model-validation run. Registration samples default to aligned, so only exceptions need
-attention. The server auto-detects validation artifacts for the configured experiment; use
-`--evaluation-dir` to inspect a different run.
+Open `http://127.0.0.1:8765`; the Model Studio landing page links registration curation, run
+history, and model validation. The run-history view discovers every sibling
+`runs/*/evaluation/validation` bundle, charts compatible datasets over time, and links each row to
+its validation explorer. A chip ID can also be compared across every run. From either chip view,
+**Curate this chip** adds previously unseen inventory points to the same registration manifest and
+opens that scene directly in the fullscreen reviewer; saves and finalization continue through the
+existing annotation bundle. Registration samples default to aligned, so only exceptions need
+attention. `--evaluation-dir` chooses the initially selected run and the sibling run directory to
+scan.
 Full-screen registration review automatically opens an interactive Street View panorama beside the
 overhead tile and retargets it whenever a numbered tree is selected. Enable the Google Maps Embed
 API, restrict its browser API key to the review server's origin, and expose it only to the server
