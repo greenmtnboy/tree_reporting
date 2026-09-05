@@ -117,6 +117,11 @@ overhead tile. Enable the Google Maps Embed API, restrict its browser API key to
 server's origin, and expose it only to the server process as `GOOGLE_MAPS_EMBED_API_KEY` (for
 example, `uv run --env-file .env urban-tree-ml qa serve ...`). Embed requests are lazy-loaded for
 the selected tree. If the variable is absent, the control retains its external Google Maps link.
+When Street View Static API is also enabled for the browser key, the reviewer resolves the actual
+nearest panorama location, aims its initial heading toward the selected tree, and draws that camera
+and view direction over the overhead tile. The iframe is interaction-locked by default so the cone
+remains truthful; **Unlock** permits free panorama navigation while leaving the cone labeled as the
+initial view. Metadata-only requests do not consume Street View Static quota.
 Every served save also refreshes a compact annotation bundle under
 `$TREE_ML_ANNOTATIONS_ROOT/<city>/<review-id>/`. Set that variable to the `annotations` directory
 of a local [`arborary-world/training-data`](https://github.com/arborary-world/training-data)
