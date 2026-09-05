@@ -264,6 +264,8 @@ def test_validation_chip_enters_existing_registration_review(tmp_path: Path) -> 
     html = (review_dir / "index.html").read_text(encoding="utf-8")
     assert "requestedSceneId" in html
     assert "setExpanded(requestedCard, true)" in html
+    assert "Back to validation" in html
+    assert "location.href = curationReturn" in html
 
 
 def test_heuristic_refresh_preserves_existing_reviews(tmp_path: Path) -> None:
