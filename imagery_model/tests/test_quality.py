@@ -90,6 +90,8 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert 'event.key === "ArrowLeft"' in html
     assert 'id="coverage-filter"' in html
     assert 'id="scene-status-filter"' in html
+    assert 'statusFilter.value === "unreviewed"' in html
+    assert "? !sceneDone : statusOf(sample.sample_id)" in html
     assert 'className = "done-button"' in html
     assert 'className = "heuristic-button"' in html
     assert 'className = "select-all-button"' in html

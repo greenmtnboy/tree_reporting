@@ -523,7 +523,9 @@ def _render_grouped_registration_html(
         const sceneDone = Boolean(sceneReviews[scene.scene_id]?.done);
         const sceneSamples = scene.sample_ids.map(sampleId => samplesById[sampleId]);
         const selectableSamples = sceneSamples.filter(sample => showStacks.checked || !isStacked(sample));
-        const statusMatches = selectableSamples.filter(sample => !statusFilter.value || statusOf(sample.sample_id) === statusFilter.value);
+        const statusMatches = selectableSamples.filter(sample => !statusFilter.value
+          || (statusFilter.value === "unreviewed"
+            ? !sceneDone : statusOf(sample.sample_id) === statusFilter.value));
         const visible = (!splitFilter.value || scene.splits.includes(splitFilter.value))
           && (!coverageFilter.value || (coverageFilter.value === "seam") === Boolean(scene.seam_priority))
           && (!sceneStatusFilter.value || (sceneStatusFilter.value === "done") === sceneDone)
