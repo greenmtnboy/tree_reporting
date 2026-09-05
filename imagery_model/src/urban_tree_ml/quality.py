@@ -261,9 +261,9 @@ def _render_grouped_registration_html(
     .tree-marker[data-status="duplicate"] {{ border-color: #c084fc; color: #e9d5ff; }}
     .tree-species-label {{ display: none; position: absolute; z-index: 2; max-width: 150px;
       padding: 2px 5px; overflow: hidden; transform: translate(14px, calc(-50% + var(--label-offset)));
-      border-radius: 4px; background: #07110da8; color: #d7e5da; font-size: 10px; line-height: 1.2;
+      border-radius: 4px; background: #07110d70; color: #d7e5da; font-size: 10px; line-height: 1.2;
       text-overflow: ellipsis; white-space: nowrap; pointer-events: none; text-shadow: 0 1px 2px #000; }}
-    .tree-species-label.active {{ z-index: 6; background: #e5f3e9e8; color: #102016; font-weight: 700;
+    .tree-species-label.active {{ z-index: 6; background: #e5f3e990; color: #102016; font-weight: 700;
       text-shadow: none; }}
     .tree-species-label[data-status="duplicate"] {{ color: #e9d5ff; box-shadow: inset 2px 0 #c084fc; }}
     .tree-species-label.active[data-status="duplicate"] {{ color: #44215f; }}
