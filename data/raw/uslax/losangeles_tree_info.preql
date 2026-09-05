@@ -1,9 +1,15 @@
 import ..tree_common;
 import ..community_tree_info;
+import ..tree_dedup;
 
 auto uslax_published_data_updated_through <- greatest(uslax_data_updated_through, uslax_community_data_updated_through, uslax_osm_data_updated_through);
 
 key uslax_source enum<string>['LOSANGELES_OPENDATA', 'COMMUNITY_USLAX', 'OSM_USLAX']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto uslax_source_label <- concat(uslax_source, '');
+merge uslax_source_label into source_label;
 
 root datasource losangeles_update_time (
     data_updated_through: uslax_data_updated_through
@@ -29,20 +35,19 @@ file `./losangeles_osm_probe.py`;
 
 # OpenStreetMap trees, read from the staged parquet in GCS rather than
 # Overpass -- extraction is decoupled from refresh (see _osm_shared.py and
-# EXTENDING.md).  Overlapping rows are kept and flagged via
-# uslax_is_duplicate below, never dropped: the Parquet must contain the union
-# of its declared sources, and the flag keeps the dedup tunable and auditable.
+# EXTENDING.md).  Overlapping rows are resolved by the
+# shared cluster merge (../tree_dedup.preql).
 root partial datasource uslax_osm_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: uslax_source,
-    species: ?species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
+    species: ?raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USLAX' and uslax_source = 'OSM_USLAX'
@@ -52,13 +57,13 @@ root partial datasource losangeles_raw_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: uslax_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USLAX' and uslax_source = 'LOSANGELES_OPENDATA'
@@ -72,13 +77,13 @@ root partial datasource uslax_community_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: uslax_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USLAX' and uslax_source = 'COMMUNITY_USLAX'
@@ -86,41 +91,19 @@ file `../community_tree_info.py`
 where city = 'USLAX';
 
 
-# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+# --- Cross-source dedup and attribute merge --------------------------------
 #
-# Same construction as ustem/tempe_tree_info.preql (full rationale there and in
-# EXTENDING.md): an OSM row is a duplicate when a non-OSM tree shares its
-# ~20m grid cell in ANY of four half-cell-staggered grid copies -- a guaranteed
-# match within 10m, possible out to a ~28m diagonal.
-#
-# CALIBRATED at 20m, unlike most cities. This city's 5-10m band is
-# 67.2% mutual-NN over n=296 -- duplicate-dominated, so those matches are
-# re-mapped inventory trees rather than neighbours at planting spacing, and
-# a 10m cell would miss them. Re-check with:
-#     cd data/raw && uv run ./osm_dedup_validation.py --city USLAX
-#
-# Cell sizes: 20m of latitude is 20/111320 deg; longitude shrinks by
-# cos(34.03 deg) here.
-const uslax_cell_lat_deg <- 0.00017966;
-const uslax_cell_lon_deg <- 0.00021678;
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# The only per-city line is the dbh merge, because Boston imputes it.
+merge merged_dbh into diameter_at_breast_height;
 
-auto uslax_cell_a <- concat(cast(floor(longitude / uslax_cell_lon_deg) as string), ':', cast(floor(latitude / uslax_cell_lat_deg) as string));
-auto uslax_cell_b <- concat(cast(floor(longitude / uslax_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / uslax_cell_lat_deg) as string));
-auto uslax_cell_c <- concat(cast(floor(longitude / uslax_cell_lon_deg) as string), ':', cast(floor(latitude / uslax_cell_lat_deg + 0.5) as string));
-auto uslax_cell_d <- concat(cast(floor(longitude / uslax_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / uslax_cell_lat_deg + 0.5) as string));
 
-auto uslax_anchor_count_a <- count(tree_id ? uslax_source != 'OSM_USLAX') by uslax_cell_a;
-auto uslax_anchor_count_b <- count(tree_id ? uslax_source != 'OSM_USLAX') by uslax_cell_b;
-auto uslax_anchor_count_c <- count(tree_id ? uslax_source != 'OSM_USLAX') by uslax_cell_c;
-auto uslax_anchor_count_d <- count(tree_id ? uslax_source != 'OSM_USLAX') by uslax_cell_d;
-
-auto uslax_is_duplicate <- uslax_source = 'OSM_USLAX' and (
-    uslax_anchor_count_a > 0
-    or uslax_anchor_count_b > 0
-    or uslax_anchor_count_c > 0
-    or uslax_anchor_count_d > 0
-);
-
+# The `where` below is the prune: this target publishes only the row that owns
+# its cluster, so the parquet holds exactly one tree per row.  It needs
+# pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
+# ../tree_dedup.preql.
 partial datasource losangeles_tree_info (
     tree_id,
     city,
@@ -132,10 +115,13 @@ partial datasource losangeles_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
-    is_duplicate: uslax_is_duplicate,
+    cluster_id,
+    merged_sources,
+    ?merged_tree_ids,
     uslax_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'USLAX'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslax_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uslax_tree_info_v{data_version}.parquet`
+where tree_id = cluster_id
 freshness by uslax_published_data_updated_through;

@@ -1,9 +1,15 @@
 import ..tree_common;
 import ..community_tree_info;
+import ..tree_dedup;
 
 auto gblon_published_data_updated_through <- greatest(gblon_data_updated_through, gblon_community_data_updated_through, gblon_osm_data_updated_through);
 
 key gblon_source enum<string>['LONDON_OPENDATA', 'COMMUNITY_GBLON', 'OSM_GBLON']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto gblon_source_label <- concat(gblon_source, '');
+merge gblon_source_label into source_label;
 
 root datasource london_update_time (
     data_updated_through: gblon_data_updated_through
@@ -29,21 +35,20 @@ file `./london_osm_probe.py`;
 
 # OpenStreetMap trees, read from the staged parquet in GCS rather than
 # Overpass -- extraction is decoupled from refresh (see _osm_shared.py and
-# EXTENDING.md).  Overlapping rows are kept and flagged via
-# gblon_is_duplicate below, never dropped: the Parquet must contain the union
-# of its declared sources, and the flag keeps the dedup tunable and auditable.
+# EXTENDING.md).  Overlapping rows are resolved by the
+# shared cluster merge (../tree_dedup.preql).
 root partial datasource gblon_osm_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: gblon_source,
     borough: ?borough,
-    species: ?species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
+    species: ?raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'GBLON' and gblon_source = 'OSM_GBLON'
@@ -53,14 +58,14 @@ root partial datasource london_raw_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: gblon_source,
-    species: species,
-    tree_name: ?tree_name,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
     borough: ?borough,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'GBLON' and gblon_source = 'LONDON_OPENDATA'
@@ -74,14 +79,14 @@ root partial datasource gblon_community_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: gblon_source,
-    species: species,
-    tree_name: ?tree_name,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
     borough: ?borough,
-    plant_date: ?plant_date,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    submission_photo_url: ?submission_photo_url,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'GBLON' and gblon_source = 'COMMUNITY_GBLON'
@@ -90,41 +95,19 @@ where city = 'GBLON';
 
 
 
-# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+# --- Cross-source dedup and attribute merge --------------------------------
 #
-# Same construction as ustem/tempe_tree_info.preql (full rationale there and in
-# EXTENDING.md): an OSM row is a duplicate when a non-OSM tree shares its
-# ~10m grid cell in ANY of four half-cell-staggered grid copies -- a guaranteed
-# match within 5m, possible out to a ~14m diagonal.
-#
-# CALIBRATED at 10m. This city's 5-10m band is 51.5% mutual-NN over
-# n=18076 -- a coin flip, so leaving it unflagged: a false flag hides a real tree
-# while a missed duplicate only double-renders one, so a band that is not
-# clearly duplicate-dominated should not be flagged. Re-check with:
-#     cd data/raw && uv run ./osm_dedup_validation.py --city GBLON
-#
-# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
-# cos(51.50 deg) here.
-const gblon_cell_lat_deg <- 0.00008983;
-const gblon_cell_lon_deg <- 0.00014430;
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# The only per-city line is the dbh merge, because Boston imputes it.
+merge merged_dbh into diameter_at_breast_height;
 
-auto gblon_cell_a <- concat(cast(floor(longitude / gblon_cell_lon_deg) as string), ':', cast(floor(latitude / gblon_cell_lat_deg) as string));
-auto gblon_cell_b <- concat(cast(floor(longitude / gblon_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / gblon_cell_lat_deg) as string));
-auto gblon_cell_c <- concat(cast(floor(longitude / gblon_cell_lon_deg) as string), ':', cast(floor(latitude / gblon_cell_lat_deg + 0.5) as string));
-auto gblon_cell_d <- concat(cast(floor(longitude / gblon_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / gblon_cell_lat_deg + 0.5) as string));
 
-auto gblon_anchor_count_a <- count(tree_id ? gblon_source != 'OSM_GBLON') by gblon_cell_a;
-auto gblon_anchor_count_b <- count(tree_id ? gblon_source != 'OSM_GBLON') by gblon_cell_b;
-auto gblon_anchor_count_c <- count(tree_id ? gblon_source != 'OSM_GBLON') by gblon_cell_c;
-auto gblon_anchor_count_d <- count(tree_id ? gblon_source != 'OSM_GBLON') by gblon_cell_d;
-
-auto gblon_is_duplicate <- gblon_source = 'OSM_GBLON' and (
-    gblon_anchor_count_a > 0
-    or gblon_anchor_count_b > 0
-    or gblon_anchor_count_c > 0
-    or gblon_anchor_count_d > 0
-);
-
+# The `where` below is the prune: this target publishes only the row that owns
+# its cluster, so the parquet holds exactly one tree per row.  It needs
+# pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
+# ../tree_dedup.preql.
 partial datasource london_tree_info (
     tree_id,
     city,
@@ -137,10 +120,13 @@ partial datasource london_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
-    is_duplicate: gblon_is_duplicate,
+    cluster_id,
+    merged_sources,
+    ?merged_tree_ids,
     gblon_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'GBLON'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gblon_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/gblon_tree_info_v{data_version}.parquet`
+where tree_id = cluster_id
 freshness by gblon_published_data_updated_through;

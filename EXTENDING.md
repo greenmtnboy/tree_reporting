@@ -369,19 +369,40 @@ The probe's HEAD request carries a cache-buster: the objects are served with
 `Cache-Control: max-age=3600`, so a probe run just after an extract would
 otherwise read the previous publication time and call the city fresh.
 
-**Dedup is stacking + aggregate, not an anti-join.** OSM overlaps the
-municipal inventory by construction. Trilogy's joins are equality-only (a
-non-`=` join key is rejected at hydration), so a spatial anti-join cannot be
-expressed in the model — and doing it in a script against the published
-Parquet would dedup one rebuild cycle stale. The model instead derives a grid
-cell from lat/lon in **four copies of a ~10m grid staggered by half a cell**
-(x, y, and both), counts non-OSM anchors per cell with a filtered aggregate,
-and flags an OSM row whose cell in *any* grid contains an anchor. Two points
-within half a cell (~5m) always share a cell in at least one grid, so this is
-an equi-join-shaped stand-in for "within 5m", with possible matches out to a
-cell diagonal (~14m). An unnest-based 3x3 neighborhood would give an exact
-radius but sits on the merged-unnest planner path that has regressed twice
-upstream; don't.
+**Dedup is one shared cluster merge, in `raw/tree_dedup.preql`.** OSM
+overlaps the municipal inventory by construction, and a community submission
+can describe a tree the inventory already has. Trilogy's joins are
+equality-only (a non-`=` join key is rejected at hydration), so a spatial
+anti-join cannot be expressed in the model — and doing it in a script against
+the published Parquet would dedup one rebuild cycle stale. The shared model
+instead derives a grid cell from lat/lon in **four copies of a grid staggered
+by half a cell** (x, y, and both); two points within half a cell always share a
+cell in at least one grid, so a 10m cell is an equi-join-shaped stand-in for
+"within 5m", with possible matches out to a cell diagonal (~14m). An
+unnest-based 3x3 neighborhood would give an exact radius but sits on the
+merged-unnest planner path that has regressed twice upstream; don't.
+
+Every row then resolves to **one canonical cluster id** — a municipal row is
+its own cluster, a community row attaches to the lowest municipal id sharing a
+cell, an OSM row to the lowest municipal id, else the lowest community id —
+and every canonical attribute of the cluster (`species`, `latitude`,
+`diameter_at_breast_height`, ...) is picked across its rows by a value
+function: `@by_source` takes a non-null value, community first (it carries a
+person and a photo), then municipal, then OSM; species prefers the most
+specific name (binomial > genus > a form sentinel > Unknown). The survivor is
+the row whose `tree_id` equals its cluster id, and `merged_sources` /
+`merged_tree_ids` record what it absorbed, so no id is ever lost.
+
+A city takes part by importing the file, feeding `source_label` from its enum,
+mapping its raw sources onto the shared `raw_*` concepts instead of the
+canonical ones (the canonical value is *derived* by the merge and `merge`d back
+— the pattern Boston has long used to impute dbh; a raw source that bound
+`species` directly would hand the planner a second, unmerged path to it), and
+adding one line for dbh. The cell size is a row in `DEDUP_CELL_METRES`
+(`_ingest_shared.py`), rendered into the model by `dedup_cells.py --write` as
+an inline `VALUES` table — inline rather than a python datasource because the
+same text is planned on the resolver service, which has no scripts, and an
+unbound cell size there made the planner error instead of reading the parquet.
 
 **Why the cell is 10m (5m guarantee), not 20m.** Distance alone cannot
 distinguish a re-mapped inventory tree from the next tree in a planted row:
@@ -429,13 +450,20 @@ Berlin (6,157) and Paris (3,906) carry enough `osm_ref` values to cross-check
 the geometric break against exact municipal-id matches; both break sharply at
 5m (18.4% and 15.9%), which is the strongest confirmation the method has.
 
-**Flag, never drop.** The dedup materializes as an `is_duplicate` boolean
-column (aliased from `{code}_is_duplicate`), and the Parquet keeps every row.
-Dropping rows would break the partition-completeness proof (the Parquet must
-contain the union of its declared sources); the flag also makes dedup tunable
-and auditable — flagged rows stay queryable, so the cell size can be evaluated
-against real data rather than re-derived.
-Because the flag is computed from the same materialization's source rows, a
+**Pruned, not flagged.** Each city's published target carries `where tree_id
+= cluster_id`, so the parquet holds exactly one row per tree; the rows a
+cluster absorbed are never published and no client-side filter is needed to
+hide them. `merged_tree_ids` is where an absorbed id survives, so a link to
+one still resolves to its survivor.
+
+This needs **pytrilogy 0.3.348 or later** and the failure modes below it are
+quiet, which is worth knowing if the pin ever moves back: 0.3.343 parsed the
+target-side `where` and silently did not apply it, publishing every row; 0.3.347
+applied it but then required the partial partitions to be provably exhaustive
+over the whole `city` enum — which one city's partitions never are — and failed
+with `no complete sources found`. `upstream_repro/keyless_join_cell_aggregate/`
+has the three spellings and the enum toggle that isolated it.
+Because the merge is computed from the same materialization's source rows, a
 municipal update dedups against itself in the same rebuild; there is no
 staleness window.
 
@@ -461,8 +489,8 @@ Read together: "only {CODE}'s trees, and this is all of them."
 
 This was missing for a long time without visible symptoms, because the planner
 *happened* to inject a predicate for the twelve cities with no OSM partition
-and not for the two with one — the presence of the `is_duplicate` column, whose
-value comes from an aggregate across the stacked partitions, is what decides it.
+and not for the two with one — the presence of a dedup column, whose value
+comes from an aggregate across the stacked partitions, is what decided it.
 Tempe's Parquet accordingly shipped three `city = 'USBOS'` rows. Do not rely on
 the injection: write the `where`. Trilogy compiles it into both a SQL predicate
 and a `--filter 'city={CODE}'` argument to the script, which
@@ -470,27 +498,33 @@ and a `--filter 'city={CODE}'` argument to the script, which
 and emit the whole export. Write-up in
 `upstream_repro/partition_filter_dropped/`.
 
-**Every city carries the column; the frontend hides the flagged rows.** The
-flag is only useful if something reads it, and for a while nothing did: Boston's
-first OSM rebuild flagged 7,369 rows correctly and the map rendered all of them
-anyway, stacked on top of the municipal trees on Boston Common. `is_duplicate`
-is therefore materialized by **every** city model — those with no
-OSM partition emit `auto {code}_is_duplicate <- False;` — and
-`duckdbPipeline.worker.ts` filters with a single
-`AND NOT COALESCE(is_duplicate, false)` when it loads a city.
+**Every city must prune, and a city that does not is silent.** Dedup is only
+useful if something acts on it, and for a while nothing did: Boston's first OSM
+rebuild flagged 7,369 rows correctly and the map rendered all of them anyway,
+stacked on top of the municipal trees on Boston Common. The prune is now the
+shared derivation in `tree_dedup.preql`, so importing that file and gating the
+published target is all a city does — and a city that skips the gate still
+builds, with counts that are simply high.
+`test_every_city_prunes_absorbed_rows` is what catches that.
 
-A missing column does not degrade: DuckDB raises a binder error and that city's
-map fails to load entirely. So **refresh every city before deploying** a worker
-change that selects it. `src/src/workers/parquetSchema.test.ts` asserts the
-column against the live GCS Parquet for every city in `CITY_CONFIG`, which is
-what turns "I forgot to refresh" into a red test rather than a broken city.
-A city whose parquet does not exist *at all* (brand-new, first build pending)
-is the one carve-out: for a 404 the test instead asserts the city's model
-materialises the column, so a city-addition PR is not red until its first
-credentialed build — the hard failure is reserved for a parquet that exists
-without the column, the stale-build case the gate was written for. The flip
-side: a green build no longer proves a brand-new city's parquet exists, so a
-just-added city stays broken in a deploy until its first refresh runs.
+**Rebuilding is per city and safe in any order.** `duckdbPipeline.worker.ts`
+probes for the old `is_duplicate` column and filters only when it is present,
+so a parquet built before the prune is filtered exactly as it always was, while
+a pruned one needs no filter because its rows are already the survivors. There
+is no window in which the map is wrong, and no need to coordinate the refresh
+with a deploy. That is why the column was not dropped and the filter deleted in
+the same change; delete the filter once every city has been rebuilt past the
+prune.
+
+`src/src/workers/parquetSchema.test.ts` asserts the *absence* of the column
+against the live GCS Parquet for every city in `CITY_CONFIG` — a parquet that
+still has it predates the prune and is publishing absorbed rows, so this turns
+"I forgot to refresh" into a red test. A city whose parquet does not exist *at
+all* (brand-new, first build pending) is the one carve-out: for a 404 the test
+asserts the city's model prunes instead, so a city-addition PR is not red until
+its first credentialed build. The flip side: a green build no longer proves a
+brand-new city's parquet exists, so a just-added city stays broken in a deploy
+until its first refresh runs.
 
 **A new column does not make a Parquet stale.** Staleness is decided by the
 freshness probes, which watch the *source data*, so refreshing a city after a
@@ -513,8 +547,10 @@ inside them — a rebuild that changes only the schema still republishes the
 object, and the rollup notices. Force it anyway if you are unsure:
 `trilogy refresh raw/full_tree_publish.preql -f full_tree_info`.
 
-**Do not merge `is_duplicate` in `tree_info.preql`.** `data_source` is merged
-there, and doing the same for the dedup flag looks symmetric but does not plan:
+**`tree_info.preql` takes the dedup columns from the parquets and derives
+nothing.** `merged_sources` and `merged_tree_ids` are one shared derivation,
+computed inside each city's own build over that city's rows. Asking the planner to resolve the cluster aggregate over the union of
+every city fails outright:
 
 ```
 UnresolvableQueryException: Planner emitted a keyless join between row-bearing
@@ -523,10 +559,19 @@ _grouped_by_local.usbos_cell_a... This would render as a cross join (ON 1=1)
 and fan out; the join axis was lost upstream.
 ```
 
-The flag comes from a per-city grid aggregate over that city's own rows;
-merging the keys asks the planner to resolve that aggregate over the union of
-every city. The cross-city `full_tree_info` Parquet accordingly has no
-`is_duplicate`, and the worker skips the filter on that fallback path.
+The cross-city `full_tree_info` Parquet does not carry the columns, and the
+worker skips the filter on that fallback path.
+
+**The all-cities dashboards now read eighteen parquets instead of the rollup.**
+Moving the raw sources onto `raw_*` changed which source the resolver picks for
+a query with no city: it used to be the rollup and is now the union of every
+city's parquet — the same rows as eighteen files. `dashboard-pushdown.test.ts`
+accepts either and fails a strict subset, because while only some cities were
+converted the resolver answered the all-cities dot map from those cities plus
+each other city's *OSM staging parquet alone*, silently. That is a planner
+bug — a `complete where city = X and source = Y` claim treated as covering
+city X — reproduced in `upstream_repro/partition_subset_chosen/`. Convert
+every city in one change; never leave the bundle half-converted.
 
 Other details: OSM `circumference` defaults to metres but is frequently
 mis-entered as bare centimetres — the extract treats a unitless value > 10 as
@@ -927,8 +972,10 @@ in `data/raw/` are what it looks the city up in.
 
 Add the city to `OSM_DATA_SOURCES` in `data/raw/_ingest_shared.py`, declare the
 `OSM_{CODE}` value in its source enum and the staging partition in its tree
-model, and derive `is_duplicate` (see the four-grid block above — calibrate the
-cell size for this city, do not copy a number).
+model, and give it a row in `DEDUP_CELL_METRES` (start at 10, then measure with
+`osm_dedup_validation.py --city {CODE}` after the first build — see the cluster
+merge block above; do not copy a number) followed by `uv run dedup_cells.py
+--write`.
 
 ### 9. Schedule It
 
@@ -1070,11 +1117,12 @@ Differences from the standard runbook, all visible in
   read as a duplicate claim.
 
 Everything else is unchanged: the city still needs the enum entry in
-`core.preql`, an `is_duplicate` column (derived from the dedup grids when OSM
-is wired, constant `False` otherwise), landmarks, frontend config, and
-attribution. For GRMLO's dedup the only non-OSM anchors are community
-submissions — a flag fires exactly when someone records a tree OSM already
-maps, and the submission wins, which is the intended outcome.
+`core.preql`, the shared cluster merge (`import ..tree_dedup;`, a
+`DEDUP_CELL_METRES` row and `where tree_id = cluster_id` on the published
+target), landmarks, frontend config, and attribution. For GRMLO's dedup the
+only non-OSM anchors are community submissions — a cluster forms exactly when
+someone records a tree OSM already maps, and the submission wins, which is the
+intended outcome.
 
 ## Landmarks (Mandatory)
 
@@ -1266,8 +1314,8 @@ If you add a city whose source data embeds a common name in the species field (a
 `normalize_species` only fixes casing.  Deciding whether a value is a taxon at
 all is `sanitize_species`, called for every city from `enforce_tree_schema`, so
 a new city inherits it without doing anything.  It drops what is not a
-scientific name — inventory placeholders (`Vacant`, `Unknown`, `Onbekend`,
-`No identificado`, `Empty pit/planting site`), free-typed OSM tags (`Pin oak`,
+scientific name — inventory placeholders (`Unknown`, `Onbekend`,
+`No identificado`), free-typed OSM tags (`Pin oak`,
 `Serviceberry or dogwood?`), abbreviated genera (`Amel. laevis 'spring
 flurry'`) — and truncates the rest to species rank, so
 `Gleditsia triacanthos var. inermis` and `Prunus serrulata 'kwanzan'` collapse
@@ -1308,10 +1356,24 @@ column says so in the refresh log rather than doing it quietly.
 Most non-taxa merge into `UNKNOWN_SPECIES` (`"Unknown"`), but a value that
 names a *growth form* keeps it: `Palm`, `Shrub` and `Cactus` are their own
 sentinels, because the form is what the map icon and colour are chosen from and
-merging throws away the one fact the source did record.
-`_FORM_SENTINEL_ALIASES` carries the multilingual spellings (`arbusto`,
-`struik`, `palmera`, …); the full set is `SPECIES_SENTINELS`, and a new
-sentinel added there needs a matching entry in `src/src/data/species.ts`.
+merging throws away the one fact the source did record.  `Dead` is a fourth,
+for the same reason with a different fact: the source recorded a standing tree
+and that it is dead.  `_FORM_SENTINEL_ALIASES` carries the multilingual
+spellings (`arbusto`, `struik`, `palmera`, `dood`, `arbre mort`, …); the full
+set is `SPECIES_SENTINELS`, and a new sentinel added there needs a matching
+entry in `src/src/data/species.ts`.
+
+**An empty site is not an unidentified tree, and is dropped.**  `Vacant`,
+`Vacant site medium`, `Scheduled Planting Site - Spring 2026`, `Empty
+pit/planting site` and `Stump` describe a spot with nothing in it; there is
+nothing to place on the map and nothing to count, so `enforce_tree_schema`
+removes the row (`is_not_a_tree`) instead of publishing it as `Unknown`.
+Several ingests already dropped the same records from a dedicated column
+(Amsterdam's `Stobbe` record type, Brookline's `IsStump`, Burlington's site
+type, Denver's `_` prefix, LA's `NOT_A_TREE_NAMES`); the shared rule catches
+the portals that only say so in the species field, SF above all.  The count is
+reported on stderr alongside the species cleanup summary.  `Unknown` and `Dead`
+are deliberately *not* in that set: both describe a tree that is there.
 
 #### Some non-taxa are only recognisable by name
 

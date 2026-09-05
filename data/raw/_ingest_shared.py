@@ -116,6 +116,49 @@ _SPECIES_PLACEHOLDERS = frozenset(
     }
 )
 
+# Values that say the *site* holds no tree at all: an empty planting pit, a
+# stump, a scheduled or vacant planting site.  Different in kind from the
+# placeholders above -- "Unknown" means there is a tree and the source could
+# not name it; "Vacant" means there is nothing to put on a map.  Rows carrying
+# one are dropped by enforce_tree_schema rather than published as
+# UNKNOWN_SPECIES.  Several ingests already drop the same records from a
+# dedicated column (Amsterdam's `Stobbe` record type, Brookline's `IsStump`,
+# Burlington's site type, Denver's `_` prefix, LA's NOT_A_TREE_NAMES); this
+# catches the portals that only say so in the species field, SF above all
+# ("Vacant site medium", "Scheduled Planting Site - Spring 2026").
+_NOT_A_TREE_MARKERS = frozenset(
+    {"vacant", "stump", "empty", "empty pit", "planting site", "stobbe"}
+)
+_NOT_A_TREE_PREFIXES = (
+    "vacant", "stump", "empty pit", "planting site", "scheduled planting",
+)
+_NOT_A_TREE_SUBSTRINGS = ("planting site", "empty pit")
+
+
+def is_not_a_tree(value: str | None) -> bool:
+    """True when a species value records an empty site rather than a tree.
+
+    Examples:
+        "Vacant"                                -> True
+        "Vacant site medium"                    -> True
+        "Scheduled Planting Site - Spring 2026" -> True
+        "Empty pit/planting site"               -> True
+        "Stump"                                 -> True
+        "Unknown"                               -> False  (a tree, unnamed)
+        "Dead tree"                             -> False  (a tree, dead)
+        "Acer rubrum"                           -> False
+    """
+    s = normalize_species(value)
+    if s is None:
+        return False
+    s = _strip_diacritics(s).lower()
+    if s in _NOT_A_TREE_MARKERS:
+        return True
+    if any(s.startswith(p) for p in _NOT_A_TREE_PREFIXES):
+        return True
+    return any(sub in s for sub in _NOT_A_TREE_SUBSTRINGS)
+
+
 # English common-name nouns that never occur as a Latin specific epithet.  A
 # two-word value ending in one of these is a common name ("Pin oak", "Red
 # maple"), not a binomial.  Genus-shaped entries (magnolia, catalpa) are safe
@@ -270,6 +313,12 @@ UNKNOWN_SPECIES = "Unknown"
 PALM_SPECIES = "Palm"
 SHRUB_SPECIES = "Shrub"
 CACTUS_SPECIES = "Cactus"
+# Not a growth form but the same kind of fact: the source recorded a standing
+# tree and that it is dead, without a species.  It stays on the map -- a dead
+# tree is still a tree at that spot -- under its own sentinel rather than as
+# "Unknown", so the condition is not lost.  An empty site or stump is a
+# different thing and is dropped; see is_not_a_tree.
+DEAD_SPECIES = "Dead"
 
 # Values that name a growth form rather than a taxon, in the languages the
 # wired cities publish in.  Anything not listed here that fails
@@ -303,13 +352,27 @@ _FORM_SENTINEL_ALIASES: dict[str, str] = {
     "αυτοφυης φοινικας": PALM_SPECIES,
     "θάμνος": SHRUB_SPECIES,
     "θαμνος": SHRUB_SPECIES,
+    "dead": DEAD_SPECIES,
+    "dead tree": DEAD_SPECIES,
+    "dood": DEAD_SPECIES,            # nl
+    "dode boom": DEAD_SPECIES,       # nl
+    "abgestorben": DEAD_SPECIES,     # de
+    "tot": DEAD_SPECIES,             # de
+    "toter baum": DEAD_SPECIES,      # de
+    "muerto": DEAD_SPECIES,          # es
+    "arbol muerto": DEAD_SPECIES,    # es
+    "árbol muerto": DEAD_SPECIES,    # es
+    "mort": DEAD_SPECIES,            # fr
+    "arbre mort": DEAD_SPECIES,      # fr
+    "νεκρό": DEAD_SPECIES,           # el
+    "νεκρο": DEAD_SPECIES,
 }
 
 # Every value the `species` key can hold that is not a scientific name.  The
 # enrichment scripts and the frontend both key off this set, so a new sentinel
 # is added here and picked up in both places.
 SPECIES_SENTINELS: frozenset[str] = frozenset(
-    {UNKNOWN_SPECIES, PALM_SPECIES, SHRUB_SPECIES, CACTUS_SPECIES}
+    {UNKNOWN_SPECIES, PALM_SPECIES, SHRUB_SPECIES, CACTUS_SPECIES, DEAD_SPECIES}
 )
 
 
@@ -357,6 +420,13 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
             "The source recorded this as a cactus without identifying the species."
         ),
         "tree_form": "columnar",
+    },
+    DEAD_SPECIES: {
+        "common_names": ["Dead tree"],
+        "description": (
+            "The source recorded this tree as dead, without identifying the species."
+        ),
+        "tree_form": "default",
     },
 }
 
@@ -593,9 +663,9 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # enum value and the staging datasource — `test_osm_city_is_fully_wired` and
 # `test_every_osm_city_has_an_extract_job` check each half, because a
 # half-wired city emits zero OSM rows rather than an error.  OSM rows overlap
-# the municipal inventory by construction, so each wired city also derives an
-# `is_duplicate` flag in its model — see the four-grid dedup block in
-# ustem/tempe_tree_info.preql for the reference implementation.
+# the municipal inventory by construction, so each wired city groups the
+# overlapping rows under one cluster id and publishes only the survivor — see
+# tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
     "USTEM": "OSM_USTEM",
     "USBOS": "OSM_USBOS",
@@ -737,6 +807,19 @@ def enforce_tree_schema(
     if species_col in names:
         sidx = table.schema.get_field_index(species_col)
         raw_species = table.column(sidx).to_pylist()
+        # An empty planting site or a stump is not a tree; there is nothing
+        # to place on the map and nothing to count.  Drop the row rather than
+        # publish it as an unidentified tree.
+        keep_rows = [not is_not_a_tree(v) for v in raw_species]
+        not_a_tree = len(keep_rows) - sum(keep_rows)
+        if not_a_tree:
+            table = table.filter(pa.array(keep_rows, type=pa.bool_()))
+            raw_species = table.column(sidx).to_pylist()
+            print(
+                f"{prefix}: dropped {not_a_tree} row(s) whose species field "
+                f"records an empty site or stump rather than a tree",
+                file=sys.stderr,
+            )
         cleaned: list[str] = []
         dropped = rewritten = formed = 0
         for value in raw_species:
@@ -895,6 +978,87 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     # two Kameni islets.
     "GRSAN": (36.30, 36.50, 25.30, 25.55),
 }
+
+
+# ---------------------------------------------------------------------------
+# Cross-source dedup: grid cell per city
+# ---------------------------------------------------------------------------
+
+# The grid cell, in metres, that raw/tree_dedup.preql matches rows across
+# sources with.  Two points within HALF a cell always share a cell in one of
+# the four staggered grids, so 10 m is a 5 m guarantee (possible matches out to
+# a ~14 m diagonal) and 20 m is a 10 m guarantee (~28 m).
+#
+# CALIBRATED PER CITY, never copied.  Distance alone cannot separate a
+# re-mapped inventory tree from the next tree in a planted row; what does is
+# pair structure, measured by `uv run osm_dedup_validation.py --city CODE`:
+# the mutual-nearest-neighbour rate in the 5-10 m band.  Below ~50% that band
+# is mostly planting-row neighbours and the cell stays at 10 m; only a band
+# that is *clearly* duplicate-dominated (the script's bar is 60%) earns 20 m.
+# The errors are not symmetric -- a missed duplicate double-renders one dot,
+# a false match hides a real tree -- so an ambiguous band is left alone, which
+# is why London (51.5%) and New York (53.3%) sit at 10 m.
+#
+# `dedup_cells.py` turns these into degrees at each city's latitude, so the
+# model never carries a hand-computed constant that can drift from the
+# calibration written next to it.  A new city needs an entry here (start at
+# 10, then measure); `test_dedup_cells.py` checks the table covers every city.
+DEDUP_CELL_METRES: dict[str, int] = {
+    # Tempe is the reference calibration: mutual-NN >=88% below 5 m (99.7%
+    # under 2 m), collapsing to 25% in the 5-10 m band.
+    "USTEM": 10,
+    # 5-10 m band 43.0% mutual-NN over n=300: neighbour-dominated.
+    "USSFO": 10,
+    # 53.3% over n=5,059: a coin flip, so the band is left unmatched.
+    "USNYC": 10,
+    # Grounded with the validation script at the 5 m break; four municipal
+    # partitions share the one cell.
+    "USBOS": 10,
+    # 15.9% over n=5,042, and Paris's 3,906 osm_ref exact-id matches break at
+    # the same 5 m line -- the strongest confirmation the method has.
+    "FRPAR": 10,
+    # 63.6% over n=22: duplicate-dominated, on a very small band.
+    "USBTV": 20,
+    # 26.7% over n=2,883.
+    "CAVAN": 10,
+    # 18.4% over n=12,630; Berlin's 6,157 osm_ref matches confirm the break.
+    "DEBER": 10,
+    # 29.9% over n=2,508.
+    "NLAMS": 10,
+    # 51.5% over n=18,076: a coin flip, left unmatched (~8,800 real trees at
+    # stake if it were flagged).
+    "GBLON": 10,
+    # 47.6% over n=884: a coin flip.
+    "AUMEL": 10,
+    # 61.0% over n=421: duplicate-dominated.
+    "ARBUE": 20,
+    # 67.2% over n=296: duplicate-dominated.
+    "USLAX": 20,
+    # 35.1% over n=558.
+    "USWAS": 10,
+    # National Garden inventory is small and dense; not yet measured, default.
+    "GRATH": 10,
+    # 76.4% mutual-NN in the 2-5 m band collapsing to 17.3% in 5-10 m
+    # (n=20,233) -- as sharp a break as any wired city.  Median planting
+    # spacing 8.2 m, so 20 m would reach the next tree in the row.  No osm_ref.
+    "USDEN": 10,
+    # Community submissions are the only anchors; a match means someone
+    # recorded a tree OSM already maps, and the submission wins.  Default.
+    "GRMLO": 10,
+    "GRSAN": 10,
+}
+
+
+def dedup_cell_degrees(city_code: str) -> tuple[float, float]:
+    """(cell_lat_deg, cell_lon_deg) for *city_code*'s dedup grid.
+
+    A degree of latitude is ~111,320 m everywhere; a degree of longitude
+    shrinks by cos(latitude), taken at the centre of the city's CITY_BOUNDS box.
+    """
+    metres = DEDUP_CELL_METRES[city_code]
+    lat_min, lat_max, _, _ = CITY_BOUNDS[city_code]
+    lat = math.radians((lat_min + lat_max) / 2)
+    return metres / 111320.0, metres / (111320.0 * math.cos(lat))
 
 
 def validate_coordinates(

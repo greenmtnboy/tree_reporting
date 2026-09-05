@@ -1,0 +1,255 @@
+# Cross-source dedup and attribute merge, shared by every city tree model.
+#
+# A city's tree parquet is built from up to three partitions -- the municipal
+# inventory, approved community submissions, and OpenStreetMap -- that overlap
+# by construction: the same tree is re-mapped by OSM, or submitted by someone
+# who found it already in the inventory.  This file resolves the overlap once,
+# for all cities: rows that describe the same tree are grouped under ONE
+# canonical cluster id, every canonical attribute (`species`, `latitude`, ...)
+# is picked from the cluster's rows by a value function, and the row whose
+# tree_id equals its cluster id is the survivor.  The rows it absorbed are not
+# published at all -- see "The prune" at the bottom.
+#
+# What a city model has to do to take part, and nothing else:
+#
+#   import ..tree_dedup;
+#   auto {lc}_source_label <- concat({lc}_source, '');
+#   merge {lc}_source_label into source_label;
+#   ... every raw source maps `raw_species`, `raw_latitude`, ... (not the
+#       canonical concepts), and the published target maps `species`,
+#       `latitude`, ... plus `merged_sources` and `merged_tree_ids`, and
+#       carries `where tree_id = cluster_id` to drop the absorbed rows.
+#   merge merged_dbh into diameter_at_breast_height;   # or a city-specific dbh
+#
+# The cell size each city matches at lives in DEDUP_CELL_METRES in
+# _ingest_shared.py, with the per-city calibration; ./dedup_cells.py turns it
+# into degrees at that city's latitude.  Add a city there and it is wired.
+#
+# ---------------------------------------------------------------------------
+# Spatial matching: four staggered grids
+# ---------------------------------------------------------------------------
+#
+# Two rows match when they share a grid cell in ANY of four copies of a grid
+# offset by half a cell in x, y and both.  Two points within half a cell of
+# each other always share a cell in at least one copy, so a 10m cell is a
+# guaranteed match within 5m, with possible matches out to a cell diagonal
+# (~14m).  Trilogy joins are equality-only, so this is the equi-join stand-in
+# for a radius query; an unnest-based 3x3 neighbourhood would give an exact
+# radius but sits on the merged-unnest planner path that has regressed twice.
+#
+# Why the guarantee is 5m for most cities and not 10m: distance alone cannot
+# separate a re-mapped inventory tree from the next tree in a planted row --
+# Tempe's inventory has a MEDIAN planting spacing of 6.5m.  What separates
+# them is pair structure, measured by osm_dedup_validation.py: below 5m an
+# OSM point and its nearest inventory tree are mutual nearest neighbours
+# >=88% of the time (the same tree, offset by GPS or imagery error); in the
+# 5-10m band that collapses to 15-50% in most cities, i.e. mostly distinct
+# neighbours.  Three cities (Buenos Aires, Burlington, Los Angeles) break at
+# 10m instead and use a 20m cell.  A missed duplicate double-renders one dot;
+# a false match hides a real tree, so an ambiguous band is left alone.
+#
+# ---------------------------------------------------------------------------
+# Cluster assignment, by source class
+# ---------------------------------------------------------------------------
+#
+#   municipal row  -> itself
+#   community row  -> the lowest municipal id sharing a cell, else itself
+#   OSM row        -> the lowest municipal id sharing a cell, else the lowest
+#                     community id sharing a cell, else itself
+#
+# The row's class is expressed as an aggregate at its own grain
+# (`min(tree_id ? <class>) by row_key`) rather than as a `case` on the source,
+# because pytrilogy 0.3.343 cannot combine a per-cell aggregate with both the
+# source and tree_id in one expression (it emits a keyless join), and cannot
+# group that self-aggregate by tree_id itself either -- a string alias of the
+# key plans.  See upstream_repro/keyless_join_cell_aggregate.
+
+import tree_common;
+
+# --- Raw (pre-merge) attributes -------------------------------------------
+#
+# Every raw source in every city maps its columns onto these.  The canonical
+# concepts in tree_common are then derived by the merge below and `merge`d in
+# -- the pattern boston_tree_info.preql has long used to impute dbh.  A raw
+# source that mapped `species` directly would give the planner a second,
+# unmerged way to answer for it.
+property tree_id.raw_species string;
+property tree_id.raw_tree_name string;
+property tree_id.raw_plant_date date;
+property tree_id.raw_latitude float;
+property tree_id.raw_longitude float;
+property tree_id.raw_dbh float;
+property tree_id.raw_photo_url string;
+
+# The row's `data_source` value as a plain string.  Each city merges its own
+# `{lc}_source` enum in; the enum itself stays per city because that is what
+# proves a city's partition union complete (see core.preql).
+property tree_id.source_label string;
+
+# The labels follow one convention -- `COMMUNITY_{code}`, `OSM_{code}`, and
+# anything else is a municipal dataset -- enforced by DATA_SOURCES in
+# _ingest_shared.py, so the class needs no per-city table.
+auto source_class <- case
+    when substring(source_label, 1, 10) = 'COMMUNITY_' then 'community'
+    when substring(source_label, 1, 4) = 'OSM_' then 'osm'
+    else 'municipal'
+end;
+
+# --- Grid cells, sized per city -------------------------------------------
+#
+# An inline table rather than a python datasource, because this file is also
+# in the browser's model bundle and is planned on a resolver that has no
+# scripts: pytrilogy drops a `file` datasource whose path does not exist, and
+# an unbound cell size made the planner error out while exploring the merge
+# instead of reading the published parquet.  Regenerate with
+# `uv run dedup_cells.py --write`; `test_dedup_cells.py` checks it is current.
+property city.cell_lat_deg float; # one grid cell, in degrees of latitude
+property city.cell_lon_deg float; # one grid cell, in degrees of longitude at the city's latitude
+
+# BEGIN dedup_cells -- generated by dedup_cells.py from DEDUP_CELL_METRES; do not edit
+root datasource dedup_cells (
+    city: city,
+    cell_lat_deg: cell_lat_deg,
+    cell_lon_deg: cell_lon_deg,
+)
+grain (city)
+query '''
+SELECT * FROM (VALUES
+    ('ARBUE', 0.00017966, 0.00021833),
+    ('AUMEL', 0.00008983, 0.00011373),
+    ('CAVAN', 0.00008983, 0.00013762),
+    ('DEBER', 0.00008983, 0.00014756),
+    ('FRPAR', 0.00008983, 0.00013658),
+    ('GBLON', 0.00008983, 0.00014430),
+    ('GRATH', 0.00008983, 0.00011396),
+    ('GRMLO', 0.00008983, 0.00011208),
+    ('GRSAN', 0.00008983, 0.00011161),
+    ('NLAMS', 0.00008983, 0.00014706),
+    ('USBOS', 0.00008983, 0.00012155),
+    ('USBTV', 0.00017966, 0.00025178),
+    ('USDEN', 0.00008983, 0.00011675),
+    ('USLAX', 0.00017966, 0.00021678),
+    ('USNYC', 0.00008983, 0.00011849),
+    ('USSFO', 0.00008983, 0.00011361),
+    ('USTEM', 0.00008983, 0.00010759),
+    ('USWAS', 0.00008983, 0.00011542)
+) AS t(city, cell_lat_deg, cell_lon_deg)
+''';
+# END dedup_cells
+
+def grid_cell(dx, dy) -> concat(
+    cast(floor(raw_longitude / cell_lon_deg + dx) as string), ':',
+    cast(floor(raw_latitude / cell_lat_deg + dy) as string)
+);
+
+auto cell_a <- @grid_cell(0, 0);
+auto cell_b <- @grid_cell(0.5, 0);
+auto cell_c <- @grid_cell(0, 0.5);
+auto cell_d <- @grid_cell(0.5, 0.5);
+
+# --- Cluster id --------------------------------------------------------------
+def municipal_anchor(cell) -> min(tree_id ? source_class = 'municipal') by cell;
+def any_anchor(cell) -> min(tree_id ? source_class != 'osm') by cell;
+
+auto municipal_anchor_a <- @municipal_anchor(cell_a);
+auto municipal_anchor_b <- @municipal_anchor(cell_b);
+auto municipal_anchor_c <- @municipal_anchor(cell_c);
+auto municipal_anchor_d <- @municipal_anchor(cell_d);
+
+auto anchor_a <- @any_anchor(cell_a);
+auto anchor_b <- @any_anchor(cell_b);
+auto anchor_c <- @any_anchor(cell_c);
+auto anchor_d <- @any_anchor(cell_d);
+
+# "Self if <class>": the row's own id when it is of that class, else null.
+auto row_key <- concat(tree_id, '#');
+auto self_if_municipal <- @municipal_anchor(row_key);
+auto self_if_not_osm <- @any_anchor(row_key);
+
+auto cluster_id <- coalesce(
+    self_if_municipal,
+    municipal_anchor_a, municipal_anchor_b, municipal_anchor_c, municipal_anchor_d,
+    self_if_not_osm,
+    anchor_a, anchor_b, anchor_c, anchor_d,
+    tree_id
+);
+
+# --- Attribute merge over the cluster ---------------------------------------
+#
+# `@by_source` is the default value function: a non-null value wins, and when
+# more than one source has one the community value is taken first (it carries
+# a person and a photo), then the municipal inventory, then OSM.  Grouped
+# aggregates inside a function argument list have to be parenthesised, or the
+# parser reads `by k, next_arg` as a multi-column group.
+def by_source(value) -> coalesce(
+    (max(value ? source_class = 'community') by cluster_id),
+    (max(value ? source_class = 'municipal') by cluster_id),
+    (max(value ? source_class = 'osm') by cluster_id)
+);
+
+auto source_rank <- case when source_class = 'community' then 3 when source_class = 'osm' then 1 else 2 end;
+
+# Species: the most specific name wins (binomial > genus > a sentinel that
+# still says something, like Palm or Dead > Unknown); ties go to the
+# higher-ranked source.  Encoded as a sortable key so a single max() picks one
+# value -- Trilogy has no arg_max.
+auto species_specificity <- case
+    when raw_species = 'Unknown' then 0
+    when raw_species = 'Palm' or raw_species = 'Shrub' or raw_species = 'Cactus' or raw_species = 'Dead' then 1
+    when strpos(raw_species, ' ') = 0 then 2
+    else 3
+end;
+auto species_key <- concat(cast(species_specificity as string), cast(source_rank as string), '|', raw_species);
+auto merged_species <- substring((max(species_key) by cluster_id), 4, 200);
+
+# Position comes from the survivor's own source via @by_source, which is a
+# single row, so latitude and longitude always travel together.  Preferring a
+# partner's unshared point over an address centroid is parked: it needs either
+# a string round-trip (`cast(... as float)` renders 32-bit REAL) or a filtered
+# aggregate on an aggregate-derived flag, which does not plan yet.
+auto merged_latitude <- @by_source(raw_latitude);
+auto merged_longitude <- @by_source(raw_longitude);
+auto merged_tree_name <- @by_source(raw_tree_name);
+auto merged_plant_date <- @by_source(raw_plant_date);
+auto merged_photo_url <- @by_source(raw_photo_url);
+
+# A negative dbh is a source's own "not measured" sentinel; null it before the
+# merge so a real measurement from another source can win.
+auto cleaned_dbh <- case when raw_dbh < 0 then null else raw_dbh end;
+auto merged_dbh <- @by_source(cleaned_dbh);
+
+# Provenance: every source that contributed to the cluster, and every id the
+# survivor absorbed, so no id is ever lost -- a link to an absorbed tree can be
+# resolved to its survivor.
+auto merged_sources <- array_to_string(array_sort(array_distinct((array_agg(source_label) by cluster_id))), ',');
+auto merged_tree_ids <- nullif(array_to_string(array_sort((array_agg(tree_id ? tree_id != cluster_id) by cluster_id)), ','), '');
+
+merge merged_species into species;
+merge merged_tree_name into tree_name;
+merge merged_plant_date into plant_date;
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
+merge merged_photo_url into submission_photo_url;
+# dbh is merged by the city model, not here: Boston imputes a missing value
+# from the city-and-species average of the merged values and merges
+# `processed_dbh` instead, and two merges into one concept is a conflict.
+
+# ---------------------------------------------------------------------------
+# The prune
+# ---------------------------------------------------------------------------
+#
+# Each city's published target carries `where tree_id = cluster_id`, so the
+# parquet holds exactly one row per tree.  Absorbed rows are not published, and
+# no client-side filter is needed to hide them; `merged_tree_ids` is where an
+# absorbed id survives, so a link to one can still be resolved to its survivor.
+#
+# This was blocked for a long time and the shape of the block is worth keeping.
+# pytrilogy 0.3.343 parsed a target-side `where` and silently did not apply it
+# when materialising; 0.3.347 applied it but then demanded the partial
+# partitions be provably exhaustive over the whole `city` enum -- which one
+# city's partitions never are -- and failed with `no complete sources found`.
+# 0.3.348 plans the gate inside the target's own partition scope, after the
+# union and the cell aggregates it depends on.  So this file needs 0.3.348 or
+# later; on an older planner the prune does not fail loudly, it either does
+# nothing or refuses to resolve.  upstream_repro/keyless_join_cell_aggregate
+# has the three spellings and the enum toggle that isolated it.

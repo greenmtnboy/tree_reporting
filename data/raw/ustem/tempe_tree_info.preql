@@ -1,9 +1,15 @@
 import ..tree_common;
 import ..community_tree_info;
+import ..tree_dedup;
 
 auto ustem_published_data_updated_through <- greatest(ustem_data_updated_through, ustem_community_data_updated_through, ustem_osm_data_updated_through);
 
 key ustem_source enum<string>['TEMPE_OPENDATA', 'COMMUNITY_USTEM', 'OSM_USTEM']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto ustem_source_label <- concat(ustem_source, '');
+merge ustem_source_label into source_label;
 
 root datasource tempe_update_time (
     data_updated_through: ustem_data_updated_through
@@ -30,13 +36,13 @@ root partial datasource tempe_raw_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: ustem_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USTEM' and ustem_source = 'TEMPE_OPENDATA'
@@ -50,13 +56,13 @@ root partial datasource ustem_community_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: ustem_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USTEM' and ustem_source = 'COMMUNITY_USTEM'
@@ -67,71 +73,38 @@ where city = 'USTEM';
 # OpenStreetMap trees, read from the staged parquet in GCS rather than
 # Overpass — extraction is decoupled from refresh (Overpass is flaky and its
 # global timestamp advances continuously; see tempe_osm_extract.py).  OSM
-# overlaps the municipal inventory by construction; overlapping rows are kept
-# and flagged via ustem_is_duplicate below, never dropped.
+# overlaps the municipal inventory by construction; overlapping rows are resolved by the
+# shared cluster merge (../tree_dedup.preql).
 root partial datasource ustem_osm_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: ustem_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USTEM' and ustem_source = 'OSM_USTEM'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ustem_osm_staging.parquet`;
 
 
-# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+# --- Cross-source dedup and attribute merge --------------------------------
 #
-# An OSM row is a duplicate when an authoritative (non-OSM) tree sits in the
-# same ~10m grid cell in ANY of four copies of the grid, offset by half a cell
-# in x, y, and both.  Two points within half a cell (~5m) of each other are
-# guaranteed to share a cell in at least one of the four grids, so this is an
-# equi-join-shaped stand-in for "within 5m", with possible matches out to one
-# cell diagonal (~14m).  Chosen over a true spatial anti-join because Trilogy
-# joins are equality-only, and over unnest-based 3x3 neighborhoods because
-# merged-unnest is the planner's known fragile path.
-#
-# Why a 5m guarantee and not 10m: distance alone cannot separate "same tree"
-# from "the next tree in the row" — Tempe's inventory has a MEDIAN planting
-# spacing of 6.5m, and 79.5% of inventory trees have another inventory tree
-# within 10m.  What does separate them is pair structure, measured with
-# tempe_dedup_validation.py: OSM points within 5m of an inventory tree are
-# mutual nearest neighbors with it >=88% of the time (99.7% at <2m) and sit
-# ~3-8x closer to it than to the runner-up — re-mapped inventory trees, offset
-# by GPS/imagery error.  In the 5-10m band mutual-NN collapses to 25%, i.e.
-# ~3/4 of those are distinct neighbors at planting-row spacing.  A 10m cell
-# keeps essentially all high-confidence duplicates while cutting the
-# neighbor-contaminated reach; the error asymmetry also favors it (a missed
-# duplicate double-renders one visible dot, a false flag hides a real tree).
-#
-# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
-# cos(33.4 deg) at Tempe.
-const ustem_cell_lat_deg <- 0.00008983;
-const ustem_cell_lon_deg <- 0.00010759;
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# The only per-city line is the dbh merge, because Boston imputes it.
+merge merged_dbh into diameter_at_breast_height;
 
-auto ustem_cell_a <- concat(cast(floor(longitude / ustem_cell_lon_deg) as string), ':', cast(floor(latitude / ustem_cell_lat_deg) as string));
-auto ustem_cell_b <- concat(cast(floor(longitude / ustem_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / ustem_cell_lat_deg) as string));
-auto ustem_cell_c <- concat(cast(floor(longitude / ustem_cell_lon_deg) as string), ':', cast(floor(latitude / ustem_cell_lat_deg + 0.5) as string));
-auto ustem_cell_d <- concat(cast(floor(longitude / ustem_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / ustem_cell_lat_deg + 0.5) as string));
 
-auto ustem_anchor_count_a <- count(tree_id ? ustem_source != 'OSM_USTEM') by ustem_cell_a;
-auto ustem_anchor_count_b <- count(tree_id ? ustem_source != 'OSM_USTEM') by ustem_cell_b;
-auto ustem_anchor_count_c <- count(tree_id ? ustem_source != 'OSM_USTEM') by ustem_cell_c;
-auto ustem_anchor_count_d <- count(tree_id ? ustem_source != 'OSM_USTEM') by ustem_cell_d;
-
-auto ustem_is_duplicate <- ustem_source = 'OSM_USTEM' and (
-    ustem_anchor_count_a > 0
-    or ustem_anchor_count_b > 0
-    or ustem_anchor_count_c > 0
-    or ustem_anchor_count_d > 0
-);
-
+# The `where` below is the prune: this target publishes only the row that owns
+# its cluster, so the parquet holds exactly one tree per row.  It needs
+# pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
+# ../tree_dedup.preql.
 partial datasource tempe_tree_info (
     tree_id,
     city,
@@ -143,10 +116,13 @@ partial datasource tempe_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
-    is_duplicate: ustem_is_duplicate,
+    cluster_id,
+    merged_sources,
+    ?merged_tree_ids,
     ustem_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'USTEM'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ustem_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ustem_tree_info_v{data_version}.parquet`
+where tree_id = cluster_id
 freshness by ustem_published_data_updated_through;
