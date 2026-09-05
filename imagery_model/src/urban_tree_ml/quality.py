@@ -319,7 +319,6 @@ def _render_grouped_registration_html(
       grid-template-areas: "head head head" "image street list" "image street details" "image street actions" "image street note"; }}
     .card.fullscreen.street-view-open .image-wrap {{ width: min(calc(50vw - 205px), calc(100vh - 72px)); }}
     .card.fullscreen.street-view-open .street-view-panel {{ grid-area: street; display: block; align-self: stretch; }}
-    .street-view-button.active {{ background: #d5ebda; border-color: #d5ebda; color: #102016; }}
     .hidden {{ display: none; }}
     @media (max-width: 1100px) {{
       .card.fullscreen.street-view-open {{ grid-template-columns: minmax(0, 1fr) minmax(330px, 420px);
@@ -654,19 +653,6 @@ def _render_grouped_registration_html(
         ? "Enable panorama controls; the overhead cone shows only the initial view"
         : "Lock panorama controls so the overhead heading stays representative";
     }}
-    function toggleStreetView(sceneId) {{
-      if (selectionFor(sceneId).size !== 1) return;
-      const card = document.querySelector(`.card[data-scene="${{sceneId}}"]`);
-      const sample = samplesById[activeByScene[sceneId]];
-      if (!streetViewEmbedApiKey) {{
-        window.open(externalStreetViewUrl(sample), "_blank", "noopener,noreferrer");
-        return;
-      }}
-      if (!card.classList.contains("fullscreen")) setExpanded(card, true);
-      if (card.classList.contains("street-view-open")) closeStreetView(card);
-      else {{ card.classList.add("street-view-open"); refreshStreetView(card, sample); }}
-      update();
-    }}
     function setExpanded(card, expanded) {{
       document.querySelectorAll(".card.fullscreen").forEach(openCard => {{
         closeStreetView(openCard);
@@ -678,22 +664,19 @@ def _render_grouped_registration_html(
         card.classList.add("fullscreen");
         const button = card.querySelector(".expand-button");
         button.textContent = "Close"; button.setAttribute("aria-expanded", "true"); card.scrollTop = 0;
+        if (streetViewEmbedApiKey && selectionFor(card.dataset.scene).size === 1) {{
+          card.classList.add("street-view-open");
+          refreshStreetView(card, samplesById[activeByScene[card.dataset.scene]]);
+        }}
       }}
       document.body.classList.toggle("modal-open", Boolean(document.querySelector(".card.fullscreen")));
     }}
     function moveScene(card, direction) {{
       const visibleCards = [...document.querySelectorAll(".card:not(.hidden)")];
       if (visibleCards.length < 2) return;
-      const keepStreetViewOpen = card.classList.contains("street-view-open");
       const currentIndex = visibleCards.indexOf(card);
       const nextIndex = (currentIndex + direction + visibleCards.length) % visibleCards.length;
-      const nextCard = visibleCards[nextIndex];
-      setExpanded(nextCard, true);
-      if (keepStreetViewOpen && streetViewEmbedApiKey) {{
-        nextCard.classList.add("street-view-open");
-        refreshStreetView(nextCard, samplesById[activeByScene[nextCard.dataset.scene]]);
-        update();
-      }}
+      setExpanded(visibleCards[nextIndex], true);
     }}
     function update() {{
       let visibleScenes = 0;
@@ -818,18 +801,10 @@ def _render_grouped_registration_html(
         note.placeholder = multiSelect
           ? "Notes are disabled while multiple trees are selected."
           : note.dataset.singlePlaceholder;
-        const streetViewButton = card.querySelector(".street-view-button");
-        streetViewButton.disabled = multiSelect;
         if (multiSelect && card.classList.contains("street-view-open")) closeStreetView(card);
-        streetViewButton.classList.toggle("active", card.classList.contains("street-view-open"));
-        streetViewButton.textContent = streetViewEmbedApiKey
-          ? (card.classList.contains("street-view-open") ? "Hide Street View" : "Street View")
-          : "Street View ↗";
-        streetViewButton.title = multiSelect
-          ? "Street View requires a single selected tree."
-          : streetViewEmbedApiKey
-            ? `Show embedded Street View nearest ${{selected.latitude.toFixed(6)}}, ${{selected.longitude.toFixed(6)}}`
-            : `Open Street View nearest ${{selected.latitude.toFixed(6)}}, ${{selected.longitude.toFixed(6)}}`;
+        if (!multiSelect && streetViewEmbedApiKey && card.classList.contains("fullscreen")) {{
+          card.classList.add("street-view-open");
+        }}
         if (card.classList.contains("street-view-open")) {{
           refreshStreetView(card, selected);
         }}
@@ -940,9 +915,6 @@ def _render_grouped_registration_html(
         button.dataset.reviewLabel = label; button.textContent = label;
         button.addEventListener("click", () => setStatus(scene.scene_id, status)); actions.append(button);
       }});
-      const streetView = document.createElement("button"); streetView.className = "street-view-button";
-      streetView.textContent = "Street View ↗";
-      streetView.addEventListener("click", () => toggleStreetView(scene.scene_id)); actions.append(streetView);
       const streetViewPanel = document.createElement("section"); streetViewPanel.className = "street-view-panel";
       const streetViewHead = document.createElement("div"); streetViewHead.className = "street-view-head";
       const streetViewLocation = document.createElement("span"); streetViewLocation.className = "street-view-location";
@@ -953,9 +925,7 @@ def _render_grouped_registration_html(
       streetViewInteraction.className = "street-view-interaction"; streetViewInteraction.textContent = "Unlock";
       streetViewInteraction.title = "Enable panorama controls; the overhead cone shows only the initial view";
       streetViewInteraction.addEventListener("click", () => toggleStreetViewInteraction(card));
-      const streetViewClose = document.createElement("button"); streetViewClose.textContent = "Close";
-      streetViewClose.addEventListener("click", () => {{ closeStreetView(card); update(); }});
-      streetViewHead.append(streetViewLocation, streetViewExternal, streetViewInteraction, streetViewClose);
+      streetViewHead.append(streetViewLocation, streetViewExternal, streetViewInteraction);
       const streetViewFrameWrap = document.createElement("div"); streetViewFrameWrap.className = "street-view-frame-wrap";
       const streetViewFrame = document.createElement("iframe"); streetViewFrame.className = "street-view-frame";
       streetViewFrame.title = "Google Street View near selected tree"; streetViewFrame.loading = "lazy";
