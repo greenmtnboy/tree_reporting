@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
@@ -529,6 +530,23 @@ def build_vrt_mosaic(
         raise ValueError("mosaic upsampling is not supported")
 
     for record in source_records:
+        source_column_offset = (
+            float(record["left"]) - left
+        ) / reference_source_x_resolution
+        source_row_offset = (
+            top - float(record["top"])
+        ) / reference_source_y_resolution
+        rounded_source_column = round(source_column_offset)
+        rounded_source_row = round(source_row_offset)
+        if any(
+            abs(value - rounded) > 1e-6
+            for value, rounded in (
+                (source_column_offset, rounded_source_column),
+                (source_row_offset, rounded_source_row),
+            )
+        ):
+            raise ValueError("mosaic sources are not aligned to a common pixel grid")
+
         column_offset = (float(record["left"]) - left) / target_resolution
         row_offset = (top - float(record["top"])) / target_resolution
         output_width = (
@@ -537,33 +555,22 @@ def build_vrt_mosaic(
         output_height = (
             int(record["height"]) * reference_source_y_resolution / target_resolution
         )
-        rounded_column = round(column_offset)
-        rounded_row = round(row_offset)
-        rounded_width = round(output_width)
-        rounded_height = round(output_height)
-        if any(
-            abs(value - rounded) > 1e-6
-            for value, rounded in (
-                (column_offset, rounded_column),
-                (row_offset, rounded_row),
-                (output_width, rounded_width),
-                (output_height, rounded_height),
-            )
-        ):
-            raise ValueError("mosaic sources are not aligned to a common pixel grid")
-        record["column_offset"] = rounded_column
-        record["row_offset"] = rounded_row
-        record["output_width"] = rounded_width
-        record["output_height"] = rounded_height
+        # GDAL VRT destination rectangles are allowed to be fractional. That is
+        # necessary when a native-resolution tile begins or ends halfway through
+        # a coarser model pixel (for example, 30 cm NAIP on a 60 cm model grid).
+        record["column_offset"] = column_offset
+        record["row_offset"] = row_offset
+        record["output_width"] = output_width
+        record["output_height"] = output_height
 
-    width = max(
-        int(record["column_offset"]) + int(record["output_width"])
+    width = math.ceil(max(
+        float(record["column_offset"]) + float(record["output_width"])
         for record in source_records
-    )
-    height = max(
-        int(record["row_offset"]) + int(record["output_height"])
+    ))
+    height = math.ceil(max(
+        float(record["row_offset"]) + float(record["output_height"])
         for record in source_records
-    )
+    ))
     vrt = ET.Element("VRTDataset", rasterXSize=str(width), rasterYSize=str(height))
     ET.SubElement(vrt, "SRS").text = reference_crs.to_wkt()  # type: ignore[union-attr]
     ET.SubElement(vrt, "GeoTransform").text = (
