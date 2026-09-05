@@ -218,6 +218,11 @@ uv run urban-tree-ml qa registration \
   --samples 160
 ```
 
+After completing the grouped registration pass, use `configs/sf_naip_citywide_curated.yaml` for
+the controlled uplift run. It keeps every citywide training and evaluation setting fixed while
+writing checkpoints to a distinct experiment directory; rebuild the shared citywide chips from
+the newly finalized feedback before training.
+
 To grow a review after labeling has started, use `--extend-existing` with the same raster,
 window size, and development/test policy. The existing scene and sample IDs, rendered images,
 and `reviews.json` are preserved; only previously unseen spatial scenes are appended. Increasing
