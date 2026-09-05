@@ -177,9 +177,6 @@ if __name__ == "__main__":
     )
     table = validate_coordinates(table, city="Denver", city_code="USDEN")
     table = enforce_tree_schema(
-        table,
-        city="Denver",
-        data_source="DENVER_OPENDATA",
-        unique_tree_ids=True,
+        table, city="Denver", data_source="DENVER_OPENDATA"
     )
     emit(table)

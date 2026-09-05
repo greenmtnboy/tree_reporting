@@ -138,10 +138,41 @@ def add_city_column(table: pa.Table) -> pa.Table:
     )
 
 
+def drop_unidentified(table: pa.Table) -> pa.Table:
+    """Drop rows the city has not assigned an id to.
+
+    43 of ~55k rows in Boston's export have an empty `id`. They were already
+    being lost -- `tree_id` is the datasource grain, Trilogy joins it with a
+    plain `=`, and `NULL = NULL` is never true, so those rows vanished from the
+    Parquet with nothing reporting it. Dropping them here is the same outcome
+    with a count in the log.
+
+    Not synthesised from position instead: an id we invent is one the city
+    cannot confirm, and it would churn the moment Boston assigns a real one.
+    """
+    id_col = next((c for c in table.schema.names if c.lower() == "id"), None)
+    if id_col is None:
+        return table
+    keep = pc.and_(
+        pc.is_valid(table[id_col]), pc.not_equal(table[id_col], "")
+    )
+    kept = table.filter(pc.fill_null(keep, False))
+    dropped = table.num_rows - kept.num_rows
+    if dropped:
+        print(
+            f"Boston ingest: dropped {dropped} row(s) the city has not assigned "
+            f"an id to; they cannot be keyed and were already being lost in the "
+            f"grain join",
+            file=sys.stderr,
+        )
+    return kept
+
+
 if __name__ == "__main__":
     csv_bytes = download_csv()
     table = load_arrow_table(csv_bytes)
     table = add_city_column(table)
+    table = drop_unidentified(table)
     table = validate_coordinates(table, city="Boston", city_code="USBOS")
     table = enforce_tree_schema(
         table,

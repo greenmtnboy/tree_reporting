@@ -898,43 +898,62 @@ class TestTreeIdGrain:
             }
         )
 
-    def test_a_repeat_raises_when_the_city_opts_in(self):
+    def test_a_repeat_raises(self):
         with pytest.raises(ValueError, match="declared grain"):
             enforce_tree_schema(
                 self._table(["den-1", "den-2", "den-1"]),
                 city="Denver",
                 data_source="DENVER_OPENDATA",
-                unique_tree_ids=True,
             )
 
-    def test_a_repeat_only_warns_by_default(self, capsys):
-        """Off by default: the cities predating the check are unmeasured."""
-        out = enforce_tree_schema(
-            self._table(["den-1", "den-2", "den-1"]),
-            city="Denver",
-            data_source="DENVER_OPENDATA",
-        )
-        assert out.num_rows == 3
-        assert "declared grain" in capsys.readouterr().err
+    def test_the_message_names_the_offenders(self):
+        """A city with a broken id scheme has thousands; naming a few is what
+        turns the failure into a diagnosis."""
+        with pytest.raises(ValueError, match="den-1"):
+            enforce_tree_schema(
+                self._table(["den-1", "den-1", "den-2"]),
+                city="Denver",
+                data_source="DENVER_OPENDATA",
+            )
 
     def test_unique_ids_pass(self):
         out = enforce_tree_schema(
             self._table(["den-1", "den-2", "den-3"]),
             city="Denver",
             data_source="DENVER_OPENDATA",
-            unique_tree_ids=True,
         )
         assert out.num_rows == 3
 
-    def test_repeated_nulls_are_not_a_repeat(self):
-        """A null id is a different problem, and the required-column check owns it."""
-        out = enforce_tree_schema(
-            self._table(["den-1", None, None]),
-            city="Denver",
-            data_source="DENVER_OPENDATA",
-            unique_tree_ids=True,
-        )
-        assert out.num_rows == 3
+    def test_a_null_id_raises_too(self):
+        """A null in the grain column is the other half of the same violation.
+
+        Trilogy joins the grain with a plain `=`, and `NULL = NULL` is never
+        true, so the row is dropped from the Parquet with nothing reporting it.
+        Boston was losing 43 rows a rebuild that way.
+        """
+        with pytest.raises(ValueError, match="no value"):
+            enforce_tree_schema(
+                self._table(["den-1", None, "den-2"]),
+                city="Denver",
+                data_source="DENVER_OPENDATA",
+            )
+
+    def test_an_empty_string_id_counts_as_null(self):
+        """A CSV source spells "no id" as an empty field, not as NULL."""
+        with pytest.raises(ValueError, match="no value"):
+            enforce_tree_schema(
+                self._table(["den-1", "", "den-2"]),
+                city="Denver",
+                data_source="DENVER_OPENDATA",
+            )
+
+    def test_the_message_reports_both_problems_at_once(self):
+        with pytest.raises(ValueError, match="repeat.*no value|no value.*repeat"):
+            enforce_tree_schema(
+                self._table(["den-1", "den-1", None]),
+                city="Denver",
+                data_source="DENVER_OPENDATA",
+            )
 
 
 class TestEnforceTreeSchema:
