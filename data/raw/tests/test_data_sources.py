@@ -234,17 +234,30 @@ def test_every_city_prunes_absorbed_rows(code: str):
 def test_every_city_publishes_cluster_id(code: str):
     """Every city's published target projects `cluster_id`.
 
-    It looks redundant -- the prune means it always equals `tree_id` -- and
-    that is exactly why it goes missing.  It cannot: the rollup reads every
-    city parquet as ONE DuckDB multi-file scan, which takes its schema from
-    the first file and raises a schema mismatch on a later file that does not
-    match.  There is no `union_by_name`, so a city missing a column the others
-    have does not read as NULL; it fails `urban-tree-full` outright, long after
-    the city itself built clean.
+    It looks redundant -- the prune means it always equals `tree_id` -- which
+    is exactly why `new_city.py`'s template dropped it, and why the first three
+    cities scaffolded from that template published fourteen columns where every
+    other city has fifteen.  Nothing at model time noticed; it was caught by
+    reading the built parquet.
 
-    `new_city.py`'s template omitted this, and the three cities scaffolded from
-    it published without the column -- caught by reading the built parquet, not
-    by anything that ran at model time.
+    What a ragged column set costs, measured against DuckDB rather than
+    assumed, because the first version of this docstring got it wrong:
+
+    * projecting only the columns every file shares -- which is what
+      `full_tree_publish.preql` does today -- **tolerates** the mismatch in
+      either file order.  So this would not have failed `urban-tree-full`.
+    * projecting the column the short file lacks raises, whichever order the
+      files are in.
+    * `select *` over the scan raises when a long file is read first, and
+      **silently drops the column** when a short one is.  That is the one to
+      care about: the rollup's file list is ordered, so whether an ad-hoc
+      `select *` loses `cluster_id` depends on which city happens to be first.
+
+    So this is not load-bearing for the daily jobs as they stand, and it is
+    still worth pinning: it is the column any check of the prune reads
+    (`where tree_id <> cluster_id`), the one a future rollup projection would
+    reach for, and a city whose parquet does not match the others is a
+    difference nobody chose.
     """
     text = city_models()[code].read_text(encoding="utf-8")
     target = re.search(

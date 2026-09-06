@@ -238,13 +238,15 @@ partial datasource {slug}_tree_info (
     ?submission_photo_url,
     ?cultivar,
     # Redundant on its face -- the prune below means it always equals tree_id --
-    # but it must be projected, because the rollup reads every city parquet as
-    # ONE DuckDB multi-file scan.  That scan takes its schema from the first
-    # file and raises on a later file that does not match; there is no
-    # union_by_name, so a city missing a column the others have does not read
-    # as NULL, it fails `urban-tree-full` outright.  Every other city declares
-    # it, so a new one must too.  `test_every_city_publishes_cluster_id` pins
-    # this, because the failure is a rollup job away from where you are looking.
+    # and dropped from this template for exactly that reason, which is how the
+    # first three cities scaffolded from it came out with fourteen columns
+    # where every other city has fifteen.  The rollup reads them all as one
+    # DuckDB multi-file scan; it projects only the shared columns, so a ragged
+    # set does not fail it, but `select *` over that scan silently drops the
+    # column when a short file is read first and raises when a long one is.
+    # It is also the column any check of the prune reads.  Keep it.
+    # `test_every_city_publishes_cluster_id` pins it and spells out the
+    # measured behaviour.
     cluster_id,
     merged_sources,
     ?merged_tree_ids,
