@@ -231,6 +231,34 @@ def test_every_city_prunes_absorbed_rows(code: str):
 
 
 @pytest.mark.parametrize("code", sorted(MUNICIPAL_DATA_SOURCES))
+def test_every_city_publishes_cluster_id(code: str):
+    """Every city's published target projects `cluster_id`.
+
+    It looks redundant -- the prune means it always equals `tree_id` -- and
+    that is exactly why it goes missing.  It cannot: the rollup reads every
+    city parquet as ONE DuckDB multi-file scan, which takes its schema from
+    the first file and raises a schema mismatch on a later file that does not
+    match.  There is no `union_by_name`, so a city missing a column the others
+    have does not read as NULL; it fails `urban-tree-full` outright, long after
+    the city itself built clean.
+
+    `new_city.py`'s template omitted this, and the three cities scaffolded from
+    it published without the column -- caught by reading the built parquet, not
+    by anything that ran at model time.
+    """
+    text = city_models()[code].read_text(encoding="utf-8")
+    target = re.search(
+        r"^partial datasource \w+_tree_info \((.*?)^\)", text, re.S | re.M
+    )
+    assert target, f"{code} has no published tree target"
+    assert re.search(r"^\s*cluster_id,\s*$", target.group(1), re.M), (
+        f"{code}'s published target does not project cluster_id, so its parquet "
+        "will have a different column set from every other city's and the "
+        "rollup's multi-file scan will fail"
+    )
+
+
+@pytest.mark.parametrize("code", sorted(MUNICIPAL_DATA_SOURCES))
 def test_no_city_publishes_the_old_duplicate_flag(code: str):
     """The flag is gone, and a copy-paste must not bring it back.
 

@@ -114,6 +114,7 @@ partial datasource calgary_tree_info (
     ?longitude,
     ?submission_photo_url,
     ?cultivar,
+    cluster_id,
     merged_sources,
     ?merged_tree_ids,
     cacal_published_data_updated_through,

@@ -1249,11 +1249,14 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # hide), with the marginal trade between consecutive sizes.  A step up in size
 # is worth taking only while it removes more duplicates than it hides trees.
 #
-# On that measure all three came in under the 10 m the bands alone suggested.
-# The cities wired before the marginal table existed are sized on the bands
-# and are worth re-checking against it -- deliberately not done here, because
-# re-cutting a published city's cell changes which of its rows survive the
-# prune, which is a rebuild of every one of them.
+# On that measure all three came in under the 10 m the bands alone suggested,
+# and so do the three published cities spot-checked afterwards -- Tempe, the
+# reference calibration, among them.  The cities wired before the marginal
+# table existed are sized on the bands and are worth re-checking against it;
+# deliberately not done here, because re-cutting a published city's cell
+# changes which of its rows survive the prune, which is a rebuild of every one
+# of them.  The measurements, the cost and the runbook are in
+# ../../DEDUP_CELL_RECALIBRATION.md.
 DEDUP_CELL_METRES: dict[str, int] = {
     # 5-10 m band 28.4% mutual-NN over n=134, and the marginal table turns at
     # 6 m: 4->6 removes 86 duplicates for 25 hidden trees (3.44), 6->8 removes
