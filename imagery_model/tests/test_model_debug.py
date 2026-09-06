@@ -151,6 +151,10 @@ def test_model_debug_bundle_serves_metrics_predictions_and_chip_image(tmp_path: 
     chip = bundle.chip("r000000_c000000")
     assert chip["ground_truth"][0]["species"] == "Acacia dealbata"
     assert chip["predictions"][0]["prediction_id"] == 4
+    assert chip["predictions"][0]["center_supervision"]["status"] == "positive"
+    assert not chip["predictions"][0]["center_supervision"]["would_penalize"]
+    assert chip["predictions"][1]["center_supervision"]["status"] == "negative"
+    assert chip["predictions"][1]["center_supervision"]["would_penalize"]
     assert chip["confidence_threshold"] == 0.35
     assert chip["display"]["output_stride"] == bundle.config.targets.output_stride
     assert bundle.chip_image("r000000_c000000").startswith(b"\x89PNG")
@@ -178,6 +182,9 @@ def test_studio_html_links_registration_and_model_views() -> None:
     assert 'id="unreviewed"' in MODEL_DEBUG_HTML
     assert "/api/curation-status" in MODEL_DEBUG_HTML
     assert "fetch(withRun('/api/curation-status'))" in MODEL_DEBUG_HTML
+    assert "Unmatched prediction" in MODEL_DEBUG_HTML
+    assert "supervisionText" in MODEL_DEBUG_HTML
+    assert "penalized" in MODEL_DEBUG_HTML
     assert "detection_f1-b.detection_f1" in MODEL_DEBUG_HTML
     assert "threshold=${encodeURIComponent($('threshold').value)}" in MODEL_DEBUG_HTML
     assert "return=${encodeURIComponent(returnTo)}" in MODEL_DEBUG_HTML

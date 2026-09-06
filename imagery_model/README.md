@@ -131,6 +131,14 @@ opens that scene directly in the fullscreen reviewer; saves and finalization con
 existing annotation bundle. Registration samples default to aligned, so only exceptions need
 attention. `--evaluation-dir` chooses the initially selected run and the sibling run directory to
 scan.
+
+Validation calls predictions without an inventory match **unmatched**, since an incomplete inventory
+cannot prove they are non-trees. Each prediction also carries its independent center-supervision
+status: a red ring is a trusted-background penalty, cyan is ignored/no loss, and gold is a reduced
+negative weight near a labeled center. Tooltips show the exact status and chip summaries split
+unmatched predictions into penalized, ignored, and unavailable counts. New evaluations persist the
+target and mask value at every decoded prediction; older evaluations reconstruct them from the saved
+raster and chip metadata when all exclusions are locally available.
 Full-screen registration review automatically opens an interactive Street View panorama beside the
 overhead tile and retargets it whenever a numbered tree is selected. Enable the Google Maps Embed
 API, restrict its browser API key to the review server's origin, and expose it only to the server
