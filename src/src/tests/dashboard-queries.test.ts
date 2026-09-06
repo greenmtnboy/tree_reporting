@@ -333,9 +333,36 @@ const INTERACTIVE_CITIES: Array<CityCode | null> = process.env.DASHBOARD_QUERY_A
 // them regardless. `DASHBOARD_QUERY_ALL_CITIES=1` forces the wide run by hand.
 const REPRESENTATIVE_CITIES: CityCode[] = ['USSFO', 'USBOS', 'GBLON', 'GRMLO']
 
+// `DASHBOARD_QUERY_CITIES` adds cities to that default: a comma-separated list
+// of codes, or `all`. CI fills it from the diff, so a pull request that edits
+// three city models sweeps those three plus the representatives rather than all
+// twenty-one -- the cities it changed are the ones whose plans could have moved.
+//
+// It is deliberately separate from DASHBOARD_QUERY_ALL_CITIES, which widens the
+// *interactive* states too (a species selection and a cross-filter per city) and
+// takes the run from 25 batches to 60. That is the diagnostic sweep, not the
+// city-coverage one, and conflating them is how this job first came back with 60
+// batches when 25 were intended.
+function requestedCities(): CityCode[] {
+  const raw = (process.env.DASHBOARD_QUERY_CITIES ?? '').trim()
+  if (!raw) return []
+  if (raw.toLowerCase() === 'all') return [...ALL_CITIES]
+  const known = new Set<string>(ALL_CITIES)
+  return raw
+    .split(',')
+    .map((code) => code.trim().toUpperCase())
+    .filter((code): code is CityCode => known.has(code))
+}
+
 const BASE_CITIES: Array<CityCode | null> = process.env.DASHBOARD_QUERY_ALL_CITIES
   ? [null, ...ALL_CITIES]
-  : [null, ...REPRESENTATIVE_CITIES.filter((city) => ALL_CITIES.includes(city))]
+  : [
+      null,
+      ...new Set([
+        ...REPRESENTATIVE_CITIES.filter((city) => ALL_CITIES.includes(city)),
+        ...requestedCities(),
+      ]),
+    ]
 
 // Which cross-filter states to exercise. The default is the one dimension that
 // reaches enrichment through the unnest+merge axis; `all` sweeps every

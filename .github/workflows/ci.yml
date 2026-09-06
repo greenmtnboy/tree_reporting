@@ -242,25 +242,43 @@ jobs:
     # tree model, landmark model, or the city config is a change to the thing
     # this suite is checking, and gets all of them. So does every push to main,
     # which backstops anything a narrow PR run let through.
-    - name: Decide how wide to sweep
+    # Name the cities this diff could have broken and let the suite add them to
+    # its default set. A city's model is what decides its plan, so a pull
+    # request that edits three of them sweeps those three plus the
+    # representatives -- not all twenty-one, which is a whole request each.
+    #
+    # `all` only for a push to main, which is the backstop for anything a narrow
+    # pull-request run let through. A change to cityConfig.json deliberately
+    # does *not* escalate: adding a city adds its model files to the same diff,
+    # so the grep below already names it, and escalating would put every
+    # city-addition PR back on the full sweep this exists to avoid.
+    #
+    # This sets DASHBOARD_QUERY_CITIES and deliberately not
+    # DASHBOARD_QUERY_ALL_CITIES: the latter also widens the interactive states
+    # and takes the run from 25 batches to 60.
+    - name: Decide which cities to sweep
       id: sweep
       run: |
         if [ "${{ github.event_name }}" != "pull_request" ]; then
+          echo "cities=all" >> "$GITHUB_OUTPUT"
           echo "reason=push to ${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          echo "all=1" >> "$GITHUB_OUTPUT"
-        elif git diff --name-only "origin/${{ github.base_ref }}...HEAD" \
-             | grep -qE '^data/raw/[a-z]+/[a-z_]+_(tree_info|landmarks)\.preql$|^src/src/cityConfig\.json$'; then
-          echo "reason=a city model or the city config changed" >> "$GITHUB_OUTPUT"
-          echo "all=1" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" || true)
+        codes=$(echo "$changed" \
+          | grep -oE '^data/raw/[a-z]{5}/[a-z_]+_(tree_info|landmarks)\.preql$' \
+          | cut -d/ -f3 | tr '[:lower:]' '[:upper:]' | sort -u | paste -sd, -)
+        echo "cities=$codes" >> "$GITHUB_OUTPUT"
+        if [ -n "$codes" ]; then
+          echo "reason=city models changed: $codes" >> "$GITHUB_OUTPUT"
         else
           echo "reason=no city model changed" >> "$GITHUB_OUTPUT"
-          echo "all=" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Compile and run every dashboard query
       working-directory: ./src
       env:
-        DASHBOARD_QUERY_ALL_CITIES: ${{ steps.sweep.outputs.all }}
+        DASHBOARD_QUERY_CITIES: ${{ steps.sweep.outputs.cities }}
       run: |
-        echo "sweeping ${{ steps.sweep.outputs.all && 'every city' || 'the representative cities' }} -- ${{ steps.sweep.outputs.reason }}"
+        echo "sweeping representatives + [${{ steps.sweep.outputs.cities }}] -- ${{ steps.sweep.outputs.reason }}"
         pnpm test:queries

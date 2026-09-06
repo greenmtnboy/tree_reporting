@@ -233,12 +233,19 @@ interactive cases (a species selection, and one cross-filter dimension —
 nativeness, the one that reaches enrichment through the
 `unnest(native_ecoregions)` merge, where both planner failures have lived).
 
-**That is a coverage trade, and it is bounded two ways.** A pull request whose
-diff touches any `*_tree_info.preql`, any `*_landmarks.preql` or
-`cityConfig.json` is changing the thing this suite checks, and the
-`dashboard-queries` job widens itself to every city — which is exactly the
-city-addition case. So does every push to main. `DASHBOARD_QUERY_ALL_CITIES=1`
-forces the wide run by hand.
+**That is a coverage trade, and it is bounded by the diff.** The
+`dashboard-queries` job reads which `*_tree_info.preql` and `*_landmarks.preql`
+files a pull request touched, and passes those city codes in
+`DASHBOARD_QUERY_CITIES`; the suite adds them to the representatives. A city's
+model is what decides its plan, so the cities a change could have broken are the
+ones it edited — a three-city addition sweeps ten cities, not twenty-one. Every
+push to main sweeps `all`, which backstops anything a narrow run let through.
+
+`DASHBOARD_QUERY_CITIES` takes a comma-separated list or `all`, and is
+deliberately **not** `DASHBOARD_QUERY_ALL_CITIES`: that one also widens the
+interactive states (a species selection and a cross-filter per city) and takes
+the run from 25 batches to 60. It is the diagnostic sweep, for when a planner
+regression is suspected, not the city-coverage one.
 
 The wide run is still 34 queries for the all-cities view plus 39 per city, and
 it still grows by 39 with each new one: `ALL_CITIES` in
