@@ -20,7 +20,8 @@ Four things about that are load-bearing, and each replaced something that broke:
 - **A job's bundle is its entrypoint's reachable imports.** `trilogy refresh`
   adopts every managed datasource it can reach, so what a model imports decides
   what a job builds, probes and needs memory for. A city model importing only
-  `tree_common` and `community_tree_info` is what makes `city-{code}` exactly
+  `tree_common`, `community_tree_info` and the shared `tree_dedup` (which has
+  no managed datasource of its own) is what makes `city-{code}` exactly
   one city. Check with `trilogy refresh --dry-run <entrypoint>`: more than one
   asset for a city job means an import reaches too far.
 - **The core must not reach a portal.** `raw/full_tree_publish.preql` reads the
@@ -277,6 +278,17 @@ Retrying costs time, so those tests carry a 120s timeout rather than 30s: under
 throttling a single compile can take tens of seconds on its own, and 30s could
 absorb neither the compile nor the backoff. A new suite that talks to the
 resolver should use the same helper and budget.
+
+**A timeout is a budget, and a per-test one is the wrong place to keep it.**
+`dashboard-pushdown.test.ts` used to compile eight queries one at a time inside
+each `it`, and under CI throttling one city took 52s, another 45s, and the third
+went past 120s and failed — the same eight compiles, on the same commit, at the
+mercy of when the quota happened to drain. Both halves of the fix are the ones
+the sweep already uses: compile through `/generate_queries` so a group's eight
+queries are one request that parses the model once, and hoist the compiling into
+`beforeAll` under one large budget so the `it` blocks only assert on what came
+back. That suite is now 26 queries in 5 requests, and a slow resolver makes it
+slow rather than red.
 
 `GET /health` is sub-second no matter how loaded the service is, so it tells you
 nothing about compile latency. The only honest readout is a real compile against

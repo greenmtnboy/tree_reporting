@@ -15,9 +15,15 @@
  * back inside a 200 carrying its own `error`, and retrying that would only turn
  * a real failure into a slow real failure.
  *
- * Retrying costs time, so a caller using this needs a per-test timeout with
- * room for the backoff below (~14s of sleeping, plus however long a throttled
- * request itself takes). 30s is not enough; the suites here use 120s.
+ * Retrying costs time, so a caller using this needs a timeout with room for the
+ * backoff below (~14s of sleeping, plus however long a throttled request itself
+ * takes). 30s is not enough; the suites here use 120s.
+ *
+ * And keep that budget over the whole set of requests rather than per test.
+ * A test that makes several calls in sequence is several throttled compiles
+ * deep before it has asserted anything, which is how a passing suite turns red
+ * on the resolver's mood alone — batch through `/generate_queries` and compile
+ * in a `beforeAll`, as `dashboard-queries` and `dashboard-pushdown` do.
  */
 
 export const RESOLVER_URL = process.env.TRILOGY_RESOLVER_URL ?? 'https://trilogy-service.fly.dev'

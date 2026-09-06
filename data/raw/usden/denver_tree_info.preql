@@ -1,9 +1,15 @@
 import ..tree_common;
 import ..community_tree_info;
+import ..tree_dedup;
 
 auto usden_published_data_updated_through <- greatest(usden_data_updated_through, usden_community_data_updated_through, usden_osm_data_updated_through);
 
 key usden_source enum<string>['DENVER_OPENDATA', 'COMMUNITY_USDEN', 'OSM_USDEN']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto usden_source_label <- concat(usden_source, '');
+merge usden_source_label into source_label;
 
 root datasource denver_update_time (
     data_updated_through: usden_data_updated_through
@@ -30,13 +36,13 @@ root partial datasource denver_raw_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: usden_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USDEN' and usden_source = 'DENVER_OPENDATA'
@@ -50,13 +56,13 @@ root partial datasource usden_community_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: usden_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USDEN' and usden_source = 'COMMUNITY_USDEN'
@@ -67,77 +73,38 @@ where city = 'USDEN';
 # OpenStreetMap trees, read from the staged parquet in GCS rather than
 # Overpass — extraction is decoupled from refresh (Overpass is flaky and its
 # global timestamp advances continuously; see denver_osm_extract.py).  OSM
-# overlaps the municipal inventory by construction; overlapping rows are kept
-# and flagged via usden_is_duplicate below, never dropped.
+# overlaps the municipal inventory by construction; overlapping rows are resolved by the
+# shared cluster merge (../tree_dedup.preql).
 root partial datasource usden_osm_tree_info (
     tree_id: tree_id,
     city: city,
     data_source: usden_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
 )
 grain (tree_id)
 complete where city = 'USDEN' and usden_source = 'OSM_USDEN'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usden_osm_staging.parquet`;
 
 
-# --- Cross-source dedup: stack + aggregate over four staggered grids -------
+# --- Cross-source dedup and attribute merge --------------------------------
 #
-# An OSM row is a duplicate when an authoritative (non-OSM) tree sits in the
-# same grid cell in ANY of four copies of the grid, offset by half a cell in
-# x, y, and both.  Two points within half a cell of each other are guaranteed
-# to share a cell in at least one of the four grids, so this is an
-# equi-join-shaped stand-in for a radius query, with possible matches out to
-# one cell diagonal.  See ustem/tempe_tree_info.preql for why the shape is
-# this and not a spatial anti-join or an unnest neighbourhood.
-#
-# CELL SIZE IS CALIBRATED PER CITY, never copied.  Measured for Denver with
-# `uv run osm_dedup_validation.py --city USDEN` against 277,589 staged OSM
-# points and 314,107 municipal inventory anchors:
-#
-#   band       n        mutual-NN   median d1/d2
-#    0- 2m   33,672      99.6%          0.15
-#    2- 5m   26,875      76.4%          0.37
-#    5-10m   20,233      17.3%          0.65
-#   10-20m   23,762       4.4%          0.82
-#
-# 17.3% in the 5-10m band is decisively neighbour-dominated -- well under the
-# 60% bar -- and the collapse from 76.4% to 17.3% across the 5m line is as
-# sharp a break as any wired city shows.  Guarantee 5m, i.e. a 10m cell.
-# Denver's inventory plants at a 8.2m median spacing, so a 20m cell would
-# reach straight into the neighbouring tree in the row.
-#
-# Denver carries no `osm_ref` values at all (0 of 277,589), so the geometric
-# break is the only signal available -- the exact-id cross-check Berlin and
-# Paris get is not on offer here.
-#
-# Cell sizes: 10m of latitude is 10/111320 deg; longitude shrinks by
-# cos(39.74 deg) at Denver.
-const usden_cell_lat_deg <- 0.00008983;
-const usden_cell_lon_deg <- 0.00011682;
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# The only per-city line is the dbh merge, because Boston imputes it.
+merge merged_dbh into diameter_at_breast_height;
 
-auto usden_cell_a <- concat(cast(floor(longitude / usden_cell_lon_deg) as string), ':', cast(floor(latitude / usden_cell_lat_deg) as string));
-auto usden_cell_b <- concat(cast(floor(longitude / usden_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / usden_cell_lat_deg) as string));
-auto usden_cell_c <- concat(cast(floor(longitude / usden_cell_lon_deg) as string), ':', cast(floor(latitude / usden_cell_lat_deg + 0.5) as string));
-auto usden_cell_d <- concat(cast(floor(longitude / usden_cell_lon_deg + 0.5) as string), ':', cast(floor(latitude / usden_cell_lat_deg + 0.5) as string));
 
-auto usden_anchor_count_a <- count(tree_id ? usden_source != 'OSM_USDEN') by usden_cell_a;
-auto usden_anchor_count_b <- count(tree_id ? usden_source != 'OSM_USDEN') by usden_cell_b;
-auto usden_anchor_count_c <- count(tree_id ? usden_source != 'OSM_USDEN') by usden_cell_c;
-auto usden_anchor_count_d <- count(tree_id ? usden_source != 'OSM_USDEN') by usden_cell_d;
-
-auto usden_is_duplicate <- usden_source = 'OSM_USDEN' and (
-    usden_anchor_count_a > 0
-    or usden_anchor_count_b > 0
-    or usden_anchor_count_c > 0
-    or usden_anchor_count_d > 0
-);
-
+# The `where` below is the prune: this target publishes only the row that owns
+# its cluster, so the parquet holds exactly one tree per row.  It needs
+# pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
+# ../tree_dedup.preql.
 partial datasource denver_tree_info (
     tree_id,
     city,
@@ -149,10 +116,13 @@ partial datasource denver_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
-    is_duplicate: usden_is_duplicate,
+    cluster_id,
+    merged_sources,
+    ?merged_tree_ids,
     usden_published_data_updated_through,
 )
 grain (tree_id)
 complete where city = 'USDEN'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usden_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usden_tree_info_v{data_version}.parquet`
+where tree_id = cluster_id
 freshness by usden_published_data_updated_through;

@@ -46,6 +46,8 @@ from _ingest_shared import (
     UNKNOWN_SPECIES,
     sanitize_species,
     form_sentinel_for,
+    is_not_a_tree,
+    DEAD_SPECIES,
     SPECIES_SENTINELS,
     PALM_SPECIES,
     SHRUB_SPECIES,
@@ -831,7 +833,7 @@ class TestEnforceTreeSchemaSpecies:
 
     def test_non_taxa_become_the_sentinel(self):
         out = enforce_tree_schema(
-            self._table(["Acer rubrum", "Vacant", "Pin oak", None]),
+            self._table(["Acer rubrum", "Unbekannt", "Pin oak", None]),
             city="Test",
             data_source="CITY_OF_BOSTON",
         )
@@ -842,6 +844,27 @@ class TestEnforceTreeSchemaSpecies:
             UNKNOWN_SPECIES,
         ]
 
+    def test_empty_sites_and_stumps_are_dropped(self):
+        """A vacant pit is not an unidentified tree; it is nothing to map.
+
+        The row goes, and the rows around it keep their own ids -- a filter,
+        not a re-index.  "Unknown" and "Dead tree" stay: both describe a
+        standing tree.
+        """
+        out = enforce_tree_schema(
+            self._table([
+                "Acer rubrum", "Vacant", "Vacant site medium",
+                "Scheduled Planting Site - Spring 2026", "Empty pit/planting site",
+                "Stump", "Unknown", "Dead tree",
+            ]),
+            city="Test",
+            data_source="CITY_OF_BOSTON",
+        )
+        assert out.column("tree_id").to_pylist() == ["t0", "t6", "t7"]
+        assert out.column("species").to_pylist() == [
+            "Acer rubrum", UNKNOWN_SPECIES, DEAD_SPECIES,
+        ]
+
     def test_growth_form_values_keep_their_own_sentinel(self):
         """"Palm" is not a taxon, but it is not nothing either.
 
@@ -849,7 +872,7 @@ class TestEnforceTreeSchemaSpecies:
         record, which is what the map icon is chosen from.
         """
         out = enforce_tree_schema(
-            self._table(["Palm", "arbusto", "Cactus", "Vacant"]),
+            self._table(["Palm", "arbusto", "Cactus", "Onbekend", "Dead"]),
             city="Test",
             data_source="CITY_OF_BOSTON",
         )
@@ -858,6 +881,7 @@ class TestEnforceTreeSchemaSpecies:
             SHRUB_SPECIES,
             CACTUS_SPECIES,
             UNKNOWN_SPECIES,
+            DEAD_SPECIES,
         ]
 
     def test_species_column_is_never_null(self):
@@ -872,13 +896,14 @@ class TestEnforceTreeSchemaSpecies:
 
     def test_cleanup_is_reported(self, capsys):
         enforce_tree_schema(
-            self._table(["Vacant", "Prunus serrulata 'kwanzan'"]),
+            self._table(["Unbekannt", "Prunus serrulata 'kwanzan'", "Vacant"]),
             city="Test",
             data_source="CITY_OF_BOSTON",
         )
         err = capsys.readouterr().err
         assert "species cleanup" in err
         assert "1 value(s)" in err
+        assert "dropped 1 row(s)" in err
 
 
 class TestTreeIdGrain:
@@ -1096,6 +1121,8 @@ class TestFormSentinels:
             ("Struik", SHRUB_SPECIES),
             ("Cactus", CACTUS_SPECIES),
             ("Cactaceae", CACTUS_SPECIES),
+            ("Dead tree", DEAD_SPECIES),
+            ("dood", DEAD_SPECIES),
             ("Vacant", None),
             ("Unbekannt", None),
             ("Acer rubrum", None),
@@ -1112,7 +1139,7 @@ class TestFormSentinels:
 
     def test_sentinels_are_the_full_set(self):
         assert SPECIES_SENTINELS == frozenset(
-            {UNKNOWN_SPECIES, PALM_SPECIES, SHRUB_SPECIES, CACTUS_SPECIES}
+            {UNKNOWN_SPECIES, PALM_SPECIES, SHRUB_SPECIES, CACTUS_SPECIES, DEAD_SPECIES}
         )
 
     @pytest.mark.parametrize(
@@ -1122,6 +1149,30 @@ class TestFormSentinels:
         """Values measured in the published data that survived as fake genera."""
         assert sanitize_species(raw) is None
         assert form_sentinel_for(raw) is None
+
+
+class TestNotATree:
+    """Empty sites and stumps are dropped; unnamed and dead trees are kept."""
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "Vacant", "Vacant well", "Vacant/ok to replant", "Vacant site medium",
+            "Vacant Unacceptable/Retired", "VACANT/INADEQUATE SPACING",
+            "Scheduled Planting Site - Spring 2026", "Empty pit/planting site",
+            "Stump", "Stump stump", "Stobbe",
+        ],
+    )
+    def test_empty_sites(self, raw):
+        assert is_not_a_tree(raw) is True
+
+    @pytest.mark.parametrize(
+        "raw",
+        ["Unknown", "Unbekannt", "Dead tree", "Dead", "Acer rubrum", "Palm",
+         "Tree(s)", None, "", "Vaccinium corymbosum"],
+    )
+    def test_trees_are_not_dropped(self, raw):
+        assert is_not_a_tree(raw) is False
 
 
 class TestCoordinateDropReporting:

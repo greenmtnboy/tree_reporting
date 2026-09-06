@@ -27,7 +27,7 @@ async function query(sql: string): Promise<Record<string, unknown>[]> {
   }
 }
 
-const SAMPLE = `(VALUES ('Acer rubrum'), ('Unknown'), ('Palm'), ('Shrub'), ('Cactus'), (NULL)) AS t(species)`
+const SAMPLE = `(VALUES ('Acer rubrum'), ('Unknown'), ('Palm'), ('Shrub'), ('Cactus'), ('Dead'), (NULL)) AS t(species)`
 
 describe('species sentinels', () => {
   test('speciesSentinel resolves each sentinel and nothing else', () => {

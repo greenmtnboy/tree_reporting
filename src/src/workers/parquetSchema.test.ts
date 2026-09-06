@@ -55,20 +55,21 @@ describe('parquet schema', () => {
     })
   }, 60_000)
 
-  // The worker filters flagged cross-source duplicates out of every per-city
-  // load with `AND NOT COALESCE(is_duplicate, false)`. A Parquet without the
-  // column does not degrade -- DuckDB raises a binder error and that city's map
-  // fails to load -- so this is the deploy gate: refresh all cities first.
+  // Absorbed duplicates are pruned at the source: every city's published
+  // target carries `where tree_id = cluster_id`, so a rebuilt parquet has one
+  // row per tree and no `is_duplicate` column at all.
   //
-  // A parquet that does not exist at all is the one carve-out. A brand-new
-  // city has nothing on GCS until the pipeline's first credentialed build, so
-  // hard-failing on the 404 turned every city-addition PR red for its whole
-  // lifetime. For a 404 the gate instead asserts the city's Trilogy model
-  // materialises the column, so the first build cannot ship without it. A
-  // parquet that *exists* without the column still fails hard -- that is a
-  // stale build one deploy away from a broken city, the case this test was
-  // written for.
-  test.each(Object.keys(CITY_CONFIG))('%s tree parquet carries is_duplicate', async (city) => {
+  // The presence of that column is therefore the tell that a city has NOT been
+  // rebuilt past the prune, and its rows still include the ones its clusters
+  // absorbed. Nothing breaks while that is true -- the worker probes for the
+  // column and keeps filtering when it is there -- so this is a staleness gate,
+  // not a crash gate: it says "this city still needs its forced refresh".
+  //
+  // A parquet that does not exist at all is the one carve-out, for the same
+  // reason as ever: a brand-new city has nothing on GCS until its first
+  // credentialed build, and hard-failing the 404 turns every city-addition PR
+  // red for its whole lifetime. For a 404 the gate moves to the model instead.
+  test.each(Object.keys(CITY_CONFIG))('%s tree parquet is pruned, not flagged', async (city) => {
     const url = cityTreeParquetUrl(city)
     expect(url, `no per-city parquet url for ${city}`).toBeTruthy()
     if (!url) return
@@ -76,15 +77,22 @@ describe('parquet schema', () => {
     if (head.status === 404) {
       console.warn(
         `${city}'s tree parquet is not on GCS yet -- run the Trilogy refresh before ` +
-          'deploying this city; asserting its model materialises is_duplicate instead',
+          'deploying this city; asserting its model prunes instead',
       )
-      const materialises = ALL_MODEL_SOURCES.some((m) =>
-        m.contents.includes(`is_duplicate: ${city.toLowerCase()}_is_duplicate`),
+      // The prune is the shared derivation in data/raw/tree_dedup.preql; a city
+      // takes part by importing it and gating its published target.
+      const model = ALL_MODEL_SOURCES.find(
+        (m) => m.alias.startsWith(`${city.toLowerCase()}.`) && m.alias.endsWith('_tree_info'),
       )
+      const prunes =
+        !!model &&
+        model.contents.includes('import ..tree_dedup;') &&
+        model.contents.split(/\r?\n/).includes('where tree_id = cluster_id') &&
+        !model.contents.includes('is_duplicate')
       expect(
-        materialises,
-        `${city} has no parquet on GCS yet and no tree model materialising ` +
-          'is_duplicate, so its first build would ship without the column',
+        prunes,
+        `${city} has no parquet on GCS yet and its tree model does not prune ` +
+          'absorbed rows, so its first build would publish duplicates',
       ).toBe(true)
       return
     }
@@ -95,9 +103,10 @@ describe('parquet schema', () => {
       const cols = result.getRowObjects().map((r) => r.column_name as string)
       expect(
         cols,
-        `${city}'s parquet has no is_duplicate column -- run the Trilogy refresh ` +
-          `before deploying, or the worker binder-errors on this city`,
-      ).toContain('is_duplicate')
+        `${city}'s parquet still carries is_duplicate, so it predates the prune ` +
+          `and still holds the rows its clusters absorbed -- force a rebuild: ` +
+          `trilogy refresh raw/<city>/<city>_tree_info.preql -f <city>_tree_info`,
+      ).not.toContain('is_duplicate')
     })
   }, 60_000)
 
@@ -111,7 +120,12 @@ describe('parquet schema', () => {
   // timikae, and purge_non_taxa() drops whatever the parquet holds before the
   // authored rows go back.
   //
-  // Red until the next enrichment run rewrites the parquet.
+  // A sentinel added in a branch cannot have a row until the enrichment job has
+  // run from main -- the daily tick runs main's code and would purge a row a
+  // branch wrote (see EXTENDING.md, "The scheduled refresh runs main"). Such a
+  // sentinel is listed here while its PR is open, and removed once the next
+  // enrichment run has published the row; every other sentinel is gated hard.
+  const PENDING_SENTINELS = new Set(['Dead'])
   test('tree_enrichment holds one authored row per species sentinel', async () => {
     await withDuckDB(async (conn) => {
       const literals = SPECIES_SENTINELS.map((s) => `'${s.species.replace(/'/g, "''")}'`).join(', ')
@@ -120,11 +134,21 @@ describe('parquet schema', () => {
          FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}') WHERE species IN (${literals})`,
       )
       const rows = result.getRowObjects()
+      const published = rows.map((r) => r.species as string)
+      for (const pending of PENDING_SENTINELS) {
+        if (!published.includes(pending)) {
+          console.warn(`${pending} has no enrichment row yet; the next enrichment run from main writes it`)
+        }
+      }
       expect(
-        rows.map((r) => r.species as string).sort(),
+        published.sort(),
         'the enrichment table is missing a sentinel row -- run the enrichment ' +
           'pipeline, or every unidentified tree resolves to a null species',
-      ).toEqual(SPECIES_SENTINELS.map((s) => s.species).sort())
+      ).toEqual(
+        SPECIES_SENTINELS.map((s) => s.species)
+          .filter((s) => !PENDING_SENTINELS.has(s) || published.includes(s))
+          .sort(),
+      )
 
       for (const row of rows) {
         const sentinel = SPECIES_SENTINELS.find((s) => s.species === row.species)!
