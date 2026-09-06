@@ -449,8 +449,8 @@ def test_a_synonym_row_is_rekeyed_when_the_accepted_row_is_missing():
 
 def test_the_accepted_row_lists_its_synonyms_and_the_alias_points_back():
     out = _by_species(with_species_aliases(_synonym_table({"Platanus x hispanica": None})))
-    assert out["Platanus x hispanica"]["synonyms"] == ["Platanus x acerifolia"]
-    assert out["Platanus x acerifolia"]["synonyms"] == ["Platanus x hispanica"]
+    assert out["Platanus x hispanica"]["synonyms"] == ["Platanus acerifolia", "Platanus hispanica", "Platanus x acerifolia"]
+    assert out["Platanus x acerifolia"]["synonyms"] == ["Platanus acerifolia", "Platanus hispanica", "Platanus x hispanica"]
 
 
 def test_every_synonym_key_gets_an_alias_row():
@@ -472,7 +472,7 @@ def test_a_hand_added_synonym_is_kept_and_aliased():
 
 def test_hand_added_and_code_synonyms_merge():
     out = _by_species(with_species_aliases(_synonym_table({"Platanus x hispanica": ["Platanus orientalis-hybrida"]})))
-    assert out["Platanus x hispanica"]["synonyms"] == ["Platanus orientalis-hybrida", "Platanus x acerifolia"]
+    assert out["Platanus x hispanica"]["synonyms"] == ["Platanus acerifolia", "Platanus hispanica", "Platanus orientalis-hybrida", "Platanus x acerifolia"]
 
 
 def test_aliasing_is_idempotent():

@@ -670,6 +670,15 @@ async function doInit(city?: string) {
   conn = await db.connect()
 
   // Load species enrichment and landmarks once — these are city-agnostic / small.
+  //
+  // The trunk photo columns were added in September 2026 and reach the
+  // published table only when it is next republished; naming a column the
+  // parquet does not have fails this whole load, and with it the tree card.
+  // Probe, and read nulls until then. Fold into the plain select afterwards.
+  const hasTrunkPhoto = await parquetHasColumn(REMOTE_SPECIES_PARQUET_URL, 'trunk_photo_url')
+  const trunkPhotoColumns = hasTrunkPhoto
+    ? 'trunk_photo_url, trunk_photo_license, trunk_photo_attribution'
+    : 'CAST(NULL AS VARCHAR) AS trunk_photo_url, CAST(NULL AS VARCHAR) AS trunk_photo_license, CAST(NULL AS VARCHAR) AS trunk_photo_attribution'
   try {
     await conn.query(`
       CREATE TABLE species_enrichment AS
@@ -697,7 +706,8 @@ async function doInit(city?: string) {
         usda_zone_max,
         photo_url,
         photo_license,
-        photo_attribution
+        photo_attribution,
+        ${trunkPhotoColumns}
       FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
     `)
   } catch (e) {

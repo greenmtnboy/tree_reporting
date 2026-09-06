@@ -546,6 +546,8 @@ SPECIES_SYNONYMS: dict[str, str] = {
     "Howea forsterana": "Howea forsteriana",
     "Raphiolepis indica": "Rhaphiolepis indica",
     # A hybrid published without its mark is the same taxon as with it.
+    "Platanus hispanica": "Platanus x hispanica",
+    "Platanus acerifolia": "Platanus x hispanica",
     "Prunus yedoensis": "Prunus x yedoensis",
     "Prunus subhirtella": "Prunus x subhirtella",
     "Populus canadensis": "Populus x canadensis",
