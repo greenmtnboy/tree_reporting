@@ -1254,11 +1254,13 @@ def _render_grouped_registration_html(
       const species = document.createElement("div"); species.className = "selected-species";
       const facts = document.createElement("div"); facts.className = "selected-facts";
       const offset = document.createElement("div"); offset.className = "offset"; details.append(species, facts, offset);
+      offset.title = "WASD nudges by 1 pixel; Shift moves 5 pixels. Q uncertain, E duplicate, R aligned, N not tree.";
       const actions = document.createElement("div"); actions.className = "actions";
       [["aligned", "Aligned"], ["not-tree", "Not tree"], ["uncertain", "Uncertain"],
         ["duplicate", "Duplicate"]].forEach(([status, label]) => {{
         const button = document.createElement("button"); button.dataset.reviewStatus = status;
         button.dataset.reviewLabel = label; button.textContent = label;
+        button.title = label + " (" + ({{aligned: "R", "not-tree": "N", uncertain: "Q", duplicate: "E"}}[status]) + ")";
         button.addEventListener("click", () => setStatus(scene.scene_id, status)); actions.append(button);
       }});
       const maskActions = document.createElement("div"); maskActions.className = "mask-actions fullscreen-only";
@@ -1326,13 +1328,31 @@ def _render_grouped_registration_html(
       if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "b") {{
         event.preventDefault(); setRegionMode(openCard.dataset.scene, "confirmed-background"); return;
       }}
-      const reviewHotkeys = {{a: "aligned", n: "not-tree", u: "uncertain", d: "duplicate"}};
+      const reviewHotkeys = {{r: "aligned", n: "not-tree", q: "uncertain", e: "duplicate"}};
       const reviewStatus = reviewHotkeys[event.key.toLowerCase()];
       if (reviewStatus && !event.ctrlKey && !event.metaKey && !event.altKey) {{
         event.preventDefault(); setStatus(openCard.dataset.scene, reviewStatus); return;
       }}
-      if (event.key === "ArrowRight") {{ event.preventDefault(); moveScene(openCard, 1); }}
-      if (event.key === "ArrowLeft") {{ event.preventDefault(); moveScene(openCard, -1); }}
+      if (event.key === "ArrowRight") {{ event.preventDefault(); moveScene(openCard, 1); return; }}
+      if (event.key === "ArrowLeft") {{ event.preventDefault(); moveScene(openCard, -1); return; }}
+      const delta = {{a: [-1, 0], d: [1, 0], w: [0, -1], s: [0, 1]}}[event.key.toLowerCase()];
+      if (delta && !event.altKey && !event.ctrlKey && !event.metaKey) {{
+        event.preventDefault();
+        const sceneId = openCard.dataset.scene;
+        if (selectionFor(sceneId).size !== 1 || regionModeByScene[sceneId]) return;
+        const sampleId = activeByScene[sceneId], sample = samplesById[sampleId];
+        const scene = scenesById[sceneId], review = reviews[sampleId] || {{}};
+        const step = event.shiftKey ? 5 : 1;
+        const x = Math.max(0, Math.min(scene.image_width - 1, (review.image_x ?? sample.target_x) + step * delta[0]));
+        const y = Math.max(0, Math.min(scene.image_height - 1, (review.image_y ?? sample.target_y) + step * delta[1]));
+        const dx = x - sample.target_x, dy = y - sample.target_y;
+        reviews[sampleId] = {{...review, status: "offset", source: "human", image_x: x, image_y: y,
+          east_m: sample.transform_a * dx + sample.transform_b * dy,
+          north_m: sample.transform_d * dx + sample.transform_e * dy}};
+        delete reviews[sampleId].heuristic_id;
+        zoomFocusByScene[sceneId] = {{x, y, label: "Nudged offset location"}};
+        persist();
+      }}
     }});
     splitFilter.addEventListener("change", update); coverageFilter.addEventListener("change", update);
     statusFilter.addEventListener("change", update); sceneStatusFilter.addEventListener("change", update);
@@ -1383,6 +1403,8 @@ def _render_grouped_registration_html(
         document.getElementById("sync").textContent = location.protocol === "file:" ? "Local only — serve the UI to auto-save" : `Load failed: ${{error.message}}`;
       }} finally {{ update(); syncTimer = setTimeout(syncReviews, 250); }}
     }}
+    window.studioViewState?.restore();
+    document.body.classList.toggle("show-stacks", showStacks.checked);
     hydrateServerReviews();
     if (requestedSceneId && scenesById[requestedSceneId]) {{
       splitFilter.value = ""; coverageFilter.value = ""; statusFilter.value = "";

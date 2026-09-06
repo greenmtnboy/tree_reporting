@@ -5,6 +5,7 @@ import json
 from collections import Counter
 from urllib.parse import urlencode
 
+from urban_tree_ml.chip_catalog import training_chip_catalog
 from urban_tree_ml.feedback import load_persisted_reviews
 
 
@@ -36,7 +37,9 @@ def city_report(context, catalog) -> dict:
         reviewed = sum(bool(reviews.get(s, {}).get("status")) for s in scene["sample_ids"])
         score = scores.get(chip)
         rows.append({
-            "id": chip or scene_id, "kind": "Validation chip" if chip else "Review scene",
+            "id": chip or scene_id,
+            "kind": ("Training chip" if scene.get("splits") == ["train"] else "Validation chip")
+            if chip else "Review scene",
             "splits": scene.get("splits", []),
             "status": "done" if done else "in-progress" if reviewed else "unreviewed",
             "reviewed_trees": reviewed, "trees": len(scene["sample_ids"]),
@@ -64,6 +67,7 @@ def city_report(context, catalog) -> dict:
     feedback = json.loads(feedback_path.read_text()) if feedback_path.exists() else {}
     return {
         "city": context.city, "label": context.label,
+        "training_progress": training_chip_catalog(context, manifest, state),
         "scenes": len(manifest["scenes"]),
         "done": sum(bool(r.get("done")) for r in state["scene_reviews"].values()),
         "tree_reviews": sum(bool(r.get("status")) for r in reviews.values()),
@@ -92,6 +96,6 @@ CURATION_REPORT_HTML = """<!doctype html>
 <p class="muted">Review scenes can be smaller than training chips and can overlap: scene counts are not unique training-chip counts. “Not in review set” does not imply no nearby trees were curated. Test is the sealed holdout; its scores are not loaded here. Mixed-split scenes count once in each represented split.</p></main><script>
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),pct=v=>v==null?'—':(v*100).toFixed(1)+'%';let cities=[];
 function render(){const rows=cities.flatMap(c=>c.rows.map(r=>({...r,city:c.city,label:c.label}))).filter(r=>(!$('city').value||r.city===$('city').value)&&(!$('status').value||r.status===$('status').value)&&(!$('split').value||r.splits.includes($('split').value))&&r.id.includes($('search').value.trim()));rows.sort((a,b)=>$('sort').value==='f2'?(a.f2??2)-(b.f2??2)||a.id.localeCompare(b.id):a.id.localeCompare(b.id));$('count').textContent=`${rows.length} tiles / scenes shown`;$('rows').innerHTML=rows.map(r=>`<tr><td>${esc(r.label)}</td><td>${esc(r.id)}</td><td>${esc(r.kind)}</td><td>${esc(r.splits.join(', '))}</td><td>${esc(r.status)}</td><td>${r.reviewed_trees==null?'—':r.reviewed_trees+' / '+r.trees}</td><td>${pct(r.f2)}</td><td><a class="action" href="${esc(r.url)}">Open</a></td></tr>`).join('')}
-async function load(){try{$('error').textContent='';const response=await fetch('/api/coverage');if(!response.ok)throw Error(await response.text());cities=(await response.json()).cities;const selection=$('city').value;$('city').innerHTML='<option value="">All cities</option>'+cities.map(c=>`<option value="${esc(c.city)}">${esc(c.label)}</option>`).join('');$('city').value=selection;$('cards').innerHTML=cities.map(c=>`<article class="card"><h2>${esc(c.label)}</h2><div class="big">${c.done} / ${c.scenes} done</div><progress value="${c.done}" max="${c.scenes||1}"></progress><p>${c.tree_reviews.toLocaleString()} tree reviews · ${c.regions} mask regions</p><p class="muted">${Object.entries(c.split_scenes).map(([s,n])=>esc(s)+': '+n).join(' · ')}<br>${Object.entries(c.verdicts).map(([s,n])=>esc(s)+': '+n).join(' · ')}</p><p>${c.published?'Published feedback is current':'Unpublished changes'}</p>${c.evaluation?`<p>Validation F2: ${pct(c.evaluation.f2)} · ${c.evaluation.chips} chips</p><p class="muted">${esc(c.evaluation.run)}<br>${esc(c.evaluation.cohort)} · confidence ${c.evaluation.threshold}${c.evaluation.radius_m?' · '+esc(c.evaluation.radius_m)+' m':''}</p>`:'<p>No saved evaluation</p>'}</article>`).join('');render()}catch(error){$('error').textContent=error.message}}
+async function load(){try{$('error').textContent='';const response=await fetch('/api/coverage');if(!response.ok)throw Error(await response.text());cities=(await response.json()).cities;const selection=$('city').value;$('city').innerHTML='<option value="">All cities</option>'+cities.map(c=>`<option value="${esc(c.city)}">${esc(c.label)}</option>`).join('');$('city').value=selection;$('cards').innerHTML=cities.map(c=>`<article class="card"><h2>${esc(c.label)}</h2>${c.training_progress?`<div class="big">${pct(c.training_progress.fraction)} of training chips curated</div><progress aria-label="${esc(c.label)} training chips curated" value="${c.training_progress.curated}" max="${c.training_progress.total||1}"></progress><p>${c.training_progress.curated} / ${c.training_progress.total} training chips · ${c.training_progress.without_targets} without retained targets</p><a class="action" href="/curate-training?city=${encodeURIComponent(c.city)}">Curate more training chips</a>`:"<p>Training chip catalog unavailable</p>"}<p>${c.done} / ${c.scenes} review scenes done</p><p>${c.tree_reviews.toLocaleString()} tree reviews · ${c.regions} mask regions</p><p class="muted">${Object.entries(c.split_scenes).map(([s,n])=>esc(s)+': '+n).join(' · ')}<br>${Object.entries(c.verdicts).map(([s,n])=>esc(s)+': '+n).join(' · ')}</p><p>${c.published?'Published feedback is current':'Unpublished changes'}</p>${c.evaluation?`<p>Validation F2: ${pct(c.evaluation.f2)} · ${c.evaluation.chips} chips</p><p class="muted">${esc(c.evaluation.run)}<br>${esc(c.evaluation.cohort)} · confidence ${c.evaluation.threshold}${c.evaluation.radius_m?' · '+esc(c.evaluation.radius_m)+' m':''}</p>`:'<p>No saved evaluation</p>'}</article>`).join('');window.studioViewState?.restore();render()}catch(error){$('error').textContent=error.message}}
 for(const id of ['city','status','split','sort','search'])$(id).addEventListener('input',render);$('refresh').addEventListener('click',load);load();
 </script></body></html>"""
