@@ -1,11 +1,44 @@
 import json
 from pathlib import Path
 
+import pytest
+
+from urban_tree_ml.config import load_config
 from urban_tree_ml.qa_server import (
+    _checked_review_context,
     _inject_street_view_embed_key,
     _safe_curation_return,
     _validation_chip_review_status,
 )
+
+
+def test_review_context_rejects_a_city_config_mismatch(tmp_path: Path) -> None:
+    config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
+    raster = tmp_path / "imagery.tif"
+    raster.touch()
+    review_dir = tmp_path / "review"
+    review_dir.mkdir()
+    (review_dir / "index.html").write_text("<html></html>", encoding="utf-8")
+
+    context = _checked_review_context(
+        "ussfo",
+        "San Francisco",
+        config,
+        raster,
+        review_dir,
+        tmp_path / "evaluation",
+    )
+
+    assert context.config.inventory.city == "USSFO"
+    with pytest.raises(ValueError, match="does not match"):
+        _checked_review_context(
+            "usbos",
+            "Boston",
+            config,
+            raster,
+            review_dir,
+            tmp_path / "evaluation",
+        )
 
 
 def test_street_view_embed_key_is_only_injected_when_configured() -> None:

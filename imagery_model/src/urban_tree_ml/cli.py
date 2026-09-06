@@ -233,6 +233,21 @@ def qa_serve(
     )
 
 
+@qa_app.command("studio")
+def qa_studio(
+    studio_config: Annotated[
+        Path,
+        typer.Option("--studio-config", exists=True, dir_okay=False),
+    ],
+    bind: Annotated[str, typer.Option("--bind")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", min=1, max=65535)] = 8765,
+) -> None:
+    from urban_tree_ml.config import load_studio_config
+    from urban_tree_ml.qa_server import serve_model_studio
+
+    serve_model_studio(load_studio_config(studio_config), bind=bind, port=port)
+
+
 @qa_app.command("heuristics")
 def qa_heuristics(
     config_path: ConfigPath,
