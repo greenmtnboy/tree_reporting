@@ -52,6 +52,18 @@ property <*>.grath_osm_data_updated_through datetime; # GCS publication time of 
 property <*>.grmlo_osm_data_updated_through datetime; # GCS publication time of Milos's staged OSM parquet
 property <*>.grsan_osm_data_updated_through datetime; # GCS publication time of Santorini's staged OSM parquet
 property <*>.usden_osm_data_updated_through datetime; # GCS publication time of Denver's staged OSM parquet
+property <*>.canwe_data_updated_through datetime; # when New Westminster data is through
+property <*>.canwe_osm_data_updated_through datetime; # GCS publication time of New Westminster's staged OSM parquet
+property <*>.cakel_data_updated_through datetime; # when Kelowna data is through
+property <*>.cakel_osm_data_updated_through datetime; # GCS publication time of Kelowna's staged OSM parquet
+property <*>.cavic_data_updated_through datetime; # when Victoria data is through
+property <*>.cavic_osm_data_updated_through datetime; # GCS publication time of Victoria's staged OSM parquet
+property <*>.calet_data_updated_through datetime; # when Lethbridge data is through
+property <*>.calet_osm_data_updated_through datetime; # GCS publication time of Lethbridge's staged OSM parquet
+property <*>.cakgn_data_updated_through datetime; # when Kingston data is through
+property <*>.cakgn_osm_data_updated_through datetime; # GCS publication time of Kingston's staged OSM parquet
+property <*>.cahfx_data_updated_through datetime; # when Halifax data is through
+property <*>.cahfx_osm_data_updated_through datetime; # GCS publication time of Halifax's staged OSM parquet
 property <*>.calon_data_updated_through datetime; # when Longueuil data is through
 property <*>.calon_osm_data_updated_through datetime; # GCS publication time of Longueuil's staged OSM parquet
 property <*>.caque_data_updated_through datetime; # when Quebec City data is through

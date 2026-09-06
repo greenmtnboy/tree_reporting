@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'New Westminster', label: 'City of New Westminster Open Data - Tree Inventory (Active Trees)', url: 'https://opendata.newwestcity.ca/datasets/tree-inventory-active-trees' },
+  { city: 'Kelowna', label: 'City of Kelowna Open Data - Tree Inventory', url: 'https://opendata.kelowna.ca/datasets/tree-inventory' },
+  { city: 'Victoria', label: 'City of Victoria Open Data - Tree Species (Parks trees database)', url: 'https://opendata.victoria.ca/datasets/tree-species-parks-trees-database' },
+  { city: 'Lethbridge', label: 'City of Lethbridge Open Data - Trees', url: 'https://opendata.lethbridge.ca/datasets/trees' },
+  { city: 'Kingston', label: 'City of Kingston Open Data - City Owned Trees', url: 'https://opendatakingston.cityofkingston.ca/explore/dataset/city-owned-trees/' },
+  { city: 'Halifax', label: 'Halifax Regional Municipality Open Data - Public Trees', url: 'https://catalogue-hrm.opendata.arcgis.com/datasets/public-trees' },
   { city: 'Longueuil', label: 'Donnees Quebec - Ville de Longueuil, Arbres (CC-BY 4.0)', url: 'https://www.donneesquebec.ca/recherche/dataset/arbres' },
   { city: 'Quebec City', label: 'Donnees Quebec - Ville de Quebec, Arbres repertories (CC-BY 4.0)', url: 'https://www.donneesquebec.ca/recherche/dataset/vque_arbrerepertorie' },
   { city: 'Montreal', label: 'Donnees Montreal - Arbres publics sur le territoire de la Ville (CC-BY 4.0)', url: 'https://donnees.montreal.ca/dataset/arbres' },
@@ -57,6 +63,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'New Westminster', label: 'City of New Westminster Open Data - Heritage Register', url: 'https://opendata.newwestcity.ca/datasets/heritage-register' },
+  { city: 'Kelowna', label: 'City of Kelowna Open Data - Heritage Registry', url: 'https://opendata.kelowna.ca/datasets/heritage-registry' },
+  { city: 'Victoria', label: 'City of Victoria Open Data - Prominent Heritage Sites (OCP)', url: 'https://opendata.victoria.ca/datasets/prominent-heritage-sites-ocp' },
+  { city: 'Lethbridge', label: 'City of Lethbridge Open Data - Historic Places', url: 'https://opendata.lethbridge.ca/datasets/historic-places' },
+  { city: 'Kingston', label: 'City of Kingston Open Data - Designated Heritage Site', url: 'https://opendatakingston.cityofkingston.ca/explore/dataset/designated-heritage-site/' },
+  { city: 'Halifax', label: 'Halifax Regional Municipality Open Data - Heritage Properties', url: 'https://catalogue-hrm.opendata.arcgis.com/datasets/heritage-properties' },
   { city: 'Longueuil', label: 'Donnees Quebec - Ville de Longueuil, Parcs (CC-BY 4.0)', url: 'https://www.donneesquebec.ca/recherche/dataset/parcs-longueuil' },
   { city: 'Quebec City', label: 'Repertoire du patrimoine culturel du Quebec - immeubles classes et cites (CC-BY 4.0)', url: 'https://www.donneesquebec.ca/recherche/dataset/immeubles-patrimoniaux-classes-par-le-ministre-de-la-culture-et-des-communications' },
   { city: 'Montreal', label: 'Repertoire du patrimoine culturel du Quebec - immeubles classes et cites (CC-BY 4.0)', url: 'https://www.donneesquebec.ca/recherche/dataset/immeubles-patrimoniaux-classes-par-le-ministre-de-la-culture-et-des-communications' },

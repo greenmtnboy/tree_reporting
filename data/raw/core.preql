@@ -1,6 +1,6 @@
 import ecoregion_common;
 
-key city enum<string>['USSFO', 'USNYC', 'USBOS', 'FRPAR', 'USBTV', 'CAVAN', 'DEBER', 'NLAMS', 'GBLON', 'AUMEL', 'ARBUE', 'USLAX', 'USWAS', 'USTEM', 'GRATH', 'GRMLO', 'GRSAN', 'USDEN', 'CACAL', 'CAEDM', 'CAWPG', 'CATOR', 'CAMTL', 'CAQUE', 'CALON']; # UN/LOCODE-style code for the source city
+key city enum<string>['USSFO', 'USNYC', 'USBOS', 'FRPAR', 'USBTV', 'CAVAN', 'DEBER', 'NLAMS', 'GBLON', 'AUMEL', 'ARBUE', 'USLAX', 'USWAS', 'USTEM', 'GRATH', 'GRMLO', 'GRSAN', 'USDEN', 'CACAL', 'CAEDM', 'CAWPG', 'CATOR', 'CAMTL', 'CAQUE', 'CALON', 'CAHFX', 'CAKGN', 'CALET', 'CAVIC', 'CAKEL', 'CANWE']; # UN/LOCODE-style code for the source city
 
 # The dataset each tree row came from is modelled as a *per-city* enum key
 # (`ussfo_source`, `usbos_source`, …) declared in each city's tree model, not as
@@ -18,7 +18,7 @@ property city.ecoregion_id <- case
     when city = 'USBOS' then 339
     when city = 'FRPAR' then 664
     when city = 'USBTV' then 334
-    when city = 'CAVAN' then 319
+    when city = 'CAVAN' then 364
     when city = 'DEBER' then 651
     when city = 'NLAMS' then 664
     when city = 'GBLON' then 663
@@ -38,6 +38,12 @@ property city.ecoregion_id <- case
     when city = 'CAMTL' then 334
     when city = 'CAQUE' then 334
     when city = 'CALON' then 334
+    when city = 'CAHFX' then 338
+    when city = 'CAKGN' then 334
+    when city = 'CALET' then 396
+    when city = 'CAVIC' then 364
+    when city = 'CAKEL' then 362
+    when city = 'CANWE' then 364
 end; # mapped from RESOLVE ecoregion at each city centroid
 
 # The data_source / submission_photo_url additions did not need a bump: the

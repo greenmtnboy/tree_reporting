@@ -113,6 +113,10 @@ _SPECIES_PLACEHOLDERS = frozenset(
         "boom", "baum", "privet", "--", "-",
         # Inventories that record "we planted a mix here" rather than a taxon.
         "mixed", "misc", "no",
+        # New Westminster's, where the surveyor recorded a genus and left the
+        # species open ("Magnolia to be determined", "Magnolia undefined",
+        # "Tbd") or gave up on a stretch of road ("Various Species Along Road").
+        "to be determined", "tbd", "undefined", "various",
         # Alberta's asset systems, where a species was never recorded.  These
         # describe the *record*, not the site, so they are Unknown rather than
         # not-a-tree: there is a tree there and nobody wrote down what it is.
@@ -214,6 +218,8 @@ _NON_TAXON_REWRITES: dict[str, str | None] = {
     "colurna": None, "communis": None, "daniellii": None, "dasystyla": None,
     "davidii": None, "glabra": None, "intermedia": None, "involucrata": None,
     "japonica": None, "negundo": None, "nigra": None, "obliqua": None,
+    "angustifolia": None, "cornuta": None, "globosum": None,
+    "hamabo": None, "koto": None, "pendula": None, "pseudoacacia": None,
     "orientalis": None, "persica": None, "phillus": None,
     "phillyreoides": None, "pungens": None, "robor": None, "serrulata": None,
     "siliquastrum": None, "szechuanica": None, "trichotomum": None,
@@ -234,6 +240,23 @@ _NON_TAXON_REWRITES: dict[str, str | None] = {
     "chokecherry": "Prunus",   # Prunus virginiana
     "mayday": "Prunus",        # Prunus padus, the mayday tree
     "crabapple": "Malus",
+    # Halifax identifies 7,700 trees to genus only and writes the genus with a
+    # "(genus)" suffix.  Twenty-nine of the thirty spellings are real genera
+    # and pass straight through; "Elm (genus)" is the English name, and elm is
+    # Ulmus and nothing else, so the genus is kept -- the same call
+    # "orme prive" gets below.
+    "elm": "Ulmus",
+    # Kelowna writes the English name in its `Genus` column on 21 rows.  A
+    # juniper is Juniperus and nothing else, so the genus is kept.
+    "juniper": "Juniperus",
+    # Rows that describe the *record* rather than a tree.  Victoria marks a
+    # tree it does not own as "Private Tree" (78 rows) and Kingston marks a
+    # grouped location "Centroid" with the common name "Central data point"
+    # (24); New Westminster has one row that is a work order someone typed
+    # into the species field.  Each names no taxon, so there is no genus to
+    # keep -- but a tree *is* there, which is why these become Unknown rather
+    # than being dropped as an empty site.
+    "private": None, "centroid": None, "remove": None,
     # The same thing in the languages the wired cities publish in.  Accents are
     # already stripped by the time this is consulted, so the keys are ASCII.
     "birke": None,          # de: birch
@@ -312,6 +335,15 @@ _RANK_QUALIFIERS = frozenset(
 # ("Malus 'spring snow' high brnch"), so the name is truncated at the quote
 # rather than having the quoted run excised from the middle.
 _QUOTE_CHARS = "'\"‘’“”"
+
+# A parenthetical in a species field is a note about rank or identification,
+# never part of the name.  Halifax writes "Acer (genus)" for a tree identified
+# only to genus -- 30 spellings of it, 7,700 trees -- and the epithet loop
+# below already truncated those correctly.  It is stripped *up front* instead
+# so the lookups that run before the loop see the name: "Elm (genus)" has to
+# reach _NON_TAXON_REWRITES as "Elm", or the English common name survives as
+# an invented genus.
+_PARENTHETICAL = re.compile(r"\s*\([^)]*\)")
 
 
 def extract_cultivar(value: str | None) -> str | None:
@@ -686,6 +718,9 @@ def _sanitize_taxon(value: str | None) -> str | None:
     if s is None:
         return None
     s = _strip_diacritics(s)
+    s = _PARENTHETICAL.sub("", s).strip()
+    if not s:
+        return None
 
     if s.lower() in _SPECIES_PLACEHOLDERS:
         return None
@@ -706,7 +741,18 @@ def _sanitize_taxon(value: str | None) -> str | None:
     # Truncate at a cultivar quote, dropping the cultivar and any trailing note.
     cut = [s.find(q) for q in _QUOTE_CHARS if s.find(q) != -1]
     if cut:
-        s = s[: min(cut)]
+        s = s[: min(cut)].strip()
+        if not s:
+            return None
+        # The lookups above ran against the value *with* its cultivar still
+        # attached, so a bare epithet carrying one slipped past them -- New
+        # Westminster publishes `biloba 'Autumn Gold'`, which is a Ginkgo that
+        # lost its genus, and reading it as the genus `Biloba` invents one.
+        # Ask again now the cultivar is off.
+        if s.lower() in _SPECIES_PLACEHOLDERS or s.lower() in _FORM_SENTINEL_ALIASES:
+            return None
+        if s.lower() in _NON_TAXON_REWRITES:
+            return _NON_TAXON_REWRITES[s.lower()]
 
     # Free-typed uncertainty and any numeric content are never taxa -- but ask
     # only of what is left after the cultivar came off.  A nursery cultivar code
@@ -742,10 +788,27 @@ def _sanitize_taxon(value: str | None) -> str | None:
         return None
     if genus.lower() in _SPECIES_PLACEHOLDERS:
         return None
+    # The whole-value lookups above miss a non-taxon that arrives with a rank
+    # qualifier or a trailing note -- "Juniper spp.", "Private Tree",
+    # "Koto no ito", "Remove Dead Top plicata".  What the value names is
+    # decided by its first word, so ask again with just the genus.  No real
+    # genus is a key in that map, by construction: an entry belongs there only
+    # when it names no genus at all, or names one in another language.
+    if genus.lower() in _NON_TAXON_REWRITES:
+        return _NON_TAXON_REWRITES[genus.lower()]
     # "-aceae" is a family, a rank the species key does not carry.  Keeping it
     # would hand the enrichment LLM a family to describe as if it were a tree.
     if genus.lower().endswith("aceae"):
         return None
+
+    # A placeholder standing where the epithet should be truncates to the
+    # genus -- the rule the single-token loop below already applies, asked of
+    # the whole remainder so that a *phrase* is caught too.  New Westminster
+    # publishes "Magnolia to be determined", which token-by-token reads "to"
+    # as the epithet and publishes the taxon `Magnolia to`.
+    remainder = " ".join(tokens[1:]).rstrip(".").lower()
+    if remainder and remainder in _SPECIES_PLACEHOLDERS:
+        tokens = tokens[:1]
 
     hybrid = ""
     epithet = ""
@@ -794,6 +857,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "CANWE": ("NEWWESTMINSTER_OPENDATA",),
+    "CAKEL": ("KELOWNA_OPENDATA",),
+    "CAVIC": ("VICTORIA_OPENDATA",),
+    "CALET": ("LETHBRIDGE_OPENDATA",),
+    "CAKGN": ("KINGSTON_OPENDATA",),
+    "CAHFX": ("HALIFAX_OPENDATA",),
     "CALON": ("LONGUEUIL_OPENDATA",),
     "CAQUE": ("QUEBEC_OPENDATA",),
     "CAMTL": ("MONTREAL_OPENDATA",),
@@ -851,6 +920,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "CANWE": "OSM_CANWE",
+    "CAKEL": "OSM_CAKEL",
+    "CAVIC": "OSM_CAVIC",
+    "CALET": "OSM_CALET",
+    "CAKGN": "OSM_CAKGN",
+    "CAHFX": "OSM_CAHFX",
     "CALON": "OSM_CALON",
     "CAQUE": "OSM_CAQUE",
     "CAMTL": "OSM_CAMTL",
@@ -1210,6 +1285,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "CANWE": (49.16, 49.26, -122.99, -122.85),
+    "CAKEL": (49.75, 50.0, -119.6, -119.3),
+    "CAVIC": (48.39, 48.48, -123.42, -123.3),
+    "CALET": (49.6, 49.8, -113.0, -112.68),
+    "CAKGN": (44.15, 44.52, -76.75, -76.17),
+    "CAHFX": (44.4, 45.05, -64.05, -62.35),
     "CALON": (45.4, 45.62, -73.58, -73.3),
     "CAQUE": (46.68, 47.0, -71.6, -71.1),
     "CAMTL": (45.38, 45.72, -74.0, -73.42),
@@ -1292,6 +1373,41 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # ../../DEDUP_CELL_RECALIBRATION.md.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # 5-10 m band 48.9% over n=270 -- a coin flip, so the bands leave it at a
+    # 5 m guarantee and the marginal table decides how far past that to go:
+    # 6->8 removes 81 duplicates for 56 hidden trees (1.45), 8->10 removes 35
+    # for 39 (0.90).
+    "CANWE": 8,
+    # Kelowna's OSM overlaps its inventory more heavily than any other city in
+    # this batch -- 785 of 2,180 nodes within 2 m of an inventory tree at
+    # 99.2% mutual-NN -- and the marginal table keeps paying further out than
+    # its neighbours: 6->8 removes 72 duplicates for 34 hidden trees (2.12),
+    # 8->10 removes 34 for 19 (1.79), 10->14 removes 18 for 56 (0.32).
+    "CAKEL": 10,
+    # 5-10 m band 37.5% over n=64: neighbour-dominated.  4->6 removes 36
+    # duplicates for 12 hidden trees (3.00), 6->8 removes 9 for 10 (0.90).
+    "CAVIC": 6,
+    # 5-10 m band 35.0% over n=103: neighbour-dominated, and Lethbridge's
+    # inventory is the tightest-planted of the six (median 6.0 m to the
+    # nearest other tree, a quarter within 4.1 m).  4->6 removes 50 duplicates
+    # for 27 hidden trees (1.85), 6->8 removes 20 for 22 (0.91).
+    "CALET": 6,
+    # 5-10 m band 50.0% mutual-NN, but over n=8: Kingston has 310 OSM nodes in
+    # total, the thinnest overlap in the batch, so the bands say almost
+    # nothing and the marginal table decides.  4->6 removes 9 duplicates and
+    # hides none, 6->8 removes 3 for 3 (1.00, break-even), and 8->10 flags
+    # fewer rows than 8 at all.  6 m is where the paying stops.
+    "CAKGN": 6,
+    # The only city here to earn a 10 m guarantee, and both measures agree.
+    # Halifax plants wide -- a median 9.2 m to the nearest other inventory
+    # tree, against Calgary's 5.1 -- so a match out at 10-15 m is far more
+    # likely a re-mapped tree than the next one in the row.  The 5-10 m band
+    # is duplicate-dominated at 72.4% (n=29) rather than the coin flip every
+    # other city in this batch shows there, and the marginal table never
+    # turns: 10->14 removes 14 duplicates for 3 hidden trees (4.67), 14->20
+    # removes 10 for 4 (2.50).  Small absolute numbers -- HRM has only 1,602
+    # OSM nodes against 80,050 inventory trees -- but they point one way.
+    "CAHFX": 20,
     # 5-10 m band 36.5% mutual-NN over n=178; 4->6 removes 102 duplicates for
     # 56 hidden trees (1.82), 6->8 removes 36 for 46 (0.78).  Longueuil's OSM
     # barely overlaps its inventory -- 1,523 duplicates out of 130,006 nodes,

@@ -1,0 +1,39 @@
+import ..landmark_common;
+
+root datasource new_westminster_landmarks_update_time (
+    data_updated_through: canwe_landmark_data_updated_through
+)
+file `./new_westminster_landmarks_probe.py`;
+
+# New Westminster's Heritage Register, read live off the same ArcGIS portal as
+# the trees -- an official designation registry, which names its properties by
+# address rather than by building name (see new_westminster_landmarks.py).
+root partial datasource raw_new_westminster_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    address: ?address,
+    year_built: ?year_built,
+    year_designated: ?year_designated,
+)
+grain (landmark_id)
+complete where city = 'CANWE'
+file `./new_westminster_landmarks.py`;
+
+partial datasource new_westminster_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?address,
+    ?year_built,
+    ?year_designated,
+    canwe_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'CANWE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/canwe_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/canwe_landmark_info_v{data_version}.parquet`
+freshness by canwe_landmark_data_updated_through;
