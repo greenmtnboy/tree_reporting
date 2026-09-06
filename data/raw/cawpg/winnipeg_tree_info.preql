@@ -1,0 +1,125 @@
+import ..tree_common;
+import ..community_tree_info;
+import ..tree_dedup;
+
+auto cawpg_published_data_updated_through <- greatest(cawpg_data_updated_through, cawpg_community_data_updated_through, cawpg_osm_data_updated_through);
+
+key cawpg_source enum<string>['WINNIPEG_OPENDATA', 'COMMUNITY_CAWPG', 'OSM_CAWPG']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto cawpg_source_label <- concat(cawpg_source, '');
+merge cawpg_source_label into source_label;
+
+root datasource winnipeg_update_time (
+    data_updated_through: cawpg_data_updated_through
+)
+file `./winnipeg_update_time.py`;
+
+# Only this city's column, so an approval elsewhere does not mark CAWPG's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource cawpg_community_update_time (
+    cawpg_community_data_updated_through: cawpg_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# GCS publication time of the staged OSM parquet; it only moves when an
+# extraction is re-run and uploaded. Not a local mtime -- git does not preserve
+# it, so a committed staging file makes every fresh clone look like new data.
+root datasource cawpg_osm_update_time (
+    data_updated_through: cawpg_osm_data_updated_through
+)
+file `./winnipeg_osm_probe.py`;
+
+root partial datasource winnipeg_raw_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: cawpg_source,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
+)
+grain (tree_id)
+complete where city = 'CAWPG' and cawpg_source = 'WINNIPEG_OPENDATA'
+file `./winnipeg_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to CAWPG and makes
+# it a disjoint partition, and the `where` clause is what actually filters --
+# `complete where` asserts, it does not promise a predicate.
+root partial datasource cawpg_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: cawpg_source,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
+)
+grain (tree_id)
+complete where city = 'CAWPG' and cawpg_source = 'COMMUNITY_CAWPG'
+file `../community_tree_info.py`
+where city = 'CAWPG';
+
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
+# -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
+# by construction; the overlap is resolved by ../tree_dedup.preql.
+root partial datasource cawpg_osm_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: cawpg_source,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
+)
+grain (tree_id)
+complete where city = 'CAWPG' and cawpg_source = 'OSM_CAWPG'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cawpg_osm_staging.parquet`;
+
+
+# --- Cross-source dedup and attribute merge --------------------------------
+#
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# The only per-city line is the dbh merge, because Boston imputes it.
+merge merged_dbh into diameter_at_breast_height;
+
+
+partial datasource winnipeg_tree_info (
+    tree_id,
+    city,
+    data_source: cawpg_source,
+    species,
+    ?tree_name,
+    ?plant_date,
+    ?diameter_at_breast_height,
+    ?latitude,
+    ?longitude,
+    ?submission_photo_url,
+    ?cultivar,
+    merged_sources,
+    ?merged_tree_ids,
+    cawpg_published_data_updated_through,
+)
+grain (tree_id)
+complete where city = 'CAWPG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cawpg_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cawpg_tree_info_v{data_version}.parquet`
+where tree_id = cluster_id
+freshness by cawpg_published_data_updated_through;

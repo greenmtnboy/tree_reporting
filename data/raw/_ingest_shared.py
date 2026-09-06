@@ -772,6 +772,9 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "CAWPG": ("WINNIPEG_OPENDATA",),
+    "CAEDM": ("EDMONTON_OPENDATA",),
+    "CACAL": ("CALGARY_OPENDATA",),
     "USSFO": ("SF_OPENDATA",),
     "USNYC": ("NYC_OPENDATA",),
     "USBOS": ("CITY_OF_BOSTON", "ARNOLD_ARBORETUM", "CAMBRIDGE", "BROOKLINE"),
@@ -822,6 +825,9 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "CAWPG": "OSM_CAWPG",
+    "CAEDM": "OSM_CAEDM",
+    "CACAL": "OSM_CACAL",
     "USTEM": "OSM_USTEM",
     "USBOS": "OSM_USBOS",
     "USSFO": "OSM_USSFO",
@@ -1174,6 +1180,9 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "CAWPG": (49.66, 50.03, -97.4, -96.9),
+    "CAEDM": (53.3, 53.75, -113.8, -113.2),
+    "CACAL": (50.8, 51.25, -114.35, -113.83),
     "USSFO": (37.60, 37.90, -122.60, -122.30),
     "USNYC": (40.45, 40.95, -74.30, -73.65),
     "USBOS": (42.15, 42.55, -71.25, -70.85),
@@ -1229,7 +1238,37 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # model never carries a hand-computed constant that can drift from the
 # calibration written next to it.  A new city needs an entry here (start at
 # 10, then measure); `test_dedup_cells.py` checks the table covers every city.
+#
+# **The three Canadian Socrata cities are the first sized below 10 m**, on a
+# measurement the earlier cities did not have.  The band test asks whether a
+# 5 m-wide ring is duplicate-dominated, which is a proxy -- and it flatters the
+# bigger cell, because a cell names a *guarantee* while the staggered grid
+# reaches to the diagonal, ~1.41x further.  `osm_dedup_validation.py` now also
+# prints, per cell size, how many of the rows it flags are mutual nearest
+# neighbours (real duplicates) and how many are not (real trees the map would
+# hide), with the marginal trade between consecutive sizes.  A step up in size
+# is worth taking only while it removes more duplicates than it hides trees.
+#
+# On that measure all three came in under the 10 m the bands alone suggested.
+# The cities wired before the marginal table existed are sized on the bands
+# and are worth re-checking against it -- deliberately not done here, because
+# re-cutting a published city's cell changes which of its rows survive the
+# prune, which is a rebuild of every one of them.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # 5-10 m band 28.4% mutual-NN over n=134, and the marginal table turns at
+    # 6 m: 4->6 removes 86 duplicates for 25 hidden trees (3.44), 6->8 removes
+    # 30 for 43 (0.70).
+    "CAWPG": 6,
+    # 5-10 m band 32.2% over n=273; 4->6 removes 271 duplicates for 115 hidden
+    # (2.36), 6->8 removes 71 for 74 (0.96), 8->10 removes 27 for 52 (0.52).
+    "CAEDM": 6,
+    # Calgary's OSM is unusually well aligned -- 95.6% mutual-NN over 119,718
+    # pairs under 2 m -- but the 2-5 m band is already a coin flip at 49.0%
+    # over n=9,160, because the inventory itself is planted tight: a median
+    # 5.1 m to the nearest other inventory tree, and a quarter within 3.2 m.
+    # The marginal table turns hard: 2->4 removes 5,403 duplicates for 2,546
+    # hidden trees (2.12), 4->6 removes 1,222 for 2,619 (0.47).
+    "CACAL": 4,
     # Tempe is the reference calibration: mutual-NN >=88% below 5 m (99.7%
     # under 2 m), collapsing to 25% in the 5-10 m band.
     "USTEM": 10,
@@ -2171,3 +2210,50 @@ def cm_to_inches(cm) -> float | None:
         return float(cm) / 2.54
     except (ValueError, TypeError):
         return None
+
+
+_UNKNOWN_COMMON_NAMES = frozenset({"n/a", "na", "unknown", "none", "unidentified"})
+
+
+def normalize_tree_name(value: str | None) -> str | None:
+    """A source's common-name field, un-inverted and put into sentence case.
+
+    Municipal inventories very often store the common name inverted so it
+    sorts by genus -- Calgary writes ``ASH, GREEN``, Edmonton ``Spruce,
+    Colorado``, Denver ``Pear, Flowering`` -- and they disagree about casing,
+    sometimes within one column (Winnipeg publishes both ``Colorado blue
+    spruce`` and ``silver maple``).  `tree_name` is what the map's tree card
+    shows above the scientific name, so neither is presentable as written.
+
+    Two steps, and the second is deliberately not reimplemented here: the
+    single-comma form is un-inverted, then `normalize_common_name` from
+    `enrichment._common_name_style` applies the sentence-case convention with
+    its curated proper-noun lists, which is the same rule the enrichment table
+    is held to (see "Common names are sentence case" in AGENTS.md).  A name
+    that comes out wrong is one entry in those lists rather than a per-city
+    special case.
+
+    Only a *single* comma is treated as inversion.  ``Aspen,
+    quaking/trembling`` inverts; a name with two commas is a list and is left
+    alone.
+
+    Examples:
+        "ASH, GREEN"           -> "Green ash"
+        "Spruce, Colorado"     -> "Colorado spruce"
+        "silver maple"         -> "Silver maple"
+        "POPLAR SPECIES"       -> "Poplar species"
+        "N/A"                  -> None
+    """
+    from enrichment._common_name_style import normalize_common_name
+
+    if not value:
+        return None
+    text = " ".join(value.split())
+    if not text or text.lower() in _UNKNOWN_COMMON_NAMES:
+        return None
+    head, sep, tail = text.partition(",")
+    if sep and "," not in tail:
+        head, tail = head.strip(), tail.strip()
+        if head and tail:
+            text = f"{tail} {head}"
+    return normalize_common_name(text)

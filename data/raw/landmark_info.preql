@@ -17,6 +17,9 @@ import grath.athens_landmarks;
 import grmlo.milos_landmarks;
 import grsan.santorini_landmarks;
 import usden.denver_landmarks;
+import cacal.calgary_landmarks;
+import caedm.edmonton_landmarks;
+import cawpg.winnipeg_landmarks;
 
 
 # --- Merged union datasource ---

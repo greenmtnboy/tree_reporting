@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Winnipeg', label: 'City of Winnipeg Open Data - Tree Inventory', url: 'https://data.winnipeg.ca/Parks/Tree-Inventory/hfwk-jp4h' },
+  { city: 'Edmonton', label: 'City of Edmonton Open Data - Trees', url: 'https://data.edmonton.ca/Environmental-Services/Trees/eecg-fc54' },
+  { city: 'Calgary', label: 'City of Calgary Open Data - Public Trees', url: 'https://data.calgary.ca/Environment/Public-Trees/tfs4-3wwa' },
+  { city: 'Winnipeg', label: 'City of Winnipeg Open Data - Tree Inventory', url: 'https://data.winnipeg.ca/Parks/Tree-Inventory/hfwk-jp4h' },
+  { city: 'Edmonton', label: 'City of Edmonton Open Data - Trees', url: 'https://data.edmonton.ca/Environmental-Services/Trees/eecg-fc54' },
+  { city: 'Calgary', label: 'City of Calgary Open Data - Public Trees', url: 'https://data.calgary.ca/Environment/Public-Trees/tfs4-3wwa' },
   { city: 'San Francisco', label: 'SF Open Data Portal', url: 'https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq' },
   { city: 'New York City', label: 'NYC Open Data Street Tree Census', url: 'https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh' },
   { city: 'Boston', label: 'City of Boston Open Data', url: 'https://data.boston.gov/dataset/bprd-trees' },
@@ -50,6 +56,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Winnipeg', label: 'City of Winnipeg Open Data - Historical Resources', url: 'https://data.winnipeg.ca/Heritage/Historical-Resources/ptpx-kgiu' },
+  { city: 'Edmonton', label: 'City of Edmonton Open Data - Register and Inventory of Historic Resources', url: 'https://data.edmonton.ca/City-Administration/The-Register-and-Inventory-of-Historic-Resources-in/jgsn-dhai' },
+  { city: 'Calgary', label: 'City of Calgary Open Data - Historic Resource', url: 'https://data.calgary.ca/Government/Historic-Resource/99yf-6c5u' },
+  { city: 'Winnipeg', label: 'City of Winnipeg Open Data - Historical Resources', url: 'https://data.winnipeg.ca/Heritage/Historical-Resources/ptpx-kgiu' },
+  { city: 'Edmonton', label: 'City of Edmonton Open Data - Register and Inventory of Historic Resources', url: 'https://data.edmonton.ca/City-Administration/The-Register-and-Inventory-of-Historic-Resources-in/jgsn-dhai' },
+  { city: 'Calgary', label: 'City of Calgary Open Data - Historic Resource', url: 'https://data.calgary.ca/Government/Historic-Resource/99yf-6c5u' },
   { city: 'San Francisco', label: 'SF Open Data Portal (Landmarks)', url: 'https://data.sfgov.org/Geographic-Locations-and-Boundaries/Landmarks/rzic-39gi/about_data' },
   { city: 'New York City', label: 'NYC LPC Individual Landmark Sites', url: 'https://data.cityofnewyork.us/Housing-Development/Individual-Landmark-Sites/buis-pvji' },
   { city: 'Boston', label: 'City of Boston Open Data (Landmarks)', url: 'https://data.boston.gov/dataset/92137315-e846-4c75-8c3d-2b7e93e38d03' },

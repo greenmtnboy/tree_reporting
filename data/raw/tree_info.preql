@@ -17,6 +17,9 @@ import grath.athens_tree_info;
 import grmlo.milos_tree_info;
 import grsan.santorini_tree_info;
 import usden.denver_tree_info;
+import cacal.calgary_tree_info;
+import caedm.edmonton_tree_info;
+import cawpg.winnipeg_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -41,6 +44,9 @@ merge grath_source into data_source;
 merge grmlo_source into data_source;
 merge grsan_source into data_source;
 merge usden_source into data_source;
+merge cacal_source into data_source;
+merge caedm_source into data_source;
+merge cawpg_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -75,7 +81,19 @@ ustem_published_data_updated_through,
 grath_published_data_updated_through,
 grmlo_published_data_updated_through,
 grsan_published_data_updated_through,
-usden_published_data_updated_through);
+usden_published_data_updated_through,
+cacal_published_data_updated_through,
+caedm_published_data_updated_through,
+cawpg_published_data_updated_through,
+cacal_published_data_updated_through,
+caedm_published_data_updated_through,
+cawpg_published_data_updated_through,
+cacal_published_data_updated_through,
+caedm_published_data_updated_through,
+cawpg_published_data_updated_through,
+cacal_published_data_updated_through,
+caedm_published_data_updated_through,
+cawpg_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

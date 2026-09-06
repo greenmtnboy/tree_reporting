@@ -18,6 +18,9 @@ Currently has data from the following cities:
 - [Tempe, AZ, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USTEM)
 - [Denver, CO, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USDEN)
 - [Vancouver, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAVAN)
+- [Calgary, AB, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CACAL)
+- [Edmonton, AB, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAEDM)
+- [Winnipeg, MB, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAWPG)
 - [London, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBLON)
 - [Amsterdam, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLAMS)
 - [Berlin, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEBER)
@@ -66,6 +69,9 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Tempe | City of Tempe - Tree Inventory | https://data.tempe.gov/datasets/tempegov::tree-inventory |
 | Denver | Denver Open Data - Parks, Medians, and Parkway Trees | https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::parks-medians-and-parkway-trees |
 | Vancouver | Vancouver Open Data - Public Trees | https://opendata.vancouver.ca/explore/dataset/public-trees/ |
+| Calgary | City of Calgary Open Data - Public Trees | https://data.calgary.ca/Environment/Public-Trees/tfs4-3wwa |
+| Edmonton | City of Edmonton Open Data - Trees | https://data.edmonton.ca/Environmental-Services/Trees/eecg-fc54 |
+| Winnipeg | City of Winnipeg Open Data - Tree Inventory | https://data.winnipeg.ca/Parks/Tree-Inventory/hfwk-jp4h |
 | London | London Datastore - Public Realm Trees | https://data.london.gov.uk/dataset/2r45m |
 | Amsterdam | Amsterdam Data Portal - Bomen (Stamgegevens) | https://api.data.amsterdam.nl/v1/bomen/stamgegevens/ |
 | Berlin | Berlin Geodateninfrastruktur - Baumbestand (WFS) | https://gdi.berlin.de/services/wfs/baumbestand |
@@ -93,6 +99,9 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Tempe | No landmark dataset in production yet | n/a |
 | Denver | Denver Open Data - Historic Landmark Structures | https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::historic-landmarks |
 | Vancouver | Vancouver Open Data - Heritage Sites | https://opendata.vancouver.ca/explore/dataset/heritage-sites/ |
+| Calgary | City of Calgary Open Data - Historic Resource | https://data.calgary.ca/Government/Historic-Resource/99yf-6c5u |
+| Edmonton | City of Edmonton Open Data - Register and Inventory of Historic Resources | https://data.edmonton.ca/City-Administration/The-Register-and-Inventory-of-Historic-Resources-in/jgsn-dhai |
+| Winnipeg | City of Winnipeg Open Data - Historical Resources | https://data.winnipeg.ca/Heritage/Historical-Resources/ptpx-kgiu |
 | London | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |
 | Amsterdam | Amsterdam Data Portal - Monumenten | https://api.data.amsterdam.nl/v1/monumenten/monumenten/ |
 | Berlin | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |

@@ -28,6 +28,9 @@ property <*>.grath_community_data_updated_through datetime; # when approved comm
 property <*>.grmlo_community_data_updated_through datetime; # when approved community submissions for GRMLO are through
 property <*>.grsan_community_data_updated_through datetime; # when approved community submissions for GRSAN are through
 property <*>.usden_community_data_updated_through datetime; # when approved community submissions for USDEN are through
+property <*>.cacal_community_data_updated_through datetime; # when approved community submissions for CACAL are through
+property <*>.caedm_community_data_updated_through datetime; # when approved community submissions for CAEDM are through
+property <*>.cawpg_community_data_updated_through datetime; # when approved community submissions for CAWPG are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

@@ -344,7 +344,9 @@ tick.  Hit the lightest metadata endpoint the portal exposes:
                layer with no editingInfo
     OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{{id}} -> .metas.default.modified
     CKAN       GET /api/3/action/resource_show?id={{id}} -> .result.last_modified
-    Socrata    GET /api/views/{{id}}.json -> .rowsUpdatedAt (unix seconds)
+    Socrata    `_socrata_shared.rows_updated_at(DATASET)` -- reads
+               /api/views/{{id}}.json .rowsUpdatedAt (unix SECONDS, not
+               Esri's milliseconds)
 
 Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
 portal in maintenance answers every path with an HTML holding page and HTTP
@@ -385,7 +387,7 @@ Everything lives in `_osm_shared.extract_city`; this file exists so each city
 has a discoverable entry point and so a city that needs to diverge (a tighter
 bbox, an extra tag) has somewhere to do it.
 
-    cd data/raw && uv run {slug}/{slug}_osm_extract.py
+    cd data/raw && uv run {lc}/{slug}_osm_extract.py
 
 The scheduled `osm-{lc}` [[cloud.job]] is the normal path; this is the manual
 counterpart, for bootstrapping the city before its job is deployed.  Both share
@@ -712,14 +714,20 @@ memory_mb = 1024
 
     # --- frontend ---------------------------------------------------------
     config_path = SRC / "cityConfig.json"
-    config = json.loads(config_path.read_text(encoding="utf-8"))
+    original = config_path.read_text(encoding="utf-8")
+    config = json.loads(original)
     if code not in config:
-        config[code] = {"name": name, "center": [lon, lat]}
-        # Written whole rather than by anchor: it is JSON, and the trailing
-        # entry has no comma, so a textual insert has two shapes to get right.
-        e._pending[config_path] = (
-            json.dumps(config, indent=2, ensure_ascii=False) + "\n"
+        # Appended textually, one line per city, because that is how the file
+        # is written by hand.  Re-serialising it with `json.dumps(indent=2)`
+        # instead puts every `center` coordinate on its own line and drops
+        # trailing zeros (13.4050 -> 13.405), so adding one city arrived as a
+        # 147-line diff that buried the three lines that mattered.
+        entry = (
+            f'  "{code}": {{ "name": {json.dumps(name, ensure_ascii=False)}, '
+            f'"center": [{lon}, {lat}] }}'
         )
+        head = original.rstrip().removesuffix("}").rstrip()
+        e._pending[config_path] = f"{head},\n{entry}\n}}\n"
         e.applied.append(f"{config_path.relative_to(REPO)}: city config")
     else:
         e.skipped.append(f"{config_path.relative_to(REPO)}: city config (already present)")
@@ -791,10 +799,11 @@ def main() -> None:
 {args.code} scaffolded.  What is left is the part that needs judgement:
 
   1. Fill in {args.slug}_tree_info.py and {args.slug}_update_time.py
-     (`_arcgis_shared` covers ArcGIS portals end to end).
+     (`_arcgis_shared` covers ArcGIS portals end to end, `_socrata_shared`
+      Socrata ones).
   2. Find a landmark source and write {args.slug}_landmarks.py + its probe.
   3. Bootstrap the OSM staging object:
-       cd data/raw && uv run {args.slug}/{args.slug}_osm_extract.py
+       cd data/raw && uv run {args.code.lower()}/{args.slug}_osm_extract.py
   4. CALIBRATE the dedup cell size -- do not ship the placeholder:
        uv run osm_dedup_validation.py --city {args.code}
   5. Fill in the two TODO attribution lines in src/src/data/sourceCatalog.ts

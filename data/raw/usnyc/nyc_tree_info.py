@@ -39,6 +39,13 @@ EMIT_ROWS = 100000
 DATASET_PARAMS = {
     "$select": "objectid,genusspecies,dbh,planteddate,location",
     "$limit": str(PAGE_SIZE),
+    # SoQL promises nothing about the order of an unordered result, so paging
+    # it by $offset can repeat or skip rows between requests -- and a short
+    # page from that ends the loop early, which is a silently truncated city.
+    # `:id` is Socrata's system row identifier: always present and stable.
+    # This ingest paged without it for as long as it has existed; see
+    # `_socrata_shared.iter_rows`, which refuses to page without an order.
+    "$order": ":id",
 }
 
 # Socrata exports point columns as WKT: "POINT (lon lat)"

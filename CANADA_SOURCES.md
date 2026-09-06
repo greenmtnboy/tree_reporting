@@ -147,6 +147,97 @@ Two specific traps in that list:
 
 ---
 
+## Status
+
+**Done (this PR):** `_socrata_shared.py`, and Calgary, Edmonton and Winnipeg
+wired onto it -- 1,325,431 trees. The three existing Socrata cities' freshness
+probes moved onto the same module, and New York's ingest gained the `$order`
+its `$offset` paging always needed.
+
+**Next (a second PR):** `_ckan_shared.py` and the four CKAN cities. See the
+handoff below.
+
+---
+
+## Handoff: `_ckan_shared` + the CKAN cities
+
+Toronto, Montreal, Quebec City and Longueuil are all CKAN, which with Boston
+makes five -- past the threshold `EXTENDING.md` sets for writing a shared
+module ("write the module when the third city arrives"). Do the module first,
+the way this PR did for Socrata: it is what turns the fourth and fifth city
+into a thin shim, and it is where the paging and freshness bugs get fixed once.
+
+### The cities
+
+| city | code | portal | dataset | rows | licence |
+|---|---|---|---|---:|---|
+| Toronto | `CATOR` | `ckan0.cf.opendata.inter.prod-toronto.ca` | `street-tree-data`, resource `3dafa392-c6ab-4f37-9bf9-21ddf7308eaf` | 688,335 | not specified |
+| Montreal | `CAMTL` | `donnees.montreal.ca` | `b89fd27d-4b49-461b-8e54-fa2b34a628c4` "Arbres publics sur le territoire de la Ville" | ~330k | CC-BY 4.0 |
+| Quebec City | `CAQUE` | `www.donneesquebec.ca/recherche` | `34103a43-3712-4a29-92e1-039e9188e915` "Arbres repertories" | ~130k | CC-BY 4.0 |
+| Longueuil | `CALON` | `www.donneesquebec.ca/recherche` | `9ed153b2-4751-4e03-862f-6d4027e6f2a6` "Arbres" | ~75k | CC-BY 4.0 |
+
+Quebec City and Longueuil are both on Donnees Quebec, so one host covers two
+cities -- and Repentigny and Saguenay publish there too, if the appetite is
+there for cities CIF never listed.
+
+### What `_ckan_shared.py` should carry
+
+Mirror `_socrata_shared.py`, which mirrors `_arcgis_shared.py`. CKAN's shape:
+
+- **`CkanDataset(host, package_id)`** with `package_show` and `resource_show`
+  endpoints, plus a `datastore_search` / `datastore_search_sql` row reader for
+  the portals that have the datastore enabled (Toronto does) and a CSV/GeoJSON
+  resource reader for those that do not (Donnees Quebec).
+- **`package_metadata` / `resource_last_modified`** -- the freshness watermark.
+  CKAN publishes three plausible stamps and they are not interchangeable:
+  `metadata_modified` on the package moves for a *description* edit,
+  `last_modified` on the resource moves when the file is replaced, and Toronto
+  adds a non-standard `last_refreshed` on the package which is the real one.
+  Prefer the resource's `last_modified`, fall back to the package's
+  `last_refreshed`, then `metadata_modified` -- and raise rather than degrade
+  when none is present, the same rule `rows_updated_at` follows.
+- **`iter_datastore_rows`** with **an explicit sort**, for exactly the reason
+  `iter_rows` requires `$order`: CKAN's `datastore_search` pages by `offset`
+  and guarantees nothing without `sort`. Use `_id`, the datastore's own row
+  key.
+- **`find_tree_datasets(host)`** via `package_search?q=tree` (and `q=arbres`
+  for the francophone portals), with the same canopy exclusion the other two
+  modules need, and a `__main__` so `uv run _ckan_shared.py <host>` is the
+  first step of the runbook.
+
+### Traps already found, so nobody pays for them twice
+
+- **Montreal publishes a consolidated file *and* one file per borough** in the
+  same package. The ingest wants "Inventaire arbres publics - Fichier
+  consolide" only; reading the resource list naively either double-counts or,
+  worse, silently picks one borough.
+- **Toronto's `STRUCTID` is the per-tree id**, not `OBJECTID` -- and check it
+  for nulls and duplicates across the whole 688k before committing, the way
+  Calgary's `wam_id` was checked here. `OBJECTID` is a local row number a
+  republish can reassign.
+- **Toronto's dataset carries no licence.** Ask before publishing, or note the
+  absence in the attribution the way the other rows do.
+- **The Quebec portals are francophone**: `essence`/`essence_latin` for
+  species, `dhp` for diameter (centimetres, like every Canadian portal).
+  `sanitize_species` already strips accents before its rules run, so
+  `Melese` and the rest arrive fine, and `_NON_TAXON_REWRITES` already carries
+  French common names -- but re-run the species sweep against each city's real
+  values before assuming, the way this PR did.
+- **Every Canadian portal publishes DBH in centimetres.** `cm_to_inches`.
+
+### Then the same checklist this PR followed
+
+1. `uv run _ckan_shared.py <host>` to find the dataset.
+2. Check the id column for uniqueness *and* nulls over the whole table.
+3. Resolve the ecoregion at the centroid, measure the coordinate extents from
+   the data rather than guessing `CITY_BOUNDS`.
+4. `uv run new_city.py ...`, then fill the four things it leaves alone.
+5. Bootstrap the OSM staging object, then calibrate the dedup cell
+   (`osm_dedup_validation.py --city CODE`) -- never copy a cell size.
+6. `uv run dedup_cells.py --write`, then `pytest tests -q`.
+
+---
+
 ## Recommended next step
 
 Add the confirmed cities directly with `new_city.py`, largest first. That is
