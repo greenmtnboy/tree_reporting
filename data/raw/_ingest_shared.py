@@ -113,6 +113,10 @@ _SPECIES_PLACEHOLDERS = frozenset(
         "boom", "baum", "privet", "--", "-",
         # Inventories that record "we planted a mix here" rather than a taxon.
         "mixed", "misc", "no",
+        # Alberta's asset systems, where a species was never recorded.  These
+        # describe the *record*, not the site, so they are Unknown rather than
+        # not-a-tree: there is a tree there and nobody wrote down what it is.
+        "not available", "not suitable",
     }
 )
 
@@ -218,6 +222,12 @@ _NON_TAXON_REWRITES: dict[str, str | None] = {
     "norway": None, "oak": None, "ontario": None, "pear": None, "red": None,
     "redwood": None, "siberian": None, "thornless": None, "white": None,
     "willow": None,
+    # Prairie-Canadian names that do name a genus, so the genus is kept.  Same
+    # shape as "Callistemon king" below: the source recorded something real,
+    # it just recorded it in English.
+    "chokecherry": "Prunus",   # Prunus virginiana
+    "mayday": "Prunus",        # Prunus padus, the mayday tree
+    "crabapple": "Malus",
     # The same thing in the languages the wired cities publish in.  Accents are
     # already stripped by the time this is consulted, so the keys are ASCII.
     "birke": None,          # de: birch
