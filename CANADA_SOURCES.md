@@ -149,13 +149,88 @@ Two specific traps in that list:
 
 ## Status
 
-**Done (this PR):** `_socrata_shared.py`, and Calgary, Edmonton and Winnipeg
+**Done (PR 1):** `_socrata_shared.py`, and Calgary, Edmonton and Winnipeg
 wired onto it -- 1,325,431 trees. The three existing Socrata cities' freshness
 probes moved onto the same module, and New York's ingest gained the `$order`
 its `$offset` paging always needed.
 
-**Next (a second PR):** `_ckan_shared.py` and the four CKAN cities. See the
-handoff below.
+**Done (PR 2):** `_ckan_shared.py`, with Toronto, Montreal, Quebec City and
+Longueuil wired onto it and Boston's probe moved across -- 1,278,553 trees. All
+four CKAN cities in the handoff below. Longueuil publishes no tree id and is
+the one city here with a **synthesised** one; see "Longueuil" below for what
+that costs and why it was taken anyway.
+
+**Next (a third PR):** the ArcGIS cities, which are 16 of the 23 confirmed and
+already have `_arcgis_shared.py` under them. Then the snowflakes -- Burlington
+ON (common name only) and Fredericton (no DBH).
+
+### What PR 2 measured that the handoff got wrong
+
+Two of the notes below were written from a first look and did not survive
+contact:
+
+- **The freshness watermark is a maximum, not a preference order.** The
+  handoff said to prefer the resource's `last_modified`. Toronto's datastore is
+  updated in place, so that stamp still reads **2022-05-02** while the data was
+  refreshed 2026-06-04 -- following the handoff would have frozen Toronto's
+  parquet on its first build and never rebuilt it. Boston's datastore resource
+  stamp, on the same CKAN version, does move. `data_last_modified` takes the
+  later of the resource stamp and the package's `last_refreshed`, and keeps
+  `metadata_modified` as a last resort only, since that one moves for a
+  description edit.
+
+- **`datastore_search_sql` cannot be relied on.** Toronto answers it with a
+  404 and Donnees Quebec rejects a `CAST` with a 403. The paged
+  `datastore_search` is the row reader for every datastore-backed resource.
+
+- **Not every CKAN portal has a datastore.** Longueuil has none at all, so the
+  module also carries `read_geojson_features` for a plain file resource. A CSV
+  or shapefile resource still has no reader; that waits for a source needing
+  one.
+
+And one the handoff did not anticipate at all:
+
+- **CKAN silently caps `limit` at 32,000** (`ckan.datastore.search.rows_max`)
+  on all four portals, exactly as ArcGIS caps `maxRecordCount`. A loop that
+  ends on a short page therefore ends after *one* page whenever the caller asks
+  for more -- Toronto would have published 32,000 of its 688,335 trees and
+  looked like a portal that shrank. CKAN echoes the applied `limit` and reports
+  `total`, so `iter_datastore_rows` takes its page size from the response and
+  terminates on `total`, never on a short page.
+
+### Longueuil: no published id, and the exception that was made for it
+
+Longueuil publishes exactly one tree dataset on Donnees Quebec (`package_search`
+for "arbres Longueuil" returns one result), and **it carries no tree id of any
+kind**. The GeoJSON's 99,345 features have exactly two properties, `Espece` and
+`Diametre_Tronc`, and no feature-level `id` member; the shapefile is an older
+63,773-record extract of the same two fields; the KMZ's `kml_1`, `kml_2` are
+sequence numbers its exporter assigns, which is the `OBJECTID` trap rather than
+an id. The city runs no ArcGIS or WFS service. There is nothing else to read.
+
+That is blocker #1 from the CIF verdict at the top of this file: `tree_id` is
+the declared grain and `enforce_tree_schema` refuses a null or duplicate one.
+The first pass therefore dropped the city. **That call was reversed**: 97,475
+mapped trees beat zero, and the cost of the alternative is bounded and
+measurable. `calon/longueuil_tree_info.py` carries the full reasoning; in
+short:
+
+- **The id is the rounded coordinate and nothing else**, because position is
+  the most stable thing the source has. Folding `Diametre_Tronc` into the key
+  would churn the id of every re-measured tree, and re-measuring is what a tree
+  inventory is for.
+- **Rounded to 7 dp (~1 cm), because the portal already publishes two
+  precisions** -- the same tree is `-73.50224994604028` in the GeoJSON and
+  `-73.5022499460403` in the KMZ. An unrounded key would have churned the day
+  someone regenerated the export with a different writer.
+- **Stacked coordinates are dropped, not resolved.** 662 coordinates carry more
+  than one tree and one carries 58 -- trees never individually surveyed, mapped
+  to a block or park centroid. 1,870 rows, 1.9% of the file.
+
+The exception is worth naming as an exception: this is the only city on the map
+whose `tree_id` the publisher cannot confirm, and a community check-in recorded
+against one is orphaned if Longueuil ever corrects that coordinate. If the city
+ever publishes an id, switch to it and accept the one-time churn.
 
 ---
 
@@ -179,6 +254,11 @@ into a thin shim, and it is where the paging and freshness bugs get fixed once.
 Quebec City and Longueuil are both on Donnees Quebec, so one host covers two
 cities -- and Repentigny and Saguenay publish there too, if the appetite is
 there for cities CIF never listed.
+
+> **Read the Status section above before this one.** The handoff below is
+> kept as written, because it is what the work was planned from; three of its
+> notes turned out to be wrong or incomplete and the corrections are recorded
+> up there rather than edited in here.
 
 ### What `_ckan_shared.py` should carry
 

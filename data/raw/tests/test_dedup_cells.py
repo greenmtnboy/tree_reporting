@@ -42,10 +42,13 @@ def test_cell_is_a_calibrated_size(code: str):
     A typo guard, not a ceiling.  The sizes come from two readings in
     `osm_dedup_validation.py`: the band table, whose guarantees of 2/5/10 m
     give a 4, 10 or 20 m cell, and the marginal table, which measures false
-    flags directly and picked 4 m for Calgary and 6 m for Edmonton and
-    Winnipeg -- every one of them under what the bands alone suggested.
+    flags directly and picked 4 m for Calgary, 6 m for Edmonton, Winnipeg,
+    Toronto and Montreal, and 8 m for Quebec City -- every one of them under
+    what the bands alone suggested.  8 was already named as the marginal
+    table's answer for San Francisco in DEDUP_CELL_RECALIBRATION.md before any
+    city carried it.
     """
-    assert DEDUP_CELL_METRES[code] in (4, 6, 10, 20)
+    assert DEDUP_CELL_METRES[code] in (4, 6, 8, 10, 20)
 
 
 @pytest.mark.parametrize("code", sorted(DEDUP_CELL_METRES))

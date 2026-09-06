@@ -89,10 +89,41 @@ class Edits:
         self._pending[path] = text.replace(anchor, anchor + addition)
         self.applied.append(f"{path.relative_to(REPO)}: {what}")
 
-    def sub_once(self, path: Path, pattern: str, repl: str, *, what: str, marker: str) -> None:
-        """Regex-substitute one occurrence, unless *marker* is already present."""
+    def sub_once(
+        self,
+        path: Path,
+        pattern: str,
+        repl: str,
+        *,
+        what: str,
+        marker: str,
+        scope: str | None = None,
+    ) -> None:
+        """Regex-substitute one occurrence, unless *marker* is already present.
+
+        *scope* narrows where the marker is looked for, to the text from the
+        first match of that regex to the end of the enclosing `[...]` or
+        `(...)`.  A file with two lists of the same shape needs it: the
+        attribution catalog holds `{ city: 'Calgary', ... }` in both
+        TREE_INVENTORY_SOURCES and LANDMARK_SOURCES, so a whole-file marker
+        cannot say which list this city is already in -- it either skips the
+        second edit or, if the marker is written narrowly enough to avoid
+        that, stops matching once a person replaces the placeholder text and
+        re-adds the row.  Calgary, Edmonton and Winnipeg each ended up in both
+        lists twice that way, and the Info page rendered them twice.
+        """
         text = self._text(path)
-        if marker in text:
+        haystack = text
+        if scope is not None:
+            found = re.search(scope, text)
+            if found is None:
+                raise SystemExit(
+                    f"{path.relative_to(REPO)}: could not scope {what} -- "
+                    f"{scope!r} matched nothing"
+                )
+            end = text.find("\n]", found.end())
+            haystack = text[found.start() : end if end != -1 else len(text)]
+        if marker in haystack:
             self.skipped.append(f"{path.relative_to(REPO)}: {what} (already present)")
             return
         new, n = re.subn(pattern, repl, text, count=1)
@@ -593,7 +624,11 @@ def build(args) -> Edits:
         shared,
         r"(DEDUP_CELL_METRES: dict\[str, int\] = \{\n)",
         rf'\1    # NOT YET CALIBRATED: default; measure after the first build.\n    "{code}": 10,\n',
-        what="DEDUP_CELL_METRES", marker=f'"{code}": 10',
+        # Any value, not the placeholder 10: calibrating the city is the whole
+        # point of the placeholder, and a marker that only recognises the
+        # uncalibrated form makes a re-run insert a second, duplicate key.
+        what="DEDUP_CELL_METRES", marker=f'"{code}":',
+        scope=r"DEDUP_CELL_METRES: dict\[str, int\] = \{",
     )
 
     # --- _osm_shared.py ---------------------------------------------------
@@ -649,12 +684,21 @@ def build(args) -> Edits:
         what="landmark freshness property",
         marker=f"property <*>.{lc}_landmark_data_updated_through",
     )
+    # The marker must NOT carry the closing paren.  A term is appended last,
+    # so `{lc}_..._through)` matches only while this city is still the last
+    # term -- add another city and the check stops recognising this one, and
+    # a re-run appends it again.  That is not hypothetical: CACAL, CAEDM and
+    # CAWPG each appear four times in the greatest() this scaffolder wrote,
+    # here and in tree_info.preql.  Harmless arithmetic (greatest(a, b, b) is
+    # greatest(a, b)) and unbounded growth, so it is fixed rather than left.
+    # `, {lc}_..._through` is unambiguous wherever the term sits, and the
+    # leading comma keeps it from matching the `property <*>.` declaration.
     e.sub_once(
         landmark_common,
         r"(auto latest_landmark_update_through <- greatest\([^)]*)\)",
         rf"\1, {lc}_landmark_data_updated_through)",
         what="latest_landmark_update_through",
-        marker=f"{lc}_landmark_data_updated_through)",
+        marker=f", {lc}_landmark_data_updated_through",
     )
 
     # --- cross-city models ------------------------------------------------
@@ -681,7 +725,8 @@ def build(args) -> Edits:
         tree_info,
         r"(auto latest_update_through <- greatest\([^)]*)\)",
         rf"\1,\n{lc}_published_data_updated_through)",
-        what="latest_update_through", marker=f"{lc}_published_data_updated_through)",
+        # Not `..._through)` -- see the note on latest_landmark_update_through.
+        what="latest_update_through", marker=f",\n{lc}_published_data_updated_through",
     )
     e.sub_once(
         RAW / "full_tree_publish.preql",
@@ -753,13 +798,17 @@ memory_mb = 1024
         SRC / "data" / "sourceCatalog.ts",
         r"(export const TREE_INVENTORY_SOURCES: CitySourceLink\[\] = \[\n)",
         rf"\1  {{ city: '{name}', label: 'TODO: {name} tree inventory source', url: 'TODO' }},\n",
-        what="tree source attribution", marker=f"city: '{name}', label: 'TODO: {name} tree",
+        what="tree source attribution", marker=f"city: '{name}',",
+        # Scoped, so filling in the placeholder does not make a re-run add a
+        # second row -- see Edits.sub_once.
+        scope=r"export const TREE_INVENTORY_SOURCES: CitySourceLink\[\] = \[",
     )
     e.sub_once(
         SRC / "data" / "sourceCatalog.ts",
         r"(export const LANDMARK_SOURCES: CitySourceLink\[\] = \[\n)",
         rf"\1  {{ city: '{name}', label: 'TODO: {name} landmark source' }},\n",
-        what="landmark source attribution", marker=f"city: '{name}', label: 'TODO: {name} landmark",
+        what="landmark source attribution", marker=f"city: '{name}',",
+        scope=r"export const LANDMARK_SOURCES: CitySourceLink\[\] = \[",
     )
     return e
 
