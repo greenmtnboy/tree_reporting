@@ -44,6 +44,7 @@ is used today by Boston's CSV ingest.
 
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -381,8 +382,7 @@ def iter_datastore_rows(
 
 
 def _json_filters(filters: dict) -> str:
-    import json
-
+    """CKAN takes `filters` as a JSON object in the query string."""
     return json.dumps(filters)
 
 
@@ -412,8 +412,6 @@ def point_lon_lat(value) -> tuple[float | None, float | None]:
         if not text:
             return None, None
         if text.startswith("{"):
-            import json
-
             try:
                 value = json.loads(text)
             except ValueError:
