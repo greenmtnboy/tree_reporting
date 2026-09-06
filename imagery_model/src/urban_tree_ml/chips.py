@@ -12,6 +12,7 @@ from pyproj import Transformer
 from urban_tree_ml.config import ProjectConfig, normalization_path
 from urban_tree_ml.feedback import load_training_feedback
 from urban_tree_ml.targets import (
+    DetectionMaskRegion,
     PointLabel,
     build_targets,
     find_collision_groups,
@@ -95,6 +96,8 @@ def build_chips(
         )
         for correction in point_correction_records
     }
+    feedback_region_records = feedback.get("region_overrides", []) if feedback is not None else []
+    feedback_regions: list[dict[str, object]] = []
     # Random reads across a large COG can otherwise let GDAL consume a substantial
     # fraction of host memory. A small cache is enough for 256-pixel windows and
     # keeps local preparation reliable on memory-constrained machines.
@@ -106,6 +109,26 @@ def build_chips(
                 f"configured band {max(config.imagery.bands)} exceeds raster count {source.count}"
             )
         transformer = Transformer.from_crs("EPSG:4326", source.crs, always_xy=True)
+        for region in feedback_region_records:
+            center_x, center_y = transformer.transform(
+                float(region["anchor_longitude"]),
+                float(region["anchor_latitude"]),
+            )
+            center_col, center_row = (~source.transform) * (
+                center_x + float(region["east_m"]),
+                center_y + float(region["north_m"]),
+            )
+            feedback_regions.append(
+                {
+                    "region_id": str(region["region_id"]),
+                    "mode": str(region["mode"]),
+                    "splits": {str(split) for split in region["splits"]},
+                    "pixel_col": float(center_col),
+                    "pixel_row": float(center_row),
+                    "radius_px": float(region["radius_m"])
+                    / config.imagery.resolution_m,
+                }
+            )
         source_xs, source_ys = transformer.transform(
             frame["longitude"].to_numpy(), frame["latitude"].to_numpy()
         )
@@ -239,6 +262,23 @@ def build_chips(
                 (float(row.pixel_col - col_off), float(row.pixel_row - row_off))
                 for row in group[group["feedback_excluded"]].itertuples(index=False)
             ]
+            split = str(splits[0])
+            mask_regions = [
+                DetectionMaskRegion(
+                    x=float(region["pixel_col"]) - col_off,
+                    y=float(region["pixel_row"]) - row_off,
+                    radius=float(region["radius_px"]),
+                    mode=str(region["mode"]),
+                )
+                for region in feedback_regions
+                if split in region["splits"]
+                and float(region["pixel_col"]) + float(region["radius_px"]) >= col_off
+                and float(region["pixel_col"]) - float(region["radius_px"])
+                < col_off + chip_pixels
+                and float(region["pixel_row"]) + float(region["radius_px"]) >= row_off
+                and float(region["pixel_row"]) - float(region["radius_px"])
+                < row_off + chip_pixels
+            ]
             targets = build_targets(
                 chip_pixels,
                 chip_pixels,
@@ -251,6 +291,7 @@ def build_chips(
                 valid_mask=valid_mask,
                 ndvi=ndvi,
                 ignored_locations=ignored_locations,
+                mask_regions=mask_regions,
                 background_mode=config.targets.background_mode,
                 background_ndvi_max=config.targets.background_ndvi_max,
                 collision_policy=config.targets.collision_policy,
@@ -263,7 +304,6 @@ def build_chips(
                 raise RuntimeError("collision exclusion accounting differs from target generation")
             collision_cells += target_collision_cells
             collision_excluded_points += target_collision_excluded
-            split = str(splits[0])
             if split == "train":
                 if channel_sum is None:
                     channel_sum = np.zeros(image.shape[0], dtype=np.float64)
@@ -296,6 +336,7 @@ def build_chips(
                     "collision_cell_count": target_collision_cells,
                     "collision_excluded_count": target_collision_excluded,
                     "feedback_ignored_count": len(ignored_locations),
+                    "feedback_region_count": len(mask_regions),
                     "valid_fraction": valid_fraction,
                     "row_offset": row_off,
                     "column_offset": col_off,
@@ -399,6 +440,10 @@ def build_chips(
         },
         "feedback_excluded_points": int(frame["feedback_excluded"].sum()),
         "feedback_point_corrected_points": int(frame["feedback_point_corrected"].sum()),
+        "feedback_mask_regions": len(feedback_regions),
+        "feedback_region_chip_intersections": sum(
+            int(record["feedback_region_count"]) for record in records
+        ),
         "source_raster": str(source_path.resolve()),
         "manifest": str(manifest_path),
         "normalization": str(output_root / "normalization.json"),

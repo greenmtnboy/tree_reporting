@@ -23,6 +23,12 @@ def _write_review_manifest(review_dir: Path, raster: Path) -> None:
         {"sample_id": "test-offset", "tree_id": "f", "split": "test"},
         {"sample_id": "train-duplicate", "tree_id": "g", "split": "train"},
     ]
+    for sample in samples:
+        sample["scene_id"] = (
+            "scene-test" if sample["split"] == "test" else f"scene-{sample['split']}"
+        )
+        sample["longitude"] = -71.1
+        sample["latitude"] = 42.3
     (review_dir / "manifest.json").write_text(
         json.dumps(
             {
@@ -34,6 +40,9 @@ def _write_review_manifest(review_dir: Path, raster: Path) -> None:
                 "scenes": [
                     {
                         "scene_id": "scene-train",
+                        "splits": ["train"],
+                        "image_width": 128,
+                        "image_height": 128,
                         "sample_ids": [
                             "train-aligned",
                             "train-offset",
@@ -43,9 +52,18 @@ def _write_review_manifest(review_dir: Path, raster: Path) -> None:
                     },
                     {
                         "scene_id": "scene-validation",
+                        "splits": ["validation"],
+                        "image_width": 128,
+                        "image_height": 128,
                         "sample_ids": ["validation-offset", "validation-uncertain"],
                     },
-                    {"scene_id": "scene-test", "sample_ids": ["test-offset"]},
+                    {
+                        "scene_id": "scene-test",
+                        "splits": ["test"],
+                        "image_width": 128,
+                        "image_height": 128,
+                        "sample_ids": ["test-offset"],
+                    },
                 ],
             }
         ),
@@ -87,6 +105,20 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
                     "completed_at": "2026-09-03T15:00:00+00:00",
                 }
             },
+            "mask_regions": [
+                {
+                    "region_id": "region-protect-1",
+                    "scene_id": "scene-train",
+                    "anchor_sample_id": "train-aligned",
+                    "mode": "protect",
+                    "image_x": 64,
+                    "image_y": 64,
+                    "east_m": 3.0,
+                    "north_m": -2.0,
+                    "radius_m": 5.0,
+                    "source": "human",
+                }
+            ],
         },
     )
 
@@ -121,7 +153,22 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
             "tree_id": "c",
         },
     ]
+    assert feedback["region_overrides"] == [
+        {
+            "anchor_latitude": 42.3,
+            "anchor_longitude": -71.1,
+            "east_m": 3.0,
+            "mode": "protect",
+            "north_m": -2.0,
+            "radius_m": 5.0,
+            "region_id": "region-protect-1",
+            "scene_id": "scene-train",
+            "source": "human",
+            "splits": ["train"],
+        }
+    ]
     assert result["point_corrected_points"] == 2
+    assert result["mask_regions"] == 1
     assert result["completed_scenes"] == 1
     assert load_persisted_reviews(review_dir)["reviews"]["validation-uncertain"] == {
         "status": "uncertain",
@@ -134,6 +181,7 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
             "completed_at": "2026-09-03T15:00:00+00:00",
         }
     }
+    assert load_persisted_reviews(review_dir)["mask_regions"][0]["mode"] == "protect"
     assert feedback["reviews"]["completed_scenes"] == 1
     assert feedback["reviews"]["source_counts"]["heuristic"] == 1
     assert feedback["reviews"]["heuristic_counts"] == {"fixture-heuristic-v1": 1}
@@ -148,6 +196,7 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
     assert bundle_dir == tmp_path / "annotations" / "ussfo" / "fixture-review"
     assert bundle["feedback_current"] is True
     assert bundle["summary"]["completed_scenes"] == 1
+    assert bundle["summary"]["mask_regions"] == 1
     assert set(bundle["files"]) == {
         "manifest.json",
         "reviews.json",

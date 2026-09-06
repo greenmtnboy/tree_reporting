@@ -262,6 +262,10 @@ def _render_grouped_registration_html(
     .prediction-marker {{ display: none; position: absolute; width: 13px; height: 13px; padding: 0;
       border: 2px solid #250725; border-radius: 50%; transform: translate(-50%, -50%);
       background: #ed55e8e6; box-shadow: 0 0 0 1px #f8d8f6cc; cursor: help; z-index: 7; }}
+    .prediction-marker.penalized {{ outline: 2px solid #ff4055; outline-offset: 2px; }}
+    .prediction-marker.ignored {{ outline: 2px solid #35e5ee; outline-offset: 2px; }}
+    .prediction-marker.near-positive {{ outline: 2px dashed #ffd166; outline-offset: 2px; }}
+    .prediction-marker.positive {{ outline: 2px solid #65e486; outline-offset: 2px; }}
     .card.fullscreen .prediction-marker {{ display: block; }}
     .prediction-badge {{ color: #f7a3f2; border-color: #9b4b97; }}
     .tree-species-label {{ display: none; position: absolute; z-index: 2; max-width: 150px;
@@ -279,6 +283,12 @@ def _render_grouped_registration_html(
     .tree-marker.heuristic-suggestion {{ box-shadow: 0 0 0 3px #ffcf66, 0 0 0 5px #17140d; z-index: 6; }}
     .tree-marker.active {{ box-shadow: 0 0 0 3px #fff, 0 0 0 5px #102016; z-index: 5; }}
     .image-wrap.multi-select {{ cursor: not-allowed; }}
+    .image-wrap.region-drawing {{ cursor: crosshair; touch-action: none; }}
+    .loss-region {{ position: absolute; padding: 0; border-radius: 50%; transform: translate(-50%, -50%);
+      z-index: 1; box-shadow: 0 0 0 1px #07110dcc; }}
+    .loss-region.protect {{ border: 2px solid #35e5ee; background: #35e5ee24; }}
+    .loss-region.confirmed-background {{ border: 2px solid #ff4055; background: #ff405524; }}
+    .loss-region.draft {{ border-style: dashed; pointer-events: none; z-index: 8; }}
     .picked {{ display: none; position: absolute; width: 18px; height: 18px; border: 2px solid #ffe34e;
       transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; z-index: 4;
       box-shadow: 0 0 0 1px #111; }}
@@ -305,12 +315,19 @@ def _render_grouped_registration_html(
     .actions {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(82px, 1fr)); gap: 5px; padding: 10px 12px; }}
     .actions button {{ min-height: 40px; padding: 6px 3px; font-size: 12px; }}
     .actions button.active {{ background: #d5ebda; border-color: #d5ebda; color: #102016; }}
+    .mask-actions {{ display: none; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 6px;
+      padding: 0 12px 10px; }}
+    .mask-actions button {{ min-height: 40px; }}
+    .mask-actions button.active {{ color: #07110d; font-weight: 700; }}
+    .mask-protect.active {{ border-color: #35e5ee; background: #35e5ee; }}
+    .mask-background.active {{ border-color: #ff6575; background: #ff6575; }}
+    .mask-hint {{ grid-column: 1 / -1; color: #aebfb3; font-size: 11px; line-height: 1.35; }}
     .offset-hint {{ color: #ffe6a3; }}
     textarea {{ width: calc(100% - 24px); min-height: 48px; margin: 0 12px 12px; resize: vertical;
       border: 1px solid #3b5144; border-radius: 6px; padding: 7px; color: #eef5ef; background: #101713; }}
     .card.fullscreen {{ position: fixed; inset: 0; z-index: 100; display: grid; overflow: auto;
-      grid-template-columns: minmax(0, 1fr) minmax(330px, 420px); grid-template-rows: auto auto auto auto 1fr;
-      grid-template-areas: "head head" "image list" "image details" "image actions" "image note";
+      grid-template-columns: minmax(0, 1fr) minmax(330px, 420px); grid-template-rows: auto auto auto auto auto 1fr;
+      grid-template-areas: "head head" "image list" "image details" "image actions" "image mask" "image note";
       border: 0; border-radius: 0; background: #101713; }}
     .card.fullscreen .card-head {{ grid-area: head; border-bottom: 1px solid #30443a; }}
     .card.fullscreen .fullscreen-only {{ display: inline-block; }}
@@ -320,6 +337,7 @@ def _render_grouped_registration_html(
     .card.fullscreen .tree-list {{ grid-area: list; padding-top: 14px; }}
     .card.fullscreen .details {{ grid-area: details; }}
     .card.fullscreen .actions {{ grid-area: actions; }}
+    .card.fullscreen .mask-actions {{ grid-area: mask; display: grid; }}
     .card.fullscreen textarea {{ grid-area: note; align-self: start; }}
     .street-view-panel {{ display: none; min-width: 200px; min-height: 420px; overflow: hidden;
       border: 1px solid #30443a; border-radius: 8px; background: #0b110e; }}
@@ -331,13 +349,13 @@ def _render_grouped_registration_html(
     .street-view-frame {{ display: block; width: 100%; height: 100%; min-height: 378px; border: 0; }}
     .street-view-frame.locked {{ pointer-events: none; }}
     .card.fullscreen.street-view-open {{ grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr) minmax(330px, 400px);
-      grid-template-areas: "head head head" "image street list" "image street details" "image street actions" "image street note"; }}
+      grid-template-areas: "head head head" "image street list" "image street details" "image street actions" "image street mask" "image street note"; }}
     .card.fullscreen.street-view-open .image-wrap {{ width: min(calc(50vw - 205px), calc(100vh - 72px)); }}
     .card.fullscreen.street-view-open .street-view-panel {{ grid-area: street; display: block; align-self: stretch; }}
     .hidden {{ display: none; }}
     @media (max-width: 1100px) {{
       .card.fullscreen.street-view-open {{ grid-template-columns: minmax(0, 1fr) minmax(330px, 420px);
-        grid-template-areas: "head head" "street list" "street details" "street actions" "street note"; }}
+        grid-template-areas: "head head" "street list" "street details" "street actions" "street mask" "street note"; }}
       .card.fullscreen.street-view-open .image-wrap {{ display: none; }}
     }}
     @media (max-width: 850px) {{
@@ -361,6 +379,8 @@ def _render_grouped_registration_html(
         <li><strong>Uncertain:</strong> use this when a small, shadowed, overhung, merged, or off-nadir tree cannot be located confidently. It will be excluded from supervision.</li>
         <li><strong>Not tree:</strong> use only when you are confident no matching tree existed when the imagery was captured. Unnumbered nearby trees are outside this inventory review.</li>
         <li><strong>Duplicate:</strong> the point repeats another numbered inventory record for the same physical tree. Keep one record aligned or offset, and mark only the extra record(s) duplicate.</li>
+        <li><strong>Protect area:</strong> draw around plausible vegetation or an unlabeled tree to make its center loss-free. This does not add a tree label.</li>
+        <li><strong>Confirmed background:</strong> draw only where you are confident there is no tree; predictions there receive normal negative center loss. Manual regions are visible in cyan/red and apply across intersecting chips after finalization.</li>
         <li><strong>Non-vegetation helper:</strong> “Check non-veg” previews conservative low-NIR gray candidates in gold. Review the highlights, then explicitly apply them as uncertain; they never become hard not-tree negatives.</li>
         <li><strong>Coordinate stacks:</strong> exact lat/lon stacks are hidden by default. Unresolved stacks are excluded by target collision handling; show them when you want to split resolvable records with explicit offsets.</li>
         <li><strong>Bulk review:</strong> Shift-click markers or numbered buttons to add or remove trees from the selection, or use <em>Select all</em>. A/N/U/D mark the selected trees aligned/not-tree/uncertain/duplicate in full-screen mode. Center marking and notes are disabled while several trees are selected.</li>
@@ -411,6 +431,9 @@ def _render_grouped_registration_html(
       && Object.prototype.hasOwnProperty.call(storedState, "reviews");
     let reviews = hasWrappedState ? (storedState.reviews || {{}}) : (storedState || {{}});
     let sceneReviews = hasWrappedState ? (storedState.scene_reviews || {{}}) : {{}};
+    let maskRegions = hasWrappedState ? (storedState.mask_regions || []) : [];
+    const regionModeByScene = {{}};
+    const regionDraftByScene = {{}};
     const suggestedByScene = {{}};
     const streetViewMetadataCache = new Map();
     let syncTimer = null;
@@ -443,10 +466,12 @@ def _render_grouped_registration_html(
       const sync = document.getElementById("sync");
       try {{
         const response = await fetch("/api/reviews", {{method: "PUT", headers: {{"Content-Type": "application/json"}},
-          body: JSON.stringify({{schema_version: 1, metadata, reviews, scene_reviews: sceneReviews}})}});
+          body: JSON.stringify({{schema_version: 1, metadata, reviews, scene_reviews: sceneReviews,
+            mask_regions: maskRegions}})}});
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || `HTTP ${{response.status}}`);
-        sync.textContent = `Saved ${{result.reviews}} tree reviews · ${{result.completed_scenes}} images done · durable snapshot updated`;
+        sync.textContent = `Saved ${{result.reviews}} tree reviews · ${{result.mask_regions}} mask areas · ` +
+          `${{result.completed_scenes}} images done · durable snapshot updated`;
         return true;
       }} catch (error) {{
         sync.textContent = location.protocol === "file:" ? "Local only — serve the UI to auto-save" : `Save failed: ${{error.message}}`;
@@ -454,7 +479,8 @@ def _render_grouped_registration_html(
       }}
     }}
     function storeLocalState() {{
-      localStorage.setItem(storageKey, JSON.stringify({{reviews, scene_reviews: sceneReviews}}));
+      localStorage.setItem(storageKey, JSON.stringify({{reviews, scene_reviews: sceneReviews,
+        mask_regions: maskRegions}}));
     }}
     function persist() {{
       storeLocalState(); update();
@@ -538,6 +564,86 @@ def _render_grouped_registration_html(
       if (done) sceneReviews[sceneId] = {{done: true, completed_at: new Date().toISOString()}};
       else delete sceneReviews[sceneId];
       persist();
+    }}
+    function regionPixelScaleM(sample) {{
+      const columnScale = Math.hypot(sample.transform_a, sample.transform_d);
+      const rowScale = Math.hypot(sample.transform_b, sample.transform_e);
+      return (columnScale + rowScale) / 2;
+    }}
+    function setRegionMode(sceneId, mode) {{
+      regionModeByScene[sceneId] = regionModeByScene[sceneId] === mode ? null : mode;
+      delete regionDraftByScene[sceneId];
+      update();
+    }}
+    function removeMaskRegion(regionId) {{
+      maskRegions = maskRegions.filter(region => region.region_id !== regionId);
+      persist();
+    }}
+    function removeLastMaskRegion(sceneId) {{
+      const index = maskRegions.findLastIndex(region => region.scene_id === sceneId);
+      if (index < 0) return;
+      maskRegions.splice(index, 1);
+      persist();
+    }}
+    function finishMaskRegion(sceneId, x, y, radiusPx) {{
+      const scene = scenesById[sceneId];
+      const anchorSampleId = activeByScene[sceneId] || scene.sample_ids[0];
+      const anchor = samplesById[anchorSampleId];
+      const mode = regionModeByScene[sceneId];
+      if (!anchor || !mode) return;
+      const pixelScaleM = regionPixelScaleM(anchor);
+      const defaultRadiusPx = 5 / pixelScaleM;
+      const finalRadiusPx = radiusPx >= 3 ? radiusPx : defaultRadiusPx;
+      const dx = x - anchor.target_x, dy = y - anchor.target_y;
+      const regionId = globalThis.crypto?.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `region-${{Date.now()}}-${{Math.random().toString(16).slice(2)}}`;
+      maskRegions.push({{
+        region_id: regionId,
+        scene_id: sceneId,
+        anchor_sample_id: anchorSampleId,
+        mode,
+        image_x: x,
+        image_y: y,
+        east_m: anchor.transform_a * dx + anchor.transform_b * dy,
+        north_m: anchor.transform_d * dx + anchor.transform_e * dy,
+        radius_m: finalRadiusPx * pixelScaleM,
+        source: "human",
+        created_at: new Date().toISOString(),
+      }});
+      regionModeByScene[sceneId] = null;
+      delete regionDraftByScene[sceneId];
+      persist();
+    }}
+    function renderMaskRegions(card, scene) {{
+      const wrap = card.querySelector(".image-wrap");
+      wrap.querySelectorAll(".loss-region").forEach(region => region.remove());
+      const visibleRegions = maskRegions.filter(region => region.scene_id === scene.scene_id);
+      const draft = regionDraftByScene[scene.scene_id];
+      const draw = (region, isDraft = false) => {{
+        const marker = document.createElement(isDraft ? "span" : "button");
+        marker.className = `loss-region ${{region.mode}}${{isDraft ? " draft" : ""}}`;
+        const anchor = samplesById[region.anchor_sample_id] || samplesById[activeByScene[scene.scene_id]];
+        const radiusPx = isDraft ? region.radius_px : Number(region.radius_m) / regionPixelScaleM(anchor);
+        marker.style.left = `${{100 * Number(region.image_x) / scene.image_width}}%`;
+        marker.style.top = `${{100 * Number(region.image_y) / scene.image_height}}%`;
+        marker.style.width = `${{200 * radiusPx / scene.image_width}}%`;
+        marker.style.height = `${{200 * radiusPx / scene.image_height}}%`;
+        const label = region.mode === "protect" ? "Loss-free protected area" : "Confirmed background";
+        marker.title = isDraft ? `${{label}} · drag to size` : `${{label}} · ${{Number(region.radius_m).toFixed(1)}} m radius · click to remove`;
+        marker.setAttribute("aria-label", marker.title);
+        if (!isDraft) {{
+          marker.type = "button";
+          marker.addEventListener("pointerdown", event => event.stopPropagation());
+          marker.addEventListener("click", event => {{
+            event.stopPropagation();
+            if (confirm(`Remove this ${{label.toLowerCase()}}?`)) removeMaskRegion(region.region_id);
+          }});
+        }}
+        wrap.append(marker);
+      }};
+      visibleRegions.forEach(region => draw(region));
+      if (draft) draw({{...draft, anchor_sample_id: activeByScene[scene.scene_id]}}, true);
     }}
     function externalStreetViewUrl(sample) {{
       const parameters = new URLSearchParams({{
@@ -677,12 +783,15 @@ def _render_grouped_registration_html(
       const centerConfidence = Number(prediction.score);
       const speciesConfidence = Number(prediction.species_confidence);
       const dbh = Number(prediction.dbh_in);
+      const supervision = prediction.center_supervision;
       return [
         `Model prediction: ${{prediction.species || "Unknown species"}}`,
         Number.isFinite(centerConfidence) ? `${{(100 * centerConfidence).toFixed(0)}}% center confidence` : null,
         Number.isFinite(speciesConfidence) ? `${{(100 * speciesConfidence).toFixed(0)}}% species confidence` : null,
         Number.isFinite(dbh) ? `${{dbh.toFixed(1)}} in predicted DBH` : null,
         predictionRun ? `Run ${{predictionRun}}` : null,
+        supervision ? `Center target: ${{supervision.label}}${{supervision.would_penalize
+          ? ` (${{Math.round(100 * Number(supervision.negative_weight))}}% negative weight)` : ""}}` : null,
       ].filter(Boolean).join(" · ");
     }}
     async function loadPredictionOverlay(card, scene) {{
@@ -706,6 +815,9 @@ def _render_grouped_registration_html(
         predictions.forEach(prediction => {{
           const marker = document.createElement("span");
           marker.className = "prediction-marker";
+          const supervisionStatus = prediction.center_supervision?.status;
+          if (supervisionStatus === "negative") marker.classList.add("penalized");
+          else if (["ignored", "near-positive", "positive"].includes(supervisionStatus)) marker.classList.add(supervisionStatus);
           marker.style.left = `${{100 * Number(prediction.output_x) * outputStride / chipPixels}}%`;
           marker.style.top = `${{100 * Number(prediction.output_y) * outputStride / chipPixels}}%`;
           marker.title = predictionTitle(prediction);
@@ -828,6 +940,15 @@ def _render_grouped_registration_html(
             ? (previewCount ? `Mark ${{previewCount}} uncertain` : "No candidates") : "Check non-veg";
         heuristicButton.classList.toggle("preview", hasPreview && previewCount > 0);
         heuristicButton.classList.toggle("applied", appliedCount > 0);
+        const regionMode = regionModeByScene[scene.scene_id];
+        card.querySelector(".mask-protect").classList.toggle("active", regionMode === "protect");
+        card.querySelector(".mask-background").classList.toggle("active", regionMode === "confirmed-background");
+        const sceneMaskRegions = maskRegions.filter(region => region.scene_id === scene.scene_id);
+        card.querySelector(".mask-undo").disabled = sceneMaskRegions.length === 0;
+        card.querySelector(".mask-undo").textContent = sceneMaskRegions.length
+          ? `Undo last area (${{sceneMaskRegions.length}})` : "No mask areas";
+        card.querySelector(".image-wrap").classList.toggle("region-drawing", Boolean(regionMode));
+        renderMaskRegions(card, scene);
         card.querySelectorAll(".tree-marker").forEach(marker => {{
           const markerSample = samplesById[marker.dataset.sampleId];
           marker.dataset.status = statusOf(markerSample.sample_id);
@@ -900,7 +1021,7 @@ def _render_grouped_registration_html(
       const eastMedian = median(east), northMedian = median(north);
       document.getElementById("stats").textContent = `${{completedScenes}}/${{scenes.length}} images done · ` +
         `${{visibleScenes}} shown · ${{samples.length - stackedSamples.length}} reviewable · ` +
-        `${{stackedSamples.length}} stacked hidden` +
+        `${{stackedSamples.length}} stacked hidden · ${{maskRegions.length}} mask areas` +
         (eastMedian == null ? "" : ` · median ${{eastMedian.toFixed(2)}} m E, ${{northMedian.toFixed(2)}} m N`);
     }}
     function createCard(scene, sceneIndex) {{
@@ -983,7 +1104,48 @@ def _render_grouped_registration_html(
       const picked = document.createElement("span"); picked.className = "picked"; wrap.append(picked);
       const streetViewCamera = document.createElement("span"); streetViewCamera.className = "street-view-camera";
       wrap.append(streetViewCamera);
+      const pointerPosition = event => {{
+        const rect = image.getBoundingClientRect();
+        return {{
+          x: Math.max(0, Math.min(scene.image_width, (event.clientX - rect.left) / rect.width * scene.image_width)),
+          y: Math.max(0, Math.min(scene.image_height, (event.clientY - rect.top) / rect.height * scene.image_height)),
+        }};
+      }};
+      wrap.addEventListener("pointerdown", event => {{
+        const mode = regionModeByScene[scene.scene_id];
+        if (!mode || event.button !== 0 || event.target.closest(".loss-region")) return;
+        event.preventDefault();
+        const point = pointerPosition(event);
+        regionDraftByScene[scene.scene_id] = {{...point, image_x: point.x, image_y: point.y,
+          radius_px: 0, mode, pointer_id: event.pointerId}};
+        wrap.setPointerCapture(event.pointerId);
+        renderMaskRegions(card, scene);
+      }});
+      wrap.addEventListener("pointermove", event => {{
+        const draft = regionDraftByScene[scene.scene_id];
+        if (!draft || draft.pointer_id !== event.pointerId) return;
+        const point = pointerPosition(event);
+        draft.radius_px = Math.hypot(point.x - draft.x, point.y - draft.y);
+        renderMaskRegions(card, scene);
+      }});
+      const completeRegionDraw = event => {{
+        const draft = regionDraftByScene[scene.scene_id];
+        if (!draft || draft.pointer_id !== event.pointerId) return;
+        event.preventDefault();
+        if (wrap.hasPointerCapture(event.pointerId)) wrap.releasePointerCapture(event.pointerId);
+        card.dataset.ignoreImageClick = "true";
+        finishMaskRegion(scene.scene_id, draft.x, draft.y, draft.radius_px);
+      }};
+      wrap.addEventListener("pointerup", completeRegionDraw);
+      wrap.addEventListener("pointercancel", event => {{
+        const draft = regionDraftByScene[scene.scene_id];
+        if (!draft || draft.pointer_id !== event.pointerId) return;
+        delete regionDraftByScene[scene.scene_id];
+        renderMaskRegions(card, scene);
+      }});
       wrap.addEventListener("click", event => {{
+        if (card.dataset.ignoreImageClick) {{ delete card.dataset.ignoreImageClick; return; }}
+        if (regionModeByScene[scene.scene_id]) return;
         if (selectionFor(scene.scene_id).size !== 1) return;
         const sampleId = activeByScene[scene.scene_id], sample = samplesById[sampleId];
         const rect = image.getBoundingClientRect();
@@ -1014,6 +1176,21 @@ def _render_grouped_registration_html(
         button.dataset.reviewLabel = label; button.textContent = label;
         button.addEventListener("click", () => setStatus(scene.scene_id, status)); actions.append(button);
       }});
+      const maskActions = document.createElement("div"); maskActions.className = "mask-actions fullscreen-only";
+      const protect = document.createElement("button"); protect.className = "mask-protect";
+      protect.textContent = "Protect area (P)";
+      protect.title = "Draw a circle that receives no center loss; use for plausible vegetation or unlabeled trees";
+      protect.addEventListener("click", () => setRegionMode(scene.scene_id, "protect"));
+      const background = document.createElement("button"); background.className = "mask-background";
+      background.textContent = "Confirm background (B)";
+      background.title = "Draw a circle that receives trusted negative center loss; use only where no tree exists";
+      background.addEventListener("click", () => setRegionMode(scene.scene_id, "confirmed-background"));
+      const undoRegion = document.createElement("button"); undoRegion.className = "mask-undo";
+      undoRegion.textContent = "Undo last area";
+      undoRegion.addEventListener("click", () => removeLastMaskRegion(scene.scene_id));
+      const maskHint = document.createElement("span"); maskHint.className = "mask-hint";
+      maskHint.textContent = "Arm a tool, then click for a 5 m circle or drag to size. Cyan = loss-free; red = trusted background. Click an existing circle to remove it.";
+      maskActions.append(protect, background, undoRegion, maskHint);
       const streetViewPanel = document.createElement("section"); streetViewPanel.className = "street-view-panel";
       const streetViewHead = document.createElement("div"); streetViewHead.className = "street-view-head";
       const streetViewLocation = document.createElement("span"); streetViewLocation.className = "street-view-location";
@@ -1037,7 +1214,7 @@ def _render_grouped_registration_html(
         if (selectionFor(scene.scene_id).size !== 1) return;
         const sampleId = activeByScene[scene.scene_id]; reviews[sampleId] = {{...(reviews[sampleId] || {{}}), note: note.value}}; persist();
       }});
-      card.append(head, wrap, streetViewPanel, treeList, details, actions, note); return card;
+      card.append(head, wrap, streetViewPanel, treeList, details, actions, maskActions, note); return card;
     }}
     [...new Set(samples.map(sample => sample.split))].forEach(value => {{
       const option = document.createElement("option"); option.value = value; option.textContent = value; splitFilter.append(option);
@@ -1047,11 +1224,23 @@ def _render_grouped_registration_html(
       const openCard = document.querySelector(".card.fullscreen");
       if (!openCard) return;
       if (event.key === "Escape") {{
+        if (regionModeByScene[openCard.dataset.scene]) {{
+          regionModeByScene[openCard.dataset.scene] = null;
+          delete regionDraftByScene[openCard.dataset.scene];
+          update();
+          return;
+        }}
         await closeExpandedCard(openCard);
         return;
       }}
       const editing = event.target.matches("textarea, input, select") || event.target.isContentEditable;
       if (editing) return;
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "p") {{
+        event.preventDefault(); setRegionMode(openCard.dataset.scene, "protect"); return;
+      }}
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "b") {{
+        event.preventDefault(); setRegionMode(openCard.dataset.scene, "confirmed-background"); return;
+      }}
       const reviewHotkeys = {{a: "aligned", n: "not-tree", u: "uncertain", d: "duplicate"}};
       const reviewStatus = reviewHotkeys[event.key.toLowerCase()];
       if (reviewStatus && !event.ctrlKey && !event.metaKey && !event.altKey) {{
@@ -1068,7 +1257,7 @@ def _render_grouped_registration_html(
     document.getElementById("export").addEventListener("click", () => {{
       const result = {{schema_version: 1, metadata, exported_at: new Date().toISOString(),
         reviews: samples.map(sample => ({{...sample, ...(reviews[sample.sample_id] || {{}})}})),
-        scene_reviews: sceneReviews}};
+        scene_reviews: sceneReviews, mask_regions: maskRegions}};
       const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([JSON.stringify(result, null, 2)], {{type: "application/json"}}));
       link.download = "registration-reviews.json"; link.click(); URL.revokeObjectURL(link.href);
     }});
@@ -1077,7 +1266,8 @@ def _render_grouped_registration_html(
         const imported = JSON.parse(reader.result);
         const importedReviews = Array.isArray(imported.reviews)
           ? Object.fromEntries(imported.reviews.map(review => [review.sample_id, review])) : (imported.reviews || {{}});
-        reviews = withAlignedDefaults(importedReviews); sceneReviews = imported.scene_reviews || {{}}; persist();
+        reviews = withAlignedDefaults(importedReviews); sceneReviews = imported.scene_reviews || {{}};
+        maskRegions = imported.mask_regions || []; persist();
       }}; if (event.target.files[0]) reader.readAsText(event.target.files[0]);
     }});
     document.getElementById("finalize").addEventListener("click", async () => {{
@@ -1087,11 +1277,12 @@ def _render_grouped_registration_html(
       if (!response.ok) {{ alert(`Finalization failed: ${{result.error}}`); return; }}
       alert(`Training feedback finalized. Registration: ${{result.registration_status}}; ` +
         `correction ${{result.correction_m.east.toFixed(2)}} m E, ${{result.correction_m.north.toFixed(2)}} m N; ` +
-        `${{result.point_corrected_points}} point corrections and ${{result.excluded_points}} exclusions. Rebuild chips before training.`);
+        `${{result.point_corrected_points}} point corrections, ${{result.excluded_points}} exclusions, and ` +
+        `${{result.mask_regions}} mask areas. Rebuild chips before training.`);
     }});
     document.getElementById("clear").addEventListener("click", () => {{
-      if (confirm("Reset every tree decision to aligned and mark every image to review?")) {{
-        reviews = withAlignedDefaults({{}}); sceneReviews = {{}}; persist();
+      if (confirm("Reset every tree decision to aligned, remove every mask area, and mark every image to review?")) {{
+        reviews = withAlignedDefaults({{}}); sceneReviews = {{}}; maskRegions = []; persist();
       }}
     }});
     async function hydrateServerReviews() {{
@@ -1099,6 +1290,7 @@ def _render_grouped_registration_html(
         const response = await fetch("/api/reviews"); if (!response.ok) throw new Error(`HTTP ${{response.status}}`);
         const persisted = await response.json(); reviews = withAlignedDefaults({{...(persisted.reviews || {{}}), ...reviews}});
         sceneReviews = {{...(persisted.scene_reviews || {{}}), ...sceneReviews}};
+        maskRegions = persisted.mask_regions || [];
         storeLocalState(); document.getElementById("sync").textContent = "Loaded saved reviews";
       }} catch (error) {{
         reviews = withAlignedDefaults(reviews); storeLocalState();

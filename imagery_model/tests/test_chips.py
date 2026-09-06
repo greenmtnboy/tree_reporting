@@ -176,6 +176,18 @@ def test_build_chips_applies_finalized_registration_feedback(tmp_path: Path) -> 
                         "north_m": 0.0,
                     }
                 ],
+                "region_overrides": [
+                    {
+                        "region_id": "protect-background-tree",
+                        "mode": "protect",
+                        "splits": ["train"],
+                        "anchor_longitude": coordinates[0][0],
+                        "anchor_latitude": coordinates[0][1],
+                        "east_m": 36.0,
+                        "north_m": -36.0,
+                        "radius_m": 6.0,
+                    }
+                ],
             }
         ),
         encoding="utf-8",
@@ -188,6 +200,9 @@ def test_build_chips_applies_finalized_registration_feedback(tmp_path: Path) -> 
         assert chip["center"][64, 66] == 1
         assert chip["center"][32, 33] == 0
         assert chip["detection_mask"][32, 33] == 0
+        assert chip["detection_mask"][94, 94] == 0
     assert summary["feedback_excluded_points"] == 1
     assert summary["feedback_point_corrected_points"] == 1
+    assert summary["feedback_mask_regions"] == 1
+    assert summary["feedback_region_chip_intersections"] == 1
     assert summary["registration_correction_m"] == {"east": 1.2, "north": 0.0}

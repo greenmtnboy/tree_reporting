@@ -1,6 +1,6 @@
 import numpy as np
 
-from urban_tree_ml.targets import PointLabel, build_targets
+from urban_tree_ml.targets import DetectionMaskRegion, PointLabel, build_targets
 
 
 def test_positive_unlabeled_mask_does_not_mark_green_pixels_as_background() -> None:
@@ -106,3 +106,44 @@ def test_rejected_inventory_points_are_ignored_without_erasing_retained_positive
     assert targets["detection_mask"][0, 0] == 0
     assert targets["detection_mask"][4, 4] == 1
     assert targets["center"][4, 4] == 1
+
+
+def test_manual_regions_override_automatic_background_and_preserve_positives() -> None:
+    targets = build_targets(
+        24,
+        24,
+        [PointLabel(x=20, y=20)],
+        stride=2,
+        gaussian_sigma_px=1,
+        supervision_radius_px=2,
+        ndvi=np.full((24, 24), -0.2, dtype=np.float32),
+        mask_regions=[
+            DetectionMaskRegion(x=4, y=4, radius=3, mode="protect"),
+            DetectionMaskRegion(x=12, y=12, radius=3, mode="confirmed-background"),
+            DetectionMaskRegion(x=20, y=20, radius=3, mode="protect"),
+        ],
+    )
+
+    assert targets["detection_mask"][2, 2] == 0
+    assert targets["detection_mask"][6, 6] == 1
+    assert targets["center"][10, 10] == 1
+    assert targets["detection_mask"][10, 10] == 1
+
+
+def test_later_manual_region_wins_when_regions_overlap() -> None:
+    targets = build_targets(
+        16,
+        16,
+        [],
+        stride=2,
+        gaussian_sigma_px=1,
+        supervision_radius_px=2,
+        ndvi=np.full((16, 16), -0.2, dtype=np.float32),
+        mask_regions=[
+            DetectionMaskRegion(x=8, y=8, radius=4, mode="protect"),
+            DetectionMaskRegion(x=8, y=8, radius=2, mode="confirmed-background"),
+        ],
+    )
+
+    assert targets["detection_mask"][4, 4] == 1
+    assert targets["detection_mask"][4, 2] == 0

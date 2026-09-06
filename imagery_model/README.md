@@ -168,6 +168,15 @@ uv run urban-tree-ml qa snapshot \
 
 Each numbered ring selects an inventory tree in the shared image. Click its apparent tree center
 to mark it offset, or use the buttons to mark it aligned, not-tree, uncertain, or duplicate.
+Fullscreen review also supports circular center-loss overrides. Choose **Protect area** (or press
+`P`), then click for a 5 m circle or drag to size around plausible vegetation or an unlabeled tree;
+the circle forces center supervision to be ignored without creating a tree label. Choose
+**Confirm background** (or press `B`) only where no tree exists to restore trusted negative center
+loss. Cyan/red overlays show the saved regions, an existing circle can be clicked to remove it, and
+**Undo last area** removes the newest region in the image. Regions are saved immediately with the
+annotation bundle, but must be finalized and followed by a chip rebuild before training uses them.
+They are anchored in raster/world coordinates so they apply to every intersecting chip. If regions
+overlap, the most recently drawn region wins; retained labeled centers always remain positive.
 Finalization turns each explicit offset into an exact correction for that reviewed tree, estimates the
 tile-wide correction from training reviews only, reports validation residuals, and records
 `not-tree`/`uncertain`/`duplicate` points as supervision exclusions. It never mutates the source
