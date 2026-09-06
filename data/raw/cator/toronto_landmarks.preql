@@ -1,0 +1,42 @@
+import ..landmark_common;
+
+root datasource toronto_landmarks_update_time (
+    data_updated_through: cator_landmark_data_updated_through
+)
+file `./toronto_landmarks_probe.py`;
+
+# Toronto's 178 Places of Interest and Attractions, on the same CKAN portal as
+# the trees.  Read directly -- no Nominatim geocoding, no committed CSV and no
+# staging object; only Overpass-backed and hand-curated sources need those.
+#
+# Not the runbook's first preference: Toronto's official Heritage Register is
+# shapefile-only and 12,332 listed properties, which would need a parser
+# nothing else here uses and would name the ground less well than 178
+# recognisable places.  See toronto_landmarks.py.
+root partial datasource raw_toronto_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    address: ?address,
+    category: ?category,
+)
+grain (landmark_id)
+complete where city = 'CATOR'
+file `./toronto_landmarks.py`;
+
+partial datasource toronto_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?address,
+    ?category,
+    cator_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'CATOR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cator_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/cator_landmark_info_v{data_version}.parquet`
+freshness by cator_landmark_data_updated_through;

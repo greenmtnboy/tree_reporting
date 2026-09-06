@@ -21,6 +21,9 @@ Currently has data from the following cities:
 - [Calgary, AB, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CACAL)
 - [Edmonton, AB, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAEDM)
 - [Winnipeg, MB, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAWPG)
+- [Toronto, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CATOR)
+- [Montreal, QC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAMTL)
+- [Quebec City, QC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAQUE)
 - [London, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBLON)
 - [Amsterdam, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLAMS)
 - [Berlin, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEBER)
@@ -72,6 +75,9 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Calgary | City of Calgary Open Data - Public Trees | https://data.calgary.ca/Environment/Public-Trees/tfs4-3wwa |
 | Edmonton | City of Edmonton Open Data - Trees | https://data.edmonton.ca/Environmental-Services/Trees/eecg-fc54 |
 | Winnipeg | City of Winnipeg Open Data - Tree Inventory | https://data.winnipeg.ca/Parks/Tree-Inventory/hfwk-jp4h |
+| Toronto | City of Toronto Open Data - Street Tree Data | https://open.toronto.ca/dataset/street-tree-data/ |
+| Montreal | Donnees Montreal - Arbres publics sur le territoire de la Ville (CC-BY 4.0) | https://donnees.montreal.ca/dataset/arbres |
+| Quebec City | Donnees Quebec - Ville de Quebec, Arbres repertories (CC-BY 4.0) | https://www.donneesquebec.ca/recherche/dataset/vque_arbrerepertorie |
 | London | London Datastore - Public Realm Trees | https://data.london.gov.uk/dataset/2r45m |
 | Amsterdam | Amsterdam Data Portal - Bomen (Stamgegevens) | https://api.data.amsterdam.nl/v1/bomen/stamgegevens/ |
 | Berlin | Berlin Geodateninfrastruktur - Baumbestand (WFS) | https://gdi.berlin.de/services/wfs/baumbestand |
@@ -102,6 +108,9 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Calgary | City of Calgary Open Data - Historic Resource | https://data.calgary.ca/Government/Historic-Resource/99yf-6c5u |
 | Edmonton | City of Edmonton Open Data - Register and Inventory of Historic Resources | https://data.edmonton.ca/City-Administration/The-Register-and-Inventory-of-Historic-Resources-in/jgsn-dhai |
 | Winnipeg | City of Winnipeg Open Data - Historical Resources | https://data.winnipeg.ca/Heritage/Historical-Resources/ptpx-kgiu |
+| Toronto | City of Toronto Open Data - Places of Interest and Toronto Attractions | https://open.toronto.ca/dataset/places-of-interest-and-toronto-attractions/ |
+| Montreal | Repertoire du patrimoine culturel du Quebec - immeubles classes et cites (CC-BY 4.0) | https://www.donneesquebec.ca/recherche/dataset/immeubles-patrimoniaux-classes-par-le-ministre-de-la-culture-et-des-communications |
+| Quebec City | Repertoire du patrimoine culturel du Quebec - immeubles classes et cites (CC-BY 4.0) | https://www.donneesquebec.ca/recherche/dataset/immeubles-patrimoniaux-classes-par-le-ministre-de-la-culture-et-des-communications |
 | London | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |
 | Amsterdam | Amsterdam Data Portal - Monumenten | https://api.data.amsterdam.nl/v1/monumenten/monumenten/ |
 | Berlin | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |

@@ -19,5 +19,8 @@
   "USDEN": { "name": "Denver", "center": [-104.9903, 39.7392] },
   "CACAL": { "name": "Calgary", "center": [-114.0719, 51.0447] },
   "CAEDM": { "name": "Edmonton", "center": [-113.4938, 53.5461] },
-  "CAWPG": { "name": "Winnipeg", "center": [-97.1384, 49.8951] }
+  "CAWPG": { "name": "Winnipeg", "center": [-97.1384, 49.8951] },
+  "CATOR": { "name": "Toronto", "center": [-79.3832, 43.6532] },
+  "CAMTL": { "name": "Montreal", "center": [-73.5673, 45.5017] },
+  "CAQUE": { "name": "Quebec City", "center": [-71.208, 46.8139] }
 }

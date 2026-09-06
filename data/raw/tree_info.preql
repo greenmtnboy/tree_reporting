@@ -20,6 +20,9 @@ import usden.denver_tree_info;
 import cacal.calgary_tree_info;
 import caedm.edmonton_tree_info;
 import cawpg.winnipeg_tree_info;
+import cator.toronto_tree_info;
+import camtl.montreal_tree_info;
+import caque.quebec_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -47,6 +50,9 @@ merge usden_source into data_source;
 merge cacal_source into data_source;
 merge caedm_source into data_source;
 merge cawpg_source into data_source;
+merge cator_source into data_source;
+merge camtl_source into data_source;
+merge caque_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -63,8 +69,7 @@ merge cawpg_source into data_source;
 # loads the per-city Parquet, so it filters on that column and skips the
 # filter on the full-file fallback path.
 
-auto latest_update_through <- greatest(
-ussfo_published_data_updated_through,
+auto latest_update_through <- greatest(ussfo_published_data_updated_through,
 usnyc_published_data_updated_through,
 usbos_published_data_updated_through,
 frpar_published_data_updated_through,
@@ -85,15 +90,9 @@ usden_published_data_updated_through,
 cacal_published_data_updated_through,
 caedm_published_data_updated_through,
 cawpg_published_data_updated_through,
-cacal_published_data_updated_through,
-caedm_published_data_updated_through,
-cawpg_published_data_updated_through,
-cacal_published_data_updated_through,
-caedm_published_data_updated_through,
-cawpg_published_data_updated_through,
-cacal_published_data_updated_through,
-caedm_published_data_updated_through,
-cawpg_published_data_updated_through);
+cator_published_data_updated_through,
+camtl_published_data_updated_through,
+caque_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

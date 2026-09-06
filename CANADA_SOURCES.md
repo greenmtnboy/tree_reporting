@@ -149,13 +149,68 @@ Two specific traps in that list:
 
 ## Status
 
-**Done (this PR):** `_socrata_shared.py`, and Calgary, Edmonton and Winnipeg
+**Done (PR 1):** `_socrata_shared.py`, and Calgary, Edmonton and Winnipeg
 wired onto it -- 1,325,431 trees. The three existing Socrata cities' freshness
 probes moved onto the same module, and New York's ingest gained the `$order`
 its `$offset` paging always needed.
 
-**Next (a second PR):** `_ckan_shared.py` and the four CKAN cities. See the
-handoff below.
+**Done (PR 2):** `_ckan_shared.py`, with Toronto, Montreal and Quebec City
+wired onto it and Boston's probe moved across -- 1,181,078 trees. Three of the
+four CKAN cities in the handoff below; **Longueuil is not wirable and was
+dropped**, for the measured reason under "Longueuil" below.
+
+**Next (a third PR):** the ArcGIS cities, which are 16 of the 23 confirmed and
+already have `_arcgis_shared.py` under them. Then the snowflakes -- Burlington
+ON (common name only) and Fredericton (no DBH).
+
+### What PR 2 measured that the handoff got wrong
+
+Two of the notes below were written from a first look and did not survive
+contact:
+
+- **The freshness watermark is a maximum, not a preference order.** The
+  handoff said to prefer the resource's `last_modified`. Toronto's datastore is
+  updated in place, so that stamp still reads **2022-05-02** while the data was
+  refreshed 2026-06-04 -- following the handoff would have frozen Toronto's
+  parquet on its first build and never rebuilt it. Boston's datastore resource
+  stamp, on the same CKAN version, does move. `data_last_modified` takes the
+  later of the resource stamp and the package's `last_refreshed`, and keeps
+  `metadata_modified` as a last resort only, since that one moves for a
+  description edit.
+
+- **`datastore_search_sql` cannot be relied on.** Toronto answers it with a
+  404 and Donnees Quebec rejects a `CAST` with a 403. The paged
+  `datastore_search` is the only row reader in the module.
+
+And one the handoff did not anticipate at all:
+
+- **CKAN silently caps `limit` at 32,000** (`ckan.datastore.search.rows_max`)
+  on all four portals, exactly as ArcGIS caps `maxRecordCount`. A loop that
+  ends on a short page therefore ends after *one* page whenever the caller asks
+  for more -- Toronto would have published 32,000 of its 688,335 trees and
+  looked like a portal that shrank. CKAN echoes the applied `limit` and reports
+  `total`, so `iter_datastore_rows` takes its page size from the response and
+  terminates on `total`, never on a short page.
+
+### Longueuil: measured, and not wirable
+
+Longueuil publishes exactly one tree dataset on Donnees Quebec (`package_search`
+for "arbres Longueuil" returns one result), and **it carries no tree id of any
+kind**. The GeoJSON's 99,345 features have exactly two properties, `Espece` and
+`Diametre_Tronc`, and no feature-level `id` member; the shapefile is an older
+63,773-record extract of the same two fields. There is nothing else to read.
+
+That is blocker #1 from the CIF verdict at the top of this file, restated:
+`tree_id` is the declared grain of every city datasource and
+`enforce_tree_schema` refuses a null or duplicate one. Nor is a derived key
+available -- `EXTENDING.md` rules out a positional hash on principle, and the
+data rules it out on the numbers: the 99,345 features sit on 98,208 distinct
+coordinates, 611 points carry more than one tree and one carries 58. Even
+hashing (coordinate, species, diameter) yields 98,464 distinct keys for 99,345
+rows, so 881 trees would silently vanish into collisions.
+
+Wiring Longueuil needs Longueuil to publish an id. Worth re-checking if the
+dataset is ever republished -- it last moved 2024-03-01.
 
 ---
 
@@ -179,6 +234,11 @@ into a thin shim, and it is where the paging and freshness bugs get fixed once.
 Quebec City and Longueuil are both on Donnees Quebec, so one host covers two
 cities -- and Repentigny and Saguenay publish there too, if the appetite is
 there for cities CIF never listed.
+
+> **Read the Status section above before this one.** The handoff below is
+> kept as written, because it is what the work was planned from; three of its
+> notes turned out to be wrong or incomplete and the corrections are recorded
+> up there rather than edited in here.
 
 ### What `_ckan_shared.py` should carry
 

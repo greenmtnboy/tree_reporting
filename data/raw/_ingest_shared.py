@@ -117,6 +117,10 @@ _SPECIES_PLACEHOLDERS = frozenset(
         # describe the *record*, not the site, so they are Unknown rather than
         # not-a-tree: there is a tree there and nobody wrote down what it is.
         "not available", "not suitable",
+        # The same thing in French, from the Quebec portals.  "Divers" is
+        # Montreal's "various" (619 rows) and reads as a genus if left alone;
+        # "Essence a determiner" is Quebec City's "species to be identified".
+        "divers", "essence a determiner",
     }
 )
 
@@ -240,6 +244,12 @@ _NON_TAXON_REWRITES: dict[str, str | None] = {
     "linde": None,          # de: linden
     "neflier": None,        # fr: medlar
     "susskirsche": None,    # de: sweet cherry
+    # Quebec City records some privately-owned trees by common name and
+    # ownership rather than by taxon.  "Orme" names a genus and keeps it, the
+    # same call "Callistemon king" gets; "Conifere" is a growth habit spanning
+    # several families and names none.
+    "orme prive": "Ulmus",  # fr: private elm
+    "conifere prive": None,  # fr: private conifer
     # Multi-word common names and free text with no genus in them.
     "campestre licenco": None,
     "eastern white": None,
@@ -782,6 +792,9 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "CAQUE": ("QUEBEC_OPENDATA",),
+    "CAMTL": ("MONTREAL_OPENDATA",),
+    "CATOR": ("TORONTO_OPENDATA",),
     "CAWPG": ("WINNIPEG_OPENDATA",),
     "CAEDM": ("EDMONTON_OPENDATA",),
     "CACAL": ("CALGARY_OPENDATA",),
@@ -835,6 +848,9 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "CAQUE": "OSM_CAQUE",
+    "CAMTL": "OSM_CAMTL",
+    "CATOR": "OSM_CATOR",
     "CAWPG": "OSM_CAWPG",
     "CAEDM": "OSM_CAEDM",
     "CACAL": "OSM_CACAL",
@@ -1190,6 +1206,9 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "CAQUE": (46.68, 47.0, -71.6, -71.1),
+    "CAMTL": (45.38, 45.72, -74.0, -73.42),
+    "CATOR": (43.55, 43.9, -79.7, -79.1),
     "CAWPG": (49.66, 50.03, -97.4, -96.9),
     "CAEDM": (53.3, 53.75, -113.8, -113.2),
     "CACAL": (50.8, 51.25, -114.35, -113.83),
@@ -1268,6 +1287,21 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # ../../DEDUP_CELL_RECALIBRATION.md.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # 5-10 m band 43.9% mutual-NN over n=4,484, and the marginal table keeps
+    # paying to 8 m: 4->6 removes 2,320 duplicates for 560 hidden trees (4.14),
+    # 6->8 removes 1,054 for 790 (1.33), 8->10 removes 632 for 878 (0.72).
+    # Same profile as San Francisco, the other city measured at 8.
+    "CAQUE": 8,
+    # Montreal's OSM is largely an import of the municipal inventory: 317,570
+    # of its 372,727 nodes sit within 2 m of an inventory tree at 99.9%
+    # mutual-NN, and 5-10 m collapses to 0.9% over n=2,969 -- the cleanest
+    # separation of any city here.  4->6 removes 1,222 duplicates for 967
+    # hidden trees (1.26); 6->8 removes 223 for 1,019 (0.22), and past 8 m
+    # there is nothing left to find (recall is already 100%).
+    "CAMTL": 6,
+    # 5-10 m band 38.3% mutual-NN over n=2,898; 4->6 removes 634 duplicates
+    # for 289 hidden trees (2.19), 6->8 removes 461 for 515 (0.90).
+    "CATOR": 6,
     # 5-10 m band 28.4% mutual-NN over n=134, and the marginal table turns at
     # 6 m: 4->6 removes 86 duplicates for 25 hidden trees (3.44), 6->8 removes
     # 30 for 43 (0.70).

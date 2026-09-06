@@ -3,28 +3,30 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
+"""Freshness probe for Boston's BPRD tree inventory (CKAN).
+
+Boston is the city this repo has read CKAN for the longest, and this probe used
+to hand-roll `resource_show` and read `last_modified` with a `created`
+fallback.  `_ckan_shared.data_last_modified` is that, plus the package's
+`last_refreshed`, plus the reason to prefer the *maximum* of them rather than
+the first one present -- which Toronto needs and Boston does not, since
+Boston's datastore resource stamp does move.  One implementation, so the next
+CKAN city inherits the rule instead of re-deriving it.
+"""
 
 import sys
+from datetime import datetime
 from pathlib import Path
-from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, get_json_with_retry
+from _ckan_shared import CkanResource, data_last_modified
+from _ingest_shared import emit_freshness
 
-RESOURCE_ID = "995cd80f-2489-41bf-b16b-113dba4f2797"
-METADATA_URL = f"https://data.boston.gov/api/3/action/resource_show?id={RESOURCE_ID}"
+RESOURCE = CkanResource("data.boston.gov", "995cd80f-2489-41bf-b16b-113dba4f2797")
 
 
 def fetch_rows_updated_at() -> datetime:
-    meta = get_json_with_retry(METADATA_URL)
-
-    result = meta.get("result", {})
-    ts = result.get("last_modified") or result.get("created")
-    if ts is None:
-        raise RuntimeError("Dataset metadata missing last_modified")
-
-    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    return data_last_modified(RESOURCE)
 
 
 if __name__ == "__main__":
