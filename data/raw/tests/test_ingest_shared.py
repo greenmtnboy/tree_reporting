@@ -808,6 +808,7 @@ def _tree_table(**overrides) -> pa.Table:
         "city": pa.array(["USSFO"], type=pa.string()),
         "data_source": pa.array(["SF_OPENDATA"], type=pa.string()),
         "species": pa.array(["Platanus x hispanica"], type=pa.string()),
+        "cultivar": pa.array([None], type=pa.string()),
         "tree_name": pa.array(["London Plane"], type=pa.string()),
         "plant_date": pa.array([date(2001, 5, 4)], type=pa.date32()),
         "latitude": pa.array([37.77], type=pa.float64()),
@@ -1211,3 +1212,173 @@ class TestCoordinateDropReporting:
         table = self._table([34.0, 34.1], [-118.3, -118.2])
         assert validate_coordinates(table, city="Test", city_code="USLAX").num_rows == 2
         assert capsys.readouterr().err == ""
+
+
+# ---------------------------------------------------------------------------
+# extract_cultivar
+# ---------------------------------------------------------------------------
+
+
+class TestExtractCultivar:
+    """A cultivar is a fact about the tree, not the species; the quoted
+    selection comes off the raw string and lands on the tree row."""
+
+    @pytest.mark.parametrize(
+        "raw, expected",
+        [
+            ("Malus sargentii 'Tina'", "Tina"),
+            ("Malus 'Spring Snow'", "Spring Snow"),
+            ("Malus 'spring snow' high brnch", "Spring Snow"),
+            ("Acer saccharum 'JFS-Caddo2'", "JFS-Caddo2"),
+            ("Prunus serrulata \u2018Kanzan\u2019", "Kanzan"),
+            ('Platanus x hispanica "Bloodgood"', "Bloodgood"),
+            ("Malus 'Spring Snow", "Spring Snow"),
+            ("Carpinus betulus 'Fastigiata' (columnar)", "Fastigiata"),
+        ],
+    )
+    def test_extracts_the_quoted_selection(self, raw, expected):
+        from _ingest_shared import extract_cultivar
+
+        assert extract_cultivar(raw) == expected
+
+    @pytest.mark.parametrize("raw", [None, "", "Acer platanoides", "Vacant", "Malus ''", "Malus ' '"])
+    def test_nothing_quoted_is_none(self, raw):
+        from _ingest_shared import extract_cultivar
+
+        assert extract_cultivar(raw) is None
+
+    def test_mixed_case_is_left_as_written(self):
+        """Nursery codes are case-significant; only an all-lower-case value
+        is a typist's habit worth correcting."""
+        from _ingest_shared import extract_cultivar
+
+        assert extract_cultivar("Acer rubrum 'October Glory'") == "October Glory"
+        assert extract_cultivar("Acer rubrum 'JFS-KW78'") == "JFS-KW78"
+        assert extract_cultivar("Acer rubrum 'october glory'") == "October Glory"
+
+
+# ---------------------------------------------------------------------------
+# SPECIES_SYNONYMS
+# ---------------------------------------------------------------------------
+
+
+class TestSpeciesSynonyms:
+    def test_a_synonym_folds_onto_its_accepted_name(self):
+        from _ingest_shared import sanitize_species
+
+        assert sanitize_species("Platanus x acerifolia") == "Platanus x hispanica"
+        assert sanitize_species("Platanus \u00d7 acerifolia") == "Platanus x hispanica"
+        assert sanitize_species("Sophora japonica") == "Styphnolobium japonicum"
+        assert sanitize_species("\u00d7 Cupressocyparis leylandii") == "Cupressus x leylandii"
+
+    def test_the_cultivar_does_not_block_the_fold(self):
+        from _ingest_shared import extract_cultivar, sanitize_species
+
+        raw = "Platanus x acerifolia 'Bloodgood'"
+        assert sanitize_species(raw) == "Platanus x hispanica"
+        assert extract_cultivar(raw) == "Bloodgood"
+
+    def test_a_hybrid_published_without_its_mark_is_the_same_taxon(self):
+        from _ingest_shared import sanitize_species
+
+        assert sanitize_species("Prunus yedoensis") == "Prunus x yedoensis"
+        assert sanitize_species("Prunus x yedoensis") == "Prunus x yedoensis"
+
+    def test_the_accepted_name_is_unchanged(self):
+        from _ingest_shared import SPECIES_SYNONYMS, sanitize_species
+
+        for accepted in set(SPECIES_SYNONYMS.values()):
+            assert sanitize_species(accepted) == accepted
+
+    def test_keys_and_values_are_written_as_the_ingest_emits_them(self):
+        """One lookup is enough only if the map is keyed on what
+        `_sanitize_taxon` produces -- ASCII mark, capitalised genus, species
+        rank -- and a value is never itself a key (no chains)."""
+        from _ingest_shared import SPECIES_SYNONYMS, _sanitize_taxon
+
+        for key, value in SPECIES_SYNONYMS.items():
+            assert _sanitize_taxon(key) == key, f"{key!r} is not in canonical form"
+            assert _sanitize_taxon(value) == value, f"{value!r} is not in canonical form"
+            assert value not in SPECIES_SYNONYMS, f"{value!r} is both a synonym and an accepted name"
+            assert key != value
+
+    def test_synonyms_of_inverts_the_map(self):
+        from _ingest_shared import SPECIES_SYNONYMS, synonyms_of
+
+        assert synonyms_of("Platanus x hispanica") == ["Platanus x acerifolia"]
+        assert synonyms_of("Acer rubrum") == []
+        for accepted in set(SPECIES_SYNONYMS.values()):
+            assert all(SPECIES_SYNONYMS[s] == accepted for s in synonyms_of(accepted))
+
+    def test_a_sentinel_is_never_an_accepted_name(self):
+        from _ingest_shared import SPECIES_SENTINELS, SPECIES_SYNONYMS
+
+        assert not SPECIES_SENTINELS & set(SPECIES_SYNONYMS.values())
+        assert not SPECIES_SENTINELS & set(SPECIES_SYNONYMS)
+
+
+# ---------------------------------------------------------------------------
+# enforce_tree_schema: cultivar
+# ---------------------------------------------------------------------------
+
+
+class TestEnforceTreeSchemaCultivar:
+    def _table(self, species, **extra):
+        n = len(species)
+        cols = {
+            "tree_id": pa.array([f"t-{i}" for i in range(n)], pa.string()),
+            "city": pa.array(["USSFO"] * n, pa.string()),
+            "species": pa.array(species, pa.string()),
+        }
+        cols.update(extra)
+        return pa.table(cols)
+
+    def test_the_quoted_cultivar_moves_to_its_own_column(self):
+        from _ingest_shared import enforce_tree_schema
+
+        out = enforce_tree_schema(
+            self._table(["Malus sargentii 'Tina'", "Malus 'Spring Snow'", "Acer rubrum"]),
+            data_source="SF_OPENDATA",
+        )
+        assert out.column("species").to_pylist() == ["Malus sargentii", "Malus", "Acer rubrum"]
+        assert out.column("cultivar").to_pylist() == ["Tina", "Spring Snow", None]
+        assert out.schema.field("cultivar").type == pa.string()
+
+    def test_a_cultivar_needs_a_taxon(self):
+        """A selection is a choice within a taxon; quoted junk on a
+        placeholder says nothing about a plant."""
+        from _ingest_shared import UNKNOWN_SPECIES, enforce_tree_schema
+
+        out = enforce_tree_schema(self._table(["Onbekend 'x'", "'Bloodgood'"]), data_source="SF_OPENDATA")
+        assert out.column("species").to_pylist() == [UNKNOWN_SPECIES] * 2
+        assert out.column("cultivar").to_pylist() == [None, None]
+
+    def test_a_source_column_wins_over_the_parsed_value(self):
+        from _ingest_shared import enforce_tree_schema
+
+        out = enforce_tree_schema(
+            self._table(
+                ["Acer rubrum 'October Glory'", "Acer rubrum", "Acer rubrum 'Armstrong'"],
+                sort=pa.array(["Red Sunset", "Bowhall", None], pa.string()),
+            ),
+            columns={"cultivar": "sort"},
+            data_source="SF_OPENDATA",
+        )
+        assert out.column("sort").to_pylist() == ["Red Sunset", "Bowhall", "Armstrong"]
+        assert "cultivar" not in out.schema.names
+
+    def test_the_synonym_fold_applies_at_the_chokepoint(self):
+        from _ingest_shared import enforce_tree_schema
+
+        out = enforce_tree_schema(
+            self._table(["Platanus x acerifolia 'Bloodgood'", "Platanus \u00d7 hispanica"]),
+            data_source="SF_OPENDATA",
+        )
+        assert out.column("species").to_pylist() == ["Platanus x hispanica"] * 2
+        assert out.column("cultivar").to_pylist() == ["Bloodgood", None]
+
+    def test_the_cleanup_summary_counts_cultivars(self, capsys):
+        from _ingest_shared import enforce_tree_schema
+
+        enforce_tree_schema(self._table(["Malus sargentii 'Tina'"]), data_source="SF_OPENDATA")
+        assert "1 carry a cultivar on the tree row" in capsys.readouterr().err

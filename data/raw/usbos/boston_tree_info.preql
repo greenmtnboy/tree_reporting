@@ -71,6 +71,7 @@ root partial datasource city_raw_tree_info (
     longitude: ?raw_longitude,
     dbh: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'CITY_OF_BOSTON'
@@ -87,6 +88,7 @@ root partial datasource arboretum_raw_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'ARNOLD_ARBORETUM'
@@ -103,6 +105,7 @@ root partial datasource cambridge_raw_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'CAMBRIDGE'
@@ -119,6 +122,7 @@ root partial datasource brookline_raw_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'BROOKLINE'
@@ -142,6 +146,7 @@ root partial datasource usbos_community_tree_info (
     latitude: ?raw_latitude,
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'COMMUNITY_USBOS'
@@ -165,6 +170,7 @@ root partial datasource usbos_osm_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'OSM_USBOS'
@@ -204,6 +210,7 @@ partial datasource boston_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    ?cultivar,
     cluster_id,
     merged_sources,
     ?merged_tree_ids,

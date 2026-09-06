@@ -187,6 +187,7 @@ def build_table(
         "tree_id": [],
         "city": [],
         "species": [],
+        "cultivar": [],
         "plant_date": [],
         "latitude": [],
         "longitude": [],
@@ -201,6 +202,12 @@ def build_table(
         rows["tree_id"].append(f"osm-{el['id']}")
         rows["city"].append(city_code)
         rows["species"].append(species)
+        # OSM tags a selection as `cultivar=*` (or the older `taxon:cultivar`);
+        # a name quoted inside the species tag is picked up by
+        # enforce_tree_schema the same way it is for every other source.
+        rows["cultivar"].append(
+            (tags.get("cultivar") or tags.get("taxon:cultivar") or "").strip() or None
+        )
         rows["plant_date"].append(start_date_to_year(tags.get("start_date")))
         rows["latitude"].append(el.get("lat"))
         rows["longitude"].append(el.get("lon"))
@@ -222,8 +229,9 @@ def build_table(
             **{
                 k: pa.array(v)
                 for k, v in rows.items()
-                if k not in ("plant_date", "osm_ref")
+                if k not in ("cultivar", "plant_date", "osm_ref")
             },
+            "cultivar": pa.array(rows["cultivar"], type=pa.string()),
             "plant_date": pa.array(rows["plant_date"], type=pa.date32()),
             "osm_ref": pa.array(rows["osm_ref"], type=pa.string()),
         }

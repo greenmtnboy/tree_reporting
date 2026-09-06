@@ -165,6 +165,7 @@ root partial datasource {slug}_raw_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = '{code}' and {lc}_source = '{source}'
@@ -186,6 +187,7 @@ root partial datasource {lc}_community_tree_info (
     latitude: ?raw_latitude,
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = '{code}' and {lc}_source = 'COMMUNITY_{code}'
@@ -207,6 +209,7 @@ root partial datasource {lc}_osm_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = '{code}' and {lc}_source = 'OSM_{code}'
@@ -233,6 +236,7 @@ partial datasource {slug}_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    ?cultivar,
     merged_sources,
     ?merged_tree_ids,
     {lc}_published_data_updated_through,
@@ -448,6 +452,7 @@ root datasource {lc}_osm_rows (
     city: city,
     data_source: data_source,
     species: ?species,
+    cultivar: ?cultivar,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
@@ -465,6 +470,7 @@ datasource {lc}_osm_staging (
     city,
     data_source,
     ?species,
+    ?cultivar,
     ?tree_name,
     ?plant_date,
     ?latitude,

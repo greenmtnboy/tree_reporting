@@ -51,7 +51,7 @@
       <div class="tree-card-header-main">
         <div class="tree-card-title-wrap">
           <div class="tree-card-title">{{ selectedTree.tree_name || 'Unknown tree' }}</div>
-          <div v-if="scientificName" class="tree-card-species">{{ scientificName }}</div>
+          <div v-if="scientificName" class="tree-card-species">{{ scientificName }}<span v-if="selectedTree.cultivar" class="tree-card-cultivar"> '{{ selectedTree.cultivar }}'</span></div>
         </div>
         <div class="tree-card-header-actions">
           <button
@@ -165,6 +165,19 @@
           </div>
         </div>
         <div v-else class="tc-photo-placeholder">No photo available</div>
+        <!-- A trunk / bark view of the species, when a reviewer has picked one. -->
+        <div v-if="selectedTree.trunk_photo_url" class="tc-photo-wrap tc-photo-wrap--trunk">
+          <div class="tree-card-section-label">Trunk</div>
+          <img
+            :src="selectedTree.trunk_photo_url"
+            :alt="`Trunk of ${selectedTree.species || 'this species'}`"
+            class="tc-photo"
+            loading="lazy"
+          />
+          <div v-if="selectedTree.trunk_photo_attribution" class="tc-photo-footer">
+            <span class="tc-photo-attr">{{ selectedTree.trunk_photo_attribution }}</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -610,6 +623,8 @@ interface PopupTreeRow {
   tree_id: string
   tree_name: string | null
   species: string | null
+  /** The cultivated selection, e.g. 'Tina' -- a property of this tree, not of the species. */
+  cultivar: string | null
   plant_date: string | number | null
   dbh: number | null
   tree_form: string | null
@@ -632,6 +647,9 @@ interface PopupTreeRow {
   photo_url: string | null
   photo_license: string | null
   photo_attribution: string | null
+  trunk_photo_url: string | null
+  trunk_photo_license: string | null
+  trunk_photo_attribution: string | null
   data_source: string | null
   submission_photo_url: string | null
 }
@@ -913,6 +931,7 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
         tf.tree_id,
         tf.tree_name,
         tf.species,
+        tf.cultivar,
         tf.plant_date,
         tf.dbh,
         tf.tree_form,
@@ -946,7 +965,10 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
         se.description,
         se.photo_url,
         se.photo_license,
-        se.photo_attribution
+        se.photo_attribution,
+        se.trunk_photo_url,
+        se.trunk_photo_license,
+        se.trunk_photo_attribution
       FROM trees_fast tf
       LEFT JOIN species_enrichment se ON tf.species = se.species
       WHERE tf.tree_id = '${safeId}'
@@ -2053,6 +2075,11 @@ onUnmounted(() => {
   color: rgba(237, 242, 235, 0.6);
 }
 
+/* A cultivar name is quoted and never italicised, by convention. */
+.tree-card-cultivar {
+  font-style: normal;
+}
+
 /* Three-pane body — side by side on desktop, stacked on mobile */
 .tree-card-body {
   display: grid;
@@ -2111,6 +2138,10 @@ onUnmounted(() => {
 }
 
 /* Photo carousel */
+.tc-photo-wrap--trunk {
+  margin-top: 8px;
+}
+
 .tc-photo-wrap {
   position: relative;
   border-radius: 6px;

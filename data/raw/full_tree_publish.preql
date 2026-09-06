@@ -68,6 +68,7 @@ import core;
 key tree_id string;
 property tree_id.data_source string; # originating dataset, materialised by every city
 property tree_id.species string;
+property tree_id.cultivar string;
 property tree_id.tree_name string;
 property tree_id.plant_date date;
 property tree_id.diameter_at_breast_height float;
@@ -93,6 +94,7 @@ root datasource city_published_trees (
     city: city,
     data_source: data_source,
     species: ?species,
+    cultivar: ?cultivar,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     diameter_at_breast_height: ?diameter_at_breast_height,
@@ -127,6 +129,7 @@ datasource full_tree_info (
     city,
     data_source,
     species,
+    ?cultivar,
     ?tree_name,
     ?plant_date,
     ?diameter_at_breast_height,

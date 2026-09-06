@@ -56,6 +56,7 @@ root partial datasource grsan_osm_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'GRSAN' and grsan_source = 'OSM_GRSAN'
@@ -75,6 +76,7 @@ root partial datasource grsan_community_tree_info (
     latitude: ?raw_latitude,
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'GRSAN' and grsan_source = 'COMMUNITY_GRSAN'
@@ -106,6 +108,7 @@ partial datasource santorini_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    ?cultivar,
     cluster_id,
     merged_sources,
     ?merged_tree_ids,

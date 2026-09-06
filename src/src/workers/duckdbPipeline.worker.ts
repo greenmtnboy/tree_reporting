@@ -489,6 +489,15 @@ async function loadCityTrees(city?: string): Promise<void> {
   const hasDedupFlag = await parquetHasColumn(parquetUrl, 'is_duplicate')
   const dedupFilter = hasDedupFlag ? 'AND NOT COALESCE(is_duplicate, false)' : ''
 
+  // `cultivar` is the tree's cultivated selection ('Tina' in Malus sargentii
+  // 'Tina'), kept on the tree row by the ingest since September 2026. A
+  // parquet built before that has no such column, and selecting a missing
+  // column fails the whole load -- so probe for it the same way, and read a
+  // null until the city is rebuilt. Fold this into the plain select once every
+  // city has been refreshed past the change.
+  const hasCultivar = await parquetHasColumn(parquetUrl, 'cultivar')
+  const cultivarColumn = hasCultivar ? 'cultivar' : 'CAST(NULL AS VARCHAR) AS cultivar'
+
   await conn.query(`
     CREATE OR REPLACE TABLE trees AS
     SELECT
@@ -498,6 +507,7 @@ async function loadCityTrees(city?: string): Promise<void> {
       tree_name,
       plant_date,
       species,
+      ${cultivarColumn},
       latitude,
       longitude,
       diameter_at_breast_height,
@@ -528,6 +538,7 @@ async function loadCityTrees(city?: string): Promise<void> {
         ) AS tree_name,
         t.plant_date,
         t.species,
+        t.cultivar,
         t.latitude,
         t.longitude,
         COALESCE(t.diameter_at_breast_height, 3) AS dbh,
@@ -578,6 +589,7 @@ async function loadCityTrees(city?: string): Promise<void> {
       tree_name,
       plant_date,
       species,
+      cultivar,
       latitude,
       longitude,
       TRY_CAST(dbh AS DOUBLE) AS dbh,

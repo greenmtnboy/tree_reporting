@@ -45,6 +45,7 @@ import ecoregion_common;
 property species.genus string;
 property species.species_epithet string;
 property species.family string;
+property species.synonyms list<string>; # other scientific names for this taxon (e.g. Platanus x acerifolia for Platanus x hispanica); the ingest folds SPECIES_SYNONYMS onto the accepted name, and the alias rows published under each synonym key list the accepted name here
 
 property species.common_names list<string>; # ordered by familiarity / prevalence
 property species.description string; # short ecology / appearance / urban planting note
@@ -83,9 +84,12 @@ property species.native_ecoregions list<int>; # list of ecoregion_id values wher
 
 property species.enriched_at datetime;
 
-property species.photo_url string; # optional URL to a representative photo of the species
+property species.photo_url string; # optional URL to a representative photo of the species -- in practice a foliage / flower close-up, which is what the iNaturalist default photo usually is
 property species.photo_license string; # license identifier for the photo
 property species.photo_attribution string; # attribution text for the photo
+property species.trunk_photo_url string; # optional URL to a photo of the trunk / bark, picked by hand in enrichment_admin.py (no source can be asked for one)
+property species.trunk_photo_license string; # license identifier for the trunk photo
+property species.trunk_photo_attribution string; # attribution text for the trunk photo
 
 auto tree_eco_region<- unnest(native_ecoregions);
 
@@ -99,6 +103,7 @@ root datasource raw_tree_enrichment (
     ?genus,
     ?species_epithet,
     ?family,
+    ?synonyms,
     ?common_names,
     ?description,
     ?is_evergreen,
@@ -127,6 +132,9 @@ root datasource raw_tree_enrichment (
     ?photo_url,
     ?photo_license,
     ?photo_attribution,
+    ?trunk_photo_url,
+    ?trunk_photo_license,
+    ?trunk_photo_attribution,
     enriched_at,
 )
 grain (species)
@@ -139,6 +147,7 @@ datasource tree_enrichment (
     ?genus,
     ?species_epithet,
     ?family,
+    ?synonyms,
     ?common_names,
     ?description,
     ?is_evergreen,
@@ -167,6 +176,9 @@ datasource tree_enrichment (
     ?photo_url,
     ?photo_license,
     ?photo_attribution,
+    ?trunk_photo_url,
+    ?trunk_photo_license,
+    ?trunk_photo_attribution,
     enriched_at,
 )
 grain (species)
