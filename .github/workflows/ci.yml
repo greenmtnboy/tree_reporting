@@ -4,6 +4,26 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+
+# One live run per pull request; a new push cancels the one it superseded.
+#
+# This is not just tidiness here, because two of the jobs below -- `test` and
+# `dashboard-queries` -- compile against trilogy-service.fly.dev, a single
+# shared instance on a burst CPU quota. They are already part of each other's
+# load within one run (see the note in src/src/tests/resolverFetch.ts); without
+# this, a branch pushed three times in quick succession puts three runs and six
+# resolver-backed jobs on it at once, drains the quota, and every request comes
+# back HTTP 504 after Fly's 120s proxy timeout. The retry policy cannot help --
+# four attempts at 120s each is eight minutes of waiting on an instance that
+# needs minutes to refill -- so `test` dies on its 10-minute job budget having
+# proved nothing. That is exactly how this branch went red, twice.
+#
+# Pushes to main are deliberately not cancelled: a superseded PR run has a
+# successor coming, and main's does not.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     timeout-minutes: 10
