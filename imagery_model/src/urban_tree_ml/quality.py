@@ -442,6 +442,7 @@ def _render_grouped_registration_html(
     let reviews = hasWrappedState ? (storedState.reviews || {{}}) : (storedState || {{}});
     let sceneReviews = hasWrappedState ? (storedState.scene_reviews || {{}}) : {{}};
     let maskRegions = hasWrappedState ? (storedState.mask_regions || []) : [];
+    let serverRevision = null;
     const regionModeByScene = {{}};
     const regionDraftByScene = {{}};
     const zoomFocusByScene = {{}};
@@ -475,12 +476,15 @@ def _render_grouped_registration_html(
     async function syncReviews() {{
       clearTimeout(syncTimer);
       const sync = document.getElementById("sync");
+      if (!serverRevision) {{ sync.textContent = "Loading saved reviewsâ€¦"; return false; }}
       try {{
         const response = await fetch("/api/reviews", {{method: "PUT", headers: {{"Content-Type": "application/json"}},
-          body: JSON.stringify({{schema_version: 1, metadata, reviews, scene_reviews: sceneReviews,
+          body: JSON.stringify({{schema_version: 1, metadata, base_revision: serverRevision,
+            reviews, scene_reviews: sceneReviews,
             mask_regions: maskRegions}})}});
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || `HTTP ${{response.status}}`);
+        serverRevision = result.state_revision;
         sync.textContent = `Saved ${{result.reviews}} tree reviews · ${{result.mask_regions}} mask areas · ` +
           `${{result.completed_scenes}} images done · durable snapshot updated`;
         return true;
@@ -1369,9 +1373,10 @@ def _render_grouped_registration_html(
     async function hydrateServerReviews() {{
       try {{
         const response = await fetch("/api/reviews"); if (!response.ok) throw new Error(`HTTP ${{response.status}}`);
-        const persisted = await response.json(); reviews = withAlignedDefaults({{...(persisted.reviews || {{}}), ...reviews}});
-        sceneReviews = {{...(persisted.scene_reviews || {{}}), ...sceneReviews}};
+        const persisted = await response.json(); reviews = withAlignedDefaults(persisted.reviews || {{}});
+        sceneReviews = persisted.scene_reviews || {{}};
         maskRegions = persisted.mask_regions || [];
+        serverRevision = persisted.state_revision;
         storeLocalState(); document.getElementById("sync").textContent = "Loaded saved reviews";
       }} catch (error) {{
         reviews = withAlignedDefaults(reviews); storeLocalState();
@@ -1484,6 +1489,7 @@ def _render_registration_html(
     const metadata = {metadata_payload};
     const storageKey = `urban-tree-registration:${{metadata.review_id}}`;
     let reviews = JSON.parse(localStorage.getItem(storageKey) || "{{}}");
+    let serverRevision = null;
     let syncTimer = null;
     const cards = document.getElementById("cards");
     const splitFilter = document.getElementById("split-filter");
@@ -1501,11 +1507,13 @@ def _render_registration_html(
     async function syncReviews() {{
       clearTimeout(syncTimer);
       const sync = document.getElementById("sync");
+      if (!serverRevision) {{ sync.textContent = "Loading saved reviewsâ€¦"; return false; }}
       try {{
         const response = await fetch("/api/reviews", {{method: "PUT", headers: {{"Content-Type": "application/json"}},
-          body: JSON.stringify({{schema_version: 1, metadata, reviews}})}});
+          body: JSON.stringify({{schema_version: 1, metadata, base_revision: serverRevision, reviews}})}});
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || `HTTP ${{response.status}}`);
+        serverRevision = result.state_revision;
         sync.textContent = `Saved ${{result.reviews}} reviews`;
         return true;
       }} catch (error) {{
@@ -1646,7 +1654,8 @@ def _render_registration_html(
         const response = await fetch("/api/reviews");
         if (!response.ok) throw new Error(`HTTP ${{response.status}}`);
         const persisted = await response.json();
-        reviews = withAlignedDefaults({{...(persisted.reviews || {{}}), ...reviews}});
+        reviews = withAlignedDefaults(persisted.reviews || {{}});
+        serverRevision = persisted.state_revision;
         localStorage.setItem(storageKey, JSON.stringify(reviews));
         update();
         await syncReviews();

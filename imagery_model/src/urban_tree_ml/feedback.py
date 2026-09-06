@@ -19,6 +19,10 @@ _NUMERIC_REVIEW_FIELDS = frozenset({"image_x", "image_y", "east_m", "north_m"})
 _SAFE_PATH_SEGMENT = re.compile(r"[^A-Za-z0-9._-]+")
 
 
+class ReviewStateConflictError(ValueError):
+    """Raised when a browser attempts to replace a newer review state."""
+
+
 def _write_json_atomic(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
@@ -268,6 +272,12 @@ def persist_review_payload(review_dir: str | Path, payload: dict[str, object]) -
         raise ValueError("review payload does not match this registration review")
     reviews = normalize_review_payload(payload, manifest)
     path = directory / "reviews.json"
+    current = load_persisted_reviews(directory)
+    base_revision = payload.get("base_revision")
+    if base_revision is not None and str(base_revision) != current["state_revision"]:
+        raise ReviewStateConflictError(
+            "saved reviews changed in another tab; reload before saving"
+        )
     if "scene_reviews" in payload:
         scene_reviews = normalize_scene_review_payload(payload, manifest)
     elif path.exists():
@@ -289,11 +299,13 @@ def persist_review_payload(review_dir: str | Path, payload: dict[str, object]) -
         "mask_regions": mask_regions,
     }
     _write_json_atomic(path, persisted)
+    state_revision = _review_state_sha256(reviews, scene_reviews, mask_regions)
     return {
         "path": str(path),
         "reviews": len(reviews),
         "completed_scenes": len(scene_reviews),
         "mask_regions": len(mask_regions),
+        "state_revision": state_revision,
     }
 
 
@@ -301,11 +313,15 @@ def load_persisted_reviews(review_dir: str | Path) -> dict[str, object]:
     directory = Path(review_dir)
     path = directory / "reviews.json"
     if not path.exists():
+        reviews: dict[str, dict[str, object]] = {}
+        scene_reviews: dict[str, dict[str, object]] = {}
+        mask_regions: list[dict[str, object]] = []
         return {
             "schema_version": 1,
-            "reviews": {},
-            "scene_reviews": {},
-            "mask_regions": [],
+            "reviews": reviews,
+            "scene_reviews": scene_reviews,
+            "mask_regions": mask_regions,
+            "state_revision": _review_state_sha256(reviews, scene_reviews, mask_regions),
         }
     manifest = _read_manifest(directory)
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -314,19 +330,27 @@ def load_persisted_reviews(review_dir: str | Path) -> dict[str, object]:
         None,
         manifest["metadata"].get("review_id"),
     ):
+        reviews: dict[str, dict[str, object]] = {}
+        scene_reviews: dict[str, dict[str, object]] = {}
+        mask_regions: list[dict[str, object]] = []
         return {
             "schema_version": 1,
             "metadata": manifest["metadata"],
-            "reviews": {},
-            "scene_reviews": {},
-            "mask_regions": [],
+            "reviews": reviews,
+            "scene_reviews": scene_reviews,
+            "mask_regions": mask_regions,
+            "state_revision": _review_state_sha256(reviews, scene_reviews, mask_regions),
         }
+    reviews = normalize_review_payload(payload, manifest)
+    scene_reviews = normalize_scene_review_payload(payload, manifest)
+    mask_regions = normalize_mask_region_payload(payload, manifest)
     return {
         "schema_version": 1,
         "metadata": manifest["metadata"],
-        "reviews": normalize_review_payload(payload, manifest),
-        "scene_reviews": normalize_scene_review_payload(payload, manifest),
-        "mask_regions": normalize_mask_region_payload(payload, manifest),
+        "reviews": reviews,
+        "scene_reviews": scene_reviews,
+        "mask_regions": mask_regions,
+        "state_revision": _review_state_sha256(reviews, scene_reviews, mask_regions),
     }
 
 

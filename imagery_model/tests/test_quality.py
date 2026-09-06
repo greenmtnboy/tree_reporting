@@ -104,6 +104,8 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "Check non-veg" in html
     assert "images done" in html
     assert "scene_reviews: sceneReviews" in html
+    assert "base_revision: serverRevision" in html
+    assert "withAlignedDefaults(persisted.reviews || {})" in html
     assert "repeat(auto-fill, minmax(38px, 1fr))" in html
     assert "Tile seams" in html
     assert "event.shiftKey" in html
