@@ -1274,6 +1274,32 @@ then
 trilogy cloud jobs run urban-tree-landmarks-{code} --wait
 ```
 
+**Build a NEW city's landmark parquet from its own preql, not from
+`landmark_info.preql`.** The shared entrypoint imports every city *and* declares
+the published union `full_landmark_info` as a datasource, which satisfies
+`landmark_id`, `name`, `geometry`, `latitude` and `longitude` for any city. Once
+that union is fresh, the planner may answer those concepts from it and read the
+city's own script only for whatever columns the union lacks -- so a city that is
+not in the union yet joins against nothing and materialises **zero rows, with no
+error and an exit code of 0**. Longueuil built that way and published an empty
+parquet while its script emitted 223 rows; the refresh log said
+"Refreshed 1 asset(s)".
+
+It is not deterministic, which is what makes it nasty: Toronto, Montreal and
+Quebec City bootstrapped correctly minutes earlier, because that run also had
+the union stale and rebuilt it in the same tick. The reliable path is the
+per-city entrypoint, exactly as the tree lane concluded:
+
+```bash
+cd data && trilogy refresh raw/{code}/{slug}_landmarks.preql -f {slug}_landmark_info
+```
+
+That file imports only `..landmark_common`, so the union is structurally out of
+scope. Check the row count against what the script emits before moving on --
+`uv run {code}/{slug}_landmarks.py | python -c "import sys,pyarrow as pa;
+print(pa.ipc.open_stream(sys.stdin.buffer).read_all().num_rows)"` -- because
+zero is what this failure looks like and nothing else reports it.
+
 **Landmarks are still one refresh lane, unlike trees.** `refresh-landmarks`
 rebuilds every city's landmark parquet plus the union, weekly (landmark sources
 change on a scale of years, and its per-city freshness columns mean it only

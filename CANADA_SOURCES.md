@@ -154,10 +154,11 @@ wired onto it -- 1,325,431 trees. The three existing Socrata cities' freshness
 probes moved onto the same module, and New York's ingest gained the `$order`
 its `$offset` paging always needed.
 
-**Done (PR 2):** `_ckan_shared.py`, with Toronto, Montreal and Quebec City
-wired onto it and Boston's probe moved across -- 1,181,078 trees. Three of the
-four CKAN cities in the handoff below; **Longueuil is not wirable and was
-dropped**, for the measured reason under "Longueuil" below.
+**Done (PR 2):** `_ckan_shared.py`, with Toronto, Montreal, Quebec City and
+Longueuil wired onto it and Boston's probe moved across -- 1,278,553 trees. All
+four CKAN cities in the handoff below. Longueuil publishes no tree id and is
+the one city here with a **synthesised** one; see "Longueuil" below for what
+that costs and why it was taken anyway.
 
 **Next (a third PR):** the ArcGIS cities, which are 16 of the 23 confirmed and
 already have `_arcgis_shared.py` under them. Then the snowflakes -- Burlington
@@ -180,7 +181,12 @@ contact:
 
 - **`datastore_search_sql` cannot be relied on.** Toronto answers it with a
   404 and Donnees Quebec rejects a `CAST` with a 403. The paged
-  `datastore_search` is the only row reader in the module.
+  `datastore_search` is the row reader for every datastore-backed resource.
+
+- **Not every CKAN portal has a datastore.** Longueuil has none at all, so the
+  module also carries `read_geojson_features` for a plain file resource. A CSV
+  or shapefile resource still has no reader; that waits for a source needing
+  one.
 
 And one the handoff did not anticipate at all:
 
@@ -192,25 +198,39 @@ And one the handoff did not anticipate at all:
   `total`, so `iter_datastore_rows` takes its page size from the response and
   terminates on `total`, never on a short page.
 
-### Longueuil: measured, and not wirable
+### Longueuil: no published id, and the exception that was made for it
 
 Longueuil publishes exactly one tree dataset on Donnees Quebec (`package_search`
 for "arbres Longueuil" returns one result), and **it carries no tree id of any
 kind**. The GeoJSON's 99,345 features have exactly two properties, `Espece` and
 `Diametre_Tronc`, and no feature-level `id` member; the shapefile is an older
-63,773-record extract of the same two fields. There is nothing else to read.
+63,773-record extract of the same two fields; the KMZ's `kml_1`, `kml_2` are
+sequence numbers its exporter assigns, which is the `OBJECTID` trap rather than
+an id. The city runs no ArcGIS or WFS service. There is nothing else to read.
 
-That is blocker #1 from the CIF verdict at the top of this file, restated:
-`tree_id` is the declared grain of every city datasource and
-`enforce_tree_schema` refuses a null or duplicate one. Nor is a derived key
-available -- `EXTENDING.md` rules out a positional hash on principle, and the
-data rules it out on the numbers: the 99,345 features sit on 98,208 distinct
-coordinates, 611 points carry more than one tree and one carries 58. Even
-hashing (coordinate, species, diameter) yields 98,464 distinct keys for 99,345
-rows, so 881 trees would silently vanish into collisions.
+That is blocker #1 from the CIF verdict at the top of this file: `tree_id` is
+the declared grain and `enforce_tree_schema` refuses a null or duplicate one.
+The first pass therefore dropped the city. **That call was reversed**: 97,475
+mapped trees beat zero, and the cost of the alternative is bounded and
+measurable. `calon/longueuil_tree_info.py` carries the full reasoning; in
+short:
 
-Wiring Longueuil needs Longueuil to publish an id. Worth re-checking if the
-dataset is ever republished -- it last moved 2024-03-01.
+- **The id is the rounded coordinate and nothing else**, because position is
+  the most stable thing the source has. Folding `Diametre_Tronc` into the key
+  would churn the id of every re-measured tree, and re-measuring is what a tree
+  inventory is for.
+- **Rounded to 7 dp (~1 cm), because the portal already publishes two
+  precisions** -- the same tree is `-73.50224994604028` in the GeoJSON and
+  `-73.5022499460403` in the KMZ. An unrounded key would have churned the day
+  someone regenerated the export with a different writer.
+- **Stacked coordinates are dropped, not resolved.** 662 coordinates carry more
+  than one tree and one carries 58 -- trees never individually surveyed, mapped
+  to a block or park centroid. 1,870 rows, 1.9% of the file.
+
+The exception is worth naming as an exception: this is the only city on the map
+whose `tree_id` the publisher cannot confirm, and a community check-in recorded
+against one is orphaned if Longueuil ever corrects that coordinate. If the city
+ever publishes an id, switch to it and accept the one-time churn.
 
 ---
 

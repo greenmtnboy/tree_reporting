@@ -34,6 +34,7 @@ property <*>.cawpg_community_data_updated_through datetime; # when approved comm
 property <*>.cator_community_data_updated_through datetime; # when approved community submissions for CATOR are through
 property <*>.camtl_community_data_updated_through datetime; # when approved community submissions for CAMTL are through
 property <*>.caque_community_data_updated_through datetime; # when approved community submissions for CAQUE are through
+property <*>.calon_community_data_updated_through datetime; # when approved community submissions for CALON are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

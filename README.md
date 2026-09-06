@@ -24,6 +24,7 @@ Currently has data from the following cities:
 - [Toronto, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CATOR)
 - [Montreal, QC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAMTL)
 - [Quebec City, QC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAQUE)
+- [Longueuil, QC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CALON)
 - [London, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBLON)
 - [Amsterdam, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLAMS)
 - [Berlin, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEBER)
@@ -78,6 +79,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Toronto | City of Toronto Open Data - Street Tree Data | https://open.toronto.ca/dataset/street-tree-data/ |
 | Montreal | Donnees Montreal - Arbres publics sur le territoire de la Ville (CC-BY 4.0) | https://donnees.montreal.ca/dataset/arbres |
 | Quebec City | Donnees Quebec - Ville de Quebec, Arbres repertories (CC-BY 4.0) | https://www.donneesquebec.ca/recherche/dataset/vque_arbrerepertorie |
+| Longueuil | Donnees Quebec - Ville de Longueuil, Arbres (CC-BY 4.0) | https://www.donneesquebec.ca/recherche/dataset/arbres |
 | London | London Datastore - Public Realm Trees | https://data.london.gov.uk/dataset/2r45m |
 | Amsterdam | Amsterdam Data Portal - Bomen (Stamgegevens) | https://api.data.amsterdam.nl/v1/bomen/stamgegevens/ |
 | Berlin | Berlin Geodateninfrastruktur - Baumbestand (WFS) | https://gdi.berlin.de/services/wfs/baumbestand |
@@ -111,6 +113,7 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Toronto | City of Toronto Open Data - Places of Interest and Toronto Attractions | https://open.toronto.ca/dataset/places-of-interest-and-toronto-attractions/ |
 | Montreal | Repertoire du patrimoine culturel du Quebec - immeubles classes et cites (CC-BY 4.0) | https://www.donneesquebec.ca/recherche/dataset/immeubles-patrimoniaux-classes-par-le-ministre-de-la-culture-et-des-communications |
 | Quebec City | Repertoire du patrimoine culturel du Quebec - immeubles classes et cites (CC-BY 4.0) | https://www.donneesquebec.ca/recherche/dataset/immeubles-patrimoniaux-classes-par-le-ministre-de-la-culture-et-des-communications |
+| Longueuil | Donnees Quebec - Ville de Longueuil, Parcs (CC-BY 4.0) | https://www.donneesquebec.ca/recherche/dataset/parcs-longueuil |
 | London | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |
 | Amsterdam | Amsterdam Data Portal - Monumenten | https://api.data.amsterdam.nl/v1/monumenten/monumenten/ |
 | Berlin | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |

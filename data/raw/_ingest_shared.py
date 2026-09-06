@@ -119,8 +119,10 @@ _SPECIES_PLACEHOLDERS = frozenset(
         "not available", "not suitable",
         # The same thing in French, from the Quebec portals.  "Divers" is
         # Montreal's "various" (619 rows) and reads as a genus if left alone;
-        # "Essence a determiner" is Quebec City's "species to be identified".
-        "divers", "essence a determiner",
+        # "Essence a determiner" is Quebec City's "species to be identified",
+        # and "Autre espece" Longueuil's "other species" (685 rows), which
+        # survives the shape rules as a plausible-looking two-word binomial.
+        "divers", "essence a determiner", "autre espece",
     }
 )
 
@@ -792,6 +794,7 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "CALON": ("LONGUEUIL_OPENDATA",),
     "CAQUE": ("QUEBEC_OPENDATA",),
     "CAMTL": ("MONTREAL_OPENDATA",),
     "CATOR": ("TORONTO_OPENDATA",),
@@ -848,6 +851,7 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "CALON": "OSM_CALON",
     "CAQUE": "OSM_CAQUE",
     "CAMTL": "OSM_CAMTL",
     "CATOR": "OSM_CATOR",
@@ -1206,6 +1210,7 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "CALON": (45.4, 45.62, -73.58, -73.3),
     "CAQUE": (46.68, 47.0, -71.6, -71.1),
     "CAMTL": (45.38, 45.72, -74.0, -73.42),
     "CATOR": (43.55, 43.9, -79.7, -79.1),
@@ -1287,6 +1292,12 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # ../../DEDUP_CELL_RECALIBRATION.md.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # 5-10 m band 36.5% mutual-NN over n=178; 4->6 removes 102 duplicates for
+    # 56 hidden trees (1.82), 6->8 removes 36 for 46 (0.78).  Longueuil's OSM
+    # barely overlaps its inventory -- 1,523 duplicates out of 130,006 nodes,
+    # against Montreal's 325,284 -- so the whole table is small, but the turn
+    # is in the same place.
+    "CALON": 6,
     # 5-10 m band 43.9% mutual-NN over n=4,484, and the marginal table keeps
     # paying to 8 m: 4->6 removes 2,320 duplicates for 560 hidden trees (4.14),
     # 6->8 removes 1,054 for 790 (1.33), 8->10 removes 632 for 878 (0.72).

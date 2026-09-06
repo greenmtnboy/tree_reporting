@@ -11,6 +11,7 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Longueuil', label: 'Donnees Quebec - Ville de Longueuil, Arbres (CC-BY 4.0)', url: 'https://www.donneesquebec.ca/recherche/dataset/arbres' },
   { city: 'Quebec City', label: 'Donnees Quebec - Ville de Quebec, Arbres repertories (CC-BY 4.0)', url: 'https://www.donneesquebec.ca/recherche/dataset/vque_arbrerepertorie' },
   { city: 'Montreal', label: 'Donnees Montreal - Arbres publics sur le territoire de la Ville (CC-BY 4.0)', url: 'https://donnees.montreal.ca/dataset/arbres' },
   { city: 'Toronto', label: 'City of Toronto Open Data - Street Tree Data', url: 'https://open.toronto.ca/dataset/street-tree-data/' },
@@ -56,6 +57,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Longueuil', label: 'Donnees Quebec - Ville de Longueuil, Parcs (CC-BY 4.0)', url: 'https://www.donneesquebec.ca/recherche/dataset/parcs-longueuil' },
   { city: 'Quebec City', label: 'Repertoire du patrimoine culturel du Quebec - immeubles classes et cites (CC-BY 4.0)', url: 'https://www.donneesquebec.ca/recherche/dataset/immeubles-patrimoniaux-classes-par-le-ministre-de-la-culture-et-des-communications' },
   { city: 'Montreal', label: 'Repertoire du patrimoine culturel du Quebec - immeubles classes et cites (CC-BY 4.0)', url: 'https://www.donneesquebec.ca/recherche/dataset/immeubles-patrimoniaux-classes-par-le-ministre-de-la-culture-et-des-communications' },
   { city: 'Toronto', label: 'City of Toronto Open Data - Places of Interest and Toronto Attractions', url: 'https://open.toronto.ca/dataset/places-of-interest-and-toronto-attractions/' },

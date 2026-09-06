@@ -23,6 +23,7 @@ import cawpg.winnipeg_landmarks;
 import cator.toronto_landmarks;
 import camtl.montreal_landmarks;
 import caque.quebec_landmarks;
+import calon.longueuil_landmarks;
 
 
 # --- Merged union datasource ---

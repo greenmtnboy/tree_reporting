@@ -52,6 +52,8 @@ property <*>.grath_osm_data_updated_through datetime; # GCS publication time of 
 property <*>.grmlo_osm_data_updated_through datetime; # GCS publication time of Milos's staged OSM parquet
 property <*>.grsan_osm_data_updated_through datetime; # GCS publication time of Santorini's staged OSM parquet
 property <*>.usden_osm_data_updated_through datetime; # GCS publication time of Denver's staged OSM parquet
+property <*>.calon_data_updated_through datetime; # when Longueuil data is through
+property <*>.calon_osm_data_updated_through datetime; # GCS publication time of Longueuil's staged OSM parquet
 property <*>.caque_data_updated_through datetime; # when Quebec City data is through
 property <*>.caque_osm_data_updated_through datetime; # GCS publication time of Quebec City's staged OSM parquet
 property <*>.camtl_data_updated_through datetime; # when Montreal data is through

@@ -33,13 +33,14 @@ measured against the four portals rather than assumed:
   handoff note in `CANADA_SOURCES.md` — and it contradicts it because Toronto
   would otherwise have been frozen in 2022 for ever.
 
-**Every city wired onto this module is datastore-backed**, so the row reader
-here is the datastore one only.  A portal with `datastore_active = False`
-publishes its rows as a file (CSV, GeoJSON, shapefile) and needs a reader
-written when the first such city arrives — deliberately not written in
-advance, since the shape of that reader is not knowable until a source needs
-it.  `resource_download_url` is the piece such a reader would start from, and
-is used today by Boston's CSV ingest.
+**Two row readers, because CKAN has two kinds of resource.**
+`iter_datastore_rows` pages a resource with `datastore_active = True`, which is
+how Toronto, Montreal, Quebec City and Boston publish.  A resource without the
+datastore is a plain file, and `read_geojson_features` reads the GeoJSON form
+of one -- Longueuil publishes its trees and its parks that way and has no
+datastore at all.  A CSV or shapefile resource still needs its own reader; that
+one is not written in advance, because the shape is not knowable until a source
+needs it.
 """
 
 from __future__ import annotations
@@ -50,7 +51,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from _ingest_shared import UpstreamUnavailable, get_json_with_retry
+from _ingest_shared import UpstreamUnavailable, get_json_with_retry, get_with_retry
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -384,6 +385,45 @@ def iter_datastore_rows(
 def _json_filters(filters: dict) -> str:
     """CKAN takes `filters` as a JSON object in the query string."""
     return json.dumps(filters)
+
+
+# ---------------------------------------------------------------------------
+# File resources
+# ---------------------------------------------------------------------------
+
+def read_geojson_features(resource: CkanResource) -> list[dict]:
+    """The features of a GeoJSON *file* resource, for a portal with no datastore.
+
+    Whole-file, not paged: a file resource is one HTTP GET and there is no
+    offset to page by.  That bounds what this is suitable for -- Longueuil's
+    trees are 25 MB and 99,345 features, which is fine, and something an order
+    of magnitude larger would want streaming instead.
+
+    Read through the resource's *published* download URL rather than a pasted
+    one, because CKAN's download path ends in the uploaded filename and a
+    re-upload under a new name breaks a hardcoded link.
+
+    The body is decoded as `utf-8-sig`: these exports carry a BOM, which
+    `json.loads` rejects as invalid JSON with a message about line 1 column 1
+    that says nothing about an encoding.
+    """
+    url = resource_download_url(resource)
+    response = get_with_retry(url, timeout=resource.timeout)
+    try:
+        payload = json.loads(response.content.decode("utf-8-sig"))
+    except ValueError as exc:
+        raise UpstreamUnavailable(
+            f"GeoJSON resource {resource.resource_id} on {resource.host} did "
+            f"not parse as JSON ({exc}); {url} returned "
+            f"{response.headers.get('content-type')}, {len(response.content)} bytes"
+        ) from exc
+    features = payload.get("features")
+    if features is None:
+        raise RuntimeError(
+            f"GeoJSON resource {resource.resource_id} on {resource.host} has no "
+            f"`features` member -- got keys {sorted(payload)[:8]}"
+        )
+    return features
 
 
 # ---------------------------------------------------------------------------
