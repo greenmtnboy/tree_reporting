@@ -261,7 +261,7 @@ def _render_grouped_registration_html(
     .tree-marker[data-status="duplicate"] {{ border-color: #c084fc; color: #e9d5ff; }}
     .prediction-marker {{ display: none; position: absolute; width: 13px; height: 13px; padding: 0;
       border: 2px solid #250725; border-radius: 50%; transform: translate(-50%, -50%);
-      background: #ed55e8e6; box-shadow: 0 0 0 1px #f8d8f6cc; cursor: help; z-index: 7; }}
+      background: #ed55e8e6; box-shadow: 0 0 0 1px #f8d8f6cc; cursor: zoom-in; z-index: 7; }}
     .prediction-marker.penalized {{ outline: 2px solid #ff4055; outline-offset: 2px; }}
     .prediction-marker.ignored {{ outline: 2px solid #35e5ee; outline-offset: 2px; }}
     .prediction-marker.near-positive {{ outline: 2px dashed #ffd166; outline-offset: 2px; }}
@@ -311,6 +311,14 @@ def _render_grouped_registration_html(
     .tree-choice[data-status="duplicate"] {{ border-color: #c084fc; }}
     .tree-choice.heuristic-suggestion {{ background: #594819; border-color: #ffcf66; color: #fff1bf; }}
     .details {{ padding: 9px 12px 0; line-height: 1.5; min-height: 70px; }}
+    .pixel-zoom {{ display: none; padding: 8px 12px; border-top: 1px solid #26392f;
+      border-bottom: 1px solid #26392f; background: #111b16; }}
+    .pixel-zoom-head {{ display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px;
+      color: #dce9df; font-size: 12px; }}
+    .pixel-zoom-label {{ color: #9eb6a5; font-variant-numeric: tabular-nums; text-align: right; }}
+    .pixel-zoom canvas {{ display: block; width: min(100%, 190px); aspect-ratio: 1; margin: 0 auto;
+      border: 1px solid #496252; border-radius: 5px; background: #050806;
+      image-rendering: pixelated; image-rendering: crisp-edges; }}
     .selected-species {{ color: #eef5ef; font-size: 14px; font-weight: 700; }}
     .actions {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(82px, 1fr)); gap: 5px; padding: 10px 12px; }}
     .actions button {{ min-height: 40px; padding: 6px 3px; font-size: 12px; }}
@@ -326,8 +334,8 @@ def _render_grouped_registration_html(
     textarea {{ width: calc(100% - 24px); min-height: 48px; margin: 0 12px 12px; resize: vertical;
       border: 1px solid #3b5144; border-radius: 6px; padding: 7px; color: #eef5ef; background: #101713; }}
     .card.fullscreen {{ position: fixed; inset: 0; z-index: 100; display: grid; overflow: auto;
-      grid-template-columns: minmax(0, 1fr) minmax(330px, 420px); grid-template-rows: auto auto auto auto auto 1fr;
-      grid-template-areas: "head head" "image list" "image details" "image actions" "image mask" "image note";
+      grid-template-columns: minmax(0, 1fr) minmax(330px, 420px); grid-template-rows: auto auto auto auto auto auto 1fr;
+      grid-template-areas: "head head" "image list" "image zoom" "image details" "image actions" "image mask" "image note";
       border: 0; border-radius: 0; background: #101713; }}
     .card.fullscreen .card-head {{ grid-area: head; border-bottom: 1px solid #30443a; }}
     .card.fullscreen .fullscreen-only {{ display: inline-block; }}
@@ -335,6 +343,7 @@ def _render_grouped_registration_html(
     .card.fullscreen .image-wrap {{ grid-area: image; align-self: start; justify-self: center;
       width: min(calc(100vw - 440px), calc(100vh - 72px)); max-width: 100%; }}
     .card.fullscreen .tree-list {{ grid-area: list; padding-top: 14px; }}
+    .card.fullscreen .pixel-zoom {{ grid-area: zoom; display: block; }}
     .card.fullscreen .details {{ grid-area: details; }}
     .card.fullscreen .actions {{ grid-area: actions; }}
     .card.fullscreen .mask-actions {{ grid-area: mask; display: grid; }}
@@ -349,13 +358,13 @@ def _render_grouped_registration_html(
     .street-view-frame {{ display: block; width: 100%; height: 100%; min-height: 378px; border: 0; }}
     .street-view-frame.locked {{ pointer-events: none; }}
     .card.fullscreen.street-view-open {{ grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr) minmax(330px, 400px);
-      grid-template-areas: "head head head" "image street list" "image street details" "image street actions" "image street mask" "image street note"; }}
+      grid-template-areas: "head head head" "image street list" "image street zoom" "image street details" "image street actions" "image street mask" "image street note"; }}
     .card.fullscreen.street-view-open .image-wrap {{ width: min(calc(50vw - 205px), calc(100vh - 72px)); }}
     .card.fullscreen.street-view-open .street-view-panel {{ grid-area: street; display: block; align-self: stretch; }}
     .hidden {{ display: none; }}
     @media (max-width: 1100px) {{
       .card.fullscreen.street-view-open {{ grid-template-columns: minmax(0, 1fr) minmax(330px, 420px);
-        grid-template-areas: "head head" "street list" "street details" "street actions" "street mask" "street note"; }}
+        grid-template-areas: "head head" "street list" "street zoom" "street details" "street actions" "street mask" "street note"; }}
       .card.fullscreen.street-view-open .image-wrap {{ display: none; }}
     }}
     @media (max-width: 850px) {{
@@ -384,6 +393,7 @@ def _render_grouped_registration_html(
         <li><strong>Non-vegetation helper:</strong> “Check non-veg” previews conservative low-NIR gray candidates in gold. Review the highlights, then explicitly apply them as uncertain; they never become hard not-tree negatives.</li>
         <li><strong>Coordinate stacks:</strong> exact lat/lon stacks are hidden by default. Unresolved stacks are excluded by target collision handling; show them when you want to split resolvable records with explicit offsets.</li>
         <li><strong>Bulk review:</strong> Shift-click markers or numbered buttons to add or remove trees from the selection, or use <em>Select all</em>. A/N/U/D mark the selected trees aligned/not-tree/uncertain/duplicate in full-screen mode. Center marking and notes are disabled while several trees are selected.</li>
+        <li><strong>Pixel close-up:</strong> fullscreen review shows a marker-free 20-pixel crop around the selected inventory point, clicked offset, or model prediction. The crosshair is the exact obscured location.</li>
       </ul>
     </details>
     <div class="toolbar">
@@ -434,6 +444,7 @@ def _render_grouped_registration_html(
     let maskRegions = hasWrappedState ? (storedState.mask_regions || []) : [];
     const regionModeByScene = {{}};
     const regionDraftByScene = {{}};
+    const zoomFocusByScene = {{}};
     const suggestedByScene = {{}};
     const streetViewMetadataCache = new Map();
     let syncTimer = null;
@@ -541,6 +552,12 @@ def _render_grouped_registration_html(
         selected.add(sampleId);
       }}
       activeByScene[sceneId] = selected.has(sampleId) ? sampleId : [...selected][0];
+      const activeSample = samplesById[activeByScene[sceneId]];
+      if (activeSample) {{
+        const number = scenesById[sceneId].sample_ids.indexOf(activeSample.sample_id) + 1;
+        zoomFocusByScene[sceneId] = {{x: activeSample.target_x, y: activeSample.target_y,
+          label: `Tree ${{number}} inventory location`}};
+      }}
       update();
     }}
     function toggleSelectAll(sceneId) {{
@@ -644,6 +661,48 @@ def _render_grouped_registration_html(
       }};
       visibleRegions.forEach(region => draw(region));
       if (draft) draw({{...draft, anchor_sample_id: activeByScene[scene.scene_id]}}, true);
+    }}
+    function renderPixelZoom(card, scene) {{
+      const panel = card.querySelector(".pixel-zoom");
+      if (!panel) return;
+      const canvas = panel.querySelector("canvas");
+      const image = card.querySelector(".image-wrap img");
+      const activeSample = samplesById[activeByScene[scene.scene_id]];
+      if (!activeSample) return;
+      const review = reviews[activeSample.sample_id] || {{}};
+      const focus = zoomFocusByScene[scene.scene_id] || (review.status === "offset" && review.image_x != null
+        ? {{x: review.image_x, y: review.image_y, label: "Corrected tree center"}}
+        : {{x: activeSample.target_x, y: activeSample.target_y, label: "Selected inventory location"}});
+      const cropPixels = 20;
+      const outputPixels = 240;
+      canvas.width = outputPixels; canvas.height = outputPixels;
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#050806"; context.fillRect(0, 0, outputPixels, outputPixels);
+      if (!image.complete || !image.naturalWidth) {{
+        if (!image.dataset.zoomLoadBound) {{
+          image.dataset.zoomLoadBound = "true";
+          image.addEventListener("load", () => renderPixelZoom(card, scene));
+        }}
+        return;
+      }}
+      context.imageSmoothingEnabled = false;
+      context.drawImage(image, focus.x - cropPixels / 2, focus.y - cropPixels / 2,
+        cropPixels, cropPixels, 0, 0, outputPixels, outputPixels);
+      const middle = outputPixels / 2;
+      const crosshair = color => {{
+        context.strokeStyle = color;
+        context.beginPath();
+        context.moveTo(middle - 17, middle); context.lineTo(middle - 5, middle);
+        context.moveTo(middle + 5, middle); context.lineTo(middle + 17, middle);
+        context.moveTo(middle, middle - 17); context.lineTo(middle, middle - 5);
+        context.moveTo(middle, middle + 5); context.lineTo(middle, middle + 17);
+        context.stroke();
+      }};
+      context.lineWidth = 5; crosshair("#06110c");
+      context.lineWidth = 2; crosshair("#8ff7ff");
+      const spanM = cropPixels * regionPixelScaleM(activeSample);
+      panel.querySelector(".pixel-zoom-label").textContent =
+        `${{focus.label}} · ${{spanM.toFixed(1)}} m square · source pixel (${{focus.x.toFixed(1)}}, ${{focus.y.toFixed(1)}})`;
     }}
     function externalStreetViewUrl(sample) {{
       const parameters = new URLSearchParams({{
@@ -818,12 +877,24 @@ def _render_grouped_registration_html(
           const supervisionStatus = prediction.center_supervision?.status;
           if (supervisionStatus === "negative") marker.classList.add("penalized");
           else if (["ignored", "near-positive", "positive"].includes(supervisionStatus)) marker.classList.add(supervisionStatus);
-          marker.style.left = `${{100 * Number(prediction.output_x) * outputStride / chipPixels}}%`;
-          marker.style.top = `${{100 * Number(prediction.output_y) * outputStride / chipPixels}}%`;
+          const predictionX = Number(prediction.output_x) * outputStride;
+          const predictionY = Number(prediction.output_y) * outputStride;
+          marker.style.left = `${{100 * predictionX / chipPixels}}%`;
+          marker.style.top = `${{100 * predictionY / chipPixels}}%`;
           marker.title = predictionTitle(prediction);
           marker.setAttribute("aria-label", marker.title);
-          marker.setAttribute("role", "img");
+          marker.setAttribute("role", "button");
           marker.tabIndex = 0;
+          const focusPrediction = event => {{
+            event.stopPropagation();
+            zoomFocusByScene[scene.scene_id] = {{x: predictionX, y: predictionY,
+              label: `Model prediction ${{Math.round(100 * Number(prediction.score))}}%`}};
+            renderPixelZoom(card, scene);
+          }};
+          marker.addEventListener("click", focusPrediction);
+          marker.addEventListener("keydown", event => {{
+            if (event.key === "Enter" || event.key === " ") {{ event.preventDefault(); focusPrediction(event); }}
+          }});
           wrap.append(marker);
         }});
         if (badge) {{
@@ -949,6 +1020,7 @@ def _render_grouped_registration_html(
           ? `Undo last area (${{sceneMaskRegions.length}})` : "No mask areas";
         card.querySelector(".image-wrap").classList.toggle("region-drawing", Boolean(regionMode));
         renderMaskRegions(card, scene);
+        renderPixelZoom(card, scene);
         card.querySelectorAll(".tree-marker").forEach(marker => {{
           const markerSample = samplesById[marker.dataset.sampleId];
           marker.dataset.status = statusOf(markerSample.sample_id);
@@ -1152,6 +1224,7 @@ def _render_grouped_registration_html(
         const x = (event.clientX - rect.left) / rect.width * scene.image_width;
         const y = (event.clientY - rect.top) / rect.height * scene.image_height;
         const dx = x - sample.target_x, dy = y - sample.target_y;
+        zoomFocusByScene[scene.scene_id] = {{x, y, label: "Clicked offset location"}};
         reviews[sampleId] = {{...(reviews[sampleId] || {{}}), status: "offset", source: "human", image_x: x, image_y: y,
           east_m: sample.transform_a * dx + sample.transform_b * dy,
           north_m: sample.transform_d * dx + sample.transform_e * dy}};
@@ -1165,6 +1238,14 @@ def _render_grouped_registration_html(
         choice.textContent = index + 1; choice.addEventListener("click", event =>
           selectSample(scene.scene_id, sample.sample_id, event.shiftKey)); treeList.append(choice);
       }});
+      const pixelZoom = document.createElement("section"); pixelZoom.className = "pixel-zoom";
+      const pixelZoomHead = document.createElement("div"); pixelZoomHead.className = "pixel-zoom-head";
+      const pixelZoomTitle = document.createElement("strong"); pixelZoomTitle.textContent = "Pixel close-up";
+      const pixelZoomLabel = document.createElement("span"); pixelZoomLabel.className = "pixel-zoom-label";
+      pixelZoomHead.append(pixelZoomTitle, pixelZoomLabel);
+      const pixelZoomCanvas = document.createElement("canvas");
+      pixelZoomCanvas.setAttribute("aria-label", "Marker-free close-up around the selected location");
+      pixelZoom.append(pixelZoomHead, pixelZoomCanvas);
       const details = document.createElement("div"); details.className = "details";
       const species = document.createElement("div"); species.className = "selected-species";
       const facts = document.createElement("div"); facts.className = "selected-facts";
@@ -1214,7 +1295,7 @@ def _render_grouped_registration_html(
         if (selectionFor(scene.scene_id).size !== 1) return;
         const sampleId = activeByScene[scene.scene_id]; reviews[sampleId] = {{...(reviews[sampleId] || {{}}), note: note.value}}; persist();
       }});
-      card.append(head, wrap, streetViewPanel, treeList, details, actions, maskActions, note); return card;
+      card.append(head, wrap, streetViewPanel, treeList, pixelZoom, details, actions, maskActions, note); return card;
     }}
     [...new Set(samples.map(sample => sample.split))].forEach(value => {{
       const option = document.createElement("option"); option.value = value; option.textContent = value; splitFilter.append(option);
