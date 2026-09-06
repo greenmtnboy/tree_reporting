@@ -24,6 +24,13 @@ import pytest
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
+# The admin reuses tree_enrichment.py, which imports the LLM client at module
+# scope.  The lightweight `uv run --with pytest python -m pytest tests -q` sweep
+# does not carry that dependency, so this file steps aside there rather than
+# breaking collection for every other test; run it in full with
+# `uv run tests/test_enrichment_admin.py`, which resolves its own dependencies.
+pytest.importorskip("instructor", reason="run `uv run tests/test_enrichment_admin.py` for the admin tests")
+
 import enrichment_admin as admin  # noqa: E402
 from enrichment._tree_shared import (  # noqa: E402
     SPECIES_SENTINELS,
