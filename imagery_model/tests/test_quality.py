@@ -130,6 +130,13 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert 'sample.species || "Unknown species"' in html
     assert '.card.fullscreen .tree-species-label' in html
     assert 'label.dataset.status = statusOf(label.dataset.sampleId)' in html
+    assert 'protect.textContent = "Protect area (P)"' in html
+    assert 'background.textContent = "Confirm background (B)"' in html
+    assert "finishMaskRegion" in html
+    assert "mask_regions: maskRegions" in html
+    assert 'className = `loss-region ${region.mode}' in html
+    assert 'event.key.toLowerCase() === "p"' in html
+    assert 'event.key.toLowerCase() === "b"' in html
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
     assert manifest["metadata"]["test_labels_included"] is False
     assert manifest["metadata"]["rendered_scenes"] == len(manifest["scenes"])

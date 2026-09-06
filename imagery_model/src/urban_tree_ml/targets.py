@@ -15,6 +15,16 @@ class PointLabel:
     species_id: int | None = None
 
 
+@dataclass(frozen=True)
+class DetectionMaskRegion:
+    """A manual circular override in input-image pixel coordinates."""
+
+    x: float
+    y: float
+    radius: float
+    mode: str
+
+
 def point_label_output_cell(
     label: PointLabel,
     *,
@@ -83,6 +93,7 @@ def build_targets(
     valid_mask: np.ndarray | None = None,
     ndvi: np.ndarray | None = None,
     ignored_locations: list[tuple[float, float]] | None = None,
+    mask_regions: list[DetectionMaskRegion] | None = None,
     background_mode: str = "ndvi_positive_unlabeled",
     background_ndvi_max: float = 0.05,
     collision_policy: str = "discard",
@@ -170,8 +181,28 @@ def build_targets(
         ignored = (grid_x - x) ** 2 + (grid_y - y) ** 2 <= radius**2
         detection_mask[ignored] = 0.0
 
-    # A retained positive always wins if its supervision neighborhood overlaps
-    # a rejected/uncertain inventory point.
+    # Apply manual regions in creation order so a later, more specific annotation
+    # can replace an earlier one. Regions only alter center supervision; they do
+    # not manufacture or remove inventory labels.
+    grid_y, grid_x = np.ogrid[:output_height, :output_width]
+    for region in mask_regions or []:
+        if region.mode not in {"protect", "confirmed-background"}:
+            raise ValueError(f"unknown detection mask region mode: {region.mode}")
+        if region.radius <= 0:
+            raise ValueError("detection mask region radius must be positive")
+        output_x = region.x / stride
+        output_y = region.y / stride
+        output_radius = region.radius / stride
+        local = (
+            (grid_x - output_x) ** 2 + (grid_y - output_y) ** 2
+            <= output_radius**2
+        )
+        local = np.logical_and(local, downsampled_valid)
+        detection_mask[local] = 0.0 if region.mode == "protect" else 1.0
+
+    # A retained positive always wins if its center overlaps an exclusion or a
+    # manual background region. Invalid background annotations therefore cannot
+    # silently erase known trees.
     detection_mask[center > 0] = 1.0
     return {
         "center": center,
