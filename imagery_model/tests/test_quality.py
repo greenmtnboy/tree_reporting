@@ -137,6 +137,12 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert 'className = `loss-region ${region.mode}' in html
     assert 'event.key.toLowerCase() === "p"' in html
     assert 'event.key.toLowerCase() === "b"' in html
+    assert 'pixelZoomTitle.textContent = "Pixel close-up"' in html
+    assert "renderPixelZoom" in html
+    assert "zoomFocusByScene" in html
+    assert "context.imageSmoothingEnabled = false" in html
+    assert 'label: "Clicked offset location"' in html
+    assert "focusPrediction" in html
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
     assert manifest["metadata"]["test_labels_included"] is False
     assert manifest["metadata"]["rendered_scenes"] == len(manifest["scenes"])

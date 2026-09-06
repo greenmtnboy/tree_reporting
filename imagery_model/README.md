@@ -147,6 +147,10 @@ process as `GOOGLE_MAPS_EMBED_API_KEY` (for example,
 full-screen image is opened. If the variable is absent, full-screen review remains overhead-only.
 The fullscreen overhead tile lightly labels every visible inventory marker with its species;
 the active tree is emphasized and duplicate verdicts are purple-tinted for comparison.
+The sidebar also renders a marker-free, nearest-neighbor 20-pixel crop around the selected
+inventory location or clicked correction, with a crosshair at the exact point hidden by the marker.
+Clicking a model-prediction marker moves the same close-up to that prediction without changing any
+tree verdict.
 When Street View Static API is also enabled for the browser key, the reviewer resolves the actual
 nearest panorama location, aims its initial heading toward the selected tree, and draws that camera
 and view direction over the overhead tile. The iframe is interaction-locked by default so the cone
