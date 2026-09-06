@@ -138,10 +138,17 @@ SELECT * FROM (VALUES
 ''';
 # END dedup_cells
 
-def grid_cell(dx, dy) -> concat(
-    cast(floor(raw_longitude / cell_lon_deg + dx) as string), ':',
-    cast(floor(raw_latitude / cell_lat_deg + dy) as string)
-);
+# One bigint per cell rather than a 'lon:lat' string.  The cell is a join
+# and grouping key in eight hash tables per build (four grids, each
+# aggregated and joined back), and a build's memory is those hash tables:
+# measured on Berlin's 765k-row union, string keys cost 11% more peak RSS
+# than integer ones (upstream_repro/redundant_group_by/memory).  The lon
+# index is at most 180 / 0.00009 ~ 2.0e6 and the lat index at most
+# 90 / 0.00009 ~ 1.0e6, so 1e7 keeps the two apart with no collisions and
+# the key stays under 2e13, well inside a bigint.
+def grid_cell(dx, dy) ->
+    cast(floor(raw_longitude / cell_lon_deg + dx) as bigint) * 10000000
+    + cast(floor(raw_latitude / cell_lat_deg + dy) as bigint);
 
 auto cell_a <- @grid_cell(0, 0);
 auto cell_b <- @grid_cell(0.5, 0);

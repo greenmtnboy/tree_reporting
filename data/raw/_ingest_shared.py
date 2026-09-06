@@ -887,11 +887,21 @@ def enforce_tree_schema(
     columns: dict[str, str] | None = None,
     city: str = "",
     data_source: str | None = None,
+    seen_ids: set[str] | None = None,
+    summary: dict[str, int] | None = None,
 ) -> pa.Table:
     """Cast the tree ingest columns to their canonical Arrow types.
 
     Every city script calls this immediately before ``emit`` so all cities'
     parquets share identical column types.
+
+    A script that streams its city in pages -- New York, whose 1.1M rows
+    peaked at 674 MiB as one table -- calls this once per page and passes the
+    same ``seen_ids`` set and ``summary`` dict each time: the set carries the
+    ``tree_id`` grain check across pages (a repeat in page three of an id from
+    page one is still a repeat), and the dict accumulates the species-cleanup
+    counts so ``report_species_cleanup`` can print the one summary line the
+    refresh log expects, instead of one per page.
 
     Parameters
     ----------
@@ -977,11 +987,6 @@ def enforce_tree_schema(
         if not_a_tree:
             table = table.filter(pa.array(keep_rows, type=pa.bool_()))
             raw_species = table.column(sidx).to_pylist()
-            print(
-                f"{prefix}: dropped {not_a_tree} row(s) whose species field "
-                f"records an empty site or stump rather than a tree",
-                file=sys.stderr,
-            )
         # The cultivar comes off the raw string before the taxon rules see
         # it, and only stays when a taxon survived: a selection is a choice
         # *within* a taxon, so one attached to "Vacant" says nothing.  A
@@ -1031,15 +1036,18 @@ def enforce_tree_schema(
             table = table.append_column(cultivar_col, cultivar_array)
         # Never silent: a run that reshapes a tenth of its species column
         # should say so in the refresh log.
-        if dropped or rewritten or formed or cultivared:
-            print(
-                f"{prefix}: species cleanup -- {dropped} value(s) were not "
-                f"scientific names and became {UNKNOWN_SPECIES!r}, "
-                f"{rewritten} normalised to species rank, "
-                f"{formed} kept as a growth-form sentinel, "
-                f"{cultivared} carry a cultivar on the tree row",
-                file=sys.stderr,
-            )
+        counts = {
+            "not_a_tree": not_a_tree,
+            "dropped": dropped,
+            "rewritten": rewritten,
+            "formed": formed,
+            "cultivared": cultivared,
+        }
+        if summary is not None:
+            for key, n in counts.items():
+                summary[key] = summary.get(key, 0) + n
+        else:
+            report_species_cleanup(counts, city=city)
 
     for canonical, target in TREE_COLUMN_TYPES.items():
         actual = resolved[canonical]
@@ -1070,12 +1078,40 @@ def enforce_tree_schema(
             actual, pa.nulls(table.num_rows, type=target)
         )
 
-    _check_tree_id_grain(table, resolved["tree_id"], prefix=prefix)
+    _check_tree_id_grain(table, resolved["tree_id"], prefix=prefix, seen=seen_ids)
 
     return table
 
 
-def _check_tree_id_grain(table: pa.Table, column: str, *, prefix: str) -> None:
+def report_species_cleanup(counts: dict[str, int], *, city: str = "") -> None:
+    """Print the species-cleanup summary for one ingest.
+
+    ``enforce_tree_schema`` calls this itself unless it was given a
+    ``summary`` dict to accumulate into, in which case the streaming script
+    calls it once at the end.  A run that reshapes a tenth of its species
+    column should say so in the refresh log, exactly once.
+    """
+    prefix = f"{city} ingest" if city else "Ingest"
+    if counts.get("not_a_tree"):
+        print(
+            f"{prefix}: dropped {counts['not_a_tree']} row(s) whose species field "
+            f"records an empty site or stump rather than a tree",
+            file=sys.stderr,
+        )
+    if any(counts.get(k) for k in ("dropped", "rewritten", "formed", "cultivared")):
+        print(
+            f"{prefix}: species cleanup -- {counts.get('dropped', 0)} value(s) were not "
+            f"scientific names and became {UNKNOWN_SPECIES!r}, "
+            f"{counts.get('rewritten', 0)} normalised to species rank, "
+            f"{counts.get('formed', 0)} kept as a growth-form sentinel, "
+            f"{counts.get('cultivared', 0)} carry a cultivar on the tree row",
+            file=sys.stderr,
+        )
+
+
+def _check_tree_id_grain(
+    table: pa.Table, column: str, *, prefix: str, seen: set[str] | None = None
+) -> None:
     """Refuse a repeated ``tree_id``.
 
     A grain violation, and Trilogy has no way to notice one -- see the note on
@@ -1092,7 +1128,10 @@ def _check_tree_id_grain(table: pa.Table, column: str, *, prefix: str) -> None:
     if column not in table.schema.names:
         return
     ids = table.column(column).to_pylist()
-    seen: set[str] = set()
+    # A streaming ingest passes one set across its pages, so a repeat of a
+    # page-one id in page three is still caught.
+    if seen is None:
+        seen = set()
     repeats: set[str] = set()
     nulls = 0
     for value in ids:
