@@ -26,6 +26,8 @@ def build_chips(
     *,
     feedback_path: str | Path | None = None,
     use_default_feedback: bool = True,
+    output_dataset: str | None = None,
+    inventory_source: Path | None = None,
 ) -> dict[str, object]:
     try:
         import rasterio
@@ -35,7 +37,7 @@ def build_chips(
             "Install the imagery dependency group: uv sync --group imagery"
         ) from error
 
-    inventory_path = (
+    inventory_path = inventory_source or (
         config.paths.root / "inventory" / config.inventory.city.lower() / "inventory.parquet"
     )
     frame = pd.read_parquet(inventory_path)
@@ -48,7 +50,7 @@ def build_chips(
         )
     frame = frame[frame["split_eligible"]].copy()
     chip_pixels = config.imagery.chip_pixels
-    output_root = config.paths.root / "chips" / config.dataset
+    output_root = config.paths.root / "chips" / (output_dataset or config.dataset)
     output_root.mkdir(parents=True, exist_ok=True)
 
     records: list[dict[str, object]] = []

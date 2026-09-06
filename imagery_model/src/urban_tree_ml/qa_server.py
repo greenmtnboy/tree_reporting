@@ -12,6 +12,7 @@ from threading import Lock
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 
 from urban_tree_ml.config import ProjectConfig, StudioConfig, load_config
+from urban_tree_ml.curation_report import CURATION_REPORT_HTML, city_report
 from urban_tree_ml.feedback import (
     ReviewStateConflictError,
     finalize_registration_feedback,
@@ -246,6 +247,8 @@ def _serve_review_contexts(
         return candidate if candidate in available else None
 
     def city_navigation(html: str, context: ReviewContext) -> str:
+        if 'href="/coverage"' not in html:
+            html = html.replace('</nav>', '<a href="/coverage">Curation coverage</a></nav>', 1)
         run_id = run_id_for_context(context)
         model_query = f"?{urlencode({'run': run_id})}" if run_id else ""
         html = html.replace(
@@ -387,6 +390,20 @@ def _serve_review_contexts(
                 return
             if path in {"/registration", "/registration/"}:
                 self._html_response(registration_html(context))
+                return
+            if path in {"/coverage", "/coverage/"}:
+                self._html_response(city_navigation(CURATION_REPORT_HTML, context))
+                return
+            if path == "/api/coverage":
+                try:
+                    with review_state_lock:
+                        report = {"cities": [
+                            city_report(city_context, run_catalog)
+                            for city_context in contexts.values()
+                        ]}
+                    self._json_response(HTTPStatus.OK, report)
+                except (OSError, ValueError, KeyError) as error:
+                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                 return
             if path in {"/runs", "/runs/"}:
                 self._html_response(city_navigation(RUN_HISTORY_HTML, context))
