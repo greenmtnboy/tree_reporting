@@ -37,8 +37,15 @@ def test_every_city_has_a_cell():
 
 @pytest.mark.parametrize("code", sorted(DEDUP_CELL_METRES))
 def test_cell_is_a_calibrated_size(code: str):
-    """10 m (a 5 m guarantee) or 20 m (10 m); anything else is a typo."""
-    assert DEDUP_CELL_METRES[code] in (10, 20)
+    """A size `osm_dedup_validation.py` can actually suggest; else it is a typo.
+
+    A typo guard, not a ceiling.  The sizes come from two readings in
+    `osm_dedup_validation.py`: the band table, whose guarantees of 2/5/10 m
+    give a 4, 10 or 20 m cell, and the marginal table, which measures false
+    flags directly and picked 4 m for Calgary and 6 m for Edmonton and
+    Winnipeg -- every one of them under what the bands alone suggested.
+    """
+    assert DEDUP_CELL_METRES[code] in (4, 6, 10, 20)
 
 
 @pytest.mark.parametrize("code", sorted(DEDUP_CELL_METRES))

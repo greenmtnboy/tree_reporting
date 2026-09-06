@@ -52,7 +52,16 @@ const CONCURRENCY = Number(process.env.DASHBOARD_QUERY_CONCURRENCY ?? 4)
 
 // The whole catalog is compiled once in beforeAll, so that is where the budget
 // lives; the it() blocks only execute SQL against an in-process DuckDB.
-const COMPILE_TIMEOUT_MS = 900_000
+//
+// 25 minutes, sized for the *wide* sweep rather than the default one. The
+// narrow run is five batches and finishes in a couple of minutes; the wide run
+// is one request per city and grows with every city added -- at 21 cities on a
+// loaded resolver it reached batch 22 of 25 at 866s.
+//
+// Give it room, because a hook that times out never registers its tests: the
+// overrun is reported as "25 tests skipped", which reads like a suite that
+// declined to run rather than one that ran out of budget.
+const COMPILE_TIMEOUT_MS = 1_500_000
 const EXECUTE_TIMEOUT_MS = 120_000
 
 type CompiledCase = { sql?: string; error?: string }
@@ -290,6 +299,71 @@ const INTERACTIVE_CITIES: Array<CityCode | null> = process.env.DASHBOARD_QUERY_A
   ? [null, ...ALL_CITIES]
   : [null, 'USSFO']
 
+// Cities whose *model* is not shaped like the others, and so are the ones whose
+// base sweep proves something the rest do not.
+//
+// Every city sends the same catalog with the same imports; what differs is the
+// `dashboard_context` constants and a `city = 'X'` filter. So compiling all of
+// them re-proves the same plan once per city -- and it costs a whole request
+// each, because batching is per (city, imports). A request re-hydrates the
+// model before it plans anything: ~375ms of a ~560ms warm compile is parsing
+// the preql sources, and there are now ~49 of them. Trimming queries per city
+// would not remove a single request; trimming cities removes them wholesale,
+// which is the only thing that moves this suite's runtime.
+//
+// What the default keeps is every city that is structurally its own case:
+//
+//   GBLON  the only city declaring a column the others do not (`borough`), on
+//          all three of its partitions
+//   USBOS  four municipal partitions and the only species-keyed aggregate (its
+//          dbh imputation), which is what forced `?species` to be nullable
+//   GRMLO  community-only: no municipal source at all, and the single-partition
+//          completeness proof that goes with it
+//   USSFO  heads the rollup's file list and is already the interactive city
+//
+// plus the all-cities view, which is the union rather than a partition and is
+// the plan most likely to break on its own. Everything else is a city whose
+// model `new_city.py` generated from the same template.
+//
+// This is a coverage trade and it is worth naming: a city outside this set can
+// break its own model and go green here. Two things cover that. A change that
+// touches any city model or the city config widens the run to every city (see
+// the `dashboard-queries` job in ci.yml), which is exactly the city-addition
+// case where this suite earns its keep; and every push to main sweeps all of
+// them regardless. `DASHBOARD_QUERY_ALL_CITIES=1` forces the wide run by hand.
+const REPRESENTATIVE_CITIES: CityCode[] = ['USSFO', 'USBOS', 'GBLON', 'GRMLO']
+
+// `DASHBOARD_QUERY_CITIES` adds cities to that default: a comma-separated list
+// of codes, or `all`. CI fills it from the diff, so a pull request that edits
+// three city models sweeps those three plus the representatives rather than all
+// twenty-one -- the cities it changed are the ones whose plans could have moved.
+//
+// It is deliberately separate from DASHBOARD_QUERY_ALL_CITIES, which widens the
+// *interactive* states too (a species selection and a cross-filter per city) and
+// takes the run from 25 batches to 60. That is the diagnostic sweep, not the
+// city-coverage one, and conflating them is how this job first came back with 60
+// batches when 25 were intended.
+function requestedCities(): CityCode[] {
+  const raw = (process.env.DASHBOARD_QUERY_CITIES ?? '').trim()
+  if (!raw) return []
+  if (raw.toLowerCase() === 'all') return [...ALL_CITIES]
+  const known = new Set<string>(ALL_CITIES)
+  return raw
+    .split(',')
+    .map((code) => code.trim().toUpperCase())
+    .filter((code): code is CityCode => known.has(code))
+}
+
+const BASE_CITIES: Array<CityCode | null> = process.env.DASHBOARD_QUERY_ALL_CITIES
+  ? [null, ...ALL_CITIES]
+  : [
+      null,
+      ...new Set([
+        ...REPRESENTATIVE_CITIES.filter((city) => ALL_CITIES.includes(city)),
+        ...requestedCities(),
+      ]),
+    ]
+
 // Which cross-filter states to exercise. The default is the one dimension that
 // reaches enrichment through the unnest+merge axis; `all` sweeps every
 // dimension and `pairs` every two-dimension combination, which is where the
@@ -335,7 +409,7 @@ async function citiesAwaitingFirstBuild(): Promise<Set<CityCode>> {
 function buildGroups(): QueryGroup[] {
   const groups: QueryGroup[] = []
 
-  for (const city of [null, ...ALL_CITIES] as Array<CityCode | null>) {
+  for (const city of BASE_CITIES) {
     groups.push({
       key: `base:${city ?? 'ALL'}`,
       label: `compiles and runs every summary and species query for ${city ?? 'all cities'}`,

@@ -1,0 +1,45 @@
+import ..landmark_common;
+
+root datasource edmonton_landmarks_update_time (
+    data_updated_through: caedm_landmark_data_updated_through
+)
+file `./edmonton_landmarks_probe.py`;
+
+# Edmonton's 1,104-row Register and Inventory of Historic Resources, on the
+# same Socrata portal as the trees.
+#
+# This is the first preference in the runbook's landmark source order -- an
+# official designation registry on the city's own portal -- so it is read
+# directly: no Nominatim geocoding, no committed CSV and no staging object.
+# Only Overpass-backed and hand-curated sources need those.
+root partial datasource raw_edmonton_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    address: ?address,
+    neighborhood: ?neighborhood,
+    year_built: ?year_built,
+    property_type: ?property_type,
+)
+grain (landmark_id)
+complete where city = 'CAEDM'
+file `./edmonton_landmarks.py`;
+
+partial datasource edmonton_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?address,
+    ?neighborhood,
+    ?year_built,
+    ?property_type,
+    caedm_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'CAEDM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/caedm_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/caedm_landmark_info_v{data_version}.parquet`
+freshness by caedm_landmark_data_updated_through;

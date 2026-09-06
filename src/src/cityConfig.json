@@ -16,5 +16,8 @@
   "GRATH": { "name": "Athens", "center": [23.7375, 37.9725] },
   "GRMLO": { "name": "Milos", "center": [24.4472, 36.7263] },
   "GRSAN": { "name": "Santorini", "center": [25.4315, 36.4072] },
-  "USDEN": { "name": "Denver", "center": [-104.9903, 39.7392] }
+  "USDEN": { "name": "Denver", "center": [-104.9903, 39.7392] },
+  "CACAL": { "name": "Calgary", "center": [-114.0719, 51.0447] },
+  "CAEDM": { "name": "Edmonton", "center": [-113.4938, 53.5461] },
+  "CAWPG": { "name": "Winnipeg", "center": [-97.1384, 49.8951] }
 }

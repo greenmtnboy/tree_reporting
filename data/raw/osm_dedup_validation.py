@@ -131,8 +131,9 @@ def main() -> None:
     ap.add_argument("--city", required=True, help="City code, e.g. USSFO")
     ap.add_argument(
         "--cells",
-        default="10,15,20",
-        help="Comma-separated cell sizes in metres to simulate (default 10,15,20)",
+        default="2,4,6,8,10,14,20",
+        help="Comma-separated cell sizes in metres to simulate (default "
+        "2,4,6,8,10,14,20 -- wide enough for the marginal trade to turn)",
     )
     ap.add_argument(
         "--osm-parquet",
@@ -146,6 +147,7 @@ def main() -> None:
     )
     args = ap.parse_args()
     code = args.city.upper()
+    cells = sorted(int(c) for c in args.cells.split(","))
     lat_min, lat_max, _, _ = CITY_BOUNDS[code]
     city_lat = (lat_min + lat_max) / 2
 
@@ -202,13 +204,60 @@ def main() -> None:
 
     print("\n--- 4-staggered-grid scheme vs ground truth, by cell size")
     print("  cell_m  flagged  missed<=half  flagged>diag")
-    for cell_m in [int(c) for c in args.cells.split(",")]:
+    for cell_m in cells:
         fl = grid_flags(osm_lon, osm_lat, muni_lon, muni_lat, cell_m, city_lat)
         half, diag = cell_m / 2.0, cell_m * math.sqrt(2)
         print(
             f"  {cell_m:4d}    {int(fl.sum()):6d}       "
             f"{int(((d1 <= half) & ~fl).sum()):4d}          "
             f"{int(((d1 > diag) & fl).sum()):4d}"
+        )
+
+    # What each extra metre of cell actually buys, measured against the scheme
+    # the model runs rather than inferred from the distance bands.
+    #
+    # The band table answers "is this 5m-wide ring duplicate-dominated", which
+    # is a proxy, and it flatters the bigger cell: a cell names a *guarantee*,
+    # but the staggered grid reaches to the cell diagonal, ~1.41x further.  So
+    # a size chosen from the bands alone can still be pulling in a ring the
+    # bands never said to flag.  This asks the question directly -- of the rows
+    # this cell flags, how many are mutual nearest neighbours (real duplicates)
+    # and how many are not (real trees the map would hide).
+    #
+    # **Read the `marginal` column, not the totals.**  The asymmetry that
+    # governs the whole calibration -- a missed duplicate double-renders a
+    # visible, toggleable dot, a false flag hides a real tree -- says a step up
+    # in size is only worth taking while it removes more duplicates than it
+    # hides trees.  Stop at the last size whose marginal ratio is comfortably
+    # above 1.0.
+    #
+    # Calgary, Edmonton and Winnipeg were all sized this way and all three came
+    # in under the 10m the band heuristic alone suggested: Edmonton's 6->10 step
+    # buys 98 more duplicates and hides 126 more real trees.  The cities wired
+    # before this table existed were sized on the bands alone and are worth
+    # re-checking.
+    print("\n--- what each cell size costs: flagged rows that are NOT duplicates")
+    print("  cell_m  flagged  true_dup   false  false%  recall   marginal true/false")
+    total_true = max(int(mutual.sum()), 1)
+    prev_true = prev_false = None
+    for cell_m in cells:
+        fl = grid_flags(osm_lon, osm_lat, muni_lon, muni_lat, cell_m, city_lat)
+        flagged = int(fl.sum())
+        true_dup = int((fl & mutual).sum())
+        false_flag = flagged - true_dup
+        if prev_true is None:
+            marginal = "--"
+        else:
+            gained, hidden = true_dup - prev_true, false_flag - prev_false
+            marginal = (
+                f"{gained:+d}/{hidden:+d} = {gained / hidden:.2f}"
+                if hidden
+                else f"{gained:+d}/0"
+            )
+        prev_true, prev_false = true_dup, false_flag
+        print(
+            f"  {cell_m:4d}   {flagged:7d}  {true_dup:8d} {false_flag:7d} "
+            f"{false_flag / max(flagged, 1):6.1%} {true_dup / total_true:7.1%}   {marginal}"
         )
 
     # Where the break sits, reported so the caller does not have to eyeball the

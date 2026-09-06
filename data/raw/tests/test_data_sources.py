@@ -231,6 +231,47 @@ def test_every_city_prunes_absorbed_rows(code: str):
 
 
 @pytest.mark.parametrize("code", sorted(MUNICIPAL_DATA_SOURCES))
+def test_every_city_publishes_cluster_id(code: str):
+    """Every city's published target projects `cluster_id`.
+
+    It looks redundant -- the prune means it always equals `tree_id` -- which
+    is exactly why `new_city.py`'s template dropped it, and why the first three
+    cities scaffolded from that template published fourteen columns where every
+    other city has fifteen.  Nothing at model time noticed; it was caught by
+    reading the built parquet.
+
+    What a ragged column set costs, measured against DuckDB rather than
+    assumed, because the first version of this docstring got it wrong:
+
+    * projecting only the columns every file shares -- which is what
+      `full_tree_publish.preql` does today -- **tolerates** the mismatch in
+      either file order.  So this would not have failed `urban-tree-full`.
+    * projecting the column the short file lacks raises, whichever order the
+      files are in.
+    * `select *` over the scan raises when a long file is read first, and
+      **silently drops the column** when a short one is.  That is the one to
+      care about: the rollup's file list is ordered, so whether an ad-hoc
+      `select *` loses `cluster_id` depends on which city happens to be first.
+
+    So this is not load-bearing for the daily jobs as they stand, and it is
+    still worth pinning: it is the column any check of the prune reads
+    (`where tree_id <> cluster_id`), the one a future rollup projection would
+    reach for, and a city whose parquet does not match the others is a
+    difference nobody chose.
+    """
+    text = city_models()[code].read_text(encoding="utf-8")
+    target = re.search(
+        r"^partial datasource \w+_tree_info \((.*?)^\)", text, re.S | re.M
+    )
+    assert target, f"{code} has no published tree target"
+    assert re.search(r"^\s*cluster_id,\s*$", target.group(1), re.M), (
+        f"{code}'s published target does not project cluster_id, so its parquet "
+        "will have a different column set from every other city's and the "
+        "rollup's multi-file scan will fail"
+    )
+
+
+@pytest.mark.parametrize("code", sorted(MUNICIPAL_DATA_SOURCES))
 def test_no_city_publishes_the_old_duplicate_flag(code: str):
     """The flag is gone, and a copy-paste must not bring it back.
 

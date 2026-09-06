@@ -2,12 +2,13 @@
  * POSTing to the hosted Trilogy resolver, with the one retry policy every
  * resolver-backed suite should share.
  *
- * trilogy-service.fly.dev runs on a shared-CPU Fly instance with a burst quota.
- * Sustained compiling drains it and every request is throttled until it
- * refills, which surfaces as a 502 or as a compile that takes tens of seconds
- * instead of ~0.5s. CI makes that routine rather than exotic: `test` and
- * `dashboard-queries` both compile against it and run concurrently, so each is
- * part of the other's load.
+ * trilogy-service.fly.dev is one shared instance, and it can be overloaded:
+ * enough concurrent compiling and requests come back 502, or 504 once Fly's
+ * proxy gives up at 120s, or simply take tens of seconds instead of ~0.5s. CI
+ * makes that routine rather than exotic: `test` and `dashboard-queries` both
+ * compile against it and run concurrently, so each is part of the other's load
+ * -- and before ci.yml had a concurrency group, every superseded run stayed in
+ * the pile too.
  *
  * The rule is the same everywhere and it is worth stating once: **retry the
  * transport, never the verdict.** A 5xx or a dropped connection is the instance
