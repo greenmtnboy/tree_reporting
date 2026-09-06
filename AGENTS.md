@@ -45,6 +45,26 @@ Four things about that are load-bearing, and each replaced something that broke:
   catches it, so run `cd data/raw && uv run --with pytest python -m pytest tests -q`
   after touching the job table.
 
+### Correcting a species by hand
+
+`data/raw/enrichment_admin.py` is a localhost form over the enrichment table
+for the case where a reviewer already knows the answer -- a photo of the wrong
+plant, a description of the wrong taxon, a trait that is off -- and re-asking
+the model (`backfill_enrichment.py`) is the long way round. Edits are staged
+locally; **Publish** re-reads the live parquet, patches the staged rows in
+(and every alias row of the taxon), uploads, and reads it back to verify, the same
+path `tree_enrichment.py --limit` takes. An edited row carries today's
+`enriched_at`, which is what keeps `refresh-enrichment` from overwriting it,
+and the form refuses a row without a common name and a growth form because
+the freshness probe would report the table stale for ever. Sentinel rows are
+authored in `_ingest_shared.py` and are read-only there, as is the alias row
+of a name in `SPECIES_SYNONYMS` (the daily job rewrites it from the accepted
+row). A duplicate species is merged from the form by adding its name to the
+accepted row's `synonyms`; making the *ingest* publish the accepted name takes
+a pair in `SPECIES_SYNONYMS` -- see "Synonyms" in `EXTENDING.md`. Needs
+`gcloud auth application-default login`; `tests/test_enrichment_admin.py`
+pins the invariants. arborary.world shows the change on its next build.
+
 ### Adding a city
 
 Do not hand-write the twenty-odd registry edits. `data/raw/new_city.py` writes

@@ -74,6 +74,7 @@ import tree_common;
 # source that mapped `species` directly would give the planner a second,
 # unmerged way to answer for it.
 property tree_id.raw_species string;
+property tree_id.raw_cultivar string;
 property tree_id.raw_tree_name string;
 property tree_id.raw_plant_date date;
 property tree_id.raw_latitude float;
@@ -210,6 +211,10 @@ auto merged_species <- substring((max(species_key) by cluster_id), 4, 200);
 auto merged_latitude <- @by_source(raw_latitude);
 auto merged_longitude <- @by_source(raw_longitude);
 auto merged_tree_name <- @by_source(raw_tree_name);
+# The cultivar travels by source rather than with the winning species: a
+# community submission that names the selection is more specific than an
+# inventory row that does not, and the same order @by_source already uses.
+auto merged_cultivar <- @by_source(raw_cultivar);
 auto merged_plant_date <- @by_source(raw_plant_date);
 auto merged_photo_url <- @by_source(raw_photo_url);
 
@@ -226,6 +231,7 @@ auto merged_tree_ids <- nullif(array_to_string(array_sort((array_agg(tree_id ? t
 
 merge merged_species into species;
 merge merged_tree_name into tree_name;
+merge merged_cultivar into cultivar;
 merge merged_plant_date into plant_date;
 merge merged_latitude into latitude;
 merge merged_longitude into longitude;

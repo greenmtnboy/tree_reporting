@@ -798,6 +798,7 @@ The script must:
 | `tree_id` | `string` | Prefix with `{abbr}-` e.g. `par-12345` for global uniqueness |
 | `city` | `string` | The city code, e.g. `FRPAR` |
 | `species` | `string` | **Scientific name only** — e.g. `"Platanus x hispanica"`. No `:: Common Name` suffix. |
+| `cultivar` | `string` | Optional. The cultivated selection, e.g. `"Tina"` for *Malus sargentii* 'Tina'. Filled from a quoted name in `species` by `enforce_tree_schema`; map a portal's own cultivar field through `columns={"cultivar": ...}` when it has one. |
 | `plant_date` | `date32` | All-null is fine, but the column must still be `date32` — never `pa.null()` |
 | `latitude` | `float64` | |
 | `longitude` | `float64` | |
@@ -1296,6 +1297,11 @@ The `tree_enrichment_v{DATA_VERSION}.parquet` at GCS is city-agnostic. It maps *
 - `common_names` — comma-separated English common names, most familiar first
 - `tree_form` — visual form (`broadleaf`, `conifer`, `palm`, `columnar`, `ornamental`, `spreading`, `weeping`, `multi_trunk`, `default`) used for icon and color
 - Ecological metadata: `native_status`, `is_evergreen`, `mature_height_ft`, `bloom_season`, etc.
+- Two photo slots: `photo_url` (the iNaturalist default, in practice a foliage
+  or flower close-up, fetched by the run) and `trunk_photo_url` (a bark or
+  trunk view, which no source can be asked for -- it is picked by hand in
+  `enrichment_admin.py` from the same licensed pool). Each carries its own
+  `_license` and `_attribution`.
 
 The browser worker joins on `t.species = se.species` (exact match on scientific name) and derives `common_name` as `split_part(se.common_names, ',', 1)` — the first enrichment common name, falling back to the scientific name if unenriched.
 
@@ -1308,6 +1314,71 @@ The `species` field in all tree parquets **must be the scientific name only** (n
 - NYC/Boston already emit scientific names directly
 
 If you add a city whose source data embeds a common name in the species field (any `::` pattern), strip it in the fetch script before emitting.
+
+**Leave a quoted cultivar in.** `Malus sargentii 'Tina'` is the species
+*Malus sargentii* and the selection 'Tina'; a cultivar is a choice people
+propagated within a taxon, not a rank in the wild taxonomy, so it is not part
+of the species key and would only fragment the enrichment table (one row per
+selection of the most common street trees, each with the same common name).
+`enforce_tree_schema` splits the two: `species` is reduced to the taxon and
+`cultivar` keeps the selection on the tree row, where the tree card shows it
+after the scientific name. An ingest that strips the quotes itself (the Arnold
+Arboretum script used to) throws the cultivar away for nothing. A portal that
+publishes the cultivar as its own field maps it through `columns` and its
+values win over the parsed ones.
+
+### Synonyms: one accepted name per taxon
+
+Inventories disagree on what to call a taxon. *Platanus × acerifolia* and
+*Platanus × hispanica* are the same hybrid (the London plane), Kew's Plants
+of the World Online lists the second as accepted and the first as a
+heterotypic synonym, and the published data carried 158k trees under one and
+53k under the other -- two enrichment rows, two LLM calls, two entries in
+every species rollup. The Leyland cypress was published under four spellings.
+
+`SPECIES_SYNONYMS` in `data/raw/_ingest_shared.py` maps a synonym to its
+accepted name and `sanitize_species` applies it as its last step, so every
+tree row publishes the accepted name. The enrichment table reads the same map
+on every load (`with_species_aliases` in `enrichment/_tree_shared.py`):
+
+- a row keyed by a synonym is folded onto the accepted row -- dropped when
+  the accepted row exists, re-keyed when it does not, so nothing is re-asked;
+- each accepted row's `synonyms` lists the names that fold into it, merged
+  with anything a reviewer added by hand in `enrichment_admin.py`;
+- an **alias row** is published under every synonym key and every hybrid-mark
+  twin, so a tree row still carrying the old name -- a city not yet rebuilt --
+  keeps its common name. The alias's own `synonyms` lists the accepted name.
+
+The map is hardcoded rather than read from the parquet at ingest time, because
+every city job would otherwise depend on that object being reachable, and a
+hand-edit in the admin form would silently change what eighteen ingests
+publish. Keys and values are written the way `sanitize_species` emits them
+(ASCII hybrid mark, capitalised genus, species rank) and a value is never
+itself a key; `test_ingest_shared.py` checks both. POWO is the authority.
+A name that is merely *misapplied* in the trade for another species
+(`Ficus nitida` for *F. microcarpa*, `Jacaranda acutifolia` for
+*J. mimosifolia*) is not a synonym and does not belong in the map.
+
+The admin form is where a duplicate is usually noticed. Adding the duplicate's
+name to the accepted row's `synonyms` field and publishing overwrites the
+duplicate's row with the accepted values (pointing back), and the two stay in
+step whichever is edited afterwards. That bridges the join immediately; it does
+not change what the ingest publishes. For that the pair goes into
+`SPECIES_SYNONYMS`, after which the synonym's row is an alias the daily job
+maintains and the form shows read-only.
+
+**Rolling out a new tree column.** `cultivar` was the worked example, and the
+order matters because DuckDB binds a projected column against the *first*
+file it reads: a single parquet without the column is a binder error, and so
+is the rollup's multi-file scan when the first city in its list lacks it (a
+later file lacking it reads as NULL). So after merging a column that every
+partition maps: (1) fire each city's `osm-{code}` job, two at a time (Overpass
+allows two slots per IP), because the city model reads the staged OSM parquet
+by column and its refresh fails until the extract has been re-run; (2) force
+each city's refresh with `-f {city}_tree_info`, San Francisco first, since it
+heads the rollup's file list; (3) run `urban-tree-full`. The browser probes
+for the column and reads a null until a city is rebuilt, so the deploy order
+does not matter on that side.
 
 ### Species hygiene is enforced centrally, not per city
 
@@ -1420,6 +1491,30 @@ not a combining character, so the hybrid mark survives.
 
 Against the August 2026 published data these removed 141 of the 795 species
 queued for enrichment: 114 that name no taxon, and 27 the ingest rewrites.
+
+### Common names are sentence case
+
+`common hackberry`, `northern hackberry`, `American hackberry`, `Mississippi
+hackberry`: the editorial convention for a vernacular name is sentence case,
+with only a genuine proper noun or proper adjective keeping its capital.
+`Evergreen Pear` is title case and becomes `Evergreen pear`; `EVERGREEN PEAR`
+becomes the same. The published table followed no convention -- of 29,039
+names in September 2026, 4,942 were all caps, 11,032 title case and 8,651
+lower case, with all three spellings of some names present -- so source
+casing is not preserved.
+
+`normalize_common_names` in `enrichment/_common_name_style.py` lowers
+everything and puts the proper components back from two curated lists,
+phrases (`New Zealand`, `St. John's`, `Autumn Blaze`) and words (`Japanese`,
+`Douglas`, `Mississippi`); a cultivar in quotes is kept as written. The lists
+were built by reading every word the published names capitalised mid-name,
+and **a word missing from them is lowercased**, so a name that comes out
+wrong (`port orford cedar`) is fixed by one entry. It runs in three places
+that must agree: on every load of the table (`with_normalized_common_names`,
+next to `purge_non_taxa`), on each row the LLM run writes, and on a row saved
+in `enrichment_admin.py`. The prompt asks for the convention too, so less
+needs correcting. The tree card's title is the first common name, so this is
+what the map shows.
 
 ### The prompt has to ask for the field
 

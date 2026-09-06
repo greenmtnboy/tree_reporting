@@ -45,6 +45,7 @@ def test_records_to_table_emits_canonical_city_rows():
             "longitude": -122.42,
             "submission_photo_url": "https://storage.googleapis.com/pub/community/photos/x.jpg",
             "borough": None,
+            "cultivar": None,
         }
     ]
     assert table.schema.field("plant_date").type == pa.date32()

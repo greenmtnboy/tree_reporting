@@ -30,7 +30,7 @@ from _ingest_shared import SENTINEL_ENRICHMENT, SPECIES_SENTINELS  # noqa: E402
 from enrichment._tree_shared import (  # noqa: E402
     CHIMERA_SPECIES,
     ENRICHMENT_COMPLETE_SQL,
-    with_hybrid_aliases,
+    with_species_aliases,
     REENRICH_INCOMPLETE_BEFORE,
     SKIP_SPECIES,
     SPECIES_EXCLUSION_SQL,
@@ -333,7 +333,7 @@ def test_the_probe_reads_the_shared_definition():
 
 
 # ---------------------------------------------------------------------------
-# with_hybrid_aliases
+# with_species_aliases: the hybrid-mark twin
 # ---------------------------------------------------------------------------
 
 
@@ -350,7 +350,7 @@ def test_hybrid_alias_bridges_both_spellings():
     common tree in the dataset -- Paris publishes 38,845 rows of
     "Platanus × hispanica" -- loses its common name the moment that city
     rebuilds."""
-    out = with_hybrid_aliases(_hybrid_table(["Platanus × hispanica"]))
+    out = with_species_aliases(_hybrid_table(["Platanus × hispanica"]))
     assert sorted(out.column("species").to_pylist()) == [
         "Platanus x hispanica",
         "Platanus × hispanica",
@@ -361,18 +361,18 @@ def test_hybrid_alias_bridges_both_spellings():
 def test_hybrid_alias_works_in_both_directions():
     """Cities are refreshed one at a time and in no particular order, so the
     row that exists first may be either spelling."""
-    out = with_hybrid_aliases(_hybrid_table(["Platanus x hispanica"]))
+    out = with_species_aliases(_hybrid_table(["Platanus x hispanica"]))
     assert "Platanus × hispanica" in out.column("species").to_pylist()
 
 
 def test_hybrid_alias_does_not_duplicate_an_existing_twin():
     both = ["Alnus x spaethii", "Alnus × spaethii"]
-    out = with_hybrid_aliases(_hybrid_table(both))
+    out = with_species_aliases(_hybrid_table(both))
     assert sorted(out.column("species").to_pylist()) == sorted(both)
 
 
 def test_hybrid_alias_leaves_non_hybrids_alone():
-    out = with_hybrid_aliases(_hybrid_table(["Acer rubrum"]))
+    out = with_species_aliases(_hybrid_table(["Acer rubrum"]))
     assert out.column("species").to_pylist() == ["Acer rubrum"]
 
 
@@ -407,3 +407,83 @@ def test_a_chimera_is_shaped_like_a_real_binomial():
 
     for value in CHIMERA_SPECIES:
         assert sanitize_species(value) == value, value
+
+
+# ---------------------------------------------------------------------------
+# with_species_aliases: synonyms
+# ---------------------------------------------------------------------------
+
+
+def _synonym_table(rows: dict[str, list[str] | None]) -> pa.Table:
+    """species -> synonyms, with a distinct common name per row so a test
+    can tell which row's values survived."""
+    return pa.table({
+        "species": pa.array(list(rows), type=pa.string()),
+        "common_names": pa.array([[f"name of {s}"] for s in rows], type=pa.list_(pa.string())),
+        "synonyms": pa.array(list(rows.values()), type=pa.list_(pa.string())),
+    })
+
+
+def _by_species(table: pa.Table) -> dict[str, dict]:
+    return {r["species"]: r for r in table.to_pylist()}
+
+
+def test_a_synonym_row_is_dropped_when_the_accepted_row_exists():
+    """Two rows for one taxon: the LLM was paid twice, and every species
+    rollup counted the London plane as two species."""
+    out = _by_species(with_species_aliases(_synonym_table({
+        "Platanus x acerifolia": None,
+        "Platanus x hispanica": None,
+    })))
+    assert out["Platanus x hispanica"]["common_names"] == ["name of Platanus x hispanica"]
+    # The synonym key is still published -- as an alias of the accepted row.
+    assert out["Platanus x acerifolia"]["common_names"] == ["name of Platanus x hispanica"]
+
+
+def test_a_synonym_row_is_rekeyed_when_the_accepted_row_is_missing():
+    """Nothing to re-ask: the row exists, only its key is out of date."""
+    out = _by_species(with_species_aliases(_synonym_table({"Sophora japonica": None})))
+    assert out["Styphnolobium japonicum"]["common_names"] == ["name of Sophora japonica"]
+    assert out["Sophora japonica"]["common_names"] == ["name of Sophora japonica"]
+
+
+def test_the_accepted_row_lists_its_synonyms_and_the_alias_points_back():
+    out = _by_species(with_species_aliases(_synonym_table({"Platanus x hispanica": None})))
+    assert out["Platanus x hispanica"]["synonyms"] == ["Platanus acerifolia", "Platanus hispanica", "Platanus x acerifolia"]
+    assert out["Platanus x acerifolia"]["synonyms"] == ["Platanus acerifolia", "Platanus hispanica", "Platanus x hispanica"]
+
+
+def test_every_synonym_key_gets_an_alias_row():
+    """A tree row still carrying the old name -- a city not yet rebuilt --
+    keeps its common name only if the old key still joins."""
+    out = _by_species(with_species_aliases(_synonym_table({"Cupressus x leylandii": None})))
+    for key in ("Cuprocyparis leylandii", "X cupressocyparis leylandii", "Cupressocyparis leylandii",
+                "X cuprocyparis leylandii", "Cupressus \u00d7 leylandii"):
+        assert out[key]["common_names"] == ["name of Cupressus x leylandii"], key
+
+
+def test_a_hand_added_synonym_is_kept_and_aliased():
+    """The admin form can add a synonym before the pair reaches the code."""
+    out = _by_species(with_species_aliases(_synonym_table({"Acer rubrum": ["Acer rubrum-flavum"]})))
+    assert out["Acer rubrum"]["synonyms"] == ["Acer rubrum-flavum"]
+    assert out["Acer rubrum-flavum"]["common_names"] == ["name of Acer rubrum"]
+    assert out["Acer rubrum-flavum"]["synonyms"] == ["Acer rubrum"]
+
+
+def test_hand_added_and_code_synonyms_merge():
+    out = _by_species(with_species_aliases(_synonym_table({"Platanus x hispanica": ["Platanus orientalis-hybrida"]})))
+    assert out["Platanus x hispanica"]["synonyms"] == ["Platanus acerifolia", "Platanus hispanica", "Platanus orientalis-hybrida", "Platanus x acerifolia"]
+
+
+def test_aliasing_is_idempotent():
+    once = with_species_aliases(_synonym_table({"Platanus x hispanica": None, "Acer rubrum": None}))
+    twice = with_species_aliases(once)
+    assert sorted(once.column("species").to_pylist()) == sorted(twice.column("species").to_pylist())
+    assert _by_species(once) == _by_species(twice)
+
+
+def test_a_synonym_is_never_queued_for_enrichment():
+    """`sanitize_species` rewrites it, and the queue rule defers to the ingest."""
+    assert not is_enrichable_species("Platanus x acerifolia")
+    assert not is_enrichable_species("Sophora japonica")
+    assert is_enrichable_species("Platanus x hispanica")

@@ -3,6 +3,7 @@ import core;
 
 key tree_id string; # unique identifier for the tree record (prefixed: sf-<id> or nyc-<id>)
 key species string; # scientific species name (Latin binomial, no common-name suffix)
+property tree_id.cultivar string; # the cultivated selection this tree is, e.g. 'Tina' in Malus sargentii 'Tina'; a property of the tree, not of the species, and never part of the species key
 property tree_id.tree_name string; # original name field from source data, which may be unique to certain trees
 property tree_id.plant_date date; # date the tree was planted
 property tree_id.diameter_at_breast_height float; # diameter at breast height - standard forestry measure of tree diameter at about 4.5 feet above ground

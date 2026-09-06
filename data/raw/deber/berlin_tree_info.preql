@@ -76,6 +76,7 @@ root partial datasource deber_osm_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'DEBER' and deber_source = 'OSM_DEBER'
@@ -92,6 +93,7 @@ root partial datasource berlin_raw_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'DEBER' and deber_source = 'BERLIN_OPENDATA'
@@ -112,6 +114,7 @@ root partial datasource deber_community_tree_info (
     latitude: ?raw_latitude,
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'DEBER' and deber_source = 'COMMUNITY_DEBER'
@@ -144,6 +147,7 @@ partial datasource berlin_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    ?cultivar,
     cluster_id,
     merged_sources,
     ?merged_tree_ids,

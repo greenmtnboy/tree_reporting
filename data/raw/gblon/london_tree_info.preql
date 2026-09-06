@@ -49,6 +49,7 @@ root partial datasource gblon_osm_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'GBLON' and gblon_source = 'OSM_GBLON'
@@ -66,6 +67,7 @@ root partial datasource london_raw_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'GBLON' and gblon_source = 'LONDON_OPENDATA'
@@ -87,6 +89,7 @@ root partial datasource gblon_community_tree_info (
     latitude: ?raw_latitude,
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'GBLON' and gblon_source = 'COMMUNITY_GBLON'
@@ -120,6 +123,7 @@ partial datasource london_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    ?cultivar,
     cluster_id,
     merged_sources,
     ?merged_tree_ids,

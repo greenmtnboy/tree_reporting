@@ -23,6 +23,8 @@ test-results/
 src/vite.run.log
 
 data/raw/*.parquet
+# Edits staged by data/raw/enrichment_admin.py and not yet published.
+data/raw/enrichment_admin_edits.json
 
 .vscode/
 .vscode/settings.json

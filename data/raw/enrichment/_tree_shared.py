@@ -12,7 +12,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _ingest_shared import (  # noqa: E402
     SENTINEL_ENRICHMENT,
     SPECIES_SENTINELS,
+    SPECIES_SYNONYMS,
     sanitize_species,
+    synonyms_of,
+)
+from enrichment._common_name_style import (  # noqa: E402,F401  (re-exported)
+    normalize_common_name,
+    normalize_common_names,
 )
 
 env = Environment(working_path=Path(__file__).resolve().parent.parent)
@@ -268,43 +274,161 @@ def sentinel_enrichment_rows() -> list[dict]:
     ]
 
 
-def with_hybrid_aliases(table):
-    """Give every U+00D7-keyed row an ASCII twin, and vice versa.
+def with_normalized_common_names(table):
+    """Rewrite every row's `common_names` in sentence case.
 
-    The ingest emits one hybrid spelling now (ASCII "x"), but that only reaches
-    the data on the next full refresh -- until then the published parquets still
-    carry "Platanus × hispanica" while a freshly enriched row would be keyed
-    "Platanus x hispanica".  `species` is the join key, so during that window one
-    of the two finds nothing: Paris alone has 38,845 rows under the U+00D7
-    spelling, and the most common tree in the dataset would silently lose its
-    common name the moment that city rebuilt.
+    Applied on load, like `purge_non_taxa`, so the published table converges
+    on one convention on the next publish rather than only for rows written
+    after the rule existed: in September 2026 a fifth of the names were ALL
+    CAPS and a third Title Case (`EVERGREEN PEAR`, `Evergreen Pear`,
+    `evergreen pear` were all present).  Case-duplicates within a row collapse
+    to one.  See `_common_name_style` for the rule and its proper-name lists.
+    """
+    import pyarrow as pa
 
-    Copying the row under both keys costs 68 rows and no LLM call, and works in
-    either direction, so the order in which cities get refreshed does not matter.
+    if "common_names" not in table.schema.names or len(table) == 0:
+        return table
+    before = table.column("common_names").to_pylist()
+    after = [normalize_common_names(names) for names in before]
+    changed = sum(1 for a, b in zip(before, after) if a != b)
+    if not changed:
+        return table
+    print(
+        f"[names] normalised common_names on {changed} row(s) to sentence case",
+        file=sys.stderr,
+    )
+    idx = table.schema.get_field_index("common_names")
+    return table.set_column(idx, "common_names", pa.array(after, type=table.schema.field(idx).type))
 
-    **This is transitional.**  Once every city has been refreshed past the
-    change, the U+00D7 rows are orphans and this should become a purge instead.
+
+def hybrid_twins(species: str) -> list[str]:
+    """The other spelling(s) of a hybrid mark, or ``[]`` for a non-hybrid.
+
+    The ingest emits one spelling now (ASCII "x"), but a published parquet can
+    still carry U+00D7 until its city is rebuilt, and `species` is the join
+    key -- so a row is published under both.  Transitional: once every city
+    has been refreshed past the change the U+00D7 rows are orphans.
+    """
+    out = []
+    for a, b in ((" × ", " x "), (" x ", " × ")):
+        if a in species:
+            out.append(species.replace(a, b))
+    return out
+
+
+def alias_keys(species: str, synonyms: list[str] | None) -> list[str]:
+    """Every key a row for *species* is also published under.
+
+    Its hybrid twin, each of its synonyms, and each synonym's hybrid twin --
+    all the spellings a tree row might still carry for this taxon.  Ordered,
+    deduplicated, and never the species itself.
+    """
+    seen: list[str] = []
+    for name in [*hybrid_twins(species), *(synonyms or [])]:
+        for key in (name, *hybrid_twins(name)):
+            if key != species and key not in seen:
+                seen.append(key)
+    return seen
+
+
+def other_names(species: str, accepted: str, synonyms: list[str]) -> list[str] | None:
+    """What a row keyed *species* lists under `synonyms`: every other name of
+    the taxon, hybrid-mark twins excluded (a spelling is not a synonym)."""
+    names = {accepted, *synonyms} - {species}
+    return sorted(names) or None
+
+
+def with_species_aliases(table):
+    """Fold synonyms onto their accepted row, fill `synonyms`, and publish an
+    alias row under every other key a tree row might still carry.
+
+    `SPECIES_SYNONYMS` (_ingest_shared) is applied by `sanitize_species`, so a
+    rebuilt city publishes the accepted name only.  Three things follow for
+    this table, and this function does all three on every load:
+
+    1. **Consolidate.**  A row keyed by a synonym is a duplicate the LLM was
+       paid for twice.  When the accepted row exists the synonym's row is
+       dropped; when it does not, the synonym's row is re-keyed to the
+       accepted name so nothing is re-asked.
+
+    2. **Fill `synonyms`.**  Each accepted row lists the names the map folds
+       into it, merged with whatever the row already carried (a reviewer can
+       add one in `enrichment_admin.py` before the pair reaches the code).
+
+    3. **Alias.**  A copy of the row is published under every synonym key and
+       every hybrid-mark twin, so a tree row still carrying the old name -- a
+       city not yet rebuilt, 158k `Platanus x acerifolia` rows on the day
+       this landed -- keeps its common name.  The copy's own `synonyms` lists
+       the accepted name, so a reader can tell which row is the taxon's.
+
+    A parquet without a `synonyms` column gets one; a table with no such
+    column at all (the older unit tests) is aliased on the hybrid mark alone.
     """
     import pyarrow as pa
 
     rows = table.to_pylist()
-    have = {row["species"] for row in rows}
-    aliases = []
+    has_synonyms = "synonyms" in table.schema.names
+    index = {row["species"]: i for i, row in enumerate(rows) if row.get("species")}
+
+    # 1. Consolidate synonym-keyed rows onto the accepted name.
+    dropped: list[str] = []
+    rekeyed: list[str] = []
+    for synonym, accepted in SPECIES_SYNONYMS.items():
+        for key in (synonym, *hybrid_twins(synonym)):
+            if key not in index:
+                continue
+            if accepted in index or any(t in index for t in hybrid_twins(accepted)):
+                rows[index[key]] = None
+                dropped.append(key)
+            else:
+                rows[index[key]]["species"] = accepted
+                index[accepted] = index[key]
+                rekeyed.append(f"{key} -> {accepted}")
+            del index[key]
+    rows = [row for row in rows if row is not None]
+    have = {row["species"] for row in rows if row.get("species")}
+
+    # 2. Fill `synonyms` on every accepted row.
+    if has_synonyms:
+        for row in rows:
+            species = row.get("species")
+            if not species:
+                continue
+            merged = {*(row.get("synonyms") or []), *synonyms_of(species)} - {species}
+            row["synonyms"] = sorted(merged) or None
+
+    # 3. Alias rows.
+    aliases: list[dict] = []
     for row in rows:
-        species = row["species"] or ""
-        for a, b in ((" × ", " x "), (" x ", " × ")):
-            if a in species:
-                twin = species.replace(a, b)
-                if twin not in have:
-                    have.add(twin)
-                    aliases.append({**row, "species": twin})
-    if not aliases:
+        species = row.get("species")
+        if not species:
+            continue
+        synonyms = list(row.get("synonyms") or []) if has_synonyms else []
+        for key in alias_keys(species, synonyms):
+            if key in have:
+                continue
+            have.add(key)
+            twin = {**row, "species": key}
+            if has_synonyms:
+                twin["synonyms"] = other_names(key, species, synonyms)
+            aliases.append(twin)
+
+    if dropped or rekeyed:
+        print(
+            f"[synonyms] folded {len(dropped) + len(rekeyed)} synonym-keyed row(s) "
+            f"onto their accepted name: dropped {dropped or 'none'}; "
+            f"re-keyed {rekeyed or 'none'}",
+            file=sys.stderr,
+        )
+    if aliases:
+        print(
+            f"[alias] added {len(aliases)} alias row(s) so every synonym and "
+            f"hybrid-mark spelling joins",
+            file=sys.stderr,
+        )
+    if not (dropped or rekeyed or aliases or has_synonyms):
         return table
-    print(
-        f"[hybrid] added {len(aliases)} alias row(s) so both mark spellings join",
-        file=sys.stderr,
-    )
-    return pa.concat_tables([table, pa.Table.from_pylist(aliases, schema=table.schema)])
+    return pa.Table.from_pylist(rows + aliases, schema=table.schema)
 
 
 def with_sentinel_rows(table):

@@ -249,6 +249,7 @@ def test_no_city_publishes_the_old_duplicate_flag(code: str):
 
 RAW_ATTRIBUTES = {
     "species": "raw_species",
+    "cultivar": "raw_cultivar",
     "tree_name": "raw_tree_name",
     "plant_date": "raw_plant_date",
     "latitude": "raw_latitude",

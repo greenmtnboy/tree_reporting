@@ -39,7 +39,9 @@ from enrichment._tree_shared import (
     SPECIES_SENTINELS,
     is_enrichable_species,
     purge_non_taxa,
-    with_hybrid_aliases,
+    normalize_common_names,
+    with_normalized_common_names,
+    with_species_aliases,
     with_sentinel_rows,
     should_skip_species,
 )
@@ -562,7 +564,9 @@ def load_existing_table(source: str) -> pa.Table | None:
     # puts the authored ones back, so both the checkpoint and the final merge
     # carry them. On a first run there is no parquet to load and they arrive on
     # the run after — there is nothing to join to yet either.
-    return with_sentinel_rows(with_hybrid_aliases(purge_non_taxa(table)))
+    return with_sentinel_rows(
+        with_species_aliases(with_normalized_common_names(purge_non_taxa(table)))
+    )
 
 
 def merge_with_existing(existing: pa.Table | None, new_rows: list[dict]) -> pa.Table:
@@ -669,6 +673,7 @@ SCHEMA = pa.schema([
     ("genus",                 pa.string()),
     ("species_epithet",       pa.string()),
     ("family",                pa.string()),
+    ("synonyms",              pa.list_(pa.string())),
     ("common_names",          pa.list_(pa.string())),
     ("description",           pa.string()),
     ("is_evergreen",          pa.bool_()),
@@ -697,6 +702,9 @@ SCHEMA = pa.schema([
     ("photo_url",             pa.string()),
     ("photo_license",         pa.string()),
     ("photo_attribution",     pa.string()),
+    ("trunk_photo_url",       pa.string()),
+    ("trunk_photo_license",   pa.string()),
+    ("trunk_photo_attribution", pa.string()),
     ("is_complete",           pa.bool_()),
     ("enriched_at",           pa.timestamp("us", tz="UTC")),
 ])
@@ -879,7 +887,10 @@ if __name__ == "__main__":
             "genus":                genus,
             "species_epithet":      species_epithet,
             "family":               None,
-            "common_names":         enrichment.common_names or None,
+            # Filled from SPECIES_SYNONYMS on load (with_species_aliases), or
+            # by hand in enrichment_admin.py; the model is not asked for it.
+            "synonyms":             None,
+            "common_names":         normalize_common_names(enrichment.common_names),
             "description":          enrichment.description.strip() if enrichment.description else None,
             "is_evergreen":         enrichment.is_evergreen,
             "mature_height_min_ft": mature_height_min_ft,
@@ -907,6 +918,11 @@ if __name__ == "__main__":
             "photo_url":            photo_url,
             "photo_license":        photo_license,
             "photo_attribution":    photo_attribution,
+            # A bark / trunk view is hand-picked in enrichment_admin.py: iNat
+            # cannot be asked for one, and the run's photo is the leaf close-up.
+            "trunk_photo_url":      None,
+            "trunk_photo_license":  None,
+            "trunk_photo_attribution": None,
             "is_complete":          is_complete,
             "enriched_at":          datetime.now(tz=timezone.utc),
         })

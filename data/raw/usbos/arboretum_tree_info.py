@@ -20,18 +20,6 @@ OUT_FIELDS = "OBJECTID,SCIENTIFIC_NAME,COMMON_NAME,LATITUDE,LONGITUDE,DBH_NUM,DB
 WHERE = "IS_DEAD=0 AND IS_MAPPED=1"
 
 
-def strip_cultivar(name: str | None) -> str | None:
-    """Strip cultivar notation (single-quoted suffix) from a scientific name.
-
-    'Carpinus betulus \\'Columnaris\\'' → 'Carpinus betulus'
-    'Tsuga canadensis' → 'Tsuga canadensis'
-    """
-    if not name or not name.strip():
-        return None
-    stripped = name.split("'")[0].strip()
-    return stripped or None
-
-
 def parse_plant_date(ms: int | None) -> date | None:
     """Convert ArcGIS millisecond timestamp to a Python date, or None."""
     if ms is None:
@@ -96,7 +84,9 @@ def build_table(records: list[dict]) -> pa.Table:
         obj_id = rec.get("OBJECTID")
         tree_ids.append(f"arb-{obj_id}" if obj_id is not None else None)
         cities.append("USBOS")
-        species_list.append(normalize_species(strip_cultivar(rec.get("SCIENTIFIC_NAME"))))
+        # The quoted cultivar stays in: enforce_tree_schema reduces the
+        # species to the taxon and keeps the selection on the tree row.
+        species_list.append(normalize_species(rec.get("SCIENTIFIC_NAME")))
         raw_common = rec.get("COMMON_NAME")
         tree_names.append(raw_common.strip() if raw_common and raw_common.strip() else None)
         plant_dates.append(parse_plant_date(rec.get("PLANT_DT")))

@@ -48,6 +48,7 @@ root partial datasource uslax_osm_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'USLAX' and uslax_source = 'OSM_USLAX'
@@ -64,6 +65,7 @@ root partial datasource losangeles_raw_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'USLAX' and uslax_source = 'LOSANGELES_OPENDATA'
@@ -84,6 +86,7 @@ root partial datasource uslax_community_tree_info (
     latitude: ?raw_latitude,
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'USLAX' and uslax_source = 'COMMUNITY_USLAX'
@@ -115,6 +118,7 @@ partial datasource losangeles_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    ?cultivar,
     cluster_id,
     merged_sources,
     ?merged_tree_ids,

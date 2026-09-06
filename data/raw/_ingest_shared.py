@@ -292,6 +292,51 @@ _RANK_QUALIFIERS = frozenset(
 _QUOTE_CHARS = "'\"‘’“”"
 
 
+def extract_cultivar(value: str | None) -> str | None:
+    """The cultivar epithet quoted inside a raw species string, or ``None``.
+
+    A cultivar is a cultivated selection *within* a taxon -- ``Malus sargentii
+    'Tina'`` is the species Malus sargentii and the selection 'Tina'; ``Malus
+    'Spring Snow'`` is a selection with no species named at all.  It is not a
+    rank in the wild taxonomy, which is why it is not part of the `species`
+    key: the enrichment table describes the taxon, and one row per cultivar
+    would fragment the most common street trees into dozens of keys with the
+    same common name.  It is still a fact about *this tree*, so the ingest
+    keeps it on the tree row as `cultivar` rather than truncating it away.
+
+    Only the quoted form is recognised, because that is the only one that can
+    be told apart from a trailing note or an unquoted trade name.  Casing is
+    left alone unless the source wrote it entirely in lower case, since
+    nursery codes are case-significant ("JFS-Caddo2") and a lower-cased OSM
+    tag is just a typist's habit.
+
+    Examples:
+        "Malus sargentii 'Tina'"           -> "Tina"
+        "Malus 'spring snow' high brnch"   -> "Spring Snow"
+        "Acer saccharum 'JFS-Caddo2'"      -> "JFS-Caddo2"
+        "Prunus serrulata \u2018Kanzan\u2019"      -> "Kanzan"
+        "Malus 'Spring Snow"               -> "Spring Snow"  (unterminated)
+        "Acer platanoides"                 -> None
+        "Vacant"                           -> None
+    """
+    if value is None:
+        return None
+    s = value.strip()
+    starts = [s.find(q) for q in _QUOTE_CHARS if s.find(q) != -1]
+    if not starts:
+        return None
+    start = min(starts)
+    rest = s[start + 1:]
+    ends = [rest.find(q) for q in _QUOTE_CHARS if rest.find(q) != -1]
+    inner = rest[: min(ends)] if ends else rest
+    inner = " ".join(inner.split())
+    if not inner or not any(ch.isalnum() for ch in inner):
+        return None
+    if inner == inner.lower():
+        inner = " ".join(w[:1].upper() + w[1:] for w in inner.split(" "))
+    return inner
+
+
 # What a tree whose species we do not know is called.  `species` is a Trilogy
 # key, and carrying a real value rather than a null keeps it join-safe
 # everywhere without relying on null-matching semantics.  It is excluded from
@@ -431,6 +476,92 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Species synonyms
+# ---------------------------------------------------------------------------
+
+# One accepted scientific name per taxon, keyed by the names the inventories
+# publish instead of it.  `Platanus x acerifolia` and `Platanus x hispanica`
+# are the same hybrid -- the London plane, P. occidentalis x P. orientalis --
+# and Kew's Plants of the World Online lists the second as the accepted name
+# with the first as a heterotypic synonym; the published data carried 158k
+# trees under one and 53k under the other, with two enrichment rows, two LLM
+# calls and two entries in every species rollup.  `sanitize_species` applies
+# this map as its last step, so a tree row publishes the accepted name, and
+# the enrichment pipeline reads the same map to fill each accepted row's
+# `synonyms` and to publish an alias row under every synonym key, so a tree
+# row still carrying the old name joins to the right taxon until its city is
+# rebuilt (see `enrichment/_tree_shared.with_species_aliases`).
+#
+# Hardcoded rather than read from the enrichment parquet at ingest time,
+# because every city job would then depend on that object being reachable,
+# and a hand-edit in the admin form would silently change what eighteen
+# ingests publish.  A reviewer who finds a duplicate adds the pair *here*;
+# the admin form's synonyms field bridges the join in the meantime.
+#
+# Keys and values are written the way `sanitize_species` emits them -- ASCII
+# hybrid mark, genus capitalised, binomial rank -- and a value is never a key,
+# so one lookup is enough.  `test_ingest_shared.py` checks both.  POWO
+# (https://powo.science.kew.org) is the authority; add a pair only when it
+# lists one name as a synonym of the other.  A name that is merely
+# *misapplied* in the trade for a different species (`Ficus nitida` for
+# F. microcarpa, `Jacaranda acutifolia` for J. mimosifolia) is not a synonym
+# and is deliberately not here.
+SPECIES_SYNONYMS: dict[str, str] = {
+    # Nomenclatural and taxonomic synonyms (POWO lists the key under the value).
+    "Platanus x acerifolia": "Platanus x hispanica",
+    "Sophora japonica": "Styphnolobium japonicum",
+    "Tilia x vulgaris": "Tilia x europaea",
+    "Eucalyptus ficifolia": "Corymbia ficifolia",
+    "Eucalyptus citriodora": "Corymbia citriodora",
+    "Eucalyptus maculata": "Corymbia maculata",
+    "Tristania conferta": "Lophostemon confertus",
+    "Tristania laurina": "Tristaniopsis laurina",
+    "Arecastrum romanzoffianum": "Syagrus romanzoffiana",
+    "Podocarpus gracilior": "Afrocarpus gracilior",
+    "Rhus lancea": "Searsia lancea",
+    "Libocedrus decurrens": "Calocedrus decurrens",
+    "Thuja orientalis": "Platycladus orientalis",
+    "Sterculia populnea": "Brachychiton populneus",
+    "Cercidium floridum": "Parkinsonia florida",
+    "Cercidium microphyllum": "Parkinsonia microphylla",
+    "Acacia farnesiana": "Vachellia farnesiana",
+    "Acacia karroo": "Vachellia karroo",
+    "Yucca elephantipes": "Yucca gigantea",
+    "Fraxinus oxycarpa": "Fraxinus angustifolia",
+    # Genus transfers Kew does not follow: POWO keeps these in Cupressus, and
+    # treats the Nootka cypress and the Leyland cypress the same way.
+    "Hesperocyparis macrocarpa": "Cupressus macrocarpa",
+    "Hesperocyparis arizonica": "Cupressus arizonica",
+    "Hesperocyparis glabra": "Cupressus glabra",
+    "Chamaecyparis nootkatensis": "Cupressus nootkatensis",
+    "Xanthocyparis nootkatensis": "Cupressus nootkatensis",
+    "Callitropsis nootkatensis": "Cupressus nootkatensis",
+    "Cuprocyparis leylandii": "Cupressus x leylandii",
+    "X cuprocyparis leylandii": "Cupressus x leylandii",
+    "Cupressocyparis leylandii": "Cupressus x leylandii",
+    "X cupressocyparis leylandii": "Cupressus x leylandii",
+    # Orthographic variants.
+    "Schinus terebinthifolius": "Schinus terebinthifolia",
+    "Howea forsterana": "Howea forsteriana",
+    "Raphiolepis indica": "Rhaphiolepis indica",
+    # A hybrid published without its mark is the same taxon as with it.
+    "Platanus hispanica": "Platanus x hispanica",
+    "Platanus acerifolia": "Platanus x hispanica",
+    "Prunus yedoensis": "Prunus x yedoensis",
+    "Prunus subhirtella": "Prunus x subhirtella",
+    "Populus canadensis": "Populus x canadensis",
+    "Photinia fraseri": "Photinia x fraseri",
+    "Ulmus hollandica": "Ulmus x hollandica",
+    "Bauhinia blakeana": "Bauhinia x blakeana",
+}
+
+
+def synonyms_of(accepted: str) -> list[str]:
+    """Every name SPECIES_SYNONYMS folds into *accepted*, sorted."""
+    return sorted(k for k, v in SPECIES_SYNONYMS.items() if v == accepted)
+
+
 def form_sentinel_for(value: str | None) -> str | None:
     """Return the growth-form sentinel *value* names, or ``None``.
 
@@ -469,7 +600,31 @@ def _is_epithet_token(token: str) -> bool:
 
 
 def sanitize_species(value: str | None) -> str | None:
+    """Reduce a raw species string to an accepted Latin binomial, or ``None``.
+
+    `_sanitize_taxon` decides whether the value names a taxon and truncates it
+    to species rank; this then folds a synonym onto its accepted name through
+    SPECIES_SYNONYMS, so `Platanus x acerifolia` and `Platanus x hispanica`
+    publish as one key.  The cultivar a value carried is not part of the
+    result -- `extract_cultivar` keeps it on the tree row instead.
+
+    Examples:
+        "Platanus x acerifolia 'Bloodgood'" -> "Platanus x hispanica"
+        "Sophora japonica"                  -> "Styphnolobium japonicum"
+        "Prunus yedoensis"                  -> "Prunus x yedoensis"
+        "Acer platanoides"                  -> "Acer platanoides"
+        "Pin oak"                           -> None
+    """
+    taxon = _sanitize_taxon(value)
+    if taxon is None:
+        return None
+    return SPECIES_SYNONYMS.get(taxon, taxon)
+
+
+def _sanitize_taxon(value: str | None) -> str | None:
     """Reduce a raw species string to a Latin binomial, or ``None``.
+
+    The shape rules only; `sanitize_species` applies the synonym map on top.
 
     ``normalize_species`` fixes *casing*; this decides whether the value is a
     scientific name at all.  Sources disagree wildly on what they put in a
@@ -713,6 +868,7 @@ TREE_COLUMN_TYPES: dict[str, pa.DataType] = {
     "city": pa.string(),
     "data_source": pa.string(),
     "species": pa.string(),
+    "cultivar": pa.string(),
     "tree_name": pa.string(),
     "plant_date": pa.date32(),
     "latitude": pa.float64(),
@@ -757,6 +913,12 @@ def enforce_tree_schema(
     entirely, because the generated join is a plain ``=`` and ``NULL = NULL`` is
     never true.  Washington DC shipped 63,527 of the first and 8,280 of the
     second for months; Boston was quietly losing 43 rows a rebuild.
+
+    ``cultivar`` is filled from the species string where the source did not
+    supply it as its own column: the quoted selection in ``Malus sargentii
+    'Tina'`` is kept on the tree row while ``species`` is reduced to the
+    taxon.  An ingest whose portal publishes a cultivar field maps it through
+    ``columns`` and its non-null values win over the parsed ones.
 
     Extra columns (``borough``, …) pass through untouched.
     Casts are *safe*: a lossy conversion raises rather than silently
@@ -820,15 +982,32 @@ def enforce_tree_schema(
                 f"records an empty site or stump rather than a tree",
                 file=sys.stderr,
             )
+        # The cultivar comes off the raw string before the taxon rules see
+        # it, and only stays when a taxon survived: a selection is a choice
+        # *within* a taxon, so one attached to "Vacant" says nothing.  A
+        # source with its own cultivar column keeps what it wrote.
+        cultivar_col = resolved["cultivar"]
+        supplied: list[str | None] = (
+            table.column(table.schema.get_field_index(cultivar_col)).to_pylist()
+            if cultivar_col in table.schema.names
+            else [None] * table.num_rows
+        )
+        cultivars: list[str | None] = []
         cleaned: list[str] = []
-        dropped = rewritten = formed = 0
-        for value in raw_species:
+        dropped = rewritten = formed = cultivared = 0
+        for value, given in zip(raw_species, supplied):
             keep = sanitize_species(value)
+            cultivar = given.strip() if isinstance(given, str) and given.strip() else None
             if keep is not None:
                 if keep != value:
                     rewritten += 1
                 cleaned.append(keep)
+                cultivar = cultivar or extract_cultivar(value)
+                if cultivar is not None:
+                    cultivared += 1
+                cultivars.append(cultivar)
                 continue
+            cultivars.append(None)
             # Not a taxon.  Keep the growth form if the source named one --
             # "Palm" says less than a binomial but far more than "Unknown",
             # and it is what the map icon is chosen from.
@@ -843,14 +1022,22 @@ def enforce_tree_schema(
         table = table.set_column(
             sidx, species_col, pa.array(cleaned, type=pa.string())
         )
+        cultivar_array = pa.array(cultivars, type=pa.string())
+        if cultivar_col in table.schema.names:
+            table = table.set_column(
+                table.schema.get_field_index(cultivar_col), cultivar_col, cultivar_array
+            )
+        else:
+            table = table.append_column(cultivar_col, cultivar_array)
         # Never silent: a run that reshapes a tenth of its species column
         # should say so in the refresh log.
-        if dropped or rewritten or formed:
+        if dropped or rewritten or formed or cultivared:
             print(
                 f"{prefix}: species cleanup -- {dropped} value(s) were not "
                 f"scientific names and became {UNKNOWN_SPECIES!r}, "
                 f"{rewritten} normalised to species rank, "
-                f"{formed} kept as a growth-form sentinel",
+                f"{formed} kept as a growth-form sentinel, "
+                f"{cultivared} carry a cultivar on the tree row",
                 file=sys.stderr,
             )
 

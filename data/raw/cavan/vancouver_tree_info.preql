@@ -48,6 +48,7 @@ root partial datasource cavan_osm_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'CAVAN' and cavan_source = 'OSM_CAVAN'
@@ -64,6 +65,7 @@ root partial datasource vancouver_raw_tree_info (
     longitude: ?raw_longitude,
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'CAVAN' and cavan_source = 'VANCOUVER_OPENDATA'
@@ -84,6 +86,7 @@ root partial datasource cavan_community_tree_info (
     latitude: ?raw_latitude,
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
 )
 grain (tree_id)
 complete where city = 'CAVAN' and cavan_source = 'COMMUNITY_CAVAN'
@@ -116,6 +119,7 @@ partial datasource vancouver_tree_info (
     ?latitude,
     ?longitude,
     ?submission_photo_url,
+    ?cultivar,
     cluster_id,
     merged_sources,
     ?merged_tree_ids,
