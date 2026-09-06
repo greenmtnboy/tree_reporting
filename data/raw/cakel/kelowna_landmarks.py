@@ -119,8 +119,18 @@ def transform(features: list[dict]) -> pa.Table:
 
 if __name__ == "__main__":
     features: list[dict] = []
+    # Ordered by the register's own key rather than the default OBJECTID:
+    # this layer reports `objectIdField: null` and its OBJECTID repeats, so it
+    # is not a total order, and offset paging over one can repeat or skip rows.
+    # Moot at 215 features against a 2,000-row page, and not moot the day the
+    # register grows -- which is exactly the kind of silent truncation
+    # `iter_features` refuses to allow by requiring an order at all.
     for page in iter_features(
-        LAYER, out_fields=OUT_FIELDS, return_geometry=True, out_sr=4326
+        LAYER,
+        out_fields=OUT_FIELDS,
+        return_geometry=True,
+        out_sr=4326,
+        order_by="KID,BLDG_NAME",
     ):
         features.extend(page)
     emit(transform(features))
