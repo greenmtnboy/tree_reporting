@@ -34,6 +34,7 @@ from _ingest_shared import (
     emit,
     emit_freshness,
     enforce_tree_schema,
+    report_species_cleanup,
     get_json_with_retry,
     response_json,
     make_point_wkt,
@@ -1382,3 +1383,69 @@ class TestEnforceTreeSchemaCultivar:
 
         enforce_tree_schema(self._table(["Malus sargentii 'Tina'"]), data_source="SF_OPENDATA")
         assert "1 carry a cultivar on the tree row" in capsys.readouterr().err
+
+
+class TestStreamedIngest:
+    """A city emitted a page at a time (New York) still gets one grain check
+    and one cleanup summary, because the shared set and dict carry both
+    across the calls."""
+
+    def _page(self, ids, species):
+        return pa.table(
+            {
+                "tree_id": pa.array(ids, type=pa.string()),
+                "city": pa.array(["USNYC"] * len(ids)),
+                "species": pa.array(species, type=pa.string()),
+            }
+        )
+
+    def test_a_repeat_across_pages_raises(self):
+        seen: set[str] = set()
+        enforce_tree_schema(
+            self._page(["nyc-1", "nyc-2"], ["Acer rubrum"] * 2),
+            city="New York City",
+            data_source="NYC_OPENDATA",
+            seen_ids=seen,
+        )
+        with pytest.raises(ValueError, match="declared grain"):
+            enforce_tree_schema(
+                self._page(["nyc-3", "nyc-1"], ["Acer rubrum"] * 2),
+                city="New York City",
+                data_source="NYC_OPENDATA",
+                seen_ids=seen,
+            )
+
+    def test_pages_without_a_shared_set_are_checked_alone(self):
+        for ids in (["nyc-1"], ["nyc-1"]):
+            enforce_tree_schema(
+                self._page(ids, ["Acer rubrum"]),
+                city="New York City",
+                data_source="NYC_OPENDATA",
+            )
+
+    def test_the_summary_accumulates_and_prints_once(self, capsys):
+        summary: dict[str, int] = {}
+        for ids, species in (
+            (["nyc-1", "nyc-2"], ["Unbekannt", "Vacant"]),
+            (["nyc-3"], ["Prunus serrulata 'kwanzan'"]),
+        ):
+            enforce_tree_schema(
+                self._page(ids, species),
+                city="New York City",
+                data_source="NYC_OPENDATA",
+                summary=summary,
+            )
+        assert capsys.readouterr().err == ""
+        assert summary == {
+            "not_a_tree": 1,
+            "dropped": 1,
+            "rewritten": 1,
+            "formed": 0,
+            "cultivared": 1,
+        }
+        report_species_cleanup(summary, city="New York City")
+        err = capsys.readouterr().err
+        assert err.count("species cleanup") == 1
+        assert "dropped 1 row(s)" in err
+        assert "1 value(s) were not scientific names" in err
+        assert "1 carry a cultivar" in err

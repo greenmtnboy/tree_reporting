@@ -5,27 +5,37 @@
 # ///
 
 import io
+import itertools
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.csv as pv
 import requests
+from trilogy.io.arrow import emit_arrow_batches
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import (
     stream_table_batches,
-    emit,
     enforce_tree_schema,
     normalize_species,
+    report_species_cleanup,
     validate_coordinates,
 )
 
 DATASET_ID = "hn5i-inap"
 DATASET_URL = f"https://data.cityofnewyork.us/resource/{DATASET_ID}.csv"
-PAGE_SIZE = 500000
+# A page is what one request downloads and parses; a whole page is held in
+# Arrow while its slices are emitted (see iter_pages), so the page, not the
+# city, is the ingest's memory footprint.  250k is five requests for the
+# city.  Measured: the whole city as one table peaked at 674 MiB, 500k
+# pages at 460, 250k pages at 395, with byte-identical output each time.
+PAGE_SIZE = 250000
+# Rows per emitted unit; see iter_pages.
+EMIT_ROWS = 100000
 DATASET_PARAMS = {
     "$select": "objectid,genusspecies,dbh,planteddate,location",
     "$limit": str(PAGE_SIZE),
@@ -162,40 +172,67 @@ def load_arrow_table(csv_bytes: io.BytesIO) -> tuple[pa.Table, int]:
     return table, raw_count
 
 
-def load_all_arrow_tables() -> pa.Table:
-    tables: list[pa.Table] = []
-    offset = 0
-
-    while True:
-        csv_bytes = download_csv_page(offset)
-        table, raw_count = load_arrow_table(csv_bytes)
-        tables.append(table)
-        if raw_count < PAGE_SIZE:
-            break
-        offset += PAGE_SIZE
-
-    return pa.concat_tables(tables)
-
-
 def add_city_column(table: pa.Table) -> pa.Table:
     return table.append_column(
         "city", pa.array(["USNYC"] * table.num_rows, type=pa.string())
     )
 
 
+def iter_pages() -> Iterator[pa.Table]:
+    """Yield each Socrata page fully processed and ready to emit.
+
+    The city is never held whole.  Concatenating the three pages and then
+    validating, sanitising and emitting 1.1M rows as one table peaked at
+    674 MiB, the largest ingest of any city and most of it spent on the
+    Python-object copies the species cleanup makes; a page at a time bounds
+    that to one page, and DuckDB reads the Arrow stream as it is written.
+    The grain check and the cleanup summary span the pages through the
+    shared ``seen`` set and ``summary`` dict -- see ``enforce_tree_schema``.
+    """
+    seen: set[str] = set()
+    summary: dict[str, int] = {}
+    offset = 0
+    while True:
+        csv_bytes = download_csv_page(offset)
+        page, raw_count = load_arrow_table(csv_bytes)
+        del csv_bytes
+        # The download stays at PAGE_SIZE (three requests for the city) but
+        # the Python-object work below is done a slice at a time: a whole
+        # page through the species cleanup peaked at 544 MiB, a slice holds
+        # it near the size of the Arrow page itself.
+        for start in range(0, page.num_rows, EMIT_ROWS):
+            table = add_city_column(page.slice(start, EMIT_ROWS))
+            table = validate_coordinates(table, city="New York City", city_code="USNYC")
+            table = enforce_tree_schema(
+                table,
+                city="New York City",
+                data_source="NYC_OPENDATA",
+                columns={
+                    "tree_id": "objectid",
+                    "species": "genusspecies",
+                    "plant_date": "planteddate",
+                    "diameter_at_breast_height": "dbh",
+                },
+                seen_ids=seen,
+                summary=summary,
+            )
+            yield table
+        if raw_count < PAGE_SIZE:
+            break
+        offset += PAGE_SIZE
+    report_species_cleanup(summary, city="New York City")
+
+
+def iter_batches(pages: Iterator[pa.Table], first: pa.Table) -> Iterator[pa.RecordBatch]:
+    # chain, not a tuple: unpacking the generator would pull every page in.
+    for page in itertools.chain((first,), pages):
+        yield from page.to_batches()
+
+
 if __name__ == "__main__":
-    table = load_all_arrow_tables()
-    table = add_city_column(table)
-    table = validate_coordinates(table, city="New York City", city_code="USNYC")
-    table = enforce_tree_schema(
-        table,
-        city="New York City",
-        data_source="NYC_OPENDATA",
-        columns={
-            "tree_id": "objectid",
-            "species": "genusspecies",
-            "plant_date": "planteddate",
-            "diameter_at_breast_height": "dbh",
-        },
-    )
-    emit(table)
+    pages = iter_pages()
+    # The stream needs its schema before the first batch; every page carries
+    # the canonical column set and types, so the first page's schema is the
+    # stream's.
+    first = next(pages)
+    emit_arrow_batches(iter_batches(pages, first), first.schema)

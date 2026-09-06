@@ -1370,8 +1370,10 @@ maintains and the form shows read-only.
 **Rolling out a new tree column.** `cultivar` was the worked example, and the
 order matters because DuckDB binds a projected column against the *first*
 file it reads: a single parquet without the column is a binder error, and so
-is the rollup's multi-file scan when the first city in its list lacks it (a
-later file lacking it reads as NULL). So after merging a column that every
+is the rollup's multi-file scan when *any* city in its list lacks it: the
+scan takes its schema from the first file and raises a schema mismatch on a
+later file that does not match (there is no `union_by_name`, so a missing
+column does not read as NULL). So after merging a column that every
 partition maps: (1) fire each city's `osm-{code}` job, two at a time (Overpass
 allows two slots per IP), because the city model reads the staged OSM parquet
 by column and its refresh fails until the extract has been re-run; (2) force
