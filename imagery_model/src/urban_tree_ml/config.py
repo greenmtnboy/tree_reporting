@@ -176,6 +176,29 @@ class ProjectConfig(StrictModel):
         return self
 
 
+class StudioCityConfig(StrictModel):
+    city: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$")
+    label: str = Field(min_length=1)
+    config_path: Path
+    raster: Path
+    review_dir: Path | None = None
+    evaluation_dir: Path | None = None
+
+
+class StudioConfig(StrictModel):
+    default_city: str
+    cities: list[StudioCityConfig] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def city_ids_are_unique_and_include_default(self) -> StudioConfig:
+        city_ids = [city.city for city in self.cities]
+        if len(city_ids) != len(set(city_ids)):
+            raise ValueError("studio city identifiers must be unique")
+        if self.default_city not in city_ids:
+            raise ValueError("studio.default_city must name one of studio.cities")
+        return self
+
+
 def load_config(path: str | Path) -> ProjectConfig:
     config_path = Path(path)
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
@@ -200,6 +223,18 @@ def load_config(path: str | Path) -> ProjectConfig:
             if not value.is_absolute():
                 setattr(config.reference, field, (config_path.parent.parent / value).resolve())
     return config
+
+
+def load_studio_config(path: str | Path) -> StudioConfig:
+    config_path = Path(path).resolve()
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    studio = StudioConfig.model_validate(_expand_environment(raw))
+    for city in studio.cities:
+        for field in ("config_path", "raster", "review_dir", "evaluation_dir"):
+            value = getattr(city, field)
+            if value is not None and not value.is_absolute():
+                setattr(city, field, (config_path.parent / value).resolve())
+    return studio
 
 
 def taxonomy_path(config: ProjectConfig) -> Path:

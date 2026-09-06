@@ -100,6 +100,20 @@ uv run urban-tree-ml qa serve \
   --raster artifacts/imagery/ussfo/2022/ca_m_3712213_sw_10_060_20220518.tif
 ```
 
+For a single Studio that safely switches between the local San Francisco and Boston workspaces,
+set the shared artifact and tracked-annotation roots and use the checked-in city registry:
+
+```bash
+TREE_ML_DATA_ROOT=/path/to/artifacts \
+TREE_ML_ANNOTATIONS_ROOT=/path/to/training-data/annotations \
+uv run --env-file .env urban-tree-ml qa studio \
+  --studio-config configs/studio_sf_boston.yaml
+```
+
+The selected city is carried on every registration read, save, and finalize request. Review images
+are served from a city-namespaced URL, and validation-to-curation resolves the city from the selected
+evaluation run. This keeps identically named scenes and chip IDs from crossing annotation bundles.
+
 `qa heuristics` enriches an existing review manifest with a conservative RGB-NIR profile without
 changing its scenes, sample IDs, or saved reviews. In the UI, **Check non-veg** only previews
 low-NIR gray candidates. A second click explicitly marks those candidates `uncertain`, and the

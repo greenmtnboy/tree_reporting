@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from urban_tree_ml.config import load_config
+from urban_tree_ml.config import load_config, load_studio_config
 from urban_tree_ml.evaluation import run_evaluation
 
 
@@ -104,6 +104,24 @@ def test_boston_external_config_reuses_sf_model_inputs_without_mixing_datasets()
         / "chips"
         / "sf-naip-rgbn-species-citywide-v1"
         / "normalization.json"
+    )
+
+
+def test_studio_config_registers_sf_and_boston_workspaces(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TREE_ML_DATA_ROOT", str(tmp_path))
+    config_dir = Path(__file__).parents[1] / "configs"
+
+    studio = load_studio_config(config_dir / "studio_sf_boston.yaml")
+
+    assert studio.default_city == "ussfo"
+    assert [city.city for city in studio.cities] == ["ussfo", "usbos"]
+    assert [city.label for city in studio.cities] == ["San Francisco", "Boston"]
+    assert studio.cities[0].config_path == (config_dir / "sf_naip_citywide_curated.yaml")
+    assert studio.cities[1].raster == (
+        tmp_path / "imagery" / "usbos" / "2023" / "usbos-2023-external.vrt"
     )
 
 

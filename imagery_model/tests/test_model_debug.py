@@ -177,6 +177,7 @@ def test_studio_html_links_registration_and_model_views() -> None:
     assert 'value="worst"' in MODEL_DEBUG_HTML
     assert 'id="unreviewed"' in MODEL_DEBUG_HTML
     assert "/api/curation-status" in MODEL_DEBUG_HTML
+    assert "fetch(withRun('/api/curation-status'))" in MODEL_DEBUG_HTML
     assert "detection_f1-b.detection_f1" in MODEL_DEBUG_HTML
     assert "threshold=${encodeURIComponent($('threshold').value)}" in MODEL_DEBUG_HTML
     assert "return=${encodeURIComponent(returnTo)}" in MODEL_DEBUG_HTML
