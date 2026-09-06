@@ -112,7 +112,7 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "selectedByScene" in html
     assert "Center marking is disabled for a multi-selection." in html
     assert "selectionFor(scene.scene_id).size !== 1" in html
-    assert 'a: "aligned", n: "not-tree", u: "uncertain", d: "duplicate"' in html
+    assert 'r: "aligned", n: "not-tree", q: "uncertain", e: "duplicate"' in html
     assert 'map_action: "pano"' in html
     assert "https://www.google.com/maps/@?" in html
     assert "const streetViewEmbedApiKey = null;" in html

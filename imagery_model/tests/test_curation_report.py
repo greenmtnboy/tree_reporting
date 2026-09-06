@@ -13,6 +13,7 @@ def test_f2_weights_missed_trees_more_than_false_positives():
 
 
 def test_report_keeps_completion_separate_from_tree_labels_and_scores(tmp_path, monkeypatch):
+    monkeypatch.setattr("urban_tree_ml.curation_report.training_chip_catalog", lambda *args: None)
     manifest = {"scenes": [
         {"scene_id": "one", "sample_ids": ["a"], "splits": ["train"]},
         {"scene_id": "two", "sample_ids": ["b"], "splits": ["validation"],

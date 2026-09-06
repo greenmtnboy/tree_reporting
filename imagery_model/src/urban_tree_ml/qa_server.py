@@ -11,6 +11,7 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 
+from urban_tree_ml.chip_catalog import next_training_truth, training_chip_catalog
 from urban_tree_ml.config import ProjectConfig, StudioConfig, load_config
 from urban_tree_ml.curation_report import CURATION_REPORT_HTML, city_report
 from urban_tree_ml.feedback import (
@@ -32,9 +33,10 @@ from urban_tree_ml.quality import (
     append_validation_chip_to_registration_review,
     render_registration_review_html,
 )
+from urban_tree_ml.studio_shell import render_studio_shell
 
 _MAX_REVIEW_PAYLOAD_BYTES = 2 * 1024 * 1024
-_CURATION_RETURN_PATHS = frozenset({"/registration", "/runs", "/compare", "/model"})
+_CURATION_RETURN_PATHS = frozenset({"/registration", "/runs", "/compare", "/model", "/coverage"})
 
 
 @dataclass(frozen=True)
@@ -247,39 +249,12 @@ def _serve_review_contexts(
         return candidate if candidate in available else None
 
     def city_navigation(html: str, context: ReviewContext) -> str:
-        if 'href="/coverage"' not in html:
-            html = html.replace('</nav>', '<a href="/coverage">Curation coverage</a></nav>', 1)
-        run_id = run_id_for_context(context)
-        model_query = f"?{urlencode({'run': run_id})}" if run_id else ""
-        html = html.replace(
-            'href="/registration"',
-            f'href="/registration?{urlencode({"city": context.city})}"',
+        return render_studio_shell(
+            html, context.city,
+            {city: item.label for city, item in contexts.items()},
+            {city: run_id_for_context(item) for city, item in contexts.items()},
         )
-        html = html.replace(
-            'href="/runs"',
-            f'href="/runs?{urlencode({"city": context.city})}"',
-        )
-        html = html.replace('href="/model"', f'href="/model{model_query}"')
-        options = "".join(
-            f'<option value="{city}"{" selected" if city == context.city else ""}>'
-            f"{item.label}</option>"
-            for city, item in contexts.items()
-        )
-        switcher = (
-            '<label class="studio-city-switch">City '
-            f'<select aria-label="Review city" onchange="location.href=\'/registration?city=\'+'
-            f'encodeURIComponent(this.value)">{options}</select></label>'
-        )
-        style = (
-            "<style>.studio-city-switch{display:inline-flex;align-items:center;gap:6px;"
-            "margin-left:auto;color:#aabdaf;font-size:13px}.studio-city-switch select{"
-            "min-height:32px;color:#edf6ef;background:#203027;border:1px solid #496252;"
-            "border-radius:6px;padding:5px 9px}</style>"
-        )
-        for closing_nav in ("</nav>",):
-            if closing_nav in html:
-                return html.replace(closing_nav, f"{switcher}</nav>{style}", 1)
-        return html.replace("<body>", f"<body><nav class=\"nav\">{switcher}</nav>{style}", 1)
+
 
     def registration_html(context: ReviewContext) -> str:
         html = _inject_street_view_embed_key(
@@ -459,6 +434,26 @@ def _serve_review_contexts(
                 self.send_header("Location", location)
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
+                return
+            if path == "/curate-training":
+                try:
+                    with review_state_lock:
+                        manifest = json.loads((context.directory / "manifest.json").read_text())
+                        state = load_persisted_reviews(context.directory)
+                        progress = training_chip_catalog(context, manifest, state)
+                        chip, truth = next_training_truth(context, progress, manifest, state)
+                        result = append_validation_chip_to_registration_review(
+                            context.config, context.raster, context.directory, chip, truth,
+                        )
+                    location = "/registration?" + urlencode({
+                        "city": context.city, "scene": result["scene_id"], "fullscreen": 1,
+                        "return": "/coverage?" + urlencode({"city": context.city}),
+                    })
+                    self.send_response(HTTPStatus.SEE_OTHER)
+                    self.send_header("Location", location)
+                    self.end_headers()
+                except (OSError, ValueError, KeyError) as error:
+                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                 return
             if path == "/api/reviews":
                 try:
