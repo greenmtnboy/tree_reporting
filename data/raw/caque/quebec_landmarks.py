@@ -29,7 +29,6 @@ Chateau Frontenac, the Citadelle, the Plaines d'Abraham nor the basilica;
 first preference and, here, the only one that names the city's landmarks.
 """
 
-
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -37,7 +36,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, iter_datastore_rows, point_lon_lat
+from _ckan_shared import CkanResource, iter_datastore_rows
 from _ingest_shared import emit, make_point_wkt
 
 HOST = "www.donneesquebec.ca/recherche"
