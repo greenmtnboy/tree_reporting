@@ -279,6 +279,17 @@ throttling a single compile can take tens of seconds on its own, and 30s could
 absorb neither the compile nor the backoff. A new suite that talks to the
 resolver should use the same helper and budget.
 
+**A timeout is a budget, and a per-test one is the wrong place to keep it.**
+`dashboard-pushdown.test.ts` used to compile eight queries one at a time inside
+each `it`, and under CI throttling one city took 52s, another 45s, and the third
+went past 120s and failed — the same eight compiles, on the same commit, at the
+mercy of when the quota happened to drain. Both halves of the fix are the ones
+the sweep already uses: compile through `/generate_queries` so a group's eight
+queries are one request that parses the model once, and hoist the compiling into
+`beforeAll` under one large budget so the `it` blocks only assert on what came
+back. That suite is now 26 queries in 5 requests, and a slow resolver makes it
+slow rather than red.
+
 `GET /health` is sub-second no matter how loaded the service is, so it tells you
 nothing about compile latency. The only honest readout is a real compile against
 the full model — `POST /generate_query` with `ALL_MODEL_SOURCES` — which is
