@@ -8,15 +8,16 @@ on:
 # One live run per pull request; a new push cancels the one it superseded.
 #
 # This is not just tidiness here, because two of the jobs below -- `test` and
-# `dashboard-queries` -- compile against trilogy-service.fly.dev, a single
-# shared instance on a burst CPU quota. They are already part of each other's
-# load within one run (see the note in src/src/tests/resolverFetch.ts); without
-# this, a branch pushed three times in quick succession puts three runs and six
-# resolver-backed jobs on it at once, drains the quota, and every request comes
-# back HTTP 504 after Fly's 120s proxy timeout. The retry policy cannot help --
-# four attempts at 120s each is eight minutes of waiting on an instance that
-# needs minutes to refill -- so `test` dies on its 10-minute job budget having
-# proved nothing. That is exactly how this branch went red, twice.
+# `dashboard-queries` -- compile against trilogy-service.fly.dev, one shared
+# instance that can be overloaded. They are already part of each other's load
+# within one run (see the note in src/src/tests/resolverFetch.ts); without this,
+# a branch pushed four times in quick succession puts four runs and eight
+# resolver-backed jobs on it at once, and requests start coming back HTTP 504
+# after Fly's 120s proxy timeout. The retry policy cannot dig out of that --
+# four attempts at 120s apiece is eight minutes of waiting on something that is
+# still overloaded -- so `test` died on its 10-minute budget having proved
+# nothing. That is exactly how this branch went red, twice; with one live run
+# the same job passed in 2m39s.
 #
 # Pushes to main are deliberately not cancelled: a superseded PR run has a
 # successor coming, and main's does not.
@@ -200,10 +201,17 @@ jobs:
   # timeouts have the headroom that needs. The first CI run without that had
   # `test` fail on an HTTP 502 and two 30s timeouts while this job passed.
   dashboard-queries:
-    timeout-minutes: 20
+    # 30 minutes, because a *wide* sweep is one request per city and this job
+    # widens itself whenever a city model changes (see "Decide how wide to
+    # sweep"). The narrow default finishes in a couple of minutes; the wide run
+    # at 21 cities needs room the old 20 did not leave.
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      with:
+        # Two commits, so the widening step below can diff against the base.
+        fetch-depth: 0
     - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
       with:
         node-version: 22
@@ -224,6 +232,35 @@ jobs:
       working-directory: ./src
       run: pnpm install --frozen-lockfile
 
+    # The default sweep compiles the all-cities view plus the handful of cities
+    # whose model is structurally its own case (see REPRESENTATIVE_CITIES in
+    # dashboard-queries.test.ts). That is the right default because every city
+    # sends the same queries and each one costs a whole request, but it means a
+    # city outside the set could break its own model and go green.
+    #
+    # So widen it exactly where that risk is real: a diff that touches any city
+    # tree model, landmark model, or the city config is a change to the thing
+    # this suite is checking, and gets all of them. So does every push to main,
+    # which backstops anything a narrow PR run let through.
+    - name: Decide how wide to sweep
+      id: sweep
+      run: |
+        if [ "${{ github.event_name }}" != "pull_request" ]; then
+          echo "reason=push to ${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          echo "all=1" >> "$GITHUB_OUTPUT"
+        elif git diff --name-only "origin/${{ github.base_ref }}...HEAD" \
+             | grep -qE '^data/raw/[a-z]+/[a-z_]+_(tree_info|landmarks)\.preql$|^src/src/cityConfig\.json$'; then
+          echo "reason=a city model or the city config changed" >> "$GITHUB_OUTPUT"
+          echo "all=1" >> "$GITHUB_OUTPUT"
+        else
+          echo "reason=no city model changed" >> "$GITHUB_OUTPUT"
+          echo "all=" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Compile and run every dashboard query
       working-directory: ./src
-      run: pnpm test:queries
+      env:
+        DASHBOARD_QUERY_ALL_CITIES: ${{ steps.sweep.outputs.all }}
+      run: |
+        echo "sweeping ${{ steps.sweep.outputs.all && 'every city' || 'the representative cities' }} -- ${{ steps.sweep.outputs.reason }}"
+        pnpm test:queries

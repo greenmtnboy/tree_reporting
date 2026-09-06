@@ -211,13 +211,43 @@ DASHBOARD_QUERY_CROSS_FILTERS=pairs pnpm test:queries        # every pair of dim
 DASHBOARD_QUERY_ALL_CITIES=1 pnpm test:queries               # interactive states in every city
 ```
 
-The default run is **34 queries for the all-cities view plus 39 per city**,
-then 123 interactive (a species selection, and one cross-filter dimension —
+### Which cities the sweep covers
+
+**The default run does not compile every city, and the reason is that a city is
+a whole request.** Batching is per `(city, imports)`, and a request re-hydrates
+the model before it plans anything — ~375ms of a ~560ms warm compile is parsing
+the preql sources, of which there are now ~49. Every city sends the *same*
+catalog with the same imports, differing only in the `dashboard_context`
+constants and a `city = 'X'` filter, so compiling all of them re-proves one plan
+once per city at full price. Trimming queries per city would not remove a single
+request; trimming cities removes them wholesale. (The CI timings bear this out:
+`39q` batches ranged 46.9s to 467s while a `34q` batch took 206s and a `40q` one
+51s — query count does not predict the time.)
+
+So the default is the all-cities view plus `REPRESENTATIVE_CITIES` in
+`dashboard-queries.test.ts` — the cities whose *model* is its own case: London
+(the only extra column, `borough`), Boston (four municipal partitions and the
+only species-keyed aggregate), Milos (community-only, no municipal source) and
+San Francisco (heads the rollup file list, and the interactive city). Then 123
+interactive cases (a species selection, and one cross-filter dimension —
 nativeness, the one that reaches enrichment through the
 `unnest(native_ecoregions)` merge, where both planner failures have lived).
-That was 820 at seventeen cities, and it grows by 39 with each new one:
-`ALL_CITIES` in `dashboardQueryCatalog.ts` is `Object.keys(CITY_CONFIG)`, so
-adding a city to `cityConfig.json` enrols it here too.
+
+**That is a coverage trade, and it is bounded two ways.** A pull request whose
+diff touches any `*_tree_info.preql`, any `*_landmarks.preql` or
+`cityConfig.json` is changing the thing this suite checks, and the
+`dashboard-queries` job widens itself to every city — which is exactly the
+city-addition case. So does every push to main. `DASHBOARD_QUERY_ALL_CITIES=1`
+forces the wide run by hand.
+
+The wide run is still 34 queries for the all-cities view plus 39 per city, and
+it still grows by 39 with each new one: `ALL_CITIES` in
+`dashboardQueryCatalog.ts` is `Object.keys(CITY_CONFIG)`, so adding a city to
+`cityConfig.json` enrols it. Its budget is sized for that —
+`COMPILE_TIMEOUT_MS` and `hookTimeout` are 25 minutes and the job allows 30,
+raised from 15/20 when 21 cities overran the old one at batch 22 of 25 and
+reported it as "25 tests skipped" (a hook that times out never registers its
+tests, so a budget overrun does not look like one).
 
 **A city whose parquet is not on GCS yet is skipped, not failed.** The
 execution harness takes each table's schema from the real Parquet, so a
@@ -262,22 +292,26 @@ wall), with per-batch latency climbing from ~8s to 232s as the queue backs up.
 Both pass. Raising it does not make the suite faster, it makes it four times
 slower.
 
-**The slow-after-load behaviour is Fly CPU throttling, not the planner.** The
-service runs on a shared-CPU Fly instance with a burst quota: sustained
-compiling drains it, and once drained every request is throttled until it
-refills. That is the whole shape — a fast first sweep, a slow one right after,
-and recovery from nothing but leaving it alone. It is being fixed on the service
-side; until it is, the symptom is a property of the host, so **a slow run is not
-evidence of a query regression**. Read the per-batch timings before concluding
-anything: throttling makes every batch slow together, while a real regression
-shows up as a failure, not a stall.
+**A slow run is not evidence of a query regression.** The service runs on
+high-performance Fly instances, but it is still **one shared instance and it
+can be overloaded**: enough concurrent compiling and requests come back 502, or
+504 once Fly's proxy gives up at 120s, or simply take tens of seconds instead of
+~0.5s.
 
-A September 2026 deploy improved the picture without removing the throttle:
-eight clients no longer return HTTP 502 and the run passes at roughly twice the
-old speed. But do not read a single good probe as "fixed" — a compile taken
-immediately after each of the first two sweeps came back in 0.4s, and a third
-sweep shortly afterwards ran past eight minutes and left the service at 92s per
-compile. Quota, not state.
+So read the per-batch timings before concluding anything. Overload makes every
+batch slow together; a real regression shows up as a failure on specific
+queries, not a stall across all of them. The clearest tell is whether a batch
+fails as a *block* — 39 queries failing together is transport, because a query
+that genuinely cannot plan comes back inside a 200 carrying its own error while
+the rest of the batch still returns SQL.
+
+Two things bound the load rather than leaving it to chance. `ci.yml` has a
+concurrency group, so a superseded pull-request run is cancelled instead of
+piling on — without it, four pushes in quick succession put eight
+resolver-backed jobs on one instance and every request 504s. And the default
+sweep compiles a handful of representative cities rather than every one, since
+each city is a whole request and they all send the same queries; see "Which
+cities the sweep covers" below.
 
 Practical consequences: **do not run this suite in a tight loop**, leave a few
 minutes between sweeps when iterating on it, and expect the CI job to be
