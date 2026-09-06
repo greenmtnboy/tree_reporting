@@ -8,10 +8,12 @@ from functools import partial
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Lock
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 
 from urban_tree_ml.config import ProjectConfig, StudioConfig, load_config
 from urban_tree_ml.feedback import (
+    ReviewStateConflictError,
     finalize_registration_feedback,
     load_persisted_reviews,
     persist_review_payload,
@@ -415,13 +417,14 @@ def _serve_review_contexts(
                     if not 0 <= threshold <= 1:
                         raise ValueError("prediction confidence threshold must be between 0 and 1")
                     truth = bundle.ground_truth[bundle.ground_truth["chip_id"] == chip_id].copy()
-                    result = append_validation_chip_to_registration_review(
-                        write_context.config,
-                        write_context.raster,
-                        write_context.directory,
-                        chip_id,
-                        truth,
-                    )
+                    with review_state_lock:
+                        result = append_validation_chip_to_registration_review(
+                            write_context.config,
+                            write_context.raster,
+                            write_context.directory,
+                            chip_id,
+                            truth,
+                        )
                 except (KeyError, OSError, ValueError) as error:
                     self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                     return
@@ -442,9 +445,11 @@ def _serve_review_contexts(
                 return
             if path == "/api/reviews":
                 try:
+                    with review_state_lock:
+                        reviews = load_persisted_reviews(context.directory)
                     self._json_response(
                         HTTPStatus.OK,
-                        load_persisted_reviews(context.directory),
+                        reviews,
                     )
                 except (OSError, ValueError, json.JSONDecodeError) as error:
                     self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
@@ -517,15 +522,23 @@ def _serve_review_contexts(
                 return
             try:
                 context = context_for_request(parse_qs(parsed.query))
-                result = persist_review_payload(context.directory, self._read_payload())
-                result.update(
-                    snapshot_registration_annotations(
-                        context.config,
-                        context.raster,
-                        review_dir=context.directory,
+                payload = self._read_payload()
+                if "base_revision" not in payload:
+                    raise ReviewStateConflictError(
+                        "this review page predates safe saves; refresh it before editing"
                     )
-                )
+                with review_state_lock:
+                    result = persist_review_payload(context.directory, payload)
+                    result.update(
+                        snapshot_registration_annotations(
+                            context.config,
+                            context.raster,
+                            review_dir=context.directory,
+                        )
+                    )
                 self._json_response(HTTPStatus.OK, result)
+            except ReviewStateConflictError as error:
+                self._json_response(HTTPStatus.CONFLICT, {"error": str(error)})
             except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
 
@@ -536,15 +549,17 @@ def _serve_review_contexts(
                 return
             try:
                 context = context_for_request(parse_qs(parsed.query))
-                result = finalize_registration_feedback(
-                    context.config,
-                    context.raster,
-                    review_dir=context.directory,
-                )
+                with review_state_lock:
+                    result = finalize_registration_feedback(
+                        context.config,
+                        context.raster,
+                        review_dir=context.directory,
+                    )
                 self._json_response(HTTPStatus.OK, result)
             except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
 
+    review_state_lock = Lock()
     handler = partial(ReviewHandler, directory=str(default_context.directory))
     server = ThreadingHTTPServer((bind, port), handler)
     server.daemon_threads = True

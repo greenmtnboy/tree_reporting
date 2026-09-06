@@ -5,6 +5,7 @@ import pytest
 
 from urban_tree_ml.config import load_config
 from urban_tree_ml.feedback import (
+    ReviewStateConflictError,
     finalize_registration_feedback,
     load_persisted_reviews,
     persist_review_payload,
@@ -249,6 +250,36 @@ def test_legacy_review_save_preserves_scene_completion(tmp_path: Path) -> None:
     assert load_persisted_reviews(review_dir)["scene_reviews"] == {
         "scene-train": {"done": True}
     }
+
+
+def test_stale_browser_revision_cannot_replace_newer_reviews(tmp_path: Path) -> None:
+    raster = tmp_path / "tile.tif"
+    review_dir = tmp_path / "review"
+    _write_review_manifest(review_dir, raster)
+    initial_revision = load_persisted_reviews(review_dir)["state_revision"]
+
+    persist_review_payload(
+        review_dir,
+        {
+            "base_revision": initial_revision,
+            "reviews": {"train-aligned": {"status": "uncertain"}},
+            "scene_reviews": {"scene-train": {"done": True}},
+        },
+    )
+
+    with pytest.raises(ReviewStateConflictError, match="another tab"):
+        persist_review_payload(
+            review_dir,
+            {
+                "base_revision": initial_revision,
+                "reviews": {"train-aligned": {"status": "aligned"}},
+                "scene_reviews": {},
+            },
+        )
+
+    persisted = load_persisted_reviews(review_dir)
+    assert persisted["reviews"]["train-aligned"]["status"] == "uncertain"
+    assert persisted["scene_reviews"] == {"scene-train": {"done": True}}
 
 
 def test_finalize_rejects_offset_verdict_without_a_clicked_location(tmp_path: Path) -> None:
