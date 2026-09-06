@@ -42,13 +42,29 @@ import {
 // in `dashboardFixtures.ts`, so both a failure to plan and a plan that answers
 // the wrong question show up here rather than in prod.
 
-// How many resolver requests are in flight at once. Four is a ceiling, not a
-// tuning knob. The resolver is a single shared instance whose throughput does
-// not improve with fan-out, so extra clients only queue: measured on the same
-// catalog, four finish the compile in 56s while eight take 261s, with per-batch
-// latency climbing from ~8s to 232s as the queue backs up. Batching is what
-// made this suite fast; concurrency is not the lever.
-const CONCURRENCY = Number(process.env.DASHBOARD_QUERY_CONCURRENCY ?? 4)
+// How many resolver requests are in flight at once. **One**, and that is a
+// correctness setting rather than a performance one.
+//
+// The resolver is a single shared instance whose throughput does not improve
+// with fan-out, so extra clients only queue -- that much was always true, and
+// is why this was already capped rather than tuned (four finished the compile
+// in 56s where eight took 261s, per-batch latency climbing from ~8s to 232s).
+// What changed is the size of a batch. Model hydration is superlinear in the
+// number of preql sources, and the bundle has grown with every city: measured
+// against the live service with one identical trivial batch, 60 sources
+// compile a single query in 2.1s and 39 of them in 54.6s, while 72 sources
+// take 7.4s and 70.8s. A batch of *real* dashboard queries at 72 sources is
+// 65-81s on its own.
+//
+// Fly's proxy gives up at 120s. So four such batches queued on one instance no
+// longer merely take four times as long -- each request crosses the ceiling
+// and comes back 504, and because a batch fails as a block that reads as "34
+// dashboard queries failed" rather than as a timeout. Serially every batch
+// fits with room to spare and the whole sweep finishes in 584s, which is
+// *faster* than the 13-17 minutes the four-way runs took before failing.
+//
+// Raise this only if the resolver stops being a single shared instance.
+const CONCURRENCY = Number(process.env.DASHBOARD_QUERY_CONCURRENCY ?? 1)
 
 // The whole catalog is compiled once in beforeAll, so that is where the budget
 // lives; the it() blocks only execute SQL against an in-process DuckDB.

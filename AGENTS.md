@@ -291,13 +291,35 @@ plan comes back inside a 200 with its own `error` and the rest of the batch
 still returns SQL, so batching does not hide a failure or blur which chart
 failed.
 
-**`DASHBOARD_QUERY_CONCURRENCY` is a ceiling at 4, not a tuning knob.** The
-service is a single shared instance whose throughput does not improve with
-fan-out, so extra clients only queue. Measured on the same catalog against the
-same deploy: four clients compile in 56s (1m12s wall); eight take 261s (4m29s
-wall), with per-batch latency climbing from ~8s to 232s as the queue backs up.
-Both pass. Raising it does not make the suite faster, it makes it four times
-slower.
+**`DASHBOARD_QUERY_CONCURRENCY` is 1, and that is correctness rather than
+performance.** The service is a single shared instance whose throughput does
+not improve with fan-out, so extra clients only queue -- that was always true,
+and is why this was a capped ceiling rather than a tuning knob (four clients
+compiled in 56s where eight took 261s, per-batch latency climbing from ~8s to
+232s as the queue backed up; both still passed).
+
+What changed is the size of a batch, and the cause is upstream: **model
+hydration is superlinear in the number of preql sources**, and the bundle grows
+with every city. Measured against the live service with one identical trivial
+batch, 60 sources compile a single query in 2.1s and a 39-query batch in 54.6s;
+72 sources take 7.4s and 70.8s. A batch of *real* dashboard queries at 72
+sources is 65-81s on its own -- so a 20% bigger model costs 3.5x on a single
+compile.
+
+Fly's proxy gives up at 120s, so four such batches on one instance no longer
+merely take four times as long: each request crosses the ceiling and returns
+504. **That failure is easy to misread.** A batch fails as a block, so it
+surfaces as "34 dashboard queries failed for ALL" with every entry reading
+`HTTP 504: Request timed out after 120s` -- which looks exactly like the
+service being unwell, and is instead the model having outgrown the request.
+The tell that it is not mere overload: a single `/generate_query` against the
+same model still returns in seconds. Serially every batch fits with room to
+spare and the whole sweep finishes in 584s, *faster* than the 13-17 minutes the
+four-way runs took before failing.
+
+Raise it only if the resolver stops being a single shared instance. If batches
+start breaching 120s serially, the model has grown again and the lever is batch
+*size*, not concurrency.
 
 **A slow run is not evidence of a query regression.** The service runs on
 high-performance Fly instances, but it is still **one shared instance and it
@@ -311,6 +333,16 @@ queries, not a stall across all of them. The clearest tell is whether a batch
 fails as a *block* — 39 queries failing together is transport, because a query
 that genuinely cannot plan comes back inside a 200 carrying its own error while
 the rest of the batch still returns SQL.
+
+**But "transport" does not mean "not our change".** Those two are easy to
+conflate and were, on the pull request that added the six Canadian ArcGIS
+cities: every batch 504'd as a block, main's own CI was green, and the job was
+re-run twice on the reading that the shared instance was merely unwell. It was
+unwell *because the branch had grown the model past what a batch could compile
+inside the proxy limit* — both halves were true at once. Before re-running,
+time a single `/generate_query` against the full model on your branch and on
+main; if the branch is materially slower, the model is the cause and a re-run
+will not help. See the concurrency note above.
 
 Two things bound the load rather than leaving it to chance. `ci.yml` has a
 concurrency group, so a superseded pull-request run is cancelled instead of
