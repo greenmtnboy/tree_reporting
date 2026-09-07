@@ -178,6 +178,38 @@ def field_max(layer: FeatureLayer, field: str, *, where: str = "1=1") -> datetim
     return stamp
 
 
+def coded_value_domain(layer: FeatureLayer, field: str) -> dict[str, str]:
+    """A field's coded-value domain as `{stored code: display name}`.
+
+    Esri layers carry their own data dictionary, and reading it is sometimes
+    the difference between a city having species and not.  Ottawa's `SPECIES`
+    column stores an inverted common name (`Maple Sugar`, `Lilac Japanese`) and
+    the *domain* gives the binomial for each -- `Acer saccharum`, `Syringa
+    reticulata` -- so a layer that reads like "common name only" is in fact
+    fully identified.  Ajax publishes the mirror of that: `SPCODE` stores a
+    USDA-style symbol and the domain names it in English.
+
+    Raises `RuntimeError` when the field has no coded-value domain, because a
+    caller that asked for one is relying on it: degrading to an empty dict
+    would publish every one of that city's trees as `Unknown` and report
+    nothing.  That is a schema question, not an availability one.
+
+    One request, and the same `?f=json` `layer_metadata` already reads.
+    """
+    for entry in layer_metadata(layer).get("fields") or []:
+        if entry.get("name") != field:
+            continue
+        domain = entry.get("domain") or {}
+        values = domain.get("codedValues")
+        if domain.get("type") != "codedValue" or not values:
+            raise RuntimeError(
+                f"{field} on {layer.base} has no coded-value domain "
+                f"(domain type {domain.get('type')!r})"
+            )
+        return {str(v["code"]): v["name"] for v in values if v.get("code") is not None}
+    raise RuntimeError(f"{layer.base} publishes no field named {field}")
+
+
 def feature_count(layer: FeatureLayer, *, where: str = "1=1") -> int:
     """`returnCountOnly` for *where*."""
     payload = get_json_with_retry(
@@ -305,6 +337,44 @@ def iter_attributes(layer: FeatureLayer, **kwargs) -> Iterator[list[dict]]:
 # Geometry
 # ---------------------------------------------------------------------------
 
+def _finite(value) -> float | None:
+    """A coordinate as a float, or None when it is not a real number.
+
+    ArcGIS servers return a feature whose geometry is missing as
+    `{"x": "NaN", "y": "NaN"}` -- the *strings*, not nulls and not floats.
+    Both Ajax and Burlington ON publish rows like that, and pyarrow refuses
+    them with `Could not convert 'NaN' with type str: tried to convert to
+    double`, which is a long way from "this feature has no location".  A
+    genuine float NaN is refused here too, for the same reason: it would
+    survive into the Parquet and compare outside every bounding box.
+    """
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number == number and abs(number) != float("inf") else None
+
+
+def esri_point(geometry: dict | None) -> tuple[float | None, float | None]:
+    """An Esri point geometry as `(latitude, longitude)`.
+
+    `(None, None)` when the feature has no usable location -- see `_finite`
+    for the shape that takes.  Every ingest reading `geometry.y` / `.x`
+    directly should come through here instead.
+    """
+    if not geometry:
+        return None, None
+    lat, lon = _finite(geometry.get("y")), _finite(geometry.get("x"))
+    # Both or neither: half a coordinate is not a location, and letting one
+    # through publishes a latitude with a null longitude, which every bounds
+    # check then reports as a row "outside" the city.
+    if lat is None or lon is None:
+        return None, None
+    return lat, lon
+
+
 def _ring_is_clockwise(ring) -> bool:
     """Shoelace sign for an Esri ring.
 
@@ -321,7 +391,13 @@ def _ring_is_clockwise(ring) -> bool:
 
 def _ring_to_wkt(ring) -> str | None:
     """One Esri ring as a WKT coordinate list, closed."""
-    points = [p for p in ring if p and len(p) >= 2 and None not in p[:2]]
+    points = [
+        (x, y)
+        for p in ring
+        if p and len(p) >= 2
+        for x, y in [(_finite(p[0]), _finite(p[1]))]
+        if x is not None and y is not None
+    ]
     if len(points) < 3:
         return None
     if points[0][:2] != points[-1][:2]:
@@ -348,8 +424,9 @@ def esri_geometry_to_wkt(geometry: dict | None) -> str | None:
     if not geometry:
         return None
 
-    if geometry.get("x") is not None and geometry.get("y") is not None:
-        return f"POINT({geometry['x']} {geometry['y']})"
+    lat, lon = esri_point(geometry)
+    if lat is not None and lon is not None:
+        return f"POINT({lon} {lat})"
 
     rings = geometry.get("rings")
     if not rings:

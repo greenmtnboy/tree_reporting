@@ -11,6 +11,11 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Moncton', label: 'City of Moncton Open Data - Trees', url: 'https://open.moncton.ca/datasets/trees' },
+  { city: 'Ajax', label: 'Town of Ajax Open Data - Town Trees', url: 'https://opendata.ajax.ca/datasets/town-trees' },
+  { city: 'Burlington, ON', label: 'City of Burlington Open Data - City Owned Trees', url: 'https://navburl-burlington.opendata.arcgis.com/datasets/city-owned-trees' },
+  { city: 'Ottawa', label: 'City of Ottawa Open Data - Tree Inventory', url: 'https://open.ottawa.ca/datasets/tree-inventory' },
+  { city: 'Mississauga', label: 'City of Mississauga Open Data - City Owned Tree Inventory', url: 'https://data.mississauga.ca/datasets/city-owned-tree-inventory' },
   { city: 'New Westminster', label: 'City of New Westminster Open Data - Tree Inventory (Active Trees)', url: 'https://opendata.newwestcity.ca/datasets/tree-inventory-active-trees' },
   { city: 'Kelowna', label: 'City of Kelowna Open Data - Tree Inventory', url: 'https://opendata.kelowna.ca/datasets/tree-inventory' },
   { city: 'Victoria', label: 'City of Victoria Open Data - Tree Species (Parks trees database)', url: 'https://opendata.victoria.ca/datasets/tree-species-parks-trees-database' },
@@ -28,7 +33,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'New York City', label: 'NYC Open Data Street Tree Census', url: 'https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh' },
   { city: 'Boston', label: 'City of Boston Open Data', url: 'https://data.boston.gov/dataset/bprd-trees' },
   { city: 'Paris', label: 'Paris Open Data (les-arbres)', url: 'https://opendata.paris.fr/explore/dataset/les-arbres/information/' },
-  { city: 'Burlington', label: 'City of Burlington VT ArcGIS FeatureServer', url: 'https://maps.burlingtonvt.gov/arcgis/rest/services/Tree_Sites_Public_View/FeatureServer/0' },
+  { city: 'Burlington, VT', label: 'City of Burlington VT ArcGIS FeatureServer', url: 'https://maps.burlingtonvt.gov/arcgis/rest/services/Tree_Sites_Public_View/FeatureServer/0' },
   { city: 'Vancouver', label: 'Vancouver Open Data (public-trees)', url: 'https://opendata.vancouver.ca/explore/dataset/public-trees/information/' },
   { city: 'Berlin', label: 'Berlin GDI WFS (Strassenbaume / baumbestand)', url: 'https://gdi.berlin.de/services/wfs/baumbestand' },
   { city: 'Amsterdam', label: 'City of Amsterdam REST API (bomen/stamgegevens)', url: 'https://api.data.amsterdam.nl/v1/bomen/stamgegevens/' },
@@ -63,6 +68,11 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Moncton', label: 'City of Moncton Open Data - Cultural Assets', url: 'https://open.moncton.ca/datasets/cultural-assets' },
+  { city: 'Ajax', label: 'Town of Ajax Open Data - Heritage Inventory', url: 'https://opendata.ajax.ca/datasets/heritage-inventory' },
+  { city: 'Burlington, ON', label: 'City of Burlington Open Data - Heritage Properties', url: 'https://navburl-burlington.opendata.arcgis.com/datasets/heritage-properties' },
+  { city: 'Ottawa', label: 'City of Ottawa Open Data - Cultural Spaces Inventory (Heritage)', url: 'https://open.ottawa.ca/datasets/ottawa::cultural-spaces-inventory-heritage' },
+  { city: 'Mississauga', label: 'City of Mississauga Open Data - City Landmarks', url: 'https://data.mississauga.ca/datasets/city-landmarks' },
   { city: 'New Westminster', label: 'City of New Westminster Open Data - Heritage Register', url: 'https://opendata.newwestcity.ca/datasets/heritage-register' },
   { city: 'Kelowna', label: 'City of Kelowna Open Data - Heritage Registry', url: 'https://opendata.kelowna.ca/datasets/heritage-registry' },
   { city: 'Victoria', label: 'City of Victoria Open Data - Prominent Heritage Sites (OCP)', url: 'https://opendata.victoria.ca/datasets/prominent-heritage-sites-ocp' },
@@ -80,7 +90,7 @@ export const LANDMARK_SOURCES: CitySourceLink[] = [
   { city: 'New York City', label: 'NYC LPC Individual Landmark Sites', url: 'https://data.cityofnewyork.us/Housing-Development/Individual-Landmark-Sites/buis-pvji' },
   { city: 'Boston', label: 'City of Boston Open Data (Landmarks)', url: 'https://data.boston.gov/dataset/92137315-e846-4c75-8c3d-2b7e93e38d03' },
   { city: 'Paris', label: 'Ile-de-France Open Data (Monuments Historiques)', url: 'https://data.iledefrance.fr/explore/dataset/immeubles-proteges-au-titre-des-monuments-historiques/' },
-  { city: 'Burlington', label: 'Geocoded from city landmark directory via Nominatim' },
+  { city: 'Burlington, VT', label: 'Geocoded from city landmark directory via Nominatim' },
   { city: 'Vancouver', label: 'Vancouver Open Data (Heritage Sites)', url: 'https://opendata.vancouver.ca/explore/dataset/heritage-sites/information/' },
   { city: 'Berlin', label: 'OpenStreetMap via Overpass API (historic=* tags)' },
   { city: 'Amsterdam', label: 'City of Amsterdam REST API (monumenten)', url: 'https://api.data.amsterdam.nl/v1/monumenten/monumenten/' },

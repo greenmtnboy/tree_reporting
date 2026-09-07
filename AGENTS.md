@@ -75,19 +75,38 @@ rollup file list, the frontend config, the attribution. Almost every one of
 those fails *silently* when it is skipped, which is why the sweep exists.
 See the quick path at the top of `EXTENDING.md`.
 
-Two shared modules carry what used to be copied per city, and a new city should
+Shared modules carry what used to be copied per city, and a new city should
 reach for them before writing anything:
 
 - **`_osm_shared.py`** — the Overpass extraction every city's `osm-{code}` job
   runs, so a city's OSM wiring is one ~28-line shim.
-- **`_arcgis_shared.py`** — layer paging, both freshness watermarks, Esri's
-  epoch-milliseconds, and a Hub catalogue search
-  (`uv run _arcgis_shared.py <hub-host>` lists a portal's tree layers). ArcGIS
-  is what most North American cities publish on. Two details in it are
+- **`_arcgis_shared.py`** — layer paging, three freshness watermarks, Esri's
+  epoch-milliseconds, field domains, geometry-to-WKT, and a Hub catalogue
+  search (`uv run _arcgis_shared.py <hub-host>` lists a portal's tree layers).
+  ArcGIS is what most North American cities publish on. Three details in it are
   correctness rather than convenience and were bugs in the copies it replaced:
   the page size comes from the layer's own `maxRecordCount` (asking for more is
-  silently capped, and a capped page reads as the end of the data), and paging
-  terminates on `exceededTransferLimit` rather than the short-page heuristic.
+  silently capped, and a capped page reads as the end of the data), paging
+  terminates on `exceededTransferLimit` rather than the short-page heuristic,
+  and `esri_point` refuses the *string* `"NaN"` that a server sends for a
+  feature with no geometry.
+- **`_socrata_shared.py`** and **`_ckan_shared.py`** — the same for the other
+  two platforms this repo reads more than twice.
+- **`_common_name_species.py`** — a curated common-name → accepted-binomial
+  table, for the portals that publish an English name where the binomial should
+  be. Not a platform module: what those cities shared was a question, not an
+  API. Read its docstring before reaching for the enrichment table's inverse
+  instead — that was tried, measured, and does not work, because the enrichment
+  table carries the misspelled binomials the cities themselves published.
+
+**Read a field's domain before deciding what a column holds.**
+`coded_value_domain(layer, field)` has now answered three questions the column
+names could not: Halifax's `DBH` is a size class whose bands the layer
+publishes, Ajax's species symbols are named in English there, and Ottawa's
+`SPECIES` — which stores `Maple Sugar`, `Oak Red` and reads exactly like a
+common-name-only column — maps all 174 of its codes to the binomial. A layer
+that looks like it does not identify its trees may be keeping the
+identification in `fields[].domain`.
 
 The judgement steps are deliberately left manual: the field mapping, the
 freshness probe, the landmark source, and the dedup cell size — which is

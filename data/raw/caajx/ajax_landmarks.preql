@@ -1,0 +1,39 @@
+import ..landmark_common;
+
+root datasource ajax_landmarks_update_time (
+    data_updated_through: caajx_landmark_data_updated_through
+)
+file `./ajax_landmarks_probe.py`;
+
+# Ajax's heritage inventory, read live off the same ArcGIS Server as the
+# trees -- the runbook's first-preference landmark source.  Demolished
+# entries are filtered out in the ingest.
+root partial datasource raw_ajax_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    address: ?address,
+    year_built: ?year_built,
+    property_type: ?property_type,
+)
+grain (landmark_id)
+complete where city = 'CAAJX'
+file `./ajax_landmarks.py`;
+
+partial datasource ajax_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?address,
+    ?year_built,
+    ?property_type,
+    caajx_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'CAAJX'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/caajx_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/caajx_landmark_info_v{data_version}.parquet`
+freshness by caajx_landmark_data_updated_through;

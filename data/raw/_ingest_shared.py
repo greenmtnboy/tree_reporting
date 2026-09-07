@@ -434,6 +434,11 @@ _FORM_SENTINEL_ALIASES: dict[str, str] = {
     "shrubs": SHRUB_SPECIES,
     "bush": SHRUB_SPECIES,
     "hedge": SHRUB_SPECIES,
+    # Mississauga records a hedge and a shrub under one value; both spellings
+    # because `form_sentinel_for` lowercases the raw string while
+    # `_common_name_species` looks it up after punctuation is stripped.
+    "shrub / hedge": SHRUB_SPECIES,
+    "shrub hedge": SHRUB_SPECIES,
     "arbusto": SHRUB_SPECIES,  # es/pt
     "arbuste": SHRUB_SPECIES,  # fr
     "struik": SHRUB_SPECIES,   # nl
@@ -857,6 +862,11 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "CAMON": ("MONCTON_OPENDATA",),
+    "CAAJX": ("AJAX_OPENDATA",),
+    "CABUR": ("BURLINGTON_ON_OPENDATA",),
+    "CAOTT": ("OTTAWA_OPENDATA",),
+    "CAMIS": ("MISSISSAUGA_OPENDATA",),
     "CANWE": ("NEWWESTMINSTER_OPENDATA",),
     "CAKEL": ("KELOWNA_OPENDATA",),
     "CAVIC": ("VICTORIA_OPENDATA",),
@@ -920,6 +930,11 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "CAMON": "OSM_CAMON",
+    "CAAJX": "OSM_CAAJX",
+    "CABUR": "OSM_CABUR",
+    "CAOTT": "OSM_CAOTT",
+    "CAMIS": "OSM_CAMIS",
     "CANWE": "OSM_CANWE",
     "CAKEL": "OSM_CAKEL",
     "CAVIC": "OSM_CAVIC",
@@ -1285,6 +1300,11 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "CAMON": (46.02, 46.2, -64.95, -64.66),
+    "CAAJX": (43.78, 43.95, -79.13, -78.93),
+    "CABUR": (43.25, 43.48, -80.0, -79.68),
+    "CAOTT": (44.92, 45.58, -76.4, -75.2),
+    "CAMIS": (43.42, 43.78, -79.88, -79.5),
     "CANWE": (49.16, 49.26, -122.99, -122.85),
     "CAKEL": (49.75, 50.0, -119.6, -119.3),
     "CAVIC": (48.39, 48.48, -123.42, -123.3),
@@ -1373,6 +1393,27 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # ../../DEDUP_CELL_RECALIBRATION.md.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Moncton's OSM presence is 477 nodes against 11,980 inventory trees, so
+    # the 5-10 m band (n=2) says nothing and the marginal table decides:
+    # 4->6 removes 3 duplicates and hides none, 6->8 removes none and hides
+    # one.  6 m is where the paying stops.
+    "CAMON": 6,
+    # 5-10 m band 25.7% mutual-NN over n=74: neighbour-dominated, and Ajax
+    # plants tight (median 9.1 m to the nearest other inventory tree, a
+    # quarter within 6.4 m).  4->6 removes 62 duplicates for 9 hidden trees
+    # (6.89), 6->8 removes 13 for 21 (0.62).
+    "CAAJX": 6,
+    # 5-10 m band 23.0% mutual-NN over n=87: neighbour-dominated.  The turn is
+    # earlier here than anywhere else in this batch -- 2->4 removes 114
+    # duplicates for 12 hidden trees (9.50) and 4->6 removes 22 for 22, exactly
+    # break-even, which is the step Kingston also declined.  A tie goes to the
+    # smaller cell: a missed duplicate double-renders one toggleable dot, a
+    # false flag hides a real tree.
+    "CABUR": 4,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAOTT": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAMIS": 10,
     # 5-10 m band 48.9% over n=270 -- a coin flip, so the bands leave it at a
     # 5 m guarantee and the marginal table decides how far past that to go:
     # 6->8 removes 81 duplicates for 56 hidden trees (1.45), 8->10 removes 35
@@ -2388,6 +2429,10 @@ def cm_to_inches(cm) -> float | None:
 
 _UNKNOWN_COMMON_NAMES = frozenset({"n/a", "na", "unknown", "none", "unidentified"})
 
+# A hyphen with whitespace on at least one side: an inversion separator.  A
+# bare hyphen is part of the word.  See `normalize_tree_name`.
+_INVERTING_HYPHEN = re.compile(r"\s-|-\s")
+
 
 def normalize_tree_name(value: str | None) -> str | None:
     """A source's common-name field, un-inverted and put into sentence case.
@@ -2400,20 +2445,33 @@ def normalize_tree_name(value: str | None) -> str | None:
     shows above the scientific name, so neither is presentable as written.
 
     Two steps, and the second is deliberately not reimplemented here: the
-    single-comma form is un-inverted, then `normalize_common_name` from
+    inverted form is un-inverted, then `normalize_common_name` from
     `enrichment._common_name_style` applies the sentence-case convention with
     its curated proper-noun lists, which is the same rule the enrichment table
     is held to (see "Common names are sentence case" in AGENTS.md).  A name
     that comes out wrong is one entry in those lists rather than a per-city
     special case.
 
-    Only a *single* comma is treated as inversion.  ``Aspen,
-    quaking/trembling`` inverts; a name with two commas is a list and is left
-    alone.
+    Two separators invert, and both are narrow on purpose.  A *single* comma
+    does: ``Aspen, quaking/trembling`` inverts, while a name with two commas
+    is a list and is left alone.  So does a hyphen with a space on at least
+    one side, which is how Burlington ON writes it (``MAPLE - NORWAY``,
+    ``BUCKEYE- OHIO``) -- but a bare hyphen is part of the word and must not,
+    or ``HORSE-CHESTNUT`` and ``MOUNTAIN-ASH`` come out as "Chestnut horse"
+    and "Ash mountain".  `_common_name_species.common_name_key` draws the same
+    line for the same reason.
+
+    A name inverted with neither -- Ottawa stores ``Maple Sugar``, ``Spruce
+    Blue/Colorado`` -- cannot be un-inverted mechanically (``Mountain Ash
+    European`` has three words and the head is the first *two*), and a city
+    like that should publish no ``tree_name`` rather than a wrong one.
 
     Examples:
         "ASH, GREEN"           -> "Green ash"
         "Spruce, Colorado"     -> "Colorado spruce"
+        "MAPLE - NORWAY"       -> "Norway maple"
+        "BUCKEYE- OHIO"        -> "Ohio buckeye"
+        "HORSE-CHESTNUT"       -> "Horse-chestnut"
         "silver maple"         -> "Silver maple"
         "POPLAR SPECIES"       -> "Poplar species"
         "N/A"                  -> None
@@ -2430,4 +2488,11 @@ def normalize_tree_name(value: str | None) -> str | None:
         head, tail = head.strip(), tail.strip()
         if head and tail:
             text = f"{tail} {head}"
+    else:
+        match = _INVERTING_HYPHEN.search(text)
+        if match:
+            head = text[: match.start()].strip()
+            tail = text[match.end() :].strip()
+            if head and tail:
+                text = f"{tail} {head}"
     return normalize_common_name(text)

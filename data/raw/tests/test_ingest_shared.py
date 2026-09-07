@@ -40,6 +40,7 @@ from _ingest_shared import (
     make_point_wkt,
     normalize_species,
     normalize_species_parts,
+    normalize_tree_name,
     parse_plant_date_year,
     parse_wkb_point,
     rd_centroid,
@@ -1449,3 +1450,44 @@ class TestStreamedIngest:
         assert "dropped 1 row(s)" in err
         assert "1 value(s) were not scientific names" in err
         assert "1 carry a cultivar" in err
+
+
+class TestNormalizeTreeName:
+    """The two inversions a municipal common-name column comes in.
+
+    `tree_name` is what the map's tree card shows above the scientific name,
+    so an un-inverted name is the whole point of this helper.
+    """
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            # A single comma inverts -- Calgary, Edmonton, Denver.
+            ("ASH, GREEN", "Green ash"),
+            ("Spruce, Colorado", "Colorado spruce"),
+            ("Aspen, quaking/trembling", "Quaking/trembling aspen"),
+            # A spaced hyphen inverts -- Burlington ON, on either side.
+            ("MAPLE - NORWAY", "Norway maple"),
+            ("BUCKEYE- OHIO", "Ohio buckeye"),
+            ("SWEETGUM -ROTUNDILOBA", "Rotundiloba sweetgum"),
+            ("HORNBEAM - BLUE-BEECH", "Blue-beech hornbeam"),
+            # A bare hyphen does not: these are single hyphenated names, and
+            # inverting them produced "Chestnut horse" and "Ash mountain".
+            ("HORSE-CHESTNUT", "Horse-chestnut"),
+            ("MOUNTAIN-ASH", "Mountain-ash"),
+            ("YELLOW-WOOD", "Yellow-wood"),
+            # Casing only, for a name that is already the right way round.
+            ("NORWAY MAPLE", "Norway maple"),
+            ("silver maple", "Silver maple"),
+            # Placeholders are not names.
+            ("N/A", None),
+            ("unknown", None),
+            ("", None),
+            (None, None),
+        ],
+    )
+    def test_normalize_tree_name(self, raw, expected):
+        assert normalize_tree_name(raw) == expected
+
+    def test_two_commas_are_a_list_not_an_inversion(self):
+        assert normalize_tree_name("Oak, red, northern") == "Oak, red, northern"

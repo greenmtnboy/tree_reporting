@@ -52,6 +52,16 @@ property <*>.grath_osm_data_updated_through datetime; # GCS publication time of 
 property <*>.grmlo_osm_data_updated_through datetime; # GCS publication time of Milos's staged OSM parquet
 property <*>.grsan_osm_data_updated_through datetime; # GCS publication time of Santorini's staged OSM parquet
 property <*>.usden_osm_data_updated_through datetime; # GCS publication time of Denver's staged OSM parquet
+property <*>.camon_data_updated_through datetime; # when Moncton data is through
+property <*>.camon_osm_data_updated_through datetime; # GCS publication time of Moncton's staged OSM parquet
+property <*>.caajx_data_updated_through datetime; # when Ajax data is through
+property <*>.caajx_osm_data_updated_through datetime; # GCS publication time of Ajax's staged OSM parquet
+property <*>.cabur_data_updated_through datetime; # when Burlington, ON data is through
+property <*>.cabur_osm_data_updated_through datetime; # GCS publication time of Burlington, ON's staged OSM parquet
+property <*>.caott_data_updated_through datetime; # when Ottawa data is through
+property <*>.caott_osm_data_updated_through datetime; # GCS publication time of Ottawa's staged OSM parquet
+property <*>.camis_data_updated_through datetime; # when Mississauga data is through
+property <*>.camis_osm_data_updated_through datetime; # GCS publication time of Mississauga's staged OSM parquet
 property <*>.canwe_data_updated_through datetime; # when New Westminster data is through
 property <*>.canwe_osm_data_updated_through datetime; # GCS publication time of New Westminster's staged OSM parquet
 property <*>.cakel_data_updated_through datetime; # when Kelowna data is through
