@@ -58,10 +58,13 @@ path `tree_enrichment.py --limit` takes. An edited row carries today's
 and the form refuses a row without a common name and a growth form because
 the freshness probe would report the table stale for ever. Sentinel rows are
 authored in `_ingest_shared.py` and are read-only there, as is the alias row
-of a name in `SPECIES_SYNONYMS` (the daily job rewrites it from the accepted
-row). A duplicate species is merged from the form by adding its name to the
-accepted row's `synonyms`; making the *ingest* publish the accepted name takes
-a pair in `SPECIES_SYNONYMS` -- see "Synonyms" in `EXTENDING.md`. Needs
+of a name in `SPECIES_SYNONYMS` or `SPECIES_MISSPELLINGS` (the daily job
+rewrites it from the accepted row). A duplicate species is merged from the
+form by adding its name to the accepted row's `synonyms`; making the *ingest*
+publish the accepted name takes a pair in `SPECIES_SYNONYMS` when Kew lists
+one name under the other, and in `SPECIES_MISSPELLINGS` when the duplicate is
+a name that does not exist -- `species_audit.py` decides which, and see
+"Synonyms" and "Misspellings" in `EXTENDING.md`. Needs
 `gcloud auth application-default login`; `tests/test_enrichment_admin.py`
 pins the invariants. arborary.world shows the change on its next build.
 

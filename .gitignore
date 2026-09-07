@@ -26,6 +26,10 @@ data/raw/*.parquet
 # Edits staged by data/raw/enrichment_admin.py and not yet published.
 data/raw/enrichment_admin_edits.json
 
+# POWO responses cached by data/raw/species_audit.py. Derived from Kew's API
+# and re-fetchable; the curated verdicts live in _ingest_shared.py instead.
+data/raw/species_audit_cache.json
+
 .vscode/
 .vscode/settings.json
 

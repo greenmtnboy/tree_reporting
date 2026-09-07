@@ -1320,6 +1320,100 @@ class TestSpeciesSynonyms:
 
 
 # ---------------------------------------------------------------------------
+# SPECIES_MISSPELLINGS
+# ---------------------------------------------------------------------------
+
+
+class TestSpeciesMisspellings:
+    def test_a_misspelling_folds_onto_the_name_it_meant(self):
+        from _ingest_shared import sanitize_species
+
+        assert sanitize_species("Acer platenoides") == "Acer platanoides"
+        assert sanitize_species("Liquidambar stryaciflua") == "Liquidambar styraciflua"
+        assert sanitize_species("Sorbus aucaparia") == "Sorbus aucuparia"
+
+    def test_the_cultivar_does_not_block_the_fold(self):
+        from _ingest_shared import extract_cultivar, sanitize_species
+
+        raw = "Acer platenoides 'Crimson King'"
+        assert sanitize_species(raw) == "Acer platanoides"
+        assert extract_cultivar(raw) == "Crimson King"
+
+    def test_the_accepted_name_is_unchanged(self):
+        from _ingest_shared import SPECIES_MISSPELLINGS, sanitize_species
+
+        for accepted in set(SPECIES_MISSPELLINGS.values()):
+            assert sanitize_species(accepted) == accepted
+
+    def test_keys_and_values_are_written_as_the_ingest_emits_them(self):
+        """Same contract as SPECIES_SYNONYMS: one lookup is enough only if the
+        map is keyed on what `_sanitize_taxon` produces and no value is itself
+        a key."""
+        from _ingest_shared import SPECIES_MISSPELLINGS, _sanitize_taxon
+
+        for key, value in SPECIES_MISSPELLINGS.items():
+            assert _sanitize_taxon(key) == key, f"{key!r} is not in canonical form"
+            assert _sanitize_taxon(value) == value, f"{value!r} is not in canonical form"
+            assert value not in SPECIES_MISSPELLINGS, f"{value!r} is both a typo and a name"
+            assert key != value
+
+    def test_the_two_maps_never_disagree(self):
+        """A name resolves through one map or the other, never both -- and a
+        misspelling's target is never itself folded onward, which the single
+        lookup in `sanitize_species` could not follow."""
+        from _ingest_shared import SPECIES_MISSPELLINGS, SPECIES_SYNONYMS
+
+        assert not set(SPECIES_MISSPELLINGS) & set(SPECIES_SYNONYMS)
+        for value in SPECIES_MISSPELLINGS.values():
+            assert value not in SPECIES_SYNONYMS, f"{value!r} folds on to a third name"
+
+    def test_misspellings_of_inverts_the_map(self):
+        from _ingest_shared import SPECIES_MISSPELLINGS, misspellings_of
+
+        for accepted in set(SPECIES_MISSPELLINGS.values()):
+            assert all(SPECIES_MISSPELLINGS[m] == accepted for m in misspellings_of(accepted))
+
+    def test_a_typo_is_not_published_as_a_synonym(self):
+        """`synonyms` says what else the taxon is called, and a typo is not one
+        of its names -- so the two maps stay separate all the way out."""
+        from _ingest_shared import SPECIES_MISSPELLINGS, synonyms_of
+
+        for misspelling, accepted in SPECIES_MISSPELLINGS.items():
+            assert misspelling not in synonyms_of(accepted)
+
+    def test_a_sentinel_is_never_involved(self):
+        from _ingest_shared import SPECIES_MISSPELLINGS, SPECIES_SENTINELS
+
+        assert not SPECIES_SENTINELS & set(SPECIES_MISSPELLINGS.values())
+        assert not SPECIES_SENTINELS & set(SPECIES_MISSPELLINGS)
+
+    # A name two edits from another is not evidence of anything: these pairs
+    # are all real, all published, and folding either direction would relabel
+    # thousands of trees as a different species with nothing to report it.
+    # `species_audit.py` refuses them because POWO returns both as accepted;
+    # this is the same verdict pinned so a later hand-edit cannot undo it.
+    CONFUSABLE = [
+        ("Acer saccharum", "Acer saccharinum"),        # sugar / silver maple
+        ("Celtis occidentalis", "Cercis occidentalis"),  # hackberry / redbud
+        ("Pinus nigra", "Prunus nigra"),               # Austrian pine / Canada plum
+        ("Morus alba", "Cornus alba"),                 # white mulberry / dogwood
+        ("Taxus baccata", "Malus baccata"),            # yew / Siberian crab
+        ("Alnus rubra", "Ulmus rubra"),                # red alder / slippery elm
+        ("Quercus lobata", "Quercus lyrata"),          # valley / overcup oak
+        ("Prunus virginiana", "Pinus virginiana"),     # chokecherry / Virginia pine
+        ("Quercus coccinea", "Quercus coccifera"),     # scarlet / kermes oak
+        ("Laburnum", "Viburnum"),
+    ]
+
+    @pytest.mark.parametrize("a,b", CONFUSABLE)
+    def test_two_real_species_are_never_folded_together(self, a, b):
+        from _ingest_shared import sanitize_species
+
+        assert sanitize_species(a) == a
+        assert sanitize_species(b) == b
+
+
+# ---------------------------------------------------------------------------
 # enforce_tree_schema: cultivar
 # ---------------------------------------------------------------------------
 

@@ -11,8 +11,10 @@ from random import randint
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _ingest_shared import (  # noqa: E402
     SENTINEL_ENRICHMENT,
+    SPECIES_MISSPELLINGS,
     SPECIES_SENTINELS,
     SPECIES_SYNONYMS,
+    misspellings_of,
     sanitize_species,
     synonyms_of,
 )
@@ -20,6 +22,10 @@ from enrichment._common_name_style import (  # noqa: E402,F401  (re-exported)
     normalize_common_name,
     normalize_common_names,
 )
+
+# What `sanitize_species` folds, this table must fold the same way: the two
+# maps differ in what they claim, not in what the ingest publishes.
+SPECIES_FOLDS: dict[str, str] = {**SPECIES_SYNONYMS, **SPECIES_MISSPELLINGS}
 
 env = Environment(working_path=Path(__file__).resolve().parent.parent)
 
@@ -319,12 +325,18 @@ def hybrid_twins(species: str) -> list[str]:
 def alias_keys(species: str, synonyms: list[str] | None) -> list[str]:
     """Every key a row for *species* is also published under.
 
-    Its hybrid twin, each of its synonyms, and each synonym's hybrid twin --
-    all the spellings a tree row might still carry for this taxon.  Ordered,
-    deduplicated, and never the species itself.
+    Its hybrid twin, each of its synonyms, each misspelling the ingest folds
+    onto it, and each of those names' hybrid twins -- all the spellings a tree
+    row might still carry for this taxon.  Ordered, deduplicated, and never
+    the species itself.
+
+    The misspellings come from the code map rather than from *synonyms*, which
+    is the row's own column: a typo is not a synonym and is deliberately not
+    listed there, but a tree row in a city that has not rebuilt still carries
+    it and still has to join.
     """
     seen: list[str] = []
-    for name in [*hybrid_twins(species), *(synonyms or [])]:
+    for name in [*hybrid_twins(species), *(synonyms or []), *misspellings_of(species)]:
         for key in (name, *hybrid_twins(name)):
             if key != species and key not in seen:
                 seen.append(key)
@@ -342,24 +354,29 @@ def with_species_aliases(table):
     """Fold synonyms onto their accepted row, fill `synonyms`, and publish an
     alias row under every other key a tree row might still carry.
 
-    `SPECIES_SYNONYMS` (_ingest_shared) is applied by `sanitize_species`, so a
-    rebuilt city publishes the accepted name only.  Three things follow for
-    this table, and this function does all three on every load:
+    `SPECIES_SYNONYMS` and `SPECIES_MISSPELLINGS` (_ingest_shared) are applied
+    by `sanitize_species`, so a rebuilt city publishes the accepted name only.
+    Three things follow for this table, and this function does all three on
+    every load:
 
-    1. **Consolidate.**  A row keyed by a synonym is a duplicate the LLM was
-       paid for twice.  When the accepted row exists the synonym's row is
-       dropped; when it does not, the synonym's row is re-keyed to the
+    1. **Consolidate.**  A row keyed by a synonym or a misspelling is a
+       duplicate the LLM was paid for twice.  When the accepted row exists the
+       duplicate's row is dropped; when it does not, it is re-keyed to the
        accepted name so nothing is re-asked.
 
-    2. **Fill `synonyms`.**  Each accepted row lists the names the map folds
-       into it, merged with whatever the row already carried (a reviewer can
-       add one in `enrichment_admin.py` before the pair reaches the code).
+    2. **Fill `synonyms`.**  Each accepted row lists the *synonyms* the map
+       folds into it, merged with whatever the row already carried (a reviewer
+       can add one in `enrichment_admin.py` before the pair reaches the code).
+       Misspellings are not listed: the column says what else the taxon is
+       called, and a typo is not one of its names.
 
-    3. **Alias.**  A copy of the row is published under every synonym key and
-       every hybrid-mark twin, so a tree row still carrying the old name -- a
-       city not yet rebuilt, 158k `Platanus x acerifolia` rows on the day
-       this landed -- keeps its common name.  The copy's own `synonyms` lists
-       the accepted name, so a reader can tell which row is the taxon's.
+    3. **Alias.**  A copy of the row is published under every synonym key,
+       every misspelling key and every hybrid-mark twin, so a tree row still
+       carrying the old spelling -- a city not yet rebuilt, 158k
+       `Platanus x acerifolia` rows on the day this landed and 787
+       `Liquidambar stryaciflua` on the day the misspellings did -- keeps its
+       common name.  The copy's own `synonyms` lists the accepted name, so a
+       reader can tell which row is the taxon's.
 
     A parquet without a `synonyms` column gets one; a table with no such
     column at all (the older unit tests) is aliased on the hybrid mark alone.
@@ -370,10 +387,10 @@ def with_species_aliases(table):
     has_synonyms = "synonyms" in table.schema.names
     index = {row["species"]: i for i, row in enumerate(rows) if row.get("species")}
 
-    # 1. Consolidate synonym-keyed rows onto the accepted name.
+    # 1. Consolidate synonym- and misspelling-keyed rows onto the accepted name.
     dropped: list[str] = []
     rekeyed: list[str] = []
-    for synonym, accepted in SPECIES_SYNONYMS.items():
+    for synonym, accepted in SPECIES_FOLDS.items():
         for key in (synonym, *hybrid_twins(synonym)):
             if key not in index:
                 continue
@@ -429,6 +446,110 @@ def with_species_aliases(table):
     if not (dropped or rekeyed or aliases or has_synonyms):
         return table
     return pa.Table.from_pylist(rows + aliases, schema=table.schema)
+
+
+def published_species_keys(source: str = TREE_INFO_PARQUET) -> set[str] | None:
+    """Every `species` value the published rollup currently holds, or None.
+
+    None means "could not tell", and every caller must read it as "keep
+    everything": an unreachable rollup is not evidence that a key is unused.
+    """
+    import duckdb
+
+    conn = duckdb.connect()
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT species FROM read_parquet(?) WHERE species IS NOT NULL",
+            [source],
+        ).fetchall()
+        return {row[0] for row in rows}
+    except Exception as exc:
+        print(
+            f"[purge] could not read published species ({exc}); keeping every row",
+            file=sys.stderr,
+        )
+        return None
+    finally:
+        conn.close()
+
+
+def purge_unreachable_keys(table, published: set[str] | None = None):
+    """Drop rows keyed on a name no tree row can carry any more.
+
+    `species` is the join key, and the only names that reach it are the ones
+    `sanitize_species` emits.  Everything else in this table is a row nothing
+    will ever join to -- 3,065 of 7,495 in the September 2026 audit, 41% of
+    the table, almost all of it from before the ingest learned to truncate to
+    species rank: `Abies balsamea 'nana'`, `Abies cf. sachalinensis`,
+    `Abies cilicica ssp. isaurica`, `Anacardiaceae`.
+
+    Reachable means one of two things, and the second is why this cannot be a
+    one-line filter:
+
+    * the ingest emits the name as written (`sanitize_species(s) == s`), or
+    * it is an alias key of such a row -- a synonym, a misspelling or a
+      hybrid-mark twin, which `with_species_aliases` has just published on
+      purpose so a city that has not rebuilt still joins.
+
+    So this runs **after** the alias step, never before.  Run before it, the
+    re-key branch would never fire: a row keyed on a synonym whose accepted
+    row does not exist yet is not junk, it is the enrichment for that taxon
+    under an old name, and dropping it would pay the LLM again to learn what
+    the table already knew.
+
+    A row `sanitize_species` maps to None is kept, which is deliberately
+    conservative.  Those are the sentinels and the nothogenus names -- and
+    `Unknown` alone is the join key for 1.4 million trees, so the cost of
+    being wrong in that direction is not symmetric.  `purge_non_taxa` already
+    removes the ones that are genuinely junk, by name.
+
+    So is *published*, and for a sharper reason: "the ingest would rewrite it"
+    is a statement about the next rebuild, not about what is on GCS now.  Every
+    tightening of `sanitize_species` orphans a batch of keys that cities go on
+    publishing until each one rebuilds -- adding `genus` to the placeholder
+    epithets orphaned 17 of them, still carrying 1,162 trees between them --
+    and dropping those rows would blank a label that is currently rendering.
+    Pass the published keys and they are kept until the rebuild catches up;
+    pass None (a test, or an unreachable rollup) and nothing is protected,
+    which is why the caller reads it rather than this deciding for itself.
+    """
+    import pyarrow as pa
+
+    if len(table) == 0:
+        return table
+    published = published or set()
+    rows = table.to_pylist()
+    emitted = {
+        row["species"]
+        for row in rows
+        if row.get("species") and sanitize_species(row["species"]) == row["species"]
+    }
+    reachable = set(emitted)
+    for row in rows:
+        species = row.get("species")
+        if species in emitted:
+            reachable.update(alias_keys(species, list(row.get("synonyms") or [])))
+
+    kept = [
+        row
+        for row in rows
+        if not row.get("species")
+        or row["species"] in reachable
+        or row["species"] in published
+        or sanitize_species(row["species"]) is None
+    ]
+    if len(kept) != len(rows):
+        dropped = sorted(
+            {r["species"] for r in rows if r.get("species")}
+            - {r["species"] for r in kept if r.get("species")}
+        )
+        print(
+            f"[purge] dropped {len(rows) - len(kept)} row(s) keyed on a name the "
+            f"ingest can no longer emit, e.g. {dropped[:5]}",
+            file=sys.stderr,
+        )
+        return pa.Table.from_pylist(kept, schema=table.schema)
+    return table
 
 
 def with_sentinel_rows(table):
