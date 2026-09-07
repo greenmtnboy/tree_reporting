@@ -34,5 +34,6 @@
   "CAOTT": { "name": "Ottawa", "center": [-75.6972, 45.4215] },
   "CABUR": { "name": "Burlington, ON", "center": [-79.799, 43.3255] },
   "CAAJX": { "name": "Ajax", "center": [-79.0204, 43.8509] },
-  "CAMON": { "name": "Moncton", "center": [-64.7782, 46.0878] }
+  "CAMON": { "name": "Moncton", "center": [-64.7782, 46.0878] },
+  "JPTYO": { "name": "Tokyo", "center": [139.6917, 35.6895] }
 }

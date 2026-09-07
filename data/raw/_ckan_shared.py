@@ -33,18 +33,21 @@ measured against the four portals rather than assumed:
   handoff note in `CANADA_SOURCES.md` — and it contradicts it because Toronto
   would otherwise have been frozen in 2022 for ever.
 
-**Two row readers, because CKAN has two kinds of resource.**
+**Three row readers, because CKAN has three kinds of resource this repo reads.**
 `iter_datastore_rows` pages a resource with `datastore_active = True`, which is
 how Toronto, Montreal, Quebec City and Boston publish.  A resource without the
-datastore is a plain file, and `read_geojson_features` reads the GeoJSON form
-of one -- Longueuil publishes its trees and its parks that way and has no
-datastore at all.  A CSV or shapefile resource still needs its own reader; that
-one is not written in advance, because the shape is not knowable until a source
-needs it.
+datastore is a plain file: `read_geojson_features` reads the GeoJSON form of
+one -- Longueuil publishes its trees and its parks that way and has no
+datastore at all -- and `read_csv_rows` the CSV form, which is how Tokyo
+publishes both of its street-tree files and its cultural-property registers.
+A shapefile resource still needs its own reader; that one is not written in
+advance, because the shape is not knowable until a source needs it.
 """
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import sys
 from dataclasses import dataclass
@@ -424,6 +427,68 @@ def read_geojson_features(resource: CkanResource) -> list[dict]:
             f"`features` member -- got keys {sorted(payload)[:8]}"
         )
     return features
+
+
+# Decoding order for a CSV file resource.  `utf-8-sig` first because it also
+# covers plain UTF-8 and strips the BOM Excel writes; `cp932` second because a
+# Japanese portal's CSV is as likely to be Shift-JIS as UTF-8 -- Tokyo
+# publishes its 23-ward street trees in cp932 and its Tama file in UTF-8, from
+# the same package, and both of its cultural-property registers in cp932.
+#
+# Order matters and the two are not interchangeable: cp932 decodes almost any
+# byte string without raising, so trying it first would turn valid UTF-8
+# Japanese into mojibake *silently*.  UTF-8 is the strict one, so a body that
+# decodes as UTF-8 is UTF-8.  `cp1252` is last for the same reason it is not
+# first -- it never raises either, and is only reached when nothing else works.
+_CSV_ENCODINGS = ("utf-8-sig", "cp932", "cp1252")
+
+
+def read_csv_rows(resource: CkanResource) -> list[dict]:
+    """The rows of a CSV *file* resource, as dicts keyed by header.
+
+    Whole-file, like `read_geojson_features` and for the same reason: a file
+    resource is one HTTP GET with no offset to page by.  Tokyo's two street
+    tree files are 13 MB and 8.6 MB, which is comfortable; something an order
+    of magnitude larger would want streaming.
+
+    Read through the resource's *published* download URL rather than a pasted
+    one -- CKAN's download path ends in the uploaded filename, so a re-upload
+    under a new name breaks a hardcoded link and does not break this.
+
+    **The encoding is detected, not assumed**, because a portal can publish two
+    encodings inside one package (see `_CSV_ENCODINGS`).  Assuming UTF-8 raises
+    `UnicodeDecodeError` on a Shift-JIS file with a message about byte 0x8e at
+    position 0, which reads as a corrupt download rather than as a legacy
+    encoding; assuming cp932 corrupts a UTF-8 file without raising at all.
+
+    Header cells are stripped, because these exports wrap a header in a
+    newline where a column name ran long -- Tokyo's cultural-property CSV
+    publishes `"都道府県コード\\n又は市区町村コード"` as one cell.
+    """
+    url = resource_download_url(resource)
+    response = get_with_retry(url, timeout=resource.timeout)
+    text = None
+    for encoding in _CSV_ENCODINGS:
+        try:
+            text = response.content.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        raise UpstreamUnavailable(
+            f"CSV resource {resource.resource_id} on {resource.host} decoded "
+            f"as none of {_CSV_ENCODINGS}; {url} returned "
+            f"{response.headers.get('content-type')}, {len(response.content)} bytes"
+        )
+
+    reader = csv.reader(io.StringIO(text, newline=""))
+    try:
+        header = [cell.strip() for cell in next(reader)]
+    except StopIteration:
+        raise RuntimeError(
+            f"CSV resource {resource.resource_id} on {resource.host} is empty"
+        ) from None
+    return [dict(zip(header, row)) for row in reader if any(cell for cell in row)]
 
 
 # ---------------------------------------------------------------------------

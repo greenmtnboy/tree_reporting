@@ -1,0 +1,38 @@
+import ..landmark_common;
+
+root datasource tokyo_landmarks_update_time (
+    data_updated_through: jptyo_landmark_data_updated_through
+)
+file `./tokyo_landmarks_probe.py`;
+
+# STUB. Every city needs a landmarks model even if it yields zero rows -- a
+# missing file fails the landmark lane for every city, and the agent has no
+# geographic context for this one.
+#
+# Point the raw datasource at whichever source this city has, in preference
+# order: an official designation registry, the same portal as the trees, an
+# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
+# geocoded via Nominatim (then add a `landmarks-jptyo` job with NO cron).
+root partial datasource raw_tokyo_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+)
+grain (landmark_id)
+complete where city = 'JPTYO'
+file `./tokyo_landmarks.py`;
+
+partial datasource tokyo_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    jptyo_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'JPTYO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/jptyo_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/jptyo_landmark_info_v{data_version}.parquet`
+freshness by jptyo_landmark_data_updated_through;

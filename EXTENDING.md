@@ -2017,9 +2017,12 @@ two are irreducible — they are reading a portal's schema — and both are much
 cheaper on a platform with a shared module.
 
 **A fifth cost turns up on any portal that publishes a common name instead of a
-binomial**, and it is now mostly paid: `_common_name_species.py` resolves 398
-published English names to accepted binomials, curated by hand from what five
-Ontario and New Brunswick portals actually publish. A new city on that
+binomial**, and it is now mostly paid *per language*: `_common_name_species.py`
+resolves 398 published English names to accepted binomials, curated by hand from
+what five Ontario and New Brunswick portals actually publish, and
+`_japanese_species.py` does the same for the 446 katakana names Tokyo publishes.
+A new city on a portal that names its trees in a language neither covers should
+expect to write the third one; the shape is fixed and the cost is the curation. A new city on that
 platform calls `species_from_common_name` and adds whatever entries its own
 values need — Mississauga, Burlington ON and Ajax between them needed 398, and
 a sixth city in the same region should need a handful. Read the module's
@@ -2049,6 +2052,50 @@ same threshold applies and the same rule about hardcoding does — its table is
 curated and committed, not derived at run time from the enrichment parquet,
 because a city job must not depend on a GCS object being reachable and a
 reviewer must be able to read what a name resolves to.
+
+`_japanese_species.py` is the same shape for Tokyo's 446 katakana names, and
+splitting it out rather than adding rows to the English table is the part worth
+copying: the two tables answer the same question but their **keys normalise by
+different rules**, and `common_name_key` reduces a value to `[a-z ]`, which
+erases a katakana name entirely. A second language gets a second module and a
+second key function, not a wider regex.
+
+Both were drafted from an automatic index and neither trusts one. Tokyo's came
+from GBIF's Japanese vernacular names (290 of 446 exact) and was then put to
+POWO value by value the way `species_audit.py` does it. Two GBIF answers would
+have mislabelled thousands of trees — `ツバキ` as *Camellia hiemalis* when that
+is the neighbouring value `カンツバキ`, and `アメリカヒイラギ` as the devilwood
+rather than the American holly — which is the same lesson the reverse enrichment
+index taught in English: **an index is a drafting aid; the table is the
+authority.**
+
+**When POWO and the published table disagree, the published table wins.** This
+one is about this repo rather than about taxonomy, and it is the argument
+`SPECIES_SYNONYMS` already makes: the same taxon under two names is two
+enrichment rows, two LLM calls and two entries in every rollup. POWO calls
+`Cinnamomum camphora` a synonym of `Camphora officinarum` and the table has
+carried the former since San Francisco, so Tokyo's 6,882 camphor trees join the
+row that exists. Where the rule points the other way — the published name *is*
+the synonym and POWO names an accepted target unambiguously — the pair goes into
+`SPECIES_SYNONYMS` instead, which is how `Sapium sebiferum` → `Triadica
+sebifera` and `Callistemon citrinus` → `Melaleuca citrina` landed.
+
+**A CSV resource's encoding is detected, and the order matters.** Tokyo
+publishes one street-tree file in Shift-JIS and the other in UTF-8 *from the same
+CKAN package*, so `_ckan_shared.read_csv_rows` tries `utf-8-sig` first and
+`cp932` second. That order is correctness, not preference: cp932 decodes almost
+any byte string without raising, so trying it first turns valid UTF-8 Japanese
+into mojibake **silently**, while UTF-8 is strict enough that a body which
+decodes as UTF-8 is UTF-8. Assuming either one raises `UnicodeDecodeError` at
+byte 0x8e, which reads as a corrupt download rather than a legacy encoding.
+
+**A city-unique column stops being city-unique.** `borough` was London's alone;
+Tokyo's `行政区` is the same concept — the administrative subdivision the tree
+sits in — so it maps onto `borough` rather than gaining a parallel `ward`
+column. That is one entry in `OSM_EXTRA_NULL_COLUMNS`, one property declaration
+in the city's own staging model, and nothing at all in the shared community and
+OSM scripts, which already emit the column for every city. A second column would
+have been six new silent-failure points for a concept that already existed.
 
 ### The landmark lane is still seventeen bespoke scripts
 

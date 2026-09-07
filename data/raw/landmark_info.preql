@@ -35,6 +35,7 @@ import caott.ottawa_landmarks;
 import cabur.burlington_on_landmarks;
 import caajx.ajax_landmarks;
 import camon.moncton_landmarks;
+import jptyo.tokyo_landmarks;
 
 
 # --- Merged union datasource ---

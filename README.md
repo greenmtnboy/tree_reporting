@@ -36,6 +36,7 @@ Currently has data from the following cities:
 - [Burlington, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CABUR)
 - [Ajax, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAAJX)
 - [Moncton, NB, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAMON)
+- [Tokyo, Japan](https://greenmtnboy.github.io/tree_reporting/#/?city=JPTYO)
 - [London, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBLON)
 - [Amsterdam, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLAMS)
 - [Berlin, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEBER)
@@ -102,6 +103,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Burlington ON | City of Burlington Open Data - City Owned Trees | https://navburl-burlington.opendata.arcgis.com/datasets/city-owned-trees |
 | Ajax | Town of Ajax Open Data - Town Trees | https://opendata.ajax.ca/datasets/town-trees |
 | Moncton | City of Moncton Open Data - Trees | https://open.moncton.ca/datasets/trees |
+| Tokyo | Tokyo Open Data Catalog - Bureau of Construction, Street Trees on Metropolitan Roads (CC BY 4.0) | https://catalog.data.metro.tokyo.lg.jp/dataset/t000014d2000000029 |
 | London | London Datastore - Public Realm Trees | https://data.london.gov.uk/dataset/2r45m |
 | Amsterdam | Amsterdam Data Portal - Bomen (Stamgegevens) | https://api.data.amsterdam.nl/v1/bomen/stamgegevens/ |
 | Berlin | Berlin Geodateninfrastruktur - Baumbestand (WFS) | https://gdi.berlin.de/services/wfs/baumbestand |
@@ -147,6 +149,7 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Burlington ON | City of Burlington Open Data - Heritage Properties | https://navburl-burlington.opendata.arcgis.com/datasets/heritage-properties |
 | Ajax | Town of Ajax Open Data - Heritage Inventory | https://opendata.ajax.ca/datasets/heritage-inventory |
 | Moncton | City of Moncton Open Data - Cultural Assets | https://open.moncton.ca/datasets/cultural-assets |
+| Tokyo | Tokyo Open Data Catalog - Board of Education, Designated Cultural Properties and Historic Sites (CC BY 4.0) | https://catalog.data.metro.tokyo.lg.jp/dataset/t000021d0000000017 |
 | London | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |
 | Amsterdam | Amsterdam Data Portal - Monumenten | https://api.data.amsterdam.nl/v1/monumenten/monumenten/ |
 | Berlin | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |
