@@ -43,15 +43,18 @@ would have mislabelled thousands of trees --
 sensitive plant, where Japanese horticulture means *Acacia dealbata*.
 
 Every value was then put to POWO the way `species_audit.py` does it, reading
-**every** exact match rather than the first.  285 of the 336 came back
-`accepted` outright; the rest split three ways, and each way changed something:
+**every** exact match rather than the first.  The 336 values it publishes now
+stand at **291 accepted, 35 ambiguous with an accepted reading, and 10
+deliberate synonyms** -- and the fixes that got them there are worth keeping,
+because a regeneration from GBIF would undo every one:
 
-* **A homonym is not a problem.**  35 came back `ambiguous` with one reading
-  `accepted` -- `Juniperus chinensis`, `Quercus glauca`, `Osmanthus fragrans`.
-  A name Kew has published twice is still a name, which is the same reading
-  `species_audit.py` takes.
+* **A homonym is not a problem**, and that is what the 35 are:
+  `Juniperus chinensis`, `Quercus glauca`, `Osmanthus fragrans`, each published
+  twice by different authors with the readings disagreeing.  A name Kew has
+  published twice is still a name, which is the reading `species_audit.py`
+  takes.
 * **A genuine synonym was replaced.**  `Acer amoenum` (オオモミジ) is a synonym
-  under both of its readings, so that value is `Acer palmatum`; `Euonymus
+  under *both* of its readings, so that value is `Acer palmatum`; `Euonymus
   sieboldianus` became `Euonymus hamiltonianus`; `Linnaea x grandiflora` became
   `Abelia x grandiflora`, POWO having moved it back.  `Rhododendron obtusum`
   has no accepted reading at all, so the Kurume and Kirishima azaleas -- which
@@ -62,6 +65,12 @@ Every value was then put to POWO the way `species_audit.py` does it, reading
   `Citrus x aurantium`.  `Machilus japonica` has no record, so ホソバタブ is
   the genus.
 
+**The 10 that are still synonyms are all one deliberate rule**, below, and
+nothing else -- which is the useful thing to know if this is ever re-audited:
+`Acca sellowiana`, `Betula platyphylla`, `Cinnamomum camphora`, `Cupressus
+arizonica`, `Cupressus macrocarpa`, `Cupressus x leylandii`, `Euscaphis
+japonica`, `Juglans ailantifolia`, `Mahonia japonica`, `Morus australis`.
+
 **Where POWO and the published table disagreed, the published table won.**
 This is the one rule that is about *this repo* rather than about taxonomy, and
 it is the same argument `SPECIES_SYNONYMS` makes: the same taxon under two
@@ -69,10 +78,10 @@ names is two enrichment rows, two LLM calls and two entries in every species
 rollup.  POWO calls `Cinnamomum camphora` a synonym of `Camphora officinarum`,
 and the enrichment table has carried `Cinnamomum camphora` since San Francisco
 was wired -- so 6,882 Tokyo camphor trees join the row that already exists.
-The same call was taken for `Acca sellowiana`, `Mahonia japonica`,
-`Morus australis`, `Euscaphis japonica`, `Juglans ailantifolia` and
-`Cupressus macrocarpa`, the last of which the repo already names as a synonym
-*target*.
+The same call was taken for the other nine listed above -- three of
+them, `Cupressus macrocarpa`, `Cupressus arizonica` and `Cupressus x
+leylandii`, being names the repo already declares as synonym *targets* in
+`SPECIES_SYNONYMS`, so agreeing with it there was not even a choice.
 
 The two places where that rule pointed the other way became `SPECIES_SYNONYMS`
 entries instead, because POWO adjudicated them with a single unambiguous
