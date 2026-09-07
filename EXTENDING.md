@@ -1426,6 +1426,121 @@ heads the rollup's file list; (3) run `urban-tree-full`. The browser probes
 for the column and reads a null until a city is rebuilt, so the deploy order
 does not matter on that side.
 
+### Misspellings: the same fold, on a different claim
+
+`SPECIES_MISSPELLINGS` sits beside `SPECIES_SYNONYMS` in `_ingest_shared.py`
+and resolves identically in `sanitize_species`. It exists separately because
+the two make different claims: a synonym is a name Kew lists under an accepted
+one, and a misspelling is a name that does not exist. `Liquidambar
+stryaciflua` is not a taxon — it is 787 Denver trees whose species field
+transposed two letters — so it cannot go in a map whose stated authority is
+POWO.
+
+The cost of leaving one alone is the cost a synonym has: a second enrichment
+row for a taxon already in the table, a second entry in every species rollup,
+a second colour on the map. The September 2026 audit mapped **232 names over
+167,813 published trees, reclaiming 178 enrichment rows that had been paid for
+twice** and taking the fleet from 4,172 distinct species to 3,912. It splits
+between an omitted or invented hybrid mark (67 pairs — `Tilia europaea` for
+`Tilia x europaea`, 55,002 trees on the unmarked spelling) and a plain typo
+(165 — `Sorbus aucaparia`, `Fraxinus pennsylvancia`, `Acer platenoides`).
+Mark-only pairs go in `SPECIES_SYNONYMS`, which has carried that case since
+`Platanus hispanica`; the rest go in the misspelling map. A further 57 pairs
+were refused as two real taxa.
+
+**Never curate this list by eye, and never by tree count.** Run
+`data/raw/species_audit.py`, which finds every pair of published names within
+two edits and asks POWO to adjudicate each one:
+
+```bash
+cd data/raw && uv run species_audit.py          # the report
+cd data/raw && uv run species_audit.py --map    # entries to paste
+```
+
+Two edits is wide enough to catch `Liquidambar stryaciflua` and wide enough to
+catch `Acer saccharum`/`Acer saccharinum`, which are two real species —
+folding those would relabel 33,644 sugar maples as silver maple and nothing
+downstream would report it. The published data also contains
+`Celtis`/`Cercis occidentalis`, `Malus`/`Taxus baccata`, `Prunus`/`Pinus
+nigra`, `Cornus`/`Morus alba`, `Ulmus`/`Alnus rubra`, `Quercus lobata`/`lyrata`
+and `Laburnum`/`Viburnum`. Shape cannot separate those from a typo; POWO
+returning both names as accepted can, and that is the whole reason the tool
+asks rather than guesses. `test_two_real_species_are_never_folded_together`
+pins the ones found so far.
+
+"Both accepted" is only the first way a pair gets refused, and the other three
+were each found by a mapping that would otherwise have landed:
+
+- **A homonym.** A binomial can carry more than one record. `Quercus lyrata`
+  Walter is the accepted overcup oak; `Quercus lyrata` Spreng. is a synonym of
+  `Quercus lobata`. Reading POWO's *first* exact match said the overcup oak was
+  really the valley oak, which would have relabelled 2,773 trees. The lookup
+  now reads every exact match and reports disagreement as `ambiguous`. Note
+  what that does and does not block: an ambiguous name refuses a *synonym*
+  verdict, because that is a claim about nomenclature, and still serves as the
+  *target* of a misspelling, because a name Kew has published twice is a name.
+  Blocking both was the first attempt and it silently cost `Crataegus
+  crusgalli`, 1,529 trees.
+- **Two things it could have meant.** `Picea pugens` is one edit from `Picea
+  pungens` and one from `Picea rubens`, both accepted. A misspelling is only
+  resolvable when there is a single candidate.
+- **Two edits inside a very short word.** Distance is a fraction of the word,
+  not an absolute: two edits in `soulangiana` is a slip, two in `mazei` is a
+  different word. It matters for hybrids, whose epithets are surnames —
+  `Quercus x mazei` and `Quercus x warei` are two edits apart and two different
+  named hybrids, and POWO cannot rule on it because it has no record of the
+  first.
+
+Tree counts are printed but are not evidence. The wrong spelling is *usually*
+rarer, which is what makes the exceptions dangerous: `Larix siberica` has
+8,431 trees against 7,661 for the correct `Larix sibirica`, and `Tilia
+europaea` outnumbers `Tilia x europaea` 55,002 to 3,137. A count only says
+which city is bigger.
+
+The enrichment side needs nothing new. `with_species_aliases` folds both maps,
+so a misspelled row is dropped onto the correct one (or re-keyed, if that row
+does not exist yet) and republished as an alias under the old key — which is
+what keeps those 787 trees labelled between the merge and Denver's next
+rebuild. The one asymmetry is deliberate: a misspelling never appears in the
+accepted row's `synonyms`, because that column says what else the taxon is
+called and a typo is not one of its names. The alias row still points home, so
+the admin form can navigate, and `accepted_for` makes it read-only there the
+same way a synonym's row is.
+
+### Rows nothing can join to
+
+A misspelling with live trees must fold, not be deleted — that was the first
+instinct when the duplicate rows were found, and it is backwards: pruning
+`Liquidambar stryaciflua` would strip the label off 787 trees that are on the
+map right now. But the same audit turned up a population where deleting *is*
+the answer, and it is much larger: **3,063 of 7,495 rows, 41% of the table,
+had no published tree behind them and no way to acquire one.** Almost all of
+it predates the ingest learning to truncate to species rank — `Abies balsamea
+'nana'`, `Abies cf. sachalinensis`, `Abies cilicica ssp. isaurica`,
+`Anacardiaceae` — keys `sanitize_species` can no longer emit.
+
+`purge_unreachable_keys` removes them on load, next to `purge_non_taxa`. Three
+things about it are load-bearing:
+
+- **It runs after `with_species_aliases`, never before.** The alias step is
+  what decides which old spellings are still joined to, and one of its
+  branches *re-keys* a row rather than dropping it — a synonym-keyed row whose
+  accepted row does not exist yet is not junk, it is that taxon's enrichment
+  under an old name. Purging first would delete it and pay the LLM again.
+- **A row the ingest maps to `None` is kept.** Those are the sentinels and the
+  nothogenus names, and `Unknown` alone is the join key for 1.4 million trees.
+  `purge_non_taxa` already removes the ones that are junk, by name.
+- **A key the published data still carries is kept, whatever the ingest would
+  now do with it.** "The ingest would rewrite this" is a claim about the next
+  rebuild, not about what is on GCS today. Every tightening of
+  `sanitize_species` orphans a batch of keys that cities keep publishing until
+  each one rebuilds: adding `genus` to the placeholder epithets (so `Viburnum
+  genus` truncates to `Viburnum`) orphaned 17 keys still carrying 1,162 trees
+  between them, and purging those would have blanked a label that was
+  rendering. So the job passes `published_species_keys()`, and an unreachable
+  rollup returns `None`, which every caller must read as *keep everything* —
+  a failed read is not evidence that a key is unused.
+
 ### Species hygiene is enforced centrally, not per city
 
 `normalize_species` only fixes casing.  Deciding whether a value is a taxon at
@@ -1510,9 +1625,10 @@ recorded the genus, while `Tai haku` is a cherry cultivar with no genus
 attached.
 
 A **misspelled binomial stays out of it**.  `Crateagus monogyna` and
-`Sequioa sempervirens` are real names badly typed; the enrichment step resolves
-those, and dropping them to `Unknown` would lose a tree we can identify.  The
-list is only for values that name no genus at all.
+`Sequioa sempervirens` are real names badly typed; dropping them to `Unknown`
+would lose a tree we can identify.  The list is only for values that name no
+genus at all.  A misspelling folds instead, through `SPECIES_MISSPELLINGS` —
+see "Misspellings" below.
 
 The structural rules gained four cases at the same time, each of which
 generalises where a list would not:
