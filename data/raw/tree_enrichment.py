@@ -38,7 +38,9 @@ from enrichment._tree_shared import (
     SPECIES_EXCLUSION_SQL,
     SPECIES_SENTINELS,
     is_enrichable_species,
+    published_species_keys,
     purge_non_taxa,
+    purge_unreachable_keys,
     normalize_common_names,
     with_normalized_common_names,
     with_species_aliases,
@@ -564,8 +566,16 @@ def load_existing_table(source: str) -> pa.Table | None:
     # puts the authored ones back, so both the checkpoint and the final merge
     # carry them. On a first run there is no parquet to load and they arrive on
     # the run after — there is nothing to join to yet either.
+    #
+    # purge_unreachable_keys runs *after* with_species_aliases and not before:
+    # the alias step is what decides which old spellings are still joined to,
+    # and one of its branches re-keys a row rather than dropping it. Ordered
+    # the other way it would delete enrichment the table already has.
     return with_sentinel_rows(
-        with_species_aliases(with_normalized_common_names(purge_non_taxa(table)))
+        purge_unreachable_keys(
+            with_species_aliases(with_normalized_common_names(purge_non_taxa(table))),
+            published=published_species_keys(),
+        )
     )
 
 

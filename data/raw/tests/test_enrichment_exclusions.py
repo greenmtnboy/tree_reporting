@@ -36,6 +36,8 @@ from enrichment._tree_shared import (  # noqa: E402
     SPECIES_EXCLUSION_SQL,
     is_enrichable_species,
     purge_non_taxa,
+    published_species_keys,
+    purge_unreachable_keys,
     sentinel_enrichment_rows,
     with_sentinel_rows,
 )
@@ -487,3 +489,120 @@ def test_a_synonym_is_never_queued_for_enrichment():
     assert not is_enrichable_species("Platanus x acerifolia")
     assert not is_enrichable_species("Sophora japonica")
     assert is_enrichable_species("Platanus x hispanica")
+
+
+# ---------------------------------------------------------------------------
+# with_species_aliases: misspellings
+# ---------------------------------------------------------------------------
+
+
+def test_a_misspelled_row_is_dropped_when_the_correct_row_exists():
+    """The same duplication a synonym causes, from a typo instead: two rows,
+    two LLM calls and two entries in every rollup for one taxon."""
+    out = _by_species(with_species_aliases(_synonym_table({
+        "Acer platenoides": None,
+        "Acer platanoides": None,
+    })))
+    assert out["Acer platanoides"]["common_names"] == ["name of Acer platanoides"]
+    assert out["Acer platenoides"]["common_names"] == ["name of Acer platanoides"]
+
+
+def test_a_misspelled_row_is_rekeyed_when_the_correct_row_is_missing():
+    out = _by_species(with_species_aliases(_synonym_table({"Acer platenoides": None})))
+    assert out["Acer platanoides"]["common_names"] == ["name of Acer platenoides"]
+
+
+def test_every_misspelling_key_gets_an_alias_row():
+    """This is what keeps the trees labelled between the merge and the city's
+    next rebuild -- 787 `Liquidambar stryaciflua` on the day this landed."""
+    out = _by_species(with_species_aliases(_synonym_table({"Liquidambar styraciflua": None})))
+    assert out["Liquidambar stryaciflua"]["common_names"] == ["name of Liquidambar styraciflua"]
+
+
+def test_a_misspelling_is_not_listed_as_a_synonym_of_the_taxon():
+    """The column says what else the taxon is called.  A typo is not one of
+    its names, so it is aliased without being claimed."""
+    out = _by_species(with_species_aliases(_synonym_table({"Acer platanoides": None})))
+    assert out["Acer platanoides"]["synonyms"] is None
+    # ...while the alias still points home, so a reader can navigate.
+    assert out["Acer platenoides"]["synonyms"] == ["Acer platanoides"]
+
+
+def test_a_misspelling_is_never_queued_for_enrichment():
+    assert not is_enrichable_species("Acer platenoides")
+    assert not is_enrichable_species("Liquidambar stryaciflua")
+    assert is_enrichable_species("Acer platanoides")
+
+
+# ---------------------------------------------------------------------------
+# purge_unreachable_keys
+# ---------------------------------------------------------------------------
+
+
+def test_a_key_the_ingest_can_no_longer_emit_is_dropped():
+    """41% of the table in the September 2026 audit: rows written before the
+    ingest truncated to species rank, which no tree row can join to."""
+    out = _by_species(purge_unreachable_keys(_synonym_table({
+        "Abies balsamea": None,
+        "Abies balsamea 'nana'": None,
+        "Abies cilicica ssp. isaurica": None,
+    })))
+    assert set(out) == {"Abies balsamea"}
+
+
+def test_an_alias_row_is_not_unreachable():
+    """The alias step publishes these on purpose, for a city that has not
+    rebuilt -- purging them would undo it in the same pass."""
+    table = with_species_aliases(_synonym_table({"Platanus x hispanica": None}))
+    out = _by_species(purge_unreachable_keys(table))
+    for key in ("Platanus x acerifolia", "Platanus acerifolia", "Platanus hispanica"):
+        assert key in out, key
+
+
+def test_a_misspelling_alias_survives_the_purge():
+    table = with_species_aliases(_synonym_table({"Liquidambar styraciflua": None}))
+    out = _by_species(purge_unreachable_keys(table))
+    assert "Liquidambar stryaciflua" in out
+
+
+def test_a_hand_added_synonym_survives_the_purge():
+    """It is not in the code map, so reachability has to read the row's own
+    `synonyms` column rather than only the maps."""
+    table = with_species_aliases(_synonym_table({"Acer rubrum": ["Acer rubrum-flavum"]}))
+    out = _by_species(purge_unreachable_keys(table))
+    assert "Acer rubrum-flavum" in out
+
+
+def test_a_sentinel_is_never_purged_as_unreachable():
+    """`sanitize_species` returns None for these, and `Unknown` alone is the
+    join key for 1.4 million trees."""
+    out = _by_species(purge_unreachable_keys(_synonym_table(
+        {name: None for name in sorted(SPECIES_SENTINELS)}
+    )))
+    assert set(out) == set(SPECIES_SENTINELS)
+
+
+def test_the_purge_is_idempotent():
+    table = with_species_aliases(_synonym_table({
+        "Platanus x hispanica": None,
+        "Abies balsamea 'nana'": None,
+    }))
+    once = purge_unreachable_keys(table)
+    assert _by_species(once) == _by_species(purge_unreachable_keys(once))
+
+
+def test_a_key_trees_still_carry_is_kept_even_when_unreachable():
+    """Every tightening of `sanitize_species` orphans keys that cities go on
+    publishing until each rebuilds.  Adding `genus` to the placeholder epithets
+    orphaned 17 of them, carrying 1,162 trees; dropping those rows would blank
+    a label that is currently rendering."""
+    table = _synonym_table({"Malus": None, "Malus genus": None})
+    assert "Malus genus" not in _by_species(purge_unreachable_keys(table))
+    kept = _by_species(purge_unreachable_keys(table, published={"Malus genus"}))
+    assert "Malus genus" in kept
+
+
+def test_an_unreadable_rollup_protects_nothing_but_is_reported():
+    """`published_species_keys` returns None when it cannot read the rollup,
+    and the caller must not treat that as 'no key is in use'."""
+    assert published_species_keys("https://example.invalid/nope.parquet") is None
