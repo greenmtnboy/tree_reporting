@@ -97,27 +97,35 @@ below used the repo's own `_arcgis_shared.py <hub-host>` discovery tool.
 
 Counts are live feature counts from the portal, taken 2026-09-06.
 
+> **Rows marked WIRED were measured field by field while being added; the rest
+> were read off a hub listing and a first page.** That difference matters more
+> than it sounds: of the six largest ArcGIS cities, *three* turned out not to
+> be what this table said. Mississauga's `BOTNAME` and Ottawa's `SPECIES` are
+> common names rather than binomials, and Markham's layer is the whole of York
+> Region. Check the column, not the column *name*, before planning around a
+> row here.
+
 | city | prov | direct source | count | notes |
 |---|---|---|---:|---|
 | Toronto | ON | CKAN datastore `3dafa392` | 688,335 | `STRUCTID`, `BOTANICAL_NAME`, `DBH_TRUNK`; `last_refreshed` is a real watermark |
 | Calgary | AB | Socrata `tfs4-3wwa` | 581,011 | |
-| Mississauga | ON | ArcGIS `2023_City_Owned_Tree_Inventory` | 499,331 | `GlobalID`, `BOTNAME`, `DIAM`, `LATITUDE`/`LONGITUDE`; `layer_last_edit` works |
+| Mississauga | ON | ArcGIS `2023_City_Owned_Tree_Inventory` | 499,331 | **common name only.** `BOTNAME` is a six-letter code (`MANOOO`, `ASGROO`) and `BOTDESC` its expansion -- `NORWAY MAPLE`, `HONEY LOCUST`, 330 distinct. No botanical name anywhere in the layer. `UNITID`, `LATITUDE`/`LONGITUDE`, `layer_last_edit` all good; 41,481 rows are `SERVSTAT = FUTURE TREE SITE` |
 | Edmonton | AB | Socrata `eecg-fc54` | 480,744 | |
 | Winnipeg | MB | Socrata `hfwk-jp4h` | 305,385 | native `tree_id`, `botanical_name`, `diameter_at_breast_height` — near-perfect fit |
-| Ottawa | ON | ArcGIS `Forestry/MapServer/0` | 304,374 | `TREEID`, `GLOBALID`, `SPECIES`, `DBH`, `PLNTDATE`; MapServer has no `editingInfo`, use `field_max('MODIFYDATE')` |
-| Surrey | BC | ArcGIS `Park Specimen Trees` (+ Screen/Important) | 115,454 | split across several park layers |
-| Markham | ON | ArcGIS `Biodiversity/MapServer/0` | 82,354 | `TREEID`, `SPECIES`, `CURRENTDBH`, `YEARPLANTED` |
+| Ottawa | ON | ArcGIS `Forestry/MapServer/0` | 304,374 | **common name only.** `SPECIES` is an inverted common name -- `Maple Sugar`, `Lilac Japanese`, `Spruce Blue/Colorado`, 169 distinct -- not a binomial. `TREEID` is a per-tree GUID, `DBH` is cm, and `field_max('MODIFYDATE')` reads 2026-09-03, so everything but the species is ready |
+| Surrey | BC | ArcGIS `Park Specimen Trees` (+ Screen/Important) | 115,454 | split across several park layers. **Host not re-found:** `data.surrey.ca` serves HTML from the DCAT path and `cosmos.surrey.ca` / `surrey.maps.arcgis.com` 404, so `find_tree_layers` cannot reach it. The layer URLs need to come from somewhere other than the Hub feed |
+| Markham | ON | ArcGIS `Biodiversity/MapServer/0` | **16,596** | **The layer is York Region, not Markham.** All 82,354 rows are `Regional ROW` trees across nine municipalities -- Vaughan 20,145, Markham 16,596, Richmond Hill 9,527, ... -- so CIF's "Markham 82,354" is the whole region. Filter `MUNICIPALITY='Markham'`. Clean binomials with quoted cultivars; no `editingInfo` and **no date column at all**, so it needs `hub_last_modified` |
 | Burlington | ON | ArcGIS `COB/Urban_Forestry/MapServer/0` | 80,287 | **common name only**, no botanical name — needs a species lookup |
-| Halifax | NS | ArcGIS `Public_Trees` | 80,051 | `GLOBALID`, `TREEID`, `SP_SCIEN`, `DBH`, `INSTYR` |
-| Kingston | ON | ArcGIS `Eng/City_Owned_Trees` | 55,891 | `TREE_ID`, `GLOBALID`, `SCIENTIFIC_NAME`, `DBH_TRUNK` |
+| Halifax | NS | ArcGIS `Public_Trees` | 80,051 | **WIRED as `CAHFX`.** `DBH` is a nine-band size class, not centimetres -- the layer publishes the bands as a coded-value domain. ~1,000 rows carry a shorthand code (`ACRU`, `QURU`) instead of a name |
+| Kingston | ON | ArcGIS `Eng/City_Owned_Trees` | 55,891 | **WIRED as `CAKGN`** (46,883 after dropping 8,945 retired). `DBH_TRUNK` uses 999 as its not-measured sentinel. No `editingInfo`, no edit-date column |
 | Ajax | ON | ArcGIS `Ajax_Open_Data/MapServer/8` | 53,848 | `SPCODE` (code, not name), `DBH`, `GPS_LAT`/`GPS_LON` |
-| Lethbridge | AB | ArcGIS `odl_trees` | 45,433 | `botn_name`, `genus`, `species`, `cultivar`, `diameter` — cleanest schema of the set |
-| Victoria | BC | ArcGIS `OpenData_Parks/MapServer/15` | 34,981 | `SiteID`, `Species`, `DiameterAtBreastHeight` |
-| Peterborough | ON | ArcGIS `Tree_Inventory` | 29,455 | `BOTANICAL`, `GENUS`; id is `FACILITYID` — check it, DC's was not unique |
-| Kelowna | BC | ArcGIS `OpenData_Environment/MapServer/17` | 24,599 | `Species`, `Genus`, `CultivarOrVariety`, `dbh_cm` |
+| Lethbridge | AB | ArcGIS `odl_trees` | 45,433 | **WIRED as `CALET`** (45,202 after dropping 231 retired). Cleanest schema of the set. No `editingInfo`, no date column |
+| Victoria | BC | ArcGIS `OpenData_Parks/MapServer/15` | 34,981 | **WIRED as `CAVIC`.** The "Parks trees database" title undersells it -- `TreeCategory` shows the whole municipal inventory. `Site` looks like an id and is not (5,913 distinct over 34,981 rows); `SiteID` is the key |
+| Peterborough | ON | ArcGIS `Tree_Inventory` (host is `data-ptbo.opendata.arcgis.com`) | 29,455 | Clean binomials with quoted cultivars, and **no diameter column at all** -- same gap as Fredericton. `editingInfo` present but `dataLastEditDate` is 2022-02. Id is `FACILITYID`, still unchecked |
+| Kelowna | BC | ArcGIS `OpenData_Environment/MapServer/17` | 24,599 | **WIRED as `CAKEL`.** `SITE_ID` is unusable -- 3,214 null and 195 rows sharing an id, one value on 33 -- and there is no `GLOBALID`, so it is keyed on `OBJECTID`, the runbook's last resort. `InventoryDate` is a live watermark |
 | Fredericton | NB | ArcGIS `Tree_Inventory/FeatureServer/37` | 21,186 | `Genus_Spec`, `GlobalID`; **no DBH field** |
-| New Westminster | BC | ArcGIS `Tree_Inventory_(PROD)_4_view` | 16,111 | `SPECIES`, `GENUS`, `CULTIVAR`, `DBH`, `PLANTINGDATE` |
-| Moncton | NB | ArcGIS `Trees/FeatureServer/0` | 12,721 | `BOTNAME`, `DIAM`, `PlantedYear`, `last_edited_date` |
+| New Westminster | BC | ArcGIS `Tree_Inventory_(PROD)_4_view` | 16,111 | **WIRED as `CANWE`.** `globalid` is clean; `FULL_NAME` is the curated taxon. No common-name column. A quarter of rows have no diameter |
+| Moncton | NB | ArcGIS `Trees/FeatureServer/0` | 12,721 | **species code, not a name**: `BOTNAME` is `MapRed`, `PinEas`. Same problem as Ajax and Mississauga. `UNITID`, `editingInfo` and `last_edited_date` are all fine |
 | Montreal | QC | CKAN `donnees.montreal.ca`, "Arbres publics sur le territoire de la Ville" | — | modified 2026-09-06 |
 | Quebec City | QC | Données Québec, "Arbres répertoriés" | — | modified 2026-09-04 |
 | Longueuil | QC | Données Québec, "Arbres" | — | modified 2026-02-09 |
@@ -160,9 +168,35 @@ four CKAN cities in the handoff below. Longueuil publishes no tree id and is
 the one city here with a **synthesised** one; see "Longueuil" below for what
 that costs and why it was taken anyway.
 
-**Next (a third PR):** the ArcGIS cities, which are 16 of the 23 confirmed and
-already have `_arcgis_shared.py` under them. Then the snowflakes -- Burlington
-ON (common name only) and Fredericton (no DBH).
+**Done (PR 3):** the six largest ArcGIS cities that publish a botanical name
+*and* a diameter -- Halifax, Kingston, Lethbridge, Victoria, Kelowna and New
+Westminster -- 247,776 trees. `_arcgis_shared` gained a third freshness
+watermark (`hub_last_modified`) and an Esri-geometry-to-WKT converter; the
+shared species hygiene gained the non-taxa these six turned up. Landmarks are
+official designation registries in all six cases, read live: no geocoding, no
+committed CSV, no staging object.
+
+**Next (a fourth PR): the common-name cities.** This is now the biggest
+remaining prize and a shared-module job rather than six city jobs. Mississauga
+(499,331), Ottawa (304,374), Burlington ON (80,287), Ajax (53,848) and Moncton
+(12,721) all publish a common name or a species code where the binomial should
+be -- 951,561 trees, more than everything wired in the three Canadian PRs so
+far. That is five cities past the threshold `EXTENDING.md` sets for writing a
+shared module, and the module has an obvious seed: the enrichment table is
+already a scientific-name -> common-names map, so its inverse resolves most of
+these automatically. Two rules keep it honest -- map only where the reverse
+index is *unambiguous* (exactly one accepted species claims the name) and fall
+back to `Unknown` rather than guessing, and hardcode the result the way
+`SPECIES_SYNONYMS` is hardcoded, so a city job never depends on a GCS object
+being reachable. Ottawa's 169 and Mississauga's 330 distinct values are the
+whole problem; they overlap heavily and are the standard North American street
+tree palette.
+
+**Then the rest of the ArcGIS set:** Peterborough (29,455) and Fredericton
+(21,186), which are clean except that neither publishes a diameter at all;
+Markham (16,596) once someone decides whether a York Region layer filtered to
+one municipality is the right thing to publish; and Surrey (115,454) if its
+layer URLs can be found without the Hub feed.
 
 ### What PR 2 measured that the handoff got wrong
 
@@ -233,6 +267,52 @@ against one is orphaned if Longueuil ever corrects that coordinate. If the city
 ever publishes an id, switch to it and accept the one-time churn.
 
 ---
+
+## What PR 3 measured that the table got wrong
+
+Recorded here rather than only in the table above, because each was a plan
+that did not survive contact and the next batch will be planned the same way.
+
+- **Three of the six biggest ArcGIS cities do not publish a botanical name.**
+  The table said Mississauga had `BOTNAME` and Ottawa had `SPECIES`, which is
+  true and means nothing: Mississauga's is a six-letter code and Ottawa's is
+  an inverted common name. A column called `SPECIES` holding `Maple Sugar` is
+  the single most expensive assumption in this file, and it cost the planned
+  city list about 800k trees.
+
+- **CIF's per-city counts inherit its sources' scope.** Markham's 82,354 is a
+  York Region layer covering nine municipalities; Markham itself is 16,596.
+  The same trap the Waterloo note already flagged, one row further down.
+
+- **A layer's own field domain is worth reading.** Halifax's `DBH` runs 1-9
+  and is a size class; the layer publishes the class boundaries as a
+  coded-value domain (`fields[].domain`), so the conversion is read off the
+  portal rather than guessed. Anything that looks like a measurement but has
+  a suspiciously small range is worth one `?f=json`.
+
+- **Four of the six had no freshness watermark inside the layer.** Kingston,
+  Lethbridge, Victoria and Kelowna publish no `editingInfo` and (mostly) no
+  edit-date column, which is what `hub_last_modified` is for: the Hub
+  catalogue's own `modified` stamp for the dataset, matched on the REST
+  endpoint. It is the last resort of the three watermarks and its limits are
+  documented on the function -- where a city has a second stamp, take the
+  **maximum**, never a preference order.
+
+- **`OBJECTID` is not always unique.** Kelowna's heritage registry reports
+  `objectIdField: null` -- it is a query layer, not a registered feature class
+  -- and `OBJECTID` repeats exactly where the parcel id does. The Pandosy
+  Mission is eight registered buildings on one parcel with one `OBJECTID`
+  between them.
+
+- **Vancouver's ecoregion was wrong, and is fixed here.** `CAVAN` was wired to
+  RESOLVE `ECO_ID` 319, which is **Indochina mangroves**; every land point in
+  Vancouver returns 364, Puget lowland forests, as do New Westminster and
+  Burnaby. Vancouver's *centroid* falls in a coverage gap and returns nothing,
+  which is how the wrong id got in. Its nativeness classification has been
+  computed against a mangrove ecoregion since the city was added; the fix
+  lands with this PR and takes effect on Vancouver's next rebuild. When
+  `curl`ing the RESOLVE service for a new city, check that it returned a
+  feature at all.
 
 ## Handoff: `_ckan_shared` + the CKAN cities
 

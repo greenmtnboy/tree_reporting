@@ -24,6 +24,12 @@ import cator.toronto_tree_info;
 import camtl.montreal_tree_info;
 import caque.quebec_tree_info;
 import calon.longueuil_tree_info;
+import cahfx.halifax_tree_info;
+import cakgn.kingston_tree_info;
+import calet.lethbridge_tree_info;
+import cavic.victoria_tree_info;
+import cakel.kelowna_tree_info;
+import canwe.new_westminster_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -55,6 +61,12 @@ merge cator_source into data_source;
 merge camtl_source into data_source;
 merge caque_source into data_source;
 merge calon_source into data_source;
+merge cahfx_source into data_source;
+merge cakgn_source into data_source;
+merge calet_source into data_source;
+merge cavic_source into data_source;
+merge cakel_source into data_source;
+merge canwe_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -95,7 +107,13 @@ cawpg_published_data_updated_through,
 cator_published_data_updated_through,
 camtl_published_data_updated_through,
 caque_published_data_updated_through,
-calon_published_data_updated_through);
+calon_published_data_updated_through,
+cahfx_published_data_updated_through,
+cakgn_published_data_updated_through,
+calet_published_data_updated_through,
+cavic_published_data_updated_through,
+cakel_published_data_updated_through,
+canwe_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

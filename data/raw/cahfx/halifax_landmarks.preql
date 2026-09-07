@@ -1,0 +1,39 @@
+import ..landmark_common;
+
+root datasource halifax_landmarks_update_time (
+    data_updated_through: cahfx_landmark_data_updated_through
+)
+file `./halifax_landmarks_probe.py`;
+
+# Halifax's municipal heritage register, read live off the same ArcGIS
+# portal as the trees -- the runbook's first-preference landmark source, so
+# no Nominatim geocoding, no committed CSV and no staging object.
+root partial datasource raw_halifax_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    year_built: ?year_built,
+    year_designated: ?year_designated,
+    property_type: ?property_type,
+)
+grain (landmark_id)
+complete where city = 'CAHFX'
+file `./halifax_landmarks.py`;
+
+partial datasource halifax_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?year_built,
+    ?year_designated,
+    ?property_type,
+    cahfx_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'CAHFX'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cahfx_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/cahfx_landmark_info_v{data_version}.parquet`
+freshness by cahfx_landmark_data_updated_through;

@@ -35,6 +35,12 @@ property <*>.cator_community_data_updated_through datetime; # when approved comm
 property <*>.camtl_community_data_updated_through datetime; # when approved community submissions for CAMTL are through
 property <*>.caque_community_data_updated_through datetime; # when approved community submissions for CAQUE are through
 property <*>.calon_community_data_updated_through datetime; # when approved community submissions for CALON are through
+property <*>.cahfx_community_data_updated_through datetime; # when approved community submissions for CAHFX are through
+property <*>.cakgn_community_data_updated_through datetime; # when approved community submissions for CAKGN are through
+property <*>.calet_community_data_updated_through datetime; # when approved community submissions for CALET are through
+property <*>.cavic_community_data_updated_through datetime; # when approved community submissions for CAVIC are through
+property <*>.cakel_community_data_updated_through datetime; # when approved community submissions for CAKEL are through
+property <*>.canwe_community_data_updated_through datetime; # when approved community submissions for CANWE are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

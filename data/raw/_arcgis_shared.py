@@ -302,6 +302,78 @@ def iter_attributes(layer: FeatureLayer, **kwargs) -> Iterator[list[dict]]:
 
 
 # ---------------------------------------------------------------------------
+# Geometry
+# ---------------------------------------------------------------------------
+
+def _ring_is_clockwise(ring) -> bool:
+    """Shoelace sign for an Esri ring.
+
+    Esri's polygon convention is orientation-based rather than nested: every
+    exterior ring is clockwise and every hole counter-clockwise, all of them in
+    one flat `rings` list with no grouping.  This is what recovers the
+    grouping, and getting it wrong turns a courtyard into a second building.
+    """
+    area = 0.0
+    for (x1, y1), (x2, y2) in zip(ring, ring[1:]):
+        area += (x2 - x1) * (y2 + y1)
+    return area > 0
+
+
+def _ring_to_wkt(ring) -> str | None:
+    """One Esri ring as a WKT coordinate list, closed."""
+    points = [p for p in ring if p and len(p) >= 2 and None not in p[:2]]
+    if len(points) < 3:
+        return None
+    if points[0][:2] != points[-1][:2]:
+        points.append(points[0])
+    return "(" + ", ".join(f"{p[0]} {p[1]}" for p in points) + ")"
+
+
+def esri_geometry_to_wkt(geometry: dict | None) -> str | None:
+    """An Esri `f=json` geometry as WKT, or None when there is nothing usable.
+
+    Handles the two shapes this repo's sources publish: a point
+    (`{"x": ..., "y": ...}`) and a polygon (`{"rings": [...]}`).  Landmark
+    registries are split about evenly between them -- Halifax, Kingston,
+    Victoria and Kelowna publish the designated *parcel* as a polygon while
+    Lethbridge and New Westminster publish a point -- and `landmark_common`
+    takes either, deriving the centroid it needs with `geo_centroid`.
+
+    Rings are grouped into polygons by orientation, so a designated property
+    with a courtyard renders as one polygon with a hole rather than two
+    buildings.  A leading hole with no exterior ring before it (which is
+    malformed, but portals publish it) starts its own polygon rather than
+    being dropped.
+    """
+    if not geometry:
+        return None
+
+    if geometry.get("x") is not None and geometry.get("y") is not None:
+        return f"POINT({geometry['x']} {geometry['y']})"
+
+    rings = geometry.get("rings")
+    if not rings:
+        return None
+
+    polygons: list[list[str]] = []
+    for ring in rings:
+        rendered = _ring_to_wkt(ring)
+        if rendered is None:
+            continue
+        if _ring_is_clockwise(ring) or not polygons:
+            polygons.append([rendered])
+        else:
+            polygons[-1].append(rendered)
+
+    if not polygons:
+        return None
+    parts = ["(" + ", ".join(rings_) + ")" for rings_ in polygons]
+    if len(parts) == 1:
+        return f"POLYGON{parts[0]}"
+    return f"MULTIPOLYGON({', '.join(parts)})"
+
+
+# ---------------------------------------------------------------------------
 # Hub catalogues
 # ---------------------------------------------------------------------------
 
@@ -353,6 +425,75 @@ def find_tree_layers(hub_host: str, *, timeout: int = 120) -> list[dict]:
             {"title": title, "modified": entry.get("modified"), "rest_url": rest}
         )
     return sorted(hits, key=lambda h: h.get("modified") or "", reverse=True)
+
+
+def hub_last_modified(
+    hub_host: str, rest_url: str, *, timeout: int = 120
+) -> datetime:
+    """The Hub catalogue's `modified` stamp for the dataset served at *rest_url*.
+
+    The **third** freshness watermark, and the last resort of the three.
+    `layer_last_edit` reads the layer's own `editingInfo` and `field_max` reads
+    an edit-date column; a layer that publishes neither has nothing inside it
+    to read, and four of the cities wired on this module are in exactly that
+    position — Kingston, Lethbridge, Victoria and Kelowna all serve their tree
+    inventory from an on-prem ArcGIS Server whose layer resource carries no
+    `editingInfo` and whose schema carries no edit date.
+
+    What their Hub site does publish is a per-dataset `modified` in the same
+    DCAT-US feed `find_tree_layers` reads, and it moves at a believable
+    cadence (Lethbridge 2025-09-15, Kingston 2026-06-08, Kelowna 2025-12-03).
+
+    **Know what it is before you reach for it.**  This is the *catalogue's*
+    stamp, not the data's, so it has both failure modes: it can move when only
+    a description changed, and it can fail to move when the publisher
+    overwrites the service in place.  The second is the dangerous one — it is
+    how Toronto's CKAN resource stamp would have frozen that city on its first
+    build (see `_ckan_shared.data_last_modified`).  So prefer a real edit
+    stamp wherever one exists, and where a city has both, take the **maximum**
+    of the two rather than picking one: that is the rule `data_last_modified`
+    arrived at, and it is the only one that cannot freeze a city.
+
+    Matching is on the REST endpoint rather than the dataset title, because a
+    title is prose someone re-words and the endpoint is the thing the ingest
+    already hardcodes.  Raises `RuntimeError` when the feed names no such
+    dataset — that is our wiring being wrong, not the portal being down, and
+    `emit_freshness` must not turn it into "no new data".
+    """
+    wanted = _normalise_rest_url(rest_url)
+    for entry in hub_datasets(hub_host, timeout=timeout):
+        for dist in entry.get("distribution") or []:
+            if _normalise_rest_url(dist.get("accessURL") or "") != wanted:
+                continue
+            stamp = _parse_dcat_datetime(entry.get("modified"))
+            if stamp is None:
+                raise RuntimeError(
+                    f"{hub_host} lists {rest_url} with an unreadable "
+                    f"modified stamp: {entry.get('modified')!r}"
+                )
+            return stamp
+    raise RuntimeError(f"{hub_host} publishes no dataset served at {rest_url}")
+
+
+def _normalise_rest_url(url: str) -> str:
+    """A REST endpoint reduced to what identifies it, for comparison."""
+    return url.split("?")[0].rstrip("/").casefold()
+
+
+def _parse_dcat_datetime(value) -> datetime | None:
+    """A DCAT `modified` string to an aware UTC datetime, or None.
+
+    The feed writes RFC 3339 with a `Z` (`2025-09-15T23:36:08.000Z`), which
+    `fromisoformat` did not accept before 3.11 and which some Hub sites emit
+    as a bare date instead.
+    """
+    if not value:
+        return None
+    try:
+        stamp = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
 
 
 if __name__ == "__main__":

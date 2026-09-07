@@ -1,0 +1,136 @@
+import ..tree_common;
+import ..community_tree_info;
+import ..tree_dedup;
+
+auto canwe_published_data_updated_through <- greatest(canwe_data_updated_through, canwe_community_data_updated_through, canwe_osm_data_updated_through);
+
+key canwe_source enum<string>['NEWWESTMINSTER_OPENDATA', 'COMMUNITY_CANWE', 'OSM_CANWE']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto canwe_source_label <- concat(canwe_source, '');
+merge canwe_source_label into source_label;
+
+root datasource new_westminster_update_time (
+    data_updated_through: canwe_data_updated_through
+)
+file `./new_westminster_update_time.py`;
+
+# Only this city's column, so an approval elsewhere does not mark CANWE's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource canwe_community_update_time (
+    canwe_community_data_updated_through: canwe_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# GCS publication time of the staged OSM parquet; it only moves when an
+# extraction is re-run and uploaded. Not a local mtime -- git does not preserve
+# it, so a committed staging file makes every fresh clone look like new data.
+root datasource canwe_osm_update_time (
+    data_updated_through: canwe_osm_data_updated_through
+)
+file `./new_westminster_osm_probe.py`;
+
+root partial datasource new_westminster_raw_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: canwe_source,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
+)
+grain (tree_id)
+complete where city = 'CANWE' and canwe_source = 'NEWWESTMINSTER_OPENDATA'
+file `./new_westminster_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to CANWE and makes
+# it a disjoint partition, and the `where` clause is what actually filters --
+# `complete where` asserts, it does not promise a predicate.
+root partial datasource canwe_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: canwe_source,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
+)
+grain (tree_id)
+complete where city = 'CANWE' and canwe_source = 'COMMUNITY_CANWE'
+file `../community_tree_info.py`
+where city = 'CANWE';
+
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
+# -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
+# by construction; the overlap is resolved by ../tree_dedup.preql.
+root partial datasource canwe_osm_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: canwe_source,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
+)
+grain (tree_id)
+complete where city = 'CANWE' and canwe_source = 'OSM_CANWE'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/canwe_osm_staging.parquet`;
+
+
+# --- Cross-source dedup and attribute merge --------------------------------
+#
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# The only per-city line is the dbh merge, because Boston imputes it.
+merge merged_dbh into diameter_at_breast_height;
+
+
+partial datasource new_westminster_tree_info (
+    tree_id,
+    city,
+    data_source: canwe_source,
+    species,
+    ?tree_name,
+    ?plant_date,
+    ?diameter_at_breast_height,
+    ?latitude,
+    ?longitude,
+    ?submission_photo_url,
+    ?cultivar,
+    # Redundant on its face -- the prune below means it always equals tree_id --
+    # and dropped from this template for exactly that reason, which is how the
+    # first three cities scaffolded from it came out with fourteen columns
+    # where every other city has fifteen.  The rollup reads them all as one
+    # DuckDB multi-file scan; it projects only the shared columns, so a ragged
+    # set does not fail it, but `select *` over that scan silently drops the
+    # column when a short file is read first and raises when a long one is.
+    # It is also the column any check of the prune reads.  Keep it.
+    # `test_every_city_publishes_cluster_id` pins it and spells out the
+    # measured behaviour.
+    cluster_id,
+    merged_sources,
+    ?merged_tree_ids,
+    canwe_published_data_updated_through,
+)
+grain (tree_id)
+complete where city = 'CANWE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/canwe_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/canwe_tree_info_v{data_version}.parquet`
+where tree_id = cluster_id
+freshness by canwe_published_data_updated_through;

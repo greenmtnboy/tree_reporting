@@ -24,6 +24,12 @@ import cator.toronto_landmarks;
 import camtl.montreal_landmarks;
 import caque.quebec_landmarks;
 import calon.longueuil_landmarks;
+import cahfx.halifax_landmarks;
+import cakgn.kingston_landmarks;
+import calet.lethbridge_landmarks;
+import cavic.victoria_landmarks;
+import cakel.kelowna_landmarks;
+import canwe.new_westminster_landmarks;
 
 
 # --- Merged union datasource ---

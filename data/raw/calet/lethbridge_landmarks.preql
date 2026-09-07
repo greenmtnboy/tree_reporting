@@ -1,0 +1,38 @@
+import ..landmark_common;
+
+root datasource lethbridge_landmarks_update_time (
+    data_updated_through: calet_landmark_data_updated_through
+)
+file `./lethbridge_landmarks_probe.py`;
+
+# Lethbridge's Provincial and Municipal Historic Resources, read live off the
+# same ArcGIS portal as the trees -- an official designation registry.
+root partial datasource raw_lethbridge_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    address: ?address,
+    year_designated: ?year_designated,
+    property_type: ?property_type,
+)
+grain (landmark_id)
+complete where city = 'CALET'
+file `./lethbridge_landmarks.py`;
+
+partial datasource lethbridge_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?address,
+    ?year_designated,
+    ?property_type,
+    calet_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'CALET'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/calet_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/calet_landmark_info_v{data_version}.parquet`
+freshness by calet_landmark_data_updated_through;

@@ -879,6 +879,144 @@ schedule = "0 30 3 * * WED"
 timeout_seconds = 1800
 memory_mb = 1024
 
+[[cloud.job]]
+key = "city-cahfx"
+name = "urban-tree-city-cahfx"
+entrypoint = "raw/cahfx/halifax_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city CAHFX`.
+schedule = "0 20 18 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-cahfx"
+name = "urban-tree-osm-cahfx"
+entrypoint = "osm_staging/cahfx_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 30 3 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "city-cakgn"
+name = "urban-tree-city-cakgn"
+entrypoint = "raw/cakgn/kingston_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city CAKGN`.
+schedule = "0 40 18 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-cakgn"
+name = "urban-tree-osm-cakgn"
+entrypoint = "osm_staging/cakgn_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 30 3 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "city-calet"
+name = "urban-tree-city-calet"
+entrypoint = "raw/calet/lethbridge_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city CALET`.
+schedule = "0 0 19 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-calet"
+name = "urban-tree-osm-calet"
+entrypoint = "osm_staging/calet_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 30 3 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "city-cavic"
+name = "urban-tree-city-cavic"
+entrypoint = "raw/cavic/victoria_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city CAVIC`.
+schedule = "0 20 19 * * TUE,FRI"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-cavic"
+name = "urban-tree-osm-cavic"
+entrypoint = "osm_staging/cavic_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 0 4 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "city-cakel"
+name = "urban-tree-city-cakel"
+entrypoint = "raw/cakel/kelowna_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city CAKEL`.
+schedule = "0 40 19 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-cakel"
+name = "urban-tree-osm-cakel"
+entrypoint = "osm_staging/cakel_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 0 4 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "city-canwe"
+name = "urban-tree-city-canwe"
+entrypoint = "raw/canwe/new_westminster_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city CANWE`.
+schedule = "0 0 20 * * THU,SUN"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-canwe"
+name = "urban-tree-osm-canwe"
+entrypoint = "osm_staging/canwe_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 0 4 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+
 # ===========================================================================
 # Ad-hoc landmark staging publish — one job per curated-CSV city
 # ===========================================================================

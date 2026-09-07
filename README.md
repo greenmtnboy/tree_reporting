@@ -25,6 +25,12 @@ Currently has data from the following cities:
 - [Montreal, QC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAMTL)
 - [Quebec City, QC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAQUE)
 - [Longueuil, QC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CALON)
+- [Halifax, NS, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAHFX)
+- [Kingston, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAKGN)
+- [Lethbridge, AB, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CALET)
+- [Victoria, BC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAVIC)
+- [Kelowna, BC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAKEL)
+- [New Westminster, BC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CANWE)
 - [London, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBLON)
 - [Amsterdam, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLAMS)
 - [Berlin, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEBER)
@@ -80,6 +86,12 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Montreal | Donnees Montreal - Arbres publics sur le territoire de la Ville (CC-BY 4.0) | https://donnees.montreal.ca/dataset/arbres |
 | Quebec City | Donnees Quebec - Ville de Quebec, Arbres repertories (CC-BY 4.0) | https://www.donneesquebec.ca/recherche/dataset/vque_arbrerepertorie |
 | Longueuil | Donnees Quebec - Ville de Longueuil, Arbres (CC-BY 4.0) | https://www.donneesquebec.ca/recherche/dataset/arbres |
+| Halifax | Halifax Regional Municipality Open Data - Public Trees | https://catalogue-hrm.opendata.arcgis.com/datasets/public-trees |
+| Kingston | City of Kingston Open Data - City Owned Trees | https://opendatakingston.cityofkingston.ca/explore/dataset/city-owned-trees/ |
+| Lethbridge | City of Lethbridge Open Data - Trees | https://opendata.lethbridge.ca/datasets/trees |
+| Victoria | City of Victoria Open Data - Tree Species (Parks trees database) | https://opendata.victoria.ca/datasets/tree-species-parks-trees-database |
+| Kelowna | City of Kelowna Open Data - Tree Inventory | https://opendata.kelowna.ca/datasets/tree-inventory |
+| New Westminster | City of New Westminster Open Data - Tree Inventory (Active Trees) | https://opendata.newwestcity.ca/datasets/tree-inventory-active-trees |
 | London | London Datastore - Public Realm Trees | https://data.london.gov.uk/dataset/2r45m |
 | Amsterdam | Amsterdam Data Portal - Bomen (Stamgegevens) | https://api.data.amsterdam.nl/v1/bomen/stamgegevens/ |
 | Berlin | Berlin Geodateninfrastruktur - Baumbestand (WFS) | https://gdi.berlin.de/services/wfs/baumbestand |
@@ -114,6 +126,12 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Montreal | Repertoire du patrimoine culturel du Quebec - immeubles classes et cites (CC-BY 4.0) | https://www.donneesquebec.ca/recherche/dataset/immeubles-patrimoniaux-classes-par-le-ministre-de-la-culture-et-des-communications |
 | Quebec City | Repertoire du patrimoine culturel du Quebec - immeubles classes et cites (CC-BY 4.0) | https://www.donneesquebec.ca/recherche/dataset/immeubles-patrimoniaux-classes-par-le-ministre-de-la-culture-et-des-communications |
 | Longueuil | Donnees Quebec - Ville de Longueuil, Parcs (CC-BY 4.0) | https://www.donneesquebec.ca/recherche/dataset/parcs-longueuil |
+| Halifax | Halifax Regional Municipality Open Data - Heritage Properties | https://catalogue-hrm.opendata.arcgis.com/datasets/heritage-properties |
+| Kingston | City of Kingston Open Data - Designated Heritage Site | https://opendatakingston.cityofkingston.ca/explore/dataset/designated-heritage-site/ |
+| Lethbridge | City of Lethbridge Open Data - Historic Places | https://opendata.lethbridge.ca/datasets/historic-places |
+| Victoria | City of Victoria Open Data - Prominent Heritage Sites (OCP) | https://opendata.victoria.ca/datasets/prominent-heritage-sites-ocp |
+| Kelowna | City of Kelowna Open Data - Heritage Registry | https://opendata.kelowna.ca/datasets/heritage-registry |
+| New Westminster | City of New Westminster Open Data - Heritage Register | https://opendata.newwestcity.ca/datasets/heritage-register |
 | London | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |
 | Amsterdam | Amsterdam Data Portal - Monumenten | https://api.data.amsterdam.nl/v1/monumenten/monumenten/ |
 | Berlin | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |

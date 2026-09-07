@@ -23,5 +23,11 @@
   "CATOR": { "name": "Toronto", "center": [-79.3832, 43.6532] },
   "CAMTL": { "name": "Montreal", "center": [-73.5673, 45.5017] },
   "CAQUE": { "name": "Quebec City", "center": [-71.208, 46.8139] },
-  "CALON": { "name": "Longueuil", "center": [-73.5185, 45.5312] }
+  "CALON": { "name": "Longueuil", "center": [-73.5185, 45.5312] },
+  "CAHFX": { "name": "Halifax", "center": [-63.5752, 44.6488] },
+  "CAKGN": { "name": "Kingston", "center": [-76.486, 44.2312] },
+  "CALET": { "name": "Lethbridge", "center": [-112.8451, 49.6956] },
+  "CAVIC": { "name": "Victoria", "center": [-123.3656, 48.4284] },
+  "CAKEL": { "name": "Kelowna", "center": [-119.496, 49.888] },
+  "CANWE": { "name": "New Westminster", "center": [-122.911, 49.2057] }
 }
