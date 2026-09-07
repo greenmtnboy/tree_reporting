@@ -45,7 +45,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, iter_features
+from _arcgis_shared import FeatureLayer, esri_point, iter_features
 from _ingest_shared import (
     cm_to_inches,
     emit,
@@ -172,8 +172,9 @@ def transform(features: list[dict]) -> pa.Table:
         # inventory's way of saying "before we started counting".
         # parse_plant_date_year returns None for that rather than year zero.
         plant_date.append(parse_plant_date_year(rec.get("INSTYR")))
-        latitude.append(geom.get("y"))
-        longitude.append(geom.get("x"))
+        lat, lon = esri_point(geom)
+        latitude.append(lat)
+        longitude.append(lon)
         dbh.append(parse_dbh(rec.get("DBH")))
 
     return pa.table(

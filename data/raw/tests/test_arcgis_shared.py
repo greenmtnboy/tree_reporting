@@ -20,8 +20,11 @@ sys.path.insert(0, str(RAW_DIR))
 import _arcgis_shared  # noqa: E402
 from _arcgis_shared import (  # noqa: E402
     FeatureLayer,
+    coded_value_domain,
+    esri_geometry_to_wkt,
     esri_ms_to_date,
     esri_ms_to_datetime,
+    esri_point,
     feature_count,
     field_max,
     iter_attributes,
@@ -266,3 +269,85 @@ class TestPaging:
         portal(FakePortal(pages=[page(2, more=False)]))
         rows = [r for p in iter_attributes(LAYER) for r in p]
         assert rows == [{"OBJECTID": 0}, {"OBJECTID": 1}]
+
+
+# ---------------------------------------------------------------------------
+# Field domains
+# ---------------------------------------------------------------------------
+
+class TestCodedValueDomain:
+    """A layer's own data dictionary, and why an empty answer must not be one.
+
+    Ottawa's `SPECIES` column stores an inverted common name and its domain
+    holds the binomial for each -- so a layer that reads like "common name
+    only" is in fact fully identified, and reading the domain is the
+    difference between 304k identified trees and 304k `Unknown`.
+    """
+
+    def test_reads_the_code_to_name_map(self, portal):
+        portal(
+            FakePortal(
+                metadata={
+                    "fields": [
+                        {"name": "DBH", "type": "esriFieldTypeInteger"},
+                        {
+                            "name": "SPECIES",
+                            "type": "esriFieldTypeString",
+                            "domain": {
+                                "type": "codedValue",
+                                "codedValues": [
+                                    {"code": "Maple Sugar", "name": "Acer saccharum"},
+                                    {"code": "Oak Red", "name": "Quercus rubra"},
+                                ],
+                            },
+                        },
+                    ]
+                }
+            )
+        )
+        assert coded_value_domain(LAYER, "SPECIES") == {
+            "Maple Sugar": "Acer saccharum",
+            "Oak Red": "Quercus rubra",
+        }
+
+    def test_a_field_with_no_domain_raises(self, portal):
+        """Degrading to `{}` would publish every tree as Unknown and say nothing."""
+        portal(FakePortal(metadata={"fields": [{"name": "SPECIES", "type": "x"}]}))
+        with pytest.raises(RuntimeError, match="no coded-value domain"):
+            coded_value_domain(LAYER, "SPECIES")
+
+    def test_a_missing_field_raises(self, portal):
+        portal(FakePortal(metadata={"fields": [{"name": "DBH", "type": "x"}]}))
+        with pytest.raises(RuntimeError, match="no field named"):
+            coded_value_domain(LAYER, "SPECIES")
+
+
+# ---------------------------------------------------------------------------
+# Geometry
+# ---------------------------------------------------------------------------
+
+class TestEsriPoint:
+    """`"NaN"` is a *string*, and it is how two on-prem servers here say
+    "this feature has no location".  Read straight into a float column it
+    fails at `pa.array` with a message about type conversion."""
+
+    def test_a_normal_point(self):
+        assert esri_point({"x": -79.5, "y": 43.6}) == (43.6, -79.5)
+
+    @pytest.mark.parametrize(
+        "geometry",
+        [
+            None,
+            {},
+            {"x": "NaN", "y": "NaN"},
+            {"x": float("nan"), "y": float("nan")},
+            {"x": None, "y": 43.6},
+            {"x": -79.5},
+        ],
+    )
+    def test_nothing_usable_is_none_none(self, geometry):
+        assert esri_point(geometry) == (None, None)
+
+    def test_wkt_refuses_a_nan_point_rather_than_writing_one(self):
+        assert esri_geometry_to_wkt({"x": "NaN", "y": "NaN"}) is None
+        assert esri_geometry_to_wkt({"x": 1.0, "y": 2.0}) == "POINT(1.0 2.0)"

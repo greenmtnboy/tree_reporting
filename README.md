@@ -31,6 +31,11 @@ Currently has data from the following cities:
 - [Victoria, BC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAVIC)
 - [Kelowna, BC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAKEL)
 - [New Westminster, BC, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CANWE)
+- [Mississauga, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAMIS)
+- [Ottawa, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAOTT)
+- [Burlington, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CABUR)
+- [Ajax, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAAJX)
+- [Moncton, NB, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAMON)
 - [London, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBLON)
 - [Amsterdam, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLAMS)
 - [Berlin, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEBER)
@@ -73,7 +78,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Boston (Cambridge) | Cambridge Open Data - Trees | https://data.cambridgema.gov/ |
 | Boston (Brookline) | Brookline GIS - Tree Viewer | ArcGIS FeatureServer |
 | Boston (Arboretum) | Arnold Arboretum / Harvard GIS | https://gis.arboretum.harvard.edu/ |
-| Burlington | City of Burlington GIS - Tree Sites | https://maps.burlingtonvt.gov/ |
+| Burlington VT | City of Burlington GIS - Tree Sites | https://maps.burlingtonvt.gov/ |
 | Washington, DC | Open Data DC - Urban Forestry Street Trees | https://opendata.dc.gov/datasets/DCGIS::urban-forestry-street-trees |
 | Los Angeles | Los Angeles Open Data - Street Tree Inventory - 1990s | https://data.lacity.org/api/views/vt5t-mscf |
 | Tempe | City of Tempe - Tree Inventory | https://data.tempe.gov/datasets/tempegov::tree-inventory |
@@ -92,6 +97,11 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Victoria | City of Victoria Open Data - Tree Species (Parks trees database) | https://opendata.victoria.ca/datasets/tree-species-parks-trees-database |
 | Kelowna | City of Kelowna Open Data - Tree Inventory | https://opendata.kelowna.ca/datasets/tree-inventory |
 | New Westminster | City of New Westminster Open Data - Tree Inventory (Active Trees) | https://opendata.newwestcity.ca/datasets/tree-inventory-active-trees |
+| Mississauga | City of Mississauga Open Data - City Owned Tree Inventory | https://data.mississauga.ca/datasets/city-owned-tree-inventory |
+| Ottawa | City of Ottawa Open Data - Tree Inventory | https://open.ottawa.ca/datasets/tree-inventory |
+| Burlington ON | City of Burlington Open Data - City Owned Trees | https://navburl-burlington.opendata.arcgis.com/datasets/city-owned-trees |
+| Ajax | Town of Ajax Open Data - Town Trees | https://opendata.ajax.ca/datasets/town-trees |
+| Moncton | City of Moncton Open Data - Trees | https://open.moncton.ca/datasets/trees |
 | London | London Datastore - Public Realm Trees | https://data.london.gov.uk/dataset/2r45m |
 | Amsterdam | Amsterdam Data Portal - Bomen (Stamgegevens) | https://api.data.amsterdam.nl/v1/bomen/stamgegevens/ |
 | Berlin | Berlin Geodateninfrastruktur - Baumbestand (WFS) | https://gdi.berlin.de/services/wfs/baumbestand |
@@ -113,7 +123,7 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | San Francisco | SF Open Data - Landmarks | https://data.sfgov.org/Geographic-Locations-and-Boundaries/Landmarks/rzic-39gi |
 | New York City | NYC Open Data - Landmarks | https://data.cityofnewyork.us/Housing-Development/Individual-Landmark-Sites/buis-pvji |
 | Boston | Analyze Boston - Landmarks | https://data.boston.gov/dataset/92137315-e846-4c75-8c3d-2b7e93e38d03 |
-| Burlington | City of Burlington - State Register of Historic Places + Nominatim geocoding | https://www.burlingtonvt.gov/ |
+| Burlington VT | City of Burlington - State Register of Historic Places + Nominatim geocoding | https://www.burlingtonvt.gov/ |
 | Washington, DC | No landmark dataset in production yet | n/a |
 | Los Angeles | No landmark dataset in production yet | n/a |
 | Tempe | No landmark dataset in production yet | n/a |
@@ -132,6 +142,11 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Victoria | City of Victoria Open Data - Prominent Heritage Sites (OCP) | https://opendata.victoria.ca/datasets/prominent-heritage-sites-ocp |
 | Kelowna | City of Kelowna Open Data - Heritage Registry | https://opendata.kelowna.ca/datasets/heritage-registry |
 | New Westminster | City of New Westminster Open Data - Heritage Register | https://opendata.newwestcity.ca/datasets/heritage-register |
+| Mississauga | City of Mississauga Open Data - City Landmarks | https://data.mississauga.ca/datasets/city-landmarks |
+| Ottawa | City of Ottawa Open Data - Cultural Spaces Inventory (Heritage) | https://open.ottawa.ca/datasets/ottawa::cultural-spaces-inventory-heritage |
+| Burlington ON | City of Burlington Open Data - Heritage Properties | https://navburl-burlington.opendata.arcgis.com/datasets/heritage-properties |
+| Ajax | Town of Ajax Open Data - Heritage Inventory | https://opendata.ajax.ca/datasets/heritage-inventory |
+| Moncton | City of Moncton Open Data - Cultural Assets | https://open.moncton.ca/datasets/cultural-assets |
 | London | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |
 | Amsterdam | Amsterdam Data Portal - Monumenten | https://api.data.amsterdam.nl/v1/monumenten/monumenten/ |
 | Berlin | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |

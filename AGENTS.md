@@ -75,19 +75,38 @@ rollup file list, the frontend config, the attribution. Almost every one of
 those fails *silently* when it is skipped, which is why the sweep exists.
 See the quick path at the top of `EXTENDING.md`.
 
-Two shared modules carry what used to be copied per city, and a new city should
+Shared modules carry what used to be copied per city, and a new city should
 reach for them before writing anything:
 
 - **`_osm_shared.py`** — the Overpass extraction every city's `osm-{code}` job
   runs, so a city's OSM wiring is one ~28-line shim.
-- **`_arcgis_shared.py`** — layer paging, both freshness watermarks, Esri's
-  epoch-milliseconds, and a Hub catalogue search
-  (`uv run _arcgis_shared.py <hub-host>` lists a portal's tree layers). ArcGIS
-  is what most North American cities publish on. Two details in it are
+- **`_arcgis_shared.py`** — layer paging, three freshness watermarks, Esri's
+  epoch-milliseconds, field domains, geometry-to-WKT, and a Hub catalogue
+  search (`uv run _arcgis_shared.py <hub-host>` lists a portal's tree layers).
+  ArcGIS is what most North American cities publish on. Three details in it are
   correctness rather than convenience and were bugs in the copies it replaced:
   the page size comes from the layer's own `maxRecordCount` (asking for more is
-  silently capped, and a capped page reads as the end of the data), and paging
-  terminates on `exceededTransferLimit` rather than the short-page heuristic.
+  silently capped, and a capped page reads as the end of the data), paging
+  terminates on `exceededTransferLimit` rather than the short-page heuristic,
+  and `esri_point` refuses the *string* `"NaN"` that a server sends for a
+  feature with no geometry.
+- **`_socrata_shared.py`** and **`_ckan_shared.py`** — the same for the other
+  two platforms this repo reads more than twice.
+- **`_common_name_species.py`** — a curated common-name → accepted-binomial
+  table, for the portals that publish an English name where the binomial should
+  be. Not a platform module: what those cities shared was a question, not an
+  API. Read its docstring before reaching for the enrichment table's inverse
+  instead — that was tried, measured, and does not work, because the enrichment
+  table carries the misspelled binomials the cities themselves published.
+
+**Read a field's domain before deciding what a column holds.**
+`coded_value_domain(layer, field)` has now answered three questions the column
+names could not: Halifax's `DBH` is a size class whose bands the layer
+publishes, Ajax's species symbols are named in English there, and Ottawa's
+`SPECIES` — which stores `Maple Sugar`, `Oak Red` and reads exactly like a
+common-name-only column — maps all 174 of its codes to the binomial. A layer
+that looks like it does not identify its trees may be keeping the
+identification in `fields[].domain`.
 
 The judgement steps are deliberately left manual: the field mapping, the
 freshness probe, the landmark source, and the dedup cell size — which is
@@ -250,11 +269,20 @@ regression is suspected, not the city-coverage one.
 The wide run is still 34 queries for the all-cities view plus 39 per city, and
 it still grows by 39 with each new one: `ALL_CITIES` in
 `dashboardQueryCatalog.ts` is `Object.keys(CITY_CONFIG)`, so adding a city to
-`cityConfig.json` enrols it. Its budget is sized for that —
-`COMPILE_TIMEOUT_MS` and `hookTimeout` are 25 minutes and the job allows 30,
-raised from 15/20 when 21 cities overran the old one at batch 22 of 25 and
-reported it as "25 tests skipped" (a hook that times out never registers its
-tests, so a budget overrun does not look like one).
+`cityConfig.json` enrols it. **In wall-clock that is about 66 seconds per
+city**, and it is the number to do arithmetic with before adding several.
+
+Its budget is sized for that — `COMPILE_TIMEOUT_MS` and `hookTimeout` are 55
+minutes and the job allows 60 — and it has now been raised twice for the same
+reason, which is what a budget sized to today's fleet does. 21 cities overran
+the original 15/20 at batch 22 of 25 and reported it as "25 tests skipped" (a
+hook that times out never registers its tests, so a budget overrun does not
+look like one). 31 cities then overran the 25/30 that replaced it, at batch 22
+of 29, with every batch compiling healthily in 63-73s and nothing wrong except
+that there were more of them than would fit — **and that failure lands on
+`main`, not on the pull request**, because a PR sweeps a handful of cities and
+a push to main sweeps `all`. A city-addition PR can be green and still take
+main's sweep red on merge; check the arithmetic, not just the PR.
 
 **A city whose parquet is not on GCS yet is skipped, not failed.** The
 execution harness takes each table's schema from the real Parquet, so a
@@ -320,6 +348,18 @@ four-way runs took before failing.
 Raise it only if the resolver stops being a single shared instance. If batches
 start breaching 120s serially, the model has grown again and the lever is batch
 *size*, not concurrency.
+
+**Watch the headroom, because it is a city or two wide.** The five cities added
+in September 2026 took `ALL_MODEL_SOURCES` from 72 preql sources to 82, and the
+default sweep now runs eight batches at **79-97s each** against a warm resolver
+-- passing, 584s total, and within 20% of the 120s ceiling on the worst batch.
+A single trivial `/generate_query` measured 1.8-2.8s at 72 sources and
+2.1-3.4s at 82 on the same afternoon, so the cost is currently tracking the
+source count rather than compounding. That is the number to re-measure before
+the next city addition: the model grows by two sources per city (a tree model
+and a landmark model), and the batch that breaks the ceiling will do it the way
+the Canadian ArcGIS batch did -- as "34 dashboard queries failed" with every
+entry reading `HTTP 504`, which looks like the service being unwell and is not.
 
 **A slow run is not evidence of a query regression.** The service runs on
 high-performance Fly instances, but it is still **one shared instance and it

@@ -176,27 +176,24 @@ shared species hygiene gained the non-taxa these six turned up. Landmarks are
 official designation registries in all six cases, read live: no geocoding, no
 committed CSV, no staging object.
 
-**Next (a fourth PR): the common-name cities.** This is now the biggest
-remaining prize and a shared-module job rather than six city jobs. Mississauga
-(499,331), Ottawa (304,374), Burlington ON (80,287), Ajax (53,848) and Moncton
-(12,721) all publish a common name or a species code where the binomial should
-be -- 951,561 trees, more than everything wired in the three Canadian PRs so
-far. That is five cities past the threshold `EXTENDING.md` sets for writing a
-shared module, and the module has an obvious seed: the enrichment table is
-already a scientific-name -> common-names map, so its inverse resolves most of
-these automatically. Two rules keep it honest -- map only where the reverse
-index is *unambiguous* (exactly one accepted species claims the name) and fall
-back to `Unknown` rather than guessing, and hardcode the result the way
-`SPECIES_SYNONYMS` is hardcoded, so a city job never depends on a GCS object
-being reachable. Ottawa's 169 and Mississauga's 330 distinct values are the
-whole problem; they overlap heavily and are the standard North American street
-tree palette.
+**Done (PR 4): the common-name cities.** `_common_name_species.py`, with
+Mississauga, Ottawa, Burlington ON, Ajax and Moncton wired onto it. The five
+layers hold 951,561 rows and publish **712,693** trees; the gap is removed
+trees and empty planting sites the sources keep in the same table, and
+Mississauga alone accounts for 228,353 of it. `_arcgis_shared` gained `coded_value_domain`
+and a NaN-safe `esri_point`. Landmarks are official registries or municipal
+cultural inventories in all five cases, read live. What the plan got wrong is
+recorded in "What PR 4 measured that the plan got wrong" below -- the short
+version is that Ottawa was never a common-name city at all.
 
-**Then the rest of the ArcGIS set:** Peterborough (29,455) and Fredericton
+**Next, the rest of the ArcGIS set:** Peterborough (29,455) and Fredericton
 (21,186), which are clean except that neither publishes a diameter at all;
 Markham (16,596) once someone decides whether a York Region layer filtered to
 one municipality is the right thing to publish; and Surrey (115,454) if its
-layer URLs can be found without the Hub feed.
+layer URLs can be found without the Hub feed. `_common_name_species` is there
+for any of them that needs it, and its table is the standard North American
+street-tree palette, so a new Ontario city should resolve most of its values
+without a single new entry.
 
 ### What PR 2 measured that the handoff got wrong
 
@@ -313,6 +310,101 @@ that did not survive contact and the next batch will be planned the same way.
   lands with this PR and takes effect on Vancouver's next rebuild. When
   `curl`ing the RESOLVE service for a new city, check that it returned a
   feature at all.
+
+## What PR 4 measured that the plan got wrong
+
+The plan above called these "the common-name cities" and expected one shared
+module plus five thin shims. The module was right. Almost everything else in
+that paragraph was not.
+
+- **Ottawa is not a common-name city.** `SPECIES` stores `Maple Sugar`,
+  `Lilac Japanese`, `Spruce Blue/Colorado`, which is what the table above
+  recorded -- and it is a *coded-value* field whose domain maps all 174 of
+  those codes to the binomial (`Acer saccharum`, `Syringa reticulata`,
+  `Picea pungens`). Ottawa's foresters published the identification; it lives
+  in `fields[].domain` rather than in a column. 304,374 trees were nearly
+  wired through a common-name index that would have thrown that away.
+  **Read a field's domain before concluding a portal does not identify its
+  trees** -- the third time in this file that a layer's own `?f=json` answered
+  a question the column names could not, after Halifax's DBH size classes and
+  Ajax's species symbols. `_arcgis_shared.coded_value_domain` now does it in
+  one call.
+
+- **Inverting the enrichment table does not work, and the reason is our own
+  data.** The plan's "obvious seed" was that the enrichment table is already a
+  scientific-name to common-names map. Measured: of 11,070 distinct common
+  names on species-rank rows, 2,328 are claimed by more than one species, and
+  the ambiguous ones are exactly the trees these cities are made of. "Norway
+  spruce" is claimed by `Picea abies`, `Picea excelsa`, `Pinus abies` and
+  `Picea x mariorika`; "tulip tree" by `Liriodendron tulipifera` and three
+  misspellings of it. The competitors are misspelled binomials that some city
+  published and `sanitize_species` deliberately keeps, so no tie-break inside
+  the index removes them -- an automatic index resolved about 60% of
+  Mississauga's rows and would have silently mislabelled some of the rest. The
+  reverse index was still worth building as a drafting aid; what it could not
+  be is the authority. `COMMON_NAME_SPECIES` is curated, 398 entries, and every key
+  is a value one of these portals actually publishes.
+
+- **Two thirds of Mississauga's layer is not a living tree.** 499,331 rows,
+  271,056 published. `SERVSTAT = 'EXPIRED'` is 152,289 of them and looks
+  arguable -- they carry a species and a 14 cm median diameter, and "expired"
+  could mean an expired warranty. It does not: EXPIRED's four commonest
+  species are GREEN ASH, ASH SPP., NORWAY MAPLE and WHITE ASH (29% of the
+  bucket is ash), and STUMP and DEAD appear in it and essentially nowhere
+  else, while the maintained bucket has no ash in its top eleven. That is the
+  emerald ash borer. Only 2.1% of EXPIRED rows share a coordinate with a
+  living tree, so they are not replants either. **A status column worth
+  filtering on can be decided by the species mix behind it.**
+
+- **A coded value does not have to match the case of its domain entry**, and a
+  code that fails to resolve publishes as `Unknown` without reporting anything.
+  Ottawa's layer stores `Staghorn Sumac` where its domain lists `Staghorn
+  sumac`, which is 265 trees; folding both sides is one line and there is no
+  reason not to. Two of its domain *values* are also rejected outright by
+  `sanitize_species` -- `Malus apple species` and `Malus crabapple species`,
+  which are 11,638 trees between them and mean `Malus` -- and two more are
+  misspelled at the source (`Sorubus Intermedia` for the Swedish whitebeam,
+  `Crataegus crusgalli` for the cockspur hawthorn). Reading a domain is one
+  request; reading what is *in* it is the part that takes a minute.
+
+- **A column named like an id is still not one, twice more.** Moncton's
+  `UNITID` is aliased "Tree ID" and 484 rows share one across 64 values;
+  Ottawa's `TREEID` is a per-tree GUID that is unique on 304,373 of 304,374
+  rows. One duplicate would have failed the whole city's refresh at
+  `enforce_tree_schema`, which is the check working. Both cities are keyed on
+  `GLOBALID`.
+
+- **An ArcGIS server returns a missing geometry as the *string* "NaN".**
+  Ajax and Burlington ON both publish rows like that, and pyarrow refuses them
+  with `Could not convert 'NaN' with type str`, which reads as a type bug
+  rather than "this feature has no location". `_arcgis_shared.esri_point` is
+  the shared coercion, and Halifax was reading the geometry dict directly and
+  had the same latent failure waiting.
+
+- **The catalogue is where the licence lives.** Ottawa's Part IV heritage
+  designation register (444 named properties) is served publicly from the same
+  map server as the trees and is *not* listed in open.ottawa.ca's DCAT feed,
+  while the Heritage Conservation Districts layer from the same service is,
+  under Ottawa's Open Data Licence 2.0. An unstated licence is blocker #4 from
+  the CIF verdict at the top of this file, so the landmarks come from the
+  catalogued "Cultural Spaces Inventory - Heritage" instead -- 205 named
+  places rather than 444, a third of which had no name anyway.
+
+- **Two cities can be called Burlington.** `USBTV` is Vermont and `CABUR` is
+  Ontario, both publish a tree inventory on ArcGIS, and the city picker and the
+  attribution catalogue both key on the display name. Both now carry their
+  province the way "Washington, DC" always has.
+
+- **Moncton's species codes had to be decoded, and Ottawa paid for it.**
+  `BOTNAME` is `MapNor`, `LinLit`, `SprWhi` -- three letters of each word of
+  the inverted common name -- with no domain and no other species column, so
+  Halifax's rule (drop a shorthand code rather than guess a taxon) would have
+  left the whole city unidentified. 65 of the 147 codes expand mechanically
+  against Ottawa's published domain by a unique-prefix rule, covering 9,588
+  rows; the rest were read by hand, and five that could not be read
+  confidently are left as `Unknown`. Both halves are in
+  `camon/moncton_tree_info.py`, separated, so a reviewer can see which is
+  which.
 
 ## Handoff: `_ckan_shared` + the CKAN cities
 

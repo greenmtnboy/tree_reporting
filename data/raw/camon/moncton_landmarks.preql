@@ -1,0 +1,37 @@
+import ..landmark_common;
+
+root datasource moncton_landmarks_update_time (
+    data_updated_through: camon_landmark_data_updated_through
+)
+file `./moncton_landmarks_probe.py`;
+
+# Moncton's cultural asset inventory, filtered to the categories that name a
+# place -- see the ingest for why the designated-heritage parcel layer, which
+# carries no name, is not used.
+root partial datasource raw_moncton_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    address: ?address,
+    property_type: ?property_type,
+)
+grain (landmark_id)
+complete where city = 'CAMON'
+file `./moncton_landmarks.py`;
+
+partial datasource moncton_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?address,
+    ?property_type,
+    camon_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'CAMON'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/camon_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/camon_landmark_info_v{data_version}.parquet`
+freshness by camon_landmark_data_updated_through;

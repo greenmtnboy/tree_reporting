@@ -10,6 +10,11 @@
  * gets round to naming it here.
  */
 export const DATA_SOURCE_LABELS: Record<string, string> = {
+  MONCTON_OPENDATA: 'Moncton Open Data',
+  AJAX_OPENDATA: 'Ajax Open Data',
+  BURLINGTON_ON_OPENDATA: 'Burlington, ON Open Data',
+  OTTAWA_OPENDATA: 'Ottawa Open Data',
+  MISSISSAUGA_OPENDATA: 'Mississauga Open Data',
   NEWWESTMINSTER_OPENDATA: 'New Westminster Open Data',
   KELOWNA_OPENDATA: 'Kelowna Open Data',
   VICTORIA_OPENDATA: 'Victoria Open Data',
@@ -30,7 +35,7 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   CAMBRIDGE: 'City of Cambridge',
   BROOKLINE: 'Town of Brookline',
   PARIS_OPENDATA: 'Paris Open Data',
-  BURLINGTON_OPENDATA: 'City of Burlington',
+  BURLINGTON_OPENDATA: 'City of Burlington, VT',
   VANCOUVER_OPENDATA: 'Vancouver Open Data',
   BERLIN_OPENDATA: 'Berlin GDI',
   AMSTERDAM_OPENDATA: 'City of Amsterdam',

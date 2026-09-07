@@ -30,6 +30,11 @@ import calet.lethbridge_landmarks;
 import cavic.victoria_landmarks;
 import cakel.kelowna_landmarks;
 import canwe.new_westminster_landmarks;
+import camis.mississauga_landmarks;
+import caott.ottawa_landmarks;
+import cabur.burlington_on_landmarks;
+import caajx.ajax_landmarks;
+import camon.moncton_landmarks;
 
 
 # --- Merged union datasource ---

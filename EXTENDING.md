@@ -307,7 +307,9 @@ never use: it always advances, so every firing re-extracts and **the cron is the
 extraction cadence**. An unreachable Overpass degrades to the epoch, so the
 staging parquet compares fresh and the firing no-ops instead of failing.
 
-Schedules are staggered, never concurrent, at most four cities a day: Overpass
+Schedules are staggered and never concurrent -- thirty minutes apart, five or
+six cities a day across the week, which is what thirty-six cities and seven
+days comes to. The invariant is the spacing, not the daily count: Overpass
 allows two slots per client IP and answers an over-budget request with HTTP 200
 carrying an error remark, so a collision does not look like a failure — it looks
 like a city with no trees in OSM. `test_osm_extract_jobs_never_fire_together`
@@ -788,6 +790,22 @@ source or `boston_tree_info.py` for the general shape.
 > short-page heuristic, which cannot tell a full last page from a truncated one.
 > `orderByFields` is likewise required, not tidy: offset paging over an
 > unordered result may repeat or skip rows between requests.
+>
+> **Read the field domains before you decide what a column holds.**
+> `coded_value_domain(layer, field)` returns a coded-value field's own
+> dictionary, and three cities' worth of judgement has come out of it:
+> Halifax's `DBH` is a nine-band size class whose boundaries the layer
+> publishes, Ajax's `SPCODE` symbols are named in English there, and Ottawa's
+> `SPECIES` -- which stores `Maple Sugar`, `Oak Red`, and reads for all the
+> world like a common-name-only column -- maps every one of its 174 codes to
+> the binomial. A layer that looks like it does not identify its trees may
+> simply be keeping the identification in `fields[].domain`.
+>
+> **A missing geometry comes back as the string `"NaN"`**, not as null, on at
+> least two of the on-prem servers here. Read a point with `esri_point`, which
+> returns `(None, None)` for it; reading `geometry["y"]` directly puts a string
+> into a float column and fails at `pa.array` with a message about type
+> conversion rather than about a feature with no location.
 
 The script must:
 1. Download the source data (CSV, JSON, or parquet from the open data portal)
@@ -1882,22 +1900,39 @@ probe, the landmark source and the dedup calibration. Of those, only the first
 two are irreducible — they are reading a portal's schema — and both are much
 cheaper on a platform with a shared module.
 
+**A fifth cost turns up on any portal that publishes a common name instead of a
+binomial**, and it is now mostly paid: `_common_name_species.py` resolves 398
+published English names to accepted binomials, curated by hand from what five
+Ontario and New Brunswick portals actually publish. A new city on that
+platform calls `species_from_common_name` and adds whatever entries its own
+values need — Mississauga, Burlington ON and Ajax between them needed 398, and
+a sixth city in the same region should need a handful. Read the module's
+docstring before reaching for the enrichment table's inverse instead; that was
+tried and measured and does not work.
+
 **So the highest-leverage next step is another `_arcgis_shared`.** That file
 took Denver's ingest from ~130 lines to ~60 and fixed two latent bugs across
 five existing cities on the way. The same is available for the other platforms
 this repo already talks to more than once:
 
-| platform | cities today | shared module? |
-|----------|--------------|----------------|
-| ArcGIS FeatureServer | Denver, Burlington, DC, Boston (×2), Tempe, LA | **yes** — `_arcgis_shared.py` |
-| OpenDataSoft | Paris, Vancouver, Melbourne | no — three hand-rolled copies |
-| Socrata | SF, NYC, LA | no — three hand-rolled copies |
-| CKAN | Boston | one, so not yet worth it |
+| platform | shared module? |
+|----------|----------------|
+| ArcGIS FeatureServer / MapServer | **yes** — `_arcgis_shared.py` |
+| Socrata | **yes** — `_socrata_shared.py` |
+| CKAN | **yes** — `_ckan_shared.py` |
+| OpenDataSoft | no — Paris, Vancouver and Melbourne are three hand-rolled copies |
 
-OpenDataSoft and Socrata are each three copies of the same paging loop and the
-same metadata probe, and both are common enough that the next few cities will
-want them. Write the module when the third city arrives, not the first — that
-is when the shape is knowable and the drift has started.
+OpenDataSoft is the one left: three copies of the same paging loop and the same
+metadata probe. Write the module when the third city arrives, not the first —
+that is when the shape is knowable and the drift has started.
+
+**A shared module does not have to be a platform.** `_common_name_species.py`
+is the counter-example: five cities published an English common name where the
+binomial should be, and what they shared was not an API but a question. The
+same threshold applies and the same rule about hardcoding does — its table is
+curated and committed, not derived at run time from the enrichment parquet,
+because a city job must not depend on a GCS object being reachable and a
+reviewer must be able to read what a name resolves to.
 
 ### The landmark lane is still seventeen bespoke scripts
 
