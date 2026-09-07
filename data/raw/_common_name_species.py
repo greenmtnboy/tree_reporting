@@ -50,7 +50,7 @@ read it.  `tests/test_common_name_species.py` pins the mechanical properties --
 values are accepted species-rank names, keys are in normalised form, no key is
 also a value.
 
-The index was still worth running as an *audit* once the table was written.
+It earned its keep a second time as an *audit*, once the table was written.
 Of the 398 entries, 247 name a species the enrichment table also lists under
 that common name, 125 name one it does not list at all, and 26 disagree -- and
 reading all 26 is what confirmed the curation rather than undermining it.  Most
