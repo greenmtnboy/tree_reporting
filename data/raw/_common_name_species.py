@@ -36,12 +36,19 @@ species, and the ambiguous ones are exactly the trees these cities are made of.
 `Picea x mariorika`; "white oak" by `Quercus alba` and `Quercus slba`; "tulip
 tree" by `Liriodendron tulipifera`, `Lilirodendron tulipifera`, `Liriodrendron
 tulipifera` and `Lirodendron tulipiforia`.  Those competitors are misspelled
-binomials that some city published and `sanitize_species` deliberately keeps
-(see "A misspelled binomial stays out of it" in EXTENDING.md), so no amount of
-tie-breaking inside the index removes them -- an automatic reverse index would
-have resolved about 60% of Mississauga's rows and silently mislabelled some of
-the rest.  The reverse index was still worth building as a *drafting aid*, and
-several entries below came from it; what it could not be is the authority.
+binomials that some city published, so no amount of tie-breaking inside the
+index removes them -- an automatic reverse index would have resolved about 60%
+of Mississauga's rows and silently mislabelled some of the rest.  The reverse
+index was still worth building as a *drafting aid*, and several entries below
+came from it; what it could not be is the authority.
+
+`SPECIES_MISSPELLINGS` has since folded the ones a *published city* still
+carried, which shrinks that ambiguity without removing it: a misspelling only
+earns an entry when POWO can be asked about both spellings (see
+`species_audit.py`), and a name like `Quercus slba` sits in the enrichment
+table with no tree behind it and nothing to compare it against.  So the
+argument stands -- the index is a drafting aid and the table below is the
+authority -- and the examples above are the ones that outlived the fold.
 
 So this is a curated list in the same spirit as `_NON_TAXON_REWRITES` and
 `SPECIES_SYNONYMS`: every key is a value some wired city actually publishes,

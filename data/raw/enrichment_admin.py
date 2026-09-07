@@ -45,6 +45,13 @@ does not change what the ingest publishes.  For that the pair goes into
 `SPECIES_SYNONYMS` in `_ingest_shared.py`, after which the synonym's row is an
 alias the daily job maintains and the form shows read-only.
 
+A duplicate that is not a synonym but a *misspelling* -- `Acer platenoides`,
+which POWO cannot match at all -- takes the same two steps and lands in
+`SPECIES_MISSPELLINGS` instead.  The difference is only in what the pair
+claims: a misspelling never appears in the accepted row's `synonyms`, because
+that column says what else the taxon is called and a typo is not one of its
+names.  The form treats both the same way, read-only and pointing here.
+
 Run
 ---
     gcloud auth application-default login        # once
@@ -81,7 +88,12 @@ import pyarrow.parquet as pq
 RAW_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(RAW_DIR))
 
-from _ingest_shared import SPECIES_SYNONYMS, _sanitize_taxon, synonyms_of  # noqa: E402
+from _ingest_shared import (  # noqa: E402
+    SPECIES_MISSPELLINGS,
+    SPECIES_SYNONYMS,
+    _sanitize_taxon,
+    synonyms_of,
+)
 from enrichment._tree_shared import (  # noqa: E402
     DATA_VERSION,
     ENRICHMENT_GCS_URI,
@@ -374,15 +386,19 @@ def is_complete(row: dict) -> bool:
 
 
 def accepted_for(species: str) -> str | None:
-    """The accepted name when *species* is a code-level synonym, else None.
+    """The accepted name when *species* is a code-level fold, else None.
 
     Such a row is an alias the daily job rewrites from the accepted row on
     every load (`with_species_aliases`), so an edit to it would not survive;
     the form sends the reviewer to the accepted row instead.  A synonym added
     by hand is different: both rows list each other and editing either
     patches both, so neither is read-only.
+
+    Both code maps count.  A misspelling is not a synonym -- POWO has never
+    heard of it -- but its row is maintained the same way, so editing it is
+    just as futile.
     """
-    return SPECIES_SYNONYMS.get(species)
+    return SPECIES_SYNONYMS.get(species) or SPECIES_MISSPELLINGS.get(species)
 
 
 def apply_edits(table: pa.Table, edits: dict[str, dict]) -> tuple[pa.Table, dict]:
@@ -699,7 +715,8 @@ class AdminState:
         accepted = accepted_for(species)
         if accepted is not None:
             raise ValidationError([
-                f"{species!r} is a synonym of {accepted!r} (SPECIES_SYNONYMS); its row is "
+                f"{species!r} folds onto {accepted!r} ("
+                f"{'SPECIES_SYNONYMS' if species in SPECIES_SYNONYMS else 'SPECIES_MISSPELLINGS'}); its row is "
                 f"an alias rewritten from that one on every run, so edit {accepted!r} instead"
             ])
         if species not in self.rows:

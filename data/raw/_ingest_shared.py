@@ -127,6 +127,12 @@ _SPECIES_PLACEHOLDERS = frozenset(
         # and "Autre espece" Longueuil's "other species" (685 rows), which
         # survives the shape rules as a plausible-looking two-word binomial.
         "divers", "essence a determiner", "autre espece",
+        # A portal that wrote the *rank* where the epithet goes.  In epithet
+        # position "genus" truncates to the genus, which is what the source
+        # actually recorded; left alone `Viburnum genus` reads as a binomial,
+        # and being two edits from `Viburnum tinus` it is exactly the shape
+        # that invites a wrong fold.
+        "genus", "species", "spp", "sp",
     }
 )
 
@@ -613,12 +619,284 @@ SPECIES_SYNONYMS: dict[str, str] = {
     "Photinia fraseri": "Photinia x fraseri",
     "Ulmus hollandica": "Ulmus x hollandica",
     "Bauhinia blakeana": "Bauhinia x blakeana",
+    # Published with the mark where the taxon has none, or without it where
+    # the taxon is a nothospecies.  Every pair below is one POWO answered
+    # in both directions -- it has no record of the key and lists the value
+    # as accepted -- which is what settles which spelling is the mistake;
+    # `species_audit.py` is the tool that asked.
+    "Acer freemanii": "Acer x freemanii",
+    "Acer x pseudosieboldianum": "Acer pseudosieboldianum",
+    "Acer zoeschense": "Acer x zoeschense",
+    "Aesculus arnoldiana": "Aesculus x arnoldiana",
+    "Aesculus bushii": "Aesculus x bushii",
+    "Aesculus carnea": "Aesculus x carnea",
+    "Aesculus hybrida": "Aesculus x hybrida",
+    "Aesculus mutabilis": "Aesculus x mutabilis",
+    "Alnus spaethii": "Alnus x spaethii",
+    "Amelanchier lamarckii": "Amelanchier x lamarckii",
+    "Amelanchier x intermedia": "Amelanchier intermedia",
+    "Catalpa erubescens": "Catalpa x erubescens",
+    "Chaenomeles superba": "Chaenomeles x superba",
+    "Citrus aurantium": "Citrus x aurantium",
+    "Citrus limon": "Citrus x limon",
+    "Cornus rutgersensis": "Cornus x rutgersensis",
+    "Crataegus grignonensis": "Crataegus x grignonensis",
+    "Crataegus lavalleei": "Crataegus x lavalleei",
+    "Crataegus mordenensis": "Crataegus x mordenensis",
+    "Forsythia intermedia": "Forsythia x intermedia",
+    "Hamamelis intermedia": "Hamamelis x intermedia",
+    "Ilex aquipernyi": "Ilex x aquipernyi",
+    "Ilex meserveae": "Ilex x meserveae",
+    "Juniperus pfitzeriana": "Juniperus x pfitzeriana",
+    "Laburnum watereri": "Laburnum x watereri",
+    "Larix marschlinsii": "Larix x marschlinsii",
+    "Magnolia brooklynensis": "Magnolia x brooklynensis",
+    "Magnolia loebneri": "Magnolia x loebneri",
+    "Magnolia proctoriana": "Magnolia x proctoriana",
+    "Magnolia soulangeana": "Magnolia x soulangeana",
+    "Malus adstringens": "Malus x adstringens",
+    "Malus atrosanguinea": "Malus x atrosanguinea",
+    "Malus robusta": "Malus x robusta",
+    "Malus x domestica": "Malus domestica",
+    "Malus zumi": "Malus x zumi",
+    "Musa paradisiaca": "Musa x paradisiaca",
+    "Osmanthus burkwoodii": "Osmanthus x burkwoodii",
+    "Pinus holfordiana": "Pinus x holfordiana",
+    "Populus berolinensis": "Populus x berolinensis",
+    "Populus canescens": "Populus x canescens",
+    "Prunus blireana": "Prunus x blireana",
+    "Prunus cistena": "Prunus x cistena",
+    "Prunus gondouinii": "Prunus x gondouinii",
+    "Prunus hillieri": "Prunus x hillieri",
+    "Prunus nigrella": "Prunus x nigrella",
+    "Prunus pennsylvanica": "Prunus pensylvanica",
+    "Prunus schmittii": "Prunus x schmittii",
+    "Pterocarya rehderiana": "Pterocarya x rehderiana",
+    "Quercus bimundorum": "Quercus x bimundorum",
+    "Quercus jackiana": "Quercus x jackiana",
+    "Quercus libanerris": "Quercus x libanerris",
+    "Quercus turneri": "Quercus x turneri",
+    "Quercus warei": "Quercus x warei",
+    "Robinia ambigua": "Robinia x ambigua",
+    "Robinia margaretta": "Robinia x margaretta",
+    "Sorbus arnoldiana": "Sorbus x arnoldiana",
+    "Sorbus domestica": "Cormus domestica",
+    "Sorbus x hybrida": "Sorbus hybrida",
+    "Syringa prestoniae": "Syringa x prestoniae",
+    "Syringa x persica": "Syringa persica",
+    "Taxus media": "Taxus x media",
+    "Tilia euchlora": "Tilia x euchlora",
+    "Tilia europaea": "Tilia x europaea",
+    "Tilia flaccida": "Tilia x flaccida",
+    "Tilia x mongolica": "Tilia mongolica",
+    "Viburnum bodnantense": "Viburnum x bodnantense",
+    "Viburnum x rhytidophyllum": "Viburnum rhytidophyllum",
+}
+
+
+# The same fold, for names that are not synonyms of anything: a binomial some
+# inventory simply typed wrong.  `Liquidambar stryaciflua` is not a taxon and
+# POWO has never heard of it -- it is 787 Denver trees whose species field
+# transposed two letters -- so it cannot go in SPECIES_SYNONYMS, whose whole
+# claim is that Kew lists the key under the value.
+#
+# It still has to fold, for exactly the reasons that map exists.  Left alone a
+# misspelling is a second enrichment row for a taxon already in the table (276
+# pairs were paid for twice), a second entry in every species rollup, and a
+# second dot colour on the map.  `EXTENDING.md` rules a misspelling out of
+# `_NON_TAXON_REWRITES` because dropping `Crateagus monogyna` to `Unknown`
+# would lose a tree we can identify -- which is right, and is an argument for
+# resolving it to the name it meant, not for leaving it fragmented.
+#
+# Every key was observed in a published city parquet and adjudicated against
+# POWO by `species_audit.py`: a key is a name POWO cannot match at all, and a
+# value is one it returns as accepted.  That is what keeps a real taxon out of
+# here -- `Acer saccharum` and `Acer saccharinum` are two edits apart and both
+# accepted, so the pair is refused rather than merged, and so are
+# `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
+# `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
+SPECIES_MISSPELLINGS: dict[str, str] = {
+    "Abies balsamaea": "Abies balsamea",
+    "Acacia mearsnii": "Acacia mearnsii",
+    "Acer buergeranum": "Acer buergerianum",
+    "Acer monspessolanum": "Acer monspessulanum",
+    "Acer platenoides": "Acer platanoides",
+    "Acer tartaricum": "Acer tataricum",
+    "Acer tatricum": "Acer tataricum",
+    "Acer x freeman": "Acer x freemanii",
+    "Acer x freemani": "Acer x freemanii",
+    "Acer x freemannii": "Acer x freemanii",
+    "Acer x fremannii": "Acer x freemanii",
+    "Aeilanthus altissima": "Ailanthus altissima",
+    "Alibizia julibrissin": "Albizia julibrissin",
+    "Allianthus altissima": "Ailanthus altissima",
+    "Amelachier ovalis": "Amelanchier ovalis",
+    "Amelanchier laeviss": "Amelanchier laevis",
+    "Betula dahurica": "Betula davurica",
+    "Betula papirifera": "Betula papyrifera",
+    "Brachychiton acerifolium": "Brachychiton acerifolius",
+    "Brachychiton pupulneum": "Brachychiton populneus",
+    "Brachychiton rupestre": "Brachychiton rupestris",
+    "Brahea aramata": "Brahea armata",
+    "Buddleia alternifolia": "Buddleja alternifolia",
+    "Buddleia davidii": "Buddleja davidii",
+    "Butya capitata": "Butia capitata",
+    "Calliandra tweedii": "Calliandra tweediei",
+    "Calodendron capense": "Calodendrum capense",
+    "Caragana arboresense": "Caragana arborescens",
+    "Carpinus betulas": "Carpinus betulus",
+    "Carpinus caroliana": "Carpinus caroliniana",
+    "Carpinus turczaninowii": "Carpinus turczaninovii",
+    "Carya illinoensis": "Carya illinoinensis",
+    "Carya illinoiensis": "Carya illinoinensis",
+    "Catalpa xerubescens": "Catalpa x erubescens",
+    "Cedrus deodora": "Cedrus deodara",
+    "Cephalotaxus harringtonii": "Cephalotaxus harringtonia",
+    "Cercidiphyllym japonicum": "Cercidiphyllum japonicum",
+    "Cercidiphylum japonicum": "Cercidiphyllum japonicum",
+    "Chionanthus retusa": "Chionanthus retusus",
+    "Chiranthodendron pentadactyl": "Chiranthodendron pentadactylon",
+    "Clerodendron trichotomum": "Clerodendrum trichotomum",
+    "Cocus nucifera": "Cocos nucifera",
+    "Corylus avellena": "Corylus avellana",
+    "Corylus columa": "Corylus colurna",
+    "Corynocarpus laevigata": "Corynocarpus laevigatus",
+    "Crataegas monogyna": "Crataegus monogyna",
+    "Crataegus crusgalli": "Crataegus crus-galli",
+    "Crataegus leavigata": "Crataegus laevigata",
+    "Crataegus phaenopyru": "Crataegus phaenopyrum",
+    "Crataegus x lavallei": "Crataegus x lavalleei",
+    "Crataegus x mordensis": "Crataegus x mordenensis",
+    "Diospyros virginia": "Diospyros virginiana",
+    "Elaeagnus augustifolia": "Elaeagnus angustifolia",
+    "Eleagnus angustifolia": "Elaeagnus angustifolia",
+    "Eleagnus pungent": "Elaeagnus pungens",
+    "Eriobotrya japonicum": "Eriobotrya japonica",
+    "Eucalyptus lehmanni": "Eucalyptus lehmannii",
+    "Eucalyptus macranda": "Eucalyptus macrandra",
+    "Eucalyptus viminallis": "Eucalyptus viminalis",
+    "Euonymous europaeeus": "Euonymus europaeus",
+    "Euonymus altus": "Euonymus alatus",
+    "Euonymus japonica": "Euonymus japonicus",
+    "Fontanesia phillyreoides": "Fontanesia philliraeoides",
+    "Fraxinus anthoxyloides": "Fraxinus xanthoxyloides",
+    "Fraxinus ianuginosa": "Fraxinus lanuginosa",
+    "Fraxinus pennsylvancia": "Fraxinus pennsylvanica",
+    "Fraxinus pennsylvanicum": "Fraxinus pennsylvanica",
+    "Gingko biloba": "Ginkgo biloba",
+    "Gymnocladus dioica": "Gymnocladus dioicus",
+    "Hibiscus syriaca": "Hibiscus syriacus",
+    "Ilanthus altissima": "Ailanthus altissima",
+    "Juglans mandschurica": "Juglans mandshurica",
+    "Koelruiteria paniculata": "Koelreuteria paniculata",
+    "Lagunaria patersonii": "Lagunaria patersonia",
+    "Lagunaria petersonii": "Lagunaria patersonia",
+    "Larix siberica": "Larix sibirica",
+    "Leptospermum scoparia": "Leptospermum scoparium",
+    "Ligustrum vulgaris": "Ligustrum vulgare",
+    "Lilirodendron tulipifera": "Liriodendron tulipifera",
+    "Liquidambar stryaciflua": "Liquidambar styraciflua",
+    "Liriodrendron tulipifera": "Liriodendron tulipifera",
+    "Livistrona australis": "Livistona australis",
+    "Maackia amerunsis": "Maackia amurensis",
+    "Maakia amurensis": "Maackia amurensis",
+    "Magnolia denudate": "Magnolia denudata",
+    "Magnolia liliflora": "Magnolia liliiflora",
+    "Magnolia x soulangiana": "Magnolia x soulangeana",
+    "Magnolia x soulngeana": "Magnolia x soulangeana",
+    "Magnolia x thompsoniana": "Magnolia x thomsoniana",
+    "Malus syvestris": "Malus sylvestris",
+    "Melaleuca styphelliodes": "Melaleuca styphelioides",
+    "Melia azerdarach": "Melia azedarach",
+    "Metasequoia glyplostroboides": "Metasequoia glyptostroboides",
+    "Metrosideros excelsus": "Metrosideros excelsa",
+    "Nyssa aqauatica": "Nyssa aquatica",
+    "Olea europea": "Olea europaea",
+    "Ostria carpinifolia": "Ostrya carpinifolia",
+    "Ostyria virginiana": "Ostrya virginiana",
+    "Patanus racemosa": "Platanus racemosa",
+    "Petula pendula": "Betula pendula",
+    "Phellodendron amurensis": "Phellodendron amurense",
+    "Philadelphus lewissii": "Philadelphus lewisii",
+    "Phoenix dactilifera": "Phoenix dactylifera",
+    "Picea englemannii": "Picea engelmannii",
+    "Picea koyamai": "Picea koyamae",
+    "Picea omorica": "Picea omorika",
+    "Picea punges": "Picea pungens",
+    "Pinus jeffereyi": "Pinus jeffreyi",
+    "Pinus sylverstris": "Pinus sylvestris",
+    "Pinus wallichina": "Pinus wallichiana",
+    "Pistachia chinensis": "Pistacia chinensis",
+    "Pittosporum phillyraeoides": "Pittosporum phillyreoides",
+    "Populus balamifera": "Populus balsamifera",
+    "Populus tremulodies": "Populus tremuloides",
+    "Prunus americain": "Prunus americana",
+    "Prunus fructicosa": "Prunus fruticosa",
+    "Prunus ilicifoia": "Prunus ilicifolia",
+    "Prunus maakii": "Prunus maackii",
+    "Prunus salicinia": "Prunus salicina",
+    "Prunus x blireiana": "Prunus x blireana",
+    "Prunus x yodoensis": "Prunus x yedoensis",
+    "Pseudostuga menziesii": "Pseudotsuga menziesii",
+    "Psidium guajaba": "Psidium guajava",
+    "Pterocaria fraxinifolia": "Pterocarya fraxinifolia",
+    "Pterocarya stepnotera": "Pterocarya stenoptera",
+    "Pterostyrax hispida": "Pterostyrax hispidus",
+    "Pyrus usseriensis": "Pyrus ussuriensis",
+    "Pyrus ussurensis": "Pyrus ussuriensis",
+    "Quercus biicolor": "Quercus bicolor",
+    "Quercus gambeii": "Quercus gambelii",
+    "Quercus gambellii": "Quercus gambelii",
+    "Quercus keloggii": "Quercus kelloggii",
+    "Quercus rhysophylla": "Quercus rysophylla",
+    "Quercus shumardi": "Quercus shumardii",
+    "Quercus wislizenii": "Quercus wislizeni",
+    "Quercus x comptonae": "Quercus x comptoniae",
+    "Quercus x macdanielli": "Quercus x macdanielii",
+    "Rhamnus catharticus": "Rhamnus cathartica",
+    "Rhapiolepis indica": "Rhaphiolepis indica",
+    "Robina pseudoacacia": "Robinia pseudoacacia",
+    "Salix amygdalioides": "Salix amygdaloides",
+    "Salix pentendra": "Salix pentandra",
+    "Schinus polygamus": "Schinus polygama",
+    "Schinus terebinthefolia": "Schinus terebinthifolia",
+    "Sequoiadendron gigantum": "Sequoiadendron giganteum",
+    "Seudotsuga menziesii": "Pseudotsuga menziesii",
+    "Sorbas aucaparia": "Sorbus aucuparia",
+    "Sorbus aucaparia": "Sorbus aucuparia",
+    "Sorbus auccuparia": "Sorbus aucuparia",
+    "Styphnolobium japonica": "Styphnolobium japonicum",
+    "Styrax japonicas": "Styrax japonicus",
+    "Syagrus romanzoffianum": "Syagrus romanzoffiana",
+    "Syringa recticulata": "Syringa reticulata",
+    "Syringa reticulate": "Syringa reticulata",
+    "Thuya occidentalis": "Thuja occidentalis",
+    "Tilia oliverii": "Tilia oliveri",
+    "Tilia x europea": "Tilia x europaea",
+    "Trachycarpus fortuneii": "Trachycarpus fortunei",
+    "Trachycarpus fortuneis": "Trachycarpus fortunei",
+    "Tsuga candensis": "Tsuga canadensis",
+    "Wisteria sinesis": "Wisteria sinensis",
+    "Xylosma congestum": "Xylosma congesta",
+    "Zanthoxylum piperetum": "Zanthoxylum piperitum",
+    "Zelcova carpinifolia": "Zelkova carpinifolia",
+    "Zelkove serrata": "Zelkova serrata",
 }
 
 
 def synonyms_of(accepted: str) -> list[str]:
-    """Every name SPECIES_SYNONYMS folds into *accepted*, sorted."""
+    """Every name SPECIES_SYNONYMS folds into *accepted*, sorted.
+
+    Deliberately not the misspellings: this fills the `synonyms` column, and
+    a typo is not a synonym.  `misspellings_of` is the parallel lookup for the
+    alias rows, which do need both.
+    """
     return sorted(k for k, v in SPECIES_SYNONYMS.items() if v == accepted)
+
+
+def misspellings_of(accepted: str) -> list[str]:
+    """Every name SPECIES_MISSPELLINGS folds into *accepted*, sorted."""
+    return sorted(k for k, v in SPECIES_MISSPELLINGS.items() if v == accepted)
 
 
 def form_sentinel_for(value: str | None) -> str | None:
@@ -662,22 +940,31 @@ def sanitize_species(value: str | None) -> str | None:
     """Reduce a raw species string to an accepted Latin binomial, or ``None``.
 
     `_sanitize_taxon` decides whether the value names a taxon and truncates it
-    to species rank; this then folds a synonym onto its accepted name through
-    SPECIES_SYNONYMS, so `Platanus x acerifolia` and `Platanus x hispanica`
-    publish as one key.  The cultivar a value carried is not part of the
+    to species rank; this then folds the result onto one accepted name through
+    SPECIES_SYNONYMS and SPECIES_MISSPELLINGS, so `Platanus x acerifolia` and
+    `Platanus x hispanica` publish as one key, and so do `Acer platenoides`
+    and `Acer platanoides`.  The cultivar a value carried is not part of the
     result -- `extract_cultivar` keeps it on the tree row instead.
+
+    The two maps are separate because they make different claims -- POWO lists
+    a synonym under its accepted name and has never heard of a typo -- but
+    they resolve identically here, and neither may contain a key the other
+    does.
 
     Examples:
         "Platanus x acerifolia 'Bloodgood'" -> "Platanus x hispanica"
         "Sophora japonica"                  -> "Styphnolobium japonicum"
         "Prunus yedoensis"                  -> "Prunus x yedoensis"
+        "Acer platenoides"                  -> "Acer platanoides"
         "Acer platanoides"                  -> "Acer platanoides"
         "Pin oak"                           -> None
     """
     taxon = _sanitize_taxon(value)
     if taxon is None:
         return None
-    return SPECIES_SYNONYMS.get(taxon, taxon)
+    if taxon in SPECIES_SYNONYMS:
+        return SPECIES_SYNONYMS[taxon]
+    return SPECIES_MISSPELLINGS.get(taxon, taxon)
 
 
 def _sanitize_taxon(value: str | None) -> str | None:
