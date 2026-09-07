@@ -69,15 +69,25 @@ const CONCURRENCY = Number(process.env.DASHBOARD_QUERY_CONCURRENCY ?? 1)
 // The whole catalog is compiled once in beforeAll, so that is where the budget
 // lives; the it() blocks only execute SQL against an in-process DuckDB.
 //
-// 25 minutes, sized for the *wide* sweep rather than the default one. The
-// narrow run is five batches and finishes in a couple of minutes; the wide run
-// is one request per city and grows with every city added -- at 21 cities on a
-// loaded resolver it reached batch 22 of 25 at 866s.
+// 55 minutes, sized for the *wide* sweep rather than the default one. The
+// narrow run is eight batches and finishes in about twelve minutes; the wide
+// run is one request per city and **grows by roughly 66 seconds with every
+// city added**, which is the number to do arithmetic with before the next
+// batch of them.
+//
+// This has now overrun twice, at the same point both times, which is what a
+// budget sized to today's fleet does. At 21 cities it reached batch 22 of 25
+// at 866s against a 15-minute budget. At 31 cities -- the six Canadian ArcGIS
+// cities had just merged -- it reached batch 22 of 29 against this 25-minute
+// one, with every batch compiling healthily in 63-73s and nothing wrong except
+// that there were more of them than would fit. 36 cities is 34 batches, or
+// about 38 minutes of compiling, so the budget is set with room for another
+// eight or so rather than for exactly the fleet that exists today.
 //
 // Give it room, because a hook that times out never registers its tests: the
-// overrun is reported as "25 tests skipped", which reads like a suite that
+// overrun is reported as "N tests skipped", which reads like a suite that
 // declined to run rather than one that ran out of budget.
-const COMPILE_TIMEOUT_MS = 1_500_000
+const COMPILE_TIMEOUT_MS = 3_300_000
 const EXECUTE_TIMEOUT_MS = 120_000
 
 type CompiledCase = { sql?: string; error?: string }

@@ -5,11 +5,18 @@ NOT a uv inline script — a regular importable module, like `_ingest_shared`.
 Most North American portals publish a scientific name.  Some publish only an
 English common name where the binomial should be, and `species` is the join key
 into the enrichment table, so those cities arrive on the map with every tree
-labelled "Unknown" unless something resolves the name.  Five do it at once --
-Mississauga (`BOTDESC`), Ottawa (a coded-value domain), Burlington ON
-(`SPECIES_COMMONNAME`), Ajax (`SPCODE`/`TYPE`) and Moncton (a contraction) --
-which is 951,561 trees and well past the threshold `EXTENDING.md` sets for
-writing a shared module.
+labelled "Unknown" unless something resolves the name.  Five arrived at once --
+Mississauga, Ottawa, Burlington ON, Ajax and Moncton, 951,561 rows between
+them -- which is well past the threshold `EXTENDING.md` sets for writing a
+shared module.
+
+Three of the five call this: Mississauga on `BOTDESC`, Burlington ON on
+`SPECIES_COMMONNAME`, Ajax on the English name its `SPCODE` domain gives.  The
+other two turned out to need something else and are worth knowing about before
+reaching for this: Ottawa's `SPECIES` domain carries the binomial itself
+(`coded_value_domain`), and Moncton's contraction is expanded by a table in its
+own ingest.  **Check for a field domain first** -- it is one request, and it is
+the publisher's answer rather than ours.
 
 Usage:
 
@@ -42,6 +49,17 @@ every value is a name `sanitize_species` keeps as written, and a reviewer can
 read it.  `tests/test_common_name_species.py` pins the mechanical properties --
 values are accepted species-rank names, keys are in normalised form, no key is
 also a value.
+
+The index was still worth running as an *audit* once the table was written.
+Of the 398 entries, 247 name a species the enrichment table also lists under
+that common name, 125 name one it does not list at all, and 26 disagree -- and
+reading all 26 is what confirmed the curation rather than undermining it.  Most
+are the enrichment table offering something worse (`accolade elm` as
+`Ulmus accolade`, `hemlock` as *Tecoma stans*, `copper beech` as
+`Fagus moesiaca`); several are it offering a synonym where this table has the
+accepted name (`Ulmus procera` for the English elm, `Gymnocladus dioica`,
+`Halesia tetraptera`); and the rest are the two regional calls below, which is
+exactly where a disagreement should show up.
 
 Three rules keep it honest, and they are why the file is shorter than the
 number of trees would suggest:

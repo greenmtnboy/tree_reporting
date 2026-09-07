@@ -93,7 +93,13 @@ WHERE = (
     + ")"
 )
 
-COMMON_NAME_BY_CODE = coded_value_domain(LAYER, "SPCODE")
+# Casefolded: a stored coded value does not have to match the case of its
+# domain entry, and a code that fails to resolve publishes as `Unknown`
+# without reporting anything.  Ottawa's layer has exactly that mismatch.
+COMMON_NAME_BY_CODE = {
+    code.casefold(): name
+    for code, name in coded_value_domain(LAYER, "SPCODE").items()
+}
 
 
 def iter_row_chunks():
@@ -123,7 +129,7 @@ def transform(features: list[dict]) -> pa.Table:
         if not raw_id:
             continue
         code = str(rec.get("SPCODE") or "").strip()
-        common = COMMON_NAME_BY_CODE.get(code) or rec.get("TYPE")
+        common = COMMON_NAME_BY_CODE.get(code.casefold()) or rec.get("TYPE")
 
         tree_id.append(f"ajx-{raw_id}")
         species.append(species_from_common_name(common))

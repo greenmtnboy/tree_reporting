@@ -12,7 +12,7 @@ export default defineConfig({
     // The compile happens once in a beforeAll and carries its own budget; a
     // failure lists every offending chart rather than stopping at the first.
     testTimeout: 120_000,
-    hookTimeout: 1_500_000,
+    hookTimeout: 3_300_000,
     // The whole run is one long hook, so intercepted console output would be
     // held until it finished — turning a slow resolver into a silent hang with
     // nothing in the CI log to distinguish it from one. The per-batch progress

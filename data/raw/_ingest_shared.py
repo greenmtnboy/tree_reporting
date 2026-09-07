@@ -1410,10 +1410,18 @@ DEDUP_CELL_METRES: dict[str, int] = {
     # smaller cell: a missed duplicate double-renders one toggleable dot, a
     # false flag hides a real tree.
     "CABUR": 4,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAOTT": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAMIS": 10,
+    # The largest overlap measured anywhere: 235,651 OSM nodes against 304,164
+    # inventory trees, 147,736 of them within 2 m of one at 98.7% mutual-NN --
+    # the National Capital Commission inventory was imported into OSM, and
+    # 62.8% of the nodes still carry the municipal id in `osm_ref`.  5-10 m
+    # collapses to 23.3% over n=11,307, and the marginal table turns in the
+    # usual place: 4->6 removes 5,778 duplicates for 3,890 hidden trees (1.49),
+    # 6->8 removes 1,940 for 3,320 (0.58).
+    "CAOTT": 6,
+    # 5-10 m band 30.5% mutual-NN over n=666: neighbour-dominated, and the
+    # marginal table turns where its neighbours' do -- 4->6 removes 309
+    # duplicates for 174 hidden trees (1.78), 6->8 removes 149 for 158 (0.94).
+    "CAMIS": 6,
     # 5-10 m band 48.9% over n=270 -- a coin flip, so the bands leave it at a
     # 5 m guarantee and the marginal table decides how far past that to go:
     # 6->8 removes 81 duplicates for 56 hidden trees (1.45), 8->10 removes 35

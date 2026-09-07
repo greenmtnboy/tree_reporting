@@ -35,6 +35,10 @@ The counts, measured 2026-09-06:
     TO BE PLANTED                        3,245   dropped
     TO BE DETERMINED                         1   dropped
 
+That leaves 271,056 rows, of which `enforce_tree_schema` drops a further 78
+whose species field reads `STUMP`, so the city publishes 270,978 trees with 62
+of them unidentified.
+
 `FUTURE TREE SITE`, `PROPOSED`, `TO BE PLANTED` and `NOT TO BE REPLANTED` are
 empty planting sites by name -- the first has no diameter on any of its 41,481
 rows, and the others carry a nursery caliper (median 5-6 cm against 18 cm for a

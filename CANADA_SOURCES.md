@@ -178,9 +178,9 @@ committed CSV, no staging object.
 
 **Done (PR 4): the common-name cities.** `_common_name_species.py`, with
 Mississauga, Ottawa, Burlington ON, Ajax and Moncton wired onto it. The five
-layers hold 951,561 rows and publish 413,437 trees; the gap is removed trees
-and empty planting sites the sources keep in the same table, and Mississauga
-alone accounts for 228,275 of it. `_arcgis_shared` gained `coded_value_domain`
+layers hold 951,561 rows and publish **712,693** trees; the gap is removed
+trees and empty planting sites the sources keep in the same table, and
+Mississauga alone accounts for 228,353 of it. `_arcgis_shared` gained `coded_value_domain`
 and a NaN-safe `esri_point`. Landmarks are official registries or municipal
 cultural inventories in all five cases, read live. What the plan got wrong is
 recorded in "What PR 4 measured that the plan got wrong" below -- the short
@@ -355,6 +355,17 @@ that paragraph was not.
   emerald ash borer. Only 2.1% of EXPIRED rows share a coordinate with a
   living tree, so they are not replants either. **A status column worth
   filtering on can be decided by the species mix behind it.**
+
+- **A coded value does not have to match the case of its domain entry**, and a
+  code that fails to resolve publishes as `Unknown` without reporting anything.
+  Ottawa's layer stores `Staghorn Sumac` where its domain lists `Staghorn
+  sumac`, which is 265 trees; folding both sides is one line and there is no
+  reason not to. Two of its domain *values* are also rejected outright by
+  `sanitize_species` -- `Malus apple species` and `Malus crabapple species`,
+  which are 11,638 trees between them and mean `Malus` -- and two more are
+  misspelled at the source (`Sorubus Intermedia` for the Swedish whitebeam,
+  `Crataegus crusgalli` for the cockspur hawthorn). Reading a domain is one
+  request; reading what is *in* it is the part that takes a minute.
 
 - **A column named like an id is still not one, twice more.** Moncton's
   `UNITID` is aliased "Tree ID" and 484 rows share one across 64 values;

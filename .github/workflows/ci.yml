@@ -201,11 +201,15 @@ jobs:
   # timeouts have the headroom that needs. The first CI run without that had
   # `test` fail on an HTTP 502 and two 30s timeouts while this job passed.
   dashboard-queries:
-    # 30 minutes, because a *wide* sweep is one request per city and this job
+    # 60 minutes, because a *wide* sweep is one request per city and this job
     # widens itself whenever a city model changes (see "Decide how wide to
-    # sweep"). The narrow default finishes in a couple of minutes; the wide run
-    # at 21 cities needs room the old 20 did not leave.
-    timeout-minutes: 30
+    # sweep"). The narrow default finishes in about twelve minutes; the wide
+    # run costs roughly 66s per city and every push to main takes it.
+    #
+    # This has to outlast COMPILE_TIMEOUT_MS in dashboard-queries.test.ts,
+    # which is 55 minutes -- otherwise the job is killed before the suite can
+    # report which batch it was on, and the log stops mid-sweep with no verdict.
+    timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
