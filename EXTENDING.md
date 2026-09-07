@@ -307,7 +307,9 @@ never use: it always advances, so every firing re-extracts and **the cron is the
 extraction cadence**. An unreachable Overpass degrades to the epoch, so the
 staging parquet compares fresh and the firing no-ops instead of failing.
 
-Schedules are staggered, never concurrent, at most four cities a day: Overpass
+Schedules are staggered and never concurrent -- thirty minutes apart, five or
+six cities a day across the week, which is what thirty-six cities and seven
+days comes to. The invariant is the spacing, not the daily count: Overpass
 allows two slots per client IP and answers an over-budget request with HTTP 200
 carrying an error remark, so a collision does not look like a failure — it looks
 like a city with no trees in OSM. `test_osm_extract_jobs_never_fire_together`
