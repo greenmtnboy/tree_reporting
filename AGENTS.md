@@ -364,6 +364,17 @@ and a landmark model), and the batch that breaks the ceiling will do it the way
 the Canadian ArcGIS batch did -- as "34 dashboard queries failed" with every
 entry reading `HTTP 504`, which looks like the service being unwell and is not.
 
+**But re-measure it rather than doing the arithmetic, because that 79-97s is
+mostly instance load.** Adding Tokyo took the bundle to 84 sources, and the
+same default sweep then ran its eight batches in **5.5-13.5s each, 70s total**
+-- roughly seven times faster at *more* sources, on a quiet afternoon. Both
+numbers are real and neither is a property of the source count alone, so the
+"within 20% of the ceiling" reading above is the busy end of the range and not
+a standing fact. Time a sweep on your branch before concluding a city cannot
+be afforded; and note that the arithmetic pointing at a hard ceiling is an
+argument for fixing the per-request re-hydration upstream, not for capping how
+many cities the map has.
+
 **A slow run is not evidence of a query regression.** The service runs on
 high-performance Fly instances, but it is still **one shared instance and it
 can be overloaded**: enough concurrent compiling and requests come back 502, or

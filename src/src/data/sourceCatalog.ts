@@ -11,6 +11,7 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Tokyo', label: 'Tokyo Open Data Catalog - Bureau of Construction, Street Trees on Metropolitan Roads (CC BY 4.0)', url: 'https://catalog.data.metro.tokyo.lg.jp/dataset/t000014d2000000029' },
   { city: 'Moncton', label: 'City of Moncton Open Data - Trees', url: 'https://open.moncton.ca/datasets/trees' },
   { city: 'Ajax', label: 'Town of Ajax Open Data - Town Trees', url: 'https://opendata.ajax.ca/datasets/town-trees' },
   { city: 'Burlington, ON', label: 'City of Burlington Open Data - City Owned Trees', url: 'https://navburl-burlington.opendata.arcgis.com/datasets/city-owned-trees' },
@@ -68,6 +69,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Tokyo', label: 'Tokyo Open Data Catalog - Board of Education, Designated Cultural Properties and Historic Sites (CC BY 4.0)', url: 'https://catalog.data.metro.tokyo.lg.jp/dataset/t000021d0000000017' },
   { city: 'Moncton', label: 'City of Moncton Open Data - Cultural Assets', url: 'https://open.moncton.ca/datasets/cultural-assets' },
   { city: 'Ajax', label: 'Town of Ajax Open Data - Heritage Inventory', url: 'https://opendata.ajax.ca/datasets/heritage-inventory' },
   { city: 'Burlington, ON', label: 'City of Burlington Open Data - Heritage Properties', url: 'https://navburl-burlington.opendata.arcgis.com/datasets/heritage-properties' },

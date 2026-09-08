@@ -35,6 +35,7 @@ import caott.ottawa_tree_info;
 import cabur.burlington_on_tree_info;
 import caajx.ajax_tree_info;
 import camon.moncton_tree_info;
+import jptyo.tokyo_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -77,6 +78,7 @@ merge caott_source into data_source;
 merge cabur_source into data_source;
 merge caajx_source into data_source;
 merge camon_source into data_source;
+merge jptyo_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -128,7 +130,8 @@ camis_published_data_updated_through,
 caott_published_data_updated_through,
 cabur_published_data_updated_through,
 caajx_published_data_updated_through,
-camon_published_data_updated_through);
+camon_published_data_updated_through,
+jptyo_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

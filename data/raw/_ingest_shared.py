@@ -476,6 +476,14 @@ _FORM_SENTINEL_ALIASES: dict[str, str] = {
     "arbre mort": DEAD_SPECIES,      # fr
     "νεκρό": DEAD_SPECIES,           # el
     "νεκρο": DEAD_SPECIES,
+    # ja -- Tokyo's metropolitan-road survey.  `枯木` is a standing dead tree,
+    # the same fact the Dutch and German entries above record; `ヤシ科sp.` is
+    # "Arecaceae sp.", a surveyor who identified the family and stopped.  Both
+    # are single rows, and both would otherwise lose the one thing the survey
+    # did establish.  Reached through `_japanese_species`, which hands an
+    # unresolved value straight to `form_sentinel_for`.
+    "枯木": DEAD_SPECIES,
+    "ヤシ科sp.": PALM_SPECIES,
 }
 
 # Every value the `species` key can hold that is not a scientific name.  The
@@ -691,6 +699,13 @@ SPECIES_SYNONYMS: dict[str, str] = {
     "Tilia x mongolica": "Tilia mongolica",
     "Viburnum bodnantense": "Viburnum x bodnantense",
     "Viburnum x rhytidophyllum": "Viburnum rhytidophyllum",
+    # Genus transfers Kew *does* follow, found when Tokyo's vernacular names
+    # were resolved: the accepted name on the right is what `_japanese_species`
+    # publishes, and the key is what an already-wired city published, so
+    # without these two the same taxon would carry two enrichment rows.  POWO
+    # returns a single unambiguous `synonym` reading for each.
+    "Sapium sebiferum": "Triadica sebifera",
+    "Callistemon citrinus": "Melaleuca citrina",
 }
 
 
@@ -1149,6 +1164,7 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "JPTYO": ("TOKYO_OPENDATA",),
     "CAMON": ("MONCTON_OPENDATA",),
     "CAAJX": ("AJAX_OPENDATA",),
     "CABUR": ("BURLINGTON_ON_OPENDATA",),
@@ -1217,6 +1233,7 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "JPTYO": "OSM_JPTYO",
     "CAMON": "OSM_CAMON",
     "CAAJX": "OSM_CAAJX",
     "CABUR": "OSM_CABUR",
@@ -1587,6 +1604,7 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "JPTYO": (35.48, 35.9, 138.93, 139.95),
     "CAMON": (46.02, 46.2, -64.95, -64.66),
     "CAAJX": (43.78, 43.95, -79.13, -78.93),
     "CABUR": (43.25, 43.48, -80.0, -79.68),
@@ -1680,6 +1698,20 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # ../../DEDUP_CELL_RECALIBRATION.md.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # 5-10 m band 42.3% mutual-NN over n=468: neighbour-dominated, so the band
+    # rule stops at a 5 m guarantee and prints "a 10 m cell".  The marginal
+    # table says one step less, and Tokyo is the city where that difference is
+    # most worth taking: its inventory is the **tightest-planted measured
+    # anywhere here** -- a median 3.2 m to the nearest other inventory tree,
+    # a tenth within 1.1 m, against Tempe's 6.5 m median -- because the
+    # 23-ward survey counts 中木, the medium-height plantings that run as a
+    # near-continuous line along a verge.  Planting spacing therefore starts
+    # much closer in than the band rule's calibration assumes, and the trade
+    # turns accordingly: 6->8 removes 108 duplicates for 95 hidden trees
+    # (1.14), 8->10 removes 48 for 97 (0.49).  A false flag hides a real tree
+    # and a missed duplicate double-renders a toggleable dot, so 8 m is where
+    # the paying stops.
+    "JPTYO": 8,
     # Moncton's OSM presence is 477 nodes against 11,980 inventory trees, so
     # the 5-10 m band (n=2) says nothing and the marginal table decides:
     # 4->6 removes 3 duplicates and hides none, 6->8 removes none and hides
