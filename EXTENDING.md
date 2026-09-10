@@ -278,6 +278,16 @@ template hides:
 cd data && trilogy refresh --dry-run osm_staging/gblon_osm_staging.preql
 ```
 
+**The extract is bounded by the city's territory, not its sanity box.**
+`fetch_osm_trees` sends one Overpass query as a union over the rectangles in
+`CITY_TERRITORY[code]` and post-filters with half-open edges, so a node on a
+shared boundary is fetched by exactly one city. It used to be the
+`CITY_BOUNDS` box, and where two cities' boxes overlapped both extracted the
+same nodes: Longueuil's box reached across the St Lawrence into downtown
+Montreal and 122,741 of its 128,390 OSM rows were Montreal's. Each city's
+parquet was clean and the duplication only existed in the rollup, which is
+what `validate-core` now checks daily.
+
 **Extraction is decoupled from refresh.** The extraction publishes
 `{code}_osm_staging.parquet` to GCS; the refresh pipeline only ever reads that
 object. Two reasons: Overpass 429/504s routinely under load (fetching at
@@ -585,6 +595,77 @@ add "(c) OpenStreetMap contributors" attribution in `README.md` and
 
 ---
 
+## Tree-level predictions
+
+`raw/tree_predictions.preql` is the fourth member of the daily core. It reads
+the published rollup and the published enrichment table -- through their
+`_source.preql` root views, never the models -- joins a committed table of
+coefficients, and publishes `tree_predictions_v{data_version}.parquet` at
+tree grain:
+
+| Column | Notes |
+|--------|-------|
+| `tree_id`, `city` | the rollup's |
+| `genus` | from the enrichment table (which has corrected a city's misspelt binomial) |
+| `dbh_cm` | the rollup's inches, converted; null where the source recorded none or zero |
+| `predicted_crown_width_m` | `2 * scale * dbh_cm ** b`, DBH clamped to the fit's range |
+| `crown_model_level` | `genus`, `family`, `division`, `global`, or `none` (no DBH, or a palm) |
+| `crown_model_taxon`, `crown_model_n` | which fit, and how many Tallo trees stood behind it |
+| `local_tree_density_per_ha` | rollup trees in the tree's 50 m cell, per hectare; a covariate, not a term |
+| `predicted_height_m`, `predicted_age_years` | null; reserved |
+
+**The model is one sourced power law per genus, and its provenance is the
+point.** `raw/crown_allometry_fit.py` fits `ln(crown_radius) = ln_a + b *
+ln(dbh_cm)` per genus on Tallo (Jucker et al. 2022; 312,829 trees with a
+measured crown radius, 1,453 genera, CC BY 4.0), gates each fit (n >= 30,
+r2 >= 0.2, 0.3 <= b <= 1.3, a largest fitted stem of at least 20 cm), and
+resolves the fallback at fit time -- a genus that fails the gate carries its
+family's fit, then its division's -- so the model does one join. Against
+today's rollup, 86% of identified trees get a genus fit, 8% a family fit,
+2% a division fit, and 4% are genera Tallo has never seen, which fall
+through to the division constants rendered into the model by `tree_form`.
+Refit with
+
+```bash
+cd data/raw && uv run crown_allometry_fit.py --write --coverage
+```
+
+which downloads Tallo to `raw/.cache/` (gitignored), rewrites
+`crown_width_coefficients.csv` and the `crown_fallbacks` block in the model,
+and prints the fit against the one open-grown urban reference (Coombes et
+al. 2019). `test_tree_predictions.py` runs the model's own SQL over nine
+fixture trees and checks the CSV against the gate, so a stale block or a fit
+that makes crowns shrink with diameter is a red test.
+
+**Two things the model deliberately is not**, both documented in the fit
+script and both left for the curation stage this parquet feeds: calibrated to
+open-grown urban trees (Tallo is forest plots, and runs 15-30% narrow for a
+30-60 cm broadleaf against the roughly 25:1 crown-to-stem ratio Coombes
+measured), and adjusted for stand density (Bechtold 2003 tried a basal-area
+term across 87 species and dropped it as unstable; Tallo records no
+competition measure). The density covariate is published so that adjustment
+can be measured rather than assumed.
+
+**Three planner facts the model leans on, each found the hard way:**
+
+- `power` is the `**` operator, not a function; there is no `exp`, `ln` or
+  `cos`. The coefficient table therefore carries `scale = exp(ln_a +
+  sigma^2/2)` so the prediction is a bare power, and the density grid scales
+  longitude by a Taylor polynomial for the cosine of the cell's latitude band.
+- DuckDB's `greatest()` skips nulls, so `least(greatest(dbh, 1), max)` turns a
+  missing diameter into a 1 cm stem with a 70 cm crown. The null case is
+  spelled out.
+- The enrichment source is `root partial`; without `partial` the planner
+  joined it INNER and dropped the 61,764 trees whose species has no enrichment
+  row yet. With it the join is FULL, which also emits a row per enrichment
+  species and coefficient genus no tree carries -- hence `where tree_id is
+  not null` on the published target, which the planner renders as a RIGHT
+  OUTER JOIN from the rollup.
+
+Locally the whole thing is 11-19 s over the 10.5M-row rollup, peaking at
+3.9 GiB with no DuckDB memory limit and completing under a 1 GB limit in
+53 s (it spills), which is what the job's `memory_mb = 4096` is sized to.
+
 ## Data Versioning
 
 All GCS parquet files use a versioned naming scheme: `{name}_v{DATA_VERSION}.parquet`.
@@ -662,6 +743,18 @@ Also add the new city's source labels to `MUNICIPAL_DATA_SOURCES` in
 **`data/raw/_ingest_shared.py`** (the community label is derived automatically)
 and a display label to **`src/src/data/dataSources.ts`**. See "The `data_source`
 column" above for why the enum values themselves live per-city rather than here.
+
+Two boxes, not one. `CITY_BOUNDS` is the sanity box every row of the city
+must fall in, drawn generously. `CITY_TERRITORY` is the set of rectangles
+that decides which city an *unattributed* tree -- an OSM node, a community
+submission -- belongs to, and no rectangle of one city may intersect a
+rectangle of another (`test_city_territory.py`). `new_city.py` writes the
+territory as the envelope; if the new city has a neighbour on the map, carve
+both territories along the real boundary, as a staircase of latitude bands
+where the boundary is diagonal (Toronto/Mississauga, Montreal/Longueuil are
+the worked examples). Municipal ingests keep using the envelope: an inventory
+attributes its own trees, and a staircase always leaves a few hundred of them
+on the far side.
 
 ### 4. Create the Freshness Probe
 
@@ -1914,6 +2007,20 @@ cd data && trilogy refresh raw/{city}/{city}_tree_info.preql -f {city}_tree_info
 
 Row counts are the cheap tell — compare each `data_source` partition in the new
 Parquet against the source row count before assuming a rebuild succeeded.
+
+### A diameter no tree has is published as null
+
+`enforce_tree_schema` nulls a `diameter_at_breast_height` that is zero,
+negative, or over `DBH_MAX_INCHES` (200 in, 5 m) and prints the count.
+Burlington ON published a linden at 192,913,385 inches, and a few cities
+carry hundreds of inches that are centimetres typed into the wrong column;
+the value cannot be used and a crown model would otherwise clamp on it. The
+cap is a guard against a wrong column, not a unit converter: Amsterdam's
+diameter classes changed format in 2026 and every value quietly parsed to
+null, which no cap can see. That ingest now counts the class strings it
+could not read and refuses to publish when they exceed 1% of the rows that
+carry one -- the pattern to copy for any source whose numeric field is a
+coded string.
 
 ### `tree_id` is the grain, and the source's obvious id is often not unique
 

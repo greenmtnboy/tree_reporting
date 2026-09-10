@@ -369,7 +369,7 @@ def test_the_core_shares_one_cron():
     """
     crons = {
         key: jobs_by_key()[key]["schedule"]
-        for key in ("publish-full", "refresh-enrichment", "refresh-ecoregions")
+        for key in ("publish-full", "refresh-enrichment", "refresh-ecoregions", "refresh-predictions", "validate-core")
     }
     assert len(set(crons.values())) == 1, (
         f"the core jobs are on different crons ({crons}); they must share one "
@@ -387,7 +387,7 @@ def test_the_core_reads_only_published_parquets():
     root datasources instead of importing the city models; this asserts they
     have not quietly re-acquired the import.
     """
-    for key in ("publish-full", "refresh-enrichment"):
+    for key in ("publish-full", "refresh-enrichment", "refresh-predictions", "validate-core"):
         entrypoint = jobs_by_key()[key]["entrypoint"]
         text = statements(DATA_DIR / entrypoint)
         for code in CITY_CODES:
@@ -398,4 +398,9 @@ def test_the_core_reads_only_published_parquets():
             )
         assert "import tree_info" not in text, (
             f"{entrypoint} imports tree_info, which imports every city model"
+        )
+        assert "import tree_enrichment;" not in text or key == "refresh-enrichment", (
+            f"{entrypoint} imports the enrichment *model*, so it would adopt "
+            "the enrichment parquet and run the LLM in its own container; a "
+            "consumer reads it through tree_enrichment_source"
         )

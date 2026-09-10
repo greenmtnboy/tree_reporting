@@ -31,7 +31,8 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _ingest_shared import (
-    CITY_BOUNDS,
+    CITY_TERRITORY,
+    in_city_territory,
     COMMUNITY_DATA_SOURCES,
     emit,
     enforce_tree_schema,
@@ -85,7 +86,7 @@ def records_to_table(records: Iterable[Mapping[str, Any]]) -> pa.Table:
             )
             continue
 
-        bounds = CITY_BOUNDS.get(city)
+        bounds = CITY_TERRITORY.get(city)
         data_source = COMMUNITY_DATA_SOURCES.get(city)
         if not tree_id or bounds is None or data_source is None:
             print(
@@ -93,8 +94,9 @@ def records_to_table(records: Iterable[Mapping[str, Any]]) -> pa.Table:
                 file=sys.stderr,
             )
             continue
-        lat_min, lat_max, lon_min, lon_max = bounds
-        if not (lat_min <= latitude <= lat_max and lon_min <= longitude <= lon_max):
+        # The territory, not the sanity box: a submission names a city the
+        # way the submitter chose, and neighbouring cities' boxes overlap.
+        if not in_city_territory(city, latitude, longitude):
             print(
                 f"Community ingest: skipping {tree_id}; coordinates outside {city}",
                 file=sys.stderr,

@@ -56,3 +56,8 @@ imagery_model/**/*.vrt
 # Upstream bug repros and handoffs. They are worked on locally and sent to the
 # upstream project rather than carried in this repo's history.
 upstream_repro/
+
+# Tallo, downloaded by data/raw/crown_allometry_fit.py when it refits the
+# crown-width coefficients. 49 MB, CC-BY 4.0, and re-downloadable; the fit
+# it produces is what is committed (crown_width_coefficients.csv).
+data/raw/.cache/

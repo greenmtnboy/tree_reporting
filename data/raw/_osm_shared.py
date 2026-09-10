@@ -49,7 +49,8 @@ import pyarrow.parquet as pq
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _ingest_shared import (  # noqa: E402
-    CITY_BOUNDS,
+    city_territory,
+    in_city_territory,
     OVERPASS_HEADERS,
     OSM_DATA_SOURCES,
     circumference_cm_to_dbh_inches,
@@ -171,18 +172,36 @@ def start_date_to_year(value: str | None):
 
 
 def fetch_osm_trees(city_code: str, timeout_s: int = 300) -> list[dict]:
-    """Every `natural=tree` node in the city's bounding box."""
-    lat_min, lat_max, lon_min, lon_max = CITY_BOUNDS[city_code]
-    bbox = f"{lat_min},{lon_min},{lat_max},{lon_max}"
-    query = f'[out:json][timeout:{timeout_s}];node["natural"="tree"]({bbox});out;'
+    """Every `natural=tree` node in the city's territory.
+
+    The territory (`CITY_TERRITORY`), not the sanity box (`CITY_BOUNDS`): an
+    OSM node carries no city, so which city publishes it has to be decided by
+    geography, and the sanity boxes of neighbouring cities overlap -- Montreal
+    and Longueuil each published the other's riverfront, 23k rows twice in the
+    rollup.  Territories are explicit rectangles that never intersect, so a
+    node is fetched by exactly one city.  One Overpass query, as a union over
+    the city's rectangles; the post-filter applies the half-open edge rule,
+    since Overpass's bbox is inclusive and a node on a shared edge would
+    otherwise come back to both neighbours.
+    """
+    boxes = city_territory(city_code)
+    union = "".join(
+        f'node["natural"="tree"]({lat_min},{lon_min},{lat_max},{lon_max});'
+        for lat_min, lat_max, lon_min, lon_max in boxes
+    )
+    query = f"[out:json][timeout:{timeout_s}];({union});out;"
     payload = post_json_with_retry(
         OVERPASS_URL, data={"data": query}, headers=OVERPASS_HEADERS
     )
-    elements = payload.get("elements")
+    elements = [
+        el
+        for el in payload.get("elements") or []
+        if in_city_territory(city_code, el.get("lat"), el.get("lon"))
+    ]
     if not elements:
         raise RuntimeError(
-            f"Overpass returned no tree nodes for {city_code} bbox {bbox} — "
-            "either the query drifted or the bbox is wrong"
+            f"Overpass returned no tree nodes for {city_code} territory {boxes} — "
+            "either the query drifted or the territory is wrong"
         )
     return elements
 
