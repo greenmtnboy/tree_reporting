@@ -72,6 +72,15 @@ _CLASS_NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 # can refuse to publish a city whose format changed under it again.
 UNPARSED_CLASSES: dict[str, int] = {}
 
+# "Unknown", in the spellings the portal uses: a class the inventory could
+# not assign, not a class this parser cannot read.  945 rows carried it on
+# the first run and tripped the format guard.
+_NO_CLASS = frozenset({"onbekend", "niet bekend", "n.v.t.", "nvt", "geen"})
+
+
+def is_no_class(diam_class: str | None) -> bool:
+    return bool(diam_class) and diam_class.strip().lower() in _NO_CLASS
+
 
 def parse_dbh(diam_class: str | None) -> float | None:
     """Convert a stamdiameterklasse string to DBH in inches, or None."""
@@ -192,7 +201,7 @@ def transform(rows: list[dict]) -> pa.Table:
         # DBH: stamdiameterklasse → midpoint → inches
         diam_class = rec.get("stamdiameterklasse")
         dbh = parse_dbh(diam_class)
-        if diam_class and dbh is None:
+        if diam_class and dbh is None and not is_no_class(diam_class):
             UNPARSED_CLASSES[diam_class] = UNPARSED_CLASSES.get(diam_class, 0) + 1
         dbhs.append(dbh)
 

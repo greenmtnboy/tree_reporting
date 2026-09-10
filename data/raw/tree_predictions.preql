@@ -219,8 +219,12 @@ end;
 # comparable open source and would come from `plant_date` where a city
 # publishes one.
 
-auto predicted_height_m <- cast(null as float);
-auto predicted_age_years <- cast(null as float);
+# Written as a case over the tree's own diameter rather than a bare
+# `cast(null as float)`: pytrilogy 0.3.353 treats a constant null as having
+# no source and drops it from the persist projection ("would write 10 of 12
+# declared columns"), while an expression over a tree column is carried.
+auto predicted_height_m <- case when dbh_cm is null then cast(null as float) else cast(null as float) end;
+auto predicted_age_years <- case when dbh_cm is null then cast(null as float) else cast(null as float) end;
 
 # --- The published parquet ------------------------------------------------
 #

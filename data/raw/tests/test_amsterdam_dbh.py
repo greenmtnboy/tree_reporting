@@ -65,8 +65,12 @@ def test_transform_counts_what_it_could_not_parse(ams):
         {"id": 1, "soortnaam": "Tilia cordata", "geometrie": None, "stamdiameterklasse": "0,1 tot 0,2 m."},
         {"id": 2, "soortnaam": "Tilia cordata", "geometrie": None, "stamdiameterklasse": "Onbekend"},
         {"id": 3, "soortnaam": "Tilia cordata", "geometrie": None, "stamdiameterklasse": None},
+        {"id": 4, "soortnaam": "Tilia cordata", "geometrie": None, "stamdiameterklasse": "dik"},
     ]
     table = ams.transform(rows)
-    assert table.column("diameter_at_breast_height").to_pylist()[1:] == [None, None]
-    assert ams.UNPARSED_CLASSES == {"Onbekend": 1}
+    assert table.column("diameter_at_breast_height").to_pylist()[1:] == [None, None, None]
+    # "Onbekend" is the inventory saying it does not know, and is not counted
+    # against the format guard; a string that is neither a class nor a known
+    # placeholder is.
+    assert ams.UNPARSED_CLASSES == {"dik": 1}
     ams.UNPARSED_CLASSES.clear()
