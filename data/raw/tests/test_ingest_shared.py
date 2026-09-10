@@ -1585,3 +1585,59 @@ class TestNormalizeTreeName:
 
     def test_two_commas_are_a_list_not_an_inversion(self):
         assert normalize_tree_name("Oak, red, northern") == "Oak, red, northern"
+
+
+# ---------------------------------------------------------------------------
+# The DBH plausibility guard
+# ---------------------------------------------------------------------------
+
+
+class TestImplausibleDbh:
+    """Zero, negative, or over 200 in becomes null, with a count in the log.
+
+    Burlington ON published a linden with a DBH of 192,913,385 in; a handful
+    of cities carry hundreds of inches that are centimetres in the wrong
+    column.  Nothing downstream can use them, so the ingest nulls them.
+    """
+
+    def _table(self, dbh):
+        n = len(dbh)
+        return pa.table(
+            {
+                "tree_id": pa.array([f"t-{i}" for i in range(n)], type=pa.string()),
+                "city": pa.array(["USSFO"] * n, type=pa.string()),
+                "species": pa.array(["Acer rubrum"] * n, type=pa.string()),
+                "diameter_at_breast_height": pa.array(dbh, type=pa.float64()),
+            }
+        )
+
+    def test_nulls_the_implausible_and_keeps_the_rest(self, capsys):
+        from _ingest_shared import DBH_MAX_INCHES
+
+        table = enforce_tree_schema(
+            self._table([10.0, 0.0, -3.0, 250.0, None, DBH_MAX_INCHES, 199.9]),
+            city="Test",
+            data_source="SF_OPENDATA",
+        )
+        assert table.column("diameter_at_breast_height").to_pylist() == [
+            10.0, None, None, None, None, DBH_MAX_INCHES, 199.9,
+        ]
+        assert "3 diameter(s) were zero, negative or over 200 in" in capsys.readouterr().err
+
+    def test_says_nothing_when_every_diameter_is_plausible(self, capsys):
+        table = enforce_tree_schema(
+            self._table([1.0, 12.5, 90.0]), city="Test", data_source="SF_OPENDATA"
+        )
+        assert table.column("diameter_at_breast_height").to_pylist() == [1.0, 12.5, 90.0]
+        assert "diameter(s)" not in capsys.readouterr().err
+
+    def test_a_streaming_ingest_accumulates_the_count(self, capsys):
+        summary: dict[str, int] = {}
+        for page in ([5.0, 999.0], [0.0, 7.0]):
+            enforce_tree_schema(
+                self._table(page), city="Test", data_source="SF_OPENDATA", summary=summary
+            )
+        assert summary["implausible_dbh"] == 2
+        assert capsys.readouterr().err == ""
+        report_species_cleanup(summary, city="Test")
+        assert "2 diameter(s) were zero, negative or over 200 in" in capsys.readouterr().err

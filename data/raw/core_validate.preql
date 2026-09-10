@@ -1,0 +1,20 @@
+# The core's own check, run by the `validate-core` [[cloud.job]] in
+# ../trilogy.toml after the rollup and the enrichment table have landed.
+#
+# `validate datasource` reads the object and checks it against its declared
+# grain, and fails the run when rows repeat: the rollup is declared at
+# `tree_id`, and for months it carried 23,078 ids twice -- OSM nodes that two
+# neighbouring cities both extracted -- with nothing anywhere reporting it,
+# because each city's own parquet was clean and the duplication only existed
+# in their union.  A refresh cannot notice that (it proves what it builds, not
+# what it built), so this is a separate statement, on the same tick, ordered
+# after both producers by the same derived edges the predictions job uses.
+#
+# Both inputs are reached through their `_source.preql` root views; this file
+# imports no model and builds nothing.
+
+import full_tree_info_source;
+import tree_enrichment_source;
+
+validate datasource full_tree_info;
+validate datasource tree_enrichment;

@@ -220,7 +220,8 @@ secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET"]
 # not three jobs that happen to start together, it is one ordered firing:
 #
 #     publish-full ──▶ refresh-enrichment ──▶ refresh-predictions   (derived edges)
-#              └──────────────────────────────▶ refresh-predictions
+#              │                          └─▶ validate-core
+#              └──────────────────────────────▶ refresh-predictions, validate-core
 #     refresh-ecoregions                          (independent, runs alongside)
 #
 # The edge is derived, not declared, and it exists because of how the two
@@ -290,6 +291,21 @@ entrypoint = "raw/enrichment_refresh.preql"
 operation = "refresh"
 schedule = "0 0 6 * * *"
 timeout_seconds = 3600
+memory_mb = 2048
+
+# The core validates what it published. `validate datasource` checks the
+# rollup and the enrichment table against their declared grain and fails the
+# run on a repeated key -- the rollup carried 23k OSM ids twice, one per
+# neighbouring city, and nothing else could see it. `run`, not `refresh`:
+# there is nothing to build, and a validate is not a persist. Same cron as
+# the rest of the core; ordered after its two inputs by their names.
+[[cloud.job]]
+key = "validate-core"
+name = "urban-tree-data-validate"
+entrypoint = "raw/core_validate.preql"
+operation = "run"
+schedule = "0 0 6 * * *"
+timeout_seconds = 900
 memory_mb = 2048
 
 # Tree-level predictions: crown width today, height and age reserved.

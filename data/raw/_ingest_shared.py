@@ -1310,6 +1310,10 @@ TREE_COLUMN_TYPES: dict[str, pa.DataType] = {
 # Columns without a `?` prefix in the preql datasources — absence is a bug.
 REQUIRED_TREE_COLUMNS = ("tree_id", "city", "data_source", "species")
 
+# The largest diameter an ingest will publish, in inches; see the guard in
+# enforce_tree_schema for why it exists and why it is 5 m.
+DBH_MAX_INCHES = 200.0
+
 
 def enforce_tree_schema(
     table: pa.Table,
@@ -1496,6 +1500,34 @@ def enforce_tree_schema(
             ) from e
         table = table.set_column(idx, actual, cast)
 
+    # A stem no tree has.  Burlington ON published a linden with a DBH of
+    # 192,913,385 inches (a coordinate or an id in the wrong column), and a
+    # handful of cities carry values in the hundreds that are centimetres or
+    # millimetres typed into an inches field.  Nothing downstream can use them
+    # -- a crown model clamps, a histogram stretches, an average lies -- so
+    # they become null here, with a count in the log.  Zero and negative are
+    # placeholders, not stems, and go the same way.  200 in is 5 m: larger
+    # than any street tree, smaller than the record-holding sequoias that
+    # are not in a city inventory.
+    dbh_column = resolved["diameter_at_breast_height"]
+    if dbh_column in table.schema.names:
+        dbh_idx = table.schema.get_field_index(dbh_column)
+        dbh = table.column(dbh_idx)
+        implausible = pc.fill_null(
+            pc.or_(pc.less_equal(dbh, 0), pc.greater(dbh, DBH_MAX_INCHES)), False
+        )
+        n_implausible = pc.sum(pc.cast(implausible, pa.int64())).as_py() or 0
+        if n_implausible:
+            table = table.set_column(
+                dbh_idx,
+                dbh_column,
+                pc.if_else(implausible, pa.scalar(None, type=pa.float64()), dbh),
+            )
+            if summary is not None:
+                summary["implausible_dbh"] = summary.get("implausible_dbh", 0) + n_implausible
+            else:
+                report_implausible_dbh(n_implausible, city=city)
+
     # Backfill the optional columns this source has no value for, as typed
     # nulls.  Every ingest then emits the identical column set, so a preql
     # datasource can map `submission_photo_url: ?submission_photo_url` uniformly across cities that do
@@ -1513,6 +1545,18 @@ def enforce_tree_schema(
     return table
 
 
+def report_implausible_dbh(count: int, *, city: str = "") -> None:
+    """One line for the diameters ``enforce_tree_schema`` nulled."""
+    if not count:
+        return
+    prefix = f"{city} ingest" if city else "Ingest"
+    print(
+        f"{prefix}: {count} diameter(s) were zero, negative or over "
+        f"{DBH_MAX_INCHES:.0f} in and were published as null",
+        file=sys.stderr,
+    )
+
+
 def report_species_cleanup(counts: dict[str, int], *, city: str = "") -> None:
     """Print the species-cleanup summary for one ingest.
 
@@ -1528,6 +1572,7 @@ def report_species_cleanup(counts: dict[str, int], *, city: str = "") -> None:
             f"records an empty site or stump rather than a tree",
             file=sys.stderr,
         )
+    report_implausible_dbh(counts.get("implausible_dbh", 0), city=city)
     if any(counts.get(k) for k in ("dropped", "rewritten", "formed", "cultivared")):
         print(
             f"{prefix}: species cleanup -- {counts.get('dropped', 0)} value(s) were not "
@@ -1854,6 +1899,125 @@ DEDUP_CELL_METRES: dict[str, int] = {
     "GRMLO": 10,
     "GRSAN": 10,
 }
+
+
+# ---------------------------------------------------------------------------
+# Territories: which city an unattributed tree belongs to
+# ---------------------------------------------------------------------------
+#
+# CITY_BOUNDS above is a *sanity* box: a municipal inventory attributes its
+# own trees, so all its box has to do is catch a wrong-hemisphere coordinate,
+# and it is drawn generously (Denver's reaches the mountain parks).  Two
+# generous boxes overlap where cities are neighbours, and for a source that
+# does NOT attribute its trees -- OpenStreetMap, whose extract is "every tree
+# node in the box", and a community submission, which names a city the way
+# the submitter chose -- an overlap is a tree published twice: 23,078 OSM rows
+# were in the rollup under two cities (Montreal and Longueuil, Mississauga
+# and Toronto, Vancouver and New Westminster, Burlington and Ajax) because
+# each city's box took the whole of the other's riverfront.
+#
+# CITY_TERRITORY is the explicit answer: one or more rectangles per city, and
+# no rectangle of one city intersects a rectangle of another
+# (`tests/test_city_territory.py` checks every pair).  Membership is
+# half-open, `lat_min <= lat < lat_max`, so a point on a shared edge belongs
+# to exactly one city.  Where a real boundary is diagonal (Etobicoke Creek,
+# the St Lawrence) the territory is a staircase of latitude bands, drawn to
+# follow the municipal inventories: a few hundred municipal trees sit on the
+# far side of each staircase, which is why municipal ingests keep using the
+# envelope and only OSM and community rows are assigned by territory.
+#
+# A new city with no neighbour gets its envelope as its one rectangle;
+# `new_city.py` writes that.  A city that gains a neighbour has to carve both.
+
+Box = tuple[float, float, float, float]
+
+CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'JPTYO': ((35.48, 35.9, 138.93, 139.95),),
+    'CAMON': ((46.02, 46.2, -64.95, -64.66),),
+    'CAAJX': ((43.78, 43.95, -79.1, -78.93),),
+    'CABUR': ((43.25, 43.475, -80.0, -79.68),),
+    'CAOTT': ((44.92, 45.58, -76.4, -75.2),),
+    'CAMIS': (
+        (43.475, 43.55, -79.88, -79.5),
+        (43.55, 43.62, -79.88, -79.55),
+        (43.62, 43.64, -79.88, -79.575),
+        (43.64, 43.68, -79.88, -79.6),
+        (43.68, 43.7, -79.88, -79.607),
+        (43.7, 43.72, -79.88, -79.617),
+        (43.72, 43.74, -79.88, -79.625),
+        (43.74, 43.78, -79.88, -79.64),
+    ),
+    'CANWE': ((49.16, 49.26, -122.99, -122.85),),
+    'CAKEL': ((49.75, 50.0, -119.6, -119.3),),
+    'CAVIC': ((48.39, 48.48, -123.42, -123.3),),
+    'CALET': ((49.6, 49.8, -113.0, -112.68),),
+    'CAKGN': ((44.15, 44.52, -76.75, -76.17),),
+    'CAHFX': ((44.4, 45.05, -64.05, -62.35),),
+    'CALON': (
+        (45.4, 45.54, -73.53, -73.3),
+        (45.54, 45.56, -73.52, -73.3),
+        (45.56, 45.58, -73.5, -73.3),
+        (45.58, 45.6, -73.498, -73.3),
+    ),
+    'CAQUE': ((46.68, 47.0, -71.6, -71.1),),
+    'CAMTL': (
+        (45.38, 45.54, -74.0, -73.53),
+        (45.54, 45.56, -74.0, -73.52),
+        (45.56, 45.58, -74.0, -73.5),
+        (45.58, 45.6, -74.0, -73.498),
+        (45.6, 45.72, -74.0, -73.42),
+    ),
+    'CATOR': (
+        (43.55, 43.62, -79.55, -79.1),
+        (43.62, 43.64, -79.575, -79.1),
+        (43.64, 43.68, -79.6, -79.1),
+        (43.68, 43.7, -79.607, -79.1),
+        (43.7, 43.72, -79.617, -79.1),
+        (43.72, 43.74, -79.625, -79.1),
+        (43.74, 43.9, -79.64, -79.1),
+    ),
+    'CAWPG': ((49.66, 50.03, -97.4, -96.9),),
+    'CAEDM': ((53.3, 53.75, -113.8, -113.2),),
+    'CACAL': ((50.8, 51.25, -114.35, -113.83),),
+    'USSFO': ((37.6, 37.9, -122.6, -122.3),),
+    'USNYC': ((40.45, 40.95, -74.3, -73.65),),
+    'USBOS': ((42.15, 42.55, -71.25, -70.85),),
+    'FRPAR': ((48.7, 49.05, 2.1, 2.6),),
+    'USBTV': ((44.35, 44.6, -73.35, -73.1),),
+    'CAVAN': ((49.1, 49.4, -123.3, -122.99),),
+    'DEBER': ((52.3, 52.7, 13.05, 13.8),),
+    'NLAMS': ((52.25, 52.45, 4.7, 5.1),),
+    'GBLON': ((51.25, 51.75, -0.55, 0.35),),
+    'AUMEL': ((-38.1, -37.55, 144.55, 145.4),),
+    'ARBUE': ((-34.8, -34.45, -58.55, -58.3),),
+    'USLAX': ((33.7, 34.35, -118.7, -118.1),),
+    'USWAS': ((38.78, 39.01, -77.15, -76.88),),
+    'USTEM': ((33.3, 33.48, -112.05, -111.8),),
+    'GRATH': ((37.85, 38.1, 23.6, 23.9),),
+    'USDEN': ((39.45, 39.95, -105.65, -104.55),),
+    'GRMLO': ((36.55, 36.9, 24.15, 24.65),),
+    'GRSAN': ((36.3, 36.5, 25.3, 25.55),),
+}
+
+
+def city_territory(city_code: str) -> tuple[Box, ...]:
+    """The rectangles that make up a city, for assigning an unattributed tree."""
+    return CITY_TERRITORY[city_code]
+
+
+def in_city_territory(city_code: str, latitude, longitude) -> bool:
+    """Whether a point falls in the city's territory (half-open on every edge)."""
+    if latitude is None or longitude is None:
+        return False
+    return any(
+        lat_min <= latitude < lat_max and lon_min <= longitude < lon_max
+        for lat_min, lat_max, lon_min, lon_max in CITY_TERRITORY[city_code]
+    )
+
+
+def boxes_intersect(a: Box, b: Box) -> bool:
+    """Whether two boxes share interior; touching edges do not."""
+    return a[0] < b[1] and b[0] < a[1] and a[2] < b[3] and b[2] < a[3]
 
 
 def dedup_cell_degrees(city_code: str) -> tuple[float, float]:

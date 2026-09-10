@@ -26,6 +26,7 @@ Coordinate notes:
     convert from RD New to WGS84 using the polynomial approximation.
 """
 
+import re
 import sys
 from collections.abc import Iterator
 
@@ -57,33 +58,34 @@ def parse_plant_date(year: int | str | None) -> date | None:
     return parse_plant_date_year(year)
 
 
-# Stamdiameterklasse is a Dutch diameter-class string like "0 t/m 20 cm",
-# "21 t/m 40 cm", "41 t/m 60 cm", etc.  We use the midpoint of the range
-# and convert cm → inches.  Unknown/None → None.
-_DIAM_CLASS_MIDPOINTS_CM: dict[str, float] = {
-    "0 t/m 20 cm": 10.0,
-    "21 t/m 40 cm": 30.5,
-    "41 t/m 60 cm": 50.5,
-    "61 t/m 80 cm": 70.5,
-    "81 t/m 100 cm": 90.5,
-    "101 t/m 120 cm": 110.5,
-    "121 t/m 140 cm": 130.5,
-    "141 t/m 160 cm": 150.5,
-    "> 160 cm": 180.0,
-}
+# Stamdiameterklasse is a diameter-class string.  The portal has published
+# it two ways: "0 t/m 20 cm", "21 t/m 40 cm", ... "> 160 cm" (API v1), and
+# since 2026 "0,1 tot 0,2 m.", "0,2 tot 0,3 m.", "0,3 tot 0,5 m.",
+# "0,5 tot 1 m.", "1,0 tot 1,5 m." -- metres, comma decimals, a trailing
+# stop.  The first cut keyed on the v1 strings and returned None for
+# everything else, so the format change cost every Amsterdam tree its
+# diameter with nothing in the log (70 of 300,891 rows had one).  This
+# parses either shape: the numbers, the unit, the midpoint of a range.
+_CLASS_NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
+
+# Class strings the parser could not read, counted across pages so the run
+# can refuse to publish a city whose format changed under it again.
+UNPARSED_CLASSES: dict[str, int] = {}
 
 
 def parse_dbh(diam_class: str | None) -> float | None:
-    """Convert stamdiameterklasse string to DBH in inches."""
-    if not diam_class:
+    """Convert a stamdiameterklasse string to DBH in inches, or None."""
+    if not diam_class or not diam_class.strip():
         return None
-    cm = _DIAM_CLASS_MIDPOINTS_CM.get(diam_class.strip())
-    if cm is None:
-        # Try to parse a bare numeric cm value (some records may differ)
-        try:
-            cm = float(diam_class)
-        except (ValueError, TypeError):
-            return None
+    text = diam_class.strip().lower()
+    numbers = [float(n.replace(",", ".")) for n in _CLASS_NUMBER.findall(text)]
+    if not numbers:
+        return None
+    # A range takes its midpoint; an open class ("> 160 cm") its bound.
+    value = (numbers[0] + numbers[1]) / 2 if len(numbers) >= 2 else numbers[0]
+    cm = value if "cm" in text else value * 100
+    if cm <= 0:
+        return None
     return cm / 2.54
 
 
@@ -187,8 +189,12 @@ def transform(rows: list[dict]) -> pa.Table:
         latitudes.append(lat)
         longitudes.append(lon)
 
-        # DBH: stamdiameterklasse → midpoint cm → inches
-        dbhs.append(parse_dbh(rec.get("stamdiameterklasse")))
+        # DBH: stamdiameterklasse → midpoint → inches
+        diam_class = rec.get("stamdiameterklasse")
+        dbh = parse_dbh(diam_class)
+        if diam_class and dbh is None:
+            UNPARSED_CLASSES[diam_class] = UNPARSED_CLASSES.get(diam_class, 0) + 1
+        dbhs.append(dbh)
 
     return pa.table(
         {
@@ -231,6 +237,17 @@ if __name__ == "__main__":
         keep=lambda r: (r.get("typeObject") or "").strip() != "Stobbe",
         label="Amsterdam ingest",
     )
+    # A class string the parser cannot read is the portal changing its format
+    # again, and the answer is to stop rather than publish 300k trees with
+    # no diameter and a clean exit code.
+    if UNPARSED_CLASSES:
+        unparsed = sum(UNPARSED_CLASSES.values())
+        with_dbh = table.num_rows - table.column("diameter_at_breast_height").null_count
+        sample = ', '.join(repr(k) for k in sorted(UNPARSED_CLASSES)[:5])
+        message = f"Amsterdam ingest: {unparsed} stamdiameterklasse value(s) could not be parsed ({sample})"
+        if unparsed > max(100, with_dbh // 100):
+            raise RuntimeError(message + "; the portal's class format has changed, update parse_dbh")
+        print(message, file=sys.stderr)
     table = validate_coordinates(table, city="Amsterdam", city_code="NLAMS")
     table = enforce_tree_schema(table, city="Amsterdam", data_source="AMSTERDAM_OPENDATA")
     emit(table)

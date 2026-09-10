@@ -278,6 +278,16 @@ template hides:
 cd data && trilogy refresh --dry-run osm_staging/gblon_osm_staging.preql
 ```
 
+**The extract is bounded by the city's territory, not its sanity box.**
+`fetch_osm_trees` sends one Overpass query as a union over the rectangles in
+`CITY_TERRITORY[code]` and post-filters with half-open edges, so a node on a
+shared boundary is fetched by exactly one city. It used to be the
+`CITY_BOUNDS` box, and where two cities' boxes overlapped both extracted the
+same nodes: Longueuil's box reached across the St Lawrence into downtown
+Montreal and 122,741 of its 128,390 OSM rows were Montreal's. Each city's
+parquet was clean and the duplication only existed in the rollup, which is
+what `validate-core` now checks daily.
+
 **Extraction is decoupled from refresh.** The extraction publishes
 `{code}_osm_staging.parquet` to GCS; the refresh pipeline only ever reads that
 object. Two reasons: Overpass 429/504s routinely under load (fetching at
@@ -733,6 +743,18 @@ Also add the new city's source labels to `MUNICIPAL_DATA_SOURCES` in
 **`data/raw/_ingest_shared.py`** (the community label is derived automatically)
 and a display label to **`src/src/data/dataSources.ts`**. See "The `data_source`
 column" above for why the enum values themselves live per-city rather than here.
+
+Two boxes, not one. `CITY_BOUNDS` is the sanity box every row of the city
+must fall in, drawn generously. `CITY_TERRITORY` is the set of rectangles
+that decides which city an *unattributed* tree -- an OSM node, a community
+submission -- belongs to, and no rectangle of one city may intersect a
+rectangle of another (`test_city_territory.py`). `new_city.py` writes the
+territory as the envelope; if the new city has a neighbour on the map, carve
+both territories along the real boundary, as a staircase of latitude bands
+where the boundary is diagonal (Toronto/Mississauga, Montreal/Longueuil are
+the worked examples). Municipal ingests keep using the envelope: an inventory
+attributes its own trees, and a staircase always leaves a few hundred of them
+on the far side.
 
 ### 4. Create the Freshness Probe
 
@@ -1985,6 +2007,20 @@ cd data && trilogy refresh raw/{city}/{city}_tree_info.preql -f {city}_tree_info
 
 Row counts are the cheap tell — compare each `data_source` partition in the new
 Parquet against the source row count before assuming a rebuild succeeded.
+
+### A diameter no tree has is published as null
+
+`enforce_tree_schema` nulls a `diameter_at_breast_height` that is zero,
+negative, or over `DBH_MAX_INCHES` (200 in, 5 m) and prints the count.
+Burlington ON published a linden at 192,913,385 inches, and a few cities
+carry hundreds of inches that are centimetres typed into the wrong column;
+the value cannot be used and a crown model would otherwise clamp on it. The
+cap is a guard against a wrong column, not a unit converter: Amsterdam's
+diameter classes changed format in 2026 and every value quietly parsed to
+null, which no cap can see. That ingest now counts the class strings it
+could not read and refuses to publish when they exceed 1% of the rows that
+carry one -- the pattern to copy for any source whose numeric field is a
+coded string.
 
 ### `tree_id` is the grain, and the source's obvious id is often not unique
 

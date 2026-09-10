@@ -616,6 +616,14 @@ def build(args) -> Edits:
         rf'\1    "{code}": ({lo_lat}, {hi_lat}, {lo_lon}, {hi_lon}),\n',
         what="CITY_BOUNDS", marker=f'"{code}": ({lo_lat}, {hi_lat}',
     )
+    # The territory starts as the envelope.  A city with a neighbour has to
+    # carve both by hand -- test_city_territory.py fails on the overlap.
+    e.sub_once(
+        shared,
+        r"(CITY_TERRITORY: dict\[str, tuple\[Box, \.\.\.\]\] = \{\n)",
+        rf"\1    '{code}': (({lo_lat}, {hi_lat}, {lo_lon}, {hi_lon}),),\n",
+        what="CITY_TERRITORY", marker=f"'{code}': (({lo_lat}, {hi_lat}",
+    )
     # The dedup grid cell starts at the common 10 m and is a placeholder until
     # measured: `uv run osm_dedup_validation.py --city {code}` after the first
     # build, then move it to 20 m only if the 5-10 m band is clearly

@@ -12,8 +12,9 @@ The shape, in one paragraph: **each city is an independent pipeline** with its
 own three jobs (`osm-{code}` weekly extraction, `city-{code}` refresh on a
 cadence matched to its portal, and a `landmarks-{code}` publish with no cron
 where the landmarks are a curated CSV), and a **daily core** (`publish-full`,
-`refresh-enrichment`, `refresh-predictions`, `refresh-ecoregions`, plus weekly
-`refresh-landmarks`) that reads only published parquets.
+`refresh-enrichment`, `refresh-predictions`, `validate-core`,
+`refresh-ecoregions`, plus weekly `refresh-landmarks`) that reads only
+published parquets.
 
 Four things about that are load-bearing, and each replaced something that broke:
 
@@ -48,6 +49,17 @@ Four things about that are load-bearing, and each replaced something that broke:
   imports both and nothing else, which is what makes `refresh-predictions`
   run after its two producers and never rebuild either. Neither source file
   may enter the frontend's model bundle (`test_tree_predictions.py`).
+- **The core validates what it published.** `raw/core_validate.preql` runs
+  `validate datasource` over the rollup and the enrichment table after both
+  land, and fails the tick on a repeated key. A refresh proves what it
+  builds, not what it built: the rollup carried 23,078 OSM ids twice, one per
+  neighbouring city, and every city's own parquet was clean.
+- **An unattributed tree is assigned by territory, not by sanity box.**
+  `CITY_BOUNDS` is the generous box a municipal row must fall in;
+  `CITY_TERRITORY` (both in `_ingest_shared.py`) is the explicit,
+  non-overlapping set of rectangles that decides which city an OSM node or a
+  community submission belongs to. `test_city_territory.py` checks every
+  pair; a city that gains a neighbour has to carve both territories.
 - **A missing job is silent.** Nothing errors when a city has no schedule; its
   parquet simply stops updating. `test_cloud_jobs.py` is the only thing that
   catches it, so run `cd data/raw && uv run --with pytest python -m pytest tests -q`
