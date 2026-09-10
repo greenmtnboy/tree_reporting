@@ -1,0 +1,250 @@
+# Tree-level predictions: one row per published tree, carrying what a model
+# says about the tree rather than what a source recorded. Built by the
+# `refresh-predictions` [[cloud.job]] in ../trilogy.toml, daily, in the same
+# tick as the rest of the core and ordered after the two jobs it consumes.
+#
+# Today it predicts one thing, crown width, and reserves two columns
+# (`predicted_height_m`, `predicted_age_years`) that are published as null
+# until a model for each exists. The map does not read this parquet yet; it
+# is for model curation first, and the crown width is meant to become the
+# visual radius of a tree's canopy.
+#
+# ---------------------------------------------------------------------------
+# The crown model, and where it comes from
+# ---------------------------------------------------------------------------
+#
+#     crown_width_m = 2 * scale * dbh_cm ** b        (dbh clamped to the fitted range)
+#
+# A genus-level power law fitted on Tallo (Jucker et al. 2022, CC-BY 4.0;
+# 312,829 trees with a measured crown radius across 1,453 genera), which is
+# the only open dataset that supports a fit at genus rank -- the published
+# urban crown models are species-level and cover a few dozen species between
+# them. `crown_allometry_fit.py` does the fit and writes
+# `crown_width_coefficients.csv`; its docstring carries the method, the
+# quality gate, the fallback order (genus -> family -> division) and the two
+# things the model deliberately is not: calibrated to open-grown urban trees
+# (Tallo is forest plots, and runs 15-30% low against the one urban reference
+# we have), and adjusted for stand density (Bechtold 2003 tried a basal-area
+# term over 87 species and dropped it as unstable). Both are curation
+# questions this dataset exists to put numbers in front of.
+#
+# The coefficient table is a CSV `file` datasource, joined on `genus`. The
+# genus comes from the enrichment table rather than from the first word of
+# `species`, because the enrichment table has already corrected the
+# misspellings a city publishes (`Petula pendula` -> Betula) and it is also
+# what supplies `tree_form`, which decides the fallback for a genus the table
+# does not carry: a conifer takes the gymnosperm fit, a palm takes none (a
+# palm's crown does not scale with its stem, and Tallo has no palm crowns),
+# anything else the angiosperm fit. The sentinels -- `Unknown`, `Dead`,
+# `Shrub` -- take the all-Tallo fit, since their division is unknown too.
+#
+# `crown_model_level` says which of those a row got, and `crown_model_n` how
+# many Tallo trees stood behind it, so a curator can filter to the rows a
+# real genus fit produced.
+#
+# ---------------------------------------------------------------------------
+# Stand density: carried, not applied
+# ---------------------------------------------------------------------------
+#
+# `local_tree_density_per_ha` counts published trees in a 50 m grid cell
+# around each tree (0.25 ha, so trees per hectare is the count times four).
+# The grid is in degrees, with the longitude step scaled by the cosine of the
+# cell's own latitude band -- a Taylor polynomial, since the planner has no
+# `cos` -- so a cell is 50 m on both axes anywhere the map goes. It is a
+# covariate for the curation stage to plot crown width against, and it does
+# not enter the prediction; see the fit script for why no sourced model has
+# a usable density term.
+#
+# ---------------------------------------------------------------------------
+# Why this job reads sources and never models
+# ---------------------------------------------------------------------------
+#
+# The two inputs are reached through `full_tree_info_source.preql` and
+# `tree_enrichment_source.preql`: root datasources over the published
+# parquets, named the same as the managed datasources that write them, which
+# is what lets trilogy-cloud order this job after `publish-full` and
+# `refresh-enrichment` in one tick. Importing the models themselves would make
+# this job adopt their targets -- rebuild the rollup, and run the enrichment
+# LLM -- inside its own container. `test_the_core_reads_only_published_parquets`
+# and `test_the_prediction_job_consumes_its_inputs_by_name` pin both.
+#
+# Neither this file nor the two source files is in the frontend's model
+# bundle, and this one must not be: it declares `genus` as a key where the
+# enrichment model the browser plans against has it as a property.
+
+import full_tree_info_source;
+import tree_enrichment_source;
+
+# --- Inputs' publication time ---------------------------------------------
+
+property <*>.prediction_inputs_published_through datetime; # newer of the rollup's and the enrichment table's Last-Modified
+
+root datasource prediction_inputs_publication (
+    data_updated_through: prediction_inputs_published_through
+)
+file `./prediction_inputs_probe.py`;
+
+# --- Coefficients, one row per genus Tallo knows --------------------------
+
+property genus.crown_coefficient_level string; # the CSV holds family / division / global rows too, for the record; only genus rows are read
+property genus.crown_fit_level string; # genus | family | division: which fit this genus's row carries
+property genus.crown_fit_taxon string; # the taxon that fit was made on
+property genus.crown_fit_n int; # Tallo trees behind the fit
+property genus.crown_fit_b float; # exponent on dbh_cm
+property genus.crown_fit_scale float; # exp(ln_a + sigma^2/2): crown_radius_m = scale * dbh_cm ** b
+property genus.crown_fit_dbh_max_cm float; # largest stem the fit saw; predictions clamp to it
+
+root datasource crown_width_coefficients (
+    level: crown_coefficient_level,
+    taxon: genus,
+    fit_level: crown_fit_level,
+    fit_taxon: crown_fit_taxon,
+    n: crown_fit_n,
+    b: crown_fit_b,
+    scale: crown_fit_scale,
+    dbh_max_cm: crown_fit_dbh_max_cm,
+)
+grain (genus)
+file `./crown_width_coefficients.csv`
+where crown_coefficient_level = 'genus';
+
+# BEGIN crown_fallbacks -- generated by crown_allometry_fit.py from crown_width_coefficients.csv; do not edit
+# Tallo 1.0.0 (Jucker et al. 2022): crown_radius_m = scale * dbh_cm ** b, dbh clamped to [1, dbh_max_cm]
+const angiosperm_crown_scale <- 0.347503;
+const angiosperm_crown_b <- 0.646075;
+const angiosperm_crown_n <- 211929;
+const angiosperm_crown_dbh_max_cm <- 385;
+const gymnosperm_crown_scale <- 0.228162;
+const gymnosperm_crown_b <- 0.708135;
+const gymnosperm_crown_n <- 77655;
+const gymnosperm_crown_dbh_max_cm <- 770;
+const global_crown_scale <- 0.352756;
+const global_crown_b <- 0.626633;
+const global_crown_n <- 312339;
+const global_crown_dbh_max_cm <- 770;
+# END crown_fallbacks
+
+# --- Crown width -----------------------------------------------------------
+
+const dbh_cm_per_inch <- 2.54;
+
+# A non-positive diameter is a placeholder, not a stem.
+auto dbh_cm <- case when diameter_at_breast_height > 0 then diameter_at_breast_height * dbh_cm_per_inch else null end;
+
+auto crown_fallback_class <- case
+    when species = 'Unknown' or species = 'Dead' or species = 'Shrub' then 'global'
+    when tree_form = 'palm' or species = 'Palm' or species = 'Cactus' then 'none'
+    when tree_form = 'conifer' then 'gymnosperm'
+    else 'angiosperm'
+end;
+
+auto crown_scale <- coalesce(crown_fit_scale, case
+    when crown_fallback_class = 'gymnosperm' then gymnosperm_crown_scale
+    when crown_fallback_class = 'angiosperm' then angiosperm_crown_scale
+    when crown_fallback_class = 'global' then global_crown_scale
+    else null
+end);
+auto crown_b <- coalesce(crown_fit_b, case
+    when crown_fallback_class = 'gymnosperm' then gymnosperm_crown_b
+    when crown_fallback_class = 'angiosperm' then angiosperm_crown_b
+    when crown_fallback_class = 'global' then global_crown_b
+    else null
+end);
+auto crown_dbh_max_cm <- coalesce(crown_fit_dbh_max_cm, case
+    when crown_fallback_class = 'gymnosperm' then gymnosperm_crown_dbh_max_cm
+    when crown_fallback_class = 'angiosperm' then angiosperm_crown_dbh_max_cm
+    when crown_fallback_class = 'global' then global_crown_dbh_max_cm
+    else null
+end);
+
+# Clamped to [1 cm, the fit's largest stem]: an exponent below one keeps a
+# power law tame, but a data-entry DBH of 400 inches should predict the crown
+# of the largest tree the genus was fitted on, not extrapolate past it. The
+# null case is spelled out because DuckDB's greatest() skips nulls -- without
+# it a tree with no diameter is a 1 cm stem with a 70 cm crown.
+auto crown_dbh_cm <- case
+    when dbh_cm is null then null
+    else least(greatest(dbh_cm, 1.0), crown_dbh_max_cm)
+end;
+
+auto predicted_crown_width_m <- 2 * crown_scale * (crown_dbh_cm ** crown_b);
+
+auto crown_model_level <- case
+    when dbh_cm is null then 'none'
+    when crown_fit_scale is not null then crown_fit_level
+    when crown_fallback_class = 'none' then 'none'
+    when crown_fallback_class = 'global' then 'global'
+    else 'division'
+end;
+auto crown_model_taxon <- case
+    when crown_model_level = 'none' then null
+    when crown_fit_scale is not null then crown_fit_taxon
+    when crown_fallback_class = 'gymnosperm' then 'Gymnosperm'
+    when crown_fallback_class = 'angiosperm' then 'Angiosperm'
+    else 'all'
+end;
+auto crown_model_n <- case
+    when crown_model_level = 'none' then null
+    when crown_fit_scale is not null then crown_fit_n
+    when crown_fallback_class = 'gymnosperm' then gymnosperm_crown_n
+    when crown_fallback_class = 'angiosperm' then angiosperm_crown_n
+    else global_crown_n
+end;
+
+# --- Stand density covariate ----------------------------------------------
+
+const density_cell_lat_deg <- 0.000449; # 50 m of latitude
+const density_cell_area_ha <- 0.25;
+
+auto density_lat_index <- floor(latitude / density_cell_lat_deg);
+# cos(latitude) of the cell's band, so every tree in a band shares one
+# longitude step and the grid stays a grid: 1 - x^2/2 + x^4/24 - x^6/720,
+# within 4e-5 of cos up to 60 degrees.
+auto density_band_rad <- density_lat_index * density_cell_lat_deg * 3.141592653589793 / 180;
+auto density_cos_lat <- 1 - (density_band_rad ** 2) / 2 + (density_band_rad ** 4) / 24 - (density_band_rad ** 6) / 720;
+auto density_lon_index <- floor(longitude * density_cos_lat / density_cell_lat_deg);
+# A tree with no coordinates lands in cell -1 rather than in a null cell, so
+# the join back from the per-cell count keeps its row; its density is null.
+auto density_cell <- coalesce(cast(density_lat_index as bigint) * 2000000 + cast(density_lon_index as bigint), -1);
+
+auto local_tree_density_per_ha <- case
+    when density_cell = -1 then null
+    else (count(tree_id) by density_cell) / density_cell_area_ha
+end;
+
+# --- Placeholders ------------------------------------------------------------
+#
+# Published as null until a model exists. Tallo carries height for 498,838
+# trees and would support a height fit of exactly this shape; age has no
+# comparable open source and would come from `plant_date` where a city
+# publishes one.
+
+auto predicted_height_m <- cast(null as float);
+auto predicted_age_years <- cast(null as float);
+
+# --- The published parquet ------------------------------------------------
+#
+# `where tree_id is not null`: the enrichment source is partial, so the
+# planner joins it with a FULL join, which keeps every tree (a species with
+# no enrichment row yet is still predicted, on the angiosperm fallback) but
+# also emits a row for every enrichment species and coefficient genus that no
+# published tree carries. Those rows have no tree, and the grain says so.
+
+datasource tree_predictions (
+    tree_id,
+    city,
+    ?genus,
+    ?dbh_cm,
+    ?predicted_crown_width_m,
+    crown_model_level,
+    ?crown_model_taxon,
+    ?crown_model_n,
+    ?local_tree_density_per_ha,
+    ?predicted_height_m,
+    ?predicted_age_years,
+    prediction_inputs_published_through,
+)
+grain (tree_id)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_predictions_v{data_version}.parquet`
+where tree_id is not null
+freshness by prediction_inputs_published_through;

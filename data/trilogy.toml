@@ -40,8 +40,8 @@ studio_url="http://localhost:5173/trilogy-studio-core/"
 #                   republishes that CSV as a staging parquet.  No cron.
 #
 # and then ONE core that takes the seventeen published city parquets and
-# publishes the cross-city rollup, the species enrichment and the ecoregion
-# dimension the app actually reads.
+# publishes the cross-city rollup, the species enrichment, the tree-level
+# predictions and the ecoregion dimension the app actually reads.
 #
 # This replaced a single `urban-tree-data` job that refreshed all seventeen
 # cities together, three times a day.  Three things were wrong with it and
@@ -214,12 +214,13 @@ secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET"]
 # portal, no Overpass, no staging object. That is what lets it run on one
 # daily cadence regardless of what any individual city is doing.
 #
-# All three jobs share one cron. `trilogy cloud sync` binds the jobs a toml
+# The core jobs share one cron. `trilogy cloud sync` binds the jobs a toml
 # declares on one cron to a single schedule **row**, and a schedule row is
 # what the platform fires as one tick and orders by dependency — so this is
 # not three jobs that happen to start together, it is one ordered firing:
 #
-#     publish-full ──▶ refresh-enrichment        (derived edge)
+#     publish-full ──▶ refresh-enrichment ──▶ refresh-predictions   (derived edges)
+#              └──────────────────────────────▶ refresh-predictions
 #     refresh-ecoregions                          (independent, runs alongside)
 #
 # The edge is derived, not declared, and it exists because of how the two
@@ -290,6 +291,24 @@ operation = "refresh"
 schedule = "0 0 6 * * *"
 timeout_seconds = 3600
 memory_mb = 2048
+
+# Tree-level predictions: crown width today, height and age reserved.
+# Consumes the rollup AND the enrichment table, both reached through their
+# `_source.preql` root views (the same name trick as above, twice), so the
+# platform orders this job after both in the same tick. It reads two
+# published parquets and one committed CSV of coefficients, runs no script
+# but its freshness probe, and cannot reach a portal or the LLM.
+#
+# 4 GiB because the whole rollup (10.5M rows) is read twice -- once for the
+# rows, once for the density grid -- and grouped in memory.
+[[cloud.job]]
+key = "refresh-predictions"
+name = "urban-tree-data-predictions"
+entrypoint = "raw/tree_predictions.preql"
+operation = "refresh"
+schedule = "0 0 6 * * *"
+timeout_seconds = 1800
+memory_mb = 4096
 
 # Landmarks: per-city parquets plus the cross-city union, still one lane.
 #

@@ -173,6 +173,16 @@ Per-species attributes (native status, evergreen, mature height, canopy spread, 
 Tree info has been automatically extracted from the available APIs per species label and may be inaccurate - corrections very welcome, especially by people that know trees. Don't cite this in your paper!
 :::
 
+### Tree-level predictions
+
+`tree_predictions_v{n}.parquet` carries a predicted crown width per tree, from
+a genus-level stem-diameter power law fitted on the
+[Tallo](https://doi.org/10.5281/zenodo.6637599) database (Jucker et al. 2022,
+*Global Change Biology*, [doi:10.1111/gcb.16302](https://doi.org/10.1111/gcb.16302);
+CC BY 4.0). Tallo is forest-plot data, so the crowns run narrower than an
+open-grown street tree's; the parquet is a model-curation input today and
+does not drive the map. Refit with `data/raw/crown_allometry_fit.py --write`.
+
 ### Species images
 
 Tree species photos are sourced from the [iNaturalist API](https://api.inaturalist.org/v1/docs/). Images are licensed by their original photographers under Creative Commons licenses. [iNaturalist](https://www.inaturalist.org/) is a joint initiative of the California Academy of Sciences and the National Geographic Society.

@@ -12,8 +12,8 @@ The shape, in one paragraph: **each city is an independent pipeline** with its
 own three jobs (`osm-{code}` weekly extraction, `city-{code}` refresh on a
 cadence matched to its portal, and a `landmarks-{code}` publish with no cron
 where the landmarks are a curated CSV), and a **daily core** (`publish-full`,
-`refresh-enrichment`, `refresh-ecoregions`, plus weekly `refresh-landmarks`)
-that reads only published parquets.
+`refresh-enrichment`, `refresh-predictions`, `refresh-ecoregions`, plus weekly
+`refresh-landmarks`) that reads only published parquets.
 
 Four things about that are load-bearing, and each replaced something that broke:
 
@@ -40,10 +40,31 @@ Four things about that are load-bearing, and each replaced something that broke:
   freshness probe and derives each portal's real publishing interval from the
   distinct watermarks it has recorded in `portal_cadence.json`. Do not retune a
   cron from a single observation.
+- **A consumer of published data reaches it through a `_source.preql`.**
+  `raw/full_tree_info_source.preql` and `raw/tree_enrichment_source.preql`
+  are root (unmanaged) views of the rollup and the enrichment table, named
+  the same as the managed datasources that write them; that shared name is
+  the derived edge trilogy-cloud orders a tick by. `raw/tree_predictions.preql`
+  imports both and nothing else, which is what makes `refresh-predictions`
+  run after its two producers and never rebuild either. Neither source file
+  may enter the frontend's model bundle (`test_tree_predictions.py`).
 - **A missing job is silent.** Nothing errors when a city has no schedule; its
   parquet simply stops updating. `test_cloud_jobs.py` is the only thing that
   catches it, so run `cd data/raw && uv run --with pytest python -m pytest tests -q`
   after touching the job table.
+
+### Tree-level predictions
+
+`raw/tree_predictions.preql` publishes `tree_predictions_v{n}.parquet`: one
+row per rollup tree with a predicted crown width, a stand-density covariate,
+and null placeholders for height and age. The crown model is a genus-level
+power law fitted on the open Tallo database by `raw/crown_allometry_fit.py`,
+committed as `raw/crown_width_coefficients.csv` and applied in DuckDB (no
+script at refresh time but the freshness probe). Read the fit script's
+docstring before touching the model: it records why Tallo, the quality gate,
+the fallback order, and the two things the model deliberately is not
+(urban-calibrated, density-adjusted). The map does not read this parquet yet;
+see "Tree-level predictions" in `EXTENDING.md` for the refit and the shape.
 
 ### Correcting a species by hand
 
