@@ -153,12 +153,20 @@ reach for them before writing anything:
   feature with no geometry.
 - **`_socrata_shared.py`** and **`_ckan_shared.py`** — the same for the other
   two platforms this repo reads more than twice.
+- **`_wfs_shared.py`** — an OGC WFS 2.0 (GeoServer) reader for Copenhagen and
+  Helsinki, whose trees and heritage registers are both on one: sorted
+  `startIndex` paging terminated on `numberMatched`, plus `wfs_max_property`,
+  the one-row descending-sort read that is both cities' freshness probe
+  (nulls excluded explicitly — GeoServer sorts them first).
 - **`_common_name_species.py`** — a curated common-name → accepted-binomial
   table, for the portals that publish an English name where the binomial should
   be. Not a platform module: what those cities shared was a question, not an
   API. Read its docstring before reaching for the enrichment table's inverse
   instead — that was tried, measured, and does not work, because the enrichment
   table carries the misspelled binomials the cities themselves published.
+  `_japanese_species.py`, `_spanish_species.py` and `_chinese_species.py` are
+  the same shape for Tokyo, Bogotá and Taipei — one module per language,
+  because the keys normalise by different rules.
 
 **Read a field's domain before deciding what a column holds.**
 `coded_value_domain(layer, field)` has now answered three questions the column
@@ -431,7 +439,11 @@ numbers are real and neither is a property of the source count alone, so the
 a standing fact. Time a sweep on your branch before concluding a city cannot
 be afforded; and note that the arithmetic pointing at a hard ceiling is an
 argument for fixing the per-request re-hydration upstream, not for capping how
-many cities the map has.
+many cities the map has. The next data point agrees: Bogotá, Taipei,
+Copenhagen and Helsinki took the bundle to **92 sources**, and the default
+sweep ran its eight batches in **7.6-17.7s each, 83s total** on the afternoon
+they were added (the four new cities were skipped as not yet on GCS, so that
+is the model cost alone).
 
 **A slow run is not evidence of a query regression.** The service runs on
 high-performance Fly instances, but it is still **one shared instance and it

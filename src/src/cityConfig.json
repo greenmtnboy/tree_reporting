@@ -35,5 +35,9 @@
   "CABUR": { "name": "Burlington, ON", "center": [-79.799, 43.3255] },
   "CAAJX": { "name": "Ajax", "center": [-79.0204, 43.8509] },
   "CAMON": { "name": "Moncton", "center": [-64.7782, 46.0878] },
-  "JPTYO": { "name": "Tokyo", "center": [139.6917, 35.6895] }
+  "JPTYO": { "name": "Tokyo", "center": [139.6917, 35.6895] },
+  "COBOG": { "name": "Bogotá", "center": [-74.0721, 4.711] },
+  "TWTPE": { "name": "Taipei", "center": [121.5654, 25.033] },
+  "DKCPH": { "name": "Copenhagen", "center": [12.5683, 55.6761] },
+  "FIHEL": { "name": "Helsinki", "center": [24.9384, 60.1699] }
 }

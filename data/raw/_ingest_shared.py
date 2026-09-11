@@ -728,6 +728,28 @@ SPECIES_SYNONYMS: dict[str, str] = {
     # returns a single unambiguous `synonym` reading for each.
     "Sapium sebiferum": "Triadica sebifera",
     "Callistemon citrinus": "Melaleuca citrina",
+    # The same, found when Taipei's Chinese names were resolved: each key is
+    # a spelling an already-wired city publishes, each value is the accepted
+    # name `_chinese_species` publishes, and POWO returns a single unambiguous
+    # `synonym` reading for each.  (`Cinnamomum camphora` is deliberately NOT
+    # here: Kew sinks it into *Camphora officinarum*, but the published table
+    # has carried it since San Francisco and Tokyo's and Taipei's camphors
+    # join that row -- the "published table wins" rule.)
+    "Michelia champaca": "Magnolia champaca",
+    "Callistemon viminalis": "Melaleuca viminalis",
+    "Tabebuia impetiginosa": "Handroanthus impetiginosus",
+    "Tabebuia chrysotricha": "Handroanthus chrysotrichus",
+    "Fortunella margarita": "Citrus japonica",
+    "Fortunella japonica": "Citrus japonica",
+    # Both spellings were published (San Francisco under Acca, Melbourne under
+    # Feijoa) and POWO returns one unambiguous synonym reading, so the row
+    # is reclaimed; the Japanese and Spanish tables publish the accepted one.
+    "Acca sellowiana": "Feijoa sellowiana",
+    # Hybrid-mark pairs from the 2026-09-11 species_audit.py run: the unmarked
+    # spelling has no POWO record and the marked one is accepted.
+    "Abelia grandiflora": "Abelia x grandiflora",
+    "Eucryphia intermedia": "Eucryphia x intermedia",
+    "Magnolia kewensis": "Magnolia x kewensis",
 }
 
 
@@ -918,6 +940,89 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Zanthoxylum piperetum": "Zanthoxylum piperitum",
     "Zelcova carpinifolia": "Zelkova carpinifolia",
     "Zelkove serrata": "Zelkova serrata",
+    # 2026-09-11 species_audit.py run: 80 pairs over 2,351 trees, each key a
+    # name POWO has no record of and each value an accepted name one or two
+    # edits away with no other candidate.
+    "Acer buegerianum": "Acer buergerianum",
+    "Acer cappadocium": "Acer cappadocicum",
+    "Acer macrophylla": "Acer macrophyllum",
+    "Acer macrophylum": "Acer macrophyllum",
+    "Acer saccharam": "Acer saccharum",
+    "Asminia triloba": "Asimina triloba",
+    "Betula papyrifa": "Betula papyrifera",
+    "Buxus semppervirens": "Buxus sempervirens",
+    "Cartaegus laevigata": "Crataegus laevigata",
+    "Celtis occidenatlis": "Celtis occidentalis",
+    "Cercidiphyllum japonica": "Cercidiphyllum japonicum",
+    "Cercidiphyllum japonicus": "Cercidiphyllum japonicum",
+    "Cercidipyllum japonicum": "Cercidiphyllum japonicum",
+    "Cercis canandensis": "Cercis canadensis",
+    "Chamacyparis lawsoniana": "Chamaecyparis lawsoniana",
+    "Chamacyparis obtusa": "Chamaecyparis obtusa",
+    "Chamacyparis pisifera": "Chamaecyparis pisifera",
+    "Cladastris kentukea": "Cladrastis kentukea",
+    "Continus coggygria": "Cotinus coggygria",
+    "Cornus kouss": "Cornus kousa",
+    "Cornus nutallii": "Cornus nuttallii",
+    "Cornus nuttalli": "Cornus nuttallii",
+    "Cryptomeria japnica": "Cryptomeria japonica",
+    "Cryptomeria japonicus": "Cryptomeria japonica",
+    "Davidia involucrate": "Davidia involucrata",
+    "Eunoymus europaeus": "Euonymus europaeus",
+    "Fagus gradifolia": "Fagus grandifolia",
+    "Fraxinus pennsylvatica": "Fraxinus pennsylvanica",
+    "Gleditisia triacanthos": "Gleditsia triacanthos",
+    "Gleditsia triancanthos": "Gleditsia triacanthos",
+    "Gleditsia tricanthos": "Gleditsia triacanthos",
+    "Juglans cinera": "Juglans cinerea",
+    "Koelreuteria panniculata": "Koelreuteria paniculata",
+    "Lagerstroemia inedica": "Lagerstroemia indica",
+    "Lagerstroemimia indica": "Lagerstroemia indica",
+    "Lagunaria pattersonia": "Lagunaria patersonia",
+    "Larix larinica": "Larix laricina",
+    "Larix occidenatlis": "Larix occidentalis",
+    "Liguidambar styraciflua": "Liquidambar styraciflua",
+    "Liquidamber styraciflua": "Liquidambar styraciflua",
+    "Magnolia accuminata": "Magnolia acuminata",
+    "Metasequoia glyptostroboid": "Metasequoia glyptostroboides",
+    "Metasequoia glytostroboides": "Metasequoia glyptostroboides",
+    "Nothofuagus antarctica": "Nothofagus antarctica",
+    "Notholithocarpus densiflora": "Notholithocarpus densiflorus",
+    "Ostrya virginianna": "Ostrya virginiana",
+    "Oxydendron arboreum": "Oxydendrum arboreum",
+    "Parrotia persicaum": "Parrotia persica",
+    "Paulownia tomemtosa": "Paulownia tomentosa",
+    "Paulownia tormentosa": "Paulownia tomentosa",
+    "Picea sitkensis": "Picea sitchensis",
+    "Pinus heldreichiin": "Pinus heldreichii",
+    "Pistacia chinesis": "Pistacia chinensis",
+    "Prunus campanulate": "Prunus campanulata",
+    "Prunus camparulata": "Prunus campanulata",
+    "Prunus ceresifera": "Prunus cerasifera",
+    "Prunus virginianna": "Prunus virginiana",
+    "Pyrus pyrofolla": "Pyrus pyrifolia",
+    "Quercis muehlenbergii": "Quercus muehlenbergii",
+    "Quercus accutissima": "Quercus acutissima",
+    "Quercus glaucar": "Quercus glauca",
+    "Quercus myrsinaefolia": "Quercus myrsinifolia",
+    "Quercus myrsinfolia": "Quercus myrsinifolia",
+    "Quercus phyllyreoides": "Quercus phillyreoides",
+    "Salix babilonica": "Salix babylonica",
+    "Salixa alba": "Salix alba",
+    "Scadiopitys verticillata": "Sciadopitys verticillata",
+    "Sequiadendron giganteum": "Sequoiadendron giganteum",
+    "Sequoia semppervirens": "Sequoia sempervirens",
+    "Stewartia pseudo-camellia": "Stewartia pseudocamellia",
+    "Styrax japonica": "Styrax japonicus",
+    "Styrax japonicum": "Styrax japonicus",
+    "Syringa reticlata": "Syringa reticulata",
+    "Thuja occidenatlis": "Thuja occidentalis",
+    "Tilia tomemtosa": "Tilia tomentosa",
+    "Tilia tormentosa": "Tilia tomentosa",
+    "Ulmus american": "Ulmus americana",
+    "Vitex angus-castus": "Vitex agnus-castus",
+    "Zelcova serrata": "Zelkova serrata",
+    "Zolkova serrata": "Zelkova serrata",
 }
 
 
@@ -1186,6 +1291,10 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "FIHEL": ("HELSINKI_OPENDATA",),
+    "DKCPH": ("COPENHAGEN_OPENDATA",),
+    "TWTPE": ("TAIPEI_OPENDATA",),
+    "COBOG": ("BOGOTA_OPENDATA",),
     "JPTYO": ("TOKYO_OPENDATA",),
     "CAMON": ("MONCTON_OPENDATA",),
     "CAAJX": ("AJAX_OPENDATA",),
@@ -1255,6 +1364,10 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "FIHEL": "OSM_FIHEL",
+    "DKCPH": "OSM_DKCPH",
+    "TWTPE": "OSM_TWTPE",
+    "COBOG": "OSM_COBOG",
     "JPTYO": "OSM_JPTYO",
     "CAMON": "OSM_CAMON",
     "CAAJX": "OSM_CAAJX",
@@ -1751,6 +1864,10 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "FIHEL": (60.05, 60.35, 24.75, 25.3),
+    "DKCPH": (55.58, 55.76, 12.4, 12.7),
+    "TWTPE": (24.95, 25.22, 121.45, 121.68),
+    "COBOG": (4.4, 4.9, -74.3, -73.95),
     "JPTYO": (35.48, 35.9, 138.93, 139.95),
     "CAMON": (46.02, 46.2, -64.95, -64.66),
     "CAAJX": (43.78, 43.95, -79.13, -78.93),
@@ -1845,6 +1962,44 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # ../../DEDUP_CELL_RECALIBRATION.md.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Calibrated 2026-09-11 against the staged extract (67,545 OSM nodes --
+    # more than the register itself) and the ingest's 66,380 rows.  5-10 m
+    # band 19.2% mutual-NN over n=1,358: neighbour-dominated, so the band
+    # rule stops at a 5 m guarantee and prints "a 10 m cell".  The marginal
+    # table turns one step earlier, as Tokyo's did: 4->6 removes 607
+    # duplicates for 307 hidden trees (1.98), 6->8 removes 152 for 363
+    # (0.42), 8->10 removes 68 for 360 (0.19).  Helsinki plants at a 5.8 m
+    # median, so from 8 m on a flag is more often the next tree in the row
+    # than the same tree re-mapped; 8 m is where the paying stops.
+    "FIHEL": 8,
+    # Calibrated 2026-09-11 against the staged extract (28,764 OSM nodes) and
+    # the ingest's 68,462 rows.  5-10 m band 28.2% mutual-NN over n=447:
+    # neighbour-dominated, band rule says a 10 m cell.  Marginal table:
+    # 4->6 removes 318 duplicates for 130 hidden trees (2.45), 6->8 removes
+    # 81 for 131 (0.62), 8->10 removes 41 for 105 (0.39).  Same shape as
+    # Tokyo and Helsinki, same answer: 8 m.
+    "DKCPH": 8,
+    # Calibrated 2026-09-11 against the staged extract (3,642 OSM nodes, a
+    # thin overlay on 162,987 inventory trees) and the ingest.  5-10 m band
+    # 58.9% mutual-NN over n=180: a coin flip, which the script reports as
+    # such, and the rule for a coin flip is to leave the rows visible -- a
+    # 5 m guarantee, a 10 m cell.  The marginal table keeps paying past 10
+    # (10->14 removes 44 for 39, 1.13) but on n=180 that is noise; the
+    # inventory plants at a 4.2 m median, second only to Tokyo, so the
+    # asymmetry argues for not widening on an ambiguous reading.
+    "TWTPE": 10,
+    # Calibrated 2026-09-11 against the staged extract (40,359 OSM nodes) and
+    # the first published parquet (1,390,646 municipal rows, read from GCS --
+    # the workstation could not hold the ingest's output).  The inventory is
+    # the tightest-planted on the map by a distance, a 2.3 m median to the
+    # nearest other row and a tenth within 0.3 m, because the census counts
+    # shrubs.  5-10 m band 54.4% mutual-NN over n=5,007: a coin flip, which
+    # the script reports as such, and the rule for a coin flip is to leave
+    # the rows visible.  The marginal table agrees: 6->8 removes 1,895
+    # duplicates for 918 hidden trees (2.06), 8->10 removes 731 for 730
+    # (1.00, break-even), 10->14 removes 542 for 987 (0.55).  8 m is where
+    # the paying stops, as it did for Tokyo, Helsinki and Copenhagen.
+    "COBOG": 8,
     # 5-10 m band 42.3% mutual-NN over n=468: neighbour-dominated, so the band
     # rule stops at a 5 m guarantee and prints "a 10 m cell".  The marginal
     # table says one step less, and Tokyo is the city where that difference is
@@ -2034,6 +2189,10 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'FIHEL': ((60.05, 60.35, 24.75, 25.3),),
+    'DKCPH': ((55.58, 55.76, 12.4, 12.7),),
+    'TWTPE': ((24.95, 25.22, 121.45, 121.68),),
+    'COBOG': ((4.4, 4.9, -74.3, -73.95),),
     'JPTYO': ((35.48, 35.9, 138.93, 139.95),),
     'CAMON': ((46.02, 46.2, -64.95, -64.66),),
     'CAAJX': ((43.78, 43.95, -79.1, -78.93),),
@@ -2414,6 +2573,31 @@ def get_with_retry(
         lambda: _send("GET", url, timeout=timeout, headers=headers, params=params),
         url=url,
         what="fetch",
+        max_retries=max_retries,
+        backoff=backoff,
+    )
+
+
+def head_with_retry(
+    url: str,
+    timeout: int = 120,
+    max_retries: int = 5,
+    backoff: float = 2.0,
+    headers: dict | None = None,
+) -> requests.Response:
+    """HEAD with the same retry policy as `get_with_retry`.
+
+    For a probe whose only watermark is a static file's `Last-Modified`
+    (Taipei publishes its tree CSVs as blobs with no catalogue stamp).
+    Redirects are followed so the header read is the file's, not the
+    redirector's.
+    """
+    return _retry(
+        lambda: _send(
+            "HEAD", url, timeout=timeout, headers=headers, allow_redirects=True
+        ),
+        url=url,
+        what="probe",
         max_retries=max_retries,
         backoff=backoff,
     )
@@ -2966,6 +3150,58 @@ def rd_centroid(ring: list) -> tuple[float, float]:
     xs = [c[0] for c in ring]
     ys = [c[1] for c in ring]
     return sum(xs) / len(xs), sum(ys) / len(ys)
+
+
+def twd97_to_wgs84(x: float, y: float) -> tuple[float, float]:
+    """Convert TWD97 / TM2 zone 121 (EPSG:3826) easting, northing to (lat, lon).
+
+    Taiwan's national grid: a Transverse Mercator on GRS80 with central
+    meridian 121 E, scale 0.9999 and a 250 km false easting.  TWD97 is
+    realised on ITRF94, which is WGS84 to well under a metre, so no datum
+    shift is applied -- the projection inverse is the whole conversion.  The
+    series is the standard one (Snyder 1987, eq. 8-17 to 8-25) and is exact to
+    a millimetre across the island.
+
+    Taipei's tree files publish nothing else: `TWD97X`/`TWD97Y` and no lat/lon.
+    """
+    a = 6378137.0
+    f = 1 / 298.257222101
+    k0 = 0.9999
+    false_easting = 250000.0
+    lon0 = math.radians(121.0)
+
+    e2 = 2 * f - f * f
+    ep2 = e2 / (1 - e2)
+    e1 = (1 - math.sqrt(1 - e2)) / (1 + math.sqrt(1 - e2))
+
+    x = x - false_easting
+    m = y / k0
+    mu = m / (a * (1 - e2 / 4 - 3 * e2**2 / 64 - 5 * e2**3 / 256))
+    phi1 = (
+        mu
+        + (3 * e1 / 2 - 27 * e1**3 / 32) * math.sin(2 * mu)
+        + (21 * e1**2 / 16 - 55 * e1**4 / 32) * math.sin(4 * mu)
+        + (151 * e1**3 / 96) * math.sin(6 * mu)
+        + (1097 * e1**4 / 512) * math.sin(8 * mu)
+    )
+    sin1, cos1, tan1 = math.sin(phi1), math.cos(phi1), math.tan(phi1)
+    n1 = a / math.sqrt(1 - e2 * sin1 * sin1)
+    t1 = tan1 * tan1
+    c1 = ep2 * cos1 * cos1
+    r1 = a * (1 - e2) / (1 - e2 * sin1 * sin1) ** 1.5
+    d = x / (n1 * k0)
+
+    lat = phi1 - (n1 * tan1 / r1) * (
+        d * d / 2
+        - (5 + 3 * t1 + 10 * c1 - 4 * c1 * c1 - 9 * ep2) * d**4 / 24
+        + (61 + 90 * t1 + 298 * c1 + 45 * t1 * t1 - 252 * ep2 - 3 * c1 * c1) * d**6 / 720
+    )
+    lon = lon0 + (
+        d
+        - (1 + 2 * t1 + c1) * d**3 / 6
+        + (5 - 2 * c1 + 28 * t1 - 3 * c1 * c1 + 8 * ep2 + 24 * t1 * t1) * d**5 / 120
+    ) / cos1
+    return math.degrees(lat), math.degrees(lon)
 
 
 # ---------------------------------------------------------------------------

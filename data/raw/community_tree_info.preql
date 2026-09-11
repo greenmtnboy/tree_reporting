@@ -47,6 +47,10 @@ property <*>.cabur_community_data_updated_through datetime; # when approved comm
 property <*>.caajx_community_data_updated_through datetime; # when approved community submissions for CAAJX are through
 property <*>.camon_community_data_updated_through datetime; # when approved community submissions for CAMON are through
 property <*>.jptyo_community_data_updated_through datetime; # when approved community submissions for JPTYO are through
+property <*>.cobog_community_data_updated_through datetime; # when approved community submissions for COBOG are through
+property <*>.twtpe_community_data_updated_through datetime; # when approved community submissions for TWTPE are through
+property <*>.dkcph_community_data_updated_through datetime; # when approved community submissions for DKCPH are through
+property <*>.fihel_community_data_updated_through datetime; # when approved community submissions for FIHEL are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

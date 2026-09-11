@@ -52,6 +52,14 @@ property <*>.grath_osm_data_updated_through datetime; # GCS publication time of 
 property <*>.grmlo_osm_data_updated_through datetime; # GCS publication time of Milos's staged OSM parquet
 property <*>.grsan_osm_data_updated_through datetime; # GCS publication time of Santorini's staged OSM parquet
 property <*>.usden_osm_data_updated_through datetime; # GCS publication time of Denver's staged OSM parquet
+property <*>.fihel_data_updated_through datetime; # when Helsinki data is through
+property <*>.fihel_osm_data_updated_through datetime; # GCS publication time of Helsinki's staged OSM parquet
+property <*>.dkcph_data_updated_through datetime; # when Copenhagen data is through
+property <*>.dkcph_osm_data_updated_through datetime; # GCS publication time of Copenhagen's staged OSM parquet
+property <*>.twtpe_data_updated_through datetime; # when Taipei data is through
+property <*>.twtpe_osm_data_updated_through datetime; # GCS publication time of Taipei's staged OSM parquet
+property <*>.cobog_data_updated_through datetime; # when Bogotá data is through
+property <*>.cobog_osm_data_updated_through datetime; # GCS publication time of Bogotá's staged OSM parquet
 property <*>.jptyo_data_updated_through datetime; # when Tokyo data is through
 property <*>.jptyo_osm_data_updated_through datetime; # GCS publication time of Tokyo's staged OSM parquet
 property <*>.camon_data_updated_through datetime; # when Moncton data is through

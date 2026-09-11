@@ -83,6 +83,10 @@ _CIRCUMFERENCE_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(cm|m)?\s*$", re.I)
 # that type", which is a long way from "you forgot a column".  London is the
 # only instance today.
 OSM_CITY_NAMES: dict[str, str] = {
+    "FIHEL": "Helsinki",
+    "DKCPH": "Copenhagen",
+    "TWTPE": "Taipei",
+    "COBOG": "Bogotá",
     "JPTYO": "Tokyo",
     "CAMON": "Moncton",
     "CAAJX": "Ajax",
@@ -125,6 +129,11 @@ OSM_CITY_NAMES: dict[str, str] = {
 OSM_EXTRA_NULL_COLUMNS: dict[str, dict[str, "pa.DataType"]] = {
     "GBLON": {"borough": pa.string()},
     "JPTYO": {"borough": pa.string()},
+    # Bogotá's localidad, Taipei's 區 and Copenhagen's bydel are the same
+    # concept as London's borough and ride the same column.
+    "COBOG": {"borough": pa.string()},
+    "TWTPE": {"borough": pa.string()},
+    "DKCPH": {"borough": pa.string()},
 }
 
 
@@ -299,9 +308,18 @@ def extract_city(
             f"{city_code} is not in OSM_DATA_SOURCES; add it there and to that "
             f"city's `{city_code.lower()}_source` enum before extracting"
         )
-    table = build_table(
-        fetch_osm_trees(city_code), city_code, name, extra_null_columns
+    # Default from the registry exactly as `stage_city_rows` does, so the two
+    # paths cannot drift on the *columns* either.  They did: the scaffolded
+    # shim passes nothing, and Copenhagen's bootstrap staged a parquet without
+    # `borough` while its model declared it -- the refresh then failed with
+    # `Table "dkcph_osm_tree_info" does not have a column named "borough"`,
+    # which is a long way from "the manual extract forgot an argument".
+    extras = (
+        extra_null_columns
+        if extra_null_columns is not None
+        else OSM_EXTRA_NULL_COLUMNS.get(city_code)
     )
+    table = build_table(fetch_osm_trees(city_code), city_code, name, extras)
     name_on_gcs = staging_name(city_code)
     # Written locally first, then published. The GCS object is the artifact;
     # nothing is committed, because git does not preserve mtime and a committed

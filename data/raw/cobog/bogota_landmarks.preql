@@ -1,0 +1,40 @@
+import ..landmark_common;
+
+root datasource bogota_landmarks_update_time (
+    data_updated_through: cobog_landmark_data_updated_through
+)
+file `./bogota_landmarks_probe.py`;
+
+# Bogotá's monuments and named heritage buildings are two live ArcGIS layers on
+# the district cadastre's server, read directly: no geocoding, no committed CSV
+# and no staging object.  See bogota_landmarks.py for the filter that keeps
+# only the named BIC properties.
+root partial datasource raw_bogota_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    address: ?address,
+    category: ?category,
+    borough: ?borough,
+)
+grain (landmark_id)
+complete where city = 'COBOG'
+file `./bogota_landmarks.py`;
+
+partial datasource bogota_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?address,
+    ?category,
+    ?borough,
+    cobog_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'COBOG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cobog_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/cobog_landmark_info_v{data_version}.parquet`
+freshness by cobog_landmark_data_updated_through;
