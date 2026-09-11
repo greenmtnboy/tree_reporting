@@ -73,7 +73,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 
 | City | Source | Link |
 |------|--------|------|
-| San Francisco | SF Open Data Portal - Street Tree List | https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq |
+| San Francisco | SF Open Data Portal - San Francisco Street Tree Inventory | https://data.sf.gov/City-Infrastructure/San-Francisco-Street-Tree-Inventory/tkzw-k3nq |
 | New York City | NYC Open Data - Street Tree Census | https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh |
 | Boston | Analyze Boston - Trees | https://data.boston.gov/dataset/bprd-trees |
 | Boston (Cambridge) | Cambridge Open Data - Trees | https://data.cambridgema.gov/ |

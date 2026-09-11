@@ -30,7 +30,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'Winnipeg', label: 'City of Winnipeg Open Data - Tree Inventory', url: 'https://data.winnipeg.ca/Parks/Tree-Inventory/hfwk-jp4h' },
   { city: 'Edmonton', label: 'City of Edmonton Open Data - Trees', url: 'https://data.edmonton.ca/Environmental-Services/Trees/eecg-fc54' },
   { city: 'Calgary', label: 'City of Calgary Open Data - Public Trees', url: 'https://data.calgary.ca/Environment/Public-Trees/tfs4-3wwa' },
-  { city: 'San Francisco', label: 'SF Open Data Portal', url: 'https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq' },
+  { city: 'San Francisco', label: 'SF Open Data Portal', url: 'https://data.sf.gov/City-Infrastructure/San-Francisco-Street-Tree-Inventory/tkzw-k3nq' },
   { city: 'New York City', label: 'NYC Open Data Street Tree Census', url: 'https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh' },
   { city: 'Boston', label: 'City of Boston Open Data', url: 'https://data.boston.gov/dataset/bprd-trees' },
   { city: 'Paris', label: 'Paris Open Data (les-arbres)', url: 'https://opendata.paris.fr/explore/dataset/les-arbres/information/' },

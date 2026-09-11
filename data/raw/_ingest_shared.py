@@ -146,11 +146,25 @@ _SPECIES_PLACEHOLDERS = frozenset(
 # Burlington's site type, Denver's `_` prefix, LA's NOT_A_TREE_NAMES); this
 # catches the portals that only say so in the species field, SF above all
 # ("Vacant site medium", "Scheduled Planting Site - Spring 2026").
+#
+# The second group is San Francisco's, found while checking whether its portal
+# flags a removed tree -- it does not, and these are what it says instead.  A
+# "Potential Site" is a spot the city has assessed and not planted, which is
+# "Vacant" by another name; it read as a plausible binomial ("Potential site")
+# and so reached the enrichment queue and the map, 149 dots' worth.  `Basin`,
+# `pave` and `Landscape Plants` describe the pit, the paving over it and a bed
+# of shrubs, none of which is a tree at a point.
 _NOT_A_TREE_MARKERS = frozenset(
-    {"vacant", "stump", "empty", "empty pit", "planting site", "stobbe"}
+    {"vacant", "stump", "empty", "empty pit", "planting site", "stobbe",
+     "potential site", "landscape plants", "basin", "basins", "pave", "paved"}
 )
 _NOT_A_TREE_PREFIXES = (
     "vacant", "stump", "empty pit", "planting site", "scheduled planting",
+    "potential site",
+    # "Paved over", "Paved temp", "Pavedtemp" -- a site the city tarmacked.
+    # The prefix is "paved" and not "pave" on purpose: *Pavetta* is a real
+    # genus of some 400 species, and a shared filter must not eat one.
+    "paved",
 )
 _NOT_A_TREE_SUBSTRINGS = ("planting site", "empty pit")
 
@@ -164,7 +178,10 @@ def is_not_a_tree(value: str | None) -> bool:
         "Scheduled Planting Site - Spring 2026" -> True
         "Empty pit/planting site"               -> True
         "Stump"                                 -> True
+        "Potential Site"                        -> True
+        "Basin(s)"                              -> True
         "Unknown"                               -> False  (a tree, unnamed)
+        "Tree(s)"                               -> False  (a tree, unnamed)
         "Dead tree"                             -> False  (a tree, dead)
         "Acer rubrum"                           -> False
     """
@@ -172,6 +189,11 @@ def is_not_a_tree(value: str | None) -> bool:
     if s is None:
         return False
     s = _strip_diacritics(s).lower()
+    # A portal that pluralises a site marker in parentheses -- SF writes
+    # "Basin(s)" -- is naming the same thing.  Safe to strip before matching
+    # because the one value that *keeps* its parenthetical, "Tree(s)", reduces
+    # to "tree", which is not a marker: an unnamed tree stays a tree.
+    s = s.replace("(s)", "").strip()
     if s in _NOT_A_TREE_MARKERS:
         return True
     if any(s.startswith(p) for p in _NOT_A_TREE_PREFIXES):
