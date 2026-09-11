@@ -1,9 +1,11 @@
 # Cross-source dedup and attribute merge, shared by every city tree model.
 #
-# A city's tree parquet is built from up to three partitions -- the municipal
-# inventory, approved community submissions, and OpenStreetMap -- that overlap
-# by construction: the same tree is re-mapped by OSM, or submitted by someone
-# who found it already in the inventory.  This file resolves the overlap once,
+# A city's tree parquet is built from up to four partitions -- the municipal
+# inventory, approved community submissions, OpenStreetMap, and reviewed
+# aerial-imagery detections -- that overlap by construction: the same tree is
+# re-mapped by OSM, submitted by someone who found it already in the
+# inventory, or detected by the imagery model in a city that later publishes
+# it.  This file resolves the overlap once,
 # for all cities: rows that describe the same tree are grouped under ONE
 # canonical cluster id, every canonical attribute (`species`, `latitude`, ...)
 # is picked from the cluster's rows by a value function, and the row whose
@@ -54,8 +56,19 @@
 #
 #   municipal row  -> itself
 #   community row  -> the lowest municipal id sharing a cell, else itself
-#   OSM row        -> the lowest municipal id sharing a cell, else the lowest
+#   satellite row  -> the lowest municipal id sharing a cell, else the lowest
 #                     community id sharing a cell, else itself
+#   OSM row        -> the lowest municipal id sharing a cell, else the lowest
+#                     community id, else the lowest satellite id, else itself
+#
+# The satellite tier is what reconciles imagery with a portal: a detection
+# accepted in the reviewer publishes as its own tree until the city's
+# inventory catches up, and the day a municipal row lands in its cell the
+# detection is absorbed into that row's cluster, its id kept in
+# `merged_tree_ids` and its label in `merged_sources`.  A detection the
+# reviewer explicitly linked to an inventory tree is exported at that tree's
+# own coordinates (satellite_tree_info.py), so it shares every grid cell with
+# it and the link cannot be lost to the grid's half-cell guarantee.
 #
 # The row's class is expressed as an aggregate at its own grain
 # (`min(tree_id ? <class>) by row_key`) rather than as a `case` on the source,
@@ -87,11 +100,12 @@ property tree_id.raw_photo_url string;
 # proves a city's partition union complete (see core.preql).
 property tree_id.source_label string;
 
-# The labels follow one convention -- `COMMUNITY_{code}`, `OSM_{code}`, and
-# anything else is a municipal dataset -- enforced by DATA_SOURCES in
-# _ingest_shared.py, so the class needs no per-city table.
+# The labels follow one convention -- `COMMUNITY_{code}`, `OSM_{code}`,
+# `SATELLITE_{code}`, and anything else is a municipal dataset -- enforced by
+# DATA_SOURCES in _ingest_shared.py, so the class needs no per-city table.
 auto source_class <- case
     when substring(source_label, 1, 10) = 'COMMUNITY_' then 'community'
+    when substring(source_label, 1, 10) = 'SATELLITE_' then 'satellite'
     when substring(source_label, 1, 4) = 'OSM_' then 'osm'
     else 'municipal'
 end;
@@ -175,13 +189,25 @@ auto cell_c <- @grid_cell(0, 0.5);
 auto cell_d <- @grid_cell(0.5, 0.5);
 
 # --- Cluster id --------------------------------------------------------------
+#
+# Three anchor tiers, one per class that can own a cluster: a municipal row,
+# a person's submission, and a reviewed detection.  Each tier is an aggregate
+# over the same four cells, so the satellite tier costs four more grouped
+# aggregates per build; what a grouped aggregate costs on Berlin's union is
+# measured in upstream_repro/redundant_group_by/memory.
 def municipal_anchor(cell) -> min(tree_id ? source_class = 'municipal') by cell;
+def person_anchor(cell) -> min(tree_id ? source_class = 'municipal' or source_class = 'community') by cell;
 def any_anchor(cell) -> min(tree_id ? source_class != 'osm') by cell;
 
 auto municipal_anchor_a <- @municipal_anchor(cell_a);
 auto municipal_anchor_b <- @municipal_anchor(cell_b);
 auto municipal_anchor_c <- @municipal_anchor(cell_c);
 auto municipal_anchor_d <- @municipal_anchor(cell_d);
+
+auto person_anchor_a <- @person_anchor(cell_a);
+auto person_anchor_b <- @person_anchor(cell_b);
+auto person_anchor_c <- @person_anchor(cell_c);
+auto person_anchor_d <- @person_anchor(cell_d);
 
 auto anchor_a <- @any_anchor(cell_a);
 auto anchor_b <- @any_anchor(cell_b);
@@ -191,11 +217,14 @@ auto anchor_d <- @any_anchor(cell_d);
 # "Self if <class>": the row's own id when it is of that class, else null.
 auto row_key <- concat(tree_id, '#');
 auto self_if_municipal <- @municipal_anchor(row_key);
+auto self_if_person <- @person_anchor(row_key);
 auto self_if_not_osm <- @any_anchor(row_key);
 
 auto cluster_id <- coalesce(
     self_if_municipal,
     municipal_anchor_a, municipal_anchor_b, municipal_anchor_c, municipal_anchor_d,
+    self_if_person,
+    person_anchor_a, person_anchor_b, person_anchor_c, person_anchor_d,
     self_if_not_osm,
     anchor_a, anchor_b, anchor_c, anchor_d,
     tree_id
@@ -205,16 +234,24 @@ auto cluster_id <- coalesce(
 #
 # `@by_source` is the default value function: a non-null value wins, and when
 # more than one source has one the community value is taken first (it carries
-# a person and a photo), then the municipal inventory, then OSM.  Grouped
-# aggregates inside a function argument list have to be parenthesised, or the
-# parser reads `by k, next_arg` as a multi-column group.
+# a person and a photo), then the municipal inventory, then the reviewed
+# detection (a person confirmed it, but its position is a crown centre and
+# its diameter an estimate the ingest does not even publish), then OSM.
+# Grouped aggregates inside a function argument list have to be
+# parenthesised, or the parser reads `by k, next_arg` as a multi-column group.
 def by_source(value) -> coalesce(
     (max(value ? source_class = 'community') by cluster_id),
     (max(value ? source_class = 'municipal') by cluster_id),
+    (max(value ? source_class = 'satellite') by cluster_id),
     (max(value ? source_class = 'osm') by cluster_id)
 );
 
-auto source_rank <- case when source_class = 'community' then 3 when source_class = 'osm' then 1 else 2 end;
+auto source_rank <- case
+    when source_class = 'community' then 4
+    when source_class = 'municipal' then 3
+    when source_class = 'satellite' then 2
+    else 1
+end;
 
 # Species: the most specific name wins (binomial > genus > a sentinel that
 # still says something, like Palm or Dead > Unknown); ties go to the

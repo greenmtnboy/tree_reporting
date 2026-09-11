@@ -1272,6 +1272,31 @@ OSM_DATA_SOURCES: dict[str, str] = {
     "GRSAN": "OSM_GRSAN",
 }
 
+
+def satellite_source_for(city_code: str) -> str:
+    """The `data_source` label for reviewed aerial-imagery detections in *city_code*."""
+    return f"SATELLITE_{city_code}"
+
+
+# Cities with a reviewed aerial-imagery partition: model detections on NAIP
+# tiles that a person accepted in the reviewer's satellite page
+# (reviewer/satellite.ts) and that the reviewer published to
+# `satellite/published_trees.ndjson` in the public bucket, which
+# `satellite_tree_info.py` reads the way `community_tree_info.py` reads the
+# community export.  Opt-in per city, like OSM was while only two cities were
+# wired: a city belongs here once imagery has been run over it and its tree
+# model declares the `SATELLITE_{code}` enum value, the partition, and the
+# freshness column -- `test_satellite_city_is_fully_wired` checks each half,
+# because a half-wired city publishes zero satellite rows rather than an
+# error.  The rows overlap every other partition by construction (the model
+# sees the trees the inventory already has), so the shared cluster merge
+# classes them as a fourth source below municipal and community and above
+# OSM; see tree_dedup.preql.
+SATELLITE_DATA_SOURCES: dict[str, str] = {
+    "USSFO": satellite_source_for("USSFO"),
+    "USBOS": satellite_source_for("USBOS"),
+}
+
 DATA_SOURCES: tuple[str, ...] = tuple(
     label
     for code in MUNICIPAL_DATA_SOURCES
@@ -1279,6 +1304,7 @@ DATA_SOURCES: tuple[str, ...] = tuple(
         *MUNICIPAL_DATA_SOURCES[code],
         COMMUNITY_DATA_SOURCES[code],
         *((OSM_DATA_SOURCES[code],) if code in OSM_DATA_SOURCES else ()),
+        *((SATELLITE_DATA_SOURCES[code],) if code in SATELLITE_DATA_SOURCES else ()),
     )
 )
 

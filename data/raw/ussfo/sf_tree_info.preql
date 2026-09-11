@@ -1,15 +1,16 @@
 import ..tree_common;
 import ..community_tree_info;
+import ..satellite_tree_info;
 import ..tree_dedup;
 
-key ussfo_source enum<string>['SF_OPENDATA', 'COMMUNITY_USSFO', 'OSM_USSFO'];
+key ussfo_source enum<string>['SF_OPENDATA', 'COMMUNITY_USSFO', 'OSM_USSFO', 'SATELLITE_USSFO'];
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
 auto ussfo_source_label <- concat(ussfo_source, '');
 merge ussfo_source_label into source_label;
 
-auto ussfo_published_data_updated_through <- greatest(ussfo_data_updated_through, ussfo_community_data_updated_through, ussfo_osm_data_updated_through);
+auto ussfo_published_data_updated_through <- greatest(ussfo_data_updated_through, ussfo_community_data_updated_through, ussfo_osm_data_updated_through, ussfo_satellite_data_updated_through);
 
 root datasource sf_update_time (
     data_updated_through: ussfo_data_updated_through
@@ -22,6 +23,12 @@ root datasource ussfo_community_update_time (
     ussfo_community_data_updated_through: ussfo_community_data_updated_through
 )
 file `../community_update_time.py`;
+
+# Likewise for reviewed aerial-imagery detections: one column, this city's.
+root datasource ussfo_satellite_update_time (
+    ussfo_satellite_data_updated_through: ussfo_satellite_data_updated_through
+)
+file `../satellite_update_time.py`;
 
 
 
@@ -92,6 +99,29 @@ root partial datasource sf_community_tree_info (
 grain (tree_id)
 complete where city = 'USSFO' and ussfo_source = 'COMMUNITY_USSFO'
 file `../community_tree_info.py`
+where city = 'USSFO';
+
+# Reviewed aerial-imagery detections (reviewer/satellite.ts), read from the
+# public export the reviewer publishes.  A detection the reviewer linked to
+# an inventory tree arrives at that tree's coordinates, so the shared cluster
+# merge absorbs it; an unlinked one publishes as its own tree until the
+# inventory catches up.  See ../satellite_tree_info.py.
+root partial datasource ussfo_satellite_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: ussfo_source,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
+)
+grain (tree_id)
+complete where city = 'USSFO' and ussfo_source = 'SATELLITE_USSFO'
+file `../satellite_tree_info.py`
 where city = 'USSFO';
 
 

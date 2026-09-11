@@ -595,6 +595,56 @@ add "(c) OpenStreetMap contributors" attribution in `README.md` and
 
 ---
 
+## Reviewed aerial-imagery detections (the satellite partition)
+
+A city imagery has been run over can carry a **fourth source partition**,
+`SATELLITE_{CODE}`: model detections on NAIP tiles that a person accepted in
+the reviewer's satellite page and published. SF and Boston are wired; the
+registry is `SATELLITE_DATA_SOURCES` in `_ingest_shared.py`, and it is
+opt-in per city the way OSM was while only two cities had it.
+
+The flow, end to end:
+
+1. `imagery_model/src/urban_tree_ml/tile_bundle_export.py` turns a run's
+   predictions plus the local NAIP mosaic into one bundle per tile (PNG +
+   JSON: affine, CRS, detections with stable ids, the inventory trees the
+   tile covers with their predicted crown widths). Sealed test chips and
+   ground truth are never exported.
+2. `reviewer/satellite.ts` serves the bundles at `/satellite`, stores each
+   decision in Firestore, and on **publish** writes
+   `satellite/published_trees.ndjson` + `satellite/manifest.json` to the
+   public bucket -- the same gate approval is for photo submissions.
+3. `raw/satellite_tree_info.py` reads that export into the canonical schema
+   and `raw/satellite_update_time.py` reads the manifest, one freshness
+   column per city, exactly as the community pair does. Each wired city's
+   model declares the `SATELLITE_{CODE}` enum value, a
+   `complete where city = 'X' and {code}_source = 'SATELLITE_X'` partition
+   over the ingest with `where city = 'X'`, the probe, and the column in its
+   `greatest()`. `test_satellite_wiring.py` names whatever is missing.
+4. `raw/tree_dedup.preql` classes the rows as a fourth source, **below
+   municipal and community and above OSM**: a lone detection publishes as
+   its own tree and anchors any OSM node beside it; a detection beside an
+   inventory tree -- or one the reviewer explicitly linked, which is
+   exported *at the inventory tree's coordinates* so the grid equi-join
+   cannot miss it -- is absorbed, the municipal position and measurement
+   win, the satellite species fills a gap, and the satellite id lands in
+   `merged_tree_ids`. That is the reconciliation: when a city starts
+   publishing a tree the imagery already found, the two become one row with
+   both sources in `merged_sources`. `test_satellite_reconciliation.py`
+   runs the SF model's own refresh SQL over fixture rows and pins each case.
+
+Two things the ingest refuses on purpose. The model's DBH estimate never
+enters `diameter_at_breast_height` (only a reviewer-typed measurement does);
+the estimate and the crown width stay in the export for a quality join by
+tree id. And a rejection or an "uncertain" is a statement about one image:
+stored, never published, never a change to a canonical tree.
+
+Adding a city: run imagery over it, add it to `SATELLITE_DATA_SOURCES`,
+declare its column in `raw/satellite_tree_info.preql`, and wire its model
+as SF's is wired. No new job: the city's own `city-{code}` refresh picks the
+export up through the freshness column, and the core reads the city parquet
+as it always has.
+
 ## Tree-level predictions
 
 `raw/tree_predictions.preql` is the fourth member of the daily core. It reads

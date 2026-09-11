@@ -61,3 +61,7 @@ upstream_repro/
 # crown-width coefficients. 49 MB, CC-BY 4.0, and re-downloadable; the fit
 # it produces is what is committed (crown_width_coefficients.csv).
 data/raw/.cache/
+
+# Satellite review tile exports for a live session (reviewer/README.md);
+# the two committed fixtures live in reviewer/fixtures/tiles instead.
+reviewer/tiles/

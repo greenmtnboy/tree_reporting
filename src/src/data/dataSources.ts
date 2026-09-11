@@ -64,11 +64,21 @@ export function isOsmSource(value: string | null | undefined): boolean {
   return typeof value === 'string' && value.startsWith('OSM_')
 }
 
+/**
+ * True for the reviewed aerial-imagery sources (`SATELLITE_<CITY>`): model
+ * detections on NAIP tiles that a person accepted in the reviewer and
+ * published. See data/raw/satellite_tree_info.py.
+ */
+export function isSatelliteSource(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.startsWith('SATELLITE_')
+}
+
 /** Human-readable label for a `data_source` value; null when there is none. */
 export function formatDataSource(value: string | null | undefined): string | null {
   if (!value) return null
   if (isCommunitySource(value)) return 'Community submission'
   if (isOsmSource(value)) return 'OpenStreetMap'
+  if (isSatelliteSource(value)) return 'Aerial imagery (reviewed)'
   return (
     DATA_SOURCE_LABELS[value] ??
     value

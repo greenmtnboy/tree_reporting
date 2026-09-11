@@ -54,6 +54,70 @@ approval rather than silently dropped later by the ingest.
 anything — use it for the first run, or if an approval committed but the export
 write failed.
 
+## Satellite review (`/satellite`)
+
+The second page reviews the imagery model's detections on NAIP aerial tiles
+and publishes the accepted ones through a path of their own, shaped like the
+photo one. It reads **tile bundles** from `SATELLITE_TILE_DIR` (default:
+`reviewer/fixtures/tiles`, which holds one real SF tile and one Boston tile so
+the page works on a fresh clone). Bundles are written by the exporter in the
+modeling package:
+
+```powershell
+cd imagery_model
+uv run --group imagery python -m urban_tree_ml.tile_bundle_export `
+  --run sf-boston-naip-curation-v5-retrain --cohort validation `
+  --chips r000020_c000066 --out ../reviewer/tiles
+$env:SATELLITE_TILE_DIR = "$PWD/../reviewer/tiles"; cd ../reviewer; pnpm dev
+```
+
+A bundle is the `TilePredictionBundleV1` contract from
+`PREDICTION_CURATION_HANDOFF.md`: the chip as a PNG, the tile's affine and
+CRS, the run's above-threshold detections with stable ids
+(`{chip}:{output_x}:{output_y}`), and the published inventory trees the tile
+covers, each with the crown width `tree_predictions_v2.parquet` gives it.
+The exporter never emits sealed test-split chips or ground truth.
+
+What the page shows, and what each decision means:
+
+- **Detections** are pink dots at the model's crown centre with a dashed ring
+  for its DBH-derived crown estimate (the Tallo genus fit in
+  `data/raw/crown_width_coefficients.csv`, applied as `tree_predictions.preql`
+  applies it). **Inventory trees** are blue diamonds at the trunk with a solid
+  ring for their published crown prediction. **Reviewed detections from other
+  tiles** are orange triangles, so a tree accepted on an overlapping tile is
+  not accepted twice. Crown rings are allometric estimates, not measured
+  canopies, and the legend says so.
+- **Accept** records a new tree at the crown centre (nudge it with the arrow
+  keys; the trunk position of an inventory tree is never moved). The species
+  is whatever the reviewer left in the box -- the model's label counts as
+  confirmed only because a person kept it, and `speciesSource` records which.
+  A measured DBH can be typed; the model's estimate is stored separately and
+  the ingest never publishes it as a measurement.
+- **Duplicate of** links the detection to an inventory tree on the tile. It
+  publishes *at that tree's coordinates*, so the shared cluster merge in
+  `data/raw/tree_dedup.preql` is guaranteed to absorb it: the municipal values
+  win, the satellite species or DBH fills only what the inventory left empty,
+  and the satellite id survives in `merged_tree_ids`.
+- **Not a tree** and **Uncertain** are statements about this image. They are
+  stored, shown, and never published; nothing a reviewer does here can delete
+  or edit a canonical tree.
+- **Tile reviewed** is coverage for this image and prediction layer, keyed by
+  imagery version and run id, independent of the per-detection decisions.
+
+Decisions are private Firestore documents (`satelliteObservations`, keyed by
+tile, run and prediction, with a revision for stale-edit conflicts).
+**Publish** -- per tile from the tile view, or per observation from the queue
+-- creates the `satelliteTrees` record in a transaction and rewrites the public
+export `satellite/published_trees.ndjson` plus `satellite/manifest.json`,
+whose `latestPublishedAtByCity` is what `data/raw/satellite_update_time.py`
+reads so that a publish in one city rebuilds that city's Parquet alone. The
+export carries no notes and no actor. `POST /api/satellite/republish` rebuilds
+it from Firestore.
+
+`pnpm test` runs the pure logic (bundle contract, observation shaping, export
+shape) against the committed fixtures; `pnpm typecheck` covers both pages.
+
 ## Data refresh
 
 Approval does not trigger a rebuild. The normal scheduled `trilogy refresh raw`

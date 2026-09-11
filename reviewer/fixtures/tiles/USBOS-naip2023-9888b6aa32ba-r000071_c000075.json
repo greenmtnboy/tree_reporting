@@ -1,0 +1,1892 @@
+{
+ "schemaVersion": 1,
+ "tileId": "USBOS-naip2023-9888b6aa32ba-r000071_c000075",
+ "city": "USBOS",
+ "chipId": "r000071_c000075",
+ "imageryVersion": "naip2023-9888b6aa32ba",
+ "provider": "naip",
+ "acquisitionStart": "2023-07-07",
+ "acquisitionEnd": "2023-07-07",
+ "sourceItemIds": [
+  "ma_m_4207148_nw_19_030_20230707_20231116",
+  "ma_m_4207148_sw_19_030_20230707_20231116",
+  "ma_m_4207147_se_19_030_20230707_20231116",
+  "ma_m_4207147_ne_19_030_20230707_20231116",
+  "ma_m_4207139_se_19_030_20230707_20231116",
+  "ma_m_4207148_ne_19_030_20230707_20231116",
+  "ma_m_4207140_sw_19_030_20230707_20231116",
+  "ma_m_4207140_se_19_030_20230707_20231116"
+ ],
+ "attribution": "USDA NAIP aerial imagery (public domain)",
+ "image": {
+  "url": "USBOS-naip2023-9888b6aa32ba-r000071_c000075.png",
+  "sha256": "c39ba4b340afba98f4209568fa197531abc61c1a67047a4b4b7f961cce032819",
+  "width": 256,
+  "height": 256,
+  "resolutionM": 0.6,
+  "crs": "EPSG:26919",
+  "affine": [
+   0.6,
+   0.0,
+   330763.2,
+   0.0,
+   -0.6,
+   4690065.600000001
+  ],
+  "affineConvention": "rasterio (a, b, c, d, e, f): x = a*col + b*row + c; y = d*col + e*row + f; tile-local pixel, top-left corner",
+  "pixelToLonLat": [
+   7.279564780082737e-06,
+   1.7590057710403784e-07,
+   -71.05456392425383,
+   1.304337794161281e-07,
+   -5.40019496281241e-06,
+   42.3444499549482
+  ],
+  "bounds": {
+   "west": -71.05456392425383,
+   "east": -71.05265536589687,
+   "south": 42.34306750503772,
+   "north": 42.344483345995734
+  }
+ },
+ "predictionLayer": {
+  "runId": "sf-boston-naip-curation-v5-retrain",
+  "checkpointSha256": "9e7cbfda17b3aacb7fdd5d906ba2a8623d6f1d34fec118e6d98b37e26eb86c0b",
+  "taxonomyVersion": "2401179edef5",
+  "confidenceThreshold": 0.35,
+  "cohort": "validation-usbos",
+  "status": "available",
+  "predictions": [
+   {
+    "predictionId": "r000071_c000075:115:22",
+    "xPx": 230,
+    "yPx": 44,
+    "longitude": -71.05288189094462,
+    "latitude": 42.344242347298305,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.56640625,
+    "species": "Quercus palustris",
+    "speciesConfidence": 0.69921875,
+    "genus": "Quercus",
+    "genusConfidence": 0.44921875,
+    "dbhInches": 6.743664305075443,
+    "crownWidthM": 3.7301626683921354,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Quercus",
+     "n": 63954
+    },
+    "candidateTreeIds": [
+     "bos-30856"
+    ],
+    "speciesTop": [
+     "Quercus palustris",
+     "Acer rubrum",
+     "Liquidambar styraciflua",
+     "Ulmus americana",
+     "Gleditsia triacanthos"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:122:25",
+    "xPx": 244,
+    "yPx": 50,
+    "longitude": -71.05277892283125,
+    "latitude": 42.34421177144845,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.55859375,
+    "species": "Quercus palustris",
+    "speciesConfidence": 0.6875,
+    "genus": "Quercus",
+    "genusConfidence": 0.453125,
+    "dbhInches": 6.38905609893065,
+    "crownWidthM": 3.565023180827258,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Quercus",
+     "n": 63954
+    },
+    "candidateTreeIds": [
+     "bos-25059"
+    ],
+    "speciesTop": [
+     "Quercus palustris",
+     "Ulmus americana",
+     "Gleditsia triacanthos",
+     "Liquidambar styraciflua",
+     "Acer rubrum"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:123:25",
+    "xPx": 246,
+    "yPx": 50,
+    "longitude": -71.05276436375262,
+    "latitude": 42.34421203220548,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.55859375,
+    "species": "Quercus palustris",
+    "speciesConfidence": 0.6484375,
+    "genus": "Quercus",
+    "genusConfidence": 0.376953125,
+    "dbhInches": 5.941375821197036,
+    "crownWidthM": 3.3544003515378686,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Quercus",
+     "n": 63954
+    },
+    "candidateTreeIds": [
+     "bos-25059"
+    ],
+    "speciesTop": [
+     "Quercus palustris",
+     "Liquidambar styraciflua",
+     "Gleditsia triacanthos",
+     "Ulmus americana",
+     "Acer rubrum"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:115:97",
+    "xPx": 230,
+    "yPx": 194,
+    "longitude": -71.05285552725775,
+    "latitude": 42.34343231721532,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.55859375,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.21875,
+    "genus": "Acer",
+    "genusConfidence": 0.3125,
+    "dbhInches": 7.912902981198737,
+    "crownWidthM": 5.609665450504115,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Quercus bicolor",
+     "Cornus kousa",
+     "Tilia cordata",
+     "Quercus rubra"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:120:12",
+    "xPx": 240,
+    "yPx": 24,
+    "longitude": -71.05281261063479,
+    "latitude": 42.34435165513744,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.55078125,
+    "species": "Quercus palustris",
+    "speciesConfidence": 0.84375,
+    "genus": "Quercus",
+    "genusConfidence": 0.71875,
+    "dbhInches": 6.9894745966477085,
+    "crownWidthM": 3.843809371311584,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Quercus",
+     "n": 63954
+    },
+    "candidateTreeIds": [
+     "bos-20844"
+    ],
+    "speciesTop": [
+     "Quercus palustris",
+     "Ulmus americana",
+     "Gleditsia triacanthos",
+     "Quercus rubra",
+     "Ulmus carpinifolia"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:107:93",
+    "xPx": 214,
+    "yPx": 186,
+    "longitude": -71.05297340455112,
+    "latitude": 42.34347343265008,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.49609375,
+    "species": "Quercus bicolor",
+    "speciesConfidence": 0.216796875,
+    "genus": "Acer",
+    "genusConfidence": 0.2138671875,
+    "dbhInches": 7.912902981198737,
+    "crownWidthM": 5.609665450504115,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Quercus bicolor",
+     "Acer rubrum",
+     "Quercus rubra",
+     "Cornus kousa",
+     "Acer saccharum"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:125:78",
+    "xPx": 250,
+    "yPx": 156,
+    "longitude": -71.0527166164932,
+    "latitude": 42.34364013241305,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.4921875,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.396484375,
+    "genus": "Acer",
+    "genusConfidence": 0.412109375,
+    "dbhInches": 7.774721228365039,
+    "crownWidthM": 5.551432242352203,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Carpinus caroliniana",
+     "Cornus kousa",
+     "Acer saccharinum",
+     "Liquidambar styraciflua"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:127:14",
+    "xPx": 254,
+    "yPx": 28,
+    "longitude": -71.05270999386663,
+    "latitude": 42.344331879630246,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.47265625,
+    "species": "Gleditsia triacanthos",
+    "speciesConfidence": 0.3359375,
+    "genus": "Quercus",
+    "genusConfidence": 0.3984375,
+    "dbhInches": 6.050686584819912,
+    "crownWidthM": 3.4060583881207522,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Quercus",
+     "n": 63954
+    },
+    "candidateTreeIds": [
+     "bos-20769"
+    ],
+    "speciesTop": [
+     "Gleditsia triacanthos",
+     "Quercus palustris",
+     "Ulmus americana",
+     "Quercus rubra",
+     "Ulmus carpinifolia"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:106:85",
+    "xPx": 212,
+    "yPx": 170,
+    "longitude": -71.05299077571767,
+    "latitude": 42.34355957507732,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.47265625,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.171875,
+    "genus": "Acer",
+    "genusConfidence": 0.2490234375,
+    "dbhInches": 9.099642225480054,
+    "crownWidthM": 6.093748218428816,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Quercus bicolor",
+     "Cercis canadensis",
+     "Cornus kousa",
+     "Acer saccharum"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:104:105",
+    "xPx": 208,
+    "yPx": 210,
+    "longitude": -71.0530128628426,
+    "latitude": 42.34334304549363,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.4609375,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.19140625,
+    "genus": "Acer",
+    "genusConfidence": 0.2451171875,
+    "dbhInches": 6.743664305075443,
+    "crownWidthM": 5.1027665083921665,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Quercus bicolor",
+     "Gleditsia triacanthos",
+     "Styphnolobium japonicum",
+     "Cercis canadensis"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:95:80",
+    "xPx": 190,
+    "yPx": 160,
+    "longitude": -71.05315268169922,
+    "latitude": 42.34361070836594,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.453125,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.486328125,
+    "genus": "Acer",
+    "genusConfidence": 0.54296875,
+    "dbhInches": 7.774721228365039,
+    "crownWidthM": 5.551432242352203,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Carpinus caroliniana",
+     "Acer saccharinum",
+     "Quercus bicolor",
+     "Liquidambar styraciflua"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:94:105",
+    "xPx": 188,
+    "yPx": 210,
+    "longitude": -71.05315845159267,
+    "latitude": 42.3433404375676,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.44140625,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.25,
+    "genus": "Acer",
+    "genusConfidence": 0.298828125,
+    "dbhInches": 7.372897488127265,
+    "crownWidthM": 5.379647950857271,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Quercus bicolor",
+     "Gleditsia triacanthos",
+     "Ulmus carpinifolia",
+     "Styphnolobium japonicum"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:78:95",
+    "xPx": 156,
+    "yPx": 190,
+    "longitude": -71.05339490955346,
+    "latitude": 42.34344426848571,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.439453125,
+    "species": "Liquidambar styraciflua",
+    "speciesConfidence": 0.234375,
+    "genus": "Liquidambar",
+    "genusConfidence": 0.1826171875,
+    "dbhInches": 10.444393964331121,
+    "crownWidthM": 5.993387787263735,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Liquidambar",
+     "n": 726
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Liquidambar styraciflua",
+     "Acer rubrum",
+     "Quercus palustris",
+     "Carpinus caroliniana",
+     "Betula nigra"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:77:72",
+    "xPx": 154,
+    "yPx": 144,
+    "longitude": -71.05341755538171,
+    "latitude": 42.34369241680473,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.4375,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.50390625,
+    "genus": "Acer",
+    "genusConfidence": 0.439453125,
+    "dbhInches": 7.504751437796486,
+    "crownWidthM": 5.436428417782892,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [
+     "bos-25034",
+     "bos-25067"
+    ],
+    "speciesTop": [
+     "Acer rubrum",
+     "Gleditsia triacanthos",
+     "Quercus palustris",
+     "Liquidambar styraciflua",
+     "Carpinus caroliniana"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:84:54",
+    "xPx": 168,
+    "yPx": 108,
+    "longitude": -71.05332197136816,
+    "latitude": 42.343888649781434,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.43359375,
+    "species": "Quercus palustris",
+    "speciesConfidence": 0.357421875,
+    "genus": "Quercus",
+    "genusConfidence": 0.470703125,
+    "dbhInches": 6.331554008170247,
+    "crownWidthM": 3.538106875568113,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Quercus",
+     "n": 63954
+    },
+    "candidateTreeIds": [
+     "bos-25070",
+     "bos-25049"
+    ],
+    "speciesTop": [
+     "Quercus palustris",
+     "Acer rubrum",
+     "Gleditsia triacanthos",
+     "Liquidambar styraciflua",
+     "Ulmus americana"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:97:80",
+    "xPx": 194,
+    "yPx": 160,
+    "longitude": -71.05312356382592,
+    "latitude": 42.34361122996713,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.43359375,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.41015625,
+    "genus": "Acer",
+    "genusConfidence": 0.478515625,
+    "dbhInches": 8.340642126143496,
+    "crownWidthM": 5.787350192155022,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Carpinus caroliniana",
+     "Acer saccharinum",
+     "Acer saccharum",
+     "Liquidambar styraciflua"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:118:72",
+    "xPx": 236,
+    "yPx": 144,
+    "longitude": -71.0528206381512,
+    "latitude": 42.34370310954776,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.431640625,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.40234375,
+    "genus": "Acer",
+    "genusConfidence": 0.359375,
+    "dbhInches": 8.340642126143496,
+    "crownWidthM": 5.787350192155022,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Quercus bicolor",
+     "Carpinus caroliniana",
+     "Cercis canadensis",
+     "Cornus kousa"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:119:72",
+    "xPx": 238,
+    "yPx": 144,
+    "longitude": -71.0528060791903,
+    "latitude": 42.34370337030758,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.431640625,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.353515625,
+    "genus": "Acer",
+    "genusConfidence": 0.349609375,
+    "dbhInches": 7.912902981198737,
+    "crownWidthM": 5.609665450504115,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Quercus bicolor",
+     "Carpinus caroliniana",
+     "Cornus kousa",
+     "Gleditsia triacanthos"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:86:89",
+    "xPx": 172,
+    "yPx": 178,
+    "longitude": -71.05328054787091,
+    "latitude": 42.343511157479625,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.427734375,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.341796875,
+    "genus": "Acer",
+    "genusConfidence": 0.31640625,
+    "dbhInches": 8.195828892530896,
+    "crownWidthM": 5.727619380710513,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Carpinus caroliniana",
+     "Gleditsia triacanthos",
+     "Quercus palustris",
+     "Liquidambar styraciflua"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:79:93",
+    "xPx": 158,
+    "yPx": 186,
+    "longitude": -71.05338105385503,
+    "latitude": 42.343466130113896,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.42578125,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.302734375,
+    "genus": "Acer",
+    "genusConfidence": 0.294921875,
+    "dbhInches": 9.099642225480054,
+    "crownWidthM": 6.093748218428816,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Liquidambar styraciflua",
+     "Carpinus caroliniana",
+     "Quercus palustris",
+     "Acer saccharinum"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:76:96",
+    "xPx": 152,
+    "yPx": 192,
+    "longitude": -71.05342367573883,
+    "latitude": 42.34343294641917,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.423828125,
+    "species": "Liquidambar styraciflua",
+    "speciesConfidence": 0.2431640625,
+    "genus": "Liquidambar",
+    "genusConfidence": 0.22265625,
+    "dbhInches": 10.807678025521156,
+    "crownWidthM": 6.1246669834467875,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Liquidambar",
+     "n": 726
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Liquidambar styraciflua",
+     "Quercus palustris",
+     "Acer rubrum",
+     "Betula nigra",
+     "Carpinus caroliniana"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:87:49",
+    "xPx": 174,
+    "yPx": 98,
+    "longitude": -71.05328005230547,
+    "latitude": 42.34394343423996,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.41015625,
+    "species": "Quercus palustris",
+    "speciesConfidence": 0.478515625,
+    "genus": "Quercus",
+    "genusConfidence": 0.51171875,
+    "dbhInches": 7.115290514356445,
+    "crownWidthM": 3.901727401217581,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Quercus",
+     "n": 63954
+    },
+    "candidateTreeIds": [
+     "bos-523",
+     "bos-1864"
+    ],
+    "speciesTop": [
+     "Quercus palustris",
+     "Acer rubrum",
+     "Gleditsia triacanthos",
+     "Liquidambar styraciflua",
+     "Ulmus americana"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:124:116",
+    "xPx": 248,
+    "yPx": 232,
+    "longitude": -71.05271781896515,
+    "latitude": 42.34322945635684,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.41015625,
+    "species": "Tilia cordata",
+    "speciesConfidence": 0.337890625,
+    "genus": "Tilia",
+    "genusConfidence": 0.353515625,
+    "dbhInches": 9.920317008742302,
+    "crownWidthM": 5.580032353146189,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Tilia",
+     "n": 783
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Tilia cordata",
+     "Acer rubrum",
+     "Pyrus calleryana",
+     "Tilia americana",
+     "Gleditsia triacanthos"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:88:77",
+    "xPx": 176,
+    "yPx": 154,
+    "longitude": -71.05325564898769,
+    "latitude": 42.34364128390024,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.400390625,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.42578125,
+    "genus": "Acer",
+    "genusConfidence": 0.3515625,
+    "dbhInches": 8.053260780008058,
+    "crownWidthM": 5.668392821822972,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Quercus bicolor",
+     "Cercis canadensis",
+     "Gleditsia triacanthos",
+     "Thuja occidentalis"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:89:77",
+    "xPx": 178,
+    "yPx": 154,
+    "longitude": -71.05324109004502,
+    "latitude": 42.343641544714984,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.400390625,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.42578125,
+    "genus": "Acer",
+    "genusConfidence": 0.376953125,
+    "dbhInches": 7.912902981198737,
+    "crownWidthM": 5.609665450504115,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Quercus bicolor",
+     "Cercis canadensis",
+     "Gleditsia triacanthos",
+     "Carpinus caroliniana"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:78:68",
+    "xPx": 156,
+    "yPx": 136,
+    "longitude": -71.05340440285224,
+    "latitude": 42.34373587923113,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.392578125,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.412109375,
+    "genus": "Acer",
+    "genusConfidence": 0.357421875,
+    "dbhInches": 7.115290514356445,
+    "crownWidthM": 5.267505571169105,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [
+     "bos-25067",
+     "bos-25034"
+    ],
+    "speciesTop": [
+     "Acer rubrum",
+     "Gleditsia triacanthos",
+     "Quercus palustris",
+     "Liquidambar styraciflua",
+     "Ulmus americana"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:83:84",
+    "xPx": 166,
+    "yPx": 168,
+    "longitude": -71.05332598255823,
+    "latitude": 42.34356437700968,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.392578125,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.318359375,
+    "genus": "Acer",
+    "genusConfidence": 0.2373046875,
+    "dbhInches": 7.6386817850411015,
+    "crownWidthM": 5.493688213036655,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Thuja occidentalis",
+     "Carpinus caroliniana",
+     "Cercis canadensis",
+     "Cornus kousa"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:85:78",
+    "xPx": 170,
+    "yPx": 156,
+    "longitude": -71.0532989742275,
+    "latitude": 42.34362970104634,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.390625,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.322265625,
+    "genus": "Acer",
+    "genusConfidence": 0.30078125,
+    "dbhInches": 8.195828892530896,
+    "crownWidthM": 5.727619380710513,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Quercus bicolor",
+     "Cercis canadensis",
+     "Carpinus caroliniana",
+     "Thuja occidentalis"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:99:69",
+    "xPx": 198,
+    "yPx": 138,
+    "longitude": -71.05309831303211,
+    "latitude": 42.3437305559596,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.388671875,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.400390625,
+    "genus": "Acer",
+    "genusConfidence": 0.38671875,
+    "dbhInches": 10.26696508157019,
+    "crownWidthM": 6.545352944901176,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Acer saccharum",
+     "Quercus bicolor",
+     "Carpinus caroliniana",
+     "Quercus palustris"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:110:102",
+    "xPx": 220,
+    "yPx": 204,
+    "longitude": -71.05292656414262,
+    "latitude": 42.34337701136542,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.388671875,
+    "species": "Quercus bicolor",
+    "speciesConfidence": 0.1923828125,
+    "genus": "Acer",
+    "genusConfidence": 0.267578125,
+    "dbhInches": 7.243087744472826,
+    "crownWidthM": 5.323341945051892,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Quercus bicolor",
+     "Acer rubrum",
+     "Cornus kousa",
+     "Gleditsia triacanthos",
+     "Cercis canadensis"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:81:63",
+    "xPx": 162,
+    "yPx": 126,
+    "longitude": -71.0533624839587,
+    "latitude": 42.34379066371745,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.37890625,
+    "species": "Quercus palustris",
+    "speciesConfidence": 0.33984375,
+    "genus": "Quercus",
+    "genusConfidence": 0.408203125,
+    "dbhInches": 6.865609273944892,
+    "crownWidthM": 3.7866243420376917,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Quercus",
+     "n": 63954
+    },
+    "candidateTreeIds": [
+     "bos-25065",
+     "bos-25049"
+    ],
+    "speciesTop": [
+     "Quercus palustris",
+     "Acer rubrum",
+     "Liquidambar styraciflua",
+     "Gleditsia triacanthos",
+     "Ulmus americana"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:110:98",
+    "xPx": 220,
+    "yPx": 196,
+    "longitude": -71.05292797022442,
+    "latitude": 42.34342021297158,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.37890625,
+    "species": "Quercus bicolor",
+    "speciesConfidence": 0.234375,
+    "genus": "Acer",
+    "genusConfidence": 0.1796875,
+    "dbhInches": 7.912902981198737,
+    "crownWidthM": 5.609665450504115,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Quercus bicolor",
+     "Acer rubrum",
+     "Cercis canadensis",
+     "Cornus kousa",
+     "Thuja occidentalis"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:105:77",
+    "xPx": 210,
+    "yPx": 154,
+    "longitude": -71.0530081469362,
+    "latitude": 42.34364571749969,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.376953125,
+    "species": "Liquidambar styraciflua",
+    "speciesConfidence": 0.1640625,
+    "genus": "Liquidambar",
+    "genusConfidence": 0.1513671875,
+    "dbhInches": 8.788908901255894,
+    "crownWidthM": 5.372503137771332,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Liquidambar",
+     "n": 726
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Liquidambar styraciflua",
+     "Quercus palustris",
+     "Carpinus caroliniana",
+     "Acer rubrum",
+     "Betula nigra"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:69:90",
+    "xPx": 138,
+    "yPx": 180,
+    "longitude": -71.05352769772784,
+    "latitude": 42.34349592290626,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.369140625,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.2490234375,
+    "genus": "Acer",
+    "genusConfidence": 0.1962890625,
+    "dbhInches": 8.487735836358526,
+    "crownWidthM": 5.847590362247152,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [
+     "bos-32850",
+     "bos-32840"
+    ],
+    "speciesTop": [
+     "Acer rubrum",
+     "Quercus palustris",
+     "Gleditsia triacanthos",
+     "Liquidambar styraciflua",
+     "Acer x freemanii"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:93:35",
+    "xPx": 186,
+    "yPx": 70,
+    "longitude": -71.05319762026504,
+    "latitude": 42.344096204707995,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.365234375,
+    "species": "Quercus palustris",
+    "speciesConfidence": 0.4609375,
+    "genus": "Quercus",
+    "genusConfidence": 0.53125,
+    "dbhInches": 6.9894745966477085,
+    "crownWidthM": 3.843809371311584,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Quercus",
+     "n": 63954
+    },
+    "candidateTreeIds": [
+     "bos-25056",
+     "bos-25068"
+    ],
+    "speciesTop": [
+     "Quercus palustris",
+     "Acer rubrum",
+     "Liquidambar styraciflua",
+     "Gleditsia triacanthos",
+     "Ulmus americana"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:49:120",
+    "xPx": 98,
+    "yPx": 240,
+    "longitude": -71.05380832568136,
+    "latitude": 42.343166693676885,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.365234375,
+    "species": "Gleditsia triacanthos",
+    "speciesConfidence": 0.89453125,
+    "genus": "Gleditsia",
+    "genusConfidence": 0.86328125,
+    "dbhInches": 6.274499402230307,
+    "crownWidthM": 4.112443803415232,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Gleditsia",
+     "n": 62
+    },
+    "candidateTreeIds": [
+     "bos-1859",
+     "bos-1826"
+    ],
+    "speciesTop": [
+     "Gleditsia triacanthos",
+     "Acer rubrum",
+     "Quercus palustris",
+     "Acer x freemanii",
+     "Zelkova serrata"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:91:40",
+    "xPx": 182,
+    "yPx": 80,
+    "longitude": -71.05322498046175,
+    "latitude": 42.34404168109194,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.36328125,
+    "species": "Quercus palustris",
+    "speciesConfidence": 0.32421875,
+    "genus": "Quercus",
+    "genusConfidence": 0.37890625,
+    "dbhInches": 7.6386817850411015,
+    "crownWidthM": 4.140926860377243,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Quercus",
+     "n": 63954
+    },
+    "candidateTreeIds": [
+     "bos-1829",
+     "bos-25056"
+    ],
+    "speciesTop": [
+     "Quercus palustris",
+     "Acer rubrum",
+     "Gleditsia triacanthos",
+     "Fraxinus pennsylvanica",
+     "Liquidambar styraciflua"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:84:57",
+    "xPx": 168,
+    "yPx": 114,
+    "longitude": -71.05332091658693,
+    "latitude": 42.343856248587514,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.36328125,
+    "species": "Quercus palustris",
+    "speciesConfidence": 0.494140625,
+    "genus": "Quercus",
+    "genusConfidence": 0.51953125,
+    "dbhInches": 7.243087744472826,
+    "crownWidthM": 3.9603882024004147,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Quercus",
+     "n": 63954
+    },
+    "candidateTreeIds": [
+     "bos-25049",
+     "bos-25070"
+    ],
+    "speciesTop": [
+     "Quercus palustris",
+     "Acer rubrum",
+     "Liquidambar styraciflua",
+     "Gleditsia triacanthos",
+     "Ulmus americana"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:89:45",
+    "xPx": 178,
+    "yPx": 90,
+    "longitude": -71.05325234061276,
+    "latitude": 42.34398715746988,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.361328125,
+    "species": "Quercus palustris",
+    "speciesConfidence": 0.48046875,
+    "genus": "Quercus",
+    "genusConfidence": 0.466796875,
+    "dbhInches": 7.243087744472826,
+    "crownWidthM": 3.9603882024004147,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Quercus",
+     "n": 63954
+    },
+    "candidateTreeIds": [
+     "bos-1864",
+     "bos-523"
+    ],
+    "speciesTop": [
+     "Quercus palustris",
+     "Liquidambar styraciflua",
+     "Acer rubrum",
+     "Gleditsia triacanthos",
+     "Ulmus americana"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:59:109",
+    "xPx": 118,
+    "yPx": 218,
+    "longitude": -71.05366660548175,
+    "latitude": 42.34328810678498,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.361328125,
+    "species": "Gleditsia triacanthos",
+    "speciesConfidence": 0.73828125,
+    "genus": "Gleditsia",
+    "genusConfidence": 0.70703125,
+    "dbhInches": 5.833759763883972,
+    "crownWidthM": 3.868217633462457,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Gleditsia",
+     "n": 62
+    },
+    "candidateTreeIds": [
+     "bos-510"
+    ],
+    "speciesTop": [
+     "Gleditsia triacanthos",
+     "Acer rubrum",
+     "Quercus palustris",
+     "Ulmus americana",
+     "Zelkova serrata"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:119:65",
+    "xPx": 238,
+    "yPx": 130,
+    "longitude": -71.05280853971924,
+    "latitude": 42.343778973119505,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.357421875,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.388671875,
+    "genus": "Acer",
+    "genusConfidence": 0.349609375,
+    "dbhInches": 8.195828892530896,
+    "crownWidthM": 5.727619380710513,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Quercus bicolor",
+     "Carpinus caroliniana",
+     "Liquidambar styraciflua",
+     "Quercus palustris"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:107:80",
+    "xPx": 214,
+    "yPx": 160,
+    "longitude": -71.05297797444791,
+    "latitude": 42.343613837862264,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.357421875,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.19140625,
+    "genus": "Acer",
+    "genusConfidence": 0.212890625,
+    "dbhInches": 9.258688448076699,
+    "crownWidthM": 6.156613247896544,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Carpinus caroliniana",
+     "Liquidambar styraciflua",
+     "Liriodendron tulipifera",
+     "Quercus palustris"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:110:67",
+    "xPx": 220,
+    "yPx": 134,
+    "longitude": -71.05293886746311,
+    "latitude": 42.343755025406935,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.35546875,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.392578125,
+    "genus": "Acer",
+    "genusConfidence": 0.384765625,
+    "dbhInches": 9.258688448076699,
+    "crownWidthM": 6.156613247896544,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Quercus bicolor",
+     "Carpinus caroliniana",
+     "Liquidambar styraciflua",
+     "Quercus palustris"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:90:68",
+    "xPx": 180,
+    "yPx": 136,
+    "longitude": -71.05322969528197,
+    "latitude": 42.343739009118444,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.353515625,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.65625,
+    "genus": "Acer",
+    "genusConfidence": 0.39453125,
+    "dbhInches": 10.444393964331121,
+    "crownWidthM": 6.61211936299815,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Quercus rubra",
+     "Acer saccharinum",
+     "Quercus bicolor",
+     "Cercis canadensis"
+    ]
+   },
+   {
+    "predictionId": "r000071_c000075:90:69",
+    "xPx": 180,
+    "yPx": 138,
+    "longitude": -71.05322934370565,
+    "latitude": 42.34372820871958,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.353515625,
+    "species": "Acer rubrum",
+    "speciesConfidence": 0.66015625,
+    "genus": "Acer",
+    "genusConfidence": 0.421875,
+    "dbhInches": 10.624616945432633,
+    "crownWidthM": 6.679465495671933,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Acer",
+     "n": 7355
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acer rubrum",
+     "Carpinus caroliniana",
+     "Acer saccharinum",
+     "Liquidambar styraciflua",
+     "Quercus rubra"
+    ]
+   }
+  ]
+ },
+ "inventoryVersion": "2026-09-11T10:52:15+00:00",
+ "inventoryTrees": [
+  {
+   "treeId": "bos-1820",
+   "longitude": -71.0538635,
+   "latitude": 42.3431168,
+   "species": "Gleditsia triacanthos",
+   "dbhInches": 4.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 2.816721386487803,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-1824",
+   "longitude": -71.0539093,
+   "latitude": 42.3430748,
+   "species": "Gleditsia triacanthos",
+   "dbhInches": 4.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 2.816721386487803,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-1825",
+   "longitude": -71.0539627,
+   "latitude": 42.3430367,
+   "species": "Gleditsia triacanthos",
+   "dbhInches": 4.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 2.816721386487803,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-1826",
+   "longitude": -71.0537567,
+   "latitude": 42.3432007,
+   "species": "Gleditsia triacanthos",
+   "dbhInches": 4.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 2.816721386487803,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-1829",
+   "longitude": -71.0532303,
+   "latitude": 42.3440399,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-1859",
+   "longitude": -71.0538177,
+   "latitude": 42.3431549,
+   "species": "Gleditsia triacanthos",
+   "dbhInches": 4.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 2.816721386487803,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-1864",
+   "longitude": -71.0532532,
+   "latitude": 42.3439865,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-20769",
+   "longitude": -71.0527115,
+   "latitude": 42.3443336,
+   "species": "Acer rubrum",
+   "dbhInches": 7.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.216781753196251,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-20844",
+   "longitude": -71.0528183,
+   "latitude": 42.3443642,
+   "species": "Acer rubrum",
+   "dbhInches": 8.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.6461573890783185,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-25025",
+   "longitude": -71.0534592,
+   "latitude": 42.3436394,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-25034",
+   "longitude": -71.0534286,
+   "latitude": 42.3436928,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-25049",
+   "longitude": -71.0533447,
+   "latitude": 42.3438377,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-25056",
+   "longitude": -71.0531998,
+   "latitude": 42.3440895,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-25058",
+   "longitude": -71.0531464,
+   "latitude": 42.3441811,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 5.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 4.7657876218461634,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-25059",
+   "longitude": -71.0527954,
+   "latitude": 42.3442307,
+   "species": "Acer rubrum",
+   "dbhInches": 8.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.6461573890783185,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-25065",
+   "longitude": -71.0533829,
+   "latitude": 42.343792,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-25066",
+   "longitude": -71.0524979,
+   "latitude": 42.3441238,
+   "species": "Acer rubrum",
+   "dbhInches": 8.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.6461573890783185,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-25067",
+   "longitude": -71.0533981,
+   "latitude": 42.3437347,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-25068",
+   "longitude": -71.0531693,
+   "latitude": 42.3441353,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-25070",
+   "longitude": -71.0533142,
+   "latitude": 42.3438911,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-30082",
+   "longitude": -71.0540085,
+   "latitude": 42.3429871,
+   "species": "Gleditsia triacanthos",
+   "dbhInches": 4.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 2.816721386487803,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-30856",
+   "longitude": -71.052887,
+   "latitude": 42.3442535,
+   "species": "Acer rubrum",
+   "dbhInches": 8.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.6461573890783185,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-32840",
+   "longitude": -71.0535278,
+   "latitude": 42.343544,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-32850",
+   "longitude": -71.0535431,
+   "latitude": 42.343483,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 7.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.820104636702075,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-32852",
+   "longitude": -71.0527954,
+   "latitude": 42.3446083,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-32855",
+   "longitude": -71.0534973,
+   "latitude": 42.3435822,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-32861",
+   "longitude": -71.0528641,
+   "latitude": 42.3445206,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-32862",
+   "longitude": -71.0528336,
+   "latitude": 42.3445663,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-46917",
+   "longitude": -71.0531006,
+   "latitude": 42.3431778,
+   "species": "Acer rubrum",
+   "dbhInches": 4.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 3.7449341349014746,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-46918",
+   "longitude": -71.0531921,
+   "latitude": 42.3432083,
+   "species": "Acer rubrum",
+   "dbhInches": 4.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 3.7449341349014746,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-46919",
+   "longitude": -71.0526276,
+   "latitude": 42.3430824,
+   "species": "Acer rubrum",
+   "dbhInches": 4.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 3.7449341349014746,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-510",
+   "longitude": -71.0536728,
+   "latitude": 42.3432808,
+   "species": "Gleditsia triacanthos",
+   "dbhInches": 4.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 2.816721386487803,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-523",
+   "longitude": -71.0532761,
+   "latitude": 42.3439445,
+   "species": "Ulmus carpinifolia",
+   "dbhInches": 6.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.310876558962112,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "bos-525",
+   "longitude": -71.0537262,
+   "latitude": 42.343235,
+   "species": "Gleditsia triacanthos",
+   "dbhInches": 4.0,
+   "source": "CITY_OF_BOSTON",
+   "positionRole": "trunk",
+   "mergedSources": "CITY_OF_BOSTON",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 2.816721386487803,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  }
+ ],
+ "exportedAt": "2026-09-11T14:08:43.038987+00:00"
+}

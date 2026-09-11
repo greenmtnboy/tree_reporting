@@ -25,6 +25,7 @@ from _ingest_shared import (  # noqa: E402
     DATA_SOURCES,
     MUNICIPAL_DATA_SOURCES,
     OSM_DATA_SOURCES,
+    SATELLITE_DATA_SOURCES,
     community_source_for,
 )
 
@@ -65,6 +66,8 @@ def test_preql_enum_matches_python_picklist(code: str):
     expected = [*MUNICIPAL_DATA_SOURCES[code], community_source_for(code)]
     if code in OSM_DATA_SOURCES:
         expected.append(OSM_DATA_SOURCES[code])
+    if code in SATELLITE_DATA_SOURCES:
+        expected.append(SATELLITE_DATA_SOURCES[code])
     assert sorted(enum_values(city_models()[code])) == sorted(expected)
 
 

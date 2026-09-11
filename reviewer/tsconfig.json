@@ -6,7 +6,15 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": [
+      "node"
+    ]
   },
-  "include": ["server.ts"]
+  "include": [
+    "server.ts",
+    "satellite.ts",
+    "tests/*.ts"
+  ]
 }

@@ -10,6 +10,7 @@ import LANDMARK_INFO_MODEL from '../../data/raw/landmark_info.preql?raw'
 // is not a per-city file the glob below would pick up.
 import COMMUNITY_TREE_INFO_MODEL from '../../data/raw/community_tree_info.preql?raw'
 import TREE_DEDUP_MODEL from '../../data/raw/tree_dedup.preql?raw'
+import SATELLITE_TREE_INFO_MODEL from '../../data/raw/satellite_tree_info.preql?raw'
 
 // Auto-discover all per-city preql files — no changes needed here when adding a city.
 // Matches data/raw/{city}/{city}_tree_info.preql and data/raw/{city}/{city}_landmarks.preql
@@ -35,6 +36,9 @@ export const ALL_MODEL_SOURCES = [
   { alias: 'landmark_info', contents: LANDMARK_INFO_MODEL },
   { alias: 'community_tree_info', contents: COMMUNITY_TREE_INFO_MODEL },
   { alias: 'tree_dedup', contents: TREE_DEDUP_MODEL },
+  // Reviewed aerial-imagery detections: the freshness columns the wired
+  // city models (SF, Boston) import; see data/raw/satellite_tree_info.preql.
+  { alias: 'satellite_tree_info', contents: SATELLITE_TREE_INFO_MODEL },
   ...[...Object.entries(cityTreeModels), ...Object.entries(cityLandmarkModels)].map(
     ([path, mod]) => ({ alias: pathToAlias(path), contents: (mod as { default: string }).default })
   ),

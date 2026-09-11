@@ -1,0 +1,1993 @@
+{
+ "schemaVersion": 1,
+ "tileId": "USSFO-naip2022-d76edb6a9ec2-r000020_c000066",
+ "city": "USSFO",
+ "chipId": "r000020_c000066",
+ "imageryVersion": "naip2022-d76edb6a9ec2",
+ "provider": "naip",
+ "acquisitionStart": "2022-05-18",
+ "acquisitionEnd": "2022-05-19",
+ "sourceItemIds": [
+  "ca_m_3712212_se_10_060_20220519",
+  "ca_m_3712213_se_10_060_20220518",
+  "ca_m_3712213_sw_10_060_20220518",
+  "ca_m_3712214_sw_10_060_20220518",
+  "ca_m_3712220_ne_10_060_20220519",
+  "ca_m_3712221_ne_10_060_20220518",
+  "ca_m_3712221_nw_10_060_20220518",
+  "ca_m_3712222_nw_10_060_20220518"
+ ],
+ "attribution": "USDA NAIP aerial imagery (public domain)",
+ "image": {
+  "url": "USSFO-naip2022-d76edb6a9ec2-r000020_c000066.png",
+  "sha256": "a9ddc73e43d6021b2ad87ce813b54d11f316e873fdea069aa49e87b1b91cb129",
+  "width": 256,
+  "height": 256,
+  "resolutionM": 0.6,
+  "crs": "EPSG:26910",
+  "affine": [
+   0.6,
+   0.0,
+   548445.6,
+   0.0,
+   -0.6,
+   4182366.0
+  ],
+  "affineConvention": "rasterio (a, b, c, d, e, f): x = a*col + b*row + c; y = d*col + e*row + f; tile-local pixel, top-left corner",
+  "pixelToLonLat": [
+   6.813976318242876e-06,
+   -4.0093134034968614e-08,
+   -122.4497979643138,
+   -3.1870103472941835e-08,
+   -5.407686580333193e-06,
+   37.78736787640928
+  ],
+  "bounds": {
+   "west": -122.44980822815612,
+   "east": -122.44805358637633,
+   "south": 37.785975350302756,
+   "north": 37.78736787640928
+  }
+ },
+ "predictionLayer": {
+  "runId": "sf-boston-naip-curation-v5-retrain",
+  "checkpointSha256": "9e7cbfda17b3aacb7fdd5d906ba2a8623d6f1d34fec118e6d98b37e26eb86c0b",
+  "taxonomyVersion": "2401179edef5",
+  "confidenceThreshold": 0.35,
+  "cohort": "validation",
+  "status": "available",
+  "predictions": [
+   {
+    "predictionId": "r000020_c000066:60:27",
+    "xPx": 120,
+    "yPx": 54,
+    "longitude": -122.44898245537293,
+    "latitude": 37.78707204020415,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.53515625,
+    "species": "Platanus x hispanica",
+    "speciesConfidence": 0.98046875,
+    "genus": "Platanus",
+    "genusConfidence": 0.96875,
+    "dbhInches": 13.467069533669397,
+    "crownWidthM": 9.448750486173303,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Platanus",
+     "n": 76
+    },
+    "candidateTreeIds": [
+     "sf-3138"
+    ],
+    "speciesTop": [
+     "Platanus x hispanica",
+     "Ginkgo biloba",
+     "Liriodendron tulipifera",
+     "Ulmus pumila",
+     "Ficus microcarpa"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:35:31",
+    "xPx": 70,
+    "yPx": 62,
+    "longitude": -122.44932347389518,
+    "latitude": 37.78703037155613,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.53125,
+    "species": "Platanus x hispanica",
+    "speciesConfidence": 0.9765625,
+    "genus": "Platanus",
+    "genusConfidence": 0.9609375,
+    "dbhInches": 12.172416709211404,
+    "crownWidthM": 8.811420970800508,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Platanus",
+     "n": 76
+    },
+    "candidateTreeIds": [
+     "sf-3139",
+     "sf-3140"
+    ],
+    "speciesTop": [
+     "Platanus x hispanica",
+     "Ulmus pumila",
+     "Ginkgo biloba",
+     "Liriodendron tulipifera",
+     "Metrosideros excelsa"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:71:25",
+    "xPx": 142,
+    "yPx": 50,
+    "longitude": -122.44883238782664,
+    "latitude": 37.78709296978449,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.52734375,
+    "species": "Platanus x hispanica",
+    "speciesConfidence": 0.94921875,
+    "genus": "Platanus",
+    "genusConfidence": 0.93359375,
+    "dbhInches": 11.374340325455691,
+    "crownWidthM": 8.408106648694488,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Platanus",
+     "n": 76
+    },
+    "candidateTreeIds": [
+     "sf-3137"
+    ],
+    "speciesTop": [
+     "Platanus x hispanica",
+     "Ginkgo biloba",
+     "Ficus microcarpa",
+     "Magnolia grandiflora",
+     "Liriodendron tulipifera"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:119:16",
+    "xPx": 238,
+    "yPx": 32,
+    "longitude": -122.448177524727,
+    "latitude": 37.787187246263066,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.51171875,
+    "species": "Platanus x hispanica",
+    "speciesConfidence": 0.97265625,
+    "genus": "Platanus",
+    "genusConfidence": 0.96484375,
+    "dbhInches": 11.968197316969134,
+    "crownWidthM": 8.709015980223356,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Platanus",
+     "n": 76
+    },
+    "candidateTreeIds": [
+     "sf-133458"
+    ],
+    "speciesTop": [
+     "Platanus x hispanica",
+     "Ulmus pumila",
+     "Liriodendron tulipifera",
+     "Ginkgo biloba",
+     "Metrosideros excelsa"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:83:23",
+    "xPx": 166,
+    "yPx": 46,
+    "longitude": -122.44866869229183,
+    "latitude": 37.78711383540417,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.50390625,
+    "species": "Platanus x hispanica",
+    "speciesConfidence": 0.96484375,
+    "genus": "Platanus",
+    "genusConfidence": 0.94921875,
+    "dbhInches": 13.021964597512564,
+    "crownWidthM": 9.231864777586868,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Platanus",
+     "n": 76
+    },
+    "candidateTreeIds": [
+     "sf-23687"
+    ],
+    "speciesTop": [
+     "Platanus x hispanica",
+     "Ulmus pumila",
+     "Ginkgo biloba",
+     "Liriodendron tulipifera",
+     "Metrosideros excelsa"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:42:106",
+    "xPx": 84,
+    "yPx": 212,
+    "longitude": -122.44923409886114,
+    "latitude": 37.78621877274525,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.50390625,
+    "species": "Tristaniopsis laurina",
+    "speciesConfidence": 0.421875,
+    "genus": "Tristaniopsis",
+    "genusConfidence": 0.46875,
+    "dbhInches": 6.743664305075443,
+    "crownWidthM": 4.899831634147735,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Tristaniopsis",
+     "n": 117
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Tristaniopsis laurina",
+     "Lophostemon confertus",
+     "Schinus terebinthifolia",
+     "Pittosporum undulatum",
+     "Magnolia grandiflora"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:47:29",
+    "xPx": 94,
+    "yPx": 58,
+    "longitude": -122.44915977862831,
+    "latitude": 37.787051237860474,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.49609375,
+    "species": "Platanus x hispanica",
+    "speciesConfidence": 0.9765625,
+    "genus": "Platanus",
+    "genusConfidence": 0.953125,
+    "dbhInches": 12.172416709211404,
+    "crownWidthM": 8.811420970800508,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Platanus",
+     "n": 76
+    },
+    "candidateTreeIds": [
+     "sf-44022"
+    ],
+    "speciesTop": [
+     "Platanus x hispanica",
+     "Ulmus pumila",
+     "Ginkgo biloba",
+     "Liriodendron tulipifera",
+     "Metrosideros excelsa"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:48:29",
+    "xPx": 96,
+    "yPx": 58,
+    "longitude": -122.44914615073255,
+    "latitude": 37.787051174147,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.49609375,
+    "species": "Platanus x hispanica",
+    "speciesConfidence": 0.9765625,
+    "genus": "Platanus",
+    "genusConfidence": 0.953125,
+    "dbhInches": 11.76714405293921,
+    "crownWidthM": 8.607669666884831,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Platanus",
+     "n": 76
+    },
+    "candidateTreeIds": [
+     "sf-44022"
+    ],
+    "speciesTop": [
+     "Platanus x hispanica",
+     "Ulmus pumila",
+     "Ginkgo biloba",
+     "Liriodendron tulipifera",
+     "Metrosideros excelsa"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:34:47",
+    "xPx": 68,
+    "yPx": 94,
+    "longitude": -122.44933838586529,
+    "latitude": 37.78685738929994,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.49609375,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 0.431640625,
+    "genus": "Metrosideros",
+    "genusConfidence": 0.4140625,
+    "dbhInches": 8.195828892530896,
+    "crownWidthM": 3.8238936885459047,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Metrosideros",
+     "n": 39
+    },
+    "candidateTreeIds": [
+     "sf-3146"
+    ],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Olea europaea",
+     "Magnolia grandiflora",
+     "Maytenus boaria",
+     "Schinus terebinthifolia"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:71:41",
+    "xPx": 142,
+    "yPx": 82,
+    "longitude": -122.44883367308421,
+    "latitude": 37.78691992385191,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.4921875,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 0.86328125,
+    "genus": "Metrosideros",
+    "genusConfidence": 0.8984375,
+    "dbhInches": 11.374340325455691,
+    "crownWidthM": 4.847725994769617,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Metrosideros",
+     "n": 39
+    },
+    "candidateTreeIds": [
+     "sf-141211"
+    ],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Acacia melanoxylon",
+     "Olea europaea",
+     "Pittosporum undulatum",
+     "Pittosporum crassifolium"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:114:17",
+    "xPx": 228,
+    "yPx": 34,
+    "longitude": -122.44824574473472,
+    "latitude": 37.787176750006466,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.4765625,
+    "species": "Platanus x hispanica",
+    "speciesConfidence": 0.88671875,
+    "genus": "Platanus",
+    "genusConfidence": 0.81640625,
+    "dbhInches": 8.637145935456955,
+    "crownWidthM": 6.951774613776722,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Platanus",
+     "n": 76
+    },
+    "candidateTreeIds": [
+     "sf-133459",
+     "sf-3134",
+     "sf-3135"
+    ],
+    "speciesTop": [
+     "Platanus x hispanica",
+     "Ginkgo biloba",
+     "Ficus microcarpa",
+     "Magnolia grandiflora",
+     "Tristaniopsis laurina"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:89:75",
+    "xPx": 178,
+    "yPx": 150,
+    "longitude": -122.44859110376592,
+    "latitude": 37.786551053483784,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.46484375,
+    "species": "Corymbia ficifolia",
+    "speciesConfidence": 0.412109375,
+    "genus": "Corymbia",
+    "genusConfidence": 0.4296875,
+    "dbhInches": 12.172416709211404,
+    "crownWidthM": 5.4902425046397605,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Corymbia",
+     "n": 275
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Corymbia ficifolia",
+     "Melaleuca quinquenervia",
+     "Metrosideros excelsa",
+     "Eucalyptus polyanthemos",
+     "Eriobotrya deflexa"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:25:49",
+    "xPx": 50,
+    "yPx": 98,
+    "longitude": -122.44946119708551,
+    "latitude": 37.78683633171752,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.45703125,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 0.828125,
+    "genus": "Metrosideros",
+    "genusConfidence": 0.80859375,
+    "dbhInches": 13.694892728788941,
+    "crownWidthM": 5.545060105864757,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Metrosideros",
+     "n": 39
+    },
+    "candidateTreeIds": [
+     "sf-3145"
+    ],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Acacia melanoxylon",
+     "Agonis flexuosa",
+     "Ligustrum lucidum",
+     "Geijera parviflora"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:121:74",
+    "xPx": 242,
+    "yPx": 148,
+    "longitude": -122.448154933678,
+    "latitude": 37.786559827158975,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.45703125,
+    "species": "Tristaniopsis laurina",
+    "speciesConfidence": 0.302734375,
+    "genus": "Tristaniopsis",
+    "genusConfidence": 0.3046875,
+    "dbhInches": 7.372897488127265,
+    "crownWidthM": 5.176018572853799,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Tristaniopsis",
+     "n": 117
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Tristaniopsis laurina",
+     "Pittosporum undulatum",
+     "Acer palmatum",
+     "Callistemon citrinus",
+     "Lophostemon confertus"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:126:87",
+    "xPx": 252,
+    "yPx": 174,
+    "longitude": -122.44808784032755,
+    "latitude": 37.78641890818323,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.45703125,
+    "species": "Ficus microcarpa",
+    "speciesConfidence": 0.55078125,
+    "genus": "Ficus",
+    "genusConfidence": 0.431640625,
+    "dbhInches": 8.053260780008058,
+    "crownWidthM": 4.201964082612937,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Ficus",
+     "n": 1024
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Ficus microcarpa",
+     "Magnolia grandiflora",
+     "Maytenus boaria",
+     "Platanus x hispanica",
+     "Tristaniopsis laurina"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:44:46",
+    "xPx": 88,
+    "yPx": 92,
+    "longitude": -122.44920202698718,
+    "latitude": 37.78686756767523,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.453125,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 0.9765625,
+    "genus": "Metrosideros",
+    "genusConfidence": 0.96875,
+    "dbhInches": 14.642631884188171,
+    "crownWidthM": 5.820262600218234,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Metrosideros",
+     "n": 39
+    },
+    "candidateTreeIds": [
+     "sf-141208"
+    ],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Acacia melanoxylon",
+     "Olea europaea",
+     "Pittosporum crassifolium",
+     "Pittosporum undulatum"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:23:94",
+    "xPx": 46,
+    "yPx": 188,
+    "longitude": -122.44949206322258,
+    "latitude": 37.78634976729596,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.453125,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 0.255859375,
+    "genus": "Arbutus",
+    "genusConfidence": 0.2216796875,
+    "dbhInches": 11.569207830853442,
+    "crownWidthM": 5.489954171973605,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "family",
+     "taxon": "Ericaceae",
+     "n": 1443
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Schinus terebinthifolia",
+     "Acacia melanoxylon",
+     "Magnolia grandiflora",
+     "Myoporum laetum"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:69:124",
+    "xPx": 138,
+    "yPx": 248,
+    "longitude": -122.44886759559358,
+    "latitude": 37.78602237548739,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.44921875,
+    "species": "Melaleuca quinquenervia",
+    "speciesConfidence": 0.1806640625,
+    "genus": "Corymbia",
+    "genusConfidence": 0.1962890625,
+    "dbhInches": 6.505416801107283,
+    "crownWidthM": 4.064895488476387,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Corymbia",
+     "n": 275
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Melaleuca quinquenervia",
+     "Leptospermum scoparium",
+     "Corymbia ficifolia",
+     "Eucalyptus polyanthemos",
+     "Lophostemon confertus"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:52:45",
+    "xPx": 104,
+    "yPx": 90,
+    "longitude": -122.44909292380108,
+    "latitude": 37.7868778733359,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.431640625,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 0.99609375,
+    "genus": "Metrosideros",
+    "genusConfidence": 0.99609375,
+    "dbhInches": 13.467069533669397,
+    "crownWidthM": 5.478130917886565,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Metrosideros",
+     "n": 39
+    },
+    "candidateTreeIds": [
+     "sf-141209"
+    ],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Olea europaea",
+     "Acacia melanoxylon",
+     "Pittosporum crassifolium",
+     "Magnolia grandiflora"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:77:95",
+    "xPx": 154,
+    "yPx": 190,
+    "longitude": -122.44875624416602,
+    "latitude": 37.78633551126976,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.4296875,
+    "species": "Magnolia grandiflora",
+    "speciesConfidence": 0.263671875,
+    "genus": "Magnolia",
+    "genusConfidence": 0.294921875,
+    "dbhInches": 8.943061786014486,
+    "crownWidthM": 4.54708713606578,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Magnolia",
+     "n": 229
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Magnolia grandiflora",
+     "Platanus x hispanica",
+     "Metrosideros excelsa",
+     "Tristaniopsis laurina",
+     "Schinus terebinthifolia"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:61:44",
+    "xPx": 122,
+    "yPx": 88,
+    "longitude": -122.44897019272048,
+    "latitude": 37.7868881151617,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.416015625,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 0.9765625,
+    "genus": "Metrosideros",
+    "genusConfidence": 0.97265625,
+    "dbhInches": 13.694892728788941,
+    "crownWidthM": 5.545060105864757,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Metrosideros",
+     "n": 39
+    },
+    "candidateTreeIds": [
+     "sf-141210",
+     "sf-62664"
+    ],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Acacia melanoxylon",
+     "Olea europaea",
+     "Pittosporum undulatum",
+     "Pittosporum crassifolium"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:15:1",
+    "xPx": 30,
+    "yPx": 2,
+    "longitude": -122.44959362520666,
+    "latitude": 37.78735610627043,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.408203125,
+    "species": "Ficus microcarpa",
+    "speciesConfidence": 0.1904296875,
+    "genus": "Arbutus",
+    "genusConfidence": 0.30078125,
+    "dbhInches": 7.504751437796486,
+    "crownWidthM": 4.48992520944054,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "family",
+     "taxon": "Ericaceae",
+     "n": 1443
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Ficus microcarpa",
+     "Lophostemon confertus",
+     "Pittosporum undulatum",
+     "Ligustrum lucidum",
+     "Magnolia grandiflora"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:80:40",
+    "xPx": 160,
+    "yPx": 80,
+    "longitude": -122.44871094190158,
+    "latitude": 37.78693016540674,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.40625,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 0.99609375,
+    "genus": "Metrosideros",
+    "genusConfidence": 0.99609375,
+    "dbhInches": 14.888967492629165,
+    "crownWidthM": 5.890978082133546,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Metrosideros",
+     "n": 39
+    },
+    "candidateTreeIds": [
+     "sf-141212"
+    ],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Acacia melanoxylon",
+     "Olea europaea",
+     "Agonis flexuosa",
+     "Magnolia grandiflora"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:6:52",
+    "xPx": 12,
+    "yPx": 104,
+    "longitude": -122.44972036697258,
+    "latitude": 37.78680509518786,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.400390625,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 0.98046875,
+    "genus": "Metrosideros",
+    "genusConfidence": 0.984375,
+    "dbhInches": 16.45061689198871,
+    "crownWidthM": 6.332047383621986,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Metrosideros",
+     "n": 39
+    },
+    "candidateTreeIds": [
+     "sf-3143"
+    ],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Olea europaea",
+     "Pittosporum crassifolium",
+     "Acacia melanoxylon",
+     "Platanus x hispanica"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:23:85",
+    "xPx": 46,
+    "yPx": 170,
+    "longitude": -122.44949134114493,
+    "latitude": 37.78644710565391,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.3984375,
+    "species": "Acacia melanoxylon",
+    "speciesConfidence": 0.1591796875,
+    "genus": "Arbutus",
+    "genusConfidence": 0.16796875,
+    "dbhInches": 12.59055410055989,
+    "crownWidthM": 5.710033947587819,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "family",
+     "taxon": "Ericaceae",
+     "n": 1443
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acacia melanoxylon",
+     "Quercus agrifolia",
+     "Myoporum laetum",
+     "Metrosideros excelsa",
+     "Schinus terebinthifolia"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:93:61",
+    "xPx": 186,
+    "yPx": 122,
+    "longitude": -122.44853546736482,
+    "latitude": 37.78670221355338,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.392578125,
+    "species": "Eriobotrya deflexa",
+    "speciesConfidence": 0.41015625,
+    "genus": "Eriobotrya",
+    "genusConfidence": 0.34765625,
+    "dbhInches": 7.6386817850411015,
+    "crownWidthM": 3.866521752532505,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Eriobotrya",
+     "n": 71
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Eriobotrya deflexa",
+     "Corymbia ficifolia",
+     "Lophostemon confertus",
+     "Callistemon citrinus",
+     "Melaleuca quinquenervia"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:94:61",
+    "xPx": 188,
+    "yPx": 122,
+    "longitude": -122.44852183953458,
+    "latitude": 37.78670214976819,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.392578125,
+    "species": "Eriobotrya deflexa",
+    "speciesConfidence": 0.376953125,
+    "genus": "Eriobotrya",
+    "genusConfidence": 0.337890625,
+    "dbhInches": 7.243087744472826,
+    "crownWidthM": 3.738268499455631,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Eriobotrya",
+     "n": 71
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Eriobotrya deflexa",
+     "Corymbia ficifolia",
+     "Lophostemon confertus",
+     "Callistemon citrinus",
+     "Melaleuca quinquenervia"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:98:0",
+    "xPx": 196,
+    "yPx": 0,
+    "longitude": -122.44846242489226,
+    "latitude": 37.78736163218593,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.390625,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 0.2578125,
+    "genus": "Metrosideros",
+    "genusConfidence": 0.1953125,
+    "dbhInches": 8.487735836358526,
+    "crownWidthM": 3.922004080540149,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Metrosideros",
+     "n": 39
+    },
+    "candidateTreeIds": [
+     "sf-126161"
+    ],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Ficus microcarpa",
+     "Corymbia ficifolia",
+     "Magnolia grandiflora",
+     "Platanus x hispanica"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:15:50",
+    "xPx": 30,
+    "yPx": 100,
+    "longitude": -122.44959755587438,
+    "latitude": 37.7868261530415,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.390625,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 0.15625,
+    "genus": "Metrosideros",
+    "genusConfidence": 0.10498046875,
+    "dbhInches": 8.487735836358526,
+    "crownWidthM": 3.922004080540149,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Metrosideros",
+     "n": 39
+    },
+    "candidateTreeIds": [
+     "sf-3144"
+    ],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Ginkgo biloba",
+     "Olea europaea",
+     "Platanus x hispanica",
+     "Maytenus boaria"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:18:96",
+    "xPx": 36,
+    "yPx": 192,
+    "longitude": -122.44956036250309,
+    "latitude": 37.78632845489592,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.390625,
+    "species": "Schinus terebinthifolia",
+    "speciesConfidence": 0.111328125,
+    "genus": "Arbutus",
+    "genusConfidence": 0.09912109375,
+    "dbhInches": 10.092286978670202,
+    "crownWidthM": 5.152421930972844,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "family",
+     "taxon": "Ericaceae",
+     "n": 1443
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Schinus terebinthifolia",
+     "Quercus agrifolia",
+     "Lophostemon confertus",
+     "Acacia melanoxylon",
+     "Metrosideros excelsa"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:60:1",
+    "xPx": 120,
+    "yPx": 2,
+    "longitude": -122.44898036737611,
+    "latitude": 37.78735323984178,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.388671875,
+    "species": "Platanus x hispanica",
+    "speciesConfidence": 0.94921875,
+    "genus": "Platanus",
+    "genusConfidence": 0.93359375,
+    "dbhInches": 11.182493960703473,
+    "crownWidthM": 8.30986703574846,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Platanus",
+     "n": 76
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Platanus x hispanica",
+     "Magnolia grandiflora",
+     "Olea europaea",
+     "Fraxinus americana",
+     "Metrosideros excelsa"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:1:7",
+    "xPx": 2,
+    "yPx": 14,
+    "longitude": -122.44978489769439,
+    "latitude": 37.78729210516569,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.38671875,
+    "species": "Platanus x hispanica",
+    "speciesConfidence": 0.67578125,
+    "genus": "Platanus",
+    "genusConfidence": 0.72265625,
+    "dbhInches": 10.444393964331121,
+    "crownWidthM": 7.926926182420799,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Platanus",
+     "n": 76
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Platanus x hispanica",
+     "Magnolia grandiflora",
+     "Olea europaea",
+     "Pittosporum undulatum",
+     "Lophostemon confertus"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:76:84",
+    "xPx": 152,
+    "yPx": 168,
+    "longitude": -122.44876898823236,
+    "latitude": 37.78645454411709,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.38671875,
+    "species": "Melaleuca quinquenervia",
+    "speciesConfidence": 0.396484375,
+    "genus": "Melaleuca",
+    "genusConfidence": 0.365234375,
+    "dbhInches": 9.42023928423861,
+    "crownWidthM": 4.523352434507948,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "family",
+     "taxon": "Myrtaceae",
+     "n": 9073
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Melaleuca quinquenervia",
+     "Metrosideros excelsa",
+     "Leptospermum scoparium",
+     "Eucalyptus polyanthemos",
+     "Dodonaea viscosa"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:87:94",
+    "xPx": 174,
+    "yPx": 188,
+    "longitude": -122.44861988617627,
+    "latitude": 37.78634568897909,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.37890625,
+    "species": "Acacia melanoxylon",
+    "speciesConfidence": 0.10546875,
+    "genus": "Arbutus",
+    "genusConfidence": 0.12451171875,
+    "dbhInches": 8.053260780008058,
+    "crownWidthM": 4.639512368666163,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "family",
+     "taxon": "Ericaceae",
+     "n": 1443
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Acacia melanoxylon",
+     "Magnolia grandiflora",
+     "Metrosideros excelsa",
+     "Pittosporum undulatum",
+     "Cordyline australis"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:119:33",
+    "xPx": 238,
+    "yPx": 66,
+    "longitude": -122.44817889193989,
+    "latitude": 37.78700338498276,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.375,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 1.0,
+    "genus": "Metrosideros",
+    "genusConfidence": 0.99609375,
+    "dbhInches": 14.642631884188171,
+    "crownWidthM": 5.820262600218234,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Metrosideros",
+     "n": 39
+    },
+    "candidateTreeIds": [
+     "sf-141213"
+    ],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Acacia melanoxylon",
+     "Olea europaea",
+     "Pittosporum crassifolium",
+     "Myoporum laetum"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:120:33",
+    "xPx": 240,
+    "yPx": 66,
+    "longitude": -122.44816526405518,
+    "latitude": 37.78700332115588,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.375,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 1.0,
+    "genus": "Metrosideros",
+    "genusConfidence": 0.99609375,
+    "dbhInches": 14.642631884188171,
+    "crownWidthM": 5.820262600218234,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Metrosideros",
+     "n": 39
+    },
+    "candidateTreeIds": [
+     "sf-141213"
+    ],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Acacia melanoxylon",
+     "Olea europaea",
+     "Pittosporum crassifolium",
+     "Myoporum laetum"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:56:7",
+    "xPx": 112,
+    "yPx": 14,
+    "longitude": -122.44903536098008,
+    "latitude": 37.787288602541224,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.373046875,
+    "species": "Magnolia grandiflora",
+    "speciesConfidence": 0.2275390625,
+    "genus": "Magnolia",
+    "genusConfidence": 0.2470703125,
+    "dbhInches": 10.807678025521156,
+    "crownWidthM": 5.14474609151381,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Magnolia",
+     "n": 229
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Magnolia grandiflora",
+     "Prunus x yedoensis",
+     "Pittosporum undulatum",
+     "Platanus x hispanica",
+     "Ficus microcarpa"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:105:52",
+    "xPx": 210,
+    "yPx": 104,
+    "longitude": -122.44837120984894,
+    "latitude": 37.78679878636077,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.37109375,
+    "species": "Corymbia ficifolia",
+    "speciesConfidence": 0.875,
+    "genus": "Corymbia",
+    "genusConfidence": 0.89453125,
+    "dbhInches": 14.16135869683449,
+    "crownWidthM": 5.903708666306306,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Corymbia",
+     "n": 275
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Corymbia ficifolia",
+     "Melaleuca quinquenervia",
+     "Eucalyptus polyanthemos",
+     "Eriobotrya deflexa",
+     "Eucalyptus sideroxylon"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:106:52",
+    "xPx": 212,
+    "yPx": 104,
+    "longitude": -122.44835758200134,
+    "latitude": 37.78679872255645,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.37109375,
+    "species": "Corymbia ficifolia",
+    "speciesConfidence": 0.83203125,
+    "genus": "Corymbia",
+    "genusConfidence": 0.875,
+    "dbhInches": 13.694892728788941,
+    "crownWidthM": 5.809600424928654,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Corymbia",
+     "n": 275
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Corymbia ficifolia",
+     "Melaleuca quinquenervia",
+     "Eucalyptus polyanthemos",
+     "Eriobotrya deflexa",
+     "Dodonaea viscosa"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:2:102",
+    "xPx": 4,
+    "yPx": 204,
+    "longitude": -122.44977888786448,
+    "latitude": 37.786264581096695,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.369140625,
+    "species": "Eriobotrya deflexa",
+    "speciesConfidence": 0.6796875,
+    "genus": "Eriobotrya",
+    "genusConfidence": 0.59765625,
+    "dbhInches": 7.243087744472826,
+    "crownWidthM": 3.738268499455631,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Eriobotrya",
+     "n": 71
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Eriobotrya deflexa",
+     "Corymbia ficifolia",
+     "Lophostemon confertus",
+     "Melaleuca quinquenervia",
+     "Tristaniopsis laurina"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:50:1",
+    "xPx": 100,
+    "yPx": 2,
+    "longitude": -122.44911664688648,
+    "latitude": 37.78735387710175,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.36328125,
+    "species": "Platanus x hispanica",
+    "speciesConfidence": 0.60546875,
+    "genus": "Platanus",
+    "genusConfidence": 0.33984375,
+    "dbhInches": 12.379852088930456,
+    "crownWidthM": 8.914896398249063,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Platanus",
+     "n": 76
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Platanus x hispanica",
+     "Magnolia grandiflora",
+     "Ulmus pumila",
+     "Fraxinus americana",
+     "Pittosporum undulatum"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:9:7",
+    "xPx": 18,
+    "yPx": 14,
+    "longitude": -122.44967587416424,
+    "latitude": 37.78729159598936,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.36328125,
+    "species": "Prunus cerasifera",
+    "speciesConfidence": 0.75,
+    "genus": "Prunus",
+    "genusConfidence": 0.6953125,
+    "dbhInches": 5.833759763883972,
+    "crownWidthM": 4.458908863390613,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Prunus",
+     "n": 503
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Prunus cerasifera",
+     "Acer palmatum",
+     "Eriobotrya deflexa",
+     "Lophostemon confertus",
+     "Tristaniopsis laurina"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:31:32",
+    "xPx": 62,
+    "yPx": 64,
+    "longitude": -122.44937806571403,
+    "latitude": 37.7870198109467,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.36328125,
+    "species": "Platanus x hispanica",
+    "speciesConfidence": 0.64453125,
+    "genus": "Platanus",
+    "genusConfidence": 0.5546875,
+    "dbhInches": 9.920317008742302,
+    "crownWidthM": 7.649933092864154,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Platanus",
+     "n": 76
+    },
+    "candidateTreeIds": [
+     "sf-3140",
+     "sf-3139",
+     "sf-3141"
+    ],
+    "speciesTop": [
+     "Platanus x hispanica",
+     "Ginkgo biloba",
+     "Magnolia grandiflora",
+     "Ficus microcarpa",
+     "Pittosporum undulatum"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:115:84",
+    "xPx": 230,
+    "yPx": 168,
+    "longitude": -122.44823750463814,
+    "latitude": 37.78645205639368,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.35546875,
+    "species": "Metrosideros excelsa",
+    "speciesConfidence": 0.82421875,
+    "genus": "Metrosideros",
+    "genusConfidence": 0.765625,
+    "dbhInches": 12.59055410055989,
+    "crownWidthM": 5.217646534453259,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Metrosideros",
+     "n": 39
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Metrosideros excelsa",
+     "Olea europaea",
+     "Myoporum laetum",
+     "Pittosporum crassifolium",
+     "Acacia melanoxylon"
+    ]
+   },
+   {
+    "predictionId": "r000020_c000066:7:96",
+    "xPx": 14,
+    "yPx": 192,
+    "longitude": -122.44971026790932,
+    "latitude": 37.78632915511927,
+    "positionRole": "crown_center",
+    "centerConfidence": 0.35546875,
+    "species": "Eriobotrya deflexa",
+    "speciesConfidence": 0.72265625,
+    "genus": "Eriobotrya",
+    "genusConfidence": 0.6015625,
+    "dbhInches": 6.38905609893065,
+    "crownWidthM": 3.4522875426998008,
+    "crownWidthMethod": "tallo_genus_power_law_from_dbh",
+    "crownFit": {
+     "level": "genus",
+     "taxon": "Eriobotrya",
+     "n": 71
+    },
+    "candidateTreeIds": [],
+    "speciesTop": [
+     "Eriobotrya deflexa",
+     "Corymbia ficifolia",
+     "Lophostemon confertus",
+     "Tristaniopsis laurina",
+     "Acer palmatum"
+    ]
+   }
+  ]
+ },
+ "inventoryVersion": "2026-09-07T15:58:10+00:00",
+ "inventoryTrees": [
+  {
+   "treeId": "sf-126161",
+   "longitude": -122.44847000567962,
+   "latitude": 37.78737869391722,
+   "species": "Corymbia ficifolia",
+   "dbhInches": 11.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.229858313184236,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-126877",
+   "longitude": -122.44861994605746,
+   "latitude": 37.787413465300396,
+   "species": "Ficus microcarpa",
+   "dbhInches": 13.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.9724677289576125,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-129886",
+   "longitude": -122.44845302021722,
+   "latitude": 37.78730228482361,
+   "species": "Lophostemon confertus",
+   "dbhInches": 2.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 1.8718789861498777,
+   "crownModelLevel": "family",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-133458",
+   "longitude": -122.4481716304289,
+   "latitude": 37.7871784130942,
+   "species": "Platanus x hispanica",
+   "dbhInches": 16.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 10.6435600197304,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-133459",
+   "longitude": -122.44826277940038,
+   "latitude": 37.78716621470515,
+   "species": "Platanus x hispanica",
+   "dbhInches": 6.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.404809991392271,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-136985",
+   "longitude": -122.44847849798833,
+   "latitude": 37.78744168063026,
+   "species": "Ulmus parvifolia",
+   "dbhInches": 5.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 4.7657876218461634,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-141208",
+   "longitude": -122.4492156646754,
+   "latitude": 37.7868733285899,
+   "species": "Metrosideros excelsa",
+   "dbhInches": 14.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.634214227435401,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-141209",
+   "longitude": -122.44909599349562,
+   "latitude": 37.78688832189795,
+   "species": "Metrosideros excelsa",
+   "dbhInches": 14.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.634214227435401,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-141210",
+   "longitude": -122.44895936893475,
+   "latitude": 37.7869045246098,
+   "species": "Metrosideros excelsa",
+   "dbhInches": 14.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.634214227435401,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-141211",
+   "longitude": -122.44882630578,
+   "latitude": 37.78692252769184,
+   "species": "Metrosideros excelsa",
+   "dbhInches": 10.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 4.416255522231043,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-141212",
+   "longitude": -122.44871422047297,
+   "latitude": 37.78693646511401,
+   "species": "Metrosideros excelsa",
+   "dbhInches": 13.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.339929303756685,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-141213",
+   "longitude": -122.44819340770981,
+   "latitude": 37.78699806040791,
+   "species": "Metrosideros excelsa",
+   "dbhInches": 13.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.339929303756685,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-141214",
+   "longitude": -122.44806966240304,
+   "latitude": 37.787014049271455,
+   "species": "Metrosideros excelsa",
+   "dbhInches": 9.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 4.091958883631378,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-141215",
+   "longitude": -122.44792713437812,
+   "latitude": 37.78702848919845,
+   "species": "Metrosideros excelsa",
+   "dbhInches": 12.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.039319729444577,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-23687",
+   "longitude": -122.44867841638596,
+   "latitude": 37.78710571729943,
+   "species": "Platanus x hispanica",
+   "dbhInches": 17.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 11.098847058896029,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-260477",
+   "longitude": -122.44873549712253,
+   "latitude": 37.78686179587265,
+   "species": "Cupressus macrocarpa",
+   "dbhInches": null,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": null,
+   "crownModelLevel": "none",
+   "crownDbhSource": null
+  },
+  {
+   "treeId": "sf-260478",
+   "longitude": -122.44873549712253,
+   "latitude": 37.78686179587265,
+   "species": "Cupressus macrocarpa",
+   "dbhInches": null,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": null,
+   "crownModelLevel": "none",
+   "crownDbhSource": null
+  },
+  {
+   "treeId": "sf-260479",
+   "longitude": -122.44873549712253,
+   "latitude": 37.78686179587265,
+   "species": "Prunus cerasifera",
+   "dbhInches": null,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": null,
+   "crownModelLevel": "none",
+   "crownDbhSource": null
+  },
+  {
+   "treeId": "sf-260480",
+   "longitude": -122.44873549712253,
+   "latitude": 37.78686179587265,
+   "species": "Prunus cerasifera",
+   "dbhInches": null,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": null,
+   "crownModelLevel": "none",
+   "crownDbhSource": null
+  },
+  {
+   "treeId": "sf-260481",
+   "longitude": -122.44873549712253,
+   "latitude": 37.78686179587265,
+   "species": "Prunus cerasifera",
+   "dbhInches": null,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": null,
+   "crownModelLevel": "none",
+   "crownDbhSource": null
+  },
+  {
+   "treeId": "sf-260482",
+   "longitude": -122.44873549712253,
+   "latitude": 37.78686179587265,
+   "species": "Prunus cerasifera",
+   "dbhInches": null,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": null,
+   "crownModelLevel": "none",
+   "crownDbhSource": null
+  },
+  {
+   "treeId": "sf-260483",
+   "longitude": -122.44873549712253,
+   "latitude": 37.78686179587265,
+   "species": "Prunus cerasifera",
+   "dbhInches": null,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": null,
+   "crownModelLevel": "none",
+   "crownDbhSource": null
+  },
+  {
+   "treeId": "sf-260484",
+   "longitude": -122.44873549712253,
+   "latitude": 37.78686179587265,
+   "species": "Prunus cerasifera",
+   "dbhInches": null,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": null,
+   "crownModelLevel": "none",
+   "crownDbhSource": null
+  },
+  {
+   "treeId": "sf-3127",
+   "longitude": -122.44790087152708,
+   "latitude": 37.78721203874623,
+   "species": "Platanus x hispanica",
+   "dbhInches": 18.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 11.545925581437606,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3132",
+   "longitude": -122.4479611580935,
+   "latitude": 37.78724181214224,
+   "species": "Ilex",
+   "dbhInches": 6.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 4.649139339088435,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3133",
+   "longitude": -122.44806622461823,
+   "latitude": 37.78725903792613,
+   "species": "Platanus x hispanica",
+   "dbhInches": 3.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 3.3480774466615606,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3134",
+   "longitude": -122.44823960121992,
+   "latitude": 37.78714790892453,
+   "species": "Platanus x hispanica",
+   "dbhInches": 18.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 11.545925581437606,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3135",
+   "longitude": -122.44823960121992,
+   "latitude": 37.78714790892453,
+   "species": "Platanus x hispanica",
+   "dbhInches": 3.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 3.3480774466615606,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3137",
+   "longitude": -122.44883730590985,
+   "latitude": 37.787087006913325,
+   "species": "Platanus x hispanica",
+   "dbhInches": 35.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 15.649406121186102,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3138",
+   "longitude": -122.44898777688967,
+   "latitude": 37.78706704824615,
+   "species": "Platanus x hispanica",
+   "dbhInches": 11.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 8.215931953714785,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3139",
+   "longitude": -122.44932502174277,
+   "latitude": 37.78702505350052,
+   "species": "Platanus x hispanica",
+   "dbhInches": 16.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 10.6435600197304,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3140",
+   "longitude": -122.44938868206727,
+   "latitude": 37.787018401233,
+   "species": "Platanus x hispanica",
+   "dbhInches": 75.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 15.649406121186102,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3141",
+   "longitude": -122.44940666741343,
+   "latitude": 37.787057866257626,
+   "species": "Platanus x hispanica",
+   "dbhInches": 12.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 8.724998602461124,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3142",
+   "longitude": -122.44985574442666,
+   "latitude": 37.786781403173805,
+   "species": "Metrosideros excelsa",
+   "dbhInches": 30.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 9.782114171560705,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3143",
+   "longitude": -122.4497344145906,
+   "latitude": 37.7868001428071,
+   "species": "Metrosideros excelsa",
+   "dbhInches": 30.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 9.782114171560705,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3144",
+   "longitude": -122.44959128971327,
+   "latitude": 37.78681412984783,
+   "species": "Metrosideros excelsa",
+   "dbhInches": 30.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 9.782114171560705,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3145",
+   "longitude": -122.44947571677307,
+   "latitude": 37.78682905550359,
+   "species": "Metrosideros excelsa",
+   "dbhInches": 30.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 9.782114171560705,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-3146",
+   "longitude": -122.44933577485486,
+   "latitude": 37.786852750538586,
+   "species": "Metrosideros excelsa",
+   "dbhInches": 30.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 9.782114171560705,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-44022",
+   "longitude": -122.44916244948811,
+   "latitude": 37.78704709048351,
+   "species": "Platanus x hispanica",
+   "dbhInches": 18.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 11.545925581437606,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  },
+  {
+   "treeId": "sf-62664",
+   "longitude": -122.44900998772378,
+   "latitude": 37.78690754418141,
+   "species": "Unknown",
+   "dbhInches": null,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 6.195219926895909,
+   "crownModelLevel": "global",
+   "crownDbhSource": "age"
+  },
+  {
+   "treeId": "sf-67233",
+   "longitude": -122.44863294216515,
+   "latitude": 37.78746295229173,
+   "species": "Ficus microcarpa",
+   "dbhInches": 12.0,
+   "source": "SF_OPENDATA",
+   "positionRole": "trunk",
+   "mergedSources": "SF_OPENDATA",
+   "mergedTreeIds": null,
+   "predictedCrownWidthM": 5.631576829152159,
+   "crownModelLevel": "genus",
+   "crownDbhSource": "measured"
+  }
+ ],
+ "exportedAt": "2026-09-11T14:08:32.372553+00:00"
+}

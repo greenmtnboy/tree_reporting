@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Satellite tree review</title>
+<style>
+:root{--bg:#0b0f0d;--panel:#111914;--line:#35513d;--text:#d7eadb;--muted:#8cab94;--accent:#6da87b;--warn:#d9a441;--bad:#c96b6b;--inv:#5ec8ff;--pred:#f0c6ff;--sat:#ffb566}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui}
+a{color:var(--accent)}button{border:1px solid var(--accent);background:#1d3624;color:#e7f5ea;padding:7px 12px;cursor:pointer;border-radius:3px;font:inherit}
+button:disabled{opacity:.45;cursor:default}button.reject{border-color:#a86d6d;background:#361d1d}button.warn{border-color:#b08a3a;background:#3a2e14}button.ghost{background:transparent;border-color:var(--line);color:var(--muted)}
+header{display:flex;gap:18px;align-items:center;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+header h1{font-size:18px;margin:0}nav a{margin-right:14px}#status{color:var(--muted);margin-left:auto}
+main{padding:16px 20px}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);font-size:13px}th{color:var(--muted);font-weight:500}
+.hidden{display:none!important}.muted{color:var(--muted)}.pill{display:inline-block;padding:1px 7px;border-radius:9px;font-size:12px;border:1px solid var(--line);margin-right:4px}
+.banner{padding:10px 14px;border:1px solid var(--warn);background:#2a2210;margin-bottom:12px}
+/* tile view */
+.tile-layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px}
+.toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:13px}
+.toolbar label{display:inline-flex;gap:6px;align-items:center;color:var(--muted)}
+.viewport{position:relative;overflow:auto;border:1px solid var(--line);background:#050806;max-height:calc(100vh - 170px)}
+.stage{position:relative;display:block;line-height:0}
+.stage img{display:block;width:100%;height:auto;image-rendering:auto;user-select:none;-webkit-user-drag:none}
+.stage svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.stage[data-crisp="1"] img{image-rendering:pixelated}
+svg .crown{fill:none;stroke-width:.7;vector-effect:non-scaling-stroke}
+svg .pred .crown{stroke:var(--pred);stroke-dasharray:3 2;opacity:.75}
+svg .inv .crown{stroke:var(--inv);opacity:.8}
+svg .sat .crown{stroke:var(--sat);opacity:.8;stroke-dasharray:1 1.5}
+svg .dot{fill:var(--pred);stroke:#000;stroke-width:.6;vector-effect:non-scaling-stroke;cursor:pointer}
+svg .inv .dot{fill:var(--inv);stroke:#000}
+svg .sat .dot{fill:var(--sat);stroke:#000}
+svg .pred.accept .dot{fill:#5ad37a}svg .pred.duplicate .dot{fill:#ffd166}svg .pred.reject .dot{fill:#444;opacity:.5}svg .pred.uncertain .dot{fill:#c0c0c0}
+svg .pred.reject .crown,svg .pred.uncertain .crown{display:none}
+svg .pred.published .dot{stroke:#fff;stroke-width:1.2}
+svg .pred.selected .dot{stroke:#fff;stroke-width:1.6;r:4}svg .pred.selected .crown{opacity:1;stroke-width:1.2}
+svg .link{stroke:#ffd166;stroke-width:.8;vector-effect:non-scaling-stroke;stroke-dasharray:2 1}
+svg .hitbox{fill:transparent;cursor:pointer}
+.side{border:1px solid var(--line);background:var(--panel);padding:12px;font-size:13px;max-height:calc(100vh - 170px);overflow:auto}
+.side h2{font-size:15px;margin:0 0 8px}.side dl{display:grid;grid-template-columns:120px 1fr;gap:4px 8px;margin:0 0 10px}.side dt{color:var(--muted)}.side dd{margin:0;overflow-wrap:anywhere}
+.side input,.side textarea{width:100%;background:#0b100d;color:var(--text);border:1px solid var(--line);padding:6px;font:inherit;border-radius:3px}
+.side textarea{min-height:52px;resize:vertical}.field{margin-bottom:8px}.field label{display:block;color:var(--muted);margin-bottom:3px}
+.decisions{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.nearest li{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:4px 0;border-bottom:1px dotted var(--line)}
+.nearest ul{list-style:none;padding:0;margin:0}.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
+kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-monospace,monospace;font-size:11px;color:var(--muted)}
+.savestate{margin-left:auto;color:var(--muted)}.savestate.err{color:var(--bad)}
+.closeup{width:100%;aspect-ratio:1;background:#000;border:1px solid var(--line);image-rendering:pixelated;margin-bottom:8px}
+@media(max-width:980px){.tile-layout{grid-template-columns:1fr}.viewport,.side{max-height:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Satellite tree review</h1>
+  <nav><a href="/">Photo submissions</a><a href="#tiles">Tiles</a><a href="#queue">Publish queue</a></nav>
+  <span id="status">Loading…</span>
+</header>
+<main>
+  <section id="view-tiles" class="hidden">
+    <p class="muted">NAIP aerial tiles with the model's detections. Open a tile, decide each detection, mark the tile done, then publish the accepted ones. Nothing reaches the map until a publish, and a rejection never touches an inventory tree.</p>
+    <table><thead><tr><th>Tile</th><th>City</th><th>Imagery</th><th>Run</th><th>Detections</th><th>Inventory</th><th>Decided</th><th>Published</th><th>Done</th><th></th></tr></thead><tbody id="tiles-body"></tbody></table>
+  </section>
+
+  <section id="view-tile" class="hidden">
+    <div class="toolbar">
+      <a href="#tiles">← Tiles</a>
+      <strong id="tile-title"></strong>
+      <span id="tile-meta" class="muted"></span>
+      <label>Min confidence <input id="threshold" type="range" min="0" max="1" step="0.01" value="0.35"> <span id="threshold-value">0.35</span></label>
+      <label>Zoom <input id="zoom" type="range" min="1" max="5" step="0.5" value="2"></label>
+      <label><input id="show-inventory" type="checkbox" checked> inventory rings</label>
+      <label><input id="show-crowns" type="checkbox" checked> detection rings</label>
+      <label><input id="hide-decided" type="checkbox"> hide decided</label>
+      <label><input id="crisp" type="checkbox"> crisp pixels</label>
+      <label><input id="done" type="checkbox"> tile reviewed</label>
+      <button id="publish-tile">Publish accepted</button>
+      <span id="savestate" class="savestate"></span>
+    </div>
+    <div id="unavailable" class="banner hidden">Inference unavailable for this tile: the prediction layer has no output here. This is not a tile with no trees.</div>
+    <div class="tile-layout">
+      <div>
+        <div class="viewport" id="viewport"><div class="stage" id="stage"><img id="tile-image" alt="Aerial tile"><svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg></div></div>
+        <div class="legend">
+          <span><i style="background:var(--pred)"></i>detection (dashed ring: DBH-derived crown estimate)</span>
+          <span><i style="background:var(--inv)"></i>inventory tree (ring: predicted crown from the public prediction parquet)</span>
+          <span><i style="background:var(--sat)"></i>reviewed detection from another tile</span>
+          <span><i style="background:#5ad37a"></i>accepted</span><span><i style="background:#ffd166"></i>duplicate</span><span><i style="background:#444"></i>not a tree</span><span><i style="background:#c0c0c0"></i>uncertain</span>
+          <span id="attribution"></span>
+        </div>
+        <p class="muted" style="font-size:12px">Crown rings are allometric estimates from DBH and genus (Tallo fits in data/raw/crown_width_coefficients.csv), not measured canopies. Detections mark crown centres; inventory points mark trunks, which can sit a few metres off a tall tree's crown. Keys: <kbd>A</kbd> accept <kbd>D</kbd> duplicate of nearest <kbd>F</kbd> not a tree <kbd>Q</kbd> uncertain <kbd>X</kbd> clear <kbd>N</kbd>/<kbd>P</kbd> next/previous <kbd>WASD</kbd>/arrows nudge crown centre (<kbd>Shift</kbd> ×5).</p>
+      </div>
+      <aside class="side" id="side">
+        <p class="muted">Select a detection.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section id="view-queue" class="hidden">
+    <p class="muted">Accepted and duplicate decisions waiting to be published. Publishing writes <code>satellite/published_trees.ndjson</code> and its manifest to the public bucket; the city's next refresh reads them. <button id="republish" class="ghost">Rebuild export</button></p>
+    <table><thead><tr><th>Observation</th><th>Tile</th><th>City</th><th>Decision</th><th>Species</th><th>DBH</th><th>Position</th><th>Updated</th><th></th></tr></thead><tbody id="queue-body"></tbody></table>
+  </section>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? '—').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = (v, d = 1) => (v == null || Number.isNaN(v)) ? '—' : Number(v).toFixed(d);
+const statusEl = $('#status');
+async function api(path, options = {}) {
+  const r = await fetch('/api/satellite' + path, { headers: { 'content-type': 'application/json' }, ...options });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(body.error || r.statusText), { status: r.status });
+  return body;
+}
+
+// ---------------------------------------------------------------- tiles list
+async function showTiles() {
+  switchView('tiles');
+  statusEl.textContent = 'Loading tiles…';
+  const rows = await api('/tiles');
+  statusEl.textContent = rows.length ? `${rows.length} tile(s)` : 'No tiles in the tile directory';
+  $('#tiles-body').innerHTML = rows.map((t) => {
+    const decided = t.counts.accept + t.counts.duplicate + t.counts.reject + t.counts.uncertain;
+    return `<tr><td><a href="#tile/${encodeURIComponent(t.tileId)}">${esc(t.chipId || t.tileId)}</a><div class="muted">${esc(t.tileId)}</div></td><td>${esc(t.city)}</td><td>${esc(t.acquisitionStart)}${t.acquisitionEnd !== t.acquisitionStart ? ' – ' + esc(t.acquisitionEnd) : ''}<div class="muted">${esc(t.imageryVersion)}</div></td><td>${esc(t.runId)}</td><td>${t.status === 'available' ? t.predictionCount : '<span class="pill">unavailable</span>'}</td><td>${t.inventoryCount}</td><td>${decided}/${t.predictionCount} <span class="muted">(${t.counts.accept} accept, ${t.counts.duplicate} dup, ${t.counts.reject} no, ${t.counts.uncertain} ?)</span></td><td>${t.counts.published}</td><td>${t.done ? '✓' : ''}</td><td><a href="#tile/${encodeURIComponent(t.tileId)}">Open</a></td></tr>`;
+  }).join('');
+}
+
+// ---------------------------------------------------------------- tile view
+const T = { bundle: null, observations: new Map(), nearby: [], selected: null, dirtyCenter: null, saving: 0 };
+const overlay = $('#overlay'), side = $('#side');
+
+function switchView(name) {
+  for (const v of ['tiles', 'tile', 'queue']) $('#view-' + v).classList.toggle('hidden', v !== name);
+}
+function setSave(text, err = false) { const el = $('#savestate'); el.textContent = text; el.classList.toggle('err', err); }
+function pxPerM() { return 1 / T.bundle.image.resolutionM; }
+function threshold() { return Number($('#threshold').value); }
+function visiblePredictions() {
+  const hideDecided = $('#hide-decided').checked;
+  return T.bundle.predictionLayer.predictions.filter((p) => p.centerConfidence >= threshold() && !(hideDecided && T.observations.has(p.predictionId)));
+}
+
+async function showTile(tileId) {
+  switchView('tile');
+  statusEl.textContent = 'Opening…';
+  side.innerHTML = '<p class="muted">Select a detection.</p>';
+  const data = await api('/tiles/' + encodeURIComponent(tileId));
+  T.bundle = data.bundle; T.selected = null; T.dirtyCenter = null;
+  T.observations = new Map(data.observations.map((o) => [o.predictionId, o]));
+  T.nearby = data.nearbyObservations;
+  const b = T.bundle;
+  $('#tile-title').textContent = b.chipId || b.tileId;
+  $('#tile-meta').textContent = `${b.city} · ${b.provider.toUpperCase()} ${b.acquisitionStart}${b.acquisitionEnd !== b.acquisitionStart ? ' – ' + b.acquisitionEnd : ''} · ${b.image.resolutionM} m/px · run ${b.predictionLayer.runId} · inventory ${b.inventoryVersion}`;
+  $('#attribution').textContent = b.attribution || '';
+  $('#threshold').value = b.predictionLayer.confidenceThreshold ?? 0.35; $('#threshold-value').textContent = fmt(threshold(), 2);
+  $('#done').checked = data.review.done;
+  $('#unavailable').classList.toggle('hidden', b.predictionLayer.status === 'available');
+  $('#tile-image').src = b.image.url;
+  overlay.setAttribute('viewBox', `0 0 ${b.image.width} ${b.image.height}`);
+  applyZoom();
+  render();
+  statusEl.textContent = `${b.predictionLayer.predictions.length} detections · ${b.inventoryTrees.length} inventory trees`;
+}
+
+function applyZoom() {
+  const z = Number($('#zoom').value);
+  $('#stage').style.width = `${T.bundle.image.width * z}px`;
+  $('#stage').dataset.crisp = $('#crisp').checked ? '1' : '0';
+}
+
+function circle(cx, cy, r, cls) { return `<circle class="${cls}" cx="${cx}" cy="${cy}" r="${r}"></circle>`; }
+
+function render() {
+  const b = T.bundle, ppm = pxPerM(), showInv = $('#show-inventory').checked, showCrowns = $('#show-crowns').checked;
+  const parts = [];
+  if (showInv) for (const t of b.inventoryTrees) {
+    const r = t.predictedCrownWidthM ? (t.predictedCrownWidthM / 2) * ppm : 0;
+    parts.push(`<g class="inv" data-tree="${esc(t.treeId)}"><title>${esc(t.treeId)} · ${esc(t.species || 'unidentified')} · ${t.dbhInches != null ? fmt(t.dbhInches) + ' in DBH' : 'no DBH'} · ${esc(t.source)}${t.predictedCrownWidthM ? ' · crown est. ' + fmt(t.predictedCrownWidthM) + ' m (' + esc(t.crownModelLevel) + ' fit)' : ''}</title>${r ? circle(t.xPx, t.yPx, r, 'crown') : ''}<rect class="dot" x="${t.xPx - 2.2}" y="${t.yPx - 2.2}" width="4.4" height="4.4" transform="rotate(45 ${t.xPx} ${t.yPx})"></rect></g>`);
+  }
+  for (const o of T.nearby) {
+    const r = o.predictedCrownWidthM ? (o.predictedCrownWidthM / 2) * ppm : 0;
+    parts.push(`<g class="sat"><title>${esc(o.decision)} on ${esc(o.tileId)} · ${esc(o.species || 'unidentified')} · ${esc(o.status)}</title>${r ? circle(o.xPx, o.yPx, r, 'crown') : ''}<polygon class="dot" points="${o.xPx},${o.yPx - 3} ${o.xPx + 2.8},${o.yPx + 2} ${o.xPx - 2.8},${o.yPx + 2}"></polygon></g>`);
+  }
+  const visible = new Set(visiblePredictions().map((p) => p.predictionId));
+  for (const p of b.predictionLayer.predictions) {
+    if (!visible.has(p.predictionId)) continue;
+    const o = T.observations.get(p.predictionId);
+    const center = (T.selected === p.predictionId && T.dirtyCenter) || o?.crownCenter || { xPx: p.xPx, yPx: p.yPx };
+    const cls = ['pred', o?.decision, o?.status === 'published' ? 'published' : '', T.selected === p.predictionId ? 'selected' : ''].filter(Boolean).join(' ');
+    const r = p.crownWidthM ? (p.crownWidthM / 2) * ppm : 0;
+    let link = '';
+    if (o?.decision === 'duplicate' && o.duplicateOf) {
+      const t = b.inventoryTrees.find((x) => x.treeId === o.duplicateOf.treeId);
+      if (t) link = `<line class="link" x1="${center.xPx}" y1="${center.yPx}" x2="${t.xPx}" y2="${t.yPx}"></line>`;
+    }
+    parts.push(`<g class="${cls}" data-pred="${esc(p.predictionId)}"><title>${esc(p.species || 'no species')} ${fmt(p.speciesConfidence, 2)} · centre ${fmt(p.centerConfidence, 2)} · DBH est. ${fmt(p.dbhInches)} in</title>${showCrowns && r ? circle(center.xPx, center.yPx, r, 'crown') : ''}${link}<circle class="hitbox" cx="${center.xPx}" cy="${center.yPx}" r="6"></circle>${circle(center.xPx, center.yPx, 3, 'dot')}</g>`);
+  }
+  overlay.innerHTML = parts.join('');
+  $('#publish-tile').textContent = `Publish accepted (${[...T.observations.values()].filter((o) => o.status === 'pending' && (o.decision === 'accept' || o.decision === 'duplicate')).length})`;
+}
+
+overlay.addEventListener('click', (e) => {
+  const g = e.target.closest('[data-pred]');
+  if (g) select(g.dataset.pred);
+});
+
+function select(predictionId) {
+  T.selected = predictionId; T.dirtyCenter = null;
+  render(); renderSide();
+}
+
+function selectedPrediction() { return T.bundle?.predictionLayer.predictions.find((p) => p.predictionId === T.selected) || null; }
+
+function renderSide() {
+  const p = selectedPrediction();
+  if (!p) { side.innerHTML = '<p class="muted">Select a detection.</p>'; return; }
+  const o = T.observations.get(p.predictionId);
+  const center = T.dirtyCenter || o?.crownCenter || { xPx: p.xPx, yPx: p.yPx };
+  const species = o ? o.species : p.species;
+  const top = (p.speciesTop || []).filter(Boolean).map(esc).join(', ');
+  side.innerHTML = `
+    <h2>${esc(p.predictionId)} ${o ? `<span class="pill">${esc(o.decision)}${o.status === 'published' ? ' · published' : ''}</span>` : ''}</h2>
+    <canvas class="closeup" id="closeup" width="96" height="96"></canvas>
+    <dl>
+      <dt>Model species</dt><dd>${esc(p.species || 'none in vocabulary')} <span class="muted">(${fmt(p.speciesConfidence, 2)})</span>${top ? `<div class="muted">top: ${top}</div>` : ''}</dd>
+      <dt>Genus</dt><dd>${esc(p.genus)} <span class="muted">(${fmt(p.genusConfidence, 2)})</span></dd>
+      <dt>Centre confidence</dt><dd>${fmt(p.centerConfidence, 2)}</dd>
+      <dt>DBH estimate</dt><dd>${fmt(p.dbhInches)} in <span class="muted">— model estimate, never published as measured</span></dd>
+      <dt>Crown estimate</dt><dd>${p.crownWidthM ? `${fmt(p.crownWidthM)} m <span class="muted">(Tallo ${esc(p.crownFit?.level)} fit, ${esc(p.crownFit?.taxon)}, n=${p.crownFit?.n})</span>` : 'unavailable'}</dd>
+      <dt>Crown centre</dt><dd>${fmt(center.xPx, 0)}, ${fmt(center.yPx, 0)} px${center.xPx !== p.xPx || center.yPx !== p.yPx ? ' <span class="pill">moved</span>' : ''} · ${fmt(p.latitude, 6)}, ${fmt(p.longitude, 6)}</dd>
+    </dl>
+    <div class="field"><label>Confirmed species <span class="muted">(blank = unidentified; the model label is kept only if you leave it)</span></label><input id="f-species" value="${esc(species ?? '')}" placeholder="Latin binomial"></div>
+    <div class="field"><label>Measured DBH, inches <span class="muted">(only if someone measured it)</span></label><input id="f-dbh" type="number" step="0.1" min="0" value="${o?.measuredDbhInches ?? ''}"></div>
+    <div class="field"><label>Notes <span class="muted">(private)</span></label><textarea id="f-notes">${esc(o?.notes ?? '')}</textarea></div>
+    <div class="decisions">
+      <button data-decision="accept" ${o?.status === 'published' ? 'disabled' : ''}>Accept as new tree <kbd>A</kbd></button>
+      <button data-decision="reject" class="reject" ${o?.status === 'published' ? 'disabled' : ''}>Not a tree <kbd>F</kbd></button>
+      <button data-decision="uncertain" class="warn" ${o?.status === 'published' ? 'disabled' : ''}>Uncertain <kbd>Q</kbd></button>
+      <button id="clear" class="ghost" ${!o || o.status === 'published' ? 'disabled' : ''}>Clear <kbd>X</kbd></button>
+    </div>
+    <h2>Nearest inventory trees</h2>
+    <div class="nearest"><ul>${(p.nearest || []).map((n) => `<li><span>${esc(n.treeId)} <span class="muted">${fmt(n.distanceM)} m · ${esc(n.species || 'unidentified')} · ${n.dbhInches != null ? fmt(n.dbhInches) + ' in' : 'no DBH'} · ${esc(n.source)}</span></span><button data-dup="${esc(n.treeId)}" ${o?.status === 'published' ? 'disabled' : ''}>${o?.duplicateOfTreeId === n.treeId ? '✓ linked' : 'Duplicate of'}</button></li>`).join('') || '<li class="muted">none within the tile</li>'}</ul></div>
+    <p class="muted" style="font-size:12px">A duplicate publishes at the linked tree's coordinates and only fills what the inventory left empty; the trunk position is never overwritten. "Not a tree" and "uncertain" are about this image only and never publish.</p>`;
+  drawCloseup(center);
+  side.querySelectorAll('[data-decision]').forEach((btn) => btn.addEventListener('click', () => decide(btn.dataset.decision)));
+  side.querySelectorAll('[data-dup]').forEach((btn) => btn.addEventListener('click', () => decide('duplicate', btn.dataset.dup)));
+  $('#clear').addEventListener('click', clearDecision);
+}
+
+function drawCloseup(center) {
+  const canvas = $('#closeup'); if (!canvas) return;
+  const img = $('#tile-image'); if (!img.complete || !img.naturalWidth) { img.addEventListener('load', () => drawCloseup(center), { once: true }); return; }
+  const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
+  const half = 12;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, center.xPx - half, center.yPx - half, half * 2, half * 2, 0, 0, canvas.width, canvas.height);
+  // Crosshair at the edges only, so the pixel under the centre stays visible.
+  ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.beginPath();
+  ctx.moveTo(canvas.width / 2, 0); ctx.lineTo(canvas.width / 2, 10); ctx.moveTo(canvas.width / 2, canvas.height - 10); ctx.lineTo(canvas.width / 2, canvas.height);
+  ctx.moveTo(0, canvas.height / 2); ctx.lineTo(10, canvas.height / 2); ctx.moveTo(canvas.width - 10, canvas.height / 2); ctx.lineTo(canvas.width, canvas.height / 2); ctx.stroke();
+}
+
+function formInput(decision, duplicateOfTreeId) {
+  const p = selectedPrediction(), o = T.observations.get(p.predictionId);
+  const species = ($('#f-species')?.value ?? '').trim() || null;
+  const dbh = $('#f-dbh')?.value; const notes = ($('#f-notes')?.value ?? '').trim() || null;
+  const center = T.dirtyCenter || o?.crownCenter || null;
+  return {
+    decision, species, speciesSource: species ? (species === p.species ? 'model' : 'reviewer') : null,
+    measuredDbhInches: dbh === '' || dbh == null ? null : Number(dbh), notes,
+    duplicateOfTreeId: decision === 'duplicate' ? duplicateOfTreeId : null,
+    crownCenter: center && (center.xPx !== p.xPx || center.yPx !== p.yPx) ? { xPx: center.xPx, yPx: center.yPx } : null,
+    baseRevision: o?.revision ?? null,
+  };
+}
+
+async function decide(decision, duplicateOfTreeId) {
+  const p = selectedPrediction(); if (!p) return;
+  if (decision === 'duplicate' && !duplicateOfTreeId) { duplicateOfTreeId = p.nearest?.[0]?.treeId; if (!duplicateOfTreeId) { setSave('No inventory tree on this tile to link to', true); return; } }
+  await save(p, formInput(decision, duplicateOfTreeId));
+}
+
+async function save(p, body) {
+  T.saving += 1; setSave('Saving…');
+  try {
+    const { observation } = await api(`/tiles/${encodeURIComponent(T.bundle.tileId)}/observations/${encodeURIComponent(p.predictionId)}`, { method: 'PUT', body: JSON.stringify(body) });
+    T.observations.set(p.predictionId, observation); T.dirtyCenter = null;
+    setSave('Saved');
+  } catch (err) {
+    setSave(err.message, true);
+    if (err.status === 409) { const fresh = await api('/tiles/' + encodeURIComponent(T.bundle.tileId)); T.observations = new Map(fresh.observations.map((o) => [o.predictionId, o])); }
+  } finally { T.saving -= 1; render(); renderSide(); }
+}
+
+async function clearDecision() {
+  const p = selectedPrediction(); if (!p || !T.observations.has(p.predictionId)) return;
+  setSave('Saving…');
+  try { await api(`/tiles/${encodeURIComponent(T.bundle.tileId)}/observations/${encodeURIComponent(p.predictionId)}`, { method: 'DELETE' }); T.observations.delete(p.predictionId); setSave('Cleared'); }
+  catch (err) { setSave(err.message, true); }
+  render(); renderSide();
+}
+
+let nudgeTimer = null;
+function nudge(dx, dy) {
+  const p = selectedPrediction(); if (!p) return;
+  const o = T.observations.get(p.predictionId); if (o?.status === 'published') return;
+  const cur = T.dirtyCenter || o?.crownCenter || { xPx: p.xPx, yPx: p.yPx };
+  T.dirtyCenter = { xPx: Math.max(0, Math.min(T.bundle.image.width, cur.xPx + dx)), yPx: Math.max(0, Math.min(T.bundle.image.height, cur.yPx + dy)) };
+  render(); renderSide();
+  // Only an existing decision is re-saved on a nudge; a bare move is kept locally until a decision is made.
+  if (o) { clearTimeout(nudgeTimer); nudgeTimer = setTimeout(() => save(p, formInput(o.decision, o.duplicateOfTreeId)), 400); }
+}
+
+function step(delta) {
+  const list = visiblePredictions().sort((a, b) => b.centerConfidence - a.centerConfidence);
+  if (!list.length) return;
+  const i = list.findIndex((p) => p.predictionId === T.selected);
+  select(list[(i + delta + list.length) % list.length].predictionId);
+}
+
+document.addEventListener('keydown', (e) => {
+  if ($('#view-tile').classList.contains('hidden')) return;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+  const k = e.key.toLowerCase(); const s = e.shiftKey ? 5 : 1;
+  const map = { a: () => decide('accept'), f: () => decide('reject'), q: () => decide('uncertain'), d: () => decide('duplicate'), e: () => decide('duplicate'), x: clearDecision, n: () => step(1), ']': () => step(1), p: () => step(-1), '[': () => step(-1),
+    w: () => nudge(0, -s), arrowup: () => nudge(0, -s), s: () => nudge(0, s), arrowdown: () => nudge(0, s), arrowleft: () => nudge(-s, 0), arrowright: () => nudge(s, 0) };
+  if (k === 'a' && e.ctrlKey) return;
+  const fn = map[k] || (k === 'a' && null);
+  if (k === 'a' && !e.ctrlKey && e.altKey) { nudge(-s, 0); e.preventDefault(); return; }
+  if (fn) { e.preventDefault(); fn(); }
+});
+// Plain "a" is accept; nudging left is Alt+A or the left arrow, since one key cannot be both.
+
+$('#threshold').addEventListener('input', () => { $('#threshold-value').textContent = fmt(threshold(), 2); render(); });
+for (const id of ['#show-inventory', '#show-crowns', '#hide-decided']) $(id).addEventListener('change', render);
+$('#zoom').addEventListener('input', applyZoom); $('#crisp').addEventListener('change', applyZoom);
+$('#done').addEventListener('change', async (e) => {
+  setSave('Saving…');
+  try { await api(`/tiles/${encodeURIComponent(T.bundle.tileId)}/done`, { method: 'POST', body: JSON.stringify({ done: e.target.checked }) }); setSave(e.target.checked ? 'Marked reviewed' : 'Marked not reviewed'); }
+  catch (err) { setSave(err.message, true); e.target.checked = !e.target.checked; }
+});
+$('#publish-tile').addEventListener('click', async (e) => {
+  e.target.disabled = true; setSave('Publishing…');
+  try {
+    const r = await api(`/tiles/${encodeURIComponent(T.bundle.tileId)}/publish`, { method: 'POST', body: '{}' });
+    setSave(`Published ${r.published.length}${r.failed.length ? `, ${r.failed.length} failed: ${r.failed.map((f) => f.error).join('; ')}` : ''} · export holds ${r.exported ?? '?'}`, r.failed.length > 0);
+    const fresh = await api('/tiles/' + encodeURIComponent(T.bundle.tileId)); T.observations = new Map(fresh.observations.map((o) => [o.predictionId, o]));
+  } catch (err) { setSave(err.message, true); }
+  e.target.disabled = false; render(); renderSide();
+});
+
+// ---------------------------------------------------------------- queue
+async function showQueue() {
+  switchView('queue'); statusEl.textContent = 'Loading queue…';
+  const rows = await api('/queue');
+  statusEl.textContent = rows.length ? `${rows.length} awaiting publish` : 'Queue is empty';
+  $('#queue-body').innerHTML = rows.map((o) => `<tr data-id="${esc(o.id)}"><td>${esc(o.id)}<div class="muted">${esc(o.predictionId)}</div></td><td><a href="#tile/${encodeURIComponent(o.tileId)}">${esc(o.chipId || o.tileId)}</a></td><td>${esc(o.city)}</td><td>${esc(o.decision)}${o.duplicateOfTreeId ? ` → ${esc(o.duplicateOfTreeId)}` : ''}</td><td>${esc(o.species || 'unidentified')} <span class="muted">${esc(o.speciesSource || '')}</span></td><td>${o.measuredDbhInches != null ? fmt(o.measuredDbhInches) + ' in measured' : `<span class="muted">est. ${fmt(o.predictedDbhInches)} in</span>`}</td><td>${esc(o.positionRole)} ${fmt(o.latitude, 5)}, ${fmt(o.longitude, 5)}</td><td>${esc(o.updatedAt)}</td><td><button data-publish>Publish</button></td></tr>`).join('');
+}
+$('#queue-body').addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-publish]'); if (!b) return;
+  b.disabled = true;
+  try { await api(`/observations/${encodeURIComponent(b.closest('tr').dataset.id)}/publish`, { method: 'POST', body: '{}' }); await showQueue(); }
+  catch (err) { alert(err.message); b.disabled = false; }
+});
+$('#republish').addEventListener('click', async (e) => {
+  e.target.disabled = true;
+  try { const r = await api('/republish', { method: 'POST', body: '{}' }); statusEl.textContent = `Export rebuilt: ${r.manifest.count} rows`; }
+  catch (err) { alert(err.message); }
+  e.target.disabled = false;
+});
+
+// ---------------------------------------------------------------- routing
+function route() {
+  const h = location.hash || '#tiles';
+  const run = h.startsWith('#tile/') ? showTile(decodeURIComponent(h.slice(6))) : h === '#queue' ? showQueue() : showTiles();
+  run.catch((err) => { statusEl.textContent = 'Error: ' + err.message; });
+}
+window.addEventListener('hashchange', route);
+route();
+</script>
+</body>
+</html>
