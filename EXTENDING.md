@@ -608,8 +608,13 @@ tree grain:
 | `tree_id`, `city` | the rollup's |
 | `genus` | from the enrichment table (which has corrected a city's misspelt binomial) |
 | `dbh_cm` | the rollup's inches, converted; null where the source recorded none or zero |
+| `age_years` | planting date to the build date, over 365.25; null without a date |
+| `predicted_dbh_cm` | `scale * age_years ** b`, age clamped to the fit's range; published for every dated tree, so the measured ones check the fit |
+| `dbh_model_level` | `genus`, `division`, `global`, or `none` (no date, or a palm) |
+| `dbh_model_taxon`, `dbh_model_n` | which age fit, and how many published trees stood behind it |
+| `crown_dbh_source` | `measured` or `age`: which diameter the crown was built on |
 | `predicted_crown_width_m` | `2 * scale * dbh_cm ** b`, DBH clamped to the fit's range |
-| `crown_model_level` | `genus`, `family`, `division`, `global`, or `none` (no DBH, or a palm) |
+| `crown_model_level` | `genus`, `family`, `division`, `global`, or `none` (no DBH from either source, or a palm) |
 | `crown_model_taxon`, `crown_model_n` | which fit, and how many Tallo trees stood behind it |
 | `local_tree_density_per_ha` | rollup trees in the tree's 50 m cell, per hectare; a covariate, not a term |
 | `predicted_height_m`, `predicted_age_years` | null; reserved |
@@ -646,6 +651,42 @@ term across 87 species and dropped it as unstable; Tallo records no
 competition measure). The density covariate is published so that adjustment
 can be measured rather than assumed.
 
+**The age fallback is a second fit of the same shape, on our own trees.**
+303,612 published trees (September 2026: most of Amsterdam's dated trees, and
+tens of thousands in Melbourne, San Francisco and Los Angeles) carry a
+planting date and no diameter, so `raw/dbh_age_fit.py` fits
+`ln(dbh_cm) = ln_a + b * ln(age_years)` per genus on the rollup's own trees
+that carry both -- 1.9M of them in 23 cities, joined to the enrichment table
+for the corrected genus exactly as the model joins it -- with the same gate
+(n >= 100 here), the same bias correction, and the same fallback order
+(genus, then the division `tree_form` implies, then all trees). No open
+reference dataset records age and diameter for urban trees at genus rank,
+and the population served is the rollup's own, so its own dated, measured
+trees are the right reference. The fit is honest about being pooled across
+climates; `dbh_model_level` and `dbh_model_n` say how far each prediction
+reached. Against i-Tree's open-grown base rate of 0.83 cm a year, Acer comes
+out at 12.6, 27.0 and 43.6 cm at 10, 30 and 60 years. Refit with
+
+```bash
+cd data/raw && uv run dbh_age_fit.py --write
+```
+
+which reads the two published parquets, rewrites `dbh_age_coefficients.csv`
+and the `dbh_age_fallbacks` block in the model, and prints every date
+carrying a tenth or more of a city's dated trees with its diameter spread.
+That list is where a portal's *stamped default* shows: Edmonton writes
+1990-06-01 on 54% of its inventory (diameters 13-58 cm across the middle
+80%) and Melbourne 1900-01-01 on a third of its dated trees at a 35 cm
+median. A cohort has one diameter and a default has the city's; the day is
+not the tell, since Boston's real 1994 cohort is a January 1 and Edmonton's
+real cohorts are June 1s. Those two are nulled **by their own ingests**
+(`PLACEHOLDER_PLANT_DATE` in each), and `enforce_tree_schema` nulls a date
+before 1500 or in the future for every city, so the model has nothing to
+second-guess: `age_years` is an age or null. Until Edmonton and Melbourne
+rebuild, the fit re-applies those rules to the published parquets
+(`INGEST_NULLED_PLANT_DATES`); delete an entry once its city's parquet no
+longer carries the date. The fit window is 1-200 years.
+
 **Three planner facts the model leans on, each found the hard way:**
 
 - `power` is the `**` operator, not a function; there is no `exp`, `ln` or
@@ -661,6 +702,10 @@ can be measured rather than assumed.
   species and coefficient genus no tree carries -- hence `where tree_id is
   not null` on the published target, which the planner renders as a RIGHT
   OUTER JOIN from the rollup.
+- Two coefficient tables keyed on `genus` do not drop each other's genera:
+  Syringa has an age fit and no Tallo row, Abarema the reverse, and
+  `test_a_genus_in_one_coefficient_table_keeps_its_row_from_the_other` pins
+  that both trees keep the fit they have.
 
 Locally the whole thing is 11-19 s over the 10.5M-row rollup, peaking at
 3.9 GiB with no DuckDB memory limit and completing under a 1 GB limit in

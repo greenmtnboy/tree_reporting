@@ -75,8 +75,16 @@ committed as `raw/crown_width_coefficients.csv` and applied in DuckDB (no
 script at refresh time but the freshness probe). Read the fit script's
 docstring before touching the model: it records why Tallo, the quality gate,
 the fallback order, and the two things the model deliberately is not
-(urban-calibrated, density-adjusted). The map does not read this parquet yet;
-see "Tree-level predictions" in `EXTENDING.md` for the refit and the shape.
+(urban-calibrated, density-adjusted). A tree with a planting date and no
+diameter gets its diameter predicted from its age first -- a second
+genus-level power law, `raw/dbh_age_fit.py`, fitted on the rollup's own 1.9M
+dated, measured trees and committed as `raw/dbh_age_coefficients.csv` --
+and the crown model is applied to that. What is *not* a planting date is the
+ingest's problem, not the model's: `enforce_tree_schema` nulls a date before
+1500 or in the future, and a portal's stamped default (Edmonton's
+1990-06-01, Melbourne's 1900-01-01) is nulled by that city's ingest. The map
+does not read this parquet yet; see "Tree-level predictions" in
+`EXTENDING.md` for the refit and the shape.
 
 ### Correcting a species by hand
 

@@ -16,7 +16,7 @@ import io
 import struct
 import sys
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pyarrow as pa
@@ -1641,3 +1641,60 @@ class TestImplausibleDbh:
         assert capsys.readouterr().err == ""
         report_species_cleanup(summary, city="Test")
         assert "2 diameter(s) were zero, negative or over 200 in" in capsys.readouterr().err
+
+
+class TestImplausiblePlantDates:
+    """A planting date before 1500 or in the future is not a planting.
+
+    The inventories carry three-digit years, `1000-01-01` on saplings, and
+    dates a century ahead; an age model reads each as an age.  The ingest
+    nulls them and says how many.
+    """
+
+    def _table(self, planted):
+        n = len(planted)
+        return pa.table(
+            {
+                "tree_id": pa.array([f"t-{i}" for i in range(n)], type=pa.string()),
+                "city": pa.array(["USNYC"] * n, type=pa.string()),
+                "species": pa.array(["Acer rubrum"] * n, type=pa.string()),
+                "plant_date": pa.array(planted, type=pa.date32()),
+            }
+        )
+
+    def test_nulls_the_implausible_and_keeps_the_rest(self, capsys):
+        from _ingest_shared import PLANT_DATE_MIN_YEAR
+
+        today = date.today()
+        planted = [
+            date(1994, 1, 1),                      # a year-only record: an age
+            date(202, 12, 25),                     # a dropped digit
+            date(1000, 1, 1),                      # a stamped default
+            date(PLANT_DATE_MIN_YEAR - 1, 12, 31),
+            date(PLANT_DATE_MIN_YEAR, 1, 1),       # the floor itself is kept
+            today,                                 # planted today: kept
+            today + timedelta(days=1),             # scheduled, not planted
+            date(2157, 11, 1),
+            None,
+        ]
+        table = enforce_tree_schema(self._table(planted), city="Test", data_source="NYC_OPENDATA")
+        assert table.column("plant_date").to_pylist() == [
+            date(1994, 1, 1), None, None, None, date(PLANT_DATE_MIN_YEAR, 1, 1), today, None, None, None,
+        ]
+        assert "5 planting date(s) were before 1500 or in the future" in capsys.readouterr().err
+
+    def test_says_nothing_when_every_date_is_a_planting(self, capsys):
+        table = enforce_tree_schema(
+            self._table([date(1994, 1, 1), date(2020, 6, 1), None]), city="Test", data_source="NYC_OPENDATA"
+        )
+        assert table.column("plant_date").to_pylist() == [date(1994, 1, 1), date(2020, 6, 1), None]
+        assert "planting date(s)" not in capsys.readouterr().err
+
+    def test_a_streaming_ingest_accumulates_the_count(self, capsys):
+        summary: dict[str, int] = {}
+        for page in ([date(202, 12, 25), date(2001, 5, 5)], [date(2157, 11, 1), None]):
+            enforce_tree_schema(self._table(page), city="Test", data_source="NYC_OPENDATA", summary=summary)
+        assert summary["implausible_plant_date"] == 2
+        assert capsys.readouterr().err == ""
+        report_species_cleanup(summary, city="Test")
+        assert "2 planting date(s) were before 1500 or in the future" in capsys.readouterr().err

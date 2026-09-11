@@ -182,6 +182,10 @@ a genus-level stem-diameter power law fitted on the
 CC BY 4.0). Tallo is forest-plot data, so the crowns run narrower than an
 open-grown street tree's; the parquet is a model-curation input today and
 does not drive the map. Refit with `data/raw/crown_allometry_fit.py --write`.
+A tree with a planting date and no measured diameter gets one predicted from
+its age, by a genus-level power law fitted on the map's own dated, measured
+trees (`data/raw/dbh_age_fit.py --write`), and the crown model is applied to
+that; `crown_dbh_source` says which diameter a row's crown came from.
 
 ### Species images
 

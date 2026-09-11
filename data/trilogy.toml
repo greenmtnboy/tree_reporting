@@ -308,11 +308,12 @@ schedule = "0 0 6 * * *"
 timeout_seconds = 900
 memory_mb = 2048
 
-# Tree-level predictions: crown width today, height and age reserved.
+# Tree-level predictions: crown width today (from a measured diameter, or
+# from one predicted from the tree's age), height and age reserved.
 # Consumes the rollup AND the enrichment table, both reached through their
 # `_source.preql` root views (the same name trick as above, twice), so the
 # platform orders this job after both in the same tick. It reads two
-# published parquets and one committed CSV of coefficients, runs no script
+# published parquets and two committed CSVs of coefficients, runs no script
 # but its freshness probe, and cannot reach a portal or the LLM.
 #
 # 4 GiB because the whole rollup (10.5M rows) is read twice -- once for the

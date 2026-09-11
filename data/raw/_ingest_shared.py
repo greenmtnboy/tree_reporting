@@ -1314,6 +1314,10 @@ REQUIRED_TREE_COLUMNS = ("tree_id", "city", "data_source", "species")
 # enforce_tree_schema for why it exists and why it is 5 m.
 DBH_MAX_INCHES = 200.0
 
+# The earliest planting year an ingest will publish; see the guard in
+# enforce_tree_schema for why it is the 16th century.
+PLANT_DATE_MIN_YEAR = 1500
+
 
 def enforce_tree_schema(
     table: pa.Table,
@@ -1528,6 +1532,43 @@ def enforce_tree_schema(
             else:
                 report_implausible_dbh(n_implausible, city=city)
 
+    # A date no planting has.  A planting date is a record of a planting, and
+    # the inventories carry a few that are not: three-digit years in New York
+    # (`202-12-25`, a dropped digit), the years 1, 8 and 15 in Amsterdam and
+    # Berlin, `1000-01-01` on fifteen Amsterdam saplings, and dates in the
+    # future (New York 2108, Washington 2157, and a planting *scheduled* for
+    # next month in Ottawa).  An age model reads every one of them as an age,
+    # so they become null here, with a count.  The floor is 1500: Berlin and
+    # Paris carry a few dozen 17th- to 19th-century dates on trees of 100-220
+    # cm, which are at least estimates of something, and nothing under a
+    # metre was planted before the 16th century.  A portal's *stamped default*
+    # -- Edmonton's 1990-06-01, Melbourne's 1900-01-01 -- is a real-looking
+    # date on a large share of a city, and is that city's ingest's to null.
+    date_column = resolved["plant_date"]
+    if date_column in table.schema.names:
+        date_idx = table.schema.get_field_index(date_column)
+        planted = table.column(date_idx)
+        not_a_planting = pc.fill_null(
+            pc.or_(
+                pc.less(pc.year(planted), PLANT_DATE_MIN_YEAR),
+                pc.greater(planted, pa.scalar(date.today(), type=pa.date32())),
+            ),
+            False,
+        )
+        n_not_a_planting = pc.sum(pc.cast(not_a_planting, pa.int64())).as_py() or 0
+        if n_not_a_planting:
+            table = table.set_column(
+                date_idx,
+                date_column,
+                pc.if_else(not_a_planting, pa.scalar(None, type=pa.date32()), planted),
+            )
+            if summary is not None:
+                summary["implausible_plant_date"] = (
+                    summary.get("implausible_plant_date", 0) + n_not_a_planting
+                )
+            else:
+                report_implausible_plant_date(n_not_a_planting, city=city)
+
     # Backfill the optional columns this source has no value for, as typed
     # nulls.  Every ingest then emits the identical column set, so a preql
     # datasource can map `submission_photo_url: ?submission_photo_url` uniformly across cities that do
@@ -1557,6 +1598,18 @@ def report_implausible_dbh(count: int, *, city: str = "") -> None:
     )
 
 
+def report_implausible_plant_date(count: int, *, city: str = "") -> None:
+    """One line for the planting dates ``enforce_tree_schema`` nulled."""
+    if not count:
+        return
+    prefix = f"{city} ingest" if city else "Ingest"
+    print(
+        f"{prefix}: {count} planting date(s) were before {PLANT_DATE_MIN_YEAR} or in "
+        f"the future and were published as null",
+        file=sys.stderr,
+    )
+
+
 def report_species_cleanup(counts: dict[str, int], *, city: str = "") -> None:
     """Print the species-cleanup summary for one ingest.
 
@@ -1573,6 +1626,7 @@ def report_species_cleanup(counts: dict[str, int], *, city: str = "") -> None:
             file=sys.stderr,
         )
     report_implausible_dbh(counts.get("implausible_dbh", 0), city=city)
+    report_implausible_plant_date(counts.get("implausible_plant_date", 0), city=city)
     if any(counts.get(k) for k in ("dropped", "rewritten", "formed", "cultivared")):
         print(
             f"{prefix}: species cleanup -- {counts.get('dropped', 0)} value(s) were not "

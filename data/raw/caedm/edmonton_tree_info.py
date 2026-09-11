@@ -120,14 +120,25 @@ def parse_dbh(value) -> float | None:
     return cm_to_inches(cm)
 
 
+# The portal's null.  1990-06-01 is on 257,596 of 480,744 rows -- 54% of the
+# inventory -- whose diameters run 13-58 cm across the middle 80%: not a
+# planting season but the value the field carries when nobody recorded one.
+# Every other date is a June 1 as well (the portal keeps the year), and those
+# *are* cohorts -- 2014-06-01 is 15,301 trees of 6-16 cm -- so the tell is
+# the share and the spread, never the day.  Published as null so that an age
+# model does not read 54% of Edmonton as planted in one week.
+PLACEHOLDER_PLANT_DATE = date(1990, 6, 1)
+
+
 def parse_plant_date(value: str | None) -> date | None:
-    """`planted_date` is ISO-8601 text; anything unparseable becomes null."""
+    """`planted_date` is ISO-8601 text; the placeholder and anything unparseable become null."""
     if not value:
         return None
     try:
-        return date.fromisoformat(value[:10])
+        parsed = date.fromisoformat(value[:10])
     except ValueError:
         return None
+    return None if parsed == PLACEHOLDER_PLANT_DATE else parsed
 
 
 def iter_row_chunks():
