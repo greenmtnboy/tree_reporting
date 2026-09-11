@@ -11,6 +11,10 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Helsinki', label: 'Helsinki Region Infoshare - City of Helsinki Tree Register (Puurekisteri, CC BY 4.0)', url: 'https://hri.fi/data/en_GB/dataset/helsingin-kaupungin-puurekisteri' },
+  { city: 'Copenhagen', label: 'City of Copenhagen Open Data - Tree Register (trae_basis, CC BY 4.0)', url: 'https://www.opendata.dk/city-of-copenhagen/trae_basis' },
+  { city: 'Taipei', label: 'Taipei City Open Data - Parks and Street Lights Office, Street and Park Trees (OGDL-Taiwan-1.0)', url: 'https://data.gov.tw/dataset/128274' },
+  { city: 'Bogotá', label: 'Datos Abiertos Bogotá - Jardín Botánico de Bogotá, Arbolado Urbano (CC BY 4.0)', url: 'https://datosabiertos.bogota.gov.co/dataset/censo-arbolado-urbano' },
   { city: 'Tokyo', label: 'Tokyo Open Data Catalog - Bureau of Construction, Street Trees on Metropolitan Roads (CC BY 4.0)', url: 'https://catalog.data.metro.tokyo.lg.jp/dataset/t000014d2000000029' },
   { city: 'Moncton', label: 'City of Moncton Open Data - Trees', url: 'https://open.moncton.ca/datasets/trees' },
   { city: 'Ajax', label: 'Town of Ajax Open Data - Town Trees', url: 'https://opendata.ajax.ca/datasets/town-trees' },
@@ -69,6 +73,10 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Helsinki', label: 'City of Helsinki WFS - Buildings Protected by Detailed Plans, Protected Natural Monuments (CC BY 4.0)', url: 'https://hri.fi/data/en_GB/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa' },
+  { city: 'Copenhagen', label: 'City of Copenhagen WFS - Monuments (monumenter, CC BY 4.0)', url: 'https://wfs-kbhkort.kk.dk/k101/ows?service=WFS&request=GetCapabilities' },
+  { city: 'Taipei', label: 'Bureau of Cultural Heritage, Ministry of Culture - Monuments and Historic Buildings (OGDL-Taiwan-1.0)', url: 'https://data.gov.tw/dataset/6246' },
+  { city: 'Bogotá', label: 'Datos Abiertos Bogotá - IDPC, Monumentos and Bienes de Interés Cultural (CC BY-SA 4.0)', url: 'https://datosabiertos.bogota.gov.co/dataset/inventario-patrimonio-mueble-bogota-d-c' },
   { city: 'Tokyo', label: 'Tokyo Open Data Catalog - Board of Education, Designated Cultural Properties and Historic Sites (CC BY 4.0)', url: 'https://catalog.data.metro.tokyo.lg.jp/dataset/t000021d0000000017' },
   { city: 'Moncton', label: 'City of Moncton Open Data - Cultural Assets', url: 'https://open.moncton.ca/datasets/cultural-assets' },
   { city: 'Ajax', label: 'Town of Ajax Open Data - Heritage Inventory', url: 'https://opendata.ajax.ca/datasets/heritage-inventory' },

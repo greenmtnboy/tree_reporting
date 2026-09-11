@@ -2222,9 +2222,14 @@ cheaper on a platform with a shared module.
 binomial**, and it is now mostly paid *per language*: `_common_name_species.py`
 resolves 398 published English names to accepted binomials, curated by hand from
 what five Ontario and New Brunswick portals actually publish, and
-`_japanese_species.py` does the same for the 446 katakana names Tokyo publishes.
-A new city on a portal that names its trees in a language neither covers should
-expect to write the third one; the shape is fixed and the cost is the curation. A new city on that
+`_japanese_species.py` does the same for the 446 katakana names Tokyo publishes,
+`_spanish_species.py` for the 503 Andean common names Bogotá's census carries
+(`Chicala, chirlobirlo, flor amarillo` is one value and one species), and
+`_chinese_species.py` for the 471 Traditional-Chinese names Taipei's two files
+use. A new city on a portal that names its trees in a language none of the four
+covers should expect to write the fifth one; the shape is fixed and the cost is
+the curation, and each of the last three was drafted by a model from the
+published value list and then put to POWO value by value. A new city on that
 platform calls `species_from_common_name` and adds whatever entries its own
 values need — Mississauga, Burlington ON and Ajax between them needed 398, and
 a sixth city in the same region should need a handful. Read the module's
@@ -2241,11 +2246,51 @@ this repo already talks to more than once:
 | ArcGIS FeatureServer / MapServer | **yes** — `_arcgis_shared.py` |
 | Socrata | **yes** — `_socrata_shared.py` |
 | CKAN | **yes** — `_ckan_shared.py` |
+| OGC WFS 2.0 (GeoServer) | **yes** — `_wfs_shared.py` (Copenhagen, Helsinki; Berlin predates it and keeps its own loop) |
 | OpenDataSoft | no — Paris, Vancouver and Melbourne are three hand-rolled copies |
 
 OpenDataSoft is the one left: three copies of the same paging loop and the same
 metadata probe. Write the module when the third city arrives, not the first —
-that is when the shape is knowable and the drift has started.
+that is when the shape is knowable and the drift has started. That is what
+happened to WFS: Berlin was the first, Copenhagen and Helsinki the third and
+fourth, and `_wfs_shared.py` was written for them. Two things in it are
+correctness rather than convenience, for the same reasons as in
+`_arcgis_shared`: paging needs a `sortBy` (an unsorted `startIndex` walk can
+repeat or skip rows between requests) and terminates on `numberMatched`, not on
+a short page; and `wfs_max_property` — one row sorted descending on a timestamp
+column, which is the whole freshness probe for both cities — excludes nulls
+explicitly, because GeoServer sorts them *first* in a descending sort and the
+first version of the probe read Copenhagen's watermark as `null`.
+
+**Four things the September 2026 quartet added that a later city may need:**
+
+- **A projection inverse in pure Python.** Taipei publishes TWD97 / TM2 zone
+  121 metres and nothing else, so `_ingest_shared.twd97_to_wgs84` inverts the
+  Transverse Mercator the way `rd_to_wgs84` handles the Dutch grid — a
+  dependency-free function next to the ingest, not a pyproj install in every
+  city job.
+- **A static blob's `Last-Modified` is a watermark**, read with
+  `head_with_retry`. Taipei's CSVs are Azure blobs with no catalogue stamp
+  tracking them; the two files moved two months apart, so the probe takes the
+  later of the two HEADs.
+- **A source with no stamp at all gets a hand-bumped constant.** Copenhagen's
+  monuments layer carries no date column and its WFS no layer-level stamp, so
+  `copenhagen_landmarks_probe.py` emits `LAST_REVIEWED` and says so. A row
+  count was tried and rejected: it is not a time, and it moves on a deletion
+  as readily as an addition while missing a rename.
+- **A load date is a watermark that always moves.** Helsinki stamps every tree
+  row with the night it was last loaded into the WFS, so the city rebuilds on
+  each tick of its cron; at 66k rows that is the cheap side of the trade,
+  and the ingest docstring says so. Bogotá is the opposite case — a layer with
+  a real per-row `Fecha_Actualizacion` and no `editingInfo`, read with
+  `field_max`.
+
+And one thing to know about the largest city on the map: Bogotá's census is
+1.39M points, twice New York's, read as ~700 ArcGIS pages at just under a
+second each with `returnGeometry=false` (the layer's stored geometry is
+broken — every point at (0, 0) — and the lat/lon attributes are clean).
+It publishes no diameter at all and no planting date, so the whole city is
+null on both; the reviewed-aerial-imagery lane is the route to a size there.
 
 **A shared module does not have to be a platform.** `_common_name_species.py`
 is the counter-example: five cities published an English common name where the

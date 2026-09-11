@@ -1,0 +1,41 @@
+import ..landmark_common;
+
+root datasource taipei_landmarks_update_time (
+    data_updated_through: twtpe_landmark_data_updated_through
+)
+file `./taipei_landmarks_probe.py`;
+
+# Taipei's designated monuments and registered historic buildings come from the
+# national Bureau of Cultural Heritage register, read live and filtered to the
+# city: no geocoding, no committed CSV and no staging object.
+root partial datasource raw_taipei_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    address: ?address,
+    category: ?category,
+    property_type: ?property_type,
+    borough: ?borough,
+)
+grain (landmark_id)
+complete where city = 'TWTPE'
+file `./taipei_landmarks.py`;
+
+partial datasource taipei_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?address,
+    ?category,
+    ?property_type,
+    ?borough,
+    twtpe_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'TWTPE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/twtpe_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/twtpe_landmark_info_v{data_version}.parquet`
+freshness by twtpe_landmark_data_updated_through;

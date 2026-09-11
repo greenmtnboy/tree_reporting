@@ -1,0 +1,136 @@
+import ..tree_common;
+import ..community_tree_info;
+import ..tree_dedup;
+
+auto fihel_published_data_updated_through <- greatest(fihel_data_updated_through, fihel_community_data_updated_through, fihel_osm_data_updated_through);
+
+key fihel_source enum<string>['HELSINKI_OPENDATA', 'COMMUNITY_FIHEL', 'OSM_FIHEL']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto fihel_source_label <- concat(fihel_source, '');
+merge fihel_source_label into source_label;
+
+root datasource helsinki_update_time (
+    data_updated_through: fihel_data_updated_through
+)
+file `./helsinki_update_time.py`;
+
+# Only this city's column, so an approval elsewhere does not mark FIHEL's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource fihel_community_update_time (
+    fihel_community_data_updated_through: fihel_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# GCS publication time of the staged OSM parquet; it only moves when an
+# extraction is re-run and uploaded. Not a local mtime -- git does not preserve
+# it, so a committed staging file makes every fresh clone look like new data.
+root datasource fihel_osm_update_time (
+    data_updated_through: fihel_osm_data_updated_through
+)
+file `./helsinki_osm_probe.py`;
+
+root partial datasource helsinki_raw_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: fihel_source,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
+)
+grain (tree_id)
+complete where city = 'FIHEL' and fihel_source = 'HELSINKI_OPENDATA'
+file `./helsinki_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to FIHEL and makes
+# it a disjoint partition, and the `where` clause is what actually filters --
+# `complete where` asserts, it does not promise a predicate.
+root partial datasource fihel_community_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: fihel_source,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
+)
+grain (tree_id)
+complete where city = 'FIHEL' and fihel_source = 'COMMUNITY_FIHEL'
+file `../community_tree_info.py`
+where city = 'FIHEL';
+
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
+# -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
+# by construction; the overlap is resolved by ../tree_dedup.preql.
+root partial datasource fihel_osm_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: fihel_source,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
+)
+grain (tree_id)
+complete where city = 'FIHEL' and fihel_source = 'OSM_FIHEL'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/fihel_osm_staging.parquet`;
+
+
+# --- Cross-source dedup and attribute merge --------------------------------
+#
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# The only per-city line is the dbh merge, because Boston imputes it.
+merge merged_dbh into diameter_at_breast_height;
+
+
+partial datasource helsinki_tree_info (
+    tree_id,
+    city,
+    data_source: fihel_source,
+    species,
+    ?tree_name,
+    ?plant_date,
+    ?diameter_at_breast_height,
+    ?latitude,
+    ?longitude,
+    ?submission_photo_url,
+    ?cultivar,
+    # Redundant on its face -- the prune below means it always equals tree_id --
+    # and dropped from this template for exactly that reason, which is how the
+    # first three cities scaffolded from it came out with fourteen columns
+    # where every other city has fifteen.  The rollup reads them all as one
+    # DuckDB multi-file scan; it projects only the shared columns, so a ragged
+    # set does not fail it, but `select *` over that scan silently drops the
+    # column when a short file is read first and raises when a long one is.
+    # It is also the column any check of the prune reads.  Keep it.
+    # `test_every_city_publishes_cluster_id` pins it and spells out the
+    # measured behaviour.
+    cluster_id,
+    merged_sources,
+    ?merged_tree_ids,
+    fihel_published_data_updated_through,
+)
+grain (tree_id)
+complete where city = 'FIHEL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/fihel_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/fihel_tree_info_v{data_version}.parquet`
+where tree_id = cluster_id
+freshness by fihel_published_data_updated_through;

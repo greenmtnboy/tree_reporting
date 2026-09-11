@@ -1,0 +1,34 @@
+import ..landmark_common;
+
+root datasource copenhagen_landmarks_update_time (
+    data_updated_through: dkcph_landmark_data_updated_through
+)
+file `./copenhagen_landmarks_probe.py`;
+
+# Copenhagen's public monuments are a layer on the same municipal WFS as its
+# trees, read directly: no geocoding, no committed CSV and no staging object.
+root partial datasource raw_copenhagen_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    category: ?category,
+)
+grain (landmark_id)
+complete where city = 'DKCPH'
+file `./copenhagen_landmarks.py`;
+
+partial datasource copenhagen_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?category,
+    dkcph_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'DKCPH'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/dkcph_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/dkcph_landmark_info_v{data_version}.parquet`
+freshness by dkcph_landmark_data_updated_through;

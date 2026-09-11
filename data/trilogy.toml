@@ -1200,6 +1200,103 @@ schedule = "0 30 4 * * TUE"
 timeout_seconds = 1800
 memory_mb = 1024
 
+[[cloud.job]]
+key = "city-cobog"
+name = "urban-tree-city-cobog"
+entrypoint = "raw/cobog/bogota_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city COBOG`.
+schedule = "0 0 22 * * MON,THU"
+# 1.39M municipal rows -- the largest single inventory on the map, twice
+# NYC's -- read as ~700 ArcGIS pages at just under a second each, then the
+# cluster merge over them in DuckDB.  Sized from the memory profile in
+# EXTENDING.md (NYC peaks at 3.1 GiB, London at 3.6); the paging alone is
+# ten to twelve minutes of the budget.
+timeout_seconds = 3600
+memory_mb = 6144
+
+[[cloud.job]]
+key = "osm-cobog"
+name = "urban-tree-osm-cobog"
+entrypoint = "osm_staging/cobog_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 30 4 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "city-twtpe"
+name = "urban-tree-city-twtpe"
+entrypoint = "raw/twtpe/taipei_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city TWTPE`.
+schedule = "0 20 22 * * THU,SUN"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-twtpe"
+name = "urban-tree-osm-twtpe"
+entrypoint = "osm_staging/twtpe_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 30 4 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "city-dkcph"
+name = "urban-tree-city-dkcph"
+entrypoint = "raw/dkcph/copenhagen_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city DKCPH`.
+schedule = "0 40 22 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-dkcph"
+name = "urban-tree-osm-dkcph"
+entrypoint = "osm_staging/dkcph_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 30 4 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "city-fihel"
+name = "urban-tree-city-fihel"
+entrypoint = "raw/fihel/helsinki_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city FIHEL`.
+schedule = "0 0 23 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-fihel"
+name = "urban-tree-osm-fihel"
+entrypoint = "osm_staging/fihel_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 30 4 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+
 # ===========================================================================
 # Ad-hoc landmark staging publish — one job per curated-CSV city
 # ===========================================================================

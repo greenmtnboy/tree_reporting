@@ -1,0 +1,39 @@
+import ..landmark_common;
+
+root datasource helsinki_landmarks_update_time (
+    data_updated_through: fihel_landmark_data_updated_through
+)
+file `./helsinki_landmarks_probe.py`;
+
+# Helsinki's plan-protected buildings and protected natural monuments are two
+# layers on the same municipal WFS as its trees, read directly: no geocoding,
+# no committed CSV and no staging object.
+root partial datasource raw_helsinki_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    geometry_raw: ?geometry_raw,
+    address: ?address,
+    category: ?category,
+    year_designated: ?year_designated,
+)
+grain (landmark_id)
+complete where city = 'FIHEL'
+file `./helsinki_landmarks.py`;
+
+partial datasource helsinki_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?geometry,
+    ?latitude,
+    ?longitude,
+    ?address,
+    ?category,
+    ?year_designated,
+    fihel_landmark_data_updated_through,
+)
+grain (landmark_id)
+complete where city = 'FIHEL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/fihel_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/fihel_landmark_info_v{data_version}.parquet`
+freshness by fihel_landmark_data_updated_through;

@@ -36,6 +36,10 @@ import cabur.burlington_on_landmarks;
 import caajx.ajax_landmarks;
 import camon.moncton_landmarks;
 import jptyo.tokyo_landmarks;
+import cobog.bogota_landmarks;
+import twtpe.taipei_landmarks;
+import dkcph.copenhagen_landmarks;
+import fihel.helsinki_landmarks;
 
 
 # --- Merged union datasource ---

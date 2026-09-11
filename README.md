@@ -37,6 +37,10 @@ Currently has data from the following cities:
 - [Ajax, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAAJX)
 - [Moncton, NB, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAMON)
 - [Tokyo, Japan](https://greenmtnboy.github.io/tree_reporting/#/?city=JPTYO)
+- [Taipei, Taiwan](https://greenmtnboy.github.io/tree_reporting/#/?city=TWTPE)
+- [Bogotá, Colombia](https://greenmtnboy.github.io/tree_reporting/#/?city=COBOG)
+- [Copenhagen, Denmark](https://greenmtnboy.github.io/tree_reporting/#/?city=DKCPH)
+- [Helsinki, Finland](https://greenmtnboy.github.io/tree_reporting/#/?city=FIHEL)
 - [London, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBLON)
 - [Amsterdam, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLAMS)
 - [Berlin, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEBER)
@@ -104,6 +108,10 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Ajax | Town of Ajax Open Data - Town Trees | https://opendata.ajax.ca/datasets/town-trees |
 | Moncton | City of Moncton Open Data - Trees | https://open.moncton.ca/datasets/trees |
 | Tokyo | Tokyo Open Data Catalog - Bureau of Construction, Street Trees on Metropolitan Roads (CC BY 4.0) | https://catalog.data.metro.tokyo.lg.jp/dataset/t000014d2000000029 |
+| Taipei | Taipei City Open Data - Parks and Street Lights Office, Street and Park Trees (OGDL-Taiwan-1.0) | https://data.gov.tw/dataset/128274 |
+| Bogotá | Datos Abiertos Bogotá - Jardín Botánico de Bogotá, Arbolado Urbano (CC BY 4.0) | https://datosabiertos.bogota.gov.co/dataset/censo-arbolado-urbano |
+| Copenhagen | City of Copenhagen Open Data - Tree Register (trae_basis, CC BY 4.0) | https://www.opendata.dk/city-of-copenhagen/trae_basis |
+| Helsinki | Helsinki Region Infoshare - City of Helsinki Tree Register (Puurekisteri, CC BY 4.0) | https://hri.fi/data/en_GB/dataset/helsingin-kaupungin-puurekisteri |
 | London | London Datastore - Public Realm Trees | https://data.london.gov.uk/dataset/2r45m |
 | Amsterdam | Amsterdam Data Portal - Bomen (Stamgegevens) | https://api.data.amsterdam.nl/v1/bomen/stamgegevens/ |
 | Berlin | Berlin Geodateninfrastruktur - Baumbestand (WFS) | https://gdi.berlin.de/services/wfs/baumbestand |
@@ -150,6 +158,10 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Ajax | Town of Ajax Open Data - Heritage Inventory | https://opendata.ajax.ca/datasets/heritage-inventory |
 | Moncton | City of Moncton Open Data - Cultural Assets | https://open.moncton.ca/datasets/cultural-assets |
 | Tokyo | Tokyo Open Data Catalog - Board of Education, Designated Cultural Properties and Historic Sites (CC BY 4.0) | https://catalog.data.metro.tokyo.lg.jp/dataset/t000021d0000000017 |
+| Taipei | Bureau of Cultural Heritage, Ministry of Culture - Monuments and Historic Buildings (OGDL-Taiwan-1.0) | https://data.gov.tw/dataset/6246 |
+| Bogotá | Datos Abiertos Bogotá - IDPC, Monumentos and Bienes de Interés Cultural (CC BY-SA 4.0) | https://datosabiertos.bogota.gov.co/dataset/inventario-patrimonio-mueble-bogota-d-c |
+| Copenhagen | City of Copenhagen WFS - Monuments (monumenter, CC BY 4.0) | https://wfs-kbhkort.kk.dk/k101/ows?service=WFS&request=GetCapabilities |
+| Helsinki | City of Helsinki WFS - Buildings Protected by Detailed Plans, Protected Natural Monuments (CC BY 4.0) | https://hri.fi/data/en_GB/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa |
 | London | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |
 | Amsterdam | Amsterdam Data Portal - Monumenten | https://api.data.amsterdam.nl/v1/monumenten/monumenten/ |
 | Berlin | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |
