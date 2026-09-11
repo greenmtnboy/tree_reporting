@@ -22,8 +22,10 @@ Field mapping:
 
 import io
 import sys
+from datetime import date
 
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -35,6 +37,13 @@ from _ingest_shared import (
     download_parquet as _download_parquet,
     parse_wkb_point,
 )
+
+# The portal's null.  1900-01-01 is on 26,522 of 82,068 dated trees -- a third
+# of them -- at a 35 cm median with a 12-80 cm spread, and the next oldest
+# dates are 1887 and 1890 on one tree each.  It is the year the portal writes
+# when it has none, and is published as null so an age model does not read a
+# third of Melbourne as 126 years old.
+PLACEHOLDER_PLANT_DATE = date(1900, 1, 1)
 
 # OpenDataSoft v2 parquet export — select only needed fields to reduce download size
 DATASET_URL = (
@@ -157,6 +166,11 @@ def transform(table: pa.Table) -> pa.Table:
             )
     else:
         plant_date = pa.array([None] * n, type=pa.date32())
+    plant_date = pc.if_else(
+        pc.equal(plant_date, pa.scalar(PLACEHOLDER_PLANT_DATE, type=pa.date32())),
+        pa.scalar(None, type=pa.date32()),
+        plant_date,
+    )
 
     return pa.table(
         {
