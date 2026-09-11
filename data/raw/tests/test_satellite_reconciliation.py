@@ -108,11 +108,13 @@ def published(tmp_path_factory) -> dict[str, dict]:
         "satellite_tree_info.py": tmp / "satellite.parquet",
         "ussfo_osm_staging.parquet": tmp / "osm.parquet",
     }
-    # The SF script emits source-native names; the model maps them.
-    write_rows(conn, fixtures["sf_tree_info.py"], MUNICIPAL, rename={
-        "tree_id": "treeid", "species": "qspecies", "plant_date": "plantdate",
-        "diameter_at_breast_height": "dbh",
-    })
+    # Every one of the four scripts emits canonical names, so none of these
+    # needs a rename.  The SF script used to emit the portal's own spelling
+    # (treeid, qspecies, plantdate, dbh) and this fixture renamed to match --
+    # which is why this test is the one that fails when the ingest and the
+    # model disagree about a column.  A dry run will not: it plans the model
+    # without ever executing the python datasource.
+    write_rows(conn, fixtures["sf_tree_info.py"], MUNICIPAL)
     write_rows(conn, fixtures["community_tree_info.py"], COMMUNITY)
     write_rows(conn, fixtures["satellite_tree_info.py"], SATELLITE)
     write_rows(conn, fixtures["ussfo_osm_staging.parquet"], OSM)

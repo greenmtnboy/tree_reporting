@@ -62,14 +62,19 @@ grain (tree_id)
 complete where city = 'USSFO' and ussfo_source = 'OSM_USSFO'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ussfo_osm_staging.parquet`;
 
+# The ingest emits canonical column names, as the community and satellite
+# partitions below already do and as every city written since Calgary does.
+# It used to emit the portal's own spelling (treeid, qspecies, plantdate, dbh)
+# and lean on this block to rename them; that ended when the portal renamed
+# every one of those columns out from under us.
 root partial datasource sf_raw_tree_info (
-    treeid: tree_id,
+    tree_id: tree_id,
     city: city,
     data_source: ussfo_source,
-    qspecies: raw_species,
+    species: raw_species,
     tree_name: ?raw_tree_name,
-    plantdate: ?raw_plant_date,
-    dbh: ?raw_dbh,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
     latitude: ?raw_latitude,
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
