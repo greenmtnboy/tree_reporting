@@ -1988,12 +1988,18 @@ DEDUP_CELL_METRES: dict[str, int] = {
     # inventory plants at a 4.2 m median, second only to Tokyo, so the
     # asymmetry argues for not widening on an ambiguous reading.
     "TWTPE": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.  The staged
-    # extract exists (40,359 OSM nodes, 2026-09-11) but the inventory is 1.39M
-    # rows and the workstation the city was added on could not hold the
-    # ingest's output to calibrate against; once `city-cobog` has published,
-    # `uv run osm_dedup_validation.py --city COBOG` reads both from GCS.
-    "COBOG": 10,
+    # Calibrated 2026-09-11 against the staged extract (40,359 OSM nodes) and
+    # the first published parquet (1,390,646 municipal rows, read from GCS --
+    # the workstation could not hold the ingest's output).  The inventory is
+    # the tightest-planted on the map by a distance, a 2.3 m median to the
+    # nearest other row and a tenth within 0.3 m, because the census counts
+    # shrubs.  5-10 m band 54.4% mutual-NN over n=5,007: a coin flip, which
+    # the script reports as such, and the rule for a coin flip is to leave
+    # the rows visible.  The marginal table agrees: 6->8 removes 1,895
+    # duplicates for 918 hidden trees (2.06), 8->10 removes 731 for 730
+    # (1.00, break-even), 10->14 removes 542 for 987 (0.55).  8 m is where
+    # the paying stops, as it did for Tokyo, Helsinki and Copenhagen.
+    "COBOG": 8,
     # 5-10 m band 42.3% mutual-NN over n=468: neighbour-dominated, so the band
     # rule stops at a 5 m guarantee and prints "a 10 m cell".  The marginal
     # table says one step less, and Tokyo is the city where that difference is
