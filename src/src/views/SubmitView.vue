@@ -199,7 +199,7 @@
 import { ref, computed, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import SubmitLocationPicker from '../components/SubmitLocationPicker.vue'
-import { useMapData, CITY_CONFIG, closestCityTo } from '../composables/useMapData'
+import { useMapData, CITY_CONFIG, cityAt, isWithinCity } from '../composables/useMapData'
 import { resizeImage } from '../lib/image'
 import {
   acquireSharedPositionWatch,
@@ -349,7 +349,7 @@ function applyLiveLocation(location: SharedPosition, options: { captureInitial?:
   userLat.value = location.lat
   userLng.value = location.lng
   userAccuracy.value = location.accuracy
-  detectedCity.value = closestCityTo(location.lat, location.lng)
+  detectedCity.value = cityAt(location.lat, location.lng)
 
   if (options.captureInitial) {
     initialLat.value = location.lat
@@ -404,6 +404,15 @@ async function handleSubmit() {
   const cityCode = activeCity.value
   if (!cityCode) {
     errorMessage.value = 'No city selected — open the map first.'
+    step.value = 'error'
+    return
+  }
+  // `activeCity` falls back to the browsing selection, which may be a city the
+  // submitter is nowhere near. Recording that produces a tree the ingest drops
+  // for being outside the city's territory — silently, and after the photo has
+  // been uploaded — so refuse it here, where the submitter can still act on it.
+  if (!isWithinCity(cityCode, lat.value, lng.value)) {
+    errorMessage.value = `This spot is not in ${cityLabel.value}. Open the map and pick the city you are in — or if it is not on the map yet, it cannot take submissions.`
     step.value = 'error'
     return
   }

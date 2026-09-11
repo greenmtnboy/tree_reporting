@@ -28,6 +28,46 @@ export function closestCityTo(lat: number, lng: number): CityCode {
   return closest
 }
 
+/**
+ * How far from a city's configured center a tree may still be submitted as that
+ * city's tree.
+ *
+ * Measured rather than picked: the furthest any city's `CITY_BOUNDS` corner sits
+ * from its `cityConfig.json` center is Halifax at 106 km, so 150 clears every
+ * wired city and leaves room for the next one. It is a sanity bound, not a
+ * boundary — `CITY_TERRITORY` in `data/raw/_ingest_shared.py` is what actually
+ * decides which city an unattributed tree belongs to, and it runs downstream.
+ */
+export const CITY_RADIUS_KM = 150
+
+/** Distance from a city's configured center, or null for an unknown city code. */
+export function distanceToCityKm(city: CityCode, lat: number, lng: number): number | null {
+  const cfg = CITY_CONFIG[city]
+  if (!cfg) return null
+  return haversineKm(lat, lng, cfg.center[1], cfg.center[0])
+}
+
+/** Whether coordinates are near enough to `city` to be recorded as its tree. */
+export function isWithinCity(city: CityCode, lat: number, lng: number): boolean {
+  const distance = distanceToCityKm(city, lat, lng)
+  return distance !== null && distance <= CITY_RADIUS_KM
+}
+
+/**
+ * The city a point is actually in, or null when the nearest one is too far.
+ *
+ * Deliberately separate from `closestCityTo`, which is total and answers a
+ * different question — "which city should the map show this person?" — where the
+ * nearest city beats none however far away it is. Use this one wherever the
+ * answer gets written down as data: a submission made in Milos before Milos was
+ * on the map was recorded as Berlin, 1,955 km away, and the ingest then dropped
+ * it for falling outside Berlin's territory, so the tree reached neither city.
+ */
+export function cityAt(lat: number, lng: number): CityCode | null {
+  const city = closestCityTo(lat, lng)
+  return isWithinCity(city, lat, lng) ? city : null
+}
+
 export function buildDefaultQueryForCity(city: CityCode): string {
   return `
 SELECT
