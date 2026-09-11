@@ -19,6 +19,10 @@ main{padding:16px 20px}table{border-collapse:collapse;width:100%}th,td{text-alig
 .toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:13px}
 .toolbar label{display:inline-flex;gap:6px;align-items:center;color:var(--muted)}
 .viewport{position:relative;overflow:auto;border:1px solid var(--line);background:#050806;max-height:calc(100vh - 170px)}
+#view-tile:fullscreen{background:var(--bg);padding:10px 14px;overflow:auto}
+#view-tile:fullscreen .viewport,#view-tile:fullscreen .side{max-height:calc(100vh - 110px)}
+#view-tile:fullscreen .legend,#view-tile:fullscreen .keys{display:none}
+#view-tile.image-only .tile-layout{grid-template-columns:1fr}#view-tile.image-only .side{display:none}
 .stage{position:relative;display:block;line-height:0}
 .stage img{display:block;width:100%;height:auto;image-rendering:auto;user-select:none;-webkit-user-drag:none}
 .stage svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
@@ -73,6 +77,9 @@ kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-
       <label><input id="hide-decided" type="checkbox"> hide decided</label>
       <label><input id="crisp" type="checkbox"> crisp pixels</label>
       <label><input id="done" type="checkbox"> tile reviewed</label>
+      <button id="fit" class="ghost" title="Zoom so the tile fills the viewport width">Fit</button>
+      <button id="fullscreen" class="ghost" title="Full screen (Esc leaves)">Full screen</button>
+      <label><input id="image-only" type="checkbox"> hide panel</label>
       <button id="publish-tile">Publish accepted</button>
       <span id="savestate" class="savestate"></span>
     </div>
@@ -87,7 +94,7 @@ kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-
           <span><i style="background:#5ad37a"></i>accepted</span><span><i style="background:#ffd166"></i>duplicate</span><span><i style="background:#444"></i>not a tree</span><span><i style="background:#c0c0c0"></i>uncertain</span>
           <span id="attribution"></span>
         </div>
-        <p class="muted" style="font-size:12px">Crown rings are allometric estimates from DBH and genus (Tallo fits in data/raw/crown_width_coefficients.csv), not measured canopies. Detections mark crown centres; inventory points mark trunks, which can sit a few metres off a tall tree's crown. Keys: <kbd>A</kbd> accept <kbd>D</kbd> duplicate of nearest <kbd>F</kbd> not a tree <kbd>Q</kbd> uncertain <kbd>X</kbd> clear <kbd>N</kbd>/<kbd>P</kbd> next/previous <kbd>WASD</kbd>/arrows nudge crown centre (<kbd>Shift</kbd> ×5).</p>
+        <p class="muted keys" style="font-size:12px">Crown rings are allometric estimates from DBH and genus (Tallo fits in data/raw/crown_width_coefficients.csv), not measured canopies. Detections mark crown centres; inventory points mark trunks, which can sit a few metres off a tall tree's crown. Keys: <kbd>A</kbd> accept <kbd>D</kbd> duplicate of nearest <kbd>F</kbd> not a tree <kbd>Q</kbd> uncertain <kbd>X</kbd> clear <kbd>N</kbd>/<kbd>P</kbd> next/previous <kbd>WASD</kbd>/arrows nudge crown centre (<kbd>Shift</kbd> ×5) <kbd>Z</kbd> fit <kbd>Shift+F</kbd> full screen.</p>
       </div>
       <aside class="side" id="side">
         <p class="muted">Select a detection.</p>
@@ -321,6 +328,8 @@ document.addEventListener('keydown', (e) => {
   if ($('#view-tile').classList.contains('hidden')) return;
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
   const k = e.key.toLowerCase(); const s = e.shiftKey ? 5 : 1;
+  if (k === 'z') { e.preventDefault(); fitZoom(); return; }
+  if (k === 'f' && e.shiftKey) { e.preventDefault(); $('#fullscreen').click(); return; }
   const map = { a: () => decide('accept'), f: () => decide('reject'), q: () => decide('uncertain'), d: () => decide('duplicate'), e: () => decide('duplicate'), x: clearDecision, n: () => step(1), ']': () => step(1), p: () => step(-1), '[': () => step(-1),
     w: () => nudge(0, -s), arrowup: () => nudge(0, -s), s: () => nudge(0, s), arrowdown: () => nudge(0, s), arrowleft: () => nudge(-s, 0), arrowright: () => nudge(s, 0) };
   if (k === 'a' && e.ctrlKey) return;
@@ -333,6 +342,21 @@ document.addEventListener('keydown', (e) => {
 $('#threshold').addEventListener('input', () => { $('#threshold-value').textContent = fmt(threshold(), 2); render(); });
 for (const id of ['#show-inventory', '#show-crowns', '#hide-decided']) $(id).addEventListener('change', render);
 $('#zoom').addEventListener('input', applyZoom); $('#crisp').addEventListener('change', applyZoom);
+function fitZoom() {
+  if (!T.bundle) return;
+  const vp = $('#viewport');
+  const maxH = parseFloat(getComputedStyle(vp).maxHeight) || Infinity;
+  const z = Math.max(0.5, Math.min(8, (vp.clientWidth - 2) / T.bundle.image.width, (maxH - 2) / T.bundle.image.height));
+  $('#zoom').max = Math.max(5, Math.ceil(z)); $('#zoom').value = z; applyZoom();
+}
+$('#fit').addEventListener('click', fitZoom);
+$('#fullscreen').addEventListener('click', () => {
+  const el = $('#view-tile');
+  if (document.fullscreenElement) document.exitFullscreen();
+  else el.requestFullscreen?.().catch((err) => setSave('Full screen refused: ' + err.message, true));
+});
+document.addEventListener('fullscreenchange', () => { $('#fullscreen').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen'; setTimeout(fitZoom, 50); });
+$('#image-only').addEventListener('change', (e) => { $('#view-tile').classList.toggle('image-only', e.target.checked); setTimeout(fitZoom, 50); });
 $('#done').addEventListener('change', async (e) => {
   setSave('Saving…');
   try { await api(`/tiles/${encodeURIComponent(T.bundle.tileId)}/done`, { method: 'POST', body: JSON.stringify({ done: e.target.checked }) }); setSave(e.target.checked ? 'Marked reviewed' : 'Marked not reviewed'); }
