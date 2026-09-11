@@ -448,10 +448,21 @@ def bundle_files() -> list[tuple[str, int]]:
 
 
 def test_every_exclude_pattern_matches_a_file():
+    """A pattern that matches nothing is a renamed or deleted file, except for
+    the gitignored working files: a clean clone (CI) never has those, so a
+    literal pattern whose path is a .gitignore entry is live by definition."""
     import fnmatch
 
     files = [p.relative_to(DATA_DIR).as_posix() for p in DATA_DIR.rglob("*") if p.is_file()]
-    dead = [pat for pat in cloud_exclude() if not any(fnmatch.fnmatch(f, pat) for f in files)]
+    ignored = {
+        line.strip().removeprefix("data/")
+        for line in (DATA_DIR.parent / ".gitignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+    dead = [
+        pat for pat in cloud_exclude()
+        if not any(fnmatch.fnmatch(f, pat) for f in files) and pat not in ignored
+    ]
     assert not dead, f"[cloud] exclude patterns that match nothing (renamed or deleted?): {dead}"
 
 
