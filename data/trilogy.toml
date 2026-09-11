@@ -1210,16 +1210,15 @@ operation = "refresh"
 schedule = "0 0 22 * * MON,THU"
 # 1.39M municipal rows -- the largest single inventory on the map, twice
 # NYC's -- read as ~700 ArcGIS pages at just under a second each, then the
-# cluster merge over them in DuckDB.  The memory profile in EXTENDING.md
-# (NYC peaks at 3.1 GiB, London at 3.6) argues for more than this, but
-# **4096 is the ceiling an executor will claim**: a worker compares a run's
-# declared memory with its own container limit and refuses anything larger,
-# and a refused run sits "dispatched" for ever with no error anywhere -- the
-# first cut asked for 6144 and waited an hour unclaimed.  4096 is the
-# largest figure any job in this table has run on.  The paging alone is
-# ten to twelve minutes of the budget.
+# cluster merge over them in DuckDB.  Sized from the memory profile in
+# EXTENDING.md (NYC peaks at 3.1 GiB, London at 3.6); the paging alone is
+# ten to twelve minutes of the budget.  A worker only claims a run whose
+# declared memory fits its own container, so a figure above what the fleet
+# offers waits "dispatched" for ever with no error -- 6144 was claimed in
+# four minutes on 2026-09-11, so the fleet has that; check `runs show` for
+# the `claimed` event before raising it further.
 timeout_seconds = 3600
-memory_mb = 4096
+memory_mb = 6144
 
 [[cloud.job]]
 key = "osm-cobog"
