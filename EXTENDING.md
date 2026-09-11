@@ -2188,6 +2188,40 @@ Each dry run should report exactly **one** asset for that city. More than one
 means the entrypoint reaches something it should not — most likely an import
 that pulled in another city's model or the cross-city merge.
 
+**To build the city in the cloud before the PR merges**, push it as a
+throwaway job rather than syncing the branch. `trilogy cloud sync` from a
+feature branch deploys the whole job table into a branch environment, which
+is the designed path, but the shared workspace bundle (every tracked
+`*.py/*.preql/*.csv/*.json` under `data/`) is 2.3 MB and the API refuses a
+body over 2 MiB — and syncing from a *detached* checkout maps to production,
+which is one wrong flag from updating every live job. A single-city push
+bundles about 1.1 MB and lands nowhere a scheduled job reads:
+
+```bash
+# a minimal trilogy.toml with one [cloud] block: org, name, entrypoint,
+# operation = "refresh", secret_env, timeout_seconds, memory_mb
+trilogy cloud --org trilogy-data jobs push --source data --config adhoc.toml \
+    --name adhoc-city-{code} --operation refresh --memory-mb 2048 \
+    --secret-env GOOGLE_HMAC_KEY --secret-env GOOGLE_HMAC_SECRET \
+    --exclude "raw/tests/*" --exclude "raw/enrichment/*" \
+    --exclude "osm_staging/*" --exclude "landmark_staging/*" \
+    --exclude "raw/{every other city}/*" \
+    --exclude raw/debug.preql --exclude raw/tree_info.preql ... # every root model the city does not import
+trilogy cloud --org trilogy-data jobs run adhoc-city-{code} --wait --logs
+trilogy cloud --org trilogy-data jobs delete adhoc-city-{code}
+```
+
+Two things about that bundle are load-bearing. **The worker executes the
+bundle as a directory, not the entrypoint**: its state snapshot parses every
+`.preql` it finds, so a root model that imports an excluded city
+(`debug.preql`, `tree_info.preql`, `landmark_info.preql`) fails the run before
+it starts, and a city directory holding both the tree and the landmark model
+builds *both* — exclude `{slug}_tree_info.preql` from the landmark job's
+bundle or the landmark run re-does the tree ingest. And **the four new-city
+parquets are new objects**, which is what makes a production-namespace push
+safe: `full_tree_publish`'s file list and `landmark_info`'s imports are
+main's until the merge, so nothing live reads them yet.
+
 Then run the enrichment probe to measure coverage:
 
 ```bash
