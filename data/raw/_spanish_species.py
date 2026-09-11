@@ -87,13 +87,14 @@ where POWO and the published table disagreed, the published table won -- the
 argument `SPECIES_SYNONYMS` and `_japanese_species` make, that the same taxon
 under two names is two enrichment rows and two entries in every rollup.
 `Cupressus lusitanica` (36,969 trees; POWO says *Hesperocyparis*, and the
-repo already folds *Hesperocyparis* onto *Cupressus*), `Acca sellowiana`
-(POWO says *Feijoa sellowiana*, and both keys are published; the Japanese
-table took *Acca*, so this one does too), `Citrus x sinensis` (POWO folds it
+repo already folds *Hesperocyparis* onto *Cupressus*), `Citrus x sinensis` (POWO folds it
 into a form of *Citrus x aurantium*), `Dypsis lutescens` (*Chrysalidocarpus*)
 and the genus `Callistemon` (*Melaleuca*).  `Hibiscus rosa-sinensis` is the
 same call in a different shape: POWO's only record is the hybrid spelling
 `Hibiscus x rosa-sinensis`, and the table carries the plain one.
+`Acca sellowiana` was the opposite case -- POWO says *Feijoa sellowiana* and
+Melbourne already publishes that spelling beside San Francisco's *Acca* -- so
+it is a `SPECIES_SYNONYMS` entry and `feijoa` here resolves to *Feijoa*.
 
 **A genus is an answer, and 6.1% of these trees get one** (85,009 trees on
 107 keys).  Most are the publisher's own category names -- `Eucalipto`,
@@ -232,7 +233,7 @@ SPANISH_SPECIES: dict[str, str] = {
     "acacia blanca cultriformes": "Acacia cultriformis",  # Acacia blanca, Cultriformes
     "acacia negra gris": "Acacia decurrens",  # Acacia negra, gris
     "acacia japonesa": "Acacia melanoxylon",
-    "feijoa": "Acca sellowiana",
+    "feijoa": "Feijoa sellowiana",
     "arce": "Acer",
     "amargoso": "Ageratina",
     "arbol pipermint": "Agonis flexuosa",

@@ -65,11 +65,14 @@ because a regeneration from GBIF would undo every one:
   `Citrus x aurantium`.  `Machilus japonica` has no record, so ホソバタブ is
   the genus.
 
-**The 10 that are still synonyms are all one deliberate rule**, below, and
+**The 9 that are still synonyms are all one deliberate rule**, below, and
 nothing else -- which is the useful thing to know if this is ever re-audited:
-`Acca sellowiana`, `Betula platyphylla`, `Cinnamomum camphora`, `Cupressus
-arizonica`, `Cupressus macrocarpa`, `Cupressus x leylandii`, `Euscaphis
-japonica`, `Juglans ailantifolia`, `Mahonia japonica`, `Morus australis`.
+`Betula platyphylla`, `Cinnamomum camphora`, `Cupressus arizonica`, `Cupressus
+macrocarpa`, `Cupressus x leylandii`, `Euscaphis japonica`, `Juglans
+ailantifolia`, `Mahonia japonica`, `Morus australis`.  (`Acca sellowiana` was
+a tenth until the September 2026 audit found Melbourne publishing *Feijoa
+sellowiana* beside it; both keys published is the case the rule exists to
+fold, so it went into `SPECIES_SYNONYMS` and フェイジョア publishes *Feijoa*.)
 
 **Where POWO and the published table disagreed, the published table won.**
 This is the one rule that is about *this repo* rather than about taxonomy, and
@@ -187,7 +190,7 @@ JAPANESE_SPECIES: dict[str, str] = {
     "モミノキ": "Abies firma",
     "ミモザ": "Acacia dealbata",
     "モリシマアカシア": "Acacia mearnsii",
-    "フェイジョア": "Acca sellowiana",
+    "フェイジョア": "Feijoa sellowiana",
     "アメリカハナノキ": "Acer rubrum",
     "イタヤカエデ": "Acer pictum",
     "イロハモミジ": "Acer palmatum",
