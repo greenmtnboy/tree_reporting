@@ -404,3 +404,99 @@ def test_the_core_reads_only_published_parquets():
             "the enrichment parquet and run the LLM in its own container; a "
             "consumer reads it through tree_enrichment_source"
         )
+
+
+# ---------------------------------------------------------------------------
+# The workspace bundle
+# ---------------------------------------------------------------------------
+#
+# `trilogy cloud sync` ships every *.py/*.preql/*.csv/*.json/*.toml under
+# data/ (minus tests) in one request the API caps at 2 MiB, and at 41 cities
+# the bundle stood 4.6 KB under that.  The [cloud] exclude list takes the
+# workstation-only scripts out; these tests keep the list honest in both
+# directions -- nothing excluded is reachable by a job, and nothing in the
+# list is dead -- and fail before the next city takes the sync on main over.
+
+BUNDLE_INCLUDE = ("*.preql", "*.py", "*.sql", "*.toml", "*.json", "*.csv")
+BUNDLE_DEFAULT_EXCLUDE = ("*/__pycache__/*", "*/.venv/*", "*/tests/*")
+BUNDLE_LIMIT_BYTES = 2 * 1024 * 1024
+BUNDLE_BUDGET_BYTES = int(BUNDLE_LIMIT_BYTES * 0.93)  # ~150 KB, three or four cities, of warning
+
+
+def cloud_exclude() -> tuple[str, ...]:
+    parsed = tomllib.loads(CONFIG.read_text(encoding="utf-8"))
+    return tuple(parsed["cloud"].get("exclude", ()))
+
+
+def bundle_files() -> list[tuple[str, int]]:
+    """(relative path, size) for every file the sync would ship, matched the
+    way the CLI matches: fnmatch over the path relative to data/."""
+    import fnmatch
+
+    exclude = BUNDLE_DEFAULT_EXCLUDE + cloud_exclude()
+    out = []
+    for path in DATA_DIR.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(DATA_DIR).as_posix()
+        if not any(fnmatch.fnmatch(rel, p) for p in BUNDLE_INCLUDE):
+            continue
+        if any(fnmatch.fnmatch(rel, p) or fnmatch.fnmatch("/" + rel, p) for p in exclude):
+            continue
+        out.append((rel, path.stat().st_size))
+    return out
+
+
+def test_every_exclude_pattern_matches_a_file():
+    import fnmatch
+
+    files = [p.relative_to(DATA_DIR).as_posix() for p in DATA_DIR.rglob("*") if p.is_file()]
+    dead = [pat for pat in cloud_exclude() if not any(fnmatch.fnmatch(f, pat) for f in files)]
+    assert not dead, f"[cloud] exclude patterns that match nothing (renamed or deleted?): {dead}"
+
+
+def test_excluded_files_are_not_reachable():
+    """No excluded file is named by a model's file clause or imported by a
+    script a model runs.  A reference in a comment does not count, which is
+    why preql is read through statements() and Python through its import
+    lines rather than a substring search."""
+    import fnmatch
+
+    excluded = [
+        p for p in DATA_DIR.rglob("*")
+        if p.is_file() and any(
+            fnmatch.fnmatch(p.relative_to(DATA_DIR).as_posix(), pat) for pat in cloud_exclude()
+        )
+    ]
+    assert excluded, "the exclude list matched no files at all"
+    stems = {p.stem for p in excluded}
+    names = {p.name for p in excluded}
+
+    offenders = []
+    for preql in DATA_DIR.rglob("*.preql"):
+        if preql in excluded:
+            continue
+        for name in names:
+            if name in statements(preql):
+                offenders.append(f"{preql.relative_to(DATA_DIR)} names {name}")
+    for script in DATA_DIR.rglob("*.py"):
+        if script in excluded or "tests" in script.parts:
+            continue
+        for line in script.read_text(encoding="utf-8").splitlines():
+            m = re.match(r"\s*(?:from|import)\s+([\w.]+)", line)
+            if m and m.group(1).split(".")[-1] in stems:
+                offenders.append(f"{script.relative_to(DATA_DIR)} imports {m.group(1)}")
+    assert not offenders, "excluded from the workspace bundle but still reachable:\n  " + "\n  ".join(offenders)
+
+
+def test_workspace_bundle_fits_the_api_with_headroom():
+    files = bundle_files()
+    total = sum(size for _, size in files)
+    biggest = sorted(files, key=lambda f: -f[1])[:5]
+    assert total <= BUNDLE_BUDGET_BYTES, (
+        f"the workspace bundle is {total:,} bytes over {len(files)} files; the API caps a "
+        f"sync body at {BUNDLE_LIMIT_BYTES:,} and this budget stops at "
+        f"{BUNDLE_BUDGET_BYTES:,} so the failure lands here and not on main's sync. "
+        f"Add workstation-only files to [cloud] exclude, or raise the platform's limit. "
+        f"Largest: {biggest}"
+    )

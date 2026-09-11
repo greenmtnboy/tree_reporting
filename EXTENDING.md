@@ -2192,10 +2192,15 @@ that pulled in another city's model or the cross-city merge.
 throwaway job rather than syncing the branch. `trilogy cloud sync` from a
 feature branch deploys the whole job table into a branch environment, which
 is the designed path, but the shared workspace bundle (every tracked
-`*.py/*.preql/*.csv/*.json` under `data/`) is 2.3 MB and the API refuses a
-body over 2 MiB — and syncing from a *detached* checkout maps to production,
-which is one wrong flag from updating every live job. A single-city push
-bundles about 1.1 MB and lands nowhere a scheduled job reads:
+`*.py/*.preql/*.csv/*.json` under `data/`, tests excluded) is shipped in one
+request the API caps at 2 MiB, and at 41 cities it stood 4.6 KB under that
+until the `exclude` list in `trilogy.toml`'s `[cloud]` block took the
+workstation-only scripts out (1.74 MiB after; ~40 KB per city). A checkout
+with local caches (`species_audit_cache.json`, a stale `--output` parquet's
+sidecars) goes over where a clean clone does not — and syncing from a
+*detached* checkout maps to production, which is one wrong flag from
+updating every live job. A single-city push bundles about 1.1 MB and lands
+nowhere a scheduled job reads:
 
 ```bash
 # a minimal trilogy.toml with one [cloud] block: org, name, entrypoint,

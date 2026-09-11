@@ -205,6 +205,40 @@ studio_url="http://localhost:5173/trilogy-studio-core/"
 org = "trilogy-data"
 workspace = "urban-tree-data"
 secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET"]
+# The workspace bundle is every *.py/*.preql/*.csv/*.json/*.toml under data/
+# (tests are dropped by the CLI's own default), shipped to the API in one
+# request whose body the platform caps at 2 MiB.  At 41 cities the bundle
+# reached 2,092,500 bytes -- 4.6 KB under -- and each city adds ~40 KB, so
+# the next one would have failed the sync on main with `413 length limit
+# exceeded`.  These are the files no job executes: workstation tools (the
+# scaffolder, the audits, the fits, the calibrator, the admin form), the
+# manual counterparts of scheduled extracts (`*_osm_extract.py` -- the job
+# runs osm_staging/osm_rows.py), the one-off geocoders and Overpass stagers
+# behind committed CSVs and staging objects, and a scratch model.  Nothing
+# here is named in a `file` clause or imported by a runtime script; `tests/
+# test_cloud_jobs.py::test_excluded_files_are_not_reachable` keeps it so.
+# Glob semantics are fnmatch over the path relative to data/.
+exclude = [
+    "raw/debug.preql",
+    "raw/new_city.py",
+    "raw/species_audit.py",
+    "raw/crown_allometry_fit.py",
+    "raw/dbh_age_fit.py",
+    "raw/osm_dedup_validation.py",
+    "raw/portal_cadence.py",
+    "raw/dedup_cells.py",
+    "raw/enrichment_admin.py",
+    "raw/backfill_enrichment.py",
+    "raw/validate_external_tree_sources.py",
+    "raw/*/*_osm_extract.py",
+    "raw/*/*_landmarks_geocode.py",
+    "raw/*/*_landmarks_extract.py",
+    # Gitignored working files of the audit and the admin form.  A clean
+    # clone never has them; a checkout does, and 100 KB of POWO cache is
+    # what took a sync from a workstation over the cap while CI was under.
+    "raw/species_audit_cache.json",
+    "raw/enrichment_admin_edits.json",
+]
 
 # ===========================================================================
 # The core
