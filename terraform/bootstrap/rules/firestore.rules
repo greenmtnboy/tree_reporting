@@ -55,6 +55,22 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Satellite review: decisions on aerial-imagery detections, the
+    // published records, and per-tile review state. Written only by the
+    // local reviewer through the Admin SDK; nothing here is a client
+    // surface, and the public data pipeline reads the GCS export instead.
+    // Spelled out rather than left to the default deny so the intent is
+    // visible next to the collections the client can reach.
+    match /satelliteObservations/{observationId} {
+      allow read, write: if false;
+    }
+    match /satelliteTrees/{treeId} {
+      allow read, write: if false;
+    }
+    match /satelliteTileReviews/{tileId} {
+      allow read, write: if false;
+    }
+
     match /checkins/{checkinId} {
       allow create: if signedIn()
                     && request.resource.data.userId == request.auth.uid

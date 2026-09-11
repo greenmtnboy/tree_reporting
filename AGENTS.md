@@ -65,6 +65,23 @@ Four things about that are load-bearing, and each replaced something that broke:
   catches it, so run `cd data/raw && uv run --with pytest python -m pytest tests -q`
   after touching the job table.
 
+### Reviewed aerial-imagery detections
+
+`SATELLITE_{CODE}` is a fourth source partition for the cities imagery has
+been run over (SF and Boston; `SATELLITE_DATA_SOURCES` in
+`_ingest_shared.py`). The reviewer's `/satellite` page
+(`reviewer/satellite.ts`) shows a NAIP tile with the model's detections and
+the published inventory trees over it, each ringed by its predicted crown
+width, and publishes accepted detections to
+`satellite/published_trees.ndjson`, which `raw/satellite_tree_info.py` reads
+the way the community ingest reads its export. `raw/tree_dedup.preql`
+classes the rows below municipal and community and above OSM, so a city that
+later publishes a tree the imagery found absorbs the detection into its own
+row with the satellite id in `merged_tree_ids`; a reviewer-linked duplicate
+is exported at the inventory tree's coordinates so the grid merge cannot miss
+it. The model's DBH estimate is never published as a measurement. See
+"Reviewed aerial-imagery detections" in `EXTENDING.md`.
+
 ### Tree-level predictions
 
 `raw/tree_predictions.preql` publishes `tree_predictions_v{n}.parquet`: one

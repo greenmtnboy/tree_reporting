@@ -22,7 +22,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from _ingest_shared import emit_freshness
 from _socrata_shared import SocrataDataset, rows_updated_at
 
-DATASET = SocrataDataset("data.sfgov.org", "tkzw-k3nq")
+# data.sf.gov, not the old data.sfgov.org: the latter 301s for metadata but
+# answers the *row* query with a bare nginx 403, so the two halves of this
+# city disagreed about which host works.  See `sf_tree_info.py` for the
+# dataset migration that renamed every column under this same four-four.
+DATASET = SocrataDataset("data.sf.gov", "tkzw-k3nq")
 
 
 def fetch_modified_at() -> datetime:

@@ -1164,6 +1164,13 @@ class TestNotATree:
             "Vacant Unacceptable/Retired", "VACANT/INADEQUATE SPACING",
             "Scheduled Planting Site - Spring 2026", "Empty pit/planting site",
             "Stump", "Stump stump", "Stobbe",
+            # San Francisco's, found while checking whether its portal flags a
+            # removed tree.  "Potential Site" is the dangerous one: it reads as
+            # a binomial, so it reached the map (149 dots) and the enrichment
+            # queue rather than being dropped like the stumps beside it.
+            "Potential Site", "Potential site", "Landscape Plants",
+            "Basin(s)", "Basins", "pave", "Paved over", "Paved temp",
+            "Pavedtemp",
         ],
     )
     def test_empty_sites(self, raw):
@@ -1172,7 +1179,11 @@ class TestNotATree:
     @pytest.mark.parametrize(
         "raw",
         ["Unknown", "Unbekannt", "Dead tree", "Dead", "Acer rubrum", "Palm",
-         "Tree(s)", None, "", "Vaccinium corymbosum"],
+         "Tree(s)", None, "", "Vaccinium corymbosum",
+         # *Pavetta* is a real genus of some 400 species and starts with the
+         # same four letters as San Francisco's paved-over sites, which is why
+         # the marker for those is "paved" and not "pave".
+         "Pavetta indica", "Pavonia hastata"],
     )
     def test_trees_are_not_dropped(self, raw):
         assert is_not_a_tree(raw) is False

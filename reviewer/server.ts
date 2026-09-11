@@ -2,12 +2,21 @@ import express from 'express'
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import sharp from 'sharp'
+
+import { createSatelliteRouter, TileStore } from './satellite.ts'
 
 const projectId = process.env.GOOGLE_CLOUD_PROJECT ?? 'sf-tree-reporting-prod'
 const storageBucket = process.env.FIREBASE_STORAGE_BUCKET ?? 'sf-tree-reporting-submissions'
 const publishedBucketName = process.env.PUBLISHED_BUCKET ?? 'sf-tree-reporting-published'
 const port = Number(process.env.REVIEWER_PORT ?? 4174)
+// Tile bundles for the satellite page, written by
+// imagery_model/src/urban_tree_ml/tile_bundle_export.py.  The committed
+// fixtures are two real tiles, one per wired city, so the page works on a
+// fresh clone; point this at an export directory for a review session.
+const tileDir = process.env.SATELLITE_TILE_DIR ?? path.join(import.meta.dirname, 'fixtures', 'tiles')
 const firebaseApp = getApps()[0] ?? initializeApp({
   credential: applicationDefault(),
   projectId,
@@ -19,18 +28,35 @@ const bucket = storage.bucket(storageBucket)
 const publishedBucket = storage.bucket(publishedBucketName)
 const app = express()
 
-// Mirrors the `city` enum in data/raw/core.preql. The ingest silently drops
-// rows for unknown cities, so reject them at approval where a human can see it.
-const CITY_CODES = new Set([
-  'USSFO', 'USNYC', 'USBOS', 'FRPAR', 'USBTV', 'CAVAN', 'DEBER',
-  'NLAMS', 'GBLON', 'AUMEL', 'ARBUE', 'USLAX', 'USWAS', 'USTEM',
-])
+// The city codes the map knows, read from the frontend's city config so the
+// reviewer has no list of its own to fall behind: cityConfig.json is what
+// data/raw/tests/test_city_wiring.py holds every city to, alongside the
+// `city` enum in data/raw/core.preql. The ingest silently drops rows for an
+// unknown city, so approval and publish reject them here where a human can
+// see it.
+const CITY_CONFIG_PATH = path.join(import.meta.dirname, '..', 'src', 'src', 'cityConfig.json')
+const CITY_CODES = new Set<string>(Object.keys(JSON.parse(readFileSync(CITY_CONFIG_PATH, 'utf8'))))
+if (![...CITY_CODES].every((code) => /^[A-Z]{5}$/.test(code))) {
+  throw new Error(`${CITY_CONFIG_PATH} has a key that is not a five-letter city code`)
+}
 
 const EXPORT_PATH = 'community/published_trees.ndjson'
 const MANIFEST_PATH = 'community/manifest.json'
 const PUBLISHED_PHOTO_MAX_DIM = 1600
 
 app.use(express.json({ limit: '32kb' }))
+
+// The satellite page: aerial tiles, model detections, inventory overlay,
+// and a publish path of its own (see satellite.ts).
+app.use('/api/satellite', createSatelliteRouter({
+  db,
+  publishedBucket,
+  cityCodes: CITY_CODES,
+  tiles: new TileStore(tileDir),
+}))
+app.get('/satellite', (_req, res) => {
+  res.sendFile(path.join(import.meta.dirname, 'satellite_page.html'))
+})
 
 type PendingSubmission = {
   userId: string
@@ -275,7 +301,8 @@ img{width:100%;max-height:420px;object-fit:contain;background:#050806}.thumbs{di
 dl{display:grid;grid-template-columns:110px 1fr;gap:8px;margin:0}dt{color:#8cab94}dd{margin:0;overflow-wrap:anywhere}
 .actions{display:flex;gap:10px;margin-top:18px}button{border:1px solid #6da87b;background:#1d3624;color:#e7f5ea;padding:9px 14px;cursor:pointer}
 button.reject{border-color:#a86d6d;background:#361d1d}.empty{color:#8cab94}@media(max-width:720px){.card{grid-template-columns:1fr}}
-</style></head><body><main><h1>Pending tree submissions</h1><p id="status">Loading…</p><section id="queue" class="queue"></section></main>
+nav{margin-bottom:14px}nav a{color:#8cab94;margin-right:14px}
+</style></head><body><main><nav><a href="/">Photo submissions</a><a href="/satellite">Satellite tiles</a><a href="/satellite#queue">Satellite publish queue</a></nav><h1>Pending tree submissions</h1><p id="status">Loading…</p><section id="queue" class="queue"></section></main>
 <script>
 const queue=document.querySelector('#queue'),status=document.querySelector('#status');
 const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -288,12 +315,13 @@ load().catch(err=>status.textContent='Could not load queue: '+err.message);
 </script></body></html>`)
 })
 
-app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((error: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(error)
-  res.status(400).json({ error: error.message })
+  res.status(error.status ?? 400).json({ error: error.message })
 })
 
 app.listen(port, '127.0.0.1', () => {
   console.log(`Tree reviewer listening at http://127.0.0.1:${port}`)
+  console.log(`Satellite tiles from ${tileDir} at http://127.0.0.1:${port}/satellite`)
   console.log(`Using Firebase project ${projectId}`)
 })
