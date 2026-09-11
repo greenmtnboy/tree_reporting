@@ -2,6 +2,7 @@ import express from 'express'
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import sharp from 'sharp'
 
@@ -27,12 +28,17 @@ const bucket = storage.bucket(storageBucket)
 const publishedBucket = storage.bucket(publishedBucketName)
 const app = express()
 
-// Mirrors the `city` enum in data/raw/core.preql. The ingest silently drops
-// rows for unknown cities, so reject them at approval where a human can see it.
-const CITY_CODES = new Set([
-  'USSFO', 'USNYC', 'USBOS', 'FRPAR', 'USBTV', 'CAVAN', 'DEBER',
-  'NLAMS', 'GBLON', 'AUMEL', 'ARBUE', 'USLAX', 'USWAS', 'USTEM',
-])
+// The city codes the map knows, read from the frontend's city config so the
+// reviewer has no list of its own to fall behind: cityConfig.json is what
+// data/raw/tests/test_city_wiring.py holds every city to, alongside the
+// `city` enum in data/raw/core.preql. The ingest silently drops rows for an
+// unknown city, so approval and publish reject them here where a human can
+// see it.
+const CITY_CONFIG_PATH = path.join(import.meta.dirname, '..', 'src', 'src', 'cityConfig.json')
+const CITY_CODES = new Set<string>(Object.keys(JSON.parse(readFileSync(CITY_CONFIG_PATH, 'utf8'))))
+if (![...CITY_CODES].every((code) => /^[A-Z]{5}$/.test(code))) {
+  throw new Error(`${CITY_CONFIG_PATH} has a key that is not a five-letter city code`)
+}
 
 const EXPORT_PATH = 'community/published_trees.ndjson'
 const MANIFEST_PATH = 'community/manifest.json'
