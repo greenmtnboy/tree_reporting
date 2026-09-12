@@ -361,15 +361,27 @@ schedule = "0 0 6 * * *"
 timeout_seconds = 1800
 memory_mb = 4096
 
-# Landmarks: per-city parquets plus the cross-city union, still one lane.
+# Landmarks: the per-city parquets, then the cross-city union, as two jobs.
 #
-# Unlike trees, this has not been split per city, and the reason is that the
-# split would be a code-sharing refactor rather than a scheduling one. Tree
-# extraction lives once in `raw/_osm_shared.py`, which is what made seventeen
-# scheduled OSM jobs a matter of seventeen thin shims; the landmark sources
-# are still seventeen bespoke scripts (a live ArcGIS query here, an inline
-# list there, two separate Overpass fetches in deber/gblon that have never
-# been shared). Landmark sources also change on a scale of years.
+# Unlike trees, the per-city half has not been split into one job per city, and
+# the reason is that the split would be a code-sharing refactor rather than a
+# scheduling one. Tree extraction lives once in `raw/_osm_shared.py`, which is
+# what made a scheduled OSM job per city a matter of a thin shim each; the
+# landmark sources are still a bespoke script per city (a live ArcGIS query
+# here, an inline list there, two separate Overpass fetches in deber/gblon that
+# have never been shared). Landmark sources also change on a scale of years.
+#
+# **The union is a separate job because one portal must not take it down.**
+# While `landmark_info.preql` declared the union as well as importing every city,
+# building it was a single query that ran ~15 cities' landmark scripts against
+# their live portals, and any one of them raising aborted the whole thing. On
+# 2026-09-12 that cost the union entirely: data.iledefrance.fr had closed the
+# API behind Paris's landmarks, and with Paris moved to the national register
+# the next attempt died on Kingston's ArcGIS answering 200 with an error
+# payload. Now `refresh-landmarks` rebuilds the forty-one city parquets, each
+# its own managed asset so an outage fails one city, and `publish-landmarks`
+# unions the *published parquets* and reaches no portal at all -- the same
+# separation `publish-full` has from the city jobs.
 #
 # Weekly rather than three times a day because that is the cadence the data
 # actually has, and independent of every city cron because nothing about a
@@ -380,6 +392,23 @@ name = "urban-tree-data-landmarks"
 entrypoint = "raw/landmark_info.preql"
 operation = "refresh"
 schedule = "0 0 4 * * SUN"    # Sundays 04:00 UTC
+timeout_seconds = 1800
+memory_mb = 2048
+
+# An hour after the per-city refresh, by wall clock rather than a derived edge:
+# the union's inputs are forty-one parquet addresses and its producers are
+# forty-one differently-named managed datasources, so there is no name for the
+# platform to form an edge on -- exactly as with `publish-full` and the city
+# jobs. Nothing is lost by the gap. This publishes whatever the cities last
+# published, so a city that lands late appears in next week's union, and its
+# watermark is the objects' publication times, so a tick where nothing moved
+# exits `up_to_date` after forty-one HEAD requests.
+[[cloud.job]]
+key = "publish-landmarks"
+name = "urban-tree-landmarks-full"
+entrypoint = "raw/full_landmark_publish.preql"
+operation = "refresh"
+schedule = "0 0 5 * * SUN"    # Sundays 05:00 UTC
 timeout_seconds = 1800
 memory_mb = 2048
 

@@ -99,7 +99,7 @@ export const LANDMARK_SOURCES: CitySourceLink[] = [
   { city: 'San Francisco', label: 'SF Open Data Portal (Landmarks)', url: 'https://data.sfgov.org/Geographic-Locations-and-Boundaries/Landmarks/rzic-39gi/about_data' },
   { city: 'New York City', label: 'NYC LPC Individual Landmark Sites', url: 'https://data.cityofnewyork.us/Housing-Development/Individual-Landmark-Sites/buis-pvji' },
   { city: 'Boston', label: 'City of Boston Open Data (Landmarks)', url: 'https://data.boston.gov/dataset/92137315-e846-4c75-8c3d-2b7e93e38d03' },
-  { city: 'Paris', label: 'Ile-de-France Open Data (Monuments Historiques)', url: 'https://data.iledefrance.fr/explore/dataset/immeubles-proteges-au-titre-des-monuments-historiques/' },
+  { city: 'Paris', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
   { city: 'Burlington, VT', label: 'Geocoded from city landmark directory via Nominatim' },
   { city: 'Vancouver', label: 'Vancouver Open Data (Heritage Sites)', url: 'https://opendata.vancouver.ca/explore/dataset/heritage-sites/information/' },
   { city: 'Berlin', label: 'OpenStreetMap via Overpass API (historic=* tags)' },

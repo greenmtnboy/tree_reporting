@@ -166,7 +166,7 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Amsterdam | Amsterdam Data Portal - Monumenten | https://api.data.amsterdam.nl/v1/monumenten/monumenten/ |
 | Berlin | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |
 | Melbourne | Melbourne Open Data - Landmarks and Places of Interest | https://data.melbourne.vic.gov.au/explore/dataset/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/ |
-| Paris | Ile-de-France Open Data - Monuments Historiques | https://data.iledefrance.fr/ |
+| Paris | Ministere de la Culture - Immeubles proteges au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
 | Buenos Aires | No landmark dataset in production yet | n/a |
 | Athens | Curated landmark list + Nominatim geocoding | https://nominatim.openstreetmap.org/ |
 | Milos | Curated landmark list + Nominatim geocoding | https://nominatim.openstreetmap.org/ |
