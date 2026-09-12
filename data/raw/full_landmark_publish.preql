@@ -1,0 +1,162 @@
+# Publisher for the cross-city full_landmark_info parquet, run weekly by the
+# `publish-landmarks` [[cloud.job]] in ../trilogy.toml.
+#
+# It publishes whatever the forty-one cities last published. A city whose own
+# landmark refresh failed keeps the rows it published last week; a city that
+# lands after today's run appears in next week's union.
+#
+# ---------------------------------------------------------------------------
+# Why this exists: one portal must not take the union down
+# ---------------------------------------------------------------------------
+#
+# `landmark_info.preql` used to declare this union *and* import all forty-one
+# city models, so building it was a single query that executed ~15 of those
+# cities' landmark scripts against their live portals. Any one of them raising
+# aborted the whole query, and the surviving scripts then died with exit code
+# 120 -- a flush against a reader that had gone away -- which is why the set of
+# named victims differed on every run and never included the culprit.
+#
+# That is not a hypothetical failure mode. On 2026-09-12 the union could not be
+# built at all: `data.iledefrance.fr` had closed the export API behind Paris's
+# landmarks (200 on the dataset's metadata, 403 on `/records` and every
+# `/exports/*`), and once Paris was pointed at the national register instead, the
+# very next attempt died on Kingston's ArcGIS answering HTTP 200 with a
+# `400: Unable to complete operation.` payload -- a portal that passes when run
+# alone and fails under the union's concurrency. It was not memory: 4096 MiB
+# failed identically to 2048.
+#
+# So the lane is now two steps, the shape the tree lane has had since the
+# per-city split:
+#
+#   refresh-landmarks   raw/landmark_info.preql          41 city parquets, each
+#                                                        its own managed asset,
+#                                                        so one portal's outage
+#                                                        fails one asset
+#   publish-landmarks   raw/full_landmark_publish.preql   this file: reads the
+#                                                        published parquets and
+#                                                        reaches no portal at all
+#
+# ---------------------------------------------------------------------------
+# One datasource over forty-one files, and no city models
+# ---------------------------------------------------------------------------
+#
+# `file [...]` is a single DuckDB multi-file scan, and the mixed schema is fine
+# because only the shared columns are projected -- every city's parquet carries
+# its own extras (SF's `landmark_number`, Paris's `arrondissement`, Taipei's
+# `property_type`) and they simply are not read here.
+#
+# The keys and properties are declared locally rather than imported from
+# `landmark_common`, for the same reason `full_tree_publish.preql` declares its
+# own: there `latitude` and `longitude` are `auto`s derived from `geometry_raw`,
+# a column the published parquets do not carry, so importing it would ask the
+# planner for a column that only the city scripts can produce -- which is the
+# coupling this file exists to remove.
+#
+# **`geometry` is deliberately not republished.** The per-city parquets keep it
+# and the per-city models still expose it; the union's only consumer is the
+# browser worker, which selects `landmark_id, city, name, latitude, longitude`
+# and never the geometry. Carrying it would mean reconstructing a
+# `GEOMETRY('OGC:CRS84')` column from parquets that hold the derived value and
+# not the WKT it came from, and the only way to do that from lat/lon would
+# silently flatten every designated parcel to a point. A column no consumer
+# reads does not need a `data_version` bump (see "Data Versioning" in
+# EXTENDING.md).
+#
+# ---------------------------------------------------------------------------
+# A refresh target, not an unconditional `copy into`
+# ---------------------------------------------------------------------------
+#
+# A tick where no city has republished exits `up_to_date` after forty-one HEAD
+# requests instead of rewriting 32k rows to say nothing changed, and a managed
+# target is a derivable output should anything ever need to be ordered after it.
+
+import core;
+
+key landmark_id string;
+property landmark_id.name string;
+property landmark_id.latitude float;
+property landmark_id.longitude float;
+
+# When any city last published its landmark parquet, from the objects rather
+# than from a column inside them. See landmark_parquet_probe.py for why.
+property <*>.latest_landmark_update_through datetime;
+
+root datasource landmark_parquet_publication (
+    data_updated_through: latest_landmark_update_through
+)
+file `./landmark_parquet_probe.py`;
+
+# Every published city landmark parquet, read as one scan. Adding a city is one
+# line here; `test_landmark_union_reads_every_city` fails if this list and the
+# set of city landmark models disagree, because a city missing from it simply
+# never reaches the map's cross-city landmark layer with nothing reporting it.
+root datasource city_published_landmarks (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    latitude: ?latitude,
+    longitude: ?longitude,
+)
+grain (landmark_id)
+file [
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/arbue_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/aumel_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/caajx_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cabur_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cacal_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/caedm_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cahfx_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cakel_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cakgn_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/calet_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/calon_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/camis_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/camon_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/camtl_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/canwe_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/caott_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/caque_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cator_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cavan_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cavic_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cawpg_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cobog_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/deber_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/dkcph_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/fihel_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/frpar_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/gblon_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/grath_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/grmlo_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/grsan_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/jptyo_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/nlams_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/twtpe_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usbos_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usbtv_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usden_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/uslax_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usnyc_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/ussfo_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/ustem_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/uswas_landmark_info_v{data_version}.parquet`
+];
+
+
+datasource full_landmark_info (
+    landmark_id,
+    city,
+    name,
+    ?latitude,
+    ?longitude,
+    latest_landmark_update_through,
+)
+grain (landmark_id)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/full_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/full_landmark_info_v{data_version}.parquet`
+# Tempe's and Washington DC's landmark CSVs are header-only -- both cities are on
+# the hand-uploaded staging path and neither has a landmark source yet -- and a
+# header-only CSV materialises as one row of all nulls rather than no rows. Two
+# such rows reached the union, sharing a null `landmark_id` against a target whose
+# grain is that column. Same clause and same reason as `tree_predictions.preql`.
+where landmark_id is not null
+freshness by latest_landmark_update_through;

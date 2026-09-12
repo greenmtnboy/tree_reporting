@@ -406,6 +406,76 @@ def test_the_core_reads_only_published_parquets():
         )
 
 
+def test_landmark_union_reads_every_city():
+    """A city missing from the landmark publisher never reaches the map's
+    cross-city landmark layer, with nothing anywhere reporting it.
+
+    The tree rollup's twin, `test_rollup_reads_every_city`, and for the same
+    reason: the list form is easy to leave a city out of.  Keyed on the set of
+    city landmark models rather than on `MUNICIPAL_DATA_SOURCES`, because every
+    city has landmarks including the community-only ones whose municipal tuple
+    is empty.
+    """
+    text = statements(DATA_DIR / "raw/full_landmark_publish.preql")
+    listed = set(re.findall(r"landmarks/([a-z]{5})_landmark_info_v", text))
+    expected = {
+        path.parent.name for path in (DATA_DIR / "raw").glob("*/*_landmarks.preql")
+    }
+    assert listed == expected, (
+        f"the landmark publisher reads {sorted(listed)} but the cities with a "
+        f"landmark model are {sorted(expected)}; missing: {sorted(expected - listed)}"
+    )
+    assert "{data_version}" in text, (
+        "the publisher's paths must interpolate data_version, not hardcode a version"
+    )
+
+
+def test_the_landmark_union_reaches_no_portal():
+    """The union must not import a city model, which is what broke it.
+
+    While `landmark_info.preql` declared the union *and* imported all forty-one
+    cities, building it executed ~15 landmark scripts against live portals in one
+    query, and any one raising aborted it -- Paris's portal closing its API took
+    the whole lane down on 2026-09-12.  The publisher now reads the published
+    parquets, and this asserts it has not re-acquired an import.
+    """
+    text = statements(DATA_DIR / "raw/full_landmark_publish.preql")
+    for code in {path.parent.name for path in (DATA_DIR / "raw").glob("*/*_landmarks.preql")}:
+        assert f"import {code}." not in text, (
+            f"full_landmark_publish.preql imports {code}'s model, so one city's "
+            "portal outage can abort the whole union again"
+        )
+    assert "import landmark_common" not in text, (
+        "importing landmark_common makes latitude/longitude `auto`s over "
+        "geometry_raw, a column the published parquets do not carry -- the "
+        "planner would have to read the city scripts to satisfy them"
+    )
+    assert "import landmark_info" not in text, (
+        "landmark_info.preql imports every city model"
+    )
+
+
+def test_the_landmark_union_is_published_after_its_inputs():
+    """Two jobs, and the union must not run first.
+
+    There is no derived edge to rely on (forty-one parquet addresses in, forty-one
+    differently-named producers), so the ordering is wall clock and this is what
+    keeps it.  A union that ran before the per-city refresh would publish last
+    week's rows every week.
+    """
+    by_key = jobs_by_key()
+    per_city = by_key["refresh-landmarks"]["schedule"].split()
+    union = by_key["publish-landmarks"]["schedule"].split()
+    assert per_city[5] == union[5], (
+        "the two landmark jobs must fire on the same day; "
+        f"per-city is {per_city[5]}, union is {union[5]}"
+    )
+    assert int(union[2]) > int(per_city[2]), (
+        f"publish-landmarks fires at hour {union[2]} and refresh-landmarks at "
+        f"{per_city[2]}; the union must come second or it publishes stale rows"
+    )
+
+
 # ---------------------------------------------------------------------------
 # The workspace bundle
 # ---------------------------------------------------------------------------

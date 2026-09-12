@@ -1,6 +1,126 @@
 {
   "_comment": "Distinct freshness watermarks observed per probe, oldest first, written by portal_cadence.py --record. Each entry is one upstream publication; the gaps between them are the measured cadence the per-city crons in ../trilogy.toml are set from. Append-only in practice -- deleting entries throws away the only cadence measurement this project has.",
   "watermarks": {
+    "landmarks:aumel/melbourne_landmarks_probe.py": [
+      "2021-03-12T00:00:00+00:00"
+    ],
+    "landmarks:caajx/ajax_landmarks_probe.py": [
+      "2015-11-10T00:00:00+00:00"
+    ],
+    "landmarks:cabur/burlington_on_landmarks_probe.py": [
+      "2026-09-11T02:25:09+00:00"
+    ],
+    "landmarks:cacal/calgary_landmarks_probe.py": [
+      "2026-04-01T23:00:44+00:00"
+    ],
+    "landmarks:caedm/edmonton_landmarks_probe.py": [
+      "2026-08-28T07:03:46+00:00"
+    ],
+    "landmarks:cahfx/halifax_landmarks_probe.py": [
+      "2026-09-06T08:55:40.286000+00:00"
+    ],
+    "landmarks:cakel/kelowna_landmarks_probe.py": [
+      "2026-09-12T16:00:14.183000+00:00"
+    ],
+    "landmarks:cakgn/kingston_landmarks_probe.py": [
+      "2023-06-28T18:27:38+00:00"
+    ],
+    "landmarks:calet/lethbridge_landmarks_probe.py": [
+      "2025-09-15T23:36:15+00:00"
+    ],
+    "landmarks:calon/longueuil_landmarks_probe.py": [
+      "2024-03-01T21:08:10.589867+00:00"
+    ],
+    "landmarks:camis/mississauga_landmarks_probe.py": [
+      "2026-09-12T00:10:03.683000+00:00"
+    ],
+    "landmarks:camon/moncton_landmarks_probe.py": [
+      "2025-08-18T18:00:22.587000+00:00"
+    ],
+    "landmarks:camtl/montreal_landmarks_probe.py": [
+      "2026-05-11T13:50:25.012955+00:00"
+    ],
+    "landmarks:canwe/new_westminster_landmarks_probe.py": [
+      "2026-04-08T18:43:46.910000+00:00"
+    ],
+    "landmarks:caott/ottawa_landmarks_probe.py": [
+      "2022-12-16T19:30:07+00:00"
+    ],
+    "landmarks:caque/quebec_landmarks_probe.py": [
+      "2026-05-11T13:50:25.012955+00:00"
+    ],
+    "landmarks:cator/toronto_landmarks_probe.py": [
+      "2026-02-20T19:04:38.238708+00:00"
+    ],
+    "landmarks:cavan/vancouver_landmarks_probe.py": [
+      "2023-03-23T16:15:25+00:00"
+    ],
+    "landmarks:cavic/victoria_landmarks_probe.py": [
+      "2025-11-06T20:33:34+00:00"
+    ],
+    "landmarks:cawpg/winnipeg_landmarks_probe.py": [
+      "2026-09-07T09:47:04+00:00"
+    ],
+    "landmarks:cobog/bogota_landmarks_probe.py": [
+      "2022-12-06T20:42:54.331834+00:00"
+    ],
+    "landmarks:deber/berlin_landmarks_probe.py": [
+      "2026-08-21T02:20:06+00:00"
+    ],
+    "landmarks:dkcph/copenhagen_landmarks_probe.py": [
+      "2026-09-11T00:00:00+00:00"
+    ],
+    "landmarks:fihel/helsinki_landmarks_probe.py": [
+      "2026-08-11T00:00:00+00:00"
+    ],
+    "landmarks:frpar/paris_landmarks_probe.py": [
+      "2026-09-10T01:17:07+00:00"
+    ],
+    "landmarks:gblon/london_landmarks_probe.py": [
+      "2026-08-21T02:20:11+00:00"
+    ],
+    "landmarks:grath/athens_landmarks_probe.py": [
+      "2026-09-04T03:00:19+00:00"
+    ],
+    "landmarks:grmlo/milos_landmarks_probe.py": [
+      "2026-09-04T03:00:34+00:00"
+    ],
+    "landmarks:grsan/santorini_landmarks_probe.py": [
+      "2026-09-04T03:00:54+00:00"
+    ],
+    "landmarks:jptyo/tokyo_landmarks_probe.py": [
+      "2025-12-12T07:32:40.457577+00:00"
+    ],
+    "landmarks:nlams/amsterdam_landmarks_probe.py": [
+      "2024-01-01T00:00:00+00:00"
+    ],
+    "landmarks:twtpe/taipei_landmarks_probe.py": [
+      "2026-09-07T08:39:52+00:00"
+    ],
+    "landmarks:usbos/boston_landmarks_probe.py": [
+      "2026-09-06T14:02:41.077236+00:00"
+    ],
+    "landmarks:usbtv/burlington_landmarks_probe.py": [
+      "2026-08-21T14:10:48+00:00"
+    ],
+    "landmarks:usden/denver_landmarks_probe.py": [
+      "2026-08-07T16:32:17.172000+00:00"
+    ],
+    "landmarks:uslax/losangeles_landmarks_probe.py": [
+      "2026-09-10T09:07:12.218000+00:00"
+    ],
+    "landmarks:usnyc/nyc_landmarks_probe.py": [
+      "2026-06-30T13:45:46+00:00"
+    ],
+    "landmarks:ussfo/sf_landmarks_probe.py": [
+      "2024-05-03T14:22:15+00:00"
+    ],
+    "landmarks:ustem/tempe_landmarks_probe.py": [
+      "2026-08-21T14:10:54+00:00"
+    ],
+    "landmarks:uswas/washingtondc_landmarks_probe.py": [
+      "2026-08-21T14:11:00+00:00"
+    ],
     "portal:arbue/buenosaires_update_time.py": [
       "2026-06-18T17:52:39.010742+00:00"
     ],

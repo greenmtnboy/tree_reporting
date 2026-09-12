@@ -1,3 +1,15 @@
+# Per-city landmark refresh: every city's landmark model, imported so that one
+# `refresh-landmarks` job rebuilds all forty-one published parquets.
+#
+# Each city's published target is its own managed asset, so a portal outage
+# fails that city and leaves the other forty alone -- which is the whole reason
+# the cross-city union moved out to `full_landmark_publish.preql`.
+#
+# Unlike the tree lane there is no per-city landmark job: the fetch is a bespoke
+# script per city rather than one shared module, so splitting this forty-one ways
+# is a code-sharing job first. See "Landmarks are still one refresh lane" in
+# EXTENDING.md.
+
 import landmark_common;
 import ussfo.sf_landmarks;
 import usnyc.nyc_landmarks;
@@ -41,18 +53,9 @@ import twtpe.taipei_landmarks;
 import dkcph.copenhagen_landmarks;
 import fihel.helsinki_landmarks;
 
-
-# --- Merged union datasource ---
-
-datasource landmark_info (
-    landmark_id,
-    city,
-    name,
-    ?geometry,
-    ?latitude,
-    ?longitude,
-    latest_landmark_update_through
-)
-grain (landmark_id)
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/full_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/full_landmark_info_v{data_version}.parquet`
-freshness by latest_landmark_update_through;
+# The cross-city union is NOT declared here. It lives in
+# `full_landmark_publish.preql`, which reads the parquets these imports publish
+# and reaches no portal at all -- see that file's header for the outage this
+# separation fixes. Refreshing this entrypoint refreshes the forty-one city
+# parquets and nothing else, so one city's portal being unwell fails one asset
+# instead of the union.
