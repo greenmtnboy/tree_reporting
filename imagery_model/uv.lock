@@ -2332,6 +2332,7 @@ imagery = [
     { name = "pystac-client" },
     { name = "rasterio", version = "1.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "rasterio", version = "1.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "tensorboard" },
 ]
 train = [
     { name = "lightning" },
@@ -2363,6 +2364,7 @@ imagery = [
     { name = "planetary-computer", specifier = ">=1.0" },
     { name = "pystac-client", specifier = ">=0.9" },
     { name = "rasterio", specifier = ">=1.4" },
+    { name = "tensorboard", specifier = ">=2.18" },
 ]
 train = [
     { name = "lightning", specifier = ">=2.5" },

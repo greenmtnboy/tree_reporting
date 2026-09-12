@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
@@ -81,6 +82,8 @@ def _validate_raster(
     path: Path,
     config: ProjectConfig,
     record: dict[str, object],
+    *,
+    expected_resolution_m: float | None = None,
 ) -> dict[str, object]:
     try:
         import rasterio
@@ -100,7 +103,7 @@ def _validate_raster(
             )
 
         x_resolution, y_resolution = (abs(float(value)) for value in source.res)
-        expected_resolution = config.imagery.resolution_m
+        expected_resolution = expected_resolution_m or config.imagery.resolution_m
         resolution_tolerance = max(0.01, expected_resolution * 0.02)
         if (
             abs(x_resolution - expected_resolution) > resolution_tolerance
@@ -219,12 +222,22 @@ def index_stac_coverage(config: ProjectConfig) -> dict[str, object]:
         if imagery.asset_key not in item.assets:
             continue
         asset = item.assets[imagery.asset_key]
+        item_bbox = item.bbox
+        inventory_tree_count = 0
+        if item_bbox and len(item_bbox) >= 4:
+            inventory_tree_count = int(
+                (
+                    frame["longitude"].between(float(item_bbox[0]), float(item_bbox[2]))
+                    & frame["latitude"].between(float(item_bbox[1]), float(item_bbox[3]))
+                ).sum()
+            )
         records.append(
             {
                 "id": item.id,
                 "collection": item.collection_id,
                 "datetime": item.datetime.isoformat() if item.datetime else None,
                 "bbox": item.bbox,
+                "inventory_tree_count": inventory_tree_count,
                 "asset_key": imagery.asset_key,
                 "asset_href": asset.href,
                 "asset_media_type": asset.media_type,
@@ -257,7 +270,28 @@ def index_stac_coverage(config: ProjectConfig) -> dict[str, object]:
         + "\n",
         encoding="utf-8",
     )
-    return {"items": len(records), "path": str(index_path), "bbox": bbox}
+    items_by_year: dict[str, int] = {}
+    for record in records:
+        year = str(record.get("properties", {}).get("naip:year") or "unknown")
+        items_by_year[year] = items_by_year.get(year, 0) + 1
+    ranked = sorted(
+        records,
+        key=lambda record: (-int(record["inventory_tree_count"]), str(record["id"])),
+    )
+    return {
+        "items": len(records),
+        "items_by_year": items_by_year,
+        "top_items_by_inventory_count": [
+            {
+                "id": record["id"],
+                "year": record.get("properties", {}).get("naip:year"),
+                "inventory_tree_count": record["inventory_tree_count"],
+            }
+            for record in ranked[:12]
+        ],
+        "path": str(index_path),
+        "bbox": bbox,
+    }
 
 
 def fetch_stac_item(
@@ -291,7 +325,14 @@ def fetch_stac_item(
     manifest_path = output_dir / f"{item_id}.manifest.json"
 
     if destination.exists() and not overwrite:
-        raster = _validate_raster(destination, config, record)
+        raster = _validate_raster(
+            destination,
+            config,
+            record,
+            expected_resolution_m=(
+                config.imagery.source_resolution_m or config.imagery.resolution_m
+            ),
+        )
         existing_manifest = (
             json.loads(manifest_path.read_text(encoding="utf-8"))
             if manifest_path.exists()
@@ -312,7 +353,14 @@ def fetch_stac_item(
     temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.part")
     try:
         downloaded, expected_bytes, sha256 = _stream_download(signed_href, temporary)
-        raster = _validate_raster(temporary, config, record)
+        raster = _validate_raster(
+            temporary,
+            config,
+            record,
+            expected_resolution_m=(
+                config.imagery.source_resolution_m or config.imagery.resolution_m
+            ),
+        )
         os.replace(temporary, destination)
     finally:
         temporary.unlink(missing_ok=True)
@@ -341,6 +389,27 @@ def fetch_stac_item(
     }
 
 
+def fetch_configured_stac_items(
+    config: ProjectConfig,
+    *,
+    overwrite: bool = False,
+) -> dict[str, object]:
+    """Fetch the explicit, reproducible imagery footprint declared by a city config."""
+    if not config.imagery.item_ids:
+        raise ValueError("imagery.item_ids is empty; select indexed STAC items first")
+    results = [
+        fetch_stac_item(config, item_id, overwrite=overwrite)
+        for item_id in config.imagery.item_ids
+    ]
+    return {
+        "city": config.inventory.city,
+        "items": len(results),
+        "downloaded": sum(result["status"] == "downloaded" for result in results),
+        "existing": sum(result["status"] == "existing" for result in results),
+        "results": results,
+    }
+
+
 def build_vrt_mosaic(
     config: ProjectConfig,
     year: str,
@@ -360,7 +429,16 @@ def build_vrt_mosaic(
 
     city = config.inventory.city.lower()
     imagery_dir = config.paths.root / "imagery" / city / year
-    sources = sorted(imagery_dir.glob("*.tif"))
+    downloaded = {path.stem: path for path in imagery_dir.glob("*.tif")}
+    if config.imagery.item_ids:
+        missing = [item_id for item_id in config.imagery.item_ids if item_id not in downloaded]
+        if missing:
+            raise FileNotFoundError(
+                "configured imagery items have not been downloaded: " + ", ".join(missing)
+            )
+        sources = [downloaded[item_id] for item_id in config.imagery.item_ids]
+    else:
+        sources = sorted(downloaded.values())
     if not sources:
         raise FileNotFoundError(f"no downloaded GeoTIFFs found under {imagery_dir}")
 
@@ -394,8 +472,8 @@ def build_vrt_mosaic(
     reference_crs = None
     reference_count = 0
     reference_dtypes: tuple[str, ...] = ()
-    x_resolution = 0.0
-    y_resolution = 0.0
+    reference_source_x_resolution = 0.0
+    reference_source_y_resolution = 0.0
     left = float("inf")
     top = float("-inf")
     for source_path in sources:
@@ -404,21 +482,21 @@ def build_vrt_mosaic(
                 raise ValueError(f"source raster has no CRS: {source_path}")
             if source.transform.b != 0 or source.transform.d != 0:
                 raise ValueError(f"rotated source rasters are not supported: {source_path}")
-            source_x_resolution, source_y_resolution = (
+            current_x_resolution, current_y_resolution = (
                 abs(float(value)) for value in source.res
             )
             if not source_records:
                 reference_crs = source.crs
                 reference_count = source.count
                 reference_dtypes = tuple(source.dtypes)
-                x_resolution = source_x_resolution
-                y_resolution = source_y_resolution
+                reference_source_x_resolution = current_x_resolution
+                reference_source_y_resolution = current_y_resolution
             elif (
                 source.crs != reference_crs
                 or source.count != reference_count
                 or tuple(source.dtypes) != reference_dtypes
-                or abs(source_x_resolution - x_resolution) > 1e-9
-                or abs(source_y_resolution - y_resolution) > 1e-9
+                or abs(current_x_resolution - reference_source_x_resolution) > 1e-9
+                or abs(current_y_resolution - reference_source_y_resolution) > 1e-9
             ):
                 raise ValueError("mosaic sources must share CRS, band count, dtype, and resolution")
             left = min(left, float(source.bounds.left))
@@ -434,22 +512,70 @@ def build_vrt_mosaic(
                 }
             )
 
-    for record in source_records:
-        column_offset = (float(record["left"]) - left) / x_resolution
-        row_offset = (top - float(record["top"])) / y_resolution
-        rounded_column = round(column_offset)
-        rounded_row = round(row_offset)
-        if abs(column_offset - rounded_column) > 1e-6 or abs(row_offset - rounded_row) > 1e-6:
-            raise ValueError("mosaic sources are not aligned to a common pixel grid")
-        record["column_offset"] = rounded_column
-        record["row_offset"] = rounded_row
+    target_resolution = config.imagery.resolution_m
+    expected_source_resolution = (
+        config.imagery.source_resolution_m or target_resolution
+    )
+    tolerance = max(0.01, expected_source_resolution * 0.02)
+    if (
+        abs(reference_source_x_resolution - expected_source_resolution) > tolerance
+        or abs(reference_source_y_resolution - expected_source_resolution) > tolerance
+    ):
+        raise ValueError(
+            "mosaic source resolution does not match imagery.source_resolution_m: "
+            f"expected {expected_source_resolution} m, got "
+            f"{reference_source_x_resolution} x {reference_source_y_resolution}"
+        )
+    if target_resolution < reference_source_x_resolution:
+        raise ValueError("mosaic upsampling is not supported")
 
-    width = max(int(record["column_offset"]) + int(record["width"]) for record in source_records)
-    height = max(int(record["row_offset"]) + int(record["height"]) for record in source_records)
+    for record in source_records:
+        source_column_offset = (
+            float(record["left"]) - left
+        ) / reference_source_x_resolution
+        source_row_offset = (
+            top - float(record["top"])
+        ) / reference_source_y_resolution
+        rounded_source_column = round(source_column_offset)
+        rounded_source_row = round(source_row_offset)
+        if any(
+            abs(value - rounded) > 1e-6
+            for value, rounded in (
+                (source_column_offset, rounded_source_column),
+                (source_row_offset, rounded_source_row),
+            )
+        ):
+            raise ValueError("mosaic sources are not aligned to a common pixel grid")
+
+        column_offset = (float(record["left"]) - left) / target_resolution
+        row_offset = (top - float(record["top"])) / target_resolution
+        output_width = (
+            int(record["width"]) * reference_source_x_resolution / target_resolution
+        )
+        output_height = (
+            int(record["height"]) * reference_source_y_resolution / target_resolution
+        )
+        # GDAL VRT destination rectangles are allowed to be fractional. That is
+        # necessary when a native-resolution tile begins or ends halfway through
+        # a coarser model pixel (for example, 30 cm NAIP on a 60 cm model grid).
+        record["column_offset"] = column_offset
+        record["row_offset"] = row_offset
+        record["output_width"] = output_width
+        record["output_height"] = output_height
+
+    width = math.ceil(max(
+        float(record["column_offset"]) + float(record["output_width"])
+        for record in source_records
+    ))
+    height = math.ceil(max(
+        float(record["row_offset"]) + float(record["output_height"])
+        for record in source_records
+    ))
     vrt = ET.Element("VRTDataset", rasterXSize=str(width), rasterYSize=str(height))
     ET.SubElement(vrt, "SRS").text = reference_crs.to_wkt()  # type: ignore[union-attr]
     ET.SubElement(vrt, "GeoTransform").text = (
-        f"{left:.15g}, {x_resolution:.15g}, 0, {top:.15g}, 0, {-y_resolution:.15g}"
+        f"{left:.15g}, {target_resolution:.15g}, 0, "
+        f"{top:.15g}, 0, {-target_resolution:.15g}"
     )
     for band_index, dtype in enumerate(reference_dtypes, start=1):
         try:
@@ -474,6 +600,8 @@ def build_vrt_mosaic(
                 relativeToVRT="1",
             ).text = relative_path
             ET.SubElement(simple_source, "SourceBand").text = str(band_index)
+            if target_resolution != reference_source_x_resolution:
+                ET.SubElement(simple_source, "Resampling").text = "average"
             ET.SubElement(
                 simple_source,
                 "SrcRect",
@@ -487,8 +615,8 @@ def build_vrt_mosaic(
                 "DstRect",
                 xOff=str(record["column_offset"]),
                 yOff=str(record["row_offset"]),
-                xSize=str(record["width"]),
-                ySize=str(record["height"]),
+                xSize=str(record["output_width"]),
+                ySize=str(record["output_height"]),
             )
 
     temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
@@ -526,8 +654,10 @@ def build_vrt_mosaic(
                 "sha256": source_manifest.get("sha256"),
                 "bounds": [
                     float(record["left"]),
-                    float(record["top"]) - int(record["height"]) * y_resolution,
-                    float(record["left"]) + int(record["width"]) * x_resolution,
+                    float(record["top"])
+                    - int(record["height"]) * reference_source_y_resolution,
+                    float(record["left"])
+                    + int(record["width"]) * reference_source_x_resolution,
                     float(record["top"]),
                 ],
             }

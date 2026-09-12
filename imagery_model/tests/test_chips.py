@@ -3,12 +3,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 import rasterio
 from pyproj import Transformer
 from rasterio.transform import from_origin
 
 from urban_tree_ml.chips import build_chips
-from urban_tree_ml.config import load_config
+from urban_tree_ml.config import ReferenceConfig, load_config
 
 
 def test_build_chips_materializes_targets_and_training_statistics(tmp_path: Path) -> None:
@@ -90,6 +91,27 @@ def test_build_chips_materializes_targets_and_training_statistics(tmp_path: Path
     labels = pd.read_parquet(summary["labels"])
     assert set(labels["tree_id"]) == {"complete-tree", "detection-only-tree"}
 
+    reference_normalization = tmp_path / "sf-normalization.json"
+    reference_normalization.write_text(
+        json.dumps({"mean": [10, 20, 30, 40], "std": [2, 3, 4, 5]}),
+        encoding="utf-8",
+    )
+    config.dataset = "external-city-fixture"
+    config.reference = ReferenceConfig(
+        taxonomy_path=tmp_path / "sf-taxonomy.json",
+        normalization_path=reference_normalization,
+    )
+
+    external_summary = build_chips(config, raster_path)
+
+    applied = json.loads(Path(external_summary["normalization"]).read_text(encoding="utf-8"))
+    local = json.loads(
+        Path(external_summary["local_normalization"]).read_text(encoding="utf-8")
+    )
+    assert applied["mean"] == [10.0, 20.0, 30.0, 40.0]
+    assert applied["std"] == [2.0, 3.0, 4.0, 5.0]
+    assert local["mean"] == pytest.approx([50 / 255, 50 / 255, 50 / 255, 100 / 255])
+
 
 def test_build_chips_applies_finalized_registration_feedback(tmp_path: Path) -> None:
     config_path = Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml"
@@ -154,6 +176,18 @@ def test_build_chips_applies_finalized_registration_feedback(tmp_path: Path) -> 
                         "north_m": 0.0,
                     }
                 ],
+                "region_overrides": [
+                    {
+                        "region_id": "protect-background-tree",
+                        "mode": "protect",
+                        "splits": ["train"],
+                        "anchor_longitude": coordinates[0][0],
+                        "anchor_latitude": coordinates[0][1],
+                        "east_m": 36.0,
+                        "north_m": -36.0,
+                        "radius_m": 6.0,
+                    }
+                ],
             }
         ),
         encoding="utf-8",
@@ -166,6 +200,9 @@ def test_build_chips_applies_finalized_registration_feedback(tmp_path: Path) -> 
         assert chip["center"][64, 66] == 1
         assert chip["center"][32, 33] == 0
         assert chip["detection_mask"][32, 33] == 0
+        assert chip["detection_mask"][94, 94] == 0
     assert summary["feedback_excluded_points"] == 1
     assert summary["feedback_point_corrected_points"] == 1
+    assert summary["feedback_mask_regions"] == 1
+    assert summary["feedback_region_chip_intersections"] == 1
     assert summary["registration_correction_m"] == {"east": 1.2, "north": 0.0}

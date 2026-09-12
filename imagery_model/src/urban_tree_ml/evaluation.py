@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import json
 import math
+import re
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from urban_tree_ml.config import ProjectConfig
+from urban_tree_ml.config import ProjectConfig, taxonomy_path
+
+_COHORT_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 
 def _greedy_matches(
@@ -199,6 +203,8 @@ def _decode_batch(
     *,
     max_detections_per_chip: int,
     nms_kernel: int,
+    target_center: Any | None = None,
+    detection_mask: Any | None = None,
 ) -> list[dict[str, object]]:
     import torch
     from torch.nn import functional as functional
@@ -236,11 +242,20 @@ def _decode_batch(
         genus_confidence_cpu = genus_confidence.float().cpu().numpy()
         species_ids_cpu = species_ids.cpu().numpy()
         species_values_cpu = species_values.float().cpu().numpy()
+        target_center_cpu = (
+            target_center[batch_index].float().cpu().numpy()
+            if target_center is not None
+            else None
+        )
+        detection_mask_cpu = (
+            detection_mask[batch_index].float().cpu().numpy()
+            if detection_mask is not None
+            else None
+        )
         for index, location in enumerate(locations_cpu):
             y, x = (int(location[0]), int(location[1]))
             dbh_log1p = float(dbh_cpu[index])
-            records.append(
-                {
+            record: dict[str, object] = {
                     "chip_id": str(chip_id),
                     "output_x": x,
                     "output_y": y,
@@ -252,8 +267,11 @@ def _decode_batch(
                     "species_id": int(species_ids_cpu[index, 0]),
                     "species_confidence": float(species_values_cpu[index, 0]),
                     "species_top_ids": [int(value) for value in species_ids_cpu[index]],
-                }
-            )
+            }
+            if target_center_cpu is not None and detection_mask_cpu is not None:
+                record["center_target"] = float(target_center_cpu[y, x])
+                record["detection_mask_value"] = float(detection_mask_cpu[y, x])
+            records.append(record)
     return records
 
 
@@ -299,11 +317,18 @@ def run_evaluation(
     split: str = "validation",
     device_name: str = "auto",
     allow_test: bool = False,
+    cohort: str | None = None,
 ) -> dict[str, object]:
     if split not in {"train", "validation", "test"}:
         raise ValueError("split must be train, validation, or test")
     if split == "test" and not allow_test:
         raise ValueError("test evaluation is sealed; pass --allow-test after decisions are frozen")
+    output_cohort = cohort or split
+    if _COHORT_NAME.fullmatch(output_cohort) is None:
+        raise ValueError(
+            "evaluation cohort must start with a lowercase letter or digit and contain only "
+            "lowercase letters, digits, and hyphens"
+        )
     try:
         import torch
         from torch.utils.data import DataLoader
@@ -321,10 +346,8 @@ def run_evaluation(
     labels_path = chip_root / "labels.parquet"
     if not labels_path.exists():
         raise FileNotFoundError("labels.parquet is missing; rebuild chips with the current code")
-    taxonomy_path = (
-        config.paths.root / "inventory" / config.inventory.city.lower() / "taxonomy.json"
-    )
-    taxonomy = json.loads(taxonomy_path.read_text(encoding="utf-8"))
+    selected_taxonomy_path = taxonomy_path(config)
+    taxonomy = json.loads(selected_taxonomy_path.read_text(encoding="utf-8"))
     device = (
         torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if device_name == "auto"
@@ -376,6 +399,8 @@ def run_evaluation(
                     list(batch["chip_id"]),
                     max_detections_per_chip=config.evaluation.max_detections_per_chip,
                     nms_kernel=config.evaluation.nms_kernel,
+                    target_center=batch["center"],
+                    detection_mask=batch["detection_mask"],
                 )
             )
 
@@ -391,6 +416,8 @@ def run_evaluation(
         "species_id",
         "species_confidence",
         "species_top_ids",
+        "center_target",
+        "detection_mask_value",
     ]
     predictions = pd.DataFrame.from_records(prediction_records, columns=prediction_columns)
     manifest = pd.read_parquet(manifest_path)
@@ -452,7 +479,11 @@ def run_evaluation(
             ),
         }
 
-    output_dir = config.paths.root / "runs" / config.experiment / "evaluation" / split
+    checkpoint_run_dir = (
+        checkpoint.parent.parent if checkpoint.parent.name == "checkpoints" else None
+    )
+    run_dir = checkpoint_run_dir or (config.paths.root / "runs" / config.experiment)
+    output_dir = run_dir / "evaluation" / output_cohort
     output_dir.mkdir(parents=True, exist_ok=True)
     predictions_path = output_dir / "predictions.parquet"
     matches_path = output_dir / "matches.parquet"
@@ -469,6 +500,10 @@ def run_evaluation(
     )
     result: dict[str, object] = {
         "checkpoint": str(checkpoint),
+        "run_id": run_dir.name,
+        "cohort": output_cohort,
+        "city": config.inventory.city,
+        "dataset": config.dataset,
         "split": split,
         "device": str(device),
         "chips": len(dataset),
@@ -482,7 +517,32 @@ def run_evaluation(
         "matches": str(matches_path),
         "ground_truth": str(ground_truth_path),
         "taxonomy": str(taxonomy_output_path),
+        "taxonomy_source": str(selected_taxonomy_path),
+        "normalization_source": str(chip_root / "normalization.json"),
+        "source_raster": str(source_raster) if source_raster is not None else None,
     }
+    evaluation_metadata_path = output_dir / "evaluation-metadata.json"
+    evaluation_metadata_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "created_at": datetime.now(UTC).isoformat(),
+                "run_id": run_dir.name,
+                "cohort": output_cohort,
+                "split": split,
+                "city": config.inventory.city,
+                "dataset": config.dataset,
+                "checkpoint": str(checkpoint),
+                "source_raster": str(source_raster) if source_raster is not None else None,
+                "config": config.model_dump(mode="json"),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    result["evaluation_metadata"] = str(evaluation_metadata_path)
     metrics_path = output_dir / "metrics.json"
     metrics_path.write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"

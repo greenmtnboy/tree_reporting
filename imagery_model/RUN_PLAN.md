@@ -141,7 +141,16 @@ assign each sample a verdict. Reviews auto-save to disk while retaining browser-
 export copies. Select **Finalize training feedback** after at least 20 training examples are
 reviewed. The resulting `training-feedback.json` contains a training-only robust tile correction,
 exact per-tree corrections for explicit offset verdicts, validation residuals, and explicit
-`not-tree`/`uncertain` exclusions. Test labels are omitted by default and never contribute.
+`not-tree`/`uncertain`/`duplicate` exclusions. Test labels are omitted by default and never
+contribute.
+
+An optional `qa heuristics` pass records per-point RGB-NIR evidence in the existing review
+manifest while preserving reviews. Its UI action is deliberately two-stage: preview conservative
+low-NIR gray candidates, then explicitly batch-mark them `uncertain` with persisted heuristic
+provenance and an undo control. It never emits `not-tree` labels. Exact-coordinate stacks are
+hidden in review by default because the `discard` collision policy excludes unresolved groups
+from dense target supervision. A reviewer can still show and split resolvable records with
+per-tree offsets.
 
 `chips build` auto-detects this finalized manifest for the selected raster. Explicit point
 corrections replace the global correction for those trees, avoiding double shifts. Excluded points

@@ -36,6 +36,14 @@ class StrictModel(BaseModel):
 
 class PathsConfig(StrictModel):
     root: Path
+    annotations: Path = Path("./annotations")
+
+
+class ReferenceConfig(StrictModel):
+    """Training-owned artifacts reused by an external validation city."""
+
+    taxonomy_path: Path
+    normalization_path: Path
 
 
 class InventoryConfig(StrictModel):
@@ -81,9 +89,22 @@ class ImageryConfig(StrictModel):
     bands: list[int]
     input_scale: float = Field(gt=0)
     resolution_m: float = Field(gt=0)
+    source_resolution_m: float | None = Field(default=None, gt=0)
     chip_pixels: int = Field(ge=32)
     minimum_valid_fraction: float = Field(ge=0, le=1)
     local_raster: Path | None = None
+    item_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def item_ids_are_safe_and_unique(self) -> ImageryConfig:
+        if len(self.item_ids) != len(set(self.item_ids)):
+            raise ValueError("imagery.item_ids must be unique")
+        if any(
+            not value or Path(value).name != value or "/" in value or "\\" in value
+            for value in self.item_ids
+        ):
+            raise ValueError("imagery.item_ids must contain filename-safe STAC identifiers")
+        return self
 
 
 class TargetsConfig(StrictModel):
@@ -144,6 +165,7 @@ class ProjectConfig(StrictModel):
     model: ModelConfig
     training: TrainingConfig
     evaluation: EvaluationConfig
+    reference: ReferenceConfig | None = None
 
     @model_validator(mode="after")
     def channels_match(self) -> ProjectConfig:
@@ -154,15 +176,74 @@ class ProjectConfig(StrictModel):
         return self
 
 
+class StudioCityConfig(StrictModel):
+    city: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$")
+    label: str = Field(min_length=1)
+    config_path: Path
+    raster: Path
+    review_dir: Path | None = None
+    evaluation_dir: Path | None = None
+
+
+class StudioConfig(StrictModel):
+    default_city: str
+    cities: list[StudioCityConfig] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def city_ids_are_unique_and_include_default(self) -> StudioConfig:
+        city_ids = [city.city for city in self.cities]
+        if len(city_ids) != len(set(city_ids)):
+            raise ValueError("studio city identifiers must be unique")
+        if self.default_city not in city_ids:
+            raise ValueError("studio.default_city must name one of studio.cities")
+        return self
+
+
 def load_config(path: str | Path) -> ProjectConfig:
     config_path = Path(path)
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     expanded = _expand_environment(raw)
     config = ProjectConfig.model_validate(expanded)
+    annotations_root = os.environ.get("TREE_ML_ANNOTATIONS_ROOT")
+    if annotations_root:
+        config.paths.annotations = Path(annotations_root)
     if not config.paths.root.is_absolute():
         config.paths.root = (config_path.parent.parent / config.paths.root).resolve()
+    if not config.paths.annotations.is_absolute():
+        config.paths.annotations = (
+            config_path.parent.parent / config.paths.annotations
+        ).resolve()
     if config.imagery.local_raster is not None and not config.imagery.local_raster.is_absolute():
         config.imagery.local_raster = (
             config_path.parent.parent / config.imagery.local_raster
         ).resolve()
+    if config.reference is not None:
+        for field in ("taxonomy_path", "normalization_path"):
+            value = getattr(config.reference, field)
+            if not value.is_absolute():
+                setattr(config.reference, field, (config_path.parent.parent / value).resolve())
     return config
+
+
+def load_studio_config(path: str | Path) -> StudioConfig:
+    config_path = Path(path).resolve()
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    studio = StudioConfig.model_validate(_expand_environment(raw))
+    for city in studio.cities:
+        for field in ("config_path", "raster", "review_dir", "evaluation_dir"):
+            value = getattr(city, field)
+            if value is not None and not value.is_absolute():
+                setattr(city, field, (config_path.parent / value).resolve())
+    return studio
+
+
+def taxonomy_path(config: ProjectConfig) -> Path:
+    if config.reference is not None:
+        return config.reference.taxonomy_path
+    return config.paths.root / "inventory" / config.inventory.city.lower() / "taxonomy.json"
+
+
+def normalization_path(config: ProjectConfig) -> Path:
+    if config.reference is not None:
+        return config.reference.normalization_path
+    return config.paths.root / "chips" / config.dataset / "normalization.json"

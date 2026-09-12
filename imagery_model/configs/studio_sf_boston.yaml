@@ -1,0 +1,16 @@
+default_city: ussfo
+
+cities:
+  - city: ussfo
+    label: San Francisco
+    config_path: sf_naip_citywide_curated.yaml
+    raster: ${TREE_ML_DATA_ROOT:-../artifacts}/imagery/ussfo/2022/ussfo-2022-mosaic.vrt
+    review_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/qa/registration/ussfo-2022-mosaic
+    evaluation_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/runs/sf-naip-rgbn-species-citywide-curated-v2/evaluation/validation
+
+  - city: usbos
+    label: Boston
+    config_path: boston_naip_external.yaml
+    raster: ${TREE_ML_DATA_ROOT:-../artifacts}/imagery/usbos/2023/usbos-2023-external.vrt
+    review_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/qa/registration/usbos-2023-external
+    evaluation_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/runs/sf-naip-rgbn-species-citywide-curated-v2/evaluation/external-usbos
