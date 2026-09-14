@@ -8,32 +8,45 @@
             <button class="welcome-close" @click="dismiss" aria-label="Close">&times;</button>
           </div>
           <div class="welcome-body">
-            <p>
-              This is an interactive explorer of <strong>urban tree populations</strong> across multiple cities.
-              Browse the map to discover the diversity and distribution of trees across the urban forest.
+                        <p>
+              We're glad you're here!
+
             </p>
             <p>
-              You can navigate the map freely, but the experience is best when using the
+              The Urban Tree Explorer is an interactive map of <strong>individual trees</strong> across multiple cities.
+              Navigate across your favorite city to discover the diversity and distribution of trees 
+              in it's urban forest.
+
+            </p>
+            <p>
+              You can navigate the map freely, or optionally use the
               <strong>AI agent assistant</strong> in the chat panel — ask it questions, request
               filters, or let it guide you through interesting patterns in the data.
             </p>
-
+            <p>
+              Tree and city level summary reports, accessible on the left, will
+              give you a quick overview if you want to see a summarized form.
+            </p>
+            <p>
+              You can also navigate by landmark in most cities - this is a great
+              way to explore trees around your favorite parks, buildings,
+              monuments, and other points of interest.
+            </p>
             <div class="welcome-section">
-              <h3>API Access</h3>
+              <h3>Agent API Access</h3>
               <p>
-                You can <strong>bring your own API token</strong> for unlimited use, or try the
-                <strong>demo token</strong> which has a daily spend cap.
+                You can <strong>bring your own API token</strong> for unlimited use, or try a limited
+                use<strong> demo token</strong>.
               </p>
             </div>
 
             <div class="welcome-section">
               <h3>Data Sources</h3>
-              <ul>
-                <li><a href="https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq" target="_blank" rel="noopener">SF Open Data — Street Tree List</a></li>
-                <li><a href="https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh" target="_blank" rel="noopener">NYC Open Data — Street Tree Census</a></li>
-                <li><a href="https://data.boston.gov/dataset/bprd-trees" target="_blank" rel="noopener">City of Boston — Street Trees</a></li>
-                <li><a href="https://opendata.paris.fr/explore/dataset/les-arbres/information/" target="_blank" rel="noopener">Paris Open Data — Les Arbres</a></li>
-              </ul>
+              <p>
+                Tree inventories come from each city's open data portal, enriched with species
+                metadata and landmarks. See the full list on the
+                <router-link to="/info#data-sources" @click="dismiss">data sources page</router-link>.
+              </p>
               <p class="welcome-disclaimer">
                 Species metadata may contain inaccuracies. Corrections are welcome!
               </p>
@@ -172,6 +185,10 @@ function dismiss() {
 
 .welcome-section p {
   margin-bottom: 0;
+}
+
+.welcome-section p + p {
+  margin-top: 8px;
 }
 
 .welcome-section ul {

@@ -17,11 +17,17 @@ async function withDuckDB<T>(fn: (conn: Awaited<ReturnType<DuckDBInstance['conne
 }
 
 describe('parquet schema', () => {
-  test('full_tree_info loads and has required columns including city', async () => {
+  // The rollup is ~300MB and this never needs a row of it. The column list and
+  // the per-column null counts come from the parquet footer alone, and the
+  // (city, data_source) pairs come from a two-column projection that DuckDB
+  // range-reads -- about a second over httpfs, against a full download that
+  // blew the 60s budget on a home connection. Do not `CREATE TABLE ... AS
+  // SELECT *` here.
+  test('full_tree_info has required columns, known cities, and labelled sources', async () => {
     await withDuckDB(async (conn) => {
-      await conn.run(`CREATE TABLE trees AS SELECT * FROM read_parquet('${REMOTE_TREES_PARQUET_URL}')`)
-
-      const colResult = await conn.runAndReadAll(`SELECT column_name FROM information_schema.columns WHERE table_name = 'trees'`)
+      const colResult = await conn.runAndReadAll(
+        `SELECT column_name FROM (DESCRIBE SELECT * FROM read_parquet('${REMOTE_TREES_PARQUET_URL}'))`,
+      )
       const cols = colResult.getRowObjects().map((r) => r.column_name as string)
       const required = [
         'tree_id', 'city', 'species', 'latitude', 'longitude', 'diameter_at_breast_height',
@@ -33,22 +39,29 @@ describe('parquet schema', () => {
         expect(cols, `missing column: ${col}`).toContain(col)
       }
 
-      const countResult = await conn.runAndReadAll(`SELECT city, COUNT(*) AS n FROM trees GROUP BY city ORDER BY city`)
-      const counts = countResult.getRowObjects()
-      expect(counts.length, 'expected at least one city in data').toBeGreaterThan(0)
-      const cities = counts.map((r) => r.city as string)
+      // Every row must be attributable to a source. Row-group statistics carry
+      // the null count per column, so this is a footer read, not a scan.
+      const nullResult = await conn.runAndReadAll(
+        `SELECT COALESCE(SUM(stats_null_count), 0) AS nulls, COUNT(*) AS row_groups
+         FROM parquet_metadata('${REMOTE_TREES_PARQUET_URL}')
+         WHERE path_in_schema = 'data_source'`,
+      )
+      const [nullRow] = nullResult.getRowObjects()
+      expect(Number(nullRow.row_groups), 'no row groups carry a data_source column').toBeGreaterThan(0)
+      expect(Number(nullRow.nulls), 'every tree must carry a data_source').toBe(0)
+
+      const pairResult = await conn.runAndReadAll(
+        `SELECT city, data_source FROM read_parquet('${REMOTE_TREES_PARQUET_URL}') GROUP BY ALL ORDER BY ALL`,
+      )
+      const pairs = pairResult.getRowObjects()
+      expect(pairs.length, 'expected at least one city in data').toBeGreaterThan(0)
+      const cities = new Set(pairs.map((r) => r.city as string))
       expect(cities).toContain('USSFO')
       expect(cities).toContain('USNYC')
 
-      // Every row must be attributable to a source, and every source must be one
-      // the frontend's picklist knows about.
-      const sourceResult = await conn.runAndReadAll(
-        `SELECT DISTINCT data_source FROM trees WHERE data_source IS NOT NULL`,
-      )
-      const sources = sourceResult.getRowObjects().map((r) => r.data_source as string)
+      // ...and every source must be one the frontend's picklist knows about.
+      const sources = [...new Set(pairs.map((r) => r.data_source as string))]
       expect(sources.length, 'expected at least one data_source value').toBeGreaterThan(0)
-      const nullSources = await conn.runAndReadAll(`SELECT COUNT(*) AS n FROM trees WHERE data_source IS NULL`)
-      expect(Number(nullSources.getRowObjects()[0].n), 'every tree must carry a data_source').toBe(0)
       for (const source of sources) {
         expect(formatDataSource(source), `unlabelled data_source: ${source}`).toBeTruthy()
       }

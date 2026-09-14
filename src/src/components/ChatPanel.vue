@@ -713,6 +713,35 @@ watch(
   padding: 0;
 }
 
+/* The shared MarkdownRenderer styles .md-table with light-theme fallbacks
+   (var(--sidebar-bg, #f8f9fa) headers, #e1e5e9 borders). Restyle for our dark surface. */
+.chat-msg-content :deep(.md-table-wrapper) {
+  overflow-x: auto;
+  margin: 6px 0;
+}
+
+.chat-msg-content :deep(.md-table) {
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.chat-msg-content :deep(.md-table th),
+.chat-msg-content :deep(.md-table td) {
+  border: 1px solid rgba(167, 227, 178, 0.18);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.chat-msg-content :deep(.md-table th) {
+  background-color: rgba(47, 125, 79, 0.22);
+  color: var(--color-leaf);
+  font-weight: 600;
+}
+
+.chat-msg-content :deep(.md-table tbody tr:nth-child(even)) {
+  background-color: rgba(167, 227, 178, 0.04);
+}
+
 .chat-tool-pills {
   display: flex;
   flex-direction: column;
