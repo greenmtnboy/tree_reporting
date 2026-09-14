@@ -25,11 +25,22 @@ function toJsonSafeValue(value: unknown): unknown {
     return (value as { toISO: () => string | null }).toISO() ?? null
   }
 
+  if (ArrayBuffer.isView(value)) {
+    return Array.from(value as unknown as ArrayLike<number | bigint>, (item) => toJsonSafeValue(item))
+  }
+
   if (Array.isArray(value)) {
     return value.map((item) => toJsonSafeValue(item))
   }
 
   if (typeof value === 'object' && value !== null) {
+    // The summary and species chats run through the studio library's DuckDB
+    // connection on the main thread, so a LIST cell is still an Arrow Vector
+    // here. JSON.stringify would honour its toJSON, but the Object.entries walk
+    // below runs first and would copy its internals instead. Unwrap it first.
+    if (typeof (value as { toJSON?: unknown }).toJSON === 'function') {
+      return toJsonSafeValue((value as { toJSON: () => unknown }).toJSON())
+    }
     return Object.fromEntries(
       Object.entries(value).map(([key, nestedValue]) => [key, toJsonSafeValue(nestedValue)]),
     )

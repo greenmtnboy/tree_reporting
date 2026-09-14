@@ -105,7 +105,9 @@ test.describe('Chat tool inspector', () => {
       // Filtered to the city on purpose: an unfiltered query resolves to the
       // all-cities rollup, and the browser would download 300MB to answer it
       // (see AGENTS.md, "What the chat resolves against").
-      { name: 'run_query', input: { query: `select species, count(tree_id) as n where city = '${CITY}' order by n desc limit 3;` } },
+      // bloom_months is a LIST column: the worker must hand it over as a plain
+      // array, not the Arrow vector's internals (see workers/normalizeValue.ts).
+      { name: 'run_query', input: { query: `select species, bloom_months, count(tree_id) as n where city = '${CITY}' order by n desc limit 3;` } },
       { name: 'return_to_user', input: { message: 'Top three species, as requested.' } },
     ])
     await openMapAndConnectDemo(page)
@@ -145,6 +147,9 @@ test.describe('Chat tool inspector', () => {
     await expect(inspector).toBeVisible()
     await expect(inspector.locator('.tool-inspector-status')).toHaveText('ok')
     await expect(inspector.locator('.tool-inspector-pre').nth(1)).toContainText('species')
+    const resultText = await inspector.locator('.tool-inspector-pre').nth(1).innerText()
+    expect(resultText).toMatch(/"bloom_months":(\[[\d,]*\]|null)/)
+    expect(resultText).not.toContain('_offsets')
 
     // Clicking the backdrop (the overlay itself, away from the dialog) closes it.
     await inspector.click({ position: { x: 5, y: 5 } })
