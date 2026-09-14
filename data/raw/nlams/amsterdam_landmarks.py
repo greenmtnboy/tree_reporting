@@ -32,7 +32,7 @@ import pyarrow.compute as pc
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, make_point_wkt, rd_to_wgs84
+from shared.ingest import emit, make_point_wkt, rd_to_wgs84
 
 BASE_URL = "https://api.data.amsterdam.nl/v1/monumenten/monumenten/"
 PAGE_SIZE = 10000

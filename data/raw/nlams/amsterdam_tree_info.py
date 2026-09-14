@@ -34,7 +34,7 @@ import pyarrow as pa
 from datetime import date
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     emit,
     enforce_tree_schema,
     get_json_with_retry,
@@ -235,7 +235,7 @@ if __name__ == "__main__":
     #
     # The other ~4,160 were `Stobbe` — tree stumps — which are not trees and
     # should not be on the map whether or not the inventory recorded what they
-    # used to be.  `_ingest_shared._SPECIES_PLACEHOLDERS` already treats
+    # used to be.  `shared.ingest._SPECIES_PLACEHOLDERS` already treats
     # "stump" as a non-taxon; filtering on the record type applies the same
     # rule, and catches the far larger group the null test never saw: 25,454
     # records are Stobbe in total, so ~21,300 stumps *with* a species were

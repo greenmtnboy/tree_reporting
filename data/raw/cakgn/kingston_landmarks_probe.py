@@ -10,7 +10,7 @@ usual watermark is gone; what it does carry is `OHA_DESIGNATION`, the date
 each property was designated, whose maximum moves whenever the city designates
 a new one.  That misses a correction to an existing row, so it is taken
 together with the Hub catalogue's `modified` stamp and the later of the two
-wins -- the rule `_ckan_shared.data_last_modified` arrived at, and the only
+wins -- the rule `shared.platforms.ckan.data_last_modified` arrived at, and the only
 one that cannot freeze a city when one of its inputs stops moving.
 """
 
@@ -19,8 +19,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, field_max, hub_last_modified
-from _ingest_shared import UpstreamUnavailable, emit_freshness
+from shared.platforms.arcgis import FeatureLayer, field_max, hub_last_modified
+from shared.ingest import UpstreamUnavailable, emit_freshness
 
 HUB_HOST = "opendatakingston.cityofkingston.ca"
 LAYER_URL = (

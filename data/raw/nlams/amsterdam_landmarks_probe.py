@@ -21,7 +21,7 @@ import requests
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness
+from shared.ingest import emit_freshness
 
 CATALOG_URL = "https://data.amsterdam.nl/api/catalog/v3/datasets/monumenten/"
 PROBE_URL = "https://api.data.amsterdam.nl/v1/monumenten/monumenten/?_format=json&page_size=1"

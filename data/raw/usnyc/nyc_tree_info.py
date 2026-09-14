@@ -18,7 +18,7 @@ import requests
 from trilogy.io.arrow import emit_arrow_batches
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     stream_table_batches,
     enforce_tree_schema,
     normalize_species,
@@ -44,7 +44,7 @@ DATASET_PARAMS = {
     # page from that ends the loop early, which is a silently truncated city.
     # `:id` is Socrata's system row identifier: always present and stable.
     # This ingest paged without it for as long as it has existed; see
-    # `_socrata_shared.iter_rows`, which refuses to page without an order.
+    # `shared.platforms.socrata.iter_rows`, which refuses to page without an order.
     "$order": ":id",
 }
 
@@ -169,7 +169,7 @@ def load_arrow_table(csv_bytes: io.BytesIO) -> tuple[pa.Table, int]:
     # Batched: PAGE_SIZE is 500,000 and `cast_columns` calls `.to_pylist()`
     # on each column, so a single page materialised more Python objects
     # than Amsterdam's entire dataset did before it started failing every
-    # cloud rebuild. See _ingest_shared.stream_table_batches.
+    # cloud rebuild. See shared.ingest.stream_table_batches.
     table = stream_table_batches(table, cast_columns, label='New York City page')
     # No null-species filter. A null species means "we do not know what this
     # tree is", not "this is not a tree", and `enforce_tree_schema` gives those

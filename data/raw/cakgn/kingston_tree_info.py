@@ -7,7 +7,7 @@
 
 Source: "City Owned Trees" (`Eng/City_Owned_Trees`) on
 `opendatakingston.cityofkingston.ca`, 55,891 rows.  Paging, the freshness
-watermark and Esri's epoch-milliseconds live in `_arcgis_shared`.
+watermark and Esri's epoch-milliseconds live in `shared.platforms.arcgis`.
 
 **`TREE_ID` is a real per-tree key**: 55,891 distinct values across 55,891
 rows, none null, none blank, checked over the whole table.  `GLOBALID` is
@@ -34,8 +34,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, iter_features
-from _ingest_shared import (
+from shared.platforms.arcgis import FeatureLayer, iter_features
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

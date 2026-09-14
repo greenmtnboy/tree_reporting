@@ -11,7 +11,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, enforce_tree_schema, normalize_species, validate_coordinates
+from shared.ingest import emit, enforce_tree_schema, normalize_species, validate_coordinates
 
 DATASET_URL = 'https://data.tempe.gov/api/download/v1/items/542d8f16fff2466fb3115f209df03fd6/geojson?layers=0'
 

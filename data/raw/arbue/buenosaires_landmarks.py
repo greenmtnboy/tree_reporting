@@ -11,7 +11,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit
+from shared.ingest import emit
 
 UPDATED_AT = datetime(2026, 4, 10, 12, 0, 0, tzinfo=timezone.utc)
 LANDMARKS: list[dict[str, str]] = [

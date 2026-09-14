@@ -7,7 +7,7 @@
 
 Source: "Parks, Medians, and Parkway Trees" (`ODC_PARK_TREEINVENTORY_P`),
 359,263 rows on the Denver geospatial hub.  Layer paging, the freshness
-watermark and Esri's epoch-milliseconds all live in `_arcgis_shared`.
+watermark and Esri's epoch-milliseconds all live in `shared.platforms.arcgis`.
 """
 
 import sys
@@ -17,8 +17,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, iter_attributes
-from _ingest_shared import (
+from shared.platforms.arcgis import FeatureLayer, iter_attributes
+from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,

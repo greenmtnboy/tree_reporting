@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pyarrow as pa
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     circumference_cm_to_dbh_inches,
     emit,
     enforce_tree_schema,
@@ -48,7 +48,7 @@ def iter_feature_chunks():
 
     A generator rather than a list: 434,765 features, each a nested dict with
     its own geometry, is the same accumulate-everything shape that made
-    Amsterdam fail every cloud rebuild.  See `_ingest_shared.stream_to_table`.
+    Amsterdam fail every cloud rebuild.  See `shared.ingest.stream_to_table`.
     """
 
     def fetch_page(start: int) -> list[dict]:

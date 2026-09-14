@@ -15,7 +15,7 @@
  * The contract is `TilePredictionBundle` below; `assertBundle` refuses what
  * the exporter's `validate_bundle` refuses, and the two are kept in step.
  *
- * Three rules the storage encodes, from PREDICTION_CURATION_HANDOFF.md:
+ * Three rules the storage encodes, from docs/PREDICTION_CURATION_HANDOFF.md:
  *
  *  - A rejection or an "uncertain" is a statement about this image, never
  *    about the inventory: those decisions are stored and never published,

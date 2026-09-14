@@ -10,7 +10,7 @@ carries is `DesignationDate`, whose maximum moves when the city designates a
 new historic resource, and its Hub catalogue entry carries a `modified` stamp.
 Neither alone is trustworthy -- a designation date misses an edit to an
 existing entry, and the catalogue stamp can miss a service overwritten in
-place -- so the later of the two wins.  See `_ckan_shared.data_last_modified`
+place -- so the later of the two wins.  See `shared.platforms.ckan.data_last_modified`
 for where that rule came from.
 """
 
@@ -19,8 +19,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, field_max, hub_last_modified
-from _ingest_shared import UpstreamUnavailable, emit_freshness
+from shared.platforms.arcgis import FeatureLayer, field_max, hub_last_modified
+from shared.ingest import UpstreamUnavailable, emit_freshness
 
 HUB_HOST = "opendata.lethbridge.ca"
 LAYER_URL = (

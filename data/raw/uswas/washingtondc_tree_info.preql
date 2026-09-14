@@ -34,7 +34,7 @@ root datasource uswas_osm_update_time (
 file `./washingtondc_osm_probe.py`;
 
 # OpenStreetMap trees, read from the staged parquet in GCS rather than
-# Overpass -- extraction is decoupled from refresh (see _osm_shared.py and
+# Overpass -- extraction is decoupled from refresh (see shared/osm.py and
 # EXTENDING.md).  Overlapping rows are resolved by the
 # shared cluster merge (../tree_dedup.preql).
 root partial datasource uswas_osm_tree_info (
@@ -98,7 +98,7 @@ where city = 'USWAS';
 #
 # Shared: ../tree_dedup.preql groups the three partitions into one cluster per
 # tree and picks each canonical attribute across the cluster; this city's grid
-# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
 # The only per-city line is the dbh merge, because Boston imputes it.
 merge merged_dbh into diameter_at_breast_height;
 

@@ -9,7 +9,7 @@ Reads `rowsUpdatedAt` off the dataset's Socrata view metadata, so a refresh
 only re-downloads the inventory when the city has actually republished it.
 
 This was three byte-identical copies -- San Francisco, and the other two Socrata
-cities -- before `_socrata_shared` existed.  See `rows_updated_at` for why
+cities -- before `shared.platforms.socrata` existed.  See `rows_updated_at` for why
 it is that field rather than `viewLastModified`, and why it raises rather
 than degrading when the field is missing.
 """
@@ -19,8 +19,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness
-from _socrata_shared import SocrataDataset, rows_updated_at
+from shared.ingest import emit_freshness
+from shared.platforms.socrata import SocrataDataset, rows_updated_at
 
 # data.sf.gov, not the old data.sfgov.org: the latter 301s for metadata but
 # answers the *row* query with a bare nginx 403, so the two halves of this

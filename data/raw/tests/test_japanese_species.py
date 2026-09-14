@@ -1,4 +1,4 @@
-"""`_japanese_species`, the Japanese vernacular name -> binomial table.
+"""`shared.species.japanese`, the Japanese vernacular name -> binomial table.
 
 The table is curated by hand, so what a test can add is the mechanical half:
 that every value is a name the ingest would keep as written, that every key is
@@ -20,11 +20,11 @@ import pytest
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     SPECIES_SENTINELS,
     sanitize_species,
 )
-from _japanese_species import (  # noqa: E402
+from shared.species.japanese import (  # noqa: E402
     JAPANESE_SPECIES,
     japanese_name_key,
     species_from_japanese_name,
@@ -153,7 +153,7 @@ def test_the_two_names_gbif_got_wrong_are_curated():
 def test_an_unresolved_name_is_not_published_as_a_genus():
     """The failure this module exists to avoid, in its Japanese form.
 
-    `_common_name_species` refuses to pass an unresolved English name through
+    `shared.species.english` refuses to pass an unresolved English name through
     because a single capitalised word is indistinguishable from a genus.  Here
     the raw value could never survive `sanitize_species` anyway, so the point
     is the *other* half of that rule: a name this table does not have must

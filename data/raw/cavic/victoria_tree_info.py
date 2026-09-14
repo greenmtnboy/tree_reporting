@@ -8,7 +8,7 @@
 Source: "Tree Species (Parks trees database)"
 (`OpenData/OpenData_Parks/MapServer/15`) on `opendata.victoria.ca`, 34,981
 rows.  Paging, the freshness watermark and Esri's epoch-milliseconds live in
-`_arcgis_shared`.
+`shared.platforms.arcgis`.
 
 **The dataset title undersells it.**  It sits under the Parks service and
 says "Parks trees database", but `TreeCategory` shows it is the whole
@@ -35,8 +35,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, iter_features
-from _ingest_shared import (
+from shared.platforms.arcgis import FeatureLayer, iter_features
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

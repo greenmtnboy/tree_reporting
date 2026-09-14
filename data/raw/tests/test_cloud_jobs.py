@@ -32,7 +32,7 @@ CONFIG = DATA_DIR / "trilogy.toml"
 
 sys.path.insert(0, str(RAW_DIR))
 
-from _ingest_shared import MUNICIPAL_DATA_SOURCES, OSM_DATA_SOURCES  # noqa: E402
+from shared.ingest import MUNICIPAL_DATA_SOURCES, OSM_DATA_SOURCES  # noqa: E402
 
 
 def jobs() -> list[dict]:
@@ -275,7 +275,7 @@ def test_extra_osm_columns_are_declared_in_the_model(code: str):
     exhaustive over that type", which is a long way from "you forgot a column".
     """
     sys.path.insert(0, str(RAW_DIR))
-    from _osm_shared import OSM_CITY_NAMES, OSM_EXTRA_NULL_COLUMNS
+    from shared.osm import OSM_CITY_NAMES, OSM_EXTRA_NULL_COLUMNS
 
     assert code in OSM_CITY_NAMES, (
         f"{code} has no OSM_CITY_NAMES entry, so the shared extract script "

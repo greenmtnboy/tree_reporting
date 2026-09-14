@@ -7,7 +7,7 @@
 
 Source: "City Owned Trees" (`COB/Urban_Forestry/MapServer/0`) on the city's
 on-prem ArcGIS Server, catalogued at `navburl-burlington.opendata.arcgis.com`,
-80,287 rows.  Paging lives in `_arcgis_shared`.
+80,287 rows.  Paging lives in `shared.platforms.arcgis`.
 
 **Not Burlington, Vermont**, which is already on the map as `USBTV`.  Both
 cities are called Burlington and both publish a tree inventory on ArcGIS; this
@@ -17,7 +17,7 @@ cannot show two identical buttons.
 **The species column is an inverted common name and nothing else.**
 `SPECIES_COMMONNAME` holds `MAPLE - NORWAY`, `BUCKEYE- OHIO`, `CEDAR - EASTERN
 WHITE` -- 192 distinct values, no botanical name anywhere in the layer.
-`_common_name_species` resolves 187 of them, covering 79,763 of the 79,877 rows
+`shared.species.english` resolves 187 of them, covering 79,763 of the 79,877 rows
 that carry one; the residue is `UNKNOWN`, `TO BE UPDATED` and three rows whose
 value is a number.  Note that the hyphen is what inverts the name and the
 un-inversion is not universal in this column -- `HORSE-CHESTNUT`,
@@ -58,9 +58,9 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, esri_point, iter_features
-from _common_name_species import species_from_common_name
-from _ingest_shared import (
+from shared.platforms.arcgis import FeatureLayer, esri_point, iter_features
+from shared.species.english import species_from_common_name
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

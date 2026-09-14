@@ -8,7 +8,7 @@ import tree_common;
 # own model as a `complete where city = 'X' and {code}_source =
 # 'SATELLITE_X'` partition reading ../satellite_tree_info.py, never here.
 #
-# A city is added by listing it in SATELLITE_DATA_SOURCES (_ingest_shared.py),
+# A city is added by listing it in SATELLITE_DATA_SOURCES (shared/ingest.py),
 # declaring its column below, and wiring its model:
 # `test_satellite_city_is_fully_wired` names whatever is missing.
 property <*>.ussfo_satellite_data_updated_through datetime; # when published satellite trees for USSFO are through

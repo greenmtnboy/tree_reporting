@@ -35,7 +35,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import UpstreamUnavailable, _retry, emit, make_point_wkt
+from shared.ingest import UpstreamUnavailable, _retry, emit, make_point_wkt
 
 MONUMENTS = "https://data.boch.gov.tw/opendata/v2/assetsCase/1.1.json"
 HISTORIC_BUILDINGS = "https://data.boch.gov.tw/opendata/v2/assetsCase/1.2.json"

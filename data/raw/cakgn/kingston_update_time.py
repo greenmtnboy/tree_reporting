@@ -19,7 +19,7 @@ overwrites the service in place.  Two things bound that: the city's cron is
 twice weekly regardless, and an approved community submission or a new OSM
 extract makes CAKGN's parquet stale through their own probes.  A layer that
 gains an `editingInfo` should move to `layer_last_edit`, or take the maximum
-of the two the way `_ckan_shared.data_last_modified` does.
+of the two the way `shared.platforms.ckan.data_last_modified` does.
 """
 
 import sys
@@ -27,8 +27,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import hub_last_modified
-from _ingest_shared import emit_freshness
+from shared.platforms.arcgis import hub_last_modified
+from shared.ingest import emit_freshness
 
 HUB_HOST = "opendatakingston.cityofkingston.ca"
 LAYER_URL = (

@@ -24,7 +24,7 @@
 #   merge merged_dbh into diameter_at_breast_height;   # or a city-specific dbh
 #
 # The cell size each city matches at lives in DEDUP_CELL_METRES in
-# _ingest_shared.py, with the per-city calibration; ./dedup_cells.py turns it
+# shared/ingest.py, with the per-city calibration; ./dedup_cells.py turns it
 # into degrees at that city's latitude.  Add a city there and it is wired.
 #
 # ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@ property tree_id.source_label string;
 
 # The labels follow one convention -- `COMMUNITY_{code}`, `OSM_{code}`,
 # `SATELLITE_{code}`, and anything else is a municipal dataset -- enforced by
-# DATA_SOURCES in _ingest_shared.py, so the class needs no per-city table.
+# DATA_SOURCES in shared/ingest.py, so the class needs no per-city table.
 auto source_class <- case
     when substring(source_label, 1, 10) = 'COMMUNITY_' then 'community'
     when substring(source_label, 1, 10) = 'SATELLITE_' then 'satellite'
@@ -117,7 +117,7 @@ end;
 # scripts: pytrilogy drops a `file` datasource whose path does not exist, and
 # an unbound cell size made the planner error out while exploring the merge
 # instead of reading the published parquet.  Regenerate with
-# `uv run dedup_cells.py --write`; `test_dedup_cells.py` checks it is current.
+# `uv run tools/dedup_cells.py --write`; `test_dedup_cells.py` checks it is current.
 property city.cell_lat_deg float; # one grid cell, in degrees of latitude
 property city.cell_lon_deg float; # one grid cell, in degrees of longitude at the city's latitude
 

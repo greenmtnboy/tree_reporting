@@ -25,8 +25,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness
-from _wfs_shared import WfsLayer, wfs_max_property
+from shared.ingest import emit_freshness
+from shared.platforms.wfs import WfsLayer, wfs_max_property
 
 # Kept in step with `helsinki_tree_info.py` by `tests/test_city_wiring.py`.
 LAYER = WfsLayer("https://kartta.hel.fi/ws/geoserver/avoindata/wfs", "avoindata:Puurekisteri_piste")

@@ -26,14 +26,14 @@ rows, 72,011 in 72,011 park rows, none null, and the two sets are disjoint.
 
 **Species is a Traditional-Chinese common name and nothing else** -- `榕樹`,
 `茄苳`, `樟樹`, 471 distinct values across the two files, no binomial
-anywhere.  `_chinese_species.species_from_chinese_name` resolves them; read
+anywhere.  `shared.species.chinese.species_from_chinese_name` resolves them; read
 its docstring before touching a mapping, because the table is curated and
 checked against POWO value by value, and Taiwan's usage of a name is not
 always the mainland's (`楓香` is *Liquidambar formosana*, `青楓` is *Acer
 serrulatum*).
 
 **Coordinates are TWD97 / TM2 zone 121 (EPSG:3826)**, the national grid, in
-metres.  `_ingest_shared.twd97_to_wgs84` inverts the projection; the datum is
+metres.  `shared.ingest.twd97_to_wgs84` inverts the projection; the datum is
 ITRF94, which is WGS84 to well under a metre, so no shift is applied.  The
 files publish nothing else for position.
 
@@ -62,8 +62,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _chinese_species import species_from_chinese_name
-from _ingest_shared import (
+from shared.species.chinese import species_from_chinese_name
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

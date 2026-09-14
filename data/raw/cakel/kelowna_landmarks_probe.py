@@ -17,8 +17,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import hub_last_modified
-from _ingest_shared import emit_freshness
+from shared.platforms.arcgis import hub_last_modified
+from shared.ingest import emit_freshness
 
 HUB_HOST = "opendata.kelowna.ca"
 LAYER_URL = (

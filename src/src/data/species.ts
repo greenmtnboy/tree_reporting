@@ -2,7 +2,7 @@
  * The values an ingest writes into `species` when a tree has no identifiable
  * species, and how to present them.
  *
- * Mirrors `SPECIES_SENTINELS` in `data/raw/_ingest_shared.py`. They are real
+ * Mirrors `SPECIES_SENTINELS` in `data/raw/shared/ingest.py`. They are real
  * values rather than nulls so `species` — a Trilogy key — stays join-safe, but
  * they are not taxa: roughly 190k rows carry `Unknown`, which would otherwise
  * make it the single most common "species" in the dataset, ahead of Acer

@@ -1,4 +1,4 @@
-"""`_chinese_species`, the Taiwanese common name -> binomial table.
+"""`shared.species.chinese`, the Taiwanese common name -> binomial table.
 
 The table is curated by hand, so what a test can add is the mechanical half:
 that every value is a name the ingest would keep as written, that every key is
@@ -23,13 +23,13 @@ import pytest
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
-from _chinese_species import (  # noqa: E402
+from shared.species.chinese import (  # noqa: E402
     CHINESE_SPECIES,
     UNRESOLVED,
     chinese_name_key,
     species_from_chinese_name,
 )
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     SPECIES_SENTINELS,
     form_sentinel_for,
     is_not_a_tree,

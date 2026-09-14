@@ -7,7 +7,7 @@
 
 Source: "Tree Inventory" (`hfwk-jp4h`) on data.winnipeg.ca, 305,385 rows.
 Paging, the freshness watermark and the point-column shapes all live in
-`_socrata_shared`.
+`shared.platforms.socrata`.
 
 This is the cleanest of the three Canadian Socrata sources: the portal already
 publishes a per-tree `tree_id` (305,385 distinct, none null), a Latin
@@ -31,7 +31,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,
@@ -40,7 +40,7 @@ from _ingest_shared import (
     stream_to_table,
     validate_coordinates,
 )
-from _socrata_shared import SocrataDataset, iter_rows, point_lon_lat
+from shared.platforms.socrata import SocrataDataset, iter_rows, point_lon_lat
 
 DATASET = SocrataDataset("data.winnipeg.ca", "hfwk-jp4h", timeout=180)
 

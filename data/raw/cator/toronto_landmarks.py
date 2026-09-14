@@ -33,8 +33,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, iter_datastore_rows, point_lon_lat
-from _ingest_shared import emit, make_point_wkt
+from shared.platforms.ckan import CkanResource, iter_datastore_rows, point_lon_lat
+from shared.ingest import emit, make_point_wkt
 
 RESOURCE = CkanResource(
     "ckan0.cf.opendata.inter.prod-toronto.ca",

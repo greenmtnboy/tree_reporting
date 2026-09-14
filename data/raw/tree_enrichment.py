@@ -18,13 +18,13 @@ import requests
 import duckdb
 from datetime import datetime, timezone
 from random import randint
-from ecoregion_matcher import (
+from enrichment.ecoregion_matcher import (
     EcoregionReference,
     build_native_range_evidence as build_native_range_evidence_for_entries,
     make_ecoregion_reference,
     select_ecoregion_candidates as select_ecoregion_candidates_from_evidence,
 )
-from _ecoregion_shared import (
+from shared.ecoregions import (
     LAYER_QUERY_URL,
     REMOTE_ECOREGION_PARQUET,
 )
@@ -898,7 +898,7 @@ if __name__ == "__main__":
             "species_epithet":      species_epithet,
             "family":               None,
             # Filled from SPECIES_SYNONYMS on load (with_species_aliases), or
-            # by hand in enrichment_admin.py; the model is not asked for it.
+            # by hand in enrichment/admin/server.py; the model is not asked for it.
             "synonyms":             None,
             "common_names":         normalize_common_names(enrichment.common_names),
             "description":          enrichment.description.strip() if enrichment.description else None,
@@ -928,7 +928,7 @@ if __name__ == "__main__":
             "photo_url":            photo_url,
             "photo_license":        photo_license,
             "photo_attribution":    photo_attribution,
-            # A bark / trunk view is hand-picked in enrichment_admin.py: iNat
+            # A bark / trunk view is hand-picked in enrichment/admin/server.py: iNat
             # cannot be asked for one, and the run's photo is the leaf close-up.
             "trunk_photo_url":      None,
             "trunk_photo_license":  None,

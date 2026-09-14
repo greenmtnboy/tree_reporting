@@ -5,7 +5,7 @@
 # ///
 """Freshness probe for Toronto's Places of Interest and Attractions.
 
-The resource's own publication time, through `_ckan_shared.data_last_modified`,
+The resource's own publication time, through `shared.platforms.ckan.data_last_modified`,
 so the weekly landmark lane only rebuilds Toronto's parquet when the 178-place
 list has actually been republished.
 """
@@ -15,8 +15,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, data_last_modified
-from _ingest_shared import emit_freshness
+from shared.platforms.ckan import CkanResource, data_last_modified
+from shared.ingest import emit_freshness
 
 RESOURCE = CkanResource(
     "ckan0.cf.opendata.inter.prod-toronto.ca",

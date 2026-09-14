@@ -8,7 +8,7 @@
 Source: "Tree Inventory" (`Forestry/MapServer/0`) on the city's on-prem ArcGIS
 Server, 304,374 rows over a municipality that reaches from the Ottawa River to
 farmland -- which is why CAOTT's bounding box spans half a degree of latitude.
-Paging and Esri's epoch-milliseconds live in `_arcgis_shared`.
+Paging and Esri's epoch-milliseconds live in `shared.platforms.arcgis`.
 
 **The `SPECIES` column looks like a common name and is not the whole story.**
 It stores an inverted English name -- `Maple Sugar`, `Lilac Japanese`,
@@ -18,7 +18,7 @@ coded-value field: the layer's own domain maps every one of those 174 stored
 codes to the binomial, `Acer saccharum`, `Syringa reticulata`, `Picea
 pungens`.  Ottawa's foresters published the identification; it just lives in
 `fields[].domain` rather than in a column.  `coded_value_domain` reads it, so
-this city needs no part of `_common_name_species` -- it is here as the
+this city needs no part of `shared.species.english` -- it is here as the
 counter-example to the rest of the batch: **read the field's domain before
 concluding a portal does not identify its trees.**
 
@@ -80,14 +80,14 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import (
+from shared.platforms.arcgis import (
     FeatureLayer,
     coded_value_domain,
     esri_ms_to_date,
     esri_point,
     iter_features,
 )
-from _ingest_shared import (
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

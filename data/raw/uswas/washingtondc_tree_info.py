@@ -11,8 +11,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, iter_features
-from _ingest_shared import (
+from shared.platforms.arcgis import FeatureLayer, iter_features
+from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
@@ -87,9 +87,9 @@ def iter_row_chunks():
     existed simultaneously as the response body, a dict per feature and a
     Python list per column. That OOM-killed the 2 GiB city container
     (`Pipe process exited abnormally code=137`) while passing locally, which
-    is the same failure `_ingest_shared.stream_to_table` was written for.
+    is the same failure `shared.ingest.stream_to_table` was written for.
 
-    Paging, ordering and the page size are `_arcgis_shared`'s -- see there for
+    Paging, ordering and the page size are `shared.platforms.arcgis`'s -- see there for
     why the size comes from the layer rather than a constant and why the loop
     ends on `exceededTransferLimit`. Both matter here: this layer's
     `maxRecordCount` is exactly the 2000 that used to be hardcoded, so the two

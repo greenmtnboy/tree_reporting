@@ -22,7 +22,7 @@ RAW_DIR = Path(__file__).resolve().parents[1]
 SRC_DIR = RAW_DIR.parent.parent / "src" / "src"
 sys.path.insert(0, str(RAW_DIR))
 
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     CITY_BOUNDS,
     CITY_TERRITORY,
     boxes_intersect,

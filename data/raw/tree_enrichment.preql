@@ -87,7 +87,7 @@ property species.enriched_at datetime;
 property species.photo_url string; # optional URL to a representative photo of the species -- in practice a foliage / flower close-up, which is what the iNaturalist default photo usually is
 property species.photo_license string; # license identifier for the photo
 property species.photo_attribution string; # attribution text for the photo
-property species.trunk_photo_url string; # optional URL to a photo of the trunk / bark, picked by hand in enrichment_admin.py (no source can be asked for one)
+property species.trunk_photo_url string; # optional URL to a photo of the trunk / bark, picked by hand in enrichment/admin/server.py (no source can be asked for one)
 property species.trunk_photo_license string; # license identifier for the trunk photo
 property species.trunk_photo_attribution string; # attribution text for the trunk photo
 

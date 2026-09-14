@@ -1,5 +1,35 @@
 # Project Context
 
+## Where things live under `data/`
+
+```
+data/
+  trilogy.toml            every [[cloud.job]], and the rationale for each cadence
+  raw/
+    *.preql               the core model: core, tree_common, tree_dedup, the
+                          rollup and landmark publishers, enrichment, predictions
+    *.py                  the scripts those models' datasources run -- the
+                          community and satellite ingests, the parquet probes
+    *.csv                 the committed coefficients tree_predictions.preql reads
+    {code}/               one directory per city: its ingest, its probes, its
+                          tree and landmark models
+    shared/               the shared ingest library: ingest, osm, ecoregions,
+                          platforms/ (arcgis, ckan, socrata, wfs) and species/
+                          (one common-name table per language)
+    enrichment/           the LLM enrichment package, plus admin/ (the localhost
+                          correction form) and backfill.py
+    tools/                workstation-only scripts: the scaffolder, the audit,
+                          the calibrators, the two model fits.  See its README.
+    tests/                `pytest tests -q` from data/raw; offline, seconds
+  osm_staging/            one thin model per city over the shared osm_rows.py
+  landmark_staging/       the curated-CSV landmark publishers
+```
+
+`shared/` is the only one of those the workspace bundle ships whole. The CLI
+drops `tests/` itself, and `tools/` and `enrichment/admin/` are excluded by
+`[cloud] exclude` because no job runs them -- so a workstation script added to
+`tools/` needs no new exclude entry, and one added beside the models does.
+
 ## Data ingest
 
 The map's parquets are built by scheduled jobs on trilogy-cloud, declared as
@@ -37,7 +67,7 @@ Four things about that are load-bearing, and each replaced something that broke:
   `raw/tree_enrichment.preql`, which is species-only. Collapsing the two puts a
   second tree source in the planner's scope and changes what the charts return —
   see the join-type bug under Dashboard query compilation below.
-- **Cadence is measured.** `data/raw/portal_cadence.py --record` samples every
+- **Cadence is measured.** `data/raw/tools/portal_cadence.py --record` samples every
   freshness probe and derives each portal's real publishing interval from the
   distinct watermarks it has recorded in `portal_cadence.json`. Do not retune a
   cron from a single observation.
@@ -56,7 +86,7 @@ Four things about that are load-bearing, and each replaced something that broke:
   neighbouring city, and every city's own parquet was clean.
 - **An unattributed tree is assigned by territory, not by sanity box.**
   `CITY_BOUNDS` is the generous box a municipal row must fall in;
-  `CITY_TERRITORY` (both in `_ingest_shared.py`) is the explicit,
+  `CITY_TERRITORY` (both in `shared/ingest.py`) is the explicit,
   non-overlapping set of rectangles that decides which city an OSM node or a
   community submission belongs to. `test_city_territory.py` checks every
   pair; a city that gains a neighbour has to carve both territories.
@@ -69,7 +99,7 @@ Four things about that are load-bearing, and each replaced something that broke:
 
 `SATELLITE_{CODE}` is a fourth source partition for the cities imagery has
 been run over (SF and Boston; `SATELLITE_DATA_SOURCES` in
-`_ingest_shared.py`). The reviewer's `/satellite` page
+`shared/ingest.py`). The reviewer's `/satellite` page
 (`reviewer/satellite.ts`) shows a NAIP tile with the model's detections and
 the published inventory trees over it, each ringed by its predicted crown
 width, and publishes accepted detections to
@@ -87,14 +117,14 @@ it. The model's DBH estimate is never published as a measurement. See
 `raw/tree_predictions.preql` publishes `tree_predictions_v{n}.parquet`: one
 row per rollup tree with a predicted crown width, a stand-density covariate,
 and null placeholders for height and age. The crown model is a genus-level
-power law fitted on the open Tallo database by `raw/crown_allometry_fit.py`,
+power law fitted on the open Tallo database by `raw/tools/crown_allometry_fit.py`,
 committed as `raw/crown_width_coefficients.csv` and applied in DuckDB (no
 script at refresh time but the freshness probe). Read the fit script's
 docstring before touching the model: it records why Tallo, the quality gate,
 the fallback order, and the two things the model deliberately is not
 (urban-calibrated, density-adjusted). A tree with a planting date and no
 diameter gets its diameter predicted from its age first -- a second
-genus-level power law, `raw/dbh_age_fit.py`, fitted on the rollup's own 1.9M
+genus-level power law, `raw/tools/dbh_age_fit.py`, fitted on the rollup's own 1.9M
 dated, measured trees and committed as `raw/dbh_age_coefficients.csv` --
 and the crown model is applied to that. What is *not* a planting date is the
 ingest's problem, not the model's: `enforce_tree_schema` nulls a date before
@@ -105,17 +135,17 @@ does not read this parquet yet; see "Tree-level predictions" in
 
 ### Correcting a species by hand
 
-`data/raw/enrichment_admin.py` is a localhost form over the enrichment table
+`data/raw/enrichment/admin/server.py` is a localhost form over the enrichment table
 for the case where a reviewer already knows the answer -- a photo of the wrong
 plant, a description of the wrong taxon, a trait that is off -- and re-asking
-the model (`backfill_enrichment.py`) is the long way round. Edits are staged
+the model (`enrichment/backfill.py`) is the long way round. Edits are staged
 locally; **Publish** re-reads the live parquet, patches the staged rows in
 (and every alias row of the taxon), uploads, and reads it back to verify, the same
 path `tree_enrichment.py --limit` takes. An edited row carries today's
 `enriched_at`, which is what keeps `refresh-enrichment` from overwriting it,
 and the form refuses a row without a common name and a growth form because
 the freshness probe would report the table stale for ever. Sentinel rows are
-authored in `_ingest_shared.py` and are read-only there, as is the alias row
+authored in `shared/ingest.py` and are read-only there, as is the alias row
 of a name in `SPECIES_SYNONYMS` or `SPECIES_MISSPELLINGS` (the daily job
 rewrites it from the accepted row). A duplicate species is merged from the
 form by adding its name to the accepted row's `synonyms`; making the *ingest*
@@ -128,7 +158,7 @@ pins the invariants. arborary.world shows the change on its next build.
 
 ### Adding a city
 
-Do not hand-write the twenty-odd registry edits. `data/raw/new_city.py` writes
+Do not hand-write the twenty-odd registry edits. `data/raw/tools/new_city.py` writes
 the mechanical ones from a single spec and `data/raw/tests/test_city_wiring.py`
 walks the same list and names anything still missing — the enum, the ecoregion
 case, four sets of freshness properties, the cross-city imports and merges, the
@@ -139,11 +169,11 @@ See the quick path at the top of `EXTENDING.md`.
 Shared modules carry what used to be copied per city, and a new city should
 reach for them before writing anything:
 
-- **`_osm_shared.py`** — the Overpass extraction every city's `osm-{code}` job
+- **`shared/osm.py`** — the Overpass extraction every city's `osm-{code}` job
   runs, so a city's OSM wiring is one ~28-line shim.
-- **`_arcgis_shared.py`** — layer paging, three freshness watermarks, Esri's
+- **`shared/platforms/arcgis.py`** — layer paging, three freshness watermarks, Esri's
   epoch-milliseconds, field domains, geometry-to-WKT, and a Hub catalogue
-  search (`uv run _arcgis_shared.py <hub-host>` lists a portal's tree layers).
+  search (`uv run shared/platforms/arcgis.py <hub-host>` lists a portal's tree layers).
   ArcGIS is what most North American cities publish on. Three details in it are
   correctness rather than convenience and were bugs in the copies it replaced:
   the page size comes from the layer's own `maxRecordCount` (asking for more is
@@ -151,20 +181,20 @@ reach for them before writing anything:
   terminates on `exceededTransferLimit` rather than the short-page heuristic,
   and `esri_point` refuses the *string* `"NaN"` that a server sends for a
   feature with no geometry.
-- **`_socrata_shared.py`** and **`_ckan_shared.py`** — the same for the other
+- **`shared/platforms/socrata.py`** and **`shared/platforms/ckan.py`** — the same for the other
   two platforms this repo reads more than twice.
-- **`_wfs_shared.py`** — an OGC WFS 2.0 (GeoServer) reader for Copenhagen and
+- **`shared/platforms/wfs.py`** — an OGC WFS 2.0 (GeoServer) reader for Copenhagen and
   Helsinki, whose trees and heritage registers are both on one: sorted
   `startIndex` paging terminated on `numberMatched`, plus `wfs_max_property`,
   the one-row descending-sort read that is both cities' freshness probe
   (nulls excluded explicitly — GeoServer sorts them first).
-- **`_common_name_species.py`** — a curated common-name → accepted-binomial
+- **`shared/species/english.py`** — a curated common-name → accepted-binomial
   table, for the portals that publish an English name where the binomial should
   be. Not a platform module: what those cities shared was a question, not an
   API. Read its docstring before reaching for the enrichment table's inverse
   instead — that was tried, measured, and does not work, because the enrichment
   table carries the misspelled binomials the cities themselves published.
-  `_japanese_species.py`, `_spanish_species.py` and `_chinese_species.py` are
+  `shared/species/japanese.py`, `shared/species/spanish.py` and `shared/species/chinese.py` are
   the same shape for Tokyo, Bogotá and Taipei — one module per language,
   because the keys normalise by different rules.
 

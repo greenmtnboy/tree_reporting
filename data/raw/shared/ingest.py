@@ -1,0 +1,3327 @@
+"""
+Shared helpers for city ingest scripts (tree_info.py / landmarks.py).
+
+NOT a uv inline script — this is a regular importable module.
+Scripts that only use non-HTTP helpers need pyarrow and pytrilogy; requests is only needed when calling the HTTP helper functions below.
+
+Usage in each city script:
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from shared.ingest import emit, normalize_species, ...
+"""
+
+from __future__ import annotations
+
+import io
+import math
+import os
+import re
+import struct
+import sys
+import time
+import unicodedata
+from datetime import date, datetime, timezone
+from email.utils import parsedate_to_datetime
+from typing import TYPE_CHECKING
+
+import pyarrow as pa
+from trilogy.io.arrow import emit_arrow as emit  # noqa: F401  (re-exported)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Iterator
+
+    import requests
+
+
+# ---------------------------------------------------------------------------
+# Species normalisation
+# ---------------------------------------------------------------------------
+
+def normalize_species(s: str | None) -> str | None:
+    """Capitalize first word, lowercase the rest.  Strip '::' or ' - ' suffixes.
+
+    Returns None for blank / None input.
+
+    Examples:
+        "platanus x hispanica"          -> "Platanus x hispanica"
+        "Platanus :: London Plane"      -> "Platanus"
+        "Quercus robur - English Oak"   -> "Quercus robur"
+    """
+    if not s or not s.strip():
+        return None
+    # Strip any common-name suffix separated by "::" or " - "
+    for sep in ("::", " - "):
+        if sep in s:
+            s = s.split(sep)[0]
+    parts = s.strip().split()
+    if not parts:
+        return None
+    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
+
+
+def normalize_species_parts(genus: str | None, epithet: str | None) -> str | None:
+    """Combine genus + epithet into a normalised scientific name.
+
+    Genus is capitalised; epithet is lowercased.  Returns None when genus is
+    absent or blank (epithet-only is meaningless).
+
+    Examples:
+        ("Platanus", "hispanica") -> "Platanus hispanica"
+        ("QUERCUS", "ROBUR")     -> "Quercus robur"
+        (None, "robur")          -> None
+        ("Quercus", None)        -> "Quercus"
+    """
+    g = (genus or "").strip()
+    e = (epithet or "").strip()
+    if not g:
+        return None
+    parts = [g.capitalize()]
+    if e:
+        parts.append(e.lower())
+    return " ".join(parts)
+
+
+def _strip_diacritics(s: str) -> str:
+    """Drop combining accents from *s*, leaving the hybrid mark alone.
+
+    A scientific name is ASCII by convention -- the botanical code requires
+    non-Latin characters to be transliterated -- so an accent is a sign the
+    value came from a common name in the portal's own language, or from a typo.
+    Stripping it lets one rule catch both: "Mālus" becomes the real genus
+    "Malus", and "Néflier" becomes "Neflier", which _NON_TAXON_REWRITES then
+    recognises as the French for medlar.  U+00D7 (×) is not a combining
+    character, so the hybrid mark survives untouched.
+    """
+    return "".join(
+        ch
+        for ch in unicodedata.normalize("NFD", s)
+        if not unicodedata.combining(ch)
+    )
+
+
+# Inventory placeholders that several portals use for an empty or
+# unidentifiable planting site.  They are not taxa and must never reach the
+# `species` key, where they would be handed to the enrichment LLM every run.
+_SPECIES_PLACEHOLDERS = frozenset(
+    {
+        "unknown", "unknown tree", "unknown tree species", "unbekannt",
+        "onbekend", "onbekend (algemeen)", "no identificado", "unidentified",
+        "unidentified unidentified", "undetermined", "not identified",
+        "none", "n/a", "na", "nvt", "other", "vacant", "dead", "stump",
+        "empty", "tree", "trees", "tree(s)", "arbol", "árbol", "arbre",
+        "boom", "baum", "privet", "--", "-",
+        # Inventories that record "we planted a mix here" rather than a taxon.
+        "mixed", "misc", "no",
+        # New Westminster's, where the surveyor recorded a genus and left the
+        # species open ("Magnolia to be determined", "Magnolia undefined",
+        # "Tbd") or gave up on a stretch of road ("Various Species Along Road").
+        "to be determined", "tbd", "undefined", "various",
+        # Alberta's asset systems, where a species was never recorded.  These
+        # describe the *record*, not the site, so they are Unknown rather than
+        # not-a-tree: there is a tree there and nobody wrote down what it is.
+        "not available", "not suitable",
+        # The same thing in French, from the Quebec portals.  "Divers" is
+        # Montreal's "various" (619 rows) and reads as a genus if left alone;
+        # "Essence a determiner" is Quebec City's "species to be identified",
+        # and "Autre espece" Longueuil's "other species" (685 rows), which
+        # survives the shape rules as a plausible-looking two-word binomial.
+        "divers", "essence a determiner", "autre espece",
+        # A portal that wrote the *rank* where the epithet goes.  In epithet
+        # position "genus" truncates to the genus, which is what the source
+        # actually recorded; left alone `Viburnum genus` reads as a binomial,
+        # and being two edits from `Viburnum tinus` it is exactly the shape
+        # that invites a wrong fold.
+        "genus", "species", "spp", "sp",
+    }
+)
+
+# Values that say the *site* holds no tree at all: an empty planting pit, a
+# stump, a scheduled or vacant planting site.  Different in kind from the
+# placeholders above -- "Unknown" means there is a tree and the source could
+# not name it; "Vacant" means there is nothing to put on a map.  Rows carrying
+# one are dropped by enforce_tree_schema rather than published as
+# UNKNOWN_SPECIES.  Several ingests already drop the same records from a
+# dedicated column (Amsterdam's `Stobbe` record type, Brookline's `IsStump`,
+# Burlington's site type, Denver's `_` prefix, LA's NOT_A_TREE_NAMES); this
+# catches the portals that only say so in the species field, SF above all
+# ("Vacant site medium", "Scheduled Planting Site - Spring 2026").
+#
+# The second group is San Francisco's, found while checking whether its portal
+# flags a removed tree -- it does not, and these are what it says instead.  A
+# "Potential Site" is a spot the city has assessed and not planted, which is
+# "Vacant" by another name; it read as a plausible binomial ("Potential site")
+# and so reached the enrichment queue and the map, 149 dots' worth.  `Basin`,
+# `pave` and `Landscape Plants` describe the pit, the paving over it and a bed
+# of shrubs, none of which is a tree at a point.
+_NOT_A_TREE_MARKERS = frozenset(
+    {"vacant", "stump", "empty", "empty pit", "planting site", "stobbe",
+     "potential site", "landscape plants", "basin", "basins", "pave", "paved"}
+)
+_NOT_A_TREE_PREFIXES = (
+    "vacant", "stump", "empty pit", "planting site", "scheduled planting",
+    "potential site",
+    # "Paved over", "Paved temp", "Pavedtemp" -- a site the city tarmacked.
+    # The prefix is "paved" and not "pave" on purpose: *Pavetta* is a real
+    # genus of some 400 species, and a shared filter must not eat one.
+    "paved",
+)
+_NOT_A_TREE_SUBSTRINGS = ("planting site", "empty pit")
+
+
+def is_not_a_tree(value: str | None) -> bool:
+    """True when a species value records an empty site rather than a tree.
+
+    Examples:
+        "Vacant"                                -> True
+        "Vacant site medium"                    -> True
+        "Scheduled Planting Site - Spring 2026" -> True
+        "Empty pit/planting site"               -> True
+        "Stump"                                 -> True
+        "Potential Site"                        -> True
+        "Basin(s)"                              -> True
+        "Unknown"                               -> False  (a tree, unnamed)
+        "Tree(s)"                               -> False  (a tree, unnamed)
+        "Dead tree"                             -> False  (a tree, dead)
+        "Acer rubrum"                           -> False
+    """
+    s = normalize_species(value)
+    if s is None:
+        return False
+    s = _strip_diacritics(s).lower()
+    # A portal that pluralises a site marker in parentheses -- SF writes
+    # "Basin(s)" -- is naming the same thing.  Safe to strip before matching
+    # because the one value that *keeps* its parenthetical, "Tree(s)", reduces
+    # to "tree", which is not a marker: an unnamed tree stays a tree.
+    s = s.replace("(s)", "").strip()
+    if s in _NOT_A_TREE_MARKERS:
+        return True
+    if any(s.startswith(p) for p in _NOT_A_TREE_PREFIXES):
+        return True
+    return any(sub in s for sub in _NOT_A_TREE_SUBSTRINGS)
+
+
+# English common-name nouns that never occur as a Latin specific epithet.  A
+# two-word value ending in one of these is a common name ("Pin oak", "Red
+# maple"), not a binomial.  Genus-shaped entries (magnolia, catalpa) are safe
+# here because they are only ever tested in *epithet* position.
+_COMMON_NAME_NOUNS = frozenset(
+    {
+        "oak", "maple", "elm", "ash", "pine", "spruce", "fir", "cedar",
+        "cherry", "plum", "birch", "beech", "linden", "locust", "willow",
+        "poplar", "hawthorn", "dogwood", "sycamore", "walnut", "hickory",
+        "gum", "holly", "plane", "tree", "palm", "cypress", "hemlock",
+        "larch", "alder", "aspen", "buckeye", "chestnut", "catalpa",
+        "redbud", "pear", "apple", "crabapple", "magnolia", "ginkgo",
+        "juniper", "yew", "laurel", "sweetgum", "cottonwood", "boxelder",
+        "fruit", "flower", "fleur", "shrub", "hedge",
+    }
+)
+
+# Values that survive every structural rule below and are still not taxa.
+#
+# The rules above are shape-based -- they can see that "Serviceberry or
+# dogwood?" is free text and that "Amel. laevis" has an abbreviated genus.
+# What they cannot see is that "Japonica" is a specific epithet whose genus was
+# dropped upstream, or that "Kastanie" is German for chestnut: both are a
+# single capitalised Latin-looking word, exactly like a real genus.  Deciding
+# those needs a list of names, and the only honest place to get one is the
+# published data -- every entry here was observed in the fourteen wired
+# inventories.
+#
+# The value is the genus to keep, or None when there is none to keep.  A
+# source that recorded "Callistemon king" still told us the genus, and merging
+# that into UNKNOWN_SPECIES throws away a fact it did record; "Tai haku" is a
+# cherry cultivar with no genus attached and has nothing to keep.
+#
+# Nothing here is a judgement call about a *taxon* -- a value belongs in this
+# map only when it names no genus at all.  A misspelled binomial
+# ("Crateagus monogyna", "Sequioa sempervirens") is a real name badly typed and
+# stays out: the enrichment step resolves those, and dropping them to Unknown
+# would lose a tree we can identify.
+_NON_TAXON_REWRITES: dict[str, str | None] = {
+    # Specific epithets that reached the species column with the genus lost.
+    "acerifolia": None, "anagynroides": None, "antarctica": None,
+    "arizonica": None, "bignonioides": None, "bilboa": None, "biloba": None,
+    "colurna": None, "communis": None, "daniellii": None, "dasystyla": None,
+    "davidii": None, "glabra": None, "intermedia": None, "involucrata": None,
+    "japonica": None, "negundo": None, "nigra": None, "obliqua": None,
+    "angustifolia": None, "cornuta": None, "globosum": None,
+    "hamabo": None, "koto": None, "pendula": None, "pseudoacacia": None,
+    "orientalis": None, "persica": None, "phillus": None,
+    "phillyreoides": None, "pungens": None, "robor": None, "serrulata": None,
+    "siliquastrum": None, "szechuanica": None, "trichotomum": None,
+    # English common names and the adjectives that qualify them, standing on
+    # their own.  ("Oak" and friends are in _COMMON_NAME_NOUNS too, but that
+    # set is only ever tested in epithet position -- see the note there.)
+    "anders": None, "austrian": None, "birch": None, "blue": None,
+    "burning": None, "callery": None, "cedar": None, "chestnut": None,
+    "common": None, "eastern": None, "eucalypt": None, "fir": None,
+    "fruit": None, "green": None, "greengage": None, "japanese": None,
+    "kentucky": None, "lombardy": None, "mullberry": None, "nordman": None,
+    "norway": None, "oak": None, "ontario": None, "pear": None, "red": None,
+    "redwood": None, "siberian": None, "thornless": None, "white": None,
+    "willow": None,
+    # Prairie-Canadian names that do name a genus, so the genus is kept.  Same
+    # shape as "Callistemon king" below: the source recorded something real,
+    # it just recorded it in English.
+    "chokecherry": "Prunus",   # Prunus virginiana
+    "mayday": "Prunus",        # Prunus padus, the mayday tree
+    "crabapple": "Malus",
+    # Halifax identifies 7,700 trees to genus only and writes the genus with a
+    # "(genus)" suffix.  Twenty-nine of the thirty spellings are real genera
+    # and pass straight through; "Elm (genus)" is the English name, and elm is
+    # Ulmus and nothing else, so the genus is kept -- the same call
+    # "orme prive" gets below.
+    "elm": "Ulmus",
+    # Kelowna writes the English name in its `Genus` column on 21 rows.  A
+    # juniper is Juniperus and nothing else, so the genus is kept.
+    "juniper": "Juniperus",
+    # Rows that describe the *record* rather than a tree.  Victoria marks a
+    # tree it does not own as "Private Tree" (78 rows) and Kingston marks a
+    # grouped location "Centroid" with the common name "Central data point"
+    # (24); New Westminster has one row that is a work order someone typed
+    # into the species field.  Each names no taxon, so there is no genus to
+    # keep -- but a tree *is* there, which is why these become Unknown rather
+    # than being dropped as an empty site.
+    "private": None, "centroid": None, "remove": None,
+    # The same thing in the languages the wired cities publish in.  Accents are
+    # already stripped by the time this is consulted, so the keys are ASCII.
+    "birke": None,          # de: birch
+    "fleur": None,          # fr: flower
+    "haselnuss": None,      # de: hazel
+    "kastanie": None,       # de: chestnut
+    "kiefer": None,         # de: pine
+    "kirsche": None,        # de: cherry
+    "klarapfel": None,      # de: an apple cultivar
+    "linde": None,          # de: linden
+    "neflier": None,        # fr: medlar
+    "susskirsche": None,    # de: sweet cherry
+    # Quebec City records some privately-owned trees by common name and
+    # ownership rather than by taxon.  "Orme" names a genus and keeps it, the
+    # same call "Callistemon king" gets; "Conifere" is a growth habit spanning
+    # several families and names none.
+    "orme prive": "Ulmus",  # fr: private elm
+    "conifere prive": None,  # fr: private conifer
+    # Multi-word common names and free text with no genus in them.
+    "campestre licenco": None,
+    "eastern white": None,
+    "european horse": None,
+    "evergreen holm": None,
+    "gewone esdoorn": None,   # nl: sycamore maple
+    "heaven scent": None,
+    "james grieve": None,
+    "northern red": None,
+    "pin maritime": None,     # fr: maritime pine
+    "scheduled planting": None,
+    "sunset boulevard": None,
+    "tai haku": None,
+    "uknown taxus": None,
+    "winter flowering": None,
+    # A real genus followed by a cultivar name or a truncated note.  The genus
+    # is real information and is kept.
+    "callistemon king": "Callistemon",
+    "crataegus x gri": "Crataegus",
+    "cydonia champion": "Cydonia",
+    "gleditsia trican": "Gleditsia",
+    "malus riesenboiken": "Malus",
+    "prunus sunset": "Prunus",
+    "prunus tai": "Prunus",
+    "sophora du": "Sophora",
+}
+
+
+# Both spellings of the hybrid mark occur in the wild -- SF publishes
+# "Platanus x hispanica", Paris publishes "Platanus × hispanica" (U+00D7) --
+# and both are recognised here.  Only the ASCII "x" is ever *emitted*.
+#
+# They were preserved verbatim for a long time, on the grounds that rewriting
+# one into the other would orphan every already-enriched hybrid.  That is true,
+# and it is the smaller cost: the same taxon under two spellings is two rows in
+# the enrichment table, two LLM calls, and two entries in every species rollup.
+# Three were already being paid for twice (Alnus x spaethii, Osmanthus x
+# burkwoodii, Quercus x kewensis).  ASCII is the majority form -- 228 distinct
+# taxa against 68 -- and the safe one: it survives SQL literals, CSV, filenames
+# and a Windows console, which has already mangled U+00D7 to "?" in this repo.
+#
+# Emitting one spelling only takes effect on the next full refresh; until then
+# the published parquets still carry U+00D7.  with_hybrid_aliases() in the
+# enrichment pipeline bridges that window.
+_HYBRID_MARKS = frozenset({"x", "×"})
+
+CANONICAL_HYBRID_MARK = "x"
+
+# Rank qualifiers introduce infraspecific detail the species key does not
+# carry; the name is truncated in front of them ("Viburnum cf. corylifolium"
+# -> "Viburnum corylifolium" is wrong, so it becomes "Viburnum").
+_RANK_QUALIFIERS = frozenset(
+    {"cf", "var", "subsp", "ssp", "forma", "f", "spp", "sp", "spec", "species",
+     "type", "group", "x"}
+)
+
+# A cultivar epithet is always quoted, and whatever trails it is a note
+# ("Malus 'spring snow' high brnch"), so the name is truncated at the quote
+# rather than having the quoted run excised from the middle.
+_QUOTE_CHARS = "'\"‘’“”"
+
+# A parenthetical in a species field is a note about rank or identification,
+# never part of the name.  Halifax writes "Acer (genus)" for a tree identified
+# only to genus -- 30 spellings of it, 7,700 trees -- and the epithet loop
+# below already truncated those correctly.  It is stripped *up front* instead
+# so the lookups that run before the loop see the name: "Elm (genus)" has to
+# reach _NON_TAXON_REWRITES as "Elm", or the English common name survives as
+# an invented genus.
+_PARENTHETICAL = re.compile(r"\s*\([^)]*\)")
+
+
+def extract_cultivar(value: str | None) -> str | None:
+    """The cultivar epithet quoted inside a raw species string, or ``None``.
+
+    A cultivar is a cultivated selection *within* a taxon -- ``Malus sargentii
+    'Tina'`` is the species Malus sargentii and the selection 'Tina'; ``Malus
+    'Spring Snow'`` is a selection with no species named at all.  It is not a
+    rank in the wild taxonomy, which is why it is not part of the `species`
+    key: the enrichment table describes the taxon, and one row per cultivar
+    would fragment the most common street trees into dozens of keys with the
+    same common name.  It is still a fact about *this tree*, so the ingest
+    keeps it on the tree row as `cultivar` rather than truncating it away.
+
+    Only the quoted form is recognised, because that is the only one that can
+    be told apart from a trailing note or an unquoted trade name.  Casing is
+    left alone unless the source wrote it entirely in lower case, since
+    nursery codes are case-significant ("JFS-Caddo2") and a lower-cased OSM
+    tag is just a typist's habit.
+
+    Examples:
+        "Malus sargentii 'Tina'"           -> "Tina"
+        "Malus 'spring snow' high brnch"   -> "Spring Snow"
+        "Acer saccharum 'JFS-Caddo2'"      -> "JFS-Caddo2"
+        "Prunus serrulata \u2018Kanzan\u2019"      -> "Kanzan"
+        "Malus 'Spring Snow"               -> "Spring Snow"  (unterminated)
+        "Acer platanoides"                 -> None
+        "Vacant"                           -> None
+    """
+    if value is None:
+        return None
+    s = value.strip()
+    starts = [s.find(q) for q in _QUOTE_CHARS if s.find(q) != -1]
+    if not starts:
+        return None
+    start = min(starts)
+    rest = s[start + 1:]
+    ends = [rest.find(q) for q in _QUOTE_CHARS if rest.find(q) != -1]
+    inner = rest[: min(ends)] if ends else rest
+    inner = " ".join(inner.split())
+    if not inner or not any(ch.isalnum() for ch in inner):
+        return None
+    if inner == inner.lower():
+        inner = " ".join(w[:1].upper() + w[1:] for w in inner.split(" "))
+    return inner
+
+
+# What a tree whose species we do not know is called.  `species` is a Trilogy
+# key, and carrying a real value rather than a null keeps it join-safe
+# everywhere without relying on null-matching semantics.  It is excluded from
+# enrichment by name via SKIP_SPECIES / SPECIES_EXCLUSION_SQL in
+# enrichment/_tree_shared.py -- an explicit, greppable exclusion rather than a
+# silent skip.
+UNKNOWN_SPECIES = "Unknown"
+
+# Some non-taxa still carry real information: a source that gives up on the
+# species but records "Palm" or "Shrub" has told us the growth form, which is
+# what drives the map icon and colour.  Merging those into UNKNOWN_SPECIES
+# throws that away, so they get their own sentinels instead.  Like
+# UNKNOWN_SPECIES they are excluded from enrichment by name -- their
+# presentation is hardcoded in src/src/data/species.ts rather than
+# guessed by an LLM, because "Palm" is not a taxon and asking a model to
+# describe one yields a plausible, specific and wrong answer: the "Unknown"
+# row came back as Orania timikae, a critically endangered New Guinea palm,
+# and labelled 189k trees across every city until it was purged.
+PALM_SPECIES = "Palm"
+SHRUB_SPECIES = "Shrub"
+CACTUS_SPECIES = "Cactus"
+# Not a growth form but the same kind of fact: the source recorded a standing
+# tree and that it is dead, without a species.  It stays on the map -- a dead
+# tree is still a tree at that spot -- under its own sentinel rather than as
+# "Unknown", so the condition is not lost.  An empty site or stump is a
+# different thing and is dropped; see is_not_a_tree.
+DEAD_SPECIES = "Dead"
+
+# Values that name a growth form rather than a taxon, in the languages the
+# wired cities publish in.  Anything not listed here that fails
+# `sanitize_species` merges into UNKNOWN_SPECIES.
+_FORM_SENTINEL_ALIASES: dict[str, str] = {
+    "palm": PALM_SPECIES,
+    "palms": PALM_SPECIES,
+    "palm tree": PALM_SPECIES,
+    "palmera": PALM_SPECIES,   # es
+    "palmeira": PALM_SPECIES,  # pt
+    "palmier": PALM_SPECIES,   # fr
+    "palme": PALM_SPECIES,     # de
+    "shrub": SHRUB_SPECIES,
+    "shrubs": SHRUB_SPECIES,
+    "bush": SHRUB_SPECIES,
+    "hedge": SHRUB_SPECIES,
+    # Mississauga records a hedge and a shrub under one value; both spellings
+    # because `form_sentinel_for` lowercases the raw string while
+    # `shared.species.english` looks it up after punctuation is stripped.
+    "shrub / hedge": SHRUB_SPECIES,
+    "shrub hedge": SHRUB_SPECIES,
+    "arbusto": SHRUB_SPECIES,  # es/pt
+    "arbuste": SHRUB_SPECIES,  # fr
+    "struik": SHRUB_SPECIES,   # nl
+    "strauch": SHRUB_SPECIES,  # de
+    "cactus": CACTUS_SPECIES,
+    "cacti": CACTUS_SPECIES,
+    "cactaceae": CACTUS_SPECIES,
+    # el — Athens's National Garden inventory records self-sown palms as
+    # "Αυτοφυής φοίνικας".  Two spellings per phrase because the two lookups
+    # normalise differently: sanitize_species strips diacritics first, while
+    # form_sentinel_for sees the raw value.
+    "φοίνικας": PALM_SPECIES,
+    "φοινικας": PALM_SPECIES,
+    "αυτοφυής φοίνικας": PALM_SPECIES,
+    "αυτοφυης φοινικας": PALM_SPECIES,
+    "θάμνος": SHRUB_SPECIES,
+    "θαμνος": SHRUB_SPECIES,
+    "dead": DEAD_SPECIES,
+    "dead tree": DEAD_SPECIES,
+    "dood": DEAD_SPECIES,            # nl
+    "dode boom": DEAD_SPECIES,       # nl
+    "abgestorben": DEAD_SPECIES,     # de
+    "tot": DEAD_SPECIES,             # de
+    "toter baum": DEAD_SPECIES,      # de
+    "muerto": DEAD_SPECIES,          # es
+    "arbol muerto": DEAD_SPECIES,    # es
+    "árbol muerto": DEAD_SPECIES,    # es
+    "mort": DEAD_SPECIES,            # fr
+    "arbre mort": DEAD_SPECIES,      # fr
+    "νεκρό": DEAD_SPECIES,           # el
+    "νεκρο": DEAD_SPECIES,
+    # ja -- Tokyo's metropolitan-road survey.  `枯木` is a standing dead tree,
+    # the same fact the Dutch and German entries above record; `ヤシ科sp.` is
+    # "Arecaceae sp.", a surveyor who identified the family and stopped.  Both
+    # are single rows, and both would otherwise lose the one thing the survey
+    # did establish.  Reached through `shared.species.japanese`, which hands an
+    # unresolved value straight to `form_sentinel_for`.
+    "枯木": DEAD_SPECIES,
+    "ヤシ科sp.": PALM_SPECIES,
+}
+
+# Every value the `species` key can hold that is not a scientific name.  The
+# enrichment scripts and the frontend both key off this set, so a new sentinel
+# is added here and picked up in both places.
+SPECIES_SENTINELS: frozenset[str] = frozenset(
+    {UNKNOWN_SPECIES, PALM_SPECIES, SHRUB_SPECIES, CACTUS_SPECIES, DEAD_SPECIES}
+)
+
+
+# What a sentinel looks like in the enrichment table.
+#
+# `species` is the join key into enrichment, so a sentinel with no row there
+# resolves to NULL in any query that reads an enrichment column -- the
+# dashboards showed a null species and a null common name for ~190k trees that
+# do carry a value.  These rows fix that, and they are *authored*: the values
+# below are the ones the frontend hardcodes in src/src/data/species.ts, not
+# something an LLM produced.  That distinction is the whole point.  The row
+# that motivated the purge was an LLM answer for "Unknown" (Orania timikae, a
+# New Guinea palm, joined to 189,139 trees); these carry no taxonomy, no photo
+# and no ecological claims -- only the label and the growth form the source
+# actually recorded.
+#
+# purge_non_taxa() still removes every sentinel row it reads from the parquet
+# before these are re-appended, so a drifted or model-written row cannot
+# survive a run.
+SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
+    UNKNOWN_SPECIES: {
+        "common_names": ["Species not recorded"],
+        "description": (
+            "This tree is in the inventory, but its source did not record a species."
+        ),
+        "tree_form": "default",
+    },
+    PALM_SPECIES: {
+        "common_names": ["Palm (species not recorded)"],
+        "description": (
+            "The source recorded this as a palm without identifying the species."
+        ),
+        "tree_form": "palm",
+    },
+    SHRUB_SPECIES: {
+        "common_names": ["Shrub (species not recorded)"],
+        "description": (
+            "The source recorded this as a shrub without identifying the species."
+        ),
+        "tree_form": "multi_trunk",
+    },
+    CACTUS_SPECIES: {
+        "common_names": ["Cactus (species not recorded)"],
+        "description": (
+            "The source recorded this as a cactus without identifying the species."
+        ),
+        "tree_form": "columnar",
+    },
+    DEAD_SPECIES: {
+        "common_names": ["Dead tree"],
+        "description": (
+            "The source recorded this tree as dead, without identifying the species."
+        ),
+        "tree_form": "default",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Species synonyms
+# ---------------------------------------------------------------------------
+
+# One accepted scientific name per taxon, keyed by the names the inventories
+# publish instead of it.  `Platanus x acerifolia` and `Platanus x hispanica`
+# are the same hybrid -- the London plane, P. occidentalis x P. orientalis --
+# and Kew's Plants of the World Online lists the second as the accepted name
+# with the first as a heterotypic synonym; the published data carried 158k
+# trees under one and 53k under the other, with two enrichment rows, two LLM
+# calls and two entries in every species rollup.  `sanitize_species` applies
+# this map as its last step, so a tree row publishes the accepted name, and
+# the enrichment pipeline reads the same map to fill each accepted row's
+# `synonyms` and to publish an alias row under every synonym key, so a tree
+# row still carrying the old name joins to the right taxon until its city is
+# rebuilt (see `enrichment/_tree_shared.with_species_aliases`).
+#
+# Hardcoded rather than read from the enrichment parquet at ingest time,
+# because every city job would then depend on that object being reachable,
+# and a hand-edit in the admin form would silently change what eighteen
+# ingests publish.  A reviewer who finds a duplicate adds the pair *here*;
+# the admin form's synonyms field bridges the join in the meantime.
+#
+# Keys and values are written the way `sanitize_species` emits them -- ASCII
+# hybrid mark, genus capitalised, binomial rank -- and a value is never a key,
+# so one lookup is enough.  `test_ingest_shared.py` checks both.  POWO
+# (https://powo.science.kew.org) is the authority; add a pair only when it
+# lists one name as a synonym of the other.  A name that is merely
+# *misapplied* in the trade for a different species (`Ficus nitida` for
+# F. microcarpa, `Jacaranda acutifolia` for J. mimosifolia) is not a synonym
+# and is deliberately not here.
+SPECIES_SYNONYMS: dict[str, str] = {
+    # Nomenclatural and taxonomic synonyms (POWO lists the key under the value).
+    "Platanus x acerifolia": "Platanus x hispanica",
+    "Sophora japonica": "Styphnolobium japonicum",
+    "Tilia x vulgaris": "Tilia x europaea",
+    "Eucalyptus ficifolia": "Corymbia ficifolia",
+    "Eucalyptus citriodora": "Corymbia citriodora",
+    "Eucalyptus maculata": "Corymbia maculata",
+    "Tristania conferta": "Lophostemon confertus",
+    "Tristania laurina": "Tristaniopsis laurina",
+    "Arecastrum romanzoffianum": "Syagrus romanzoffiana",
+    "Podocarpus gracilior": "Afrocarpus gracilior",
+    "Rhus lancea": "Searsia lancea",
+    "Libocedrus decurrens": "Calocedrus decurrens",
+    "Thuja orientalis": "Platycladus orientalis",
+    "Sterculia populnea": "Brachychiton populneus",
+    "Cercidium floridum": "Parkinsonia florida",
+    "Cercidium microphyllum": "Parkinsonia microphylla",
+    "Acacia farnesiana": "Vachellia farnesiana",
+    "Acacia karroo": "Vachellia karroo",
+    "Yucca elephantipes": "Yucca gigantea",
+    "Fraxinus oxycarpa": "Fraxinus angustifolia",
+    # Genus transfers Kew does not follow: POWO keeps these in Cupressus, and
+    # treats the Nootka cypress and the Leyland cypress the same way.
+    "Hesperocyparis macrocarpa": "Cupressus macrocarpa",
+    "Hesperocyparis arizonica": "Cupressus arizonica",
+    "Hesperocyparis glabra": "Cupressus glabra",
+    "Chamaecyparis nootkatensis": "Cupressus nootkatensis",
+    "Xanthocyparis nootkatensis": "Cupressus nootkatensis",
+    "Callitropsis nootkatensis": "Cupressus nootkatensis",
+    "Cuprocyparis leylandii": "Cupressus x leylandii",
+    "X cuprocyparis leylandii": "Cupressus x leylandii",
+    "Cupressocyparis leylandii": "Cupressus x leylandii",
+    "X cupressocyparis leylandii": "Cupressus x leylandii",
+    # Orthographic variants.
+    "Schinus terebinthifolius": "Schinus terebinthifolia",
+    "Howea forsterana": "Howea forsteriana",
+    "Raphiolepis indica": "Rhaphiolepis indica",
+    # A hybrid published without its mark is the same taxon as with it.
+    "Platanus hispanica": "Platanus x hispanica",
+    "Platanus acerifolia": "Platanus x hispanica",
+    "Prunus yedoensis": "Prunus x yedoensis",
+    "Prunus subhirtella": "Prunus x subhirtella",
+    "Populus canadensis": "Populus x canadensis",
+    "Photinia fraseri": "Photinia x fraseri",
+    "Ulmus hollandica": "Ulmus x hollandica",
+    "Bauhinia blakeana": "Bauhinia x blakeana",
+    # Published with the mark where the taxon has none, or without it where
+    # the taxon is a nothospecies.  Every pair below is one POWO answered
+    # in both directions -- it has no record of the key and lists the value
+    # as accepted -- which is what settles which spelling is the mistake;
+    # `species_audit.py` is the tool that asked.
+    "Acer freemanii": "Acer x freemanii",
+    "Acer x pseudosieboldianum": "Acer pseudosieboldianum",
+    "Acer zoeschense": "Acer x zoeschense",
+    "Aesculus arnoldiana": "Aesculus x arnoldiana",
+    "Aesculus bushii": "Aesculus x bushii",
+    "Aesculus carnea": "Aesculus x carnea",
+    "Aesculus hybrida": "Aesculus x hybrida",
+    "Aesculus mutabilis": "Aesculus x mutabilis",
+    "Alnus spaethii": "Alnus x spaethii",
+    "Amelanchier lamarckii": "Amelanchier x lamarckii",
+    "Amelanchier x intermedia": "Amelanchier intermedia",
+    "Catalpa erubescens": "Catalpa x erubescens",
+    "Chaenomeles superba": "Chaenomeles x superba",
+    "Citrus aurantium": "Citrus x aurantium",
+    "Citrus limon": "Citrus x limon",
+    "Cornus rutgersensis": "Cornus x rutgersensis",
+    "Crataegus grignonensis": "Crataegus x grignonensis",
+    "Crataegus lavalleei": "Crataegus x lavalleei",
+    "Crataegus mordenensis": "Crataegus x mordenensis",
+    "Forsythia intermedia": "Forsythia x intermedia",
+    "Hamamelis intermedia": "Hamamelis x intermedia",
+    "Ilex aquipernyi": "Ilex x aquipernyi",
+    "Ilex meserveae": "Ilex x meserveae",
+    "Juniperus pfitzeriana": "Juniperus x pfitzeriana",
+    "Laburnum watereri": "Laburnum x watereri",
+    "Larix marschlinsii": "Larix x marschlinsii",
+    "Magnolia brooklynensis": "Magnolia x brooklynensis",
+    "Magnolia loebneri": "Magnolia x loebneri",
+    "Magnolia proctoriana": "Magnolia x proctoriana",
+    "Magnolia soulangeana": "Magnolia x soulangeana",
+    "Malus adstringens": "Malus x adstringens",
+    "Malus atrosanguinea": "Malus x atrosanguinea",
+    "Malus robusta": "Malus x robusta",
+    "Malus x domestica": "Malus domestica",
+    "Malus zumi": "Malus x zumi",
+    "Musa paradisiaca": "Musa x paradisiaca",
+    "Osmanthus burkwoodii": "Osmanthus x burkwoodii",
+    "Pinus holfordiana": "Pinus x holfordiana",
+    "Populus berolinensis": "Populus x berolinensis",
+    "Populus canescens": "Populus x canescens",
+    "Prunus blireana": "Prunus x blireana",
+    "Prunus cistena": "Prunus x cistena",
+    "Prunus gondouinii": "Prunus x gondouinii",
+    "Prunus hillieri": "Prunus x hillieri",
+    "Prunus nigrella": "Prunus x nigrella",
+    "Prunus pennsylvanica": "Prunus pensylvanica",
+    "Prunus schmittii": "Prunus x schmittii",
+    "Pterocarya rehderiana": "Pterocarya x rehderiana",
+    "Quercus bimundorum": "Quercus x bimundorum",
+    "Quercus jackiana": "Quercus x jackiana",
+    "Quercus libanerris": "Quercus x libanerris",
+    "Quercus turneri": "Quercus x turneri",
+    "Quercus warei": "Quercus x warei",
+    "Robinia ambigua": "Robinia x ambigua",
+    "Robinia margaretta": "Robinia x margaretta",
+    "Sorbus arnoldiana": "Sorbus x arnoldiana",
+    "Sorbus domestica": "Cormus domestica",
+    "Sorbus x hybrida": "Sorbus hybrida",
+    "Syringa prestoniae": "Syringa x prestoniae",
+    "Syringa x persica": "Syringa persica",
+    "Taxus media": "Taxus x media",
+    "Tilia euchlora": "Tilia x euchlora",
+    "Tilia europaea": "Tilia x europaea",
+    "Tilia flaccida": "Tilia x flaccida",
+    "Tilia x mongolica": "Tilia mongolica",
+    "Viburnum bodnantense": "Viburnum x bodnantense",
+    "Viburnum x rhytidophyllum": "Viburnum rhytidophyllum",
+    # Genus transfers Kew *does* follow, found when Tokyo's vernacular names
+    # were resolved: the accepted name on the right is what `shared.species.japanese`
+    # publishes, and the key is what an already-wired city published, so
+    # without these two the same taxon would carry two enrichment rows.  POWO
+    # returns a single unambiguous `synonym` reading for each.
+    "Sapium sebiferum": "Triadica sebifera",
+    "Callistemon citrinus": "Melaleuca citrina",
+    # The same, found when Taipei's Chinese names were resolved: each key is
+    # a spelling an already-wired city publishes, each value is the accepted
+    # name `shared.species.chinese` publishes, and POWO returns a single unambiguous
+    # `synonym` reading for each.  (`Cinnamomum camphora` is deliberately NOT
+    # here: Kew sinks it into *Camphora officinarum*, but the published table
+    # has carried it since San Francisco and Tokyo's and Taipei's camphors
+    # join that row -- the "published table wins" rule.)
+    "Michelia champaca": "Magnolia champaca",
+    "Callistemon viminalis": "Melaleuca viminalis",
+    "Tabebuia impetiginosa": "Handroanthus impetiginosus",
+    "Tabebuia chrysotricha": "Handroanthus chrysotrichus",
+    "Fortunella margarita": "Citrus japonica",
+    "Fortunella japonica": "Citrus japonica",
+    # Both spellings were published (San Francisco under Acca, Melbourne under
+    # Feijoa) and POWO returns one unambiguous synonym reading, so the row
+    # is reclaimed; the Japanese and Spanish tables publish the accepted one.
+    "Acca sellowiana": "Feijoa sellowiana",
+    # Hybrid-mark pairs from the 2026-09-11 species_audit.py run: the unmarked
+    # spelling has no POWO record and the marked one is accepted.
+    "Abelia grandiflora": "Abelia x grandiflora",
+    "Eucryphia intermedia": "Eucryphia x intermedia",
+    "Magnolia kewensis": "Magnolia x kewensis",
+}
+
+
+# The same fold, for names that are not synonyms of anything: a binomial some
+# inventory simply typed wrong.  `Liquidambar stryaciflua` is not a taxon and
+# POWO has never heard of it -- it is 787 Denver trees whose species field
+# transposed two letters -- so it cannot go in SPECIES_SYNONYMS, whose whole
+# claim is that Kew lists the key under the value.
+#
+# It still has to fold, for exactly the reasons that map exists.  Left alone a
+# misspelling is a second enrichment row for a taxon already in the table (276
+# pairs were paid for twice), a second entry in every species rollup, and a
+# second dot colour on the map.  `EXTENDING.md` rules a misspelling out of
+# `_NON_TAXON_REWRITES` because dropping `Crateagus monogyna` to `Unknown`
+# would lose a tree we can identify -- which is right, and is an argument for
+# resolving it to the name it meant, not for leaving it fragmented.
+#
+# Every key was observed in a published city parquet and adjudicated against
+# POWO by `species_audit.py`: a key is a name POWO cannot match at all, and a
+# value is one it returns as accepted.  That is what keeps a real taxon out of
+# here -- `Acer saccharum` and `Acer saccharinum` are two edits apart and both
+# accepted, so the pair is refused rather than merged, and so are
+# `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
+# `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
+SPECIES_MISSPELLINGS: dict[str, str] = {
+    "Abies balsamaea": "Abies balsamea",
+    "Acacia mearsnii": "Acacia mearnsii",
+    "Acer buergeranum": "Acer buergerianum",
+    "Acer monspessolanum": "Acer monspessulanum",
+    "Acer platenoides": "Acer platanoides",
+    "Acer tartaricum": "Acer tataricum",
+    "Acer tatricum": "Acer tataricum",
+    "Acer x freeman": "Acer x freemanii",
+    "Acer x freemani": "Acer x freemanii",
+    "Acer x freemannii": "Acer x freemanii",
+    "Acer x fremannii": "Acer x freemanii",
+    "Aeilanthus altissima": "Ailanthus altissima",
+    "Alibizia julibrissin": "Albizia julibrissin",
+    "Allianthus altissima": "Ailanthus altissima",
+    "Amelachier ovalis": "Amelanchier ovalis",
+    "Amelanchier laeviss": "Amelanchier laevis",
+    "Betula dahurica": "Betula davurica",
+    "Betula papirifera": "Betula papyrifera",
+    "Brachychiton acerifolium": "Brachychiton acerifolius",
+    "Brachychiton pupulneum": "Brachychiton populneus",
+    "Brachychiton rupestre": "Brachychiton rupestris",
+    "Brahea aramata": "Brahea armata",
+    "Buddleia alternifolia": "Buddleja alternifolia",
+    "Buddleia davidii": "Buddleja davidii",
+    "Butya capitata": "Butia capitata",
+    "Calliandra tweedii": "Calliandra tweediei",
+    "Calodendron capense": "Calodendrum capense",
+    "Caragana arboresense": "Caragana arborescens",
+    "Carpinus betulas": "Carpinus betulus",
+    "Carpinus caroliana": "Carpinus caroliniana",
+    "Carpinus turczaninowii": "Carpinus turczaninovii",
+    "Carya illinoensis": "Carya illinoinensis",
+    "Carya illinoiensis": "Carya illinoinensis",
+    "Catalpa xerubescens": "Catalpa x erubescens",
+    "Cedrus deodora": "Cedrus deodara",
+    "Cephalotaxus harringtonii": "Cephalotaxus harringtonia",
+    "Cercidiphyllym japonicum": "Cercidiphyllum japonicum",
+    "Cercidiphylum japonicum": "Cercidiphyllum japonicum",
+    "Chionanthus retusa": "Chionanthus retusus",
+    "Chiranthodendron pentadactyl": "Chiranthodendron pentadactylon",
+    "Clerodendron trichotomum": "Clerodendrum trichotomum",
+    "Cocus nucifera": "Cocos nucifera",
+    "Corylus avellena": "Corylus avellana",
+    "Corylus columa": "Corylus colurna",
+    "Corynocarpus laevigata": "Corynocarpus laevigatus",
+    "Crataegas monogyna": "Crataegus monogyna",
+    "Crataegus crusgalli": "Crataegus crus-galli",
+    "Crataegus leavigata": "Crataegus laevigata",
+    "Crataegus phaenopyru": "Crataegus phaenopyrum",
+    "Crataegus x lavallei": "Crataegus x lavalleei",
+    "Crataegus x mordensis": "Crataegus x mordenensis",
+    "Diospyros virginia": "Diospyros virginiana",
+    "Elaeagnus augustifolia": "Elaeagnus angustifolia",
+    "Eleagnus angustifolia": "Elaeagnus angustifolia",
+    "Eleagnus pungent": "Elaeagnus pungens",
+    "Eriobotrya japonicum": "Eriobotrya japonica",
+    "Eucalyptus lehmanni": "Eucalyptus lehmannii",
+    "Eucalyptus macranda": "Eucalyptus macrandra",
+    "Eucalyptus viminallis": "Eucalyptus viminalis",
+    "Euonymous europaeeus": "Euonymus europaeus",
+    "Euonymus altus": "Euonymus alatus",
+    "Euonymus japonica": "Euonymus japonicus",
+    "Fontanesia phillyreoides": "Fontanesia philliraeoides",
+    "Fraxinus anthoxyloides": "Fraxinus xanthoxyloides",
+    "Fraxinus ianuginosa": "Fraxinus lanuginosa",
+    "Fraxinus pennsylvancia": "Fraxinus pennsylvanica",
+    "Fraxinus pennsylvanicum": "Fraxinus pennsylvanica",
+    "Gingko biloba": "Ginkgo biloba",
+    "Gymnocladus dioica": "Gymnocladus dioicus",
+    "Hibiscus syriaca": "Hibiscus syriacus",
+    "Ilanthus altissima": "Ailanthus altissima",
+    "Juglans mandschurica": "Juglans mandshurica",
+    "Koelruiteria paniculata": "Koelreuteria paniculata",
+    "Lagunaria patersonii": "Lagunaria patersonia",
+    "Lagunaria petersonii": "Lagunaria patersonia",
+    "Larix siberica": "Larix sibirica",
+    "Leptospermum scoparia": "Leptospermum scoparium",
+    "Ligustrum vulgaris": "Ligustrum vulgare",
+    "Lilirodendron tulipifera": "Liriodendron tulipifera",
+    "Liquidambar stryaciflua": "Liquidambar styraciflua",
+    "Liriodrendron tulipifera": "Liriodendron tulipifera",
+    "Livistrona australis": "Livistona australis",
+    "Maackia amerunsis": "Maackia amurensis",
+    "Maakia amurensis": "Maackia amurensis",
+    "Magnolia denudate": "Magnolia denudata",
+    "Magnolia liliflora": "Magnolia liliiflora",
+    "Magnolia x soulangiana": "Magnolia x soulangeana",
+    "Magnolia x soulngeana": "Magnolia x soulangeana",
+    "Magnolia x thompsoniana": "Magnolia x thomsoniana",
+    "Malus syvestris": "Malus sylvestris",
+    "Melaleuca styphelliodes": "Melaleuca styphelioides",
+    "Melia azerdarach": "Melia azedarach",
+    "Metasequoia glyplostroboides": "Metasequoia glyptostroboides",
+    "Metrosideros excelsus": "Metrosideros excelsa",
+    "Nyssa aqauatica": "Nyssa aquatica",
+    "Olea europea": "Olea europaea",
+    "Ostria carpinifolia": "Ostrya carpinifolia",
+    "Ostyria virginiana": "Ostrya virginiana",
+    "Patanus racemosa": "Platanus racemosa",
+    "Petula pendula": "Betula pendula",
+    "Phellodendron amurensis": "Phellodendron amurense",
+    "Philadelphus lewissii": "Philadelphus lewisii",
+    "Phoenix dactilifera": "Phoenix dactylifera",
+    "Picea englemannii": "Picea engelmannii",
+    "Picea koyamai": "Picea koyamae",
+    "Picea omorica": "Picea omorika",
+    "Picea punges": "Picea pungens",
+    "Pinus jeffereyi": "Pinus jeffreyi",
+    "Pinus sylverstris": "Pinus sylvestris",
+    "Pinus wallichina": "Pinus wallichiana",
+    "Pistachia chinensis": "Pistacia chinensis",
+    "Pittosporum phillyraeoides": "Pittosporum phillyreoides",
+    "Populus balamifera": "Populus balsamifera",
+    "Populus tremulodies": "Populus tremuloides",
+    "Prunus americain": "Prunus americana",
+    "Prunus fructicosa": "Prunus fruticosa",
+    "Prunus ilicifoia": "Prunus ilicifolia",
+    "Prunus maakii": "Prunus maackii",
+    "Prunus salicinia": "Prunus salicina",
+    "Prunus x blireiana": "Prunus x blireana",
+    "Prunus x yodoensis": "Prunus x yedoensis",
+    "Pseudostuga menziesii": "Pseudotsuga menziesii",
+    "Psidium guajaba": "Psidium guajava",
+    "Pterocaria fraxinifolia": "Pterocarya fraxinifolia",
+    "Pterocarya stepnotera": "Pterocarya stenoptera",
+    "Pterostyrax hispida": "Pterostyrax hispidus",
+    "Pyrus usseriensis": "Pyrus ussuriensis",
+    "Pyrus ussurensis": "Pyrus ussuriensis",
+    "Quercus biicolor": "Quercus bicolor",
+    "Quercus gambeii": "Quercus gambelii",
+    "Quercus gambellii": "Quercus gambelii",
+    "Quercus keloggii": "Quercus kelloggii",
+    "Quercus rhysophylla": "Quercus rysophylla",
+    "Quercus shumardi": "Quercus shumardii",
+    "Quercus wislizenii": "Quercus wislizeni",
+    "Quercus x comptonae": "Quercus x comptoniae",
+    "Quercus x macdanielli": "Quercus x macdanielii",
+    "Rhamnus catharticus": "Rhamnus cathartica",
+    "Rhapiolepis indica": "Rhaphiolepis indica",
+    "Robina pseudoacacia": "Robinia pseudoacacia",
+    "Salix amygdalioides": "Salix amygdaloides",
+    "Salix pentendra": "Salix pentandra",
+    "Schinus polygamus": "Schinus polygama",
+    "Schinus terebinthefolia": "Schinus terebinthifolia",
+    "Sequoiadendron gigantum": "Sequoiadendron giganteum",
+    "Seudotsuga menziesii": "Pseudotsuga menziesii",
+    "Sorbas aucaparia": "Sorbus aucuparia",
+    "Sorbus aucaparia": "Sorbus aucuparia",
+    "Sorbus auccuparia": "Sorbus aucuparia",
+    "Styphnolobium japonica": "Styphnolobium japonicum",
+    "Styrax japonicas": "Styrax japonicus",
+    "Syagrus romanzoffianum": "Syagrus romanzoffiana",
+    "Syringa recticulata": "Syringa reticulata",
+    "Syringa reticulate": "Syringa reticulata",
+    "Thuya occidentalis": "Thuja occidentalis",
+    "Tilia oliverii": "Tilia oliveri",
+    "Tilia x europea": "Tilia x europaea",
+    "Trachycarpus fortuneii": "Trachycarpus fortunei",
+    "Trachycarpus fortuneis": "Trachycarpus fortunei",
+    "Tsuga candensis": "Tsuga canadensis",
+    "Wisteria sinesis": "Wisteria sinensis",
+    "Xylosma congestum": "Xylosma congesta",
+    "Zanthoxylum piperetum": "Zanthoxylum piperitum",
+    "Zelcova carpinifolia": "Zelkova carpinifolia",
+    "Zelkove serrata": "Zelkova serrata",
+    # 2026-09-11 species_audit.py run: 80 pairs over 2,351 trees, each key a
+    # name POWO has no record of and each value an accepted name one or two
+    # edits away with no other candidate.
+    "Acer buegerianum": "Acer buergerianum",
+    "Acer cappadocium": "Acer cappadocicum",
+    "Acer macrophylla": "Acer macrophyllum",
+    "Acer macrophylum": "Acer macrophyllum",
+    "Acer saccharam": "Acer saccharum",
+    "Asminia triloba": "Asimina triloba",
+    "Betula papyrifa": "Betula papyrifera",
+    "Buxus semppervirens": "Buxus sempervirens",
+    "Cartaegus laevigata": "Crataegus laevigata",
+    "Celtis occidenatlis": "Celtis occidentalis",
+    "Cercidiphyllum japonica": "Cercidiphyllum japonicum",
+    "Cercidiphyllum japonicus": "Cercidiphyllum japonicum",
+    "Cercidipyllum japonicum": "Cercidiphyllum japonicum",
+    "Cercis canandensis": "Cercis canadensis",
+    "Chamacyparis lawsoniana": "Chamaecyparis lawsoniana",
+    "Chamacyparis obtusa": "Chamaecyparis obtusa",
+    "Chamacyparis pisifera": "Chamaecyparis pisifera",
+    "Cladastris kentukea": "Cladrastis kentukea",
+    "Continus coggygria": "Cotinus coggygria",
+    "Cornus kouss": "Cornus kousa",
+    "Cornus nutallii": "Cornus nuttallii",
+    "Cornus nuttalli": "Cornus nuttallii",
+    "Cryptomeria japnica": "Cryptomeria japonica",
+    "Cryptomeria japonicus": "Cryptomeria japonica",
+    "Davidia involucrate": "Davidia involucrata",
+    "Eunoymus europaeus": "Euonymus europaeus",
+    "Fagus gradifolia": "Fagus grandifolia",
+    "Fraxinus pennsylvatica": "Fraxinus pennsylvanica",
+    "Gleditisia triacanthos": "Gleditsia triacanthos",
+    "Gleditsia triancanthos": "Gleditsia triacanthos",
+    "Gleditsia tricanthos": "Gleditsia triacanthos",
+    "Juglans cinera": "Juglans cinerea",
+    "Koelreuteria panniculata": "Koelreuteria paniculata",
+    "Lagerstroemia inedica": "Lagerstroemia indica",
+    "Lagerstroemimia indica": "Lagerstroemia indica",
+    "Lagunaria pattersonia": "Lagunaria patersonia",
+    "Larix larinica": "Larix laricina",
+    "Larix occidenatlis": "Larix occidentalis",
+    "Liguidambar styraciflua": "Liquidambar styraciflua",
+    "Liquidamber styraciflua": "Liquidambar styraciflua",
+    "Magnolia accuminata": "Magnolia acuminata",
+    "Metasequoia glyptostroboid": "Metasequoia glyptostroboides",
+    "Metasequoia glytostroboides": "Metasequoia glyptostroboides",
+    "Nothofuagus antarctica": "Nothofagus antarctica",
+    "Notholithocarpus densiflora": "Notholithocarpus densiflorus",
+    "Ostrya virginianna": "Ostrya virginiana",
+    "Oxydendron arboreum": "Oxydendrum arboreum",
+    "Parrotia persicaum": "Parrotia persica",
+    "Paulownia tomemtosa": "Paulownia tomentosa",
+    "Paulownia tormentosa": "Paulownia tomentosa",
+    "Picea sitkensis": "Picea sitchensis",
+    "Pinus heldreichiin": "Pinus heldreichii",
+    "Pistacia chinesis": "Pistacia chinensis",
+    "Prunus campanulate": "Prunus campanulata",
+    "Prunus camparulata": "Prunus campanulata",
+    "Prunus ceresifera": "Prunus cerasifera",
+    "Prunus virginianna": "Prunus virginiana",
+    "Pyrus pyrofolla": "Pyrus pyrifolia",
+    "Quercis muehlenbergii": "Quercus muehlenbergii",
+    "Quercus accutissima": "Quercus acutissima",
+    "Quercus glaucar": "Quercus glauca",
+    "Quercus myrsinaefolia": "Quercus myrsinifolia",
+    "Quercus myrsinfolia": "Quercus myrsinifolia",
+    "Quercus phyllyreoides": "Quercus phillyreoides",
+    "Salix babilonica": "Salix babylonica",
+    "Salixa alba": "Salix alba",
+    "Scadiopitys verticillata": "Sciadopitys verticillata",
+    "Sequiadendron giganteum": "Sequoiadendron giganteum",
+    "Sequoia semppervirens": "Sequoia sempervirens",
+    "Stewartia pseudo-camellia": "Stewartia pseudocamellia",
+    "Styrax japonica": "Styrax japonicus",
+    "Styrax japonicum": "Styrax japonicus",
+    "Syringa reticlata": "Syringa reticulata",
+    "Thuja occidenatlis": "Thuja occidentalis",
+    "Tilia tomemtosa": "Tilia tomentosa",
+    "Tilia tormentosa": "Tilia tomentosa",
+    "Ulmus american": "Ulmus americana",
+    "Vitex angus-castus": "Vitex agnus-castus",
+    "Zelcova serrata": "Zelkova serrata",
+    "Zolkova serrata": "Zelkova serrata",
+}
+
+
+def synonyms_of(accepted: str) -> list[str]:
+    """Every name SPECIES_SYNONYMS folds into *accepted*, sorted.
+
+    Deliberately not the misspellings: this fills the `synonyms` column, and
+    a typo is not a synonym.  `misspellings_of` is the parallel lookup for the
+    alias rows, which do need both.
+    """
+    return sorted(k for k, v in SPECIES_SYNONYMS.items() if v == accepted)
+
+
+def misspellings_of(accepted: str) -> list[str]:
+    """Every name SPECIES_MISSPELLINGS folds into *accepted*, sorted."""
+    return sorted(k for k, v in SPECIES_MISSPELLINGS.items() if v == accepted)
+
+
+def form_sentinel_for(value: str | None) -> str | None:
+    """Return the growth-form sentinel *value* names, or ``None``.
+
+    Called only for values `sanitize_species` has already rejected as taxa, to
+    decide whether they merge into ``UNKNOWN_SPECIES`` or keep their form.
+
+    Examples:
+        "Palm"    -> "Palm"
+        "arbusto" -> "Shrub"
+        "Vacant"  -> None   (says nothing about a plant)
+    """
+    if value is None:
+        return None
+    return _FORM_SENTINEL_ALIASES.get(value.strip().lower())
+
+
+def _is_epithet_token(token: str) -> bool:
+    """True for a token shaped like a specific epithet.
+
+    Letters, optionally joined by ONE internal hyphen.  The botanical code
+    permits a hyphen in an epithet compounded from two words that could stand
+    apart, and several of those are common street trees: `Crataegus crus-galli`
+    (cockspur hawthorn), `Vaccinium vitis-idaea`, `Coix lacryma-jobi`.  A bare
+    `str.isalpha()` rejected all of them, so each collapsed onto its genus and
+    silently merged with every other species in it.
+
+    One hyphen, not any number, and letters on both sides: that admits the real
+    names and still refuses nursery cultivar codes, which is what the caller
+    needs to keep out ("JFS-Caddo2" fails on the digit, "Emer-II-x" on the
+    second hyphen).
+    """
+    if not token:
+        return False
+    parts = token.split("-")
+    return len(parts) <= 2 and all(p.isalpha() for p in parts)
+
+
+def sanitize_species(value: str | None) -> str | None:
+    """Reduce a raw species string to an accepted Latin binomial, or ``None``.
+
+    `_sanitize_taxon` decides whether the value names a taxon and truncates it
+    to species rank; this then folds the result onto one accepted name through
+    SPECIES_SYNONYMS and SPECIES_MISSPELLINGS, so `Platanus x acerifolia` and
+    `Platanus x hispanica` publish as one key, and so do `Acer platenoides`
+    and `Acer platanoides`.  The cultivar a value carried is not part of the
+    result -- `extract_cultivar` keeps it on the tree row instead.
+
+    The two maps are separate because they make different claims -- POWO lists
+    a synonym under its accepted name and has never heard of a typo -- but
+    they resolve identically here, and neither may contain a key the other
+    does.
+
+    Examples:
+        "Platanus x acerifolia 'Bloodgood'" -> "Platanus x hispanica"
+        "Sophora japonica"                  -> "Styphnolobium japonicum"
+        "Prunus yedoensis"                  -> "Prunus x yedoensis"
+        "Acer platenoides"                  -> "Acer platanoides"
+        "Acer platanoides"                  -> "Acer platanoides"
+        "Pin oak"                           -> None
+    """
+    taxon = _sanitize_taxon(value)
+    if taxon is None:
+        return None
+    if taxon in SPECIES_SYNONYMS:
+        return SPECIES_SYNONYMS[taxon]
+    return SPECIES_MISSPELLINGS.get(taxon, taxon)
+
+
+def _sanitize_taxon(value: str | None) -> str | None:
+    """Reduce a raw species string to a Latin binomial, or ``None``.
+
+    The shape rules only; `sanitize_species` applies the synonym map on top.
+
+    ``normalize_species`` fixes *casing*; this decides whether the value is a
+    scientific name at all.  Sources disagree wildly on what they put in a
+    species field -- OSM contributors free-type ("Serviceberry or dogwood?",
+    "Pin oak", "Malus 'spring snow' high brnch"), and municipal inventories
+    use placeholders for empty sites ("Vacant", "Onbekend").  Everything that
+    is not a binomial is dropped to ``None`` rather than kept, because the
+    `species` key is the join key into the enrichment table: junk there is
+    both a permanent LLM cost and a wrong label on the map.
+
+    Returns the genus, optionally followed by a hybrid mark and an epithet.
+    Cultivars, rank qualifiers and trailing notes are truncated away.
+
+    Examples:
+        "Acer platanoides"              -> "Acer platanoides"
+        "Citrus × limon"                -> "Citrus × limon"   (mark preserved)
+        "Platanus x hispanica"          -> "Platanus x hispanica"
+        "X amelasorbus jackii"          -> "X amelasorbus jackii"
+        "Fagus spp"                     -> "Fagus"
+        "Malus 'spring snow' high brnch"-> "Malus"
+        "Acer unidentified"             -> "Acer"
+        "Parkinsonia x"                 -> "Parkinsonia"  (dangling mark)
+        "Callistemon king"              -> "Callistemon"  (cultivar name)
+        "Pin oak"                       -> None  (common name)
+        "Oak"                           -> None  (common name, no genus)
+        "Japonica"                      -> None  (epithet, genus lost)
+        "X ambigua"                     -> None  (hybrid epithet, genus lost)
+        "Kastanie"                      -> None  (de: chestnut)
+        "Platanaceae"                   -> None  (a family, not a species)
+        "Serviceberry or dogwood?"      -> None
+        "Amel. laevis 'spring flurry'"  -> None  (abbreviated genus)
+        "Vacant"                        -> None
+        "Palm"                          -> None  (a form, not a taxon; see
+                                                  form_sentinel_for)
+    """
+    s = normalize_species(value)
+    if s is None:
+        return None
+    s = _strip_diacritics(s)
+    s = _PARENTHETICAL.sub("", s).strip()
+    if not s:
+        return None
+
+    if s.lower() in _SPECIES_PLACEHOLDERS:
+        return None
+    # "Palm" / "Shrub" / "Cactus" are genus-shaped and would otherwise survive
+    # as invented genera; enforce_tree_schema maps them to a form sentinel.
+    # Checked before _NON_TAXON_REWRITES so a value that names a growth form
+    # keeps it rather than merging into UNKNOWN_SPECIES.
+    if s.lower() in _FORM_SENTINEL_ALIASES:
+        return None
+    if s.lower() in _NON_TAXON_REWRITES:
+        return _NON_TAXON_REWRITES[s.lower()]
+    # Free-typed uncertainty spanning the whole value ("Serviceberry or
+    # dogwood?").  Checked before the cultivar truncation below, because the
+    # alternatives are named on either side of it.
+    if " or " in s.lower():
+        return None
+
+    # Truncate at a cultivar quote, dropping the cultivar and any trailing note.
+    cut = [s.find(q) for q in _QUOTE_CHARS if s.find(q) != -1]
+    if cut:
+        s = s[: min(cut)].strip()
+        if not s:
+            return None
+        # The lookups above ran against the value *with* its cultivar still
+        # attached, so a bare epithet carrying one slipped past them -- New
+        # Westminster publishes `biloba 'Autumn Gold'`, which is a Ginkgo that
+        # lost its genus, and reading it as the genus `Biloba` invents one.
+        # Ask again now the cultivar is off.
+        if s.lower() in _SPECIES_PLACEHOLDERS or s.lower() in _FORM_SENTINEL_ALIASES:
+            return None
+        if s.lower() in _NON_TAXON_REWRITES:
+            return _NON_TAXON_REWRITES[s.lower()]
+
+    # Free-typed uncertainty and any numeric content are never taxa -- but ask
+    # only of what is left after the cultivar came off.  A nursery cultivar code
+    # routinely carries a digit ("Acer saccharum 'JFS-Caddo2'"), and rejecting
+    # the whole value for it threw away a perfectly good binomial that was
+    # sitting right there: whether a real name survived came down to whether
+    # its cultivar happened to be spelled with a number.
+    if "?" in s or "/" in s or any(ch.isdigit() for ch in s):
+        return None
+
+    tokens = s.split()
+    if not tokens:
+        return None
+
+    prefix = ""
+    # A leading hybrid mark denotes a nothogenus ("X amelasorbus jackii"), and
+    # a nothogenus name is still genus + epithet.  With one token after the
+    # mark the genus is the thing that went missing -- "X ambigua" is some
+    # city's `Genus × ambigua` with the genus dropped upstream, and reading it
+    # as a nothogenus would invent one.  Two real nothogenus names are lost
+    # this way ("× Chitalpa", "× Cupressocyparis"), but both also appear in the
+    # data spelled without the mark, where they resolve normally.
+    if tokens[0].lower() in _HYBRID_MARKS:
+        # Leading, so it is the first word and takes normalize_species' capital.
+        prefix = CANONICAL_HYBRID_MARK.upper()
+        tokens = tokens[1:]
+        if len(tokens) < 2:
+            return None
+
+    genus = tokens[0]
+    # An abbreviated or one/two-letter genus cannot be resolved to a real name.
+    if genus.endswith(".") or len(genus) < 3 or not genus.isalpha():
+        return None
+    if genus.lower() in _SPECIES_PLACEHOLDERS:
+        return None
+    # The whole-value lookups above miss a non-taxon that arrives with a rank
+    # qualifier or a trailing note -- "Juniper spp.", "Private Tree",
+    # "Koto no ito", "Remove Dead Top plicata".  What the value names is
+    # decided by its first word, so ask again with just the genus.  No real
+    # genus is a key in that map, by construction: an entry belongs there only
+    # when it names no genus at all, or names one in another language.
+    if genus.lower() in _NON_TAXON_REWRITES:
+        return _NON_TAXON_REWRITES[genus.lower()]
+    # "-aceae" is a family, a rank the species key does not carry.  Keeping it
+    # would hand the enrichment LLM a family to describe as if it were a tree.
+    if genus.lower().endswith("aceae"):
+        return None
+
+    # A placeholder standing where the epithet should be truncates to the
+    # genus -- the rule the single-token loop below already applies, asked of
+    # the whole remainder so that a *phrase* is caught too.  New Westminster
+    # publishes "Magnolia to be determined", which token-by-token reads "to"
+    # as the epithet and publishes the taxon `Magnolia to`.
+    remainder = " ".join(tokens[1:]).rstrip(".").lower()
+    if remainder and remainder in _SPECIES_PLACEHOLDERS:
+        tokens = tokens[:1]
+
+    hybrid = ""
+    epithet = ""
+    for tok in tokens[1:]:
+        low = tok.rstrip(".").lower()
+        if tok.lower() in _HYBRID_MARKS and not epithet:
+            hybrid = CANONICAL_HYBRID_MARK
+            continue
+        if low in _RANK_QUALIFIERS or low in _SPECIES_PLACEHOLDERS or tok.endswith("."):
+            break
+        if not _is_epithet_token(tok):
+            break
+        epithet = tok
+        break
+
+    # "Pin oak" / "Red maple": a Latin epithet is never an English tree noun.
+    if epithet and not hybrid and epithet.lower() in _COMMON_NAME_NOUNS:
+        return None
+
+    # "Parkinsonia x" is a genus with a dangling mark, not a hybrid.
+    if not epithet:
+        hybrid = ""
+
+    parts = [p for p in (prefix, genus, hybrid, epithet) if p]
+    return " ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Data source labels
+# ---------------------------------------------------------------------------
+
+# Every tree row carries the dataset it came from.  These values are the
+# picklist: they must stay byte-identical to the per-city `{code}_source` enums
+# declared in each city's tree model, and each one is the sole source label of
+# exactly one raw datasource.  That one-to-one mapping is not cosmetic — a
+# city's raw sources declare `complete where city = 'X' and {code}_source = 'Y'`,
+# and it is the disjoint source partition that lets Trilogy UNION a city's
+# municipal and community rows into one Parquet.  A city whose only source
+# claimed `complete where city = 'X'` would leave no room for community rows,
+# which is exactly how the first cut of this feature silently dropped every one.
+#
+# The enums are per-city rather than one global enum because Trilogy proves a
+# Parquet complete by checking its sources cover every value of the partitioning
+# enum; a 30-value global enum is never covered by one city's two sources.
+#
+# Keyed by city code so `community_source_for` can derive the community label
+# and so tests can assert the two lists agree.
+MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "FIHEL": ("HELSINKI_OPENDATA",),
+    "DKCPH": ("COPENHAGEN_OPENDATA",),
+    "TWTPE": ("TAIPEI_OPENDATA",),
+    "COBOG": ("BOGOTA_OPENDATA",),
+    "JPTYO": ("TOKYO_OPENDATA",),
+    "CAMON": ("MONCTON_OPENDATA",),
+    "CAAJX": ("AJAX_OPENDATA",),
+    "CABUR": ("BURLINGTON_ON_OPENDATA",),
+    "CAOTT": ("OTTAWA_OPENDATA",),
+    "CAMIS": ("MISSISSAUGA_OPENDATA",),
+    "CANWE": ("NEWWESTMINSTER_OPENDATA",),
+    "CAKEL": ("KELOWNA_OPENDATA",),
+    "CAVIC": ("VICTORIA_OPENDATA",),
+    "CALET": ("LETHBRIDGE_OPENDATA",),
+    "CAKGN": ("KINGSTON_OPENDATA",),
+    "CAHFX": ("HALIFAX_OPENDATA",),
+    "CALON": ("LONGUEUIL_OPENDATA",),
+    "CAQUE": ("QUEBEC_OPENDATA",),
+    "CAMTL": ("MONTREAL_OPENDATA",),
+    "CATOR": ("TORONTO_OPENDATA",),
+    "CAWPG": ("WINNIPEG_OPENDATA",),
+    "CAEDM": ("EDMONTON_OPENDATA",),
+    "CACAL": ("CALGARY_OPENDATA",),
+    "USSFO": ("SF_OPENDATA",),
+    "USNYC": ("NYC_OPENDATA",),
+    "USBOS": ("CITY_OF_BOSTON", "ARNOLD_ARBORETUM", "CAMBRIDGE", "BROOKLINE"),
+    "FRPAR": ("PARIS_OPENDATA",),
+    "USBTV": ("BURLINGTON_OPENDATA",),
+    "CAVAN": ("VANCOUVER_OPENDATA",),
+    "DEBER": ("BERLIN_OPENDATA",),
+    "NLAMS": ("AMSTERDAM_OPENDATA",),
+    "GBLON": ("LONDON_OPENDATA",),
+    "AUMEL": ("MELBOURNE_OPENDATA",),
+    "ARBUE": ("BUENOSAIRES_OPENDATA",),
+    "USLAX": ("LOSANGELES_OPENDATA",),
+    "USWAS": ("WASHINGTONDC_OPENDATA",),
+    "USTEM": ("TEMPE_OPENDATA",),
+    "GRATH": ("ATHENS_OPENDATA",),
+    "USDEN": ("DENVER_OPENDATA",),
+    # Milos has no municipal tree inventory — no Greek portal publishes one
+    # (checked opendata.thessaloniki.gr, data.gov.gr, geodata.gov.gr, and the
+    # Athens portal, whose only tree dataset is the National Garden).  The city
+    # exists so residents can record trees: its Parquet is built entirely from
+    # approved community submissions, and its enum has just the community value.
+    "GRMLO": (),
+    # Santorini, same story as Milos and checked against the same portals: the
+    # Cyclades publish no municipal tree inventory, so its rows are approved
+    # community submissions plus the supplemental OSM extract.
+    "GRSAN": (),
+}
+
+
+def community_source_for(city_code: str) -> str:
+    """The `data_source` label for approved community trees in *city_code*."""
+    return f"COMMUNITY_{city_code}"
+
+
+COMMUNITY_DATA_SOURCES: dict[str, str] = {
+    code: community_source_for(code) for code in MUNICIPAL_DATA_SOURCES
+}
+
+# Cities with a supplemental OpenStreetMap source, keyed to its label.  All
+# seventeen are wired; the map stays keyed rather than derived from the city
+# list because a city is briefly in one and not the other while it is being
+# added.  A city belongs here once it has an `osm-{code}` [[cloud.job]]
+# publishing its staging parquet and its tree model declares the `OSM_{code}`
+# enum value and the staging datasource — `test_osm_city_is_fully_wired` and
+# `test_every_osm_city_has_an_extract_job` check each half, because a
+# half-wired city emits zero OSM rows rather than an error.  OSM rows overlap
+# the municipal inventory by construction, so each wired city groups the
+# overlapping rows under one cluster id and publishes only the survivor — see
+# tree_dedup.preql, which every city imports.
+OSM_DATA_SOURCES: dict[str, str] = {
+    "FIHEL": "OSM_FIHEL",
+    "DKCPH": "OSM_DKCPH",
+    "TWTPE": "OSM_TWTPE",
+    "COBOG": "OSM_COBOG",
+    "JPTYO": "OSM_JPTYO",
+    "CAMON": "OSM_CAMON",
+    "CAAJX": "OSM_CAAJX",
+    "CABUR": "OSM_CABUR",
+    "CAOTT": "OSM_CAOTT",
+    "CAMIS": "OSM_CAMIS",
+    "CANWE": "OSM_CANWE",
+    "CAKEL": "OSM_CAKEL",
+    "CAVIC": "OSM_CAVIC",
+    "CALET": "OSM_CALET",
+    "CAKGN": "OSM_CAKGN",
+    "CAHFX": "OSM_CAHFX",
+    "CALON": "OSM_CALON",
+    "CAQUE": "OSM_CAQUE",
+    "CAMTL": "OSM_CAMTL",
+    "CATOR": "OSM_CATOR",
+    "CAWPG": "OSM_CAWPG",
+    "CAEDM": "OSM_CAEDM",
+    "CACAL": "OSM_CACAL",
+    "USTEM": "OSM_USTEM",
+    "USBOS": "OSM_USBOS",
+    "USSFO": "OSM_USSFO",
+    "USNYC": "OSM_USNYC",
+    "FRPAR": "OSM_FRPAR",
+    "USBTV": "OSM_USBTV",
+    "CAVAN": "OSM_CAVAN",
+    "DEBER": "OSM_DEBER",
+    "NLAMS": "OSM_NLAMS",
+    "GBLON": "OSM_GBLON",
+    "AUMEL": "OSM_AUMEL",
+    "ARBUE": "OSM_ARBUE",
+    "USLAX": "OSM_USLAX",
+    "USWAS": "OSM_USWAS",
+    "GRATH": "OSM_GRATH",
+    "USDEN": "OSM_USDEN",
+    "GRMLO": "OSM_GRMLO",
+    "GRSAN": "OSM_GRSAN",
+}
+
+
+def satellite_source_for(city_code: str) -> str:
+    """The `data_source` label for reviewed aerial-imagery detections in *city_code*."""
+    return f"SATELLITE_{city_code}"
+
+
+# Cities with a reviewed aerial-imagery partition: model detections on NAIP
+# tiles that a person accepted in the reviewer's satellite page
+# (reviewer/satellite.ts) and that the reviewer published to
+# `satellite/published_trees.ndjson` in the public bucket, which
+# `satellite_tree_info.py` reads the way `community_tree_info.py` reads the
+# community export.  Opt-in per city, like OSM was while only two cities were
+# wired: a city belongs here once imagery has been run over it and its tree
+# model declares the `SATELLITE_{code}` enum value, the partition, and the
+# freshness column -- `test_satellite_city_is_fully_wired` checks each half,
+# because a half-wired city publishes zero satellite rows rather than an
+# error.  The rows overlap every other partition by construction (the model
+# sees the trees the inventory already has), so the shared cluster merge
+# classes them as a fourth source below municipal and community and above
+# OSM; see tree_dedup.preql.
+SATELLITE_DATA_SOURCES: dict[str, str] = {
+    "USSFO": satellite_source_for("USSFO"),
+    "USBOS": satellite_source_for("USBOS"),
+}
+
+DATA_SOURCES: tuple[str, ...] = tuple(
+    label
+    for code in MUNICIPAL_DATA_SOURCES
+    for label in (
+        *MUNICIPAL_DATA_SOURCES[code],
+        COMMUNITY_DATA_SOURCES[code],
+        *((OSM_DATA_SOURCES[code],) if code in OSM_DATA_SOURCES else ()),
+        *((SATELLITE_DATA_SOURCES[code],) if code in SATELLITE_DATA_SOURCES else ()),
+    )
+)
+
+
+# ---------------------------------------------------------------------------
+# Canonical tree output schema
+# ---------------------------------------------------------------------------
+
+# Arrow types every city's tree ingest must emit, mirroring the property
+# declarations in tree_common.preql.  Trilogy passes these types through to the
+# materialised parquet unchanged, so a column left to inference silently
+# changes the parquet's physical type: an all-null pa.null() plant_date lands
+# as INT32 (breaking year()), and a whole-number dbh read from CSV lands as
+# BIGINT instead of DOUBLE.  Enforce rather than infer.
+TREE_COLUMN_TYPES: dict[str, pa.DataType] = {
+    "tree_id": pa.string(),
+    "city": pa.string(),
+    "data_source": pa.string(),
+    "species": pa.string(),
+    "cultivar": pa.string(),
+    "tree_name": pa.string(),
+    "plant_date": pa.date32(),
+    "latitude": pa.float64(),
+    "longitude": pa.float64(),
+    "diameter_at_breast_height": pa.float64(),
+    "submission_photo_url": pa.string(),
+}
+
+# Columns without a `?` prefix in the preql datasources — absence is a bug.
+REQUIRED_TREE_COLUMNS = ("tree_id", "city", "data_source", "species")
+
+# The largest diameter an ingest will publish, in inches; see the guard in
+# enforce_tree_schema for why it exists and why it is 5 m.
+DBH_MAX_INCHES = 200.0
+
+# The earliest planting year an ingest will publish; see the guard in
+# enforce_tree_schema for why it is the 16th century.
+PLANT_DATE_MIN_YEAR = 1500
+
+
+def enforce_tree_schema(
+    table: pa.Table,
+    *,
+    columns: dict[str, str] | None = None,
+    city: str = "",
+    data_source: str | None = None,
+    seen_ids: set[str] | None = None,
+    summary: dict[str, int] | None = None,
+) -> pa.Table:
+    """Cast the tree ingest columns to their canonical Arrow types.
+
+    Every city script calls this immediately before ``emit`` so all cities'
+    parquets share identical column types.
+
+    A script that streams its city in pages -- New York, whose 1.1M rows
+    peaked at 674 MiB as one table -- calls this once per page and passes the
+    same ``seen_ids`` set and ``summary`` dict each time: the set carries the
+    ``tree_id`` grain check across pages (a repeat in page three of an id from
+    page one is still a repeat), and the dict accumulates the species-cleanup
+    counts so ``report_species_cleanup`` can print the one summary line the
+    refresh log expects, instead of one per page.
+
+    Parameters
+    ----------
+    table:    The Arrow table about to be emitted.
+    columns:  Maps a canonical name to the actual column name in *table*, for
+              scripts that emit source-native names — e.g. SF passes
+              ``{"tree_id": "treeid", "diameter_at_breast_height": "dbh"}``.
+              Canonical names not listed are looked up as-is.
+    city:     Optional city name used in error messages.
+    data_source: The ``data_source`` enum value every row of this ingest
+              carries (e.g. ``"SF_OPENDATA"``).  Appended as a constant column,
+              which is what lets Trilogy union a city's municipal and community
+              sources as disjoint partitions.  Scripts that emit a per-row
+              ``data_source`` column (only the community ingest does) omit it.
+    Raises if ``tree_id`` repeats or is null.  ``tree_id`` is the declared
+    ``grain`` of every city datasource and neither failure errors anywhere: a
+    repeat fans out the joins Trilogy builds on that grain, so the Parquet comes
+    back with more rows than the portal published, and a null drops its row
+    entirely, because the generated join is a plain ``=`` and ``NULL = NULL`` is
+    never true.  Washington DC shipped 63,527 of the first and 8,280 of the
+    second for months; Boston was quietly losing 43 rows a rebuild.
+
+    ``cultivar`` is filled from the species string where the source did not
+    supply it as its own column: the quoted selection in ``Malus sargentii
+    'Tina'`` is kept on the tree row while ``species`` is reduced to the
+    taxon.  An ingest whose portal publishes a cultivar field maps it through
+    ``columns`` and its non-null values win over the parsed ones.
+
+    Extra columns (``borough``, …) pass through untouched.
+    Casts are *safe*: a lossy conversion raises rather than silently
+    truncating values.
+    """
+    import pyarrow.compute as pc
+
+    prefix = f"{city} ingest" if city else "Ingest"
+    overrides = columns or {}
+    if data_source is not None:
+        if data_source not in DATA_SOURCES:
+            raise ValueError(
+                f"{prefix}: data_source {data_source!r} is not a known source "
+                f"label; add it to MUNICIPAL_DATA_SOURCES here and to that "
+                f"city's `{{code}}_source` enum in its tree model together"
+            )
+        if "data_source" in table.schema.names:
+            table = table.drop_columns(["data_source"])
+        table = table.append_column(
+            "data_source",
+            pa.array([data_source] * table.num_rows, type=pa.string()),
+        )
+    unknown = set(overrides) - set(TREE_COLUMN_TYPES)
+    if unknown:
+        raise ValueError(
+            f"{prefix}: enforce_tree_schema got unknown canonical column(s) "
+            f"{sorted(unknown)}; expected any of {sorted(TREE_COLUMN_TYPES)}"
+        )
+
+    resolved = {c: overrides.get(c, c) for c in TREE_COLUMN_TYPES}
+    names = set(table.schema.names)
+
+    for canonical in REQUIRED_TREE_COLUMNS:
+        actual = resolved[canonical]
+        if actual not in names:
+            raise ValueError(
+                f"{prefix}: required column '{actual}' ({canonical}) is missing "
+                f"from the emitted table"
+            )
+
+    # Species hygiene, applied for every city at the one chokepoint rather than
+    # per source.  The raw value is the join key into the enrichment table, so
+    # a non-taxon there is both a permanent LLM cost and a wrong map label; see
+    # sanitize_species.  Sources vary in how much junk they carry -- OSM's
+    # free-typed tags and the municipal "Vacant"/"Onbekend" placeholders are the
+    # two big ones -- but none of them are exempt from the binomial contract.
+    species_col = resolved["species"]
+    if species_col in names:
+        sidx = table.schema.get_field_index(species_col)
+        raw_species = table.column(sidx).to_pylist()
+        # An empty planting site or a stump is not a tree; there is nothing
+        # to place on the map and nothing to count.  Drop the row rather than
+        # publish it as an unidentified tree.
+        keep_rows = [not is_not_a_tree(v) for v in raw_species]
+        not_a_tree = len(keep_rows) - sum(keep_rows)
+        if not_a_tree:
+            table = table.filter(pa.array(keep_rows, type=pa.bool_()))
+            raw_species = table.column(sidx).to_pylist()
+        # The cultivar comes off the raw string before the taxon rules see
+        # it, and only stays when a taxon survived: a selection is a choice
+        # *within* a taxon, so one attached to "Vacant" says nothing.  A
+        # source with its own cultivar column keeps what it wrote.
+        cultivar_col = resolved["cultivar"]
+        supplied: list[str | None] = (
+            table.column(table.schema.get_field_index(cultivar_col)).to_pylist()
+            if cultivar_col in table.schema.names
+            else [None] * table.num_rows
+        )
+        cultivars: list[str | None] = []
+        cleaned: list[str] = []
+        dropped = rewritten = formed = cultivared = 0
+        for value, given in zip(raw_species, supplied):
+            keep = sanitize_species(value)
+            cultivar = given.strip() if isinstance(given, str) and given.strip() else None
+            if keep is not None:
+                if keep != value:
+                    rewritten += 1
+                cleaned.append(keep)
+                cultivar = cultivar or extract_cultivar(value)
+                if cultivar is not None:
+                    cultivared += 1
+                cultivars.append(cultivar)
+                continue
+            cultivars.append(None)
+            # Not a taxon.  Keep the growth form if the source named one --
+            # "Palm" says less than a binomial but far more than "Unknown",
+            # and it is what the map icon is chosen from.
+            sentinel = form_sentinel_for(value)
+            if sentinel is not None:
+                formed += 1
+                cleaned.append(sentinel)
+                continue
+            if value is not None:
+                dropped += 1
+            cleaned.append(UNKNOWN_SPECIES)
+        table = table.set_column(
+            sidx, species_col, pa.array(cleaned, type=pa.string())
+        )
+        cultivar_array = pa.array(cultivars, type=pa.string())
+        if cultivar_col in table.schema.names:
+            table = table.set_column(
+                table.schema.get_field_index(cultivar_col), cultivar_col, cultivar_array
+            )
+        else:
+            table = table.append_column(cultivar_col, cultivar_array)
+        # Never silent: a run that reshapes a tenth of its species column
+        # should say so in the refresh log.
+        counts = {
+            "not_a_tree": not_a_tree,
+            "dropped": dropped,
+            "rewritten": rewritten,
+            "formed": formed,
+            "cultivared": cultivared,
+        }
+        if summary is not None:
+            for key, n in counts.items():
+                summary[key] = summary.get(key, 0) + n
+        else:
+            report_species_cleanup(counts, city=city)
+
+    for canonical, target in TREE_COLUMN_TYPES.items():
+        actual = resolved[canonical]
+        if actual not in names:
+            continue
+        idx = table.schema.get_field_index(actual)
+        current = table.schema.field(idx).type
+        if current.equals(target):
+            continue
+        try:
+            cast = pc.cast(table.column(idx), target)
+        except (pa.ArrowInvalid, pa.ArrowNotImplementedError) as e:
+            raise ValueError(
+                f"{prefix}: column '{actual}' ({canonical}) has type {current}, "
+                f"which cannot be safely cast to the canonical {target}: {e}"
+            ) from e
+        table = table.set_column(idx, actual, cast)
+
+    # A stem no tree has.  Burlington ON published a linden with a DBH of
+    # 192,913,385 inches (a coordinate or an id in the wrong column), and a
+    # handful of cities carry values in the hundreds that are centimetres or
+    # millimetres typed into an inches field.  Nothing downstream can use them
+    # -- a crown model clamps, a histogram stretches, an average lies -- so
+    # they become null here, with a count in the log.  Zero and negative are
+    # placeholders, not stems, and go the same way.  200 in is 5 m: larger
+    # than any street tree, smaller than the record-holding sequoias that
+    # are not in a city inventory.
+    dbh_column = resolved["diameter_at_breast_height"]
+    if dbh_column in table.schema.names:
+        dbh_idx = table.schema.get_field_index(dbh_column)
+        dbh = table.column(dbh_idx)
+        implausible = pc.fill_null(
+            pc.or_(pc.less_equal(dbh, 0), pc.greater(dbh, DBH_MAX_INCHES)), False
+        )
+        n_implausible = pc.sum(pc.cast(implausible, pa.int64())).as_py() or 0
+        if n_implausible:
+            table = table.set_column(
+                dbh_idx,
+                dbh_column,
+                pc.if_else(implausible, pa.scalar(None, type=pa.float64()), dbh),
+            )
+            if summary is not None:
+                summary["implausible_dbh"] = summary.get("implausible_dbh", 0) + n_implausible
+            else:
+                report_implausible_dbh(n_implausible, city=city)
+
+    # A date no planting has.  A planting date is a record of a planting, and
+    # the inventories carry a few that are not: three-digit years in New York
+    # (`202-12-25`, a dropped digit), the years 1, 8 and 15 in Amsterdam and
+    # Berlin, `1000-01-01` on fifteen Amsterdam saplings, and dates in the
+    # future (New York 2108, Washington 2157, and a planting *scheduled* for
+    # next month in Ottawa).  An age model reads every one of them as an age,
+    # so they become null here, with a count.  The floor is 1500: Berlin and
+    # Paris carry a few dozen 17th- to 19th-century dates on trees of 100-220
+    # cm, which are at least estimates of something, and nothing under a
+    # metre was planted before the 16th century.  A portal's *stamped default*
+    # -- Edmonton's 1990-06-01, Melbourne's 1900-01-01 -- is a real-looking
+    # date on a large share of a city, and is that city's ingest's to null.
+    date_column = resolved["plant_date"]
+    if date_column in table.schema.names:
+        date_idx = table.schema.get_field_index(date_column)
+        planted = table.column(date_idx)
+        not_a_planting = pc.fill_null(
+            pc.or_(
+                pc.less(pc.year(planted), PLANT_DATE_MIN_YEAR),
+                pc.greater(planted, pa.scalar(date.today(), type=pa.date32())),
+            ),
+            False,
+        )
+        n_not_a_planting = pc.sum(pc.cast(not_a_planting, pa.int64())).as_py() or 0
+        if n_not_a_planting:
+            table = table.set_column(
+                date_idx,
+                date_column,
+                pc.if_else(not_a_planting, pa.scalar(None, type=pa.date32()), planted),
+            )
+            if summary is not None:
+                summary["implausible_plant_date"] = (
+                    summary.get("implausible_plant_date", 0) + n_not_a_planting
+                )
+            else:
+                report_implausible_plant_date(n_not_a_planting, city=city)
+
+    # Backfill the optional columns this source has no value for, as typed
+    # nulls.  Every ingest then emits the identical column set, so a preql
+    # datasource can map `submission_photo_url: ?submission_photo_url` uniformly across cities that do
+    # and don't have photos without the SELECT failing on a missing column.
+    for canonical, target in TREE_COLUMN_TYPES.items():
+        actual = resolved[canonical]
+        if actual in table.schema.names:
+            continue
+        table = table.append_column(
+            actual, pa.nulls(table.num_rows, type=target)
+        )
+
+    _check_tree_id_grain(table, resolved["tree_id"], prefix=prefix, seen=seen_ids)
+
+    return table
+
+
+def report_implausible_dbh(count: int, *, city: str = "") -> None:
+    """One line for the diameters ``enforce_tree_schema`` nulled."""
+    if not count:
+        return
+    prefix = f"{city} ingest" if city else "Ingest"
+    print(
+        f"{prefix}: {count} diameter(s) were zero, negative or over "
+        f"{DBH_MAX_INCHES:.0f} in and were published as null",
+        file=sys.stderr,
+    )
+
+
+def report_implausible_plant_date(count: int, *, city: str = "") -> None:
+    """One line for the planting dates ``enforce_tree_schema`` nulled."""
+    if not count:
+        return
+    prefix = f"{city} ingest" if city else "Ingest"
+    print(
+        f"{prefix}: {count} planting date(s) were before {PLANT_DATE_MIN_YEAR} or in "
+        f"the future and were published as null",
+        file=sys.stderr,
+    )
+
+
+def report_species_cleanup(counts: dict[str, int], *, city: str = "") -> None:
+    """Print the species-cleanup summary for one ingest.
+
+    ``enforce_tree_schema`` calls this itself unless it was given a
+    ``summary`` dict to accumulate into, in which case the streaming script
+    calls it once at the end.  A run that reshapes a tenth of its species
+    column should say so in the refresh log, exactly once.
+    """
+    prefix = f"{city} ingest" if city else "Ingest"
+    if counts.get("not_a_tree"):
+        print(
+            f"{prefix}: dropped {counts['not_a_tree']} row(s) whose species field "
+            f"records an empty site or stump rather than a tree",
+            file=sys.stderr,
+        )
+    report_implausible_dbh(counts.get("implausible_dbh", 0), city=city)
+    report_implausible_plant_date(counts.get("implausible_plant_date", 0), city=city)
+    if any(counts.get(k) for k in ("dropped", "rewritten", "formed", "cultivared")):
+        print(
+            f"{prefix}: species cleanup -- {counts.get('dropped', 0)} value(s) were not "
+            f"scientific names and became {UNKNOWN_SPECIES!r}, "
+            f"{counts.get('rewritten', 0)} normalised to species rank, "
+            f"{counts.get('formed', 0)} kept as a growth-form sentinel, "
+            f"{counts.get('cultivared', 0)} carry a cultivar on the tree row",
+            file=sys.stderr,
+        )
+
+
+def _check_tree_id_grain(
+    table: pa.Table, column: str, *, prefix: str, seen: set[str] | None = None
+) -> None:
+    """Refuse a repeated ``tree_id``.
+
+    A grain violation, and Trilogy has no way to notice one -- see the note on
+    ``enforce_tree_schema``.
+
+    Every city's published Parquet was measured before this became fatal
+    (2026-09-04, `count(*)` vs `count(DISTINCT tree_id)` over each object in
+    GCS): seventeen of eighteen were already clean, and the eighteenth was
+    Washington DC, fixed in the same change that made this raise.  So no
+    currently-wired city's refresh starts failing because of it -- but a portal
+    that begins publishing a duplicate id will now stop that city rather than
+    inflate its counts, which is the trade this repo makes everywhere else.
+    """
+    if column not in table.schema.names:
+        return
+    ids = table.column(column).to_pylist()
+    # A streaming ingest passes one set across its pages, so a repeat of a
+    # page-one id in page three is still caught.
+    if seen is None:
+        seen = set()
+    repeats: set[str] = set()
+    nulls = 0
+    for value in ids:
+        if value is None or value == "":
+            nulls += 1
+        elif value in seen:
+            repeats.add(value)
+        else:
+            seen.add(value)
+    if not repeats and not nulls:
+        return
+
+    problems = []
+    if repeats:
+        sample = ", ".join(sorted(repeats)[:5])
+        problems.append(
+            f"{len(repeats)} value(s) repeat (e.g. {sample}), so joins on that "
+            f"grain will fan out"
+        )
+    if nulls:
+        problems.append(
+            f"{nulls} row(s) have no value, and Trilogy joins the grain with a "
+            f"plain `=`, so those rows are dropped from the Parquet silently"
+        )
+    raise ValueError(
+        f"{prefix}: '{column}' is the declared grain but " + "; ".join(problems)
+        + ". If the source has no unique per-tree column, look for a GlobalID "
+        "or equivalent before falling back to a positional one (see "
+        "uswas/washingtondc_tree_info.py); if the source simply leaves some "
+        "rows unidentified, drop them in the ingest with a logged count rather "
+        "than letting the join do it quietly (see usbos/boston_tree_info.py)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Coordinate validation & bounding-box filtering
+# ---------------------------------------------------------------------------
+
+# Generous bounding boxes per city code — wide enough for metro-area trees,
+# tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
+# Format: (lat_min, lat_max, lon_min, lon_max)
+CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "FIHEL": (60.05, 60.35, 24.75, 25.3),
+    "DKCPH": (55.58, 55.76, 12.4, 12.7),
+    "TWTPE": (24.95, 25.22, 121.45, 121.68),
+    "COBOG": (4.4, 4.9, -74.3, -73.95),
+    "JPTYO": (35.48, 35.9, 138.93, 139.95),
+    "CAMON": (46.02, 46.2, -64.95, -64.66),
+    "CAAJX": (43.78, 43.95, -79.13, -78.93),
+    "CABUR": (43.25, 43.48, -80.0, -79.68),
+    "CAOTT": (44.92, 45.58, -76.4, -75.2),
+    "CAMIS": (43.42, 43.78, -79.88, -79.5),
+    "CANWE": (49.16, 49.26, -122.99, -122.85),
+    "CAKEL": (49.75, 50.0, -119.6, -119.3),
+    "CAVIC": (48.39, 48.48, -123.42, -123.3),
+    "CALET": (49.6, 49.8, -113.0, -112.68),
+    "CAKGN": (44.15, 44.52, -76.75, -76.17),
+    "CAHFX": (44.4, 45.05, -64.05, -62.35),
+    "CALON": (45.4, 45.62, -73.58, -73.3),
+    "CAQUE": (46.68, 47.0, -71.6, -71.1),
+    "CAMTL": (45.38, 45.72, -74.0, -73.42),
+    "CATOR": (43.55, 43.9, -79.7, -79.1),
+    "CAWPG": (49.66, 50.03, -97.4, -96.9),
+    "CAEDM": (53.3, 53.75, -113.8, -113.2),
+    "CACAL": (50.8, 51.25, -114.35, -113.83),
+    "USSFO": (37.60, 37.90, -122.60, -122.30),
+    "USNYC": (40.45, 40.95, -74.30, -73.65),
+    "USBOS": (42.15, 42.55, -71.25, -70.85),
+    "FRPAR": (48.70, 49.05, 2.10, 2.60),
+    "USBTV": (44.35, 44.60, -73.35, -73.10),
+    "CAVAN": (49.10, 49.40, -123.30, -122.95),
+    "DEBER": (52.30, 52.70, 13.05, 13.80),
+    "NLAMS": (52.25, 52.45, 4.70, 5.10),
+    "GBLON": (51.25, 51.75, -0.55, 0.35),
+    "AUMEL": (-38.10, -37.55, 144.55, 145.40),
+    "ARBUE": (-34.80, -34.45, -58.55, -58.30),
+    "USLAX": (33.70, 34.35, -118.70, -118.10),
+    "USWAS": (38.78, 39.01, -77.15, -76.88),
+    "USTEM": (33.30, 33.48, -112.05, -111.80),
+    "GRATH": (37.85, 38.10, 23.60, 23.90),
+    # Denver reaches a long way past its county line, and the inventory
+    # follows it: the box spans the detached airport parcel to the north-east
+    # and the Denver Mountain Parks system 40 miles west -- Red Rocks, Genesee,
+    # Echo Lake, Evergreen Golf Course -- which is Denver-owned land carrying
+    # 3,700 city-maintained trees.  A box drawn to the county line dropped all
+    # of them as bad coordinates.  These bounds exist to catch a geocoding
+    # error, not to assert a municipal boundary.
+    "USDEN": (39.45, 39.95, -105.65, -104.55),
+    # The whole island (community submissions can come from anywhere on it),
+    # including Antimilos to the northwest.
+    "GRMLO": (36.55, 36.90, 24.15, 24.65),
+    # The whole Santorini caldera group: Thira, Thirasia, Aspronisi and the
+    # two Kameni islets.
+    "GRSAN": (36.30, 36.50, 25.30, 25.55),
+}
+
+
+# ---------------------------------------------------------------------------
+# Cross-source dedup: grid cell per city
+# ---------------------------------------------------------------------------
+
+# The grid cell, in metres, that raw/tree_dedup.preql matches rows across
+# sources with.  Two points within HALF a cell always share a cell in one of
+# the four staggered grids, so 10 m is a 5 m guarantee (possible matches out to
+# a ~14 m diagonal) and 20 m is a 10 m guarantee (~28 m).
+#
+# CALIBRATED PER CITY, never copied.  Distance alone cannot separate a
+# re-mapped inventory tree from the next tree in a planted row; what does is
+# pair structure, measured by `uv run tools/osm_dedup_validation.py --city CODE`:
+# the mutual-nearest-neighbour rate in the 5-10 m band.  Below ~50% that band
+# is mostly planting-row neighbours and the cell stays at 10 m; only a band
+# that is *clearly* duplicate-dominated (the script's bar is 60%) earns 20 m.
+# The errors are not symmetric -- a missed duplicate double-renders one dot,
+# a false match hides a real tree -- so an ambiguous band is left alone, which
+# is why London (51.5%) and New York (53.3%) sit at 10 m.
+#
+# `dedup_cells.py` turns these into degrees at each city's latitude, so the
+# model never carries a hand-computed constant that can drift from the
+# calibration written next to it.  A new city needs an entry here (start at
+# 10, then measure); `test_dedup_cells.py` checks the table covers every city.
+#
+# **The three Canadian Socrata cities are the first sized below 10 m**, on a
+# measurement the earlier cities did not have.  The band test asks whether a
+# 5 m-wide ring is duplicate-dominated, which is a proxy -- and it flatters the
+# bigger cell, because a cell names a *guarantee* while the staggered grid
+# reaches to the diagonal, ~1.41x further.  `osm_dedup_validation.py` now also
+# prints, per cell size, how many of the rows it flags are mutual nearest
+# neighbours (real duplicates) and how many are not (real trees the map would
+# hide), with the marginal trade between consecutive sizes.  A step up in size
+# is worth taking only while it removes more duplicates than it hides trees.
+#
+# On that measure all three came in under the 10 m the bands alone suggested,
+# and so do the three published cities spot-checked afterwards -- Tempe, the
+# reference calibration, among them.  The cities wired before the marginal
+# table existed are sized on the bands and are worth re-checking against it;
+# deliberately not done here, because re-cutting a published city's cell
+# changes which of its rows survive the prune, which is a rebuild of every one
+# of them.  The measurements, the cost and the runbook are in
+# `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
+DEDUP_CELL_METRES: dict[str, int] = {
+    # Calibrated 2026-09-11 against the staged extract (67,545 OSM nodes --
+    # more than the register itself) and the ingest's 66,380 rows.  5-10 m
+    # band 19.2% mutual-NN over n=1,358: neighbour-dominated, so the band
+    # rule stops at a 5 m guarantee and prints "a 10 m cell".  The marginal
+    # table turns one step earlier, as Tokyo's did: 4->6 removes 607
+    # duplicates for 307 hidden trees (1.98), 6->8 removes 152 for 363
+    # (0.42), 8->10 removes 68 for 360 (0.19).  Helsinki plants at a 5.8 m
+    # median, so from 8 m on a flag is more often the next tree in the row
+    # than the same tree re-mapped; 8 m is where the paying stops.
+    "FIHEL": 8,
+    # Calibrated 2026-09-11 against the staged extract (28,764 OSM nodes) and
+    # the ingest's 68,462 rows.  5-10 m band 28.2% mutual-NN over n=447:
+    # neighbour-dominated, band rule says a 10 m cell.  Marginal table:
+    # 4->6 removes 318 duplicates for 130 hidden trees (2.45), 6->8 removes
+    # 81 for 131 (0.62), 8->10 removes 41 for 105 (0.39).  Same shape as
+    # Tokyo and Helsinki, same answer: 8 m.
+    "DKCPH": 8,
+    # Calibrated 2026-09-11 against the staged extract (3,642 OSM nodes, a
+    # thin overlay on 162,987 inventory trees) and the ingest.  5-10 m band
+    # 58.9% mutual-NN over n=180: a coin flip, which the script reports as
+    # such, and the rule for a coin flip is to leave the rows visible -- a
+    # 5 m guarantee, a 10 m cell.  The marginal table keeps paying past 10
+    # (10->14 removes 44 for 39, 1.13) but on n=180 that is noise; the
+    # inventory plants at a 4.2 m median, second only to Tokyo, so the
+    # asymmetry argues for not widening on an ambiguous reading.
+    "TWTPE": 10,
+    # Calibrated 2026-09-11 against the staged extract (40,359 OSM nodes) and
+    # the first published parquet (1,390,646 municipal rows, read from GCS --
+    # the workstation could not hold the ingest's output).  The inventory is
+    # the tightest-planted on the map by a distance, a 2.3 m median to the
+    # nearest other row and a tenth within 0.3 m, because the census counts
+    # shrubs.  5-10 m band 54.4% mutual-NN over n=5,007: a coin flip, which
+    # the script reports as such, and the rule for a coin flip is to leave
+    # the rows visible.  The marginal table agrees: 6->8 removes 1,895
+    # duplicates for 918 hidden trees (2.06), 8->10 removes 731 for 730
+    # (1.00, break-even), 10->14 removes 542 for 987 (0.55).  8 m is where
+    # the paying stops, as it did for Tokyo, Helsinki and Copenhagen.
+    "COBOG": 8,
+    # 5-10 m band 42.3% mutual-NN over n=468: neighbour-dominated, so the band
+    # rule stops at a 5 m guarantee and prints "a 10 m cell".  The marginal
+    # table says one step less, and Tokyo is the city where that difference is
+    # most worth taking: its inventory is the **tightest-planted measured
+    # anywhere here** -- a median 3.2 m to the nearest other inventory tree,
+    # a tenth within 1.1 m, against Tempe's 6.5 m median -- because the
+    # 23-ward survey counts 中木, the medium-height plantings that run as a
+    # near-continuous line along a verge.  Planting spacing therefore starts
+    # much closer in than the band rule's calibration assumes, and the trade
+    # turns accordingly: 6->8 removes 108 duplicates for 95 hidden trees
+    # (1.14), 8->10 removes 48 for 97 (0.49).  A false flag hides a real tree
+    # and a missed duplicate double-renders a toggleable dot, so 8 m is where
+    # the paying stops.
+    "JPTYO": 8,
+    # Moncton's OSM presence is 477 nodes against 11,980 inventory trees, so
+    # the 5-10 m band (n=2) says nothing and the marginal table decides:
+    # 4->6 removes 3 duplicates and hides none, 6->8 removes none and hides
+    # one.  6 m is where the paying stops.
+    "CAMON": 6,
+    # 5-10 m band 25.7% mutual-NN over n=74: neighbour-dominated, and Ajax
+    # plants tight (median 9.1 m to the nearest other inventory tree, a
+    # quarter within 6.4 m).  4->6 removes 62 duplicates for 9 hidden trees
+    # (6.89), 6->8 removes 13 for 21 (0.62).
+    "CAAJX": 6,
+    # 5-10 m band 23.0% mutual-NN over n=87: neighbour-dominated.  The turn is
+    # earlier here than anywhere else in this batch -- 2->4 removes 114
+    # duplicates for 12 hidden trees (9.50) and 4->6 removes 22 for 22, exactly
+    # break-even, which is the step Kingston also declined.  A tie goes to the
+    # smaller cell: a missed duplicate double-renders one toggleable dot, a
+    # false flag hides a real tree.
+    "CABUR": 4,
+    # The largest overlap measured anywhere: 235,651 OSM nodes against 304,164
+    # inventory trees, 147,736 of them within 2 m of one at 98.7% mutual-NN --
+    # the National Capital Commission inventory was imported into OSM, and
+    # 62.8% of the nodes still carry the municipal id in `osm_ref`.  5-10 m
+    # collapses to 23.3% over n=11,307, and the marginal table turns in the
+    # usual place: 4->6 removes 5,778 duplicates for 3,890 hidden trees (1.49),
+    # 6->8 removes 1,940 for 3,320 (0.58).
+    "CAOTT": 6,
+    # 5-10 m band 30.5% mutual-NN over n=666: neighbour-dominated, and the
+    # marginal table turns where its neighbours' do -- 4->6 removes 309
+    # duplicates for 174 hidden trees (1.78), 6->8 removes 149 for 158 (0.94).
+    "CAMIS": 6,
+    # 5-10 m band 48.9% over n=270 -- a coin flip, so the bands leave it at a
+    # 5 m guarantee and the marginal table decides how far past that to go:
+    # 6->8 removes 81 duplicates for 56 hidden trees (1.45), 8->10 removes 35
+    # for 39 (0.90).
+    "CANWE": 8,
+    # Kelowna's OSM overlaps its inventory more heavily than any other city in
+    # this batch -- 785 of 2,180 nodes within 2 m of an inventory tree at
+    # 99.2% mutual-NN -- and the marginal table keeps paying further out than
+    # its neighbours: 6->8 removes 72 duplicates for 34 hidden trees (2.12),
+    # 8->10 removes 34 for 19 (1.79), 10->14 removes 18 for 56 (0.32).
+    "CAKEL": 10,
+    # 5-10 m band 37.5% over n=64: neighbour-dominated.  4->6 removes 36
+    # duplicates for 12 hidden trees (3.00), 6->8 removes 9 for 10 (0.90).
+    "CAVIC": 6,
+    # 5-10 m band 35.0% over n=103: neighbour-dominated, and Lethbridge's
+    # inventory is the tightest-planted of the six (median 6.0 m to the
+    # nearest other tree, a quarter within 4.1 m).  4->6 removes 50 duplicates
+    # for 27 hidden trees (1.85), 6->8 removes 20 for 22 (0.91).
+    "CALET": 6,
+    # 5-10 m band 50.0% mutual-NN, but over n=8: Kingston has 310 OSM nodes in
+    # total, the thinnest overlap in the batch, so the bands say almost
+    # nothing and the marginal table decides.  4->6 removes 9 duplicates and
+    # hides none, 6->8 removes 3 for 3 (1.00, break-even), and 8->10 flags
+    # fewer rows than 8 at all.  6 m is where the paying stops.
+    "CAKGN": 6,
+    # The only city here to earn a 10 m guarantee, and both measures agree.
+    # Halifax plants wide -- a median 9.2 m to the nearest other inventory
+    # tree, against Calgary's 5.1 -- so a match out at 10-15 m is far more
+    # likely a re-mapped tree than the next one in the row.  The 5-10 m band
+    # is duplicate-dominated at 72.4% (n=29) rather than the coin flip every
+    # other city in this batch shows there, and the marginal table never
+    # turns: 10->14 removes 14 duplicates for 3 hidden trees (4.67), 14->20
+    # removes 10 for 4 (2.50).  Small absolute numbers -- HRM has only 1,602
+    # OSM nodes against 80,050 inventory trees -- but they point one way.
+    "CAHFX": 20,
+    # 5-10 m band 36.5% mutual-NN over n=178; 4->6 removes 102 duplicates for
+    # 56 hidden trees (1.82), 6->8 removes 36 for 46 (0.78).  Longueuil's OSM
+    # barely overlaps its inventory -- 1,523 duplicates out of 130,006 nodes,
+    # against Montreal's 325,284 -- so the whole table is small, but the turn
+    # is in the same place.
+    "CALON": 6,
+    # 5-10 m band 43.9% mutual-NN over n=4,484, and the marginal table keeps
+    # paying to 8 m: 4->6 removes 2,320 duplicates for 560 hidden trees (4.14),
+    # 6->8 removes 1,054 for 790 (1.33), 8->10 removes 632 for 878 (0.72).
+    # Same profile as San Francisco, the other city measured at 8.
+    "CAQUE": 8,
+    # Montreal's OSM is largely an import of the municipal inventory: 317,570
+    # of its 372,727 nodes sit within 2 m of an inventory tree at 99.9%
+    # mutual-NN, and 5-10 m collapses to 0.9% over n=2,969 -- the cleanest
+    # separation of any city here.  4->6 removes 1,222 duplicates for 967
+    # hidden trees (1.26); 6->8 removes 223 for 1,019 (0.22), and past 8 m
+    # there is nothing left to find (recall is already 100%).
+    "CAMTL": 6,
+    # 5-10 m band 38.3% mutual-NN over n=2,898; 4->6 removes 634 duplicates
+    # for 289 hidden trees (2.19), 6->8 removes 461 for 515 (0.90).
+    "CATOR": 6,
+    # 5-10 m band 28.4% mutual-NN over n=134, and the marginal table turns at
+    # 6 m: 4->6 removes 86 duplicates for 25 hidden trees (3.44), 6->8 removes
+    # 30 for 43 (0.70).
+    "CAWPG": 6,
+    # 5-10 m band 32.2% over n=273; 4->6 removes 271 duplicates for 115 hidden
+    # (2.36), 6->8 removes 71 for 74 (0.96), 8->10 removes 27 for 52 (0.52).
+    "CAEDM": 6,
+    # Calgary's OSM is unusually well aligned -- 95.6% mutual-NN over 119,718
+    # pairs under 2 m -- but the 2-5 m band is already a coin flip at 49.0%
+    # over n=9,160, because the inventory itself is planted tight: a median
+    # 5.1 m to the nearest other inventory tree, and a quarter within 3.2 m.
+    # The marginal table turns hard: 2->4 removes 5,403 duplicates for 2,546
+    # hidden trees (2.12), 4->6 removes 1,222 for 2,619 (0.47).
+    "CACAL": 4,
+    # Tempe is the reference calibration: mutual-NN >=88% below 5 m (99.7%
+    # under 2 m), collapsing to 25% in the 5-10 m band.
+    "USTEM": 10,
+    # 5-10 m band 43.0% mutual-NN over n=300: neighbour-dominated.
+    "USSFO": 10,
+    # 53.3% over n=5,059: a coin flip, so the band is left unmatched.
+    "USNYC": 10,
+    # Grounded with the validation script at the 5 m break; four municipal
+    # partitions share the one cell.
+    "USBOS": 10,
+    # 15.9% over n=5,042, and Paris's 3,906 osm_ref exact-id matches break at
+    # the same 5 m line -- the strongest confirmation the method has.
+    "FRPAR": 10,
+    # 63.6% over n=22: duplicate-dominated, on a very small band.
+    "USBTV": 20,
+    # 26.7% over n=2,883.
+    "CAVAN": 10,
+    # 18.4% over n=12,630; Berlin's 6,157 osm_ref matches confirm the break.
+    "DEBER": 10,
+    # 29.9% over n=2,508.
+    "NLAMS": 10,
+    # 51.5% over n=18,076: a coin flip, left unmatched (~8,800 real trees at
+    # stake if it were flagged).
+    "GBLON": 10,
+    # 47.6% over n=884: a coin flip.
+    "AUMEL": 10,
+    # 61.0% over n=421: duplicate-dominated.
+    "ARBUE": 20,
+    # 67.2% over n=296: duplicate-dominated.
+    "USLAX": 20,
+    # 35.1% over n=558.
+    "USWAS": 10,
+    # National Garden inventory is small and dense; not yet measured, default.
+    "GRATH": 10,
+    # 76.4% mutual-NN in the 2-5 m band collapsing to 17.3% in 5-10 m
+    # (n=20,233) -- as sharp a break as any wired city.  Median planting
+    # spacing 8.2 m, so 20 m would reach the next tree in the row.  No osm_ref.
+    "USDEN": 10,
+    # Community submissions are the only anchors; a match means someone
+    # recorded a tree OSM already maps, and the submission wins.  Default.
+    "GRMLO": 10,
+    "GRSAN": 10,
+}
+
+
+# ---------------------------------------------------------------------------
+# Territories: which city an unattributed tree belongs to
+# ---------------------------------------------------------------------------
+#
+# CITY_BOUNDS above is a *sanity* box: a municipal inventory attributes its
+# own trees, so all its box has to do is catch a wrong-hemisphere coordinate,
+# and it is drawn generously (Denver's reaches the mountain parks).  Two
+# generous boxes overlap where cities are neighbours, and for a source that
+# does NOT attribute its trees -- OpenStreetMap, whose extract is "every tree
+# node in the box", and a community submission, which names a city the way
+# the submitter chose -- an overlap is a tree published twice: 23,078 OSM rows
+# were in the rollup under two cities (Montreal and Longueuil, Mississauga
+# and Toronto, Vancouver and New Westminster, Burlington and Ajax) because
+# each city's box took the whole of the other's riverfront.
+#
+# CITY_TERRITORY is the explicit answer: one or more rectangles per city, and
+# no rectangle of one city intersects a rectangle of another
+# (`tests/test_city_territory.py` checks every pair).  Membership is
+# half-open, `lat_min <= lat < lat_max`, so a point on a shared edge belongs
+# to exactly one city.  Where a real boundary is diagonal (Etobicoke Creek,
+# the St Lawrence) the territory is a staircase of latitude bands, drawn to
+# follow the municipal inventories: a few hundred municipal trees sit on the
+# far side of each staircase, which is why municipal ingests keep using the
+# envelope and only OSM and community rows are assigned by territory.
+#
+# A new city with no neighbour gets its envelope as its one rectangle;
+# `new_city.py` writes that.  A city that gains a neighbour has to carve both.
+
+Box = tuple[float, float, float, float]
+
+CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'FIHEL': ((60.05, 60.35, 24.75, 25.3),),
+    'DKCPH': ((55.58, 55.76, 12.4, 12.7),),
+    'TWTPE': ((24.95, 25.22, 121.45, 121.68),),
+    'COBOG': ((4.4, 4.9, -74.3, -73.95),),
+    'JPTYO': ((35.48, 35.9, 138.93, 139.95),),
+    'CAMON': ((46.02, 46.2, -64.95, -64.66),),
+    'CAAJX': ((43.78, 43.95, -79.1, -78.93),),
+    'CABUR': ((43.25, 43.475, -80.0, -79.68),),
+    'CAOTT': ((44.92, 45.58, -76.4, -75.2),),
+    'CAMIS': (
+        (43.475, 43.55, -79.88, -79.5),
+        (43.55, 43.62, -79.88, -79.55),
+        (43.62, 43.64, -79.88, -79.575),
+        (43.64, 43.68, -79.88, -79.6),
+        (43.68, 43.7, -79.88, -79.607),
+        (43.7, 43.72, -79.88, -79.617),
+        (43.72, 43.74, -79.88, -79.625),
+        (43.74, 43.78, -79.88, -79.64),
+    ),
+    'CANWE': ((49.16, 49.26, -122.99, -122.85),),
+    'CAKEL': ((49.75, 50.0, -119.6, -119.3),),
+    'CAVIC': ((48.39, 48.48, -123.42, -123.3),),
+    'CALET': ((49.6, 49.8, -113.0, -112.68),),
+    'CAKGN': ((44.15, 44.52, -76.75, -76.17),),
+    'CAHFX': ((44.4, 45.05, -64.05, -62.35),),
+    'CALON': (
+        (45.4, 45.54, -73.53, -73.3),
+        (45.54, 45.56, -73.52, -73.3),
+        (45.56, 45.58, -73.5, -73.3),
+        (45.58, 45.6, -73.498, -73.3),
+    ),
+    'CAQUE': ((46.68, 47.0, -71.6, -71.1),),
+    'CAMTL': (
+        (45.38, 45.54, -74.0, -73.53),
+        (45.54, 45.56, -74.0, -73.52),
+        (45.56, 45.58, -74.0, -73.5),
+        (45.58, 45.6, -74.0, -73.498),
+        (45.6, 45.72, -74.0, -73.42),
+    ),
+    'CATOR': (
+        (43.55, 43.62, -79.55, -79.1),
+        (43.62, 43.64, -79.575, -79.1),
+        (43.64, 43.68, -79.6, -79.1),
+        (43.68, 43.7, -79.607, -79.1),
+        (43.7, 43.72, -79.617, -79.1),
+        (43.72, 43.74, -79.625, -79.1),
+        (43.74, 43.9, -79.64, -79.1),
+    ),
+    'CAWPG': ((49.66, 50.03, -97.4, -96.9),),
+    'CAEDM': ((53.3, 53.75, -113.8, -113.2),),
+    'CACAL': ((50.8, 51.25, -114.35, -113.83),),
+    'USSFO': ((37.6, 37.9, -122.6, -122.3),),
+    'USNYC': ((40.45, 40.95, -74.3, -73.65),),
+    'USBOS': ((42.15, 42.55, -71.25, -70.85),),
+    'FRPAR': ((48.7, 49.05, 2.1, 2.6),),
+    'USBTV': ((44.35, 44.6, -73.35, -73.1),),
+    'CAVAN': ((49.1, 49.4, -123.3, -122.99),),
+    'DEBER': ((52.3, 52.7, 13.05, 13.8),),
+    'NLAMS': ((52.25, 52.45, 4.7, 5.1),),
+    'GBLON': ((51.25, 51.75, -0.55, 0.35),),
+    'AUMEL': ((-38.1, -37.55, 144.55, 145.4),),
+    'ARBUE': ((-34.8, -34.45, -58.55, -58.3),),
+    'USLAX': ((33.7, 34.35, -118.7, -118.1),),
+    'USWAS': ((38.78, 39.01, -77.15, -76.88),),
+    'USTEM': ((33.3, 33.48, -112.05, -111.8),),
+    'GRATH': ((37.85, 38.1, 23.6, 23.9),),
+    'USDEN': ((39.45, 39.95, -105.65, -104.55),),
+    'GRMLO': ((36.55, 36.9, 24.15, 24.65),),
+    'GRSAN': ((36.3, 36.5, 25.3, 25.55),),
+}
+
+
+def city_territory(city_code: str) -> tuple[Box, ...]:
+    """The rectangles that make up a city, for assigning an unattributed tree."""
+    return CITY_TERRITORY[city_code]
+
+
+def in_city_territory(city_code: str, latitude, longitude) -> bool:
+    """Whether a point falls in the city's territory (half-open on every edge)."""
+    if latitude is None or longitude is None:
+        return False
+    return any(
+        lat_min <= latitude < lat_max and lon_min <= longitude < lon_max
+        for lat_min, lat_max, lon_min, lon_max in CITY_TERRITORY[city_code]
+    )
+
+
+def boxes_intersect(a: Box, b: Box) -> bool:
+    """Whether two boxes share interior; touching edges do not."""
+    return a[0] < b[1] and b[0] < a[1] and a[2] < b[3] and b[2] < a[3]
+
+
+def dedup_cell_degrees(city_code: str) -> tuple[float, float]:
+    """(cell_lat_deg, cell_lon_deg) for *city_code*'s dedup grid.
+
+    A degree of latitude is ~111,320 m everywhere; a degree of longitude
+    shrinks by cos(latitude), taken at the centre of the city's CITY_BOUNDS box.
+    """
+    metres = DEDUP_CELL_METRES[city_code]
+    lat_min, lat_max, _, _ = CITY_BOUNDS[city_code]
+    lat = math.radians((lat_min + lat_max) / 2)
+    return metres / 111320.0, metres / (111320.0 * math.cos(lat))
+
+
+def validate_coordinates(
+    table: pa.Table,
+    city: str = "",
+    city_code: str = "",
+    threshold: float = 0.10,
+) -> pa.Table:
+    """Validate and filter coordinates, returning the cleaned table.
+
+    1. Raises ValueError if the table has 0 rows or >threshold null lat/lon.
+    2. If *city_code* matches a CITY_BOUNDS entry, drops rows outside the
+       bounding box and logs the count to stderr.
+
+    Parameters
+    ----------
+    table:      The Arrow table to validate.
+    city:       Optional city name used in error messages.
+    city_code:  City code (e.g. "USSFO") for bounding-box filtering.
+    threshold:  Maximum allowed null fraction for latitude/longitude (default 10%).
+
+    Returns
+    -------
+    The table with out-of-bounds rows removed (if a bounding box was applied).
+    """
+    import pyarrow.compute as pc
+
+    n = table.num_rows
+    prefix = f"{city} ingest" if city else "Ingest"
+    if n == 0:
+        raise ValueError(f"{prefix} produced 0 rows")
+    for col in ("latitude", "longitude"):
+        null_count = table.column(col).null_count
+        if null_count == n:
+            raise ValueError(
+                f"{prefix}: '{col}' is NULL for all {n} rows — "
+                "coordinate extraction failed"
+            )
+        null_pct = null_count / n
+        if null_pct > threshold:
+            raise ValueError(
+                f"{prefix}: '{col}' is NULL for {null_pct:.0%} of rows "
+                f"({null_count}/{n})"
+            )
+
+    bounds = CITY_BOUNDS.get(city_code)
+    if bounds:
+        lat_min, lat_max, lon_min, lon_max = bounds
+        mask = (
+            pc.and_(
+                pc.and_(
+                    pc.greater_equal(table["latitude"], lat_min),
+                    pc.less_equal(table["latitude"], lat_max),
+                ),
+                pc.and_(
+                    pc.greater_equal(table["longitude"], lon_min),
+                    pc.less_equal(table["longitude"], lon_max),
+                ),
+            )
+        )
+        filtered = table.filter(mask)
+        dropped = n - filtered.num_rows
+        if dropped:
+            # Break the count down by cause.  A null or (0, 0) coordinate fails
+            # the comparisons above just like a genuinely distant one, so
+            # reporting them all as "outside bounds" says the bounding box is
+            # too tight when the real answer is that the source has no location
+            # for those rows.  LA drops 262,112 rows here and every one of them
+            # is a missing or null-island coordinate -- 120,000 sampled records
+            # contained no valid coordinate outside the box at all -- but the
+            # message read as a geography problem and cost an investigation.
+            lat_col, lon_col = table["latitude"], table["longitude"]
+            missing = pc.sum(
+                pc.cast(pc.or_(pc.is_null(lat_col), pc.is_null(lon_col)), pa.int64())
+            ).as_py() or 0
+            at_origin = pc.sum(
+                pc.cast(
+                    pc.and_(
+                        pc.fill_null(pc.equal(lat_col, 0), False),
+                        pc.fill_null(pc.equal(lon_col, 0), False),
+                    ),
+                    pa.int64(),
+                )
+            ).as_py() or 0
+            elsewhere = dropped - missing - at_origin
+            parts = []
+            if missing:
+                parts.append(f"{missing} missing a coordinate")
+            if at_origin:
+                parts.append(f"{at_origin} at (0, 0)")
+            if elsewhere:
+                parts.append(
+                    f"{elsewhere} outside {lat_min}–{lat_max}°N, "
+                    f"{lon_min}–{lon_max}°E"
+                )
+            print(
+                f"{prefix}: dropped {dropped} rows without a usable "
+                f"{city_code} location (" + ", ".join(parts) + ")",
+                file=sys.stderr,
+            )
+        return filtered
+
+    return table
+
+
+# ---------------------------------------------------------------------------
+# HTTP helpers
+# ---------------------------------------------------------------------------
+
+# Overpass API rejects the default `python-requests/...` User-Agent with
+# HTTP 406 ("Not Acceptable"). OSM etiquette also requires identifying the
+# application. Cities that fetch from Overpass should pass these headers to
+# `post_with_retry` / `get_with_retry`.
+OVERPASS_HEADERS = {
+    "User-Agent": "sf-tree-reporting/1.0 (https://github.com/greenmtnboy/tree_reporting)"
+}
+
+
+class UpstreamUnavailable(RuntimeError):
+    """An open data portal did not serve usable data.
+
+    Covers everything that is the *portal's* problem rather than ours: connection
+    errors, 5xx, 429, and 2xx responses whose body is not what the endpoint
+    documents (a maintenance page served with HTTP 200 is the common one).
+    Distinct from a parse error against a genuine payload, which means our field
+    mapping is wrong and must stay loud.
+
+    Subclasses RuntimeError so callers that only catch RuntimeError still work.
+    """
+
+
+def _body_snippet(response: requests.Response, limit: int = 160) -> str:
+    """A one-line, truncated preview of a response body for error messages."""
+    text = " ".join((response.text or "").split())
+    # ASCII ellipsis: probe stderr lands in job logs with unpredictable encodings.
+    return text[:limit] + ("..." if len(text) > limit else "")
+
+
+# Overpass reports overload the same way whether it ran out of time or memory;
+# anything else in `remark` (attribution notes, tag advisories) is not a failure.
+_OVERPASS_FAILURE_RE = re.compile(
+    r"runtime error|timed out|out of memory|too many requests", re.I
+)
+
+
+def error_envelope(payload) -> str | None:
+    """A server-side error reported *inside* an HTTP 200 JSON body, if present.
+
+    The GIS platforms these ingests use all answer a failed query with 200 and
+    an error object rather than a 5xx — ArcGIS returns
+    ``{"error": {"code": 500, "message": "Error performing query operation"}}``
+    for a statistics query its backend could not run.  Left unclassified, that
+    reaches the caller as a well-formed payload with no rows, and every probe's
+    "no features" guard turns a portal hiccup into a fatal error.
+    """
+    if not isinstance(payload, dict):
+        return None
+    error = payload.get("error")
+    # ArcGIS / CKAN: a nested error object.
+    if isinstance(error, dict) and (error.get("message") or error.get("code")):
+        return f"{error.get('code', 'error')}: {error.get('message', '')}".strip()
+    # Socrata: {"error": true, "message": "..."}
+    if error is True:
+        return str(payload.get("message") or "error")
+    # CKAN failure with no error object.
+    if payload.get("success") is False:
+        return str(error or "success=false")
+    # Overpass: an overloaded or timed-out query is HTTP 200 with a well-formed
+    # body, an empty `elements` list and the failure in `remark`:
+    #   {"elements": [], "remark": "runtime error: Query timed out in
+    #    \"query\" at line 3 after 180 seconds."}
+    # There is no `error` key, so without this the caller sees a valid payload
+    # with no rows and its own "no features" guard turns an Overpass hiccup
+    # into a fatal, unretried error.  `remark` is also used for benign notes,
+    # so only the failure wordings count.
+    remark = payload.get("remark")
+    if isinstance(remark, str) and _OVERPASS_FAILURE_RE.search(remark):
+        return f"overpass remark: {remark.strip()}"
+    return None
+
+
+def response_json(response: requests.Response, url: str):
+    """Decode a JSON response, or raise UpstreamUnavailable describing the body.
+
+    ``response.json()`` on an HTML maintenance page raises a bare
+    ``JSONDecodeError: Expecting value: line 2 column 9``, which names neither
+    the host nor what it actually served — the failure mode that made a
+    gdi.berlin.de outage read like a bug in the probe.  This reports the status,
+    content type, size and the first line of the body instead.
+
+    A 200 carrying a provider error envelope is treated the same way: it is the
+    portal saying it could not serve the request, so it is worth retrying and
+    worth degrading on, not worth failing the whole refresh over.
+    """
+    try:
+        payload = response.json()
+    except ValueError as e:
+        content_type = response.headers.get("Content-Type") or "unset"
+        raise UpstreamUnavailable(
+            f"{url} returned HTTP {response.status_code} with a non-JSON body "
+            f"(content-type {content_type}, {len(response.content)} bytes): "
+            f"{_body_snippet(response)!r} ({e})"
+        ) from e
+    detail = error_envelope(payload)
+    if detail:
+        raise UpstreamUnavailable(
+            f"{url} returned HTTP {response.status_code} with an error payload: "
+            f"{detail}"
+        )
+    return payload
+
+
+def _retry(
+    attempt: "Callable[[], object]",
+    *,
+    url: str,
+    what: str,
+    max_retries: int,
+    backoff: float,
+):
+    """Call *attempt* until it succeeds, backing off on UpstreamUnavailable.
+
+    *attempt* raises UpstreamUnavailable for a failure worth retrying; any other
+    exception (a 4xx, a bad field mapping) propagates on the first try.
+    """
+    err = ""
+    for i in range(max_retries):
+        try:
+            return attempt()
+        except UpstreamUnavailable as e:
+            err = str(e)
+        if i < max_retries - 1:
+            wait = backoff * (2 ** i)
+            print(
+                f"[retry {i + 1}/{max_retries}] {err}, waiting {wait:.0f}s",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
+    raise UpstreamUnavailable(
+        f"Failed to {what} {url} after {max_retries} attempts: {err}"
+    )
+
+
+def _send(method: str, url: str, **kwargs) -> requests.Response:
+    """One HTTP attempt, classified: retryable failures raise UpstreamUnavailable.
+
+    4xx other than 429 raise HTTPError immediately — auth, forbidden and not
+    found are client-side problems that retrying cannot fix.
+    """
+    import requests
+
+    try:
+        r = requests.request(method, url, **kwargs)
+    except requests.exceptions.RequestException as e:
+        raise UpstreamUnavailable(str(e)) from e
+    if r.status_code < 400:
+        return r
+    if 400 <= r.status_code < 500 and r.status_code != 429:
+        r.raise_for_status()  # raises immediately, no retry
+    raise UpstreamUnavailable(f"HTTP {r.status_code}")
+
+
+def get_with_retry(
+    url: str,
+    timeout: int = 120,
+    max_retries: int = 5,
+    backoff: float = 2.0,
+    headers: dict | None = None,
+    params: dict | None = None,
+) -> requests.Response:
+    """GET with exponential backoff on 5xx / connection errors.
+
+    4xx errors (except 429 Too Many Requests) are not retried — they indicate
+    a client-side problem (auth, forbidden, not found) that retrying won't fix.
+
+    Callers expecting JSON should use `get_json_with_retry`, which also retries
+    a 2xx whose body isn't JSON.
+    """
+    return _retry(
+        lambda: _send("GET", url, timeout=timeout, headers=headers, params=params),
+        url=url,
+        what="fetch",
+        max_retries=max_retries,
+        backoff=backoff,
+    )
+
+
+def head_with_retry(
+    url: str,
+    timeout: int = 120,
+    max_retries: int = 5,
+    backoff: float = 2.0,
+    headers: dict | None = None,
+) -> requests.Response:
+    """HEAD with the same retry policy as `get_with_retry`.
+
+    For a probe whose only watermark is a static file's `Last-Modified`
+    (Taipei publishes its tree CSVs as blobs with no catalogue stamp).
+    Redirects are followed so the header read is the file's, not the
+    redirector's.
+    """
+    return _retry(
+        lambda: _send(
+            "HEAD", url, timeout=timeout, headers=headers, allow_redirects=True
+        ),
+        url=url,
+        what="probe",
+        max_retries=max_retries,
+        backoff=backoff,
+    )
+
+
+def get_json_with_retry(
+    url: str,
+    timeout: int = 120,
+    max_retries: int = 5,
+    backoff: float = 2.0,
+    headers: dict | None = None,
+    params: dict | None = None,
+):
+    """GET and decode JSON, retrying non-JSON 2xx bodies as well as 5xx.
+
+    Portals in maintenance often answer *every* path with HTTP 200 and an HTML
+    holding page — gdi.berlin.de serves a 1.4 KB "Wartungsarbeiten" page for the
+    WFS and the metadata API alike.  That is a transient outage, so it is worth
+    the same backoff as a 503, and worth an error message that says so.
+    """
+
+    def attempt():
+        response = _send("GET", url, timeout=timeout, headers=headers, params=params)
+        return response_json(response, url)
+
+    return _retry(
+        attempt, url=url, what="fetch JSON from", max_retries=max_retries, backoff=backoff
+    )
+
+
+def post_with_retry(
+    url: str,
+    data: dict,
+    timeout: int = 240,
+    max_retries: int = 5,
+    backoff: float = 10.0,
+    headers: dict | None = None,
+) -> requests.Response:
+    """POST with exponential backoff on 5xx / connection errors.
+
+    Longer default backoff than get_with_retry — suited to Overpass API.
+    4xx errors (except 429) are not retried.
+    """
+    return _retry(
+        lambda: _send("POST", url, data=data, timeout=timeout, headers=headers),
+        url=url,
+        what="POST",
+        max_retries=max_retries,
+        backoff=backoff,
+    )
+
+
+def post_json_with_retry(
+    url: str,
+    data: dict,
+    timeout: int = 240,
+    max_retries: int = 5,
+    backoff: float = 10.0,
+    headers: dict | None = None,
+):
+    """POST and decode JSON, retrying non-JSON 2xx bodies as well as 5xx.
+
+    Overpass in particular answers an overloaded instance with a 200 HTML error
+    page rather than the JSON its API documents.
+    """
+
+    def attempt():
+        response = _send("POST", url, data=data, timeout=timeout, headers=headers)
+        return response_json(response, url)
+
+    return _retry(
+        attempt,
+        url=url,
+        what="POST JSON to",
+        max_retries=max_retries,
+        backoff=backoff,
+    )
+
+
+def download_parquet(url: str, timeout: int = 300) -> io.BytesIO:
+    """Stream-download a parquet file into a BytesIO buffer and return it seeked to 0."""
+    import requests
+
+    r = requests.get(url, stream=True, timeout=timeout)
+    r.raise_for_status()
+    buf = io.BytesIO()
+    for chunk in r.iter_content(chunk_size=1024 * 1024):
+        if chunk:
+            buf.write(chunk)
+    buf.seek(0)
+    return buf
+
+
+# ---------------------------------------------------------------------------
+# Staged sources
+# ---------------------------------------------------------------------------
+
+# Some sources are too fragile to hit during a refresh.  Overpass allows two
+# concurrent slots per client IP and answers an over-budget request with HTTP
+# 200 carrying an error remark, so a refresh at `parallelism = 3` could fail a
+# city on a transient -- `london_landmark_info` died that way and took
+# `full_landmark_info` with it, while the same script run alone finished in
+# 6.8s.  Those sources are *staged*: an extract script fetches them on its own
+# schedule and writes a parquet here, and the refresh only ever reads the
+# staged copy.
+#
+# The staging objects live in GCS rather than in the repo.  They were committed
+# at first, which worked but made the freshness signal a lie: the probes read
+# the file's mtime, and **git does not preserve mtime**.  Every fresh clone --
+# which is every cloud job run -- stamps the checkout time, so the watermark
+# advanced on every tick and Boston and Tempe rebuilt three times a day.  That
+# is the same every-tick thrash the staging design set out to avoid; it had
+# only swapped Overpass's minute-resolution timestamp for a checkout timestamp.
+# A GCS object's Last-Modified is a real publication time that survives
+# cloning, so `staging_modified_at` is a watermark that only moves when an
+# extract is actually re-run.
+STAGING_BASE_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/staging"
+STAGING_GCS_PREFIX = "gs://trilogy_public_models/duckdb/staging"
+
+
+def staging_url(name: str) -> str:
+    """Public read URL for a staged parquet, for a preql `file` clause."""
+    return f"{STAGING_BASE_URL}/{name}"
+
+
+def staging_gcs_uri(name: str) -> str:
+    """`gs://` write URI for a staged parquet."""
+    return f"{STAGING_GCS_PREFIX}/{name}"
+
+
+def staging_modified_at(name: str) -> datetime:
+    """Publication time of a staged parquet, from the GCS object metadata.
+
+    Returns the epoch when the object does not exist, matching how a missing
+    staging file behaved when these lived on disk: an absent optional source
+    sits out the run rather than aborting it.  A transport failure raises
+    `UpstreamUnavailable` so `emit_freshness` degrades the same way.
+
+    The objects are served with `Cache-Control: max-age=3600`, so the request
+    carries a cache-buster -- without one a probe run just after an extract
+    would read the previous publication time and call the city fresh.
+    """
+    import requests
+
+    url = f"{staging_url(name)}?cb={int(time.time())}"
+    try:
+        response = requests.head(url, timeout=30, allow_redirects=True)
+    except requests.RequestException as err:
+        raise UpstreamUnavailable(f"Failed to HEAD staged object {name}: {err}") from err
+    if response.status_code == 404:
+        return datetime.fromtimestamp(0, tz=timezone.utc)
+    if response.status_code >= 400:
+        raise UpstreamUnavailable(
+            f"HEAD {url} returned HTTP {response.status_code}"
+        )
+    header = response.headers.get("Last-Modified")
+    if not header:
+        # Not an availability problem: GCS always sends this, so its absence
+        # means the URL is not the object we think it is.
+        raise RuntimeError(f"staged object {name} has no Last-Modified header")
+    return parsedate_to_datetime(header).astimezone(timezone.utc)
+
+
+def upload_staging(local_path, name: str) -> None:
+    """Publish a locally written staging parquet to GCS.
+
+    Called by the extract scripts, which run on their own schedule and are the
+    only writers.  Uploading is what makes the city's Parquet stale, so it is
+    also the moment the refresh is allowed to notice the new data.
+    """
+    from google.cloud import storage as gcs
+
+    uri = staging_gcs_uri(name)
+    bucket_name, _, blob_name = uri[len("gs://"):].partition("/")
+    blob = gcs.Client().bucket(bucket_name).blob(blob_name)
+    blob.upload_from_filename(str(local_path))
+    print(f"uploaded {local_path} -> {uri}", file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# Streaming ingest
+# ---------------------------------------------------------------------------
+
+# A city ingest that accumulates every source record before transforming holds
+# the whole dataset as Python dicts, which is the most expensive representation
+# available: Amsterdam's 325k records peaked at 882 MB of Python heap and failed
+# every cloud refresh that actually rebuilt it, while passing locally every
+# time.  The failure is latent rather than absent for the others -- a city is
+# only rebuilt when its source updates, so an ingest can sit oversized for
+# months and break the day its portal publishes.
+#
+# The fix is always the same shape: yield a chunk of records, convert it to
+# Arrow, drop the dicts.  Peak memory becomes one chunk plus the accumulated
+# columnar data, which is roughly a tenth of the dict form and does not grow
+# with the number of chunks.  These helpers exist so a new city gets that for
+# free instead of reinventing the accumulate-everything loop.
+
+DEFAULT_CHUNK_ROWS = 50_000
+
+
+def stream_to_table(
+    chunks: Iterable[list[dict]],
+    transform: Callable[[list[dict]], pa.Table],
+    *, keep: Callable[[dict], bool] | None = None,
+    label: str = "",
+) -> pa.Table:
+    """Transform each chunk to Arrow and concatenate.
+
+    The counterpart to the `iter_*` helpers below and the piece that actually
+    bounds memory: `transform` runs per chunk, so the dicts for a chunk become
+    garbage as soon as its Arrow table exists.
+
+    `keep` filters records before transforming, for sources that carry rows
+    which are not trees at all (Amsterdam publishes tree stumps alongside
+    trees).  Filtering here rather than after the concat means the dropped rows
+    never occupy a column.
+    """
+    tables: list[pa.Table] = []
+    seen = kept = 0
+    for chunk in chunks:
+        seen += len(chunk)
+        if keep is not None:
+            chunk = [r for r in chunk if keep(r)]
+        kept += len(chunk)
+        if chunk:
+            tables.append(transform(chunk))
+    if not tables:
+        raise RuntimeError(f"{label or 'ingest'}: source produced no rows")
+    table = pa.concat_tables(tables)
+    print(
+        f"{label or 'ingest'}: streamed {seen} record(s) in {len(tables)} chunk(s)"
+        + (f", {seen - kept} filtered out" if seen != kept else ""),
+        file=sys.stderr,
+    )
+    return table
+
+
+def stream_table_batches(
+    table: pa.Table,
+    transform: Callable[[pa.Table], pa.Table],
+    *,
+    chunk_rows: int = DEFAULT_CHUNK_ROWS,
+    label: str = "",
+) -> pa.Table:
+    """Run a table-shaped `transform` over slices, concatenating the results.
+
+    The counterpart of `stream_to_table` for cities whose source is one bulk
+    file read with `pyarrow.csv` rather than a paged API.  The Arrow table
+    itself is compact -- a million rows is unremarkable -- but these transforms
+    call `.to_pylist()` on each column, which materialises a Python object per
+    value and is where the memory actually goes.  Slicing bounds that to one
+    chunk at a time; a zero-copy slice costs nothing, and the Python objects
+    for each chunk become garbage as soon as its Arrow output exists.
+    """
+    if table.num_rows == 0:
+        raise RuntimeError(f"{label or 'ingest'}: source produced no rows")
+    out: list[pa.Table] = []
+    for start in range(0, table.num_rows, chunk_rows):
+        out.append(transform(table.slice(start, chunk_rows)))
+    result = pa.concat_tables(out)
+    print(
+        f"{label or 'ingest'}: transformed {table.num_rows} row(s) "
+        f"in {len(out)} chunk(s)",
+        file=sys.stderr,
+    )
+    return result
+
+
+def iter_link_pages(
+    url: str, *, rows_key: str, next_key: str = "next", **kwargs
+) -> Iterator[list[dict]]:
+    """Pages from an API that advertises the next page as a link.
+
+    The HAL/DSO shape: `_embedded.<rows_key>` holds the records and
+    `_links.<next_key>.href` the next page, absent on the last.
+    """
+    while url:
+        data = get_json_with_retry(url, **kwargs)
+        yield data.get("_embedded", {}).get(rows_key, [])
+        link = data.get("_links", {}).get(next_key, {})
+        url = link.get("href") if isinstance(link, dict) else None
+
+
+def iter_offset_pages(
+    fetch_page: Callable[[int], list[dict]], *, page_size: int
+) -> Iterator[list[dict]]:
+    """Pages from an API paged by offset, stopping on a short or empty page.
+
+    `fetch_page(offset)` returns that page's records.  Covers both the Socrata
+    `$offset`/`$limit` and WFS `startIndex`/`COUNT` spellings -- the caller
+    supplies the request, this owns the loop and the termination rule.
+    """
+    offset = 0
+    while True:
+        batch = fetch_page(offset)
+        if not batch:
+            return
+        yield batch
+        if len(batch) < page_size:
+            return
+        offset += page_size
+
+
+def iter_csv_row_chunks(
+    url: str,
+    *,
+    chunk_rows: int = DEFAULT_CHUNK_ROWS,
+    delimiter: str | None = None,
+    timeout: int = 600,
+) -> Iterator[list[dict]]:
+    """Chunks of dict rows from a remote CSV, without holding the whole file.
+
+    Streams the body to a temporary file and reads it back with
+    `csv.DictReader`, so peak memory is one chunk rather than the file text
+    *and* a dict per row simultaneously -- London's 1.1M-row CSV was doing
+    both.  The temporary file is removed on the way out.
+
+    The delimiter is sniffed from the header when not given, since these
+    exports are inconsistently comma- and semicolon-separated.
+    """
+    import csv
+    import tempfile
+
+    import requests
+
+    handle, path = tempfile.mkstemp(suffix=".csv")
+    os.close(handle)
+    try:
+        with requests.get(url, stream=True, timeout=timeout) as r:
+            r.raise_for_status()
+            with open(path, "wb") as fh:
+                for block_ in r.iter_content(chunk_size=1024 * 1024):
+                    if block_:
+                        fh.write(block_)
+        # utf-8-sig strips a BOM when present; latin-1 never fails, so it is a
+        # safe last resort for these municipal exports.
+        for encoding in ("utf-8-sig", "latin-1"):
+            try:
+                with open(path, "r", encoding=encoding, newline="") as fh:
+                    header = fh.readline()
+                    if delimiter is None:
+                        sep = max(",;	|", key=header.count)
+                    else:
+                        sep = delimiter
+                    fh.seek(0)
+                    reader = csv.DictReader(fh, delimiter=sep)
+                    chunk: list[dict] = []
+                    for row in reader:
+                        chunk.append(row)
+                        if len(chunk) >= chunk_rows:
+                            yield chunk
+                            chunk = []
+                    if chunk:
+                        yield chunk
+                return
+            except UnicodeDecodeError:
+                continue
+        raise RuntimeError(f"could not decode CSV at {url}")
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Pushdown filters
+# ---------------------------------------------------------------------------
+
+def parse_pushdown_filters(argv: list[str]) -> dict[str, str]:
+    """Read `--filter key=value` pairs Trilogy pushes down from the model.
+
+    A datasource-level `where city = 'USTEM'` is compiled into both a SQL
+    predicate and a `--filter 'city=USTEM'` argument here, so honouring it is
+    an optimisation, not a correctness requirement: the SQL predicate filters
+    the rows either way.  That is why an unrecognised key is ignored rather
+    than fatal — a filter this script does not understand still gets applied
+    one layer up.
+
+    Every city's datasource runs this script, so without the pushdown all
+    fourteen read and emit the whole export to have thirteen fourteenths of it
+    discarded downstream.
+    """
+    filters: dict[str, str] = {}
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--filter" and i + 1 < len(argv):
+            key, _, value = argv[i + 1].partition("=")
+            if value:
+                filters[key.strip().lower()] = value.strip()
+            i += 2
+        else:
+            i += 1
+    return filters
+
+
+
+# ---------------------------------------------------------------------------
+# Freshness probes
+# ---------------------------------------------------------------------------
+
+# What a probe emits when its portal is unreachable.  It loses every
+# `greatest()` against a real timestamp, so the city's Parquet compares as fresh
+# and is skipped for this run rather than rebuilt from a portal that is down.
+PORTAL_UNAVAILABLE_TIMESTAMP = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def emit_freshness(
+    city_code: str | None,
+    fetch: "Callable[[], datetime]",
+    *,
+    label: str = "",
+) -> None:
+    """Emit the one-row freshness table Trilogy probes, tolerating a dead portal.
+
+    *city_code* is the five-letter code the probe reports for, emitted as the
+    `city` column; pass None for a probe with no city (the ecoregion layer) and
+    name it with *label* for the log line instead.
+
+    Every tree and landmark probe is a root datasource feeding some Parquet's
+    `freshness by`, and Trilogy collects those watermarks in one un-isolated
+    planning phase: `_collect_root_watermarks` calls `future.result()` with no
+    per-probe guard, so a single probe raising ends the whole `trilogy refresh
+    raw` command before any asset is refreshed.  One city's portal being in
+    maintenance therefore fails all fourteen cities plus landmarks and
+    enrichment — the same blast radius the community 403 had (see EXTENDING.md).
+
+    So an *availability* failure (connection error, 5xx, 429, or a 2xx that
+    isn't the documented payload) degrades to PORTAL_UNAVAILABLE_TIMESTAMP with
+    a loud stderr note: this city sits out the run and the next scheduled tick
+    picks it up once the portal is back.
+
+    A *parse* failure does not degrade.  A KeyError or a bad date against a
+    genuine payload means our field mapping drifted from the portal's schema,
+    and silently reporting "no new data" would freeze the city's Parquet
+    indefinitely with nothing in the logs.  Those still abort, loudly.
+    """
+    try:
+        updated_at = fetch()
+    except UpstreamUnavailable as e:
+        # One line, and short.  A degrading probe is the *expected* path when a
+        # portal is down, but the retry helper's message quotes the offending
+        # body, and a run's captured stderr is a tail: Berlin in maintenance
+        # printed its 1.4 KB holding page ten times over and pushed the
+        # traceback of a genuinely failing asset clean out of the window, which
+        # cost two diagnostic round trips on an unrelated bug.  A probe that is
+        # working as designed must not be able to hide the errors of one that
+        # is not.
+        detail = " ".join(str(e).split())
+        if len(detail) > 200:
+            detail = detail[:200] + "…"
+        print(
+            f"{label or city_code} freshness probe: portal unavailable "
+            f"({detail}); reporting no new data so the refresh can proceed",
+            file=sys.stderr,
+        )
+        updated_at = PORTAL_UNAVAILABLE_TIMESTAMP
+    columns = {}
+    if city_code is not None:
+        columns["city"] = pa.array([city_code], type=pa.string())
+    columns["data_updated_through"] = pa.array(
+        [updated_at], type=pa.timestamp("us", tz="UTC")
+    )
+    emit(pa.table(columns))
+
+
+# ---------------------------------------------------------------------------
+# WKB / WKT geometry helpers
+# ---------------------------------------------------------------------------
+
+def parse_wkb_point(wkb: bytes | None) -> tuple[float | None, float | None]:
+    """Parse a WKB binary Point into (lon, lat).
+
+    OpenDataSoft exports geo_point_2d as WKB:
+      byte 0   : byte order (1 = little-endian, 0 = big-endian)
+      bytes 1-4: geometry type (uint32, value 1 = Point)
+      bytes 5-12: x (double) = longitude
+      bytes 13-20: y (double) = latitude
+
+    Returns (None, None) for None or too-short input.
+    """
+    if wkb is None or len(wkb) < 21:
+        return None, None
+    bo = "<" if wkb[0] == 1 else ">"
+    x, y = struct.unpack_from(bo + "dd", wkb, 5)
+    return x, y
+
+
+def make_point_wkt(lon, lat) -> str | None:
+    """Return a WKT POINT string or None if either coordinate is None."""
+    if lon is None or lat is None:
+        return None
+    return f"POINT({lon} {lat})"
+
+
+# ---------------------------------------------------------------------------
+# RD New (EPSG:28992) → WGS84
+# ---------------------------------------------------------------------------
+
+def rd_to_wgs84(x: float, y: float) -> tuple[float, float]:
+    """Convert RD New (x, y) to (lat, lon) in WGS84.
+
+    Polynomial approximation (~1 m accuracy).
+    Coefficients from the Dutch Kadaster / RDNAPTRANS reference.
+    """
+    x0, y0 = 155000.0, 463000.0
+    phi0, lam0 = 52.15517440, 5.38720621
+
+    dx = (x - x0) * 1e-5
+    dy = (y - y0) * 1e-5
+
+    coefs_phi = [
+        (0, 1, 3235.65389),
+        (2, 0, -32.58297),
+        (0, 2, -0.24750),
+        (2, 1, -0.84978),
+        (0, 3, -0.06550),
+        (2, 2, -0.01709),
+        (1, 0, -0.00738),
+        (4, 0, 0.00530),
+        (2, 3, -0.00039),
+        (4, 1, 0.00033),
+        (1, 1, -0.00012),
+    ]
+    coefs_lam = [
+        (1, 0, 5260.52916),
+        (1, 1, 105.94684),
+        (1, 2, 2.45656),
+        (3, 0, -0.81885),
+        (1, 3, 0.05594),
+        (3, 1, -0.05607),
+        (0, 1, 0.01199),
+        (3, 2, -0.00256),
+        (1, 4, 0.00128),
+        (0, 2, 0.00022),
+        (2, 0, -0.00022),
+        (5, 0, 0.00026),
+    ]
+
+    dphi = sum(c * (dx ** p) * (dy ** q) for p, q, c in coefs_phi)
+    dlam = sum(c * (dx ** p) * (dy ** q) for p, q, c in coefs_lam)
+
+    lat = phi0 + dphi / 3600.0
+    lon = lam0 + dlam / 3600.0
+    return lat, lon
+
+
+def rd_centroid(ring: list) -> tuple[float, float]:
+    """Return (mean_x, mean_y) of a coordinate ring (RD New)."""
+    xs = [c[0] for c in ring]
+    ys = [c[1] for c in ring]
+    return sum(xs) / len(xs), sum(ys) / len(ys)
+
+
+def twd97_to_wgs84(x: float, y: float) -> tuple[float, float]:
+    """Convert TWD97 / TM2 zone 121 (EPSG:3826) easting, northing to (lat, lon).
+
+    Taiwan's national grid: a Transverse Mercator on GRS80 with central
+    meridian 121 E, scale 0.9999 and a 250 km false easting.  TWD97 is
+    realised on ITRF94, which is WGS84 to well under a metre, so no datum
+    shift is applied -- the projection inverse is the whole conversion.  The
+    series is the standard one (Snyder 1987, eq. 8-17 to 8-25) and is exact to
+    a millimetre across the island.
+
+    Taipei's tree files publish nothing else: `TWD97X`/`TWD97Y` and no lat/lon.
+    """
+    a = 6378137.0
+    f = 1 / 298.257222101
+    k0 = 0.9999
+    false_easting = 250000.0
+    lon0 = math.radians(121.0)
+
+    e2 = 2 * f - f * f
+    ep2 = e2 / (1 - e2)
+    e1 = (1 - math.sqrt(1 - e2)) / (1 + math.sqrt(1 - e2))
+
+    x = x - false_easting
+    m = y / k0
+    mu = m / (a * (1 - e2 / 4 - 3 * e2**2 / 64 - 5 * e2**3 / 256))
+    phi1 = (
+        mu
+        + (3 * e1 / 2 - 27 * e1**3 / 32) * math.sin(2 * mu)
+        + (21 * e1**2 / 16 - 55 * e1**4 / 32) * math.sin(4 * mu)
+        + (151 * e1**3 / 96) * math.sin(6 * mu)
+        + (1097 * e1**4 / 512) * math.sin(8 * mu)
+    )
+    sin1, cos1, tan1 = math.sin(phi1), math.cos(phi1), math.tan(phi1)
+    n1 = a / math.sqrt(1 - e2 * sin1 * sin1)
+    t1 = tan1 * tan1
+    c1 = ep2 * cos1 * cos1
+    r1 = a * (1 - e2) / (1 - e2 * sin1 * sin1) ** 1.5
+    d = x / (n1 * k0)
+
+    lat = phi1 - (n1 * tan1 / r1) * (
+        d * d / 2
+        - (5 + 3 * t1 + 10 * c1 - 4 * c1 * c1 - 9 * ep2) * d**4 / 24
+        + (61 + 90 * t1 + 298 * c1 + 45 * t1 * t1 - 252 * ep2 - 3 * c1 * c1) * d**6 / 720
+    )
+    lon = lon0 + (
+        d
+        - (1 + 2 * t1 + c1) * d**3 / 6
+        + (5 - 2 * c1 + 28 * t1 - 3 * c1 * c1 + 8 * ep2 + 24 * t1 * t1) * d**5 / 120
+    ) / cos1
+    return math.degrees(lat), math.degrees(lon)
+
+
+# ---------------------------------------------------------------------------
+# Plant date helpers
+# ---------------------------------------------------------------------------
+
+def parse_plant_date_year(year) -> date | None:
+    """Convert an integer or string year to January 1 of that year.
+
+    Returns None for None, 0, negative values, values > 2100, or
+    non-numeric input.
+    """
+    if year is None:
+        return None
+    try:
+        y = int(year)
+    except (ValueError, TypeError):
+        return None
+    if y <= 0 or y > 2100:
+        return None
+    return date(y, 1, 1)
+
+
+# ---------------------------------------------------------------------------
+# DBH / dimension conversion helpers
+# ---------------------------------------------------------------------------
+
+def circumference_cm_to_dbh_inches(circ_cm) -> float | None:
+    """Convert trunk circumference in cm to diameter at breast height in inches.
+
+    DBH = circumference / π, then convert cm → inches (÷ 2.54).
+    Returns None for None or zero input.
+    """
+    if circ_cm is None:
+        return None
+    try:
+        v = float(circ_cm)
+    except (ValueError, TypeError):
+        return None
+    if v == 0:
+        return None
+    return v / (math.pi * 2.54)
+
+
+def cm_to_inches(cm) -> float | None:
+    """Convert a centimetre value to inches (÷ 2.54).  Returns None for None."""
+    if cm is None:
+        return None
+    try:
+        return float(cm) / 2.54
+    except (ValueError, TypeError):
+        return None
+
+
+_UNKNOWN_COMMON_NAMES = frozenset({"n/a", "na", "unknown", "none", "unidentified"})
+
+# A hyphen with whitespace on at least one side: an inversion separator.  A
+# bare hyphen is part of the word.  See `normalize_tree_name`.
+_INVERTING_HYPHEN = re.compile(r"\s-|-\s")
+
+
+def normalize_tree_name(value: str | None) -> str | None:
+    """A source's common-name field, un-inverted and put into sentence case.
+
+    Municipal inventories very often store the common name inverted so it
+    sorts by genus -- Calgary writes ``ASH, GREEN``, Edmonton ``Spruce,
+    Colorado``, Denver ``Pear, Flowering`` -- and they disagree about casing,
+    sometimes within one column (Winnipeg publishes both ``Colorado blue
+    spruce`` and ``silver maple``).  `tree_name` is what the map's tree card
+    shows above the scientific name, so neither is presentable as written.
+
+    Two steps, and the second is deliberately not reimplemented here: the
+    inverted form is un-inverted, then `normalize_common_name` from
+    `enrichment._common_name_style` applies the sentence-case convention with
+    its curated proper-noun lists, which is the same rule the enrichment table
+    is held to (see "Common names are sentence case" in AGENTS.md).  A name
+    that comes out wrong is one entry in those lists rather than a per-city
+    special case.
+
+    Two separators invert, and both are narrow on purpose.  A *single* comma
+    does: ``Aspen, quaking/trembling`` inverts, while a name with two commas
+    is a list and is left alone.  So does a hyphen with a space on at least
+    one side, which is how Burlington ON writes it (``MAPLE - NORWAY``,
+    ``BUCKEYE- OHIO``) -- but a bare hyphen is part of the word and must not,
+    or ``HORSE-CHESTNUT`` and ``MOUNTAIN-ASH`` come out as "Chestnut horse"
+    and "Ash mountain".  `shared.species.english.common_name_key` draws the same
+    line for the same reason.
+
+    A name inverted with neither -- Ottawa stores ``Maple Sugar``, ``Spruce
+    Blue/Colorado`` -- cannot be un-inverted mechanically (``Mountain Ash
+    European`` has three words and the head is the first *two*), and a city
+    like that should publish no ``tree_name`` rather than a wrong one.
+
+    Examples:
+        "ASH, GREEN"           -> "Green ash"
+        "Spruce, Colorado"     -> "Colorado spruce"
+        "MAPLE - NORWAY"       -> "Norway maple"
+        "BUCKEYE- OHIO"        -> "Ohio buckeye"
+        "HORSE-CHESTNUT"       -> "Horse-chestnut"
+        "silver maple"         -> "Silver maple"
+        "POPLAR SPECIES"       -> "Poplar species"
+        "N/A"                  -> None
+    """
+    from enrichment._common_name_style import normalize_common_name
+
+    if not value:
+        return None
+    text = " ".join(value.split())
+    if not text or text.lower() in _UNKNOWN_COMMON_NAMES:
+        return None
+    head, sep, tail = text.partition(",")
+    if sep and "," not in tail:
+        head, tail = head.strip(), tail.strip()
+        if head and tail:
+            text = f"{tail} {head}"
+    else:
+        match = _INVERTING_HYPHEN.search(text)
+        if match:
+            head = text[: match.start()].strip()
+            tail = text[match.end() :].strip()
+            if head and tail:
+                text = f"{tail} {head}"
+    return normalize_common_name(text)

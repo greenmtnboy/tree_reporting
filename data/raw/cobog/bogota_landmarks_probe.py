@@ -7,7 +7,7 @@
 
 Neither layer publishes `editingInfo` or an edit-date column, so the watermark
 is the catalogue's: the later of the two datasets' publication stamps on
-`datosabiertos.bogota.gov.co`, read through `_ckan_shared.data_last_modified`
+`datosabiertos.bogota.gov.co`, read through `shared.platforms.ckan.data_last_modified`
 against each dataset's "Esri REST" resource.  Those resources carry no
 `last_modified` of their own, so the helper falls back to the package's
 `metadata_modified` -- which moves for a description edit as well as for
@@ -23,8 +23,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, data_last_modified
-from _ingest_shared import emit_freshness
+from shared.platforms.ckan import CkanResource, data_last_modified
+from shared.ingest import emit_freshness
 
 RESOURCES = (
     # Monumentos - Inventario Patrimonio Mueble, the "Esri REST" resource

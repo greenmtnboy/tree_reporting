@@ -33,8 +33,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit
-from _wfs_shared import WfsLayer, geojson_to_wkt, iter_wfs_features
+from shared.ingest import emit
+from shared.platforms.wfs import WfsLayer, geojson_to_wkt, iter_wfs_features
 
 LAYER = WfsLayer("https://wfs-kbhkort.kk.dk/k101/ows", "k101:monumenter")
 PROPERTIES = ["navn", "loebenummer", "wkb_geometry"]

@@ -8,7 +8,7 @@
 Source: "Public Trees" (`tfs4-3wwa`) on data.calgary.ca, 581,011 rows -- the
 largest Canadian inventory on the map and the second largest anywhere in it
 after London.  Paging, the freshness watermark and the point-column shapes
-live in `_socrata_shared`.
+live in `shared.platforms.socrata`.
 
 **The id is `wam_id`, not `tree_asset_cd`.**  The obvious-looking column is a
 trap of exactly the kind `EXTENDING.md` describes under "`tree_id` is the
@@ -33,7 +33,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,
@@ -42,7 +42,7 @@ from _ingest_shared import (
     stream_to_table,
     validate_coordinates,
 )
-from _socrata_shared import SocrataDataset, iter_rows, point_lon_lat
+from shared.platforms.socrata import SocrataDataset, iter_rows, point_lon_lat
 
 DATASET = SocrataDataset("data.calgary.ca", "tfs4-3wwa", timeout=180)
 

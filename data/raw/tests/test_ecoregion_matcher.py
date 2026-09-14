@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ecoregion_matcher import (
+from enrichment.ecoregion_matcher import (
     build_native_range_evidence,
     make_ecoregion_reference,
     select_ecoregion_candidates,

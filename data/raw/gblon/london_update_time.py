@@ -21,7 +21,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, get_json_with_retry
+from shared.ingest import emit_freshness, get_json_with_retry
 
 PACKAGE_URL = "https://data.london.gov.uk/api/3/action/package_show?id=2r45m"
 

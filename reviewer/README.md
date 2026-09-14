@@ -72,7 +72,7 @@ $env:SATELLITE_TILE_DIR = "$PWD/../reviewer/tiles"; cd ../reviewer; pnpm dev
 ```
 
 A bundle is the `TilePredictionBundleV1` contract from
-`PREDICTION_CURATION_HANDOFF.md`: the chip as a PNG, the tile's affine and
+`docs/PREDICTION_CURATION_HANDOFF.md`: the chip as a PNG, the tile's affine and
 CRS, the run's above-threshold detections with stable ids
 (`{chip}:{output_x}:{output_y}`), and the published inventory trees the tile
 covers, each with the crown width `tree_predictions_v2.parquet` gives it.

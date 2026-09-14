@@ -10,7 +10,7 @@ The register arrives as two resources (classified and cited -- see
 times: either one moving means the city's landmark set may have changed, and
 taking only one would freeze the lane on a republish of the other.
 
-Both reads go through `_ckan_shared.data_last_modified`, which raises rather
+Both reads go through `shared.platforms.ckan.data_last_modified`, which raises rather
 than degrading when a portal has no usable stamp; a genuine outage is caught
 inside it and degrades to the epoch, so the weekly landmark lane sits this city
 out rather than failing every city.
@@ -21,8 +21,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, data_last_modified
-from _ingest_shared import emit_freshness
+from shared.platforms.ckan import CkanResource, data_last_modified
+from shared.ingest import emit_freshness
 
 HOST = "www.donneesquebec.ca/recherche"
 CLASSIFIED = CkanResource(HOST, "c6c20af9-504f-4848-9ff2-32c463c9b04c")

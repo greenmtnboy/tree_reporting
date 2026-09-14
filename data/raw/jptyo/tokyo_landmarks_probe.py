@@ -24,8 +24,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, data_last_modified
-from _ingest_shared import emit_freshness
+from shared.platforms.ckan import CkanResource, data_last_modified
+from shared.ingest import emit_freshness
 
 RESOURCES = (
     CkanResource("catalog.data.metro.tokyo.lg.jp", "25c5e6f7-0f8d-44d8-ac37-127e008f7a69"),

@@ -44,8 +44,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, esri_geometry_to_wkt, iter_features
-from _ingest_shared import emit, make_point_wkt
+from shared.platforms.arcgis import FeatureLayer, esri_geometry_to_wkt, iter_features
+from shared.ingest import emit, make_point_wkt
 
 SERVICE = "https://serviciosgis.catastrobogota.gov.co/arcgis/rest/services/recreaciondeporte/bienesinterescultural/MapServer"
 MONUMENTS = FeatureLayer(f"{SERVICE}/0", timeout=180)

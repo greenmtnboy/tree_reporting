@@ -4,7 +4,7 @@
  * The stored values are the per-city `{code}_source` enums declared in each
  * city's Trilogy model (see data/raw/core.preql for why the enums are per-city
  * rather than global); the value list itself lives in DATA_SOURCES in
- * data/raw/_ingest_shared.py. This map is only the picklist's display side —
+ * data/raw/shared/ingest.py. This map is only the picklist's display side —
  * an unmapped value falls back to a readable form of the raw value rather than
  * disappearing, so a newly added city shows something sensible before anyone
  * gets round to naming it here.

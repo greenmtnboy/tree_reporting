@@ -27,7 +27,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species_parts,

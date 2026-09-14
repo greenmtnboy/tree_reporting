@@ -1,4 +1,4 @@
-"""`_spanish_species`, the Bogotá vernacular name -> binomial table.
+"""`shared.species.spanish`, the Bogotá vernacular name -> binomial table.
 
 The table is curated by hand, so what a test can add is the mechanical half:
 that every value is a name the ingest would keep as written, that every key is
@@ -24,11 +24,11 @@ import pytest
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     SPECIES_SENTINELS,
     sanitize_species,
 )
-from _spanish_species import (  # noqa: E402
+from shared.species.spanish import (  # noqa: E402
     SPANISH_SPECIES,
     UNRESOLVED,
     spanish_name_key,

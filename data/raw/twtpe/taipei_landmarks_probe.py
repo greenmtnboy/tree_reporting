@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, get_json_with_retry
+from shared.ingest import emit_freshness, get_json_with_retry
 
 DATASETS = (6246, 6965)  # 文資局古蹟, 文資局歷史建築
 TAIWAN = timezone(timedelta(hours=8))

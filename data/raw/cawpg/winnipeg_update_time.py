@@ -21,8 +21,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness
-from _socrata_shared import SocrataDataset, rows_updated_at
+from shared.ingest import emit_freshness
+from shared.platforms.socrata import SocrataDataset, rows_updated_at
 
 DATASET = SocrataDataset("data.winnipeg.ca", "hfwk-jp4h")
 

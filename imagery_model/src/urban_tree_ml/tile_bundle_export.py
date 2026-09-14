@@ -2,7 +2,7 @@
 
 This is the handoff between the model and the reviewer's satellite page
 (``reviewer/satellite.ts`` in the main repository).  A bundle is the
-``TilePredictionBundleV1`` contract from ``PREDICTION_CURATION_HANDOFF.md``:
+``TilePredictionBundleV1`` contract from ``docs/PREDICTION_CURATION_HANDOFF.md``:
 a PNG of the tile, the run's predictions on it with stable ids and
 tile-local pixel coordinates, the tile's affine transform and CRS so a pixel
 can be georeferenced without the raster, and the published inventory trees

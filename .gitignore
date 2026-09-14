@@ -23,12 +23,14 @@ test-results/
 src/vite.run.log
 
 data/raw/*.parquet
-# Edits staged by data/raw/enrichment_admin.py and not yet published.
-data/raw/enrichment_admin_edits.json
+# The admin form's publish staging copy.
+data/raw/enrichment/admin/*.parquet
+# Edits staged by data/raw/enrichment/admin/server.py and not yet published.
+data/raw/enrichment/admin/enrichment_admin_edits.json
 
-# POWO responses cached by data/raw/species_audit.py. Derived from Kew's API
-# and re-fetchable; the curated verdicts live in _ingest_shared.py instead.
-data/raw/species_audit_cache.json
+# POWO responses cached by data/raw/tools/species_audit.py. Derived from Kew's API
+# and re-fetchable; the curated verdicts live in shared/ingest.py instead.
+data/raw/tools/species_audit_cache.json
 
 .vscode/
 .vscode/settings.json
@@ -47,7 +49,7 @@ imagery_model/**/*.ckpt
 imagery_model/**/*.tif
 imagery_model/**/*.tiff
 imagery_model/**/*.vrt
-# Staged source parquets live in GCS (see _ingest_shared.staging_url), not in
+# Staged source parquets live in GCS (see shared.ingest.staging_url), not in
 # git: the probes read the object Last-Modified as the freshness watermark, and
 # git does not preserve mtime, so a committed copy made every fresh clone look
 # like newly extracted data.
@@ -57,10 +59,10 @@ imagery_model/**/*.vrt
 # upstream project rather than carried in this repo's history.
 upstream_repro/
 
-# Tallo, downloaded by data/raw/crown_allometry_fit.py when it refits the
+# Tallo, downloaded by data/raw/tools/crown_allometry_fit.py when it refits the
 # crown-width coefficients. 49 MB, CC-BY 4.0, and re-downloadable; the fit
 # it produces is what is committed (crown_width_coefficients.csv).
-data/raw/.cache/
+data/raw/tools/.cache/
 
 # Satellite review tile exports for a live session (reviewer/README.md);
 # the two committed fixtures live in reviewer/fixtures/tiles instead.

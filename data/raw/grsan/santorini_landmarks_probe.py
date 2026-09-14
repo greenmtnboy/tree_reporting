@@ -10,7 +10,7 @@ from pathlib import Path
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, staging_modified_at
+from shared.ingest import emit_freshness, staging_modified_at
 
 STAGING_NAME = "grsan_landmarks_staging.parquet"
 

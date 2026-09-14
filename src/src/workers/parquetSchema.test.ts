@@ -114,7 +114,7 @@ describe('parquet schema', () => {
   // here every enrichment column comes back NULL for the ~190k trees whose
   // source did not identify them, including `species` itself once a query reads
   // any enrichment field. The row exists to give that join something to land
-  // on, and it is authored (data/raw/_ingest_shared.py SENTINEL_ENRICHMENT,
+  // on, and it is authored (data/raw/shared/ingest.py SENTINEL_ENRICHMENT,
   // mirroring src/src/data/species.ts) rather than generated: one *generated*
   // row for "Unknown" labelled 189,139 trees across every city as Orania
   // timikae, and purge_non_taxa() drops whatever the parquet holds before the

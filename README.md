@@ -193,10 +193,10 @@ a genus-level stem-diameter power law fitted on the
 *Global Change Biology*, [doi:10.1111/gcb.16302](https://doi.org/10.1111/gcb.16302);
 CC BY 4.0). Tallo is forest-plot data, so the crowns run narrower than an
 open-grown street tree's; the parquet is a model-curation input today and
-does not drive the map. Refit with `data/raw/crown_allometry_fit.py --write`.
+does not drive the map. Refit with `data/raw/tools/crown_allometry_fit.py --write`.
 A tree with a planting date and no measured diameter gets one predicted from
 its age, by a genus-level power law fitted on the map's own dated, measured
-trees (`data/raw/dbh_age_fit.py --write`), and the crown model is applied to
+trees (`data/raw/tools/dbh_age_fit.py --write`), and the crown model is applied to
 that; `crown_dbh_source` says which diameter a row's crown came from.
 
 ### Species images
@@ -281,5 +281,5 @@ trilogy cloud jobs run urban-tree-city-ussfo --wait
 How often each portal actually publishes, measured rather than assumed:
 
 ```bash
-cd data/raw && uv run ./portal_cadence.py --record
+cd data/raw && uv run ./tools/portal_cadence.py --record
 ```

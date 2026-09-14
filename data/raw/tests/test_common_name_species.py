@@ -1,4 +1,4 @@
-"""`_common_name_species`, the common-name -> binomial table.
+"""`shared.species.english`, the common-name -> binomial table.
 
 The table is curated by hand, so what a test can add is the mechanical half:
 that every value is a name the ingest would keep as written, that every key is
@@ -20,12 +20,12 @@ import pytest
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
-from _common_name_species import (  # noqa: E402
+from shared.species.english import (  # noqa: E402
     COMMON_NAME_SPECIES,
     common_name_key,
     species_from_common_name,
 )
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     SPECIES_SENTINELS,
     sanitize_species,
 )

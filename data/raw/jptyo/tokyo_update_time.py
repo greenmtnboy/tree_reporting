@@ -14,7 +14,7 @@ both and either can move on its own: the 23-ward file was last published
 added the Tama half in the first place.  Taking one resource would freeze the
 city whenever the *other* one was the thing that changed -- the silent
 never-rebuilding failure a probe exists to prevent, and the same trap Toronto
-fell into for a different reason (see the table in `_ckan_shared`).
+fell into for a different reason (see the table in `shared.platforms.ckan`).
 
 `data_last_modified` raises rather than degrading when a resource carries no
 stamp at all: that is the portal changing its metadata shape, not the portal
@@ -28,8 +28,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, data_last_modified
-from _ingest_shared import emit_freshness
+from shared.platforms.ckan import CkanResource, data_last_modified
+from shared.ingest import emit_freshness
 
 # Both resources of package `t000014d2000000029`, "都道の街路樹".  Kept in step
 # with `tokyo_tree_info.py` by `tests/test_city_wiring.py`, which checks that a

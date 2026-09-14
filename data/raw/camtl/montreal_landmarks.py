@@ -33,7 +33,7 @@ Read straight through the datastore with a `municipalite` filter, so this pulls
 166 rows rather than 1,351 and the province's other cities cost nothing.
 
 Quebec City reads the same two resources with its own filter.  A third Quebec
-city would be the point at which this is worth sharing the way `_ckan_shared`
+city would be the point at which this is worth sharing the way `shared.platforms.ckan`
 shares the reads underneath it.
 """
 
@@ -44,8 +44,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, iter_datastore_rows
-from _ingest_shared import emit, make_point_wkt
+from shared.platforms.ckan import CkanResource, iter_datastore_rows
+from shared.ingest import emit, make_point_wkt
 
 HOST = "www.donneesquebec.ca/recherche"
 

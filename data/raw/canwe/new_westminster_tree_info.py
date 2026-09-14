@@ -7,7 +7,7 @@
 
 Source: "Tree Inventory (Active Trees)" (`Tree_Inventory_(PROD)_4_view`) on
 `opendata.newwestcity.ca`, 16,111 rows.  Paging, the freshness watermark and
-Esri's epoch-milliseconds live in `_arcgis_shared`.
+Esri's epoch-milliseconds live in `shared.platforms.arcgis`.
 
 **`globalid` is the key**, and it is the one this layer guarantees: 16,111
 distinct values across 16,111 rows, none null, checked over the whole table.
@@ -35,8 +35,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, esri_ms_to_date, iter_features
-from _ingest_shared import (
+from shared.platforms.arcgis import FeatureLayer, esri_ms_to_date, iter_features
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

@@ -30,7 +30,7 @@ literals. The 223 slugs stay distinct.
 
 The polygon-to-WKT helpers below are a second copy of the ones in
 `uslax/losangeles_landmarks.py`. Two is under the threshold `EXTENDING.md` sets
-for sharing; a third belongs in `_ingest_shared` next to `make_point_wkt`.
+for sharing; a third belongs in `shared.ingest` next to `make_point_wkt`.
 """
 
 import re
@@ -41,8 +41,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, read_geojson_features
-from _ingest_shared import emit
+from shared.platforms.ckan import CkanResource, read_geojson_features
+from shared.ingest import emit
 
 RESOURCE = CkanResource(
     "www.donneesquebec.ca/recherche",

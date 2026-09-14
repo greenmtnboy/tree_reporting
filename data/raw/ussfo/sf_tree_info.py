@@ -44,7 +44,7 @@ The host moved too.  `data.sfgov.org` 301s to `data.sf.gov` for metadata but
 answers the row query with a bare nginx **403**, which reads as a block rather
 than as a redirect; address the new host directly.
 
-Paging is `_socrata_shared.iter_rows` rather than this script's former
+Paging is `shared.platforms.socrata.iter_rows` rather than this script's former
 `$limit=500000` single request -- the defect that module's docstring names,
 and one San Francisco was the example of.
 
@@ -64,14 +64,14 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
     stream_to_table,
     validate_coordinates,
 )
-from _socrata_shared import SocrataDataset, iter_rows
+from shared.platforms.socrata import SocrataDataset, iter_rows
 
 DATASET = SocrataDataset("data.sf.gov", "tkzw-k3nq", timeout=180)
 

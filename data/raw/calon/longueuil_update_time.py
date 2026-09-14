@@ -12,7 +12,7 @@ does rarely: the resource last moved 2024-03-01.
 The package's `metadata_modified` is 2026-02-09, nearly two years later, and
 `data_last_modified` deliberately does not read it: that stamp moves for a
 description edit, and following it would rebuild Longueuil for a typo. See the
-note in `_ckan_shared`.
+note in `shared.platforms.ckan`.
 """
 
 import sys
@@ -20,8 +20,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, data_last_modified
-from _ingest_shared import emit_freshness
+from shared.platforms.ckan import CkanResource, data_last_modified
+from shared.ingest import emit_freshness
 
 RESOURCE = CkanResource(
     "www.donneesquebec.ca/recherche", "23cde69a-a1d7-4775-8271-e3b46b3a6d83"

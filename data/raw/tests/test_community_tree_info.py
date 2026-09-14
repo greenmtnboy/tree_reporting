@@ -7,7 +7,7 @@ import pyarrow as pa
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
-from _ingest_shared import UNKNOWN_SPECIES  # noqa: E402
+from shared.ingest import UNKNOWN_SPECIES  # noqa: E402
 SPEC = importlib.util.spec_from_file_location(
     "community_tree_info", RAW_DIR / "community_tree_info.py"
 )

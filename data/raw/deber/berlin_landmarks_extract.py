@@ -24,7 +24,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     upload_staging,
     validate_coordinates,
     post_json_with_retry,

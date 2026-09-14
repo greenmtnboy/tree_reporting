@@ -18,7 +18,7 @@ not a register number, not a file number -- and neither the name nor the
 address is unique across the 1,104 rows.  `:id` is the system row identifier:
 always present, distinct on every row here, and stable across a republish,
 which is more than a name-and-address hash would be (that churns the moment
-somebody fixes a typo).  It is the same reasoning `_socrata_shared` gives for
+somebody fixes a typo).  It is the same reasoning `shared.platforms.socrata` gives for
 ordering pages by it.
 """
 
@@ -28,8 +28,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, make_point_wkt
-from _socrata_shared import SYSTEM_ID, SocrataDataset, iter_rows
+from shared.ingest import emit, make_point_wkt
+from shared.platforms.socrata import SYSTEM_ID, SocrataDataset, iter_rows
 
 DATASET = SocrataDataset("data.edmonton.ca", "jgsn-dhai")
 

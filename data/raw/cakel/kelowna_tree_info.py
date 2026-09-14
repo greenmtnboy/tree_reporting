@@ -7,7 +7,7 @@
 
 Source: "Tree Inventory" (`OpenData_Environment/MapServer/17`) on
 `opendata.kelowna.ca`, 24,599 rows.  Paging, the freshness watermark and
-Esri's epoch-milliseconds live in `_arcgis_shared`.
+Esri's epoch-milliseconds live in `shared.platforms.arcgis`.
 
 **Kelowna publishes no usable tree id, and this ingest keys on `OBJECTID`.**
 That is the last resort in `EXTENDING.md`'s preference order, and it is taken
@@ -42,8 +42,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, iter_features
-from _ingest_shared import (
+from shared.platforms.arcgis import FeatureLayer, iter_features
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,
