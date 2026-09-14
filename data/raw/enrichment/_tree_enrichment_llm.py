@@ -5,7 +5,7 @@ import sys
 
 import instructor
 
-from ecoregion_matcher import EcoregionReference
+from .ecoregion_matcher import EcoregionReference
 
 from ._tree_enrichment_models import TreeEnrichment
 from ._tree_enrichment_sources import SourceTexts, build_reference_text

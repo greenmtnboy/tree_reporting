@@ -9,7 +9,7 @@ The enrichment table (`tree_enrichment_v{n}.parquet` in GCS) is the one row
 per species that every tree row joins to: its common name, growth form, traits,
 native range and photo.  It is written by an LLM run, and the LLM is sometimes
 wrong -- a photo of a different plant, a description of the wrong taxon, a
-trait that reads as off.  `backfill_enrichment.py` can re-ask the model, but a
+trait that reads as off.  `enrichment/backfill.py` can re-ask the model, but a
 reviewer who already knows the answer should be able to just write it down.
 
 This serves a small form over the table.  Edits are staged locally and land in
@@ -55,7 +55,7 @@ names.  The form treats both the same way, read-only and pointing here.
 Run
 ---
     gcloud auth application-default login        # once
-    cd data/raw && uv run enrichment_admin.py
+    cd data/raw && uv run enrichment/admin/server.py
 
 then open http://127.0.0.1:4175.  The server binds to localhost only.  Set
 ENRICHMENT_ADMIN_PORT to change the port.
@@ -85,7 +85,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-RAW_DIR = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent
+RAW_DIR = HERE.parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
 from shared.ingest import (  # noqa: E402
@@ -106,7 +107,7 @@ from enrichment._tree_shared import (  # noqa: E402
 )
 
 # The pieces of tree_enrichment.py we reuse, loaded without running its
-# __main__ -- the same trick backfill_enrichment.py uses.
+# __main__ -- the same trick enrichment/backfill.py uses.
 import importlib.util as _ilu  # noqa: E402
 
 _te_spec = _ilu.spec_from_file_location("tree_enrichment", RAW_DIR / "tree_enrichment.py")
@@ -114,11 +115,11 @@ _te = _ilu.module_from_spec(_te_spec)  # type: ignore[arg-type]
 _te_spec.loader.exec_module(_te)  # type: ignore[union-attr]
 
 SCHEMA: pa.Schema = _te.SCHEMA
-HTML = RAW_DIR / "enrichment_admin.html"
+HTML = HERE / "index.html"
 # Staged edits survive a restart.  Gitignored.
-EDITS_PATH = RAW_DIR / "enrichment_admin_edits.json"
+EDITS_PATH = HERE / "enrichment_admin_edits.json"
 # What publish writes before uploading; `data/raw/*.parquet` is gitignored.
-PUBLISH_PATH = RAW_DIR / "tree_enrichment_admin_publish.parquet"
+PUBLISH_PATH = HERE / "tree_enrichment_admin_publish.parquet"
 PUBLISHED_URL = ENRICHMENT_GCS_URI.replace("gs://", "https://storage.googleapis.com/")
 # Versioned like the enrichment table.  `shared.ecoregions.REMOTE_ECOREGION_PARQUET`
 # still names v1, which is gone from the bucket.

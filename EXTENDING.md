@@ -1532,7 +1532,7 @@ The `tree_enrichment_v{DATA_VERSION}.parquet` at GCS is city-agnostic. It maps *
 - Two photo slots: `photo_url` (the iNaturalist default, in practice a foliage
   or flower close-up, fetched by the run) and `trunk_photo_url` (a bark or
   trunk view, which no source can be asked for -- it is picked by hand in
-  `enrichment_admin.py` from the same licensed pool). Each carries its own
+  `enrichment/admin/server.py` from the same licensed pool). Each carries its own
   `_license` and `_attribution`.
 
 The browser worker joins on `t.species = se.species` (exact match on scientific name) and derives `common_name` as `split_part(se.common_names, ',', 1)` — the first enrichment common name, falling back to the scientific name if unenriched.
@@ -1576,7 +1576,7 @@ on every load (`with_species_aliases` in `enrichment/_tree_shared.py`):
 - a row keyed by a synonym is folded onto the accepted row -- dropped when
   the accepted row exists, re-keyed when it does not, so nothing is re-asked;
 - each accepted row's `synonyms` lists the names that fold into it, merged
-  with anything a reviewer added by hand in `enrichment_admin.py`;
+  with anything a reviewer added by hand in `enrichment/admin/server.py`;
 - an **alias row** is published under every synonym key and every hybrid-mark
   twin, so a tree row still carrying the old name -- a city not yet rebuilt --
   keeps its common name. The alias's own `synonyms` lists the accepted name.
@@ -1862,7 +1862,7 @@ and **a word missing from them is lowercased**, so a name that comes out
 wrong (`port orford cedar`) is fixed by one entry. It runs in three places
 that must agree: on every load of the table (`with_normalized_common_names`,
 next to `purge_non_taxa`), on each row the LLM run writes, and on a row saved
-in `enrichment_admin.py`. The prompt asks for the convention too, so less
+in `enrichment/admin/server.py`. The prompt asks for the convention too, so less
 needs correcting. The tree card's title is the first common name, so this is
 what the map shows.
 

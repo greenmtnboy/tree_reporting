@@ -31,7 +31,7 @@ sys.path.insert(0, str(RAW_DIR))
 # `uv run tests/test_enrichment_admin.py`, which resolves its own dependencies.
 pytest.importorskip("instructor", reason="run `uv run tests/test_enrichment_admin.py` for the admin tests")
 
-import enrichment_admin as admin  # noqa: E402
+from enrichment.admin import server as admin  # noqa: E402
 from enrichment._tree_shared import (  # noqa: E402
     SPECIES_SENTINELS,
     sentinel_enrichment_rows,

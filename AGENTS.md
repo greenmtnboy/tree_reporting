@@ -105,10 +105,10 @@ does not read this parquet yet; see "Tree-level predictions" in
 
 ### Correcting a species by hand
 
-`data/raw/enrichment_admin.py` is a localhost form over the enrichment table
+`data/raw/enrichment/admin/` is a localhost form over the enrichment table
 for the case where a reviewer already knows the answer -- a photo of the wrong
 plant, a description of the wrong taxon, a trait that is off -- and re-asking
-the model (`backfill_enrichment.py`) is the long way round. Edits are staged
+the model (`enrichment/backfill.py`) is the long way round. Edits are staged
 locally; **Publish** re-reads the live parquet, patches the staged rows in
 (and every alias row of the taxon), uploads, and reads it back to verify, the same
 path `tree_enrichment.py --limit` takes. An edited row carries today's

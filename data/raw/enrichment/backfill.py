@@ -21,33 +21,39 @@ Providers
 Usage
 -----
   # Backfill iNat photo columns (no LLM needed)
-  uv run backfill_enrichment.py --fields photo_url
+  uv run enrichment/backfill.py --fields photo_url
 
   # Preview which species need backfill without running
-  uv run backfill_enrichment.py --fields photo_url --dry-run
+  uv run enrichment/backfill.py --fields photo_url --dry-run
 
   # Backfill description for species missing it
-  uv run backfill_enrichment.py --fields description --model gemini-2.0-flash
+  uv run enrichment/backfill.py --fields description --model gemini-2.0-flash
 
     # Re-run a single species and overwrite its existing description
-    uv run backfill_enrichment.py --fields description --species "Acer x freemanii 'sienna glen'" --overwrite-existing --model gemini-2.5-flash
+    uv run enrichment/backfill.py --fields description --species "Acer x freemanii 'sienna glen'" --overwrite-existing --model gemini-2.5-flash
 
     # Inspect the exact LLM context for a targeted rerun
-    uv run backfill_enrichment.py --fields description --species "Acer x freemanii 'sienna glen'" --overwrite-existing --print-llm-context --model gemini-2.5-flash
+    uv run enrichment/backfill.py --fields description --species "Acer x freemanii 'sienna glen'" --overwrite-existing --print-llm-context --model gemini-2.5-flash
 
   # Multiple fields — all providers needed are resolved automatically
-  uv run backfill_enrichment.py --fields photo_url,description --model gemini-2.0-flash
+  uv run enrichment/backfill.py --fields photo_url,description --model gemini-2.0-flash
 
   # Cap how many species to process, write a local checkpoint
-  uv run backfill_enrichment.py --fields photo_url --limit 50 --output tree_enrichment.parquet
+  uv run enrichment/backfill.py --fields photo_url --limit 50 --output tree_enrichment.parquet
 
   # Use a local checkpoint as the source instead of the remote GCS parquet
-  uv run backfill_enrichment.py --fields photo_url --source tree_enrichment.parquet --output tree_enrichment.parquet
+  uv run enrichment/backfill.py --fields photo_url --source tree_enrichment.parquet --output tree_enrichment.parquet
 """
 
 import sys
 import os
 import argparse
+from pathlib import Path
+
+# Run directly and sys.path[0] is `enrichment/`, not `data/raw`, so the
+# package imports below need the raw directory put back on the path.
+RAW_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(RAW_DIR))
 import time as _time
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -73,8 +79,7 @@ from enrichment._tree_enrichment_helpers import (
 
 # Import the pieces we reuse from tree_enrichment without re-running its __main__
 import importlib.util as _ilu
-import pathlib as _pl
-_te_spec = _ilu.spec_from_file_location("tree_enrichment", _pl.Path(__file__).parent / "tree_enrichment.py")
+_te_spec = _ilu.spec_from_file_location("tree_enrichment", RAW_DIR / "tree_enrichment.py")
 _te = _ilu.module_from_spec(_te_spec)  # type: ignore[arg-type]
 _te_spec.loader.exec_module(_te)  # type: ignore[union-attr]
 

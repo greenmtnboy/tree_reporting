@@ -366,7 +366,7 @@ def with_species_aliases(table):
 
     2. **Fill `synonyms`.**  Each accepted row lists the *synonyms* the map
        folds into it, merged with whatever the row already carried (a reviewer
-       can add one in `enrichment_admin.py` before the pair reaches the code).
+       can add one in `enrichment/admin/server.py` before the pair reaches the code).
        Misspellings are not listed: the column says what else the taxon is
        called, and a typo is not one of its names.
 

@@ -226,16 +226,16 @@ exclude = [
     "raw/osm_dedup_validation.py",
     "raw/portal_cadence.py",
     "raw/dedup_cells.py",
-    "raw/enrichment_admin.py",
-    "raw/backfill_enrichment.py",
+    "raw/enrichment/admin/*",
+    "raw/enrichment/backfill.py",
     "raw/*/*_osm_extract.py",
     "raw/*/*_landmarks_geocode.py",
     "raw/*/*_landmarks_extract.py",
-    # Gitignored working files of the audit and the admin form.  A clean
-    # clone never has them; a checkout does, and 100 KB of POWO cache is
-    # what took a sync from a workstation over the cap while CI was under.
+    # A gitignored working file of the audit.  A clean clone never has it; a
+    # checkout does, and 100 KB of POWO cache is what took a sync from a
+    # workstation over the cap while CI was under.  (The admin form's own
+    # staged edits sit under `raw/enrichment/admin/`, already excluded above.)
     "raw/species_audit_cache.json",
-    "raw/enrichment_admin_edits.json",
 ]
 
 # ===========================================================================
