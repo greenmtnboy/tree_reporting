@@ -1,5 +1,5 @@
 {
-  "_comment": "Distinct freshness watermarks observed per probe, oldest first, written by portal_cadence.py --record. Each entry is one upstream publication; the gaps between them are the measured cadence the per-city crons in ../trilogy.toml are set from. Append-only in practice -- deleting entries throws away the only cadence measurement this project has.",
+  "_comment": "Distinct freshness watermarks observed per probe, oldest first, written by portal_cadence.py --record. Each entry is one upstream publication; the gaps between them are the measured cadence the per-city crons in ../../trilogy.toml are set from. Append-only in practice -- deleting entries throws away the only cadence measurement this project has.",
   "watermarks": {
     "landmarks:aumel/melbourne_landmarks_probe.py": [
       "2021-03-12T00:00:00+00:00"

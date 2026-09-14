@@ -30,7 +30,7 @@ measured against the four portals rather than assumed:
   nothing about the order of an unsorted result.
 * **No single timestamp is the freshness watermark.**  See
   `data_last_modified`, which is the one place this module contradicts the
-  handoff note in `CANADA_SOURCES.md` — and it contradicts it because Toronto
+  handoff note in `docs/CANADA_SOURCES.md` — and it contradicts it because Toronto
   would otherwise have been frozen in 2022 for ever.
 
 **Three row readers, because CKAN has three kinds of resource this repo reads.**
@@ -178,7 +178,7 @@ def data_last_modified(resource: CkanResource) -> datetime:
     """When this resource's *data* last changed, for a freshness probe.
 
     **The maximum of the data stamps, not the first one present.**  This is the
-    one place the module contradicts the handoff note in `CANADA_SOURCES.md`,
+    one place the module contradicts the handoff note in `docs/CANADA_SOURCES.md`,
     which proposed a preference order of resource `last_modified`, then the
     package's `last_refreshed`, then `metadata_modified`.  Measured against the
     four portals, that order freezes Toronto for ever:

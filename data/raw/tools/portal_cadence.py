@@ -7,7 +7,7 @@
 to how often we poll it.
 
 Every city's ingest is scheduled independently (one `[[cloud.job]]` per city in
-`../trilogy.toml`), which only pays off if the cron matches the portal's real
+`../../trilogy.toml`), which only pays off if the cron matches the portal's real
 publishing rhythm.  Nothing upstream advertises that rhythm reliably --
 `accrualPeriodicity` is aspirational where it exists at all -- so the only
 honest source is the watermark the city's own freshness probe already emits,
@@ -243,7 +243,7 @@ def save_history(watermarks: dict[str, list[str]]) -> None:
             "Distinct freshness watermarks observed per probe, oldest first, "
             "written by portal_cadence.py --record. Each entry is one upstream "
             "publication; the gaps between them are the measured cadence the "
-            "per-city crons in ../trilogy.toml are set from. Append-only in "
+            "per-city crons in ../../trilogy.toml are set from. Append-only in "
             "practice -- deleting entries throws away the only cadence "
             "measurement this project has."
         ),

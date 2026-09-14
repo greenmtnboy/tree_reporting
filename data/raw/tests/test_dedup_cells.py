@@ -47,7 +47,7 @@ def test_cell_is_a_calibrated_size(code: str):
     flags directly and picked 4 m for Calgary, 6 m for Edmonton, Winnipeg,
     Toronto and Montreal, and 8 m for Quebec City -- every one of them under
     what the bands alone suggested.  8 was already named as the marginal
-    table's answer for San Francisco in DEDUP_CELL_RECALIBRATION.md before any
+    table's answer for San Francisco in docs/DEDUP_CELL_RECALIBRATION.md before any
     city carried it.
     """
     assert DEDUP_CELL_METRES[code] in (4, 6, 8, 10, 20)

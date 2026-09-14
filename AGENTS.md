@@ -1,5 +1,35 @@
 # Project Context
 
+## Where things live under `data/`
+
+```
+data/
+  trilogy.toml            every [[cloud.job]], and the rationale for each cadence
+  raw/
+    *.preql               the core model: core, tree_common, tree_dedup, the
+                          rollup and landmark publishers, enrichment, predictions
+    *.py                  the scripts those models' datasources run -- the
+                          community and satellite ingests, the parquet probes
+    *.csv                 the committed coefficients tree_predictions.preql reads
+    {code}/               one directory per city: its ingest, its probes, its
+                          tree and landmark models
+    shared/               the shared ingest library: ingest, osm, ecoregions,
+                          platforms/ (arcgis, ckan, socrata, wfs) and species/
+                          (one common-name table per language)
+    enrichment/           the LLM enrichment package, plus admin/ (the localhost
+                          correction form) and backfill.py
+    tools/                workstation-only scripts: the scaffolder, the audit,
+                          the calibrators, the two model fits.  See its README.
+    tests/                `pytest tests -q` from data/raw; offline, seconds
+  osm_staging/            one thin model per city over the shared osm_rows.py
+  landmark_staging/       the curated-CSV landmark publishers
+```
+
+`shared/` is the only one of those the workspace bundle ships whole. The CLI
+drops `tests/` itself, and `tools/` and `enrichment/admin/` are excluded by
+`[cloud] exclude` because no job runs them -- so a workstation script added to
+`tools/` needs no new exclude entry, and one added beside the models does.
+
 ## Data ingest
 
 The map's parquets are built by scheduled jobs on trilogy-cloud, declared as
@@ -105,7 +135,7 @@ does not read this parquet yet; see "Tree-level predictions" in
 
 ### Correcting a species by hand
 
-`data/raw/enrichment/admin/` is a localhost form over the enrichment table
+`data/raw/enrichment/admin/server.py` is a localhost form over the enrichment table
 for the case where a reviewer already knows the answer -- a photo of the wrong
 plant, a description of the wrong taxon, a trait that is off -- and re-asking
 the model (`enrichment/backfill.py`) is the long way round. Edits are staged

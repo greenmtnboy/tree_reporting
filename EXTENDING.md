@@ -2208,7 +2208,7 @@ nowhere a scheduled job reads:
 trilogy cloud --org trilogy-data jobs push --source data --config adhoc.toml \
     --name adhoc-city-{code} --operation refresh --memory-mb 2048 \
     --secret-env GOOGLE_HMAC_KEY --secret-env GOOGLE_HMAC_SECRET \
-    --exclude "raw/tests/*" --exclude "raw/enrichment/*" \
+    --exclude "raw/tests/*" --exclude "raw/enrichment/*" --exclude "raw/tools/*" \
     --exclude "osm_staging/*" --exclude "landmark_staging/*" \
     --exclude "raw/{every other city}/*" \
     --exclude raw/tree_info.preql --exclude raw/landmark_info.preql ... # every root model the city does not import

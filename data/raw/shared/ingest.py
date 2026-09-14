@@ -1960,7 +1960,7 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # deliberately not done here, because re-cutting a published city's cell
 # changes which of its rows survive the prune, which is a rebuild of every one
 # of them.  The measurements, the cost and the runbook are in
-# ../../DEDUP_CELL_RECALIBRATION.md.
+# `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
     # Calibrated 2026-09-11 against the staged extract (67,545 OSM nodes --
     # more than the register itself) and the ingest's 66,380 rows.  5-10 m
