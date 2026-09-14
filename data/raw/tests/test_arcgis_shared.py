@@ -1,4 +1,4 @@
-"""`_arcgis_shared`, with the HTTP layer faked.
+"""`shared.platforms.arcgis`, with the HTTP layer faked.
 
 The paging rules are what these are really about.  Both were latent bugs in the
 hand-rolled copies this module replaced, and both fail *silently* -- as a city
@@ -17,8 +17,8 @@ import pytest
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
-import _arcgis_shared  # noqa: E402
-from _arcgis_shared import (  # noqa: E402
+import shared.platforms.arcgis  # noqa: E402
+from shared.platforms.arcgis import (  # noqa: E402
     FeatureLayer,
     coded_value_domain,
     esri_geometry_to_wkt,
@@ -57,7 +57,7 @@ class FakePortal:
 @pytest.fixture
 def portal(monkeypatch):
     def install(fake: FakePortal) -> FakePortal:
-        monkeypatch.setattr(_arcgis_shared, "get_json_with_retry", fake)
+        monkeypatch.setattr(shared.platforms.arcgis, "get_json_with_retry", fake)
         return fake
 
     return install
@@ -202,7 +202,7 @@ class TestPaging:
 
     def test_a_missing_max_record_count_falls_back(self, portal):
         portal(FakePortal(metadata={}))
-        assert max_record_count(LAYER) == _arcgis_shared.FALLBACK_PAGE_SIZE
+        assert max_record_count(LAYER) == shared.platforms.arcgis.FALLBACK_PAGE_SIZE
 
     def test_exceeded_transfer_limit_ends_the_loop(self, portal):
         """Esri's own "there is more" flag is exact. The short-page heuristic is

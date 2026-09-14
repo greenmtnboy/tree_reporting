@@ -7,7 +7,7 @@
 
 Source: "Trees" (`OpenData/odl_trees`) on `opendata.lethbridge.ca`, 45,433
 rows.  Paging, the freshness watermark and Esri's epoch-milliseconds live in
-`_arcgis_shared`.
+`shared.platforms.arcgis`.
 
 **The cleanest schema of the Canadian ArcGIS set.**  Lethbridge publishes
 `genus`, `species` and `cultivar` as three separate columns as well as the
@@ -35,8 +35,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, iter_features
-from _ingest_shared import (
+from shared.platforms.arcgis import FeatureLayer, iter_features
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

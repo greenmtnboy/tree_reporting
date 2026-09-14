@@ -30,7 +30,7 @@ import pyarrow as pa
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _ingest_shared import (
+from shared.ingest import (
     CITY_TERRITORY,
     in_city_territory,
     COMMUNITY_DATA_SOURCES,

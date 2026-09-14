@@ -36,7 +36,7 @@ SRC_DIR = REPO_DIR / "src" / "src"
 REVIEWER_DIR = REPO_DIR / "reviewer"
 sys.path.insert(0, str(RAW_DIR))
 
-from _ingest_shared import CITY_BOUNDS  # noqa: E402
+from shared.ingest import CITY_BOUNDS  # noqa: E402
 
 FRONTEND = SRC_DIR / "composables" / "useMapData.ts"
 REVIEWER = REVIEWER_DIR / "submissionCity.ts"

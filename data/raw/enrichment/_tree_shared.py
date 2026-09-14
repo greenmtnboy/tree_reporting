@@ -9,7 +9,7 @@ from pathlib import Path
 from random import randint
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     SENTINEL_ENRICHMENT,
     SPECIES_MISSPELLINGS,
     SPECIES_SENTINELS,
@@ -55,7 +55,7 @@ EXCLUDED_SPECIES: set[str] = {
 # Species present in tree_info that represent vacant / placeholder records — skip enrichment.
 #
 # SPECIES_SENTINELS carries the values every ingest writes for a tree it could
-# not identify (_ingest_shared: "Unknown", plus the growth-form sentinels
+# not identify (shared.ingest: "Unknown", plus the growth-form sentinels
 # "Palm" / "Shrub" / "Cactus").  They are real values in the `species` key so
 # joins stay null-free, but they are not taxa and must never reach the
 # enrichment LLM: asked to describe one, a model answers with a plausible,
@@ -354,7 +354,7 @@ def with_species_aliases(table):
     """Fold synonyms onto their accepted row, fill `synonyms`, and publish an
     alias row under every other key a tree row might still carry.
 
-    `SPECIES_SYNONYMS` and `SPECIES_MISSPELLINGS` (_ingest_shared) are applied
+    `SPECIES_SYNONYMS` and `SPECIES_MISSPELLINGS` (shared.ingest) are applied
     by `sanitize_species`, so a rebuilt city publishes the accepted name only.
     Three things follow for this table, and this function does all three on
     every load:

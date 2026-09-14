@@ -10,7 +10,7 @@ from pathlib import Path
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, get_json_with_retry
+from shared.ingest import emit_freshness, get_json_with_retry
 
 DATASET_ID = "rzic-39gi"
 METADATA_URL = f"https://data.sfgov.org/api/views/{DATASET_ID}.json"

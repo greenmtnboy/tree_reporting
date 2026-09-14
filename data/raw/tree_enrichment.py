@@ -24,7 +24,7 @@ from ecoregion_matcher import (
     make_ecoregion_reference,
     select_ecoregion_candidates as select_ecoregion_candidates_from_evidence,
 )
-from _ecoregion_shared import (
+from shared.ecoregions import (
     LAYER_QUERY_URL,
     REMOTE_ECOREGION_PARQUET,
 )

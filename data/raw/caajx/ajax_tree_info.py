@@ -6,7 +6,7 @@
 """Ajax's town-owned tree inventory, from opendata.ajax.ca.
 
 Source: "Town Trees" (`Ajax_Open_Data/MapServer/8`) on the town's on-prem
-ArcGIS Server, 53,848 rows.  Paging lives in `_arcgis_shared`.
+ArcGIS Server, 53,848 rows.  Paging lives in `shared.platforms.arcgis`.
 
 **Two columns name the species and neither is a binomial.**  `SPCODE` holds a
 USDA-PLANTS-style symbol (`TIAM`, `FAGR`, `ACGI`) and carries a coded-value
@@ -17,7 +17,7 @@ whatever does not fit -- `Accolade E`, `common Hac`, `Geenspire`, `ohio bucke`.
 Of the 53,848 rows, 44,591 carry a code the domain names and 8,180 fall back to
 `TYPE`; 1,077 have neither and publish as `Unknown`.
 
-The English name then goes through `_common_name_species`, exactly as
+The English name then goes through `shared.species.english`, exactly as
 Mississauga's and Burlington's do.  Decoding the *symbol* is deliberately not
 attempted even though most of them look like USDA symbols: `TIAM` is
 convincingly *Tilia americana* and `MAAM9` is not convincingly anything, and a
@@ -50,15 +50,15 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import (
+from shared.platforms.arcgis import (
     FeatureLayer,
     coded_value_domain,
     esri_ms_to_date,
     esri_point,
     iter_features,
 )
-from _common_name_species import species_from_common_name
-from _ingest_shared import (
+from shared.species.english import species_from_common_name
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

@@ -1,6 +1,6 @@
 """Resolve Bogotá's Spanish inventory name to an accepted binomial.
 
-NOT a uv inline script -- a regular importable module, like `_ingest_shared`.
+NOT a uv inline script -- a regular importable module, like `shared.ingest`.
 
 Bogotá's Jardín Botánico publishes its 1.39M-tree inventory with a Spanish
 common name in `Nombre_Esp` -- `Sauco`, `Jazmin del cabo, laurel huesito`,
@@ -10,8 +10,8 @@ species code, and no binomial anywhere in the layer: 503 distinct strings
 `species` is the join key into the enrichment table, so without this the whole
 city arrives labelled `Unknown`.
 
-This is `_common_name_species` applied to a third language, and the shape is
-deliberately the same as `_japanese_species` -- a curated dict, a key
+This is `shared.species.english` applied to a third language, and the shape is
+deliberately the same as `shared.species.japanese` -- a curated dict, a key
 normaliser, and a lookup that returns `None` rather than guessing.  It is a
 separate module for the reason that one is: the keys normalise by their own
 rules (accents are stripped here, the English table has none to strip and the
@@ -19,7 +19,7 @@ Japanese one folds scripts), and the *whole* published string is the key.
 
 Usage:
 
-    from _spanish_species import species_from_spanish_name
+    from shared.species.spanish import species_from_spanish_name
 
     species_from_spanish_name("Sauco")                      # 'Sambucus nigra'
     species_from_spanish_name("Ciprés, Pino ciprés, Pino")  # 'Cupressus lusitanica'
@@ -84,7 +84,7 @@ genus):
 
 **The 5 that are still synonyms are one deliberate rule, and nothing else:**
 where POWO and the published table disagreed, the published table won -- the
-argument `SPECIES_SYNONYMS` and `_japanese_species` make, that the same taxon
+argument `SPECIES_SYNONYMS` and `shared.species.japanese` make, that the same taxon
 under two names is two enrichment rows and two entries in every rollup.
 `Cupressus lusitanica` (36,969 trees; POWO says *Hesperocyparis*, and the
 repo already folds *Hesperocyparis* onto *Cupressus*), `Citrus x sinensis` (POWO folds it
@@ -171,7 +171,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from _ingest_shared import form_sentinel_for, is_not_a_tree
+from shared.ingest import form_sentinel_for, is_not_a_tree
 
 # Anything that is not a lowercase ASCII letter or a digit, after accents have
 # been stripped: commas, parentheses, hyphens, stray spaces.  Each run becomes

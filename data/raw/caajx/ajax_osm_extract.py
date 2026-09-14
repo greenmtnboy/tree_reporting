@@ -6,7 +6,7 @@
 
 """Extract Ajax's OpenStreetMap trees into the staged parquet in GCS.
 
-Everything lives in `_osm_shared.extract_city`; this file exists so each city
+Everything lives in `shared.osm.extract_city`; this file exists so each city
 has a discoverable entry point and so a city that needs to diverge (a tighter
 bbox, an extra tag) has somewhere to do it.
 
@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _osm_shared import extract_city  # noqa: E402
+from shared.osm import extract_city  # noqa: E402
 
 CITY_CODE = "CAAJX"
 CITY_NAME = "Ajax OSM"

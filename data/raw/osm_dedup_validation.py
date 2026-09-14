@@ -46,7 +46,7 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _ingest_shared import CITY_BOUNDS, staging_url  # noqa: E402
+from shared.ingest import CITY_BOUNDS, staging_url  # noqa: E402
 
 TREES_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees"
 
@@ -99,7 +99,7 @@ def load(city_code: str, osm_path: str | None = None, inventory_path: str | None
     outputs of the pipeline this cell size is an input to, so calibrating from
     GCS alone is a deadlock -- you cannot write the model without the number,
     and you cannot get the number without having run the model.  Run the city's
-    ingest and `_osm_shared.fetch_osm_trees` to local parquets, calibrate
+    ingest and `shared.osm.fetch_osm_trees` to local parquets, calibrate
     against those, then wire the answer in.
 
     A local inventory file has not been through the model, so it carries no

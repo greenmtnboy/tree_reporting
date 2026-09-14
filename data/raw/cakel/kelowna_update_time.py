@@ -13,7 +13,7 @@ alone is trustworthy -- `InventoryDate` never moves for a correction to an
 existing row, and the catalogue stamp can miss a service overwritten in place
 -- so this takes the later of the two.
 
-That is the rule `_ckan_shared.data_last_modified` arrived at the hard way:
+That is the rule `shared.platforms.ckan.data_last_modified` arrived at the hard way:
 preferring one stamp froze Toronto on its first build, because the one
 preferred had stopped moving three years earlier.  A maximum cannot freeze a
 city as long as any one of its inputs is alive.  Today the two disagree by
@@ -26,8 +26,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, field_max, hub_last_modified
-from _ingest_shared import UpstreamUnavailable, emit_freshness
+from shared.platforms.arcgis import FeatureLayer, field_max, hub_last_modified
+from shared.ingest import UpstreamUnavailable, emit_freshness
 
 HUB_HOST = "opendata.kelowna.ca"
 LAYER_URL = (

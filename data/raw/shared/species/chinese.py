@@ -1,6 +1,6 @@
 """Resolve a Taiwanese inventory's Chinese common name to an accepted binomial.
 
-NOT a uv inline script -- a regular importable module, like `_ingest_shared`.
+NOT a uv inline script -- a regular importable module, like `shared.ingest`.
 
 Taipei's Parks and Street Lights Office publishes its street trees (90,976
 rows) and park trees (72,011) under a Traditional-Chinese common name and
@@ -9,7 +9,7 @@ trees, with no binomial column in either file.  `species` is the join key
 into the enrichment table, so without this the whole city arrives labelled
 `Unknown`.
 
-This is `_japanese_species` for a third language, and the shape is
+This is `shared.species.japanese` for a third language, and the shape is
 deliberately the same -- a curated dict, a key normaliser, and a lookup that
 returns `None` rather than guessing.  It is its own module for the reason
 that one is: the keys normalise by different rules.  `common_name_key`
@@ -19,7 +19,7 @@ the one variant Taipei's files actually contain (`台`/`臺`, below).
 
 Usage:
 
-    from _chinese_species import species_from_chinese_name
+    from shared.species.chinese import species_from_chinese_name
 
     species_from_chinese_name("榕樹")      # 'Ficus microcarpa'
     species_from_chinese_name("櫻花")      # 'Prunus'  -- a genus is an answer
@@ -93,7 +93,7 @@ rosa-sinensis`).
 
 **Where POWO and the published table disagreed, the published table won.**
 This is the one rule that is about *this repo* rather than about taxonomy,
-and it is the argument `SPECIES_SYNONYMS` and `_japanese_species` make: the
+and it is the argument `SPECIES_SYNONYMS` and `shared.species.japanese` make: the
 same taxon under two names is two enrichment rows, two LLM calls and two
 entries in every species rollup.  POWO calls `Cinnamomum camphora` a synonym
 of `Camphora officinarum`; the table has carried `Cinnamomum camphora` since
@@ -152,7 +152,7 @@ from __future__ import annotations
 
 import unicodedata
 
-from _ingest_shared import form_sentinel_for, is_not_a_tree
+from shared.ingest import form_sentinel_for, is_not_a_tree
 
 # `台` is the everyday form and `臺` the formal one of the same character,
 # and both files use the formal one almost everywhere (`臺灣欒樹`, `臺灣海棗`)
@@ -695,7 +695,7 @@ def species_from_chinese_name(value: str | None) -> str | None:
     * ``None`` otherwise, which publishes as ``Unknown``.
 
     Passing an *unresolved* value through is refused, as it is in
-    `_common_name_species` and `_japanese_species`: `sanitize_species`
+    `shared.species.english` and `shared.species.japanese`: `sanitize_species`
     rejects a Chinese string outright, so a passed-through name would publish
     as `Unknown` anyway -- but by a longer route, and without this module
     ever admitting that it did not know.

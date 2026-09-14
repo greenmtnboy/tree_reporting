@@ -6,8 +6,8 @@
 
 from datetime import datetime, timezone
 
-from _ecoregion_shared import LAYER_METADATA_URL
-from _ingest_shared import emit_freshness, get_json_with_retry
+from shared.ecoregions import LAYER_METADATA_URL
+from shared.ingest import emit_freshness, get_json_with_retry
 
 
 def fetch_data_updated_through() -> datetime:

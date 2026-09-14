@@ -10,7 +10,7 @@ from pathlib import Path
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, get_json_with_retry
+from shared.ingest import emit_freshness, get_json_with_retry
 
 DATASET_ID = "buis-pvji"  # Individual Landmark Sites (LPC)
 METADATA_URL = f"https://data.cityofnewyork.us/api/views/{DATASET_ID}.json"

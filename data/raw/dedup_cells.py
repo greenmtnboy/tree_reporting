@@ -9,7 +9,7 @@
     cd data/raw && uv run dedup_cells.py --check    # exit 1 if it is stale
 
 The cell size in metres, and why it is what it is for each city, live in
-DEDUP_CELL_METRES in _ingest_shared.py.  This script converts metres to
+DEDUP_CELL_METRES in shared/ingest.py.  This script converts metres to
 degrees at each city's latitude (from the centre of its CITY_BOUNDS box) and
 writes them as an inline `VALUES` table between the BEGIN/END markers in
 tree_dedup.preql, so the constant a model consumes can never drift from the
@@ -34,7 +34,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     DEDUP_CELL_METRES,
     dedup_cell_degrees,
 )

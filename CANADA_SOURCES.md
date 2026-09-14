@@ -91,7 +91,7 @@ portals do carry licences (mostly municipal open data licences), which is what
 
 It is an excellent **discovery index**: it names 39 municipalities that have
 tree inventory data, which is a shopping list for `new_city.py`. The sweep
-below used the repo's own `_arcgis_shared.py <hub-host>` discovery tool.
+below used the repo's own `shared/platforms/arcgis.py <hub-host>` discovery tool.
 
 ### Confirmed direct sources (23 cities, plus Vancouver already wired)
 
@@ -157,12 +157,12 @@ Two specific traps in that list:
 
 ## Status
 
-**Done (PR 1):** `_socrata_shared.py`, and Calgary, Edmonton and Winnipeg
+**Done (PR 1):** `shared/platforms/socrata.py`, and Calgary, Edmonton and Winnipeg
 wired onto it -- 1,325,431 trees. The three existing Socrata cities' freshness
 probes moved onto the same module, and New York's ingest gained the `$order`
 its `$offset` paging always needed.
 
-**Done (PR 2):** `_ckan_shared.py`, with Toronto, Montreal, Quebec City and
+**Done (PR 2):** `shared/platforms/ckan.py`, with Toronto, Montreal, Quebec City and
 Longueuil wired onto it and Boston's probe moved across -- 1,278,553 trees. All
 four CKAN cities in the handoff below. Longueuil publishes no tree id and is
 the one city here with a **synthesised** one; see "Longueuil" below for what
@@ -170,17 +170,17 @@ that costs and why it was taken anyway.
 
 **Done (PR 3):** the six largest ArcGIS cities that publish a botanical name
 *and* a diameter -- Halifax, Kingston, Lethbridge, Victoria, Kelowna and New
-Westminster -- 247,776 trees. `_arcgis_shared` gained a third freshness
+Westminster -- 247,776 trees. `shared.platforms.arcgis` gained a third freshness
 watermark (`hub_last_modified`) and an Esri-geometry-to-WKT converter; the
 shared species hygiene gained the non-taxa these six turned up. Landmarks are
 official designation registries in all six cases, read live: no geocoding, no
 committed CSV, no staging object.
 
-**Done (PR 4): the common-name cities.** `_common_name_species.py`, with
+**Done (PR 4): the common-name cities.** `shared/species/english.py`, with
 Mississauga, Ottawa, Burlington ON, Ajax and Moncton wired onto it. The five
 layers hold 951,561 rows and publish **712,693** trees; the gap is removed
 trees and empty planting sites the sources keep in the same table, and
-Mississauga alone accounts for 228,353 of it. `_arcgis_shared` gained `coded_value_domain`
+Mississauga alone accounts for 228,353 of it. `shared.platforms.arcgis` gained `coded_value_domain`
 and a NaN-safe `esri_point`. Landmarks are official registries or municipal
 cultural inventories in all five cases, read live. What the plan got wrong is
 recorded in "What PR 4 measured that the plan got wrong" below -- the short
@@ -190,7 +190,7 @@ version is that Ottawa was never a common-name city at all.
 (21,186), which are clean except that neither publishes a diameter at all;
 Markham (16,596) once someone decides whether a York Region layer filtered to
 one municipality is the right thing to publish; and Surrey (115,454) if its
-layer URLs can be found without the Hub feed. `_common_name_species` is there
+layer URLs can be found without the Hub feed. `shared.species.english` is there
 for any of them that needs it, and its table is the standard North American
 street-tree palette, so a new Ontario city should resolve most of its values
 without a single new entry.
@@ -327,7 +327,7 @@ that paragraph was not.
   **Read a field's domain before concluding a portal does not identify its
   trees** -- the third time in this file that a layer's own `?f=json` answered
   a question the column names could not, after Halifax's DBH size classes and
-  Ajax's species symbols. `_arcgis_shared.coded_value_domain` now does it in
+  Ajax's species symbols. `shared.platforms.arcgis.coded_value_domain` now does it in
   one call.
 
 - **Inverting the enrichment table does not work, and the reason is our own
@@ -377,7 +377,7 @@ that paragraph was not.
 - **An ArcGIS server returns a missing geometry as the *string* "NaN".**
   Ajax and Burlington ON both publish rows like that, and pyarrow refuses them
   with `Could not convert 'NaN' with type str`, which reads as a type bug
-  rather than "this feature has no location". `_arcgis_shared.esri_point` is
+  rather than "this feature has no location". `shared.platforms.arcgis.esri_point` is
   the shared coercion, and Halifax was reading the geometry dict directly and
   had the same latent failure waiting.
 
@@ -406,7 +406,7 @@ that paragraph was not.
   `camon/moncton_tree_info.py`, separated, so a reviewer can see which is
   which.
 
-## Handoff: `_ckan_shared` + the CKAN cities
+## Handoff: `shared.platforms.ckan` + the CKAN cities
 
 Toronto, Montreal, Quebec City and Longueuil are all CKAN, which with Boston
 makes five -- past the threshold `EXTENDING.md` sets for writing a shared
@@ -432,9 +432,9 @@ there for cities CIF never listed.
 > notes turned out to be wrong or incomplete and the corrections are recorded
 > up there rather than edited in here.
 
-### What `_ckan_shared.py` should carry
+### What `shared/platforms/ckan.py` should carry
 
-Mirror `_socrata_shared.py`, which mirrors `_arcgis_shared.py`. CKAN's shape:
+Mirror `shared/platforms/socrata.py`, which mirrors `shared/platforms/arcgis.py`. CKAN's shape:
 
 - **`CkanDataset(host, package_id)`** with `package_show` and `resource_show`
   endpoints, plus a `datastore_search` / `datastore_search_sql` row reader for
@@ -454,7 +454,7 @@ Mirror `_socrata_shared.py`, which mirrors `_arcgis_shared.py`. CKAN's shape:
   key.
 - **`find_tree_datasets(host)`** via `package_search?q=tree` (and `q=arbres`
   for the francophone portals), with the same canopy exclusion the other two
-  modules need, and a `__main__` so `uv run _ckan_shared.py <host>` is the
+  modules need, and a `__main__` so `uv run shared/platforms/ckan.py <host>` is the
   first step of the runbook.
 
 ### Traps already found, so nobody pays for them twice
@@ -479,7 +479,7 @@ Mirror `_socrata_shared.py`, which mirrors `_arcgis_shared.py`. CKAN's shape:
 
 ### Then the same checklist this PR followed
 
-1. `uv run _ckan_shared.py <host>` to find the dataset.
+1. `uv run shared/platforms/ckan.py <host>` to find the dataset.
 2. Check the id column for uniqueness *and* nulls over the whole table.
 3. Resolve the ecoregion at the centroid, measure the coordinate extents from
    the data rather than guessing `CITY_BOUNDS`.
@@ -498,15 +498,15 @@ watermarks and real ids, versus 4.36M stale id-less rows from CIF.
 
 Platform-wise this is mostly a solved problem here:
 
-- **ArcGIS** — 16 of the 23 confirmed. `_arcgis_shared.py` already covers
+- **ArcGIS** — 16 of the 23 confirmed. `shared/platforms/arcgis.py` already covers
   paging, both freshness watermarks and Esri epoch-milliseconds.
 - **Socrata** — Calgary, Edmonton, Winnipeg. That takes Socrata to six cities
   in this repo (with SF, NYC, LA) and past the threshold `EXTENDING.md` sets
   for writing a shared module: *"Write the module when the third city arrives."*
-  **`_socrata_shared.py` should be written before or alongside the first of
+  **`shared/platforms/socrata.py` should be written before or alongside the first of
   these three**, not after.
 - **CKAN** — Toronto, Montreal, Québec City, Longueuil. That takes CKAN to
-  five (with Boston) and likewise earns `_ckan_shared.py`. Québec City and
+  five (with Boston) and likewise earns `shared/platforms/ckan.py`. Québec City and
   Longueuil are both on Données Québec, so one module covers both.
 
 Everything else is per-city judgement the runbook already isolates: the field

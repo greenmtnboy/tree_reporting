@@ -23,8 +23,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness
-from _wfs_shared import WfsLayer, wfs_max_property
+from shared.ingest import emit_freshness
+from shared.platforms.wfs import WfsLayer, wfs_max_property
 
 # Kept in step with `copenhagen_tree_info.py` by `tests/test_city_wiring.py`.
 LAYER = WfsLayer("https://wfs-kbhkort.kk.dk/k101/ows", "k101:trae_basis")

@@ -8,7 +8,7 @@
 Source: "Public Trees" (`Public_Trees`) on `catalogue-hrm.opendata.arcgis.com`,
 80,051 rows covering the whole Halifax Regional Municipality -- which is why
 CAHFX's bounding box spans 1.3 degrees of longitude.  Paging, the freshness
-watermark and Esri's epoch-milliseconds live in `_arcgis_shared`.
+watermark and Esri's epoch-milliseconds live in `shared.platforms.arcgis`.
 
 Three things about this source are worth knowing.
 
@@ -45,8 +45,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, esri_point, iter_features
-from _ingest_shared import (
+from shared.platforms.arcgis import FeatureLayer, esri_point, iter_features
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

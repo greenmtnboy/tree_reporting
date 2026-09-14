@@ -6,7 +6,7 @@
 """Edmonton's municipal tree inventory, from the city's Socrata portal.
 
 Source: "Trees" (`eecg-fc54`) on data.edmonton.ca, 480,744 rows.  Paging, the
-freshness watermark and the point-column shapes live in `_socrata_shared`.
+freshness watermark and the point-column shapes live in `shared.platforms.socrata`.
 
 Two of Edmonton's columns are not what their names suggest, and both were
 worth checking rather than assuming:
@@ -28,7 +28,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,
@@ -37,7 +37,7 @@ from _ingest_shared import (
     stream_to_table,
     validate_coordinates,
 )
-from _socrata_shared import SocrataDataset, iter_rows
+from shared.platforms.socrata import SocrataDataset, iter_rows
 
 DATASET = SocrataDataset("data.edmonton.ca", "eecg-fc54", timeout=180)
 

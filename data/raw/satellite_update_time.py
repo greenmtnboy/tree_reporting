@@ -30,7 +30,7 @@ import pyarrow as pa
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _ingest_shared import SATELLITE_DATA_SOURCES  # noqa: E402
+from shared.ingest import SATELLITE_DATA_SOURCES  # noqa: E402
 from satellite_tree_info import PUBLISHED_BUCKET  # noqa: E402
 
 EMPTY_DATASET_TIMESTAMP = datetime(1970, 1, 1, tzinfo=timezone.utc)

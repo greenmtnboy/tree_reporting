@@ -11,7 +11,7 @@ import pyarrow as pa
 import pyarrow.csv as pv
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit
+from shared.ingest import emit
 
 DATASET_ID = "buis-pvji"  # Individual Landmark Sites (LPC)
 DATASET_URL = (

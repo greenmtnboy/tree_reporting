@@ -1,6 +1,6 @@
 """Resolve a municipal inventory's *common* name to an accepted binomial.
 
-NOT a uv inline script — a regular importable module, like `_ingest_shared`.
+NOT a uv inline script — a regular importable module, like `shared.ingest`.
 
 Most North American portals publish a scientific name.  Some publish only an
 English common name where the binomial should be, and `species` is the join key
@@ -20,7 +20,7 @@ the publisher's answer rather than ours.
 
 Usage:
 
-    from _common_name_species import species_from_common_name
+    from shared.species.english import species_from_common_name
 
     species_from_common_name("MAPLE - NORWAY")   # 'Acer platanoides'
     species_from_common_name("ASH SPP.")         # 'Fraxinus'
@@ -100,7 +100,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from _ingest_shared import form_sentinel_for, is_not_a_tree
+from shared.ingest import form_sentinel_for, is_not_a_tree
 
 # A quoted cultivar: `HONEY LOCUST 'SKYLINE'`, `Basswood 'Redmond'`.  Removed
 # before the key is built so one entry covers every selection of a taxon.

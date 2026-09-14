@@ -35,7 +35,7 @@ export function closestCityTo(lat: number, lng: number): CityCode {
  * Measured rather than picked: the furthest any city's `CITY_BOUNDS` corner sits
  * from its `cityConfig.json` center is Halifax at 106 km, so 150 clears every
  * wired city and leaves room for the next one. It is a sanity bound, not a
- * boundary — `CITY_TERRITORY` in `data/raw/_ingest_shared.py` is what actually
+ * boundary — `CITY_TERRITORY` in `data/raw/shared/ingest.py` is what actually
  * decides which city an unattributed tree belongs to, and it runs downstream.
  */
 export const CITY_RADIUS_KM = 150

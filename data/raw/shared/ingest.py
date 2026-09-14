@@ -8,7 +8,7 @@ Usage in each city script:
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    from _ingest_shared import emit, normalize_species, ...
+    from shared.ingest import emit, normalize_species, ...
 """
 
 from __future__ import annotations
@@ -464,7 +464,7 @@ _FORM_SENTINEL_ALIASES: dict[str, str] = {
     "hedge": SHRUB_SPECIES,
     # Mississauga records a hedge and a shrub under one value; both spellings
     # because `form_sentinel_for` lowercases the raw string while
-    # `_common_name_species` looks it up after punctuation is stripped.
+    # `shared.species.english` looks it up after punctuation is stripped.
     "shrub / hedge": SHRUB_SPECIES,
     "shrub hedge": SHRUB_SPECIES,
     "arbusto": SHRUB_SPECIES,  # es/pt
@@ -502,7 +502,7 @@ _FORM_SENTINEL_ALIASES: dict[str, str] = {
     # the same fact the Dutch and German entries above record; `ヤシ科sp.` is
     # "Arecaceae sp.", a surveyor who identified the family and stopped.  Both
     # are single rows, and both would otherwise lose the one thing the survey
-    # did establish.  Reached through `_japanese_species`, which hands an
+    # did establish.  Reached through `shared.species.japanese`, which hands an
     # unresolved value straight to `form_sentinel_for`.
     "枯木": DEAD_SPECIES,
     "ヤシ科sp.": PALM_SPECIES,
@@ -722,7 +722,7 @@ SPECIES_SYNONYMS: dict[str, str] = {
     "Viburnum bodnantense": "Viburnum x bodnantense",
     "Viburnum x rhytidophyllum": "Viburnum rhytidophyllum",
     # Genus transfers Kew *does* follow, found when Tokyo's vernacular names
-    # were resolved: the accepted name on the right is what `_japanese_species`
+    # were resolved: the accepted name on the right is what `shared.species.japanese`
     # publishes, and the key is what an already-wired city published, so
     # without these two the same taxon would carry two enrichment rows.  POWO
     # returns a single unambiguous `synonym` reading for each.
@@ -730,7 +730,7 @@ SPECIES_SYNONYMS: dict[str, str] = {
     "Callistemon citrinus": "Melaleuca citrina",
     # The same, found when Taipei's Chinese names were resolved: each key is
     # a spelling an already-wired city publishes, each value is the accepted
-    # name `_chinese_species` publishes, and POWO returns a single unambiguous
+    # name `shared.species.chinese` publishes, and POWO returns a single unambiguous
     # `synonym` reading for each.  (`Cinnamomum camphora` is deliberately NOT
     # here: Kew sinks it into *Camphora officinarum*, but the published table
     # has carried it since San Francisco and Tokyo's and Taipei's camphors
@@ -3287,7 +3287,7 @@ def normalize_tree_name(value: str | None) -> str | None:
     one side, which is how Burlington ON writes it (``MAPLE - NORWAY``,
     ``BUCKEYE- OHIO``) -- but a bare hyphen is part of the word and must not,
     or ``HORSE-CHESTNUT`` and ``MOUNTAIN-ASH`` come out as "Chestnut horse"
-    and "Ash mountain".  `_common_name_species.common_name_key` draws the same
+    and "Ash mountain".  `shared.species.english.common_name_key` draws the same
     line for the same reason.
 
     A name inverted with neither -- Ottawa stores ``Maple Sugar``, ``Spruce

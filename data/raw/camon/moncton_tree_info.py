@@ -7,7 +7,7 @@
 
 Source: "Trees" (`Trees/FeatureServer/0`) on the city's ArcGIS Online
 organisation, 12,721 rows.  Paging, the freshness watermark and Esri's
-epoch-milliseconds live in `_arcgis_shared`.
+epoch-milliseconds live in `shared.platforms.arcgis`.
 
 **`BOTNAME` is aliased "Botanical Name" and holds no botanical name.**  It is a
 contraction -- `MapNor`, `LinLit`, `SprWhi`, `OakRed` -- three letters of each
@@ -68,8 +68,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, esri_ms_to_date, esri_point, iter_features
-from _ingest_shared import (
+from shared.platforms.arcgis import FeatureLayer, esri_ms_to_date, esri_point, iter_features
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

@@ -34,7 +34,7 @@ REPO_DIR = DATA_DIR.parent
 SRC_DIR = REPO_DIR / "src" / "src"
 sys.path.insert(0, str(RAW_DIR))
 
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     CITY_BOUNDS,
     MUNICIPAL_DATA_SOURCES,
     OSM_DATA_SOURCES,

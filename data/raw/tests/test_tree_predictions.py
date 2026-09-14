@@ -215,7 +215,7 @@ def test_age_predictions_are_plausible(age_rows):
 
 def test_the_fit_reapplies_the_ingest_guards_with_the_same_numbers():
     """The fit reads parquets built before the guards; its copies must not drift."""
-    import _ingest_shared as ingest
+    import shared.ingest as ingest
 
     assert age_fit.DBH_MAX_INCHES == ingest.DBH_MAX_INCHES
     assert age_fit.PLANT_DATE_MIN_YEAR == ingest.PLANT_DATE_MIN_YEAR

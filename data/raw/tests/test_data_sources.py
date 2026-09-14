@@ -1,6 +1,6 @@
 """The `data_source` picklist has to agree in three places at once.
 
-`_ingest_shared.DATA_SOURCES` is what the ingest scripts validate against, the
+`shared.ingest.DATA_SOURCES` is what the ingest scripts validate against, the
 per-city `{code}_source` enums in the preql models are what Trilogy validates
 against, and the raw datasources' `complete where` clauses are what make the
 municipal/community union resolve.  If any of the three drifts, the failure is
@@ -19,7 +19,7 @@ import pytest
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     CITY_BOUNDS,
     COMMUNITY_DATA_SOURCES,
     DATA_SOURCES,
@@ -378,5 +378,5 @@ def test_no_staging_parquet_is_committed():
     committed = sorted(p.name for p in RAW_DIR.glob("*/*_staging.parquet"))
     assert not committed, (
         f"{committed} are in the working tree; publish them with "
-        "_ingest_shared.upload_staging and let .gitignore keep them out"
+        "shared.ingest.upload_staging and let .gitignore keep them out"
     )

@@ -27,7 +27,7 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, head_with_retry
+from shared.ingest import emit_freshness, head_with_retry
 
 # Kept in step with `paris_landmarks.py` by `tests/test_city_wiring.py`.
 REGISTER_URL = "https://ministere-culture.s3.sbg.io.cloud.ovh.net/POP/merimee.csv"

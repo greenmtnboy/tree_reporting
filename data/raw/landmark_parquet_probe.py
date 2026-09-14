@@ -34,7 +34,7 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     CITY_BOUNDS,
     UpstreamUnavailable,
     emit_freshness,

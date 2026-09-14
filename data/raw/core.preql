@@ -10,7 +10,7 @@ key city enum<string>['USSFO', 'USNYC', 'USBOS', 'FRPAR', 'USBTV', 'CAVAN', 'DEB
 # model fails to resolve — verified, as does a plain `key data_source string`.
 # Each city aliases its key to the physical column `data_source`, so every tree
 # Parquet still exposes one uniformly named column. The full value list lives in
-# DATA_SOURCES in data/raw/_ingest_shared.py; data/raw/tests/test_data_sources.py
+# DATA_SOURCES in data/raw/shared/ingest.py; data/raw/tests/test_data_sources.py
 # asserts the two stay in sync.
 property city.ecoregion_id <- case
     when city = 'USSFO' then 423

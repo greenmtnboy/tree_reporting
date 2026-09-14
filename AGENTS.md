@@ -56,7 +56,7 @@ Four things about that are load-bearing, and each replaced something that broke:
   neighbouring city, and every city's own parquet was clean.
 - **An unattributed tree is assigned by territory, not by sanity box.**
   `CITY_BOUNDS` is the generous box a municipal row must fall in;
-  `CITY_TERRITORY` (both in `_ingest_shared.py`) is the explicit,
+  `CITY_TERRITORY` (both in `shared/ingest.py`) is the explicit,
   non-overlapping set of rectangles that decides which city an OSM node or a
   community submission belongs to. `test_city_territory.py` checks every
   pair; a city that gains a neighbour has to carve both territories.
@@ -69,7 +69,7 @@ Four things about that are load-bearing, and each replaced something that broke:
 
 `SATELLITE_{CODE}` is a fourth source partition for the cities imagery has
 been run over (SF and Boston; `SATELLITE_DATA_SOURCES` in
-`_ingest_shared.py`). The reviewer's `/satellite` page
+`shared/ingest.py`). The reviewer's `/satellite` page
 (`reviewer/satellite.ts`) shows a NAIP tile with the model's detections and
 the published inventory trees over it, each ringed by its predicted crown
 width, and publishes accepted detections to
@@ -115,7 +115,7 @@ path `tree_enrichment.py --limit` takes. An edited row carries today's
 `enriched_at`, which is what keeps `refresh-enrichment` from overwriting it,
 and the form refuses a row without a common name and a growth form because
 the freshness probe would report the table stale for ever. Sentinel rows are
-authored in `_ingest_shared.py` and are read-only there, as is the alias row
+authored in `shared/ingest.py` and are read-only there, as is the alias row
 of a name in `SPECIES_SYNONYMS` or `SPECIES_MISSPELLINGS` (the daily job
 rewrites it from the accepted row). A duplicate species is merged from the
 form by adding its name to the accepted row's `synonyms`; making the *ingest*
@@ -139,11 +139,11 @@ See the quick path at the top of `EXTENDING.md`.
 Shared modules carry what used to be copied per city, and a new city should
 reach for them before writing anything:
 
-- **`_osm_shared.py`** — the Overpass extraction every city's `osm-{code}` job
+- **`shared/osm.py`** — the Overpass extraction every city's `osm-{code}` job
   runs, so a city's OSM wiring is one ~28-line shim.
-- **`_arcgis_shared.py`** — layer paging, three freshness watermarks, Esri's
+- **`shared/platforms/arcgis.py`** — layer paging, three freshness watermarks, Esri's
   epoch-milliseconds, field domains, geometry-to-WKT, and a Hub catalogue
-  search (`uv run _arcgis_shared.py <hub-host>` lists a portal's tree layers).
+  search (`uv run shared/platforms/arcgis.py <hub-host>` lists a portal's tree layers).
   ArcGIS is what most North American cities publish on. Three details in it are
   correctness rather than convenience and were bugs in the copies it replaced:
   the page size comes from the layer's own `maxRecordCount` (asking for more is
@@ -151,20 +151,20 @@ reach for them before writing anything:
   terminates on `exceededTransferLimit` rather than the short-page heuristic,
   and `esri_point` refuses the *string* `"NaN"` that a server sends for a
   feature with no geometry.
-- **`_socrata_shared.py`** and **`_ckan_shared.py`** — the same for the other
+- **`shared/platforms/socrata.py`** and **`shared/platforms/ckan.py`** — the same for the other
   two platforms this repo reads more than twice.
-- **`_wfs_shared.py`** — an OGC WFS 2.0 (GeoServer) reader for Copenhagen and
+- **`shared/platforms/wfs.py`** — an OGC WFS 2.0 (GeoServer) reader for Copenhagen and
   Helsinki, whose trees and heritage registers are both on one: sorted
   `startIndex` paging terminated on `numberMatched`, plus `wfs_max_property`,
   the one-row descending-sort read that is both cities' freshness probe
   (nulls excluded explicitly — GeoServer sorts them first).
-- **`_common_name_species.py`** — a curated common-name → accepted-binomial
+- **`shared/species/english.py`** — a curated common-name → accepted-binomial
   table, for the portals that publish an English name where the binomial should
   be. Not a platform module: what those cities shared was a question, not an
   API. Read its docstring before reaching for the enrichment table's inverse
   instead — that was tried, measured, and does not work, because the enrichment
   table carries the misspelled binomials the cities themselves published.
-  `_japanese_species.py`, `_spanish_species.py` and `_chinese_species.py` are
+  `shared/species/japanese.py`, `shared/species/spanish.py` and `shared/species/chinese.py` are
   the same shape for Tokyo, Bogotá and Taipei — one module per language,
   because the keys normalise by different rules.
 

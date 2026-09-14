@@ -1,6 +1,6 @@
 """Shared helpers for reading Socrata (Tyler Data & Insights) open data portals.
 
-NOT a uv inline script — a regular importable module, like `_ingest_shared`.
+NOT a uv inline script — a regular importable module, like `shared.ingest`.
 
 Socrata is the second platform this repo talks to more than a couple of times:
 San Francisco, New York and Los Angeles were each carrying their own copy of
@@ -9,11 +9,11 @@ out of `/api/views/{id}.json`, and page the rows by `$offset` — and the three
 Canadian cities added alongside this module would have made six.  `EXTENDING.md`
 sets the threshold at three ("write the module when the third city arrives"),
 and this is what it asks for: one implementation, a thin shim per city, the way
-`_arcgis_shared` did for ArcGIS and `_osm_shared` for Overpass.
+`shared.platforms.arcgis` did for ArcGIS and `shared.osm` for Overpass.
 
 Usage:
 
-    from _socrata_shared import SocrataDataset, iter_rows, rows_updated_at
+    from shared.platforms.socrata import SocrataDataset, iter_rows, rows_updated_at
 
     DATASET = SocrataDataset("data.winnipeg.ca", "hfwk-jp4h")
 
@@ -40,9 +40,14 @@ import os
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from _ingest_shared import UpstreamUnavailable, get_json_with_retry
+# This module is also runnable (the portal search at the bottom), and being
+# run directly puts `shared/platforms` on the path rather than `data/raw`,
+# so the package import has to be bootstrapped.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from shared.ingest import UpstreamUnavailable, get_json_with_retry  # noqa: E402
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -204,7 +209,7 @@ def iter_rows(
 ) -> Iterator[list[dict]]:
     """Pages of raw records, one HTTP request at a time.
 
-    Yields lists of dicts so a caller can feed `_ingest_shared.stream_to_table`
+    Yields lists of dicts so a caller can feed `shared.ingest.stream_to_table`
     and never hold the whole dataset in memory.
 
     Two things here are correctness, not tidiness:
@@ -215,7 +220,7 @@ def iter_rows(
       the loop early, which is a silently truncated city that looks exactly
       like a portal publishing less.  New York's ingest pages by `$offset`
       today with no `$order` at all.  Passing an empty string is refused, the
-      same way `_arcgis_shared.iter_features` refuses an empty `order_by`.
+      same way `shared.platforms.arcgis.iter_features` refuses an empty `order_by`.
     * **Termination is on a short page**, which is exact here in a way it is
       not on ArcGIS: `$limit` is a promise Socrata keeps unless the data ran
       out, and there is no server-side cap quietly rewriting it (a request for
@@ -344,7 +349,7 @@ def catalog_search(
 def find_tree_datasets(domain: str, *, timeout: int = 120) -> list[dict]:
     """Candidate tree-inventory datasets on a Socrata portal.
 
-    The counterpart of `_arcgis_shared.find_tree_layers`, and it needs the same
+    The counterpart of `shared.platforms.arcgis.find_tree_layers`, and it needs the same
     canopy exclusion for the same reason: of the eight top hits for "tree" on
     `data.calgary.ca`, seven are canopy-cover rasters and one is the inventory.
 
@@ -370,10 +375,10 @@ def find_tree_datasets(domain: str, *, timeout: int = 120) -> list[dict]:
 
 
 if __name__ == "__main__":
-    # `uv run _socrata_shared.py <domain>` — the Socrata half of the runbook's
+    # `uv run shared/platforms/socrata.py <domain>` — the Socrata half of the runbook's
     # first step, so finding a portal's tree dataset is not a manual browse.
     if len(sys.argv) != 2:
-        print("usage: _socrata_shared.py <socrata-domain>", file=sys.stderr)
+        print("usage: shared/platforms/socrata.py <socrata-domain>", file=sys.stderr)
         raise SystemExit(2)
     try:
         found = find_tree_datasets(sys.argv[1])

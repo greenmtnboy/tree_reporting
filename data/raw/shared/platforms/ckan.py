@@ -1,17 +1,17 @@
 """Shared helpers for reading CKAN open data portals.
 
-NOT a uv inline script — a regular importable module, like `_ingest_shared`.
+NOT a uv inline script — a regular importable module, like `shared.ingest`.
 
 CKAN is the third platform this repo talks to more than a couple of times.
 Boston has read `data.boston.gov` since it was wired, and Toronto, Montreal and
 Quebec City make four; `EXTENDING.md` sets the threshold at three ("write the
 module when the third city arrives"), and this is what it asks for: one
-implementation, a thin shim per city, the way `_arcgis_shared` did for ArcGIS,
-`_socrata_shared` for Socrata and `_osm_shared` for Overpass.
+implementation, a thin shim per city, the way `shared.platforms.arcgis` did for ArcGIS,
+`shared.platforms.socrata` for Socrata and `shared.osm` for Overpass.
 
 Usage:
 
-    from _ckan_shared import CkanResource, data_last_modified, iter_datastore_rows
+    from shared.platforms.ckan import CkanResource, data_last_modified, iter_datastore_rows
 
     RESOURCE = CkanResource(
         "ckan0.cf.opendata.inter.prod-toronto.ca",
@@ -52,9 +52,14 @@ import json
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from _ingest_shared import UpstreamUnavailable, get_json_with_retry, get_with_retry
+# This module is also runnable (the portal search at the bottom), and being
+# run directly puts `shared/platforms` on the path rather than `data/raw`,
+# so the package import has to be bootstrapped.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from shared.ingest import UpstreamUnavailable, get_json_with_retry, get_with_retry  # noqa: E402
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -311,7 +316,7 @@ def iter_datastore_rows(
 ) -> Iterator[list[dict]]:
     """Pages of raw records, one HTTP request at a time.
 
-    Yields lists of dicts so a caller can feed `_ingest_shared.stream_to_table`
+    Yields lists of dicts so a caller can feed `shared.ingest.stream_to_table`
     and never hold the whole dataset in memory.
 
     Three things here are correctness, not tidiness:
@@ -319,7 +324,7 @@ def iter_datastore_rows(
     * **`limit` is silently capped, so a short page cannot end the loop.**
       CKAN clamps `limit` to `ckan.datastore.search.rows_max`, which is 32,000
       on all four portals here, and answers a request for more with 32,000 rows
-      and no error — the same silent cap `_arcgis_shared` hit with
+      and no error — the same silent cap `shared.platforms.arcgis` hit with
       `maxRecordCount`.  A loop that stops on `len(page) < requested` therefore
       stops after **one** page whenever the caller asks for more than the cap:
       Toronto would publish 32,000 of its 688,335 trees and look exactly like a
@@ -332,8 +337,8 @@ def iter_datastore_rows(
       by `offset` over a result CKAN makes no ordering promise about, so
       paging an unsorted result may repeat or skip rows between requests.
       Passing an empty string is refused, the same way
-      `_socrata_shared.iter_rows` refuses an empty `$order` and
-      `_arcgis_shared.iter_features` an empty `order_by`.
+      `shared.platforms.socrata.iter_rows` refuses an empty `$order` and
+      `shared.platforms.arcgis.iter_features` an empty `order_by`.
 
     * **`datastore_search_sql` is not used anywhere in this module**, however
       convenient it looks: Toronto's portal answers it with a 404.  It is
@@ -501,7 +506,7 @@ def point_lon_lat(value) -> tuple[float | None, float | None]:
     A datastore column holding geometry is `text`, so a GeoJSON point arrives
     as the *string* `{"type": "Point", "coordinates": [lon, lat]}` (Toronto's
     `geometry`) rather than as an object — which is the one shape
-    `_socrata_shared.point_lon_lat` does not accept, and the reason this is not
+    `shared.platforms.socrata.point_lon_lat` does not accept, and the reason this is not
     simply imported from there.  A dict, a `{lat, lon}` pair and WKT text are
     all accepted too.
 
@@ -574,8 +579,8 @@ def find_tree_datasets(
 ) -> list[dict]:
     """Candidate tree-inventory packages on a CKAN portal.
 
-    The counterpart of `_arcgis_shared.find_tree_layers` and
-    `_socrata_shared.find_tree_datasets`, and it needs the same canopy
+    The counterpart of `shared.platforms.arcgis.find_tree_layers` and
+    `shared.platforms.socrata.find_tree_datasets`, and it needs the same canopy
     exclusion for the same reason: a search for "tree" returns the canopy-cover
     and planting-plan datasets alongside the inventory.
 
@@ -613,11 +618,11 @@ def find_tree_datasets(
 
 
 if __name__ == "__main__":
-    # `uv run _ckan_shared.py <host>` — the CKAN half of the runbook's first
+    # `uv run shared/platforms/ckan.py <host>` — the CKAN half of the runbook's first
     # step, so finding a portal's tree dataset is not a manual browse.  The
     # host may carry a path: donneesquebec.ca serves its API under /recherche.
     if len(sys.argv) != 2:
-        print("usage: _ckan_shared.py <ckan-host>", file=sys.stderr)
+        print("usage: shared/platforms/ckan.py <ckan-host>", file=sys.stderr)
         raise SystemExit(2)
     try:
         found = find_tree_datasets(sys.argv[1])

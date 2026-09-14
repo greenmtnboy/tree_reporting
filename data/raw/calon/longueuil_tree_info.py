@@ -7,7 +7,7 @@
 
 Source: "Arbres" on `www.donneesquebec.ca/recherche`, the GeoJSON resource
 `23cde69a`, 99,345 features under CC-BY.  Longueuil has **no CKAN datastore**,
-so this is the one city here read through `_ckan_shared.read_geojson_features`
+so this is the one city here read through `shared.platforms.ckan.read_geojson_features`
 rather than the paged datastore search.
 
 **The source publishes no tree id, and this file synthesises one.  That is
@@ -58,8 +58,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, read_geojson_features
-from _ingest_shared import (
+from shared.platforms.ckan import CkanResource, read_geojson_features
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

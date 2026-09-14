@@ -1,7 +1,7 @@
 """
 Shared OpenStreetMap tree extraction, behind both of the ways a city extracts.
 
-NOT a uv inline script — a regular importable module, like `_ingest_shared`.
+NOT a uv inline script — a regular importable module, like `shared.ingest`.
 
 **Not a refresh-time ingest.** This is the extraction pass the refresh pipeline
 reads *from*.  It queries Overpass for `natural=tree` nodes in a city's
@@ -47,8 +47,8 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-sys.path.insert(0, str(Path(__file__).parent))
-from _ingest_shared import (  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from shared.ingest import (  # noqa: E402
     city_territory,
     in_city_territory,
     OVERPASS_HEADERS,
@@ -362,7 +362,7 @@ def stage_city_rows(
     `OSM_EXTRA_NULL_COLUMNS` and are arguments only so a caller can override
     them; the shared script passes neither.
     """
-    from _ingest_shared import emit
+    from shared.ingest import emit
 
     if city_code not in OSM_DATA_SOURCES:
         raise ValueError(

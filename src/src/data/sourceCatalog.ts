@@ -63,7 +63,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   //
   // One 'All cities' line rather than one per city, because every city carries
   // an OSM partition -- a city is wired to OSM at the same time as its
-  // municipal source, and `OSM_DATA_SOURCES` in data/raw/_ingest_shared.py is
+  // municipal source, and `OSM_DATA_SOURCES` in data/raw/shared/ingest.py is
   // the list. The per-city form was the original and it silently fell behind:
   // OSM rolled out to every city while this list still named the first five,
   // so twelve cities were rendering ODbL data with no attribution at all.

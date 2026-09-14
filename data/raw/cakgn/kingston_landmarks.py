@@ -36,13 +36,13 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import (
+from shared.platforms.arcgis import (
     FeatureLayer,
     esri_geometry_to_wkt,
     esri_ms_to_datetime,
     iter_features,
 )
-from _ingest_shared import emit
+from shared.ingest import emit
 
 LAYER = FeatureLayer(
     "https://api.cityofkingston.ca/gis_unfed/rest/services/Planning/"

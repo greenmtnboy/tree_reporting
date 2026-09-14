@@ -15,8 +15,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, layer_last_edit
-from _ingest_shared import emit_freshness
+from shared.platforms.arcgis import FeatureLayer, layer_last_edit
+from shared.ingest import emit_freshness
 
 LAYER = FeatureLayer(
     "https://services1.arcgis.com/zdB7qR0BtYrg0Xpl/arcgis/rest/services/"

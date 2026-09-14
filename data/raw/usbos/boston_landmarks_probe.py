@@ -10,7 +10,7 @@ from pathlib import Path
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, get_json_with_retry
+from shared.ingest import emit_freshness, get_json_with_retry
 
 RESOURCE_ID = "fb53d967-ead6-4b4e-ab17-506521434038"
 METADATA_URL = f"https://data.boston.gov/api/3/action/resource_show?id={RESOURCE_ID}"

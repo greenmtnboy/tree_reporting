@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "raw"))
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     OVERPASS_HEADERS,
     UpstreamUnavailable,
     emit_freshness,

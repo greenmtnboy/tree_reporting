@@ -105,7 +105,7 @@ Then, per city:
 1. Read the `marginal` column and take the last size comfortably above 1.0.
    Where it sits right at 1.0 (Boston's 6->8 is 1.07, SF's is 1.42) the
    asymmetry says round **down**, not up — a tie is not a reason to hide a tree.
-2. Edit `DEDUP_CELL_METRES` in `_ingest_shared.py`, replacing the band-based
+2. Edit `DEDUP_CELL_METRES` in `shared/ingest.py`, replacing the band-based
    comment with the marginal numbers, as the three Canadian entries do.
 3. `uv run dedup_cells.py --write` — the model carries the cell as an inline
    `VALUES` block and `test_dedup_cells.py` fails if it goes stale.
@@ -138,7 +138,7 @@ the *most* likely to move and the most worth reading carefully — a 20 m cell
 reaches 28 m, which in London spans several trees.
 
 **Do not batch the edit ahead of the rebuilds.** A city whose cell has changed
-in `_ingest_shared.py` but whose parquet has not been rebuilt is not broken —
+in `shared/ingest.py` but whose parquet has not been rebuilt is not broken —
 the published rows are simply the old clustering — but `dashboard-pushdown` and
 the map will disagree with the model until it is. Change and rebuild one city
 at a time, or accept a window where the two are out of step and say so.

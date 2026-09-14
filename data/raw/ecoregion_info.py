@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 import pyarrow as pa
 import requests
 
-from _ecoregion_shared import (
+from shared.ecoregions import (
     LAYER_METADATA_URL,
     LAYER_QUERY_URL,
     SERVICE_ITEM_ID,

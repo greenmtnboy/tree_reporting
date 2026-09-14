@@ -60,7 +60,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     circumference_cm_to_dbh_inches,
     emit,
     enforce_tree_schema,
@@ -68,7 +68,7 @@ from _ingest_shared import (
     stream_to_table,
     validate_coordinates,
 )
-from _wfs_shared import WfsLayer, iter_wfs_features
+from shared.platforms.wfs import WfsLayer, iter_wfs_features
 
 LAYER = WfsLayer("https://wfs-kbhkort.kk.dk/k101/ows", "k101:trae_basis", timeout=300)
 

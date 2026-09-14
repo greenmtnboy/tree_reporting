@@ -33,7 +33,7 @@ if (![...CITY_CODES].every((code) => /^[A-Z]{5}$/.test(code))) {
  * Halifax at 106 km.
  *
  * This is a coordinate sanity bound, not a boundary. CITY_TERRITORY in
- * data/raw/_ingest_shared.py remains the authority on which city a tree is in;
+ * data/raw/shared/ingest.py remains the authority on which city a tree is in;
  * what this catches is the case that authority handles by dropping the row.
  */
 export const CITY_RADIUS_KM = 150

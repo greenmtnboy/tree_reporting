@@ -13,7 +13,7 @@ import pyarrow.csv as pv
 from datetime import date
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit
+from shared.ingest import emit
 
 RESOURCE_ID = "fb53d967-ead6-4b4e-ab17-506521434038"
 DATASET_URL = (

@@ -69,8 +69,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, read_csv_rows
-from _ingest_shared import CITY_BOUNDS, emit
+from shared.platforms.ckan import CkanResource, read_csv_rows
+from shared.ingest import CITY_BOUNDS, emit
 
 CULTURAL_PROPERTIES = CkanResource(
     "catalog.data.metro.tokyo.lg.jp", "25c5e6f7-0f8d-44d8-ac37-127e008f7a69"

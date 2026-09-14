@@ -26,7 +26,7 @@ import pytest
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
-from _ingest_shared import SENTINEL_ENRICHMENT, SPECIES_SENTINELS  # noqa: E402
+from shared.ingest import SENTINEL_ENRICHMENT, SPECIES_SENTINELS  # noqa: E402
 from enrichment._tree_shared import (  # noqa: E402
     CHIMERA_SPECIES,
     ENRICHMENT_COMPLETE_SQL,
@@ -50,7 +50,7 @@ def _table(species: list[str | None]) -> pa.Table:
 
 
 def test_every_ingest_sentinel_is_excluded():
-    """A sentinel added in _ingest_shared must not need a second edit here."""
+    """A sentinel added in shared.ingest must not need a second edit here."""
     assert SPECIES_SENTINELS <= SKIP_SPECIES
 
 
@@ -246,7 +246,7 @@ def test_the_queue_rule_and_the_ingest_cannot_drift():
     ingest's idea of "is this a taxon" shrink the enrichment backlog in the
     same edit, with no second list to keep in step.
     """
-    from _ingest_shared import sanitize_species
+    from shared.ingest import sanitize_species
 
     for value in ("Acer rubrum", "Oak", "Acer unidentified", "Crateagus monogyna"):
         assert is_enrichable_species(value) is (sanitize_species(value) == value)
@@ -405,7 +405,7 @@ def test_a_chimera_is_shaped_like_a_real_binomial():
     """Why this has to be a list and not a rule: sanitize_species sees a real
     genus and a real Latin epithet, exactly like a correct name. Only knowing
     the taxonomy separates "Acer implexa" from "Acer campestre"."""
-    from _ingest_shared import sanitize_species
+    from shared.ingest import sanitize_species
 
     for value in CHIMERA_SPECIES:
         assert sanitize_species(value) == value, value

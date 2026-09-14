@@ -4,7 +4,7 @@
 # dependencies = ["pyarrow", "requests", "pytrilogy", "pytest"]
 # ///
 
-"""Tests for _ingest_shared.py helper module.
+"""Tests for shared/ingest.py helper module.
 
 Run with:
     pytest data/raw/tests/test_ingest_shared.py
@@ -25,7 +25,7 @@ import pytest
 # Allow import from data/raw/
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from _ingest_shared import (
+from shared.ingest import (
     PORTAL_UNAVAILABLE_TIMESTAMP,
     TREE_COLUMN_TYPES,
     UpstreamUnavailable,
@@ -1250,20 +1250,20 @@ class TestExtractCultivar:
         ],
     )
     def test_extracts_the_quoted_selection(self, raw, expected):
-        from _ingest_shared import extract_cultivar
+        from shared.ingest import extract_cultivar
 
         assert extract_cultivar(raw) == expected
 
     @pytest.mark.parametrize("raw", [None, "", "Acer platanoides", "Vacant", "Malus ''", "Malus ' '"])
     def test_nothing_quoted_is_none(self, raw):
-        from _ingest_shared import extract_cultivar
+        from shared.ingest import extract_cultivar
 
         assert extract_cultivar(raw) is None
 
     def test_mixed_case_is_left_as_written(self):
         """Nursery codes are case-significant; only an all-lower-case value
         is a typist's habit worth correcting."""
-        from _ingest_shared import extract_cultivar
+        from shared.ingest import extract_cultivar
 
         assert extract_cultivar("Acer rubrum 'October Glory'") == "October Glory"
         assert extract_cultivar("Acer rubrum 'JFS-KW78'") == "JFS-KW78"
@@ -1277,7 +1277,7 @@ class TestExtractCultivar:
 
 class TestSpeciesSynonyms:
     def test_a_synonym_folds_onto_its_accepted_name(self):
-        from _ingest_shared import sanitize_species
+        from shared.ingest import sanitize_species
 
         assert sanitize_species("Platanus x acerifolia") == "Platanus x hispanica"
         assert sanitize_species("Platanus \u00d7 acerifolia") == "Platanus x hispanica"
@@ -1285,20 +1285,20 @@ class TestSpeciesSynonyms:
         assert sanitize_species("\u00d7 Cupressocyparis leylandii") == "Cupressus x leylandii"
 
     def test_the_cultivar_does_not_block_the_fold(self):
-        from _ingest_shared import extract_cultivar, sanitize_species
+        from shared.ingest import extract_cultivar, sanitize_species
 
         raw = "Platanus x acerifolia 'Bloodgood'"
         assert sanitize_species(raw) == "Platanus x hispanica"
         assert extract_cultivar(raw) == "Bloodgood"
 
     def test_a_hybrid_published_without_its_mark_is_the_same_taxon(self):
-        from _ingest_shared import sanitize_species
+        from shared.ingest import sanitize_species
 
         assert sanitize_species("Prunus yedoensis") == "Prunus x yedoensis"
         assert sanitize_species("Prunus x yedoensis") == "Prunus x yedoensis"
 
     def test_the_accepted_name_is_unchanged(self):
-        from _ingest_shared import SPECIES_SYNONYMS, sanitize_species
+        from shared.ingest import SPECIES_SYNONYMS, sanitize_species
 
         for accepted in set(SPECIES_SYNONYMS.values()):
             assert sanitize_species(accepted) == accepted
@@ -1307,7 +1307,7 @@ class TestSpeciesSynonyms:
         """One lookup is enough only if the map is keyed on what
         `_sanitize_taxon` produces -- ASCII mark, capitalised genus, species
         rank -- and a value is never itself a key (no chains)."""
-        from _ingest_shared import SPECIES_SYNONYMS, _sanitize_taxon
+        from shared.ingest import SPECIES_SYNONYMS, _sanitize_taxon
 
         for key, value in SPECIES_SYNONYMS.items():
             assert _sanitize_taxon(key) == key, f"{key!r} is not in canonical form"
@@ -1316,7 +1316,7 @@ class TestSpeciesSynonyms:
             assert key != value
 
     def test_synonyms_of_inverts_the_map(self):
-        from _ingest_shared import SPECIES_SYNONYMS, synonyms_of
+        from shared.ingest import SPECIES_SYNONYMS, synonyms_of
 
         assert synonyms_of("Platanus x hispanica") == ['Platanus acerifolia', 'Platanus hispanica', 'Platanus x acerifolia']
         assert synonyms_of("Acer rubrum") == []
@@ -1324,7 +1324,7 @@ class TestSpeciesSynonyms:
             assert all(SPECIES_SYNONYMS[s] == accepted for s in synonyms_of(accepted))
 
     def test_a_sentinel_is_never_an_accepted_name(self):
-        from _ingest_shared import SPECIES_SENTINELS, SPECIES_SYNONYMS
+        from shared.ingest import SPECIES_SENTINELS, SPECIES_SYNONYMS
 
         assert not SPECIES_SENTINELS & set(SPECIES_SYNONYMS.values())
         assert not SPECIES_SENTINELS & set(SPECIES_SYNONYMS)
@@ -1337,21 +1337,21 @@ class TestSpeciesSynonyms:
 
 class TestSpeciesMisspellings:
     def test_a_misspelling_folds_onto_the_name_it_meant(self):
-        from _ingest_shared import sanitize_species
+        from shared.ingest import sanitize_species
 
         assert sanitize_species("Acer platenoides") == "Acer platanoides"
         assert sanitize_species("Liquidambar stryaciflua") == "Liquidambar styraciflua"
         assert sanitize_species("Sorbus aucaparia") == "Sorbus aucuparia"
 
     def test_the_cultivar_does_not_block_the_fold(self):
-        from _ingest_shared import extract_cultivar, sanitize_species
+        from shared.ingest import extract_cultivar, sanitize_species
 
         raw = "Acer platenoides 'Crimson King'"
         assert sanitize_species(raw) == "Acer platanoides"
         assert extract_cultivar(raw) == "Crimson King"
 
     def test_the_accepted_name_is_unchanged(self):
-        from _ingest_shared import SPECIES_MISSPELLINGS, sanitize_species
+        from shared.ingest import SPECIES_MISSPELLINGS, sanitize_species
 
         for accepted in set(SPECIES_MISSPELLINGS.values()):
             assert sanitize_species(accepted) == accepted
@@ -1360,7 +1360,7 @@ class TestSpeciesMisspellings:
         """Same contract as SPECIES_SYNONYMS: one lookup is enough only if the
         map is keyed on what `_sanitize_taxon` produces and no value is itself
         a key."""
-        from _ingest_shared import SPECIES_MISSPELLINGS, _sanitize_taxon
+        from shared.ingest import SPECIES_MISSPELLINGS, _sanitize_taxon
 
         for key, value in SPECIES_MISSPELLINGS.items():
             assert _sanitize_taxon(key) == key, f"{key!r} is not in canonical form"
@@ -1372,14 +1372,14 @@ class TestSpeciesMisspellings:
         """A name resolves through one map or the other, never both -- and a
         misspelling's target is never itself folded onward, which the single
         lookup in `sanitize_species` could not follow."""
-        from _ingest_shared import SPECIES_MISSPELLINGS, SPECIES_SYNONYMS
+        from shared.ingest import SPECIES_MISSPELLINGS, SPECIES_SYNONYMS
 
         assert not set(SPECIES_MISSPELLINGS) & set(SPECIES_SYNONYMS)
         for value in SPECIES_MISSPELLINGS.values():
             assert value not in SPECIES_SYNONYMS, f"{value!r} folds on to a third name"
 
     def test_misspellings_of_inverts_the_map(self):
-        from _ingest_shared import SPECIES_MISSPELLINGS, misspellings_of
+        from shared.ingest import SPECIES_MISSPELLINGS, misspellings_of
 
         for accepted in set(SPECIES_MISSPELLINGS.values()):
             assert all(SPECIES_MISSPELLINGS[m] == accepted for m in misspellings_of(accepted))
@@ -1387,13 +1387,13 @@ class TestSpeciesMisspellings:
     def test_a_typo_is_not_published_as_a_synonym(self):
         """`synonyms` says what else the taxon is called, and a typo is not one
         of its names -- so the two maps stay separate all the way out."""
-        from _ingest_shared import SPECIES_MISSPELLINGS, synonyms_of
+        from shared.ingest import SPECIES_MISSPELLINGS, synonyms_of
 
         for misspelling, accepted in SPECIES_MISSPELLINGS.items():
             assert misspelling not in synonyms_of(accepted)
 
     def test_a_sentinel_is_never_involved(self):
-        from _ingest_shared import SPECIES_MISSPELLINGS, SPECIES_SENTINELS
+        from shared.ingest import SPECIES_MISSPELLINGS, SPECIES_SENTINELS
 
         assert not SPECIES_SENTINELS & set(SPECIES_MISSPELLINGS.values())
         assert not SPECIES_SENTINELS & set(SPECIES_MISSPELLINGS)
@@ -1418,7 +1418,7 @@ class TestSpeciesMisspellings:
 
     @pytest.mark.parametrize("a,b", CONFUSABLE)
     def test_two_real_species_are_never_folded_together(self, a, b):
-        from _ingest_shared import sanitize_species
+        from shared.ingest import sanitize_species
 
         assert sanitize_species(a) == a
         assert sanitize_species(b) == b
@@ -1441,7 +1441,7 @@ class TestEnforceTreeSchemaCultivar:
         return pa.table(cols)
 
     def test_the_quoted_cultivar_moves_to_its_own_column(self):
-        from _ingest_shared import enforce_tree_schema
+        from shared.ingest import enforce_tree_schema
 
         out = enforce_tree_schema(
             self._table(["Malus sargentii 'Tina'", "Malus 'Spring Snow'", "Acer rubrum"]),
@@ -1454,14 +1454,14 @@ class TestEnforceTreeSchemaCultivar:
     def test_a_cultivar_needs_a_taxon(self):
         """A selection is a choice within a taxon; quoted junk on a
         placeholder says nothing about a plant."""
-        from _ingest_shared import UNKNOWN_SPECIES, enforce_tree_schema
+        from shared.ingest import UNKNOWN_SPECIES, enforce_tree_schema
 
         out = enforce_tree_schema(self._table(["Onbekend 'x'", "'Bloodgood'"]), data_source="SF_OPENDATA")
         assert out.column("species").to_pylist() == [UNKNOWN_SPECIES] * 2
         assert out.column("cultivar").to_pylist() == [None, None]
 
     def test_a_source_column_wins_over_the_parsed_value(self):
-        from _ingest_shared import enforce_tree_schema
+        from shared.ingest import enforce_tree_schema
 
         out = enforce_tree_schema(
             self._table(
@@ -1475,7 +1475,7 @@ class TestEnforceTreeSchemaCultivar:
         assert "cultivar" not in out.schema.names
 
     def test_the_synonym_fold_applies_at_the_chokepoint(self):
-        from _ingest_shared import enforce_tree_schema
+        from shared.ingest import enforce_tree_schema
 
         out = enforce_tree_schema(
             self._table(["Platanus x acerifolia 'Bloodgood'", "Platanus \u00d7 hispanica"]),
@@ -1485,7 +1485,7 @@ class TestEnforceTreeSchemaCultivar:
         assert out.column("cultivar").to_pylist() == ["Bloodgood", None]
 
     def test_the_cleanup_summary_counts_cultivars(self, capsys):
-        from _ingest_shared import enforce_tree_schema
+        from shared.ingest import enforce_tree_schema
 
         enforce_tree_schema(self._table(["Malus sargentii 'Tina'"]), data_source="SF_OPENDATA")
         assert "1 carry a cultivar on the tree row" in capsys.readouterr().err
@@ -1623,7 +1623,7 @@ class TestImplausibleDbh:
         )
 
     def test_nulls_the_implausible_and_keeps_the_rest(self, capsys):
-        from _ingest_shared import DBH_MAX_INCHES
+        from shared.ingest import DBH_MAX_INCHES
 
         table = enforce_tree_schema(
             self._table([10.0, 0.0, -3.0, 250.0, None, DBH_MAX_INCHES, 199.9]),
@@ -1674,7 +1674,7 @@ class TestImplausiblePlantDates:
         )
 
     def test_nulls_the_implausible_and_keeps_the_rest(self, capsys):
-        from _ingest_shared import PLANT_DATE_MIN_YEAR
+        from shared.ingest import PLANT_DATE_MIN_YEAR
 
         today = date.today()
         planted = [

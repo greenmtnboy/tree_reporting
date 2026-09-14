@@ -7,7 +7,7 @@
 
 Source: "Arbres publics sur le territoire de la Ville" on
 `donnees.montreal.ca`, the **consolidated** resource `64e28fe6`, 335,052 rows.
-Paging and the freshness watermark live in `_ckan_shared`.
+Paging and the freshness watermark live in `shared.platforms.ckan`.
 
 **The package holds seven resources and only one of them is this city.**
 Alongside the consolidated inventory it publishes a DBH history file, a
@@ -51,8 +51,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, iter_datastore_rows
-from _ingest_shared import (
+from shared.platforms.ckan import CkanResource, iter_datastore_rows
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

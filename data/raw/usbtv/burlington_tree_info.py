@@ -11,8 +11,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, iter_features
-from _ingest_shared import (
+from shared.platforms.arcgis import FeatureLayer, iter_features
+from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
@@ -34,7 +34,7 @@ WHERE = "site_typ = 'T'"
 def iter_row_chunks():
     """One ArcGIS page at a time, reprojected to WGS84 server-side.
 
-    Paging is `_arcgis_shared`'s. The version this replaced computed its page
+    Paging is `shared.platforms.arcgis`'s. The version this replaced computed its page
     offsets from a `returnCountOnly` taken *before* the first page and passed no
     `orderByFields` at all, so a row inserted mid-read shifted every subsequent
     page: offset paging over an unordered ArcGIS result may repeat or skip rows,

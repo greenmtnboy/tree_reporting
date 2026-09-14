@@ -97,7 +97,7 @@ file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cahfx_
 #
 # Shared: ../tree_dedup.preql groups the three partitions into one cluster per
 # tree and picks each canonical attribute across the cluster; this city's grid
-# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
 # The only per-city line is the dbh merge, because Boston imputes it.
 merge merged_dbh into diameter_at_breast_height;
 

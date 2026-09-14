@@ -37,8 +37,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, esri_geometry_to_wkt, iter_features
-from _ingest_shared import emit
+from shared.platforms.arcgis import FeatureLayer, esri_geometry_to_wkt, iter_features
+from shared.ingest import emit
 
 LAYER = FeatureLayer(
     "https://maps.ottawa.ca/arcgis/rest/services/OfficialPlan/MapServer/133",

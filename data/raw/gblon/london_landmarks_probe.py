@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, staging_modified_at  # noqa: E402
+from shared.ingest import emit_freshness, staging_modified_at  # noqa: E402
 
 STAGING_NAME = "gblon_landmarks_staging.parquet"
 

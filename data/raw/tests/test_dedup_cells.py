@@ -21,7 +21,7 @@ import pytest
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     CITY_BOUNDS,
     DEDUP_CELL_METRES,
     MUNICIPAL_DATA_SOURCES,

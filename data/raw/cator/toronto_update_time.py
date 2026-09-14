@@ -14,7 +14,7 @@ own `last_modified` still reads 2022-05-02 while the data behind it was
 refreshed in 2026 -- the package's non-standard `last_refreshed` is what moved.
 Reading the resource stamp alone would have stored 2022 on the first build and
 compared fresh for ever, which is the silent never-rebuilding failure a
-freshness probe exists to prevent.  See the table in `_ckan_shared`.
+freshness probe exists to prevent.  See the table in `shared.platforms.ckan`.
 
 `data_last_modified` raises rather than degrading when no stamp is present:
 that is the portal changing its metadata shape, not the portal being down, and
@@ -27,8 +27,8 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, data_last_modified
-from _ingest_shared import emit_freshness
+from shared.platforms.ckan import CkanResource, data_last_modified
+from shared.ingest import emit_freshness
 
 RESOURCE = CkanResource(
     "ckan0.cf.opendata.inter.prod-toronto.ca",

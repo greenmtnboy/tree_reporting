@@ -18,7 +18,7 @@ resources**, which this script reads and unions:
 They are one inventory split by survey campaign, not two datasets, so they are
 one `data_source` and one city.  Nothing else about them agrees: the 23-ward
 file is Shift-JIS with Japanese column headers, the Tama file is UTF-8 with
-romanised ones, and the row shapes differ by two columns.  `_ckan_shared.
+romanised ones, and the row shapes differ by two columns.  `shared.platforms.ckan.
 read_csv_rows` detects the encoding per resource, which is why the difference
 costs a column map here rather than two code paths.
 
@@ -66,7 +66,7 @@ because a bounds filter reports "outside CITY_BOUNDS", which is a different and
 much less alarming fact than "this file has a column-order bug".
 
 **Species is a Japanese vernacular name and nothing else** -- `イチョウ`,
-`ケヤキ`, 446 distinct values.  `_japanese_species.species_from_japanese_name`
+`ケヤキ`, 446 distinct values.  `shared.species.japanese.species_from_japanese_name`
 resolves 99.98% of the trees to an accepted binomial or a genus; read its
 docstring before touching a mapping, because the table is curated and the two
 obvious automatic sources for it are both wrong in ways that do not announce
@@ -103,13 +103,13 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, read_csv_rows
-from _ingest_shared import (
+from shared.platforms.ckan import CkanResource, read_csv_rows
+from shared.ingest import (
     emit,
     enforce_tree_schema,
     validate_coordinates,
 )
-from _japanese_species import species_from_japanese_name
+from shared.species.japanese import species_from_japanese_name
 
 # Both resources of package `t000014d2000000029`, "都道の街路樹".
 WARDS = CkanResource("catalog.data.metro.tokyo.lg.jp", "8bdb63d0-911f-4e88-845f-14f6cab691a4", timeout=180)

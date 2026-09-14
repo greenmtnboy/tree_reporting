@@ -251,7 +251,7 @@ file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/{lc}_o
 #
 # Shared: ../tree_dedup.preql groups the three partitions into one cluster per
 # tree and picks each canonical attribute across the cluster; this city's grid
-# cell size and its calibration live in DEDUP_CELL_METRES in _ingest_shared.py.
+# cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
 # The only per-city line is the dbh merge, because Boston imputes it.
 merge merged_dbh into diameter_at_breast_height;
 
@@ -309,7 +309,7 @@ that are not optional:
   * `validate_coordinates` before it, so a wrong-hemisphere geocode is caught
     here rather than as a dot in the ocean.
 
-For an ArcGIS FeatureServer source, `_arcgis_shared` already has the paging,
+For an ArcGIS FeatureServer source, `shared.platforms.arcgis` already has the paging,
 the watermark and the Esri epoch conversion -- see usden/denver_tree_info.py.
 For a large source, stream it: `stream_to_table` over a chunk generator keeps
 peak memory at one chunk (a bulk `response.json()` OOM-killed a 2 GiB
@@ -323,7 +323,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
@@ -382,11 +382,11 @@ UPDATE_TIME = '''#!/usr/bin/env -S uv run
 Mandatory: without it the pipeline re-downloads the whole dataset on every
 tick.  Hit the lightest metadata endpoint the portal exposes:
 
-    ArcGIS     `_arcgis_shared.layer_last_edit(LAYER)`, or `field_max` for a
+    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
                layer with no editingInfo
     OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{{id}} -> .metas.default.modified
     CKAN       GET /api/3/action/resource_show?id={{id}} -> .result.last_modified
-    Socrata    `_socrata_shared.rows_updated_at(DATASET)` -- reads
+    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
                /api/views/{{id}}.json .rowsUpdatedAt (unix SECONDS, not
                Esri's milliseconds)
 
@@ -404,7 +404,7 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, get_json_with_retry
+from shared.ingest import emit_freshness, get_json_with_retry
 
 METADATA_URL = "TODO: the portal's metadata endpoint"
 
@@ -425,7 +425,7 @@ OSM_EXTRACT = '''#!/usr/bin/env -S uv run
 
 """Extract {name}'s OpenStreetMap trees into the staged parquet in GCS.
 
-Everything lives in `_osm_shared.extract_city`; this file exists so each city
+Everything lives in `shared.osm.extract_city`; this file exists so each city
 has a discoverable entry point and so a city that needs to diverge (a tighter
 bbox, an extra tag) has somewhere to do it.
 
@@ -441,7 +441,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _osm_shared import extract_city  # noqa: E402
+from shared.osm import extract_city  # noqa: E402
 
 CITY_CODE = "{code}"
 CITY_NAME = "{name} OSM"
@@ -470,7 +470,7 @@ from pathlib import Path
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, staging_modified_at
+from shared.ingest import emit_freshness, staging_modified_at
 
 STAGING_NAME = "{lc}_osm_staging.parquet"
 
@@ -595,8 +595,8 @@ def build(args) -> Edits:
         OSM_STAGING_MODEL.format(**fields), what="OSM staging model",
     )
 
-    # --- _ingest_shared.py ------------------------------------------------
-    shared = RAW / "_ingest_shared.py"
+    # --- shared/ingest.py ------------------------------------------------
+    shared = RAW / "shared" / "ingest.py"
     e.sub_once(
         shared,
         r"(MUNICIPAL_DATA_SOURCES: dict\[str, tuple\[str, \.\.\.\]\] = \{\n)",
@@ -639,9 +639,9 @@ def build(args) -> Edits:
         scope=r"DEDUP_CELL_METRES: dict\[str, int\] = \{",
     )
 
-    # --- _osm_shared.py ---------------------------------------------------
+    # --- shared/osm.py ---------------------------------------------------
     e.sub_once(
-        RAW / "_osm_shared.py",
+        RAW / "shared" / "osm.py",
         r"(OSM_CITY_NAMES: dict\[str, str\] = \{\n)",
         rf'\1    "{code}": "{name}",\n',
         what="OSM_CITY_NAMES", marker=f'"{code}": "{name}"',
@@ -867,7 +867,7 @@ def main() -> None:
 {args.code} scaffolded.  What is left is the part that needs judgement:
 
   1. Fill in {args.slug}_tree_info.py and {args.slug}_update_time.py
-     (`_arcgis_shared` covers ArcGIS portals end to end, `_socrata_shared`
+     (`shared.platforms.arcgis` covers ArcGIS portals end to end, `shared.platforms.socrata`
       Socrata ones).
   2. Find a landmark source and write {args.slug}_landmarks.py + its probe.
   3. Bootstrap the OSM staging object:

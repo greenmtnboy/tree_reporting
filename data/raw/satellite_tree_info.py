@@ -50,7 +50,7 @@ import pyarrow as pa
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     SATELLITE_DATA_SOURCES,
     emit,
     enforce_tree_schema,

@@ -28,7 +28,7 @@ Field mapping:
                             tree_name.  One Greek-only value
                             ("Αυτοφυής φοίνικας", self-sown palm) is routed to
                             the Palm sentinel by sanitize_species's Greek
-                            aliases in _ingest_shared.
+                            aliases in shared.ingest.
   Condition              -> row filter: "Cut" rows are felled trees and are
                             excluded; anything else ("Existing", "New", or a
                             value the source adds later) is kept, so a new
@@ -43,7 +43,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     emit,
     enforce_tree_schema,
     get_json_with_retry,

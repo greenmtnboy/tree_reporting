@@ -121,7 +121,7 @@ MIN_AGE_YEARS = 1.0  # the fit window; see the docstring
 MAX_AGE_YEARS = 200.0
 MIN_FITTED_AGE_MAX_YEARS = 20.0  # a fit made on saplings alone would clamp every mature tree to a sapling's stem
 
-# The ingest's own guards (`_ingest_shared.DBH_MAX_INCHES`, `PLANT_DATE_MIN_YEAR`),
+# The ingest's own guards (`shared.ingest.DBH_MAX_INCHES`, `PLANT_DATE_MIN_YEAR`),
 # re-applied to parquets built before them; `test_tree_predictions.py` keeps
 # the numbers in step.
 DBH_MAX_INCHES = 200.0

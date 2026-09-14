@@ -8,7 +8,7 @@
 Source: "Street Tree Data" on `ckan0.cf.opendata.inter.prod-toronto.ca`,
 resource `3dafa392`, 688,335 rows -- the largest single municipal inventory on
 the map.  Paging, the freshness watermark and the point shape all live in
-`_ckan_shared`.
+`shared.platforms.ckan`.
 
 Three things about this source are worth knowing:
 
@@ -40,8 +40,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, iter_datastore_rows, point_lon_lat
-from _ingest_shared import (
+from shared.platforms.ckan import CkanResource, iter_datastore_rows, point_lon_lat
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

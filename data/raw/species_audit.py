@@ -22,7 +22,7 @@ Re-run it after a city lands, and expect it to report nothing: a name the maps
 already fold is no longer a candidate, so a clean sweep is the converged
 state rather than a sign the tool did not run.
 
-`SPECIES_SYNONYMS` and `SPECIES_MISSPELLINGS` in `_ingest_shared.py` are what
+`SPECIES_SYNONYMS` and `SPECIES_MISSPELLINGS` in `shared/ingest.py` are what
 fixes one, and this is the tool that decides what belongs in them.
 
 **The measurement is cheap and the judgement is not, which is the whole point
@@ -84,7 +84,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     MUNICIPAL_DATA_SOURCES,
     SPECIES_MISSPELLINGS,
     SPECIES_SYNONYMS,
@@ -459,7 +459,7 @@ def report(verdicts: dict[str, list]) -> None:
 
 
 def emit_map(verdicts: dict[str, list]) -> None:
-    """Print the entries for pasting into `_ingest_shared.py`."""
+    """Print the entries for pasting into `shared/ingest.py`."""
     for name, target in (
         ("HYBRID_MARK", "SPECIES_SYNONYMS"),
         ("SYNONYM", "SPECIES_SYNONYMS"),

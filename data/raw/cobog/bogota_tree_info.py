@@ -13,7 +13,7 @@ it is large: **1,390,646 points** across the twenty localidades, updated in
 place (the layer's `Fecha_Actualizacion` runs to mid-2026 and the catalogue
 entry was republished in August 2026).
 
-Read through `_arcgis_shared` like every other ArcGIS source here: 2,000 rows a
+Read through `shared.platforms.arcgis` like every other ArcGIS source here: 2,000 rows a
 page, ordered by `OBJECTID`, ~700 requests at just under a second each.  The
 bulk downloads on the catalogue (a 656 MB GeoJSON, a 288 MB GeoPackage) are
 snapshots of the same layer and would be one request instead of seven hundred,
@@ -28,7 +28,7 @@ the two attribute columns carry a clean WGS84 position on every row
 `returnGeometry=false`, which also makes the pages a third the size.
 
 **Species is a Spanish common name, and every one of the 503 values is
-resolved by `_spanish_species`.**  `Nombre_Esp` is a comma-separated list of
+resolved by `shared.species.spanish`.**  `Nombre_Esp` is a comma-separated list of
 the names one species goes by in Bogotá -- `Chicala, chirlobirlo, flor
 amarillo` is *Tecoma stans* -- and `Con_Especie_ID` is SIGAU's own species
 code, but the code's dictionary (the binomial) is not in the public layer.
@@ -66,14 +66,14 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, coded_value_domain, iter_attributes
-from _ingest_shared import (
+from shared.platforms.arcgis import FeatureLayer, coded_value_domain, iter_attributes
+from shared.ingest import (
     emit,
     enforce_tree_schema,
     stream_to_table,
     validate_coordinates,
 )
-from _spanish_species import species_from_spanish_name
+from shared.species.spanish import species_from_spanish_name
 
 LAYER = FeatureLayer(
     "https://geoportal.jbb.gov.co/agc/rest/services/IDECA/CensoArbol/FeatureServer/0",

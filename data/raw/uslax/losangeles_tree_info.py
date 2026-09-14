@@ -12,7 +12,7 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     emit,
     enforce_tree_schema,
     iter_offset_pages,
@@ -74,7 +74,7 @@ def iter_row_chunks():
     A generator rather than a list: at 529,636 records this is the largest
     ingest in the repo after London, and holding them all as dicts is what
     made Amsterdam fail every cloud rebuild while passing locally.  See
-    `_ingest_shared.stream_to_table`.
+    `shared.ingest.stream_to_table`.
     """
     import requests
 

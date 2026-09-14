@@ -47,7 +47,7 @@ are discovery hints, not deployable URLs or dependencies for a fresh clone.
 | Client authorization | `terraform/bootstrap/rules/firestore.rules` |
 | Existing approval and approved-tree export | `reviewer/server.ts` |
 | Approved new trees entering ingest | `data/raw/community_tree_info.py`, `community_tree_info.preql`, `community_update_time.py` |
-| Shared schema, identity, territory, species | `data/raw/_ingest_shared.py`, `tree_dedup.preql` |
+| Shared schema, identity, territory, species | `data/raw/shared/ingest.py`, `tree_dedup.preql` |
 | General pipeline rules | `AGENTS.md`, `EXTENDING.md`, header of `data/trilogy.toml` |
 | Prediction decoder and georeferencing | `modeling/src/urban_tree_ml/evaluation.py` |
 | Existing JSON/image adapter | `modeling/src/urban_tree_ml/model_debug.py`, `qa_server.py` |

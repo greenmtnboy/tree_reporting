@@ -47,15 +47,15 @@ points over 83,875 rows.
 
 **Two encodings inside one package.** The 23-ward file is Shift-JIS with
 Japanese column headers, the Tama file UTF-8 with romanised ones. This is what
-`_ckan_shared.read_csv_rows` was added for — the CSV reader the module's own
+`shared.platforms.ckan.read_csv_rows` was added for — the CSV reader the module's own
 docstring had been deferring until a source needed one. It detects the encoding
 per resource, and the order it tries is load-bearing: cp932 decodes almost any
 byte string without raising, so trying it before UTF-8 would turn valid UTF-8
 Japanese into mojibake *silently*.
 
 **Species is a Japanese vernacular name and nothing else** — 446 distinct
-values, no binomial column anywhere. `_japanese_species.py` is
-`_common_name_species` applied to a second language: a curated 427-entry table
+values, no binomial column anywhere. `shared/species/japanese.py` is
+`shared.species.english` applied to a second language: a curated 427-entry table
 that resolves **99.98%** of the trees. It is a separate module because the keys
 normalise by different rules — the English table's `common_name_key` reduces a
 value to `[a-z ]`, which erases a katakana name entirely.

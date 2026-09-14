@@ -1,6 +1,6 @@
 """Shared helpers for reading ArcGIS FeatureServer / MapServer layers.
 
-NOT a uv inline script — a regular importable module, like `_ingest_shared`.
+NOT a uv inline script — a regular importable module, like `shared.ingest`.
 
 ArcGIS is the dominant platform for North American municipal open data, and by
 the time Denver was wired six scripts across five cities were each carrying
@@ -9,12 +9,12 @@ freshness watermark out of it, and turn Esri's epoch-milliseconds into a
 `datetime`.  They had drifted in exactly the ways copies do — two different
 spellings of the watermark, hand-URL-encoded `outStatistics` JSON, and a
 page-size constant that was right for one layer and a silent truncation risk
-for the next.  This does for ArcGIS what `_osm_shared` does for Overpass:
+for the next.  This does for ArcGIS what `shared.osm` does for Overpass:
 one implementation, a thin shim per city.
 
 Usage:
 
-    from _arcgis_shared import FeatureLayer, iter_features, layer_last_edit
+    from shared.platforms.arcgis import FeatureLayer, iter_features, layer_last_edit
 
     LAYER = FeatureLayer(
         "https://services1.arcgis.com/zdB7qR0BtYrg0Xpl/arcgis/rest/services/"
@@ -31,9 +31,14 @@ import json
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from _ingest_shared import UpstreamUnavailable, get_json_with_retry
+# This module is also runnable (the portal search at the bottom), and being
+# run directly puts `shared/platforms` on the path rather than `data/raw`,
+# so the package import has to be bootstrapped.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from shared.ingest import UpstreamUnavailable, get_json_with_retry  # noqa: E402
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -261,7 +266,7 @@ def iter_features(
     """Pages of raw `f=json` features, one HTTP request at a time.
 
     Yields lists of Esri features (`{"attributes": {...}, "geometry": {...}}`)
-    so a caller can feed `_ingest_shared.stream_to_table` and never hold the
+    so a caller can feed `shared.ingest.stream_to_table` and never hold the
     whole layer in memory.  DC's ingest OOM-killed its 2 GiB container reading
     216k features in one `response.json()`; Denver is 359k.
 
@@ -526,7 +531,7 @@ def hub_last_modified(
     a description changed, and it can fail to move when the publisher
     overwrites the service in place.  The second is the dangerous one — it is
     how Toronto's CKAN resource stamp would have frozen that city on its first
-    build (see `_ckan_shared.data_last_modified`).  So prefer a real edit
+    build (see `shared.platforms.ckan.data_last_modified`).  So prefer a real edit
     stamp wherever one exists, and where a city has both, take the **maximum**
     of the two rather than picking one: that is the rule `data_last_modified`
     arrived at, and it is the only one that cannot freeze a city.
@@ -574,10 +579,10 @@ def _parse_dcat_datetime(value) -> datetime | None:
 
 
 if __name__ == "__main__":
-    # `uv run _arcgis_shared.py <hub-host>` — the first step of the city
+    # `uv run shared/platforms/arcgis.py <hub-host>` — the first step of the city
     # runbook, so finding a portal's tree layer is not a manual browse.
     if len(sys.argv) != 2:
-        print("usage: _arcgis_shared.py <arcgis-hub-host>", file=sys.stderr)
+        print("usage: shared/platforms/arcgis.py <arcgis-hub-host>", file=sys.stderr)
         raise SystemExit(2)
     try:
         found = find_tree_layers(sys.argv[1])

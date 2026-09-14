@@ -15,7 +15,7 @@ mechanical ones and `tests/test_city_wiring.py` tells you what is still owed.
 
 ```bash
 # 1. Find the portal's tree layer. For any ArcGIS Hub site, this is one command:
-cd data/raw && uv run _arcgis_shared.py opendata-geospatialdenver.hub.arcgis.com
+cd data/raw && uv run shared/platforms/arcgis.py opendata-geospatialdenver.hub.arcgis.com
 
 # 2. Look up the ecoregion at the city centroid (RESOLVE ECO_ID):
 curl -sG "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/Resolve_Ecoregions/FeatureServer/0/query"   --data-urlencode "geometry=-104.9903,39.7392" --data-urlencode "geometryType=esriGeometryPoint"   --data-urlencode "inSR=4326" --data-urlencode "spatialRel=esriSpatialRelIntersects"   --data-urlencode "outFields=ECO_ID,ECO_NAME" --data-urlencode "returnGeometry=false" --data-urlencode "f=json"
@@ -33,7 +33,7 @@ measurement or a look at the portal:
 
 1. **Fill in `{slug}_tree_info.py` and `{slug}_update_time.py`.** The field
    mapping is the actual work. For an ArcGIS portal — which is most North
-   American cities — `_arcgis_shared` covers paging, the freshness watermark
+   American cities — `shared.platforms.arcgis` covers paging, the freshness watermark
    and Esri's epoch-milliseconds; `usden/denver_tree_info.py` is ~150 lines
    including its comments.
 2. **Find a landmark source** and write `{slug}_landmarks.py` + its probe. See
@@ -223,7 +223,7 @@ GPS tags, and publishing is the point where that stops being private.
 
 Every tree row carries the dataset it came from, materialized as a uniformly
 named `data_source` column in every tree Parquet. The value list lives in
-`DATA_SOURCES` in `data/raw/_ingest_shared.py`; display labels live in
+`DATA_SOURCES` in `data/raw/shared/ingest.py`; display labels live in
 `src/src/data/dataSources.ts`. `data/raw/tests/test_data_sources.py` asserts the
 Python picklist, the preql enums, and the `complete where` clauses all agree.
 
@@ -248,14 +248,14 @@ must claim `complete where city = 'X' and {code}_source = 'Y'`.
 ### Supplemental OpenStreetMap sources
 
 Every city carries a third partition of `natural=tree` nodes from OSM, labelled
-`OSM_{CODE}` and listed in `OSM_DATA_SOURCES` in `data/raw/_ingest_shared.py`
+`OSM_{CODE}` and listed in `OSM_DATA_SOURCES` in `data/raw/shared/ingest.py`
 — ~1.37M staged trees across them. It was opt-in while only Tempe and
 Boston were wired; it no longer is, and a new city should wire it at the same
 time as its municipal source. `test_osm_city_is_fully_wired` parametrises over
 every city in `OSM_DATA_SOURCES` and asserts each half of the wiring below, so
 a half-wired city fails loudly rather than silently emitting zero OSM rows.
 
-The extraction itself lives once, in `_osm_shared.extract_city`; each city
+The extraction itself lives once, in `shared.osm.extract_city`; each city
 keeps a ~28-line shim. They were 160-line copies differing in five lines, which
 is how Boston's shipped with a docstring claiming it extracted Tempe's trees.
 
@@ -264,7 +264,7 @@ municipal and community sources declare `borough`; its OSM source did not, so
 that partition dropped out of the union and the remaining two stopped covering
 the source enum. Trilogy reports this as `complete where` clauses "not provably
 exhaustive over that type", which is a long way from "you forgot a column".
-Add it to `OSM_EXTRA_NULL_COLUMNS` in `data/raw/_osm_shared.py` (keyed by city
+Add it to `OSM_EXTRA_NULL_COLUMNS` in `data/raw/shared/osm.py` (keyed by city
 code, so the shared row script emits it for that city alone) and declare the
 property plus `borough: ?borough` in `osm_staging/gblon_osm_staging.preql`.
 London is the only instance today, which is why the shared
@@ -301,7 +301,7 @@ publishing a new extract is what makes the city's Parquet stale.
 Every city runs an `osm-{code}` `[[cloud.job]]` (see `data/trilogy.toml`) that
 refreshes one `osm_staging/{code}_osm_staging.preql`: a standalone model whose
 python datasource is the *shared* `osm_staging/osm_rows.py` (a thin wrapper over
-`_osm_shared.stage_city_rows`) and whose target is the staging parquet — so
+`shared.osm.stage_city_rows`) and whose target is the staging parquet — so
 DuckDB writes GCS with the job's HMAC secrets and no local credential is
 involved. Which city that script fetches comes from the datasource's
 `where city = '{CODE}'`, which Trilogy pushes down as `--filter`; there is no
@@ -372,7 +372,7 @@ that four staging files committed at 08:55 and 10:24 all carried an mtime of
 20:17, matching a branch switch.
 
 A GCS object's `Last-Modified` is a real publication time that survives cloning.
-`_ingest_shared` holds the three helpers — `staging_url` for the preql `file`
+`shared.ingest` holds the three helpers — `staging_url` for the preql `file`
 clause, `staging_modified_at` for the probe, `upload_staging` for the extract —
 and `.gitignore` carries `*_staging.parquet` so a copy cannot drift back in.
 `test_no_staging_parquet_is_committed` fails if one does.
@@ -411,7 +411,7 @@ canonical ones (the canonical value is *derived* by the merge and `merge`d back
 — the pattern Boston has long used to impute dbh; a raw source that bound
 `species` directly would hand the planner a second, unmerged path to it), and
 adding one line for dbh. The cell size is a row in `DEDUP_CELL_METRES`
-(`_ingest_shared.py`), rendered into the model by `dedup_cells.py --write` as
+(`shared/ingest.py`), rendered into the model by `dedup_cells.py --write` as
 an inline `VALUES` table — inline rather than a python datasource because the
 same text is planned on the resolver service, which has no scripts, and an
 unbound cell size there made the planner error instead of reading the parquet.
@@ -600,7 +600,7 @@ add "(c) OpenStreetMap contributors" attribution in `README.md` and
 A city imagery has been run over can carry a **fourth source partition**,
 `SATELLITE_{CODE}`: model detections on NAIP tiles that a person accepted in
 the reviewer's satellite page and published. SF and Boston are wired; the
-registry is `SATELLITE_DATA_SOURCES` in `_ingest_shared.py`, and it is
+registry is `SATELLITE_DATA_SOURCES` in `shared/ingest.py`, and it is
 opt-in per city the way OSM was while only two cities had it.
 
 The flow, end to end:
@@ -835,7 +835,7 @@ key city enum<string>['USSFO', 'USNYC', 'USBOS', 'FRPAR'];
 Trilogy will reject any `complete where city = '...'` clause whose value isn't in this enum, so this must be done before the preql files in the next steps will validate.
 
 Also add the new city's source labels to `MUNICIPAL_DATA_SOURCES` in
-**`data/raw/_ingest_shared.py`** (the community label is derived automatically)
+**`data/raw/shared/ingest.py`** (the community label is derived automatically)
 and a display label to **`src/src/data/dataSources.ts`**. See "The `data_source`
 column" above for why the enum values themselves live per-city rather than here.
 
@@ -869,7 +869,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit_freshness, get_json_with_retry
+from shared.ingest import emit_freshness, get_json_with_retry
 
 def fetch_modified_at() -> datetime:
     # Hit the lightest metadata endpoint your open data platform exposes.
@@ -962,12 +962,12 @@ Create `data/raw/{city}/{city}_tree_info.py`. `new_city.py` leaves a stub with
 the contract in its docstring; follow `usden/denver_tree_info.py` for an ArcGIS
 source or `boston_tree_info.py` for the general shape.
 
-> **If the portal is ArcGIS, use `_arcgis_shared`.** It is the platform most
+> **If the portal is ArcGIS, use `shared.platforms.arcgis`.** It is the platform most
 > North American cities publish on, and the module covers the whole of it:
 > `FeatureLayer` addresses a layer, `iter_features` / `iter_attributes` page it,
 > `layer_last_edit` and `field_max` are the two freshness watermarks, and
 > `esri_ms_to_date` converts Esri's epoch-milliseconds. `find_tree_layers` will
-> even locate the layer — `uv run _arcgis_shared.py <hub-host>` lists every
+> even locate the layer — `uv run shared/platforms/arcgis.py <hub-host>` lists every
 > tree dataset a Hub site publishes with its REST endpoint.
 >
 > Two details in there are correctness rather than convenience, and both were
@@ -1018,7 +1018,7 @@ The script must:
 - Paris emitted an all-null `plant_date` as `pa.null()`. A null-typed Arrow column carries no type, so it materialised as `INT32` and every `year(plant_date)` query failed with `No function matches the given name and argument types 'year(INTEGER)'`.
 - SF's `dbh` came from CSV inference; every value was a whole number, so pyarrow chose `int64` and the parquet column became `BIGINT` instead of `DOUBLE`.
 
-`enforce_tree_schema` (in `data/raw/_ingest_shared.py`) is the single chokepoint that prevents this. It casts each canonical column to the type in `TREE_COLUMN_TYPES`, raises if a required column (`tree_id`, `city`, `species`) is missing, and passes city-specific extras (`borough`, `usbos_source`, …) through untouched. Casts are *safe* — a lossy conversion raises rather than corrupting values.
+`enforce_tree_schema` (in `data/raw/shared/ingest.py`) is the single chokepoint that prevents this. It casts each canonical column to the type in `TREE_COLUMN_TYPES`, raises if a required column (`tree_id`, `city`, `species`) is missing, and passes city-specific extras (`borough`, `usbos_source`, …) through untouched. Casts are *safe* — a lossy conversion raises rather than corrupting values.
 
 Scripts that emit source-native column names rather than canonical ones pass a `columns` map:
 
@@ -1177,7 +1177,7 @@ The row script is shared by every city — do **not** add a per-city copy. The
 `where` clause is what selects the city, and `CITY_BOUNDS` / `OSM_CITY_NAMES`
 in `data/raw/` are what it looks the city up in.
 
-Add the city to `OSM_DATA_SOURCES` in `data/raw/_ingest_shared.py`, declare the
+Add the city to `OSM_DATA_SOURCES` in `data/raw/shared/ingest.py`, declare the
 `OSM_{CODE}` value in its source enum and the staging partition in its tree
 model, and give it a row in `DEDUP_CELL_METRES` (start at 10, then measure with
 `osm_dedup_validation.py --city {CODE}` after the first build — see the cluster
@@ -1511,12 +1511,12 @@ rebuilds every city's landmark parquet plus the union, weekly (landmark sources
 change on a scale of years, and its per-city freshness columns mean it only
 rebuilds cities that actually moved). Splitting it per city the way trees were
 split is a *code-sharing* job rather than a scheduling one: tree extraction lives
-once in `_osm_shared.py`, which is what made a scheduled OSM job per city a
+once in `shared/osm.py`, which is what made a scheduled OSM job per city a
 matter of one thin shim each, whereas the landmark sources are a bespoke
 script per city. Three cities are still on hand-run paths that the Greek model
 would replace — `USBTV`, `USTEM` and `USWAS` read a hand-uploaded CSV from the
 staging prefix, and `DEBER`/`GBLON` stage from a hand-run Overpass fetch whose
-logic has never been shared. Sharing that fetch the way `_osm_shared` shares the
+logic has never been shared. Sharing that fetch the way `shared.osm` shares the
 tree one is the prerequisite; the scheduling is the easy half.
 
 ---
@@ -1568,7 +1568,7 @@ heterotypic synonym, and the published data carried 158k trees under one and
 53k under the other -- two enrichment rows, two LLM calls, two entries in
 every species rollup. The Leyland cypress was published under four spellings.
 
-`SPECIES_SYNONYMS` in `data/raw/_ingest_shared.py` maps a synonym to its
+`SPECIES_SYNONYMS` in `data/raw/shared/ingest.py` maps a synonym to its
 accepted name and `sanitize_species` applies it as its last step, so every
 tree row publishes the accepted name. The enrichment table reads the same map
 on every load (`with_species_aliases` in `enrichment/_tree_shared.py`):
@@ -1616,7 +1616,7 @@ does not matter on that side.
 
 ### Misspellings: the same fold, on a different claim
 
-`SPECIES_MISSPELLINGS` sits beside `SPECIES_SYNONYMS` in `_ingest_shared.py`
+`SPECIES_MISSPELLINGS` sits beside `SPECIES_SYNONYMS` in `shared/ingest.py`
 and resolves identically in `sanitize_species`. It exists separately because
 the two make different claims: a synonym is a name Kew lists under an accepted
 one, and a misspelling is a name that does not exist. `Liquidambar
@@ -2161,7 +2161,7 @@ Checking a candidate before you commit to it costs one query:
 ```bash
 cd data/raw && python -c "
 import sys; sys.path.insert(0,'.')
-from _arcgis_shared import FeatureLayer, feature_count
+from shared.platforms.arcgis import FeatureLayer, feature_count
 L = FeatureLayer('<layer url>')
 print('total    ', feature_count(L))
 print('id null  ', feature_count(L, where=\"GLOBALID IS NULL\"))
@@ -2258,13 +2258,13 @@ two are irreducible — they are reading a portal's schema — and both are much
 cheaper on a platform with a shared module.
 
 **A fifth cost turns up on any portal that publishes a common name instead of a
-binomial**, and it is now mostly paid *per language*: `_common_name_species.py`
+binomial**, and it is now mostly paid *per language*: `shared/species/english.py`
 resolves 398 published English names to accepted binomials, curated by hand from
 what five Ontario and New Brunswick portals actually publish, and
-`_japanese_species.py` does the same for the 446 katakana names Tokyo publishes,
-`_spanish_species.py` for the 503 Andean common names Bogotá's census carries
+`shared/species/japanese.py` does the same for the 446 katakana names Tokyo publishes,
+`shared/species/spanish.py` for the 503 Andean common names Bogotá's census carries
 (`Chicala, chirlobirlo, flor amarillo` is one value and one species), and
-`_chinese_species.py` for the 471 Traditional-Chinese names Taipei's two files
+`shared/species/chinese.py` for the 471 Traditional-Chinese names Taipei's two files
 use. A new city on a portal that names its trees in a language none of the four
 covers should expect to write the fifth one; the shape is fixed and the cost is
 the curation, and each of the last three was drafted by a model from the
@@ -2275,26 +2275,26 @@ a sixth city in the same region should need a handful. Read the module's
 docstring before reaching for the enrichment table's inverse instead; that was
 tried and measured and does not work.
 
-**So the highest-leverage next step is another `_arcgis_shared`.** That file
+**So the highest-leverage next step is another `shared.platforms.arcgis`.** That file
 took Denver's ingest from ~130 lines to ~60 and fixed two latent bugs across
 five existing cities on the way. The same is available for the other platforms
 this repo already talks to more than once:
 
 | platform | shared module? |
 |----------|----------------|
-| ArcGIS FeatureServer / MapServer | **yes** — `_arcgis_shared.py` |
-| Socrata | **yes** — `_socrata_shared.py` |
-| CKAN | **yes** — `_ckan_shared.py` |
-| OGC WFS 2.0 (GeoServer) | **yes** — `_wfs_shared.py` (Copenhagen, Helsinki; Berlin predates it and keeps its own loop) |
+| ArcGIS FeatureServer / MapServer | **yes** — `shared/platforms/arcgis.py` |
+| Socrata | **yes** — `shared/platforms/socrata.py` |
+| CKAN | **yes** — `shared/platforms/ckan.py` |
+| OGC WFS 2.0 (GeoServer) | **yes** — `shared/platforms/wfs.py` (Copenhagen, Helsinki; Berlin predates it and keeps its own loop) |
 | OpenDataSoft | no — Paris, Vancouver and Melbourne are three hand-rolled copies |
 
 OpenDataSoft is the one left: three copies of the same paging loop and the same
 metadata probe. Write the module when the third city arrives, not the first —
 that is when the shape is knowable and the drift has started. That is what
 happened to WFS: Berlin was the first, Copenhagen and Helsinki the third and
-fourth, and `_wfs_shared.py` was written for them. Two things in it are
+fourth, and `shared/platforms/wfs.py` was written for them. Two things in it are
 correctness rather than convenience, for the same reasons as in
-`_arcgis_shared`: paging needs a `sortBy` (an unsorted `startIndex` walk can
+`shared.platforms.arcgis`: paging needs a `sortBy` (an unsorted `startIndex` walk can
 repeat or skip rows between requests) and terminates on `numberMatched`, not on
 a short page; and `wfs_max_property` — one row sorted descending on a timestamp
 column, which is the whole freshness probe for both cities — excludes nulls
@@ -2304,7 +2304,7 @@ first version of the probe read Copenhagen's watermark as `null`.
 **Four things the September 2026 quartet added that a later city may need:**
 
 - **A projection inverse in pure Python.** Taipei publishes TWD97 / TM2 zone
-  121 metres and nothing else, so `_ingest_shared.twd97_to_wgs84` inverts the
+  121 metres and nothing else, so `shared.ingest.twd97_to_wgs84` inverts the
   Transverse Mercator the way `rd_to_wgs84` handles the Dutch grid — a
   dependency-free function next to the ingest, not a pyproj install in every
   city job.
@@ -2331,7 +2331,7 @@ broken — every point at (0, 0) — and the lat/lon attributes are clean).
 It publishes no diameter at all and no planting date, so the whole city is
 null on both; the reviewed-aerial-imagery lane is the route to a size there.
 
-**A shared module does not have to be a platform.** `_common_name_species.py`
+**A shared module does not have to be a platform.** `shared/species/english.py`
 is the counter-example: five cities published an English common name where the
 binomial should be, and what they shared was not an API but a question. The
 same threshold applies and the same rule about hardcoding does — its table is
@@ -2339,7 +2339,7 @@ curated and committed, not derived at run time from the enrichment parquet,
 because a city job must not depend on a GCS object being reachable and a
 reviewer must be able to read what a name resolves to.
 
-`_japanese_species.py` is the same shape for Tokyo's 446 katakana names, and
+`shared/species/japanese.py` is the same shape for Tokyo's 446 katakana names, and
 splitting it out rather than adding rows to the English table is the part worth
 copying: the two tables answer the same question but their **keys normalise by
 different rules**, and `common_name_key` reduces a value to `[a-z ]`, which
@@ -2368,7 +2368,7 @@ sebifera` and `Callistemon citrinus` → `Melaleuca citrina` landed.
 
 **A CSV resource's encoding is detected, and the order matters.** Tokyo
 publishes one street-tree file in Shift-JIS and the other in UTF-8 *from the same
-CKAN package*, so `_ckan_shared.read_csv_rows` tries `utf-8-sig` first and
+CKAN package*, so `shared.platforms.ckan.read_csv_rows` tries `utf-8-sig` first and
 `cp932` second. That order is correctness, not preference: cp932 decodes almost
 any byte string without raising, so trying it first turns valid UTF-8 Japanese
 into mojibake **silently**, while UTF-8 is strict enough that a body which
@@ -2386,9 +2386,9 @@ have been six new silent-failure points for a concept that already existed.
 ### The landmark lane is still seventeen bespoke scripts
 
 Trees were split per city cheaply because extraction lives once in
-`_osm_shared`. Landmarks cannot be split the same way yet, because each city's
+`shared.osm`. Landmarks cannot be split the same way yet, because each city's
 landmark fetch is its own script — see "Landmarks are still one refresh lane".
-Sharing the Overpass fetch (Berlin, London) the way `_osm_shared` shares the
+Sharing the Overpass fetch (Berlin, London) the way `shared.osm` shares the
 tree one is the prerequisite; the scheduling is the easy half.
 
 Denver is the first city to take the runbook's *preferred* landmark source — an

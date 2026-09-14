@@ -35,7 +35,7 @@ from pathlib import Path
 import pyarrow as pa
 import requests
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     circumference_cm_to_dbh_inches,
     emit,
     enforce_tree_schema,

@@ -31,7 +31,7 @@ clear `ENRICHMENT_COMPLETE_SQL` (a common name and a growth form) or the
 freshness probe would report the table stale on every tick, so the form
 refuses to save without them.
 
-Sentinel rows ("Unknown", "Palm", ...) are authored in `_ingest_shared` and
+Sentinel rows ("Unknown", "Palm", ...) are authored in `shared.ingest` and
 re-appended on every run, so they cannot be edited here; fix them in code.
 
 Synonyms
@@ -42,7 +42,7 @@ duplicate's row is overwritten with this row's values (its own `synonyms` then
 pointing back here), and the two stay in step from then on whichever is
 edited.  That bridges the join for tree rows still carrying the old name; it
 does not change what the ingest publishes.  For that the pair goes into
-`SPECIES_SYNONYMS` in `_ingest_shared.py`, after which the synonym's row is an
+`SPECIES_SYNONYMS` in `shared/ingest.py`, after which the synonym's row is an
 alias the daily job maintains and the form shows read-only.
 
 A duplicate that is not a synonym but a *misspelling* -- `Acer platenoides`,
@@ -88,7 +88,7 @@ import pyarrow.parquet as pq
 RAW_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(RAW_DIR))
 
-from _ingest_shared import (  # noqa: E402
+from shared.ingest import (  # noqa: E402
     SPECIES_MISSPELLINGS,
     SPECIES_SYNONYMS,
     _sanitize_taxon,
@@ -120,7 +120,7 @@ EDITS_PATH = RAW_DIR / "enrichment_admin_edits.json"
 # What publish writes before uploading; `data/raw/*.parquet` is gitignored.
 PUBLISH_PATH = RAW_DIR / "tree_enrichment_admin_publish.parquet"
 PUBLISHED_URL = ENRICHMENT_GCS_URI.replace("gs://", "https://storage.googleapis.com/")
-# Versioned like the enrichment table.  `_ecoregion_shared.REMOTE_ECOREGION_PARQUET`
+# Versioned like the enrichment table.  `shared.ecoregions.REMOTE_ECOREGION_PARQUET`
 # still names v1, which is gone from the bucket.
 ECOREGION_URL = f"https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ecoregion_info_v{DATA_VERSION}.parquet"
 
@@ -711,7 +711,7 @@ class AdminState:
 
     def save(self, species: str, payload: dict) -> dict:
         if species in SKIP_SPECIES:
-            raise ValidationError([f"{species!r} is a sentinel; its row is authored in _ingest_shared.py"])
+            raise ValidationError([f"{species!r} is a sentinel; its row is authored in shared/ingest.py"])
         accepted = accepted_for(species)
         if accepted is not None:
             raise ValidationError([

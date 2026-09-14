@@ -23,8 +23,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, make_point_wkt
-from _socrata_shared import SocrataDataset, iter_rows, point_lon_lat
+from shared.ingest import emit, make_point_wkt
+from shared.platforms.socrata import SocrataDataset, iter_rows, point_lon_lat
 
 DATASET = SocrataDataset("data.calgary.ca", "99yf-6c5u")
 

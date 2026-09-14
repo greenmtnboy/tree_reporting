@@ -10,7 +10,7 @@ import pyarrow as pa
 from datetime import date, timezone, datetime
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import emit, enforce_tree_schema, normalize_species, validate_coordinates
+from shared.ingest import emit, enforce_tree_schema, normalize_species, validate_coordinates
 
 BASE_URL = "https://gis.arboretum.harvard.edu/arcgis/rest/services/Maps/Explorer/MapServer/34/query"
 PAGE_SIZE = 100_000

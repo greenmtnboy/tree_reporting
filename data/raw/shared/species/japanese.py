@@ -1,6 +1,6 @@
 """Resolve a Japanese inventory's vernacular name to an accepted binomial.
 
-NOT a uv inline script -- a regular importable module, like `_ingest_shared`.
+NOT a uv inline script -- a regular importable module, like `shared.ingest`.
 
 Tokyo publishes its street trees under the Japanese vernacular name and nothing
 else: `イチョウ`, `ケヤキ`, `トキワマンサク`, 446 distinct values over 228,058
@@ -8,7 +8,7 @@ trees on metropolitan roads, with no binomial column anywhere in either file.
 `species` is the join key into the enrichment table, so without this the whole
 city arrives labelled `Unknown`.
 
-This is `_common_name_species` applied to a second language, and the shape is
+This is `shared.species.english` applied to a second language, and the shape is
 deliberately the same -- a curated dict, a key normaliser, and a lookup that
 returns `None` rather than guessing.  It is a separate module rather than more
 rows in that one because the *keys* live in a different script and normalise by
@@ -17,7 +17,7 @@ different rules; the English table's `common_name_key` reduces a value to
 
 Usage:
 
-    from _japanese_species import species_from_japanese_name
+    from shared.species.japanese import species_from_japanese_name
 
     species_from_japanese_name("イチョウ")      # 'Ginkgo biloba'
     species_from_japanese_name("サクラ")        # 'Prunus'  -- a genus is an answer
@@ -133,7 +133,7 @@ from __future__ import annotations
 
 import unicodedata
 
-from _ingest_shared import form_sentinel_for, is_not_a_tree
+from shared.ingest import form_sentinel_for, is_not_a_tree
 
 # Hiragana to katakana, one codepoint block apart.  Japanese plant names are
 # conventionally written in katakana and both files do so almost everywhere,
@@ -630,7 +630,7 @@ def species_from_japanese_name(value: str | None) -> str | None:
     * ``None`` otherwise, which publishes as ``Unknown``.
 
     Passing an *unresolved* value through is refused, as it is in
-    `_common_name_species`, and here the reason is stronger rather than weaker:
+    `shared.species.english`, and here the reason is stronger rather than weaker:
     `sanitize_species` rejects a katakana string outright, so a passed-through
     name would publish as `Unknown` anyway -- but by a longer route, and
     without this module ever admitting that it did not know.

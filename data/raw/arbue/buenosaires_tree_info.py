@@ -12,7 +12,7 @@ import pyarrow as pa
 import pyarrow.csv as pv
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,
@@ -76,7 +76,7 @@ def transform(table: pa.Table) -> pa.Table:
 if __name__ == '__main__':
     # Batched: the Arrow table is compact, but `transform` calls
     # `.to_pylist()` on each column, materialising a Python object per
-    # value across all ~355k rows. See _ingest_shared.stream_table_batches.
+    # value across all ~355k rows. See shared.ingest.stream_table_batches.
     table = stream_table_batches(
         load_table(download_csv()), transform, label='Buenos Aires ingest'
     )

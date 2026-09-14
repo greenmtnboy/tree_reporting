@@ -24,7 +24,7 @@ import pyarrow.parquet as pq
 import io
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ingest_shared import (
+from shared.ingest import (
     emit,
     validate_coordinates,
     download_parquet as _download_parquet,

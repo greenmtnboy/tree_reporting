@@ -1,6 +1,6 @@
 """Read an OGC WFS 2.0 layer (GeoServer) as GeoJSON, one page at a time.
 
-NOT a uv inline script -- a regular importable module, like `_arcgis_shared`.
+NOT a uv inline script -- a regular importable module, like `shared.platforms.arcgis`.
 
 Copenhagen (`wfs-kbhkort.kk.dk`) and Helsinki (`kartta.hel.fi`) both publish
 their tree register and their heritage register on a GeoServer WFS, which is
@@ -12,7 +12,7 @@ Two things here are correctness rather than convenience:
 
 * **Paging needs `sortBy`.**  `startIndex` over an unsorted result is not
   guaranteed stable between requests, so a row can repeat or vanish between
-  pages -- the same rule `_arcgis_shared.iter_features` enforces for
+  pages -- the same rule `shared.platforms.arcgis.iter_features` enforces for
   `orderByFields`.  The layer's primary key is the right column.
 * **`numberMatched` is the termination test, not a short page.**  GeoServer
   reports the total on every page, so the loop stops when it has read that
@@ -23,7 +23,7 @@ Two things here are correctness rather than convenience:
 timestamp column, so a probe reads the register's last edit without reading
 the register.
 
-    from _wfs_shared import WfsLayer, iter_wfs_features, wfs_max_property
+    from shared.platforms.wfs import WfsLayer, iter_wfs_features, wfs_max_property
 
     LAYER = WfsLayer("https://wfs-kbhkort.kk.dk/k101/ows", "k101:trae_basis")
     for page in iter_wfs_features(LAYER, properties=[...], sort_by="uuid"):
@@ -36,9 +36,14 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Iterator
 
-from _ingest_shared import get_json_with_retry
+# This module is also runnable (the portal search at the bottom), and being
+# run directly puts `shared/platforms` on the path rather than `data/raw`,
+# so the package import has to be bootstrapped.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from shared.ingest import get_json_with_retry  # noqa: E402
 
 
 @dataclass(frozen=True)

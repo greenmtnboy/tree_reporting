@@ -7,14 +7,14 @@
 
 Source: "Arbres repertories" on `www.donneesquebec.ca/recherche`, resource
 `13a51853`, 158,127 rows.  Paging and the freshness watermark live in
-`_ckan_shared`.
+`shared.platforms.ckan`.
 
 Note the host carries a **path**: Donnees Quebec serves its CKAN API under
 `/recherche`, not at the domain root, so `CkanResource` is given
 `www.donneesquebec.ca/recherche` and builds `.../recherche/api/3/action/...`
 from it.  It is a provincial aggregator rather than a city portal, which is
 also why `datastore_search_sql` there rejects a `CAST` with HTTP 403 -- another
-reason `_ckan_shared` reads rows only through the paged search.
+reason `shared.platforms.ckan` reads rows only through the paged search.
 
 **`DIAMETRE` is not always a diameter at breast height**, and this is the one
 field mapping here that is a judgement rather than a rename.  `POSITION_MESURE`
@@ -53,8 +53,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _ckan_shared import CkanResource, iter_datastore_rows
-from _ingest_shared import (
+from shared.platforms.ckan import CkanResource, iter_datastore_rows
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

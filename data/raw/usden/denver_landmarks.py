@@ -29,8 +29,8 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, iter_features
-from _ingest_shared import emit, make_point_wkt
+from shared.platforms.arcgis import FeatureLayer, iter_features
+from shared.ingest import emit, make_point_wkt
 
 LAYER = FeatureLayer(
     "https://services1.arcgis.com/zdB7qR0BtYrg0Xpl/arcgis/rest/services/"

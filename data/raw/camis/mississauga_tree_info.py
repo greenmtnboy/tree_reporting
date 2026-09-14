@@ -8,7 +8,7 @@
 Source: "City Owned Tree Inventory" (`2023_City_Owned_Tree_Inventory`) on the
 city's ArcGIS Hub, 499,331 rows -- the largest ArcGIS layer this repo reads.
 Paging, the freshness watermark and Esri's epoch-milliseconds live in
-`_arcgis_shared`.
+`shared.platforms.arcgis`.
 
 **There is no botanical name in this layer, and the column called `BOTNAME` is
 the trap.**  It holds a six-letter contraction of the *common* name --
@@ -16,7 +16,7 @@ the trap.**  It holds a six-letter contraction of the *common* name --
 inverted English name (MAple NOrway, ASh GReen, LOcust HOney, SPruce
 COlorado).  `BOTDESC` is that contraction spelled out (`NORWAY MAPLE`, `ASH
 SPP.`), 330 distinct values, and it is the only species information the layer
-carries.  `_common_name_species.species_from_common_name` is what turns it
+carries.  `shared.species.english.species_from_common_name` is what turns it
 into a taxon; 326 of the 330 values resolve, covering 426,760 of 427,781 rows
 that have one.
 
@@ -69,9 +69,9 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _arcgis_shared import FeatureLayer, iter_attributes
-from _common_name_species import species_from_common_name
-from _ingest_shared import (
+from shared.platforms.arcgis import FeatureLayer, iter_attributes
+from shared.species.english import species_from_common_name
+from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,

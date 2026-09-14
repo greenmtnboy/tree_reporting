@@ -30,7 +30,7 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _ingest_shared import UpstreamUnavailable, emit_freshness  # noqa: E402
+from shared.ingest import UpstreamUnavailable, emit_freshness  # noqa: E402
 from enrichment._tree_shared import DATA_VERSION  # noqa: E402
 
 TREES_BASE_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees"

@@ -27,7 +27,7 @@ a missing or unknown city is a hard failure, and the extract does not run.
 
     cd data && trilogy refresh osm_staging/ussfo_osm_staging.preql
 
-The extraction itself lives in raw/_osm_shared.py, shared with the manual
+The extraction itself lives in raw/shared/osm.py, shared with the manual
 `raw/{code}/{city}_osm_extract.py` path, so the two cannot drift on content.
 """
 
@@ -35,8 +35,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "raw"))
-from _ingest_shared import parse_pushdown_filters  # noqa: E402
-from _osm_shared import OSM_CITY_NAMES, stage_city_rows  # noqa: E402
+from shared.ingest import parse_pushdown_filters  # noqa: E402
+from shared.osm import OSM_CITY_NAMES, stage_city_rows  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> None:
     if code not in OSM_CITY_NAMES:
         raise SystemExit(
             f"{code} has no OSM extract configured; add it to OSM_DATA_SOURCES "
-            "and CITY_BOUNDS in raw/_ingest_shared.py first"
+            "and CITY_BOUNDS in raw/shared/ingest.py first"
         )
     stage_city_rows(code)
 
