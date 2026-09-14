@@ -214,12 +214,11 @@ secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET"]
 # scaffolder, the audits, the fits, the calibrator, the admin form), the
 # manual counterparts of scheduled extracts (`*_osm_extract.py` -- the job
 # runs osm_staging/osm_rows.py), the one-off geocoders and Overpass stagers
-# behind committed CSVs and staging objects, and a scratch model.  Nothing
+# behind committed CSVs and staging objects.  Nothing
 # here is named in a `file` clause or imported by a runtime script; `tests/
 # test_cloud_jobs.py::test_excluded_files_are_not_reachable` keeps it so.
 # Glob semantics are fnmatch over the path relative to data/.
 exclude = [
-    "raw/debug.preql",
     "raw/new_city.py",
     "raw/species_audit.py",
     "raw/crown_allometry_fit.py",
@@ -229,7 +228,6 @@ exclude = [
     "raw/dedup_cells.py",
     "raw/enrichment_admin.py",
     "raw/backfill_enrichment.py",
-    "raw/validate_external_tree_sources.py",
     "raw/*/*_osm_extract.py",
     "raw/*/*_landmarks_geocode.py",
     "raw/*/*_landmarks_extract.py",

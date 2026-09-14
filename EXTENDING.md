@@ -2211,7 +2211,7 @@ trilogy cloud --org trilogy-data jobs push --source data --config adhoc.toml \
     --exclude "raw/tests/*" --exclude "raw/enrichment/*" \
     --exclude "osm_staging/*" --exclude "landmark_staging/*" \
     --exclude "raw/{every other city}/*" \
-    --exclude raw/debug.preql --exclude raw/tree_info.preql ... # every root model the city does not import
+    --exclude raw/tree_info.preql --exclude raw/landmark_info.preql ... # every root model the city does not import
 trilogy cloud --org trilogy-data jobs run adhoc-city-{code} --wait --logs
 trilogy cloud --org trilogy-data jobs delete adhoc-city-{code}
 ```
@@ -2219,7 +2219,7 @@ trilogy cloud --org trilogy-data jobs delete adhoc-city-{code}
 Two things about that bundle are load-bearing. **The worker executes the
 bundle as a directory, not the entrypoint**: its state snapshot parses every
 `.preql` it finds, so a root model that imports an excluded city
-(`debug.preql`, `tree_info.preql`, `landmark_info.preql`) fails the run before
+(`tree_info.preql`, `landmark_info.preql`) fails the run before
 it starts, and a city directory holding both the tree and the landmark model
 builds *both* — exclude `{slug}_tree_info.preql` from the landmark job's
 bundle or the landmark run re-does the tree ingest. And **the four new-city
