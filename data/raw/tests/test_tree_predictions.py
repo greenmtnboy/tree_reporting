@@ -30,6 +30,8 @@ DATA_DIR = RAW_DIR.parent
 REPO_DIR = DATA_DIR.parent
 
 sys.path.insert(0, str(RAW_DIR))
+# The two fits are workstation tools and live with the rest of them.
+sys.path.insert(0, str(RAW_DIR / "tools"))
 
 import crown_allometry_fit as fit  # noqa: E402
 import dbh_age_fit as age_fit  # noqa: E402
@@ -98,7 +100,7 @@ def test_the_fallback_block_in_the_model_is_current(rows):
 
 def test_check_flag_agrees():
     result = subprocess.run(
-        [sys.executable, str(RAW_DIR / "crown_allometry_fit.py"), "--check"],
+        [sys.executable, str(RAW_DIR / "tools" / "crown_allometry_fit.py"), "--check"],
         capture_output=True,
         text=True,
         cwd=RAW_DIR,
@@ -182,7 +184,7 @@ def test_the_age_fallback_block_in_the_model_is_current(age_rows):
 
 def test_age_check_flag_agrees():
     result = subprocess.run(
-        [sys.executable, str(RAW_DIR / "dbh_age_fit.py"), "--check"],
+        [sys.executable, str(RAW_DIR / "tools" / "dbh_age_fit.py"), "--check"],
         capture_output=True,
         text=True,
         cwd=RAW_DIR,

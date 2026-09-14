@@ -37,7 +37,7 @@ Four things about that are load-bearing, and each replaced something that broke:
   `raw/tree_enrichment.preql`, which is species-only. Collapsing the two puts a
   second tree source in the planner's scope and changes what the charts return —
   see the join-type bug under Dashboard query compilation below.
-- **Cadence is measured.** `data/raw/portal_cadence.py --record` samples every
+- **Cadence is measured.** `data/raw/tools/portal_cadence.py --record` samples every
   freshness probe and derives each portal's real publishing interval from the
   distinct watermarks it has recorded in `portal_cadence.json`. Do not retune a
   cron from a single observation.
@@ -87,14 +87,14 @@ it. The model's DBH estimate is never published as a measurement. See
 `raw/tree_predictions.preql` publishes `tree_predictions_v{n}.parquet`: one
 row per rollup tree with a predicted crown width, a stand-density covariate,
 and null placeholders for height and age. The crown model is a genus-level
-power law fitted on the open Tallo database by `raw/crown_allometry_fit.py`,
+power law fitted on the open Tallo database by `raw/tools/crown_allometry_fit.py`,
 committed as `raw/crown_width_coefficients.csv` and applied in DuckDB (no
 script at refresh time but the freshness probe). Read the fit script's
 docstring before touching the model: it records why Tallo, the quality gate,
 the fallback order, and the two things the model deliberately is not
 (urban-calibrated, density-adjusted). A tree with a planting date and no
 diameter gets its diameter predicted from its age first -- a second
-genus-level power law, `raw/dbh_age_fit.py`, fitted on the rollup's own 1.9M
+genus-level power law, `raw/tools/dbh_age_fit.py`, fitted on the rollup's own 1.9M
 dated, measured trees and committed as `raw/dbh_age_coefficients.csv` --
 and the crown model is applied to that. What is *not* a planting date is the
 ingest's problem, not the model's: `enforce_tree_schema` nulls a date before
@@ -128,7 +128,7 @@ pins the invariants. arborary.world shows the change on its next build.
 
 ### Adding a city
 
-Do not hand-write the twenty-odd registry edits. `data/raw/new_city.py` writes
+Do not hand-write the twenty-odd registry edits. `data/raw/tools/new_city.py` writes
 the mechanical ones from a single spec and `data/raw/tests/test_city_wiring.py`
 walks the same list and names anything still missing — the enum, the ecoregion
 case, four sets of freshness properties, the cross-city imports and merges, the

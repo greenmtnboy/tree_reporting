@@ -5,7 +5,7 @@
 # ///
 """Scaffold a new city: every registry edit and every boilerplate file.
 
-    cd data/raw && uv run new_city.py \\
+    cd data/raw && uv run tools/new_city.py \\
         --code USDEN --name Denver --slug denver \\
         --center 39.7392,-104.9903 \\
         --bounds 39.45,39.95,-105.65,-104.55 \\
@@ -49,7 +49,7 @@ import re
 import sys
 from pathlib import Path
 
-RAW = Path(__file__).resolve().parent
+RAW = Path(__file__).resolve().parents[1]
 DATA = RAW.parent
 REPO = DATA.parent
 SRC = REPO / "src" / "src"
@@ -625,7 +625,7 @@ def build(args) -> Edits:
         what="CITY_TERRITORY", marker=f"'{code}': (({lo_lat}, {hi_lat}",
     )
     # The dedup grid cell starts at the common 10 m and is a placeholder until
-    # measured: `uv run osm_dedup_validation.py --city {code}` after the first
+    # measured: `uv run tools/osm_dedup_validation.py --city {code}` after the first
     # build, then move it to 20 m only if the 5-10 m band is clearly
     # duplicate-dominated.  tree_dedup.preql reads it through dedup_cells.py.
     e.sub_once(
@@ -873,7 +873,7 @@ def main() -> None:
   3. Bootstrap the OSM staging object:
        cd data/raw && uv run {args.code.lower()}/{args.slug}_osm_extract.py
   4. CALIBRATE the dedup cell size -- do not ship the placeholder:
-       uv run osm_dedup_validation.py --city {args.code}
+       uv run tools/osm_dedup_validation.py --city {args.code}
   5. Fill in the two TODO attribution lines in src/src/data/sourceCatalog.ts
      and the README source tables.
 

@@ -483,10 +483,10 @@ Mirror `shared/platforms/socrata.py`, which mirrors `shared/platforms/arcgis.py`
 2. Check the id column for uniqueness *and* nulls over the whole table.
 3. Resolve the ecoregion at the centroid, measure the coordinate extents from
    the data rather than guessing `CITY_BOUNDS`.
-4. `uv run new_city.py ...`, then fill the four things it leaves alone.
+4. `uv run tools/new_city.py ...`, then fill the four things it leaves alone.
 5. Bootstrap the OSM staging object, then calibrate the dedup cell
    (`osm_dedup_validation.py --city CODE`) -- never copy a cell size.
-6. `uv run dedup_cells.py --write`, then `pytest tests -q`.
+6. `uv run tools/dedup_cells.py --write`, then `pytest tests -q`.
 
 ---
 

@@ -21,7 +21,7 @@ cd data/raw && uv run shared/platforms/arcgis.py opendata-geospatialdenver.hub.a
 curl -sG "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/Resolve_Ecoregions/FeatureServer/0/query"   --data-urlencode "geometry=-104.9903,39.7392" --data-urlencode "geometryType=esriGeometryPoint"   --data-urlencode "inSR=4326" --data-urlencode "spatialRel=esriSpatialRelIntersects"   --data-urlencode "outFields=ECO_ID,ECO_NAME" --data-urlencode "returnGeometry=false" --data-urlencode "f=json"
 
 # 3. Scaffold every registry edit and every boilerplate file:
-cd data/raw && uv run new_city.py     --code USDEN --name Denver --slug denver     --center 39.7392,-104.9903     --bounds 39.45,39.95,-105.65,-104.55     --source-label DENVER_OPENDATA     --ecoregion 402     --city-cron "0 40 15 * * SUN,WED" --osm-cron "0 30 2 * * SAT"
+cd data/raw && uv run tools/new_city.py     --code USDEN --name Denver --slug denver     --center 39.7392,-104.9903     --bounds 39.45,39.95,-105.65,-104.55     --source-label DENVER_OPENDATA     --ecoregion 402     --city-cron "0 40 15 * * SUN,WED" --osm-cron "0 30 2 * * SAT"
 ```
 
 `--dry-run` first if you want to see the twenty-seven edits before they land.
@@ -42,7 +42,7 @@ measurement or a look at the portal:
    read before its `osm-{code}` job exists in production:
    `uv run {slug}/{slug}_osm_extract.py`.
 4. **Calibrate the dedup cell size.** Never copy one:
-   `uv run osm_dedup_validation.py --city {CODE}`. Before the city's first
+   `uv run tools/osm_dedup_validation.py --city {CODE}`. Before the city's first
    credentialed build neither the staged extract nor the published parquet
    exists in GCS, so pass `--osm-parquet` / `--inventory-parquet` and calibrate
    against local files.
@@ -149,7 +149,7 @@ and putting the rollup in its scope gives the browser's planner a second way to
 answer a tree question — it returned 2 where the fixtures say 3. Job view and
 app view are two different file sets on purpose.
 
-**Cadence is measured, not guessed.** `data/raw/portal_cadence.py --record`
+**Cadence is measured, not guessed.** `data/raw/tools/portal_cadence.py --record`
 runs every city's freshness probe, keeps the distinct watermarks it has seen in
 `portal_cadence.json`, and derives each portal's real publishing interval from
 the changes. It reads the crons back out of `trilogy.toml`, so its verdict
@@ -670,7 +670,7 @@ tree grain:
 | `predicted_height_m`, `predicted_age_years` | null; reserved |
 
 **The model is one sourced power law per genus, and its provenance is the
-point.** `raw/crown_allometry_fit.py` fits `ln(crown_radius) = ln_a + b *
+point.** `raw/tools/crown_allometry_fit.py` fits `ln(crown_radius) = ln_a + b *
 ln(dbh_cm)` per genus on Tallo (Jucker et al. 2022; 312,829 trees with a
 measured crown radius, 1,453 genera, CC BY 4.0), gates each fit (n >= 30,
 r2 >= 0.2, 0.3 <= b <= 1.3, a largest fitted stem of at least 20 cm), and
@@ -682,7 +682,7 @@ through to the division constants rendered into the model by `tree_form`.
 Refit with
 
 ```bash
-cd data/raw && uv run crown_allometry_fit.py --write --coverage
+cd data/raw && uv run tools/crown_allometry_fit.py --write --coverage
 ```
 
 which downloads Tallo to `raw/.cache/` (gitignored), rewrites
@@ -704,7 +704,7 @@ can be measured rather than assumed.
 **The age fallback is a second fit of the same shape, on our own trees.**
 303,612 published trees (September 2026: most of Amsterdam's dated trees, and
 tens of thousands in Melbourne, San Francisco and Los Angeles) carry a
-planting date and no diameter, so `raw/dbh_age_fit.py` fits
+planting date and no diameter, so `raw/tools/dbh_age_fit.py` fits
 `ln(dbh_cm) = ln_a + b * ln(age_years)` per genus on the rollup's own trees
 that carry both -- 1.9M of them in 23 cities, joined to the enrichment table
 for the corrected genus exactly as the model joins it -- with the same gate
@@ -718,7 +718,7 @@ reached. Against i-Tree's open-grown base rate of 0.83 cm a year, Acer comes
 out at 12.6, 27.0 and 43.6 cm at 10, 30 and 60 years. Refit with
 
 ```bash
-cd data/raw && uv run dbh_age_fit.py --write
+cd data/raw && uv run tools/dbh_age_fit.py --write
 ```
 
 which reads the two published parquets, rewrites `dbh_age_coefficients.csv`
@@ -1181,7 +1181,7 @@ Add the city to `OSM_DATA_SOURCES` in `data/raw/shared/ingest.py`, declare the
 `OSM_{CODE}` value in its source enum and the staging partition in its tree
 model, and give it a row in `DEDUP_CELL_METRES` (start at 10, then measure with
 `osm_dedup_validation.py --city {CODE}` after the first build — see the cluster
-merge block above; do not copy a number) followed by `uv run dedup_cells.py
+merge block above; do not copy a number) followed by `uv run tools/dedup_cells.py
 --write`.
 
 ### 9. Schedule It
@@ -1228,7 +1228,7 @@ greater than or equal to 1`, after the jobs themselves have been created.
 after its own OSM extract and again mid-week. Then measure rather than guess:
 
 ```bash
-cd data/raw && uv run ./portal_cadence.py --record --city {CODE}
+cd data/raw && uv run ./tools/portal_cadence.py --record --city {CODE}
 ```
 
 Run it repeatedly over a few weeks. It records each distinct watermark the
@@ -1637,12 +1637,12 @@ Mark-only pairs go in `SPECIES_SYNONYMS`, which has carried that case since
 were refused as two real taxa.
 
 **Never curate this list by eye, and never by tree count.** Run
-`data/raw/species_audit.py`, which finds every pair of published names within
+`data/raw/tools/species_audit.py`, which finds every pair of published names within
 two edits and asks POWO to adjudicate each one:
 
 ```bash
-cd data/raw && uv run species_audit.py          # the report
-cd data/raw && uv run species_audit.py --map    # entries to paste
+cd data/raw && uv run tools/species_audit.py          # the report
+cd data/raw && uv run tools/species_audit.py --map    # entries to paste
 ```
 
 Two edits is wide enough to catch `Liquidambar stryaciflua` and wide enough to

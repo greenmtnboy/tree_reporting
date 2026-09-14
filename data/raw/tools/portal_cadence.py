@@ -15,8 +15,8 @@ sampled over time.
 
 Two modes, and the second is the one that matters:
 
-    uv run ./portal_cadence.py                 # snapshot: watermark + age + cron
-    uv run ./portal_cadence.py --record        # snapshot, appended to history
+    uv run ./tools/portal_cadence.py                 # snapshot: watermark + age + cron
+    uv run ./tools/portal_cadence.py --record        # snapshot, appended to history
 
 `--record` writes into `portal_cadence.json` (committed).  A single sample
 cannot measure a cadence -- "Vancouver published 3 days ago" is consistent with
@@ -56,10 +56,11 @@ from statistics import median
 import pyarrow as pa
 import pyarrow.ipc as ipc
 
-RAW_DIR = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent
+RAW_DIR = HERE.parent
 DATA_DIR = RAW_DIR.parent
 CONFIG = DATA_DIR / "trilogy.toml"
-HISTORY = RAW_DIR / "portal_cadence.json"
+HISTORY = HERE / "portal_cadence.json"
 
 # A probe that reports the epoch is `emit_freshness` degrading a dead portal,
 # not a publication.  Recording it would invent a "publication" on every

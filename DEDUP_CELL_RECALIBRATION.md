@@ -96,7 +96,7 @@ cd data/raw
 for c in USSFO USNYC USBOS FRPAR USBTV CAVAN DEBER NLAMS GBLON AUMEL \
          ARBUE USLAX USWAS USTEM GRATH GRMLO GRSAN USDEN; do
   echo "### $c"
-  uv run osm_dedup_validation.py --city "$c" | sed -n '/what each cell size costs/,$p'
+  uv run tools/osm_dedup_validation.py --city "$c" | sed -n '/what each cell size costs/,$p'
 done
 ```
 
@@ -107,7 +107,7 @@ Then, per city:
    asymmetry says round **down**, not up — a tie is not a reason to hide a tree.
 2. Edit `DEDUP_CELL_METRES` in `shared/ingest.py`, replacing the band-based
    comment with the marginal numbers, as the three Canadian entries do.
-3. `uv run dedup_cells.py --write` — the model carries the cell as an inline
+3. `uv run tools/dedup_cells.py --write` — the model carries the cell as an inline
    `VALUES` block and `test_dedup_cells.py` fails if it goes stale.
 4. Widen `test_cell_is_a_calibrated_size`'s allowed set if a size lands outside
    `(4, 6, 10, 20)`.

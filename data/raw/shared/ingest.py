@@ -1930,7 +1930,7 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 #
 # CALIBRATED PER CITY, never copied.  Distance alone cannot separate a
 # re-mapped inventory tree from the next tree in a planted row; what does is
-# pair structure, measured by `uv run osm_dedup_validation.py --city CODE`:
+# pair structure, measured by `uv run tools/osm_dedup_validation.py --city CODE`:
 # the mutual-nearest-neighbour rate in the 5-10 m band.  Below ~50% that band
 # is mostly planting-row neighbours and the cell stays at 10 m; only a band
 # that is *clearly* duplicate-dominated (the script's bar is 60%) earns 20 m.

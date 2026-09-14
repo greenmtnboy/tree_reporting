@@ -5,9 +5,9 @@
 # ///
 """Find species names two cities spell differently, and ask POWO which is right.
 
-    cd data/raw && uv run species_audit.py                 # report, all cities
-    cd data/raw && uv run species_audit.py --city USDEN    # one city's names
-    cd data/raw && uv run species_audit.py --map           # emit map entries
+    cd data/raw && uv run tools/species_audit.py                 # report, all cities
+    cd data/raw && uv run tools/species_audit.py --city USDEN    # one city's names
+    cd data/raw && uv run tools/species_audit.py --map           # emit map entries
 
 Inventories disagree about spelling, and `species` is the join key into the
 enrichment table, so a disagreement is not cosmetic: `Liquidambar stryaciflua`
@@ -82,7 +82,7 @@ import time
 import unicodedata
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from shared.ingest import (  # noqa: E402
     MUNICIPAL_DATA_SOURCES,

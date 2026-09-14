@@ -7,7 +7,7 @@ form and nothing is ever deduplicated; and a hand-copied degree constant
 drifts from the metres written next to it.  The table is keyed by city,
 converted to degrees in one place, and generated into the model by
 dedup_cells.py -- the check here is what catches an edit to the metres that
-was not followed by `uv run dedup_cells.py --write`.
+was not followed by `uv run tools/dedup_cells.py --write`.
 """
 
 from __future__ import annotations
@@ -20,6 +20,8 @@ import pytest
 
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
+# The generator is a workstation tool and lives with the rest of them.
+sys.path.insert(0, str(RAW_DIR / "tools"))
 
 from shared.ingest import (  # noqa: E402
     CITY_BOUNDS,
@@ -80,7 +82,7 @@ def test_model_block_is_generated_from_the_table():
     """
     text = MODEL.read_text(encoding="utf-8")
     assert current_block(text) == render_block(), (
-        "tree_dedup.preql is stale; run `cd data/raw && uv run dedup_cells.py --write`"
+        "tree_dedup.preql is stale; run `cd data/raw && uv run tools/dedup_cells.py --write`"
     )
     for code in DEDUP_CELL_METRES:
         assert f"('{code}', " in text

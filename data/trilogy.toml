@@ -54,7 +54,7 @@ studio_url="http://localhost:5173/trilogy-studio-core/"
 #     carried 4 GiB for all seventeen and still OOM-died part-way through a
 #     full rebuild, taking sixteen healthy cities with it.
 #   * **Every city was polled on the fastest city's schedule.** Measured with
-#     `raw/portal_cadence.py` (which is committed precisely so this is not a
+#     `raw/tools/portal_cadence.py` (which is committed precisely so this is not a
 #     guess): San Francisco, Boston, Amsterdam and Cambridge move daily,
 #     while Los Angeles last published in 2016, Tempe in 2024 and Burlington
 #     in 2024. Eleven of the seventeen portals move on a scale of months to
@@ -96,10 +96,10 @@ studio_url="http://localhost:5173/trilogy-studio-core/"
 #
 # Re-measure before re-tiering, and record the measurement:
 #
-#     cd data/raw && uv run ./portal_cadence.py --record
+#     cd data/raw && uv run ./tools/portal_cadence.py --record
 #
 # A single sample cannot measure a cadence, so that script keeps a history in
-# `raw/portal_cadence.json` and derives the interval from *changes* to each
+# `raw/tools/portal_cadence.json` and derives the interval from *changes* to each
 # watermark. It reads the crons back out of this file, so its `verdict`
 # column is a live comparison rather than a second copy of the schedule.
 #
@@ -210,32 +210,29 @@ secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET"]
 # request whose body the platform caps at 2 MiB.  At 41 cities the bundle
 # reached 2,092,500 bytes -- 4.6 KB under -- and each city adds ~40 KB, so
 # the next one would have failed the sync on main with `413 length limit
-# exceeded`.  These are the files no job executes: workstation tools (the
-# scaffolder, the audits, the fits, the calibrator, the admin form), the
-# manual counterparts of scheduled extracts (`*_osm_extract.py` -- the job
-# runs osm_staging/osm_rows.py), the one-off geocoders and Overpass stagers
-# behind committed CSVs and staging objects.  Nothing
-# here is named in a `file` clause or imported by a runtime script; `tests/
-# test_cloud_jobs.py::test_excluded_files_are_not_reachable` keeps it so.
-# Glob semantics are fnmatch over the path relative to data/.
+# exceeded`.  These are the files no job executes: the workstation tools --
+# the scaffolder, the audit, the fits, the calibrator, the enrichment form
+# and its backfill, each now in a directory of its own -- and the manual
+# counterparts of scheduled extracts (`*_osm_extract.py`; the job runs
+# osm_staging/osm_rows.py) plus the one-off geocoders and Overpass stagers
+# behind committed CSVs and staging objects.  Nothing here is named in a
+# `file` clause or imported by a runtime script; `tests/test_cloud_jobs.py::
+# test_excluded_files_are_not_reachable` keeps it so.  Glob semantics are
+# fnmatch over the path relative to data/.
 exclude = [
-    "raw/new_city.py",
-    "raw/species_audit.py",
-    "raw/crown_allometry_fit.py",
-    "raw/dbh_age_fit.py",
-    "raw/osm_dedup_validation.py",
-    "raw/portal_cadence.py",
-    "raw/dedup_cells.py",
+    # The workstation tools, and the enrichment form and backfill beside the
+    # package they edit.  Each of these directories holds nothing a job runs,
+    # so the whole directory goes -- including the gitignored working files a
+    # checkout accumulates in them (the audit's 100 KB of POWO cache is what
+    # took a sync from a workstation over the cap while CI was under).
+    "raw/tools/*",
     "raw/enrichment/admin/*",
     "raw/enrichment/backfill.py",
+    # The manual counterparts of scheduled extracts, and the one-off geocoders
+    # and Overpass stagers behind committed CSVs and staging objects.
     "raw/*/*_osm_extract.py",
     "raw/*/*_landmarks_geocode.py",
     "raw/*/*_landmarks_extract.py",
-    # A gitignored working file of the audit.  A clean clone never has it; a
-    # checkout does, and 100 KB of POWO cache is what took a sync from a
-    # workstation over the cap while CI was under.  (The admin form's own
-    # staged edits sit under `raw/enrichment/admin/`, already excluded above.)
-    "raw/species_audit_cache.json",
 ]
 
 # ===========================================================================

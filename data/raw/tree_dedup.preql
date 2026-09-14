@@ -117,7 +117,7 @@ end;
 # scripts: pytrilogy drops a `file` datasource whose path does not exist, and
 # an unbound cell size made the planner error out while exploring the merge
 # instead of reading the published parquet.  Regenerate with
-# `uv run dedup_cells.py --write`; `test_dedup_cells.py` checks it is current.
+# `uv run tools/dedup_cells.py --write`; `test_dedup_cells.py` checks it is current.
 property city.cell_lat_deg float; # one grid cell, in degrees of latitude
 property city.cell_lon_deg float; # one grid cell, in degrees of longitude at the city's latitude
 

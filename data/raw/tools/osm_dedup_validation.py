@@ -5,7 +5,7 @@
 # ///
 """Ground-truth calibration for a city's OSM dedup grid.
 
-    cd data/raw && uv run osm_dedup_validation.py --city USSFO
+    cd data/raw && uv run tools/osm_dedup_validation.py --city USSFO
 
 NOT part of the refresh pipeline — a standalone analysis, run once per city
 before trusting a cell size, and again whenever the inventory or the staged OSM
@@ -45,7 +45,7 @@ import duckdb
 import numpy as np
 from scipy.spatial import cKDTree
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from shared.ingest import CITY_BOUNDS, staging_url  # noqa: E402
 
 TREES_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees"
