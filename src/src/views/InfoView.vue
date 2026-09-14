@@ -8,7 +8,7 @@
         attributes.
       </p>
 
-      <section>
+      <section id="data-sources">
         <h2>Data Sources</h2>
 
         <div class="source-card">
@@ -111,11 +111,22 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   LANDMARK_SOURCES,
   SPECIES_ENRICHMENT_SOURCES,
   TREE_INVENTORY_SOURCES,
 } from '../data/sourceCatalog'
+
+const route = useRoute()
+
+// .info-page is its own scroll container, so the router's window-level hash
+// scrolling never reaches a section anchor. Scroll to it ourselves.
+onMounted(() => {
+  if (!route.hash) return
+  document.getElementById(route.hash.slice(1))?.scrollIntoView({ block: 'start' })
+})
 
 const treeInventorySources = TREE_INVENTORY_SOURCES
 const speciesEnrichmentSources = SPECIES_ENRICHMENT_SOURCES

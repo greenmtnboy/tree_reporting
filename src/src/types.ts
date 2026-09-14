@@ -48,6 +48,13 @@ export interface ToolCallRecord {
   id: string
   name: string
   input: Record<string, unknown>
+  /** The short outcome the executor reported for the UI: a message or an error. */
   result: string
   isError?: boolean
+  /**
+   * The full text the model was sent as this call's result: query rows, the
+   * error with its context. It arrives on the hidden user message that follows
+   * the call, so it is joined on afterwards; undefined until then.
+   */
+  output?: string
 }

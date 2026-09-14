@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import type { ChatMessage as LibChatMessage } from '@trilogy-data/trilogy-studio-components/llm'
-import type { ChatMessage, ToolCallRecord } from '../types'
+import type { ChatMessage } from '../types'
+import { attachToolOutputs, toToolCallRecords } from '../lib/chatToolRecords'
 import {
   buildCustomTrilogyPrompt,
   runToolLoop,
@@ -549,24 +550,6 @@ function cancelPendingNavigationTimers() {
       window.clearTimeout(timerId)
     }
   }
-}
-
-// Convert a lib message's executedToolCalls to the app's ToolCallRecord[] for UI display.
-// Filters out return_to_user since its message surfaces as the assistant's content instead.
-function toToolCallRecords(
-  executedToolCalls?: LibChatMessage['executedToolCalls'],
-): ToolCallRecord[] | undefined {
-  const display = executedToolCalls?.filter(
-    (tc) => tc.name !== 'return_to_user' && tc.name !== 'send_user_message',
-  )
-  if (!display?.length) return undefined
-  return display.map((tc) => ({
-    id: tc.id,
-    name: tc.name,
-    input: tc.input as Record<string, unknown>,
-    result: tc.result?.message || tc.result?.error || '',
-    isError: !(tc.result?.success ?? true),
-  }))
 }
 
 export function useChat() {
@@ -1122,7 +1105,12 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
     const persistence: MessagePersistence = {
       addMessage: (msg) => {
         llmHistory.push(msg)
-        if (msg.hidden) return
+        if (msg.hidden) {
+          // The tool results message: carry the full text the model was sent
+          // onto the pills' records so the inspector can show it.
+          attachToolOutputs(messages.value, msg.toolResults)
+          return
+        }
 
         // When return_to_user fires, its message is the user-visible answer
         const returnToUser = msg.executedToolCalls?.find((tc) => tc.name === 'return_to_user')

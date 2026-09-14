@@ -23,6 +23,7 @@ import {
   cityTreeParquetUrl,
   cityLandmarkParquetUrl,
 } from './parquetUrls'
+import { normalizeValue } from './normalizeValue'
 
 const WEB_MERCATOR_MAX = 20037508.342789244
 const WEB_MERCATOR_WORLD = WEB_MERCATOR_MAX * 2
@@ -1677,39 +1678,6 @@ async function prewarmLodCaches(): Promise<void> {
 
 function setAutoTileFetchEnabled(enabled: boolean) {
   autoTileFetchEnabled = !!enabled
-}
-
-function normalizeValue(v: unknown): unknown {
-  if (typeof v === 'function') {
-    return undefined
-  }
-  if (typeof v === 'bigint') {
-    const n = Number(v)
-    return Number.isSafeInteger(n) ? n : v.toString()
-  }
-  if (v instanceof Date) {
-    return v.toISOString()
-  }
-  if (
-    v !== null &&
-    v !== undefined &&
-    (v as { isLuxonDateTime?: boolean }).isLuxonDateTime === true &&
-    typeof (v as { toISO?: () => string | null }).toISO === 'function'
-  ) {
-    return (v as { toISO: () => string | null }).toISO() ?? null
-  }
-  if (v instanceof Uint8Array) {
-    return Array.from(v)
-  }
-  if (Array.isArray(v)) {
-    return v.map((item) => normalizeValue(item))
-  }
-  if (v && typeof v === 'object') {
-    return Object.fromEntries(
-      Object.entries(v as Record<string, unknown>).map(([key, value]) => [key, normalizeValue(value)]),
-    )
-  }
-  return v
 }
 
 async function runQuery(sql: string): Promise<{ columns: string[]; rows: Record<string, unknown>[] }> {

@@ -219,6 +219,7 @@ import { firebaseAvailable } from '../lib/firebase'
 import { formatDataSource } from '../data/dataSources'
 import { speciesSentinel } from '../data/species'
 import { plantYearFrom } from '../lib/achievements'
+import { formatPlantDate, formatTreeAge } from '../lib/plantDate'
 import {
   acquireSharedPositionWatch,
   getGeolocationPermissionState,
@@ -762,6 +763,7 @@ const treeCardStyle = computed(() => {
 function selectTree(row: PopupTreeRow, coords: [number, number]): void {
   selectedTree.value = row
   selectedTreeAnchor.value = coords
+  syncTreeRoute(row.tree_id)
   updateTreeCardPosition()
   // The card element does not exist yet on the first call, so clamping has no
   // dimensions to work with. Re-run once it has been rendered and measured.
@@ -809,7 +811,91 @@ function closeTreeCard(): void {
   selectedTree.value = null
   selectedTreeAnchor.value = null
   selectedTreeScreenPoint.value = null
+  deepLinkInFlight = null
+  syncTreeRoute(null)
 }
+
+// --- Tree deep links: #/?city=USLAX&tree=lax-54642 ---
+//
+// The selected tree is mirrored into `?tree=` so the address bar is always a
+// shareable link to it, and a URL that arrives with `?tree=` set opens that
+// tree's card once its city is loaded. The city comes from `?city=` (or the
+// usual bootstrap resolution); a tree id is only looked up in the loaded city's
+// trees_fast, and an id that is not there drops the param rather than erroring.
+
+function readRouteTreeId(value: unknown): string | null {
+  const id = Array.isArray(value) ? value[0] : value
+  if (typeof id !== 'string') return null
+  const trimmed = id.trim()
+  return trimmed && trimmed.length <= 64 ? trimmed : null
+}
+
+function syncTreeRoute(treeId: string | null): void {
+  if (readRouteTreeId(route.query.tree) === treeId) return
+  const query = { ...route.query }
+  if (treeId) query.tree = treeId
+  else delete query.tree
+  void router.replace({ query })
+}
+
+// The id whose lookup-and-fly is in progress, so a second trigger (the phase
+// watcher and the query watcher can both fire for one navigation) does not
+// start a second flight to the same tree.
+let deepLinkInFlight: string | null = null
+
+async function openTreeFromRoute(): Promise<void> {
+  const treeId = readRouteTreeId(route.query.tree)
+  if (!treeId || !mapRef.value || lifecyclePhase.value !== 'ready') return
+  if (selectedTree.value?.tree_id === treeId || deepLinkInFlight === treeId) return
+  deepLinkInFlight = treeId
+  try {
+    const safeId = treeId.replace(/'/g, "''")
+    const { rows } = await duckQuery(
+      `SELECT longitude, latitude FROM trees_fast WHERE tree_id = '${safeId}' LIMIT 1`,
+    )
+    const row = rows[0] as { longitude: number; latitude: number } | undefined
+    // The URL or the city may have moved on while the query ran.
+    if (readRouteTreeId(route.query.tree) !== treeId || deepLinkInFlight !== treeId || !mapRef.value) return
+    if (!row) {
+      console.warn(`[TreeDeepLink] no tree "${treeId}" in ${selectedCity.value}; dropping ?tree`)
+      deepLinkInFlight = null
+      syncTreeRoute(null)
+      return
+    }
+    const coords: [number, number] = [Number(row.longitude), Number(row.latitude)]
+    const map = mapRef.value
+    map.once('moveend', () => {
+      if (deepLinkInFlight !== treeId) return
+      deepLinkInFlight = null
+      if (readRouteTreeId(route.query.tree) !== treeId) return
+      void showTreeCard(
+        { type: 'Feature', properties: { id: treeId }, geometry: { type: 'Point', coordinates: coords } },
+        coords,
+      )
+    })
+    map.flyTo({ center: coords, zoom: 17, pitch: props.simplified ? 0 : 50, duration: 1500, essential: true })
+  } catch (e) {
+    deepLinkInFlight = null
+    console.error('[TreeDeepLink] failed', e)
+  }
+}
+
+watch(lifecyclePhase, (phase) => {
+  if (phase === 'ready') void openTreeFromRoute()
+})
+
+// A `?tree=` edited in the address bar (or restored by the back button) opens
+// that tree; the param disappearing (back button past the selection) closes it.
+watch(
+  () => route.query.tree,
+  (value) => {
+    if (readRouteTreeId(value)) {
+      void openTreeFromRoute()
+    } else if (selectedTree.value) {
+      closeTreeCard()
+    }
+  },
+)
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -865,53 +951,6 @@ function formatSunExposure(values: string[] | null) {
 function formatDbh(value: number | null) {
   if (value == null || !Number.isFinite(value)) return null
   return `${value.toFixed(2)}"`
-}
-
-function formatPlantDate(value: string | number | null) {
-  if (value == null || value === '') return null
-
-  const normalizeDate = (date: Date): string | null => {
-    if (Number.isNaN(date.getTime())) return null
-    return date.toISOString().slice(0, 10)
-  }
-
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const timestamp = value < 1e12 ? value * 1000 : value
-    return normalizeDate(new Date(timestamp))
-  }
-
-  const normalized = String(value).trim()
-  if (!normalized) return null
-
-  if (/^\d+$/.test(normalized)) {
-    const numeric = Number(normalized)
-    if (Number.isFinite(numeric)) {
-      const timestamp = numeric < 1e12 ? numeric * 1000 : numeric
-      return normalizeDate(new Date(timestamp))
-    }
-  }
-
-  const simpleDate = normalized.split('T')[0]?.split(' ')[0]
-  if (simpleDate && /^\d{4}-\d{2}-\d{2}$/.test(simpleDate)) return simpleDate
-
-  return normalizeDate(new Date(normalized)) ?? normalized
-}
-
-function formatTreeAge(value: string | number | null) {
-  const dateStr = formatPlantDate(value)
-  if (!dateStr) return null
-  const planted = new Date(dateStr)
-  if (Number.isNaN(planted.getTime())) return null
-  const now = new Date()
-  let years = now.getFullYear() - planted.getFullYear()
-  if (
-    now.getMonth() < planted.getMonth() ||
-    (now.getMonth() === planted.getMonth() && now.getDate() < planted.getDate())
-  ) {
-    years--
-  }
-  if (years < 1) return '< 1 year'
-  return `${years} year${years !== 1 ? 's' : ''}`
 }
 
 async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, number]) {
