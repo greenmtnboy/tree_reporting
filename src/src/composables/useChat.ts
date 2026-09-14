@@ -18,6 +18,7 @@ import { useLandmarkData } from './useLandmarkData'
 import { useMapData, CITY_CONFIG } from './useMapData'
 import type { CityCode } from './useMapData'
 import { ALL_MODEL_SOURCES } from '../trilogyModels'
+import { MAP_CHAT_IMPORTS } from './chatModelImports'
 import { useTrilogyRuntime } from './useTrilogyRuntime'
 import { router } from '../router'
 import {
@@ -639,7 +640,7 @@ export function useChat() {
       'duckdb',
       'preql',
       ALL_MODEL_SOURCES,
-      [{ name: 'tree_enrichment', alias: '' }],
+      MAP_CHAT_IMPORTS,
     )
     if (response.data.error) {
       throw new Error(`Trilogy compile error: ${response.data.error}`)

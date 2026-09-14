@@ -40,6 +40,7 @@ import {
   buildDashboardContextParameters,
   buildDashboardContextSource,
 } from '../composables/dashboardContextSource'
+import { MAP_CHAT_IMPORTS } from '../composables/chatModelImports'
 import { summaryQueryCases, speciesQueryCases, type DashboardQueryCase } from './dashboardQueryCatalog'
 import { postToResolver } from './resolverFetch'
 import { CITY_CONFIG, type CityCode } from '../composables/useMapData'
@@ -233,6 +234,79 @@ function chatCase(city: CityCode): DashboardQueryCase {
   }
 }
 
+// The map screen's chat has no dashboard context: `compilePreQL` in
+// `useChat.ts` sends the agent's PreQL straight at the resolver with
+// `MAP_CHAT_IMPORTS`. That array is what these cases are really testing. It
+// used to be a literal reading `[tree_enrichment]`, which was correct only
+// while `tree_enrichment.preql` still imported `tree_info`; once enrichment
+// became species-only the map chat had no tree datasource in scope at all and
+// every run_query and publish_results came back 422 ("No datasource exists for
+// root concept local.tree_id"). A compile error fails `parquetsFor`, so these
+// go red on that rather than on a slow plan.
+//
+// `surface` is inert here — the harness reads id, query, imports and filters —
+// and 'summary' keeps it consistent with chatCase above.
+function mapChatCase(id: string, query: string): DashboardQueryCase {
+  return {
+    id,
+    surface: 'summary',
+    query,
+    imports: MAP_CHAT_IMPORTS,
+    filters: [],
+    state: { city: null, genus: null, species: null, crossFilters: [] },
+  }
+}
+
+// The three shapes the map chat actually sends: run_query's rows, the
+// enrichment-joined aggregate a species question compiles to, and
+// publish_results' tree_id plus an inline override_color.
+const MAP_CHAT_CITY: CityCode = 'USBOS'
+const MAP_CHAT_CASES = [
+  mapChatCase(
+    'map-chat:rows',
+    `SELECT tree_id, species, latitude, longitude WHERE city = '${MAP_CHAT_CITY}' LIMIT 100`,
+  ),
+  mapChatCase(
+    'map-chat:enriched',
+    `SELECT species, common_names, count(tree_id) -> tree_count ` +
+      `WHERE city = '${MAP_CHAT_CITY}' ORDER BY tree_count desc LIMIT 10`,
+  ),
+  mapChatCase(
+    'map-chat:publish',
+    `SELECT tree_id, case when diameter_at_breast_height >= 20 then '#FF69B4' ` +
+      `else '#4169E1' end -> override_color WHERE city = '${MAP_CHAT_CITY}'`,
+  ),
+]
+
+// Two and three cities, named explicitly in the predicate — the question a
+// user asks the chat by naming cities, on both chat surfaces.
+//
+// Today these plan against the rollup, and that is accepted rather than
+// pinned: one city matches a `complete where city = 'X'` partition and two
+// match none, so `tree_info.preql`'s unfiltered rollup datasource is the only
+// single source covering the predicate. The planner does emit a `UNION ALL`
+// over exactly the named cities the moment the rollup is out of scope, so
+// preferring the union for a bounded set of cities is a planner-side
+// improvement, not a reason to narrow what the browser imports.
+//
+// What is pinned is that the answer is complete. A strict subset is the
+// failure that has actually happened here before (see
+// upstream_repro/partition_subset_chosen, and the all-cities test below): the
+// count simply comes back low, with nothing reporting it.
+const MULTI_CITY_SETS: CityCode[][] = [
+  ['USBOS', 'GRMLO'],
+  ['USBOS', 'GRMLO', 'USSFO'],
+]
+
+function multiCityId(groupKey: string, cities: CityCode[]): string {
+  return `${groupKey}-multi:${cities.join('+')}`
+}
+
+function multiCityQuery(cities: CityCode[]): string {
+  const list = cities.map((city) => `'${city}'`).join(', ')
+  return `SELECT city, count(tree_id) -> tree_count WHERE city in (${list}) ORDER BY tree_count desc`
+}
+
 const CITY_GROUPS = (['USSFO', 'FRPAR', 'GRATH'] as CityCode[]).map((city) => ({
   key: `city:${city}`,
   city,
@@ -242,11 +316,35 @@ const CITY_GROUPS = (['USSFO', 'FRPAR', 'GRATH'] as CityCode[]).map((city) => ({
 // No city context: the all-cities view, where the query's own predicate is the
 // only thing that says which city is wanted.
 const CHAT_CITIES = ['USBOS', 'GRMLO'] as CityCode[]
-const CHAT_GROUP: PushdownGroup = { key: 'chat', city: null, cases: CHAT_CITIES.map(chatCase) }
+const CHAT_GROUP: PushdownGroup = {
+  key: 'chat',
+  city: null,
+  cases: [
+    ...CHAT_CITIES.map(chatCase),
+    ...MULTI_CITY_SETS.map((cities) => ({
+      ...chatCase(cities[0]),
+      id: multiCityId('chat', cities),
+      query: multiCityQuery(cities),
+    })),
+  ],
+}
+
+// One batch: every case here declares MAP_CHAT_IMPORTS, and imports are a
+// property of the whole request rather than of a query in it.
+const MAP_CHAT_GROUP: PushdownGroup = {
+  key: 'map-chat',
+  city: null,
+  cases: [
+    ...MAP_CHAT_CASES,
+    ...MULTI_CITY_SETS.map((cities) =>
+      mapChatCase(multiCityId('map-chat', cities), multiCityQuery(cities)),
+    ),
+  ],
+}
 
 const ALL_GROUP: PushdownGroup = { key: 'all-cities', city: null, cases: sampleCases(null) }
 
-const GROUPS: PushdownGroup[] = [...CITY_GROUPS, CHAT_GROUP, ALL_GROUP]
+const GROUPS: PushdownGroup[] = [...CITY_GROUPS, CHAT_GROUP, MAP_CHAT_GROUP, ALL_GROUP]
 
 // Every compile happens in beforeAll, so that is where the budget lives; the
 // it() blocks below only read parquet names out of what came back. A throttled
@@ -294,6 +392,36 @@ describe('dashboard parquet pushdown', () => {
         `a chat query filtered to ${city} scanned the cross-city rollup`,
       ).not.toContain('full_tree_info')
     })
+  }
+
+  for (const queryCase of MAP_CHAT_CASES) {
+    it(`resolves the map chat's ${queryCase.id} down to ${MAP_CHAT_CITY}'s parquet`, () => {
+      const parquets = parquetsFor(MAP_CHAT_GROUP, queryCase.id)
+      expect(parquets).toContain(`${MAP_CHAT_CITY.toLowerCase()}_tree_info`)
+      expect(
+        parquets,
+        `${queryCase.id} read the cross-city rollup for a single city`,
+      ).not.toContain('full_tree_info')
+    })
+  }
+
+  for (const group of [CHAT_GROUP, MAP_CHAT_GROUP]) {
+    for (const cities of MULTI_CITY_SETS) {
+      const id = multiCityId(group.key, cities)
+      it(`answers a ${cities.length}-city ${group.key} query from a complete source`, () => {
+        const parquets = parquetsFor(group, id)
+        expect(parquets, `${id} named no tree parquet`).not.toHaveLength(0)
+        // The rollup covers every city, so it is complete by construction.
+        if (parquets.includes('full_tree_info')) return
+        const cityParquets = parquets.filter(
+          (parquet) => parquet !== 'full_tree_info' && parquet.endsWith('_tree_info'),
+        )
+        expect(
+          cityParquets.sort(),
+          `${id} planned against neither the rollup nor exactly the cities it named`,
+        ).toEqual(cities.map((city) => `${city.toLowerCase()}_tree_info`).sort())
+      })
+    }
   }
 
   it('plans the all-cities view against every city, or the rollup', () => {
