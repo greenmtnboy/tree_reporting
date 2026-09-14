@@ -130,7 +130,16 @@
       </div>
       <div v-for="(msg, i) in messages" :key="i" :class="['chat-msg', `chat-msg--${msg.role}`]">
         <div v-if="!msg.isLoading && !msg.content && msg.toolCalls?.length" class="chat-tool-pills">
-          <span v-for="tc in msg.toolCalls" :key="tc.id" class="chat-tool-pill">{{ tc.name }}</span>
+          <button
+            v-for="(tc, idx) in msg.toolCalls"
+            :key="tc.id"
+            type="button"
+            class="chat-tool-pill"
+            :class="{ 'chat-tool-pill--error': tc.isError }"
+            data-testid="chat-tool-pill"
+            :title="tc.isError ? `${tc.name} failed. Click for details.` : `Click for ${tc.name} details.`"
+            @click="openInspector(msg.toolCalls, idx)"
+          ><span v-if="tc.isError" class="chat-tool-pill-icon" aria-hidden="true">!</span>{{ tc.name }}</button>
         </div>
         <div v-else class="chat-msg-content">
           <div v-if="msg.isLoading" class="chat-loading">
@@ -140,12 +149,73 @@
           <template v-else>
             <MarkdownRenderer v-if="msg.content" :markdown="msg.content" />
             <div v-if="msg.toolCalls?.length" class="chat-tool-pills chat-tool-pills--inline">
-              <span v-for="tc in msg.toolCalls" :key="tc.id" class="chat-tool-pill">{{ tc.name }}</span>
+              <button
+                v-for="(tc, idx) in msg.toolCalls"
+                :key="tc.id"
+                type="button"
+                class="chat-tool-pill"
+                :class="{ 'chat-tool-pill--error': tc.isError }"
+                data-testid="chat-tool-pill"
+                :title="tc.isError ? `${tc.name} failed. Click for details.` : `Click for ${tc.name} details.`"
+                @click="openInspector(msg.toolCalls, idx)"
+              ><span v-if="tc.isError" class="chat-tool-pill-icon" aria-hidden="true">!</span>{{ tc.name }}</button>
             </div>
           </template>
         </div>
       </div>
     </div>
+
+    <!-- Tool inspector: the calls behind one assistant turn, each with its
+         input and the full result text the model was sent. This is the view
+         for a retry loop: the same tool failing the same way, call after call. -->
+    <Teleport to="body">
+      <div
+        v-if="inspector && inspectedCall"
+        class="tool-inspector-overlay"
+        data-testid="tool-inspector"
+        @click.self="closeInspector"
+      >
+        <div class="tool-inspector" role="dialog" aria-modal="true" aria-label="Tool call details">
+          <div class="tool-inspector-header">
+            <div class="tool-inspector-tabs">
+              <button
+                v-for="(tc, idx) in inspector.calls"
+                :key="tc.id"
+                type="button"
+                class="tool-inspector-tab"
+                :class="{ active: idx === inspector.index, 'tool-inspector-tab--error': tc.isError }"
+                @click="inspector.index = idx"
+              ><span v-if="tc.isError" class="chat-tool-pill-icon" aria-hidden="true">!</span>{{ tc.name }}</button>
+            </div>
+            <button class="tool-inspector-close" aria-label="Close" @click="closeInspector">&#x2715;</button>
+          </div>
+          <div class="tool-inspector-body">
+            <div class="tool-inspector-call-title">
+              <code class="tool-inspector-call-name">{{ inspectedCall.name }}</code>
+              <span v-if="inspector.calls.length > 1" class="tool-inspector-call-index">
+                {{ inspector.index + 1 }} of {{ inspector.calls.length }}
+              </span>
+              <span class="tool-inspector-status" :class="inspectedCall.isError ? 'error' : 'ok'">
+                {{ inspectedCall.isError ? 'failed' : 'ok' }}
+              </span>
+              <button type="button" class="tool-inspector-copy" @click="copyInspectedCall">
+                {{ copiedCall ? 'Copied' : 'Copy JSON' }}
+              </button>
+            </div>
+            <div class="tool-inspector-section">
+              <div class="tool-inspector-section-label">Input</div>
+              <pre class="tool-inspector-pre">{{ formatInput(inspectedCall.input) }}</pre>
+            </div>
+            <div class="tool-inspector-section">
+              <div class="tool-inspector-section-label">
+                {{ inspectedCall.output ? 'Result sent to the model' : 'Result' }}
+              </div>
+              <pre class="tool-inspector-pre">{{ inspectedCall.output || inspectedCall.result || '(no output recorded)' }}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <div v-if="isConfigured && !showSettings" class="chat-input-area">
       <div class="chat-input-shell">
@@ -177,10 +247,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch, onUnmounted } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { MarkdownRenderer } from '@trilogy-data/trilogy-studio-components/dashboard'
 import { useChat } from '../composables/useChat'
+import type { ToolCallRecord } from '../types'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
 import { useMapLifecycle } from '../composables/useMapLifecycle'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
@@ -255,6 +326,59 @@ watch(isLoading, (loading) => {
 onUnmounted(() => {
   if (thinkingInterval != null) clearInterval(thinkingInterval)
 })
+
+// --- Tool inspector ---
+// Clicking a pill opens the turn it belongs to with that call selected. The
+// turn's other calls are tabs so a whole loop can be read without reopening.
+const inspector = ref<{ calls: ToolCallRecord[]; index: number } | null>(null)
+const inspectedCall = computed(() => inspector.value?.calls[inspector.value.index] ?? null)
+const copiedCall = ref(false)
+
+function openInspector(calls: ToolCallRecord[] | undefined, index: number) {
+  if (!calls?.length) return
+  copiedCall.value = false
+  inspector.value = { calls, index }
+}
+
+function closeInspector() {
+  inspector.value = null
+}
+
+function onInspectorKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && inspector.value) closeInspector()
+}
+
+onMounted(() => window.addEventListener('keydown', onInspectorKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onInspectorKeydown))
+
+function formatInput(input: unknown): string {
+  if (input === undefined) return '(no input)'
+  try {
+    return JSON.stringify(input, null, 2)
+  } catch {
+    return String(input)
+  }
+}
+
+async function copyInspectedCall() {
+  const call = inspectedCall.value
+  if (!call) return
+  const payload = {
+    id: call.id,
+    name: call.name,
+    isError: call.isError ?? false,
+    input: call.input,
+    result: call.result,
+    output: call.output ?? null,
+  }
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+    copiedCall.value = true
+    setTimeout(() => { copiedCall.value = false }, 1500)
+  } catch (e) {
+    console.warn('[ToolInspector] clipboard write failed', e)
+  }
+}
 
 const _isMapScreen = computed(() => route.name === 'map')
 const isSummaryScreen = computed(() => route.name === 'summary')
@@ -756,8 +880,11 @@ watch(
   border-top: 1px solid rgba(167, 227, 178, 0.08);
 }
 
+/* A pill is a button: it opens the tool inspector on its call. Failed calls
+   are tinted so a retry loop is visible at a glance. */
 .chat-tool-pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   font-size: 0.68rem;
   color: var(--color-moss);
   background: rgba(47, 125, 79, 0.08);
@@ -765,6 +892,255 @@ watch(
   border-radius: 999px;
   padding: 1px 8px;
   font-family: monospace;
+  line-height: 1.5;
+  cursor: pointer;
+  appearance: none;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.chat-tool-pill:hover,
+.chat-tool-pill:focus-visible {
+  border-color: rgba(167, 227, 178, 0.4);
+  color: var(--color-leaf);
+  outline: none;
+}
+
+.chat-tool-pill--error {
+  color: #f0a8a8;
+  background: rgba(217, 122, 58, 0.12);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.chat-tool-pill--error:hover,
+.chat-tool-pill--error:focus-visible {
+  border-color: rgba(239, 68, 68, 0.7);
+  color: #f5c2c2;
+}
+
+/* The bubble's `:deep(*) { color: inherit }` would otherwise flatten the
+   inline pills' tint. */
+.chat-msg-content .chat-tool-pill {
+  color: var(--color-moss);
+}
+
+.chat-msg-content .chat-tool-pill:hover,
+.chat-msg-content .chat-tool-pill:focus-visible {
+  color: var(--color-leaf);
+}
+
+.chat-msg-content .chat-tool-pill--error {
+  color: #f0a8a8;
+}
+
+.chat-tool-pill-icon {
+  display: inline-block;
+  margin-right: 5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+  color: #1c1f24;
+  background: #ef4444;
+}
+
+/* --- Tool inspector --- */
+
+.tool-inspector-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 10, 14, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 16px;
+}
+
+.tool-inspector {
+  width: 100%;
+  max-width: 760px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(28, 31, 36, 0.98), rgba(15, 20, 17, 0.98));
+  border: 1px solid rgba(167, 227, 178, 0.18);
+  box-shadow: 0 24px 56px rgba(6, 8, 10, 0.55);
+  color: var(--color-ink);
+}
+
+.tool-inspector-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px 12px 16px;
+  border-bottom: 1px solid rgba(167, 227, 178, 0.1);
+}
+
+.tool-inspector-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tool-inspector-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-family: monospace;
+  background: rgba(42, 47, 54, 0.9);
+  border: 1px solid rgba(167, 227, 178, 0.12);
+  color: var(--color-muted);
+  cursor: pointer;
+  appearance: none;
+}
+
+.tool-inspector-tab:hover {
+  color: var(--color-ink);
+}
+
+.tool-inspector-tab.active {
+  border-color: var(--color-moss);
+  color: var(--color-leaf);
+  background: rgba(47, 125, 79, 0.18);
+}
+
+.tool-inspector-tab--error {
+  color: #f0a8a8;
+}
+
+.tool-inspector-tab--error.active {
+  border-color: rgba(239, 68, 68, 0.7);
+  background: rgba(239, 68, 68, 0.12);
+  color: #f5c2c2;
+}
+
+.tool-inspector-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.tool-inspector-close:hover {
+  color: var(--color-ink);
+}
+
+.tool-inspector-body {
+  overflow-y: auto;
+  padding: 12px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tool-inspector-call-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.tool-inspector-call-name {
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--color-leaf);
+  background: none;
+  padding: 0;
+}
+
+.tool-inspector-call-index {
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--color-muted);
+}
+
+.tool-inspector-status {
+  font-family: monospace;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.tool-inspector-status.ok {
+  color: var(--color-leaf);
+  background: rgba(47, 125, 79, 0.18);
+}
+
+.tool-inspector-status.error {
+  color: #f0a8a8;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.tool-inspector-copy {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--color-moss);
+  background: rgba(47, 125, 79, 0.08);
+  border: 1px solid rgba(167, 227, 178, 0.14);
+  border-radius: 999px;
+  padding: 2px 10px;
+  cursor: pointer;
+  appearance: none;
+}
+
+.tool-inspector-copy:hover {
+  color: var(--color-leaf);
+  border-color: rgba(167, 227, 178, 0.4);
+}
+
+.tool-inspector-section-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-muted);
+  margin-bottom: 4px;
+}
+
+/* Result text can be a full query result: scroll it inside the dialog. */
+.tool-inspector-pre {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 40vh;
+  overflow: auto;
+  background: rgba(15, 24, 19, 0.6);
+  border: 1px solid rgba(167, 227, 178, 0.1);
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: rgba(237, 242, 235, 0.9);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 640px) {
+  .tool-inspector-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .tool-inspector {
+    max-width: none;
+    max-height: none;
+    border: none;
+  }
+
+  .tool-inspector-pre {
+    max-height: 45vh;
+  }
 }
 
 .chat-input-area {
