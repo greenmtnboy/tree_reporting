@@ -319,6 +319,42 @@ that city's trees, because each city's datasource asserts
 resolver wants `parameters` keys carrying their leading colon (`':nlb'`, not
 `'nlb'`); without it the filter fails to parse with a bare `Syntax error`.
 
+### What the chat resolves against
+
+The chat compiles PreQL through a different path on each screen, and the
+`imports` it sends decide which parquet the browser downloads — or whether the
+query resolves at all.
+
+| Screen | Call site | `imports` |
+|--------|-----------|-----------|
+| Map | `compilePreQL` in `useChat.ts` | `MAP_CHAT_IMPORTS` (`chatModelImports.ts`): `tree_enrichment` + `tree_info` |
+| Summary, species | `executeSummaryRunQuery` / `executeSpeciesRunQuery` | `SUMMARY_DASHBOARD_IMPORTS`: `tree_enrichment` + `dashboard_context`, which imports `tree_info` itself |
+
+Both reach the same pair, and both must: `tree_enrichment` is the species
+dimension only, so **enrichment alone reaches no tree datasource**. The map
+chat shipped that way once — the literal `[tree_enrichment]` was correct while
+`tree_enrichment.preql` still imported `tree_info`, and when enrichment became
+species-only the fix landed in `dashboardContextSource.ts` and missed the map
+chat. Every `run_query` and `publish_results` then returned an HTTP 422 from
+the resolver ("No datasource exists for root concept local.tree_id"), surfaced
+in the UI as a compile error. Nothing caught it: the chat integration test
+mocks `resolve_query`, and each resolver-backed suite declared its own import
+list rather than the app's. `dashboard-pushdown.test.ts` now compiles the
+real `MAP_CHAT_IMPORTS`, and `chat-publish.integration.test.ts` asserts the
+call site still sends it.
+
+**A query naming two or three cities reads the rollup, and that is expected.**
+One city matches a `complete where city = 'X'` partition; two match none, so
+`tree_info.preql`'s unfiltered rollup datasource is the only single source
+that covers the predicate and the planner takes it. Take the rollup out of
+scope and the same planner emits a `UNION ALL` over exactly the cities named
+(pruned — 41 city models in scope, a two-city query still reads two parquets),
+so preferring the union for a bounded set of cities is a pytrilogy-side
+improvement. Do not chase it by narrowing what the browser imports: the import
+list would then have to be derived from the query text, and the all-cities
+view still wants the one-file read. What the test pins is only that the answer
+is *complete* — the rollup, or exactly the cities named, never a subset.
+
 Flags, for widening the sweep when a planner regression is suspected:
 
 ```bash

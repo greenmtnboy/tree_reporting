@@ -226,6 +226,15 @@ WHERE city = 'USBOS' AND species LIKE 'Gleditsia triacanthos%'`,
     expect(mocks.resolveQuery).toHaveBeenCalledTimes(1)
     expect(mocks.duckQuery).toHaveBeenCalledTimes(3)
 
+    // The resolver is mocked here, so this pins the call site to the shared
+    // import list and nothing more; that the list itself resolves a tree query
+    // is `dashboard-pushdown.test.ts`, which compiles against the live service.
+    // Between the two: the map chat once sent `[tree_enrichment]` alone, which
+    // reaches no tree datasource at all and 422s on every query.
+    const { MAP_CHAT_IMPORTS } = await import('../composables/chatModelImports')
+    const [, , , , imports] = mocks.resolveQuery.mock.calls[0] as unknown[]
+    expect(imports).toEqual(MAP_CHAT_IMPORTS)
+
     for (const [sql] of mocks.duckQuery.mock.calls as Array<[string]>) {
       expect(sql).not.toContain(':override_color')
     }
