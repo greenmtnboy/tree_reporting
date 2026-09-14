@@ -253,7 +253,7 @@
       ? ` Also published under ${d.aliases.map((a) => `<i>${esc(a)}</i>`).join(', ')}; publishing updates every one of them${d.new_aliases.length ? ` (${d.new_aliases.map((a) => `<i>${esc(a)}</i>`).join(', ')} will be created)` : ''}.`
       : ''
     parts.push(`<p class="note">Last enriched ${row.enriched_at ? new Date(row.enriched_at).toLocaleString() : 'never'}.${aliasNote}</p>`)
-    if (d.sentinel) parts.push(`<div class="banner warn">This is a sentinel row, authored in <code>_ingest_shared.py</code> and rewritten on every run. It cannot be edited here.</div>`)
+    if (d.sentinel) parts.push(`<div class="banner warn">This is a sentinel row, authored in <code>shared/ingest.py</code> and rewritten on every run. It cannot be edited here.</div>`)
     if (d.alias_of) parts.push(`<div class="banner warn">This is an alias row: <i>${esc(d.species)}</i> is a synonym of <a href="/?species=${encodeURIComponent(d.alias_of)}"><i>${esc(d.alias_of)}</i></a> in <code>SPECIES_SYNONYMS</code>, and the daily job rewrites it from that row. Edit the accepted name instead.</div>`)
     if (d.merges.length) parts.push(`<div class="banner warn">Publishing will fold ${d.merges.map((a) => `<i>${esc(a)}</i>`).join(', ')} into this row: their own rows are overwritten with these values.</div>`)
     parts.push(`<div id="problems"></div>`)
@@ -312,7 +312,7 @@
         return `<label class="${cls}">${lbl}<input name="${name}" value="${esc((value || []).join(', '))}"><div class="hint">comma separated</div></label>`
       case 'list<string>':
         if (name === 'synonyms')
-          return `<label class="${cls}">${lbl}<input name="${name}" value="${esc((value || []).join(', '))}"><div class="hint">Comma separated, each a species-rank name as the ingest writes it (ASCII hybrid mark). Adding a name that has its own row folds that row into this one on publish; to make the ingest publish this name instead, add the pair to <code>SPECIES_SYNONYMS</code> in <code>_ingest_shared.py</code>.</div></label>`
+          return `<label class="${cls}">${lbl}<input name="${name}" value="${esc((value || []).join(', '))}"><div class="hint">Comma separated, each a species-rank name as the ingest writes it (ASCII hybrid mark). Adding a name that has its own row folds that row into this one on publish; to make the ingest publish this name instead, add the pair to <code>SPECIES_SYNONYMS</code> in <code>shared/ingest.py</code>.</div></label>`
         return `<label class="${cls}">${lbl}<input name="${name}" value="${esc((value || []).join(', '))}"><div class="hint">comma separated</div></label>`
       case 'int':
         return `<label class="${cls}">${lbl}<input name="${name}" type="number" step="1" value="${value ?? ''}"></label>`
