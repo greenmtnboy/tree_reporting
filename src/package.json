@@ -11,6 +11,7 @@
     "lint": "eslint . --ext .vue,.ts,.js",
     "test": "vitest run",
     "test:queries": "vitest run --config vitest.queries.config.ts",
+    "bench:chat": "vitest run --config vitest.chatbench.config.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

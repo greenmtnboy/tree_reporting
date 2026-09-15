@@ -251,6 +251,7 @@ import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { MarkdownRenderer } from '@trilogy-data/trilogy-studio-components/dashboard'
 import { useChat } from '../composables/useChat'
+import { MAP_SUGGESTIONS, SUMMARY_SUGGESTIONS, SPECIES_SUGGESTIONS } from '../composables/chatSuggestions'
 import type { ToolCallRecord } from '../types'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
 import { useMapLifecycle } from '../composables/useMapLifecycle'
@@ -272,27 +273,6 @@ const KEY_PLACEHOLDERS: Record<string, string> = {
   google: 'AIza...',
   openrouter: 'sk-or-...',
 }
-
-const MAP_SUGGESTIONS = [
-  'What can you do?',
-  'What is the most common type of tree?',
-  'Show me trees in bloom right now!',
-  'Where is the biggest tree?',
-]
-
-const SUMMARY_SUGGESTIONS = [
-  'Filter the charts to local native trees',
-  'Show only trees outside the hardiness zone',
-  'What share of the city is concentrated in the top 5 species?',
-  'Clear the analytics filters',
-]
-
-const SPECIES_SUGGESTIONS = [
-  'Set the genus to Quercus',
-  'Filter this page to Acer rubrum',
-  'What does the current species view show?',
-  'Clear the species filter but keep the genus',
-]
 
 const { messages, isLoading, isConfigured, providerType, setConnection, deleteConnection, sendMessage, clearMessages } = useChat()
 const { chatReady: mapReady } = useMapLifecycle()
