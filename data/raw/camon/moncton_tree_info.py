@@ -57,8 +57,8 @@ their median of 20 sits exactly where a municipal inventory's median diameter
 sits, where reading them as inches would make Moncton's median tree 51 cm.
 
 `GlobalID` is the key.  `UNITID` is aliased "Tree ID" and is *not* unique --
-484 rows share an id across 64 values -- which is the `FACILITYID` trap from
-EXTENDING.md in a column named even more convincingly.
+484 rows share an id across 64 values -- which is the trap EXTENDING.md warns of under the id rule (a
+field that merely sounds like an id), in a column named even more convincingly.
 """
 
 import sys

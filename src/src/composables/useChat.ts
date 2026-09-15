@@ -157,7 +157,36 @@ const _today = new Date().toLocaleDateString('en-US', {
   day: 'numeric',
 })
 
+const _monthNumber = new Date().getMonth() + 1
+
 const _cityNames = Object.values(CITY_CONFIG).map((c) => c.name).join(', ')
+
+/**
+ * The species dimension as `tree_enrichment.preql` declares it, shared by the
+ * map and summary prompts. The map prompt used to carry its own copy, written
+ * against an earlier enrichment table: `bloom_season`, `native_status`,
+ * `mature_height_ft`, `lifespan_years` and the `species :: common name`
+ * convention none of which exist any more. The chat benchmark found it by
+ * "Show me trees in bloom right now!" failing ten rounds out of ten -- the
+ * model asked for a concept that was not there, then guessed at array idioms.
+ */
+const ENRICHMENT_CONCEPTS = `- genus (string) / family (string)
+- common_names (string) - comma-separated, most familiar first
+- description (string)
+- is_evergreen (bool)
+- mature_height_min_ft / mature_height_max_ft (float)
+- canopy_spread_min_ft / canopy_spread_max_ft (float)
+- growth_rate (string) - slow | moderate | fast
+- lifespan_min_years / lifespan_max_years (int)
+- drought_tolerance (string) - low | moderate | high
+- water_needs (string) - low | moderate | high
+- sun_exposure (list of full_sun | partial_shade | shade)
+- bloom_months (list of month numbers 1-12 in which the species flowers). Test membership with N in bloom_months: trees in bloom this month are WHERE ${_monthNumber} in bloom_months. There is no season concept.
+- wildlife_value (string) - low | moderate | high
+- fire_risk (string) - low | moderate | high
+- tree_form (string) - broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default
+- usda_zone_min / usda_zone_max (int)
+- native_ecoregions (list of ecoregion ids where the species is native)`
 
 function buildSystemPromptForCity(city: CityCode, userLoc?: { lat: number; lng: number } | null): string {
   const cityName = CITY_CONFIG[city].name
@@ -177,24 +206,13 @@ AVAILABLE CONCEPTS:
 - tree_id (string) — unique identifier
 - tree_name (string) — e.g. "Swamp Myrtle"
 - plant_date (date) — date planted; not known for all trees.
-- species (string) — full species string like "Tristaniopsis laurina :: Swamp Myrtle"
+- species (string) — scientific name, e.g. "Platanus x hispanica"; common names live in common_names
 - latitude (float) — geographic latitude
 - longitude (float) — geographic longitude
 - diameter_at_breast_height (float) — trunk diameter in inches
 
 SPECIES-LEVEL ENRICHMENT CONCEPTS:
-- common_names (string) — comma-separated common names for the species
-- native_status (string) — native_bay_area | native_california | non_native | naturalized | unknown
-- is_evergreen (bool)
-- mature_height_ft (float)
-- canopy_spread_ft (float)
-- growth_rate (string) — slow | moderate | fast
-- lifespan_years (string) — e.g. "50-100", "200+"
-- drought_tolerance (string) — low | moderate | high
-- bloom_season (string) — September to November | autumn and winter | late spring and summer | late spring or summer | late spring to autumn | spring | spring and summer | summer | winter | year-round
-- wildlife_value (string) — low | moderate | high
-- fire_risk (string) — low | moderate | high
-- tree_form (string) — broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default
+${ENRICHMENT_CONCEPTS}
 
 TRILOGY SYNTAX RULES:
 ${rulesInput}
@@ -232,7 +250,7 @@ AVAILABLE CONCEPTS:
 - tree_id (string) - unique identifier
 - tree_name (string) - e.g. "Swamp Myrtle"
 - plant_date (date) - date planted; not known for all trees.
-- species (string) - full species string like "Tristaniopsis laurina :: Swamp Myrtle"
+- species (string) - scientific name, e.g. "Platanus x hispanica"; common names live in common_names
 - latitude (float) - geographic latitude
 - longitude (float) - geographic longitude
 - diameter_at_breast_height (float) - trunk diameter in inches
@@ -243,26 +261,11 @@ SUMMARY ANALYTICS CONCEPTS:
 - water_resilience_bucket (string) - High water / low drought tolerance | Low water / high drought tolerance | Moderate / mixed | Unknown
 - sun_exposure_label (string) - Full sun | Partial shade | Shade
 - lifespan_bucket (string) - Short-lived (<50y) | Medium-lived (50-149y) | Long-lived (150+y) | Unknown
-- dominance_rank (int)
-- cumulative_tree_share_pct (float)
+- dominance_rank (int) - the species' rank by tree count within the active filters, 1 = most common
+- cumulative_tree_share_pct (float) - the share of all trees held by the species ranked 1 through dominance_rank, so at dominance_rank = 5 it is the top-5 share. Both are precomputed: never rebuild them from count(tree_id). The Top 5 Share KPI is exactly: SELECT --species, --dominance_rank, cumulative_tree_share_pct as top_5_species_share_pct HAVING dominance_rank = 5;
 
 SPECIES-LEVEL ENRICHMENT CONCEPTS:
-- common_names (string)
-- description (string)
-- is_evergreen (bool)
-- mature_height_min_ft / mature_height_max_ft (float)
-- canopy_spread_min_ft / canopy_spread_max_ft (float)
-- growth_rate (string) - slow | moderate | fast
-- lifespan_min_years / lifespan_max_years (int)
-- drought_tolerance (string) - low | moderate | high
-- water_needs (string) - low | moderate | high
-- sun_exposure (array)
-- bloom_months (array of month numbers)
-- wildlife_value (string) - low | moderate | high
-- fire_risk (string) - low | moderate | high
-- tree_form (string) - broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default
-- usda_zone_min / usda_zone_max (int)
-- native_ecoregions (array of ecoregion ids)
+${ENRICHMENT_CONCEPTS}
 
 TRILOGY SYNTAX RULES:
 ${rulesInput}
@@ -275,9 +278,10 @@ VALID DATA TYPES: ${datatypes.join(', ')}
 
 IMPORTANT GUIDELINES:
 1. Use a reasonable LIMIT (e.g., 100-500) for exploratory run_query calls.
-2. Use set_summary_filters for requests like "filter to local native trees", "show broadleaf species only", "show only trees outside the hardiness zone", or "clear the filters".
-3. If a query fails, explain the error and try a corrected version.
-4. Always finish by calling return_to_user with your complete response. Never return a plain text reply - use return_to_user to signal you are done.
+2. A field used in ORDER BY or HAVING must appear in the SELECT; prefix it with -- to keep it out of the output (SELECT species, cumulative_tree_share_pct, --dominance_rank ORDER BY dominance_rank ASC). There are no subqueries: write one SELECT over the concepts above.
+3. Use set_summary_filters for requests like "filter to local native trees", "show broadleaf species only", "show only trees outside the hardiness zone", or "clear the filters".
+4. If a query fails, explain the error and try a corrected version.
+5. Always finish by calling return_to_user with your complete response. Never return a plain text reply - use return_to_user to signal you are done.
 
 Be concise and helpful. When showing query results, format them nicely.
 

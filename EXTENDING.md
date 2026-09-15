@@ -1,15 +1,8 @@
 # Extending the Tree Map: Adding a New City
 
-This document captures the steps discovered adding cities, from Paris after SF,
-NYC and Boston through to Denver. Use it as a runbook for the next one.
-
-**Read this first, then use the quick path below.** Everything under
-"Step-by-Step" is still accurate and is where the *reasoning* lives — why a
-partition is shaped the way it is, what broke when it was not — but you should
-not be typing those twenty edits by hand any more. `new_city.py` writes the
-mechanical ones and `tests/test_city_wiring.py` tells you what is still owed.
-
----
+The runbook. Each step is the rule and the check. The pipeline reference is
+`docs/DATA_PIPELINE.md`; landmarks are `docs/LANDMARKS.md`; species handling
+is `docs/SPECIES_ENRICHMENT.md`.
 
 ## The quick path
 
@@ -18,2399 +11,292 @@ mechanical ones and `tests/test_city_wiring.py` tells you what is still owed.
 cd data/raw && uv run shared/platforms/arcgis.py opendata-geospatialdenver.hub.arcgis.com
 
 # 2. Look up the ecoregion at the city centroid (RESOLVE ECO_ID):
-curl -sG "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/Resolve_Ecoregions/FeatureServer/0/query"   --data-urlencode "geometry=-104.9903,39.7392" --data-urlencode "geometryType=esriGeometryPoint"   --data-urlencode "inSR=4326" --data-urlencode "spatialRel=esriSpatialRelIntersects"   --data-urlencode "outFields=ECO_ID,ECO_NAME" --data-urlencode "returnGeometry=false" --data-urlencode "f=json"
+curl -sG "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/Resolve_Ecoregions/FeatureServer/0/query" \
+  --data-urlencode "geometry=-104.9903,39.7392" --data-urlencode "geometryType=esriGeometryPoint" \
+  --data-urlencode "inSR=4326" --data-urlencode "spatialRel=esriSpatialRelIntersects" \
+  --data-urlencode "outFields=ECO_ID,ECO_NAME" --data-urlencode "returnGeometry=false" --data-urlencode "f=json"
 
 # 3. Scaffold every registry edit and every boilerplate file:
-cd data/raw && uv run tools/new_city.py     --code USDEN --name Denver --slug denver     --center 39.7392,-104.9903     --bounds 39.45,39.95,-105.65,-104.55     --source-label DENVER_OPENDATA     --ecoregion 402     --city-cron "0 40 15 * * SUN,WED" --osm-cron "0 30 2 * * SAT"
+cd data/raw && uv run tools/new_city.py \
+    --code USDEN --name Denver --slug denver \
+    --center 39.7392,-104.9903 \
+    --bounds 39.45,39.95,-105.65,-104.55 \
+    --source-label DENVER_OPENDATA \
+    --ecoregion 402 \
+    --city-cron "0 40 15 * * SUN,WED" --osm-cron "0 30 2 * * SAT"
 ```
 
-`--dry-run` first if you want to see the twenty-seven edits before they land.
-It is idempotent, and it stages everything in memory before writing, so a
-failure leaves the tree untouched rather than half-patched.
+`--dry-run` lists the edits first. The scaffolder is idempotent and stages
+everything in memory, so a failure leaves the tree untouched.
 
-**Then do the four things it deliberately does not do**, because each needs a
-measurement or a look at the portal:
+**Then the four things it does not do**, each needing a measurement or a look at the portal:
 
-1. **Fill in `{slug}_tree_info.py` and `{slug}_update_time.py`.** The field
-   mapping is the actual work. For an ArcGIS portal — which is most North
-   American cities — `shared.platforms.arcgis` covers paging, the freshness watermark
-   and Esri's epoch-milliseconds; `usden/denver_tree_info.py` is ~150 lines
-   including its comments.
-2. **Find a landmark source** and write `{slug}_landmarks.py` + its probe. See
-   "Finding a Landmarks Source" for the preference order.
-3. **Bootstrap the OSM staging object**, so the city's model has something to
-   read before its `osm-{code}` job exists in production:
-   `uv run {slug}/{slug}_osm_extract.py`.
-4. **Calibrate the dedup cell size.** Never copy one:
-   `uv run tools/osm_dedup_validation.py --city {CODE}`. Before the city's first
-   credentialed build neither the staged extract nor the published parquet
-   exists in GCS, so pass `--osm-parquet` / `--inventory-parquet` and calibrate
-   against local files.
+1. **Fill in `{slug}_tree_info.py` and `{slug}_update_time.py`** (steps 4 and 5).
+2. **Find a landmark source** and write `{slug}_landmarks.py` plus its probe (Landmarks below).
+3. **Bootstrap the OSM staging object**: `uv run {slug}/{slug}_osm_extract.py`.
+4. **Calibrate the dedup cell size**: `uv run tools/osm_dedup_validation.py --city {CODE}`.
+   Never copy one. Before the first cloud build pass `--osm-parquet` and
+   `--inventory-parquet` to calibrate against local files.
 
-Then check the wiring. These are fast and they catch the failures that are
-otherwise silent:
+Then the checks:
 
 ```bash
-cd data/raw && uv run --with pytest python -m pytest tests -q
+cd data/raw && uv run --no-project --with pytest --with pyarrow --with pytrilogy --with duckdb --with requests python -m pytest tests -q
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql
 cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql
 ```
 
-`test_city_wiring.py` walks every registry a city has to appear in — the enum,
-the ecoregion case, four sets of freshness properties, the cross-city imports
-and merges, the rollup file list, the frontend config, the attribution — and
-fails naming the file and the line. A half-wired city is a red test rather than
-a quiet hole in the map. Each dry run must report **exactly one** asset; more
-means an import reaches too far.
-
----
-
-## Architecture Overview
-
-```
-OpenData API / CSV
-        │
-        ▼
-data/raw/{city}/{city}_tree_info.py   ← fetch + transform script (Arrow IPC → stdout)
-        │
-        ▼  (Trilogy pipeline materialises to GCS)
-GCS: trilogy_public_models/duckdb/trees/{code}_tree_info_v{version}.parquet
-        │
-        ▼  (loaded at runtime by the browser worker)
-src/src/workers/duckdbPipeline.worker.ts  ← DuckDB-WASM reads parquet over HTTP
-        │
-        ▼
-src/src/composables/useMapData.ts  ← CITY_CONFIG drives map center + default query
-        │
-        ▼
-src/src/workers/parquetUrls.ts  ← builds versioned GCS URL from city code + DATA_VERSION
-```
-
-The browser never touches raw source data — it only fetches the pre-built parquet from GCS and queries it locally with DuckDB-WASM.
-
-### Per-city ingest pipelines, one unified core
-
-The scheduling shape is the other half of the architecture, and adding a city
-means adding to it. Each city is an **independent pipeline** — its own jobs, on
-its own cadences, reaching no other city — and everything cross-city happens in
-a **core** that reads only published parquets:
-
-```
-per city, three independent schedules
-────────────────────────────────────────────────────────────────────
-  osm-{code}       weekly, staggered      osm_staging/{code}_osm_staging.preql
-        │                                   └─ Overpass → staging/{code}_osm_staging.parquet
-        ▼
-  city-{code}      daily or twice weekly  raw/{code}/{city}_tree_info.preql
-        │                                   └─ municipal portal + community + staged OSM
-        ▼                                      → trees/{code}_tree_info_v{n}.parquet
-  landmarks-{code} no cron, by hand       landmark_staging/{code}_landmarks_staging.preql
-
-the core, daily, reading only published parquets
-────────────────────────────────────────────────────────────────────
-  06:00  publish-full         raw/full_tree_publish.preql   → full_tree_info_v{n}.parquet
-  06:00  refresh-ecoregions   raw/ecoregion_info.preql
-  07:00  refresh-enrichment   raw/tree_enrichment.preql     → tree_enrichment_v{n}.parquet
-  Sun    refresh-landmarks    raw/landmark_info.preql       → landmark parquets + union
-```
-
-Every job in that picture is a `[[cloud.job]]` entry in `data/trilogy.toml`,
-which carries the full rationale for each cadence. Three properties are
-load-bearing rather than tidy:
-
-**A city job's bundle is exactly one city.** `trilogy refresh` adopts every
-managed datasource it can reach from its entrypoint, so a city's model importing
-only `tree_common` and `community_tree_info` is what makes `city-{code}` build
-one parquet, probe one portal, and be sized for one city. This replaced a single
-lane refreshing all seventeen: it carried Berlin's 4 GiB for everyone and still
-OOM-died part-way through a full rebuild, taking sixteen healthy cities with it.
-
-**The core cannot reach a portal.** `full_tree_publish.preql` reads the
-published city parquets directly (one `file [...]` multi-file scan) and
-`raw/enrichment_refresh.preql` reaches the rollup through a root datasource,
-rather than either of them importing the city models. That is what lets the core
-run daily on one cadence no matter what any city is doing — and it is not
-cosmetic: while enrichment imported `tree_info` it could rebuild a city's parquet
-inside its own 2 GiB container, concurrently with that city's own job.
-`test_the_core_reads_only_published_parquets` pins it.
-
-**The core's own ordering is derived, from names.** The platform reads a job's
-outputs from its managed datasources and its inputs from its root ones, keyed by
-physical address — except that an f-string address is not a join key, so a
-templated address keys on the datasource's *name*. `full_tree_publish.preql`
-declares `full_tree_info` managed; `full_tree_info_source.preql` declares the
-same name root; the enrichment entrypoint imports it. Names match, the edge
-forms, and the two jobs share one cron so the platform orders them in one tick
-instead of us leaving an hour's gap and hoping.
-
-That is also why the enrichment *job* has a separate entrypoint from the
-enrichment *model*. `tree_enrichment.preql` is in the frontend's model bundle,
-and putting the rollup in its scope gives the browser's planner a second way to
-answer a tree question — it returned 2 where the fixtures say 3. Job view and
-app view are two different file sets on purpose.
-
-**Cadence is measured, not guessed.** `data/raw/tools/portal_cadence.py --record`
-runs every city's freshness probe, keeps the distinct watermarks it has seen in
-`portal_cadence.json`, and derives each portal's real publishing interval from
-the changes. It reads the crons back out of `trilogy.toml`, so its verdict
-column compares against the live schedule rather than a second copy of it. The
-measurement that motivated the split: San Francisco, Boston, Amsterdam and
-Cambridge publish daily, while Los Angeles last published in 2016, Tempe in 2024
-and Burlington in 2024 — eleven of seventeen portals move on a scale of months
-to years and were being polled three times a day.
-
-A city's cron still has a floor below the portal's own rhythm, because two other
-things make its parquet stale: an approved community submission (any time) and
-its own weekly OSM extract. That is why the slow tier is twice weekly rather
-than monthly.
-
-### Approved community submissions
-
-The local reviewer promotes accepted submissions from `submissions` into the
-`publishedTrees` Firestore collection. On approval it also:
-
-1. Re-encodes each submission photo with `sharp` and writes it to the **public**
-   `sf-tree-reporting-published` bucket under `community/photos/`.
-2. Rewrites `community/published_trees.ndjson` (the approved-tree export) and
-   `community/manifest.json` (the freshness timestamp) in the same bucket.
-
-Approval itself does not refresh map data. During the normal scheduled refresh,
-`data/raw/community_tree_info.py` reads that public export into the canonical
-Arrow tree schema, and `community_update_time.py` reads the manifest as a
-freshness input, so a new approval makes the affected city Parquet stale on the
-next run.
-
-**Freshness is per city.** `community_update_time.py` emits one *column* per
-city (`ussfo_community_data_updated_through`, …) and each city's model probes
-only its own, so approving a tree in Boston rebuilds Boston alone. A shared
-scalar would mark all fourteen city Parquets stale and re-download every
-municipal dataset to publish one tree.
-
-Note the shape: per-city *columns*, not one row per city with a
-`complete where city = 'X'` filter. Trilogy pushes a `complete where` clause
-into row queries but **not** into the watermark probe, which stays a plain
-`SELECT MAX(col) FROM uv_run(...)` over every row the script emits. The
-row-per-city version was tried and measured — a Boston-only approval moved San
-Francisco's watermark too. `data/raw/tests/test_data_sources.py` guards this.
-
-**Why a public GCS export rather than reading Firestore directly.** The first
-cut of this pipeline hit `firestore.googleapis.com/v1` on the theory that a
-`allow read: if true` security rule made `publishedTrees` world-readable. It
-does not: the Cloud REST API enforces IAM, and security rules only apply to
-Firebase SDK clients, so an unauthenticated pipeline gets
-`403 PERMISSION_DENIED`. Because every city's freshness now depends on the
-community probe, that 403 aborted the *entire* `trilogy refresh raw` run — all
-cities, plus landmarks and enrichment. Reading a public object keeps the
-pipeline credential-free, keeps Firestore private, and gives the photos a
-public URL in the same step. Both community scripts also treat a missing export
-as zero rows rather than raising, so an optional source can never take the
-whole refresh down again.
-
-**Photos.** `submission_photo_url` on a tree row is a photo of *that specific
-tree*, distinct from `species.photo_url` in `tree_enrichment.preql`, which is a
-stock photo of the species. `TreeMap.vue` prefers the submission photo when
-present. Private submission uploads are never made public: the `submissions`
-bucket keeps `public_access_prevention = "enforced"`, and a reviewer approval is
-the only thing that copies a photo into the public bucket.
-
-**EXIF.** The web client strips metadata by re-encoding through a canvas
-(`src/src/lib/image.ts`), which every upload path uses. The reviewer strips it
-again server-side at the publish gate, because the storage rules only check
-`contentType` — anything speaking the Storage API can upload a JPEG with intact
-GPS tags, and publishing is the point where that stops being private.
-
-### The `data_source` column
-
-Every tree row carries the dataset it came from, materialized as a uniformly
-named `data_source` column in every tree Parquet. The value list lives in
-`DATA_SOURCES` in `data/raw/shared/ingest.py`; display labels live in
-`src/src/data/dataSources.ts`. `data/raw/tests/test_data_sources.py` asserts the
-Python picklist, the preql enums, and the `complete where` clauses all agree.
-
-The concept is modelled as a **per-city** enum key (`ussfo_source`,
-`usbos_source`, …) declared in each city's tree model, *not* as one global enum
-in `core.preql`. This is not a style choice: Trilogy proves a city's Parquet is
-complete by checking that its raw sources cover every value of the partitioning
-enum. A 30-value global enum is never covered by one city's two sources, and the
-model fails with `UnresolvableQueryException: no complete sources found` — as
-does a plain `key data_source string`. Both were tried. Each city then aliases
-its key to the physical column (`data_source: ussfo_source`) so the Parquets
-still share one column name, and `tree_info.preql` merges the 14 keys into a
-single `data_source` concept for the cross-city Parquet. Do not add that merge
-to a city model — it re-breaks that city's resolution.
-
-This partitioning is also what makes community rows appear at all. A city whose
-only source claims `complete where city = 'X'` leaves no room for a second
-source: Trilogy treats the municipal source as covering the whole city and
-silently emits **zero** community rows, with no error anywhere. Each raw source
-must claim `complete where city = 'X' and {code}_source = 'Y'`.
-
-### Supplemental OpenStreetMap sources
-
-Every city carries a third partition of `natural=tree` nodes from OSM, labelled
-`OSM_{CODE}` and listed in `OSM_DATA_SOURCES` in `data/raw/shared/ingest.py`
-— ~1.37M staged trees across them. It was opt-in while only Tempe and
-Boston were wired; it no longer is, and a new city should wire it at the same
-time as its municipal source. `test_osm_city_is_fully_wired` parametrises over
-every city in `OSM_DATA_SOURCES` and asserts each half of the wiring below, so
-a half-wired city fails loudly rather than silently emitting zero OSM rows.
-
-The extraction itself lives once, in `shared.osm.extract_city`; each city
-keeps a ~28-line shim. They were 160-line copies differing in five lines, which
-is how Boston's shipped with a docstring claiming it extracted Tempe's trees.
-
-**A city-specific column has to be declared on the OSM partition too.** London's
-municipal and community sources declare `borough`; its OSM source did not, so
-that partition dropped out of the union and the remaining two stopped covering
-the source enum. Trilogy reports this as `complete where` clauses "not provably
-exhaustive over that type", which is a long way from "you forgot a column".
-Add it to `OSM_EXTRA_NULL_COLUMNS` in `data/raw/shared/osm.py` (keyed by city
-code, so the shared row script emits it for that city alone) and declare the
-property plus `borough: ?borough` in `osm_staging/gblon_osm_staging.preql`.
-London is the only instance today, which is why the shared
-`osm_staging/staging_common.preql` does *not* declare it — a city-unique column
-stays in the city's own file. `test_extra_osm_columns_are_declared_in_the_model`
-pins the two halves together. Dry-run every
-city after wiring from a template — per-city divergence is exactly what a
-template hides:
-
-```bash
-cd data && trilogy refresh --dry-run osm_staging/gblon_osm_staging.preql
-```
-
-**The extract is bounded by the city's territory, not its sanity box.**
-`fetch_osm_trees` sends one Overpass query as a union over the rectangles in
-`CITY_TERRITORY[code]` and post-filters with half-open edges, so a node on a
-shared boundary is fetched by exactly one city. It used to be the
-`CITY_BOUNDS` box, and where two cities' boxes overlapped both extracted the
-same nodes: Longueuil's box reached across the St Lawrence into downtown
-Montreal and 122,741 of its 128,390 OSM rows were Montreal's. Each city's
-parquet was clean and the duplication only existed in the rollup, which is
-what `validate-core` now checks daily.
-
-**Extraction is decoupled from refresh.** The extraction publishes
-`{code}_osm_staging.parquet` to GCS; the refresh pipeline only ever reads that
-object. Two reasons: Overpass 429/504s routinely under load (fetching at
-refresh time would couple every municipal rebuild to Overpass being up), and
-the only cheap OSM watermark is the global database timestamp, which advances
-every minute and would mark the city stale on every tick. Instead
-`{city}_osm_probe.py` emits the staged object's publication time, so
-publishing a new extract is what makes the city's Parquet stale.
-
-**Extraction is a scheduled job per city, and that job's cron is the cadence.**
-Every city runs an `osm-{code}` `[[cloud.job]]` (see `data/trilogy.toml`) that
-refreshes one `osm_staging/{code}_osm_staging.preql`: a standalone model whose
-python datasource is the *shared* `osm_staging/osm_rows.py` (a thin wrapper over
-`shared.osm.stage_city_rows`) and whose target is the staging parquet — so
-DuckDB writes GCS with the job's HMAC secrets and no local credential is
-involved. Which city that script fetches comes from the datasource's
-`where city = '{CODE}'`, which Trilogy pushes down as `--filter`; there is no
-per-city copy of it, and a missing filter is a hard failure rather than
-an Overpass query per city.
-
-Everything those models share — the canonical tree concepts and the
-Overpass freshness probe — lives in `osm_staging/staging_common.preql`, so a
-city's own file is two datasources and (for London) one extra column. The
-`freshness by` is Overpass's global `osm_base` timestamp
-(`osm_staging/overpass_timestamp.py`), the watermark the *city* models must
-never use: it always advances, so every firing re-extracts and **the cron is the
-extraction cadence**. An unreachable Overpass degrades to the epoch, so the
-staging parquet compares fresh and the firing no-ops instead of failing.
-
-Schedules are staggered and never concurrent -- thirty minutes apart, five or
-six cities a day across the week, which is what thirty-six cities and seven
-days comes to. The invariant is the spacing, not the daily count: Overpass
-allows two slots per client IP and answers an over-budget request with HTTP 200
-carrying an error remark, so a collision does not look like a failure — it looks
-like a city with no trees in OSM. `test_osm_extract_jobs_never_fire_together`
-in `data/raw/tests/test_cloud_jobs.py` checks this, because these entries are
-copy-pasted by definition.
-
-The extract models import nothing from `raw/` and nothing in `raw/` imports
-them, which is what keeps a city refresh job from ever adopting an extract
-asset.
-
-`{city}_osm_extract.py` still exists in each city directory as the manual
-counterpart — a run from a workstation with application-default GCS credentials,
-which fetches Overpass and `upload_staging`s the parquet. It is the bootstrap
-path: a brand-new city needs its staging object to exist before its tree model
-can build, and its `osm-{code}` job does not exist in production until the sync
-runs on merge. Both paths share `fetch_osm_trees`/`build_table`, so they cannot
-drift on content — the only difference is who writes the GCS object. Once the
-job is deployed, prefer firing it:
-
-```bash
-trilogy cloud jobs run urban-tree-osm-ussfo --wait
-```
-
-**A new city's tree model must be imported in `raw/tree_info.preql` and given a
-stub datasource in `raw/full_tree_publish.preql`.** `tree_info.preql` is the
-cross-city union model the app's dashboard queries resolve against; it is not a
-refresh entrypoint and never has been. The published rollup is republished from
-the city parquets by the `urban-tree-full` job, so a city missing from that
-publisher's stubs never appears in `full_tree_info` no matter how healthy its own
-pipeline is.
-
-There used to be a third list, `raw/tree_cities.preql`, whose only job was to be
-the trees lane's entrypoint (city imports and never the `data_source` merge, or
-the planner would build the city parquets from the wrong sources). Per-city
-entrypoints made it unnecessary and it was deleted: a city model *is* the
-entrypoint now, and it structurally cannot have the merge in scope. What the
-import list used to catch — a city that silently never rebuilds — is now
-`test_every_city_has_a_refresh_job`.
-
-**Staged parquets live in GCS, not in git — and the reason is the watermark.**
-The first cut committed them next to the extract script and had the probe emit
-the file's `st_mtime`. That works locally and is wrong everywhere else, because
-**git does not preserve mtime**: a fresh clone stamps every file with the
-checkout time. Every cloud job run is a fresh clone, so the watermark advanced
-on each of the three daily ticks and Boston and Tempe rebuilt every time —
-precisely the every-tick thrash staging was introduced to prevent, having merely
-swapped Overpass's minute-resolution clock for a checkout clock. It is invisible
-locally, where mtimes happen to be stable, and it was caught only by noticing
-that four staging files committed at 08:55 and 10:24 all carried an mtime of
-20:17, matching a branch switch.
-
-A GCS object's `Last-Modified` is a real publication time that survives cloning.
-`shared.ingest` holds the three helpers — `staging_url` for the preql `file`
-clause, `staging_modified_at` for the probe, `upload_staging` for the extract —
-and `.gitignore` carries `*_staging.parquet` so a copy cannot drift back in.
-`test_no_staging_parquet_is_committed` fails if one does.
-
-The probe's HEAD request carries a cache-buster: the objects are served with
-`Cache-Control: max-age=3600`, so a probe run just after an extract would
-otherwise read the previous publication time and call the city fresh.
-
-**Dedup is one shared cluster merge, in `raw/tree_dedup.preql`.** OSM
-overlaps the municipal inventory by construction, and a community submission
-can describe a tree the inventory already has. Trilogy's joins are
-equality-only (a non-`=` join key is rejected at hydration), so a spatial
-anti-join cannot be expressed in the model — and doing it in a script against
-the published Parquet would dedup one rebuild cycle stale. The shared model
-instead derives a grid cell from lat/lon in **four copies of a grid staggered
-by half a cell** (x, y, and both); two points within half a cell always share a
-cell in at least one grid, so a 10m cell is an equi-join-shaped stand-in for
-"within 5m", with possible matches out to a cell diagonal (~14m). An
-unnest-based 3x3 neighborhood would give an exact radius but sits on the
-merged-unnest planner path that has regressed twice upstream; don't.
-
-Every row then resolves to **one canonical cluster id** — a municipal row is
-its own cluster, a community row attaches to the lowest municipal id sharing a
-cell, an OSM row to the lowest municipal id, else the lowest community id —
-and every canonical attribute of the cluster (`species`, `latitude`,
-`diameter_at_breast_height`, ...) is picked across its rows by a value
-function: `@by_source` takes a non-null value, community first (it carries a
-person and a photo), then municipal, then OSM; species prefers the most
-specific name (binomial > genus > a form sentinel > Unknown). The survivor is
-the row whose `tree_id` equals its cluster id, and `merged_sources` /
-`merged_tree_ids` record what it absorbed, so no id is ever lost.
-
-A city takes part by importing the file, feeding `source_label` from its enum,
-mapping its raw sources onto the shared `raw_*` concepts instead of the
-canonical ones (the canonical value is *derived* by the merge and `merge`d back
-— the pattern Boston has long used to impute dbh; a raw source that bound
-`species` directly would hand the planner a second, unmerged path to it), and
-adding one line for dbh. The cell size is a row in `DEDUP_CELL_METRES`
-(`shared/ingest.py`), rendered into the model by `dedup_cells.py --write` as
-an inline `VALUES` table — inline rather than a python datasource because the
-same text is planned on the resolver service, which has no scripts, and an
-unbound cell size there made the planner error instead of reading the parquet.
-
-**Why the cell is 10m (5m guarantee), not 20m.** Distance alone cannot
-distinguish a re-mapped inventory tree from the next tree in a planted row:
-Tempe's inventory has a *median* nearest-neighbor spacing of 6.5m, and 79.5%
-of inventory trees have another inventory tree within 10m. What does separate
-the populations is pair structure, measured by
-`data/raw/ustem/tempe_dedup_validation.py` (exact haversine, mutual-NN, 1:1
-matching, local density): OSM points within 5m of an inventory tree are
-mutual nearest neighbors with it >=88% of the time (99.7% below 2m), sit
-3-8x closer to it than to the second-closest, and appear where OSM:inventory
-local density is 1:1 — the inventory re-mapped with GPS/imagery offset. In the
-5-10m band mutual-NN collapses to 25%, meaning roughly three quarters of those
-matches are distinct neighbors at planting-row spacing. A 20m cell (10m
-guarantee, 28m reach) flagged ~80 more OSM rows, most of them likely real
-trees; the error asymmetry favors the smaller cell, since a missed duplicate
-double-renders one visible, toggleable dot while a false flag hides a real
-tree. When wiring a new city, re-run the validation script against that city's
-inventory before copying the cell size — the 5m break reflects Tempe's small
-OSM positional offsets, and a city traced from misaligned imagery may need a
-larger cell (Berlin and Paris can calibrate against `osm_ref` exact-id
-matches). Per-city thresholds are expected as OSM rolls out.
-
-**Calibrate every city; the answer differs.** `osm_dedup_validation.py --city
-CODE` measures the mutual-NN rate per distance band against the staged extract
-and the published inventory. Across the wired cities it split three ways:
-
-| cell | cities | 5-10m mutual-NN |
-|------|--------|-----------------|
-| 10m | Paris, Berlin, Vancouver, Amsterdam, DC, SF, Melbourne | 15.9%-47.6% |
-| 10m | London, NYC | 51.5%, 53.3% — coin flips, see below |
-| 20m | Burlington, Buenos Aires, LA | 61.0%-67.2% |
-
-**The threshold is 60%, not 50%, and that matters.** The first version of this
-script used a bare `mutual-NN < 50%` cut and sent London (51.5% over n=18,076)
-and New York (53.3% over n=5,059) to a 20m cell. Those readings are coin flips,
-and the errors are not symmetric: flagging a 50/50 band hides about as many
-real trees as duplicates it removes — roughly 8,800 in London and 2,400 in New
-York. Only flag a band that is *clearly* duplicate-dominated; when the
-measurement is ambiguous the asymmetry says leave the rows visible. The script
-now reports which regime it saw ("coin flip" or "neighbour-dominated") rather
-than emitting a bare number, because the number alone invited exactly this
-mistake.
-
-Berlin (6,157) and Paris (3,906) carry enough `osm_ref` values to cross-check
-the geometric break against exact municipal-id matches; both break sharply at
-5m (18.4% and 15.9%), which is the strongest confirmation the method has.
-
-**Pruned, not flagged.** Each city's published target carries `where tree_id
-= cluster_id`, so the parquet holds exactly one row per tree; the rows a
-cluster absorbed are never published and no client-side filter is needed to
-hide them. `merged_tree_ids` is where an absorbed id survives, so a link to
-one still resolves to its survivor.
-
-This needs **pytrilogy 0.3.348 or later** and the failure modes below it are
-quiet, which is worth knowing if the pin ever moves back: 0.3.343 parsed the
-target-side `where` and silently did not apply it, publishing every row; 0.3.347
-applied it but then required the partial partitions to be provably exhaustive
-over the whole `city` enum — which one city's partitions never are — and failed
-with `no complete sources found`. `upstream_repro/keyless_join_cell_aggregate/`
-has the three spellings and the enum toggle that isolated it.
-Because the merge is computed from the same materialization's source rows, a
-municipal update dedups against itself in the same rebuild; there is no
-staleness window.
-
-**`complete where` asserts; `where` filters.** These are different clauses and
-a shared source needs both. `complete where city = 'X' and {code}_source = 'Y'`
-is a *model-level assertion* — "this source holds the complete set of rows for
-that partition" — and does not promise the planner will inject a predicate.
-`community_tree_info.py` is read by every city and returns *every*
-city's approved submissions, so each city's datasource has to restrict its rows
-itself, with a `where` clause after the file clause:
-
-```preql
-root partial datasource {code}_community_tree_info (
-    ...
-)
-grain (tree_id)
-complete where city = '{CODE}' and {code}_source = 'COMMUNITY_{CODE}'
-file `../community_tree_info.py`
-where city = '{CODE}';
-```
-
-Read together: "only {CODE}'s trees, and this is all of them."
-
-This was missing for a long time without visible symptoms, because the planner
-*happened* to inject a predicate for the twelve cities with no OSM partition
-and not for the two with one — the presence of a dedup column, whose value
-comes from an aggregate across the stacked partitions, is what decided it.
-Tempe's Parquet accordingly shipped three `city = 'USBOS'` rows. Do not rely on
-the injection: write the `where`. Trilogy compiles it into both a SQL predicate
-and a `--filter 'city={CODE}'` argument to the script, which
-`community_tree_info.py` honours so that one invocation per city does not each read
-and emit the whole export. Write-up in
-`upstream_repro/partition_filter_dropped/`.
-
-**Every city must prune, and a city that does not is silent.** Dedup is only
-useful if something acts on it, and for a while nothing did: Boston's first OSM
-rebuild flagged 7,369 rows correctly and the map rendered all of them anyway,
-stacked on top of the municipal trees on Boston Common. The prune is now the
-shared derivation in `tree_dedup.preql`, so importing that file and gating the
-published target is all a city does — and a city that skips the gate still
-builds, with counts that are simply high.
-`test_every_city_prunes_absorbed_rows` is what catches that.
-
-**Rebuilding is per city and safe in any order.** `duckdbPipeline.worker.ts`
-probes for the old `is_duplicate` column and filters only when it is present,
-so a parquet built before the prune is filtered exactly as it always was, while
-a pruned one needs no filter because its rows are already the survivors. There
-is no window in which the map is wrong, and no need to coordinate the refresh
-with a deploy. That is why the column was not dropped and the filter deleted in
-the same change; delete the filter once every city has been rebuilt past the
-prune.
-
-`src/src/workers/parquetSchema.test.ts` asserts the *absence* of the column
-against the live GCS Parquet for every city in `CITY_CONFIG` — a parquet that
-still has it predates the prune and is publishing absorbed rows, so this turns
-"I forgot to refresh" into a red test. A city whose parquet does not exist *at
-all* (brand-new, first build pending) is the one carve-out: for a 404 the test
-asserts the city's model prunes instead, so a city-addition PR is not red until
-its first credentialed build. The flip side: a green build no longer proves a
-brand-new city's parquet exists, so a just-added city stays broken in a deploy
-until its first refresh runs.
-
-**A new column does not make a Parquet stale.** Staleness is decided by the
-freshness probes, which watch the *source data*, so refreshing a city after a
-model change reports it "up to date" and rebuilds nothing. Rolling this column out looked like it worked — the run exited 0 with
-"All scripts executed successfully" — while twelve of the fourteen Parquets were
-never touched. Force each one by name:
-
-```bash
-cd data && trilogy refresh raw/{city}/{city}_tree_info.preql -f {city}_tree_info
-```
-
-Then republish `full_tree_info`, which reads the per-city Parquets and would
-otherwise still hold the pre-change rows. It is built only by the
-`urban-tree-full` cloud job (`trilogy cloud jobs run urban-tree-full --wait`);
-see `raw/full_tree_publish.preql`.
-
-The rollup is less exposed to this trap than the cities are, because its
-watermark is the *publication time* of the city objects rather than a column
-inside them — a rebuild that changes only the schema still republishes the
-object, and the rollup notices. Force it anyway if you are unsure:
-`trilogy refresh raw/full_tree_publish.preql -f full_tree_info`.
-
-**`tree_info.preql` takes the dedup columns from the parquets and derives
-nothing.** `merged_sources` and `merged_tree_ids` are one shared derivation,
-computed inside each city's own build over that city's rows. Asking the planner to resolve the cluster aggregate over the union of
-every city fails outright:
-
-```
-UnresolvableQueryException: Planner emitted a keyless join between row-bearing
-sources that share a join axis: ...unioned_at_local_data_source_local_tree_id
-_grouped_by_local.usbos_cell_a... This would render as a cross join (ON 1=1)
-and fan out; the join axis was lost upstream.
-```
-
-The cross-city `full_tree_info` Parquet does not carry the columns, and the
-worker skips the filter on that fallback path.
-
-**The all-cities dashboards now read eighteen parquets instead of the rollup.**
-Moving the raw sources onto `raw_*` changed which source the resolver picks for
-a query with no city: it used to be the rollup and is now the union of every
-city's parquet — the same rows as eighteen files. `dashboard-pushdown.test.ts`
-accepts either and fails a strict subset, because while only some cities were
-converted the resolver answered the all-cities dot map from those cities plus
-each other city's *OSM staging parquet alone*, silently. That is a planner
-bug — a `complete where city = X and source = Y` claim treated as covering
-city X — reproduced in `upstream_repro/partition_subset_chosen/`. Convert
-every city in one change; never leave the bundle half-converted.
-
-Other details: OSM `circumference` defaults to metres but is frequently
-mis-entered as bare centimetres — the extract treats a unitless value > 10 as
-cm. The staging schema keeps the node's `ref` tag (`osm_ref`): empty for
-Tempe, but Berlin (~6k) and Paris (~4k) carry the municipal inventory id
-there, enabling exact-id dedup when those cities are wired. OSM data is ODbL:
-add "(c) OpenStreetMap contributors" attribution in `README.md` and
-`src/src/data/sourceCatalog.ts` when wiring a city.
-
----
-
-## Reviewed aerial-imagery detections (the satellite partition)
-
-A city imagery has been run over can carry a **fourth source partition**,
-`SATELLITE_{CODE}`: model detections on NAIP tiles that a person accepted in
-the reviewer's satellite page and published. SF and Boston are wired; the
-registry is `SATELLITE_DATA_SOURCES` in `shared/ingest.py`, and it is
-opt-in per city the way OSM was while only two cities had it.
-
-The flow, end to end:
-
-1. `imagery_model/src/urban_tree_ml/tile_bundle_export.py` turns a run's
-   predictions plus the local NAIP mosaic into one bundle per tile (PNG +
-   JSON: affine, CRS, detections with stable ids, the inventory trees the
-   tile covers with their predicted crown widths). Sealed test chips and
-   ground truth are never exported.
-2. `reviewer/satellite.ts` serves the bundles at `/satellite`, stores each
-   decision in Firestore, and on **publish** writes
-   `satellite/published_trees.ndjson` + `satellite/manifest.json` to the
-   public bucket -- the same gate approval is for photo submissions.
-3. `raw/satellite_tree_info.py` reads that export into the canonical schema
-   and `raw/satellite_update_time.py` reads the manifest, one freshness
-   column per city, exactly as the community pair does. Each wired city's
-   model declares the `SATELLITE_{CODE}` enum value, a
-   `complete where city = 'X' and {code}_source = 'SATELLITE_X'` partition
-   over the ingest with `where city = 'X'`, the probe, and the column in its
-   `greatest()`. `test_satellite_wiring.py` names whatever is missing.
-4. `raw/tree_dedup.preql` classes the rows as a fourth source, **below
-   municipal and community and above OSM**: a lone detection publishes as
-   its own tree and anchors any OSM node beside it; a detection beside an
-   inventory tree -- or one the reviewer explicitly linked, which is
-   exported *at the inventory tree's coordinates* so the grid equi-join
-   cannot miss it -- is absorbed, the municipal position and measurement
-   win, the satellite species fills a gap, and the satellite id lands in
-   `merged_tree_ids`. That is the reconciliation: when a city starts
-   publishing a tree the imagery already found, the two become one row with
-   both sources in `merged_sources`. `test_satellite_reconciliation.py`
-   runs the SF model's own refresh SQL over fixture rows and pins each case.
-
-Two things the ingest refuses on purpose. The model's DBH estimate never
-enters `diameter_at_breast_height` (only a reviewer-typed measurement does);
-the estimate and the crown width stay in the export for a quality join by
-tree id. And a rejection or an "uncertain" is a statement about one image:
-stored, never published, never a change to a canonical tree.
-
-Adding a city: run imagery over it, add it to `SATELLITE_DATA_SOURCES`,
-declare its column in `raw/satellite_tree_info.preql`, and wire its model
-as SF's is wired. No new job: the city's own `city-{code}` refresh picks the
-export up through the freshness column, and the core reads the city parquet
-as it always has.
-
-## Tree-level predictions
-
-`raw/tree_predictions.preql` is the fourth member of the daily core. It reads
-the published rollup and the published enrichment table -- through their
-`_source.preql` root views, never the models -- joins a committed table of
-coefficients, and publishes `tree_predictions_v{data_version}.parquet` at
-tree grain:
-
-| Column | Notes |
-|--------|-------|
-| `tree_id`, `city` | the rollup's |
-| `genus` | from the enrichment table (which has corrected a city's misspelt binomial) |
-| `dbh_cm` | the rollup's inches, converted; null where the source recorded none or zero |
-| `age_years` | planting date to the build date, over 365.25; null without a date |
-| `predicted_dbh_cm` | `scale * age_years ** b`, age clamped to the fit's range; published for every dated tree, so the measured ones check the fit |
-| `dbh_model_level` | `genus`, `division`, `global`, or `none` (no date, or a palm) |
-| `dbh_model_taxon`, `dbh_model_n` | which age fit, and how many published trees stood behind it |
-| `crown_dbh_source` | `measured` or `age`: which diameter the crown was built on |
-| `predicted_crown_width_m` | `2 * scale * dbh_cm ** b`, DBH clamped to the fit's range |
-| `crown_model_level` | `genus`, `family`, `division`, `global`, or `none` (no DBH from either source, or a palm) |
-| `crown_model_taxon`, `crown_model_n` | which fit, and how many Tallo trees stood behind it |
-| `local_tree_density_per_ha` | rollup trees in the tree's 50 m cell, per hectare; a covariate, not a term |
-| `predicted_height_m`, `predicted_age_years` | null; reserved |
-
-**The model is one sourced power law per genus, and its provenance is the
-point.** `raw/tools/crown_allometry_fit.py` fits `ln(crown_radius) = ln_a + b *
-ln(dbh_cm)` per genus on Tallo (Jucker et al. 2022; 312,829 trees with a
-measured crown radius, 1,453 genera, CC BY 4.0), gates each fit (n >= 30,
-r2 >= 0.2, 0.3 <= b <= 1.3, a largest fitted stem of at least 20 cm), and
-resolves the fallback at fit time -- a genus that fails the gate carries its
-family's fit, then its division's -- so the model does one join. Against
-today's rollup, 86% of identified trees get a genus fit, 8% a family fit,
-2% a division fit, and 4% are genera Tallo has never seen, which fall
-through to the division constants rendered into the model by `tree_form`.
-Refit with
-
-```bash
-cd data/raw && uv run tools/crown_allometry_fit.py --write --coverage
-```
-
-which downloads Tallo to `raw/.cache/` (gitignored), rewrites
-`crown_width_coefficients.csv` and the `crown_fallbacks` block in the model,
-and prints the fit against the one open-grown urban reference (Coombes et
-al. 2019). `test_tree_predictions.py` runs the model's own SQL over nine
-fixture trees and checks the CSV against the gate, so a stale block or a fit
-that makes crowns shrink with diameter is a red test.
-
-**Two things the model deliberately is not**, both documented in the fit
-script and both left for the curation stage this parquet feeds: calibrated to
-open-grown urban trees (Tallo is forest plots, and runs 15-30% narrow for a
-30-60 cm broadleaf against the roughly 25:1 crown-to-stem ratio Coombes
-measured), and adjusted for stand density (Bechtold 2003 tried a basal-area
-term across 87 species and dropped it as unstable; Tallo records no
-competition measure). The density covariate is published so that adjustment
-can be measured rather than assumed.
-
-**The age fallback is a second fit of the same shape, on our own trees.**
-303,612 published trees (September 2026: most of Amsterdam's dated trees, and
-tens of thousands in Melbourne, San Francisco and Los Angeles) carry a
-planting date and no diameter, so `raw/tools/dbh_age_fit.py` fits
-`ln(dbh_cm) = ln_a + b * ln(age_years)` per genus on the rollup's own trees
-that carry both -- 1.9M of them in 23 cities, joined to the enrichment table
-for the corrected genus exactly as the model joins it -- with the same gate
-(n >= 100 here), the same bias correction, and the same fallback order
-(genus, then the division `tree_form` implies, then all trees). No open
-reference dataset records age and diameter for urban trees at genus rank,
-and the population served is the rollup's own, so its own dated, measured
-trees are the right reference. The fit is honest about being pooled across
-climates; `dbh_model_level` and `dbh_model_n` say how far each prediction
-reached. Against i-Tree's open-grown base rate of 0.83 cm a year, Acer comes
-out at 12.6, 27.0 and 43.6 cm at 10, 30 and 60 years. Refit with
-
-```bash
-cd data/raw && uv run tools/dbh_age_fit.py --write
-```
-
-which reads the two published parquets, rewrites `dbh_age_coefficients.csv`
-and the `dbh_age_fallbacks` block in the model, and prints every date
-carrying a tenth or more of a city's dated trees with its diameter spread.
-That list is where a portal's *stamped default* shows: Edmonton writes
-1990-06-01 on 54% of its inventory (diameters 13-58 cm across the middle
-80%) and Melbourne 1900-01-01 on a third of its dated trees at a 35 cm
-median. A cohort has one diameter and a default has the city's; the day is
-not the tell, since Boston's real 1994 cohort is a January 1 and Edmonton's
-real cohorts are June 1s. Those two are nulled **by their own ingests**
-(`PLACEHOLDER_PLANT_DATE` in each), and `enforce_tree_schema` nulls a date
-before 1500 or in the future for every city, so the model has nothing to
-second-guess: `age_years` is an age or null. Until Edmonton and Melbourne
-rebuild, the fit re-applies those rules to the published parquets
-(`INGEST_NULLED_PLANT_DATES`); delete an entry once its city's parquet no
-longer carries the date. The fit window is 1-200 years.
-
-**Three planner facts the model leans on, each found the hard way:**
-
-- `power` is the `**` operator, not a function; there is no `exp`, `ln` or
-  `cos`. The coefficient table therefore carries `scale = exp(ln_a +
-  sigma^2/2)` so the prediction is a bare power, and the density grid scales
-  longitude by a Taylor polynomial for the cosine of the cell's latitude band.
-- DuckDB's `greatest()` skips nulls, so `least(greatest(dbh, 1), max)` turns a
-  missing diameter into a 1 cm stem with a 70 cm crown. The null case is
-  spelled out.
-- The enrichment source is `root partial`; without `partial` the planner
-  joined it INNER and dropped the 61,764 trees whose species has no enrichment
-  row yet. With it the join is FULL, which also emits a row per enrichment
-  species and coefficient genus no tree carries -- hence `where tree_id is
-  not null` on the published target, which the planner renders as a RIGHT
-  OUTER JOIN from the rollup.
-- Two coefficient tables keyed on `genus` do not drop each other's genera:
-  Syringa has an age fit and no Tallo row, Abarema the reverse, and
-  `test_a_genus_in_one_coefficient_table_keeps_its_row_from_the_other` pins
-  that both trees keep the fit they have.
-
-Locally the whole thing is 11-19 s over the 10.5M-row rollup, peaking at
-3.9 GiB with no DuckDB memory limit and completing under a 1 GB limit in
-53 s (it spills), which is what the job's `memory_mb = 4096` is sized to.
-
-## Data Versioning
-
-All GCS parquet files use a versioned naming scheme: `{name}_v{DATA_VERSION}.parquet`.
-
-The version is a single integer defined in two places — keep them in sync when bumping:
-
-- **`data/raw/core.preql`** — `param data_version string default '2';` (the preql
-  models interpolate it; `data/raw/enrichment/_tree_shared.py` reads it from here)
-- **`src/src/workers/parquetUrls.ts`** — `TREE_DATA_VERSION` and
-  `LANDMARK_DATA_VERSION` (used by the browser worker). Both track the single
-  preql `data_version`, so bump all three together.
-
-Preql datasource files use the `f\`` template syntax to interpolate the version:
-
-```preql
-file f`https://.../trees/{code}_tree_info_v{data_version}.parquet`:f`gcs://.../{code}_tree_info_v{data_version}.parquet`
-```
-
-**When to bump the version:** Any change that makes an existing consumer fail — a type change, or removing/renaming a column something actually reads. Bump the integer in both places, rebuild all parquets, and the old files remain on GCS untouched as a rollback path.
-
-**When not to.** Purely additive columns do not need one. The deployed app selects columns by name, so it ignores new ones, and rolling the app back after a rebuild still works because its column set is a subset. Bumping is not free: `data_version` is a single param shared by *all* parquets, so a bump re-materializes the LLM-backed enrichment table and every landmark parquet too. The `data_source` / `submission_photo_url` addition deliberately stayed on v2 for this reason.
-
-Either way, **refresh before you deploy** — the worker selects new columns by name and fails to load against a parquet that has not been rebuilt yet.
-
----
-
-## City Code Convention
-
-| City | Code | Pattern |
-|------|------|---------|
-| San Francisco | `USSFO` | `{ISO-3166-1-alpha-2}{IATA-airport-or-3-letter-abbr}` |
-| New York City | `USNYC` | |
-| Boston | `USBOS` | |
-| Paris | `FRPAR` | |
-| Santorini | `GRSAN` | 3-letter abbreviation, not the IATA `JTR` — same call Vancouver's `CAVAN` made over `YVR`, since the code shows up in the URL |
-
-All codes are **5 uppercase letters**: 2-letter country code + 3-letter city abbreviation. The parquet file name is the lowercase code: `frpar_tree_info_v1.parquet`.
-
----
-
-## Step-by-Step: Adding a New City
-
-### 1. Understand the Source Data
-
-Find the city's open tree dataset. Key fields needed:
-- **Unique tree ID** (any stable string/int)
-- **Species** — the scientific name (Latin binomial, e.g. `"Platanus x hispanica"`). Do **not** embed a common name in this field — see the Species Enrichment section.
-- **Latitude / Longitude** (decimal degrees WGS84)
-- **Diameter at breast height** (DBH) in inches, or a proxy you can convert
-
-Paris notes:
-- Source: `https://opendata.paris.fr/explore/dataset/les-arbres/`
-- API: `https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/les-arbres/exports/parquet`
-- DBH not available — uses **circumference in cm** (`circonferenceencm`); convert: `dbh_in = circ_cm / (π × 2.54)`
-- Genus/species are `genre`/`espece` — concatenate as `f"{genre} {espece}".strip()`
-- Location is a nested struct `geo_point_2d: {lat, lon}`
-- No `plant_date` field
-- ~217k trees
-
-### 2. Choose a City Code
-
-Format: `{ISO2}{3-letter-city}`. Check it doesn't collide with existing codes. For Paris → `FRPAR`.
-
-### 3. Register the City Code in the Trilogy Enum
-
-**`data/raw/core.preql`** holds the `city` key as a typed enum. Add the new code:
-
-```preql
-key city enum<string>['USSFO', 'USNYC', 'USBOS', 'FRPAR'];
-```
-
-Trilogy will reject any `complete where city = '...'` clause whose value isn't in this enum, so this must be done before the preql files in the next steps will validate.
-
-Also add the new city's source labels to `MUNICIPAL_DATA_SOURCES` in
-**`data/raw/shared/ingest.py`** (the community label is derived automatically)
-and a display label to **`src/src/data/dataSources.ts`**. See "The `data_source`
-column" above for why the enum values themselves live per-city rather than here.
-
-Two boxes, not one. `CITY_BOUNDS` is the sanity box every row of the city
-must fall in, drawn generously. `CITY_TERRITORY` is the set of rectangles
-that decides which city an *unattributed* tree -- an OSM node, a community
-submission -- belongs to, and no rectangle of one city may intersect a
-rectangle of another (`test_city_territory.py`). `new_city.py` writes the
-territory as the envelope; if the new city has a neighbour on the map, carve
-both territories along the real boundary, as a staircase of latitude bands
-where the boundary is diagonal (Toronto/Mississauga, Montreal/Longueuil are
-the worked examples). Municipal ingests keep using the envelope: an inventory
-attributes its own trees, and a staircase always leaves a few hundred of them
-on the far side.
-
-### 4. Create the Freshness Probe
-
-**This step is mandatory.** Without it, Trilogy re-downloads the full dataset on every pipeline run regardless of whether the source has changed. The probe is a lightweight script that fetches only the dataset's last-modified timestamp and emits a single-row Arrow table.
-
-Create `data/raw/{city}/{city}_update_time.py`:
-
-```python
-#!/usr/bin/env -S uv run
-# /// script
-# requires-python = ">=3.13"
-# dependencies = ["pyarrow", "pytrilogy", "requests"]
-# ///
-
-import sys
-from datetime import datetime, timezone
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
-
-def fetch_modified_at() -> datetime:
-    # Hit the lightest metadata endpoint your open data platform exposes.
-    # For OpenDataSoft (Paris, and many European cities):
-    #   GET /api/explore/v2.1/catalog/datasets/{dataset_id}
-    #   Read: .metas.default.modified  (ISO 8601)
-    # For CKAN (Boston, many US cities):
-    #   GET /api/3/action/resource_show?id={resource_id}
-    #   Read: .result.last_modified
-    # For Socrata (SF, NYC):
-    #   GET /api/views/{dataset_id}.json
-    #   Read: .rowsUpdatedAt  (Unix timestamp)
-    raise NotImplementedError
-
-if __name__ == "__main__":
-    emit_freshness("{CODE}", fetch_modified_at)
-```
-
-**Fetch JSON with `get_json_with_retry`, and emit with `emit_freshness`** — do
-not hand-roll `requests.get(...).json()` or the Arrow table.  Both helpers exist
-because of the same failure: every probe is a root datasource, and Trilogy
-collects root watermarks in one planning phase that has no per-probe error
-handling, so *one* probe raising ends the whole `trilogy refresh raw` run before
-any city is refreshed.
-
-- `get_json_with_retry` treats a 2xx whose body isn't JSON as a transient
-  outage, because that is what it usually is: portals in maintenance answer
-  every path with an HTML holding page and HTTP 200 (gdi.berlin.de serves a
-  1.4 KB "Wartungsarbeiten" page for its WFS *and* its metadata API).  It
-  retries with backoff and, when it gives up, raises `UpstreamUnavailable`
-  naming the URL, status, content type and first line of the body — where
-  `.json()` raised a bare `JSONDecodeError: Expecting value: line 2 column 9`.
-- `get_json_with_retry` also classifies a 200 that carries a provider *error
-  envelope* — ArcGIS's `{"error": {"code": 500, ...}}`, Socrata's
-  `{"error": true}`, CKAN's `{"success": false}` — as an outage. Burlington's
-  ArcGIS answered a statistics query exactly that way during an outage; because
-  the body was valid JSON it reached the probe's "no features" guard, which
-  raised a fatal `RuntimeError` and took the whole refresh down. Probes should
-  keep their "missing field" guards, but they must never be the thing that sees
-  a portal outage first.
-- `emit_freshness` catches `UpstreamUnavailable` and emits the epoch instead.
-  The epoch loses every `greatest()`, so the city's Parquet compares as fresh,
-  sits out this run, and is picked up by the next tick once the portal is back —
-  while the other thirteen cities refresh normally.
-
-Anything that is *not* an availability problem must keep raising.  A missing
-field or an unparseable date means the portal changed its schema and our mapping
-is stale; degrading there would freeze that city's Parquet silently and forever.
-Raise `RuntimeError` (as the existing probes do for a missing timestamp field),
-not `UpstreamUnavailable`.
-
-For a probe whose endpoint returns something other than JSON, classify the
-failure yourself — see `deber/berlin_landmarks_probe.py`, which raises
-`UpstreamUnavailable` when Overpass returns a body that is not an ISO timestamp.
-
-**Check the portal's maintenance window before assuming the schedule is fine.**
-Berlin publishes one (Thursdays 08:00-10:00 local), and the refresh's original
-06:00 UTC tick sat inside it every summer Thursday.  The tick times in
-`data/trilogy.toml` avoid the 06:00-09:00 UTC band for that reason; if a new
-city's portal publishes a window that collides, move a tick rather than adding
-one.
-
-Also add the city's freshness property to **`data/raw/tree_common.preql`**:
-
-```preql
-property <*>.{city}_data_updated_through datetime;
-
-auto latest_update_through <- greatest(..., {city}_data_updated_through);
-```
-
-**One freshness timestamp per city (important):** The final materialized parquet's `freshness by` clause must reference a single per-city `auto` property, not a list of sub-source raw properties. If a city ingests from multiple sub-sources (e.g. Boston has `boston_city_data_updated_through` and `arboretum_data_updated_through`), define individual raw properties for each sub-source and one `auto` that coalesces them:
-
-```preql
-# tree_common.preql
-property <*>.{city}_source_a_data_updated_through datetime;
-property <*>.{city}_source_b_data_updated_through datetime;
-auto {city}_data_updated_through <- greatest({city}_source_a_data_updated_through, {city}_source_b_data_updated_through);
-```
-
-The `freshness by {city}_data_updated_through` in the parquet datasource then references only the `auto`. Adding raw sub-source properties directly to `freshness by` is incorrect and will cause Trilogy to treat the datasource as needing multiple independent freshness checks.
-
-Paris probe details:
-- **Metadata URL:** `https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/les-arbres`
-- **Timestamp field:** `.metas.default.modified` (ISO 8601, already timezone-aware)
-- This is a ~2 KB JSON response vs. the ~50 MB full dataset export
-
-### 5. Create the Fetch Script
-
-Create `data/raw/{city}/{city}_tree_info.py`. `new_city.py` leaves a stub with
-the contract in its docstring; follow `usden/denver_tree_info.py` for an ArcGIS
-source or `boston_tree_info.py` for the general shape.
-
-> **If the portal is ArcGIS, use `shared.platforms.arcgis`.** It is the platform most
-> North American cities publish on, and the module covers the whole of it:
-> `FeatureLayer` addresses a layer, `iter_features` / `iter_attributes` page it,
-> `layer_last_edit` and `field_max` are the two freshness watermarks, and
-> `esri_ms_to_date` converts Esri's epoch-milliseconds. `find_tree_layers` will
-> even locate the layer — `uv run shared/platforms/arcgis.py <hub-host>` lists every
-> tree dataset a Hub site publishes with its REST endpoint.
->
-> Two details in there are correctness rather than convenience, and both were
-> bugs in the hand-rolled copies it replaced. The page size comes from the
-> layer's own `maxRecordCount`, because asking for more is **silently capped**
-> and a capped page is a short page, which is the signal that the data ran out.
-> And paging stops on Esri's `exceededTransferLimit` flag rather than on the
-> short-page heuristic, which cannot tell a full last page from a truncated one.
-> `orderByFields` is likewise required, not tidy: offset paging over an
-> unordered result may repeat or skip rows between requests.
->
-> **Read the field domains before you decide what a column holds.**
-> `coded_value_domain(layer, field)` returns a coded-value field's own
-> dictionary, and three cities' worth of judgement has come out of it:
-> Halifax's `DBH` is a nine-band size class whose boundaries the layer
-> publishes, Ajax's `SPCODE` symbols are named in English there, and Ottawa's
-> `SPECIES` -- which stores `Maple Sugar`, `Oak Red`, and reads for all the
-> world like a common-name-only column -- maps every one of its 174 codes to
-> the binomial. A layer that looks like it does not identify its trees may
-> simply be keeping the identification in `fields[].domain`.
->
-> **A missing geometry comes back as the string `"NaN"`**, not as null, on at
-> least two of the on-prem servers here. Read a point with `esri_point`, which
-> returns `(None, None)` for it; reading `geometry["y"]` directly puts a string
-> into a float column and fails at `pa.array` with a message about type
-> conversion rather than about a feature with no location.
-
-The script must:
-1. Download the source data (CSV, JSON, or parquet from the open data portal)
-2. Transform to this schema:
-
-| Column | Type | Notes |
-|--------|------|-------|
-| `tree_id` | `string` | Prefix with `{abbr}-` e.g. `par-12345` for global uniqueness |
-| `city` | `string` | The city code, e.g. `FRPAR` |
-| `species` | `string` | **Scientific name only** — e.g. `"Platanus x hispanica"`. No `:: Common Name` suffix. |
-| `cultivar` | `string` | Optional. The cultivated selection, e.g. `"Tina"` for *Malus sargentii* 'Tina'. Filled from a quoted name in `species` by `enforce_tree_schema`; map a portal's own cultivar field through `columns={"cultivar": ...}` when it has one. |
-| `plant_date` | `date32` | All-null is fine, but the column must still be `date32` — never `pa.null()` |
-| `latitude` | `float64` | |
-| `longitude` | `float64` | |
-| `diameter_at_breast_height` | `float64` | Inches; `null` if unavailable |
-
-3. Call `enforce_tree_schema(table, city="{City}")` immediately before `emit`.
-4. Emit the Arrow IPC stream to `sys.stdout.buffer` via `pa.ipc.new_stream`.
-
-**Column types are enforced, not inferred (important):** Trilogy passes the Arrow types from your script straight through to the materialised parquet — it does *not* coerce them to the types declared in `tree_common.preql`. A column left to inference silently produces the wrong parquet type, and the failure surfaces much later as a DuckDB binder error in the browser. Two real cases:
-
-- Paris emitted an all-null `plant_date` as `pa.null()`. A null-typed Arrow column carries no type, so it materialised as `INT32` and every `year(plant_date)` query failed with `No function matches the given name and argument types 'year(INTEGER)'`.
-- SF's `dbh` came from CSV inference; every value was a whole number, so pyarrow chose `int64` and the parquet column became `BIGINT` instead of `DOUBLE`.
-
-`enforce_tree_schema` (in `data/raw/shared/ingest.py`) is the single chokepoint that prevents this. It casts each canonical column to the type in `TREE_COLUMN_TYPES`, raises if a required column (`tree_id`, `city`, `species`) is missing, and passes city-specific extras (`borough`, `usbos_source`, …) through untouched. Casts are *safe* — a lossy conversion raises rather than corrupting values.
-
-Scripts that emit source-native column names rather than canonical ones pass a `columns` map:
-
-```python
-table = enforce_tree_schema(
-    table,
-    city="San Francisco",
-    columns={
-        "tree_id": "treeid",
-        "species": "qspecies",
-        "plant_date": "plantdate",
-        "diameter_at_breast_height": "dbh",
-    },
-)
-```
-
-**Species key rule:** The `species` field must contain only the Latin binomial (e.g. `"Platanus x hispanica"`). The `:: Common Name` convention was retired — common names now come exclusively from the enrichment table. If source data has a `:: suffix` (SF does), strip it: `v.split("::")[0].strip()`. For cities that provide genus and species epithet as separate fields (Paris), concatenate them: `f"{genre} {espece}".strip()`. Empty or null species should be emitted as `None`.
-
-### 6. Create the Trilogy Data Model
-
-Create `data/raw/{city}/{city}_tree_info.preql`. Wire in the freshness probe via `freshness by` on both the raw datasource and the materialized parquet. Use the `f\`` template syntax for the versioned GCS URL:
-
-```preql
-import ..tree_common;
-
-root partial datasource {city}_update_time (
-    data_updated_through: {city}_data_updated_through
-)
-grain (city)
-complete where city = '{CODE}'
-file `./{city}_update_time.py`
-freshness by {city}_data_updated_through;
-
-key {code}_source enum<string>['{CITY}_OPENDATA', 'COMMUNITY_{CODE}'];
-
-auto {code}_published_data_updated_through <- greatest({code}_data_updated_through, {code}_community_data_updated_through);
-
-# Only this city's column, so an approval elsewhere does not rebuild it.
-root datasource {code}_community_update_time (
-    {code}_community_data_updated_through: {code}_community_data_updated_through
-)
-file `../community_update_time.py`;
-
-root partial datasource {city}_raw_tree_info (
-    tree_id: tree_id,
-    city: city,
-    data_source: {code}_source,
-    species: species,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
-)
-grain (tree_id)
-complete where city = '{CODE}' and {code}_source = '{CITY}_OPENDATA'
-file `./{city}_tree_info.py`;
-
-
-# Mandatory. Without this partition, approved community trees for this city are
-# silently dropped — see "The `data_source` column" above.
-root partial datasource {code}_community_tree_info (
-    tree_id: tree_id,
-    city: city,
-    data_source: {code}_source,
-    species: species,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    submission_photo_url: ?submission_photo_url,
-)
-grain (tree_id)
-complete where city = '{CODE}' and {code}_source = 'COMMUNITY_{CODE}'
-file `../community_tree_info.py`;
-
-
-partial datasource {city}_tree_info (
-    tree_id,
-    city,
-    data_source: {code}_source,
-    species,
-    ?plant_date,
-    ?diameter_at_breast_height,
-    ?latitude,
-    ?longitude,
-    ?submission_photo_url,
-    {code}_published_data_updated_through,
-)
-grain (tree_id)
-complete where city = '{CODE}'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{code}_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{code}_tree_info_v{data_version}.parquet`
-freshness by {code}_published_data_updated_through;
-```
-
-Also add `import ..community_tree_info;` at the top, declare
-`property <*>.{code}_community_data_updated_through datetime;` in
-`community_tree_info.preql`, and pass `data_source="{CITY}_OPENDATA"` to
-`enforce_tree_schema` in the fetch script.
-
-Verify before moving on — a missing community partition produces no error:
-
-```bash
-cd data && trilogy refresh raw/{city}/{city}_tree_info.preql --dry-run -f {city}_tree_info
-```
-
-The generated SQL must contain a `UNION ALL` and reference
-`community_tree_info.py`. If it doesn't, the community partition isn't wired up.
-
-### 7. Register in the Cross-City Models
-
-Two files, and both are needed for different reasons:
-
-**`data/raw/tree_info.preql`** — the union model the app's dashboard queries
-resolve against. Add the import *and* the `data_source` merge:
-
-```preql
-import {city}.{city}_tree_info;
-merge {code}_source into data_source;
-```
-
-**`data/raw/full_tree_publish.preql`** — the publisher that builds
-`full_tree_info` from the per-city parquets. One line in its file list:
-
-```preql
-root datasource city_published_trees (...)
-file [
-    ...,
-    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{code}_tree_info_v{data_version}.parquet`
-];
-```
-
-`file [...]` is read as a single DuckDB multi-file scan, so every city is
-covered by one datasource rather than a stub each. A mixed schema is fine — London's
-parquet carries a `borough` column the others do not, and projecting the shared
-columns unions them without complaint.
-
-A city missing from that list has a perfectly healthy pipeline of its own and
-never appears on the map's cross-city view, which is why
-`test_rollup_reads_every_city` compares the list against
-`MUNICIPAL_DATA_SOURCES`.
-
-### 8. Create the OSM Extract Model
-
-Copy an existing pair in `data/osm_staging/` — they are deliberately thin,
-because everything shared lives in `staging_common.preql`:
-
-- `{code}_osm_staging.preql` — the only new file. `import staging_common;` plus
-  the two datasources: `{code}_osm_rows`, reading the shared
-  `./osm_rows.py` with `where city = '{CODE}'`, and `{code}_osm_staging`
-  writing `staging/{code}_osm_staging.parquet` with
-  `freshness by osm_extracted_through`.
-
-The row script is shared by every city — do **not** add a per-city copy. The
-`where` clause is what selects the city, and `CITY_BOUNDS` / `OSM_CITY_NAMES`
-in `data/raw/` are what it looks the city up in.
-
-Add the city to `OSM_DATA_SOURCES` in `data/raw/shared/ingest.py`, declare the
-`OSM_{CODE}` value in its source enum and the staging partition in its tree
-model, and give it a row in `DEDUP_CELL_METRES` (start at 10, then measure with
-`osm_dedup_validation.py --city {CODE}` after the first build — see the cluster
-merge block above; do not copy a number) followed by `uv run tools/dedup_cells.py
---write`.
-
-### 9. Schedule It
-
-Three `[[cloud.job]]` entries in `data/trilogy.toml`. Nothing runs without
-them, and nothing *errors* without them either — a job that does not exist
-cannot fail, so `data/raw/tests/test_cloud_jobs.py` is what turns a forgotten
-entry into a red test.
-
-```toml
-[[cloud.job]]
-key = "city-{code}"
-name = "urban-tree-city-{code}"
-entrypoint = "raw/{code}/{city}_tree_info.preql"
-operation = "refresh"
-schedule = "0 0 12 * * TUE,FRI" # see "picking a cadence" below
-timeout_seconds = 1800
-memory_mb = 2048
-
-[[cloud.job]]
-key = "osm-{code}"
-name = "urban-tree-osm-{code}"
-entrypoint = "osm_staging/{code}_osm_staging.preql"
-operation = "refresh"
-schedule = "0 30 2 * * THU"     # weekly, on a minute no other extract uses
-timeout_seconds = 1800
-memory_mb = 1024
-```
-
-plus a `landmarks-{code}` entry with **no** schedule if the city's landmarks
-are a curated CSV (see the Landmarks section).
-
-**Write the day of the week as a name.** The platform parses these with the
-Rust `cron` crate, which is Quartz-shaped rather than crontab-shaped: six
-fields with seconds first, and day-of-week numbered **1-7 from Sunday**. A
-numeric day therefore fires one day earlier than a reader coming from a unix
-crontab expects, and six of the seven do it silently — only `0` is rejected,
-and only at sync time, with `Invalid cron expression … Days of Week must be
-greater than or equal to 1`, after the jobs themselves have been created.
-`SUN`..`SAT` mean the same thing in both dialects;
-`test_day_of_week_is_written_as_a_name` enforces it.
-
-**Picking a cadence.** Start the city in the twice-weekly tier, placed the day
-after its own OSM extract and again mid-week. Then measure rather than guess:
-
-```bash
-cd data/raw && uv run ./tools/portal_cadence.py --record --city {CODE}
-```
-
-Run it repeatedly over a few weeks. It records each distinct watermark the
-portal has published in `portal_cadence.json` and derives the real interval
-from the changes; its `verdict` column compares that against the cron you just
-wrote. Move the city to daily when the portal turns out to move daily.
-
-Do not set the cadence from the portal alone. Two other things make a city's
-parquet stale — an approved community submission, which can land any day, and
-the city's own weekly OSM extract — so twice weekly is the floor even for a
-portal that last published in 2016.
-
-**Pick an OSM minute nothing else uses.** Overpass allows two concurrent slots
-per client IP and answers an over-budget request with HTTP 200 carrying an error
-remark, so two extract jobs firing together do not look like a failure — they
-look like a city with no trees in OSM.
-
-### 10. Update the Frontend
-
-**a) `src/src/workers/parquetUrls.ts`** — the `cityTreeParquetUrl` and `cityLandmarkParquetUrl` functions use a regex `/^[a-z]{2}[a-z]{3}$/` to validate city codes (5 lowercase letters). No code changes needed for new cities — just ensure the `DATA_VERSION` constant matches `data/raw/enrichment/_tree_shared.py`.
-
-**b) `src/src/trilogyModels.ts`** — **nothing to do.** It discovers the
-per-city models with `import.meta.glob('../../data/raw/*/*_tree_info.preql')`
-and the same for landmarks, so a new city's models reach the agent chat's query
-resolver as soon as the files exist. (This step used to be two hand-maintained
-import lists. It is called out rather than deleted because the failure it
-guarded against — the agent unable to resolve queries against a city whose
-parquet is loaded — is invisible from the map.)
-
-**c) `src/src/cityConfig.json`** — add the city:
-
-```json
-"USDEN": { "name": "Denver", "center": [-104.9903, 39.7392] }
-```
-
-The `center` is `[longitude, latitude]` (GeoJSON/MapLibre order), not the
-lat-first order everything else in this repo uses. Use the city center, not a
-corner. `test_city_is_in_the_frontend_config` checks the point falls inside the
-city's `CITY_BOUNDS`, which is what catches a swapped pair — the symptom
-otherwise is a map centred in the sea.
-
-This one file drives more than the city picker: `ALL_CITIES` in
-`dashboardQueryCatalog.ts` is `Object.keys(CITY_CONFIG)`, so adding a city here
-also adds ~39 queries to the `pnpm test:queries` sweep.
-
-That's it — the city button appears automatically in the UI, the worker loads `{code}_tree_info_v{DATA_VERSION}.parquet` from GCS, and DuckDB queries it exactly like any other city.
-
----
-
-### 11. Update Attribution and Docs
-
-Do not stop after the parquet and city config are working. Every city addition must also update the public attribution surfaces:
-
-- `README.md` - add or update the source links in the tree inventory / landmarks tables.
-- `src/src/data/sourceCatalog.ts` - add or update the portal metadata that powers the Info page attribution. `InfoView.vue` renders from this catalog; avoid hardcoding new portal links directly in the view.
-
-If you change the source story significantly, review `src/src/components/WelcomeModal.vue` as well so the onboarding copy does not drift.
-
-## Community-only cities (no municipal inventory)
-
-A city can exist with **no municipal dataset at all** — Milos (`GRMLO`) is the
-reference and Santorini (`GRSAN`) the second: no Greek portal publishes a tree
-inventory for either, and they are on the map so that community submissions
-recorded there can be published.  Santorini shipped with its OSM partition
-from the first commit, so it skipped the single-partition wrinkle below;
-`grsan/santorini_tree_info.preql` is the copy to start from for a city wired
-that way.
-Differences from the standard runbook, all visible in
-`data/raw/grmlo/milos_tree_info.preql`:
-
-- `MUNICIPAL_DATA_SOURCES[code]` is an **empty tuple**; the community label is
-  still derived automatically and `CITY_BOUNDS` still needs an entry (the
-  community ingest drops rows for cities missing from either map).
-- No municipal fetch script, no municipal freshness probe, and no
-  `{code}_data_updated_through` property in `tree_common.preql`. The published
-  watermark has no municipal term — for GRMLO it is
-  `greatest({code}_community_data_updated_through, {code}_osm_data_updated_through)`
-  (a `greatest()` over a municipal column nothing feeds would never resolve).
-- **If the city has exactly one partition** (community only, no OSM), one more
-  wrinkle applies: a multi-partition city proves its Parquet complete by
-  unioning the sources that cover its enum, but **a lone partial source is
-  never a union candidate** — with `complete where city = '{CODE}'` alone the
-  refresh fails with `no complete sources found … could only be resolved from
-  partial sources`. The fix is to pin the single enum value on the *published
-  target* too: `complete where city = '{CODE}' and {code}_source =
-  'COMMUNITY_{CODE}'`, which makes the materialisation query imply the
-  community source's own `complete where`. GRMLO shipped that way first and
-  the failure was verified both ways; once its OSM partition was added the
-  standard union proof applied and the pin came out again.
-- `tests/test_data_sources.py` knows about both wrinkles: the freshness test
-  branches on an empty municipal tuple, and the one-claim-per-enum-value test
-  counts only `root` datasource claims so a pinned published target does not
-  read as a duplicate claim.
-
-Everything else is unchanged: the city still needs the enum entry in
-`core.preql`, the shared cluster merge (`import ..tree_dedup;`, a
-`DEDUP_CELL_METRES` row and `where tree_id = cluster_id` on the published
-target), landmarks, frontend config, and attribution. For GRMLO's dedup the
-only non-OSM anchors are community submissions — a cluster forms exactly when
-someone records a tree OSM already maps, and the submission wins, which is the
-intended outcome.
-
-## Landmarks (Mandatory)
-
-Every city **must** have a landmarks preql file, even if it yields zero rows. The worker silently skips missing landmark *parquets* at runtime, but a missing preql file will cause the Trilogy pipeline to fail and the agent will have no geographic context for the city. A landmarks dataset with zero rows is acceptable; a missing file is not.
-
-> **Burlington pattern — local CSV + Nominatim geocoding:**
-> When no structured spatial landmark source exists (e.g. the city only publishes a web directory), use a two-step approach:
-> 1. Run a one-off geocoder script (`{city}_landmarks_geocode.py`) that scrapes the city's landmark list and geocodes each entry via Nominatim (free, no key, 1 req/sec). Results are saved to a local `{city}_landmarks.csv`. The script is resumable — it skips already-geocoded rows so you can interrupt and continue.
-> 2. The preql datasource points directly at `{city}_landmarks.csv` — no Arrow redirect script needed. An empty CSV (header-only) is valid and produces zero rows.
-> 3. The freshness probe (`{city}_landmarks_probe.py`) emits the CSV file's mtime as the freshness timestamp; Trilogy only re-materialises the parquet if the CSV changes.
->
-> Commit `{city}_landmarks.csv` to the repo so the pipeline can run without re-geocoding. Re-run the geocode script periodically to pick up new entries.
-> See `data/raw/burlington/` for the reference implementation.
->
-> **Athens/Milos variant — ad-hoc cloud publish, no local credentials:** the
-> Greek cities' landmark models read a staging *parquet* instead, published
-> from the committed CSV by an unscheduled `[[cloud.job]]`
-> (`landmark_staging/{code}_landmarks_staging.preql`;
-> `trilogy cloud jobs run urban-tree-landmarks-{code} --wait`). The job is
-> `operation = "run"` over a `copy into parquet ... from select` script, not
-> a refresh: a refresh target needs a freshness watermark to ever rebuild
-> once its object exists, and for "republish when a person fires the job"
-> the firing itself is the decision — `run` copies unconditionally. That is
-> also why it carries no cron: republishing an unchanged CSV still moves the
-> staging object's Last-Modified and would rebuild the city's landmark
-> parquet for nothing. Prefer this variant for new cities; it keeps
-> `upload_staging` credentials out of the loop entirely.
-
-### Landmark Data Schema
-
-| Column | Type | Notes |
-|--------|------|-------|
-| `landmark_id` | `string` | Prefix with `{abbr}-` for global uniqueness |
-| `city` | `string` | City code |
-| `name` | `string` | Human-readable landmark name |
-| `geometry_raw` | `string` | WKT geometry. Use a polygon/multipolygon if available; for point-only sources construct `POINT(lon lat)` |
-| `latitude` | `float64` | Centroid latitude (can be derived from `geometry_raw` by Trilogy, or set directly for point sources) |
-| `longitude` | `float64` | Centroid longitude |
-
-City-specific extra fields are fine — declare them in `landmark_common.preql` alongside the SF, NYC, Boston, and Paris-specific blocks already there.
-
-### Finding a Landmarks Source
-
-Preference order:
-1. **Official historic landmark / heritage designation registry** from the city or national government — most consistent with how SF/NYC/Boston landmarks work (e.g. NYC Landmarks Preservation Commission, SF landmark designations)
-2. **Same open data platform as the trees** if a heritage dataset exists there
-3. OpenStreetMap extract via Overpass API (`historic=*` tags)
-4. **Web directory + Nominatim geocoding** — scrape the city's landmark list, geocode addresses, commit the resulting CSV (see Burlington pattern above)
-
-**Paris:** The best source is the national Monuments Historiques registry filtered to Paris (dept 75), hosted on the Île-de-France regional open data platform — not opendata.paris.fr. It has ~1,885 officially classified/listed monuments, parquet export, and point coordinates.
-
-```
-Dataset: immeubles-proteges-au-titre-des-monuments-historiques
-Platform: data.iledefrance.fr  (OpenDataSoft v2 — same API as opendata.paris.fr)
-Parquet export URL:
-  https://data.iledefrance.fr/api/explore/v2.1/catalog/datasets/
-  immeubles-proteges-au-titre-des-monuments-historiques/exports/parquet
-  ?where=departement_format_numerique%3D%2275%22
-  &select=reference,titre_editorial_de_la_notice,adresse_forme_editoriale,
-          commune_forme_editoriale,date_et_typologie_de_la_protection,
-          denomination_de_l_edifice,coordonnees_au_format_wgs84
-Metadata URL (for probe):
-  https://data.iledefrance.fr/api/explore/v2.1/catalog/datasets/
-  immeubles-proteges-au-titre-des-monuments-historiques
-  → .metas.default.modified
-```
-
-Key field mapping for Paris:
-- `reference` → `landmark_id` (prefix `"frpar-"`)
-- `titre_editorial_de_la_notice` → `name`
-- `coordonnees_au_format_wgs84` (struct `{lon, lat}`) → construct `POINT(lon lat)` as `geometry_raw`
-- `commune_forme_editoriale` → `arrondissement` (Paris-specific)
-- `date_et_typologie_de_la_protection` → `protection_type` (Paris-specific, e.g. `"1862 : classé MH"`)
-- `denomination_de_l_edifice` → `denomination` (Paris-specific, e.g. `"immeuble"`, `"église"`)
-
-### Files to Create
-
-```
-data/raw/{city}/{city}_landmarks.py          ← fetch + transform (same Arrow IPC pattern)
-data/raw/{city}/{city}_landmarks_probe.py    ← freshness probe (same pattern as tree probe)
-data/raw/{city}/{city}_landmarks.preql       ← datasource with versioned GCS URL
-```
-
-**If the source is Overpass, stage it instead** — the same decoupling the OSM
-tree extracts use, for the same reason:
-
-```
-data/raw/{city}/{city}_landmarks_extract.py  ← queries Overpass, publishes the staging parquet to GCS
-gs://…/duckdb/staging/{code}_landmarks_staging.parquet  ← the refresh only ever reads this
-data/raw/{city}/{city}_landmarks_probe.py    ← emits the staged object's publication time
-```
-
-Overpass allows **two concurrent slots per client IP** (`GET /api/status`
-reports them), and answers an over-budget request with HTTP 200 carrying either
-an HTML page or a body whose `remark` is a `runtime error` — never a 4xx/5xx.
-London and Berlin both fetched at refresh time, which meant a full refresh with
-`parallelism = 3` could put three Overpass callers in flight against those two
-slots and fail a city on a transient: `london_landmark_info` died that way and
-took `full_landmark_info` with it as a failed dependency, while the same script
-run alone finished in **6.8s**. The query was never the problem; the concurrency
-was.
-
-Staging removes Overpass from the refresh path entirely, and re-running the
-extract becomes what marks the city stale — the OSM watermark alternative (the
-global database timestamp) advances every minute and would rebuild the city on
-every tick. Publish the staged parquet to GCS rather than committing it; see
-the watermark note above for why a committed copy reintroduces that same thrash.
-
-```bash
-cd data/raw && uv run {city}/{city}_landmarks_extract.py   # publishes to GCS; nothing to commit
-```
-
-Add the city's landmark freshness property and update the `greatest()` expression in **`data/raw/landmark_common.preql`**:
-
-```preql
-property <*>.{city}_landmark_data_updated_through datetime;
-auto latest_landmark_update_through <- greatest(..., {city}_landmark_data_updated_through);
-```
-
-Add the import to **`data/raw/landmark_info.preql`**:
-
-```preql
-import {city}.{city}_landmarks;
-```
-
-The landmark preql follows the same versioned `f\`` URL pattern as tree files. See `paris_landmarks.preql` as the reference implementation.
-
-**If the source is a curated CSV, add a `landmark_staging/` publish job.** The
-Greek cities are the model: the geocoded CSV is committed, rides the workspace
-sync, and a `landmarks-{code}` `[[cloud.job]]` with **no cron** republishes it
-as the staging parquet on demand.
-
-```
-data/landmark_staging/{code}_landmarks_staging.preql  ← import staging_common; CSV source + copy into
-```
-
-Everything shared lives in `landmark_staging/staging_common.preql`, including
-why this is `copy into` under `operation = "run"` rather than a refresh target:
-a refresh target needs a freshness watermark to rebuild once its object exists,
-and the only honest watermark for "republish when a person fires the job" is the
-firing. Which is also why it must never gain a cron — an unconditional copy
-moves the staging object's `Last-Modified`, and that is exactly the watermark
-the city's landmark probe reads, so the city's landmark parquet would rebuild
-every firing for nothing. The flow after editing a CSV: merge, let the sync run,
-then
-
-```bash
-trilogy cloud jobs run urban-tree-landmarks-{code} --wait
-```
-
-**Build a NEW city's landmark parquet from its own preql, not from
-`landmark_info.preql`.** The shared entrypoint imports every city *and* declares
-the published union `full_landmark_info` as a datasource, which satisfies
-`landmark_id`, `name`, `geometry`, `latitude` and `longitude` for any city. Once
-that union is fresh, the planner may answer those concepts from it and read the
-city's own script only for whatever columns the union lacks -- so a city that is
-not in the union yet joins against nothing and materialises **zero rows, with no
-error and an exit code of 0**. Longueuil built that way and published an empty
-parquet while its script emitted 223 rows; the refresh log said
-"Refreshed 1 asset(s)".
-
-It is not deterministic, which is what makes it nasty: Toronto, Montreal and
-Quebec City bootstrapped correctly minutes earlier, because that run also had
-the union stale and rebuilt it in the same tick. The reliable path is the
-per-city entrypoint, exactly as the tree lane concluded:
+`test_city_wiring.py` walks every registry a city must appear in and names
+anything missing. Each dry run must report **exactly one** asset; more means
+an import reaches too far.
+
+## City codes
+
+Five uppercase letters: ISO 3166-1 alpha-2 country plus a three-letter city
+abbreviation (`USSFO`, `USNYC`, `FRPAR`, `CAVAN`, `GRSAN`). Prefer a readable
+abbreviation over the IATA code, since the code appears in URLs. Parquets use
+the lowercase code: `frpar_tree_info_v{n}.parquet`.
+
+## The shape you are adding to
+
+Each city is an independent pipeline of three jobs in `data/trilogy.toml`:
+`osm-{code}` (weekly Overpass extract to a staging parquet), `city-{code}`
+(the refresh: portal plus community plus staged OSM, deduplicated, published
+as `trees/{code}_tree_info_v{n}.parquet`) and `landmarks-{code}` (no cron
+when the source is a curated CSV). A daily core reads only published
+parquets and never a portal. The browser reads the parquets with DuckDB-WASM
+and never touches raw data.
+
+Rules that hold while wiring:
+
+- **A city model's imports decide its job's bundle.** Import `tree_common`,
+  `community_tree_info` and `tree_dedup` only; never another city or the
+  cross-city merge.
+- **`data_source` is a per-city enum key**, and every raw source claims
+  `complete where city = 'X' and {code}_source = 'Y'`. A source claiming the
+  whole city alone silently drops the other partitions' rows.
+- **`complete where` asserts; `where` filters.** The shared community and
+  satellite ingests return every city, so each such partition also carries
+  `where city = 'X'` after its file clause.
+- **Staged parquets live in GCS, never in git.** Their watermark is the
+  object's publication time.
+
+## Step by step
+
+### 1. Understand the source
+
+You need a stable unique id, a scientific-name species field, WGS84
+coordinates, and a diameter or a proxy (circumference in cm converts as
+`dbh_in = circ_cm / (pi * 2.54)`). Missing fields are fine as null.
+
+**The id is the grain; verify it before committing to it.** Preference: a
+publisher-guaranteed per-feature id (`GLOBALID` on ArcGIS); then the source's
+own asset id once checked unique and non-null over the whole layer; then
+`OBJECTID` as a last resort. Never a field that merely sounds like an id, and
+never a positional hash. `enforce_tree_schema` refuses a repeated or null
+`tree_id`; drop unidentified rows in the ingest with a logged count.
+
+**Read a coded field's domain before deciding what a column holds**
+(`coded_value_domain(layer, field)`). A column that looks like common names
+or size classes may map every code to the binomial or to published bands.
+
+### 2-3. Register the code
+
+The scaffolder does this: the `city` enum in `core.preql`, the source label in
+`MUNICIPAL_DATA_SOURCES`, `CITY_BOUNDS` (the generous sanity box) and
+`CITY_TERRITORY` (the non-overlapping rectangles that decide which city an
+OSM node or community submission belongs to). **If the city has a neighbour on
+the map, carve both territories along the real boundary**; the scaffolder
+writes the envelope, and `test_city_territory.py` fails on an overlap.
+
+### 4. The freshness probe (mandatory)
+
+`{slug}_update_time.py` emits one row with the portal's last-modified time via
+`emit_freshness("{CODE}", fetch_modified_at)`, fetching with
+`get_json_with_retry` or the platform module's watermark helper. Without it
+the city re-downloads on every tick.
+
+- Availability problems degrade, never raise: the helpers classify a non-JSON
+  200, a provider error envelope and a timeout as `UpstreamUnavailable`, and
+  `emit_freshness` then emits the epoch, so the city sits out one tick.
+- A schema change must raise (`RuntimeError`), or the city freezes silently.
+- One `auto {code}_data_updated_through` per city in `tree_common.preql`. A
+  city with several sub-sources coalesces them with `greatest()` into that one
+  property, and only that property goes in `freshness by`.
+- Check the portal's maintenance window before choosing a tick.
+
+### 5. The fetch script
+
+`{slug}_tree_info.py` downloads, maps to the canonical schema (`tree_id`,
+`city`, `species`, `cultivar`, `plant_date` as `date32`, `latitude`,
+`longitude`, `diameter_at_breast_height` in inches), calls
+`enforce_tree_schema(table, city=..., data_source="{LABEL}_OPENDATA",
+columns={...})` last, and writes an Arrow IPC stream to stdout.
+
+- **Use the platform module**: `shared/platforms/arcgis.py`, `socrata.py`,
+  `ckan.py`, `wfs.py`. They own paging, watermarks and geometry handling
+  (page size from `maxRecordCount`, termination on `exceededTransferLimit`,
+  the string `"NaN"` for a missing geometry). OpenDataSoft has no module.
+  Write a shared module (platform or common-name table) when the third
+  city needs it, not the first.
+- **Types are enforced, not inferred.** `enforce_tree_schema` casts every
+  canonical column and raises on a lossy cast. An all-null `plant_date` is
+  still `date32`.
+- **`species` is the scientific name only.** Strip a `:: common name`
+  suffix; concatenate genus and epithet; leave a quoted cultivar in (the
+  schema moves it to `cultivar`). A portal that publishes common names gets a
+  `shared/species/{language}.py` table (English, Japanese, Spanish and
+  Chinese exist); curate it against POWO, never derive it from the
+  enrichment parquet.
+- **Null a portal's stamped default planting date** in the ingest
+  (`PLACEHOLDER_PLANT_DATE`). `enforce_tree_schema` already nulls dates
+  before 1500 or in the future, and diameters that are zero, negative or
+  over 200 inches.
+- **A coded numeric field needs a parse-failure guard**: count the strings
+  you could not read and refuse to publish above 1% of rows.
+- Rows describing an empty site (`Vacant`, `Stump`, a planting site) are
+  dropped by the shared rule; `Unknown` and `Dead` are trees and stay.
+
+### 6. The city model
+
+`{slug}_tree_info.preql`: the probe datasource, the `{code}_source` enum
+(`{LABEL}_OPENDATA`, `COMMUNITY_{CODE}`, `OSM_{CODE}`), one root partial
+datasource per partition mapping onto the shared `raw_*` concepts (never the
+canonical ones; the dedup merge derives those), the staged-OSM partition,
+`import ..tree_dedup;`, and the published target with
+`complete where city = '{CODE}'`, `where tree_id = cluster_id`, and
+`freshness by {code}_published_data_updated_through`. The scaffolder writes
+this file; verify the dry run's SQL contains a `UNION ALL` and references
+`community_tree_info.py`.
+
+**Mark any column a source can leave empty `?`** in every datasource that
+maps it; an unmarked column joins with `=` and drops null rows without an
+error. Compare each partition's row count against the source before calling
+a rebuild good.
+
+### 7-8. Cross-city registration and the OSM model
+
+`tree_info.preql` gets the import and `merge {code}_source into
+data_source;`. `full_tree_publish.preql` gets one line in its file list
+(`test_rollup_reads_every_city`). `osm_staging/{code}_osm_staging.preql` is
+the thin per-city extract model over the shared `osm_rows.py`, selected by
+`where city = '{CODE}'`. Add the city to `OSM_DATA_SOURCES`, give it a
+`DEDUP_CELL_METRES` row (start at 10, then measure), and run
+`uv run tools/dedup_cells.py --write`. A city-unique column (`borough`) must
+be declared on the OSM partition too (`OSM_EXTRA_NULL_COLUMNS`).
+
+### 9. Schedule it
+
+Three `[[cloud.job]]` entries in `data/trilogy.toml`. Nothing errors when
+one is missing; `test_cloud_jobs.py` is the check.
+
+- Write the day of week as a name (`SUN,WED`). The parser numbers days 1-7
+  from Sunday, so a numeric day fires a day early, silently.
+- Start in the twice-weekly tier (the day after the city's OSM extract and
+  mid-week). Measure with `tools/portal_cadence.py --record --city {CODE}`
+  over a few weeks and move to daily only if the portal moves daily. Twice
+  weekly is the floor regardless, because approvals and the weekly OSM
+  extract also make the parquet stale.
+- Pick an OSM minute nothing else uses; extracts are thirty minutes apart
+  and never concurrent (`test_osm_extract_jobs_never_fire_together`).
+  Overpass answers an over-budget request with a 200 that looks like a city
+  with no trees.
+
+### 10-11. Frontend and attribution
+
+`src/src/cityConfig.json` gets `"USDEN": { "name": "Denver", "center":
+[lon, lat] }` (longitude first; `test_city_is_in_the_frontend_config`
+catches a swap). That entry adds the city to the picker, the worker's parquet
+URL, the chat's model glob and the `pnpm test:queries` sweep. Then
+`README.md` and `src/src/data/sourceCatalog.ts` for attribution (OSM data is
+ODbL: credit OpenStreetMap contributors), and a display label in
+`src/src/data/dataSources.ts`.
+
+## Community-only cities
+
+A city with no municipal inventory has an empty `MUNICIPAL_DATA_SOURCES`
+tuple, no municipal script or probe, and a published watermark over the
+community and OSM columns only. A city with **exactly one** partition must
+also pin that enum value on the published target's `complete where`, because
+a lone partial source is never a union candidate. Start from
+`grsan/santorini_tree_info.preql`.
+
+## Landmarks (mandatory)
+
+Every city needs `{slug}_landmarks.preql` even if it yields zero rows;
+`landmark_common.preql` gets the freshness property and `landmark_info.preql`
+the import. Schema: `landmark_id` (prefixed), `city`, `name`, `geometry_raw`
+(WKT), `latitude`, `longitude`; city-specific extras are declared in
+`landmark_common.preql`.
+
+Source preference: an official designation registry; a heritage dataset on
+the trees' own portal; Overpass, **staged** and never fetched at refresh
+time; a web directory geocoded with Nominatim into a committed CSV, published
+by an uncronned `landmarks-{code}` job (`landmark_staging/`). Prefer the last
+pattern for any curated CSV.
+
+**Build a new city's landmark parquet from its own preql**, never from
+`landmark_info.preql`, and check the row count against the script's output:
 
 ```bash
 cd data && trilogy refresh raw/{code}/{slug}_landmarks.preql -f {slug}_landmark_info
 ```
 
-That file imports only `..landmark_common`, so the union is structurally out of
-scope. Check the row count against what the script emits before moving on --
-`uv run {code}/{slug}_landmarks.py | python -c "import sys,pyarrow as pa;
-print(pa.ipc.open_stream(sys.stdin.buffer).read_all().num_rows)"` -- because
-zero is what this failure looks like and nothing else reports it.
+## Species rules an ingest must respect
 
-**Landmarks are still one refresh lane, unlike trees.** `refresh-landmarks`
-rebuilds every city's landmark parquet plus the union, weekly (landmark sources
-change on a scale of years, and its per-city freshness columns mean it only
-rebuilds cities that actually moved). Splitting it per city the way trees were
-split is a *code-sharing* job rather than a scheduling one: tree extraction lives
-once in `shared/osm.py`, which is what made a scheduled OSM job per city a
-matter of one thin shim each, whereas the landmark sources are a bespoke
-script per city. Three cities are still on hand-run paths that the Greek model
-would replace — `USBTV`, `USTEM` and `USWAS` read a hand-uploaded CSV from the
-staging prefix, and `DEBER`/`GBLON` stage from a hand-run Overpass fetch whose
-logic has never been shared. Sharing that fetch the way `shared.osm` shares the
-tree one is the prerequisite; the scheduling is the easy half.
+- `species` is the join key into one city-agnostic enrichment table, so it
+  must be the accepted binomial. `sanitize_species` (inside
+  `enforce_tree_schema`) truncates to species rank, folds `SPECIES_SYNONYMS`
+  and `SPECIES_MISSPELLINGS`, emits ASCII `x` for a hybrid, and turns
+  non-taxa into sentinels (`Unknown`, `Palm`, `Shrub`, `Cactus`, `Dead`),
+  never null.
+- Never curate the synonym or misspelling maps by eye or by tree count:
+  `tools/species_audit.py` asks POWO about every near pair. A name merely
+  misapplied in the trade is not a synonym.
+- A sentinel or a chimera (a real genus welded to another species' epithet)
+  is never enriched; the exclusion and purge lists derive from
+  `SPECIES_SENTINELS` and `CHIMERA_SPECIES`.
+- The enrichment job runs daily from `main`, so a change to the shape of
+  the published table is not done until it merges.
 
----
+## Data versioning
 
-## Species Enrichment
+`data_version` in `data/raw/core.preql` and `TREE_DATA_VERSION` /
+`LANDMARK_DATA_VERSION` in `src/src/workers/parquetUrls.ts` move together.
+Bump only for a change that breaks an existing reader (a type change, a
+removed column). Additive columns stay on the current version, because a bump
+re-materialises every parquet, including the LLM-backed enrichment table.
+Refresh before you deploy either way.
 
-### How It Works
-
-The `tree_enrichment_v{DATA_VERSION}.parquet` at GCS is city-agnostic. It maps **scientific species names** (Latin binomials only) to:
-- `common_names` — comma-separated English common names, most familiar first
-- `tree_form` — visual form (`broadleaf`, `conifer`, `palm`, `columnar`, `ornamental`, `spreading`, `weeping`, `multi_trunk`, `default`) used for icon and color
-- Ecological metadata: `native_status`, `is_evergreen`, `mature_height_ft`, `bloom_season`, etc.
-- Two photo slots: `photo_url` (the iNaturalist default, in practice a foliage
-  or flower close-up, fetched by the run) and `trunk_photo_url` (a bark or
-  trunk view, which no source can be asked for -- it is picked by hand in
-  `enrichment/admin/server.py` from the same licensed pool). Each carries its own
-  `_license` and `_attribution`.
-
-The browser worker joins on `t.species = se.species` (exact match on scientific name) and derives `common_name` as `split_part(se.common_names, ',', 1)` — the first enrichment common name, falling back to the scientific name if unenriched.
-
-### Species Key Rule (Important)
-
-The `species` field in all tree parquets **must be the scientific name only** (no `:: suffix`). This is what makes the single enrichment table work across all cities:
-
-- SF raw data has `"Platanus x hispanica :: London Plane"` → strip to `"Platanus x hispanica"` in `sf_tree_info.py`
-- Paris has separate `genre`/`espece` fields → concatenate to `"Platanus hispanica"`
-- NYC/Boston already emit scientific names directly
-
-If you add a city whose source data embeds a common name in the species field (any `::` pattern), strip it in the fetch script before emitting.
-
-**Leave a quoted cultivar in.** `Malus sargentii 'Tina'` is the species
-*Malus sargentii* and the selection 'Tina'; a cultivar is a choice people
-propagated within a taxon, not a rank in the wild taxonomy, so it is not part
-of the species key and would only fragment the enrichment table (one row per
-selection of the most common street trees, each with the same common name).
-`enforce_tree_schema` splits the two: `species` is reduced to the taxon and
-`cultivar` keeps the selection on the tree row, where the tree card shows it
-after the scientific name. An ingest that strips the quotes itself (the Arnold
-Arboretum script used to) throws the cultivar away for nothing. A portal that
-publishes the cultivar as its own field maps it through `columns` and its
-values win over the parsed ones.
-
-### Synonyms: one accepted name per taxon
-
-Inventories disagree on what to call a taxon. *Platanus × acerifolia* and
-*Platanus × hispanica* are the same hybrid (the London plane), Kew's Plants
-of the World Online lists the second as accepted and the first as a
-heterotypic synonym, and the published data carried 158k trees under one and
-53k under the other -- two enrichment rows, two LLM calls, two entries in
-every species rollup. The Leyland cypress was published under four spellings.
-
-`SPECIES_SYNONYMS` in `data/raw/shared/ingest.py` maps a synonym to its
-accepted name and `sanitize_species` applies it as its last step, so every
-tree row publishes the accepted name. The enrichment table reads the same map
-on every load (`with_species_aliases` in `enrichment/_tree_shared.py`):
-
-- a row keyed by a synonym is folded onto the accepted row -- dropped when
-  the accepted row exists, re-keyed when it does not, so nothing is re-asked;
-- each accepted row's `synonyms` lists the names that fold into it, merged
-  with anything a reviewer added by hand in `enrichment/admin/server.py`;
-- an **alias row** is published under every synonym key and every hybrid-mark
-  twin, so a tree row still carrying the old name -- a city not yet rebuilt --
-  keeps its common name. The alias's own `synonyms` lists the accepted name.
-
-The map is hardcoded rather than read from the parquet at ingest time, because
-every city job would otherwise depend on that object being reachable, and a
-hand-edit in the admin form would silently change what eighteen ingests
-publish. Keys and values are written the way `sanitize_species` emits them
-(ASCII hybrid mark, capitalised genus, species rank) and a value is never
-itself a key; `test_ingest_shared.py` checks both. POWO is the authority.
-A name that is merely *misapplied* in the trade for another species
-(`Ficus nitida` for *F. microcarpa*, `Jacaranda acutifolia` for
-*J. mimosifolia*) is not a synonym and does not belong in the map.
-
-The admin form is where a duplicate is usually noticed. Adding the duplicate's
-name to the accepted row's `synonyms` field and publishing overwrites the
-duplicate's row with the accepted values (pointing back), and the two stay in
-step whichever is edited afterwards. That bridges the join immediately; it does
-not change what the ingest publishes. For that the pair goes into
-`SPECIES_SYNONYMS`, after which the synonym's row is an alias the daily job
-maintains and the form shows read-only.
-
-**Rolling out a new tree column.** `cultivar` was the worked example, and the
-order matters because DuckDB binds a projected column against the *first*
-file it reads: a single parquet without the column is a binder error, and so
-is the rollup's multi-file scan when *any* city in its list lacks it: the
-scan takes its schema from the first file and raises a schema mismatch on a
-later file that does not match (there is no `union_by_name`, so a missing
-column does not read as NULL). So after merging a column that every
-partition maps: (1) fire each city's `osm-{code}` job, two at a time (Overpass
-allows two slots per IP), because the city model reads the staged OSM parquet
-by column and its refresh fails until the extract has been re-run; (2) force
-each city's refresh with `-f {city}_tree_info`, San Francisco first, since it
-heads the rollup's file list; (3) run `urban-tree-full`. The browser probes
-for the column and reads a null until a city is rebuilt, so the deploy order
-does not matter on that side.
-
-### Misspellings: the same fold, on a different claim
-
-`SPECIES_MISSPELLINGS` sits beside `SPECIES_SYNONYMS` in `shared/ingest.py`
-and resolves identically in `sanitize_species`. It exists separately because
-the two make different claims: a synonym is a name Kew lists under an accepted
-one, and a misspelling is a name that does not exist. `Liquidambar
-stryaciflua` is not a taxon — it is 787 Denver trees whose species field
-transposed two letters — so it cannot go in a map whose stated authority is
-POWO.
-
-The cost of leaving one alone is the cost a synonym has: a second enrichment
-row for a taxon already in the table, a second entry in every species rollup,
-a second colour on the map. The September 2026 audit mapped **232 names over
-167,813 published trees, reclaiming 178 enrichment rows that had been paid for
-twice** and taking the fleet from 4,172 distinct species to 3,912. It splits
-between an omitted or invented hybrid mark (67 pairs — `Tilia europaea` for
-`Tilia x europaea`, 55,002 trees on the unmarked spelling) and a plain typo
-(165 — `Sorbus aucaparia`, `Fraxinus pennsylvancia`, `Acer platenoides`).
-Mark-only pairs go in `SPECIES_SYNONYMS`, which has carried that case since
-`Platanus hispanica`; the rest go in the misspelling map. A further 57 pairs
-were refused as two real taxa.
-
-**Never curate this list by eye, and never by tree count.** Run
-`data/raw/tools/species_audit.py`, which finds every pair of published names within
-two edits and asks POWO to adjudicate each one:
+## After adding a city
 
 ```bash
-cd data/raw && uv run tools/species_audit.py          # the report
-cd data/raw && uv run tools/species_audit.py --map    # entries to paste
+cd data/raw && uv run --no-project --with pytest --with pyarrow --with pytrilogy --with duckdb --with requests python -m pytest tests -q
+cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql        # one asset
+cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql     # one asset
+cd data/raw && uv run tree_enrichment_probe.py                                # lists species needing enrichment
 ```
 
-Two edits is wide enough to catch `Liquidambar stryaciflua` and wide enough to
-catch `Acer saccharum`/`Acer saccharinum`, which are two real species —
-folding those would relabel 33,644 sugar maples as silver maple and nothing
-downstream would report it. The published data also contains
-`Celtis`/`Cercis occidentalis`, `Malus`/`Taxus baccata`, `Prunus`/`Pinus
-nigra`, `Cornus`/`Morus alba`, `Ulmus`/`Alnus rubra`, `Quercus lobata`/`lyrata`
-and `Laburnum`/`Viburnum`. Shape cannot separate those from a typo; POWO
-returning both names as accepted can, and that is the whole reason the tool
-asks rather than guesses. `test_two_real_species_are_never_folded_together`
-pins the ones found so far.
-
-"Both accepted" is only the first way a pair gets refused, and the other three
-were each found by a mapping that would otherwise have landed:
-
-- **A homonym.** A binomial can carry more than one record. `Quercus lyrata`
-  Walter is the accepted overcup oak; `Quercus lyrata` Spreng. is a synonym of
-  `Quercus lobata`. Reading POWO's *first* exact match said the overcup oak was
-  really the valley oak, which would have relabelled 2,773 trees. The lookup
-  now reads every exact match and reports disagreement as `ambiguous`. Note
-  what that does and does not block: an ambiguous name refuses a *synonym*
-  verdict, because that is a claim about nomenclature, and still serves as the
-  *target* of a misspelling, because a name Kew has published twice is a name.
-  Blocking both was the first attempt and it silently cost `Crataegus
-  crusgalli`, 1,529 trees.
-- **Two things it could have meant.** `Picea pugens` is one edit from `Picea
-  pungens` and one from `Picea rubens`, both accepted. A misspelling is only
-  resolvable when there is a single candidate.
-- **Two edits inside a very short word.** Distance is a fraction of the word,
-  not an absolute: two edits in `soulangiana` is a slip, two in `mazei` is a
-  different word. It matters for hybrids, whose epithets are surnames —
-  `Quercus x mazei` and `Quercus x warei` are two edits apart and two different
-  named hybrids, and POWO cannot rule on it because it has no record of the
-  first.
-
-Tree counts are printed but are not evidence. The wrong spelling is *usually*
-rarer, which is what makes the exceptions dangerous: `Larix siberica` has
-8,431 trees against 7,661 for the correct `Larix sibirica`, and `Tilia
-europaea` outnumbers `Tilia x europaea` 55,002 to 3,137. A count only says
-which city is bigger.
-
-The enrichment side needs nothing new. `with_species_aliases` folds both maps,
-so a misspelled row is dropped onto the correct one (or re-keyed, if that row
-does not exist yet) and republished as an alias under the old key — which is
-what keeps those 787 trees labelled between the merge and Denver's next
-rebuild. The one asymmetry is deliberate: a misspelling never appears in the
-accepted row's `synonyms`, because that column says what else the taxon is
-called and a typo is not one of its names. The alias row still points home, so
-the admin form can navigate, and `accepted_for` makes it read-only there the
-same way a synonym's row is.
-
-### Rows nothing can join to
-
-A misspelling with live trees must fold, not be deleted — that was the first
-instinct when the duplicate rows were found, and it is backwards: pruning
-`Liquidambar stryaciflua` would strip the label off 787 trees that are on the
-map right now. But the same audit turned up a population where deleting *is*
-the answer, and it is much larger: **3,063 of 7,495 rows, 41% of the table,
-had no published tree behind them and no way to acquire one.** Almost all of
-it predates the ingest learning to truncate to species rank — `Abies balsamea
-'nana'`, `Abies cf. sachalinensis`, `Abies cilicica ssp. isaurica`,
-`Anacardiaceae` — keys `sanitize_species` can no longer emit.
-
-`purge_unreachable_keys` removes them on load, next to `purge_non_taxa`. Three
-things about it are load-bearing:
-
-- **It runs after `with_species_aliases`, never before.** The alias step is
-  what decides which old spellings are still joined to, and one of its
-  branches *re-keys* a row rather than dropping it — a synonym-keyed row whose
-  accepted row does not exist yet is not junk, it is that taxon's enrichment
-  under an old name. Purging first would delete it and pay the LLM again.
-- **A row the ingest maps to `None` is kept.** Those are the sentinels and the
-  nothogenus names, and `Unknown` alone is the join key for 1.4 million trees.
-  `purge_non_taxa` already removes the ones that are junk, by name.
-- **A key the published data still carries is kept, whatever the ingest would
-  now do with it.** "The ingest would rewrite this" is a claim about the next
-  rebuild, not about what is on GCS today. Every tightening of
-  `sanitize_species` orphans a batch of keys that cities keep publishing until
-  each one rebuilds: adding `genus` to the placeholder epithets (so `Viburnum
-  genus` truncates to `Viburnum`) orphaned 17 keys still carrying 1,162 trees
-  between them, and purging those would have blanked a label that was
-  rendering. So the job passes `published_species_keys()`, and an unreachable
-  rollup returns `None`, which every caller must read as *keep everything* —
-  a failed read is not evidence that a key is unused.
-
-### Species hygiene is enforced centrally, not per city
-
-`normalize_species` only fixes casing.  Deciding whether a value is a taxon at
-all is `sanitize_species`, called for every city from `enforce_tree_schema`, so
-a new city inherits it without doing anything.  It drops what is not a
-scientific name — inventory placeholders (`Unknown`, `Onbekend`,
-`No identificado`), free-typed OSM tags (`Pin oak`,
-`Serviceberry or dogwood?`), abbreviated genera (`Amel. laevis 'spring
-flurry'`) — and truncates the rest to species rank, so
-`Gleditsia triacanthos var. inermis` and `Prunus serrulata 'kwanzan'` collapse
-onto the binomial the enrichment table is keyed on.  Applied to the published
-data this cut distinct species 6,418 → 3,776 and the enrichment backlog
-1,568 → 734 city/species pairs.
-
-**One hybrid spelling is emitted: ASCII `x`.**  Both are recognised on input —
-SF publishes `Platanus x hispanica`, Paris publishes `Platanus × hispanica`
-(U+00D7) — and `sanitize_species` collapses them onto the ASCII form.
-
-This reverses an earlier decision to preserve both verbatim, whose reasoning was
-that normalising would orphan every already-enriched hybrid.  That is true, and
-it is the smaller cost: the same taxon under two spellings is two rows in the
-enrichment table, two LLM calls and two entries in every species rollup.  Three
-were already being paid for twice (`Alnus x spaethii`, `Osmanthus x burkwoodii`,
-`Quercus x kewensis`).  ASCII is both the majority form — 228 distinct taxa
-against 68 — and the safe one: it survives SQL literals, CSV, filenames and a
-Windows console, which mangled U+00D7 to `?` while this very change was being
-measured.  A leading mark keeps its capital (`X amelasorbus jackii`), because it
-is the first word and takes the capital `normalize_species` gives one.
-
-**The orphaning is real and is bridged, not ignored.**  Emitting one spelling
-only reaches the data on the next full refresh, so there is a window where the
-published parquets still carry U+00D7 while new enrichment rows are keyed on
-ASCII.  `with_hybrid_aliases` copies every hybrid row under both keys — 68 rows,
-no LLM call, and symmetric, so the order cities are refreshed in does not
-matter.  Without it, Paris's 38,845 `Platanus × hispanica` rows — the most
-common tree in the dataset — would lose their common name the moment that city
-rebuilt.  It is transitional: once every city is refreshed past the change, the
-U+00D7 rows are orphans and it should become a purge.
-
-Anything that survives as a non-taxon becomes a **sentinel**, never null — see
-the next section for why.  `enforce_tree_schema` prints a per-ingest summary of
-how many values it reshaped, so a run that rewrites a tenth of its species
-column says so in the refresh log rather than doing it quietly.
-
-Most non-taxa merge into `UNKNOWN_SPECIES` (`"Unknown"`), but a value that
-names a *growth form* keeps it: `Palm`, `Shrub` and `Cactus` are their own
-sentinels, because the form is what the map icon and colour are chosen from and
-merging throws away the one fact the source did record.  `Dead` is a fourth,
-for the same reason with a different fact: the source recorded a standing tree
-and that it is dead.  `_FORM_SENTINEL_ALIASES` carries the multilingual
-spellings (`arbusto`, `struik`, `palmera`, `dood`, `arbre mort`, …); the full
-set is `SPECIES_SENTINELS`, and a new sentinel added there needs a matching
-entry in `src/src/data/species.ts`.
-
-**An empty site is not an unidentified tree, and is dropped.**  `Vacant`,
-`Vacant site medium`, `Scheduled Planting Site - Spring 2026`, `Empty
-pit/planting site` and `Stump` describe a spot with nothing in it; there is
-nothing to place on the map and nothing to count, so `enforce_tree_schema`
-removes the row (`is_not_a_tree`) instead of publishing it as `Unknown`.
-Several ingests already dropped the same records from a dedicated column
-(Amsterdam's `Stobbe` record type, Brookline's `IsStump`, Burlington's site
-type, Denver's `_` prefix, LA's `NOT_A_TREE_NAMES`); the shared rule catches
-the portals that only say so in the species field, SF above all.  The count is
-reported on stderr alongside the species cleanup summary.  `Unknown` and `Dead`
-are deliberately *not* in that set: both describe a tree that is there.
-
-#### Some non-taxa are only recognisable by name
-
-The rules above are *shape*-based, and shape runs out.  `Japonica` is a
-specific epithet whose genus was dropped upstream; `Kastanie` is German for
-chestnut; `Oak` is an English common name.  All three are a single capitalised
-Latin-looking word, indistinguishable from a real genus — and the
-`_COMMON_NAME_NOUNS` check does not catch them because it is only ever tested
-in *epithet* position (that is deliberate: `Magnolia` and `Catalpa` are genuine
-genera and would fail it in genus position).
-
-Deciding those needs a list of names, and the only honest source for one is the
-published data.  `_NON_TAXON_REWRITES` is that list — every entry was observed
-in the wired inventories.  It maps a value to the genus worth keeping,
-or to `None` when there is none: a source that wrote `Callistemon king` still
-recorded the genus, while `Tai haku` is a cherry cultivar with no genus
-attached.
-
-A **misspelled binomial stays out of it**.  `Crateagus monogyna` and
-`Sequioa sempervirens` are real names badly typed; dropping them to `Unknown`
-would lose a tree we can identify.  The list is only for values that name no
-genus at all.  A misspelling folds instead, through `SPECIES_MISSPELLINGS` —
-see "Misspellings" below.
-
-The structural rules gained four cases at the same time, each of which
-generalises where a list would not:
-
-- a **placeholder in epithet position** truncates to the genus rather than
-  dropping the value — `Acer unidentified` is an `Acer`, and thirteen cities
-  publish some spelling of that;
-- a **leading hybrid mark needs two tokens after it**.  A nothogenus name is
-  still genus + epithet, so `X ambigua` is a `Genus × ambigua` that lost its
-  genus, not a nothogenus.  This costs two real names (`× Chitalpa`,
-  `× Cupressocyparis`), both of which also appear unmarked in the data;
-- a **dangling mark** is dropped: `Parkinsonia x` is a genus, not a hybrid;
-- a **family** (`-aceae`) is not a species-rank name.  Left in, `Platanaceae`
-  would be handed to the enrichment LLM to describe as though it were a tree.
-
-**Accents are stripped before any of this.**  A scientific name is ASCII by
-convention — the botanical code requires transliteration — so an accent means a
-typo or a common name in the portal's own language.  Stripping first lets one
-rule cover both: `Mālus` becomes the real genus `Malus`, and `Néflier` becomes
-`Neflier`, which the list recognises as the French for medlar.  U+00D7 (×) is
-not a combining character, so the hybrid mark survives.
-
-Against the August 2026 published data these removed 141 of the 795 species
-queued for enrichment: 114 that name no taxon, and 27 the ingest rewrites.
-
-### Common names are sentence case
-
-`common hackberry`, `northern hackberry`, `American hackberry`, `Mississippi
-hackberry`: the editorial convention for a vernacular name is sentence case,
-with only a genuine proper noun or proper adjective keeping its capital.
-`Evergreen Pear` is title case and becomes `Evergreen pear`; `EVERGREEN PEAR`
-becomes the same. The published table followed no convention -- of 29,039
-names in September 2026, 4,942 were all caps, 11,032 title case and 8,651
-lower case, with all three spellings of some names present -- so source
-casing is not preserved.
-
-`normalize_common_names` in `enrichment/_common_name_style.py` lowers
-everything and puts the proper components back from two curated lists,
-phrases (`New Zealand`, `St. John's`, `Autumn Blaze`) and words (`Japanese`,
-`Douglas`, `Mississippi`); a cultivar in quotes is kept as written. The lists
-were built by reading every word the published names capitalised mid-name,
-and **a word missing from them is lowercased**, so a name that comes out
-wrong (`port orford cedar`) is fixed by one entry. It runs in three places
-that must agree: on every load of the table (`with_normalized_common_names`,
-next to `purge_non_taxa`), on each row the LLM run writes, and on a row saved
-in `enrichment/admin/server.py`. The prompt asks for the convention too, so less
-needs correcting. The tree card's title is the first common name, so this is
-what the map shows.
-
-### The prompt has to ask for the field
-
-`common_names` and `tree_form` are both **required** by the response model, and
-the prompt named neither.  An empty list satisfies `list[str]` and `"default"`
-is a legal `tree_form`, so for a taxon the sources cover thinly the model took
-the free exit: of 159 species that came back without a common name, **148 also
-carried `tree_form = "default"`** and 71 had no description at all.  That is not
-a taxonomy problem, it is an unasked question — `Fagus lucida`, `Magnolia zenii`
-and `Emmenopterys henryi` are all well documented.
-
-The prompt now asks for both, tells the model where to find a fallback name (a
-`Quercus` hybrid is a hybrid oak), and `parse_enrichment_from_text_v2` re-asks
-once when `common_names` comes back empty.
-
-**The retry keeps the escape hatch open on purpose.**  Some published values are
-not taxa but chimeras welded from two real names — `Erythrina camaldulensis`
-(that is a *Eucalyptus*), `Pinus abies` (a *Picea*), `Acer implexa` (an
-*Acacia*), `Laurus lucidum` (a *Ligustrum*).  There is nothing to find, and
-`sanitize_species` cannot catch them because both halves are real Latin.
-Pushing harder for a name would get one invented, which is the Orania failure in
-miniature.  So the retry explicitly permits an empty answer, and a species that
-returns one twice is taken at its word — the row still lands, so it is not
-re-queued for ever.
-
-**Model choice.**  `google/gemini-2.5-flash`, overridable with
-`TREE_ENRICHMENT_MODEL`.  As of August 2026 the only models reachable in
-`preqldata`/`us-central1` are `gemini-2.5-flash` and `gemini-2.5-flash-lite`;
-no Gemini 3 publisher model resolves there.  Lite is cheaper and is the wrong
-direction for this workload — the failure mode is a thin answer on an obscure
-taxon, which is exactly what a smaller model does more of.
-
-### Nine names with nothing behind them
-
-The August 2026 backlog closed at 795 queued, 786 enriched, nine left — and the
-nine are all the same thing: a real genus welded to an epithet from a different
-species.  `Erythrina camaldulensis` is a *Eucalyptus*, `Acer implexa` an
-*Acacia*, `Laurus lucidum` a *Ligustrum*, `Pinus excelsior` a *Fraxinus*,
-`Melaleuca azedarach` a *Melia*, `Cupressus plicata` a *Thuja*.  There is no
-such tree, so there is nothing to find, and asked twice under a prompt that
-explicitly requests a common name all nine still came back empty.  That is the
-model being right.
-
-`CHIMERA_SPECIES` keeps them out of the queue.  It has to be a list: both
-halves are real Latin and the shape is indistinguishable from a correct
-binomial, so `sanitize_species` cannot catch them and should not try — only
-knowing the taxonomy separates `Acer implexa` from `Acer campestre`.
-Truncating to the genus is wrong rather than conservative, since calling an
-*Acacia* an *Acer* asserts something false.
-
-They are deliberately **not** in `SKIP_SPECIES`, which would also purge their
-rows.  Whatever description the model did manage beats nothing for the 30 trees
-involved, and the map falls back to the scientific name for the label — the
-honest answer when we do not know what the tree is.
-
-With those nine excluded the probe returns `true` for the first time, which
-also stops the every-tick re-run described below.
-
-### The scheduled refresh runs `main`, and will undo you
-
-The `refresh-enrichment` job in `data/trilogy.toml` ticks daily at 07:00 UTC,
-and because the enrichment probe reports `false` while any species is short of a
-common name, **every tick re-runs the enrichment script** — from whatever is on
-`main`, not from your branch.
-
-So a change to the *shape* of the published table is reverted on the next tick
-until it merges.  The sentinel rows are the worked example: a branch run
-published 7,485 rows with the four authored sentinels, the noon tick loaded that
-table, ran `main`'s `load_existing_table` (which ends at `return
-purge_non_taxa(table)`, purging sentinels and not re-adding them) and
-republished 7,481 without them.  CI ran eight minutes later and the sentinel
-test went red — correctly: it was reporting that production runs code without
-the fix.
-
-Two things follow.  A data-shape change is not done when the parquet looks
-right; it is done when it **merges**, and until then expect any test asserting
-the new shape to flap on a daily cycle.  And `assert_published_matches`
-reads the object back after every upload and checks the row count and the
-sentinel set, because an upload that lands short is otherwise invisible — the
-script reports the count it *wrote*, exits 0, and the damage shows up as null
-common names on the map.
-
-### Two ways this script could quietly destroy the table
-
-Both were live until August 2026 and both are now guarded, because neither
-failed loudly:
-
-- **A stale `--output` checkpoint.**  Local mode reads `--output` in preference
-  to GCS *and uploads it at the end*, so a stale file there does not get
-  ignored, it replaces the published table.  The default is
-  `tree_enrichment.parquet` in the working directory, and a gitignored
-  months-old one with 1,404 rows was sitting there — one default invocation away
-  from reverting every city's species labels to a March snapshot.
-  `assert_checkpoint_is_not_stale` refuses to resume from a checkpoint holding
-  fewer rows than the published table, since a real checkpoint is always a
-  superset of what it read.
-- **A silent cap.**  The run stopped after 250 species with a bare
-  `if counter>250: break` and no message, so it exited 0 having done a fraction
-  of the queue with nothing saying so.  It is now `MAX_SPECIES_PER_RUN` and it
-  reports what it left behind.
-
-### "A row exists" is not "it is enriched"
-
-`get_already_enriched` answers *is there a row*.  The freshness probe answers
-*does that row have a common name and a growth form*.  Those are different
-questions, and for months they disagreed: 226 species carried a row with a null
-`common_names`, written between March and August 2026, so the script skipped
-them as done while the probe reported them missing on every single run.  The
-probe could never return `true` — not for want of runs, but because nothing
-would ever revisit those rows.
-
-Three pieces fix it, and you need all three:
-
-- **One definition of complete.**  `ENRICHMENT_COMPLETE_SQL` lives in
-  `enrichment/_tree_shared.py` and both scripts read it, so what the probe
-  reports missing is exactly what the next run picks up.  The bar is
-  deliberately low — a common name and a growth form, which is what the map
-  renders.  A stricter bar would be permanently unmet: plenty of real taxa have
-  no published canopy spread, and asking again does not conjure one.
-- **`get_incomplete_species`**, which puts those rows back in the queue.
-- **`merge_with_existing` replaces rather than refuses.**  It used to raise on
-  any overlap ("re-processing is not expected"), which is what made
-  re-enrichment impossible; it now drops the existing row first.  It must —
-  `species` is the grain of this table and the join key from every tree row, so
-  two rows for one species would double every tree carrying it.
-
-**The retry is bounded by a date, not a counter.**
-`REENRICH_INCOMPLETE_BEFORE` converges without a schema change: a row rewritten
-by this run carries today's `enriched_at` and falls out of scope on the next
-one, so a species the model still cannot name is retried exactly once.  Without
-that bound an unnameable species would be re-enriched on every refresh tick,
-for ever, at roughly a minute each.  Moving the date is how
-you ask for another attempt: a deliberate, greppable edit, like
-`SENTINEL_ENRICHED_AT`.
-
-The rows were not unfixable, which is what made this worth doing rather than
-relaxing the probe.  Asked directly, a model names *Hovenia tomentella* the
-downy Japanese raisin tree, *Enkianthus deflexus* the bent enkianthus and
-*Corylopsis glandulifera* the Chinese fragrant winterhazel.  The first instinct
-was that these obscure Asian taxa simply have no English common name and the
-probe was asking for the impossible; they do, and it was not.
-
-### The enrichment queue asks `sanitize_species`, not a second list
-
-`SKIP_SPECIES` names specific values.  `is_enrichable_species` is the general
-rule, and it defers to the ingest: a species is enrichable when
-`sanitize_species` would keep it **exactly as written**.  Both
-`tree_enrichment.py` and `tree_enrichment_probe.py` queue from it.
-
-Tying the two together is the point.  An improvement to the ingest's idea of
-"is this a taxon" shrinks the enrichment backlog in the same edit, with no
-second list to keep in step — which is how a queue of 795 came to contain
-`Oak`, `Japonica`, `Kastanie` and `X ambigua` in the first place.
-
-A value `sanitize_species` *rewrites* is skipped too, rather than enriched
-under its raw spelling.  `Acer unidentified` is a row the next refresh will
-publish as `Acer`, so a row keyed on the raw string is dead on arrival — a
-duplicate of an entry that already exists, paid for.  Both cases leave those
-trees unenriched until a refresh rewrites their species, which is where they
-already were.
-
-### Sentinels are excluded from enrichment, and purged from it
-
-A sentinel is not a taxon, and `species` is the join key into the enrichment
-table, so an enrichment row for one is not inert — it labels **every** tree
-carrying that value.  This is not hypothetical.  A row keyed `Unknown` was
-enriched in April 2026 and came back as *Orania timikae*, a critically
-endangered single-stemmed palm from the heath forests of western New Guinea:
-
-```
-species='Unknown'  genus='Unknown'  tree_form='palm'
-description='Orania timikae is a small, single-stemmed palm reaching up to 4
-             meters tall, distinctive for its subdistichous crown…'
-photo_url=<an iNaturalist photo of a palm>
-```
-
-Once `UNKNOWN_SPECIES` adopted the same string, that one row labelled **189,139
-trees across all fourteen cities** — 67.6k in LA, 37.9k in NYC, 27.9k of
-Boston's OSM rows — each rendered with a palm icon, a palm photo, and a
-description of an endangered New Guinea palm.
-
-Two mechanisms, and you need both:
-
-- **Exclusion** keeps a sentinel out of the enrichment queue.  It lives in
-  `SKIP_SPECIES` / `SPECIES_EXCLUSION_SQL` (`enrichment/_tree_shared.py`),
-  which are now derived from `SPECIES_SENTINELS` so the two cannot drift.  A
-  new *non-sentinel* placeholder value belongs in `SKIP_SPECIES` directly.
-- **Purge** removes a row that is already there.  Exclusion alone does not:
-  `get_already_enriched` reads whatever the Parquet holds and
-  `merge_with_existing` concatenates it forward, so a row that got in before
-  the exclusion existed survives every run for ever.  `purge_non_taxa` runs
-  inside `load_existing_table`, so the removal lands on the next enrichment run
-  whether or not any new species were processed.
-
-Presentation for the sentinels is **hardcoded** in `src/src/data/species.ts` —
-label, `tree_form`, and the note shown where a description would go — rather
-than fetched.  Asking a model to describe "Palm" does not fail loudly; it
-returns a plausible, specific and wrong species, which is exactly how this
-happened.  The worker applies the label and form once in `trees_fast`, and
-`REAL_SPECIES_PREDICATE` keeps all four sentinels out of every species rollup.
-
-### Mark a nullable column `?` or Trilogy will silently drop rows
-
-A datasource column declared without `?` is non-nullable, and Trilogy generates
-plain `=` joins for it.  `NULL = NULL` is never true, so **every row with a
-null in that column vanishes from the materialised Parquet, with no error**.
-
-Boston is the worked example.  Its dbh imputation
-(`auto processed_dbh <- coalesce(_cleaned_db, avg(_cleaned_db) by city, species)`)
-compiles to a join of the species-average CTE back onto the rows:
-
-```sql
-INNER JOIN "abhorrent" on "macho"."city" = "abhorrent"."city"
-                      AND "macho"."species" = "abhorrent"."species"
-```
-
-Boston's municipal sources always carry a species, so this was invisible for
-months.  Wiring OSM exposed it: OSM `natural=tree` nodes are ~99% species-less,
-and the first rebuild wrote **349 of 28,163** OSM rows.  Declaring
-`spp_bot: ?species` (and the same on every other Boston datasource) changes the
-generated predicate to `is not distinct from`, which matches null to null:
-
-```sql
-AND "macho"."species" is not distinct from "abhorrent"."species"
-```
-
-Boston is currently the only city with a species-keyed aggregate, so it is the
-only one that needed it — but the rule is general.  If a city adds an aggregate
-keyed on a column that any of its sources can leave empty, mark that column
-`?` in **every** datasource that maps it, and check the rendered SQL:
+To build the city in the cloud before the PR merges, push it as a throwaway
+job rather than syncing the branch. The worker executes the bundle as a
+directory, so exclude every other city and every root model the city does
+not import:
 
 ```bash
-cd data && trilogy refresh raw/{city}/{city}_tree_info.preql -f {city}_tree_info --dry-run
-```
-
-Row counts are the cheap tell — compare each `data_source` partition in the new
-Parquet against the source row count before assuming a rebuild succeeded.
-
-### A diameter no tree has is published as null
-
-`enforce_tree_schema` nulls a `diameter_at_breast_height` that is zero,
-negative, or over `DBH_MAX_INCHES` (200 in, 5 m) and prints the count.
-Burlington ON published a linden at 192,913,385 inches, and a few cities
-carry hundreds of inches that are centimetres typed into the wrong column;
-the value cannot be used and a crown model would otherwise clamp on it. The
-cap is a guard against a wrong column, not a unit converter: Amsterdam's
-diameter classes changed format in 2026 and every value quietly parsed to
-null, which no cap can see. That ingest now counts the class strings it
-could not read and refuses to publish when they exceed 1% of the rows that
-carry one -- the pattern to copy for any source whose numeric field is a
-coded string.
-
-### `tree_id` is the grain, and the source's obvious id is often not unique
-
-`enforce_tree_schema` refuses a `tree_id` that repeats *or* is null. It has to:
-`tree_id` is the declared `grain` of every city datasource, Trilogy has no way
-to notice a violation, and neither symptom is an error.
-
-- **A repeat fans out** every join built on that grain, so the Parquet comes
-  back with more rows than the portal published and every count is quietly high.
-- **A null drops its row.** The generated join is a plain `=` and `NULL = NULL`
-  is never true, so the row vanishes from the Parquet with nothing reporting it
-  — the same mechanism as the nullable-column trap above, applied to the grain
-  itself. Boston was losing 43 rows a rebuild this way.
-
-If a source genuinely leaves some rows unidentified, drop them in the ingest
-with a logged count (`usbos/boston_tree_info.py`) rather than letting the join
-do it quietly. Do not synthesise an id from position: it is one the city cannot
-confirm, and it churns the moment the city assigns a real one.
-
-**Do not assume the field named like an id is one.** Washington DC used
-`FACILITYID`, which is a *facility* id, and shipped for months with 63,527 of
-215,583 rows carrying no `tree_id` at all (29.8% of the layer has no
-FACILITYID) and 8,280 more sharing one with a different tree —
-`was-35778-290-3005-0057-000` covered 127 rows, including a witch-hazel and a
-black walnut 50m apart.
-
-The preference order for a new city:
-
-1. **A stable per-feature id the publisher guarantees.** On ArcGIS that is
-   `GLOBALID` — assigned once per feature and preserved across replication and
-   republishing. DC's is populated and distinct on all 216,725 rows.
-2. **The source's own asset id**, once you have checked it is unique *and*
-   non-null across the whole layer, not just the first page.
-3. **`OBJECTID` only as a last resort.** It is unique but it is a local row
-   number, so a rebuild on the publisher's side can reassign it and churn every
-   `tree_id` you derive from it.
-
-Prefer any of those to a positional hash: coordinates get corrected, and two
-records stacked at one point collide.
-
-Checking a candidate before you commit to it costs one query:
-
-```bash
-cd data/raw && python -c "
-import sys; sys.path.insert(0,'.')
-from shared.platforms.arcgis import FeatureLayer, feature_count
-L = FeatureLayer('<layer url>')
-print('total    ', feature_count(L))
-print('id null  ', feature_count(L, where=\"GLOBALID IS NULL\"))
-"
-```
-
-and uniqueness needs the full column, which `iter_attributes` will page for you.
-Changing a city's id scheme afterwards rewrites every one of its `tree_id`s,
-which orphans any check-in recorded against the old value — so it is worth the
-query up front.
-
-### After Adding a New City
-
-Check the wiring before checking the data — the schedule tests are instant and
-catch the failure that is otherwise silent:
-
-```bash
-cd data/raw && uv run --with pytest python -m pytest tests -q
-cd data && trilogy refresh --dry-run raw/{code}/{city}_tree_info.preql
-cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql
-```
-
-Each dry run should report exactly **one** asset for that city. More than one
-means the entrypoint reaches something it should not — most likely an import
-that pulled in another city's model or the cross-city merge.
-
-**To build the city in the cloud before the PR merges**, push it as a
-throwaway job rather than syncing the branch. `trilogy cloud sync` from a
-feature branch deploys the whole job table into a branch environment, which
-is the designed path, but the shared workspace bundle (every tracked
-`*.py/*.preql/*.csv/*.json` under `data/`, tests excluded) is shipped in one
-request the API caps at 2 MiB, and at 41 cities it stood 4.6 KB under that
-until the `exclude` list in `trilogy.toml`'s `[cloud]` block took the
-workstation-only scripts out (1.74 MiB after; ~40 KB per city). A checkout
-with local caches (`species_audit_cache.json`, a stale `--output` parquet's
-sidecars) goes over where a clean clone does not — and syncing from a
-*detached* checkout maps to production, which is one wrong flag from
-updating every live job. A single-city push bundles about 1.1 MB and lands
-nowhere a scheduled job reads:
-
-```bash
-# a minimal trilogy.toml with one [cloud] block: org, name, entrypoint,
-# operation = "refresh", secret_env, timeout_seconds, memory_mb
 trilogy cloud --org trilogy-data jobs push --source data --config adhoc.toml \
     --name adhoc-city-{code} --operation refresh --memory-mb 2048 \
     --secret-env GOOGLE_HMAC_KEY --secret-env GOOGLE_HMAC_SECRET \
     --exclude "raw/tests/*" --exclude "raw/enrichment/*" --exclude "raw/tools/*" \
     --exclude "osm_staging/*" --exclude "landmark_staging/*" \
     --exclude "raw/{every other city}/*" \
-    --exclude raw/tree_info.preql --exclude raw/landmark_info.preql ... # every root model the city does not import
+    --exclude raw/tree_info.preql --exclude raw/landmark_info.preql
 trilogy cloud --org trilogy-data jobs run adhoc-city-{code} --wait --logs
 trilogy cloud --org trilogy-data jobs delete adhoc-city-{code}
 ```
 
-Two things about that bundle are load-bearing. **The worker executes the
-bundle as a directory, not the entrypoint**: its state snapshot parses every
-`.preql` it finds, so a root model that imports an excluded city
-(`tree_info.preql`, `landmark_info.preql`) fails the run before
-it starts, and a city directory holding both the tree and the landmark model
-builds *both* — exclude `{slug}_tree_info.preql` from the landmark job's
-bundle or the landmark run re-does the tree ingest. And **the four new-city
-parquets are new objects**, which is what makes a production-namespace push
-safe: `full_tree_publish`'s file list and `landmark_info`'s imports are
-main's until the merge, so nothing live reads them yet.
-
-Then run the enrichment probe to measure coverage:
-
-```bash
-cd data/raw && uv run tree_enrichment_probe.py
-```
-
-It prints `true` if every species has complete enrichment, `false` + a list of missing species otherwise. Then run `tree_enrichment.py` to fill in missing entries (this calls the LLM — costs money, runs slowly):
-
-```bash
-cd data/raw && uv run tree_enrichment.py --limit 50 --output tree_enrichment.parquet
-```
-
----
-
-## What to Optimize / Streamline Next Time
-
-Both entries that used to live here — "the city enum is easy to miss" and
-"parquet column types drift silently" — are now enforced rather than advised:
-`test_city_is_in_the_core_enum` catches the first and `enforce_tree_schema`
-catches the second. What follows is what is still manual, roughly in order of
-how much a city addition costs today.
-
-### The judgement steps are the whole cost now
-
-`new_city.py` writes twenty-seven mechanical edits in about a second, so what a
-city costs is the four things it cannot do: the field mapping, the freshness
-probe, the landmark source and the dedup calibration. Of those, only the first
-two are irreducible — they are reading a portal's schema — and both are much
-cheaper on a platform with a shared module.
-
-**A fifth cost turns up on any portal that publishes a common name instead of a
-binomial**, and it is now mostly paid *per language*: `shared/species/english.py`
-resolves 398 published English names to accepted binomials, curated by hand from
-what five Ontario and New Brunswick portals actually publish, and
-`shared/species/japanese.py` does the same for the 446 katakana names Tokyo publishes,
-`shared/species/spanish.py` for the 503 Andean common names Bogotá's census carries
-(`Chicala, chirlobirlo, flor amarillo` is one value and one species), and
-`shared/species/chinese.py` for the 471 Traditional-Chinese names Taipei's two files
-use. A new city on a portal that names its trees in a language none of the four
-covers should expect to write the fifth one; the shape is fixed and the cost is
-the curation, and each of the last three was drafted by a model from the
-published value list and then put to POWO value by value. A new city on that
-platform calls `species_from_common_name` and adds whatever entries its own
-values need — Mississauga, Burlington ON and Ajax between them needed 398, and
-a sixth city in the same region should need a handful. Read the module's
-docstring before reaching for the enrichment table's inverse instead; that was
-tried and measured and does not work.
-
-**So the highest-leverage next step is another `shared.platforms.arcgis`.** That file
-took Denver's ingest from ~130 lines to ~60 and fixed two latent bugs across
-five existing cities on the way. The same is available for the other platforms
-this repo already talks to more than once:
-
-| platform | shared module? |
-|----------|----------------|
-| ArcGIS FeatureServer / MapServer | **yes** — `shared/platforms/arcgis.py` |
-| Socrata | **yes** — `shared/platforms/socrata.py` |
-| CKAN | **yes** — `shared/platforms/ckan.py` |
-| OGC WFS 2.0 (GeoServer) | **yes** — `shared/platforms/wfs.py` (Copenhagen, Helsinki; Berlin predates it and keeps its own loop) |
-| OpenDataSoft | no — Paris, Vancouver and Melbourne are three hand-rolled copies |
-
-OpenDataSoft is the one left: three copies of the same paging loop and the same
-metadata probe. Write the module when the third city arrives, not the first —
-that is when the shape is knowable and the drift has started. That is what
-happened to WFS: Berlin was the first, Copenhagen and Helsinki the third and
-fourth, and `shared/platforms/wfs.py` was written for them. Two things in it are
-correctness rather than convenience, for the same reasons as in
-`shared.platforms.arcgis`: paging needs a `sortBy` (an unsorted `startIndex` walk can
-repeat or skip rows between requests) and terminates on `numberMatched`, not on
-a short page; and `wfs_max_property` — one row sorted descending on a timestamp
-column, which is the whole freshness probe for both cities — excludes nulls
-explicitly, because GeoServer sorts them *first* in a descending sort and the
-first version of the probe read Copenhagen's watermark as `null`.
-
-**Four things the September 2026 quartet added that a later city may need:**
-
-- **A projection inverse in pure Python.** Taipei publishes TWD97 / TM2 zone
-  121 metres and nothing else, so `shared.ingest.twd97_to_wgs84` inverts the
-  Transverse Mercator the way `rd_to_wgs84` handles the Dutch grid — a
-  dependency-free function next to the ingest, not a pyproj install in every
-  city job.
-- **A static blob's `Last-Modified` is a watermark**, read with
-  `head_with_retry`. Taipei's CSVs are Azure blobs with no catalogue stamp
-  tracking them; the two files moved two months apart, so the probe takes the
-  later of the two HEADs.
-- **A source with no stamp at all gets a hand-bumped constant.** Copenhagen's
-  monuments layer carries no date column and its WFS no layer-level stamp, so
-  `copenhagen_landmarks_probe.py` emits `LAST_REVIEWED` and says so. A row
-  count was tried and rejected: it is not a time, and it moves on a deletion
-  as readily as an addition while missing a rename.
-- **A load date is a watermark that always moves.** Helsinki stamps every tree
-  row with the night it was last loaded into the WFS, so the city rebuilds on
-  each tick of its cron; at 66k rows that is the cheap side of the trade,
-  and the ingest docstring says so. Bogotá is the opposite case — a layer with
-  a real per-row `Fecha_Actualizacion` and no `editingInfo`, read with
-  `field_max`.
-
-And one thing to know about the largest city on the map: Bogotá's census is
-1.39M points, twice New York's, read as ~700 ArcGIS pages at just under a
-second each with `returnGeometry=false` (the layer's stored geometry is
-broken — every point at (0, 0) — and the lat/lon attributes are clean).
-It publishes no diameter at all and no planting date, so the whole city is
-null on both; the reviewed-aerial-imagery lane is the route to a size there.
-
-**A shared module does not have to be a platform.** `shared/species/english.py`
-is the counter-example: five cities published an English common name where the
-binomial should be, and what they shared was not an API but a question. The
-same threshold applies and the same rule about hardcoding does — its table is
-curated and committed, not derived at run time from the enrichment parquet,
-because a city job must not depend on a GCS object being reachable and a
-reviewer must be able to read what a name resolves to.
-
-`shared/species/japanese.py` is the same shape for Tokyo's 446 katakana names, and
-splitting it out rather than adding rows to the English table is the part worth
-copying: the two tables answer the same question but their **keys normalise by
-different rules**, and `common_name_key` reduces a value to `[a-z ]`, which
-erases a katakana name entirely. A second language gets a second module and a
-second key function, not a wider regex.
-
-Both were drafted from an automatic index and neither trusts one. Tokyo's came
-from GBIF's Japanese vernacular names (290 of 446 exact) and was then put to
-POWO value by value the way `species_audit.py` does it. Two GBIF answers would
-have mislabelled thousands of trees — `ツバキ` as *Camellia hiemalis* when that
-is the neighbouring value `カンツバキ`, and `アメリカヒイラギ` as the devilwood
-rather than the American holly — which is the same lesson the reverse enrichment
-index taught in English: **an index is a drafting aid; the table is the
-authority.**
-
-**When POWO and the published table disagree, the published table wins.** This
-one is about this repo rather than about taxonomy, and it is the argument
-`SPECIES_SYNONYMS` already makes: the same taxon under two names is two
-enrichment rows, two LLM calls and two entries in every rollup. POWO calls
-`Cinnamomum camphora` a synonym of `Camphora officinarum` and the table has
-carried the former since San Francisco, so Tokyo's 6,882 camphor trees join the
-row that exists. Where the rule points the other way — the published name *is*
-the synonym and POWO names an accepted target unambiguously — the pair goes into
-`SPECIES_SYNONYMS` instead, which is how `Sapium sebiferum` → `Triadica
-sebifera` and `Callistemon citrinus` → `Melaleuca citrina` landed.
-
-**A CSV resource's encoding is detected, and the order matters.** Tokyo
-publishes one street-tree file in Shift-JIS and the other in UTF-8 *from the same
-CKAN package*, so `shared.platforms.ckan.read_csv_rows` tries `utf-8-sig` first and
-`cp932` second. That order is correctness, not preference: cp932 decodes almost
-any byte string without raising, so trying it first turns valid UTF-8 Japanese
-into mojibake **silently**, while UTF-8 is strict enough that a body which
-decodes as UTF-8 is UTF-8. Assuming either one raises `UnicodeDecodeError` at
-byte 0x8e, which reads as a corrupt download rather than a legacy encoding.
-
-**A city-unique column stops being city-unique.** `borough` was London's alone;
-Tokyo's `行政区` is the same concept — the administrative subdivision the tree
-sits in — so it maps onto `borough` rather than gaining a parallel `ward`
-column. That is one entry in `OSM_EXTRA_NULL_COLUMNS`, one property declaration
-in the city's own staging model, and nothing at all in the shared community and
-OSM scripts, which already emit the column for every city. A second column would
-have been six new silent-failure points for a concept that already existed.
-
-### The landmark lane is still seventeen bespoke scripts
-
-Trees were split per city cheaply because extraction lives once in
-`shared.osm`. Landmarks cannot be split the same way yet, because each city's
-landmark fetch is its own script — see "Landmarks are still one refresh lane".
-Sharing the Overpass fetch (Berlin, London) the way `shared.osm` shares the
-tree one is the prerequisite; the scheduling is the easy half.
-
-Denver is the first city to take the runbook's *preferred* landmark source — an
-official designation registry on the same portal as the trees, read live with
-no staging and no geocoding. That path is both the cheapest and the best, and
-it is worth looking for it properly before falling back to a curated CSV.
-
-### Hardcoded city counts in prose go stale on every addition
-
-"all fourteen cities", "seventeen per-city partitions" — these were written
-when they were true and are wrong by the time anyone reads them. Prefer "every
-city" / "all cities" for a present-tense claim, and keep a numeral only where
-it is a *measurement at a point in time* ("11 of 17 portals move on a scale of
-months", "189,139 trees across all fourteen cities"), which stays true as
-history. This pass fixed the present-tense ones; new prose should not
-reintroduce them.
-
-### A city's first deploy is still a hole
-
-`parquetSchema.test.ts` carves out a 404 so a city-addition PR is not red
-before its first credentialed build. The flip side is that a green build no
-longer proves a brand-new city's parquet exists, so a just-added city stays
-broken in a deploy until its first refresh runs. Nothing currently reports that
-gap; the honest fix is a check that every city in `CITY_CONFIG` has a published
-parquet, run against production rather than in PR CI.
+A new column does not make a parquet stale. Force each city with
+`trilogy refresh raw/{code}/{slug}_tree_info.preql -f {slug}_tree_info`, San
+Francisco first (it heads the rollup's file list), then run
+`urban-tree-full`. A just-added city stays broken in a deploy until its first
+refresh has published; `parquetSchema.test.ts` treats the 404 as a pass, so
+a green build does not prove the parquet exists.

@@ -22,6 +22,9 @@ test-results/
 
 src/vite.run.log
 
+# Chat benchmark runs (pnpm bench:chat): transcripts and the summary of each sweep.
+src/bench-results/
+
 data/raw/*.parquet
 # The admin form's publish staging copy.
 data/raw/enrichment/admin/*.parquet

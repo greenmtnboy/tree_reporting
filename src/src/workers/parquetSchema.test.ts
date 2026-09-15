@@ -135,7 +135,7 @@ describe('parquet schema', () => {
   //
   // A sentinel added in a branch cannot have a row until the enrichment job has
   // run from main -- the daily tick runs main's code and would purge a row a
-  // branch wrote (see EXTENDING.md, "The scheduled refresh runs main"). Such a
+  // branch wrote (see docs/SPECIES_ENRICHMENT.md, "How the job behaves"). Such a
   // sentinel is listed here while its PR is open, and removed once the next
   // enrichment run has published the row; every other sentinel is gated hard.
   const PENDING_SENTINELS = new Set(['Dead'])

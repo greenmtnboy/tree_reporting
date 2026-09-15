@@ -104,7 +104,7 @@ def parse_species(value) -> str | None:
     as invented genera (`Acru`, `Quru`), which is worse than saying nothing:
     the species key is the join into the enrichment table, so each becomes a
     permanent LLM call and a wrong label on every tree carrying it.  That is
-    the Orania failure described in EXTENDING.md, in miniature and thirty
+    a sentinel enriched as a real species (docs/SPECIES_ENRICHMENT.md), in miniature and thirty
     times over.
 
     **The layer separates the two itself, and the separation was checked over
@@ -196,7 +196,7 @@ if __name__ == "__main__":
     # omission: `FCODE` can encode a stump or a vacant planting site, and
     # Halifax's holds only LCTS (single tree, 78,953), LCDS (dead tree, 1,013)
     # and LCTA (grove, 85).  A dead tree is a tree that is there, so it stays --
-    # see "An empty site is not an unidentified tree" in EXTENDING.md.
+    # see the empty-site rule in docs/SPECIES_ENRICHMENT.md.
     table = stream_to_table(iter_row_chunks(), transform, label="Halifax OpenData")
     table = validate_coordinates(table, city="Halifax", city_code="CAHFX")
     table = enforce_tree_schema(
