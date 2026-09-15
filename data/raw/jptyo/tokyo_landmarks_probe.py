@@ -16,7 +16,7 @@ documented last resort, which moves for a description edit as well as for data.
 That is the right trade here rather than a problem: the landmark lane runs
 weekly, these registers change on a scale of years, and an occasional rebuild
 of 287 rows costs nothing.  The alternative -- no watermark -- is what
-`EXTENDING.md` says never to ship.
+`docs/LANDMARKS.md` says never to ship.
 """
 
 import sys

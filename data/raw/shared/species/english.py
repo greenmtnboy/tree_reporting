@@ -75,7 +75,7 @@ number of trees would suggest:
   `HAWTHORN` name a genus and nothing finer, so they resolve to `Fraxinus`,
   `Acer`, `Amelanchier`, `Crataegus`.  `sanitize_species` keeps a bare genus,
   the enrichment table is keyed on it, and a genus is what the source recorded.
-  Inventing a species for it would be the Orania failure from EXTENDING.md.
+  Inventing a species for it would label every such tree with a species the source never recorded (docs/SPECIES_ENRICHMENT.md).
 * **A cultivar resolves to its taxon, and a hybrid cultivar to its genus.**
   `HONEY LOCUST 'SKYLINE'` is a *Gleditsia triacanthos*; `ACCOLADE ELM` and
   `TRIUMPH ELM` are complex Asian elm hybrids with no binomial to give, so

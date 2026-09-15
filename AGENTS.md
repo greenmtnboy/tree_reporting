@@ -14,7 +14,7 @@ species enrichment, analytics dashboards and an agent chat over the same data.
 | `reviewer/` | The local reviewer for community submissions and aerial-imagery detections; the only path that publishes a submission. |
 | `imagery_model/` | The tree-detection model over NAIP imagery and its export into the reviewer. |
 | `terraform/` | Infrastructure. |
-| `docs/` | Longer write-ups: `DATA_PIPELINE.md`, `TESTING.md`, source surveys, calibration notes. |
+| `docs/` | Reference docs: `DATA_PIPELINE.md`, `SPECIES_ENRICHMENT.md`, `LANDMARKS.md`, `TESTING.md`, plus source surveys and calibration notes. |
 
 ## Tech stack and tooling
 
@@ -37,13 +37,13 @@ pnpm test:queries    # compiles and executes the whole dashboard catalog against
 pnpm bench:chat      # the agent chat benchmark; spends the demo model budget, run by hand
 
 # data, from data/raw
-uv run --with pytest python -m pytest tests -q      # offline, seconds; run after touching models or the job table
+uv run --no-project --with pytest --with pyarrow --with pytrilogy --with duckdb --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql   # must report exactly one asset
 ```
 
 ## Invariants to keep in mind
 
-Each of these replaced something that broke; the reasoning is in `docs/DATA_PIPELINE.md`.
+The reference for each is `docs/DATA_PIPELINE.md`.
 
 - **Each city is an independent pipeline** (`osm-{code}`, `city-{code}`, `landmarks-{code}` jobs); the daily core reads only published parquets and never a portal. A city model's imports decide its job's bundle, so the dry run above must show one asset.
 - **A missing job is silent**: nothing errors when a city has no schedule. `data/raw/tests/test_cloud_jobs.py` is what catches it.
@@ -55,8 +55,10 @@ Each of these replaced something that broke; the reasoning is in `docs/DATA_PIPE
 
 ## Where to read next
 
-- `EXTENDING.md`: the city-addition runbook and every data-side lesson, in full.
-- `docs/DATA_PIPELINE.md`: the scheduling shape, dedup, satellite partition, predictions, species corrections.
-- `docs/TESTING.md`: the dashboard query sweep, what the chat resolves against, the chat benchmark and how to read its report.
+- `EXTENDING.md`: the city-addition runbook.
+- `docs/DATA_PIPELINE.md`: jobs, partitions, sources, dedup, rebuilding, predictions.
+- `docs/SPECIES_ENRICHMENT.md`: the species key rule, synonyms and misspellings, sentinels, the enrichment job.
+- `docs/LANDMARKS.md`: landmark sources, schema, staging and building.
+- `docs/TESTING.md`: the dashboard query sweep, what the chat resolves against, the chat benchmark.
 - `data/raw/tools/README.md`: the workstation-only scripts.
 - `reviewer/README.md`, `imagery_model/README.md`: the two other applications.

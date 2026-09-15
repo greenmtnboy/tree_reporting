@@ -7,8 +7,8 @@
 #
 # Unlike the tree lane there is no per-city landmark job: the fetch is a bespoke
 # script per city rather than one shared module, so splitting this forty-one ways
-# is a code-sharing job first. See "Landmarks are still one refresh lane" in
-# EXTENDING.md.
+# is a code-sharing job first. See "Building" in
+# docs/LANDMARKS.md.
 
 import landmark_common;
 import ussfo.sf_landmarks;

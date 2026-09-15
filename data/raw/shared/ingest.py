@@ -762,7 +762,7 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # It still has to fold, for exactly the reasons that map exists.  Left alone a
 # misspelling is a second enrichment row for a taxon already in the table (276
 # pairs were paid for twice), a second entry in every species rollup, and a
-# second dot colour on the map.  `EXTENDING.md` rules a misspelling out of
+# second dot colour on the map.  `docs/SPECIES_ENRICHMENT.md` rules a misspelling out of
 # `_NON_TAXON_REWRITES` because dropping `Crateagus monogyna` to `Unknown`
 # would lose a tree we can identify -- which is right, and is an argument for
 # resolving it to the name it meant, not for leaving it fragmented.
@@ -3023,7 +3023,7 @@ def emit_freshness(
     per-probe guard, so a single probe raising ends the whole `trilogy refresh
     raw` command before any asset is refreshed.  One city's portal being in
     maintenance therefore fails all fourteen cities plus landmarks and
-    enrichment — the same blast radius the community 403 had (see EXTENDING.md).
+    enrichment — the same blast radius a raising community probe would have.
 
     So an *availability* failure (connection error, 5xx, 429, or a 2xx that
     isn't the documented payload) degrades to PORTAL_UNAVAILABLE_TIMESTAMP with

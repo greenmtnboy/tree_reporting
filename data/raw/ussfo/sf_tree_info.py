@@ -123,8 +123,8 @@ def parse_plant_date(value) -> date | None:
 def split_species(value: str | None) -> tuple[str | None, str | None]:
     """"Pinus radiata :: Monterey Pine" -> ("Pinus radiata", "Monterey Pine").
 
-    The scientific half is the species key -- see "Species Key Rule" in
-    EXTENDING.md -- and the common half is kept as `tree_name`.  A row with no
+    The scientific half is the species key -- see "The key rule" in
+    docs/SPECIES_ENRICHMENT.md -- and the common half is kept as `tree_name`.  A row with no
     common half falls back to the scientific name, which is what the map shows
     when nothing better exists.
     """
