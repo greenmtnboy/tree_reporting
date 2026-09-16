@@ -155,7 +155,9 @@ columns={...})` last, and writes an Arrow IPC stream to stdout.
 - **A coded numeric field needs a parse-failure guard**: count the strings
   you could not read and refuse to publish above 1% of rows.
 - Rows describing an empty site (`Vacant`, `Stump`, a planting site) are
-  dropped by the shared rule; `Unknown` and `Dead` are trees and stay.
+  dropped by the shared rule; `Unknown` and `Dead` are trees and stay. That
+  rule reads `species`, so a portal that records site status in a column of
+  its own (Cambridge's `sitetype`) drops those rows in its ingest.
 
 ### 6. The city model
 

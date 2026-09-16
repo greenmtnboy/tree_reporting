@@ -157,6 +157,13 @@ record what it absorbed. The published target carries
   band only when it is clearly duplicate-dominated (above 60%), never on a
   coin flip. A missed duplicate double-renders a dot; a false flag hides a
   real tree.
+- The merge cannot see a duplicate inside one source, because every
+  municipal row is its own cluster. A portal feed that holds several
+  inventories is resolved in its ingest (`usbos/cambridge_tree_info.py`).
+  Once candidates are gated on species, mutual-NN stops separating
+  duplicates from neighbours (distinct Cambridge trees score ~75% at every
+  band to 15 m), so calibrate such a match against a distinct-tree control
+  and read `d1/d2`.
 - Needs pytrilogy 0.3.348 or later for the target-side `where`.
 - The cross-city rollup does not carry the dedup columns, and
   `tree_info.preql` derives nothing.
