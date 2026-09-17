@@ -113,18 +113,51 @@ def test_the_replanting_survives_its_well(cam):
     assert (collapsed, unresolved) == (1, 0)
 
 
-def test_a_retirement_marker_outranks_a_planting_date(cam):
-    """`sitereplan = 'Y'` names the superseded row outright, so it is read
-    before any date is compared."""
+@pytest.mark.parametrize(
+    "mark", [{"siteretire": "paved over"}, {"cartegraph": "2024-10-01T00:00:00.000"}]
+)
+def test_a_retirement_mark_outranks_a_planting_date(cam, mark):
+    """SITERETIREDREASON and CARTEGRAPHRETIREDATE say the record is retired
+    outright, so they are read before any date is compared."""
     lat, lon = offset(metres_north=0.5)
     records = [
-        row("1", species="Acer rubrum", treewellid="1", sitereplan="Y",
-            plantdate="2024-01-01T00:00:00.000"),
+        row("1", species="Acer rubrum", treewellid="1",
+            plantdate="2024-01-01T00:00:00.000", **mark),
         row("2", species="Tilia cordata", treewellid="1", lat=lat, lon=lon,
             plantdate="2009-01-01T00:00:00.000"),
     ]
     kept, collapsed, _ = cam.collapse_replanted_wells(records)
     assert [r["treeid"] for r in kept] == ["2"]
+    assert collapsed == 1
+
+
+def test_site_replanted_is_not_a_retirement_mark(cam):
+    """SITEREPLANTED is set on 243 live trees, most planted since 2020, so a
+    `Y` on the newer planting must not hand the well to the older one."""
+    lat, lon = offset(metres_north=0.5)
+    records = [
+        row("100", species="Acer rubrum", treewellid="3",
+            plantdate="2009-01-01T00:00:00.000"),
+        row("150", species="Tilia cordata", treewellid="3", lat=lat, lon=lon,
+            sitereplan="Y", plantdate="2022-11-30T00:00:00.000"),
+    ]
+    kept, collapsed, _ = cam.collapse_replanted_wells(records)
+    assert [r["treeid"] for r in kept] == ["150"]
+    assert collapsed == 1
+
+
+def test_the_cartegraph_plant_date_stands_in_for_a_missing_one(cam):
+    """Well 69188: the 2025 replacement Zelkova has only a Cartegraph plant
+    date, and without it the 2024 tree won as the only dated row."""
+    lat, lon = offset(metres_north=0.4)
+    records = [
+        row("1509617", species="Zelkova serrata", treewellid="69188",
+            plantdate="2024-11-05T00:00:00.000", cartegra_1="2024-11-05T00:00:00.000"),
+        row("1510440", species="Zelkova serrata", treewellid="69188", lat=lat, lon=lon,
+            cartegra_1="2025-11-03T00:00:00.000"),
+    ]
+    kept, collapsed, _ = cam.collapse_replanted_wells(records)
+    assert [r["treeid"] for r in kept] == ["1510440"]
     assert collapsed == 1
 
 
@@ -148,13 +181,27 @@ def test_a_reused_well_id_is_two_wells(cam):
     """Well ids repeat across the city -- the widest such group spans 4,967m."""
     lat, lon = offset(metres_east=400.0)
     records = [
-        row("1", species="Acer rubrum", treewellid="9", sitereplan="Y"),
+        row("1", species="Acer rubrum", treewellid="9", siteretire="paved over"),
         row("2", species="Tilia cordata", treewellid="9", lat=lat, lon=lon,
             plantdate="2020-01-01T00:00:00.000"),
     ]
     kept, collapsed, _ = cam.collapse_replanted_wells(records)
     assert len(kept) == 2
     assert collapsed == 0
+
+
+# --- field mapping ----------------------------------------------------------
+
+
+def test_the_published_row_takes_the_cartegraph_plant_date_and_a_sentence_case_name(cam):
+    table = cam.build_table([
+        row("1", species="Zelkova serrata", commonname="Japanese Zelkova",
+            cartegra_1="2025-09-01T00:00:00.000"),
+        row("2", species="Platanus x acerifolia", commonname="London Planetree",
+            plantdate="2019-10-01T00:00:00.000", cartegra_1="2019-10-01T00:00:00.000"),
+    ]).to_pylist()
+    assert [str(r["plant_date"]) for r in table] == ["2025-09-01", "2019-10-01"]
+    assert [r["tree_name"] for r in table] == ["Japanese zelkova", "London planetree"]
 
 
 # --- the Harvard re-survey --------------------------------------------------

@@ -23,24 +23,33 @@ import pyarrow as pa
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit, enforce_tree_schema, normalize_species, validate_coordinates
+from shared.ingest import (
+    emit,
+    enforce_tree_schema,
+    normalize_species,
+    normalize_tree_name,
+    validate_coordinates,
+)
 
 DATASET_ID = "82zb-7qc9"
 # Only current (non-removed) trees; request all fields we need
 BASE_URL = f"https://data.cambridgema.gov/resource/{DATASET_ID}.json"
 PAGE_SIZE = 50_000
+# Socrata truncates the layer's field names to ten characters: `cartegraph` is
+# CARTEGRAPHRETIREDATE, `cartegra_1` CARTEGRAPHPLANTDATE, `siteretire`
+# SITERETIREDREASON.
 SELECT = (
-    "treeid,scientific,commonname,cultivar,plantdate,the_geom,diameter,"
-    "sitetype,treewellid,sitereplan,siteretire,cartegraph"
+    "treeid,scientific,commonname,cultivar,plantdate,cartegra_1,the_geom,diameter,"
+    "sitetype,treewellid,siteretire,cartegraph"
 )
 WHERE = "removaldat IS NULL"
 
-# An open record is not a standing tree. `shared.ingest.is_not_a_tree` reads
-# the species field, and these rows carry a real binomial, so 2,279 of them
-# (September 2026) were on the map. `Retired` means the site is gone: median
-# planting year 2015 against 2021 for `Tree`, and the older planting 109 times
-# to 8 when it shares a well with a live row. `Spar` (a standing dead trunk),
-# `Unknown` and a blank all describe something that may be there, and stay.
+# The publisher defines SITETYPE as whether a tree occupies the site, with
+# `Retired` "paved over or otherwise empty and no longer available for
+# planting", and says it supersedes conflicting data in the record. These rows
+# carry a real binomial, so `shared.ingest.is_not_a_tree` (which reads the
+# species field) does not catch them. `Spar` (a standing dead trunk),
+# `Unknown` and a blank may describe a tree, and stay.
 SITE_TYPES_WITHOUT_A_TREE = frozenset(
     {
         "Retired",
@@ -176,35 +185,39 @@ def drop_sites_without_a_tree(
     return kept, dict(dropped), unrecognised
 
 
-def _is_superseded(rec: dict) -> bool:
-    """The portal's own marks on the row a replanting replaced.
+def _plant_date(rec: dict) -> str:
+    """PLANTDATE, else CARTEGRAPHPLANTDATE.
 
-    In well 10153 the maple's `cartegraph` stamp is 2023-11-01 and the redbud
-    that replaced it was planted 2023-11-02.
+    The two agree on every row that carries both; the Cartegraph date alone
+    covers ~900 recent plantings (all 400 stamped 2025-09-01 are the "Fall
+    2025" season, median 1.4in).
     """
-    return (
-        _text(rec, "sitereplan").upper() == "Y"
-        or bool(_text(rec, "siteretire"))
-        or bool(_text(rec, "cartegraph"))
-    )
+    return _text(rec, "plantdate") or _text(rec, "cartegra_1")
+
+
+def _is_retired(rec: dict) -> bool:
+    """A retirement reason or a Cartegraph retire date on the record.
+
+    Not SITEREPLANTED: 243 live trees carry it, most planted since 2020.
+    """
+    return bool(_text(rec, "siteretire")) or bool(_text(rec, "cartegraph"))
 
 
 def _current_tree_in_well(group: list[dict]) -> dict | None:
     """The tree standing in a shared well now, or None to keep every row.
 
-    The portal's marks settle 64% of wells; planting date and then id order
-    (which matches planting order 94% of the time) settle most of the rest.
-    A latest-`plantdate` rule alone cannot: 22% of wells carry no date.
+    A retirement mark first, then the latest planting date, then the highest
+    id (which matches planting order 94% of the time where both are dated).
     """
-    standing = [r for r in group if not _is_superseded(r)]
+    standing = [r for r in group if not _is_retired(r)]
     if len(standing) == 1:
         return standing[0]
     candidates = standing or group
 
-    dated = [r for r in candidates if r.get("plantdate")]
+    dated = [r for r in candidates if _plant_date(r)]
     if dated:
-        newest = max(r["plantdate"] for r in dated)
-        latest = [r for r in dated if r["plantdate"] == newest]
+        newest = max(_plant_date(r) for r in dated)
+        latest = [r for r in dated if _plant_date(r) == newest]
         if len(latest) == 1:
             return latest[0]
 
@@ -355,10 +368,8 @@ def build_table(records: list[dict]) -> pa.Table:
         species_list.append(species)
         cultivars.append(_text(rec, "cultivar") or None)
 
-        cn = rec.get("commonname")
-        tree_names.append(cn.strip() if cn and cn.strip() else None)
-
-        plant_dates.append(parse_plant_date(rec.get("plantdate")))
+        tree_names.append(normalize_tree_name(rec.get("commonname")))
+        plant_dates.append(parse_plant_date(_plant_date(rec)))
 
         point = _point(rec)
         latitudes.append(point[0] if point else None)
