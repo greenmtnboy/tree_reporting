@@ -45,6 +45,7 @@ property <*>.nlams_osm_data_updated_through datetime; # GCS publication time of 
 property <*>.deber_osm_data_updated_through datetime; # GCS publication time of Berlin's staged OSM parquet
 property <*>.cavan_osm_data_updated_through datetime; # GCS publication time of Vancouver's staged OSM parquet
 property <*>.usbtv_osm_data_updated_through datetime; # GCS publication time of Burlington's staged OSM parquet
+property <*>.usbtv_overture_data_updated_through datetime; # GCS publication time of Burlington's staged Overture position lookup
 property <*>.frpar_osm_data_updated_through datetime; # GCS publication time of Paris's staged OSM parquet
 property <*>.usnyc_osm_data_updated_through datetime; # GCS publication time of New York City's staged OSM parquet
 property <*>.ussfo_osm_data_updated_through datetime; # GCS publication time of San Francisco's staged OSM parquet # mtime of Boston's committed OSM staging parquet

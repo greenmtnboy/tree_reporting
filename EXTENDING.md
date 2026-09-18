@@ -70,8 +70,9 @@ and never touches raw data.
 Rules that hold while wiring:
 
 - **A city model's imports decide its job's bundle.** Import `tree_common`,
-  `community_tree_info` and `tree_dedup` only; never another city or the
-  cross-city merge.
+  `community_tree_info` and `tree_dedup` only (plus `tree_position` for a
+  city with an Overture lookup, `docs/POSITION_CORRECTION.md`); never another
+  city or the cross-city merge.
 - **`data_source` is a per-city enum key**, and every raw source claims
   `complete where city = 'X' and {code}_source = 'Y'`. A source claiming the
   whole city alone silently drops the other partitions' rows.
@@ -165,11 +166,14 @@ columns={...})` last, and writes an Arrow IPC stream to stdout.
 (`{LABEL}_OPENDATA`, `COMMUNITY_{CODE}`, `OSM_{CODE}`), one root partial
 datasource per partition mapping onto the shared `raw_*` concepts (never the
 canonical ones; the dedup merge derives those), the staged-OSM partition,
-`import ..tree_dedup;`, and the published target with
+`import ..tree_dedup;`, the dbh and position merges (`merge merged_dbh
+into diameter_at_breast_height;`, `merge merged_latitude into latitude;`,
+`merge merged_longitude into longitude;`), and the published target with
 `complete where city = '{CODE}'`, `where tree_id = cluster_id`, and
 `freshness by {code}_published_data_updated_through`. The scaffolder writes
 this file; verify the dry run's SQL contains a `UNION ALL` and references
-`community_tree_info.py`.
+`community_tree_info.py`. A new city starts without the Overture position
+correction; opting in is a separate step (`docs/POSITION_CORRECTION.md`).
 
 **Mark any column a source can leave empty `?`** in every datasource that
 maps it; an unmarked column joins with `=` and drops null rows without an

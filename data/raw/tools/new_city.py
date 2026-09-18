@@ -252,8 +252,12 @@ file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/{lc}_o
 # Shared: ../tree_dedup.preql groups the three partitions into one cluster per
 # tree and picks each canonical attribute across the cluster; this city's grid
 # cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
-# The only per-city line is the dbh merge, because Boston imputes it.
+# The per-city lines are the dbh merge, because Boston imputes it, and the
+# position policy: a city with an Overture lookup imports ../tree_position.preql
+# instead of the two position merges (see that file).
 merge merged_dbh into diameter_at_breast_height;
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
 
 
 partial datasource {slug}_tree_info (

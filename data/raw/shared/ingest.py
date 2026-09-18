@@ -2293,6 +2293,56 @@ def dedup_cell_degrees(city_code: str) -> tuple[float, float]:
     return metres / 111320.0, metres / (111320.0 * math.cos(lat))
 
 
+# ---------------------------------------------------------------------------
+# The position grid
+# ---------------------------------------------------------------------------
+
+# One fixed cell for every city, in degrees: 0.00002 deg of latitude is 2.2 m
+# everywhere; 0.00003 deg of longitude is 3.3 m at the equator, 2.4 m at
+# 45 deg and 1.7 m at 60 deg.  raw/tree_position.preql looks a row's cell up
+# in a per-city table of cells that Overture says are under a building or a
+# road (shared/overture.py builds it), and moves the row to the open ground
+# that table names.  The cell is fixed rather than sized per city, the way the
+# dedup grid is, so the key needs no per-city table on either side; the two
+# constants are declared again in the model and test_position_grid.py pins
+# that they agree.
+SNAP_CELL_LAT_DEG = 0.00002
+SNAP_CELL_LON_DEG = 0.00003
+
+# The key packs the two indices into one bigint the way the dedup grid does:
+# the longitude index is at most 180 / 0.00003 = 6.0e6 and the latitude index
+# at most 90 / 0.00002 = 4.5e6, so 1e8 keeps them apart with no collisions,
+# negative indices included, and the key stays under 1e15.
+SNAP_CELL_LON_MULTIPLIER = 100_000_000
+
+
+def snap_cell_indices(latitude: float, longitude: float) -> tuple[int, int]:
+    """(lon_index, lat_index) of the grid cell a point falls in."""
+    return (
+        math.floor(longitude / SNAP_CELL_LON_DEG),
+        math.floor(latitude / SNAP_CELL_LAT_DEG),
+    )
+
+
+def snap_cell_key(lon_index: int, lat_index: int) -> int:
+    return lon_index * SNAP_CELL_LON_MULTIPLIER + lat_index
+
+
+def snap_cell_for(latitude: float | None, longitude: float | None) -> int | None:
+    """The packed cell key for one point, or None without coordinates."""
+    if latitude is None or longitude is None:
+        return None
+    return snap_cell_key(*snap_cell_indices(latitude, longitude))
+
+
+def snap_cell_centre(lon_index: int, lat_index: int) -> tuple[float, float]:
+    """(latitude, longitude) of a cell's centre."""
+    return (
+        (lat_index + 0.5) * SNAP_CELL_LAT_DEG,
+        (lon_index + 0.5) * SNAP_CELL_LON_DEG,
+    )
+
+
 def validate_coordinates(
     table: pa.Table,
     city: str = "",

@@ -10,7 +10,7 @@ species enrichment, analytics dashboards and an agent chat over the same data.
 | Path | What it is |
 |---|---|
 | `src/` | The web app: Vite, Vue 3, TypeScript. DuckDB-WASM reads published parquets in the browser; the dashboards and chat compile PreQL through a hosted Trilogy resolver. |
-| `data/` | The Trilogy models and ingest scripts that build those parquets, and `trilogy.toml`, the job table trilogy-cloud runs them from. `data/raw/` holds the core model, one directory per city, the shared ingest library and the tests. |
+| `data/` | The Trilogy models and ingest scripts that build those parquets, and `trilogy.toml`, the job table trilogy-cloud runs them from. `data/raw/` holds the core model, one directory per city, the shared ingest library and the tests; `osm_staging/`, `overture_staging/` and `landmark_staging/` the per-city staging jobs. |
 | `reviewer/` | The local reviewer for community submissions and aerial-imagery detections; the only path that publishes a submission. |
 | `imagery_model/` | The tree-detection model over NAIP imagery and its export into the reviewer. |
 | `terraform/` | Infrastructure. |
@@ -52,6 +52,7 @@ The reference for each is `docs/DATA_PIPELINE.md`.
 - **Do not hand-write a city addition.** `data/raw/tools/new_city.py` writes the registry edits and `test_city_wiring.py` names what is still missing; the judgement steps (field mapping, freshness probe, landmarks, dedup cell size) are in `EXTENDING.md`.
 - **Do not work around a planner bug in a query.** File a repro under `upstream_repro/` (gitignored) and let the test stay red; see `docs/TESTING.md`.
 - **The chat's `imports` decide what the browser downloads.** Both screens must reach a tree datasource; `dashboard-pushdown.test.ts` pins it.
+- **Every city has exactly one position policy.** A city imports `tree_position` (Overture lookup, corrected `latitude`/`longitude`, `source_*` kept) or merges `merged_latitude`/`merged_longitude` itself; `tree_dedup` merges neither. The grid key is derived in `tree_position.preql` from the row's own coordinates (pytrilogy 0.3.360+), not stamped on the rows; see `docs/POSITION_CORRECTION.md`.
 
 ## Where to read next
 
@@ -59,6 +60,7 @@ The reference for each is `docs/DATA_PIPELINE.md`.
 - `docs/DATA_PIPELINE.md`: jobs, partitions, sources, dedup, rebuilding, predictions.
 - `docs/SPECIES_ENRICHMENT.md`: the species key rule, synonyms and misspellings, sentinels, the enrichment job.
 - `docs/LANDMARKS.md`: landmark sources, schema, staging and building.
+- `docs/POSITION_CORRECTION.md`: moving trees out of buildings and roads with Overture; the pilot's numbers; what the language would need to own it.
 - `docs/TESTING.md`: the dashboard query sweep, what the chat resolves against, the chat benchmark.
 - `data/raw/tools/README.md`: the workstation-only scripts.
 - `reviewer/README.md`, `imagery_model/README.md`: the two other applications.
