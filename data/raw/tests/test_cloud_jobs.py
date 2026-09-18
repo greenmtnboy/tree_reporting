@@ -481,16 +481,29 @@ def test_the_landmark_union_is_published_after_its_inputs():
 # ---------------------------------------------------------------------------
 #
 # `trilogy cloud sync` ships every *.py/*.preql/*.csv/*.json/*.toml under
-# data/ (minus tests) in one request the API caps at 2 MiB, and at 41 cities
-# the bundle stood 4.6 KB under that.  The [cloud] exclude list takes the
-# workstation-only scripts out; these tests keep the list honest in both
-# directions -- nothing excluded is reachable by a job, and nothing in the
-# list is dead -- and fail before the next city takes the sync on main over.
+# data/ (minus tests) in one request the CLI refuses past its own budget.  At
+# 41 cities plus the Overture lookup the bundle is ~1.9 MB against that 8 MiB,
+# so the cap is no longer the near thing it was when it was 2 MiB.  The [cloud]
+# exclude list takes the workstation-only scripts out; these tests keep the list
+# honest in both directions -- nothing excluded is reachable by a job, and
+# nothing in the list is dead -- and fail before a city takes the sync over.
+#
+# The one file worth moving if this ever tightens again is
+# raw/crown_width_coefficients.csv: 178 KB, in the bundle only because
+# tree_predictions.preql reads it with a relative `file` clause rather than
+# from GCS like a staged object.
 
 BUNDLE_INCLUDE = ("*.preql", "*.py", "*.sql", "*.toml", "*.json", "*.csv")
 BUNDLE_DEFAULT_EXCLUDE = ("*/__pycache__/*", "*/.venv/*", "*/tests/*")
-BUNDLE_LIMIT_BYTES = 2 * 1024 * 1024
-BUNDLE_BUDGET_BYTES = int(BUNDLE_LIMIT_BYTES * 0.93)  # ~150 KB, three or four cities, of warning
+# Mirrors the CLI's own refusal in trilogy/scripts/cloud.py::check_bundle_size,
+# which is `PUBSUB_MAX_BYTES * SAFETY_MARGIN` = 10 MiB * 0.80.  This was 2 MiB
+# and went stale when the platform raised the queued-job limit; at 41 cities the
+# bundle is ~1.9 MB, so the old constant was calling a 23%-full bundle full.
+# Note the CLI measures the *encoded JSON payload* and this sums raw file bytes,
+# so the real send is somewhat larger than what this counts -- escaping in JSON
+# string literals.  The 7% below absorbs that and then some.
+BUNDLE_LIMIT_BYTES = int(10 * 1024 * 1024 * 0.80)
+BUNDLE_BUDGET_BYTES = int(BUNDLE_LIMIT_BYTES * 0.93)  # ~590 KB, a dozen cities, of warning
 
 
 def cloud_exclude() -> tuple[str, ...]:
