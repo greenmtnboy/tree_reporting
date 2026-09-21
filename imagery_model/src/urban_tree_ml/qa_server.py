@@ -633,6 +633,7 @@ def _serve_review_contexts(
                                         state['state_revision'], bundle['feedback_current'] and bundle.get('review_state_sha256') == state['state_revision'],
                                         _json_sha256(manifest))
                         report['snapshot'] = snapshot_worker.status(context.city)
+                    report['job'] = backup_job.status(context.config.paths.root)
                     self._json_response(HTTPStatus.OK, report)
                 except (OSError, ValueError, KeyError) as error:
                     self._json_response(HTTPStatus.BAD_REQUEST, {'error': str(error)})
