@@ -4,7 +4,9 @@
 
 Destination: `greenmtnboy/tree_reporting`, branch
 `codex/training-curation-backup-20260921`, based on remote main `f69e5f3`.
-Code commit: `88e9f1aaf526160d8fc91b3af71ef6b9467b10fe`.
+Code commit: `88e9f1aaf526160d8fc91b3af71ef6b9467b10fe`. A later collector
+update made concurrently in the source worktree is included in a follow-up:
+SSH keepalives and bounded status polling, without acknowledging failed collection.
 
 The source is the active reviewer's `model_training` worktree at `429f04e`,
 including its uncommitted imagery files and the final imagery state from all
@@ -86,8 +88,10 @@ does not claim to include subsequent edits.
 
 The private archive target is `gs://arborary-world-curation-archive`. The
 whole-history backup includes roughly 29,000 revision ZIPs (57 GB locally);
-current captured revision objects are verified separately. Do not infer
-whole-history upload completion from the Git push alone.
+both captured revision ZIPs were uploaded and their GCS object sizes and MD5
+hashes verified against local immutable bytes. The existing backup was still
+syncing historical revisions when this report was prepared. Do not infer
+whole-history upload completion from the Git push or the two ZIP checks alone.
 
 ## Latest model artifacts
 

@@ -28,13 +28,19 @@ def main():
     if not name or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in name):
         parser.error("invalid experiment")
     host = "ubuntu@" + args.ip
-    options = ["-i", args.ssh_key, "-o", "BatchMode=yes", "-o", "ConnectTimeout=15"]
+    options = ["-i", args.ssh_key, "-o", "BatchMode=yes", "-o", "ConnectTimeout=15",
+               "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"]
     ssh = ["ssh", *options, host]
     root = "/lambda/nfs/tree-reporting-dev/urban-tree-ml"
     status_path = f"{root}/{name}-status.json"
     deadline = time.monotonic() + 9 * 3600
     while time.monotonic() < deadline:
-        result = subprocess.run(ssh + [f"cat {status_path}"], capture_output=True, text=True)
+        try:
+            result = subprocess.run(ssh + [f"cat {status_path}"], capture_output=True, text=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            print("Status SSH timed out; retrying without acknowledging collection", flush=True)
+            time.sleep(45)
+            continue
         if result.returncode == 0 and json.loads(result.stdout).get("finished_at"):
             archive = f"{root}/{name}-results.tar.gz"
             # Keep small chip indexes/build audits too, for Studio provenance and masks.
