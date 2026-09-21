@@ -6,9 +6,9 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from urban_tree_ml.config import InventoryConfig, ProjectConfig
+from urban_tree_ml.config import InventoryConfig, ProjectConfig, taxonomy_path
 from urban_tree_ml.splits import assign_spatial_splits
-from urban_tree_ml.taxonomy import build_taxonomy, encode_taxonomy
+from urban_tree_ml.taxonomy import Taxonomy, build_taxonomy, encode_taxonomy
 
 INVENTORY_COLUMNS = (
     "tree_id",
@@ -20,6 +20,16 @@ INVENTORY_COLUMNS = (
     "latitude",
     "longitude",
 )
+
+
+def planted_after_imagery(frame: pd.DataFrame, cutoff) -> pd.Series:
+    """Unknown dates stay eligible; same-day planting is not known to be later."""
+    if cutoff is None:
+        return pd.Series(False, index=frame.index)
+    if "plant_date" not in frame:
+        raise ValueError("plant_date is required when imagery.planting_date_cutoff is set")
+    planted = pd.to_datetime(frame["plant_date"], errors="coerce", utc=True, format="mixed")
+    return planted.dt.normalize().gt(pd.Timestamp(cutoff, tz="UTC"))
 
 
 def _read_inventory(config: ProjectConfig) -> pd.DataFrame:
@@ -69,11 +79,21 @@ def export_inventory(config: ProjectConfig) -> dict[str, object]:
     training_rows = frame[
         (frame["split"] == "train") & frame["split_eligible"] & frame["taxon_eligible"]
     ]
-    taxonomy = build_taxonomy(
-        training_rows,
-        min_species_examples=config.inventory.min_species_examples,
-        max_species_classes=config.inventory.max_species_classes,
-    )
+    selected_taxonomy_path = taxonomy_path(config)
+    if config.reference is not None:
+        if not selected_taxonomy_path.exists():
+            raise FileNotFoundError(
+                f"reference taxonomy does not exist: {selected_taxonomy_path}"
+            )
+        taxonomy = Taxonomy(**json.loads(selected_taxonomy_path.read_text(encoding="utf-8")))
+        taxonomy_source = str(selected_taxonomy_path.resolve())
+    else:
+        taxonomy = build_taxonomy(
+            training_rows,
+            min_species_examples=config.inventory.min_species_examples,
+            max_species_classes=config.inventory.max_species_classes,
+        )
+        taxonomy_source = "local training split"
     frame = encode_taxonomy(frame, taxonomy)
     frame["genus_eligible"] = frame["taxon_eligible"] & frame["genus_id"].ge(0)
     frame["species_eligible"] = frame["taxon_eligible"] & frame["species_id"].ge(0)
@@ -83,10 +103,10 @@ def export_inventory(config: ProjectConfig) -> dict[str, object]:
     )
 
     inventory_path = output_dir / "inventory.parquet"
-    taxonomy_path = output_dir / "taxonomy.json"
+    taxonomy_output_path = output_dir / "taxonomy.json"
     summary_path = output_dir / "summary.json"
     frame.to_parquet(inventory_path, index=False)
-    taxonomy_path.write_text(
+    taxonomy_output_path.write_text(
         json.dumps(taxonomy.to_dict(), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
@@ -110,6 +130,11 @@ def export_inventory(config: ProjectConfig) -> dict[str, object]:
         },
         "selected_species": len(taxonomy.species),
         "selected_genera": len(taxonomy.genera),
+        "taxonomy_source": taxonomy_source,
+        "out_of_vocabulary": {
+            "species_rows": int((frame["taxon_eligible"] & frame["species_id"].lt(0)).sum()),
+            "genus_rows": int((frame["taxon_eligible"] & frame["genus_id"].lt(0)).sum()),
+        },
         "split_rows": {
             name: int(count)
             for name, count in eligible.groupby("split", observed=True).size().items()
@@ -123,7 +148,7 @@ def export_inventory(config: ProjectConfig) -> dict[str, object]:
         },
         "paths": {
             "inventory": str(inventory_path),
-            "taxonomy": str(taxonomy_path),
+            "taxonomy": str(taxonomy_output_path),
         },
     }
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")

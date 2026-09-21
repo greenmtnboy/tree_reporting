@@ -5,7 +5,16 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
-from urban_tree_ml.config import ProjectConfig
+from urban_tree_ml.config import ProjectConfig, taxonomy_path
+
+
+def require_finite_losses(losses, stage):
+    """Raise rather than allowing nonfinite early-stop to look like success."""
+    import torch
+
+    if not torch.stack([torch.isfinite(value).all() for value in losses.values()]).all():
+        bad = [name for name, value in losses.items() if not torch.isfinite(value).all()]
+        raise FloatingPointError(f"Nonfinite {stage} losses: {', '.join(bad)}")
 
 
 def _git_metadata() -> dict[str, object]:
@@ -32,7 +41,10 @@ def _git_metadata() -> dict[str, object]:
         return {"revision": None, "dirty": None}
 
 
-def run_training(config: ProjectConfig, resume: str | None = None) -> dict[str, object]:
+def run_training(config: ProjectConfig, resume: str | None = None, *,
+                 initial_checkpoint: str | None = None) -> dict[str, object]:
+    if resume and initial_checkpoint:
+        raise ValueError("Resume and weights-only warm start are mutually exclusive")
     try:
         import lightning as lightning
         import torch
@@ -45,10 +57,8 @@ def run_training(config: ProjectConfig, resume: str | None = None) -> dict[str, 
     from urban_tree_ml.losses import multitask_loss
     from urban_tree_ml.model import RawImageryTreeModel
 
-    taxonomy_path = (
-        config.paths.root / "inventory" / config.inventory.city.lower() / "taxonomy.json"
-    )
-    taxonomy = json.loads(taxonomy_path.read_text(encoding="utf-8"))
+    selected_taxonomy_path = taxonomy_path(config)
+    taxonomy = json.loads(selected_taxonomy_path.read_text(encoding="utf-8"))
     manifest_path = config.paths.root / "chips" / config.dataset / "chips.parquet"
     train_dataset = NpzChipDataset(
         manifest_path,
@@ -56,6 +66,16 @@ def run_training(config: ProjectConfig, resume: str | None = None) -> dict[str, 
         random_dihedral=config.training.random_dihedral,
     )
     validation_dataset = NpzChipDataset(manifest_path, "validation")
+    if config.model.crown_head:
+        import numpy as np
+        measured = False
+        for row in train_dataset.rows.itertuples(index=False):
+            with np.load(train_dataset.root / row.path) as chip:
+                if "crown_mask" in chip and chip["crown_mask"].any():
+                    measured = True
+                    break
+        if not measured:
+            raise ValueError("Crown head requires crown labels in training chips; rebuild with measured overrides or allometric supervision")
     if not train_dataset or not validation_dataset:
         raise ValueError("training and validation chip splits must both be non-empty")
     if config.training.accelerator == "gpu" and not torch.cuda.is_available():
@@ -69,11 +89,13 @@ def run_training(config: ProjectConfig, resume: str | None = None) -> dict[str, 
             super().__init__()
             self.save_hyperparameters(config.model_dump(mode="json"))
             self.network = RawImageryTreeModel(
+                backbone=config.model.backbone,
                 input_channels=config.model.input_channels,
                 feature_channels=config.model.feature_channels,
                 genus_classes=len(taxonomy["genera"]),
                 species_classes=len(taxonomy["species"]),
-                pretrained=config.model.pretrained,
+                crown_head=config.model.crown_head,
+                pretrained=config.model.pretrained and not initial_checkpoint,
             )
 
         def forward(self, image):
@@ -87,7 +109,9 @@ def run_training(config: ProjectConfig, resume: str | None = None) -> dict[str, 
                 dbh_weight=config.training.dbh_loss_weight,
                 genus_weight=config.training.genus_loss_weight,
                 species_weight=config.training.species_loss_weight,
+                crown_weight=config.training.crown_loss_weight,
             )
+            require_finite_losses(losses, stage)
             for name, value in losses.items():
                 self.log(
                     f"{stage}/{name}",
@@ -139,11 +163,16 @@ def run_training(config: ProjectConfig, resume: str | None = None) -> dict[str, 
         "created_at": datetime.now(UTC).isoformat(),
         "config": config.model_dump(mode="json"),
         "git": _git_metadata(),
-        "inventory_summary": str(taxonomy_path.with_name("summary.json")),
+        "inventory_summary": str(
+            config.paths.root / "inventory" / config.inventory.city.lower() / "summary.json"
+        ),
+        "taxonomy": str(selected_taxonomy_path),
         "imagery_index": str(
             config.paths.root / "imagery" / config.inventory.city.lower() / "stac-items.json"
         ),
         "chip_manifest": str(manifest_path),
+        "initial_checkpoint": initial_checkpoint,
+        "initialization": "weights_only_fresh_optimizer" if initial_checkpoint else "default",
         "torch": {
             "version": torch.__version__,
             "cuda_version": torch.version.cuda,
@@ -180,12 +209,24 @@ def run_training(config: ProjectConfig, resume: str | None = None) -> dict[str, 
     if resume == "auto":
         last = checkpoint_dir / "last.ckpt"
         checkpoint_path = str(last) if last.exists() else None
+    task = TreeTask()
+    if initial_checkpoint:
+        saved = torch.load(initial_checkpoint, map_location="cpu", weights_only=False)
+        from urban_tree_ml.crown_size import validate_warm_start_keys
+        validate_warm_start_keys(set(task.state_dict()), set(saved["state_dict"]))
+        task.load_state_dict(saved["state_dict"], strict=False)
+        del saved
+        print(f"Loaded warm-start weights: {initial_checkpoint}; fresh optimizer", flush=True)
     trainer.fit(
-        TreeTask(),
+        task,
         train_dataloaders=train_loader,
         val_dataloaders=validation_loader,
         ckpt_path=checkpoint_path,
     )
+    require_finite_losses({"validation/loss": trainer.callback_metrics["validation/loss"]},
+                          "final validation")
+    if not checkpoint.best_model_path or not Path(checkpoint.best_model_path).is_file():
+        raise RuntimeError("Training finished without a best checkpoint")
     return {
         "run_dir": str(run_dir),
         "best_checkpoint": checkpoint.best_model_path,

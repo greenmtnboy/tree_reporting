@@ -1,7 +1,6 @@
 # Lambda Cloud's default hosts provide the NVIDIA driver and container toolkit.
-# PyTorch 2.13's Linux wheel carries CUDA 13 user-space libraries; this base
-# supplies the matching CUDA generation without duplicating a second cuDNN.
-FROM nvidia/cuda:13.0.2-base-ubuntu24.04
+# Match the explicitly locked CUDA 12.8 wheels and Lambda's R570 drivers.
+FROM nvidia/cuda:12.8.1-base-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -24,6 +23,7 @@ RUN uv sync --frozen --no-dev --group imagery --group train --no-install-project
 COPY README.md ./
 COPY src ./src
 COPY configs ./configs
+COPY lambda/gpu_joint.py ./lambda/gpu_joint.py
 
 RUN uv sync --frozen --no-dev --group imagery --group train
 

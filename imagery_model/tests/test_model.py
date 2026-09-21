@@ -1,16 +1,19 @@
 import torch
+import pytest
 
 from urban_tree_ml.losses import multitask_loss
 from urban_tree_ml.model import RawImageryTreeModel
 
 
-def test_model_and_multitask_loss_shapes() -> None:
+@pytest.mark.parametrize('backbone',['resnet34','convnext_tiny','swin_tiny'])
+def test_model_and_multitask_loss_shapes(backbone) -> None:
     model = RawImageryTreeModel(
         input_channels=4,
         feature_channels=32,
         genus_classes=3,
         species_classes=5,
         pretrained=False,
+        backbone=backbone,
     ).eval()
     with torch.no_grad():
         prediction = model(torch.zeros(2, 4, 64, 64))
