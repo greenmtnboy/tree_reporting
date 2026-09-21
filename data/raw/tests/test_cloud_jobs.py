@@ -323,9 +323,10 @@ def test_the_rollup_producer_and_consumer_share_a_datasource_name():
     `full_tree_publish.preql` and `full_tree_info_source.preql` happen to call
     the rollup the same thing.
 
-    Rename either and nothing errors: the two jobs simply stop being ordered,
-    land in the same tick unordered, and enrichment reads the rollup while it
-    is being rewritten.  That is the failure this asserts against.
+    Rename either and nothing errors: the jobs simply stop being ordered,
+    land in the same tick unordered, and predictions and validation read the
+    rollup while it is being rewritten.  That is the failure this asserts
+    against.
     """
     producer = statements(DATA_DIR / "raw/full_tree_publish.preql")
     consumer = statements(DATA_DIR / "raw/full_tree_info_source.preql")
@@ -340,12 +341,7 @@ def test_the_rollup_producer_and_consumer_share_a_datasource_name():
         "full_tree_info_source.preql must declare `full_tree_info` as a *root* "
         "datasource; managed would make every consumer try to rebuild it"
     )
-    entrypoint = jobs_by_key()["refresh-enrichment"]["entrypoint"]
-    assert "import full_tree_info_source;" in statements(DATA_DIR / entrypoint), (
-        f"{entrypoint} must import the rollup source, or the enrichment job "
-        "declares no input and nothing orders it after the publisher"
-    )
-    # And it must stay OUT of the model the app resolves against: a second tree
+    # It must stay OUT of the model the app resolves against: a second tree
     # source in the planner's scope changed a chart's answer (2 where the
     # fixtures say 3), which `pnpm test:queries` caught and the smoke tests did
     # not.
@@ -356,6 +352,72 @@ def test_the_rollup_producer_and_consumer_share_a_datasource_name():
         "frontend's model bundle, and a second way to answer a tree question "
         "changes what the dashboard charts return"
     )
+
+
+def test_enrichment_is_declared_after_the_rollup():
+    """Enrichment reads the rollup by URL, so no derived edge orders it.
+
+    The job refreshes `raw/tree_enrichment.preql`, the file that declares the
+    enrichment parquet, and that model must not import the rollup (above), so
+    the platform sees no input to order on.  The `[dependencies]` entry is the
+    edge; without it enrichment would run beside `publish-full` in the same
+    tick and read the rollup mid-rewrite.
+    """
+    config = tomllib.loads(CONFIG.read_text(encoding="utf-8"))
+    enrichment = jobs_by_key()["refresh-enrichment"]["entrypoint"]
+    rollup = jobs_by_key()["publish-full"]["entrypoint"]
+    after = config.get("dependencies", {}).get(enrichment, {}).get("after", [])
+    assert rollup in after, (
+        f"[dependencies] must declare {enrichment!r} after {rollup!r}; it is "
+        "the only thing ordering enrichment after the rollup it reads"
+    )
+
+
+def test_every_refresh_entrypoint_declares_what_it_builds():
+    """A file refresh builds only the datasources that file declares.
+
+    pytrilogy >= 0.3.368 probes what a file imports and builds none of it, so a
+    refresh job pointed at an umbrella that only imports -- the old
+    `landmark_info.preql` and `enrichment_refresh.preql` -- builds nothing,
+    exits 2, and the platform records "up to date" and skips everything
+    downstream.  Nothing fails; the data just stops moving.
+    """
+    managed = re.compile(r"^\s*(?:partial\s+)?datasource\s+\w+", re.M)
+    hubs = [
+        f"{job['key']} -> {job['entrypoint']}"
+        for job in jobs()
+        if job["operation"] == "refresh"
+        and job["entrypoint"].endswith(".preql")
+        and not managed.search(statements(DATA_DIR / job["entrypoint"]))
+    ]
+    assert not hubs, (
+        f"these refresh jobs point at a file that declares no managed "
+        f"datasource, so they would build nothing: {hubs}"
+    )
+
+
+def test_every_landmark_model_has_its_own_refresh_job():
+    """One job per city's landmark parquet, all landing before the union.
+
+    Each `raw/{code}/{slug}_landmarks.preql` declares its city's published
+    parquet, so it is the refresh entrypoint for that city; a model with no job
+    never republishes.  The jobs are staggered so none share a schedule row
+    (a shared row is one tick, whose state prologue probes the whole tree).
+    """
+    models = {
+        path.relative_to(DATA_DIR).as_posix()
+        for path in (DATA_DIR / "raw").glob("*/*_landmarks.preql")
+    }
+    landmark_jobs = [
+        job for job in jobs() if job["key"].startswith("refresh-landmarks-")
+    ]
+    refreshed = {job["entrypoint"] for job in landmark_jobs}
+    assert refreshed == models, (
+        f"landmark models with no refresh job: {sorted(models - refreshed)}; "
+        f"jobs with no model: {sorted(refreshed - models)}"
+    )
+    slots = [job["schedule"] for job in landmark_jobs]
+    assert len(set(slots)) == len(slots), "two landmark jobs share a slot"
 
 
 def test_the_core_shares_one_cron():
@@ -456,24 +518,27 @@ def test_the_landmark_union_reaches_no_portal():
 
 
 def test_the_landmark_union_is_published_after_its_inputs():
-    """Two jobs, and the union must not run first.
+    """The union must not run before any city's landmark refresh.
 
     There is no derived edge to rely on (forty-one parquet addresses in, forty-one
     differently-named producers), so the ordering is wall clock and this is what
-    keeps it.  A union that ran before the per-city refresh would publish last
-    week's rows every week.
+    keeps it.  A union that ran before a city's refresh would publish that
+    city's last-week rows every week.
     """
     by_key = jobs_by_key()
-    per_city = by_key["refresh-landmarks"]["schedule"].split()
     union = by_key["publish-landmarks"]["schedule"].split()
-    assert per_city[5] == union[5], (
-        "the two landmark jobs must fire on the same day; "
-        f"per-city is {per_city[5]}, union is {union[5]}"
-    )
-    assert int(union[2]) > int(per_city[2]), (
-        f"publish-landmarks fires at hour {union[2]} and refresh-landmarks at "
-        f"{per_city[2]}; the union must come second or it publishes stale rows"
-    )
+    for key, job in by_key.items():
+        if not key.startswith("refresh-landmarks-"):
+            continue
+        per_city = job["schedule"].split()
+        assert per_city[5] == union[5], (
+            f"{key} fires on {per_city[5]} and the union on {union[5]}; "
+            "they must fire on the same day"
+        )
+        assert (int(union[2]), int(union[1])) > (int(per_city[2]), int(per_city[1])), (
+            f"publish-landmarks fires at {union[2]}:{union[1]} and {key} at "
+            f"{per_city[2]}:{per_city[1]}; the union must come after every city"
+        )
 
 
 # ---------------------------------------------------------------------------

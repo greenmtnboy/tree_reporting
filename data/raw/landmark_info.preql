@@ -1,14 +1,11 @@
-# Per-city landmark refresh: every city's landmark model, imported so that one
-# `refresh-landmarks` job rebuilds all forty-one published parquets.
+# Every city's landmark model in one scope: the app's landmark model
+# (src/src/trilogyModels.ts), which queries across cities.
 #
-# Each city's published target is its own managed asset, so a portal outage
-# fails that city and leaves the other forty alone -- which is the whole reason
-# the cross-city union moved out to `full_landmark_publish.preql`.
-#
-# Unlike the tree lane there is no per-city landmark job: the fetch is a bespoke
-# script per city rather than one shared module, so splitting this forty-one ways
-# is a code-sharing job first. See "Building" in
-# docs/LANDMARKS.md.
+# Not a refresh entrypoint. `trilogy refresh <file>` builds what the file
+# declares and this one declares nothing, so refreshing it probes every city
+# and builds none. Each city's parquet is built by its own
+# `refresh-landmarks-{code}` job from `raw/{code}/{slug}_landmarks.preql`; see
+# "Building" in docs/LANDMARKS.md.
 
 import landmark_common;
 import ussfo.sf_landmarks;

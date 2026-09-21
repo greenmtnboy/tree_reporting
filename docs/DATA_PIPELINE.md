@@ -48,22 +48,28 @@ per city, three independent schedules
                      cities only)
   city-{code}        daily or twice weekly  raw/{code}/{slug}_tree_info.preql
   landmarks-{code}   no cron, by hand       landmark_staging/{code}_landmarks_staging.preql
+  refresh-landmarks-{code}  weekly, Sun 03:00-04:20, 2 min apart
+                                            raw/{code}/{slug}_landmarks.preql
 
 the core, daily, reading only published parquets
   publish-full          raw/full_tree_publish.preql     -> full_tree_info_v{n}.parquet
   refresh-ecoregions    raw/ecoregion_info.preql
-  refresh-enrichment    raw/enrichment_refresh.preql    -> tree_enrichment_v{n}.parquet
+  refresh-enrichment    raw/tree_enrichment.preql       -> tree_enrichment_v{n}.parquet
   refresh-predictions   raw/tree_predictions.preql      -> tree_predictions_v{n}.parquet
   validate-core         raw/core_validate.preql
-  refresh-landmarks     raw/landmark_info.preql (weekly)
+  publish-landmarks     raw/full_landmark_publish.preql (weekly, Sun 05:00)
 ```
 
 Rules:
 
-- **A job's bundle is its entrypoint's reachable imports.** `trilogy refresh`
-  adopts every managed datasource it can reach, so what a model imports
-  decides what a job builds and how much memory it needs. Check with
-  `trilogy refresh --dry-run <entrypoint>`: a city job must show one asset.
+- **A refresh job builds what its entrypoint declares, nothing it imports.**
+  pytrilogy >= 0.3.368 probes imported datasources (they are the expected side
+  of what it builds) and never builds them, so a refresh entrypoint must be the
+  file that declares its output. An umbrella that only imports builds nothing
+  and exits "up to date", which skips everything downstream;
+  `test_cloud_jobs.py::test_every_refresh_entrypoint_declares_what_it_builds`
+  refuses one. Check with `trilogy refresh --dry-run <entrypoint>`: a city job
+  must show one asset.
 - **The core never reaches a portal.** `full_tree_publish.preql` reads the
   city parquets with one `file [...]` multi-file scan; the enrichment and
   prediction jobs reach published tables through root `_source.preql` views
@@ -72,10 +78,12 @@ Rules:
   runs after its two producers. `test_cloud_jobs.py` pins that the core
   imports no city model, and `test_tree_predictions.py` pins that no
   `_source.preql` enters the frontend bundle.
-- **The job's file set and the browser's are different on purpose.** The
-  enrichment job runs `raw/enrichment_refresh.preql`; the browser bundles
-  `raw/tree_enrichment.preql`, which is species-only. A second tree source in
-  the browser's scope changes join types and chart answers (`docs/TESTING.md`).
+- **Enrichment is ordered by a declared edge.** The job refreshes
+  `raw/tree_enrichment.preql`, which the browser also bundles and which must
+  stay species-only: a second tree source in the browser's scope changes join
+  types and chart answers (`docs/TESTING.md`). Its script reads the rollup by
+  URL, so nothing in the model orders it after `publish-full`; the
+  `[dependencies]` table in `trilogy.toml` does.
 - **`validate-core` runs `validate datasource` over the rollup and the
   enrichment table after both land** and fails the tick on a repeated key.
 - **Cadence is measured.** `tools/portal_cadence.py --record` samples every

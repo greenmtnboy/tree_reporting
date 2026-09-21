@@ -299,25 +299,32 @@ timeout_seconds = 900
 memory_mb = 1024
 
 # Species enrichment. Consumes the rollup `publish-full` produces, in the same
-# tick and ordered after it (see above).
+# tick and ordered after it by the `[dependencies]` entry below.
 #
-# Its entrypoint is the thin `raw/enrichment_refresh.preql` rather than the
-# enrichment model itself, and that indirection is load-bearing: the entrypoint
-# declares the rollup as a root input so the platform can order this job, while
-# keeping it out of `raw/tree_enrichment.preql`, which the *app* resolves its
-# dashboard queries against. Putting the rollup in the app's scope gives the
-# planner a second way to answer a tree question and it returns a different
-# answer — a summary chart came back 2 where the fixtures say 3. Full story in
-# the entrypoint's header.
+# Its entrypoint is the enrichment model itself, the one file that declares
+# `tree_enrichment`: `trilogy refresh <file>` builds what that file declares
+# (pytrilogy >= 0.3.368). The script reads the rollup by URL, not through the
+# model, so the rollup is no input the platform can see; the edge after
+# `publish-full` is declared instead. It must not be imported here to make one:
+# this file is in the app's model bundle, and a second tree source in the
+# planner's scope changed a chart's answer (2 where the fixtures say 3).
 #
 # Either way it does not import the city models, so this job can no longer probe
 # a municipal portal or rebuild a city parquet in its own container. Its LLM calls are the slowest thing in
 # the file, which is the other reason it is its own job: they can no longer eat
 # a city refresh's timeout.
+[dependencies]
+# The one ordering edge content cannot express: enrichment reads the rollup by
+# URL, so nothing in its model names it. Same condition as a derived edge --
+# runs after `publish-full` completes, and is skipped when the rollup did not
+# move or failed. trilogy-cloud matches it to the job whose entrypoint is that
+# script; `trilogy run .` applies it locally.
+"raw/tree_enrichment.preql" = { after = ["raw/full_tree_publish.preql"] }
+
 [[cloud.job]]
 key = "refresh-enrichment"
 name = "urban-tree-data-enrichment"
-entrypoint = "raw/enrichment_refresh.preql"
+entrypoint = "raw/tree_enrichment.preql"
 operation = "refresh"
 schedule = "0 0 6 * * *"
 timeout_seconds = 3600
@@ -357,15 +364,23 @@ schedule = "0 0 6 * * *"
 timeout_seconds = 1800
 memory_mb = 4096
 
-# Landmarks: the per-city parquets, then the cross-city union, as two jobs.
+# Landmarks: one refresh job per city's landmark model, then the cross-city
+# union as its own job.
 #
-# Unlike trees, the per-city half has not been split into one job per city, and
-# the reason is that the split would be a code-sharing refactor rather than a
-# scheduling one. Tree extraction lives once in `raw/shared/osm.py`, which is
-# what made a scheduled OSM job per city a matter of a thin shim each; the
-# landmark sources are still a bespoke script per city (a live ArcGIS query
-# here, an inline list there, two separate Overpass fetches in deber/gblon that
-# have never been shared). Landmark sources also change on a scale of years.
+# `trilogy refresh <file>` builds only what that file declares (pytrilogy
+# >= 0.3.368); what it imports is probed, never built. The single
+# `refresh-landmarks` job ran `raw/landmark_info.preql`, which declares nothing
+# and imports all forty-one city models, so under that rule it would have
+# probed every portal, built nothing, and exited "up to date". Each
+# `raw/{code}/{slug}_landmarks.preql` already declares its city's published
+# parquet, so the split needs no shared fetch -- a job per model, the way
+# docs/LANDMARKS.md already says to build one. `landmark_info.preql` stays: it
+# is the app's landmark model (src/src/trilogyModels.ts).
+#
+# Staggered two minutes apart from Sunday 03:00, so no two share a schedule
+# row (a shared row is one tick, whose state prologue would probe the whole
+# tree) and a VM left idle by one city takes the next. The last lands at 04:20,
+# well before the 05:00 union. Landmark sources change on a scale of years.
 #
 # **The union is a separate job because one portal must not take it down.**
 # While `landmark_info.preql` declared the union as well as importing every city,
@@ -374,21 +389,381 @@ memory_mb = 4096
 # 2026-09-12 that cost the union entirely: data.iledefrance.fr had closed the
 # API behind Paris's landmarks, and with Paris moved to the national register
 # the next attempt died on Kingston's ArcGIS answering 200 with an error
-# payload. Now `refresh-landmarks` rebuilds the forty-one city parquets, each
-# its own managed asset so an outage fails one city, and `publish-landmarks`
-# unions the *published parquets* and reaches no portal at all -- the same
-# separation `publish-full` has from the city jobs.
+# payload. Now each city's landmark parquet is its own job, so an outage fails
+# one city, and `publish-landmarks` unions the *published parquets* and reaches
+# no portal at all -- the same separation `publish-full` has from the city jobs.
 #
 # Weekly rather than three times a day because that is the cadence the data
 # actually has, and independent of every city cron because nothing about a
-# tree refresh has any bearing on it.
+# tree refresh has any bearing on it. `tests/test_cloud_jobs.py` pins one job
+# per landmark model and every slot before the union.
 [[cloud.job]]
-key = "refresh-landmarks"
-name = "urban-tree-data-landmarks"
-entrypoint = "raw/landmark_info.preql"
+key = "refresh-landmarks-arbue"
+name = "urban-tree-landmarks-refresh-arbue"
+entrypoint = "raw/arbue/buenosaires_landmarks.preql"
 operation = "refresh"
-schedule = "0 0 4 * * SUN"    # Sundays 04:00 UTC
-timeout_seconds = 1800
+schedule = "0 0 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-aumel"
+name = "urban-tree-landmarks-refresh-aumel"
+entrypoint = "raw/aumel/melbourne_landmarks.preql"
+operation = "refresh"
+schedule = "0 2 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-caajx"
+name = "urban-tree-landmarks-refresh-caajx"
+entrypoint = "raw/caajx/ajax_landmarks.preql"
+operation = "refresh"
+schedule = "0 4 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-cabur"
+name = "urban-tree-landmarks-refresh-cabur"
+entrypoint = "raw/cabur/burlington_on_landmarks.preql"
+operation = "refresh"
+schedule = "0 6 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-cacal"
+name = "urban-tree-landmarks-refresh-cacal"
+entrypoint = "raw/cacal/calgary_landmarks.preql"
+operation = "refresh"
+schedule = "0 8 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-caedm"
+name = "urban-tree-landmarks-refresh-caedm"
+entrypoint = "raw/caedm/edmonton_landmarks.preql"
+operation = "refresh"
+schedule = "0 10 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-cahfx"
+name = "urban-tree-landmarks-refresh-cahfx"
+entrypoint = "raw/cahfx/halifax_landmarks.preql"
+operation = "refresh"
+schedule = "0 12 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-cakel"
+name = "urban-tree-landmarks-refresh-cakel"
+entrypoint = "raw/cakel/kelowna_landmarks.preql"
+operation = "refresh"
+schedule = "0 14 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-cakgn"
+name = "urban-tree-landmarks-refresh-cakgn"
+entrypoint = "raw/cakgn/kingston_landmarks.preql"
+operation = "refresh"
+schedule = "0 16 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-calet"
+name = "urban-tree-landmarks-refresh-calet"
+entrypoint = "raw/calet/lethbridge_landmarks.preql"
+operation = "refresh"
+schedule = "0 18 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-calon"
+name = "urban-tree-landmarks-refresh-calon"
+entrypoint = "raw/calon/longueuil_landmarks.preql"
+operation = "refresh"
+schedule = "0 20 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-camis"
+name = "urban-tree-landmarks-refresh-camis"
+entrypoint = "raw/camis/mississauga_landmarks.preql"
+operation = "refresh"
+schedule = "0 22 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-camon"
+name = "urban-tree-landmarks-refresh-camon"
+entrypoint = "raw/camon/moncton_landmarks.preql"
+operation = "refresh"
+schedule = "0 24 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-camtl"
+name = "urban-tree-landmarks-refresh-camtl"
+entrypoint = "raw/camtl/montreal_landmarks.preql"
+operation = "refresh"
+schedule = "0 26 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-canwe"
+name = "urban-tree-landmarks-refresh-canwe"
+entrypoint = "raw/canwe/new_westminster_landmarks.preql"
+operation = "refresh"
+schedule = "0 28 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-caott"
+name = "urban-tree-landmarks-refresh-caott"
+entrypoint = "raw/caott/ottawa_landmarks.preql"
+operation = "refresh"
+schedule = "0 30 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-caque"
+name = "urban-tree-landmarks-refresh-caque"
+entrypoint = "raw/caque/quebec_landmarks.preql"
+operation = "refresh"
+schedule = "0 32 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-cator"
+name = "urban-tree-landmarks-refresh-cator"
+entrypoint = "raw/cator/toronto_landmarks.preql"
+operation = "refresh"
+schedule = "0 34 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-cavan"
+name = "urban-tree-landmarks-refresh-cavan"
+entrypoint = "raw/cavan/vancouver_landmarks.preql"
+operation = "refresh"
+schedule = "0 36 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-cavic"
+name = "urban-tree-landmarks-refresh-cavic"
+entrypoint = "raw/cavic/victoria_landmarks.preql"
+operation = "refresh"
+schedule = "0 38 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-cawpg"
+name = "urban-tree-landmarks-refresh-cawpg"
+entrypoint = "raw/cawpg/winnipeg_landmarks.preql"
+operation = "refresh"
+schedule = "0 40 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-cobog"
+name = "urban-tree-landmarks-refresh-cobog"
+entrypoint = "raw/cobog/bogota_landmarks.preql"
+operation = "refresh"
+schedule = "0 42 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-deber"
+name = "urban-tree-landmarks-refresh-deber"
+entrypoint = "raw/deber/berlin_landmarks.preql"
+operation = "refresh"
+schedule = "0 44 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-dkcph"
+name = "urban-tree-landmarks-refresh-dkcph"
+entrypoint = "raw/dkcph/copenhagen_landmarks.preql"
+operation = "refresh"
+schedule = "0 46 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-fihel"
+name = "urban-tree-landmarks-refresh-fihel"
+entrypoint = "raw/fihel/helsinki_landmarks.preql"
+operation = "refresh"
+schedule = "0 48 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-frpar"
+name = "urban-tree-landmarks-refresh-frpar"
+entrypoint = "raw/frpar/paris_landmarks.preql"
+operation = "refresh"
+schedule = "0 50 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-gblon"
+name = "urban-tree-landmarks-refresh-gblon"
+entrypoint = "raw/gblon/london_landmarks.preql"
+operation = "refresh"
+schedule = "0 52 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-grath"
+name = "urban-tree-landmarks-refresh-grath"
+entrypoint = "raw/grath/athens_landmarks.preql"
+operation = "refresh"
+schedule = "0 54 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-grmlo"
+name = "urban-tree-landmarks-refresh-grmlo"
+entrypoint = "raw/grmlo/milos_landmarks.preql"
+operation = "refresh"
+schedule = "0 56 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-grsan"
+name = "urban-tree-landmarks-refresh-grsan"
+entrypoint = "raw/grsan/santorini_landmarks.preql"
+operation = "refresh"
+schedule = "0 58 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-jptyo"
+name = "urban-tree-landmarks-refresh-jptyo"
+entrypoint = "raw/jptyo/tokyo_landmarks.preql"
+operation = "refresh"
+schedule = "0 0 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-nlams"
+name = "urban-tree-landmarks-refresh-nlams"
+entrypoint = "raw/nlams/amsterdam_landmarks.preql"
+operation = "refresh"
+schedule = "0 2 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-twtpe"
+name = "urban-tree-landmarks-refresh-twtpe"
+entrypoint = "raw/twtpe/taipei_landmarks.preql"
+operation = "refresh"
+schedule = "0 4 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-usbos"
+name = "urban-tree-landmarks-refresh-usbos"
+entrypoint = "raw/usbos/boston_landmarks.preql"
+operation = "refresh"
+schedule = "0 6 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-usbtv"
+name = "urban-tree-landmarks-refresh-usbtv"
+entrypoint = "raw/usbtv/burlington_landmarks.preql"
+operation = "refresh"
+schedule = "0 8 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-usden"
+name = "urban-tree-landmarks-refresh-usden"
+entrypoint = "raw/usden/denver_landmarks.preql"
+operation = "refresh"
+schedule = "0 10 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-uslax"
+name = "urban-tree-landmarks-refresh-uslax"
+entrypoint = "raw/uslax/losangeles_landmarks.preql"
+operation = "refresh"
+schedule = "0 12 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-usnyc"
+name = "urban-tree-landmarks-refresh-usnyc"
+entrypoint = "raw/usnyc/nyc_landmarks.preql"
+operation = "refresh"
+schedule = "0 14 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-ussfo"
+name = "urban-tree-landmarks-refresh-ussfo"
+entrypoint = "raw/ussfo/sf_landmarks.preql"
+operation = "refresh"
+schedule = "0 16 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-ustem"
+name = "urban-tree-landmarks-refresh-ustem"
+entrypoint = "raw/ustem/tempe_landmarks.preql"
+operation = "refresh"
+schedule = "0 18 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-uswas"
+name = "urban-tree-landmarks-refresh-uswas"
+entrypoint = "raw/uswas/washingtondc_landmarks.preql"
+operation = "refresh"
+schedule = "0 20 4 * * SUN"
+timeout_seconds = 900
 memory_mb = 2048
 
 # An hour after the per-city refresh, by wall clock rather than a derived edge:
