@@ -100,6 +100,10 @@ file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cakgn_
 # cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
 # The only per-city line is the dbh merge, because Boston imputes it.
 merge merged_dbh into diameter_at_breast_height;
+# Position: the survivor's own point.  A city with an Overture lookup imports
+# ../tree_position.preql instead, which merges the corrected point.
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
 
 
 partial datasource kingston_tree_info (

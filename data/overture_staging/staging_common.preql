@@ -1,0 +1,44 @@
+# Shared declarations for every scheduled Overture position-lookup model.
+#
+# One `{code}_overture_staging.preql` per city, each run by its own
+# `overture-{code}` [[cloud.job]] in ../trilogy.toml -- never by a city
+# refresh.  This file holds what those models have in common so a city's own
+# file is just its two datasources: the rows script and the staging target it
+# writes.  What the table is and how it is built is the docstring of
+# raw/shared/overture.py; how a city refresh uses it is raw/tree_position.preql.
+#
+# Deliberately standalone, like osm_staging/staging_common.preql: nothing here
+# imports raw/, and nothing in raw/ imports this, which is what keeps a city
+# refresh job from ever adopting a staging asset.  The concepts below mirror
+# raw/tree_position.preql's lookup columns *by name* because the staging
+# parquet's column names are the contract the city model reads.
+#
+# The freshness watermark is the date of the current Overture release, from
+# the STAC catalog (overture_release.py).  Overture releases roughly monthly,
+# so a scheduled firing that finds the same release exits `up_to_date` in
+# seconds, and the one that finds a new release rebuilds the table from it --
+# the cron is a polling interval, not a rebuild cadence.
+
+# One script serves every city.  Each model points its rows datasource at
+# `./overture_snap_rows.py` and adds `where city = '<CODE>'`, which Trilogy
+# compiles into both a SQL predicate and a `--filter 'city=<CODE>'` argument
+# -- that argument is how the script knows which city to build, and it
+# refuses to run without one rather than building every city on every
+# firing.  `test_position_grid.py` checks each model supplies one.
+
+key snap_cell bigint; # one cell of the position grid, packed as lon_index * 1e8 + lat_index
+property snap_cell.city string;
+property snap_cell.snap_latitude float; # centre of the nearest open cell
+property snap_cell.snap_longitude float;
+property snap_cell.snap_reason string; # 'building' or 'road': what the blocked cell is under
+property snap_cell.snap_distance_m float; # from the blocked cell's centre to the open one, in metres
+property snap_cell.overture_release string; # the Overture release the row was built from, e.g. 2026-08-19.0
+
+property <*>.overture_released_through datetime; # date of the current Overture release
+
+# City-agnostic on purpose: the release is global, so every staging model
+# maps this one script onto the one freshness property.
+root datasource overture_release (
+    data_updated_through: overture_released_through
+)
+file `./overture_release.py`;

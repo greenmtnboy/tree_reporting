@@ -221,6 +221,10 @@ file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbos_
 auto imputed_dbh <- coalesce(cleaned_dbh, avg(cleaned_dbh) by city, raw_species);
 auto processed_dbh <- @by_source(imputed_dbh);
 merge processed_dbh into diameter_at_breast_height;
+# Position: the survivor's own point.  A city with an Overture lookup imports
+# ../tree_position.preql instead, which merges the corrected point.
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
 
 
 # --- Merged materialized parquet (all Boston sources) ---

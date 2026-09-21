@@ -335,7 +335,7 @@ def test_city_feeds_the_shared_cluster_merge(code: str):
         assert column in text, f"{code} does not publish {column.strip()}"
 
 
-def test_shared_dedup_merges_every_attribute_but_dbh():
+def test_shared_dedup_merges_every_attribute_but_dbh_and_position():
     text = (RAW_DIR / "tree_dedup.preql").read_text(encoding="utf-8")
     for attr in RAW_ATTRIBUTES:
         if attr == "diameter_at_breast_height":
@@ -343,6 +343,13 @@ def test_shared_dedup_merges_every_attribute_but_dbh():
                 "dbh is merged per city (Boston imputes it first); a second "
                 "merge into diameter_at_breast_height would conflict"
             )
+            continue
+        if attr in ("latitude", "longitude"):
+            # The position policy is the city's: tree_position.preql merges
+            # the corrected point for a city with an Overture lookup, and
+            # every other city merges merged_latitude itself
+            # (test_position_grid.py).  A merge here would conflict with both.
+            assert re.search(rf"^merge merged_{attr} into {attr};", text, re.M) is None
             continue
         merged = "merged_photo_url" if attr == "submission_photo_url" else f"merged_{attr}"
         assert f"merge {merged} into {attr};" in text

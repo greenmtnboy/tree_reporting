@@ -22,6 +22,8 @@
 #       `latitude`, ... plus `merged_sources` and `merged_tree_ids`, and
 #       carries `where tree_id = cluster_id` to drop the absorbed rows.
 #   merge merged_dbh into diameter_at_breast_height;   # or a city-specific dbh
+#   merge merged_latitude into latitude;               # or import ../tree_position.preql,
+#   merge merged_longitude into longitude;             #   which merges the corrected point
 #
 # The cell size each city matches at lives in DEDUP_CELL_METRES in
 # shared/ingest.py, with the per-city calibration; ./dedup_cells.py turns it
@@ -300,12 +302,14 @@ merge merged_species into species;
 merge merged_tree_name into tree_name;
 merge merged_cultivar into cultivar;
 merge merged_plant_date into plant_date;
-merge merged_latitude into latitude;
-merge merged_longitude into longitude;
 merge merged_photo_url into submission_photo_url;
 # dbh is merged by the city model, not here: Boston imputes a missing value
 # from the city-and-species average of the merged values and merges
 # `processed_dbh` instead, and two merges into one concept is a conflict.
+# Position is merged by the city model too, for the same reason: a city that
+# imports ../tree_position.preql publishes the corrected point (moved off a
+# road or out of a building) as `latitude` and `longitude`, and one that does
+# not merges `merged_latitude` and `merged_longitude` itself.
 
 # ---------------------------------------------------------------------------
 # The prune

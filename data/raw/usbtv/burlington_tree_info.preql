@@ -1,8 +1,9 @@
 import ..tree_common;
 import ..community_tree_info;
 import ..tree_dedup;
+import ..tree_position;
 
-auto usbtv_published_data_updated_through <- greatest(usbtv_data_updated_through, usbtv_community_data_updated_through, usbtv_osm_data_updated_through);
+auto usbtv_published_data_updated_through <- greatest(usbtv_data_updated_through, usbtv_community_data_updated_through, usbtv_osm_data_updated_through, usbtv_overture_data_updated_through);
 
 key usbtv_source enum<string>['BURLINGTON_OPENDATA', 'COMMUNITY_USBTV', 'OSM_USBTV']; # originating dataset for the row
 
@@ -32,6 +33,34 @@ root datasource usbtv_osm_update_time (
     data_updated_through: usbtv_osm_data_updated_through
 )
 file `./burlington_osm_probe.py`;
+
+# GCS publication time of the staged Overture position lookup (see
+# burlington_overture_extract.py and ../../overture_staging/); it moves when a
+# table built from a new Overture release is published, and that is what
+# re-places every tree that sits in a footprint or a carriageway.
+root datasource usbtv_overture_update_time (
+    data_updated_through: usbtv_overture_data_updated_through
+)
+file `./burlington_overture_probe.py`;
+
+# --- Position correction ------------------------------------------------------
+#
+# Pilot city for ../tree_position.preql: the shared model derives each raw
+# row's `snap_cell` from its own coordinates, this table says which cells are
+# under an Overture building or road and where the nearest open ground is,
+# and the model substitutes that point for the row's own before the cluster
+# merge.  One row per blocked cell; a tree on open ground matches nothing and
+# keeps its coordinates.  The raw partitions below need no extra column.
+# Built by the `overture-usbtv` job from shared/overture.py.
+root datasource usbtv_overture_snap (
+    snap_cell: snap_cell,
+    snap_latitude: snap_latitude,
+    snap_longitude: snap_longitude,
+    snap_reason: snap_reason,
+    snap_distance_m: snap_distance_m,
+)
+grain (snap_cell)
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbtv_overture_snap.parquet`;
 
 # OpenStreetMap trees, read from the staged parquet in GCS rather than
 # Overpass -- extraction is decoupled from refresh (see shared/osm.py and
@@ -99,7 +128,10 @@ where city = 'USBTV';
 # Shared: ../tree_dedup.preql groups the three partitions into one cluster per
 # tree and picks each canonical attribute across the cluster; this city's grid
 # cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
-# The only per-city line is the dbh merge, because Boston imputes it.
+# The per-city lines are the dbh merge, because Boston imputes it, and the
+# position policy: ../tree_position.preql (imported above) merges the corrected
+# point into latitude and longitude, where a city without a lookup merges
+# merged_latitude and merged_longitude itself.
 merge merged_dbh into diameter_at_breast_height;
 
 
@@ -122,6 +154,10 @@ partial datasource burlington_tree_info (
     cluster_id,
     merged_sources,
     ?merged_tree_ids,
+    ?source_latitude,
+    ?source_longitude,
+    ?position_adjustment,
+    ?position_shift_m,
     usbtv_published_data_updated_through,
 )
 grain (tree_id)

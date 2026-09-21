@@ -231,6 +231,7 @@ exclude = [
     # The manual counterparts of scheduled extracts, and the one-off geocoders
     # and Overpass stagers behind committed CSVs and staging objects.
     "raw/*/*_osm_extract.py",
+    "raw/*/*_overture_extract.py",
     "raw/*/*_landmarks_geocode.py",
     "raw/*/*_landmarks_extract.py",
 ]
@@ -704,6 +705,33 @@ operation = "refresh"
 schedule = "0 0 3 * * TUE"
 timeout_seconds = 1800
 memory_mb = 1024
+
+# ---------------------------------------------------------------------------
+# Overture position lookups
+# ---------------------------------------------------------------------------
+#
+# `overture-{code}` builds the table raw/tree_position.preql moves a city's
+# trees with: one row per ~2 m grid cell under an Overture building footprint
+# or road carriageway, with the nearest open ground (raw/shared/overture.py).
+# The watermark is the Overture release date, which moves about monthly, so
+# a weekly firing is a poll: it exits `up_to_date` in seconds until a new
+# release lands, then rebuilds from it and publishes -- and publishing is
+# what marks the city's tree parquet stale, through its overture probe, so
+# the city's next refresh re-places its trees.  Placed on the city's OSM day,
+# ahead of the OSM extract, so the refresh that follows sees both.
+#
+# The build reads two Overture themes straight from S3 with a bounding-box
+# prune and then runs one spatial query in DuckDB: minutes of parquet footer
+# reads, then the geometry.  Sized from the Burlington measurement recorded
+# in docs/POSITION_CORRECTION.md.
+[[cloud.job]]
+key = "overture-usbtv"
+name = "urban-tree-overture-usbtv"
+entrypoint = "overture_staging/usbtv_overture_staging.preql"
+operation = "refresh"
+schedule = "0 0 1 * * TUE"
+timeout_seconds = 3600
+memory_mb = 2048
 
 # --- Wednesday -------------------------------------------------------------
 [[cloud.job]]
