@@ -33,11 +33,11 @@ import ecoregion_common;
 # fixtures say 3. The smoke tests did not catch it (they check the base
 # per-city queries); `pnpm test:queries` did.
 #
-# The job's input is declared where the job can see it and the app cannot:
-# `raw/enrichment_refresh.preql`, the entrypoint, imports this file *and*
-# `raw/full_tree_info_source.preql`. Neither is in the frontend's model
-# bundle, so what the platform orders on and what the browser plans against
-# are now two different sets — which is what they always should have been.
+# The job's ordering after the rollup is declared instead, in the
+# `[dependencies]` table of data/trilogy.toml. This file is the job's
+# entrypoint: `trilogy refresh <file>` builds what the file declares
+# (pytrilogy >= 0.3.368), and this is the file that declares the enrichment
+# parquet.
 
 # Species dimension. The existing `species` key already serves as the canonical
 # scientific-name identifier, so we extend it instead of introducing a separate

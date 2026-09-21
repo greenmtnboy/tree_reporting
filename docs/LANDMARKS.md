@@ -63,8 +63,13 @@ script's output.
 cd data && trilogy refresh raw/{code}/{slug}_landmarks.preql -f {slug}_landmark_info
 ```
 
-`refresh-landmarks` rebuilds every city's landmark parquet plus the union
-weekly; per-city freshness columns mean only cities whose source moved are
-rebuilt. Landmarks stay one refresh lane because each city's fetch is its
-own script; splitting them per city as the tree lane is split needs a shared
-fetch first.
+Each city's landmark parquet has its own weekly `refresh-landmarks-{code}`
+job running exactly that command's model, staggered two minutes apart from
+Sunday 03:00 so a VM left idle by one city takes the next; `publish-landmarks`
+unions the published parquets at 05:00. An outage fails one city's job, and a
+city whose source did not move exits "up to date" after its probe.
+`raw/tools/new_city.py` adds the job for a new city in the next free slot.
+
+`landmark_info.preql` is the app's cross-city landmark model and is never a
+refresh entrypoint: a file refresh builds only what the file declares, and it
+declares nothing.
