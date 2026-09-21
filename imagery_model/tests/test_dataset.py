@@ -20,8 +20,12 @@ def _sample() -> dict[str, object]:
     }
 
 
-def test_dihedral_transform_keeps_all_target_fields_registered() -> None:
-    transformed = apply_dihedral(_sample(), 5)
+@pytest.mark.parametrize('with_crowns', [False, True])
+def test_dihedral_transform_keeps_all_target_fields_registered(with_crowns) -> None:
+    sample = _sample()
+    if with_crowns:
+        sample.update(crown=sample['center'], crown_mask=sample['center'])
+    transformed = apply_dihedral(sample, 5)
     expected = torch.flip(torch.rot90(_sample()["center"], 1, (-2, -1)), (-1,))
 
     assert transformed["chip_id"] == "chip"
@@ -37,6 +41,9 @@ def test_dihedral_transform_keeps_all_target_fields_registered() -> None:
         "species",
     ):
         assert torch.equal(transformed[key], expected)
+    if with_crowns:
+        assert torch.equal(transformed['crown'], expected)
+        assert torch.equal(transformed['crown_mask'], expected)
 
 
 def test_dihedral_transform_rejects_unknown_symmetry() -> None:

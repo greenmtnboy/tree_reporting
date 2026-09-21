@@ -5,9 +5,11 @@ import pytest
 
 from urban_tree_ml.config import load_config
 from urban_tree_ml.feedback import (
+    ReviewStateConflictError,
     finalize_registration_feedback,
     load_persisted_reviews,
     persist_review_payload,
+    snapshot_registration_annotations,
 )
 
 
@@ -20,7 +22,14 @@ def _write_review_manifest(review_dir: Path, raster: Path) -> None:
         {"sample_id": "train-bad", "tree_id": "d", "split": "train"},
         {"sample_id": "validation-uncertain", "tree_id": "e", "split": "validation"},
         {"sample_id": "test-offset", "tree_id": "f", "split": "test"},
+        {"sample_id": "train-duplicate", "tree_id": "g", "split": "train"},
     ]
+    for sample in samples:
+        sample["scene_id"] = (
+            "scene-test" if sample["split"] == "test" else f"scene-{sample['split']}"
+        )
+        sample["longitude"] = -71.1
+        sample["latitude"] = 42.3
     (review_dir / "manifest.json").write_text(
         json.dumps(
             {
@@ -29,15 +38,84 @@ def _write_review_manifest(review_dir: Path, raster: Path) -> None:
                     "source_raster": str(raster),
                 },
                 "samples": samples,
+                "scenes": [
+                    {
+                        "scene_id": "scene-train",
+                        "splits": ["train"],
+                        "image_width": 128,
+                        "image_height": 128,
+                        "sample_ids": [
+                            "train-aligned",
+                            "train-offset",
+                            "train-bad",
+                            "train-duplicate",
+                        ],
+                    },
+                    {
+                        "scene_id": "scene-validation",
+                        "splits": ["validation"],
+                        "image_width": 128,
+                        "image_height": 128,
+                        "sample_ids": ["validation-offset", "validation-uncertain"],
+                    },
+                    {
+                        "scene_id": "scene-test",
+                        "splits": ["test"],
+                        "image_width": 128,
+                        "image_height": 128,
+                        "sample_ids": ["test-offset"],
+                    },
+                ],
             }
         ),
         encoding="utf-8",
     )
 
 
+def test_tree_radius_is_exported_for_training_but_not_test(tmp_path):
+    config = load_config(Path(__file__).parents[1] / 'configs/sf_naip_baseline.yaml')
+    config.paths.root = tmp_path/'artifacts'
+    config.paths.annotations = tmp_path/'annotations'
+    directory, raster = tmp_path/'review', tmp_path/'tile.tif'
+    _write_review_manifest(directory,raster)
+    persist_review_payload(directory, {'reviews': {
+        'train-aligned': {'status':'aligned', 'crown_radius_m':8},
+        'validation-offset': {'status':'aligned', 'crown_radius_m':5},
+        'test-offset': {'status':'aligned', 'crown_radius_m':9},
+    }})
+    result=finalize_registration_feedback(config,raster,review_dir=directory,minimum_training_reviews=1)
+    feedback=json.loads(Path(result['feedback']).read_text())
+    overrides={r['tree_id']:r for r in feedback['region_overrides']}
+    assert set(overrides)=={'a','c'}
+    assert overrides['a']['radius_m']==8 and overrides['a']['splits']==['train']
+    assert overrides['c']['radius_m']==5 and overrides['c']['splits']==['validation']
+
+
+def test_occluded_persists_and_is_excluded_from_published_targets(tmp_path):
+    config = load_config(Path(__file__).parents[1] / 'configs/sf_naip_baseline.yaml')
+    config.paths.root = tmp_path/'artifacts'
+    config.paths.annotations = tmp_path/'annotations'
+    directory = tmp_path/'review'
+    raster = tmp_path/'tile.tif'
+    _write_review_manifest(directory,raster)
+    persist_review_payload(directory, {'reviews': {
+        'train-aligned': {'status':'aligned'},
+        'train-offset': {'status':'aligned'},
+        'validation-uncertain': {'status':'occluded','source':'human'},
+        'train-bad': {'status':'occluded','source':'crown-overlap','heuristic_id':'table-sha'},
+        'test-offset': {'status':'occluded'},
+    }})
+    assert load_persisted_reviews(directory)['reviews']['train-bad']['status']=='occluded'
+    result=finalize_registration_feedback(config,raster,review_dir=directory,minimum_training_reviews=2)
+    feedback=json.loads(Path(result['feedback']).read_text())
+    assert {(e['tree_id'],e['reason']) for e in feedback['exclusions']}=={('d','occluded'),('e','occluded')}
+    assert result['ignored_test_reviews']==1
+
+
 def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: Path) -> None:
     config = load_config(Path(__file__).parents[1] / "configs" / "sf_naip_baseline.yaml")
     config.paths.root = tmp_path / "artifacts"
+    config.paths.annotations = tmp_path / "annotations"
     raster = tmp_path / "tile.tif"
     review_dir = tmp_path / "review"
     _write_review_manifest(review_dir, raster)
@@ -54,9 +132,34 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
                 "train-offset": {"status": "offset", "east_m": 2, "north_m": 4},
                 "validation-offset": {"status": "offset", "east_m": 100, "north_m": 100},
                 "train-bad": {"status": "not-tree"},
-                "validation-uncertain": {"status": "uncertain"},
+                "validation-uncertain": {
+                    "status": "uncertain",
+                    "source": "heuristic",
+                    "heuristic_id": "fixture-heuristic-v1",
+                },
                 "test-offset": {"status": "offset", "east_m": -100, "north_m": -100},
+                "train-duplicate": {"status": "duplicate"},
             },
+            "scene_reviews": {
+                "scene-train": {
+                    "done": True,
+                    "completed_at": "2026-09-03T15:00:00+00:00",
+                }
+            },
+            "mask_regions": [
+                {
+                    "region_id": "region-protect-1",
+                    "scene_id": "scene-train",
+                    "anchor_sample_id": "train-aligned",
+                    "mode": "protect",
+                    "image_x": 64,
+                    "image_y": 64,
+                    "east_m": 3.0,
+                    "north_m": -2.0,
+                    "radius_m": 5.0,
+                    "source": "human",
+                }
+            ],
         },
     )
 
@@ -71,7 +174,10 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
     assert result["correction_m"] == {"east": 1.0, "north": 2.0}
     assert result["ignored_test_reviews"] == 1
     feedback = json.loads(Path(result["feedback"]).read_text(encoding="utf-8"))
-    assert {entry["tree_id"] for entry in feedback["exclusions"]} == {"d", "e"}
+    assert {entry["tree_id"] for entry in feedback["exclusions"]} == {"d", "e", "g"}
+    assert next(
+        entry for entry in feedback["exclusions"] if entry["tree_id"] == "g"
+    )["reason"] == "duplicate"
     assert feedback["point_corrections"] == [
         {
             "east_m": 2.0,
@@ -88,8 +194,144 @@ def test_finalize_uses_training_offsets_and_emits_explicit_exclusions(tmp_path: 
             "tree_id": "c",
         },
     ]
+    assert feedback["region_overrides"] == [
+        {
+            "anchor_latitude": 42.3,
+            "anchor_longitude": -71.1,
+            "east_m": 3.0,
+            "mode": "protect",
+            "north_m": -2.0,
+            "radius_m": 5.0,
+            "region_id": "region-protect-1",
+            "scene_id": "scene-train",
+            "source": "human",
+            "splits": ["train"],
+        }
+    ]
     assert result["point_corrected_points"] == 2
+    assert result["mask_regions"] == 1
+    assert result["completed_scenes"] == 1
+    assert load_persisted_reviews(review_dir)["reviews"]["validation-uncertain"] == {
+        "status": "uncertain",
+        "source": "heuristic",
+        "heuristic_id": "fixture-heuristic-v1",
+    }
+    assert load_persisted_reviews(review_dir)["scene_reviews"] == {
+        "scene-train": {
+            "done": True,
+            "completed_at": "2026-09-03T15:00:00+00:00",
+        }
+    }
+    assert load_persisted_reviews(review_dir)["mask_regions"][0]["mode"] == "protect"
+    assert feedback["reviews"]["completed_scenes"] == 1
+    assert feedback["reviews"]["source_counts"]["heuristic"] == 1
+    assert feedback["reviews"]["heuristic_counts"] == {"fixture-heuristic-v1": 1}
+    heuristic_exclusion = next(
+        entry for entry in feedback["exclusions"] if entry["tree_id"] == "e"
+    )
+    assert heuristic_exclusion["source"] == "heuristic"
+    assert heuristic_exclusion["heuristic_id"] == "fixture-heuristic-v1"
     assert feedback["registration"]["validation_residual"]["east_median"] == 99.0
+    bundle_dir = Path(result["annotation_bundle"])
+    bundle = json.loads((bundle_dir / "bundle.json").read_text(encoding="utf-8"))
+    assert bundle_dir == tmp_path / "annotations" / "ussfo" / "fixture-review"
+    assert bundle["feedback_current"] is True
+    assert bundle["summary"]["completed_scenes"] == 1
+    assert bundle["summary"]["mask_regions"] == 1
+    assert set(bundle["files"]) == {
+        "manifest.json",
+        "reviews.json",
+        "training-feedback.json",
+    }
+    assert not (bundle_dir / "images").exists()
+
+    persist_review_payload(
+        review_dir,
+        {"reviews": {"train-aligned": {"status": "not-tree"}}},
+    )
+    snapshot_result = snapshot_registration_annotations(
+        config,
+        raster,
+        review_dir=review_dir,
+    )
+    stale_bundle = json.loads(
+        Path(snapshot_result["bundle_manifest"]).read_text(encoding="utf-8")
+    )
+    assert stale_bundle["feedback_current"] is False
+    assert not (bundle_dir / "training-feedback.json").exists()
+
+
+def test_second_pass_completion_round_trips(tmp_path: Path) -> None:
+    directory = tmp_path / "review"
+    _write_review_manifest(directory, tmp_path / "tile.tif")
+    review = {"done": True, "completed_at": "2026-09-01", "more_done": True,
+              "more_completed_at": "2026-09-11"}
+    persist_review_payload(directory, {"scene_reviews": {"scene-train": review}})
+    assert load_persisted_reviews(directory)["scene_reviews"]["scene-train"] == review
+    for invalid in [{"done": True, "more_done": "yes"}, {"done": False, "more_done": True}]:
+        with pytest.raises(ValueError, match="more_done"):
+            persist_review_payload(directory, {"scene_reviews": {"scene-train": invalid}})
+
+
+def test_persist_rejects_completion_for_an_unknown_scene(tmp_path: Path) -> None:
+    raster = tmp_path / "tile.tif"
+    review_dir = tmp_path / "review"
+    _write_review_manifest(review_dir, raster)
+
+    with pytest.raises(ValueError, match="unknown scene"):
+        persist_review_payload(
+            review_dir,
+            {"scene_reviews": {"missing-scene": {"done": True}}},
+        )
+
+
+def test_legacy_review_save_preserves_scene_completion(tmp_path: Path) -> None:
+    raster = tmp_path / "tile.tif"
+    review_dir = tmp_path / "review"
+    _write_review_manifest(review_dir, raster)
+    persist_review_payload(
+        review_dir,
+        {"scene_reviews": {"scene-train": {"done": True}}},
+    )
+
+    persist_review_payload(
+        review_dir,
+        {"reviews": {"train-aligned": {"status": "aligned"}}},
+    )
+
+    assert load_persisted_reviews(review_dir)["scene_reviews"] == {
+        "scene-train": {"done": True}
+    }
+
+
+def test_stale_browser_revision_cannot_replace_newer_reviews(tmp_path: Path) -> None:
+    raster = tmp_path / "tile.tif"
+    review_dir = tmp_path / "review"
+    _write_review_manifest(review_dir, raster)
+    initial_revision = load_persisted_reviews(review_dir)["state_revision"]
+
+    persist_review_payload(
+        review_dir,
+        {
+            "base_revision": initial_revision,
+            "reviews": {"train-aligned": {"status": "uncertain"}},
+            "scene_reviews": {"scene-train": {"done": True}},
+        },
+    )
+
+    with pytest.raises(ReviewStateConflictError, match="another tab"):
+        persist_review_payload(
+            review_dir,
+            {
+                "base_revision": initial_revision,
+                "reviews": {"train-aligned": {"status": "aligned"}},
+                "scene_reviews": {},
+            },
+        )
+
+    persisted = load_persisted_reviews(review_dir)
+    assert persisted["reviews"]["train-aligned"]["status"] == "uncertain"
+    assert persisted["scene_reviews"] == {"scene-train": {"done": True}}
 
 
 def test_finalize_rejects_offset_verdict_without_a_clicked_location(tmp_path: Path) -> None:

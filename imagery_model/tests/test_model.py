@@ -1,16 +1,21 @@
 import torch
+import pytest
 
 from urban_tree_ml.losses import multitask_loss
 from urban_tree_ml.model import RawImageryTreeModel
 
 
-def test_model_and_multitask_loss_shapes() -> None:
+@pytest.mark.parametrize('backbone',['resnet34','convnext_tiny','swin_tiny'])
+@pytest.mark.parametrize('crown_head', [False, True])
+def test_model_and_multitask_loss_shapes(backbone, crown_head) -> None:
     model = RawImageryTreeModel(
         input_channels=4,
         feature_channels=32,
         genus_classes=3,
         species_classes=5,
         pretrained=False,
+        backbone=backbone,
+        crown_head=crown_head,
     ).eval()
     with torch.no_grad():
         prediction = model(torch.zeros(2, 4, 64, 64))
@@ -19,6 +24,10 @@ def test_model_and_multitask_loss_shapes() -> None:
     assert prediction["dbh_log1p"].shape == (2, 32, 32)
     assert prediction["genus_logits"].shape == (2, 3, 32, 32)
     assert prediction["species_logits"].shape == (2, 5, 32, 32)
+    if crown_head:
+        assert prediction['crown_log1p'].shape == (2, 32, 32)
+    else:
+        assert 'crown_log1p' not in prediction
 
     center = torch.zeros(2, 32, 32)
     center[:, 8, 8] = 1
@@ -33,6 +42,8 @@ def test_model_and_multitask_loss_shapes() -> None:
         "dbh": torch.ones_like(center),
         "genus": torch.where(attributes, 1, -1),
         "species": torch.where(attributes, 2, -1),
+        "crown": torch.ones_like(center),
+        "crown_mask": attributes.float(),
     }
     losses = multitask_loss(
         prediction,
@@ -44,3 +55,6 @@ def test_model_and_multitask_loss_shapes() -> None:
     )
 
     assert torch.isfinite(losses["loss"])
+    assert torch.isfinite(losses['crown_loss'])
+    if not crown_head:
+        assert losses['crown_loss'] == 0

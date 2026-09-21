@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -10,25 +12,64 @@ from uuid import uuid4
 import numpy as np
 
 from urban_tree_ml.config import ProjectConfig
+from urban_tree_ml.tree_curation import expand_tree_records, geographic_regions, storage_payload
 
-REVIEW_STATUSES = frozenset({"aligned", "offset", "not-tree", "uncertain"})
-_REVIEW_FIELDS = frozenset(
-    {"status", "note", "image_x", "image_y", "east_m", "north_m"}
-)
+REVIEW_STATUSES = frozenset({"aligned", "offset", "not-tree", "uncertain", "duplicate", "occluded"})
+MASK_REGION_MODES = frozenset({"protect", "confirmed-background", "confirmed-tree"})
+_NUMERIC_REVIEW_FIELDS = frozenset({"image_x", "image_y", "east_m", "north_m", "crown_radius_m"})
+_SAFE_PATH_SEGMENT = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+class ReviewStateConflictError(ValueError):
+    """Raised when a browser attempts to replace a newer review state."""
 
 
 def _write_json_atomic(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    encoded = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode('utf-8')
+    if path.exists() and path.read_bytes() == encoded:
+        return
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
-        with temporary.open("w", encoding="utf-8", newline="\n") as output:
-            json.dump(value, output, indent=2, sort_keys=True)
-            output.write("\n")
+        with temporary.open("wb") as output:
+            output.write(encoded)
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _json_sha256(value: object) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _file_record(path: Path) -> dict[str, str | int]:
+    return {
+        "bytes": path.stat().st_size,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
+
+
+def _safe_path_segment(value: object, field: str) -> str:
+    segment = _SAFE_PATH_SEGMENT.sub("-", str(value)).strip("-.")
+    if not segment:
+        raise ValueError(f"annotation bundle {field} is empty")
+    return segment
+
+
+def _review_state_sha256(
+    reviews: dict[str, dict[str, object]],
+    scene_reviews: dict[str, dict[str, object]],
+    mask_regions: list[dict[str, object]],
+) -> str:
+    state: dict[str, object] = {"reviews": reviews, "scene_reviews": scene_reviews}
+    # Preserve hashes from pre-region bundles when no region exists. Adding or
+    # removing a real region still invalidates finalized feedback as intended.
+    if mask_regions:
+        state["mask_regions"] = mask_regions
+    return _json_sha256(state)
 
 
 def _read_manifest(review_dir: Path) -> dict[str, object]:
@@ -55,9 +96,21 @@ def _finite_optional(value: object, field: str) -> float | None:
 def normalize_review_payload(
     payload: dict[str, object],
     manifest: dict[str, object],
+    *, migrate_crowns: bool = True,
 ) -> dict[str, dict[str, object]]:
     """Validate browser/server or exported review JSON into one canonical mapping."""
     raw_reviews = payload.get("reviews", {})
+    scope = payload.get('scope')
+    if scope and scope.get('imagery_id') != manifest['metadata'].get('curation_imagery_id'):
+        raise ValueError('Curation belongs to a different imagery version')
+    if 'tree_reviews' in payload:
+        records = payload['tree_reviews']
+        if not isinstance(records, dict) or any(not isinstance(v, dict) for v in records.values()):
+            raise ValueError('tree_reviews must map tree IDs to objects')
+        known = {str(s['tree_id']) for s in manifest['samples']}
+        if set(records) - known:
+            raise ValueError('tree_reviews refers to unknown trees')
+        raw_reviews = expand_tree_records(records, manifest)
     if isinstance(raw_reviews, list):
         review_items = []
         for review in raw_reviews:
@@ -89,12 +142,183 @@ def normalize_review_payload(
         note = raw_review.get("note")
         if note is not None:
             review["note"] = str(note)[:2000]
-        for field in _REVIEW_FIELDS - {"status", "note"}:
+        source = raw_review.get("source")
+        if source is not None:
+            review["source"] = str(source)[:100]
+        heuristic_id = raw_review.get("heuristic_id")
+        if heuristic_id is not None:
+            review["heuristic_id"] = str(heuristic_id)[:200]
+        for field in _NUMERIC_REVIEW_FIELDS:
             number = _finite_optional(raw_review.get(field), field)
             if number is not None:
+                if field == 'crown_radius_m' and not 0 < number <= 500:
+                    raise ValueError('Invalid crown radius')
                 review[field] = number
+        if 'crown_radius_m' in review:
+            review['crown_source'] = 'human'
         if review:
             normalized[sample_id] = review
+    # Legacy linked circles become radius attributes, never independent centers.
+    for region in payload.get('mask_regions', []) if migrate_crowns else []:
+        if region.get('mode') == 'confirmed-tree' and region.get('tree_id'):
+            radius = _finite_optional(region.get('radius_m'), 'crown_radius_m')
+            if radius is None or not 0 < radius <= 500:
+                raise ValueError('Invalid crown radius')
+            for sid, sample in samples.items():
+                if str(sample['tree_id']) == str(region['tree_id']):
+                    record = normalized.setdefault(sid, {})
+                    if record.get('crown_radius_m', radius) != radius:
+                        raise ValueError('Conflicting crown radii')
+                    record.update(crown_radius_m=radius, crown_source='human')
+    return normalized
+
+
+def normalize_scene_review_payload(
+    payload: dict[str, object],
+    manifest: dict[str, object],
+) -> dict[str, dict[str, object]]:
+    """Validate persistent scene-level completion state from the review UI."""
+    raw_scene_reviews = payload.get("scene_reviews", {})
+    if raw_scene_reviews is None:
+        raw_scene_reviews = {}
+    if not isinstance(raw_scene_reviews, dict):
+        raise ValueError("scene_reviews must be an object")
+
+    scenes = manifest.get("scenes", [])
+    if not isinstance(scenes, list):
+        raise ValueError("registration review manifest scenes must be a list")
+    scene_ids = {
+        str(scene["scene_id"])
+        for scene in scenes
+        if isinstance(scene, dict) and "scene_id" in scene
+    }
+    normalized: dict[str, dict[str, object]] = {}
+    for raw_scene_id, raw_review in raw_scene_reviews.items():
+        scene_id = str(raw_scene_id)
+        if scene_id not in scene_ids:
+            raise ValueError(f"scene review refers to unknown scene {scene_id!r}")
+        if not isinstance(raw_review, dict):
+            raise ValueError(f"scene review {scene_id!r} must be an object")
+        done = raw_review.get("done")
+        more_done = raw_review.get("more_done", False)
+        if not isinstance(more_done, bool):
+            raise ValueError(f"scene review {scene_id!r} more_done must be a boolean")
+        if more_done and done is not True:
+            raise ValueError(f"scene review {scene_id!r} more_done requires done")
+        if done is None or done is False:
+            continue
+        if done is not True:
+            raise ValueError(f"scene review {scene_id!r} done must be a boolean")
+        review: dict[str, object] = {"done": True}
+        completed_at = raw_review.get("completed_at")
+        if completed_at is not None:
+            review["completed_at"] = str(completed_at)[:100]
+        if more_done:
+            review["more_done"] = True
+            if raw_review.get("more_completed_at") is not None:
+                review["more_completed_at"] = str(raw_review["more_completed_at"])[:100]
+        normalized[scene_id] = review
+    return normalized
+
+
+def normalize_mask_region_payload(
+    payload: dict[str, object],
+    manifest: dict[str, object],
+    *, migrate_crowns: bool = True,
+) -> list[dict[str, object]]:
+    """Validate editable scene-local center-loss mask annotations."""
+    raw_regions = payload.get("mask_regions", [])
+    if raw_regions is None:
+        raw_regions = []
+    if not isinstance(raw_regions, list):
+        raise ValueError("mask_regions must be a list")
+    if migrate_crowns:
+        raw_regions = [r for r in raw_regions if not (r.get('mode') == 'confirmed-tree' and r.get('tree_id'))]
+    raw_regions += [{**tree, 'mode': 'confirmed-tree', 'radius_m': tree['crown_radius_m']}
+                   for tree in payload.get('added_trees', {}).values()]
+    if manifest['metadata'].get('curation_schema_version') == 2:
+        from pyproj import Transformer
+        regions = geographic_regions(raw_regions, manifest)
+        projector = Transformer.from_crs('EPSG:4326', manifest['metadata']['curation_crs'], always_xy=True)
+        seen = set()
+        for region in regions:
+            rid = region.get('region_id')
+            if not isinstance(rid, str) or not rid or rid in seen:
+                raise ValueError('Invalid or duplicate mask region ID')
+            seen.add(rid)
+            if region.get('mode') not in MASK_REGION_MODES:
+                raise ValueError('Invalid mask mode')
+            lon, lat, radius = (_finite_optional(region.get(k), k) for k in ['longitude','latitude','radius_m'])
+            if None in (lon,lat,radius) or not -180 <= lon <= 180 or not -90 <= lat <= 90 or not 0 < radius <= 500:
+                raise ValueError('Invalid geographic mask center or radius')
+            region['world_x'], region['world_y'] = projector.transform(lon,lat)
+        return sorted(regions, key=lambda r: r['region_id']) if migrate_crowns else regions
+    scenes = manifest.get("scenes", [])
+    samples = manifest.get("samples", [])
+    if not isinstance(scenes, list) or not isinstance(samples, list):
+        raise ValueError("registration review manifest scenes and samples must be lists")
+    scenes_by_id = {
+        str(scene["scene_id"]): scene
+        for scene in scenes
+        if isinstance(scene, dict) and "scene_id" in scene
+    }
+    samples_by_id = {
+        str(sample["sample_id"]): sample
+        for sample in samples
+        if isinstance(sample, dict) and "sample_id" in sample
+    }
+    normalized: list[dict[str, object]] = []
+    region_ids: set[str] = set()
+    for raw_region in raw_regions:
+        if not isinstance(raw_region, dict):
+            raise ValueError("every mask region must be an object")
+        region_id = str(raw_region.get("region_id", ""))[:200]
+        if not region_id:
+            raise ValueError("every mask region must contain a region_id")
+        if region_id in region_ids:
+            raise ValueError(f"duplicate mask region {region_id!r}")
+        region_ids.add(region_id)
+        scene_id = str(raw_region.get("scene_id", ""))
+        scene = scenes_by_id.get(scene_id)
+        if scene is None:
+            raise ValueError(f"mask region refers to unknown scene {scene_id!r}")
+        anchor_sample_id = str(raw_region.get("anchor_sample_id", ""))
+        sample = samples_by_id.get(anchor_sample_id)
+        if sample is None or str(sample.get("scene_id")) != scene_id:
+            raise ValueError("mask region anchor must be a sample in the same scene")
+        mode = str(raw_region.get("mode", ""))
+        if mode not in MASK_REGION_MODES:
+            raise ValueError(f"mask region has unknown mode {mode!r}")
+        image_x = _finite_optional(raw_region.get("image_x"), "image_x")
+        image_y = _finite_optional(raw_region.get("image_y"), "image_y")
+        east_m = _finite_optional(raw_region.get("east_m"), "east_m")
+        north_m = _finite_optional(raw_region.get("north_m"), "north_m")
+        radius_m = _finite_optional(raw_region.get("radius_m"), "radius_m")
+        if None in {image_x, image_y, east_m, north_m, radius_m}:
+            raise ValueError("mask region is missing its center or radius")
+        if radius_m <= 0 or radius_m > 500:
+            raise ValueError("mask region radius must be greater than zero and at most 500 m")
+        width = float(scene.get("image_width", sample.get("image_width", 0)))
+        height = float(scene.get("image_height", sample.get("image_height", 0)))
+        if width > 0 and not 0 <= image_x <= width:
+            raise ValueError("mask region image_x lies outside its scene")
+        if height > 0 and not 0 <= image_y <= height:
+            raise ValueError("mask region image_y lies outside its scene")
+        region: dict[str, object] = {
+            "region_id": region_id,
+            "scene_id": scene_id,
+            "anchor_sample_id": anchor_sample_id,
+            "mode": mode,
+            "image_x": image_x,
+            "image_y": image_y,
+            "east_m": east_m,
+            "north_m": north_m,
+            "radius_m": radius_m,
+            "source": str(raw_region.get("source", "human"))[:100],
+        }
+        if raw_region.get("created_at") is not None:
+            region["created_at"] = str(raw_region["created_at"])[:100]
+        normalized.append(region)
     return normalized
 
 
@@ -109,22 +333,58 @@ def persist_review_payload(review_dir: str | Path, payload: dict[str, object]) -
     ):
         raise ValueError("review payload does not match this registration review")
     reviews = normalize_review_payload(payload, manifest)
+    path = directory / "reviews.json"
+    current = load_persisted_reviews(directory)
+    base_revision = payload.get("base_revision")
+    if base_revision is not None and str(base_revision) != current["state_revision"]:
+        raise ReviewStateConflictError(
+            "saved reviews changed in another tab; reload before saving"
+        )
+    if "scene_reviews" in payload:
+        scene_reviews = normalize_scene_review_payload(payload, manifest)
+    elif path.exists():
+        scene_reviews = load_persisted_reviews(directory)["scene_reviews"]
+    else:
+        scene_reviews = {}
+    if "mask_regions" in payload:
+        mask_regions = normalize_mask_region_payload(payload, manifest)
+    elif path.exists():
+        mask_regions = load_persisted_reviews(directory)["mask_regions"]
+    else:
+        mask_regions = []
     persisted = {
         "schema_version": 1,
         "metadata": metadata,
         "saved_at": datetime.now(UTC).isoformat(),
         "reviews": reviews,
+        "scene_reviews": scene_reviews,
+        "mask_regions": mask_regions,
     }
-    path = directory / "reviews.json"
-    _write_json_atomic(path, persisted)
-    return {"path": str(path), "reviews": len(reviews)}
+    _write_json_atomic(path, storage_payload(persisted, manifest))
+    state_revision = load_persisted_reviews(directory)['state_revision']
+    return {
+        "path": str(path),
+        "reviews": len(reviews),
+        "completed_scenes": len(scene_reviews),
+        "mask_regions": len(mask_regions),
+        "state_revision": state_revision,
+    }
 
 
-def load_persisted_reviews(review_dir: str | Path) -> dict[str, object]:
+def load_persisted_reviews(review_dir: str | Path, *, migrate_crowns: bool = True) -> dict[str, object]:
     directory = Path(review_dir)
     path = directory / "reviews.json"
     if not path.exists():
-        return {"schema_version": 1, "reviews": {}}
+        reviews: dict[str, dict[str, object]] = {}
+        scene_reviews: dict[str, dict[str, object]] = {}
+        mask_regions: list[dict[str, object]] = []
+        return {
+            "schema_version": 1,
+            "reviews": reviews,
+            "scene_reviews": scene_reviews,
+            "mask_regions": mask_regions,
+            "state_revision": _review_state_sha256(reviews, scene_reviews, mask_regions),
+        }
     manifest = _read_manifest(directory)
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload_metadata = payload.get("metadata", {})
@@ -132,15 +392,147 @@ def load_persisted_reviews(review_dir: str | Path) -> dict[str, object]:
         None,
         manifest["metadata"].get("review_id"),
     ):
+        reviews: dict[str, dict[str, object]] = {}
+        scene_reviews: dict[str, dict[str, object]] = {}
+        mask_regions: list[dict[str, object]] = []
         return {
             "schema_version": 1,
             "metadata": manifest["metadata"],
-            "reviews": {},
+            "reviews": reviews,
+            "scene_reviews": scene_reviews,
+            "mask_regions": mask_regions,
+            "state_revision": _review_state_sha256(reviews, scene_reviews, mask_regions),
         }
+    reviews = normalize_review_payload(payload, manifest, migrate_crowns=migrate_crowns)
+    scene_reviews = normalize_scene_review_payload(payload, manifest)
+    mask_regions = normalize_mask_region_payload(payload, manifest, migrate_crowns=migrate_crowns)
     return {
         "schema_version": 1,
         "metadata": manifest["metadata"],
-        "reviews": normalize_review_payload(payload, manifest),
+        "reviews": reviews,
+        "scene_reviews": scene_reviews,
+        "mask_regions": mask_regions,
+        "state_revision": _review_state_sha256(reviews, scene_reviews, mask_regions),
+    }
+
+
+def snapshot_registration_annotations(
+    config: ProjectConfig,
+    raster_path: str | Path,
+    *,
+    review_dir: str | Path | None = None,
+    reviews_path: str | Path | None = None,
+    archive_review_dir: str | Path | None = None,
+) -> dict[str, object]:
+    """Publish a compact, Git-trackable copy of registration annotations."""
+    raster = Path(raster_path).resolve()
+    directory = (
+        Path(review_dir)
+        if review_dir is not None
+        else config.paths.root / "qa" / "registration" / raster.stem
+    )
+    manifest = _read_manifest(directory)
+    metadata = manifest["metadata"]
+    if Path(str(metadata.get("source_raster", ""))).name != raster.name:
+        raise ValueError("registration review was generated for a different raster")
+
+    source_reviews = Path(reviews_path) if reviews_path is not None else directory / "reviews.json"
+    if not source_reviews.exists():
+        raise FileNotFoundError(
+            f"no saved reviews found at {source_reviews}; use the served UI or export its JSON"
+        )
+    raw_payload = json.loads(source_reviews.read_text(encoding="utf-8"))
+    payload_metadata = raw_payload.get("metadata", {})
+    if isinstance(payload_metadata, dict) and payload_metadata.get("review_id") not in (
+        None,
+        metadata.get("review_id"),
+    ):
+        raise ValueError("saved reviews do not match this registration review")
+    reviews = normalize_review_payload(raw_payload, manifest)
+    scene_reviews = normalize_scene_review_payload(raw_payload, manifest)
+    mask_regions = normalize_mask_region_payload(raw_payload, manifest)
+    canonical_reviews = {
+        "schema_version": 1,
+        "metadata": metadata,
+        "saved_at": raw_payload.get("saved_at", datetime.now(UTC).isoformat()),
+        "reviews": reviews,
+        "scene_reviews": scene_reviews,
+        "mask_regions": mask_regions,
+    }
+
+    city = _safe_path_segment(config.inventory.city.lower(), "city")
+    review_id = _safe_path_segment(metadata.get("review_id"), "review_id")
+    bundle_dir = config.paths.annotations / city / review_id
+    manifest_path = bundle_dir / "manifest.json"
+    reviews_output_path = bundle_dir / "reviews.json"
+    _write_json_atomic(manifest_path, manifest)
+    _write_json_atomic(reviews_output_path, storage_payload(canonical_reviews, manifest))
+
+    state_sha256 = _review_state_sha256(reviews, scene_reviews, mask_regions)
+    manifest_sha256 = _json_sha256(manifest)
+    feedback_source = directory / "training-feedback.json"
+    feedback_output = bundle_dir / "training-feedback.json"
+    current_feedback = False
+    if feedback_source.exists():
+        feedback = json.loads(feedback_source.read_text(encoding="utf-8"))
+        current_feedback = (
+            feedback.get("source_reviews_sha256") == state_sha256
+            and feedback.get("source_manifest_sha256") == manifest_sha256
+        )
+        if current_feedback:
+            _write_json_atomic(feedback_output, feedback)
+    if not current_feedback:
+        feedback_output.unlink(missing_ok=True)
+
+    status_counts = {status: 0 for status in sorted(REVIEW_STATUSES)}
+    for review in reviews.values():
+        status = review.get("status")
+        if status in status_counts:
+            status_counts[str(status)] += 1
+    files = {
+        "manifest.json": _file_record(manifest_path),
+        "reviews.json": _file_record(reviews_output_path),
+    }
+    if current_feedback:
+        files["training-feedback.json"] = _file_record(feedback_output)
+    bundle = {
+        "schema_version": 1,
+        "created_at": datetime.now(UTC).isoformat(),
+        "city": config.inventory.city,
+        "dataset": config.dataset,
+        "experiment": config.experiment,
+        "review_id": metadata.get("review_id"),
+        "source_raster_name": raster.name,
+        "images_included": False,
+        "feedback_current": current_feedback,
+        "review_state_sha256": state_sha256,
+        "source_manifest_sha256": manifest_sha256,
+        "summary": {
+            "samples": len(manifest["samples"]),
+            "completed_scenes": len(scene_reviews),
+            "mask_regions": len(mask_regions),
+            "status_counts": status_counts,
+        },
+        "files": files,
+    }
+    bundle_path = bundle_dir / "bundle.json"
+    _write_json_atomic(bundle_path, bundle)
+    if (config.paths.root / 'curation-archive' / 'ENABLED').exists():
+        from urban_tree_ml.curation_archive import capture
+
+        error_path = config.paths.root / 'curation-archive' / 'errors' / f'{city}.json'
+        try:
+            capture(config.paths.root, bundle_dir, archive_review_dir or directory, raster)
+            _write_json_atomic(error_path, {'error': None})
+        except (OSError, ValueError, KeyError) as error:
+            _write_json_atomic(error_path, {'error': str(error)})
+    return {
+        "annotation_bundle": str(bundle_dir),
+        "bundle_manifest": str(bundle_path),
+        "feedback_current": current_feedback,
+        "reviews": len(reviews),
+        "completed_scenes": len(scene_reviews),
+        "mask_regions": len(mask_regions),
     }
 
 
@@ -204,40 +596,63 @@ def finalize_registration_feedback(
     ):
         raise ValueError("saved reviews do not match this registration review")
     reviews = normalize_review_payload(raw_payload, manifest)
+    scene_reviews = normalize_scene_review_payload(raw_payload, manifest)
+    mask_regions = normalize_mask_region_payload(raw_payload, manifest)
     canonical = {
         "schema_version": 1,
         "metadata": metadata,
         "saved_at": datetime.now(UTC).isoformat(),
         "reviews": reviews,
+        "scene_reviews": scene_reviews,
+        "mask_regions": mask_regions,
     }
-    _write_json_atomic(directory / "reviews.json", canonical)
+    _write_json_atomic(directory / "reviews.json", storage_payload(canonical, manifest))
 
     samples = {str(sample["sample_id"]): sample for sample in manifest["samples"]}
+    scenes = {
+        str(scene["scene_id"]): scene
+        for scene in manifest.get("scenes", [])
+        if isinstance(scene, dict) and "scene_id" in scene
+    }
     status_counts = {status: 0 for status in sorted(REVIEW_STATUSES)}
+    source_counts: dict[str, int] = {}
+    heuristic_counts: dict[str, int] = {}
     training_offsets: list[tuple[float, float]] = []
     validation_offsets: list[tuple[float, float]] = []
     exclusions: list[dict[str, str]] = []
     point_corrections: list[dict[str, str | float]] = []
     ignored_test_reviews = 0
+    emitted_trees = set()
     for sample_id, review in reviews.items():
+        identity = (str(samples[sample_id]['tree_id']), str(samples[sample_id]['split']))
+        if identity in emitted_trees:
+            continue
+        emitted_trees.add(identity)
         status = review.get("status")
         if status is None:
             continue
         status_counts[str(status)] += 1
+        source = str(review.get("source", "unspecified"))
+        source_counts[source] = source_counts.get(source, 0) + 1
+        if source == "heuristic":
+            heuristic_id = str(review.get("heuristic_id", "unspecified"))
+            heuristic_counts[heuristic_id] = heuristic_counts.get(heuristic_id, 0) + 1
         sample = samples[sample_id]
         split = str(sample["split"])
         if split == "test":
             ignored_test_reviews += 1
             continue
-        if status in {"not-tree", "uncertain"}:
-            exclusions.append(
-                {
-                    "tree_id": str(sample["tree_id"]),
-                    "split": split,
-                    "reason": str(status),
-                    "sample_id": sample_id,
-                }
-            )
+        if status in {"not-tree", "uncertain", "duplicate", "occluded"}:
+            exclusion = {
+                "tree_id": str(sample["tree_id"]),
+                "split": split,
+                "reason": str(status),
+                "sample_id": sample_id,
+                "source": source,
+            }
+            if review.get("heuristic_id") is not None:
+                exclusion["heuristic_id"] = str(review["heuristic_id"])
+            exclusions.append(exclusion)
         else:
             offset = _offset_for_review(review)
             if status == "offset":
@@ -255,6 +670,56 @@ def finalize_registration_feedback(
             elif split == "validation":
                 validation_offsets.append(offset)
 
+    region_overrides: list[dict[str, object]] = []
+    for sample_id, review in reviews.items():
+        sample = samples[sample_id]
+        if review.get('crown_radius_m') and sample['split'] in {'train', 'validation'}:
+            tid = str(sample['tree_id'])
+            if not any(r.get('tree_id') == tid and sample['split'] in r['splits'] for r in region_overrides):
+                region_overrides.append(dict(region_id='crown-'+tid, mode='confirmed-tree', tree_id=tid,
+                    splits=[sample['split']], anchor_longitude=sample['longitude'], anchor_latitude=sample['latitude'],
+                    east_m=0., north_m=0., radius_m=review['crown_radius_m'], source='human'))
+    ignored_test_regions = 0
+    for region in mask_regions:
+        if 'longitude' in region:
+            region_overrides.append({
+                'region_id':region['region_id'], 'mode':region['mode'],
+                **{k:region[k] for k in ['tree_id','species','identification_source'] if k in region},
+                'splits':['train','validation'], 'anchor_longitude':region['longitude'],
+                'anchor_latitude':region['latitude'], 'east_m':0.0,'north_m':0.0,
+                'radius_m':region['radius_m'], 'source':region.get('source','human')})
+            continue
+        scene = scenes[str(region["scene_id"])]
+        splits = sorted(
+            {
+                str(split)
+                for split in scene.get("splits", [])
+                if str(split) in {"train", "validation"}
+            }
+        )
+        if not splits:
+            ignored_test_regions += 1
+            continue
+        anchor = samples[str(region["anchor_sample_id"])]
+        longitude = _finite_optional(anchor.get("longitude"), "longitude")
+        latitude = _finite_optional(anchor.get("latitude"), "latitude")
+        if longitude is None or latitude is None:
+            raise ValueError("mask region anchor is missing longitude or latitude")
+        region_overrides.append(
+            {
+                "region_id": region["region_id"],
+                "scene_id": region["scene_id"],
+                "mode": region["mode"],
+                "splits": splits,
+                "anchor_longitude": longitude,
+                "anchor_latitude": latitude,
+                "east_m": region["east_m"],
+                "north_m": region["north_m"],
+                "radius_m": region["radius_m"],
+                "source": region.get("source", "human"),
+            }
+        )
+
     training_summary = _offset_summary(training_offsets)
     enough_reviews = len(training_offsets) >= minimum_training_reviews
     east_m = float(training_summary["east_median"] or 0.0) if enough_reviews else 0.0
@@ -269,9 +734,16 @@ def finalize_registration_feedback(
         "review_id": metadata.get("review_id"),
         "source_raster_name": raster.name,
         "source_raster": str(raster),
+        "source_reviews_sha256": _review_state_sha256(
+            reviews, scene_reviews, mask_regions
+        ),
+        "source_manifest_sha256": _json_sha256(manifest),
         "reviews": {
             "status_counts": status_counts,
+            "source_counts": source_counts,
+            "heuristic_counts": heuristic_counts,
             "ignored_test_reviews": ignored_test_reviews,
+            "completed_scenes": len(scene_reviews),
         },
         "registration": {
             "status": "applied" if enough_reviews else "insufficient-training-reviews",
@@ -283,11 +755,20 @@ def finalize_registration_feedback(
         },
         "exclusions": exclusions,
         "point_corrections": point_corrections,
+        "region_overrides": region_overrides,
+        "ignored_test_regions": ignored_test_regions,
     }
     feedback_path = directory / "training-feedback.json"
     _write_json_atomic(feedback_path, feedback)
+    snapshot = snapshot_registration_annotations(
+        config,
+        raster,
+        review_dir=directory,
+    )
     return {
         "feedback": str(feedback_path),
+        "annotation_bundle": snapshot["annotation_bundle"],
+        "bundle_manifest": snapshot["bundle_manifest"],
         "registration_status": feedback["registration"]["status"],
         "correction_m": {"east": east_m, "north": north_m},
         "training_registration_reviews": len(training_offsets),
@@ -295,6 +776,9 @@ def finalize_registration_feedback(
         "excluded_points": len(exclusions),
         "point_corrected_points": len(point_corrections),
         "ignored_test_reviews": ignored_test_reviews,
+        "completed_scenes": len(scene_reviews),
+        "mask_regions": len(region_overrides),
+        "ignored_test_regions": ignored_test_regions,
     }
 
 
@@ -336,4 +820,44 @@ def load_training_feedback(
         if key in correction_keys:
             raise ValueError(f"duplicate registration point correction for {key!r}")
         correction_keys.add(key)
+    region_overrides = feedback.get("region_overrides", [])
+    if not isinstance(region_overrides, list):
+        raise ValueError("registration feedback region overrides must be a list")
+    region_ids: set[str] = set()
+    for region in region_overrides:
+        if not isinstance(region, dict):
+            raise ValueError("every registration region override must be an object")
+        required = {
+            "region_id",
+            "mode",
+            "splits",
+            "anchor_longitude",
+            "anchor_latitude",
+            "east_m",
+            "north_m",
+            "radius_m",
+        }
+        if not required.issubset(region):
+            raise ValueError("registration region override is missing required fields")
+        region_id = str(region["region_id"])
+        if region_id in region_ids:
+            raise ValueError(f"duplicate registration region override {region_id!r}")
+        region_ids.add(region_id)
+        if region["mode"] not in MASK_REGION_MODES:
+            raise ValueError(f"registration region override has unknown mode {region['mode']!r}")
+        splits = region["splits"]
+        if not isinstance(splits, list) or not splits or any(
+            split not in {"train", "validation"} for split in splits
+        ):
+            raise ValueError("registration region override has invalid development splits")
+        for field in (
+            "anchor_longitude",
+            "anchor_latitude",
+            "east_m",
+            "north_m",
+            "radius_m",
+        ):
+            _finite_optional(region[field], field)
+        if float(region["radius_m"]) <= 0 or float(region["radius_m"]) > 500:
+            raise ValueError("registration region override radius is invalid")
     return feedback
