@@ -55,3 +55,5 @@ Notes:
 Rules live in `rules/firestore.rules` and `rules/storage.rules`. Terraform creates a new ruleset and release whenever the file content changes.
 
 Current posture: authenticated users can only create submissions/checkins owned by their own UID, and read/write only their own data. Update/delete are disallowed for submissions (offline pipeline handles moderation via admin SDK).
+
+`rules/tests/` runs both files against the Firebase emulators (the `firestore-rules` CI job); see its README. Deploy rules before a frontend that depends on them: the check-in batch includes the counter and marker writes, so an app ahead of its rules fails every check-in, not just the count.

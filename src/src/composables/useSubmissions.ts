@@ -9,7 +9,6 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
   writeBatch,
   Timestamp,
   where,
@@ -255,7 +254,7 @@ function mapCheckinDoc(id: string, data: Record<string, unknown>): Checkin {
   }
 }
 
-export async function recordCheckin(input: CheckinInput): Promise<string> {
+export async function recordCheckin(input: CheckinInput): Promise<{ id: string; counted: boolean }> {
   const { db: firestore, storage: bucket } = requireFirebase()
   const user = await signInIfNeeded()
 
@@ -305,31 +304,62 @@ export async function recordCheckin(input: CheckinInput): Promise<string> {
     at: serverTimestamp(),
   }
   const checkinRef = doc(collection(firestore, 'checkins'))
-  // The check-in and the tree's public counter are committed together; the
-  // rules only accept a counter bump that names a check-in this batch creates.
-  const batch = writeBatch(firestore)
-  batch.set(checkinRef, docData)
-  batch.set(
-    doc(firestore, 'treeCheckinStats', treeStatsKey(input.treeId)),
-    {
-      treeId: input.treeId,
-      count: increment(1),
-      lastCheckinId: checkinRef.id,
-      lastCheckinAt: serverTimestamp(),
-    },
-    { merge: true },
-  )
-  try {
+  const treeKey = treeStatsKey(input.treeId)
+  const markerRef = doc(firestore, 'treeCheckinMarkers', `${user.uid}_${treeKey}`)
+  const commitCheckin = async (withCount: boolean) => {
+    // The check-in, the tree's public counter and this user's marker for the
+    // tree are committed together: the rules only accept a counter bump that
+    // names a check-in this batch creates, alongside a marker that may move.
+    const batch = writeBatch(firestore)
+    batch.set(checkinRef, docData)
+    if (withCount) {
+      batch.set(
+        doc(firestore, 'treeCheckinStats', treeKey),
+        { treeId: input.treeId, count: increment(1), lastCheckinId: checkinRef.id },
+        { merge: true },
+      )
+      batch.set(markerRef, {
+        userId: user.uid,
+        treeId: input.treeId,
+        lastCheckinId: checkinRef.id,
+        countedAt: serverTimestamp(),
+      })
+    }
     await batch.commit()
+  }
+
+  const marker = await getDoc(markerRef).catch(() => null)
+  const countedAt = marker?.data()?.countedAt
+  const counts = checkinCountsNow(countedAt instanceof Timestamp ? countedAt.toDate() : null)
+  if (!counts) {
+    await commitCheckin(false)
+    return { id: checkinRef.id, counted: false }
+  }
+  try {
+    await commitCheckin(true)
+    return { id: checkinRef.id, counted: true }
   } catch (err) {
-    // Until the rules that admit treeCheckinStats are deployed, the counter
-    // write denies the whole batch. The check-in itself must never depend on
-    // the counter, so record it alone; the count just misses this one.
+    // A clock far enough off, a check-in from another tab, or a frontend that
+    // shipped before its rules can have the bump refused; the check-in itself
+    // never depends on the count, so it is recorded alone.
     if (!isPermissionDenied(err)) throw err
     console.warn('[checkin] counter write refused; recording the check-in without it', err)
-    await setDoc(checkinRef, docData)
+    await commitCheckin(false)
+    return { id: checkinRef.id, counted: false }
   }
-  return checkinRef.id
+}
+
+/**
+ * How often one account can add to a tree's public count. Mirrors the
+ * `treeCheckinMarkers` rule; the client adds a margin so its own clock being a
+ * few minutes fast does not cost the user a failed write.
+ */
+export const CHECKIN_COUNT_WINDOW_MS = 20 * 60 * 60 * 1000
+const CHECKIN_COUNT_CLOCK_MARGIN_MS = 5 * 60 * 1000
+
+export function checkinCountsNow(lastCountedAt: Date | null, now: Date = new Date()): boolean {
+  if (!lastCountedAt) return true
+  return now.getTime() - lastCountedAt.getTime() >= CHECKIN_COUNT_WINDOW_MS + CHECKIN_COUNT_CLOCK_MARGIN_MS
 }
 
 function isPermissionDenied(err: unknown): boolean {
@@ -338,7 +368,6 @@ function isPermissionDenied(err: unknown): boolean {
 
 export interface TreeCheckinStats {
   count: number
-  lastCheckinAt: Date | null
 }
 
 /**
@@ -359,12 +388,8 @@ export async function getTreeCheckinStats(treeId: string): Promise<TreeCheckinSt
   if (e2eEnabled) return e2eTreeCheckinStats(treeId)
   const { db: firestore } = requireFirebase()
   const snap = await getDoc(doc(firestore, 'treeCheckinStats', treeStatsKey(treeId)))
-  if (!snap.exists()) return { count: 0, lastCheckinAt: null }
-  const data = snap.data()
-  return {
-    count: Number(data.count ?? 0),
-    lastCheckinAt: data.lastCheckinAt instanceof Timestamp ? data.lastCheckinAt.toDate() : null,
-  }
+  if (!snap.exists()) return { count: 0 }
+  return { count: Number(snap.data().count ?? 0) }
 }
 
 export interface TreePhotos {

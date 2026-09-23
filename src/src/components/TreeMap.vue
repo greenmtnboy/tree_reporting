@@ -88,7 +88,6 @@
         </div>
         <div v-if="checkinStats" class="tc-social" data-testid="tree-checkin-count">
           <span class="tc-social-count">{{ checkinCountLabel }}</span>
-          <span v-if="checkinLastLabel" class="tc-social-last">{{ checkinLastLabel }}</span>
         </div>
         <button
           v-if="canCheckInToSelectedTree"
@@ -812,38 +811,13 @@ const checkinCountLabel = computed(() => {
   return n === 1 ? '1 check-in' : `${n.toLocaleString()} check-ins`
 })
 
-const checkinLastLabel = computed(() => {
-  const at = checkinStats.value?.lastCheckinAt
-  if (!at || (checkinStats.value?.count ?? 0) === 0) return null
-  return `last ${formatRelativeTime(at)}`
-})
-
-function formatRelativeTime(at: Date): string {
-  const seconds = Math.max(0, (Date.now() - at.getTime()) / 1000)
-  if (seconds < 60) return 'just now'
-  const units: [number, string][] = [
-    [60 * 60 * 24 * 365, 'year'],
-    [60 * 60 * 24 * 30, 'month'],
-    [60 * 60 * 24 * 7, 'week'],
-    [60 * 60 * 24, 'day'],
-    [60 * 60, 'hour'],
-    [60, 'minute'],
-  ]
-  for (const [size, unit] of units) {
-    if (seconds >= size) {
-      const n = Math.floor(seconds / size)
-      return `${n} ${unit}${n === 1 ? '' : 's'} ago`
-    }
-  }
-  return 'just now'
-}
-
-function handleCheckinSuccess(mode: 'checkin' | 'update' | 'missing'): void {
-  // The dialog stays open on its "done" step; only a check-in moves the count.
-  if (mode !== 'checkin' || !checkinDialog.value) return
+function handleCheckinSuccess(mode: 'checkin' | 'update' | 'missing', counted: boolean): void {
+  // The dialog stays open on its "done" step; only a check-in that the rules
+  // let count (once per person per tree per 20 hours) moves the count.
+  if (mode !== 'checkin' || !counted || !checkinDialog.value) return
   if (selectedTree.value?.tree_id !== checkinDialog.value.treeId) return
   const prev = checkinStats.value?.count ?? 0
-  checkinStats.value = { count: prev + 1, lastCheckinAt: new Date() }
+  checkinStats.value = { count: prev + 1 }
 }
 
 // Gap between the card and the map container edge when the anchor is close
@@ -2241,10 +2215,6 @@ onUnmounted(() => {
 
 .tc-social-count {
   color: var(--color-leaf);
-}
-
-.tc-social-last {
-  color: var(--color-muted);
 }
 
 .tc-report-link {

@@ -36,23 +36,51 @@ service cloud.firestore {
       return value == null || value is number;
     }
 
+    function isLatLng(lat, lng) {
+      return lat is number && lng is number
+        && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+    }
+
+    function optionalLatLng(lat, lng) {
+      return (lat == null && lng == null) || isLatLng(lat, lng);
+    }
+
+    // An uploaded photo can only be referenced from the uploader's own folder
+    // for that kind of record, so approving a record can never make the
+    // reviewer publish someone else's private upload.
+    function optionalOwnPhoto(path, folder) {
+      return path == null
+        || (path is string && path.matches(folder + '/' + request.auth.uid + '/[^/]+'));
+    }
+
+    // Same escape as treeStatsKey() in useSubmissions.ts and treeDocKey() in
+    // reviewer/server.ts. Rules' replace() replaces every match.
+    function treeKeyOf(treeId) {
+      return treeId.replace('%', '%25').replace('/', '%2F');
+    }
+
+    function checkinMarkerPath(treeKey) {
+      return /databases/$(database)/documents/treeCheckinMarkers/$(request.auth.uid + '_' + treeKey);
+    }
+
     // A bump of a tree's public check-in counter is only valid alongside the
-    // check-in it counts: the named check-in must not exist before this write,
-    // must exist after it, and must be this user's check-in to this tree. So
-    // the counter can only move by one per new check-in document.
+    // check-in it counts and this user's marker for the tree: the named
+    // check-in must be new, this user's and to this tree, and the marker
+    // (which can only move once every 20 hours) must name the same check-in.
+    // So one account adds at most one to a tree's count per 20 hours.
     function checkinStatsWriteAllowed(treeKey) {
       let data = request.resource.data;
       let checkinPath = /databases/$(database)/documents/checkins/$(data.lastCheckinId);
       return signedIn()
-        && data.keys().hasOnly(['treeId', 'count', 'lastCheckinId', 'lastCheckinAt'])
+        && data.keys().hasOnly(['treeId', 'count', 'lastCheckinId'])
         && data.treeId is string
         && data.lastCheckinId is string
-        // Same escape as treeStatsKey() in useSubmissions.ts.
-        && treeKey == data.treeId.replace('%', '%25').replace('/', '%2F')
-        && data.lastCheckinAt == request.time
+        && treeKey == treeKeyOf(data.treeId)
         && !exists(checkinPath)
         && getAfter(checkinPath).data.userId == request.auth.uid
-        && getAfter(checkinPath).data.treeId == data.treeId;
+        && getAfter(checkinPath).data.treeId == data.treeId
+        && getAfter(checkinMarkerPath(treeKey)).data.countedAt == request.time
+        && getAfter(checkinMarkerPath(treeKey)).data.lastCheckinId == data.lastCheckinId;
     }
 
     match /users/{uid} {
@@ -93,14 +121,28 @@ service cloud.firestore {
                     && request.resource.data.status == 'pending'
                     && request.resource.data.submittedAt == request.time
                     && request.resource.data.keys().hasAll(['userId', 'kind', 'treeId', 'city', 'treeLat', 'treeLng', 'submittedAt', 'status'])
+                    && request.resource.data.keys().hasOnly([
+                         'userId', 'kind', 'treeId', 'city', 'treeLat', 'treeLng',
+                         'userLat', 'userLng', 'distanceMeters', 'currentSpecies',
+                         'currentDbhInches', 'missingReason', 'proposedLat', 'proposedLng',
+                         'proposedSpecies', 'proposedDbhInches', 'notes', 'photoPath',
+                         'submittedAt', 'status'])
                     && request.resource.data.kind in ['missing', 'update']
                     && request.resource.data.treeId is string
                     && request.resource.data.treeId.size() <= 200
+                    && request.resource.data.city is string
+                    && request.resource.data.city.size() <= 100
+                    && isLatLng(request.resource.data.treeLat, request.resource.data.treeLng)
+                    && optionalLatLng(request.resource.data.get('userLat', null), request.resource.data.get('userLng', null))
+                    && optionalNumber(request.resource.data.get('distanceMeters', null))
+                    && optionalString(request.resource.data.get('currentSpecies', null), 200)
+                    && optionalNumber(request.resource.data.get('currentDbhInches', null))
+                    && request.resource.data.get('missingReason', null) in [null, 'removed', 'stump', 'never-existed', 'other']
                     && optionalString(request.resource.data.get('notes', null), 1000)
                     && optionalString(request.resource.data.get('proposedSpecies', null), 200)
-                    && optionalNumber(request.resource.data.get('proposedLat', null))
-                    && optionalNumber(request.resource.data.get('proposedLng', null))
+                    && optionalLatLng(request.resource.data.get('proposedLat', null), request.resource.data.get('proposedLng', null))
                     && optionalNumber(request.resource.data.get('proposedDbhInches', null))
+                    && optionalOwnPhoto(request.resource.data.get('photoPath', null), 'modifications')
                     && modificationRateLimitAllows(request.auth.uid)
                     && getAfter(modificationRateLimitPath(request.auth.uid)).data.userId == request.auth.uid
                     && getAfter(modificationRateLimitPath(request.auth.uid)).data.lastModificationId == modificationId
@@ -152,6 +194,23 @@ service cloud.firestore {
       allow create: if signedIn()
                     && request.resource.data.userId == request.auth.uid
                     && request.resource.data.keys().hasAll(['userId', 'treeId', 'at'])
+                    && request.resource.data.keys().hasOnly([
+                         'userId', 'treeId', 'lat', 'lng', 'treeLat', 'treeLng', 'city',
+                         'distanceMeters', 'photoPath', 'photoReview', 'species', 'treeForm',
+                         'dbhInches', 'plantYear', 'speciesCityCount', 'at'])
+                    && request.resource.data.at == request.time
+                    && request.resource.data.treeId is string
+                    && request.resource.data.treeId.size() <= 200
+                    && optionalString(request.resource.data.get('city', null), 100)
+                    && optionalLatLng(request.resource.data.get('lat', null), request.resource.data.get('lng', null))
+                    && optionalLatLng(request.resource.data.get('treeLat', null), request.resource.data.get('treeLng', null))
+                    && optionalNumber(request.resource.data.get('distanceMeters', null))
+                    && optionalOwnPhoto(request.resource.data.get('photoPath', null), 'checkins')
+                    && optionalString(request.resource.data.get('species', null), 200)
+                    && optionalString(request.resource.data.get('treeForm', null), 100)
+                    && optionalNumber(request.resource.data.get('dbhInches', null))
+                    && optionalNumber(request.resource.data.get('plantYear', null))
+                    && optionalNumber(request.resource.data.get('speciesCityCount', null))
                     // A photo offered as a public tree photo enters review as
                     // 'pending'; only the reviewer moves it on from there.
                     && (!('photoReview' in request.resource.data)
@@ -170,7 +229,8 @@ service cloud.firestore {
     }
 
     // The public per-tree check-in counter on the tree card. Anyone may read
-    // it; it only moves through checkinStatsWriteAllowed().
+    // it; it only moves through checkinStatsWriteAllowed(). It deliberately
+    // holds no timestamp: when someone was last at a tree is not public.
     match /treeCheckinStats/{treeKey} {
       allow read: if true;
       allow create: if checkinStatsWriteAllowed(treeKey)
@@ -178,6 +238,25 @@ service cloud.firestore {
       allow update: if checkinStatsWriteAllowed(treeKey)
                     && request.resource.data.treeId == resource.data.treeId
                     && request.resource.data.count == resource.data.count + 1;
+      allow delete: if false;
+    }
+
+    // One per (user, tree), id `{uid}_{treeKey}`: when this user last added to
+    // the tree's public count. It only moves once 20 hours have passed (so a
+    // daily visit always counts), and only in the same write as the bump it
+    // records; that is what bounds the counter. The owner reads it to decide
+    // whether a new check-in also counts.
+    match /treeCheckinMarkers/{markerId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create, update: if signedIn()
+                            && request.resource.data.keys().hasOnly(['userId', 'treeId', 'lastCheckinId', 'countedAt'])
+                            && request.resource.data.userId == request.auth.uid
+                            && request.resource.data.treeId is string
+                            && markerId == request.auth.uid + '_' + treeKeyOf(request.resource.data.treeId)
+                            && request.resource.data.countedAt == request.time
+                            && (resource == null
+                                || resource.data.countedAt <= request.time - duration.value(20, 'h'))
+                            && getAfter(/databases/$(database)/documents/treeCheckinStats/$(treeKeyOf(request.resource.data.treeId))).data.lastCheckinId == request.resource.data.lastCheckinId;
       allow delete: if false;
     }
   }

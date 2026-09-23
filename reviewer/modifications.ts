@@ -1,3 +1,4 @@
+import { isOwnUpload } from './checkinPhotos.ts'
 import { assertCoordinatesAreInCity, CITY_CODES } from './submissionCity.ts'
 
 /**
@@ -20,6 +21,12 @@ import { assertCoordinatesAreInCity, CITY_CODES } from './submissionCity.ts'
  */
 
 export type ModificationKind = 'missing' | 'update'
+export const MISSING_REASONS = ['removed', 'stump', 'never-existed', 'other'] as const
+export type MissingReason = (typeof MISSING_REASONS)[number]
+
+function isMissingReason(value: unknown): value is MissingReason {
+  return typeof value === 'string' && (MISSING_REASONS as readonly string[]).includes(value)
+}
 export type ModificationStatus = 'pending' | 'published' | 'rejected'
 
 export type PendingModification = {
@@ -74,7 +81,12 @@ export function assertModificationPublishable(modification: PendingModification)
     throw new Error(`Modification city ${modification.city} is not a supported city code`)
   }
   if (!modification.treeId) throw new Error('Modification has no tree id')
-  if (modification.kind === 'missing') return
+  if (modification.kind === 'missing') {
+    if (modification.missingReason != null && !isMissingReason(modification.missingReason)) {
+      throw new Error(`Unknown missing reason ${String(modification.missingReason)}`)
+    }
+    return
+  }
   if (modification.kind !== 'update') throw new Error(`Unknown modification kind ${String(modification.kind)}`)
 
   const lat = finiteOrNull(modification.proposedLat)
@@ -103,7 +115,7 @@ export function modificationExportRow(
     treeId: String(data.treeId ?? ''),
     city: String(data.city ?? '').toUpperCase(),
     kind,
-    missingReason: kind === 'missing' && typeof data.missingReason === 'string' ? data.missingReason : null,
+    missingReason: kind === 'missing' && isMissingReason(data.missingReason) ? data.missingReason : null,
     latitude: isUpdate ? finiteOrNull(data.latitude) : null,
     longitude: isUpdate ? finiteOrNull(data.longitude) : null,
     species: isUpdate ? species : null,
@@ -127,4 +139,43 @@ export function modificationManifest(rows: ModificationExportRow[]): {
     if (!previous || row.publishedAt > previous) latestPublishedAtByCity[row.city] = row.publishedAt
   }
   return { count: rows.length, latestPublishedAt, latestPublishedAtByCity }
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' ? value : null
+}
+
+/**
+ * The review queue's row for a modification. Built field by field rather than
+ * spread from the document: the id must be the document's own (a stored `id`
+ * field would otherwise point Approve at another record), and the page
+ * renders every value into markup.
+ */
+export function modificationListItem(
+  id: string,
+  data: Record<string, unknown> & { submittedAt?: { toDate(): Date } },
+  photoUrl: (path: string) => string,
+) {
+  const photoPath = isOwnUpload(data.photoPath, 'modifications', data.userId) ? data.photoPath : null
+  return {
+    id,
+    userId: stringOrNull(data.userId),
+    kind: data.kind === 'missing' ? 'missing' : 'update',
+    treeId: stringOrNull(data.treeId),
+    city: stringOrNull(data.city),
+    treeLat: finiteOrNull(data.treeLat),
+    treeLng: finiteOrNull(data.treeLng),
+    distanceMeters: finiteOrNull(data.distanceMeters),
+    currentSpecies: stringOrNull(data.currentSpecies),
+    currentDbhInches: finiteOrNull(data.currentDbhInches),
+    missingReason: isMissingReason(data.missingReason) ? data.missingReason : null,
+    proposedLat: finiteOrNull(data.proposedLat),
+    proposedLng: finiteOrNull(data.proposedLng),
+    proposedSpecies: stringOrNull(data.proposedSpecies),
+    proposedDbhInches: finiteOrNull(data.proposedDbhInches),
+    notes: stringOrNull(data.notes),
+    status: stringOrNull(data.status),
+    submittedAt: data.submittedAt?.toDate().toISOString() ?? null,
+    photoUrl: photoPath ? photoUrl(photoPath) : null,
+  }
 }

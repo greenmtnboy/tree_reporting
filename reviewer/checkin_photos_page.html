@@ -24,7 +24,13 @@ nav{margin-bottom:14px}nav a{color:#8cab94;margin-right:14px}a{color:#a7e3b2}
 <script>
 const queue = document.querySelector('#queue'), status = document.querySelector('#status');
 const esc = v => String(v ?? '—').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const osm = (lat, lng) => lat == null ? '—' : `<a href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=20/${lat}/${lng}" target="_blank" rel="noopener">${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}</a>`;
+// Coordinates come from client-written documents: only a finite number ever
+// reaches the markup, whatever the document holds.
+const osm = (lat, lng) => {
+  const a = lat == null ? NaN : Number(lat), b = lng == null ? NaN : Number(lng);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return '—';
+  return `<a href="https://www.openstreetmap.org/?mlat=${a}&mlon=${b}#map=20/${a}/${b}" target="_blank" rel="noopener">${a.toFixed(6)}, ${b.toFixed(6)}</a>`;
+};
 async function load() {
   status.textContent = 'Loading…';
   const r = await fetch('/api/checkin-photos');

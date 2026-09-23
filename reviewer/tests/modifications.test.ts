@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import {
   assertModificationPublishable,
   modificationExportRow,
+  modificationListItem,
   modificationManifest,
   type PendingModification,
 } from '../modifications.ts'
@@ -123,4 +124,41 @@ test('the manifest keeps the latest publish per city', () => {
     USSFO: '2026-09-03T00:00:00.000Z',
     USBOS: '2026-09-02T00:00:00.000Z',
   })
+})
+
+test('a missing-tree report with an unknown reason is refused, and never exported', () => {
+  assert.throws(
+    () => assertModificationPublishable(pending({ kind: 'missing', missingReason: 'x'.repeat(5000) })),
+    /Unknown missing reason/,
+  )
+  const row = modificationExportRow('m1', { kind: 'missing', treeId: 't', city: 'ussfo', missingReason: '<b>hi</b>' }, null)
+  assert.equal(row.missingReason, null)
+})
+
+test('the queue row keeps the document id even when the document stores its own', () => {
+  const row = modificationListItem('real-id', { ...pending(), id: 'other-id' }, (p) => p)
+  assert.equal(row.id, 'real-id')
+})
+
+test('the queue row carries only typed values and the owner\'s own photo', () => {
+  const hostile = '1"><img src=x onerror=alert(1)>'
+  const row = modificationListItem('m1', {
+    ...pending(),
+    treeLat: hostile,
+    proposedLat: hostile,
+    proposedDbhInches: hostile,
+    missingReason: hostile,
+    photoPath: 'checkins/u2/p.jpg',
+    extra: 'field',
+  }, (p) => p)
+  assert.equal(row.treeLat, null)
+  assert.equal(row.proposedLat, null)
+  assert.equal(row.proposedDbhInches, null)
+  assert.equal(row.missingReason, null)
+  assert.equal(row.photoUrl, null)
+  assert.equal('extra' in row, false)
+  assert.equal(
+    modificationListItem('m2', { ...pending(), photoPath: 'modifications/u1/m2.jpg' }, (p) => p).photoUrl,
+    'modifications/u1/m2.jpg',
+  )
 })

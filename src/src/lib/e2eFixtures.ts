@@ -215,7 +215,7 @@ export function e2eModifications(): TreeModification[] | null {
  */
 export function e2eTreeCheckinStats(treeId: string): TreeCheckinStats {
   const count = e2eFixtures()?.treeCheckinCounts?.[treeId] ?? 0
-  return { count, lastCheckinAt: null }
+  return { count }
 }
 
 /** The tree card's visitor photos; like the counter, never read from Firestore in e2e. */

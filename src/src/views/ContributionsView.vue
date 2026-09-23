@@ -77,7 +77,7 @@
           <h2 class="section-title">Tree reports</h2>
           <p v-if="loading" class="muted">Loading…</p>
           <p v-else-if="modifications.length === 0" class="muted">
-            No reports yet. Standing at a tree that's gone or mapped wrong? Open it on the map and choose "Suggest a fix" or "Tree is gone".
+            No reports yet. Standing at a tree that's gone or mapped wrong? On your phone, open it on the map and choose "Missing or mapped wrong? Report it".
           </p>
           <ul v-else class="checkin-list" data-testid="modification-list">
             <li v-for="m in modifications" :key="m.id" class="checkin-item">

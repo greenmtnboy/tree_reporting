@@ -58,8 +58,19 @@ write failed.
 
 A check-in photo is private unless the visitor ticks **Submit as a photo of
 this tree** in the check-in dialog, which records `photoReview: 'pending'` on
-the check-in (the rules allow no other value from the client). The check-in
-counts immediately; only the photo waits.
+the check-in (the rules allow no other value from the client, and only a
+`photoPath` in that user's own `checkins/{uid}/` folder). The check-in counts
+immediately; only the photo waits. Publishing checks the folder again, so a
+check-in can never make the reviewer publish someone else's upload.
+
+The public counter, `treeCheckinStats/{treeKey}`, moves by one per person per
+tree per 20 hours: the rules only accept a bump written alongside a new
+check-in and that user's `treeCheckinMarkers/{uid}_{treeKey}` marker, which
+cannot move again inside the window. It holds a count and nothing about when.
+
+There is no unpublish route yet: taking a published photo down means removing
+its URL from `treePhotos/{treeKey}` and deleting the object in the public
+bucket by hand.
 
 `/photos` lists pending ones. **Publish** re-encodes the photo through `sharp`
 exactly as submission photos are (no EXIF, IPTC or XMP), writes it to

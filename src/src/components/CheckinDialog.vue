@@ -167,7 +167,10 @@
               <span class="muted">— a reviewer checks it before it appears on the tree card.</span>
             </span>
           </label>
-          <p v-if="mode === 'update' && !hasChanges" class="muted">Change the pin, species or diameter to send a fix.</p>
+          <p v-if="mode === 'update' && dbhInvalid" class="error-text" data-testid="checkin-dbh-invalid">
+            Diameter must be a number of inches between 0 and {{ MAX_DBH_IN }}.
+          </p>
+          <p v-else-if="mode === 'update' && !hasChanges" class="muted">Change the pin, species or diameter to send a fix.</p>
 
           <div class="actions">
             <button type="button" class="btn-secondary" @click="handleDismiss">Cancel</button>
@@ -243,7 +246,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'success', mode: Mode): void
+  // `counted`: whether a check-in added to the tree's public count (at most
+  // once per person per tree per 20 hours). Always false for a report.
+  (e: 'success', mode: Mode, counted: boolean): void
 }>()
 
 // One visit, three things to say about the tree: it's here (check in), it's
@@ -277,7 +282,7 @@ const MISSING_REASONS: { value: MissingReason; label: string }[] = [
   { value: 'never-existed', label: 'Never a tree here' },
   { value: 'other', label: 'Something else' },
 ]
-// GPS jitter on a dragged pin is a few metres; below this the position is
+// The pin only moves when dragged or recentred; below this a nudge is
 // treated as unchanged rather than sent as a sub-metre "correction".
 const MIN_MOVE_M = 1
 
@@ -319,11 +324,19 @@ const movedMeters = computed(
   () => haversineKm(props.treeLat, props.treeLng, proposedLat.value, proposedLng.value) * 1000,
 )
 
+const MAX_DBH_IN = 400
+
 const proposedDbhValue = computed<number | null>(() => {
   if (proposedDbh.value === '' || proposedDbh.value == null) return null
   const n = Number(proposedDbh.value)
-  return Number.isFinite(n) && n > 0 && n <= 400 ? n : null
+  return Number.isFinite(n) && n > 0 && n <= MAX_DBH_IN ? n : null
 })
+
+// Something typed that proposedDbhValue refuses, so the user is told why the
+// fix is not being sent rather than seeing Send stay disabled.
+const dbhInvalid = computed(
+  () => proposedDbh.value !== '' && proposedDbh.value != null && proposedDbhValue.value == null,
+)
 
 const speciesChanged = computed(() => {
   const next = proposedSpecies.value.trim()
@@ -422,8 +435,9 @@ async function handleSubmit() {
   }
   try {
     const city = closestCityTo(props.treeLat, props.treeLng)
+    let counted = false
     if (mode.value === 'checkin') {
-      await recordCheckin({
+      ;({ counted } = await recordCheckin({
         treeId: props.treeId,
         treeLat: props.treeLat,
         treeLng: props.treeLng,
@@ -439,7 +453,7 @@ async function handleSubmit() {
         plantYear: props.plantYear ?? null,
         speciesCityCount: speciesCityCount.value,
         onProgress,
-      })
+      }))
     } else {
       const moved = movedMeters.value >= MIN_MOVE_M
       await submitTreeModification({
@@ -464,7 +478,7 @@ async function handleSubmit() {
       })
     }
     state.value = 'done'
-    emit('success', mode.value)
+    emit('success', mode.value, counted)
   } catch (err) {
     submitError.value = (err as Error).message ?? 'Unknown error'
     state.value = 'error'

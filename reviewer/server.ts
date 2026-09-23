@@ -6,10 +6,17 @@ import path from 'node:path'
 import sharp from 'sharp'
 
 import { createSatelliteRouter, TileStore } from './satellite.ts'
-import { checkinPhotoObjectPath, nextTreePhotos, treeDocKey } from './checkinPhotos.ts'
+import {
+  assertCheckinPhotoPublishable,
+  checkinPhotoListItem,
+  checkinPhotoObjectPath,
+  nextTreePhotos,
+  treeDocKey,
+} from './checkinPhotos.ts'
 import {
   assertModificationPublishable,
   modificationExportRow,
+  modificationListItem,
   modificationManifest,
   type PendingModification,
 } from './modifications.ts'
@@ -311,15 +318,7 @@ app.get('/api/modifications', async (_req, res, next) => {
       .orderBy('submittedAt', 'asc')
       .limit(100)
       .get()
-    res.json(snapshot.docs.map((document) => {
-      const data = document.data() as PendingModification & { submittedAt?: Timestamp }
-      return {
-        id: document.id,
-        ...data,
-        submittedAt: data.submittedAt?.toDate().toISOString() ?? null,
-        photoUrl: data.photoPath ? localPhotoUrl(data.photoPath) : null,
-      }
-    }))
+    res.json(snapshot.docs.map((document) => modificationListItem(document.id, document.data(), localPhotoUrl)))
   } catch (error) {
     next(error)
   }
@@ -413,21 +412,7 @@ app.get('/api/checkin-photos', async (_req, res, next) => {
       .orderBy('at', 'asc')
       .limit(100)
       .get()
-    res.json(snapshot.docs.map((document) => {
-      const data = document.data() as PendingCheckinPhoto
-      return {
-        id: document.id,
-        treeId: data.treeId,
-        city: data.city ?? null,
-        species: data.species ?? null,
-        treeLat: data.treeLat ?? null,
-        treeLng: data.treeLng ?? null,
-        distanceMeters: data.distanceMeters ?? null,
-        userId: data.userId,
-        at: data.at?.toDate().toISOString() ?? null,
-        photoUrl: data.photoPath ? localPhotoUrl(data.photoPath) : null,
-      }
-    }))
+    res.json(snapshot.docs.map((document) => checkinPhotoListItem(document.id, document.data(), localPhotoUrl)))
   } catch (error) {
     next(error)
   }
@@ -437,11 +422,7 @@ app.post('/api/checkin-photos/:id/approve', async (req, res, next) => {
   try {
     const checkinRef = db.collection('checkins').doc(req.params.id)
     const pending = await checkinRef.get()
-    if (!pending.exists) throw new Error('Check-in not found')
-    const checkin = pending.data() as PendingCheckinPhoto
-    if (checkin.photoReview !== 'pending') throw new Error(`Photo is already ${checkin.photoReview ?? 'not offered'}`)
-    if (!checkin.photoPath) throw new Error('Check-in has no photo')
-    if (!checkin.treeId) throw new Error('Check-in has no tree id')
+    const checkin = assertCheckinPhotoPublishable(pending.data() as PendingCheckinPhoto | undefined)
 
     // Re-encode into the public bucket before the transaction records the URL;
     // if the transaction then fails the copy is simply unreferenced.
