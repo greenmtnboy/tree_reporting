@@ -6,6 +6,7 @@ import path from 'node:path'
 import sharp from 'sharp'
 
 import { createSatelliteRouter, TileStore } from './satellite.ts'
+import { checkinPhotoObjectPath, nextTreePhotos, treeDocKey } from './checkinPhotos.ts'
 import {
   assertModificationPublishable,
   modificationExportRow,
@@ -95,6 +96,10 @@ function publishedPhotoUrl(objectPath: string): string {
  * dropped.
  */
 async function publishPhoto(sourcePath: string, treeId: string, index: number): Promise<string> {
+  return publishPhotoTo(sourcePath, `community/photos/${treeId}${index === 0 ? '' : `-${index}`}.jpg`)
+}
+
+async function publishPhotoTo(sourcePath: string, objectPath: string): Promise<string> {
   const [original] = await bucket.file(sourcePath).download()
   const cleaned = await sharp(original)
     .rotate()
@@ -107,7 +112,6 @@ async function publishPhoto(sourcePath: string, treeId: string, index: number): 
     .jpeg({ quality: 85 })
     .toBuffer()
 
-  const objectPath = `community/photos/${treeId}${index === 0 ? '' : `-${index}`}.jpg`
   await publishedBucket.file(objectPath).save(cleaned, {
     contentType: 'image/jpeg',
     metadata: { cacheControl: 'public, max-age=86400' },
@@ -208,7 +212,8 @@ app.get('/api/submissions', async (_req, res, next) => {
 app.get('/api/photos', async (req, res, next) => {
   try {
     const path = typeof req.query.path === 'string' ? req.query.path : ''
-    if (!(path.startsWith('submissions/') || path.startsWith('modifications/')) || path.includes('..')) {
+    const privatePrefixes = ['submissions/', 'modifications/', 'checkins/']
+    if (!privatePrefixes.some((prefix) => path.startsWith(prefix)) || path.includes('..')) {
       res.status(400).json({ error: 'Invalid submission photo path' })
       return
     }
@@ -386,6 +391,109 @@ app.post('/api/modifications/republish', async (_req, res, next) => {
   }
 })
 
+type PendingCheckinPhoto = {
+  userId: string
+  treeId: string
+  city?: string
+  photoPath?: string | null
+  photoReview?: 'pending' | 'published' | 'rejected'
+  species?: string | null
+  lat?: number
+  lng?: number
+  treeLat?: number
+  treeLng?: number
+  distanceMeters?: number | null
+  at?: Timestamp
+}
+
+app.get('/api/checkin-photos', async (_req, res, next) => {
+  try {
+    const snapshot = await db.collection('checkins')
+      .where('photoReview', '==', 'pending')
+      .orderBy('at', 'asc')
+      .limit(100)
+      .get()
+    res.json(snapshot.docs.map((document) => {
+      const data = document.data() as PendingCheckinPhoto
+      return {
+        id: document.id,
+        treeId: data.treeId,
+        city: data.city ?? null,
+        species: data.species ?? null,
+        treeLat: data.treeLat ?? null,
+        treeLng: data.treeLng ?? null,
+        distanceMeters: data.distanceMeters ?? null,
+        userId: data.userId,
+        at: data.at?.toDate().toISOString() ?? null,
+        photoUrl: data.photoPath ? localPhotoUrl(data.photoPath) : null,
+      }
+    }))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/checkin-photos/:id/approve', async (req, res, next) => {
+  try {
+    const checkinRef = db.collection('checkins').doc(req.params.id)
+    const pending = await checkinRef.get()
+    if (!pending.exists) throw new Error('Check-in not found')
+    const checkin = pending.data() as PendingCheckinPhoto
+    if (checkin.photoReview !== 'pending') throw new Error(`Photo is already ${checkin.photoReview ?? 'not offered'}`)
+    if (!checkin.photoPath) throw new Error('Check-in has no photo')
+    if (!checkin.treeId) throw new Error('Check-in has no tree id')
+
+    // Re-encode into the public bucket before the transaction records the URL;
+    // if the transaction then fails the copy is simply unreferenced.
+    const photoUrl = await publishPhotoTo(checkin.photoPath, checkinPhotoObjectPath(checkin.treeId, checkinRef.id))
+    const treePhotosRef = db.collection('treePhotos').doc(treeDocKey(checkin.treeId))
+
+    await db.runTransaction(async (transaction) => {
+      const [snapshot, treePhotos] = await Promise.all([transaction.get(checkinRef), transaction.get(treePhotosRef)])
+      const current = snapshot.data() as PendingCheckinPhoto | undefined
+      if (current?.photoReview !== 'pending') throw new Error(`Photo is already ${current?.photoReview ?? 'gone'}`)
+      transaction.set(treePhotosRef, {
+        treeId: checkin.treeId,
+        ...nextTreePhotos(treePhotos.data(), photoUrl),
+        latestPublishedAt: FieldValue.serverTimestamp(),
+      })
+      transaction.update(checkinRef, {
+        photoReview: 'published',
+        publishedPhotoUrl: photoUrl,
+        photoReviewedAt: FieldValue.serverTimestamp(),
+      })
+    })
+    res.json({ ok: true, photoUrl })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/checkin-photos/:id/reject', async (req, res, next) => {
+  try {
+    const { reason } = assertDecisionBody(req.body)
+    const checkinRef = db.collection('checkins').doc(req.params.id)
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(checkinRef)
+      if (!snapshot.exists) throw new Error('Check-in not found')
+      const checkin = snapshot.data() as PendingCheckinPhoto
+      if (checkin.photoReview !== 'pending') throw new Error(`Photo is already ${checkin.photoReview ?? 'not offered'}`)
+      transaction.update(checkinRef, {
+        photoReview: 'rejected',
+        photoRejectionReason: reason,
+        photoReviewedAt: FieldValue.serverTimestamp(),
+      })
+    })
+    res.json({ ok: true })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/photos', (_req, res) => {
+  res.sendFile(path.join(import.meta.dirname, 'checkin_photos_page.html'))
+})
+
 app.get('/modifications', (_req, res) => {
   res.sendFile(path.join(import.meta.dirname, 'modifications_page.html'))
 })
@@ -412,7 +520,7 @@ dl{display:grid;grid-template-columns:110px 1fr;gap:8px;margin:0}dt{color:#8cab9
 .actions{display:flex;gap:10px;margin-top:18px}button{border:1px solid #6da87b;background:#1d3624;color:#e7f5ea;padding:9px 14px;cursor:pointer}
 button.reject{border-color:#a86d6d;background:#361d1d}.empty{color:#8cab94}@media(max-width:720px){.card{grid-template-columns:1fr}}
 nav{margin-bottom:14px}nav a{color:#8cab94;margin-right:14px}
-</style></head><body><main><nav><a href="/">Photo submissions</a><a href="/modifications">Tree reports</a><a href="/satellite">Satellite tiles</a><a href="/satellite#queue">Satellite publish queue</a></nav><h1>Pending tree submissions</h1><p id="status">Loading…</p><section id="queue" class="queue"></section></main>
+</style></head><body><main><nav><a href="/">Photo submissions</a><a href="/modifications">Tree reports</a><a href="/photos">Tree photos</a><a href="/satellite">Satellite tiles</a><a href="/satellite#queue">Satellite publish queue</a></nav><h1>Pending tree submissions</h1><p id="status">Loading…</p><section id="queue" class="queue"></section></main>
 <script>
 const queue=document.querySelector('#queue'),status=document.querySelector('#status');
 const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

@@ -26,6 +26,7 @@ import {
   e2ePhotoUrl,
   e2eSubmissions,
   e2eTreeCheckinStats,
+  e2eTreePhotos,
 } from '../lib/e2eFixtures'
 import type { Firestore } from 'firebase/firestore'
 import type { FirebaseStorage } from 'firebase/storage'
@@ -67,6 +68,9 @@ export interface Checkin {
   city: string
   distanceMeters: number | null
   photoPath: string | null
+  // Set when the user offered the photo as a public photo of the tree:
+  // 'pending' until the reviewer publishes or rejects it.
+  photoReview: PhotoReviewStatus | null
   at: Date | null
   // Tree facts snapshotted at check-in time (null on older check-ins).
   // Achievements read these because the tree's city parquet may not be
@@ -78,6 +82,8 @@ export interface Checkin {
   speciesCityCount: number | null
 }
 
+export type PhotoReviewStatus = 'pending' | 'published' | 'rejected'
+
 export interface CheckinInput {
   treeId: string
   treeLat: number
@@ -87,6 +93,8 @@ export interface CheckinInput {
   distanceMeters: number
   city: string
   photoBlob?: Blob
+  // Offer the photo as a public photo of this tree, through the review queue.
+  submitPhotoForTree?: boolean
   species?: string | null
   treeForm?: string | null
   dbhInches?: number | null
@@ -236,6 +244,7 @@ function mapCheckinDoc(id: string, data: Record<string, unknown>): Checkin {
         ? null
         : Number(data.distanceMeters),
     photoPath: (data.photoPath as string | null) ?? null,
+    photoReview: (data.photoReview as PhotoReviewStatus | null) ?? null,
     at: at instanceof Timestamp ? at.toDate() : null,
     species: (data.species as string | null) ?? null,
     treeForm: (data.treeForm as string | null) ?? null,
@@ -284,6 +293,9 @@ export async function recordCheckin(input: CheckinInput): Promise<string> {
     city: input.city,
     distanceMeters: input.distanceMeters,
     photoPath,
+    // Only a photo the user explicitly offered ever reaches the review queue;
+    // every other check-in photo stays in the user's private folder.
+    ...(photoPath && input.submitPhotoForTree ? { photoReview: 'pending' as PhotoReviewStatus } : {}),
     species: input.species ?? null,
     treeForm: input.treeForm ?? null,
     dbhInches: input.dbhInches ?? null,
@@ -339,6 +351,27 @@ export async function getTreeCheckinStats(treeId: string): Promise<TreeCheckinSt
     count: Number(data.count ?? 0),
     lastCheckinAt: data.lastCheckinAt instanceof Timestamp ? data.lastCheckinAt.toDate() : null,
   }
+}
+
+export interface TreePhotos {
+  // Newest first; the reviewer keeps a bounded list.
+  photoUrls: string[]
+  count: number
+}
+
+/**
+ * Reviewed visitor photos of a tree, published from check-ins. Public like the
+ * check-in counter; written only by the reviewer. A tree with none has no
+ * document.
+ */
+export async function getTreePhotos(treeId: string): Promise<TreePhotos> {
+  if (e2eEnabled) return e2eTreePhotos(treeId)
+  const { db: firestore } = requireFirebase()
+  const snap = await getDoc(doc(firestore, 'treePhotos', treeStatsKey(treeId)))
+  if (!snap.exists()) return { photoUrls: [], count: 0 }
+  const data = snap.data()
+  const photoUrls = Array.isArray(data.photoUrls) ? (data.photoUrls as unknown[]).map(String) : []
+  return { photoUrls, count: Number(data.count ?? photoUrls.length) }
 }
 
 // --- Tree modifications -------------------------------------------------

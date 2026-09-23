@@ -19,8 +19,10 @@ import type {
   ModificationKind,
   Submission,
   SubmissionStatus,
+  PhotoReviewStatus,
   TreeCheckinStats,
   TreeModification,
+  TreePhotos,
 } from '../composables/useSubmissions'
 
 export const e2eEnabled = import.meta.env.VITE_E2E === '1'
@@ -54,6 +56,7 @@ export interface E2ECheckinFixture {
   /** ISO 8601. Without a zone suffix this is read as browser-local time. */
   at?: string | null
   hasPhoto?: boolean
+  photoReview?: PhotoReviewStatus | null
   species?: string | null
   treeForm?: string | null
   dbhInches?: number | null
@@ -81,6 +84,8 @@ export interface E2EFixtures {
   modifications?: E2EModificationFixture[]
   /** Public per-tree check-in counters, keyed by tree id. Missing ids read as 0. */
   treeCheckinCounts?: Record<string, number>
+  /** Published visitor photo URLs per tree id, newest first. Missing ids have none. */
+  treePhotos?: Record<string, string[]>
 }
 
 declare global {
@@ -163,6 +168,7 @@ export function e2eCheckins(): Checkin[] | null {
     city: c.city,
     distanceMeters: c.distanceMeters ?? 12,
     photoPath: c.hasPhoto ? `e2e/checkin-${i}.jpg` : null,
+    photoReview: c.photoReview ?? null,
     at: parseDate(c.at),
     species: c.species ?? null,
     treeForm: c.treeForm ?? null,
@@ -210,4 +216,10 @@ export function e2eModifications(): TreeModification[] | null {
 export function e2eTreeCheckinStats(treeId: string): TreeCheckinStats {
   const count = e2eFixtures()?.treeCheckinCounts?.[treeId] ?? 0
   return { count, lastCheckinAt: null }
+}
+
+/** The tree card's visitor photos; like the counter, never read from Firestore in e2e. */
+export function e2eTreePhotos(treeId: string): TreePhotos {
+  const photoUrls = e2eFixtures()?.treePhotos?.[treeId] ?? []
+  return { photoUrls, count: photoUrls.length }
 }

@@ -160,6 +160,13 @@
             </span>
           </label>
           <p v-if="photoError" class="error-text">{{ photoError }}</p>
+          <label v-if="mode === 'checkin' && photoBlob" class="share-photo">
+            <input v-model="submitPhotoForTree" type="checkbox" data-testid="checkin-share-photo" />
+            <span>
+              Submit as a photo of this tree
+              <span class="muted">— a reviewer checks it before it appears on the tree card.</span>
+            </span>
+          </label>
           <p v-if="mode === 'update' && !hasChanges" class="muted">Change the pin, species or diameter to send a fix.</p>
 
           <div class="actions">
@@ -185,6 +192,9 @@
         <!-- Done -->
         <section v-else-if="state === 'done'" class="section">
           <p class="ok-text"><strong>{{ mode === 'checkin' ? 'Checked in!' : 'Thanks — report sent.' }}</strong></p>
+          <p v-if="mode === 'checkin' && photoBlob && submitPhotoForTree" class="muted">
+            Your photo is in the review queue. Once approved it shows on this tree's card.
+          </p>
           <p v-if="mode !== 'checkin'" class="muted">
             A reviewer will look at it. You can follow it under My contributions.
           </p>
@@ -302,6 +312,8 @@ const proposedSpecies = ref('')
 const proposedDbh = ref<number | string>('')
 const missingReason = ref<MissingReason>('removed')
 const notes = ref('')
+// Opt-in: a check-in photo stays private unless the user offers it here.
+const submitPhotoForTree = ref(false)
 
 const movedMeters = computed(
   () => haversineKm(props.treeLat, props.treeLng, proposedLat.value, proposedLng.value) * 1000,
@@ -420,6 +432,7 @@ async function handleSubmit() {
         distanceMeters: Math.round(distance.value),
         city,
         photoBlob: photoBlob.value ?? undefined,
+        submitPhotoForTree: submitPhotoForTree.value,
         species: props.species ?? null,
         treeForm: props.treeForm ?? null,
         dbhInches: props.dbhInches ?? null,
@@ -653,6 +666,19 @@ onBeforeUnmount(() => {
   gap: 10px;
   font-size: 0.9rem;
   cursor: pointer;
+}
+
+.share-photo {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.share-photo input {
+  margin-top: 3px;
+  accent-color: var(--color-leaf);
 }
 
 .link-btn {

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Tree photo review</title>
+<style>
+body{margin:0;background:#0b0f0d;color:#d7eadb;font:15px system-ui}main{max-width:1100px;margin:auto;padding:28px}
+h1{font-size:24px}.queue{display:grid;gap:18px}.card{display:grid;grid-template-columns:minmax(260px,420px) 1fr;gap:20px;padding:18px;border:1px solid #35513d;background:#111914}
+img{width:100%;max-height:420px;object-fit:contain;background:#050806}
+dl{display:grid;grid-template-columns:130px 1fr;gap:8px;margin:0}dt{color:#8cab94}dd{margin:0;overflow-wrap:anywhere}
+.actions{display:flex;gap:10px;margin-top:18px}button{border:1px solid #6da87b;background:#1d3624;color:#e7f5ea;padding:9px 14px;cursor:pointer}
+button.reject{border-color:#a86d6d;background:#361d1d}@media(max-width:720px){.card{grid-template-columns:1fr}}
+nav{margin-bottom:14px}nav a{color:#8cab94;margin-right:14px}a{color:#a7e3b2}
+</style>
+</head>
+<body><main>
+<nav><a href="/">Photo submissions</a><a href="/modifications">Tree reports</a><a href="/photos">Tree photos</a><a href="/satellite">Satellite tiles</a></nav>
+<h1>Pending tree photos</h1>
+<p>Check-in photos the visitor offered as a public photo of the tree. Publish only a clear photo of this tree, with no identifiable people, faces, plates, or house numbers. Publishing re-encodes the photo (no EXIF) and adds it to the tree card; the check-in itself already counted.</p>
+<p id="status">Loading…</p>
+<section id="queue" class="queue"></section>
+</main>
+<script>
+const queue = document.querySelector('#queue'), status = document.querySelector('#status');
+const esc = v => String(v ?? '—').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const osm = (lat, lng) => lat == null ? '—' : `<a href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=20/${lat}/${lng}" target="_blank" rel="noopener">${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}</a>`;
+async function load() {
+  status.textContent = 'Loading…';
+  const r = await fetch('/api/checkin-photos');
+  if (!r.ok) throw new Error(await r.text());
+  const rows = await r.json();
+  status.textContent = rows.length ? rows.length + ' awaiting review' : 'Queue is empty';
+  queue.innerHTML = rows.map(c => `<article class="card" data-id="${esc(c.id)}">
+    <div><img src="${esc(c.photoUrl)}" alt="Check-in photo"></div>
+    <div><dl><dt>Tree</dt><dd><code>${esc(c.treeId)}</code></dd><dt>Species on map</dt><dd>${esc(c.species)}</dd>
+    <dt>City</dt><dd>${esc(c.city)}</dd><dt>Mapped at</dt><dd>${osm(c.treeLat, c.treeLng)}</dd>
+    <dt>Visitor was</dt><dd>${c.distanceMeters != null ? esc(c.distanceMeters) + ' m from the tree' : '—'}</dd>
+    <dt>Checked in</dt><dd>${esc(c.at)}</dd><dt>User</dt><dd>${esc(c.userId)}</dd></dl>
+    <div class="actions"><button data-action="approve">Publish</button><button class="reject" data-action="reject">Reject</button></div></div></article>`).join('');
+}
+async function decide(id, action) {
+  let body = {};
+  if (action === 'reject') { const reason = prompt('Optional rejection reason') ?? null; if (reason === null) return; body = { reason }; }
+  const r = await fetch('/api/checkin-photos/' + encodeURIComponent(id) + '/' + action, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(await r.text());
+  await load();
+}
+queue.addEventListener('click', e => {
+  const b = e.target.closest('button[data-action]'); if (!b) return;
+  const card = b.closest('[data-id]'); b.disabled = true;
+  decide(card.dataset.id, b.dataset.action).catch(err => { alert(err.message); b.disabled = false; });
+});
+load().catch(err => status.textContent = 'Could not load queue: ' + err.message);
+</script>
+</body>
+</html>

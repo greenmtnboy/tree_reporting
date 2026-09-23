@@ -54,6 +54,22 @@ approval rather than silently dropped later by the ingest.
 anything — use it for the first run, or if an approval committed but the export
 write failed.
 
+## Tree photos (`/photos`)
+
+A check-in photo is private unless the visitor ticks **Submit as a photo of
+this tree** in the check-in dialog, which records `photoReview: 'pending'` on
+the check-in (the rules allow no other value from the client). The check-in
+counts immediately; only the photo waits.
+
+`/photos` lists pending ones. **Publish** re-encodes the photo through `sharp`
+exactly as submission photos are (no EXIF, IPTC or XMP), writes it to
+`community/tree_photos/{tree}/{checkin}.jpg` in the public bucket, and in one
+transaction prepends its URL to `treePhotos/{treeKey}` (newest first, the last
+12 kept, plus a running count) and marks the check-in `published`. The tree
+card reads `treePhotos` directly, like the check-in counter, so this works for
+every source's trees with no pipeline change. **Reject** marks it `rejected`;
+the file stays private. Report photos are never published.
+
 ## Tree reports (`/modifications`)
 
 The mobile check-in dialog lets someone standing within 50 m of a mapped tree
@@ -62,7 +78,8 @@ say one of two things about it besides "I'm here": **the tree is gone**
 position and/or a corrected species or DBH). Each is a `treeModifications`
 document tied to the existing tree id, `pending` until reviewed, rate-limited
 the same way submissions are (`modificationRateLimits`). Photos go to the
-private `modifications/{uid}/` prefix and are never published.
+private `modifications/{uid}/` prefix and are reviewer evidence only; they are
+never published.
 
 `/modifications` lists the pending queue with the mapped position, the
 proposed one (and the distance between them), and old versus new values.

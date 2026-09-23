@@ -151,10 +151,22 @@ service cloud.firestore {
     match /checkins/{checkinId} {
       allow create: if signedIn()
                     && request.resource.data.userId == request.auth.uid
-                    && request.resource.data.keys().hasAll(['userId', 'treeId', 'at']);
+                    && request.resource.data.keys().hasAll(['userId', 'treeId', 'at'])
+                    // A photo offered as a public tree photo enters review as
+                    // 'pending'; only the reviewer moves it on from there.
+                    && (!('photoReview' in request.resource.data)
+                        || (request.resource.data.photoReview == 'pending'
+                            && request.resource.data.photoPath is string));
       allow read: if request.auth != null
                   && resource.data.userId == request.auth.uid;
       allow update, delete: if false;
+    }
+
+    // Reviewed visitor photos per tree, keyed like treeCheckinStats. Public to
+    // read; written only by the local reviewer through the Admin SDK.
+    match /treePhotos/{treeKey} {
+      allow read: if true;
+      allow write: if false;
     }
 
     // The public per-tree check-in counter on the tree card. Anyone may read

@@ -148,12 +148,17 @@ for (const mobile of [false, true]) {
       expect(queryErrors, `tree card query failed: ${queryErrors.join('\n')}`).toEqual([])
     })
 
-    test('the card shows the check-in count, and a check-in button only on mobile', async ({ page }) => {
+    test('the card shows check-ins and visitor photos, and a check-in button only on mobile', async ({ page }) => {
       test.setTimeout(180_000)
 
       // The clicked tree is not known in advance, so every id reads as 7.
       await page.addInitScript(() => {
-        window.__treeE2E = { treeCheckinCounts: new Proxy({}, { get: () => 7 }) }
+        const photo =
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAoMBgDTD2qgAAAAASUVORK5CYII='
+        window.__treeE2E = {
+          treeCheckinCounts: new Proxy({}, { get: () => 7 }),
+          treePhotos: new Proxy({}, { get: () => [photo, photo + '#2'] }),
+        }
       })
       await openMap(page, mobile)
       const tree = await findClickableTree(page, mobile)
@@ -162,6 +167,12 @@ for (const mobile of [false, true]) {
       const count = page.getByTestId('tree-checkin-count')
       await expect(count).toBeVisible({ timeout: 15_000 })
       await expect(count).toContainText('7 check-ins')
+
+      // Reviewed visitor photos replace the example species photo.
+      const visitorPhoto = page.getByTestId('tree-visitor-photo')
+      await expect(visitorPhoto).toBeVisible()
+      await expect(visitorPhoto).toContainText('2 visitor photos')
+      await expect(page.locator('.tree-card-pane--photos .tree-card-section-label').first()).toHaveText('Photo of this tree')
 
       // Checking in is mobile-only; desktop shows the count and nothing more.
       const checkin = page.locator('.tree-card-checkin')
@@ -190,3 +201,42 @@ for (const mobile of [false, true]) {
     })
   })
 }
+
+test('a check-in photo is only offered as a tree photo once one is attached', async ({ page, context }) => {
+  test.setTimeout(180_000)
+
+  await openMap(page, true)
+  const tree = await findClickableTree(page, true)
+  // Stand on the tree so the dialog lands on its ready step.
+  const at = await page.evaluate(({ x, y }) => {
+    const map = window.__treeMap!
+    const box = map.getContainer().getBoundingClientRect()
+    const p = map.unproject([x - box.left, y - box.top])
+    return { latitude: p.lat, longitude: p.lng }
+  }, tree)
+  await context.grantPermissions(['geolocation'])
+  await context.setGeolocation(at)
+
+  await page.mouse.click(tree.x, tree.y)
+  await page.locator('.tree-card-checkin').click()
+  await expect(page.getByTestId('checkin-submit')).toBeVisible({ timeout: 20_000 })
+
+  const share = page.getByTestId('checkin-share-photo')
+  await expect(share).toHaveCount(0)
+
+  await page.locator('.checkin-dialog .photo-input').setInputFiles({
+    name: 'tree.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAoMBgDTD2qgAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  })
+  await expect(share).toBeVisible()
+  // Opt-in: nothing is offered for publication unless the user ticks it.
+  await expect(share).not.toBeChecked()
+
+  // Reports never offer their photo for publication.
+  await page.getByTestId('checkin-mode-missing').click()
+  await expect(share).toHaveCount(0)
+})

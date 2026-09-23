@@ -146,10 +146,12 @@
       </div>
 
       <!-- Right pane: photo. A community submission has a photo of this exact
-           tree; everything else can only show a stock photo of the species. -->
+           tree, and any tree can collect reviewed visitor photos from
+           check-ins; everything else can only show a stock photo of the
+           species. -->
       <div class="tree-card-pane tree-card-pane--photos">
         <div class="tree-card-section-label">
-          {{ selectedTree.submission_photo_url ? 'Photo of this tree' : 'Example species photo' }}
+          {{ selectedTree.submission_photo_url || visitorPhotoUrl ? 'Photo of this tree' : 'Example species photo' }}
         </div>
         <div v-if="selectedTree.submission_photo_url" class="tc-photo-wrap">
           <img
@@ -160,6 +162,28 @@
           />
           <div class="tc-photo-footer">
             <span class="tc-photo-attr">Submitted by a community contributor</span>
+          </div>
+        </div>
+        <div v-else-if="visitorPhotoUrl" class="tc-photo-wrap" data-testid="tree-visitor-photo">
+          <img
+            :src="visitorPhotoUrl"
+            :alt="`Visitor photo of ${selectedTree.species || 'this tree'}`"
+            class="tc-photo"
+            loading="lazy"
+          />
+          <div class="tc-photo-footer">
+            <span class="tc-photo-attr">{{ visitorPhotoCaption }}</span>
+          </div>
+          <div v-if="(treePhotos?.photoUrls.length ?? 0) > 1" class="tc-photo-thumbs">
+            <button
+              v-for="(url, i) in treePhotos!.photoUrls"
+              :key="url"
+              type="button"
+              class="tc-photo-thumb"
+              :class="{ 'tc-photo-thumb--active': i === visitorPhotoIndex }"
+              :aria-label="`Visitor photo ${i + 1}`"
+              @click="visitorPhotoIndex = i"
+            ><img :src="url" alt="" loading="lazy" /></button>
           </div>
         </div>
         <div v-else-if="selectedTree.photo_url" class="tc-photo-wrap">
@@ -226,7 +250,12 @@ import CitySelector from './CitySelector.vue'
 import MapCompass from './MapCompass.vue'
 import CheckinDialog from './CheckinDialog.vue'
 import { firebaseAvailable } from '../lib/firebase'
-import { getTreeCheckinStats, type TreeCheckinStats } from '../composables/useSubmissions'
+import {
+  getTreeCheckinStats,
+  getTreePhotos,
+  type TreeCheckinStats,
+  type TreePhotos,
+} from '../composables/useSubmissions'
 import { formatDataSource } from '../data/dataSources'
 import { speciesSentinel } from '../data/species'
 import { plantYearFrom } from '../lib/achievements'
@@ -747,6 +776,35 @@ watch(
     }
   },
 )
+
+// Reviewed visitor photos, published from check-ins. Same best-effort rules
+// as the counter above.
+const treePhotos = ref<TreePhotos | null>(null)
+const visitorPhotoIndex = ref(0)
+let treePhotosToken = 0
+
+watch(
+  () => selectedTree.value?.tree_id ?? null,
+  async (treeId) => {
+    const token = ++treePhotosToken
+    treePhotos.value = null
+    visitorPhotoIndex.value = 0
+    if (!treeId || !firebaseAvailable) return
+    try {
+      const photos = await getTreePhotos(treeId)
+      if (token === treePhotosToken) treePhotos.value = photos
+    } catch (err) {
+      console.warn('[TreeCard] visitor photos unavailable', err)
+    }
+  },
+)
+
+const visitorPhotoUrl = computed(() => treePhotos.value?.photoUrls[visitorPhotoIndex.value] ?? null)
+
+const visitorPhotoCaption = computed(() => {
+  const n = treePhotos.value?.count ?? 0
+  return n > 1 ? `Visitor photo · ${n.toLocaleString()} visitor photos` : 'Visitor photo from a check-in'
+})
 
 const checkinCountLabel = computed(() => {
   const n = checkinStats.value?.count ?? 0
@@ -2334,6 +2392,34 @@ onUnmounted(() => {
 .tc-photo {
   width: 100%;
   height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+.tc-photo-thumbs {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  overflow-x: auto;
+}
+
+.tc-photo-thumb {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(167, 227, 178, 0.18);
+  background: none;
+  cursor: pointer;
+}
+
+.tc-photo-thumb--active {
+  border-color: var(--color-leaf);
+}
+
+.tc-photo-thumb img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
 }

@@ -64,6 +64,10 @@
                 <div v-if="c.distanceMeters != null" class="checkin-distance">
                   within {{ c.distanceMeters }} m
                 </div>
+                <div v-if="c.photoReview" class="checkin-row">
+                  <span class="submission-status" :data-status="c.photoReview">{{ c.photoReview }}</span>
+                  <span class="checkin-distance">{{ PHOTO_REVIEW_LABELS[c.photoReview] }}</span>
+                </div>
               </div>
             </li>
           </ul>
@@ -99,7 +103,11 @@
 <script setup lang="ts">
 import { onMounted, watch } from 'vue'
 import { useAuth } from '../composables/useAuth'
-import { useMyContributions, type TreeModification } from '../composables/useSubmissions'
+import {
+  useMyContributions,
+  type PhotoReviewStatus,
+  type TreeModification,
+} from '../composables/useSubmissions'
 import { firebaseAvailable } from '../lib/firebase'
 import SubmissionThumbnail from '../components/SubmissionThumbnail.vue'
 import AchievementGrid from '../components/AchievementGrid.vue'
@@ -119,6 +127,12 @@ watch(user, (u) => {
     modifications.value = []
   }
 })
+
+const PHOTO_REVIEW_LABELS: Record<PhotoReviewStatus, string> = {
+  pending: 'Tree photo awaiting review',
+  published: 'Tree photo is on the map',
+  rejected: 'Tree photo not published',
+}
 
 function describeModification(m: TreeModification): string {
   if (m.kind === 'missing') return 'Reported missing'
