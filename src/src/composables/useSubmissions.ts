@@ -9,6 +9,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   writeBatch,
   Timestamp,
   where,
@@ -318,8 +319,21 @@ export async function recordCheckin(input: CheckinInput): Promise<string> {
     },
     { merge: true },
   )
-  await batch.commit()
+  try {
+    await batch.commit()
+  } catch (err) {
+    // Until the rules that admit treeCheckinStats are deployed, the counter
+    // write denies the whole batch. The check-in itself must never depend on
+    // the counter, so record it alone; the count just misses this one.
+    if (!isPermissionDenied(err)) throw err
+    console.warn('[checkin] counter write refused; recording the check-in without it', err)
+    await setDoc(checkinRef, docData)
+  }
   return checkinRef.id
+}
+
+function isPermissionDenied(err: unknown): boolean {
+  return (err as { code?: unknown } | null)?.code === 'permission-denied'
 }
 
 export interface TreeCheckinStats {
@@ -472,7 +486,16 @@ export async function submitTreeModification(input: ModificationInput): Promise<
     lastModificationId: modificationId,
     submittedAt: serverTimestamp(),
   })
-  await batch.commit()
+  // A denial is also what the 30-second rate limit looks like, and what every
+  // report gets before the treeModifications rules are deployed.
+  const denied = await batch.commit().then(
+    () => false,
+    (err: unknown) => {
+      if (isPermissionDenied(err)) return true
+      throw err
+    },
+  )
+  if (denied) throw new Error("Couldn't send the report — wait a minute and try again.")
   return modificationId
 }
 
