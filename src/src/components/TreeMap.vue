@@ -698,7 +698,10 @@ const checkinDialog = ref<{
 
 const CHECKIN_MAX_METERS = 50
 
+// Checking in (and reporting) is a phone-in-hand-at-the-tree flow. Desktop
+// shows the tree's check-in count but offers no way to add to it.
 const canCheckInToSelectedTree = computed(() => {
+  if (!props.simplified) return false
   if (!firebaseAvailable) return false
   if (!selectedTreeAnchor.value) return false
   const loc = userLocation.value

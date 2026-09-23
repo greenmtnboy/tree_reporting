@@ -148,7 +148,7 @@ for (const mobile of [false, true]) {
       expect(queryErrors, `tree card query failed: ${queryErrors.join('\n')}`).toEqual([])
     })
 
-    test('the card shows how many people have checked in at the tree', async ({ page }) => {
+    test('the card shows the check-in count, and a check-in button only on mobile', async ({ page }) => {
       test.setTimeout(180_000)
 
       // The clicked tree is not known in advance, so every id reads as 7.
@@ -162,6 +162,17 @@ for (const mobile of [false, true]) {
       const count = page.getByTestId('tree-checkin-count')
       await expect(count).toBeVisible({ timeout: 15_000 })
       await expect(count).toContainText('7 check-ins')
+
+      // Checking in is mobile-only; desktop shows the count and nothing more.
+      const checkin = page.locator('.tree-card-checkin')
+      const report = page.getByTestId('tree-report-link')
+      if (mobile) {
+        await expect(checkin).toBeVisible()
+        await expect(report).toBeVisible()
+      } else {
+        await expect(checkin).toHaveCount(0)
+        await expect(report).toHaveCount(0)
+      }
     })
 
     test('the tree card closes again', async ({ page }) => {
