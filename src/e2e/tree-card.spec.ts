@@ -148,6 +148,22 @@ for (const mobile of [false, true]) {
       expect(queryErrors, `tree card query failed: ${queryErrors.join('\n')}`).toEqual([])
     })
 
+    test('the card shows how many people have checked in at the tree', async ({ page }) => {
+      test.setTimeout(180_000)
+
+      // The clicked tree is not known in advance, so every id reads as 7.
+      await page.addInitScript(() => {
+        window.__treeE2E = { treeCheckinCounts: new Proxy({}, { get: () => 7 }) }
+      })
+      await openMap(page, mobile)
+      const tree = await findClickableTree(page, mobile)
+      await page.mouse.click(tree.x, tree.y)
+
+      const count = page.getByTestId('tree-checkin-count')
+      await expect(count).toBeVisible({ timeout: 15_000 })
+      await expect(count).toContainText('7 check-ins')
+    })
+
     test('the tree card closes again', async ({ page }) => {
       test.setTimeout(180_000)
 

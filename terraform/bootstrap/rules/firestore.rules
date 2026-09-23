@@ -19,6 +19,42 @@ service cloud.firestore {
         || get(rateLimitPath(uid)).data.submittedAt <= request.time - duration.value(30, 's');
     }
 
+    function modificationRateLimitPath(uid) {
+      return /databases/$(database)/documents/modificationRateLimits/$(uid);
+    }
+
+    function modificationRateLimitAllows(uid) {
+      return !exists(modificationRateLimitPath(uid))
+        || get(modificationRateLimitPath(uid)).data.submittedAt <= request.time - duration.value(30, 's');
+    }
+
+    function optionalString(value, maxSize) {
+      return value == null || (value is string && value.size() <= maxSize);
+    }
+
+    function optionalNumber(value) {
+      return value == null || value is number;
+    }
+
+    // A bump of a tree's public check-in counter is only valid alongside the
+    // check-in it counts: the named check-in must not exist before this write,
+    // must exist after it, and must be this user's check-in to this tree. So
+    // the counter can only move by one per new check-in document.
+    function checkinStatsWriteAllowed(treeKey) {
+      let data = request.resource.data;
+      let checkinPath = /databases/$(database)/documents/checkins/$(data.lastCheckinId);
+      return signedIn()
+        && data.keys().hasOnly(['treeId', 'count', 'lastCheckinId', 'lastCheckinAt'])
+        && data.treeId is string
+        && data.lastCheckinId is string
+        // Same escape as treeStatsKey() in useSubmissions.ts.
+        && treeKey == data.treeId.replace('%', '%25').replace('/', '%2F')
+        && data.lastCheckinAt == request.time
+        && !exists(checkinPath)
+        && getAfter(checkinPath).data.userId == request.auth.uid
+        && getAfter(checkinPath).data.treeId == data.treeId;
+    }
+
     match /users/{uid} {
       allow read, write: if isOwner(uid);
     }
@@ -46,6 +82,47 @@ service cloud.firestore {
                             && existsAfter(/databases/$(database)/documents/submissions/$(request.resource.data.lastSubmissionId))
                             && getAfter(/databases/$(database)/documents/submissions/$(request.resource.data.lastSubmissionId)).data.userId == uid;
       allow read, delete: if false;
+    }
+
+    // A proposed change to an existing tree: `missing` (it is not there) or
+    // `update` (corrected position and/or properties). Pending until the local
+    // reviewer publishes or rejects it, exactly like a submission.
+    match /treeModifications/{modificationId} {
+      allow create: if signedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.submittedAt == request.time
+                    && request.resource.data.keys().hasAll(['userId', 'kind', 'treeId', 'city', 'treeLat', 'treeLng', 'submittedAt', 'status'])
+                    && request.resource.data.kind in ['missing', 'update']
+                    && request.resource.data.treeId is string
+                    && request.resource.data.treeId.size() <= 200
+                    && optionalString(request.resource.data.get('notes', null), 1000)
+                    && optionalString(request.resource.data.get('proposedSpecies', null), 200)
+                    && optionalNumber(request.resource.data.get('proposedLat', null))
+                    && optionalNumber(request.resource.data.get('proposedLng', null))
+                    && optionalNumber(request.resource.data.get('proposedDbhInches', null))
+                    && modificationRateLimitAllows(request.auth.uid)
+                    && getAfter(modificationRateLimitPath(request.auth.uid)).data.userId == request.auth.uid
+                    && getAfter(modificationRateLimitPath(request.auth.uid)).data.lastModificationId == modificationId
+                    && getAfter(modificationRateLimitPath(request.auth.uid)).data.submittedAt == request.time;
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /modificationRateLimits/{uid} {
+      allow create, update: if isOwner(uid)
+                            && request.resource.data.keys().hasOnly(['userId', 'lastModificationId', 'submittedAt'])
+                            && request.resource.data.userId == uid
+                            && request.resource.data.submittedAt == request.time
+                            && modificationRateLimitAllows(uid)
+                            && existsAfter(/databases/$(database)/documents/treeModifications/$(request.resource.data.lastModificationId))
+                            && getAfter(/databases/$(database)/documents/treeModifications/$(request.resource.data.lastModificationId)).data.userId == uid;
+      allow read, delete: if false;
+    }
+
+    // Published modifications, written only by the local reviewer.
+    match /publishedTreeModifications/{modificationId} {
+      allow read, write: if false;
     }
 
     // Approved records are immutable from the public client. The local review
@@ -78,6 +155,18 @@ service cloud.firestore {
       allow read: if request.auth != null
                   && resource.data.userId == request.auth.uid;
       allow update, delete: if false;
+    }
+
+    // The public per-tree check-in counter on the tree card. Anyone may read
+    // it; it only moves through checkinStatsWriteAllowed().
+    match /treeCheckinStats/{treeKey} {
+      allow read: if true;
+      allow create: if checkinStatsWriteAllowed(treeKey)
+                    && request.resource.data.count == 1;
+      allow update: if checkinStatsWriteAllowed(treeKey)
+                    && request.resource.data.treeId == resource.data.treeId
+                    && request.resource.data.count == resource.data.count + 1;
+      allow delete: if false;
     }
   }
 }

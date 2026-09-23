@@ -14,7 +14,14 @@
  * `.env.e2e`) turns it on.
  */
 import type { User } from 'firebase/auth'
-import type { Checkin, Submission, SubmissionStatus } from '../composables/useSubmissions'
+import type {
+  Checkin,
+  ModificationKind,
+  Submission,
+  SubmissionStatus,
+  TreeCheckinStats,
+  TreeModification,
+} from '../composables/useSubmissions'
 
 export const e2eEnabled = import.meta.env.VITE_E2E === '1'
 
@@ -55,11 +62,25 @@ export interface E2ECheckinFixture {
   distanceMeters?: number | null
 }
 
+export interface E2EModificationFixture {
+  id?: string
+  kind: ModificationKind
+  treeId?: string
+  city: string
+  /** ISO 8601. Without a zone suffix this is read as browser-local time. */
+  submittedAt?: string | null
+  status?: SubmissionStatus
+  proposedSpecies?: string | null
+}
+
 export interface E2EFixtures {
   /** `null` models a signed-out visitor; omitting it leaves real auth in charge. */
   user?: E2EUserFixture | null
   submissions?: E2ESubmissionFixture[]
   checkins?: E2ECheckinFixture[]
+  modifications?: E2EModificationFixture[]
+  /** Public per-tree check-in counters, keyed by tree id. Missing ids read as 0. */
+  treeCheckinCounts?: Record<string, number>
 }
 
 declare global {
@@ -155,4 +176,38 @@ export function e2eCheckins(): Checkin[] | null {
 export function e2ePhotoUrl(photoPath: string): string | null {
   if (!e2eFixtures() || !photoPath.startsWith('e2e/')) return null
   return PLACEHOLDER_PHOTO
+}
+
+export function e2eModifications(): TreeModification[] | null {
+  const fixtures = e2eFixtures()
+  if (!fixtures || fixtures.user == null) return null
+  const uid = fixtures.user.uid
+  return (fixtures.modifications ?? []).map((m, i) => ({
+    id: m.id ?? `e2e-modification-${i}`,
+    userId: uid,
+    kind: m.kind,
+    treeId: m.treeId ?? `e2e-tree-${i}`,
+    city: m.city,
+    treeLat: 37.7749,
+    treeLng: -122.4194,
+    distanceMeters: 8,
+    missingReason: m.kind === 'missing' ? 'removed' : null,
+    proposedLat: null,
+    proposedLng: null,
+    proposedSpecies: m.proposedSpecies ?? null,
+    proposedDbhInches: null,
+    notes: null,
+    photoPath: null,
+    submittedAt: parseDate(m.submittedAt),
+    status: m.status ?? 'pending',
+  }))
+}
+
+/**
+ * The tree card's public counter. An e2e build never reaches Firestore for it:
+ * the placeholder project would only fail, so unseeded trees read as zero.
+ */
+export function e2eTreeCheckinStats(treeId: string): TreeCheckinStats {
+  const count = e2eFixtures()?.treeCheckinCounts?.[treeId] ?? 0
+  return { count, lastCheckinAt: null }
 }

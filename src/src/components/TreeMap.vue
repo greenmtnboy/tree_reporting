@@ -31,7 +31,6 @@
     <button
       class="city-btn locate-btn"
       :class="{ active: userLocation !== null }"
-      :disabled="isInitialLoading"
       :title="userLocation ? 'Pan to my location' : 'Show my location on the map'"
       @click="toggleUserLocation"
     >&#x25CE; Find Me</button>
@@ -40,7 +39,6 @@
     v-else
     class="locate-btn-desktop"
     :class="{ active: userLocation !== null }"
-    :disabled="isInitialLoading"
     :title="userLocation ? 'Pan to my location' : 'Show my location on the map'"
     @click="toggleUserLocation"
   >&#x25CE; Find Me</button>
@@ -57,7 +55,7 @@
           <button
             v-if="canCheckInToSelectedTree"
             class="tree-card-checkin"
-            @click="openCheckin"
+            @click="openCheckin('checkin')"
           >Check in</button>
           <button class="tree-card-close" @click="closeTreeCard" aria-label="Close">&#x2715;</button>
         </div>
@@ -88,6 +86,17 @@
             <span class="tc-label">Ecological fit</span><span class="tc-value">{{ selectedTree.ecological_fit }}</span>
           </template>
         </div>
+        <div v-if="checkinStats" class="tc-social" data-testid="tree-checkin-count">
+          <span class="tc-social-count">{{ checkinCountLabel }}</span>
+          <span v-if="checkinLastLabel" class="tc-social-last">{{ checkinLastLabel }}</span>
+        </div>
+        <button
+          v-if="canCheckInToSelectedTree"
+          type="button"
+          class="tc-report-link"
+          data-testid="tree-report-link"
+          @click="openCheckin('update')"
+        >Missing or mapped wrong? Report it</button>
       </div>
 
       <!-- Center pane: species info -->
@@ -191,8 +200,9 @@
     :tree-form="checkinDialog.treeForm"
     :dbh-inches="checkinDialog.dbhInches"
     :plant-year="checkinDialog.plantYear"
+    :initial-mode="checkinDialog.mode"
     @close="checkinDialog = null"
-    @success="checkinDialog = null"
+    @success="handleCheckinSuccess"
   />
 </template>
 
@@ -216,6 +226,7 @@ import CitySelector from './CitySelector.vue'
 import MapCompass from './MapCompass.vue'
 import CheckinDialog from './CheckinDialog.vue'
 import { firebaseAvailable } from '../lib/firebase'
+import { getTreeCheckinStats, type TreeCheckinStats } from '../composables/useSubmissions'
 import { formatDataSource } from '../data/dataSources'
 import { speciesSentinel } from '../data/species'
 import { plantYearFrom } from '../lib/achievements'
@@ -682,6 +693,7 @@ const checkinDialog = ref<{
   treeForm: string | null
   dbhInches: number | null
   plantYear: number | null
+  mode: 'checkin' | 'update' | 'missing'
 } | null>(null)
 
 const CHECKIN_MAX_METERS = 50
@@ -696,10 +708,11 @@ const canCheckInToSelectedTree = computed(() => {
   return meters <= CHECKIN_MAX_METERS
 })
 
-function openCheckin(): void {
+function openCheckin(mode: 'checkin' | 'update' | 'missing'): void {
   if (!selectedTree.value || !selectedTreeAnchor.value) return
   const [lng, lat] = selectedTreeAnchor.value
   checkinDialog.value = {
+    mode,
     treeId: selectedTree.value.tree_id,
     lat,
     lng,
@@ -708,6 +721,68 @@ function openCheckin(): void {
     dbhInches: selectedTree.value.dbh,
     plantYear: plantYearFrom(selectedTree.value.plant_date),
   }
+}
+
+// --- Public check-in counter on the tree card ---
+//
+// Best-effort and never blocking: the card renders without it, and a failed
+// read (offline, Firebase unconfigured) just leaves the line off.
+const checkinStats = ref<TreeCheckinStats | null>(null)
+let checkinStatsToken = 0
+
+watch(
+  () => selectedTree.value?.tree_id ?? null,
+  async (treeId) => {
+    const token = ++checkinStatsToken
+    checkinStats.value = null
+    if (!treeId || !firebaseAvailable) return
+    try {
+      const stats = await getTreeCheckinStats(treeId)
+      if (token === checkinStatsToken) checkinStats.value = stats
+    } catch (err) {
+      console.warn('[TreeCard] check-in count unavailable', err)
+    }
+  },
+)
+
+const checkinCountLabel = computed(() => {
+  const n = checkinStats.value?.count ?? 0
+  if (n === 0) return 'No check-ins yet — be the first'
+  return n === 1 ? '1 check-in' : `${n.toLocaleString()} check-ins`
+})
+
+const checkinLastLabel = computed(() => {
+  const at = checkinStats.value?.lastCheckinAt
+  if (!at || (checkinStats.value?.count ?? 0) === 0) return null
+  return `last ${formatRelativeTime(at)}`
+})
+
+function formatRelativeTime(at: Date): string {
+  const seconds = Math.max(0, (Date.now() - at.getTime()) / 1000)
+  if (seconds < 60) return 'just now'
+  const units: [number, string][] = [
+    [60 * 60 * 24 * 365, 'year'],
+    [60 * 60 * 24 * 30, 'month'],
+    [60 * 60 * 24 * 7, 'week'],
+    [60 * 60 * 24, 'day'],
+    [60 * 60, 'hour'],
+    [60, 'minute'],
+  ]
+  for (const [size, unit] of units) {
+    if (seconds >= size) {
+      const n = Math.floor(seconds / size)
+      return `${n} ${unit}${n === 1 ? '' : 's'} ago`
+    }
+  }
+  return 'just now'
+}
+
+function handleCheckinSuccess(mode: 'checkin' | 'update' | 'missing'): void {
+  // The dialog stays open on its "done" step; only a check-in moves the count.
+  if (mode !== 'checkin' || !checkinDialog.value) return
+  if (selectedTree.value?.tree_id !== checkinDialog.value.treeId) return
+  const prev = checkinStats.value?.count ?? 0
+  checkinStats.value = { count: prev + 1, lastCheckinAt: new Date() }
 }
 
 // Gap between the card and the map container edge when the anchor is close
@@ -1273,6 +1348,10 @@ function silentlyApplyCity(lat: number, lng: number): void {
  * This is the single authoritative path for GPS-driven navigation.
  */
 function navigateToLocation(lat: number, lng: number): void {
+  if (isInitialLoading.value || !mapRef.value) {
+    deferNavigationUntilReady(lat, lng)
+    return
+  }
   const city = closestCityTo(lat, lng)
   if (city !== selectedCity.value) {
     void switchCity(city, [lng, lat])
@@ -1280,6 +1359,30 @@ function navigateToLocation(lat: number, lng: number): void {
     flyTo({ lat, lng, zoom: props.simplified ? 18 : 15 })
   }
 }
+
+// "Find Me" is live from first paint, before the map has a city loaded. A
+// press then does what a city pick from the (also never-disabled) selector
+// does: it settles the initial city, so IP/geolocation bootstrap yields to it,
+// and requests the user's city through the route. The camera move waits for
+// the lifecycle to reach 'ready' -- flying mid-load would fight the city load
+// and, on desktop, the intro animation.
+let pendingLocateTarget: { lat: number; lng: number } | null = null
+
+function deferNavigationUntilReady(lat: number, lng: number): void {
+  pendingLocateTarget = { lat, lng }
+  markInitialUserCityDetectionDone()
+  const city = closestCityTo(lat, lng)
+  if (readRouteCity(route.query.city) !== city) {
+    void router.replace({ query: { ...route.query, city } })
+  }
+}
+
+watch(isInitialLoading, (loading) => {
+  if (loading || !pendingLocateTarget || !mapRef.value) return
+  const { lat, lng } = pendingLocateTarget
+  pendingLocateTarget = null
+  navigateToLocation(lat, lng)
+})
 
 let userLocationMarker: maplibregl.Marker | null = null
 
@@ -2062,6 +2165,43 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
+}
+
+.tc-social {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(167, 227, 178, 0.1);
+  font-size: 0.8rem;
+}
+
+.tc-social-count {
+  color: var(--color-leaf);
+}
+
+.tc-social-last {
+  color: var(--color-muted);
+}
+
+.tc-report-link {
+  display: block;
+  margin-top: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 0.76rem;
+  text-decoration: underline;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tc-report-link:hover {
+  color: var(--color-leaf);
 }
 
 .tree-card-checkin {

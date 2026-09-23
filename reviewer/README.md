@@ -54,6 +54,33 @@ approval rather than silently dropped later by the ingest.
 anything — use it for the first run, or if an approval committed but the export
 write failed.
 
+## Tree reports (`/modifications`)
+
+The mobile check-in dialog lets someone standing within 50 m of a mapped tree
+say one of two things about it besides "I'm here": **the tree is gone**
+(removed, a stump, or never there), or **suggest a fix** (a dragged-pin
+position and/or a corrected species or DBH). Each is a `treeModifications`
+document tied to the existing tree id, `pending` until reviewed, rate-limited
+the same way submissions are (`modificationRateLimits`). Photos go to the
+private `modifications/{uid}/` prefix and are never published.
+
+`/modifications` lists the pending queue with the mapped position, the
+proposed one (and the distance between them), and old versus new values.
+**Approve** runs `assertModificationPublishable` (known city, proposed
+position inside it, an update that changes something), copies the change into
+`publishedTreeModifications`, and rewrites the public
+`community/tree_modifications.ndjson` plus
+`community/tree_modifications_manifest.json` (`latestPublishedAtByCity`, as
+for approved trees). Export rows carry only the change: tree id, city, kind,
+reason, and the proposed latitude/longitude/species/DBH, with null meaning
+"keep the source value". A tree can have several approved rows; a consumer
+takes the last non-null value per field, and a later `missing` wins.
+`POST /api/modifications/republish` rebuilds the export.
+
+The data pipeline does not read this export yet: approving a report records
+and publishes it, but the city parquets are unchanged until an ingest applies
+it.
+
 ## Satellite review (`/satellite`)
 
 The second page reviews the imagery model's detections on NAIP aerial tiles

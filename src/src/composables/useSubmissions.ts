@@ -2,7 +2,9 @@ import { ref } from 'vue'
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
+  increment,
   limit,
   orderBy,
   query,
@@ -10,7 +12,6 @@ import {
   writeBatch,
   Timestamp,
   where,
-  addDoc,
 } from 'firebase/firestore'
 import {
   getDownloadURL,
@@ -18,7 +19,14 @@ import {
   uploadBytesResumable,
 } from 'firebase/storage'
 import { db, storage } from '../lib/firebase'
-import { e2eCheckins, e2ePhotoUrl, e2eSubmissions } from '../lib/e2eFixtures'
+import {
+  e2eCheckins,
+  e2eEnabled,
+  e2eModifications,
+  e2ePhotoUrl,
+  e2eSubmissions,
+  e2eTreeCheckinStats,
+} from '../lib/e2eFixtures'
 import type { Firestore } from 'firebase/firestore'
 import type { FirebaseStorage } from 'firebase/storage'
 import { signInIfNeeded, useAuth } from './useAuth'
@@ -283,8 +291,199 @@ export async function recordCheckin(input: CheckinInput): Promise<string> {
     speciesCityCount: input.speciesCityCount ?? null,
     at: serverTimestamp(),
   }
-  const docRef = await addDoc(collection(firestore, 'checkins'), docData)
-  return docRef.id
+  const checkinRef = doc(collection(firestore, 'checkins'))
+  // The check-in and the tree's public counter are committed together; the
+  // rules only accept a counter bump that names a check-in this batch creates.
+  const batch = writeBatch(firestore)
+  batch.set(checkinRef, docData)
+  batch.set(
+    doc(firestore, 'treeCheckinStats', treeStatsKey(input.treeId)),
+    {
+      treeId: input.treeId,
+      count: increment(1),
+      lastCheckinId: checkinRef.id,
+      lastCheckinAt: serverTimestamp(),
+    },
+    { merge: true },
+  )
+  await batch.commit()
+  return checkinRef.id
+}
+
+export interface TreeCheckinStats {
+  count: number
+  lastCheckinAt: Date | null
+}
+
+/**
+ * Firestore document ids cannot contain `/`, and some source ids might. The
+ * rules recompute this same escape from the stored `treeId`, so a counter
+ * document can only ever sit under its own tree's key.
+ */
+export function treeStatsKey(treeId: string): string {
+  return treeId.replace(/%/g, '%25').replace(/\//g, '%2F')
+}
+
+/**
+ * The public, per-tree check-in counter shown on the tree card. Readable
+ * without signing in; a tree nobody has checked in to has no document and
+ * reads as zero.
+ */
+export async function getTreeCheckinStats(treeId: string): Promise<TreeCheckinStats> {
+  if (e2eEnabled) return e2eTreeCheckinStats(treeId)
+  const { db: firestore } = requireFirebase()
+  const snap = await getDoc(doc(firestore, 'treeCheckinStats', treeStatsKey(treeId)))
+  if (!snap.exists()) return { count: 0, lastCheckinAt: null }
+  const data = snap.data()
+  return {
+    count: Number(data.count ?? 0),
+    lastCheckinAt: data.lastCheckinAt instanceof Timestamp ? data.lastCheckinAt.toDate() : null,
+  }
+}
+
+// --- Tree modifications -------------------------------------------------
+//
+// A modification is a reviewed proposal against an existing tree, the way a
+// submission is a reviewed proposal for a new one: it lands `pending`, and
+// only the local reviewer can publish it. `missing` says the tree is not
+// there any more; `update` proposes a corrected position and/or properties,
+// leaving any field it does not set as the tree already has it.
+
+export type ModificationKind = 'missing' | 'update'
+export type MissingReason = 'removed' | 'stump' | 'never-existed' | 'other'
+
+export interface TreeModification {
+  id: string
+  userId: string
+  kind: ModificationKind
+  treeId: string
+  city: string
+  treeLat: number
+  treeLng: number
+  distanceMeters: number | null
+  missingReason: MissingReason | null
+  proposedLat: number | null
+  proposedLng: number | null
+  proposedSpecies: string | null
+  proposedDbhInches: number | null
+  notes: string | null
+  photoPath: string | null
+  submittedAt: Date | null
+  status: SubmissionStatus
+}
+
+export interface ModificationInput {
+  kind: ModificationKind
+  treeId: string
+  city: string
+  treeLat: number
+  treeLng: number
+  userLat: number
+  userLng: number
+  distanceMeters: number
+  // What the tree looked like when the user opened it, so a reviewer sees
+  // the proposal against the values it replaces.
+  currentSpecies?: string | null
+  currentDbhInches?: number | null
+  missingReason?: MissingReason
+  proposedLat?: number | null
+  proposedLng?: number | null
+  proposedSpecies?: string | null
+  proposedDbhInches?: number | null
+  notes?: string | null
+  photoBlob?: Blob
+  onProgress?: (fraction: number) => void
+}
+
+export async function submitTreeModification(input: ModificationInput): Promise<string> {
+  const { db: firestore, storage: bucket } = requireFirebase()
+  const user = await signInIfNeeded()
+  const modificationRef = doc(collection(firestore, 'treeModifications'))
+  const modificationId = modificationRef.id
+
+  let photoPath: string | null = null
+  if (input.photoBlob) {
+    photoPath = `modifications/${user.uid}/${modificationId}.${extFor(input.photoBlob)}`
+    await uploadOne(bucket, photoPath, input.photoBlob, input.onProgress)
+  }
+
+  const isUpdate = input.kind === 'update'
+  const docData = {
+    userId: user.uid,
+    kind: input.kind,
+    treeId: input.treeId,
+    city: input.city,
+    treeLat: input.treeLat,
+    treeLng: input.treeLng,
+    userLat: input.userLat,
+    userLng: input.userLng,
+    distanceMeters: input.distanceMeters,
+    currentSpecies: input.currentSpecies ?? null,
+    currentDbhInches: input.currentDbhInches ?? null,
+    missingReason: isUpdate ? null : (input.missingReason ?? 'other'),
+    proposedLat: isUpdate ? (input.proposedLat ?? null) : null,
+    proposedLng: isUpdate ? (input.proposedLng ?? null) : null,
+    proposedSpecies: isUpdate ? (input.proposedSpecies?.trim() || null) : null,
+    proposedDbhInches: isUpdate ? (input.proposedDbhInches ?? null) : null,
+    notes: input.notes?.trim() || null,
+    photoPath,
+    submittedAt: serverTimestamp(),
+    status: 'pending' as SubmissionStatus,
+  }
+  // Same shape as submitPhoto: the rate-limit marker is validated against
+  // this document with getAfter(), so it cannot be skipped client-side.
+  const batch = writeBatch(firestore)
+  batch.set(modificationRef, docData)
+  batch.set(doc(firestore, 'modificationRateLimits', user.uid), {
+    userId: user.uid,
+    lastModificationId: modificationId,
+    submittedAt: serverTimestamp(),
+  })
+  await batch.commit()
+  return modificationId
+}
+
+function numberOrNull(value: unknown): number | null {
+  return value === null || value === undefined ? null : Number(value)
+}
+
+function mapModificationDoc(id: string, data: Record<string, unknown>): TreeModification {
+  const submittedAt = data.submittedAt
+  return {
+    id,
+    userId: String(data.userId ?? ''),
+    kind: data.kind === 'missing' ? 'missing' : 'update',
+    treeId: String(data.treeId ?? ''),
+    city: String(data.city ?? ''),
+    treeLat: Number(data.treeLat ?? 0),
+    treeLng: Number(data.treeLng ?? 0),
+    distanceMeters: numberOrNull(data.distanceMeters),
+    missingReason: (data.missingReason as MissingReason | null) ?? null,
+    proposedLat: numberOrNull(data.proposedLat),
+    proposedLng: numberOrNull(data.proposedLng),
+    proposedSpecies: (data.proposedSpecies as string | null) ?? null,
+    proposedDbhInches: numberOrNull(data.proposedDbhInches),
+    notes: (data.notes as string | null) ?? null,
+    photoPath: (data.photoPath as string | null) ?? null,
+    submittedAt: submittedAt instanceof Timestamp ? submittedAt.toDate() : null,
+    status: (data.status as SubmissionStatus) ?? 'pending',
+  }
+}
+
+export async function listMyModifications(maxResults = 50): Promise<TreeModification[]> {
+  const seeded = e2eModifications()
+  if (seeded) return seeded.slice(0, maxResults)
+
+  const { db: firestore } = requireFirebase()
+  const user = await signInIfNeeded()
+  const q = query(
+    collection(firestore, 'treeModifications'),
+    where('userId', '==', user.uid),
+    orderBy('submittedAt', 'desc'),
+    limit(maxResults),
+  )
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => mapModificationDoc(d.id, d.data()))
 }
 
 export async function listMySubmissions(maxResults = 50): Promise<Submission[]> {
@@ -331,6 +530,7 @@ export async function getSubmissionPhotoUrl(photoPath: string): Promise<string> 
 export function useMyContributions() {
   const submissions = ref<Submission[]>([])
   const checkins = ref<Checkin[]>([])
+  const modifications = ref<TreeModification[]>([])
   const loading = ref(false)
   const error = ref<Error | null>(null)
   const { user } = useAuth()
@@ -339,9 +539,19 @@ export function useMyContributions() {
     loading.value = true
     error.value = null
     try {
-      const [subs, chks] = await Promise.all([listMySubmissions(), listMyCheckins()])
+      const [subs, chks, mods] = await Promise.all([
+        listMySubmissions(),
+        listMyCheckins(),
+        // Reports are the newest collection; a failure here (e.g. its index
+        // still building) must not blank the photos and check-ins above it.
+        listMyModifications().catch((e: unknown) => {
+          console.warn('[contributions] could not load tree reports', e)
+          return [] as TreeModification[]
+        }),
+      ])
       submissions.value = subs
       checkins.value = chks
+      modifications.value = mods
     } catch (e) {
       error.value = e as Error
     } finally {
@@ -349,5 +559,5 @@ export function useMyContributions() {
     }
   }
 
-  return { submissions, checkins, loading, error, refresh, user }
+  return { submissions, checkins, modifications, loading, error, refresh, user }
 }
