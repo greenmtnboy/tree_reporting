@@ -97,3 +97,66 @@ resource "google_firestore_index" "submissions_pending_oldest" {
     order      = "ASCENDING"
   }
 }
+
+resource "google_firestore_index" "tree_modifications_by_user_recent" {
+  project    = var.project_id
+  database   = google_firestore_database.default.name
+  collection = "treeModifications"
+
+  fields {
+    field_path = "userId"
+    order      = "ASCENDING"
+  }
+
+  fields {
+    field_path = "submittedAt"
+    order      = "DESCENDING"
+  }
+
+  fields {
+    field_path = "__name__"
+    order      = "DESCENDING"
+  }
+}
+
+resource "google_firestore_index" "tree_modifications_pending_oldest" {
+  project    = var.project_id
+  database   = google_firestore_database.default.name
+  collection = "treeModifications"
+
+  fields {
+    field_path = "status"
+    order      = "ASCENDING"
+  }
+
+  fields {
+    field_path = "submittedAt"
+    order      = "ASCENDING"
+  }
+
+  fields {
+    field_path = "__name__"
+    order      = "ASCENDING"
+  }
+}
+
+resource "google_firestore_index" "checkin_photos_pending_oldest" {
+  project    = var.project_id
+  database   = google_firestore_database.default.name
+  collection = "checkins"
+
+  fields {
+    field_path = "photoReview"
+    order      = "ASCENDING"
+  }
+
+  fields {
+    field_path = "at"
+    order      = "ASCENDING"
+  }
+
+  fields {
+    field_path = "__name__"
+    order      = "ASCENDING"
+  }
+}

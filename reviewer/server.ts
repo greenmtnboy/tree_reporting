@@ -6,6 +6,20 @@ import path from 'node:path'
 import sharp from 'sharp'
 
 import { createSatelliteRouter, TileStore } from './satellite.ts'
+import {
+  assertCheckinPhotoPublishable,
+  checkinPhotoListItem,
+  checkinPhotoObjectPath,
+  nextTreePhotos,
+  treeDocKey,
+} from './checkinPhotos.ts'
+import {
+  assertModificationPublishable,
+  modificationExportRow,
+  modificationListItem,
+  modificationManifest,
+  type PendingModification,
+} from './modifications.ts'
 import { assertCoordinatesAreInCity, CITY_CODES } from './submissionCity.ts'
 
 const projectId = process.env.GOOGLE_CLOUD_PROJECT ?? 'sf-tree-reporting-prod'
@@ -30,6 +44,8 @@ const app = express()
 
 const EXPORT_PATH = 'community/published_trees.ndjson'
 const MANIFEST_PATH = 'community/manifest.json'
+const MODIFICATIONS_EXPORT_PATH = 'community/tree_modifications.ndjson'
+const MODIFICATIONS_MANIFEST_PATH = 'community/tree_modifications_manifest.json'
 const PUBLISHED_PHOTO_MAX_DIM = 1600
 
 app.use(express.json({ limit: '32kb' }))
@@ -87,6 +103,10 @@ function publishedPhotoUrl(objectPath: string): string {
  * dropped.
  */
 async function publishPhoto(sourcePath: string, treeId: string, index: number): Promise<string> {
+  return publishPhotoTo(sourcePath, `community/photos/${treeId}${index === 0 ? '' : `-${index}`}.jpg`)
+}
+
+async function publishPhotoTo(sourcePath: string, objectPath: string): Promise<string> {
   const [original] = await bucket.file(sourcePath).download()
   const cleaned = await sharp(original)
     .rotate()
@@ -99,7 +119,6 @@ async function publishPhoto(sourcePath: string, treeId: string, index: number): 
     .jpeg({ quality: 85 })
     .toBuffer()
 
-  const objectPath = `community/photos/${treeId}${index === 0 ? '' : `-${index}`}.jpg`
   await publishedBucket.file(objectPath).save(cleaned, {
     contentType: 'image/jpeg',
     metadata: { cacheControl: 'public, max-age=86400' },
@@ -152,6 +171,28 @@ async function rewritePublicExport(): Promise<number> {
   return lines.length
 }
 
+/**
+ * Rewrite the public export of approved tree modifications, in publish order.
+ * Same reasoning as rewritePublicExport: the pipeline reads GCS, not Firestore.
+ * The rows carry the change only: no user, notes, or photo.
+ */
+async function rewriteModificationExport(): Promise<number> {
+  const snapshot = await db.collection('publishedTreeModifications').orderBy('publishedAt', 'asc').get()
+  const rows = snapshot.docs.map((document) => {
+    const data = document.data()
+    const publishedAt = data.publishedAt instanceof Timestamp ? data.publishedAt.toDate().toISOString() : null
+    return modificationExportRow(document.id, data, publishedAt)
+  })
+  const writeOptions = { contentType: 'application/json', metadata: { cacheControl: 'no-cache' } }
+  const body = rows.map((row) => JSON.stringify(row)).join('\n')
+  await publishedBucket.file(MODIFICATIONS_EXPORT_PATH).save(rows.length ? `${body}\n` : '', writeOptions)
+  await publishedBucket.file(MODIFICATIONS_MANIFEST_PATH).save(
+    JSON.stringify(modificationManifest(rows)),
+    writeOptions,
+  )
+  return rows.length
+}
+
 app.get('/api/submissions', async (_req, res, next) => {
   try {
     const snapshot = await db.collection('submissions')
@@ -178,7 +219,8 @@ app.get('/api/submissions', async (_req, res, next) => {
 app.get('/api/photos', async (req, res, next) => {
   try {
     const path = typeof req.query.path === 'string' ? req.query.path : ''
-    if (!path.startsWith('submissions/') || path.includes('..')) {
+    const privatePrefixes = ['submissions/', 'modifications/', 'checkins/']
+    if (!privatePrefixes.some((prefix) => path.startsWith(prefix)) || path.includes('..')) {
       res.status(400).json({ error: 'Invalid submission photo path' })
       return
     }
@@ -269,6 +311,174 @@ app.post('/api/submissions/:id/reject', async (req, res, next) => {
   }
 })
 
+app.get('/api/modifications', async (_req, res, next) => {
+  try {
+    const snapshot = await db.collection('treeModifications')
+      .where('status', '==', 'pending')
+      .orderBy('submittedAt', 'asc')
+      .limit(100)
+      .get()
+    res.json(snapshot.docs.map((document) => modificationListItem(document.id, document.data(), localPhotoUrl)))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/modifications/:id/approve', async (req, res, next) => {
+  try {
+    const modificationId = req.params.id
+    const modificationRef = db.collection('treeModifications').doc(modificationId)
+    const publishedRef = db.collection('publishedTreeModifications').doc(modificationId)
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(modificationRef)
+      if (!snapshot.exists) throw new Error('Modification not found')
+      const modification = snapshot.data() as PendingModification & { submittedAt?: Timestamp }
+      assertModificationPublishable(modification)
+      const isUpdate = modification.kind === 'update'
+      transaction.create(publishedRef, {
+        modificationId,
+        treeId: modification.treeId,
+        city: modification.city,
+        kind: modification.kind,
+        missingReason: isUpdate ? null : (modification.missingReason ?? null),
+        latitude: isUpdate ? (modification.proposedLat ?? null) : null,
+        longitude: isUpdate ? (modification.proposedLng ?? null) : null,
+        species: isUpdate ? (modification.proposedSpecies?.trim() || null) : null,
+        dbhInches: isUpdate ? (modification.proposedDbhInches ?? null) : null,
+        submittedAt: modification.submittedAt ?? null,
+        publishedAt: FieldValue.serverTimestamp(),
+      })
+      transaction.update(modificationRef, {
+        status: 'published',
+        reviewedAt: FieldValue.serverTimestamp(),
+        rejectionReason: null,
+      })
+    })
+    const published = await rewriteModificationExport()
+    res.json({ ok: true, published })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/modifications/:id/reject', async (req, res, next) => {
+  try {
+    const { reason } = assertDecisionBody(req.body)
+    const modificationRef = db.collection('treeModifications').doc(req.params.id)
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(modificationRef)
+      if (!snapshot.exists) throw new Error('Modification not found')
+      const modification = snapshot.data() as PendingModification
+      if (modification.status !== 'pending') throw new Error(`Modification is already ${modification.status}`)
+      transaction.update(modificationRef, {
+        status: 'rejected',
+        reviewedAt: FieldValue.serverTimestamp(),
+        rejectionReason: reason,
+      })
+    })
+    res.json({ ok: true })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/modifications/republish', async (_req, res, next) => {
+  try {
+    res.json({ ok: true, published: await rewriteModificationExport() })
+  } catch (error) {
+    next(error)
+  }
+})
+
+type PendingCheckinPhoto = {
+  userId: string
+  treeId: string
+  city?: string
+  photoPath?: string | null
+  photoReview?: 'pending' | 'published' | 'rejected'
+  species?: string | null
+  lat?: number
+  lng?: number
+  treeLat?: number
+  treeLng?: number
+  distanceMeters?: number | null
+  at?: Timestamp
+}
+
+app.get('/api/checkin-photos', async (_req, res, next) => {
+  try {
+    const snapshot = await db.collection('checkins')
+      .where('photoReview', '==', 'pending')
+      .orderBy('at', 'asc')
+      .limit(100)
+      .get()
+    res.json(snapshot.docs.map((document) => checkinPhotoListItem(document.id, document.data(), localPhotoUrl)))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/checkin-photos/:id/approve', async (req, res, next) => {
+  try {
+    const checkinRef = db.collection('checkins').doc(req.params.id)
+    const pending = await checkinRef.get()
+    const checkin = assertCheckinPhotoPublishable(pending.data() as PendingCheckinPhoto | undefined)
+
+    // Re-encode into the public bucket before the transaction records the URL;
+    // if the transaction then fails the copy is simply unreferenced.
+    const photoUrl = await publishPhotoTo(checkin.photoPath, checkinPhotoObjectPath(checkin.treeId, checkinRef.id))
+    const treePhotosRef = db.collection('treePhotos').doc(treeDocKey(checkin.treeId))
+
+    await db.runTransaction(async (transaction) => {
+      const [snapshot, treePhotos] = await Promise.all([transaction.get(checkinRef), transaction.get(treePhotosRef)])
+      const current = snapshot.data() as PendingCheckinPhoto | undefined
+      if (current?.photoReview !== 'pending') throw new Error(`Photo is already ${current?.photoReview ?? 'gone'}`)
+      transaction.set(treePhotosRef, {
+        treeId: checkin.treeId,
+        ...nextTreePhotos(treePhotos.data(), photoUrl),
+        latestPublishedAt: FieldValue.serverTimestamp(),
+      })
+      transaction.update(checkinRef, {
+        photoReview: 'published',
+        publishedPhotoUrl: photoUrl,
+        photoReviewedAt: FieldValue.serverTimestamp(),
+      })
+    })
+    res.json({ ok: true, photoUrl })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/checkin-photos/:id/reject', async (req, res, next) => {
+  try {
+    const { reason } = assertDecisionBody(req.body)
+    const checkinRef = db.collection('checkins').doc(req.params.id)
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(checkinRef)
+      if (!snapshot.exists) throw new Error('Check-in not found')
+      const checkin = snapshot.data() as PendingCheckinPhoto
+      if (checkin.photoReview !== 'pending') throw new Error(`Photo is already ${checkin.photoReview ?? 'not offered'}`)
+      transaction.update(checkinRef, {
+        photoReview: 'rejected',
+        photoRejectionReason: reason,
+        photoReviewedAt: FieldValue.serverTimestamp(),
+      })
+    })
+    res.json({ ok: true })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/photos', (_req, res) => {
+  res.sendFile(path.join(import.meta.dirname, 'checkin_photos_page.html'))
+})
+
+app.get('/modifications', (_req, res) => {
+  res.sendFile(path.join(import.meta.dirname, 'modifications_page.html'))
+})
+
 // Rebuild the export from Firestore without approving anything — for the first
 // run, or to recover if an approval committed but the export write failed.
 app.post('/api/republish', async (_req, res, next) => {
@@ -291,7 +501,7 @@ dl{display:grid;grid-template-columns:110px 1fr;gap:8px;margin:0}dt{color:#8cab9
 .actions{display:flex;gap:10px;margin-top:18px}button{border:1px solid #6da87b;background:#1d3624;color:#e7f5ea;padding:9px 14px;cursor:pointer}
 button.reject{border-color:#a86d6d;background:#361d1d}.empty{color:#8cab94}@media(max-width:720px){.card{grid-template-columns:1fr}}
 nav{margin-bottom:14px}nav a{color:#8cab94;margin-right:14px}
-</style></head><body><main><nav><a href="/">Photo submissions</a><a href="/satellite">Satellite tiles</a><a href="/satellite#queue">Satellite publish queue</a></nav><h1>Pending tree submissions</h1><p id="status">Loading…</p><section id="queue" class="queue"></section></main>
+</style></head><body><main><nav><a href="/">Photo submissions</a><a href="/modifications">Tree reports</a><a href="/photos">Tree photos</a><a href="/satellite">Satellite tiles</a><a href="/satellite#queue">Satellite publish queue</a></nav><h1>Pending tree submissions</h1><p id="status">Loading…</p><section id="queue" class="queue"></section></main>
 <script>
 const queue=document.querySelector('#queue'),status=document.querySelector('#status');
 const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

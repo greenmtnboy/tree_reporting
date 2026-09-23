@@ -54,6 +54,61 @@ approval rather than silently dropped later by the ingest.
 anything — use it for the first run, or if an approval committed but the export
 write failed.
 
+## Tree photos (`/photos`)
+
+A check-in photo is private unless the visitor ticks **Submit as a photo of
+this tree** in the check-in dialog, which records `photoReview: 'pending'` on
+the check-in (the rules allow no other value from the client, and only a
+`photoPath` in that user's own `checkins/{uid}/` folder). The check-in counts
+immediately; only the photo waits. Publishing checks the folder again, so a
+check-in can never make the reviewer publish someone else's upload.
+
+The public counter, `treeCheckinStats/{treeKey}`, moves by one per person per
+tree per 20 hours: the rules only accept a bump written alongside a new
+check-in and that user's `treeCheckinMarkers/{uid}_{treeKey}` marker, which
+cannot move again inside the window. It holds a count and nothing about when.
+
+There is no unpublish route yet: taking a published photo down means removing
+its URL from `treePhotos/{treeKey}` and deleting the object in the public
+bucket by hand.
+
+`/photos` lists pending ones. **Publish** re-encodes the photo through `sharp`
+exactly as submission photos are (no EXIF, IPTC or XMP), writes it to
+`community/tree_photos/{tree}/{checkin}.jpg` in the public bucket, and in one
+transaction prepends its URL to `treePhotos/{treeKey}` (newest first, the last
+12 kept, plus a running count) and marks the check-in `published`. The tree
+card reads `treePhotos` directly, like the check-in counter, so this works for
+every source's trees with no pipeline change. **Reject** marks it `rejected`;
+the file stays private. Report photos are never published.
+
+## Tree reports (`/modifications`)
+
+The mobile check-in dialog lets someone standing within 50 m of a mapped tree
+say one of two things about it besides "I'm here": **the tree is gone**
+(removed, a stump, or never there), or **suggest a fix** (a dragged-pin
+position and/or a corrected species or DBH). Each is a `treeModifications`
+document tied to the existing tree id, `pending` until reviewed, rate-limited
+the same way submissions are (`modificationRateLimits`). Photos go to the
+private `modifications/{uid}/` prefix and are reviewer evidence only; they are
+never published.
+
+`/modifications` lists the pending queue with the mapped position, the
+proposed one (and the distance between them), and old versus new values.
+**Approve** runs `assertModificationPublishable` (known city, proposed
+position inside it, an update that changes something), copies the change into
+`publishedTreeModifications`, and rewrites the public
+`community/tree_modifications.ndjson` plus
+`community/tree_modifications_manifest.json` (`latestPublishedAtByCity`, as
+for approved trees). Export rows carry only the change: tree id, city, kind,
+reason, and the proposed latitude/longitude/species/DBH, with null meaning
+"keep the source value". A tree can have several approved rows; a consumer
+takes the last non-null value per field, and a later `missing` wins.
+`POST /api/modifications/republish` rebuilds the export.
+
+The data pipeline does not read this export yet: approving a report records
+and publishes it, but the city parquets are unchanged until an ingest applies
+it.
+
 ## Satellite review (`/satellite`)
 
 The second page reviews the imagery model's detections on NAIP aerial tiles

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Tree report review</title>
+<style>
+body{margin:0;background:#0b0f0d;color:#d7eadb;font:15px system-ui}main{max-width:1100px;margin:auto;padding:28px}
+h1{font-size:24px}.queue{display:grid;gap:18px}.card{display:grid;grid-template-columns:minmax(260px,420px) 1fr;gap:20px;padding:18px;border:1px solid #35513d;background:#111914}
+img{width:100%;max-height:420px;object-fit:contain;background:#050806}.nophoto{display:grid;place-items:center;min-height:120px;background:#050806;color:#8cab94}
+dl{display:grid;grid-template-columns:130px 1fr;gap:8px;margin:0}dt{color:#8cab94}dd{margin:0;overflow-wrap:anywhere}
+.kind{display:inline-block;padding:2px 8px;border:1px solid #6da87b;font-size:12px;letter-spacing:.06em;text-transform:uppercase}.kind.missing{border-color:#a86d6d;color:#f0b4b4}
+.changed{color:#a7e3b2}.was{color:#8cab94;text-decoration:line-through;margin-right:6px}
+.actions{display:flex;gap:10px;margin-top:18px}button{border:1px solid #6da87b;background:#1d3624;color:#e7f5ea;padding:9px 14px;cursor:pointer}
+button.reject{border-color:#a86d6d;background:#361d1d}@media(max-width:720px){.card{grid-template-columns:1fr}}
+nav{margin-bottom:14px}nav a{color:#8cab94;margin-right:14px}a{color:#a7e3b2}
+</style>
+</head>
+<body><main>
+<nav><a href="/">Photo submissions</a><a href="/modifications">Tree reports</a><a href="/photos">Tree photos</a><a href="/satellite">Satellite tiles</a></nav>
+<h1>Pending tree reports</h1>
+<p>Reports against trees already on the map: a tree that is gone, or a corrected position, species or trunk diameter. Approving publishes the change to <code>community/tree_modifications.ndjson</code>; the user, notes and photo stay private.</p>
+<p id="status">Loading…</p>
+<section id="queue" class="queue"></section>
+</main>
+<script>
+const queue = document.querySelector('#queue'), status = document.querySelector('#status');
+const esc = v => String(v ?? '—').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Coordinates come from client-written documents: only a finite number ever
+// reaches the markup, whatever the document holds.
+const osm = (lat, lng) => {
+  const a = lat == null ? NaN : Number(lat), b = lng == null ? NaN : Number(lng);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return '—';
+  return `<a href="https://www.openstreetmap.org/?mlat=${a}&mlon=${b}#map=20/${a}/${b}" target="_blank" rel="noopener">${a.toFixed(6)}, ${b.toFixed(6)}</a>`;
+};
+function metres(aLat, aLng, bLat, bLng) {
+  const R = 6371000, r = d => d * Math.PI / 180;
+  const a = Math.sin(r(bLat - aLat) / 2) ** 2 + Math.cos(r(aLat)) * Math.cos(r(bLat)) * Math.sin(r(bLng - aLng) / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+function changeRows(m) {
+  if (m.kind === 'missing') return `<dt>Finding</dt><dd class="changed">${esc(m.missingReason)}</dd><dt>Species on map</dt><dd>${esc(m.currentSpecies)}</dd>`;
+  let rows = '';
+  if (m.proposedLat != null && m.proposedLng != null) {
+    rows += `<dt>Move to</dt><dd class="changed">${osm(m.proposedLat, m.proposedLng)} (${metres(m.treeLat, m.treeLng, m.proposedLat, m.proposedLng)} m)</dd>`;
+  }
+  if (m.proposedSpecies) rows += `<dt>Species</dt><dd><span class="was">${esc(m.currentSpecies)}</span><span class="changed">${esc(m.proposedSpecies)}</span></dd>`;
+  if (m.proposedDbhInches != null) rows += `<dt>DBH (in)</dt><dd><span class="was">${esc(m.currentDbhInches)}</span><span class="changed">${esc(m.proposedDbhInches)}</span></dd>`;
+  return rows;
+}
+async function load() {
+  status.textContent = 'Loading…';
+  const r = await fetch('/api/modifications');
+  if (!r.ok) throw new Error(await r.text());
+  const rows = await r.json();
+  status.textContent = rows.length ? rows.length + ' awaiting review' : 'Queue is empty';
+  queue.innerHTML = rows.map(m => `<article class="card" data-id="${esc(m.id)}">
+    <div>${m.photoUrl ? `<img src="${esc(m.photoUrl)}" alt="Reported tree">` : '<div class="nophoto">No photo</div>'}</div>
+    <div><p><span class="kind ${m.kind === 'missing' ? 'missing' : ''}">${m.kind === 'missing' ? 'Tree is gone' : 'Suggested fix'}</span></p>
+    <dl><dt>Tree</dt><dd><code>${esc(m.treeId)}</code></dd><dt>City</dt><dd>${esc(m.city)}</dd>
+    <dt>Mapped at</dt><dd>${osm(m.treeLat, m.treeLng)}</dd>
+    ${changeRows(m)}
+    <dt>Reporter was</dt><dd>${m.distanceMeters != null ? esc(m.distanceMeters) + ' m from the tree' : '—'}</dd>
+    <dt>Notes</dt><dd>${esc(m.notes)}</dd><dt>Submitted</dt><dd>${esc(m.submittedAt)}</dd><dt>User</dt><dd>${esc(m.userId)}</dd></dl>
+    <div class="actions"><button data-action="approve">Approve</button><button class="reject" data-action="reject">Reject</button></div></div></article>`).join('');
+}
+async function decide(id, action) {
+  let body = {};
+  if (action === 'reject') { const reason = prompt('Optional rejection reason') ?? null; if (reason === null) return; body = { reason }; }
+  const r = await fetch('/api/modifications/' + encodeURIComponent(id) + '/' + action, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(await r.text());
+  await load();
+}
+queue.addEventListener('click', e => {
+  const b = e.target.closest('button[data-action]'); if (!b) return;
+  const card = b.closest('[data-id]'); b.disabled = true;
+  decide(card.dataset.id, b.dataset.action).catch(err => { alert(err.message); b.disabled = false; });
+});
+load().catch(err => status.textContent = 'Could not load queue: ' + err.message);
+</script>
+</body>
+</html>
