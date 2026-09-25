@@ -157,7 +157,9 @@ defaults are wide for that city, the knob is `ROAD_HALF_WIDTH_M`. The four
 farthest moves, 16 to 20 m, are one cluster at 44.4616, -73.2152 inside a
 single footprint.
 
-The `overture-usbtv` job is sized from this: 3600 s timeout, 2048 MB. The
+The `overture-usbtv` job is sized from this: 3600 s timeout, 3072 MB. The
+pilot recorded no memory figure; 2048 MB was OOM-killed on the first prod
+firing (2026-09-22), and 3072 is the ceiling of the same medium class. The
 city refresh joins 12,816 rows to 4.4M with a hash on the smaller side.
 
 ## Rolling a city on
