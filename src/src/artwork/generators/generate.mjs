@@ -6,6 +6,8 @@ import { generateBroadleafSvg } from './broadleaf.mjs'
 import { generateWoodlandSvg } from './woodland.mjs'
 import { generateConiferSvg } from './conifer.mjs'
 import { generateDesertSvg } from './desert.mjs'
+import { generateTropicalSvg } from './tropical.mjs'
+import { generateBorealSvg } from './boreal.mjs'
 
 const generators = [
   ['city', generateCitySvg],
@@ -14,6 +16,8 @@ const generators = [
   ['woodland', generateWoodlandSvg],
   ['conifer', generateConiferSvg],
   ['desert', generateDesertSvg],
+  ['tropical', generateTropicalSvg],
+  ['boreal', generateBorealSvg],
 ]
 
 for (const [name, generate] of generators) {

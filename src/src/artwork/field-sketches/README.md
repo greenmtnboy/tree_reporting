@@ -30,10 +30,17 @@ complete drawing immediately. Exported SVGs remain static.
 | `conifer.svg` | Temperate conifer forest: five tapered needle fans |
 | `desert.svg` | Desert/xeric scrub: mature and young cacti among low dunes |
 | `grassland.svg` | Grassland/savanna: grasses and seed heads |
+| `tropical.svg` | Moist tropical/subtropical forest: pointed evergreen leaves and a fern |
+| `boreal.svg` | Boreal forest/taiga: paired pine needles and low understory foliage |
 
 `index.ts` registers drawings and their review notes. `FieldSketch.vue` renders
 only these trusted, static SVG imports. The app's `FieldBackdrop.vue` chooses
-the biome and handles position/opacity. The smaller city study lives inside
+the biome via the explicit RESOLVE-label mapping in `../biomeSketch.ts` and
+handles position/opacity. All 41 configured cities have an explicit choice
+across seven biomes; `biomeSketch.test.ts` fails if a future city's biome is
+unmapped. The all-cities view retains the broadleaf study. The studio lists
+the cities using each drawing from the same context and mapping.
+The smaller city study lives inside
 `AppSidebar.vue` behind the Urban Trees name block. The studio uses the same renderer and
 originals, so edits appear in both through Vite's hot reload.
 
@@ -113,7 +120,27 @@ outline. Plant templates and their details use shared local transforms.
 Five low sand ridges are sampled and interrupted behind the cactus
 silhouettes, so the SVG stays transparent without shared mask IDs. Open
 outline bases and short ground marks settle the plants into the foreground.
-Use the same generate/check commands; all six studies now have generators.
+Use the same generate/check commands.
+
+## Generate moist tropical forest and taiga
+
+`tropical.svg` uses `tropicalScene` in `../generators/tropical.mjs`: four
+entire, pointed evergreen leaves above a low arching fern. The leaves follow
+their petioles' terminal tangents; fern leaflets start at sampled points on
+the rachis, follow its local direction, and taper toward its end. This shared
+moist-forest motif covers Bogotá and Taipei, not a particular species in
+either ecoregion.
+
+`boreal.svg` uses `borealScene` in `../generators/boreal.mjs`: three open
+pine-inspired shoots and a low small-leaved shrub. Each needle pair shares
+an attachment on its shoot, with an alternating spread and subtle curvature.
+Bare junctions separate the fans. The shrub's petioles and leaves share
+attachment points and tangents. Helsinki uses this taiga study; temperate
+conifer cities retain the fir-like `conifer.svg`.
+
+Both use `botanical-geometry.mjs` for shared curve evaluation, local frames,
+and entire-leaf construction. They preserve the same growth groups, static
+SVG exports, theme inheritance, and reduced-motion behavior as earlier art.
 
 ## Iteration contract
 
@@ -136,7 +163,7 @@ Use the same generate/check commands; all six studies now have generators.
 
 ## Current review baseline
 
-All six studies now use generators. Botanical attachments share their stem
+All eight studies use generators. Botanical attachments share their stem
 geometry; desert contours stop behind the plants. Low opacity, panel overlays,
 and cropping also make parts less visible. Per-drawing notes are in the
 studio. Use Git history for before/after comparisons rather than duplicating

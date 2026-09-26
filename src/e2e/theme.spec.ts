@@ -69,7 +69,11 @@ test('background drawings follow the active city ecosystem', async ({ page }) =>
   await page.goto('/#/info?city=USSFO')
   const backdrop = page.locator('.field-backdrop')
   await expect(backdrop).toHaveAttribute('data-ecosystem', 'woodland')
-  for (const [city, biome] of [['USBOS', 'broadleaf'], ['CAVAN', 'conifer'], ['USTEM', 'desert'], ['ARBUE', 'grassland']]) {
+  for (const [city, biome] of [
+    ['USBOS', 'broadleaf'], ['CAVAN', 'conifer'], ['USTEM', 'desert'], ['ARBUE', 'grassland'],
+    ['COBOG', 'tropical'], ['TWTPE', 'tropical'], ['FIHEL', 'boreal'],
+    ['JPTYO', 'broadleaf'], ['DKCPH', 'broadleaf'], ['USDEN', 'grassland'], ['CAVIC', 'conifer'],
+  ]) {
     await page.getByRole('combobox', { name: 'Select city' }).selectOption(city!)
     await expect(backdrop).toHaveAttribute('data-ecosystem', biome!)
   }

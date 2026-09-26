@@ -4,6 +4,8 @@ import broadleaf from './broadleaf.svg?raw'
 import conifer from './conifer.svg?raw'
 import desert from './desert.svg?raw'
 import grassland from './grassland.svg?raw'
+import tropical from './tropical.svg?raw'
+import boreal from './boreal.svg?raw'
 
 /** Static, repository-owned SVG only. Never add user-supplied markup here. */
 export const fieldSketches = {
@@ -31,6 +33,16 @@ export const fieldSketches = {
     svg: grassland, title: 'Grassland & savanna', example: 'Buenos Aires',
     motif: 'Arching grasses and seed heads',
     review: 'Each leaf starts on its curved stalk and rotates with the local stalk angle. Seed heads are evenly spaced along the curve. Edit grasslandScene in generators/grassland.mjs, then run pnpm artwork:generate; grassland and savanna share this drawing.',
+  },
+  tropical: {
+    svg: tropical, title: 'Moist tropical forest', example: 'Bogotá · Taipei',
+    motif: 'Pointed evergreen leaves above an arching understory fern',
+    review: 'One entire-leaf template with drawn-out tips follows the terminal direction of each branch. Fern leaflets start on the curved rachis and taper toward its tip. These are shared moist-forest motifs, not a species portrait. Edit tropicalScene in generators/tropical.mjs, then run pnpm artwork:generate.',
+  },
+  boreal: {
+    svg: boreal, title: 'Boreal forest & taiga', example: 'Helsinki',
+    motif: 'Open pairs of pine needles above a small-leaved forest-floor spray',
+    review: 'Needles grow in pairs from shared points on three curved shoots. Their open fans stay separate, with bare branch junctions and no cones. The lower spray uses small entire leaves attached by curved petioles. Edit borealScene in generators/boreal.mjs, then run pnpm artwork:generate.',
   },
   city: {
     svg: city, title: 'City geometry', example: 'Shared upper-left drawing',
