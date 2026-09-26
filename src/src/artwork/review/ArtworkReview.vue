@@ -2,6 +2,9 @@
 import { computed, ref, watchEffect } from 'vue'
 import FieldSketch from '../field-sketches/FieldSketch.vue'
 import { fieldSketches, type FieldSketchName } from '../field-sketches'
+import { getBiomeSketch } from '../biomeSketch'
+import { getCityBiome } from '../../composables/dashboardContextSource'
+import cityConfig from '../../cityConfig.json'
 
 const names = Object.keys(fieldSketches) as FieldSketchName[]
 const requested = new URLSearchParams(location.search).get('sketch')
@@ -14,6 +17,9 @@ const growthReplay = ref(0)
 const sketch = computed(() => fieldSketches[selected.value])
 const download = computed(() => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sketch.value.svg)}`)
 const appOpacity = computed(() => selected.value === 'city' ? .24 : .4)
+const coveredCities = computed(() => Object.entries(cityConfig)
+  .filter(([code]) => selected.value === 'city' || getBiomeSketch(getCityBiome(code)) === selected.value)
+  .map(([, city]) => city.name))
 
 watchEffect(() => {
   document.documentElement.dataset.theme = theme.value
@@ -45,7 +51,7 @@ watchEffect(() => {
           <FieldSketch :name="name" class="thumbnail" />
           <span>{{ fieldSketches[name].title }}</span>
         </button>
-        <p class="collection-note">Six generated SVGs.<br />The app uses these same files.</p>
+        <p class="collection-note">{{ names.length }} generated SVGs.<br />The app uses these same files.</p>
       </nav>
 
       <main>
@@ -95,6 +101,10 @@ watchEffect(() => {
           <p class="eyebrow">Construction rules</p>
           <p>{{ sketch.review }}</p>
           <code>src/src/artwork/field-sketches/{{ selected }}.svg</code>
+        </aside>
+        <aside class="coverage-note" aria-label="Cities using this drawing">
+          <p class="eyebrow">Used by {{ coveredCities.length }} {{ coveredCities.length === 1 ? 'city' : 'cities' }}</p>
+          <p>{{ coveredCities.join(' · ') }}</p>
         </aside>
         <p class="footnote">These are decorative ecosystem studies, not species-identification illustrations. Edit a generator and run pnpm artwork:generate to update both previews and the app.</p>
       </main>
@@ -158,6 +168,8 @@ h3 { font-size: .75rem; font-weight: 600; }
 .review-note { margin-top: 20px; border-left: 2px solid var(--color-leaf); padding: 4px 0 4px 16px; }
 .review-note > p:not(.eyebrow) { margin: 8px 0; font-size: .8rem; line-height: 1.55; max-width: 80ch; }
 .review-note code { color: var(--color-muted); font-size: .68rem; overflow-wrap: anywhere; }
+.coverage-note { margin-top: 20px; font-size: .75rem; color: var(--color-muted); line-height: 1.7; }
+.coverage-note .eyebrow { margin-bottom: 5px; }
 .footnote { margin-top: 20px; color: var(--color-muted); font-size: .7rem; line-height: 1.6; }
 @media (max-width: 1000px) { .studio { padding: 20px; } .studio-layout { grid-template-columns: 150px minmax(0, 1fr); gap: 20px; } .comparison { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .studio-header { align-items: flex-start; } h1 { font-size: 1.7rem; } .intro { max-width: 24ch; } .theme-switch button { padding: 9px; } .studio-layout { display: block; } nav { display: flex; overflow-x: auto; gap: 6px; margin-bottom: 24px; } nav > p { display: none; } .collection-item { min-width: 145px; } .drawing-heading { align-items: flex-start; } h2 { font-size: 1.45rem; } .canvas { height: 360px; } }

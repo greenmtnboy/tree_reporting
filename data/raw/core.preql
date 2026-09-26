@@ -19,10 +19,10 @@ property city.ecoregion_id <- case
     when city = 'FRPAR' then 664
     when city = 'USBTV' then 334
     when city = 'CAVAN' then 364
-    when city = 'DEBER' then 651
+    when city = 'DEBER' then 654
     when city = 'NLAMS' then 664
     when city = 'GBLON' then 663
-    when city = 'AUMEL' then 808
+    when city = 'AUMEL' then 176
     when city = 'ARBUE' then 576
     when city = 'USLAX' then 422
     when city = 'USWAS' then 399
