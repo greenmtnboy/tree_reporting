@@ -10,12 +10,12 @@ export const fieldSketches = {
   woodland: {
     svg: woodland, title: 'Mediterranean woodland', example: 'San Francisco · Athens',
     motif: 'A branching spray of narrow leaves',
-    review: 'Start here: several leaf bases and side branches miss the curved main stem. Rebuild them from shared attachment points; add restrained secondary veins.',
+    review: 'Olive-inspired leaves and side branches share exact attachment points on the curved stalk. Leaf angles follow its local direction, and each midrib connects the same base and tip. Edit woodlandScene in generators/woodland.mjs, then run pnpm artwork:generate.',
   },
   broadleaf: {
     svg: broadleaf, title: 'Broadleaf forest', example: 'Boston · London',
-    motif: 'Lobed leaves and a branching twig',
-    review: 'The rotated upper leaf study and the main twig were drawn separately. Check that petioles meet the twig, and make the smaller leaves feel like a coherent botanical study.',
+    motif: 'One oak-like leaf type on an alternating spray',
+    review: 'Every branch begins on the curved main twig. Each oak-like leaf shares one rounded-lobe template, meets its branch tip, and follows its direction; veins join the same midrib. Edit broadleafScene in generators/broadleaf.mjs, then run pnpm artwork:generate.',
   },
   conifer: {
     svg: conifer, title: 'Conifer forest', example: 'Vancouver',

@@ -2,8 +2,17 @@ import { readFile, writeFile } from 'node:fs/promises'
 import process from 'node:process'
 import { generateCitySvg } from './city.mjs'
 import { generateGrasslandSvg } from './grassland.mjs'
+import { generateBroadleafSvg } from './broadleaf.mjs'
+import { generateWoodlandSvg } from './woodland.mjs'
 
-for (const [name, generate] of [['city', generateCitySvg], ['grassland', generateGrasslandSvg]]) {
+const generators = [
+  ['city', generateCitySvg],
+  ['grassland', generateGrasslandSvg],
+  ['broadleaf', generateBroadleafSvg],
+  ['woodland', generateWoodlandSvg],
+]
+
+for (const [name, generate] of generators) {
   const destination = new URL(`../field-sketches/${name}.svg`, import.meta.url)
   const svg = generate()
   if (process.argv.includes('--check')) {

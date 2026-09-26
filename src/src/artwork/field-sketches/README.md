@@ -67,8 +67,24 @@ Both biomes share `grassland.svg`, generated from `grasslandScene` in
 Leaf bases are evaluated on that exact curve; leaf outlines rotate into the
 curve's local tangent and normal. Seed-head spacing is measured along the
 stalk from its tip. Change the head's offset, spacing, sides, width, and length
-to iterate without disconnecting leaves from their stalks. The other biome
-drawings remain hand-authored.
+to iterate without disconnecting leaves from their stalks.
+
+## Generate broadleaf and Mediterranean woodland
+
+`broadleaf.svg` uses `broadleafScene` in `../generators/broadleaf.mjs`: one
+rounded, oak-like leaf template at four sizes and orientations. Branch roots
+are evaluated on the main twig's curve. Each leaf base is its branch tip,
+and its midrib follows the branch's terminal tangent. Secondary veins start
+on that same midrib and end inside the corresponding lobes.
+
+`woodland.svg` uses `woodlandScene` in `../generators/woodland.mjs`. It keeps
+the olive-inspired narrow leaves and arching spray. Both branch roots and
+leaf bases are evaluated on the main stalk; leaf angles are relative to its
+local tangent. Terminal leaves follow their side branches, with outlines and
+midribs sharing the exact same base and tip.
+
+Use `pnpm artwork:generate` and `pnpm artwork:check` for both. The conifer
+and desert drawings remain hand-authored.
 
 ## Iteration contract
 
@@ -91,17 +107,16 @@ drawings remain hand-authored.
 
 ## Current review baseline
 
-Grassland now uses generated attachments and angles. The remaining biome
-files preserve the first-pass artwork, including its rough joins. Woodland
-leaf bases and conifer needle attachments were drawn independently of their
-curved stems; their gaps are not a loading or
-draw-animation issue. Low opacity, panel overlays, and cropping also make
-parts less visible. Start with `woodland.svg`; per-drawing notes are in the
+Grassland, broadleaf, and woodland now use generated attachments and angles.
+Conifer needle attachments still preserve the first-pass artwork's rough
+joins; their gaps are not a loading or draw-animation issue. Low opacity,
+panel overlays, and cropping also make parts less visible. Per-drawing notes are in the
 studio. Use Git history for before/after comparisons rather than duplicating
 the artwork into an app copy and a review copy.
 
-The broadleaf upper leaf outline and vein study came from the local Arborary
-website's `docs/.vitepress/theme/leaf-studies.ts`; the city drawing follows its
+The original broadleaf study used a leaf from the local Arborary website's
+`docs/.vitepress/theme/leaf-studies.ts`; its replacement uses an app-authored
+rounded-lobe template throughout. The city drawing follows Arborary's
 architectural sketch direction. Other geometry was authored for this app.
 
 ## Shared-package direction
