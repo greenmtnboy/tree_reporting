@@ -78,7 +78,7 @@ jobs:
       # list mirrors the `# /// script` blocks the tests import through.
       run: >
         uv run --no-project
-        --with pytest --with pyarrow --with pytrilogy --with duckdb --with requests
+        --with pytest --with pyarrow --with "pytrilogy>=0.3.360" --with duckdb --with requests
         python -m pytest tests -q
 
   # Exercise the training/reviewer code with synthetic fixtures on CPU. Install

@@ -37,7 +37,7 @@ pnpm test:queries    # compiles and executes the whole dashboard catalog against
 pnpm bench:chat      # the agent chat benchmark; spends the demo model budget, run by hand
 
 # data, from data/raw
-uv run --no-project --with pytest --with pyarrow --with pytrilogy --with duckdb --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
+uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.360" --with duckdb --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql   # must report exactly one asset
 ```
 
