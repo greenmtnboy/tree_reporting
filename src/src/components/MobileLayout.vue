@@ -58,6 +58,7 @@
               <span class="mobile-nav-item-label">{{ item.label }}</span>
               <span class="mobile-nav-item-copy">{{ item.copy }}</span>
             </button>
+            <ThemeSelector class="mobile-theme-selector" />
           </div>
         </transition>
         <button
@@ -127,6 +128,7 @@
 </template>
 
 <script setup lang="ts">
+import ThemeSelector from './ThemeSelector.vue'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TreeMap from './TreeMap.vue'
@@ -287,6 +289,7 @@ function handleLandmarkClick(lm: Landmark) {
 </script>
 
 <style scoped>
+.mobile-theme-selector { margin: 8px; }
 .mobile-layout {
   display: flex;
   flex-direction: column;
@@ -311,8 +314,8 @@ function handleLandmarkClick(lm: Landmark) {
   overflow-y: auto;
   padding-bottom: 82px;
   background:
-    radial-gradient(circle at top left, rgba(47, 125, 79, 0.16), transparent 44%),
-    linear-gradient(180deg, rgba(28, 31, 36, 0.98), rgba(15, 20, 17, 0.98));
+    radial-gradient(circle at top left, rgba(var(--accent-rgb), 0.16), transparent 44%),
+    linear-gradient(180deg, rgba(var(--surface-rgb), 0.98), rgba(var(--surface-rgb), 0.98));
 }
 
 .mobile-route-screen {
@@ -323,8 +326,8 @@ function handleLandmarkClick(lm: Landmark) {
   padding-bottom: 82px;
   box-sizing: border-box;
   background:
-    radial-gradient(circle at top left, rgba(47, 125, 79, 0.16), transparent 44%),
-    linear-gradient(180deg, rgba(28, 31, 36, 0.98), rgba(15, 20, 17, 0.98));
+    radial-gradient(circle at top left, rgba(var(--accent-rgb), 0.16), transparent 44%),
+    linear-gradient(180deg, rgba(var(--surface-rgb), 0.98), rgba(var(--surface-rgb), 0.98));
 }
 
 .mobile-route-header {
@@ -332,9 +335,9 @@ function handleLandmarkClick(lm: Landmark) {
   align-items: center;
   gap: 12px;
   padding: 18px 18px 14px;
-  border-bottom: 1px solid rgba(167, 227, 178, 0.08);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.08);
   background:
-    linear-gradient(180deg, rgba(58, 64, 72, 0.22), rgba(28, 31, 36, 0.88));
+    linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.22), rgba(var(--surface-rgb), 0.88));
 }
 
 .mobile-route-heading {
@@ -403,10 +406,10 @@ function handleLandmarkClick(lm: Landmark) {
   min-width: 0;
   padding: 0 14px;
   border-radius: 16px;
-  border: 1px solid rgba(167, 227, 178, 0.14);
+  border: 1px solid rgba(var(--accent-rgb), 0.14);
   background:
-    linear-gradient(180deg, rgba(58, 64, 72, 0.64), rgba(28, 31, 36, 0.96));
-  color: rgba(237, 242, 235, 0.82);
+    linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.64), rgba(var(--surface-rgb), 0.96));
+  color: rgba(var(--ink-rgb), 0.82);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -420,14 +423,14 @@ function handleLandmarkClick(lm: Landmark) {
 }
 
 .mobile-action-btn:active {
-  background: rgba(47, 125, 79, 0.24);
+  background: rgba(var(--accent-rgb), 0.24);
   color: var(--color-leaf);
 }
 
 .mobile-action-btn--active {
-  border-color: rgba(167, 227, 178, 0.26);
+  border-color: rgba(var(--accent-rgb), 0.26);
   background:
-    linear-gradient(180deg, rgba(67, 107, 77, 0.82), rgba(28, 55, 38, 0.98));
+    var(--accent-soft);
   color: var(--color-ink);
 }
 
@@ -437,12 +440,12 @@ function handleLandmarkClick(lm: Landmark) {
   padding: 0;
   border-color: var(--color-leaf);
   background: var(--color-leaf);
-  color: #0b0f0d;
+  color: var(--color-on-accent);
 }
 
 .mobile-action-btn--icon:active {
   background: var(--color-leaf);
-  color: #0b0f0d;
+  color: var(--color-on-accent);
   filter: brightness(0.9);
 }
 
@@ -460,6 +463,9 @@ function handleLandmarkClick(lm: Landmark) {
 }
 
 .mobile-nav-menu {
+  max-height: calc(100dvh - 96px);
+  overflow-y: auto;
+  border-radius: 16px;
   position: fixed;
   left: 14px;
   right: 14px;
@@ -470,27 +476,29 @@ function handleLandmarkClick(lm: Landmark) {
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  border: 1px solid rgba(167, 227, 178, 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.1);
   background:
-    linear-gradient(180deg, rgba(42, 47, 54, 0.94), rgba(18, 20, 24, 0.98));
+    var(--surface-1);
   box-shadow: 0 18px 38px rgba(6, 8, 10, 0.38);
   pointer-events: auto;
 }
 
 .mobile-nav-item {
+  flex-shrink: 0;
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 12px 14px;
-  border: 1px solid rgba(167, 227, 178, 0.06);
-  background: rgba(28, 31, 36, 0.56);
-  color: rgba(237, 242, 235, 0.84);
+  border: 1px solid rgba(var(--accent-rgb), 0.06);
+  background: rgba(var(--surface-rgb), 0.56);
+  color: rgba(var(--ink-rgb), 0.84);
   text-align: left;
 }
 
 .mobile-nav-item--active {
-  border-color: rgba(167, 227, 178, 0.22);
-  background: rgba(47, 125, 79, 0.18);
+  border-color: rgba(var(--accent-rgb), 0.22);
+  background: rgba(var(--accent-rgb), 0.18);
 }
 
 .mobile-nav-item-label {
@@ -503,17 +511,17 @@ function handleLandmarkClick(lm: Landmark) {
 .mobile-nav-item-copy {
   font-size: 0.74rem;
   line-height: 1.4;
-  color: rgba(154, 166, 154, 0.82);
+  color: rgba(var(--muted-rgb), 0.82);
 }
 
 .mobile-nav-trigger {
   width: 100%;
   min-height: 50px;
   border-radius: 16px;
-  border: 1px solid rgba(167, 227, 178, 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
   background:
-    radial-gradient(circle at top, rgba(167, 227, 178, 0.18), transparent 62%),
-    linear-gradient(180deg, rgba(42, 47, 54, 0.98), rgba(19, 22, 27, 0.98));
+    radial-gradient(circle at top, rgba(var(--accent-rgb), 0.18), transparent 62%),
+    linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.98), rgba(var(--surface-rgb), 0.98));
   box-shadow: 0 18px 36px rgba(6, 8, 10, 0.38);
   display: inline-flex;
   flex-direction: column;
@@ -527,9 +535,9 @@ function handleLandmarkClick(lm: Landmark) {
 }
 
 .mobile-nav-trigger--open {
-  border-color: rgba(167, 227, 178, 0.26);
+  border-color: rgba(var(--accent-rgb), 0.26);
   background:
-    linear-gradient(180deg, rgba(67, 107, 77, 0.82), rgba(28, 55, 38, 0.98));
+    var(--accent-soft);
   box-shadow: 0 18px 36px rgba(12, 22, 16, 0.42);
 }
 
@@ -564,11 +572,11 @@ function handleLandmarkClick(lm: Landmark) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgba(167, 227, 178, 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.1);
   border-radius: 24px;
   box-shadow: 0 24px 48px rgba(6, 8, 10, 0.44);
   background:
-    linear-gradient(180deg, rgba(28, 31, 36, 0.95), rgba(15, 36, 23, 0.97));
+    linear-gradient(180deg, rgba(var(--surface-rgb), 0.95), rgba(var(--surface-rgb), 0.97));
 }
 
 .mobile-overlay-header {
@@ -576,8 +584,8 @@ function handleLandmarkClick(lm: Landmark) {
   align-items: center;
   padding: 14px 16px;
   background:
-    linear-gradient(180deg, rgba(58, 64, 72, 0.42), rgba(28, 31, 36, 0.96));
-  border-bottom: 1px solid rgba(167, 227, 178, 0.08);
+    linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.42), rgba(var(--surface-rgb), 0.96));
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.08);
   min-height: 52px;
 }
 
@@ -598,9 +606,9 @@ function handleLandmarkClick(lm: Landmark) {
   height: 32px;
   padding: 0;
   border-radius: 50%;
-  border: 1px solid rgba(167, 227, 178, 0.14);
-  background: rgba(28, 31, 36, 0.72);
-  color: rgba(237, 242, 235, 0.82);
+  border: 1px solid rgba(var(--accent-rgb), 0.14);
+  background: rgba(var(--surface-rgb), 0.72);
+  color: rgba(var(--ink-rgb), 0.82);
   font-size: 1.25rem;
   line-height: 1;
   cursor: pointer;
@@ -609,14 +617,14 @@ function handleLandmarkClick(lm: Landmark) {
 
 .mobile-overlay-close:hover,
 .mobile-overlay-close:focus-visible {
-  background: rgba(47, 125, 79, 0.24);
-  border-color: rgba(167, 227, 178, 0.26);
+  background: rgba(var(--accent-rgb), 0.24);
+  border-color: rgba(var(--accent-rgb), 0.26);
   color: var(--color-leaf);
   outline: none;
 }
 
 .mobile-overlay-close:active {
-  background: rgba(47, 125, 79, 0.36);
+  background: rgba(var(--accent-rgb), 0.36);
 }
 
 /* Search overlay body */
@@ -630,9 +638,9 @@ function handleLandmarkClick(lm: Landmark) {
 .mobile-search-input {
   margin: 12px;
   padding: 10px 14px;
-  border: 1px solid rgba(167, 227, 178, 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
   border-radius: 8px;
-  background: rgba(42, 47, 54, 0.72);
+  background: rgba(var(--surface-raised-rgb), 0.72);
   color: var(--color-ink);
   font-size: 1rem;
   outline: none;
@@ -640,11 +648,11 @@ function handleLandmarkClick(lm: Landmark) {
 }
 
 .mobile-search-input:focus {
-  border-color: rgba(167, 227, 178, 0.3);
+  border-color: rgba(var(--accent-rgb), 0.3);
 }
 
 .mobile-search-input::placeholder {
-  color: rgba(154, 166, 154, 0.7);
+  color: rgba(var(--muted-rgb), 0.7);
 }
 
 .mobile-landmarks-list {
@@ -660,22 +668,22 @@ function handleLandmarkClick(lm: Landmark) {
   padding: 14px 16px;
   border: none;
   background: none;
-  color: rgba(237, 242, 235, 0.78);
+  color: rgba(var(--ink-rgb), 0.78);
   font-size: 0.95rem;
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
-  border-bottom: 1px solid rgba(167, 227, 178, 0.08);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.08);
 }
 
 .mobile-landmark-item:active {
-  background: rgba(47, 125, 79, 0.18);
+  background: rgba(var(--accent-rgb), 0.18);
   color: var(--color-leaf);
 }
 
 .mobile-landmarks-empty {
   padding: 24px 16px;
   font-size: 0.9rem;
-  color: rgba(154, 166, 154, 0.74);
+  color: rgba(var(--muted-rgb), 0.74);
   font-style: italic;
   text-align: center;
 }
@@ -729,6 +737,6 @@ function handleLandmarkClick(lm: Landmark) {
 
 .mobile-chat-overlay .chat-panel {
   background:
-    linear-gradient(180deg, rgba(28, 31, 36, 0.98), rgba(15, 20, 17, 0.98));
+    linear-gradient(180deg, rgba(var(--surface-rgb), 0.98), rgba(var(--surface-rgb), 0.98));
 }
 </style>

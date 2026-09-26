@@ -1,15 +1,17 @@
 <template>
   <div class="map-view">
-    <TreeMap />
-    <router-link
-      v-if="firebaseAvailable"
-      :to="{ name: 'submit' }"
-      class="submit-fab"
-      aria-label="Submit a tree"
-      title="Submit a tree"
-    >
-      <span aria-hidden="true">+</span>
-    </router-link>
+    <div class="map-surface">
+      <TreeMap />
+      <router-link
+        v-if="firebaseAvailable"
+        :to="{ name: 'submit' }"
+        class="submit-fab"
+        aria-label="Submit a tree"
+        title="Submit a tree"
+      >
+        <span aria-hidden="true">+</span>
+      </router-link>
+    </div>
   </div>
 </template>
 
@@ -19,6 +21,12 @@ import { firebaseAvailable } from '../lib/firebase'
 </script>
 
 <style scoped>
+.map-surface {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 .map-view {
   position: relative;
   width: 100%;
@@ -36,9 +44,9 @@ import { firebaseAvailable } from '../lib/firebase'
   border-radius: 50%;
   /* Sits quietly alongside the other map controls: an outlined ghost that only
      fills in on hover, so it doesn't shout over the map. */
-  background: rgba(28, 31, 36, 0.5);
+  background: rgba(var(--surface-rgb), 0.5);
   color: var(--color-leaf);
-  border: 1px solid rgba(167, 227, 178, 0.42);
+  border: 1px solid rgba(var(--accent-rgb), 0.42);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -53,7 +61,7 @@ import { firebaseAvailable } from '../lib/firebase'
 
 .submit-fab:hover {
   background: var(--color-leaf);
-  color: #0b0f0d;
+  color: var(--color-on-accent);
   border-color: var(--color-leaf);
   transform: translateY(-1px);
 }
@@ -68,7 +76,7 @@ import { firebaseAvailable } from '../lib/firebase'
     width: 56px;
     height: 56px;
     background: var(--color-leaf);
-    color: #0b0f0d;
+    color: var(--color-on-accent);
     border-color: var(--color-leaf);
     box-shadow: 0 18px 34px rgba(6, 8, 10, 0.4);
   }

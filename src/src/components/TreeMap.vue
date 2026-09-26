@@ -230,6 +230,9 @@
 </template>
 
 <script setup lang="ts">
+import { useTheme } from '../composables/useTheme'
+import { basemapStyleUrl, bindMapTheme } from '../composables/mapTheme'
+
 import { ref, shallowRef, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
 import maplibregl from 'maplibre-gl'
 import { registerCategoryColoredIcons } from '../composables/useTreeCategories'
@@ -265,6 +268,10 @@ import {
   refreshSharedPosition,
 } from '../lib/geo'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
+
+const { resolvedTheme } = useTheme()
+let releaseMapTheme: (() => void) | undefined
+let mapResizeObserver: ResizeObserver | undefined
 
 const props = defineProps<{
   simplified?: boolean
@@ -1242,7 +1249,7 @@ function wasdTick() {
 function onWasdKeyDown(e: KeyboardEvent) {
   if (!mapRef.value) return
   const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
-  if (tag === 'input' || tag === 'textarea' || (e.target as HTMLElement)?.isContentEditable) return
+  if (tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'button' || (e.target as HTMLElement)?.isContentEditable) return
   const key = e.key.toLowerCase()
   if (!WASD_DIRS[key]) return
   e.preventDefault()
@@ -1653,7 +1660,7 @@ onMounted(async () => {
 
   const map = new maplibregl.Map({
     container: mapContainer.value!,
-    style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    style: basemapStyleUrl(resolvedTheme.value),
     zoom: props.simplified ? 13 : INTRO_START_ZOOM,
     center: CITY_CONFIG[mapDisplayCity.value].center,
     pitch: props.simplified ? 0 : 60,
@@ -1663,6 +1670,9 @@ onMounted(async () => {
     keyboard: true,
   })
   mapRef.value = map
+  releaseMapTheme = bindMapTheme(map)
+  mapResizeObserver = new ResizeObserver(() => map.resize())
+  mapResizeObserver.observe(mapContainer.value!)
   // Debug / e2e handle. Playwright needs the live map to hit-test a rendered
   // tree and click its exact pixel — see e2e/tree-card.spec.ts.
   ;(window as unknown as { __treeMap?: maplibregl.Map }).__treeMap = map
@@ -1788,6 +1798,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  releaseMapTheme?.()
+  mapResizeObserver?.disconnect()
   window.removeEventListener('keydown', onWasdKeyDown)
   window.removeEventListener('keyup', onWasdKeyUp)
   if (wasdRafId !== null) cancelAnimationFrame(wasdRafId)
@@ -1825,9 +1837,9 @@ onUnmounted(() => {
   width: 29px;
   min-height: 29px;
   color: var(--color-leaf);
-  background: rgba(28, 31, 36, 0.92);
-  border-top: 1px solid rgba(167, 227, 178, 0.18);
-  border-bottom: 1px solid rgba(167, 227, 178, 0.18);
+  background: rgba(var(--surface-rgb), 0.92);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.18);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.18);
   font-size: 0.68rem;
   font-weight: 700;
   line-height: 1;
@@ -1836,18 +1848,18 @@ onUnmounted(() => {
 }
 
 :deep(.maplibregl-ctrl-group) {
-  background: rgba(28, 31, 36, 0.82);
-  border: 1px solid rgba(167, 227, 178, 0.16);
+  background: rgba(var(--surface-rgb), 0.82);
+  border: 1px solid rgba(var(--accent-rgb), 0.16);
   box-shadow: 0 10px 24px rgba(7, 10, 11, 0.24);
 }
 
 :deep(.maplibregl-ctrl-group button) {
   background: transparent;
-  color: rgba(237, 242, 235, 0.82);
+  color: rgba(var(--ink-rgb), 0.82);
 }
 
 :deep(.maplibregl-ctrl-group button:hover) {
-  background: rgba(47, 125, 79, 0.16);
+  background: rgba(var(--accent-rgb), 0.16);
   color: var(--color-ink);
 }
 
@@ -1864,14 +1876,14 @@ onUnmounted(() => {
 }
 
 .map-loading {
-  background: rgba(28, 31, 36, 0.9);
+  background: rgba(var(--surface-rgb), 0.9);
   color: var(--color-leaf);
-  border: 1px solid rgba(167, 227, 178, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   box-shadow: 0 18px 36px rgba(7, 10, 11, 0.26);
 }
 
 .map-refreshing {
-  background: rgba(28, 31, 36, 0.76);
+  background: rgba(var(--surface-rgb), 0.76);
   font-size: 0.8rem;
 }
 
@@ -1887,9 +1899,9 @@ onUnmounted(() => {
   z-index: 4;
   padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(167, 227, 178, 0.16);
-  background: rgba(28, 31, 36, 0.82);
-  color: rgba(237, 242, 235, 0.74);
+  border: 1px solid rgba(var(--accent-rgb), 0.16);
+  background: rgba(var(--surface-rgb), 0.82);
+  color: rgba(var(--ink-rgb), 0.74);
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
@@ -1897,15 +1909,15 @@ onUnmounted(() => {
 }
 
 .locate-btn-desktop:hover {
-  background: rgba(47, 125, 79, 0.16);
+  background: rgba(var(--accent-rgb), 0.16);
   color: var(--color-ink);
-  border-color: rgba(167, 227, 178, 0.32);
+  border-color: rgba(var(--accent-rgb), 0.32);
 }
 
 .locate-btn-desktop.active {
-  background: rgba(47, 125, 79, 0.22);
+  background: rgba(var(--accent-rgb), 0.22);
   color: var(--color-leaf);
-  border-color: rgba(167, 227, 178, 0.42);
+  border-color: rgba(var(--accent-rgb), 0.42);
 }
 
 .locate-btn-desktop:disabled {
@@ -1928,9 +1940,9 @@ onUnmounted(() => {
 .city-btn {
   padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(167, 227, 178, 0.16);
-  background: rgba(28, 31, 36, 0.82);
-  color: rgba(237, 242, 235, 0.74);
+  border: 1px solid rgba(var(--accent-rgb), 0.16);
+  background: rgba(var(--surface-rgb), 0.82);
+  color: rgba(var(--ink-rgb), 0.74);
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
@@ -1940,15 +1952,15 @@ onUnmounted(() => {
 }
 
 .city-btn:hover {
-  background: rgba(47, 125, 79, 0.16);
+  background: rgba(var(--accent-rgb), 0.16);
   color: var(--color-ink);
-  border-color: rgba(167, 227, 178, 0.32);
+  border-color: rgba(var(--accent-rgb), 0.32);
 }
 
 .city-btn.active {
-  background: rgba(47, 125, 79, 0.22);
+  background: rgba(var(--accent-rgb), 0.22);
   color: var(--color-leaf);
-  border-color: rgba(167, 227, 178, 0.42);
+  border-color: rgba(var(--accent-rgb), 0.42);
 }
 
 .city-btn:disabled {
@@ -1992,18 +2004,18 @@ onUnmounted(() => {
 .cache-refresh-btn {
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid rgba(167, 227, 178, 0.14);
-  background: rgba(28, 31, 36, 0.74);
-  color: rgba(237, 242, 235, 0.58);
+  border: 1px solid rgba(var(--accent-rgb), 0.14);
+  background: rgba(var(--surface-rgb), 0.74);
+  color: rgba(var(--ink-rgb), 0.58);
   font-size: 14px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .cache-refresh-btn:hover {
-  background: rgba(47, 125, 79, 0.16);
+  background: rgba(var(--accent-rgb), 0.16);
   color: var(--color-ink);
-  border-color: rgba(167, 227, 178, 0.28);
+  border-color: rgba(var(--accent-rgb), 0.28);
 }
 
 .cache-refresh-btn:disabled {
@@ -2023,9 +2035,9 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.72rem;
-  color: rgba(237, 242, 235, 0.9);
-  background: rgba(28, 31, 36, 0.94);
-  border: 1px solid rgba(167, 227, 178, 0.16);
+  color: rgba(var(--ink-rgb), 0.9);
+  background: rgba(var(--surface-rgb), 0.94);
+  border: 1px solid rgba(var(--accent-rgb), 0.16);
   border-radius: 5px;
   padding: 3px 8px;
   white-space: nowrap;
@@ -2057,9 +2069,9 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.72rem;
-  color: rgba(237, 242, 235, 0.9);
-  background: rgba(28, 31, 36, 0.94);
-  border: 1px solid rgba(167, 227, 178, 0.16);
+  color: rgba(var(--ink-rgb), 0.9);
+  background: rgba(var(--surface-rgb), 0.94);
+  border: 1px solid rgba(var(--accent-rgb), 0.16);
   border-radius: 5px;
   padding: 3px 8px;
   white-space: nowrap;
@@ -2076,8 +2088,8 @@ onUnmounted(() => {
   position: absolute;
   bottom: 28px;
   right: 8px;
-  background: rgba(28, 31, 36, 0.84);
-  border: 1px solid rgba(167, 227, 178, 0.16);
+  background: rgba(var(--surface-rgb), 0.84);
+  border: 1px solid rgba(var(--accent-rgb), 0.16);
   border-radius: 8px;
   padding: 8px 12px;
   z-index: 4;
@@ -2105,7 +2117,7 @@ onUnmounted(() => {
 
 .legend-label {
   font-size: 0.72rem;
-  color: rgba(237, 242, 235, 0.84);
+  color: rgba(var(--ink-rgb), 0.84);
   white-space: nowrap;
 }
 
@@ -2133,9 +2145,9 @@ onUnmounted(() => {
 }
 
 .locate-btn.active {
-  background: rgba(47, 125, 79, 0.22);
+  background: rgba(var(--accent-rgb), 0.22);
   color: var(--color-leaf);
-  border-color: rgba(167, 227, 178, 0.42);
+  border-color: rgba(var(--accent-rgb), 0.42);
 }
 </style>
 
@@ -2150,11 +2162,11 @@ onUnmounted(() => {
   z-index: 10;
   width: min(840px, calc(100% - 24px));
   max-height: min(420px, 55vh);
-  background: linear-gradient(160deg, rgba(30, 34, 41, 0.98), rgba(20, 24, 29, 0.98));
-  border: 1px solid rgba(167, 227, 178, 0.18);
+  background: linear-gradient(160deg, rgba(var(--surface-raised-rgb), 0.98), rgba(var(--surface-rgb), 0.98));
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   border-radius: 14px;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
-  color: rgba(237, 242, 235, 0.92);
+  color: rgba(var(--ink-rgb), 0.92);
   font-size: 0.8rem;
   display: flex;
   flex-direction: column;
@@ -2170,14 +2182,14 @@ onUnmounted(() => {
   width: 16px;
   height: 16px;
   transform: translateX(-50%) rotate(45deg);
-  background: rgba(20, 24, 29, 0.98);
-  border-right: 1px solid rgba(167, 227, 178, 0.18);
-  border-bottom: 1px solid rgba(167, 227, 178, 0.18);
+  background: rgba(var(--surface-rgb), 0.98);
+  border-right: 1px solid rgba(var(--accent-rgb), 0.18);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.18);
 }
 
 .tree-card-close {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(167, 227, 178, 0.14);
+  background: rgba(var(--ink-rgb), 0.06);
+  border: 1px solid rgba(var(--accent-rgb), 0.14);
   border-radius: 50%;
   width: 26px;
   height: 26px;
@@ -2185,14 +2197,14 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  color: rgba(237, 242, 235, 0.58);
+  color: rgba(var(--ink-rgb), 0.58);
   font-size: 0.72rem;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 .tree-card-close:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(237, 242, 235, 0.92);
+  background: rgba(var(--ink-rgb), 0.12);
+  color: rgba(var(--ink-rgb), 0.92);
 }
 
 .tree-card-header-actions {
@@ -2209,7 +2221,7 @@ onUnmounted(() => {
   gap: 6px;
   margin-top: 10px;
   padding-top: 8px;
-  border-top: 1px solid rgba(167, 227, 178, 0.1);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.1);
   font-size: 0.8rem;
 }
 
@@ -2237,7 +2249,7 @@ onUnmounted(() => {
 
 .tree-card-checkin {
   background: var(--color-leaf);
-  color: #0b0f0d;
+  color: var(--color-on-accent);
   border: 1px solid var(--color-leaf);
   font-family: var(--font-display);
   font-size: 0.68rem;
@@ -2255,7 +2267,7 @@ onUnmounted(() => {
 
 .tree-card-header {
   padding: 14px 16px 10px;
-  border-bottom: 1px solid rgba(167, 227, 178, 0.1);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.1);
   flex-shrink: 0;
 }
 
@@ -2282,7 +2294,7 @@ onUnmounted(() => {
   margin-top: 3px;
   font-size: 0.78rem;
   font-style: italic;
-  color: rgba(237, 242, 235, 0.6);
+  color: rgba(var(--ink-rgb), 0.6);
 }
 
 /* A cultivar name is quoted and never italicised, by convention. */
@@ -2310,11 +2322,11 @@ onUnmounted(() => {
 
 .tree-card-pane--tree,
 .tree-card-pane--species {
-  border-right: 1px solid rgba(167, 227, 178, 0.08);
+  border-right: 1px solid rgba(var(--accent-rgb), 0.08);
 }
 
 .tree-card-section-label {
-  color: rgba(167, 227, 178, 0.52);
+  color: rgba(var(--accent-rgb), 0.52);
   font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -2331,7 +2343,7 @@ onUnmounted(() => {
 }
 
 .tc-label {
-  color: rgba(154, 166, 154, 0.7);
+  color: rgba(var(--muted-rgb), 0.7);
   font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.07em;
@@ -2341,7 +2353,7 @@ onUnmounted(() => {
 }
 
 .tc-value {
-  color: rgba(237, 242, 235, 0.92);
+  color: rgba(var(--ink-rgb), 0.92);
   font-size: 0.8rem;
   font-weight: 600;
   line-height: 1.35;
@@ -2378,7 +2390,7 @@ onUnmounted(() => {
   width: 44px;
   height: 44px;
   padding: 0;
-  border: 1px solid rgba(167, 227, 178, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   background: none;
   cursor: pointer;
 }
@@ -2407,20 +2419,20 @@ onUnmounted(() => {
 }
 
 .tc-photo-count {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 0.65rem;
   font-weight: 600;
 }
 
 .tc-photo-attr {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.85);
   font-size: 0.6rem;
   line-height: 1.3;
   overflow-wrap: break-word;
 }
 
 .tc-photo-loading {
-  color: rgba(167, 227, 178, 0.6);
+  color: rgba(var(--accent-rgb), 0.6);
   font-size: 0.62rem;
   font-style: italic;
 }
@@ -2430,15 +2442,15 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(237, 242, 235, 0.32);
+  color: rgba(var(--ink-rgb), 0.32);
   font-size: 0.76rem;
   font-style: italic;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--ink-rgb), 0.03);
 }
 
 .tc-description {
-  color: rgba(237, 242, 235, 0.72);
+  color: rgba(var(--ink-rgb), 0.72);
   font-size: 0.76rem;
   line-height: 1.5;
   margin: 0;
@@ -2457,7 +2469,7 @@ onUnmounted(() => {
     position: sticky;
     top: 0;
     z-index: 2;
-    background: linear-gradient(160deg, rgba(30, 34, 41, 0.98), rgba(20, 24, 29, 0.98));
+    background: linear-gradient(160deg, rgba(var(--surface-raised-rgb), 0.98), rgba(var(--surface-rgb), 0.98));
   }
   .tree-card-header-main {
     gap: 10px;
@@ -2506,7 +2518,7 @@ onUnmounted(() => {
   .tree-card-pane--tree,
   .tree-card-pane--species {
     border-right: none;
-    border-bottom: 1px solid rgba(167, 227, 178, 0.08);
+    border-bottom: 1px solid rgba(var(--accent-rgb), 0.08);
   }
   .tc-photo-wrap {
     overflow: visible;
@@ -2523,9 +2535,9 @@ onUnmounted(() => {
 }
 
 .landmark-popup .maplibregl-popup-content {
-  background: rgba(28, 31, 36, 0.94);
-  color: rgba(237, 242, 235, 0.92);
-  border: 1px solid rgba(167, 227, 178, 0.22);
+  background: rgba(var(--surface-rgb), 0.94);
+  color: rgba(var(--ink-rgb), 0.92);
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 0.78rem;
@@ -2536,7 +2548,7 @@ onUnmounted(() => {
 }
 
 .landmark-popup .maplibregl-popup-tip {
-  border-top-color: rgba(28, 31, 36, 0.94);
+  border-top-color: rgba(var(--surface-rgb), 0.94);
 }
 
 .user-location-marker {
@@ -2545,13 +2557,13 @@ onUnmounted(() => {
   border-radius: 50%;
   background: var(--color-leaf);
   border: 2px solid #fff;
-  box-shadow: 0 0 0 0 rgba(167, 227, 178, 0.46);
+  box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.46);
   animation: user-location-pulse 2s infinite;
 }
 
 @keyframes user-location-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(167, 227, 178, 0.46); }
-  70% { box-shadow: 0 0 0 10px rgba(167, 227, 178, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(167, 227, 178, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.46); }
+  70% { box-shadow: 0 0 0 10px rgba(var(--accent-rgb), 0); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
 }
 </style>

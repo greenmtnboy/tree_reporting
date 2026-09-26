@@ -8,8 +8,14 @@
 </template>
 
 <script setup lang="ts">
+import { useTheme } from '../composables/useTheme'
+import { basemapStyleUrl, bindMapTheme } from '../composables/mapTheme'
+
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import maplibregl from 'maplibre-gl'
+
+const { resolvedTheme } = useTheme()
+let releaseMapTheme: (() => void) | undefined
 
 const props = defineProps<{
   lat: number
@@ -44,12 +50,13 @@ onMounted(() => {
   if (!container.value) return
   map = new maplibregl.Map({
     container: container.value,
-    style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    style: basemapStyleUrl(resolvedTheme.value),
     center: [props.lng, props.lat],
     zoom: props.zoom ?? 19,
     maxZoom: props.maxZoom ?? 21,
     attributionControl: false,
   })
+  releaseMapTheme = bindMapTheme(map)
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
   map.on('load', () => {
     if (!map) return
@@ -94,6 +101,7 @@ function recenter() {
 }
 
 onBeforeUnmount(() => {
+  releaseMapTheme?.()
   marker?.remove()
   marker = null
   userMarker?.remove()
@@ -125,15 +133,15 @@ onBeforeUnmount(() => {
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  background: rgba(18, 22, 28, 0.85);
+  background: rgba(var(--surface-rgb), 0.85);
   color: var(--color-ink);
-  border: 1px solid rgba(167, 227, 178, 0.3);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
   cursor: pointer;
   z-index: 2;
 }
 
 .location-picker__recenter:hover {
-  background: rgba(47, 125, 79, 0.28);
+  background: rgba(var(--accent-rgb), 0.28);
 }
 </style>
 

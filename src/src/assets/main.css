@@ -1,248 +1,58 @@
+@import './theme.css';
+
 *,
 *::before,
-*::after {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+*::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-:root {
-  --color-asphalt: #1c1f24;
-  --color-steel: #2a2f36;
-  --color-concrete: #3a4048;
-  --color-canopy: #2f7d4f;
-  --color-moss: #6baf92;
-  --color-leaf: #a7e3b2;
-  --color-autumn: #d97a3a;
-  --color-soil: #7a5c3e;
-  --color-water: #4da3ff;
-  --color-ink: #edf2eb;
-  --color-muted: #9aa69a;
-  --color-border: rgba(167, 227, 178, 0.12);
-  --surface-0: #15181d;
-  --surface-1: rgba(28, 31, 36, 0.94);
-  --surface-2: rgba(42, 47, 54, 0.92);
-  --surface-3: rgba(58, 64, 72, 0.92);
-  --app-biome-glow-primary: rgba(47, 125, 79, 0.34);
-  --app-biome-glow-secondary: rgba(107, 175, 146, 0.16);
-  --app-biome-wash: rgba(15, 36, 23, 0.34);
-  --app-biome-background-art: none;
-  --app-biome-accent-art: none;
-  --app-biome-tree-art: none;
-  --app-biome-background-size: 100vw auto;
-  --app-biome-accent-size: 100vw auto;
-  --app-biome-tree-size: 100vw auto;
-  --app-biome-background-position: center right;
-  --app-biome-accent-position: center bottom;
-  --app-biome-tree-position: center bottom;
-  --app-biome-opacity: 0.88;
-  --shadow-soft: 0 20px 48px rgba(7, 10, 11, 0.26);
-  --font-body: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Bahnschrift", "Arial Narrow", "Segoe UI Variable", sans-serif;
+html, body, #app {
+  height: 100%; width: 100%; overflow: hidden;
+  font-family: var(--font-body); background: var(--surface-0); color: var(--color-ink);
 }
-
-html,
-body,
-#app {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-  font-family: var(--font-body);
-  background:
-    linear-gradient(180deg, #20242a 0%, #1a1f24 40%, #0f2417 100%);
-  color: var(--color-ink);
-}
-
-#app {
-  display: flex;
-  position: relative;
-  isolation: isolate;
-  background:
-    radial-gradient(circle at 12% 10%, rgba(88, 94, 102, 0.22), transparent 28%),
-    linear-gradient(180deg, #20242a 0%, #1a1f24 40%, #0f2417 100%);
-  background-size: auto;
-}
-
-#app::before,
-#app::after {
-  content: '';
-  position: absolute;
-  pointer-events: none;
-  z-index: 0;
-}
-
-#app::before {
-  inset: 0;
-  background:
-    radial-gradient(circle at 10% 10%, rgba(215, 220, 224, 0.12), transparent 24%),
-    linear-gradient(135deg, rgba(220, 225, 229, 0.075), transparent 62%),
-    repeating-linear-gradient(0deg, rgba(214, 220, 223, 0.072) 0 2px, transparent 2px 54px),
-    repeating-linear-gradient(90deg, rgba(214, 220, 223, 0.072) 0 2px, transparent 2px 54px),
-    repeating-linear-gradient(0deg, rgba(226, 230, 233, 0.04) 0 4px, transparent 4px 216px),
-    repeating-linear-gradient(90deg, rgba(226, 230, 233, 0.04) 0 4px, transparent 4px 216px);
-  opacity: 0.48;
-  mask-image: linear-gradient(
-    135deg,
-    black 0%,
-    black 60%,
-    rgba(0, 0, 0, 0.88) 68%,
-    rgba(0, 0, 0, 0.42) 79%,
-    transparent 90%
-  );
-}
-
-#app::after {
-  position: fixed;
-  inset: 0;
-  background:
-    linear-gradient(180deg, rgba(15, 36, 23, 0), var(--app-biome-wash)),
-    radial-gradient(circle at 70% 84%, var(--app-biome-glow-primary), transparent 42%),
-    radial-gradient(circle at 88% 92%, var(--app-biome-glow-secondary), transparent 30%),
-    var(--app-biome-background-art),
-    var(--app-biome-accent-art),
-    var(--app-biome-tree-art);
-  background-repeat: no-repeat;
-  background-position:
-    center,
-    center,
-    center,
-    var(--app-biome-background-position),
-    var(--app-biome-accent-position),
-    var(--app-biome-tree-position);
-  background-size:
-    cover,
-    cover,
-    cover,
-    var(--app-biome-background-size),
-    var(--app-biome-accent-size),
-    var(--app-biome-tree-size);
-  opacity: var(--app-biome-opacity);
-  mask-image: linear-gradient(
-    180deg,
-    transparent 0%,
-    rgba(0, 0, 0, 0) 52%,
-    rgba(0, 0, 0, 0.62) 70%,
-    black 100%
-  );
-}
-
-#app > * {
-  position: relative;
-  z-index: 1;
-}
+#app { display: flex; position: relative; isolation: isolate; }
+#app > * { position: relative; z-index: 1; }
+button, input, select, textarea { font-family: inherit; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid var(--color-leaf); outline-offset: 3px; }
+::selection { background: var(--accent-soft); color: var(--color-ink); }
 
 .sidebar {
-  width: 280px;
-  min-width: 280px;
-  height: 100%;
-  background:
-    linear-gradient(180deg, rgba(167, 227, 178, 0.005), transparent 0%),
-    linear-gradient(180deg, rgba(28, 31, 36, 0.08) 0%, rgba(24, 27, 31, 0.42) 45%, rgba(20, 23, 27, 0.58) 100%);
-  border-right: 1px solid rgba(167, 227, 178, 0.1);
-  display: flex;
-  flex-direction: column;
-  z-index: 10;
-  position: relative;
-  overflow: hidden;
+  width: 260px; min-width: 260px; height: 100%;
+  background: rgba(var(--surface-rgb), .62);
+  border-right: 1px solid var(--color-border);
+  display: flex; flex-direction: column; z-index: 10; position: relative; overflow: hidden;
 }
-
-.sidebar::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(167, 227, 178, 0.022) 100%);
-  opacity: 0.1;
-  pointer-events: none;
-}
-
-.sidebar-header {
-  padding: 24px 20px 16px;
-  border-bottom: 1px solid rgba(167, 227, 178, 0.08);
-  position: relative;
-  z-index: 1;
-}
-
+.sidebar-header { padding: 28px 22px 22px; border-bottom: 1px solid var(--color-border); }
 .sidebar-header h1 {
-  font-size: 1.4rem;
-  font-weight: 700;
-  font-family: var(--font-display);
-  color: var(--color-ink);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 1.85rem; font-weight: 400; font-family: var(--font-display);
+  color: var(--color-ink); letter-spacing: -.035em;
 }
-
 .sidebar-header .subtitle {
-  font-size: 0.76rem;
-  color: var(--color-muted);
-  margin-top: 6px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: .76rem; color: var(--color-muted); margin-top: 6px; letter-spacing: .025em;
 }
-
-.sidebar-nav {
-  padding: 8px 14px 2px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  position: relative;
-  z-index: 1;
-}
-
+.sidebar-nav { padding: 16px 14px; display: flex; flex-direction: column; gap: 4px; }
 .sidebar-nav a {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 4px 12px 4px 0;
-  color: rgba(237, 242, 235, 0.78);
-  text-decoration: none;
-  font-size: 0.875rem;
-  transition:
-    background 0.15s,
-    color 0.15s,
-    transform 0.15s;
-  position: relative;
+  display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 10px;
+  border-radius: 9px; color: var(--color-muted); text-decoration: none; font-size: .875rem;
+  transition: background .15s, color .15s; position: relative;
 }
-
-.sidebar-nav a:hover {
-  color: var(--color-ink);
-  transform: translateX(2px);
-}
-
-.sidebar-nav a.router-link-active {
-  color: var(--color-leaf);
-}
-
+.sidebar-nav a:hover { background: rgba(var(--accent-rgb), .07); color: var(--color-ink); }
+.sidebar-nav a.router-link-active { background: var(--accent-soft); color: var(--color-leaf); }
 .sidebar-nav .nav-icon {
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(167, 227, 178, 0.14);
-  background: rgba(58, 64, 72, 0.28);
-  color: var(--color-moss);
-  flex-shrink: 0;
-  padding: 0;
+  width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+  color: currentColor; flex-shrink: 0; padding: 0;
 }
+.main-col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+.main-content { flex: 1; min-height: 0; position: relative; overflow: hidden; z-index: 1; }
+.maplibregl-ctrl-icon:not(.maplibregl-ctrl-zoom-level) { filter: var(--map-control-filter); }
+.maplibregl-ctrl-attrib { background: var(--surface-1) !important; color: var(--color-muted); }
+.maplibregl-ctrl-attrib.maplibregl-ctrl, .maplibregl-ctrl-attrib.maplibregl-ctrl a { color: var(--color-muted); }
+.maplibregl-ctrl-attrib-button { filter: var(--map-control-filter); }
 
-.sidebar-nav a.router-link-active .nav-icon {
-  border-color: rgba(167, 227, 178, 0.28);
-  background: linear-gradient(180deg, rgba(47, 125, 79, 0.24), rgba(28, 31, 36, 0.42));
-  color: var(--color-leaf);
+/* Keep the desktop map framed by the journal rather than edge-to-edge chrome. */
+@media (min-width: 769px) {
+  .map-view { padding: 12px 14px 14px; }
+  .map-view > .map-surface { border: 1px solid var(--color-border); border-radius: 14px; overflow: hidden; }
 }
-
-.main-col {
-  flex: 1;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.main-content {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  z-index: 1;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

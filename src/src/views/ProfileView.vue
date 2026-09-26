@@ -251,8 +251,8 @@ async function handleSignOut() {
 .profile-title {
   font-size: 1.6rem;
   font-family: var(--font-display);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: -.025em;
+  text-transform: none;
   color: var(--color-ink);
   margin: 0;
 }
@@ -262,8 +262,8 @@ async function handleSignOut() {
   flex-direction: column;
   gap: 10px;
   padding: 20px;
-  border: 1px solid rgba(167, 227, 178, 0.12);
-  background: rgba(28, 31, 36, 0.5);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
+  background: rgba(var(--surface-rgb), 0.5);
 }
 
 .profile-status p {
@@ -308,15 +308,15 @@ async function handleSignOut() {
   flex-wrap: wrap;
   gap: 8px;
   padding: 10px 12px;
-  border: 1px solid rgba(167, 227, 178, 0.14);
-  background: rgba(28, 31, 36, 0.6);
+  border: 1px solid rgba(var(--accent-rgb), 0.14);
+  background: rgba(var(--surface-rgb), 0.6);
   text-decoration: none;
   transition: border-color 0.15s, background 0.15s;
 }
 
 .badge-strip:hover {
   border-color: var(--color-leaf);
-  background: rgba(47, 125, 79, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
 }
 
 .badge-strip__count {
@@ -362,7 +362,7 @@ async function handleSignOut() {
   font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  border: 1px solid rgba(167, 227, 178, 0.3);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
   cursor: pointer;
   text-decoration: none;
   display: inline-flex;
@@ -372,7 +372,7 @@ async function handleSignOut() {
 
 .btn-primary {
   background: var(--color-leaf);
-  color: #0b0f0d;
+  color: var(--color-on-accent);
   border-color: var(--color-leaf);
 }
 
@@ -387,18 +387,18 @@ async function handleSignOut() {
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(167, 227, 178, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 
 .btn-google {
   background: #f3f6ef;
   color: #122014;
-  border-color: #f3f6ef;
+  border-color: var(--color-leaf);
 }
 
 .btn-google:hover:not(:disabled) {
   background: transparent;
-  color: #f3f6ef;
+  color: var(--color-leaf);
 }
 
 .btn-primary:disabled,
@@ -409,13 +409,13 @@ async function handleSignOut() {
 }
 
 .error-text {
-  color: #ff8a8a;
+  color: var(--color-error);
   font-size: 0.82rem;
 }
 
 .privacy-section {
-  border: 1px solid rgba(167, 227, 178, 0.12);
-  background: rgba(28, 31, 36, 0.5);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
+  background: rgba(var(--surface-rgb), 0.5);
 }
 
 .privacy-section summary {
@@ -449,7 +449,7 @@ async function handleSignOut() {
 
 .privacy-body {
   padding: 4px 20px 20px;
-  color: rgba(237, 242, 235, 0.88);
+  color: rgba(var(--ink-rgb), 0.88);
   font-size: 0.88rem;
   line-height: 1.55;
 }

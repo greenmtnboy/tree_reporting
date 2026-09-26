@@ -339,23 +339,23 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: rgba(154, 166, 154, 0.82);
+  color: rgba(var(--muted-rgb), 0.82);
   font-size: 0.84rem;
 }
 
 .summary-markdown-card__state--error {
-  color: #d48f72;
+  color: var(--color-autumn);
 }
 
 .summary-markdown-card__content {
   height: 100%;
-  color: rgba(237, 242, 235, 0.9);
+  color: rgba(var(--ink-rgb), 0.9);
 }
 
 .summary-markdown-card__content :deep(.markdown-root),
 .summary-markdown-card__content :deep(.markdown-content),
 .summary-markdown-card__content :deep(.markdown-body) {
-  color: rgba(237, 242, 235, 0.9);
+  color: rgba(var(--ink-rgb), 0.9);
   font-size: 0.92rem;
   line-height: 1.6;
 }
@@ -366,7 +366,7 @@ onBeforeUnmount(() => {
 
 .summary-markdown-card__content :deep(p),
 .summary-markdown-card__content :deep(li) {
-  color: rgba(237, 242, 235, 0.82);
+  color: rgba(var(--ink-rgb), 0.82);
 }
 
 .summary-markdown-card__content :deep(strong) {
@@ -375,12 +375,12 @@ onBeforeUnmount(() => {
 }
 
 .summary-markdown-card__content :deep(em) {
-  color: rgba(237, 242, 235, 0.88);
+  color: rgba(var(--ink-rgb), 0.88);
 }
 
 .summary-markdown-card__content :deep(p:first-child) {
   margin-top: 0;
-  color: rgba(237, 242, 235, 0.94);
+  color: rgba(var(--ink-rgb), 0.94);
   font-size: 1rem;
   line-height: 1.55;
 }
@@ -395,7 +395,7 @@ onBeforeUnmount(() => {
 }
 
 .summary-markdown-card__content :deep(li::marker) {
-  color: rgba(167, 227, 178, 0.68);
+  color: rgba(var(--accent-rgb), 0.68);
 }
 
 .summary-markdown-card__content :deep(a) {

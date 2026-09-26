@@ -1,3 +1,4 @@
+import { initializeTheme } from './composables/useTheme'
 import { createApp } from 'vue'
 import { ref } from 'vue'
 import { createPinia } from 'pinia'
@@ -8,6 +9,9 @@ import { useUserSettingsStore } from '@trilogy-data/trilogy-studio-components/st
 import 'maplibre-gl/dist/maplibre-gl.css'
 import '@trilogy-data/trilogy-studio-components/style.css'
 import './assets/main.css'
+
+const stopTheme = initializeTheme()
+if (import.meta.hot) import.meta.hot.dispose(stopTheme)
 
 const app = createApp(App)
 const pinia = createPinia()

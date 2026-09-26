@@ -107,8 +107,8 @@ function dismiss() {
   max-height: 90vh;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(28, 31, 36, 0.98), rgba(15, 20, 17, 0.98));
-  border: 1px solid rgba(167, 227, 178, 0.18);
+    linear-gradient(180deg, rgba(var(--surface-rgb), 0.98), rgba(var(--surface-rgb), 0.98));
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   box-shadow: 0 24px 56px rgba(6, 8, 10, 0.55);
   display: flex;
   flex-direction: column;
@@ -119,7 +119,7 @@ function dismiss() {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(167, 227, 178, 0.1);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.1);
 }
 
 .welcome-header h2 {
@@ -134,7 +134,7 @@ function dismiss() {
 
 .welcome-close {
   background: transparent;
-  border: 1px solid rgba(167, 227, 178, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   color: var(--color-ink);
   width: 30px;
   height: 30px;
@@ -145,15 +145,15 @@ function dismiss() {
 }
 
 .welcome-close:hover {
-  background: rgba(167, 227, 178, 0.08);
-  border-color: rgba(167, 227, 178, 0.4);
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: rgba(var(--accent-rgb), 0.4);
 }
 
 .welcome-body {
   padding: 16px 20px;
   font-size: 0.9rem;
   line-height: 1.6;
-  color: rgba(237, 242, 235, 0.82);
+  color: rgba(var(--ink-rgb), 0.82);
 }
 
 .welcome-body p {
@@ -168,8 +168,8 @@ function dismiss() {
 .welcome-section {
   margin: 16px 0;
   padding: 12px 14px;
-  background: rgba(47, 125, 79, 0.08);
-  border: 1px solid rgba(167, 227, 178, 0.12);
+  background: rgba(var(--accent-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
   border-left: 3px solid var(--color-moss);
 }
 
@@ -238,7 +238,7 @@ function dismiss() {
   align-items: center;
   justify-content: space-between;
   padding: 14px 20px;
-  border-top: 1px solid rgba(167, 227, 178, 0.1);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.1);
 }
 
 .welcome-dismiss-label {
@@ -255,9 +255,10 @@ function dismiss() {
 }
 
 .welcome-btn {
-  background: linear-gradient(180deg, rgba(47, 125, 79, 0.9), rgba(34, 96, 60, 0.9));
-  color: var(--color-ink);
-  border: 1px solid rgba(167, 227, 178, 0.3);
+  border-radius: 8px;
+  background: var(--color-leaf);
+  color: var(--color-on-accent);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
   padding: 8px 22px;
   font-family: var(--font-display);
   font-size: 0.8rem;
@@ -269,8 +270,8 @@ function dismiss() {
 }
 
 .welcome-btn:hover {
-  background: linear-gradient(180deg, rgba(56, 142, 92, 0.95), rgba(40, 108, 68, 0.95));
-  border-color: rgba(167, 227, 178, 0.5);
+  background: var(--color-moss);
+  border-color: rgba(var(--accent-rgb), 0.5);
 }
 
 .modal-fade-enter-active,

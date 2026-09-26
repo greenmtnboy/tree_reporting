@@ -336,12 +336,12 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: rgba(154, 166, 154, 0.82);
+  color: rgba(var(--muted-rgb), 0.82);
   font-size: 0.84rem;
 }
 
 .carousel-state--error {
-  color: #d48f72;
+  color: var(--color-autumn);
 }
 
 .carousel-nav {
@@ -355,10 +355,10 @@ onBeforeUnmount(() => {
 .carousel-arrow {
   width: 32px;
   height: 32px;
-  border: 1px solid rgba(167, 227, 178, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   border-radius: 8px;
-  background: rgba(15, 21, 17, 0.36);
-  color: var(--color-foam, #edf2eb);
+  background: rgba(var(--surface-rgb), 0.36);
+  color: var(--color-ink);
   font-size: 1.2rem;
   line-height: 1;
   cursor: pointer;
@@ -366,8 +366,8 @@ onBeforeUnmount(() => {
 }
 
 .carousel-arrow:hover:not(:disabled) {
-  background: rgba(47, 125, 79, 0.18);
-  border-color: rgba(167, 227, 178, 0.32);
+  background: rgba(var(--accent-rgb), 0.18);
+  border-color: rgba(var(--accent-rgb), 0.32);
 }
 
 .carousel-arrow:disabled {
@@ -379,7 +379,7 @@ onBeforeUnmount(() => {
   font-size: 0.76rem;
   font-weight: 600;
   letter-spacing: 0.06em;
-  color: rgba(154, 166, 154, 0.82);
+  color: rgba(var(--muted-rgb), 0.82);
 }
 
 .carousel-body {
@@ -404,7 +404,7 @@ onBeforeUnmount(() => {
   flex: 0 0 220px;
   object-fit: cover;
   border-radius: 12px;
-  border: 1px solid rgba(167, 227, 178, 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
 }
 
 .carousel-photo-placeholder {
@@ -415,16 +415,16 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   border-radius: 12px;
-  border: 1px solid rgba(167, 227, 178, 0.08);
-  background: rgba(12, 17, 21, 0.3);
-  color: rgba(154, 166, 154, 0.5);
+  border: 1px solid rgba(var(--accent-rgb), 0.08);
+  background: rgba(var(--surface-rgb), 0.3);
+  color: rgba(var(--muted-rgb), 0.5);
   font-size: 0.8rem;
 }
 
 .carousel-photo-attr {
   margin-top: 4px;
   font-size: 0.66rem;
-  color: rgba(154, 166, 154, 0.6);
+  color: rgba(var(--muted-rgb), 0.6);
   line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -455,12 +455,12 @@ onBeforeUnmount(() => {
 .carousel-sci-name {
   font-size: 0.88rem;
   font-style: italic;
-  color: rgba(237, 242, 235, 0.7);
+  color: rgba(var(--ink-rgb), 0.7);
 }
 
 .carousel-count {
   font-size: 0.82rem;
-  color: rgba(167, 227, 178, 0.82);
+  color: rgba(var(--accent-rgb), 0.82);
   font-weight: 600;
 }
 
@@ -468,7 +468,7 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 0.86rem;
   line-height: 1.6;
-  color: rgba(237, 242, 235, 0.78);
+  color: rgba(var(--ink-rgb), 0.78);
 }
 
 .carousel-facts {
@@ -480,12 +480,12 @@ onBeforeUnmount(() => {
 .carousel-facts li {
   margin-bottom: 3px;
   font-size: 0.84rem;
-  color: rgba(237, 242, 235, 0.82);
+  color: rgba(var(--ink-rgb), 0.82);
   line-height: 1.5;
 }
 
 .carousel-facts li::marker {
-  color: rgba(167, 227, 178, 0.68);
+  color: rgba(var(--accent-rgb), 0.68);
 }
 
 .carousel-facts strong {

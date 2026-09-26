@@ -516,22 +516,22 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  border-bottom: 1px solid rgba(167, 227, 178, 0.1);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.1);
   padding-bottom: 14px;
 }
 
 .submit-header h1 {
   font-size: 1.3rem;
   font-family: var(--font-display);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: -.025em;
+  text-transform: none;
   margin: 0;
   flex: 1;
 }
 
 .submit-back {
   background: transparent;
-  border: 1px solid rgba(167, 227, 178, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   color: var(--color-ink);
   width: 36px;
   height: 36px;
@@ -540,7 +540,7 @@ onBeforeUnmount(() => {
 }
 
 .submit-back:hover {
-  background: rgba(47, 125, 79, 0.15);
+  background: rgba(var(--accent-rgb), 0.15);
 }
 
 .submit-steps {
@@ -554,7 +554,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(167, 227, 178, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   font-size: 0.75rem;
   color: var(--color-muted);
 }
@@ -584,14 +584,14 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 16px;
   padding: 20px;
-  border: 1px dashed rgba(167, 227, 178, 0.28);
-  background: rgba(28, 31, 36, 0.5);
+  border: 1px dashed rgba(var(--accent-rgb), 0.28);
+  background: rgba(var(--surface-rgb), 0.5);
   cursor: pointer;
 }
 
 .capture-drop:hover {
   border-color: var(--color-leaf);
-  background: rgba(47, 125, 79, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
 }
 
 .capture-input {
@@ -624,7 +624,7 @@ onBeforeUnmount(() => {
 .locate-map {
   height: 55vh;
   min-height: 320px;
-  border: 1px solid rgba(167, 227, 178, 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
 }
 
 .confirm-row {
@@ -650,7 +650,7 @@ onBeforeUnmount(() => {
 
 .photo-tile {
   object-fit: cover;
-  border: 1px solid rgba(167, 227, 178, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   display: block;
 }
 
@@ -670,7 +670,7 @@ onBeforeUnmount(() => {
   width: 22px;
   height: 22px;
   border: none;
-  background: rgba(11, 15, 13, 0.75);
+  background: rgba(var(--surface-rgb), 0.75);
   color: var(--color-ink);
   font-size: 1rem;
   line-height: 1;
@@ -681,8 +681,8 @@ onBeforeUnmount(() => {
 }
 
 .photo-remove:hover {
-  background: rgba(11, 15, 13, 0.95);
-  color: #ff8a8a;
+  background: rgba(var(--surface-rgb), 0.95);
+  color: var(--color-error);
 }
 
 .photo-add {
@@ -691,15 +691,15 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  border: 1px dashed rgba(167, 227, 178, 0.28);
-  background: rgba(28, 31, 36, 0.5);
+  border: 1px dashed rgba(var(--accent-rgb), 0.28);
+  background: rgba(var(--surface-rgb), 0.5);
   color: var(--color-muted);
   cursor: pointer;
 }
 
 .photo-add:hover {
   border-color: var(--color-leaf);
-  background: rgba(47, 125, 79, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
   color: var(--color-leaf);
 }
 
@@ -760,8 +760,8 @@ onBeforeUnmount(() => {
 }
 
 .text-input {
-  background: rgba(28, 31, 36, 0.8);
-  border: 1px solid rgba(167, 227, 178, 0.14);
+  background: rgba(var(--surface-rgb), 0.8);
+  border: 1px solid rgba(var(--accent-rgb), 0.14);
   color: var(--color-ink);
   padding: 10px 12px;
   font-size: 0.9rem;
@@ -784,7 +784,7 @@ onBeforeUnmount(() => {
 .btn-identify {
   background: transparent;
   color: var(--color-leaf);
-  border: 1px solid rgba(167, 227, 178, 0.3);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
   padding: 6px 12px;
   font-family: var(--font-display);
   font-size: 0.72rem;
@@ -794,7 +794,7 @@ onBeforeUnmount(() => {
 }
 
 .btn-identify:hover:not(:disabled) {
-  background: rgba(47, 125, 79, 0.15);
+  background: rgba(var(--accent-rgb), 0.15);
   border-color: var(--color-leaf);
 }
 
@@ -816,8 +816,8 @@ onBeforeUnmount(() => {
   grid-template-rows: auto auto;
   column-gap: 10px;
   text-align: left;
-  background: rgba(28, 31, 36, 0.6);
-  border: 1px solid rgba(167, 227, 178, 0.14);
+  background: rgba(var(--surface-rgb), 0.6);
+  border: 1px solid rgba(var(--accent-rgb), 0.14);
   color: var(--color-ink);
   padding: 8px 12px;
   cursor: pointer;
@@ -826,12 +826,12 @@ onBeforeUnmount(() => {
 
 .candidate-chip:hover {
   border-color: var(--color-leaf);
-  background: rgba(47, 125, 79, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
 }
 
 .candidate-chip.selected {
   border-color: var(--color-leaf);
-  background: rgba(47, 125, 79, 0.18);
+  background: rgba(var(--accent-rgb), 0.18);
 }
 
 .candidate-sci {
@@ -860,7 +860,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(167, 227, 178, 0.1);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.1);
   flex-wrap: wrap;
 }
 
@@ -901,7 +901,7 @@ onBeforeUnmount(() => {
   font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  border: 1px solid rgba(167, 227, 178, 0.3);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
   cursor: pointer;
   text-decoration: none;
   display: inline-flex;
@@ -911,7 +911,7 @@ onBeforeUnmount(() => {
 
 .btn-primary {
   background: var(--color-leaf);
-  color: #0b0f0d;
+  color: var(--color-on-accent);
   border-color: var(--color-leaf);
 }
 
@@ -926,13 +926,13 @@ onBeforeUnmount(() => {
 }
 
 .btn-secondary:hover {
-  background: rgba(167, 227, 178, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 
 .progress {
   width: 100%;
   height: 6px;
-  background: rgba(167, 227, 178, 0.12);
+  background: rgba(var(--accent-rgb), 0.12);
   overflow: hidden;
 }
 
@@ -943,7 +943,7 @@ onBeforeUnmount(() => {
 }
 
 .error-text {
-  color: #ff8a8a;
+  color: var(--color-error);
   font-size: 0.88rem;
 }
 </style>

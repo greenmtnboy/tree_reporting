@@ -115,8 +115,8 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: rgba(28, 31, 36, 0.82);
-  border: 1px solid rgba(167, 227, 178, 0.16);
+  background: rgba(var(--surface-rgb), 0.82);
+  border: 1px solid rgba(var(--accent-rgb), 0.16);
   box-shadow: 0 10px 24px rgba(7, 10, 11, 0.24);
   transition: width 0.16s ease, height 0.16s ease;
 }
@@ -152,7 +152,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
   margin-left: -4px;
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
-  border-bottom: 7px solid rgba(167, 227, 178, 0.6);
+  border-bottom: 7px solid rgba(var(--accent-rgb), 0.6);
   pointer-events: none;
 }
 
@@ -169,7 +169,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: rgba(237, 242, 235, 0.6);
+  color: rgba(var(--ink-rgb), 0.6);
   font-size: 0.72rem;
   font-weight: 700;
   line-height: 1;
@@ -178,7 +178,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
 }
 
 .compass-dir:hover {
-  background: rgba(47, 125, 79, 0.28);
+  background: rgba(var(--accent-rgb), 0.28);
   color: var(--color-ink);
 }
 
@@ -187,7 +187,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
 }
 
 .compass-dir--facing {
-  background: rgba(47, 125, 79, 0.22);
+  background: rgba(var(--accent-rgb), 0.22);
   color: var(--color-leaf);
 }
 
@@ -220,7 +220,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
 .compass-toggle--open {
   width: 20px;
   height: 20px;
-  background: rgba(167, 227, 178, 0.14);
+  background: rgba(var(--accent-rgb), 0.14);
 }
 
 .compass-toggle:disabled {
@@ -251,6 +251,6 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-top: 8px solid rgba(237, 242, 235, 0.3);
+  border-top: 8px solid rgba(var(--ink-rgb), 0.3);
 }
 </style>

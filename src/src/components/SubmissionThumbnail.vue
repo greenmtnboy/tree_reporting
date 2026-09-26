@@ -37,12 +37,12 @@ watch(() => props.photoPath, load)
   width: 72px;
   height: 72px;
   flex-shrink: 0;
-  background: rgba(167, 227, 178, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid rgba(167, 227, 178, 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.1);
 }
 
 .submission-thumb__img {

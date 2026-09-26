@@ -126,8 +126,8 @@ watch(
   flex-direction: column;
   gap: 4px;
   padding: 12px 10px;
-  border: 1px solid rgba(167, 227, 178, 0.12);
-  background: rgba(28, 31, 36, 0.5);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
+  background: rgba(var(--surface-rgb), 0.5);
   min-height: 108px;
 }
 
@@ -136,8 +136,8 @@ watch(
 }
 
 .badge.earned {
-  border-color: rgba(167, 227, 178, 0.4);
-  background: rgba(47, 125, 79, 0.12);
+  border-color: rgba(var(--accent-rgb), 0.4);
+  background: rgba(var(--accent-rgb), 0.12);
 }
 
 .badge-emoji {
@@ -161,7 +161,7 @@ watch(
   font-size: 0.6rem;
   padding: 1px 6px;
   background: var(--color-leaf);
-  color: #0b0f0d;
+  color: var(--color-on-accent);
   letter-spacing: 0.08em;
 }
 
@@ -175,7 +175,7 @@ watch(
 .badge-progress {
   position: relative;
   height: 14px;
-  background: rgba(167, 227, 178, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
   overflow: hidden;
 }
 

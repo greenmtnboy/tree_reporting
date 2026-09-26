@@ -55,6 +55,10 @@ jobs:
       working-directory: ./src
       run: pnpm lint
 
+    - name: Verify generated artwork
+      working-directory: ./src
+      run: pnpm artwork:check
+
   # The ingest models and the job table these deploy from have no other gate.
   # `data/raw/tests` asserts things whose failure mode is silence rather than an
   # error: a data_source value with no partition emits zero rows, a city with no
