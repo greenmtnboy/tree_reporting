@@ -21,105 +21,249 @@ const CITY_DASHBOARD_CONTEXT: Record<
   { ecoregionId: number; usdaZone: number; biome: string; realm: string }
 > = {
   USSFO: {
-    ecoregionId: 423,
+    ecoregionId: 423, // California interior chaparral and woodlands
     usdaZone: 10,
     biome: 'Mediterranean Forests, Woodlands & Scrub',
     realm: 'nearctic',
   },
   USNYC: {
-    ecoregionId: 339,
+    ecoregionId: 339, // Northeast US Coastal forests
     usdaZone: 7,
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'nearctic',
   },
   USBOS: {
-    ecoregionId: 339,
+    ecoregionId: 339, // Northeast US Coastal forests
     usdaZone: 7,
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'nearctic',
   },
   FRPAR: {
-    ecoregionId: 664,
+    ecoregionId: 664, // European Atlantic mixed forests
     usdaZone: 8,
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'palearctic',
   },
   USBTV: {
-    ecoregionId: 334,
+    ecoregionId: 334, // Eastern Great Lakes lowland forests
     usdaZone: 5,
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'nearctic',
   },
   CAVAN: {
-    ecoregionId: 524,
+    ecoregionId: 364, // Puget lowland forests
     usdaZone: 8,
     biome: 'Temperate Conifer Forests',
     realm: 'nearctic',
   },
   DEBER: {
-    ecoregionId: 680,
+    ecoregionId: 654, // Central European mixed forests
     usdaZone: 7,
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'palearctic',
   },
   NLAMS: {
-    ecoregionId: 661,
+    ecoregionId: 664, // European Atlantic mixed forests
     usdaZone: 8,
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'palearctic',
   },
   GBLON: {
-    ecoregionId: 660,
+    ecoregionId: 663, // English Lowlands beech forests
     usdaZone: 9,
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'palearctic',
   },
   AUMEL: {
-    ecoregionId: 801,
+    ecoregionId: 176, // Southeast Australia temperate forests
     usdaZone: 9,
     biome: 'Temperate Broadleaf & Mixed Forests',
-    realm: 'australasian',
+    realm: 'australasia',
   },
   ARBUE: {
-    ecoregionId: 576,
+    ecoregionId: 576, // Humid Pampas
     usdaZone: 10,
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'neotropical',
   },
   USLAX: {
-    ecoregionId: 422,
+    ecoregionId: 422, // California coastal sage and chaparral
     usdaZone: 10,
     biome: 'Mediterranean Forests, Woodlands & Scrub',
     realm: 'nearctic',
   },
   USWAS: {
-    ecoregionId: 399,
+    ecoregionId: 399, // Southeast US conifer savannas
     usdaZone: 7,
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'nearctic',
   },
   USTEM: {
-    ecoregionId: 435,
+    ecoregionId: 435, // Sonoran desert
     usdaZone: 10,
     biome: 'Deserts & Xeric Shrublands',
     realm: 'nearctic',
   },
   GRATH: {
-    ecoregionId: 785,
+    ecoregionId: 785, // Aegean and Western Turkey sclerophyllous and mixed forests
     usdaZone: 10,
     biome: 'Mediterranean Forests, Woodlands & Scrub',
     realm: 'palearctic',
   },
   GRMLO: {
-    ecoregionId: 785,
+    ecoregionId: 785, // Aegean and Western Turkey sclerophyllous and mixed forests
     usdaZone: 10,
     biome: 'Mediterranean Forests, Woodlands & Scrub',
     realm: 'palearctic',
   },
   GRSAN: {
-    ecoregionId: 785,
+    ecoregionId: 785, // Aegean and Western Turkey sclerophyllous and mixed forests
     usdaZone: 10,
     biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'palearctic',
+  },
+  USDEN: {
+    ecoregionId: 402, // Western shortgrass prairie
+    usdaZone: 6,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  CACAL: {
+    ecoregionId: 394, // Montana Valley and Foothill grasslands
+    usdaZone: 4,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  CAEDM: {
+    ecoregionId: 386, // Canadian Aspen forests and parklands
+    usdaZone: 4,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  CAWPG: {
+    ecoregionId: 397, // Northern Tallgrass prairie
+    usdaZone: 3,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  CATOR: {
+    ecoregionId: 342, // Southern Great Lakes forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  CAMTL: {
+    ecoregionId: 334, // Eastern Great Lakes lowland forests
+    usdaZone: 5,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  CAQUE: {
+    ecoregionId: 334, // Eastern Great Lakes lowland forests
+    usdaZone: 4,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  CALON: {
+    ecoregionId: 334, // Eastern Great Lakes lowland forests
+    usdaZone: 5,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  CAHFX: {
+    ecoregionId: 338, // New England-Acadian forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  CAKGN: {
+    ecoregionId: 334, // Eastern Great Lakes lowland forests
+    usdaZone: 5,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  CALET: {
+    ecoregionId: 396, // Northern Shortgrass prairie
+    usdaZone: 4,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  CAVIC: {
+    ecoregionId: 364, // Puget lowland forests
+    usdaZone: 9,
+    biome: 'Temperate Conifer Forests',
+    realm: 'nearctic',
+  },
+  CAKEL: {
+    ecoregionId: 362, // Okanogan dry forests
+    usdaZone: 7,
+    biome: 'Temperate Conifer Forests',
+    realm: 'nearctic',
+  },
+  CANWE: {
+    ecoregionId: 364, // Puget lowland forests
+    usdaZone: 8,
+    biome: 'Temperate Conifer Forests',
+    realm: 'nearctic',
+  },
+  CAMIS: {
+    ecoregionId: 342, // Southern Great Lakes forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  CAOTT: {
+    ecoregionId: 334, // Eastern Great Lakes lowland forests
+    usdaZone: 5,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  CABUR: {
+    ecoregionId: 342, // Southern Great Lakes forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  CAAJX: {
+    ecoregionId: 342, // Southern Great Lakes forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  CAMON: {
+    ecoregionId: 335, // Gulf of St. Lawrence lowland forests
+    usdaZone: 5,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  JPTYO: {
+    ecoregionId: 682, // Taiheiyo evergreen forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  COBOG: {
+    ecoregionId: 477, // Magdalena Valley montane forests
+    usdaZone: 10,
+    biome: 'Tropical & Subtropical Moist Broadleaf Forests',
+    realm: 'neotropical',
+  },
+  TWTPE: {
+    ecoregionId: 283, // Taiwan subtropical evergreen forests
+    usdaZone: 11,
+    biome: 'Tropical & Subtropical Moist Broadleaf Forests',
+    realm: 'indo_malay',
+  },
+  DKCPH: {
+    ecoregionId: 647, // Baltic mixed forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  FIHEL: {
+    ecoregionId: 717, // Scandinavian and Russian taiga
+    usdaZone: 6,
+    biome: 'Boreal Forests/Taiga',
     realm: 'palearctic',
   },
 }
