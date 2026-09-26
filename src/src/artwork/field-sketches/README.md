@@ -32,6 +32,29 @@ only these trusted, static SVG imports. The app's `FieldBackdrop.vue` chooses
 the biome and handles position/opacity. The studio uses the same renderer and
 originals, so edits appear in both through Vite's hot reload.
 
+## Generate the city
+
+`city.svg` is generated. Edit `cityScene` in `../generators/city.mjs`, then run
+`pnpm artwork:generate` from `src/`. `pnpm artwork:check` verifies that the
+committed SVG matches its source. The generator has no dependencies on Vue,
+Vite, or a browser, so it can move into the shared artwork package.
+
+Each building has a footprint (`x`, `y`, `width`, `depth`), a height, and a
+floor count. All geometry uses the same isometric projection:
+
+- Every wall ends at its footprint's `z=0` street-level corner.
+- Roof and wall edges share corners; roofs have no antenna/cross decorations.
+- Windows are inset rectangles on the facade planes, inside each floor.
+- The tall rear tower and the three foreground buildings are ordered by depth.
+- Hidden line segments are cut away behind nearer buildings, preserving a
+  transparent background without opaque fills or reusable SVG mask IDs.
+- Curb and survey lines use the same ground plane as the buildings.
+
+Use separated, non-overlapping footprints; the current depth ordering is
+intended for this small composed scene, not interlocking building volumes.
+The biome drawings remain hand-authored for now. Their next generator should
+similarly derive leaves and veins from attachment points on shared stem curves.
+
 ## Iteration contract
 
 - Preserve the viewBox: biome drawings use `0 0 460 510`; the city uses
@@ -53,7 +76,7 @@ originals, so edits appear in both through Vite's hot reload.
 
 ## Current review baseline
 
-These files preserve the first-pass artwork, including its rough joins. The
+The biome files preserve the first-pass artwork, including its rough joins. The
 woodland leaf bases, conifer needle attachments, and grass seed heads were
 drawn independently of their curved stems; their gaps are not a loading or
 draw-animation issue. Low opacity, panel overlays, and cropping also make

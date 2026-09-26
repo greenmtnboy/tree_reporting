@@ -69,7 +69,7 @@ watchEffect(() => {
             <div class="canvas full-canvas" :class="{ 'with-grid': guides }">
               <FieldSketch :name="selected" class="full-study" :style="{ opacity: visibility / 100 }" />
             </div>
-            <p class="caption">Check leaf bases, branch junctions, and every line ending here.</p>
+            <p class="caption">{{ selected === 'city' ? 'Check the shared ground plane, facade corners, and hidden edges here.' : 'Check leaf bases, branch junctions, and every line ending here.' }}</p>
           </section>
           <section aria-label="App placement" class="study-card">
             <header><h3>App placement</h3><span>{{ Math.round(appOpacity * 100) }}% visibility + edge crop</span></header>
@@ -86,7 +86,7 @@ watchEffect(() => {
         </div>
 
         <aside class="review-note">
-          <p class="eyebrow">What to refine</p>
+          <p class="eyebrow">{{ selected === 'city' ? 'Construction rules' : 'What to refine' }}</p>
           <p>{{ sketch.review }}</p>
           <code>src/src/artwork/field-sketches/{{ selected }}.svg</code>
         </aside>

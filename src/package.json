@@ -13,7 +13,9 @@
     "test:queries": "vitest run --config vitest.queries.config.ts",
     "bench:chat": "vitest run --config vitest.chatbench.config.ts",
     "test:e2e": "playwright test",
-    "dev:artwork": "vite --open /artwork.html"
+    "dev:artwork": "vite --open /artwork.html",
+    "artwork:generate": "node src/artwork/generators/generate.mjs",
+    "artwork:check": "node src/artwork/generators/generate.mjs --check"
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "1.33.1-dev18.0",

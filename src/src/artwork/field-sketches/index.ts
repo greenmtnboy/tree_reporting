@@ -34,8 +34,8 @@ export const fieldSketches = {
   },
   city: {
     svg: city, title: 'City geometry', example: 'Shared upper-left drawing',
-    motif: 'An architectural sketch over survey lines',
-    review: 'Open survey lines and the second pencil pass are intentional. Check building corners and perspective separately from those construction marks.',
+    motif: 'Four buildings on one projected street plane',
+    review: 'Generated from footprint dimensions and heights. All wall bases meet the same ground plane; windows follow their facade, and nearer buildings hide lines behind them. The taller rear tower has a plain roof. Edit cityScene in generators/city.mjs to change the composition.',
   },
 } as const
 
