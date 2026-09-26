@@ -17,8 +17,7 @@ const ecosystem = computed(() => {
 
 <template>
   <div class="field-backdrop" aria-hidden="true" :data-ecosystem="ecosystem">
-    <FieldSketch name="city" class="city-study" />
-    <FieldSketch :name="ecosystem" class="ecosystem-study" />
+    <FieldSketch :key="ecosystem" :name="ecosystem" grow class="ecosystem-study" />
   </div>
 </template>
 
@@ -30,14 +29,6 @@ const ecosystem = computed(() => {
   pointer-events: none;
   overflow: hidden;
 }
-.city-study {
-  position: absolute;
-  top: -36px;
-  left: -45px;
-  width: min(660px, 65vw);
-  color: var(--sketch-city);
-  opacity: .34;
-}
 .ecosystem-study {
   position: absolute;
   bottom: -32px;
@@ -47,7 +38,6 @@ const ecosystem = computed(() => {
   opacity: .4;
 }
 @media (max-width: 768px) {
-  .city-study { width: 85vw; opacity: .22; }
   .ecosystem-study { width: 75vw; opacity: .25; }
 }
 </style>

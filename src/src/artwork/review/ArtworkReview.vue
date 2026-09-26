@@ -10,9 +10,10 @@ const theme = ref<'light' | 'dark'>(matchMedia('(prefers-color-scheme: dark)').m
 const guides = ref(false)
 const panel = ref(true)
 const visibility = ref(100)
+const growthReplay = ref(0)
 const sketch = computed(() => fieldSketches[selected.value])
 const download = computed(() => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sketch.value.svg)}`)
-const appOpacity = computed(() => selected.value === 'city' ? .34 : .4)
+const appOpacity = computed(() => selected.value === 'city' ? .24 : .4)
 
 watchEffect(() => {
   document.documentElement.dataset.theme = theme.value
@@ -61,6 +62,7 @@ watchEffect(() => {
           <label>Study visibility <input v-model.number="visibility" type="range" min="10" max="100" step="5" /> <output>{{ visibility }}%</output></label>
           <label><input v-model="guides" type="checkbox" /> Alignment grid</label>
           <label><input v-model="panel" type="checkbox" /> Panel over app preview</label>
+          <button v-if="selected !== 'city'" class="replay-growth" @click="growthReplay++">Replay growth</button>
         </div>
 
         <div class="comparison">
@@ -74,10 +76,14 @@ watchEffect(() => {
           <section aria-label="App placement" class="study-card">
             <header><h3>App placement</h3><span>{{ Math.round(appOpacity * 100) }}% visibility + edge crop</span></header>
             <div class="canvas context-canvas" :class="{ 'with-grid': guides, 'city-context': selected === 'city' }">
-              <FieldSketch :name="selected" class="context-study" :style="{ opacity: appOpacity }" />
+              <FieldSketch :key="`${selected}-${growthReplay}`" :name="selected" :grow="selected !== 'city'" class="context-study" :style="{ opacity: appOpacity }" />
               <div v-if="panel" class="panel-veil"></div>
-              <div class="context-label">
-                <span class="eyebrow">{{ selected === 'city' ? 'Upper left' : 'Lower right' }}</span>
+              <div v-if="selected === 'city'" class="brand-preview">
+                <strong>Urban Trees</strong>
+                <span>The Concrete Jungle</span>
+              </div>
+              <div v-else class="context-label">
+                <span class="eyebrow">Lower right</span>
                 <p>{{ panel ? 'Under a translucent panel' : 'Background only' }}</p>
               </div>
             </div>
@@ -126,6 +132,7 @@ h2 { font: 400 1.8rem/1.3 var(--font-display); margin: 5px 0; }
 .download-link { white-space: nowrap; border-bottom: 1px solid var(--color-border); padding: 6px 0; color: var(--color-leaf); font-size: .75rem; text-decoration: none; }
 .controls { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 22px; padding: 20px 0 16px; font-size: .72rem; color: var(--color-muted); }
 .controls label { display: flex; align-items: center; gap: 8px; }
+.replay-growth { border: 1px solid var(--color-border); border-radius: 6px; padding: 5px 9px; color: var(--color-leaf); background: var(--surface-1); }
 input { accent-color: var(--color-leaf); }
 input[type='range'] { width: 85px; }
 output { min-width: 3ch; font-variant-numeric: tabular-nums; }
@@ -140,7 +147,10 @@ h3 { font-size: .75rem; font-weight: 600; }
 .full-study[data-sketch='city'] { color: var(--sketch-city); width: 100%; }
 .with-grid { background-image: linear-gradient(rgba(var(--accent-rgb), .1) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--accent-rgb), .1) 1px, transparent 1px); background-size: 30px 30px; }
 .context-study { position: absolute; width: 510px; bottom: -32px; right: -35px; }
-.city-context .context-study { width: 660px; top: -36px; left: -45px; bottom: auto; right: auto; color: var(--sketch-city); }
+.city-context .context-study { width: 230px; top: -4px; left: 44px; bottom: auto; right: auto; color: var(--sketch-city); clip-path: inset(4px 14px 26px 0); }
+.brand-preview { position: absolute; top: 0; left: 0; width: 260px; padding: 28px 22px 22px; border-right: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+.brand-preview strong { display: block; font: 400 1.85rem var(--font-display); letter-spacing: -.035em; }
+.brand-preview span { display: block; margin-top: 6px; font-size: .76rem; color: var(--color-muted); }
 .panel-veil { position: absolute; inset: 0; background: rgba(var(--surface-rgb), .62); }
 .context-label { position: absolute; top: 20px; left: 20px; right: 20px; }
 .context-label p { font: 400 1.05rem/1.4 var(--font-display); margin-top: 6px; }

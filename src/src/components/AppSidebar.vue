@@ -1,6 +1,7 @@
 <template>
   <aside class="sidebar">
     <div class="sidebar-header">
+      <FieldSketch name="city" class="city-study" />
       <h1>Urban Trees</h1>
       <div class="subtitle">The Concrete Jungle</div>
       <a
@@ -105,6 +106,7 @@
 
 <script setup lang="ts">
 import ThemeSelector from './ThemeSelector.vue'
+import FieldSketch from '../artwork/field-sketches/FieldSketch.vue'
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLandmarkData } from '../composables/useLandmarkData'
@@ -155,6 +157,17 @@ function handleClick(lm: Landmark) {
 </script>
 
 <style scoped>
+.sidebar-header { position: relative; isolation: isolate; overflow: hidden; }
+.sidebar-header > :not(.city-study) { position: relative; z-index: 1; }
+.city-study {
+  position: absolute;
+  width: 230px;
+  top: -4px;
+  right: -14px;
+  color: var(--sketch-city);
+  opacity: .24;
+  pointer-events: none;
+}
 .sidebar-appearance { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--color-border); }
 .appearance-label { display: block; margin-bottom: 8px; font-size: .65rem; letter-spacing: .12em; text-transform: none; color: var(--color-muted); }
 .nav-link {

@@ -15,6 +15,10 @@ The studio shows the full drawing beside an app-placement approximation, with
 light/dark previews, adjustable study visibility, an alignment grid, a panel
 overlay switch, and SVG downloads. App placement uses the desktop corner
 offsets and opacity; its preview canvas is smaller than an actual app viewport.
+The full study stays still; use **Replay growth** to review a biome's entrance
+in the placement preview. The app reveals plants upward from their roots once
+on mount and when the biome changes. Reduced-motion preferences show the
+complete drawing immediately. Exported SVGs remain static.
 
 ## Files
 
@@ -29,7 +33,8 @@ offsets and opacity; its preview canvas is smaller than an actual app viewport.
 
 `index.ts` registers drawings and their review notes. `FieldSketch.vue` renders
 only these trusted, static SVG imports. The app's `FieldBackdrop.vue` chooses
-the biome and handles position/opacity. The studio uses the same renderer and
+the biome and handles position/opacity. The smaller city study lives inside
+`AppSidebar.vue` behind the Urban Trees name block. The studio uses the same renderer and
 originals, so edits appear in both through Vite's hot reload.
 
 ## Generate the city
@@ -124,7 +129,7 @@ Use the same generate/check commands; all six studies now have generators.
 - Keep secondary detail lighter than the outline. The default stroke is
   1.15 units, pencil detail .65 at .6 opacity, contour lines .7 at .35 opacity,
   and washes use `currentColor` at .08 fill opacity.
-- Then check both themes and the app crop. App opacity (.4 for biomes, .34
+- Then check both themes and the app crop. App opacity (.4 for biomes, .24
   for city) belongs in placement, not baked into the whole SVG.
 - These are decorative ecosystem motifs, not botanical identification keys.
   Record references and species intent here if moving to species-specific art.

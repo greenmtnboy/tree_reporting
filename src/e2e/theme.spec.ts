@@ -75,6 +75,25 @@ test('background drawings follow the active city ecosystem', async ({ page }) =>
   }
 })
 
+test('biome growth respects reduced motion and plays once for a new biome', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/#/info?city=USSFO')
+  const plant = page.locator('.ecosystem-study .botanical')
+  await expect(plant).toBeVisible()
+  expect(await plant.evaluate(el => el.getAnimations().length)).toBe(0)
+  await expect(plant).toHaveCSS('opacity', '1')
+  await expect(plant).toHaveCSS('clip-path', 'none')
+
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.getByRole('combobox', { name: 'Select city' }).selectOption('USBOS')
+  await expect(page.locator('.ecosystem-study')).toHaveAttribute('data-sketch', 'broadleaf')
+  await expect.poll(() => plant.evaluate(el => el.getAnimations().some(animation => animation.playState === 'running'))).toBe(true)
+  await expect.poll(() => plant.evaluate(el => el.getAnimations().every(animation => animation.playState === 'finished')), { timeout: 6_000 }).toBe(true)
+  // Animated lengths can retain either percentage or pixel units at zero.
+  await expect(plant).toHaveCSS('clip-path', /^inset\(0(?:%|px)?(?: 0(?:%|px)?){0,3}\)$/)
+  await expect(plant).toHaveCSS('opacity', '1')
+})
+
 test('changing map theme preserves tree layers and camera', async ({ page }) => {
   test.setTimeout(120_000)
   await page.emulateMedia({ colorScheme: 'light' })
