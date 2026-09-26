@@ -3,6 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      // Apply the saved/system preference before the app or stylesheet paints.
+      (() => {
+        let theme = 'system'
+        try { theme = localStorage.getItem('urban-trees-theme') || 'system' } catch {}
+        const dark = theme === 'dark' || (theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+      })()
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script data-goatcounter="https://sf-tree-reporting.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>

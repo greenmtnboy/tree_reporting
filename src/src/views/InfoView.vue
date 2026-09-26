@@ -63,7 +63,7 @@
           <h3>Basemap</h3>
           <p>
             <a href="https://carto.com/basemaps" target="_blank" rel="noopener">CARTO</a>
-            Dark Matter vector tile style.
+            Positron (light) and Dark Matter (dark) vector tile styles.
           </p>
         </div>
       </section>
@@ -149,16 +149,16 @@ const landmarkSources = LANDMARK_SOURCES
 
 h1 {
   font-size: 1.8rem;
-  font-weight: 700;
+  font-weight: 400;
   font-family: var(--font-display);
   color: var(--color-ink);
   margin-bottom: 8px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: -.025em;
+  text-transform: none;
 }
 
 .info-lead {
-  color: rgba(237, 242, 235, 0.76);
+  color: rgba(var(--ink-rgb), 0.76);
   font-size: 0.95rem;
   line-height: 1.6;
   margin-bottom: 32px;
@@ -172,7 +172,7 @@ h2 {
   color: var(--color-moss);
   margin-bottom: 12px;
   padding-bottom: 10px;
-  border-bottom: 1px solid rgba(167, 227, 178, 0.08);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.08);
 }
 
 section {
@@ -181,8 +181,8 @@ section {
 
 .source-card {
   background:
-    linear-gradient(180deg, rgba(42, 47, 54, 0.82), rgba(28, 31, 36, 0.96));
-  border: 1px solid rgba(167, 227, 178, 0.1);
+    linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.82), rgba(var(--surface-rgb), 0.96));
+  border: 1px solid rgba(var(--accent-rgb), 0.1);
   padding: 14px 16px;
   margin-bottom: 10px;
   box-shadow: var(--shadow-soft);
@@ -196,7 +196,7 @@ section {
 }
 
 .source-card p {
-  color: rgba(237, 242, 235, 0.72);
+  color: rgba(var(--ink-rgb), 0.72);
   font-size: 0.85rem;
   line-height: 1.5;
   margin-bottom: 6px;
@@ -214,7 +214,7 @@ section {
 }
 
 .source-card a:hover {
-  color: #d4f4d8;
+  color: var(--color-leaf);
 }
 
 .source-card ul {
@@ -226,7 +226,7 @@ section {
 .source-card ul li {
   padding: 4px 0 4px 12px;
   position: relative;
-  color: rgba(237, 242, 235, 0.72);
+  color: rgba(var(--ink-rgb), 0.72);
   font-size: 0.85rem;
   line-height: 1.5;
 }
@@ -248,7 +248,7 @@ section {
 }
 
 .source-card ul li a:hover {
-  color: #d4f4d8;
+  color: var(--color-leaf);
 }
 
 .city-details {
@@ -282,12 +282,12 @@ details[open] > .city-summary::before {
 }
 
 .city-summary:hover {
-  color: #d4f4d8;
+  color: var(--color-leaf);
 }
 
 .source-note {
   font-size: 0.8rem !important;
-  color: rgba(154, 166, 154, 0.72) !important;
+  color: rgba(var(--muted-rgb), 0.72) !important;
   font-style: italic;
 }
 
@@ -299,8 +299,8 @@ details[open] > .city-summary::before {
 
 .tech-item {
   background:
-    linear-gradient(180deg, rgba(42, 47, 54, 0.82), rgba(28, 31, 36, 0.96));
-  border: 1px solid rgba(167, 227, 178, 0.1);
+    linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.82), rgba(var(--surface-rgb), 0.96));
+  border: 1px solid rgba(var(--accent-rgb), 0.1);
   padding: 10px 14px;
   display: flex;
   flex-direction: column;
@@ -312,7 +312,7 @@ details[open] > .city-summary::before {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: rgba(154, 166, 154, 0.74);
+  color: rgba(var(--muted-rgb), 0.74);
 }
 
 .tech-item span:last-child {
@@ -328,7 +328,7 @@ details[open] > .city-summary::before {
 }
 
 .repo-link:hover {
-  color: #d4f4d8;
+  color: var(--color-leaf);
 }
 
 .source-section {

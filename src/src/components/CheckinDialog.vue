@@ -285,8 +285,8 @@ onBeforeUnmount(() => {
   max-height: 90vh;
   overflow: auto;
   background:
-    linear-gradient(180deg, rgba(28, 31, 36, 0.98), rgba(15, 20, 17, 0.98));
-  border: 1px solid rgba(167, 227, 178, 0.18);
+    linear-gradient(180deg, rgba(var(--surface-rgb), 0.98), rgba(var(--surface-rgb), 0.98));
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   box-shadow: 0 24px 56px rgba(6, 8, 10, 0.55);
   display: flex;
   flex-direction: column;
@@ -297,7 +297,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid rgba(167, 227, 178, 0.1);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.1);
 }
 
 .checkin-dialog__title {
@@ -311,7 +311,7 @@ onBeforeUnmount(() => {
 
 .checkin-dialog__close {
   background: transparent;
-  border: 1px solid rgba(167, 227, 178, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   color: var(--color-ink);
   width: 30px;
   height: 30px;
@@ -356,7 +356,7 @@ onBeforeUnmount(() => {
 }
 
 .error-text {
-  color: #ff8a8a;
+  color: var(--color-error);
 }
 
 .field-label {
@@ -383,8 +383,8 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 12px;
   padding: 14px;
-  border: 1px dashed rgba(167, 227, 178, 0.28);
-  background: rgba(28, 31, 36, 0.4);
+  border: 1px dashed rgba(var(--accent-rgb), 0.28);
+  background: rgba(var(--surface-rgb), 0.4);
   font-size: 0.88rem;
 }
 
@@ -402,7 +402,7 @@ onBeforeUnmount(() => {
   width: 72px;
   height: 72px;
   object-fit: cover;
-  border: 1px solid rgba(167, 227, 178, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
 }
 
 .actions {
@@ -419,14 +419,14 @@ onBeforeUnmount(() => {
   font-size: 0.78rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  border: 1px solid rgba(167, 227, 178, 0.3);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .btn-primary {
   background: var(--color-leaf);
-  color: #0b0f0d;
+  color: var(--color-on-accent);
   border-color: var(--color-leaf);
 }
 
@@ -441,13 +441,13 @@ onBeforeUnmount(() => {
 }
 
 .btn-secondary:hover {
-  background: rgba(167, 227, 178, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 
 .progress {
   width: 100%;
   height: 6px;
-  background: rgba(167, 227, 178, 0.12);
+  background: rgba(var(--accent-rgb), 0.12);
   overflow: hidden;
 }
 

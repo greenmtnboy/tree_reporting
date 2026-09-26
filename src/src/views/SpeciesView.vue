@@ -679,14 +679,14 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
   margin: 0;
   font-size: 2rem;
   font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: 0.01em;
+  font-weight: 400;
+  letter-spacing: -.025em;
 }
 
 .species-intro {
   margin: 12px 0 0;
   max-width: 820px;
-  color: rgba(237, 242, 235, 0.78);
+  color: rgba(var(--ink-rgb), 0.78);
   line-height: 1.65;
 }
 
@@ -707,10 +707,10 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
   gap: 4px;
   min-height: 62px;
   padding: 11px 13px;
-  border: 1px solid rgba(167, 227, 178, 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
   border-radius: 14px;
   background:
-    linear-gradient(180deg, rgba(42, 47, 54, 0.5), rgba(22, 26, 31, 0.76)),
+    linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.5), rgba(var(--surface-rgb), 0.76)),
     color-mix(in srgb, var(--species-accent, #2F7D4F) 10%, transparent);
   transition: background 0.4s ease, border-color 0.2s ease;
 }
@@ -720,7 +720,7 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(154, 166, 154, 0.82);
+  color: rgba(var(--muted-rgb), 0.82);
 }
 
 .city-context-pill-value {
@@ -734,8 +734,8 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
   padding: 18px;
-  background: linear-gradient(180deg, rgba(31, 36, 41, 0.76), rgba(23, 27, 32, 0.9));
-  border: 1px solid rgba(167, 227, 178, 0.12);
+  background: linear-gradient(180deg, rgba(var(--surface-rgb), 0.76), rgba(var(--surface-rgb), 0.9));
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
   border-radius: 18px;
   box-shadow: 0 18px 42px rgba(5, 8, 10, 0.22);
 }
@@ -746,8 +746,8 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
   gap: 10px;
   min-width: 0;
   padding: 14px;
-  background: rgba(12, 17, 21, 0.26);
-  border: 1px solid rgba(167, 227, 178, 0.08);
+  background: rgba(var(--surface-rgb), 0.26);
+  border: 1px solid rgba(var(--accent-rgb), 0.08);
   border-radius: 14px;
 }
 
@@ -763,7 +763,7 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
 .species-filter-hint {
   font-size: 0.77rem;
   line-height: 1.45;
-  color: rgba(154, 166, 154, 0.82);
+  color: rgba(var(--muted-rgb), 0.82);
 }
 
 .active-filters {
@@ -777,8 +777,8 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
   align-items: center;
   gap: 8px;
   padding: 8px 12px 8px 14px;
-  border: 1px solid rgba(107, 175, 146, 0.18);
-  background: rgba(47, 125, 79, 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  background: rgba(var(--accent-rgb), 0.1);
   border-radius: 999px;
   font-size: 0.78rem;
   color: var(--color-leaf);
@@ -787,9 +787,9 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
 .filter-chip-clear {
   width: 20px;
   height: 20px;
-  border: 1px solid rgba(167, 227, 178, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   border-radius: 999px;
-  background: rgba(15, 21, 17, 0.28);
+  background: rgba(var(--surface-rgb), 0.28);
   color: inherit;
   cursor: pointer;
   font-size: 0.8rem;
@@ -797,10 +797,10 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
 }
 
 .clear-all-btn {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(167, 227, 178, 0.12);
+  background: rgba(var(--ink-rgb), 0.02);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
   border-radius: 999px;
-  color: rgba(237, 242, 235, 0.72);
+  color: rgba(var(--ink-rgb), 0.72);
   cursor: pointer;
   font-size: 0.78rem;
   padding: 8px 12px;
@@ -808,10 +808,10 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
 
 .species-gate-state {
   padding: 18px 20px;
-  border: 1px solid rgba(167, 227, 178, 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.1);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(42, 47, 54, 0.52), rgba(28, 31, 36, 0.64));
-  color: rgba(237, 242, 235, 0.72);
+  background: linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.52), rgba(var(--surface-rgb), 0.64));
+  color: rgba(var(--ink-rgb), 0.72);
   font-size: 0.92rem;
 }
 
@@ -847,7 +847,7 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
 
 .species-section-header p {
   margin: 0;
-  color: rgba(154, 166, 154, 0.82);
+  color: rgba(var(--muted-rgb), 0.82);
   font-size: 0.82rem;
   line-height: 1.45;
 }
@@ -862,8 +862,8 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
   position: relative;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, rgba(42, 47, 54, 0.62), rgba(28, 31, 36, 0.72));
-  border: 1px solid rgba(167, 227, 178, 0.1);
+  background: linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.62), rgba(var(--surface-rgb), 0.72));
+  border: 1px solid rgba(var(--accent-rgb), 0.1);
   border-radius: 14px;
   padding: 20px 22px;
   grid-column: 1 / -1;
@@ -891,7 +891,7 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(154, 166, 154, 0.85);
+  color: rgba(var(--muted-rgb), 0.85);
 }
 
 .chart-card--wide {
@@ -937,7 +937,7 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
 .chart-sub {
   display: block;
   font-size: 0.78rem;
-  color: rgba(154, 166, 154, 0.82);
+  color: rgba(var(--muted-rgb), 0.82);
   margin-top: 8px;
   line-height: 1.45;
 }
@@ -949,7 +949,7 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
   left: 0;
   width: 88px;
   height: 1px;
-  background: linear-gradient(90deg, var(--species-accent, rgba(47, 125, 79, 0.58)), rgba(167, 227, 178, 0));
+  background: linear-gradient(90deg, var(--species-accent, rgba(var(--accent-rgb), 0.58)), rgba(var(--accent-rgb), 0));
   opacity: 0.6;
   transition: background 0.4s ease;
 }

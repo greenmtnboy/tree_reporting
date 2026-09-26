@@ -1,5 +1,5 @@
 <template>
-  <TrilogyEmbedProvider theme="dark">
+  <TrilogyEmbedProvider :theme="resolvedTheme">
     <div ref="containerRef" class="embedded-dashboard-chart">
       <DashboardChart
         :dashboard-id="resolvedDashboardId"
@@ -17,6 +17,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTheme } from '../composables/useTheme'
 import {
   DashboardChart,
   TrilogyEmbedProvider,
@@ -30,6 +31,8 @@ import {
   type SqlFilterLike,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toValue, watch, watchEffect } from 'vue'
+
+const { resolvedTheme } = useTheme()
 
 const props = withDefaults(
   defineProps<{

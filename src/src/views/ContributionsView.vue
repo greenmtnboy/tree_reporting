@@ -122,23 +122,23 @@ function formatDate(d: Date | null): string {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  border-bottom: 1px solid rgba(167, 227, 178, 0.1);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.1);
   padding-bottom: 12px;
 }
 
 .contributions-header h1 {
   font-size: 1.4rem;
   font-family: var(--font-display);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: -.025em;
+  text-transform: none;
   color: var(--color-ink);
   margin: 0;
 }
 
 .contributions-status {
   padding: 20px;
-  border: 1px solid rgba(167, 227, 178, 0.12);
-  background: rgba(28, 31, 36, 0.5);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
+  background: rgba(var(--surface-rgb), 0.5);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -166,7 +166,7 @@ function formatDate(d: Date | null): string {
 }
 
 .error-text {
-  color: #ff8a8a;
+  color: var(--color-error);
 }
 
 .submission-list,
@@ -183,8 +183,8 @@ function formatDate(d: Date | null): string {
   display: flex;
   gap: 12px;
   padding: 10px;
-  border: 1px solid rgba(167, 227, 178, 0.12);
-  background: rgba(28, 31, 36, 0.5);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
+  background: rgba(var(--surface-rgb), 0.5);
   align-items: center;
 }
 
@@ -209,7 +209,7 @@ function formatDate(d: Date | null): string {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 2px 8px;
-  border: 1px solid rgba(167, 227, 178, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
 }
 
 .submission-status[data-status='pending'] {
@@ -222,8 +222,8 @@ function formatDate(d: Date | null): string {
 }
 
 .submission-status[data-status='rejected'] {
-  color: #ff8a8a;
-  border-color: #ff8a8a;
+  color: var(--color-error);
+  border-color: var(--color-error);
 }
 
 .submission-date {
@@ -239,7 +239,7 @@ function formatDate(d: Date | null): string {
 .submission-species {
   font-size: 0.82rem;
   font-style: italic;
-  color: rgba(237, 242, 235, 0.78);
+  color: rgba(var(--ink-rgb), 0.78);
 }
 
 .checkin-item {
@@ -247,8 +247,8 @@ function formatDate(d: Date | null): string {
   gap: 12px;
   align-items: center;
   padding: 10px;
-  border: 1px solid rgba(167, 227, 178, 0.12);
-  background: rgba(28, 31, 36, 0.5);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
+  background: rgba(var(--surface-rgb), 0.5);
   font-size: 0.85rem;
 }
 
@@ -284,7 +284,7 @@ function formatDate(d: Date | null): string {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   background: var(--color-leaf);
-  color: #0b0f0d;
+  color: var(--color-on-accent);
   border: 1px solid var(--color-leaf);
   cursor: pointer;
   text-decoration: none;

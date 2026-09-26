@@ -96,10 +96,15 @@
         <span v-if="profileSubLabel" class="sidebar-profile__sub">{{ profileSubLabel }}</span>
       </span>
     </router-link>
+    <div class="sidebar-appearance">
+      <span class="appearance-label">Appearance</span>
+      <ThemeSelector />
+    </div>
   </aside>
 </template>
 
 <script setup lang="ts">
+import ThemeSelector from './ThemeSelector.vue'
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLandmarkData } from '../composables/useLandmarkData'
@@ -150,6 +155,8 @@ function handleClick(lm: Landmark) {
 </script>
 
 <style scoped>
+.sidebar-appearance { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--color-border); }
+.appearance-label { display: block; margin-bottom: 8px; font-size: .65rem; letter-spacing: .12em; text-transform: none; color: var(--color-muted); }
 .nav-link {
   position: relative;
 }
@@ -163,11 +170,11 @@ function handleClick(lm: Landmark) {
 }
 
 .nav-copy strong {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: 0.86rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .sidebar-landmarks {
@@ -189,17 +196,18 @@ function handleClick(lm: Landmark) {
   font-weight: 600;
   color: var(--color-muted);
   letter-spacing: 0.14em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .landmarks-search-wrap {
+  border-radius: 8px;
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 0 0 10px;
   padding: 0 10px;
-  border: 1px solid rgba(167, 227, 178, 0.12);
-  background: rgba(28, 31, 36, 0.9);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
+  background: rgba(var(--surface-rgb), 0.9);
   color: var(--color-moss);
   min-height: 40px;
 }
@@ -214,7 +222,7 @@ function handleClick(lm: Landmark) {
 }
 
 .landmarks-search::placeholder {
-  color: rgba(154, 166, 154, 0.7);
+  color: rgba(var(--muted-rgb), 0.7);
 }
 
 .landmarks-list {
@@ -224,13 +232,14 @@ function handleClick(lm: Landmark) {
 }
 
 .landmark-item {
+  border-radius: 7px;
   display: block;
   width: 100%;
   text-align: left;
   padding: 8px 10px;
   border: none;
-  background: rgba(42, 47, 54, 0.34);
-  color: rgba(237, 242, 235, 0.82);
+  background: rgba(var(--surface-raised-rgb), 0.34);
+  color: rgba(var(--ink-rgb), 0.82);
   font-size: 0.8rem;
   cursor: pointer;
   transition:
@@ -242,7 +251,7 @@ function handleClick(lm: Landmark) {
 }
 
 .landmark-item:hover {
-  background: rgba(47, 125, 79, 0.14);
+  background: rgba(var(--accent-rgb), 0.14);
   color: var(--color-ink);
   transform: translateX(2px);
 }
@@ -254,7 +263,7 @@ function handleClick(lm: Landmark) {
 .landmarks-empty {
   padding: 12px 4px;
   font-size: 0.75rem;
-  color: rgba(154, 166, 154, 0.72);
+  color: rgba(var(--muted-rgb), 0.72);
   font-style: italic;
 }
 
@@ -267,7 +276,7 @@ function handleClick(lm: Landmark) {
 }
 
 .landmarks-list::-webkit-scrollbar-thumb {
-  background: rgba(107, 175, 146, 0.3);
+  background: rgba(var(--accent-rgb), 0.3);
   border-radius: 2px;
 }
 
@@ -293,8 +302,8 @@ function handleClick(lm: Landmark) {
   gap: 10px;
   margin-top: auto;
   padding: 14px 20px;
-  border-top: 1px solid rgba(167, 227, 178, 0.1);
-  color: rgba(237, 242, 235, 0.78);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.1);
+  color: rgba(var(--ink-rgb), 0.78);
   text-decoration: none;
   transition: background 0.15s, color 0.15s, transform 0.15s;
   position: relative;
@@ -303,7 +312,7 @@ function handleClick(lm: Landmark) {
 
 .sidebar-profile:hover {
   color: var(--color-ink);
-  background: rgba(47, 125, 79, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 
 .sidebar-profile.is-active {
@@ -316,15 +325,15 @@ function handleClick(lm: Landmark) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(167, 227, 178, 0.14);
-  background: rgba(58, 64, 72, 0.28);
+  border: 1px solid rgba(var(--accent-rgb), 0.14);
+  background: rgba(var(--surface-raised-rgb), 0.28);
   color: var(--color-moss);
   flex-shrink: 0;
 }
 
 .sidebar-profile.is-active .sidebar-profile__icon {
   color: var(--color-leaf);
-  border-color: rgba(167, 227, 178, 0.35);
+  border-color: rgba(var(--accent-rgb), 0.35);
 }
 
 .sidebar-profile__copy {
@@ -335,18 +344,18 @@ function handleClick(lm: Landmark) {
 }
 
 .sidebar-profile__copy strong {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: 0.86rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .sidebar-profile__sub {
   font-size: 0.68rem;
   color: var(--color-muted);
   letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
   margin-top: 2px;
 }
 </style>

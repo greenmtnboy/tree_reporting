@@ -259,7 +259,7 @@ watch(
   justify-content: center;
   font-size: 0.75rem;
   letter-spacing: 0.08em;
-  color: rgba(154, 166, 154, 0.5);
+  color: rgba(var(--muted-rgb), 0.5);
   pointer-events: none;
 }
 

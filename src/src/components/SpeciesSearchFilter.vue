@@ -401,21 +401,21 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   min-height: 48px;
-  border: 1px solid rgba(167, 227, 178, 0.14);
+  border: 1px solid rgba(var(--accent-rgb), 0.14);
   border-radius: 12px;
-  background: rgba(10, 14, 18, 0.58);
+  background: rgba(var(--surface-rgb), 0.58);
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .species-search-filter__control--open {
-  border-color: rgba(107, 175, 146, 0.45);
-  box-shadow: 0 0 0 1px rgba(107, 175, 146, 0.18), 0 10px 24px rgba(4, 7, 8, 0.18);
-  background: rgba(15, 20, 25, 0.74);
+  border-color: rgba(var(--accent-rgb), 0.45);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.18), 0 10px 24px rgba(4, 7, 8, 0.18);
+  background: rgba(var(--surface-rgb), 0.74);
 }
 
 .species-search-filter__control--disabled {
   opacity: 0.55;
-  background: rgba(28, 31, 36, 0.36);
+  background: rgba(var(--surface-rgb), 0.36);
 }
 
 .species-search-filter__input {
@@ -430,7 +430,7 @@ onBeforeUnmount(() => {
 }
 
 .species-search-filter__input::placeholder {
-  color: rgba(154, 166, 154, 0.76);
+  color: rgba(var(--muted-rgb), 0.76);
 }
 
 .species-search-filter__toggle {
@@ -439,7 +439,7 @@ onBeforeUnmount(() => {
   height: 42px;
   border: none;
   background: transparent;
-  color: rgba(154, 166, 154, 0.82);
+  color: rgba(var(--muted-rgb), 0.82);
   cursor: pointer;
 }
 
@@ -468,9 +468,9 @@ onBeforeUnmount(() => {
   max-height: 320px;
   padding: 8px;
   overflow-y: auto;
-  border: 1px solid rgba(167, 227, 178, 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
   border-radius: 12px;
-  background: rgba(14, 18, 22, 0.98);
+  background: rgba(var(--surface-rgb), 0.98);
   box-shadow: 0 18px 40px rgba(4, 7, 8, 0.35);
 }
 
@@ -484,18 +484,18 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: rgba(237, 242, 235, 0.88);
+  color: rgba(var(--ink-rgb), 0.88);
   text-align: left;
   cursor: pointer;
 }
 
 .species-search-filter__option:hover {
-  background: rgba(47, 125, 79, 0.16);
+  background: rgba(var(--accent-rgb), 0.16);
 }
 
 .species-search-filter__option:focus-visible {
-  outline: 1px solid rgba(107, 175, 146, 0.45);
-  background: rgba(47, 125, 79, 0.16);
+  outline: 1px solid rgba(var(--accent-rgb), 0.45);
+  background: rgba(var(--accent-rgb), 0.16);
 }
 
 .species-search-filter__option-label {
@@ -507,13 +507,13 @@ onBeforeUnmount(() => {
 
 .species-search-filter__option-count {
   flex: 0 0 auto;
-  color: rgba(154, 166, 154, 0.76);
+  color: rgba(var(--muted-rgb), 0.76);
   font-size: 0.76rem;
 }
 
 .species-search-filter__status {
   padding: 10px 12px;
-  color: rgba(154, 166, 154, 0.78);
+  color: rgba(var(--muted-rgb), 0.78);
   font-size: 0.82rem;
 }
 </style>

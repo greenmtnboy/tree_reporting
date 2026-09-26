@@ -16,8 +16,8 @@ defineProps<{
 
 <style scoped>
 .stat-card {
-  background: #16213e;
-  border: 1px solid #0f3460;
+  background: var(--surface-1);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 20px 24px;
   display: flex;
@@ -28,7 +28,7 @@ defineProps<{
 .stat-value {
   font-size: 2rem;
   font-weight: 700;
-  color: #4fc3f7;
+  color: var(--color-leaf);
   line-height: 1;
   letter-spacing: -0.5px;
 }
@@ -38,12 +38,12 @@ defineProps<{
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: #7a7a9e;
+  color: var(--color-muted);
 }
 
 .stat-sub {
   font-size: 0.75rem;
-  color: #555577;
+  color: var(--color-muted);
   margin-top: 2px;
 }
 </style>
