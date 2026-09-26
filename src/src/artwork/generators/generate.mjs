@@ -5,6 +5,7 @@ import { generateGrasslandSvg } from './grassland.mjs'
 import { generateBroadleafSvg } from './broadleaf.mjs'
 import { generateWoodlandSvg } from './woodland.mjs'
 import { generateConiferSvg } from './conifer.mjs'
+import { generateDesertSvg } from './desert.mjs'
 
 const generators = [
   ['city', generateCitySvg],
@@ -12,6 +13,7 @@ const generators = [
   ['broadleaf', generateBroadleafSvg],
   ['woodland', generateWoodlandSvg],
   ['conifer', generateConiferSvg],
+  ['desert', generateDesertSvg],
 ]
 
 for (const [name, generate] of generators) {

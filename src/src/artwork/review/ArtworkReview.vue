@@ -44,7 +44,7 @@ watchEffect(() => {
           <FieldSketch :name="name" class="thumbnail" />
           <span>{{ fieldSketches[name].title }}</span>
         </button>
-        <p class="collection-note">Six editable SVGs.<br />The app uses these same files.</p>
+        <p class="collection-note">Six generated SVGs.<br />The app uses these same files.</p>
       </nav>
 
       <main>
@@ -86,11 +86,11 @@ watchEffect(() => {
         </div>
 
         <aside class="review-note">
-          <p class="eyebrow">{{ selected !== 'desert' ? 'Construction rules' : 'What to refine' }}</p>
+          <p class="eyebrow">Construction rules</p>
           <p>{{ sketch.review }}</p>
           <code>src/src/artwork/field-sketches/{{ selected }}.svg</code>
         </aside>
-        <p class="footnote">These are decorative ecosystem studies, not species-identification illustrations. Edit one SVG and both previews update alongside the app.</p>
+        <p class="footnote">These are decorative ecosystem studies, not species-identification illustrations. Edit a generator and run pnpm artwork:generate to update both previews and the app.</p>
       </main>
     </div>
   </div>

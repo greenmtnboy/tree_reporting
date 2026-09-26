@@ -24,7 +24,7 @@ offsets and opacity; its preview canvas is smaller than an actual app viewport.
 | `woodland.svg` | Mediterranean woodland: narrow-leaf spray |
 | `broadleaf.svg` | Temperate broadleaf forest: lobed leaves and twig |
 | `conifer.svg` | Temperate conifer forest: five tapered needle fans |
-| `desert.svg` | Desert/xeric scrub: cactus and succulent |
+| `desert.svg` | Desert/xeric scrub: mature and young cacti among low dunes |
 | `grassland.svg` | Grassland/savanna: grasses and seed heads |
 
 `index.ts` registers drawings and their review notes. `FieldSketch.vue` renders
@@ -96,7 +96,19 @@ Needles start on their twig curves, rotate with the local tangent, and taper
 in length toward the ends. Bare sections keep branch junctions open. Two
 lower fans fill out the spray while preserving clear gaps. Change the needle counts,
 lengths, and covered curve ranges in the scene, then use the same generate
-and check commands. Only the desert drawing remains hand-authored.
+and check commands.
+
+## Generate desert / xeric scrub
+
+`desert.svg` uses `desertScene` in `../generators/desert.mjs`. A mature
+saguaro-inspired silhouette has unequal arms, rounded junctions, and a
+gently irregular trunk; a smaller unbranched column provides scale. Fine
+longitudinal ribs and sparse spine marks keep the detail quieter than the
+outline. Plant templates and their details use shared local transforms.
+Five low sand ridges are sampled and interrupted behind the cactus
+silhouettes, so the SVG stays transparent without shared mask IDs. Open
+outline bases and short ground marks settle the plants into the foreground.
+Use the same generate/check commands; all six studies now have generators.
 
 ## Iteration contract
 
@@ -119,8 +131,8 @@ and check commands. Only the desert drawing remains hand-authored.
 
 ## Current review baseline
 
-Grassland, broadleaf, woodland, and conifer now use generated attachments and
-angles. Desert is still the first-pass study. Low opacity, panel overlays,
+All six studies now use generators. Botanical attachments share their stem
+geometry; desert contours stop behind the plants. Low opacity, panel overlays,
 and cropping also make parts less visible. Per-drawing notes are in the
 studio. Use Git history for before/after comparisons rather than duplicating
 the artwork into an app copy and a review copy.

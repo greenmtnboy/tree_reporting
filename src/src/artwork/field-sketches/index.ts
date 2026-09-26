@@ -24,8 +24,8 @@ export const fieldSketches = {
   },
   desert: {
     svg: desert, title: 'Desert & xeric scrub', example: 'Tempe',
-    motif: 'An upright cactus and a low succulent',
-    review: 'Refine the cactus ribs and succulent leaf tips. Decide whether these broad regional motifs are specific enough for the city’s ecosystem.',
+    motif: 'An asymmetric saguaro, a young column, and low sand ridges',
+    review: 'Rounded, unequal arms merge into a gently irregular trunk, with fine ribs and restrained spine marks. Five dune contours pass behind the cacti. Edit desertScene in generators/desert.mjs, then run pnpm artwork:generate.',
   },
   grassland: {
     svg: grassland, title: 'Grassland & savanna', example: 'Buenos Aires',
