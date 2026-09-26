@@ -34,8 +34,8 @@ export const fieldSketches = {
   },
   city: {
     svg: city, title: 'City geometry', example: 'Shared upper-left drawing',
-    motif: 'Four buildings on one projected street plane',
-    review: 'Generated from footprint dimensions and heights. All wall bases meet the same ground plane; windows follow their facade, and nearer buildings hide lines behind them. The taller rear tower has a plain roof. Edit cityScene in generators/city.mjs to change the composition.',
+    motif: 'Four buildings, a wandering street, and little planted pockets',
+    review: 'Buildings share a ground plane and consistent facade geometry. Rounded curbs, dashed lanes, a small crossing, two pocket gardens, and a loose second pencil pass soften the streets. Edit cityScene in generators/city.mjs; street variation is deterministic.',
   },
 } as const
 

@@ -8,6 +8,10 @@ export const cityScene = {
     { id: 'center', x: 30, y: 65, width: 60, depth: 50, height: 132, floors: 5 },
     { id: 'right', x: 125, y: 40, width: 56, depth: 42, height: 98, floors: 4 },
   ],
+  street: {
+    cornerRadius: 22,
+    gardens: [{ x: -62, y: 123, radius: 11 }, { x: 191, y: 14, radius: 9 }],
+  },
 }
 
 export function project([x, y, z = 0], origin = cityScene.origin) {
@@ -20,10 +24,84 @@ const interpolate = (a, b, t) => a.map((n, i) => n + (b[i] - n) * t)
 const edges = points => points.map((p, i) => [p, points[(i + 1) % points.length]])
 const format = point => point.map(n => Number(n.toFixed(2))).join(' ')
 const path = segments => segments.map(([a, b]) => `M${format(a)}L${format(b)}`).join(' ')
+const chain = points => points.slice(1).map((point, i) => [points[i], point])
+
+function streetGeometry(scene) {
+  const ground = (x, y) => project([x, y, 0], scene.origin)
+  // Round the street corner on the same ground plane as the foundations.
+  // A slight bow in the long runs gives the road a drawn, unhurried character.
+  const promenade = (x, y, radius) => {
+    const points = []
+    for (let i = 0; i <= 40; i++) {
+      const t = i / 40
+      points.push(ground(-105 + (x - radius + 105) * t, y + 2.5 * Math.sin(t * Math.PI * 2)))
+    }
+    for (let i = 1; i <= 24; i++) {
+      const angle = i / 24 * Math.PI / 2
+      points.push(ground(x - radius + radius * Math.sin(angle), y - radius + radius * Math.cos(angle)))
+    }
+    for (let i = 1; i <= 32; i++) {
+      const t = i / 32
+      points.push(ground(x + 2 * Math.sin(t * Math.PI * 2), (y - radius) * (1 - t) - 70 * t))
+    }
+    return points
+  }
+  const radius = scene.street.cornerRadius
+  const inner = promenade(200, 128, radius)
+  const outer = promenade(209, 137, radius + 9)
+  const road = promenade(222, 150, radius + 22)
+  const pencil = chain(outer.map(([x, y], i) => [x + .9 * Math.sin(i * .32), y + 1.5]))
+    .filter((_, i) => i % 19 < 12)
+  const paving = []
+  for (const x of [-72, -48, -24, 0, 24, 48, 72, 96, 120, 144]) {
+    const t = (x + 105) / (200 - radius + 105)
+    const bow = 2.5 * Math.sin(t * Math.PI * 2)
+    paving.push([ground(x, 129 + bow), ground(x, 135 + bow)])
+  }
+  // A short zebra crossing, set into the road instead of the building block.
+  const crossing = []
+  for (let i = 0; i < 5; i++) {
+    const x = -58 + i * 7
+    crossing.push(...edges([ground(x, 142), ground(x + 3, 142), ground(x + 3, 159), ground(x, 159)]))
+  }
+  const gardens = scene.street.gardens.map(({ x, y, radius }, index) => {
+    const base = ground(x, y)
+    const ring = Array.from({ length: 40 }, (_, i) => {
+      const angle = i / 40 * Math.PI * 2
+      return ground(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius)
+    })
+    const crown = Array.from({ length: 60 }, (_, i) => {
+      const angle = i / 60 * Math.PI * 2
+      const scallop = 1 + .09 * Math.sin(5 * angle + index) + .035 * Math.sin(9 * angle)
+      return [base[0] + Math.cos(angle) * 12 * scallop, base[1] - 24 + Math.sin(angle) * 14 * scallop]
+    })
+    const branches = [
+      [base, [base[0] + 1, base[1] - 29]],
+      [[base[0] + .6, base[1] - 17.4], [base[0] - 6, base[1] - 24]],
+      [[base[0] + .8, base[1] - 23.2], [base[0] + 6, base[1] - 30]],
+    ]
+    return { crown, outline: [...edges(ring), ...edges(crown), ...branches] }
+  })
+  return {
+    curbs: [...chain(inner), ...chain(outer)],
+    lane: chain(road).filter((_, i) => i % 6 < 3),
+    pencil, paving, crossing, gardens,
+  }
+}
 
 function inside(point, polygon) {
-  const signs = edges(polygon).map(([a, b]) => cross(minus(b, a), minus(point, a)))
-  return signs.every(n => n > 1e-6) || signs.every(n => n < -1e-6)
+  // Ray casting also supports the gently scalloped (non-convex) tree crowns.
+  let contained = false
+  for (const [a, b] of edges(polygon)) {
+    if (Math.abs(cross(minus(b, a), minus(point, a))) < 1e-6
+      && point[0] >= Math.min(a[0], b[0]) && point[0] <= Math.max(a[0], b[0])
+      && point[1] >= Math.min(a[1], b[1]) && point[1] <= Math.max(a[1], b[1])) return false
+    if ((a[1] > point[1]) !== (b[1] > point[1])
+      && point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0]) {
+      contained = !contained
+    }
+  }
+  return contained
 }
 
 /** Remove portions behind nearer buildings, rather than paint opaque panels
@@ -95,18 +173,25 @@ export function generateCitySvg(scene = cityScene) {
   for (const axis of [-90, -45, 0, 45, 90, 135, 180, 225]) {
     survey.push([ground(axis, -80), ground(axis, 185)], [ground(-115, axis), ground(245, axis)])
   }
-  const curb = (x, y) => [ground(-60, y), ground(x, y), ground(x, -14)]
-  const street = [curb(200, 128), curb(206, 134)].flatMap(points => [[points[0], points[1]], [points[1], points[2]]])
+  const street = streetGeometry(scene)
   const allSilhouettes = buildings.map(building => building.silhouette)
+  const groundOccluders = [...allSilhouettes, ...street.gardens.map(garden => garden.crown)]
   const draw = (segments, occluders) => path(segments.flatMap(segment => visibleSegments(segment, occluders)))
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 360" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round">
   <!-- Generated by generators/city.mjs. Edit cityScene; run pnpm artwork:generate. -->
-  <g class="survey-lines" opacity=".2" stroke-width=".65">
-    <path d="${draw(survey, allSilhouettes)}" />
+  <g class="survey-lines" opacity=".1" stroke-width=".65">
+    <path d="${draw(survey, groundOccluders)}" />
   </g>
-  <g class="street" opacity=".55" stroke-width=".8">
-    <path d="${draw(street, allSilhouettes)}" />
+  <g class="street" opacity=".65" stroke-width=".85">
+    <path d="${draw(street.curbs, groundOccluders)}" />
+    <path class="lane-markings" opacity=".65" stroke-width="1.1" d="${draw(street.lane, groundOccluders)}" />
+    <path class="paving" opacity=".45" stroke-width=".65" d="${draw(street.paving, groundOccluders)}" />
+    <path class="crossing" opacity=".7" stroke-width=".65" d="${draw(street.crossing, groundOccluders)}" />
+    <path class="pencil-pass" opacity=".3" stroke-width=".55" d="${draw(street.pencil, groundOccluders)}" />
+  </g>
+  <g class="pocket-gardens" opacity=".8" stroke-width=".85">
+    <path d="${draw(street.gardens.flatMap(garden => garden.outline), allSilhouettes)}" />
   </g>
 ${buildings.map((building, i) => {
     const occluders = buildings.slice(i + 1).map(building => building.silhouette)

@@ -49,6 +49,12 @@ floor count. All geometry uses the same isometric projection:
 - Hidden line segments are cut away behind nearer buildings, preserving a
   transparent background without opaque fills or reusable SVG mask IDs.
 - Curb and survey lines use the same ground plane as the buildings.
+- Streets have rounded corners, gently bowed runs, paving joints, a zebra
+  crossing, dashed lane marks, and a broken second pencil pass. All variation
+  is deterministic, so regenerating the same scene produces the same SVG.
+- `cityScene.street` sets the corner radius and pocket-garden positions.
+  Trees use ground-projected planting rings, trunks with shared branch
+  junctions, and softly scalloped crowns. Ground lines are hidden by crowns.
 
 Use separated, non-overlapping footprints; the current depth ordering is
 intended for this small composed scene, not interlocking building volumes.
