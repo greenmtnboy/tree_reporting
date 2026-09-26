@@ -86,7 +86,7 @@ watchEffect(() => {
         </div>
 
         <aside class="review-note">
-          <p class="eyebrow">{{ ['city', 'grassland', 'broadleaf', 'woodland'].includes(selected) ? 'Construction rules' : 'What to refine' }}</p>
+          <p class="eyebrow">{{ selected !== 'desert' ? 'Construction rules' : 'What to refine' }}</p>
           <p>{{ sketch.review }}</p>
           <code>src/src/artwork/field-sketches/{{ selected }}.svg</code>
         </aside>

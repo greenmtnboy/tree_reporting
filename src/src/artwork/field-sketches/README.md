@@ -86,8 +86,18 @@ Two pairs of rounded olives hang from short stems evaluated on the same
 twig. `woodlandScene.olives` controls their attachment, offset, angle, and
 size; each fruit outline starts exactly where its stem ends.
 
-Use `pnpm artwork:generate` and `pnpm artwork:check` for both. The conifer
-and desert drawings remain hand-authored.
+Use `pnpm artwork:generate` and `pnpm artwork:check` for both.
+
+## Generate conifer
+
+`conifer.svg` uses `coniferScene` in `../generators/conifer.mjs`. A curved
+leader and two side branches form three separated, fir-like needle fans.
+Needles start on their twig curves, rotate with the local tangent, and taper
+in length toward the ends. Bare sections keep branch junctions open. The
+cone hangs from a shared point on the left branch, above the contour lines;
+six rows of rounded scales stay inside its outline. Change the needle counts,
+lengths, and covered curve ranges in the scene, then use the same generate
+and check commands. Only the desert drawing remains hand-authored.
 
 ## Iteration contract
 
@@ -110,10 +120,9 @@ and desert drawings remain hand-authored.
 
 ## Current review baseline
 
-Grassland, broadleaf, and woodland now use generated attachments and angles.
-Conifer needle attachments still preserve the first-pass artwork's rough
-joins; their gaps are not a loading or draw-animation issue. Low opacity,
-panel overlays, and cropping also make parts less visible. Per-drawing notes are in the
+Grassland, broadleaf, woodland, and conifer now use generated attachments and
+angles. Desert is still the first-pass study. Low opacity, panel overlays,
+and cropping also make parts less visible. Per-drawing notes are in the
 studio. Use Git history for before/after comparisons rather than duplicating
 the artwork into an app copy and a review copy.
 

@@ -19,8 +19,8 @@ export const fieldSketches = {
   },
   conifer: {
     svg: conifer, title: 'Conifer forest', example: 'Vancouver',
-    motif: 'Needles, branching twigs, and a cone',
-    review: 'Needles were spaced along straight lines while the stem curves. Anchor each cluster to its twig and refine the cone attachment and overlapping scales.',
+    motif: 'A quiet fir-like sprig with three needle fans and a hanging cone',
+    review: 'Short, tapered needles follow each twig’s curve, with space around branch junctions. The cone hangs from a side branch and has six rows of rounded scales. Edit coniferScene in generators/conifer.mjs, then run pnpm artwork:generate.',
   },
   desert: {
     svg: desert, title: 'Desert & xeric scrub', example: 'Tempe',
