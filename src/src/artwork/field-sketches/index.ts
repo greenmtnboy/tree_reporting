@@ -30,7 +30,7 @@ export const fieldSketches = {
   grassland: {
     svg: grassland, title: 'Grassland & savanna', example: 'Buenos Aires',
     motif: 'Arching grasses and seed heads',
-    review: 'Seed heads and stems use different curves, leaving some attachments loose. Join them consistently and vary their spacing and silhouette.',
+    review: 'Each leaf starts on its curved stalk and rotates with the local stalk angle. Seed heads are evenly spaced along the curve. Edit grasslandScene in generators/grassland.mjs, then run pnpm artwork:generate; grassland and savanna share this drawing.',
   },
   city: {
     svg: city, title: 'City geometry', example: 'Shared upper-left drawing',

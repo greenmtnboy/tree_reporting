@@ -58,8 +58,17 @@ floor count. All geometry uses the same isometric projection:
 
 Use separated, non-overlapping footprints; the current depth ordering is
 intended for this small composed scene, not interlocking building volumes.
-The biome drawings remain hand-authored for now. Their next generator should
-similarly derive leaves and veins from attachment points on shared stem curves.
+
+## Generate grassland and savanna
+
+Both biomes share `grassland.svg`, generated from `grasslandScene` in
+`../generators/grassland.mjs`. Run the same `pnpm artwork:generate` and
+`pnpm artwork:check` commands. Each stalk has a base, quadratic bend, and tip.
+Leaf bases are evaluated on that exact curve; leaf outlines rotate into the
+curve's local tangent and normal. Seed-head spacing is measured along the
+stalk from its tip. Change the head's offset, spacing, sides, width, and length
+to iterate without disconnecting leaves from their stalks. The other biome
+drawings remain hand-authored.
 
 ## Iteration contract
 
@@ -82,9 +91,10 @@ similarly derive leaves and veins from attachment points on shared stem curves.
 
 ## Current review baseline
 
-The biome files preserve the first-pass artwork, including its rough joins. The
-woodland leaf bases, conifer needle attachments, and grass seed heads were
-drawn independently of their curved stems; their gaps are not a loading or
+Grassland now uses generated attachments and angles. The remaining biome
+files preserve the first-pass artwork, including its rough joins. Woodland
+leaf bases and conifer needle attachments were drawn independently of their
+curved stems; their gaps are not a loading or
 draw-animation issue. Low opacity, panel overlays, and cropping also make
 parts less visible. Start with `woodland.svg`; per-drawing notes are in the
 studio. Use Git history for before/after comparisons rather than duplicating

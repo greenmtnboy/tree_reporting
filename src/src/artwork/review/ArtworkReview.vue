@@ -86,7 +86,7 @@ watchEffect(() => {
         </div>
 
         <aside class="review-note">
-          <p class="eyebrow">{{ selected === 'city' ? 'Construction rules' : 'What to refine' }}</p>
+          <p class="eyebrow">{{ selected === 'city' || selected === 'grassland' ? 'Construction rules' : 'What to refine' }}</p>
           <p>{{ sketch.review }}</p>
           <code>src/src/artwork/field-sketches/{{ selected }}.svg</code>
         </aside>
