@@ -24,6 +24,7 @@ urban-tree-ml = "urban_tree_ml.cli:app"
 
 [dependency-groups]
 imagery = [
+  "tensorboard>=2.18",
   "pillow>=11",
   "planetary-computer>=1.0",
   "pystac-client>=0.9",
@@ -32,9 +33,9 @@ imagery = [
 train = [
   "lightning>=2.5",
   "tensorboard>=2.18",
-  "torch>=2.6",
+  "torch==2.10.0",
   "torchmetrics>=1.6",
-  "torchvision>=0.21",
+  "torchvision==0.25.0",
 ]
 dev = [
   "pytest>=8.3",
@@ -43,6 +44,16 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/urban_tree_ml"]
+
+# Lambda A10 hosts currently ship R570 drivers: use CUDA 12.8, not PyPI CUDA 13.
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -64,6 +64,33 @@
                 <div v-if="c.distanceMeters != null" class="checkin-distance">
                   within {{ c.distanceMeters }} m
                 </div>
+                <div v-if="c.photoReview" class="checkin-row">
+                  <span class="submission-status" :data-status="c.photoReview">{{ c.photoReview }}</span>
+                  <span class="checkin-distance">{{ PHOTO_REVIEW_LABELS[c.photoReview] }}</span>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">Tree reports</h2>
+          <p v-if="loading" class="muted">Loading…</p>
+          <p v-else-if="modifications.length === 0" class="muted">
+            No reports yet. Standing at a tree that's gone or mapped wrong? On your phone, open it on the map and choose "Missing or mapped wrong? Report it".
+          </p>
+          <ul v-else class="checkin-list" data-testid="modification-list">
+            <li v-for="m in modifications" :key="m.id" class="checkin-item">
+              <SubmissionThumbnail v-if="m.photoPath" :photo-path="m.photoPath" />
+              <div class="checkin-meta">
+                <div class="checkin-row">
+                  <span class="submission-status" :data-status="m.status">{{ m.status }}</span>
+                  <span class="checkin-date">{{ formatDate(m.submittedAt) }}</span>
+                </div>
+                <div class="checkin-row">
+                  <span>{{ describeModification(m) }}</span>
+                  <span class="checkin-tree"><code>{{ m.treeId }}</code></span>
+                </div>
               </div>
             </li>
           </ul>
@@ -76,13 +103,17 @@
 <script setup lang="ts">
 import { onMounted, watch } from 'vue'
 import { useAuth } from '../composables/useAuth'
-import { useMyContributions } from '../composables/useSubmissions'
+import {
+  useMyContributions,
+  type PhotoReviewStatus,
+  type TreeModification,
+} from '../composables/useSubmissions'
 import { firebaseAvailable } from '../lib/firebase'
 import SubmissionThumbnail from '../components/SubmissionThumbnail.vue'
 import AchievementGrid from '../components/AchievementGrid.vue'
 
 const { user, authReady } = useAuth()
-const { submissions, checkins, loading, error, refresh } = useMyContributions()
+const { submissions, checkins, modifications, loading, error, refresh } = useMyContributions()
 
 onMounted(() => {
   if (user.value) void refresh()
@@ -93,8 +124,24 @@ watch(user, (u) => {
   else {
     submissions.value = []
     checkins.value = []
+    modifications.value = []
   }
 })
+
+const PHOTO_REVIEW_LABELS: Record<PhotoReviewStatus, string> = {
+  pending: 'Tree photo awaiting review',
+  published: 'Tree photo is on the map',
+  rejected: 'Tree photo not published',
+}
+
+function describeModification(m: TreeModification): string {
+  if (m.kind === 'missing') return 'Reported missing'
+  const parts: string[] = []
+  if (m.proposedLat != null && m.proposedLng != null) parts.push('location')
+  if (m.proposedSpecies) parts.push(`species → ${m.proposedSpecies}`)
+  if (m.proposedDbhInches != null) parts.push(`diameter → ${m.proposedDbhInches} in`)
+  return parts.length ? `Fix: ${parts.join(', ')}` : 'Suggested fix'
+}
 
 function formatDate(d: Date | null): string {
   if (!d) return 'just now'

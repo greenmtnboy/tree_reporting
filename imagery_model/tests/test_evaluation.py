@@ -56,6 +56,8 @@ def test_decode_batch_reads_attributes_at_center_peak() -> None:
     genus[0, 1, 2, 1] = 4.0
     species = torch.zeros((1, 3, 4, 4))
     species[0, 2, 2, 1] = 4.0
+    target_center = torch.zeros((1, 4, 4))
+    detection_mask = torch.ones((1, 4, 4))
 
     decoded = _decode_batch(
         {
@@ -67,6 +69,8 @@ def test_decode_batch_reads_attributes_at_center_peak() -> None:
         ["chip"],
         max_detections_per_chip=1,
         nms_kernel=3,
+        target_center=target_center,
+        detection_mask=detection_mask,
     )
 
     assert len(decoded) == 1
@@ -75,3 +79,5 @@ def test_decode_batch_reads_attributes_at_center_peak() -> None:
     assert decoded[0]["dbh_in"] == pytest.approx(10.0)
     assert decoded[0]["genus_id"] == 1
     assert decoded[0]["species_id"] == 2
+    assert decoded[0]["center_target"] == 0
+    assert decoded[0]["detection_mask_value"] == 1

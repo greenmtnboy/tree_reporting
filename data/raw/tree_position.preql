@@ -1,0 +1,120 @@
+# Position correction: move a tree that sits inside a road or a building to
+# the nearest open ground, shared by every city that opts in.
+#
+# Municipal inventories geocode from addresses, OSM nodes are placed by hand
+# and community submissions carry phone GPS, so a share of every city's trees
+# lands in the carriageway or under a roof.  This file resolves that once, for
+# all cities, from Overture Maps' building footprints and road network:
+#
+#   * a staging job (overture_staging/{code}_overture_staging.preql) rasterises
+#     the city's Overture buildings and roads onto a fixed lat/lon grid and
+#     publishes ONE ROW PER BLOCKED CELL, each carrying the centre of the
+#     nearest cell that is open ground (shared/overture.py);
+#   * this file keys every raw row into that grid, looks its cell up, and if
+#     the cell is blocked substitutes the open point for the row's own.
+#
+# The model side is an equality join and a coalesce -- deliberately.  Trilogy
+# joins are equality-only and its geography functions stop at point, distance
+# and transform, so "is this point inside a polygon, and where is the nearest
+# point that is not" cannot be asked in the language today.  The grid lookup
+# is the same stand-in tree_dedup.preql uses for a radius query, and it keeps
+# the whole of the geometry in a job that runs once per Overture release
+# instead of once per city refresh.  What the language would need to do this
+# natively is written up in docs/POSITION_CORRECTION.md.
+#
+# What a city model has to do to take part, and nothing else:
+#
+#   import ..tree_position;             (instead of merging merged_latitude
+#                                        and merged_longitude itself)
+#   root datasource {lc}_overture_snap (...) grain (snap_cell)
+#       file `.../staging/{lc}_overture_snap.parquet`;
+#   a probe on that object's publication time, folded into the city's
+#       published watermark so a re-snap rebuilds the parquet;
+#   the published target maps source_latitude, source_longitude,
+#       position_adjustment and position_shift_m alongside latitude and
+#       longitude.
+#
+# A city that does not import this file merges `merged_latitude` and
+# `merged_longitude` into `latitude` and `longitude` itself (one line each,
+# beside its dbh merge); tree_dedup.preql stopped doing that so the two
+# policies cannot both claim the concept.
+#
+# ---------------------------------------------------------------------------
+# The grid
+# ---------------------------------------------------------------------------
+#
+# A fixed cell in degrees, the same for every city: 0.00002 deg of latitude is
+# 2.2 m everywhere, and 0.00003 deg of longitude is 3.3 m at the equator,
+# 2.4 m at 45 deg and 1.7 m at 60 deg.  Fixed rather than sized per city (the
+# way the dedup grid is) so the key needs no per-city table on either side:
+# shared/overture.py computes the same integer from the same constants, and
+# test_position_grid.py pins that they agree.
+#
+# The key packs the two indices into one bigint the way tree_dedup's does.
+# The longitude index is at most 180 / 0.00003 = 6.0e6 and the latitude index
+# at most 90 / 0.00002 = 4.5e6, so 1e8 keeps them apart with no collisions,
+# negative indices included, and the key stays under 1e15.
+#
+# A cell is "blocked" when its CENTRE is inside a footprint or a carriageway,
+# so a tree is moved only when the ground under the middle of its cell is
+# built on; a tree straddling a kerb by a few centimetres stays where it is.
+# The staged target is the centre of the nearest open cell -- so a moved tree
+# lands about a cell OUTSIDE the edge, not on the wall line itself -- and the
+# search is capped (SNAP_MAX_METRES in shared/overture.py): a point 200 m
+# inside a mall's footprint is a bad geocode, not a tree by a wall, and is
+# left alone rather than dragged to the nearest street.
+#
+# ---------------------------------------------------------------------------
+# Where in the merge it applies
+# ---------------------------------------------------------------------------
+#
+# Per raw row, before the cluster merge, and then carried through @by_source
+# exactly as latitude and longitude are.  Clustering still runs on the RAW
+# positions: two sources that both put the same tree under the same roof are
+# still the same tree.  Correcting per row rather than once on the merged
+# position keeps the lookup a plain property-level join; a join keyed on an
+# aggregate-derived value is the planner path tree_dedup.preql documents as
+# not yet planning.
+
+import tree_dedup;
+
+const snap_cell_lat_deg <- 0.00002;
+const snap_cell_lon_deg <- 0.00003;
+
+# The row's cell, packed as lon_index * 1e8 + lat_index, derived from the
+# row's own coordinates the way tree_dedup.preql derives its dedup cell.  A
+# row with no coordinates gets a null cell and matches nothing.
+auto snap_cell <- cast(floor(raw_longitude / snap_cell_lon_deg) as bigint) * 100000000
+    + cast(floor(raw_latitude / snap_cell_lat_deg) as bigint);
+
+# The staged lookup, one row per blocked cell, keyed on that same cell.
+# Every city's staging job writes the same four columns (shared/overture.py,
+# SNAP_COLUMNS).
+property snap_cell.snap_latitude float; # centre of the nearest open cell
+property snap_cell.snap_longitude float;
+property snap_cell.snap_reason string; # 'building' or 'road': what the blocked cell is under
+property snap_cell.snap_distance_m float; # from the blocked cell's centre to the open one, in metres
+
+# The row's position after correction: the open point when its cell is
+# blocked, else its own.  A row with no coordinates has no cell and no match,
+# and stays null.
+auto raw_placed_latitude <- coalesce(snap_latitude, raw_latitude);
+auto raw_placed_longitude <- coalesce(snap_longitude, raw_longitude);
+
+# What the published parquet carries beside latitude and longitude.
+property tree_id.source_latitude float; # the survivor's own position before correction
+property tree_id.source_longitude float;
+property tree_id.position_adjustment string; # 'building' or 'road' when the point was moved; null when it was not
+property tree_id.position_shift_m float; # about how far it moved, in metres (from the cell's centre, so within a cell of the truth)
+
+auto merged_placed_latitude <- @by_source(raw_placed_latitude);
+auto merged_placed_longitude <- @by_source(raw_placed_longitude);
+auto merged_position_adjustment <- @by_source(snap_reason);
+auto merged_position_shift_m <- @by_source(snap_distance_m);
+
+merge merged_placed_latitude into latitude;
+merge merged_placed_longitude into longitude;
+merge merged_latitude into source_latitude;
+merge merged_longitude into source_longitude;
+merge merged_position_adjustment into position_adjustment;
+merge merged_position_shift_m into position_shift_m;

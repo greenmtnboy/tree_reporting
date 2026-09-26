@@ -16,9 +16,10 @@
 // cheaper thing to detect.
 //
 // So: the per-city partitions live in `tree_info.preql`, `dashboard_context`
-// imports it, and the enrichment job's own view of the rollup is kept in a
-// separate file set (`raw/enrichment_refresh.preql`) that the frontend does not
-// bundle. This asserts the outcome of that arrangement rather than its spelling.
+// imports it, and the enrichment job is ordered after the rollup by a declared
+// `[dependencies]` edge rather than by importing it into
+// `raw/tree_enrichment.preql`, which the frontend bundles. This asserts the
+// outcome of that arrangement rather than its spelling.
 //
 // Network: compiles against the live resolver, like trilogy-smoketest. No SQL is
 // executed — only the parquet names in the generated SQL are read.

@@ -31,7 +31,6 @@
     <button
       class="city-btn locate-btn"
       :class="{ active: userLocation !== null }"
-      :disabled="isInitialLoading"
       :title="userLocation ? 'Pan to my location' : 'Show my location on the map'"
       @click="toggleUserLocation"
     >&#x25CE; Find Me</button>
@@ -40,7 +39,6 @@
     v-else
     class="locate-btn-desktop"
     :class="{ active: userLocation !== null }"
-    :disabled="isInitialLoading"
     :title="userLocation ? 'Pan to my location' : 'Show my location on the map'"
     @click="toggleUserLocation"
   >&#x25CE; Find Me</button>
@@ -57,7 +55,7 @@
           <button
             v-if="canCheckInToSelectedTree"
             class="tree-card-checkin"
-            @click="openCheckin"
+            @click="openCheckin('checkin')"
           >Check in</button>
           <button class="tree-card-close" @click="closeTreeCard" aria-label="Close">&#x2715;</button>
         </div>
@@ -88,6 +86,16 @@
             <span class="tc-label">Ecological fit</span><span class="tc-value">{{ selectedTree.ecological_fit }}</span>
           </template>
         </div>
+        <div v-if="checkinStats" class="tc-social" data-testid="tree-checkin-count">
+          <span class="tc-social-count">{{ checkinCountLabel }}</span>
+        </div>
+        <button
+          v-if="canCheckInToSelectedTree"
+          type="button"
+          class="tc-report-link"
+          data-testid="tree-report-link"
+          @click="openCheckin('update')"
+        >Missing or mapped wrong? Report it</button>
       </div>
 
       <!-- Center pane: species info -->
@@ -137,10 +145,12 @@
       </div>
 
       <!-- Right pane: photo. A community submission has a photo of this exact
-           tree; everything else can only show a stock photo of the species. -->
+           tree, and any tree can collect reviewed visitor photos from
+           check-ins; everything else can only show a stock photo of the
+           species. -->
       <div class="tree-card-pane tree-card-pane--photos">
         <div class="tree-card-section-label">
-          {{ selectedTree.submission_photo_url ? 'Photo of this tree' : 'Example species photo' }}
+          {{ selectedTree.submission_photo_url || visitorPhotoUrl ? 'Photo of this tree' : 'Example species photo' }}
         </div>
         <div v-if="selectedTree.submission_photo_url" class="tc-photo-wrap">
           <img
@@ -151,6 +161,28 @@
           />
           <div class="tc-photo-footer">
             <span class="tc-photo-attr">Submitted by a community contributor</span>
+          </div>
+        </div>
+        <div v-else-if="visitorPhotoUrl" class="tc-photo-wrap" data-testid="tree-visitor-photo">
+          <img
+            :src="visitorPhotoUrl"
+            :alt="`Visitor photo of ${selectedTree.species || 'this tree'}`"
+            class="tc-photo"
+            loading="lazy"
+          />
+          <div class="tc-photo-footer">
+            <span class="tc-photo-attr">{{ visitorPhotoCaption }}</span>
+          </div>
+          <div v-if="(treePhotos?.photoUrls.length ?? 0) > 1" class="tc-photo-thumbs">
+            <button
+              v-for="(url, i) in treePhotos!.photoUrls"
+              :key="url"
+              type="button"
+              class="tc-photo-thumb"
+              :class="{ 'tc-photo-thumb--active': i === visitorPhotoIndex }"
+              :aria-label="`Visitor photo ${i + 1}`"
+              @click="visitorPhotoIndex = i"
+            ><img :src="url" alt="" loading="lazy" /></button>
           </div>
         </div>
         <div v-else-if="selectedTree.photo_url" class="tc-photo-wrap">
@@ -191,8 +223,9 @@
     :tree-form="checkinDialog.treeForm"
     :dbh-inches="checkinDialog.dbhInches"
     :plant-year="checkinDialog.plantYear"
+    :initial-mode="checkinDialog.mode"
     @close="checkinDialog = null"
-    @success="checkinDialog = null"
+    @success="handleCheckinSuccess"
   />
 </template>
 
@@ -219,6 +252,12 @@ import CitySelector from './CitySelector.vue'
 import MapCompass from './MapCompass.vue'
 import CheckinDialog from './CheckinDialog.vue'
 import { firebaseAvailable } from '../lib/firebase'
+import {
+  getTreeCheckinStats,
+  getTreePhotos,
+  type TreeCheckinStats,
+  type TreePhotos,
+} from '../composables/useSubmissions'
 import { formatDataSource } from '../data/dataSources'
 import { speciesSentinel } from '../data/species'
 import { plantYearFrom } from '../lib/achievements'
@@ -689,11 +728,15 @@ const checkinDialog = ref<{
   treeForm: string | null
   dbhInches: number | null
   plantYear: number | null
+  mode: 'checkin' | 'update' | 'missing'
 } | null>(null)
 
 const CHECKIN_MAX_METERS = 50
 
+// Checking in (and reporting) is a phone-in-hand-at-the-tree flow. Desktop
+// shows the tree's check-in count but offers no way to add to it.
 const canCheckInToSelectedTree = computed(() => {
+  if (!props.simplified) return false
   if (!firebaseAvailable) return false
   if (!selectedTreeAnchor.value) return false
   const loc = userLocation.value
@@ -703,10 +746,11 @@ const canCheckInToSelectedTree = computed(() => {
   return meters <= CHECKIN_MAX_METERS
 })
 
-function openCheckin(): void {
+function openCheckin(mode: 'checkin' | 'update' | 'missing'): void {
   if (!selectedTree.value || !selectedTreeAnchor.value) return
   const [lng, lat] = selectedTreeAnchor.value
   checkinDialog.value = {
+    mode,
     treeId: selectedTree.value.tree_id,
     lat,
     lng,
@@ -715,6 +759,72 @@ function openCheckin(): void {
     dbhInches: selectedTree.value.dbh,
     plantYear: plantYearFrom(selectedTree.value.plant_date),
   }
+}
+
+// --- Public check-in counter on the tree card ---
+//
+// Best-effort and never blocking: the card renders without it, and a failed
+// read (offline, Firebase unconfigured) just leaves the line off.
+const checkinStats = ref<TreeCheckinStats | null>(null)
+let checkinStatsToken = 0
+
+watch(
+  () => selectedTree.value?.tree_id ?? null,
+  async (treeId) => {
+    const token = ++checkinStatsToken
+    checkinStats.value = null
+    if (!treeId || !firebaseAvailable) return
+    try {
+      const stats = await getTreeCheckinStats(treeId)
+      if (token === checkinStatsToken) checkinStats.value = stats
+    } catch (err) {
+      console.warn('[TreeCard] check-in count unavailable', err)
+    }
+  },
+)
+
+// Reviewed visitor photos, published from check-ins. Same best-effort rules
+// as the counter above.
+const treePhotos = ref<TreePhotos | null>(null)
+const visitorPhotoIndex = ref(0)
+let treePhotosToken = 0
+
+watch(
+  () => selectedTree.value?.tree_id ?? null,
+  async (treeId) => {
+    const token = ++treePhotosToken
+    treePhotos.value = null
+    visitorPhotoIndex.value = 0
+    if (!treeId || !firebaseAvailable) return
+    try {
+      const photos = await getTreePhotos(treeId)
+      if (token === treePhotosToken) treePhotos.value = photos
+    } catch (err) {
+      console.warn('[TreeCard] visitor photos unavailable', err)
+    }
+  },
+)
+
+const visitorPhotoUrl = computed(() => treePhotos.value?.photoUrls[visitorPhotoIndex.value] ?? null)
+
+const visitorPhotoCaption = computed(() => {
+  const n = treePhotos.value?.count ?? 0
+  return n > 1 ? `Visitor photo · ${n.toLocaleString()} visitor photos` : 'Visitor photo from a check-in'
+})
+
+const checkinCountLabel = computed(() => {
+  const n = checkinStats.value?.count ?? 0
+  if (n === 0) return 'No check-ins yet — be the first'
+  return n === 1 ? '1 check-in' : `${n.toLocaleString()} check-ins`
+})
+
+function handleCheckinSuccess(mode: 'checkin' | 'update' | 'missing', counted: boolean): void {
+  // The dialog stays open on its "done" step; only a check-in that the rules
+  // let count (once per person per tree per 20 hours) moves the count.
+  if (mode !== 'checkin' || !counted || !checkinDialog.value) return
+  if (selectedTree.value?.tree_id !== checkinDialog.value.treeId) return
+  const prev = checkinStats.value?.count ?? 0
+  checkinStats.value = { count: prev + 1 }
 }
 
 // Gap between the card and the map container edge when the anchor is close
@@ -1280,6 +1390,10 @@ function silentlyApplyCity(lat: number, lng: number): void {
  * This is the single authoritative path for GPS-driven navigation.
  */
 function navigateToLocation(lat: number, lng: number): void {
+  if (isInitialLoading.value || !mapRef.value) {
+    deferNavigationUntilReady(lat, lng)
+    return
+  }
   const city = closestCityTo(lat, lng)
   if (city !== selectedCity.value) {
     void switchCity(city, [lng, lat])
@@ -1287,6 +1401,30 @@ function navigateToLocation(lat: number, lng: number): void {
     flyTo({ lat, lng, zoom: props.simplified ? 18 : 15 })
   }
 }
+
+// "Find Me" is live from first paint, before the map has a city loaded. A
+// press then does what a city pick from the (also never-disabled) selector
+// does: it settles the initial city, so IP/geolocation bootstrap yields to it,
+// and requests the user's city through the route. The camera move waits for
+// the lifecycle to reach 'ready' -- flying mid-load would fight the city load
+// and, on desktop, the intro animation.
+let pendingLocateTarget: { lat: number; lng: number } | null = null
+
+function deferNavigationUntilReady(lat: number, lng: number): void {
+  pendingLocateTarget = { lat, lng }
+  markInitialUserCityDetectionDone()
+  const city = closestCityTo(lat, lng)
+  if (readRouteCity(route.query.city) !== city) {
+    void router.replace({ query: { ...route.query, city } })
+  }
+}
+
+watch(isInitialLoading, (loading) => {
+  if (loading || !pendingLocateTarget || !mapRef.value) return
+  const { lat, lng } = pendingLocateTarget
+  pendingLocateTarget = null
+  navigateToLocation(lat, lng)
+})
 
 let userLocationMarker: maplibregl.Marker | null = null
 
@@ -2076,6 +2214,39 @@ onUnmounted(() => {
   flex: 0 0 auto;
 }
 
+.tc-social {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(167, 227, 178, 0.1);
+  font-size: 0.8rem;
+}
+
+.tc-social-count {
+  color: var(--color-leaf);
+}
+
+.tc-report-link {
+  display: block;
+  margin-top: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 0.76rem;
+  text-decoration: underline;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tc-report-link:hover {
+  color: var(--color-leaf);
+}
+
 .tree-card-checkin {
   background: var(--color-leaf);
   color: var(--color-on-accent);
@@ -2203,6 +2374,34 @@ onUnmounted(() => {
 .tc-photo {
   width: 100%;
   height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+.tc-photo-thumbs {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  overflow-x: auto;
+}
+
+.tc-photo-thumb {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(167, 227, 178, 0.18);
+  background: none;
+  cursor: pointer;
+}
+
+.tc-photo-thumb--active {
+  border-color: var(--color-leaf);
+}
+
+.tc-photo-thumb img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
 }

@@ -13,6 +13,8 @@ _SPATIAL_KEYS = (
     "genus_mask",
     "species_mask",
     "dbh",
+    "crown",
+    "crown_mask",
     "genus",
     "species",
 )
@@ -29,6 +31,8 @@ def apply_dihedral(sample: dict[str, object], transform: int) -> dict[str, objec
     flip = transform >= 4
     transformed = dict(sample)
     for key in _SPATIAL_KEYS:
+        if key in {"crown", "crown_mask"} and key not in transformed:
+            continue
         value = transformed[key]
         if not isinstance(value, torch.Tensor):
             raise TypeError(f"sample field {key!r} must be a tensor")
@@ -82,6 +86,8 @@ class NpzChipDataset:
                 "genus_mask": self._torch.from_numpy(chip["genus_mask"].copy()).bool(),
                 "species_mask": self._torch.from_numpy(chip["species_mask"].copy()).bool(),
                 "dbh": self._torch.from_numpy(chip["dbh"].copy()).float(),
+                "crown": self._torch.from_numpy(chip["crown"].copy() if "crown" in chip else np.zeros_like(chip["dbh"])).float(),
+                "crown_mask": self._torch.from_numpy(chip["crown_mask"].copy() if "crown_mask" in chip else np.zeros_like(chip["dbh_mask"])).float(),
                 "genus": self._torch.from_numpy(chip["genus"].copy()).long(),
                 "species": self._torch.from_numpy(chip["species"].copy()).long(),
             }

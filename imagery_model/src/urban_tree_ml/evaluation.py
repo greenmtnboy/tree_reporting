@@ -2,13 +2,36 @@ from __future__ import annotations
 
 import json
 import math
+import re
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from urban_tree_ml.config import ProjectConfig
+from urban_tree_ml.config import ProjectConfig, taxonomy_path
+
+_COHORT_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+
+
+def inference_coverage(manifest, split, processed_chip_ids, predictions):
+    """Prove every requested chip ran, independently of its detection count."""
+    expected = list(manifest.loc[manifest.split == split, "chip_id"])
+    processed = list(processed_chip_ids)
+    if (not expected or len(expected) != len(set(expected))
+            or len(processed) != len(set(processed))
+            or set(processed) != set(expected)):
+        raise ValueError(f"Incomplete or duplicate inference coverage for {split}")
+    counts = predictions.groupby("chip_id").size()
+    if not set(counts.index) <= set(expected):
+        raise ValueError("Predictions contain chips outside the requested split")
+    return {
+        "schema_version": 1, "split": split, "complete": True,
+        "chip_count": len(expected),
+        "chips": [{"chip_id": chip_id, "prediction_count": int(counts.get(chip_id, 0))}
+                  for chip_id in sorted(expected)],
+    }
 
 
 def _greedy_matches(
@@ -21,22 +44,27 @@ def _greedy_matches(
     matched_truth: set[int] = set()
     matches: list[tuple[int, int, float]] = []
     ordered = predictions.sort_values("score", ascending=False, kind="stable")
+    # Materialize coordinates once; constructing pandas Series inside the nested
+    # loop dominated scoring. Keep scalar hypot and original tie order exactly.
     truths_by_chip = {
-        str(chip_id): group for chip_id, group in ground_truth.groupby("chip_id", sort=False)
+        str(chip_id): [(int(i), float(x), float(y)) for i, x, y in
+                      group[['output_x', 'output_y']].itertuples(name=None)]
+        for chip_id, group in ground_truth.groupby("chip_id", sort=False)
     }
-    for prediction_index, prediction in ordered.iterrows():
-        candidates = truths_by_chip.get(str(prediction["chip_id"]))
+    for prediction_index, chip_id, px, py in ordered[['chip_id', 'output_x', 'output_y']].itertuples(name=None):
+        candidates = truths_by_chip.get(str(chip_id))
         if candidates is None:
             continue
         best_index: int | None = None
         best_distance = math.inf
-        for truth_index, truth in candidates.iterrows():
-            if int(truth_index) in matched_truth:
+        px, py = float(px), float(py)
+        for truth_index, tx, ty in candidates:
+            if truth_index in matched_truth:
                 continue
-            distance = math.hypot(
-                float(prediction["output_x"]) - float(truth["output_x"]),
-                float(prediction["output_y"]) - float(truth["output_y"]),
-            )
+            dx, dy = px-tx, py-ty
+            if abs(dx) > radius_output_px or abs(dy) > radius_output_px:
+                continue
+            distance = math.hypot(dx, dy)
             if distance <= radius_output_px and distance < best_distance:
                 best_index = int(truth_index)
                 best_distance = distance
@@ -51,15 +79,16 @@ def _average_precision(
     ground_truth: pd.DataFrame,
     *,
     radius_output_px: float,
+    matches: list[tuple[int, int, float]] | None = None,
 ) -> float | None:
     if ground_truth.empty:
         return None
     ordered = predictions.sort_values("score", ascending=False, kind="stable")
     matched_prediction_ids = {
         prediction_index
-        for prediction_index, _, _ in _greedy_matches(
+        for prediction_index, _, _ in (matches if matches is not None else _greedy_matches(
             ordered, ground_truth, radius_output_px=radius_output_px
-        )
+        ))
     }
     true_positive = np.asarray(
         [int(index in matched_prediction_ids) for index in ordered.index], dtype=np.float64
@@ -175,7 +204,9 @@ def _attribute_metrics(
             "rmse_in": float(np.sqrt(np.square(errors).mean())),
             "bias_in": float(errors.mean()),
         }
+    from urban_tree_ml.crown_size import crown_metrics
     return {
+        "crown": crown_metrics(predictions, ground_truth, matches),
         "dbh": dbh,
         "genus": _classification_metrics(genus_true, genus_predicted),
         "species": _classification_metrics(
@@ -199,6 +230,8 @@ def _decode_batch(
     *,
     max_detections_per_chip: int,
     nms_kernel: int,
+    target_center: Any | None = None,
+    detection_mask: Any | None = None,
 ) -> list[dict[str, object]]:
     import torch
     from torch.nn import functional as functional
@@ -232,28 +265,44 @@ def _decode_batch(
         locations_cpu = locations.cpu().numpy()
         scores_cpu = scores.float().cpu().numpy()
         dbh_cpu = dbh_values.float().cpu().numpy()
+        crown_cpu = (prediction["crown_log1p"][batch_index, ys, xs].float().cpu().numpy()
+                     if "crown_log1p" in prediction else None)
         genus_ids_cpu = genus_ids.cpu().numpy()
         genus_confidence_cpu = genus_confidence.float().cpu().numpy()
         species_ids_cpu = species_ids.cpu().numpy()
         species_values_cpu = species_values.float().cpu().numpy()
+        target_center_cpu = (
+            target_center[batch_index].float().cpu().numpy()
+            if target_center is not None
+            else None
+        )
+        detection_mask_cpu = (
+            detection_mask[batch_index].float().cpu().numpy()
+            if detection_mask is not None
+            else None
+        )
         for index, location in enumerate(locations_cpu):
             y, x = (int(location[0]), int(location[1]))
             dbh_log1p = float(dbh_cpu[index])
-            records.append(
-                {
+            record: dict[str, object] = {
                     "chip_id": str(chip_id),
                     "output_x": x,
                     "output_y": y,
                     "score": float(scores_cpu[index]),
                     "dbh_log1p": dbh_log1p,
                     "dbh_in": float(np.expm1(np.clip(dbh_log1p, -10.0, 10.0))),
+                    "crown_radius_m": float(np.expm1(np.clip(crown_cpu[index], 0, 6.22))) if crown_cpu is not None else None,
+                    "crown_diameter_m": float(2*np.expm1(np.clip(crown_cpu[index], 0, 6.22))) if crown_cpu is not None else None,
                     "genus_id": int(genus_ids_cpu[index]),
                     "genus_confidence": float(genus_confidence_cpu[index]),
                     "species_id": int(species_ids_cpu[index, 0]),
                     "species_confidence": float(species_values_cpu[index, 0]),
                     "species_top_ids": [int(value) for value in species_ids_cpu[index]],
-                }
-            )
+            }
+            if target_center_cpu is not None and detection_mask_cpu is not None:
+                record["center_target"] = float(target_center_cpu[y, x])
+                record["detection_mask_value"] = float(detection_mask_cpu[y, x])
+            records.append(record)
     return records
 
 
@@ -299,11 +348,18 @@ def run_evaluation(
     split: str = "validation",
     device_name: str = "auto",
     allow_test: bool = False,
+    cohort: str | None = None,
 ) -> dict[str, object]:
     if split not in {"train", "validation", "test"}:
         raise ValueError("split must be train, validation, or test")
     if split == "test" and not allow_test:
         raise ValueError("test evaluation is sealed; pass --allow-test after decisions are frozen")
+    output_cohort = cohort or split
+    if _COHORT_NAME.fullmatch(output_cohort) is None:
+        raise ValueError(
+            "evaluation cohort must start with a lowercase letter or digit and contain only "
+            "lowercase letters, digits, and hyphens"
+        )
     try:
         import torch
         from torch.utils.data import DataLoader
@@ -321,10 +377,8 @@ def run_evaluation(
     labels_path = chip_root / "labels.parquet"
     if not labels_path.exists():
         raise FileNotFoundError("labels.parquet is missing; rebuild chips with the current code")
-    taxonomy_path = (
-        config.paths.root / "inventory" / config.inventory.city.lower() / "taxonomy.json"
-    )
-    taxonomy = json.loads(taxonomy_path.read_text(encoding="utf-8"))
+    selected_taxonomy_path = taxonomy_path(config)
+    taxonomy = json.loads(selected_taxonomy_path.read_text(encoding="utf-8"))
     device = (
         torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if device_name == "auto"
@@ -335,14 +389,17 @@ def run_evaluation(
     if device.type == "cuda":
         torch.set_float32_matmul_precision("high")
 
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    has_crown = any(key.startswith("network.crown_head.") for key in payload["state_dict"])
     network = RawImageryTreeModel(
+        backbone=config.model.backbone,
         input_channels=config.model.input_channels,
         feature_channels=config.model.feature_channels,
         genus_classes=len(taxonomy["genera"]),
         species_classes=len(taxonomy["species"]),
         pretrained=False,
+        crown_head=has_crown,
     )
-    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
     state = {
         key.removeprefix("network."): value
         for key, value in payload["state_dict"].items()
@@ -361,6 +418,7 @@ def run_evaluation(
         persistent_workers=config.training.workers > 0,
     )
     prediction_records: list[dict[str, object]] = []
+    processed_chip_ids = []
     with torch.inference_mode():
         for batch in loader:
             image = batch["image"].to(device, non_blocking=True)
@@ -376,8 +434,11 @@ def run_evaluation(
                     list(batch["chip_id"]),
                     max_detections_per_chip=config.evaluation.max_detections_per_chip,
                     nms_kernel=config.evaluation.nms_kernel,
+                    target_center=batch["center"],
+                    detection_mask=batch["detection_mask"],
                 )
             )
+            processed_chip_ids.extend(list(batch["chip_id"]))
 
     prediction_columns = [
         "chip_id",
@@ -386,14 +447,19 @@ def run_evaluation(
         "score",
         "dbh_log1p",
         "dbh_in",
+        "crown_radius_m",
+        "crown_diameter_m",
         "genus_id",
         "genus_confidence",
         "species_id",
         "species_confidence",
         "species_top_ids",
+        "center_target",
+        "detection_mask_value",
     ]
     predictions = pd.DataFrame.from_records(prediction_records, columns=prediction_columns)
     manifest = pd.read_parquet(manifest_path)
+    coverage = inference_coverage(manifest, split, processed_chip_ids, predictions)
     summary = json.loads((chip_root / "summary.json").read_text(encoding="utf-8"))
     source_raster_value = summary.get("source_raster")
     source_raster = Path(str(source_raster_value)) if source_raster_value else None
@@ -408,6 +474,16 @@ def run_evaluation(
 
     ground_truth = pd.read_parquet(labels_path)
     ground_truth = ground_truth[ground_truth["split"] == split].reset_index(drop=True)
+    checkpoint_run_dir = checkpoint.parent.parent if checkpoint.parent.name == "checkpoints" else None
+    run_dir = checkpoint_run_dir or (config.paths.root / "runs" / config.experiment)
+    output_dir = run_dir / "evaluation" / output_cohort
+    output_dir.mkdir(parents=True, exist_ok=True)
+    predictions_path = output_dir / "predictions.parquet"
+    ground_truth_path = output_dir / "ground-truth.parquet"
+    # Persist expensive GPU results before CPU scoring. COMPLETE/coverage still
+    # remain gated on the entire evaluation succeeding.
+    predictions.to_parquet(predictions_path, index=True)
+    ground_truth.to_parquet(ground_truth_path, index=False)
     above_threshold = predictions[predictions["above_threshold"]]
     metrics_by_radius: dict[str, object] = {}
     match_records: list[dict[str, object]] = []
@@ -415,9 +491,13 @@ def run_evaluation(
         radius_output_px = radius_m / (
             config.imagery.resolution_m * config.targets.output_stride
         )
-        matches = _greedy_matches(
-            above_threshold, ground_truth, radius_output_px=radius_output_px
+        all_matches = _greedy_matches(
+            predictions, ground_truth, radius_output_px=radius_output_px
         )
+        # A confidence threshold retains a prefix of the same stable score order.
+        # Its greedy matches are therefore identical to this prefix's matches.
+        retained_ids = set(above_threshold.index)
+        matches = [match for match in all_matches if match[0] in retained_ids]
         true_positive = len(matches)
         precision = true_positive / len(above_threshold) if len(above_threshold) else 0.0
         recall = true_positive / len(ground_truth) if len(ground_truth) else 0.0
@@ -441,7 +521,7 @@ def run_evaluation(
                 "recall": recall,
                 "f1": 2 * precision * recall / (precision + recall or 1),
                 "average_precision": _average_precision(
-                    predictions, ground_truth, radius_output_px=radius_output_px
+                    predictions, ground_truth, radius_output_px=radius_output_px, matches=all_matches
                 ),
             },
             "attributes_on_matched_detections": _attribute_metrics(
@@ -452,14 +532,16 @@ def run_evaluation(
             ),
         }
 
-    output_dir = config.paths.root / "runs" / config.experiment / "evaluation" / split
+    checkpoint_run_dir = (
+        checkpoint.parent.parent if checkpoint.parent.name == "checkpoints" else None
+    )
+    run_dir = checkpoint_run_dir or (config.paths.root / "runs" / config.experiment)
+    output_dir = run_dir / "evaluation" / output_cohort
     output_dir.mkdir(parents=True, exist_ok=True)
     predictions_path = output_dir / "predictions.parquet"
     matches_path = output_dir / "matches.parquet"
     ground_truth_path = output_dir / "ground-truth.parquet"
     taxonomy_output_path = output_dir / "taxonomy.json"
-    predictions.to_parquet(predictions_path, index=True)
-    ground_truth.to_parquet(ground_truth_path, index=False)
     pd.DataFrame.from_records(
         match_records,
         columns=["radius_m", "prediction_index", "tree_id", "distance_m"],
@@ -469,6 +551,10 @@ def run_evaluation(
     )
     result: dict[str, object] = {
         "checkpoint": str(checkpoint),
+        "run_id": run_dir.name,
+        "cohort": output_cohort,
+        "city": config.inventory.city,
+        "dataset": config.dataset,
         "split": split,
         "device": str(device),
         "chips": len(dataset),
@@ -482,10 +568,40 @@ def run_evaluation(
         "matches": str(matches_path),
         "ground_truth": str(ground_truth_path),
         "taxonomy": str(taxonomy_output_path),
+        "taxonomy_source": str(selected_taxonomy_path),
+        "normalization_source": str(chip_root / "normalization.json"),
+        "source_raster": str(source_raster) if source_raster is not None else None,
     }
+    evaluation_metadata_path = output_dir / "evaluation-metadata.json"
+    evaluation_metadata_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "created_at": datetime.now(UTC).isoformat(),
+                "run_id": run_dir.name,
+                "cohort": output_cohort,
+                "split": split,
+                "city": config.inventory.city,
+                "dataset": config.dataset,
+                "checkpoint": str(checkpoint),
+                "source_raster": str(source_raster) if source_raster is not None else None,
+                "config": config.model_dump(mode="json"),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    result["evaluation_metadata"] = str(evaluation_metadata_path)
     metrics_path = output_dir / "metrics.json"
     metrics_path.write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     result["metrics"] = str(metrics_path)
+    coverage.update({"run_id": run_dir.name, "cohort": output_cohort,
+                     "city": config.inventory.city, "checkpoint": str(checkpoint)})
+    coverage_path = output_dir / "inference-coverage.json"
+    coverage_path.write_text(json.dumps(coverage, indent=2) + "\n", encoding="utf-8")
+    result["inference_coverage"] = str(coverage_path)
     return result

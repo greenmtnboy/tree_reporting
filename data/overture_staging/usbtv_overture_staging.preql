@@ -1,0 +1,34 @@
+# Scheduled Overture position lookup for Burlington, run by the
+# `overture-usbtv` [[cloud.job]] in ../trilogy.toml.  Everything shared with
+# the other cities -- the lookup concepts, the release probe, and why this is
+# a separate job at all -- lives in staging_common.preql; this file is just
+# Burlington's rows and the staging object they land in.
+
+import staging_common;
+
+root datasource usbtv_overture_snap_rows (
+    snap_cell: snap_cell,
+    city: city,
+    snap_latitude: snap_latitude,
+    snap_longitude: snap_longitude,
+    snap_reason: snap_reason,
+    snap_distance_m: snap_distance_m,
+    overture_release: overture_release,
+)
+grain (snap_cell)
+file `./overture_snap_rows.py`
+where city = 'USBTV';
+
+datasource usbtv_overture_snap (
+    snap_cell,
+    city,
+    snap_latitude,
+    snap_longitude,
+    snap_reason,
+    snap_distance_m,
+    overture_release,
+    overture_released_through,
+)
+grain (snap_cell)
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbtv_overture_snap.parquet`:`gcs://trilogy_public_models/duckdb/staging/usbtv_overture_snap.parquet`
+freshness by overture_released_through;

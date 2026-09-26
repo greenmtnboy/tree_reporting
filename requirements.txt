@@ -13,7 +13,13 @@
 # Both `landmark_info` and `tree_info` hit it; per-city Parquets were unaffected,
 # so it only showed up when full_*_info was rebuilt. If those reappear, check the
 # installed version first — the models are fine.
-pytrilogy>=0.3.305
+#
+# Raised to 0.3.360, the first release that plans a lookup keyed on a derived
+# concept across a partitioned union. raw/tree_position.preql derives
+# `snap_cell` from each row's coordinates and joins the Overture lookup on it;
+# on 0.3.359 and earlier that raised "Could not resolve connections" against
+# the municipal/community/OSM partitions every city model is built from.
+pytrilogy>=0.3.360
 # DuckDB 1.5.3+ is the first 1.5.x with the `nanoarrow` community extension
 # published for linux_amd64 (1.5.0 ships `arrow` but not `nanoarrow`, so
 # `LOAD arrow` fails with "Nested load of nanoarrow failed" on the runner).

@@ -252,8 +252,12 @@ file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/{lc}_o
 # Shared: ../tree_dedup.preql groups the three partitions into one cluster per
 # tree and picks each canonical attribute across the cluster; this city's grid
 # cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
-# The only per-city line is the dbh merge, because Boston imputes it.
+# The per-city lines are the dbh merge, because Boston imputes it, and the
+# position policy: a city with an Overture lookup imports ../tree_position.preql
+# instead of the two position merges (see that file).
 merge merged_dbh into diameter_at_breast_height;
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
 
 
 partial datasource {slug}_tree_info (
@@ -768,6 +772,17 @@ operation = "refresh"
 schedule = "{args.osm_cron}"
 timeout_seconds = 1800
 memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-{lc}"
+name = "urban-tree-landmarks-refresh-{lc}"
+entrypoint = "raw/{lc}/{slug}_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "{next_landmark_slot((DATA / "trilogy.toml").read_text(encoding="utf-8"))}"
+timeout_seconds = 900
+memory_mb = 2048
 '''
     e.sub_once(
         DATA / "trilogy.toml",
@@ -831,6 +846,24 @@ def parse_bounds(value: str) -> tuple[float, float, float, float]:
     if len(parts) != 4:
         raise argparse.ArgumentTypeError("bounds is lat_min,lat_max,lon_min,lon_max")
     return tuple(parts)  # type: ignore[return-value]
+
+
+def next_landmark_slot(toml_text: str) -> str:
+    """The Sunday two-minute slot after the latest per-city landmark job."""
+    minutes = [
+        int(hour) * 60 + int(minute)
+        for minute, hour in re.findall(
+            r'key = "refresh-landmarks-[a-z]{5}"[^\[]*?schedule = "0 (\d+) (\d+) \* \* SUN"',
+            toml_text,
+        )
+    ]
+    after = max(minutes, default=178) + 2
+    if after >= 5 * 60:
+        raise SystemExit(
+            "no landmark slot left before the 05:00 union; widen the window in "
+            "trilogy.toml and tests/test_cloud_jobs.py"
+        )
+    return f"0 {after % 60} {after // 60} * * SUN"
 
 
 def main() -> None:

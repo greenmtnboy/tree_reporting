@@ -25,6 +25,8 @@ data/
                           the calibrators, the two model fits (see its README)
     tests/                `pytest tests -q` from data/raw; offline, seconds
   osm_staging/            one thin model per city over the shared osm_rows.py
+  overture_staging/       one thin model per opted-in city over the shared
+                          overture_snap_rows.py: the position lookup
   landmark_staging/       the curated-CSV landmark publishers
 ```
 
@@ -41,24 +43,33 @@ Every job is a `[[cloud.job]]` in `data/trilogy.toml`, deployed by
 ```
 per city, three independent schedules
   osm-{code}         weekly, staggered      osm_staging/{code}_osm_staging.preql
+  overture-{code}    weekly poll, monthly   overture_staging/{code}_overture_staging.preql
+                     rebuild (opted-in
+                     cities only)
   city-{code}        daily or twice weekly  raw/{code}/{slug}_tree_info.preql
   landmarks-{code}   no cron, by hand       landmark_staging/{code}_landmarks_staging.preql
+  refresh-landmarks-{code}  weekly, Sun 03:00-04:20, 2 min apart
+                                            raw/{code}/{slug}_landmarks.preql
 
 the core, daily, reading only published parquets
   publish-full          raw/full_tree_publish.preql     -> full_tree_info_v{n}.parquet
   refresh-ecoregions    raw/ecoregion_info.preql
-  refresh-enrichment    raw/enrichment_refresh.preql    -> tree_enrichment_v{n}.parquet
+  refresh-enrichment    raw/tree_enrichment.preql       -> tree_enrichment_v{n}.parquet
   refresh-predictions   raw/tree_predictions.preql      -> tree_predictions_v{n}.parquet
   validate-core         raw/core_validate.preql
-  refresh-landmarks     raw/landmark_info.preql (weekly)
+  publish-landmarks     raw/full_landmark_publish.preql (weekly, Sun 05:00)
 ```
 
 Rules:
 
-- **A job's bundle is its entrypoint's reachable imports.** `trilogy refresh`
-  adopts every managed datasource it can reach, so what a model imports
-  decides what a job builds and how much memory it needs. Check with
-  `trilogy refresh --dry-run <entrypoint>`: a city job must show one asset.
+- **A refresh job builds what its entrypoint declares, nothing it imports.**
+  pytrilogy >= 0.3.368 probes imported datasources (they are the expected side
+  of what it builds) and never builds them, so a refresh entrypoint must be the
+  file that declares its output. An umbrella that only imports builds nothing
+  and exits "up to date", which skips everything downstream;
+  `test_cloud_jobs.py::test_every_refresh_entrypoint_declares_what_it_builds`
+  refuses one. Check with `trilogy refresh --dry-run <entrypoint>`: a city job
+  must show one asset.
 - **The core never reaches a portal.** `full_tree_publish.preql` reads the
   city parquets with one `file [...]` multi-file scan; the enrichment and
   prediction jobs reach published tables through root `_source.preql` views
@@ -67,10 +78,12 @@ Rules:
   runs after its two producers. `test_cloud_jobs.py` pins that the core
   imports no city model, and `test_tree_predictions.py` pins that no
   `_source.preql` enters the frontend bundle.
-- **The job's file set and the browser's are different on purpose.** The
-  enrichment job runs `raw/enrichment_refresh.preql`; the browser bundles
-  `raw/tree_enrichment.preql`, which is species-only. A second tree source in
-  the browser's scope changes join types and chart answers (`docs/TESTING.md`).
+- **Enrichment is ordered by a declared edge.** The job refreshes
+  `raw/tree_enrichment.preql`, which the browser also bundles and which must
+  stay species-only: a second tree source in the browser's scope changes join
+  types and chart answers (`docs/TESTING.md`). Its script reads the rollup by
+  URL, so nothing in the model orders it after `publish-full`; the
+  `[dependencies]` table in `trilogy.toml` does.
 - **`validate-core` runs `validate datasource` over the rollup and the
   enrichment table after both land** and fails the tick on a repeated key.
 - **Cadence is measured.** `tools/portal_cadence.py --record` samples every
@@ -136,6 +149,45 @@ Every tree row carries `data_source`. The value list is `DATA_SOURCES` in
 decides which city an unattributed tree (OSM node, community submission)
 belongs to. `test_city_territory.py` checks every pair; a city that gains a
 neighbour has to carve both. Municipal ingests keep using the box.
+
+## Position correction (`raw/tree_position.preql`)
+
+A tree whose coordinates fall inside an Overture building footprint or a
+road's carriageway is moved to the nearest open ground before the cluster
+merge, for cities that opt in. The reference is `docs/POSITION_CORRECTION.md`;
+the shape:
+
+- **The key is derived in the model.** `tree_position.preql` computes
+  `snap_cell` (a fixed ~2 m lat/lon grid cell) from each raw row's own
+  coordinates and joins the lookup on it, so no ingest and no partition
+  carries the column. It needs pytrilogy 0.3.360 or later: earlier releases
+  planned a lookup keyed on a derived concept against one source but not
+  against a partitioned union, which is why the key was stamped by
+  `enforce_tree_schema` until now. `shared/overture.py` keys the staging
+  table from the same two constants (`SNAP_CELL_*` in `shared/ingest.py`)
+  and `test_position_grid.py` pins that the two agree.
+- **The lookup is a staging parquet, one row per blocked cell**
+  (`staging/{code}_overture_snap.parquet`), built by the `overture-{code}`
+  job from one DuckDB spatial query over Overture's S3 release
+  (`shared/overture.py`). Its watermark is the Overture release date, so the
+  weekly firing rebuilds only when a release lands; publishing marks the city
+  stale through its `{slug}_overture_probe.py`.
+- **The position policy is the city's.** A city with a lookup imports
+  `tree_position` (which merges the corrected point into `latitude` and
+  `longitude`); every other city merges `merged_latitude` and
+  `merged_longitude` itself, one line each beside its dbh merge.
+  `tree_dedup.preql` merges neither, because two merges into one concept
+  conflict. `test_position_grid.py` checks every city has exactly one.
+- **The city parquet keeps both.** `latitude`/`longitude` are the corrected
+  point; `source_latitude`/`source_longitude` the survivor's own;
+  `position_adjustment` (`building`, `road`, null) and `position_shift_m`
+  say what happened. The rollup carries only the corrected point.
+- **Rolling a city on**: `OVERTURE_SNAP_CITIES`, the staging model and job,
+  the city-model wiring, then stage the table by hand
+  (`uv run {code}/{slug}_overture_extract.py`) before the city's next
+  refresh — the model reads the object by URL and a refresh before it exists
+  fails on the read. No OSM re-extract is needed; the cell is derived from
+  coordinates the staged object already carries.
 
 ## Deduplication (`raw/tree_dedup.preql`)
 

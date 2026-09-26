@@ -1,0 +1,15 @@
+{
+  "name": "tree-reporting-rules-tests",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "firebase --config ../firebase.json emulators:exec --only firestore,storage --project demo-tree-rules \"node --import tsx --test \\\"*.test.ts\\\"\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase": "^12.11.0",
+    "firebase-tools": "^14.0.0",
+    "tsx": "^4.20.3"
+  }
+}

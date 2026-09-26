@@ -9,12 +9,19 @@ def masked_centernet_focal_loss(
     target: torch.Tensor,
     valid_mask: torch.Tensor,
 ) -> torch.Tensor:
-    probability = logits.sigmoid().clamp(1e-6, 1 - 1e-6)
+    # bf16 rounds sigmoid/clamp to exactly 1 for ordinary positive logits.
+    # Evaluate log probabilities directly in float32, avoiding log(0), including
+    # at excluded pixels (inf * 0 is NaN, not a safe way to mask a loss).
+    logits = logits.float()
+    target = target.float()
+    probability = logits.sigmoid()
     positives = target.eq(1).float()
     negatives = target.lt(1).float()
     negative_weight = (1 - target).pow(4)
-    positive_loss = -(probability.log()) * (1 - probability).pow(2) * positives
-    negative_loss = -((1 - probability).log() * probability.pow(2) * negative_weight * negatives)
+    positive_loss = -functional.logsigmoid(logits) * (1 - probability).pow(2) * positives
+    negative_loss = (
+        -functional.logsigmoid(-logits) * probability.pow(2) * negative_weight * negatives
+    )
     mask = valid_mask.float()
     normalizer = (positives * mask).sum().clamp_min(1.0)
     return ((positive_loss + negative_loss) * mask).sum() / normalizer
@@ -28,6 +35,7 @@ def multitask_loss(
     dbh_weight: float,
     genus_weight: float,
     species_weight: float,
+    crown_weight: float = 1.0,
 ) -> dict[str, torch.Tensor]:
     dbh_mask = batch["dbh_mask"]
     center = masked_centernet_focal_loss(
@@ -55,13 +63,19 @@ def multitask_loss(
         if species_mask.any()
         else species_logits.sum() * 0
     )
-    total = (
+    crown = center * 0
+    if "crown_log1p" in prediction:
+        mask = batch["crown_mask"].bool()
+        crown = ((functional.smooth_l1_loss(prediction["crown_log1p"].float()[mask], batch["crown"][mask], reduction='none') * batch['crown_mask'][mask]).mean()
+                 if mask.any() else prediction["crown_log1p"].sum() * 0)
+    total = crown_weight * crown + (
         center_weight * center + dbh_weight * dbh + genus_weight * genus + species_weight * species
     )
     return {
         "loss": total,
         "center_loss": center,
         "dbh_loss": dbh,
+        "crown_loss": crown,
         "genus_loss": genus,
         "species_loss": species,
     }

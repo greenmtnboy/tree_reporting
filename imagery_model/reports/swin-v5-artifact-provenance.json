@@ -1,0 +1,27 @@
+{
+  "run": "sf-boston-naip-swin-v5-finetune",
+  "remote_filesystem": "/lambda/nfs/tree-reporting-dev/urban-tree-ml",
+  "remote_verification": "Recovered and checksum-verified in the prior run; remote filesystem not mounted or rechecked during this code backup. No model-checkpoint GCS upload claimed.",
+  "files": [
+    {
+      "path_under_artifacts": "sf-boston-naip-swin-v5-finetune-results.tar.gz",
+      "bytes": 1433967181,
+      "sha256": "2d83632a5a93d92c8ae2cef680da294398b28a068cdfd09d3d779a61e52e4869"
+    },
+    {
+      "path_under_artifacts": "runs/sf-boston-naip-swin-v5-finetune/checkpoints/016.ckpt",
+      "bytes": 349356363,
+      "sha256": "9c656fecce19f33cc5885667ce30f7f3695acd5833cea967fa4fe77c72593a22"
+    },
+    {
+      "path_under_artifacts": "sf-boston-naip-swin-v5-finetune-source.tar.gz",
+      "bytes": 403812,
+      "sha256": "b28e71954125198e67c385e2ad75f4fe6c64798270001b0ca14ff26740360981"
+    },
+    {
+      "path_under_artifacts": "sf-boston-naip-swin-v5-finetune-inputs.tar.gz",
+      "bytes": 23458776,
+      "sha256": "2ef8e3a6b1cc83a6734d049e2c401ab2260e376301079ff29a82e9e3c5657521"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "C:\\Users\\ethan\\coding_projects\\sf_tree_reporting\\imagery_model\\artifacts\\runs\\sf-boston-naip-swin-v5-finetune\\evaluation\\validation\\ground-truth.parquet": "f67f42427125afd3097db0b45b1121a2dc1b21cbb8d1ccc2e26840cf54bb3ac6",
+  "C:\\Users\\ethan\\coding_projects\\sf_tree_reporting\\imagery_model\\artifacts\\runs\\sf-boston-naip-swin-v5-finetune\\evaluation\\validation\\predictions.parquet": "96f43378278052fa8bc668653a67a37895add484f226f9c16bb8058a72d3fb26",
+  "C:\\Users\\ethan\\coding_projects\\sf_tree_reporting\\imagery_model\\artifacts\\runs\\sf-boston-naip-swin-v5-finetune\\evaluation\\validation\\evaluation-metadata.json": "adc1f251e5b4ed76f6a9a2c60bbcbd1b9b448ce1157b4cf47bb16b7277fd43f8",
+  "C:\\Users\\ethan\\coding_projects\\sf_tree_reporting\\imagery_model\\artifacts\\runs\\sf-boston-naip-swin-v5-finetune\\evaluation\\validation-usbos\\ground-truth.parquet": "0dbab65d2d62efb36a7c29d1b1afb0f5a1635dbc4ba7d8e9f71602d572719956",
+  "C:\\Users\\ethan\\coding_projects\\sf_tree_reporting\\imagery_model\\artifacts\\runs\\sf-boston-naip-swin-v5-finetune\\evaluation\\validation-usbos\\predictions.parquet": "c9b8d6c90e009d79d619a0fe5749f4ffaa192285d577a3671970bd18d4b9e529",
+  "C:\\Users\\ethan\\coding_projects\\sf_tree_reporting\\imagery_model\\artifacts\\runs\\sf-boston-naip-swin-v5-finetune\\evaluation\\validation-usbos\\evaluation-metadata.json": "f8389afaf347dbd0d1349cab20bf72cc932a106d1bebd5f7d0d10a31f5b380eb"
+}
