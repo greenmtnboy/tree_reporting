@@ -19,8 +19,8 @@ export const fieldSketches = {
   },
   conifer: {
     svg: conifer, title: 'Conifer forest', example: 'Vancouver',
-    motif: 'A quiet fir-like sprig with three needle fans and a hanging cone',
-    review: 'Short, tapered needles follow each twig’s curve, with space around branch junctions. The cone hangs from a side branch and has six rows of rounded scales. Edit coniferScene in generators/conifer.mjs, then run pnpm artwork:generate.',
+    motif: 'An airy fir-like sprig with five tapered needle fans',
+    review: 'Five separated needle fans follow the curved leader and four side branches. Short, tapered needles leave space around the branch junctions. Edit coniferScene in generators/conifer.mjs, then run pnpm artwork:generate.',
   },
   desert: {
     svg: desert, title: 'Desert & xeric scrub', example: 'Tempe',

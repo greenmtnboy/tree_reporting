@@ -23,7 +23,7 @@ offsets and opacity; its preview canvas is smaller than an actual app viewport.
 | `city.svg` | Upper left: buildings and survey lines |
 | `woodland.svg` | Mediterranean woodland: narrow-leaf spray |
 | `broadleaf.svg` | Temperate broadleaf forest: lobed leaves and twig |
-| `conifer.svg` | Temperate conifer forest: needles and cone |
+| `conifer.svg` | Temperate conifer forest: five tapered needle fans |
 | `desert.svg` | Desert/xeric scrub: cactus and succulent |
 | `grassland.svg` | Grassland/savanna: grasses and seed heads |
 
@@ -91,11 +91,10 @@ Use `pnpm artwork:generate` and `pnpm artwork:check` for both.
 ## Generate conifer
 
 `conifer.svg` uses `coniferScene` in `../generators/conifer.mjs`. A curved
-leader and two side branches form three separated, fir-like needle fans.
+leader and four side branches form five separated, fir-like needle fans.
 Needles start on their twig curves, rotate with the local tangent, and taper
-in length toward the ends. Bare sections keep branch junctions open. The
-cone hangs from a shared point on the left branch, above the contour lines;
-six rows of rounded scales stay inside its outline. Change the needle counts,
+in length toward the ends. Bare sections keep branch junctions open. Two
+lower fans fill out the spray while preserving clear gaps. Change the needle counts,
 lengths, and covered curve ranges in the scene, then use the same generate
 and check commands. Only the desert drawing remains hand-authored.
 
