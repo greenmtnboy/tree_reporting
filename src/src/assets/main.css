@@ -1,74 +1,8 @@
+@import './theme.css';
+
 *,
 *::before,
 *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
-/* Shared with Arborary's field-journal palette. RGB channels also theme the
-   translucent map controls and panels without flattening their hierarchy. */
-:root {
-  color-scheme: light;
-  --ink-rgb: 48, 59, 45;
-  --muted-rgb: 98, 103, 87;
-  --accent-rgb: 77, 101, 69;
-  --surface-rgb: 248, 246, 238;
-  --surface-raised-rgb: 238, 238, 226;
-  --color-asphalt: #f8f6ee;
-  --color-steel: #f1efe4;
-  --color-concrete: #e5e7d9;
-  --color-canopy: #4d6545;
-  --color-moss: #536c49;
-  --color-leaf: #4d6545;
-  --color-autumn: #996036;
-  --color-error: #ac3434;
-  --color-soil: #7a5c3e;
-  --color-water: #326d85;
-  --color-ink: #303b2d;
-  --color-muted: #626757;
-  --color-on-accent: #fbf9f2;
-  --color-border: #cecdbb;
-  --surface-0: #f8f6ee;
-  --surface-1: #fbf9f2;
-  --surface-2: #eeeee2;
-  --surface-3: #e5e7d9;
-  --accent-soft: #e5eadb;
-  --sketch-city: #796d60;
-  --sketch-leaf: #62654f;
-  --map-control-filter: none;
-  --shadow-soft: 0 12px 32px rgba(48, 59, 45, .09);
-  --font-body: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
-  --font-display: Georgia, 'Times New Roman', serif;
-}
-
-:root[data-theme='dark'] {
-  color-scheme: dark;
-  --ink-rgb: 227, 230, 216;
-  --muted-rgb: 178, 187, 169;
-  --accent-rgb: 174, 196, 152;
-  --surface-rgb: 34, 43, 36;
-  --surface-raised-rgb: 43, 52, 43;
-  --color-asphalt: #222b24;
-  --color-steel: #2b342b;
-  --color-concrete: #3b493c;
-  --color-canopy: #5a734b;
-  --color-moss: #b2c59e;
-  --color-leaf: #aec498;
-  --color-autumn: #d6a16e;
-  --color-error: #f0a8a8;
-  --color-soil: #baa385;
-  --color-water: #91bdc9;
-  --color-ink: #e3e6d8;
-  --color-muted: #b2bba9;
-  --color-on-accent: #222b24;
-  --color-border: #4b5746;
-  --surface-0: #222b24;
-  --surface-1: #273128;
-  --surface-2: #2b342b;
-  --surface-3: #303a31;
-  --accent-soft: #394632;
-  --sketch-city: #b7aa92;
-  --sketch-leaf: #a6b397;
-  --map-control-filter: invert(1);
-  --shadow-soft: 0 12px 32px rgba(0, 0, 0, .2);
-}
 
 html, body, #app {
   height: 100%; width: 100%; overflow: hidden;

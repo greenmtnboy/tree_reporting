@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 510" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round">
+  <g class="contours" opacity=".35" stroke-width=".7"><path d="M25 484c80-45 139-7 202-25s133-16 238-55M4 501c91-43 157-4 230-22s156-25 240-53M76 459c52-23 100 1 156-17s135-5 223-58" /></g>
+  <g class="botanical"><path class="sketch-wash" fill="currentColor" fill-opacity=".08" d="M276 484V218c0-32 36-32 36 0v82h23v-72c0-25 27-25 27 0v88q0 22-24 22h-26v146Z" />
+  <path d="M276 484V218c0-32 36-32 36 0v82h23v-72c0-25 27-25 27 0v88q0 22-24 22h-26v146M276 365h-35q-27 0-27-25v-59c0-24 27-24 27 0v50h35M290 475V217m8 250V223M227 288v51q0 12 30 12M349 237v75l-25 12M159 471q-14-85-62-109 63 10 76 60-7-85 17-123 16 65-2 130 34-57 77-58-49 33-64 98" />
+  <path class="pencil-detail" opacity=".6" stroke-width=".65" d="m133 439 22 3m-11-30 17 5m31-63-4 20m18 52 14-10m69-159 13-5m-15 43 13-5m-13 49 13-5m-13 58 13-5" />
+  </g>
+</svg>

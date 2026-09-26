@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 360" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round">
+  <g class="survey-lines" opacity=".35" stroke-width=".7">
+  <path d="M-40 298 420 32M-40 338 480 38M-20 380 530 62M-10 245 280 412M36 215 380 414M94 182 520 428M150 149 560 385" />
+  <path d="M18 38h85m-68-16v40M344 88h110m-18-17v40" />
+  <circle cx="436" cy="88" r="18" />
+  </g>
+  <g class="city-buildings" transform="translate(30 50)">
+  <path class="sketch-wash" fill="currentColor" fill-opacity=".08" d="m16 186 0-75 56-32 38 22v72l32-18V65l53-31 43 25v81l29-17V87l42-24 51 29v90l-175 102Z" />
+  <path d="m16 186 0-75 56-32 38 22v72M16 111l39 23 55-33M55 134v74M72 79v-8l38 22v8M142 225V65l53-31 43 25v164M142 65l43 25 53-31M185 90v163M195 34V16m-8 5h16M267 237V87l42-24 51 29v90M267 87l51 29 42-24M318 116v96M-4 199l189 110 194-113" />
+  <path class="pencil-detail" opacity=".6" stroke-width=".65" d="m26 130 18 10v15l-18-10Zm0 33 18 10v15l-18-10Zm40-21 14-8v14l-14 8Zm20-12 14-8v14l-14 8Zm-20 41 14-8v14l-14 8Zm20-12 14-8v14l-14 8ZM152 85l22 13v18l-22-13Zm0 38 22 13v18l-22-13Zm0 38 22 13v18l-22-13Zm43-62 13-8v17l-13 8Zm22-13 12-7v17l-12 7Zm-22 48 13-8v17l-13 8Zm22-13 12-7v17l-12 7Zm-22 49 13-8v17l-13 8Zm22-13 12-7v17l-12 7Zm61-51 30 17v17l-30-17Zm0 34 30 17v17l-30-17Zm49-15 23-13v19l-23 13Z" />
+  <path class="pencil-detail" opacity=".6" stroke-width=".65" d="M13 187v-77l58-34M139 225V64l55-33M188 92v160M270 239V91M321 118v95M-7 204l192 111 199-115M118 196l15-9m-15 15 15-9m128 19 10-6" />
+  </g>
+</svg>
