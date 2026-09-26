@@ -9,8 +9,8 @@ import grassland from './grassland.svg?raw'
 export const fieldSketches = {
   woodland: {
     svg: woodland, title: 'Mediterranean woodland', example: 'San Francisco · Athens',
-    motif: 'A branching spray of narrow leaves',
-    review: 'Olive-inspired leaves and side branches share exact attachment points on the curved stalk. Leaf angles follow its local direction, and each midrib connects the same base and tip. Edit woodlandScene in generators/woodland.mjs, then run pnpm artwork:generate.',
+    motif: 'A branching olive spray with narrow leaves and paired fruit',
+    review: 'Olive-inspired leaves, side branches, and fruit stems share exact attachment points on the curved stalk. Leaf angles follow its local direction; rounded olives hang in two small pairs. Edit woodlandScene in generators/woodland.mjs, then run pnpm artwork:generate.',
   },
   broadleaf: {
     svg: broadleaf, title: 'Broadleaf forest', example: 'Boston · London',

@@ -82,6 +82,9 @@ the olive-inspired narrow leaves and arching spray. Both branch roots and
 leaf bases are evaluated on the main stalk; leaf angles are relative to its
 local tangent. Terminal leaves follow their side branches, with outlines and
 midribs sharing the exact same base and tip.
+Two pairs of rounded olives hang from short stems evaluated on the same
+twig. `woodlandScene.olives` controls their attachment, offset, angle, and
+size; each fruit outline starts exactly where its stem ends.
 
 Use `pnpm artwork:generate` and `pnpm artwork:check` for both. The conifer
 and desert drawings remain hand-authored.
