@@ -2221,7 +2221,7 @@ onUnmounted(() => {
   gap: 6px;
   margin-top: 10px;
   padding-top: 8px;
-  border-top: 1px solid rgba(167, 227, 178, 0.1);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.1);
   font-size: 0.8rem;
 }
 
@@ -2390,7 +2390,7 @@ onUnmounted(() => {
   width: 44px;
   height: 44px;
   padding: 0;
-  border: 1px solid rgba(167, 227, 178, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   background: none;
   cursor: pointer;
 }

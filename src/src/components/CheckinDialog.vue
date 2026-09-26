@@ -610,14 +610,14 @@ onBeforeUnmount(() => {
 .mode-tabs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  border: 1px solid rgba(167, 227, 178, 0.22);
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
 }
 
 .mode-tab {
   padding: 9px 6px;
   background: transparent;
   border: none;
-  border-right: 1px solid rgba(167, 227, 178, 0.22);
+  border-right: 1px solid rgba(var(--accent-rgb), 0.22);
   color: var(--color-muted);
   font-family: var(--font-display);
   font-size: 0.68rem;
@@ -632,13 +632,13 @@ onBeforeUnmount(() => {
 }
 
 .mode-tab--active {
-  background: rgba(167, 227, 178, 0.14);
+  background: rgba(var(--accent-rgb), 0.14);
   color: var(--color-leaf);
 }
 
 .picker-wrap {
   height: 240px;
-  border: 1px solid rgba(167, 227, 178, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
 }
 
 .picker-wrap :deep(.location-picker) {
@@ -652,8 +652,8 @@ onBeforeUnmount(() => {
 
 .text-input {
   padding: 9px 10px;
-  background: rgba(28, 31, 36, 0.6);
-  border: 1px solid rgba(167, 227, 178, 0.22);
+  background: rgba(var(--surface-rgb), 0.6);
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
   color: var(--color-ink);
   font: inherit;
   font-size: 0.9rem;
@@ -776,7 +776,7 @@ onBeforeUnmount(() => {
   opacity: 0.45;
   cursor: not-allowed;
   background: var(--color-leaf);
-  color: #0b0f0d;
+  color: var(--color-on-accent);
 }
 
 .btn-secondary {
