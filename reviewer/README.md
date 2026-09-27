@@ -157,7 +157,7 @@ What the page shows, and what each decision means:
   tiles** are orange triangles, so a tree accepted on an overlapping tile is
   not accepted twice. Crown rings are allometric estimates, not measured
   canopies, and the legend says so.
-- **Accept** records a new tree at the crown centre (nudge it with the arrow
+- **Accept** (Enter) records a new tree at the crown centre (nudge it with WASD or the arrow
   keys; the trunk position of an inventory tree is never moved). The species
   is whatever the reviewer left in the box -- the model's label counts as
   confirmed only because a person kept it, and `speciesSource` records which.

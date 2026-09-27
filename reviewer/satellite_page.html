@@ -95,7 +95,7 @@ kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-
           <span><i style="background:#5ad37a"></i>accepted</span><span><i style="background:#ffd166"></i>duplicate</span><span><i style="background:#444"></i>not a tree</span><span><i style="background:#c0c0c0"></i>uncertain</span>
           <span id="attribution"></span>
         </div>
-        <p class="muted keys" style="font-size:12px">Crown rings are allometric estimates from DBH and genus (Tallo fits in data/raw/crown_width_coefficients.csv), not measured canopies. Detections mark crown centres; inventory points mark trunks, which can sit a few metres off a tall tree's crown. Keys: <kbd>A</kbd> accept <kbd>D</kbd> duplicate of nearest <kbd>F</kbd> not a tree <kbd>Q</kbd> uncertain <kbd>X</kbd> clear <kbd>N</kbd>/<kbd>P</kbd> next/previous <kbd>WASD</kbd>/arrows nudge crown centre (<kbd>Shift</kbd> ×5) <kbd>Z</kbd> fit <kbd>Shift+F</kbd> full screen.</p>
+        <p class="muted keys" style="font-size:12px">Crown rings are allometric estimates from DBH and genus (Tallo fits in data/raw/crown_width_coefficients.csv), not measured canopies. Detections mark crown centres; inventory points mark trunks, which can sit a few metres off a tall tree's crown. Keys: <kbd>Enter</kbd>/<kbd>Space</kbd> accept <kbd>E</kbd> duplicate of nearest <kbd>F</kbd> not a tree <kbd>Q</kbd> uncertain <kbd>X</kbd> clear <kbd>N</kbd>/<kbd>P</kbd> next/previous <kbd>WASD</kbd>/arrows nudge crown centre (<kbd>Shift</kbd> ×5) <kbd>Z</kbd> fit <kbd>Shift+F</kbd> full screen.</p>
       </div>
       <aside class="side" id="side">
         <p class="muted">Select a detection.</p>
@@ -257,7 +257,7 @@ function renderSide() {
     <div class="field"><label>Measured DBH, inches <span class="muted">(only if someone measured it)</span></label><input id="f-dbh" type="number" step="0.1" min="0" value="${o?.measuredDbhInches ?? ''}"></div>
     <div class="field"><label>Notes <span class="muted">(private)</span></label><textarea id="f-notes">${esc(o?.notes ?? '')}</textarea></div>
     <div class="decisions">
-      <button data-decision="accept" ${o?.status === 'published' ? 'disabled' : ''}>Accept as new tree <kbd>A</kbd></button>
+      <button data-decision="accept" ${o?.status === 'published' ? 'disabled' : ''}>Accept as new tree <kbd>Enter</kbd></button>
       <button data-decision="reject" class="reject" ${o?.status === 'published' ? 'disabled' : ''}>Not a tree <kbd>F</kbd></button>
       <button data-decision="uncertain" class="warn" ${o?.status === 'published' ? 'disabled' : ''}>Uncertain <kbd>Q</kbd></button>
       <button id="clear" class="ghost" ${!o || o.status === 'published' ? 'disabled' : ''}>Clear <kbd>X</kbd></button>
@@ -348,14 +348,13 @@ document.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase(); const s = e.shiftKey ? 5 : 1;
   if (k === 'z') { e.preventDefault(); fitZoom(); return; }
   if (k === 'f' && e.shiftKey) { e.preventDefault(); $('#fullscreen').click(); return; }
-  const map = { a: () => decide('accept'), f: () => decide('reject'), q: () => decide('uncertain'), d: () => decide('duplicate'), e: () => decide('duplicate'), x: clearDecision, n: () => step(1), ']': () => step(1), p: () => step(-1), '[': () => step(-1),
-    w: () => nudge(0, -s), arrowup: () => nudge(0, -s), s: () => nudge(0, s), arrowdown: () => nudge(0, s), arrowleft: () => nudge(-s, 0), arrowright: () => nudge(s, 0) };
-  if (k === 'a' && e.ctrlKey) return;
-  const fn = map[k] || (k === 'a' && null);
-  if (k === 'a' && !e.ctrlKey && e.altKey) { nudge(-s, 0); e.preventDefault(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // WASD and the arrows only move the selected crown centre; decisions sit on other keys.
+  const map = { enter: () => decide('accept'), ' ': () => decide('accept'), f: () => decide('reject'), q: () => decide('uncertain'), e: () => decide('duplicate'), x: clearDecision, n: () => step(1), ']': () => step(1), p: () => step(-1), '[': () => step(-1),
+    w: () => nudge(0, -s), arrowup: () => nudge(0, -s), s: () => nudge(0, s), arrowdown: () => nudge(0, s), a: () => nudge(-s, 0), arrowleft: () => nudge(-s, 0), d: () => nudge(s, 0), arrowright: () => nudge(s, 0) };
+  const fn = map[k];
   if (fn) { e.preventDefault(); fn(); }
 });
-// Plain "a" is accept; nudging left is Alt+A or the left arrow, since one key cannot be both.
 
 $('#threshold').addEventListener('input', () => { $('#threshold-value').textContent = fmt(threshold(), 2); render(); });
 for (const id of ['#show-inventory', '#show-crowns', '#hide-decided']) $(id).addEventListener('change', render);
