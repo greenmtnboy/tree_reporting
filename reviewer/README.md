@@ -126,6 +126,27 @@ uv run --group imagery python -m urban_tree_ml.tile_bundle_export `
 $env:SATELLITE_TILE_DIR = "$PWD/../reviewer/tiles"; cd ../reviewer; pnpm dev
 ```
 
+The directory is read recursively, so export each tile set to its own
+subdirectory (`--out ../reviewer/tiles/sf-gaps-30cm-v2`) and point one
+reviewer at the parent. The page opens on the cities with tiles
+(`/satellite#tiles`). `#city/USNYC` lists one city's tiles grouped by set, and
+`#tile/<tileId>` opens a tile; all three work as links. If the same tile id
+is in two sets, the newest file wins.
+
+`--min-score 0.1` exports candidates below the run's threshold too, so the
+page's confidence slider has something to reveal, and `--threshold` sets where
+the slider starts (the run's `confidence_threshold` otherwise).
+
+**Predict at** on the tile list fetches the newest NAIP imagery around any
+latitude/longitude, runs the model on it and adds the tile to the list
+(`imagery_model/src/urban_tree_ml/point_predict.py`, about 20 s, one at a
+time). Tiles sit on a half-tile grid, so nearby points reuse a tile, and they
+carry current trees from every city whose envelope they meet. Set
+`SATELLITE_RUN` (default: the newest complete run), `SATELLITE_THRESHOLD` and
+`SATELLITE_MIN_SCORE` (default 0.1). Point tiles ignore the training splits:
+publishing from one inside a sealed test block leaks into that block's
+evaluation.
+
 A bundle is the `TilePredictionBundleV1` contract from
 `docs/PREDICTION_CURATION_HANDOFF.md`: the chip as a PNG, the tile's affine and
 CRS, the run's above-threshold detections with stable ids
@@ -136,14 +157,16 @@ The exporter never emits sealed test-split chips or ground truth.
 What the page shows, and what each decision means:
 
 - **Detections** are pink dots at the model's crown centre with a dashed ring
-  for its DBH-derived crown estimate (the Tallo genus fit in
+  for the model's own crown-width head (`modelCrownWidthM`). A run without a
+  crown head falls back to the DBH-derived estimate (the Tallo genus fit in
   `data/raw/crown_width_coefficients.csv`, applied as `tree_predictions.preql`
-  applies it). **Inventory trees** are blue diamonds at the trunk with a solid
-  ring for their published crown prediction. **Reviewed detections from other
-  tiles** are orange triangles, so a tree accepted on an overlapping tile is
-  not accepted twice. Crown rings are allometric estimates, not measured
-  canopies, and the legend says so.
-- **Accept** records a new tree at the crown centre (nudge it with the arrow
+  applies it), and the panel shows both. A published tree records the model's
+  width as `predictedCrownWidthM`, with `crownWidthMethod` saying which it
+  was. **Inventory trees** are blue diamonds at the trunk with a solid ring for
+  their published crown prediction. **Reviewed detections from other tiles**
+  are orange triangles, so a tree accepted on an overlapping tile is not
+  accepted twice. No ring is a measured canopy, and the legend says so.
+- **Accept** (Enter) records a new tree at the crown centre (nudge it with WASD or the arrow
   keys; the trunk position of an inventory tree is never moved). The species
   is whatever the reviewer left in the box -- the model's label counts as
   confirmed only because a person kept it, and `speciesSource` records which.

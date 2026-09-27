@@ -62,12 +62,19 @@ kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-
 <main>
   <section id="view-tiles" class="hidden">
     <p class="muted">NAIP aerial tiles with the model's detections. Open a tile, decide each detection, mark the tile done, then publish the accepted ones. Nothing reaches the map until a publish, and a rejection never touches an inventory tree.</p>
-    <table><thead><tr><th>Tile</th><th>City</th><th>Imagery</th><th>Run</th><th>Detections</th><th>Inventory</th><th>Decided</th><th>Published</th><th>Done</th><th></th></tr></thead><tbody id="tiles-body"></tbody></table>
+    <form id="predict-form" class="toolbar"><label>Predict at <input id="predict-point" placeholder="42.3400, -71.1090" size="24" required></label> <button id="predict-go">Fetch NAIP &amp; predict</button> <span id="predict-state" class="muted"></span></form>
+    <div id="cities-view">
+      <table><thead><tr><th>City</th><th>Tiles</th><th>Tile sets</th></tr></thead><tbody id="cities-body"></tbody></table>
+    </div>
+    <div id="city-view" class="hidden">
+    <p><a href="#tiles">← Cities</a> <strong id="city-title"></strong></p>
+    <table><thead><tr><th>Tile</th><th>Set</th><th>Imagery</th><th>Run</th><th>Detections</th><th>Inventory</th><th>Decided</th><th>Published</th><th>Done</th><th></th></tr></thead><tbody id="tiles-body"></tbody></table>
+    </div>
   </section>
 
   <section id="view-tile" class="hidden">
     <div class="toolbar">
-      <a href="#tiles">← Tiles</a>
+      <a href="#tiles">Cities</a> <a id="tile-back" href="#tiles">← Tiles</a>
       <strong id="tile-title"></strong>
       <span id="tile-meta" class="muted"></span>
       <label>Min confidence <input id="threshold" type="range" min="0" max="1" step="0.01" value="0.35"> <span id="threshold-value">0.35</span></label>
@@ -88,13 +95,13 @@ kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-
       <div>
         <div class="viewport" id="viewport"><div class="stage" id="stage"><img id="tile-image" alt="Aerial tile"><svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg></div></div>
         <div class="legend">
-          <span><i style="background:var(--pred)"></i>detection (dashed ring: DBH-derived crown estimate)</span>
+          <span><i style="background:var(--pred)"></i>detection (dashed ring: the model's predicted crown, or a DBH-derived estimate where the run has no crown head)</span>
           <span><i style="background:var(--inv)"></i>inventory tree (ring: predicted crown from the public prediction parquet)</span>
           <span><i style="background:var(--sat)"></i>reviewed detection from another tile</span>
           <span><i style="background:#5ad37a"></i>accepted</span><span><i style="background:#ffd166"></i>duplicate</span><span><i style="background:#444"></i>not a tree</span><span><i style="background:#c0c0c0"></i>uncertain</span>
           <span id="attribution"></span>
         </div>
-        <p class="muted keys" style="font-size:12px">Crown rings are allometric estimates from DBH and genus (Tallo fits in data/raw/crown_width_coefficients.csv), not measured canopies. Detections mark crown centres; inventory points mark trunks, which can sit a few metres off a tall tree's crown. Keys: <kbd>A</kbd> accept <kbd>D</kbd> duplicate of nearest <kbd>F</kbd> not a tree <kbd>Q</kbd> uncertain <kbd>X</kbd> clear <kbd>N</kbd>/<kbd>P</kbd> next/previous <kbd>WASD</kbd>/arrows nudge crown centre (<kbd>Shift</kbd> ×5) <kbd>Z</kbd> fit <kbd>Shift+F</kbd> full screen.</p>
+        <p class="muted keys" style="font-size:12px">Detection rings are the model's predicted crown width where the run has a crown head, otherwise allometric estimates from DBH and genus (Tallo fits in data/raw/crown_width_coefficients.csv); inventory rings are always allometric. None are measured canopies. Detections mark crown centres; inventory points mark trunks, which can sit a few metres off a tall tree's crown. Keys: <kbd>Enter</kbd>/<kbd>Space</kbd> accept <kbd>E</kbd> duplicate of nearest <kbd>F</kbd> not a tree <kbd>Q</kbd> uncertain <kbd>X</kbd> clear <kbd>N</kbd>/<kbd>P</kbd> next/previous <kbd>WASD</kbd>/arrows nudge crown centre (<kbd>Shift</kbd> ×5) <kbd>Z</kbd> fit <kbd>Shift+F</kbd> full screen.</p>
       </div>
       <aside class="side" id="side">
         <p class="muted">Select a detection.</p>
@@ -120,16 +127,45 @@ async function api(path, options = {}) {
 }
 
 // ---------------------------------------------------------------- tiles list
-async function showTiles() {
+async function showCities() {
   switchView('tiles');
-  statusEl.textContent = 'Loading tiles…';
-  const rows = await api('/tiles');
-  statusEl.textContent = rows.length ? `${rows.length} tile(s)` : 'No tiles in the tile directory';
+  $('#cities-view').classList.remove('hidden'); $('#city-view').classList.add('hidden');
+  statusEl.textContent = 'Loading cities…';
+  const rows = await api('/cities');
+  statusEl.textContent = rows.length ? `${rows.reduce((n, c) => n + c.tileCount, 0)} tile(s) in ${rows.length} cities` : 'No tiles in the tile directory';
+  $('#cities-body').innerHTML = rows.map((c) => `<tr><td><a href="#city/${encodeURIComponent(c.city)}">${esc(c.city)}</a></td><td>${c.tileCount}</td><td>${c.collections.map((s) => esc(s || '(top level)')).join(', ')}</td></tr>`).join('');
+}
+
+async function showTiles(city) {
+  switchView('tiles');
+  $('#cities-view').classList.add('hidden'); $('#city-view').classList.remove('hidden');
+  $('#city-title').textContent = city;
+  $('#tiles-body').innerHTML = '';
+  statusEl.textContent = `Loading ${city} tiles…`;
+  const rows = await api('/tiles?city=' + encodeURIComponent(city));
+  statusEl.textContent = rows.length ? `${rows.length} ${city} tile(s)` : `No ${city} tiles`;
   $('#tiles-body').innerHTML = rows.map((t) => {
     const decided = t.counts.accept + t.counts.duplicate + t.counts.reject + t.counts.uncertain;
-    return `<tr><td><a href="#tile/${encodeURIComponent(t.tileId)}">${esc(t.chipId || t.tileId)}</a><div class="muted">${esc(t.tileId)}</div></td><td>${esc(t.city)}</td><td>${esc(t.acquisitionStart)}${t.acquisitionEnd !== t.acquisitionStart ? ' – ' + esc(t.acquisitionEnd) : ''}<div class="muted">${esc(t.imageryVersion)}</div></td><td>${esc(t.runId)}</td><td>${t.status === 'available' ? t.predictionCount : '<span class="pill">unavailable</span>'}</td><td>${t.inventoryCount}</td><td>${decided}/${t.predictionCount} <span class="muted">(${t.counts.accept} accept, ${t.counts.duplicate} dup, ${t.counts.reject} no, ${t.counts.uncertain} ?)</span></td><td>${t.counts.published}</td><td>${t.done ? '✓' : ''}</td><td><a href="#tile/${encodeURIComponent(t.tileId)}">Open</a></td></tr>`;
+    return `<tr><td><a href="#tile/${encodeURIComponent(t.tileId)}">${esc(t.chipId || t.tileId)}</a><div class="muted">${esc(t.tileId)}</div></td><td>${esc(t.collection || '(top level)')}</td><td>${esc(t.acquisitionStart)}${t.acquisitionEnd !== t.acquisitionStart ? ' – ' + esc(t.acquisitionEnd) : ''}<div class="muted">${esc(t.imageryVersion)}</div></td><td>${esc(t.runId)}</td><td>${t.status === 'available' ? t.predictionCount : '<span class="pill">unavailable</span>'}</td><td>${t.inventoryCount}</td><td>${decided}/${t.predictionCount} <span class="muted">(${t.counts.accept} accept, ${t.counts.duplicate} dup, ${t.counts.reject} no, ${t.counts.uncertain} ?)</span></td><td>${t.counts.published}</td><td>${t.done ? '✓' : ''}</td><td><a href="#tile/${encodeURIComponent(t.tileId)}">Open</a></td></tr>`;
   }).join('');
 }
+
+$('#predict-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const parts = $('#predict-point').value.split(/[\s,]+/).filter(Boolean).map(Number);
+  if (parts.length !== 2 || parts.some(Number.isNaN)) { $('#predict-state').textContent = 'Enter "lat, lon"'; return; }
+  $('#predict-go').disabled = true;
+  $('#predict-state').textContent = 'Fetching imagery and running the model (~20 s)…';
+  try {
+    const tile = await api('/predict', { method: 'POST', body: JSON.stringify({ lat: parts[0], lon: parts[1] }) });
+    $('#predict-state').textContent = `${tile.aboveThreshold} detections, ${tile.inventoryTrees} current trees`;
+    location.hash = '#tile/' + encodeURIComponent(tile.tileId);
+  } catch (error) {
+    $('#predict-state').textContent = error.message;
+  } finally {
+    $('#predict-go').disabled = false;
+  }
+});
 
 // ---------------------------------------------------------------- tile view
 const T = { bundle: null, observations: new Map(), nearby: [], selected: null, dirtyCenter: null, saving: 0 };
@@ -155,6 +191,8 @@ async function showTile(tileId) {
   T.observations = new Map(data.observations.map((o) => [o.predictionId, o]));
   T.nearby = data.nearbyObservations;
   const b = T.bundle;
+  $('#tile-back').href = '#city/' + encodeURIComponent(b.city);
+  $('#tile-back').textContent = '← ' + b.city + ' tiles';
   $('#tile-title').textContent = b.chipId || b.tileId;
   $('#tile-meta').textContent = `${b.city} · ${b.provider.toUpperCase()} ${b.acquisitionStart}${b.acquisitionEnd !== b.acquisitionStart ? ' – ' + b.acquisitionEnd : ''} · ${b.image.resolutionM} m/px · run ${b.predictionLayer.runId} · inventory ${b.inventoryVersion}`;
   $('#attribution').textContent = b.attribution || '';
@@ -193,7 +231,8 @@ function render() {
     const o = T.observations.get(p.predictionId);
     const center = (T.selected === p.predictionId && T.dirtyCenter) || o?.crownCenter || { xPx: p.xPx, yPx: p.yPx };
     const cls = ['pred', o?.decision, o?.status === 'published' ? 'published' : '', T.selected === p.predictionId ? 'selected' : ''].filter(Boolean).join(' ');
-    const r = p.crownWidthM ? (p.crownWidthM / 2) * ppm : 0;
+    const crown = p.modelCrownWidthM ?? p.crownWidthM;
+    const r = crown ? (crown / 2) * ppm : 0;
     let link = '';
     if (o?.decision === 'duplicate' && o.duplicateOf) {
       const t = b.inventoryTrees.find((x) => x.treeId === o.duplicateOf.treeId);
@@ -211,6 +250,7 @@ overlay.addEventListener('click', (e) => {
 });
 
 function select(predictionId) {
+  flushNudge();
   T.selected = predictionId; T.dirtyCenter = null;
   render(); renderSide();
 }
@@ -232,14 +272,15 @@ function renderSide() {
       <dt>Genus</dt><dd>${esc(p.genus)} <span class="muted">(${fmt(p.genusConfidence, 2)})</span></dd>
       <dt>Centre confidence</dt><dd>${fmt(p.centerConfidence, 2)}</dd>
       <dt>DBH estimate</dt><dd>${fmt(p.dbhInches)} in <span class="muted">— model estimate, never published as measured</span></dd>
-      <dt>Crown estimate</dt><dd>${p.crownWidthM ? `${fmt(p.crownWidthM)} m <span class="muted">(Tallo ${esc(p.crownFit?.level)} fit, ${esc(p.crownFit?.taxon)}, n=${p.crownFit?.n})</span>` : 'unavailable'}</dd>
-      <dt>Crown centre</dt><dd>${fmt(center.xPx, 0)}, ${fmt(center.yPx, 0)} px${center.xPx !== p.xPx || center.yPx !== p.yPx ? ' <span class="pill">moved</span>' : ''} · ${fmt(p.latitude, 6)}, ${fmt(p.longitude, 6)}</dd>
+      <dt>Crown (model)</dt><dd>${p.modelCrownWidthM ? `${fmt(p.modelCrownWidthM)} m` : 'no crown head'}</dd>
+      <dt>Crown (from DBH)</dt><dd>${p.crownWidthM ? `${fmt(p.crownWidthM)} m <span class="muted">(Tallo ${esc(p.crownFit?.level)} fit, ${esc(p.crownFit?.taxon)}, n=${p.crownFit?.n})</span>` : 'unavailable'}</dd>
+      <dt>Crown centre</dt><dd id="side-center">${centerText(p, center)}</dd>
     </dl>
     <div class="field"><label>Confirmed species <span class="muted">(blank = unidentified; the model label is kept only if you leave it)</span></label><input id="f-species" value="${esc(species ?? '')}" placeholder="Latin binomial"></div>
     <div class="field"><label>Measured DBH, inches <span class="muted">(only if someone measured it)</span></label><input id="f-dbh" type="number" step="0.1" min="0" value="${o?.measuredDbhInches ?? ''}"></div>
     <div class="field"><label>Notes <span class="muted">(private)</span></label><textarea id="f-notes">${esc(o?.notes ?? '')}</textarea></div>
     <div class="decisions">
-      <button data-decision="accept" ${o?.status === 'published' ? 'disabled' : ''}>Accept as new tree <kbd>A</kbd></button>
+      <button data-decision="accept" ${o?.status === 'published' ? 'disabled' : ''}>Accept as new tree <kbd>Enter</kbd></button>
       <button data-decision="reject" class="reject" ${o?.status === 'published' ? 'disabled' : ''}>Not a tree <kbd>F</kbd></button>
       <button data-decision="uncertain" class="warn" ${o?.status === 'published' ? 'disabled' : ''}>Uncertain <kbd>Q</kbd></button>
       <button id="clear" class="ghost" ${!o || o.status === 'published' ? 'disabled' : ''}>Clear <kbd>X</kbd></button>
@@ -251,6 +292,10 @@ function renderSide() {
   side.querySelectorAll('[data-decision]').forEach((btn) => btn.addEventListener('click', () => decide(btn.dataset.decision)));
   side.querySelectorAll('[data-dup]').forEach((btn) => btn.addEventListener('click', () => decide('duplicate', btn.dataset.dup)));
   $('#clear').addEventListener('click', clearDecision);
+}
+
+function centerText(p, center) {
+  return `${fmt(center.xPx, 0)}, ${fmt(center.yPx, 0)} px${center.xPx !== p.xPx || center.yPx !== p.yPx ? ' <span class="pill">moved</span>' : ''} · ${fmt(p.latitude, 6)}, ${fmt(p.longitude, 6)}`;
 }
 
 function drawCloseup(center) {
@@ -282,20 +327,29 @@ function formInput(decision, duplicateOfTreeId) {
 
 async function decide(decision, duplicateOfTreeId) {
   const p = selectedPrediction(); if (!p) return;
+  clearTimeout(nudgeTimer); nudgeTimer = null; // the decision carries the moved centre
   if (decision === 'duplicate' && !duplicateOfTreeId) { duplicateOfTreeId = p.nearest?.[0]?.treeId; if (!duplicateOfTreeId) { setSave('No inventory tree on this tile to link to', true); return; } }
   await save(p, formInput(decision, duplicateOfTreeId));
 }
 
 async function save(p, body) {
   T.saving += 1; setSave('Saving…');
+  const sentCenter = T.dirtyCenter;
   try {
     const { observation } = await api(`/tiles/${encodeURIComponent(T.bundle.tileId)}/observations/${encodeURIComponent(p.predictionId)}`, { method: 'PUT', body: JSON.stringify(body) });
-    T.observations.set(p.predictionId, observation); T.dirtyCenter = null;
+    T.observations.set(p.predictionId, observation);
+    // Nudges made while this save was in flight stay dirty; only the position we sent is now saved.
+    if (T.dirtyCenter === sentCenter) T.dirtyCenter = null;
     setSave('Saved');
   } catch (err) {
     setSave(err.message, true);
     if (err.status === 409) { const fresh = await api('/tiles/' + encodeURIComponent(T.bundle.tileId)); T.observations = new Map(fresh.observations.map((o) => [o.predictionId, o])); }
-  } finally { T.saving -= 1; render(); renderSide(); }
+  } finally {
+    T.saving -= 1;
+    render();
+    // Rebuilding the panel would drop focus and half-typed fields; skip it while a move is still pending.
+    if (!T.dirtyCenter || T.selected !== p.predictionId) renderSide();
+  }
 }
 
 async function clearDecision() {
@@ -306,15 +360,28 @@ async function clearDecision() {
   render(); renderSide();
 }
 
+// A run of nudges saves once, after a pause, or at once when the selection,
+// decision or tile changes -- never one save per key.
+const NUDGE_SAVE_MS = 1000;
 let nudgeTimer = null;
+function flushNudge() {
+  if (!nudgeTimer) return;
+  clearTimeout(nudgeTimer); nudgeTimer = null;
+  const p = selectedPrediction(); const o = p && T.observations.get(p.predictionId);
+  if (!p || !o || !T.dirtyCenter) return;
+  if (T.saving) { nudgeTimer = setTimeout(flushNudge, 200); return; }
+  save(p, formInput(o.decision, o.duplicateOfTreeId));
+}
 function nudge(dx, dy) {
   const p = selectedPrediction(); if (!p) return;
   const o = T.observations.get(p.predictionId); if (o?.status === 'published') return;
   const cur = T.dirtyCenter || o?.crownCenter || { xPx: p.xPx, yPx: p.yPx };
   T.dirtyCenter = { xPx: Math.max(0, Math.min(T.bundle.image.width, cur.xPx + dx)), yPx: Math.max(0, Math.min(T.bundle.image.height, cur.yPx + dy)) };
-  render(); renderSide();
+  render();
+  const centerEl = $('#side-center'); if (centerEl) centerEl.innerHTML = centerText(p, T.dirtyCenter);
+  drawCloseup(T.dirtyCenter);
   // Only an existing decision is re-saved on a nudge; a bare move is kept locally until a decision is made.
-  if (o) { clearTimeout(nudgeTimer); nudgeTimer = setTimeout(() => save(p, formInput(o.decision, o.duplicateOfTreeId)), 400); }
+  if (o) { setSave('Moved — saving shortly'); clearTimeout(nudgeTimer); nudgeTimer = setTimeout(flushNudge, NUDGE_SAVE_MS); }
 }
 
 function step(delta) {
@@ -330,14 +397,13 @@ document.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase(); const s = e.shiftKey ? 5 : 1;
   if (k === 'z') { e.preventDefault(); fitZoom(); return; }
   if (k === 'f' && e.shiftKey) { e.preventDefault(); $('#fullscreen').click(); return; }
-  const map = { a: () => decide('accept'), f: () => decide('reject'), q: () => decide('uncertain'), d: () => decide('duplicate'), e: () => decide('duplicate'), x: clearDecision, n: () => step(1), ']': () => step(1), p: () => step(-1), '[': () => step(-1),
-    w: () => nudge(0, -s), arrowup: () => nudge(0, -s), s: () => nudge(0, s), arrowdown: () => nudge(0, s), arrowleft: () => nudge(-s, 0), arrowright: () => nudge(s, 0) };
-  if (k === 'a' && e.ctrlKey) return;
-  const fn = map[k] || (k === 'a' && null);
-  if (k === 'a' && !e.ctrlKey && e.altKey) { nudge(-s, 0); e.preventDefault(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // WASD and the arrows only move the selected crown centre; decisions sit on other keys.
+  const map = { enter: () => decide('accept'), ' ': () => decide('accept'), f: () => decide('reject'), q: () => decide('uncertain'), e: () => decide('duplicate'), x: clearDecision, n: () => step(1), ']': () => step(1), p: () => step(-1), '[': () => step(-1),
+    w: () => nudge(0, -s), arrowup: () => nudge(0, -s), s: () => nudge(0, s), arrowdown: () => nudge(0, s), a: () => nudge(-s, 0), arrowleft: () => nudge(-s, 0), d: () => nudge(s, 0), arrowright: () => nudge(s, 0) };
+  const fn = map[k];
   if (fn) { e.preventDefault(); fn(); }
 });
-// Plain "a" is accept; nudging left is Alt+A or the left arrow, since one key cannot be both.
 
 $('#threshold').addEventListener('input', () => { $('#threshold-value').textContent = fmt(threshold(), 2); render(); });
 for (const id of ['#show-inventory', '#show-crowns', '#hide-decided']) $(id).addEventListener('change', render);
@@ -394,11 +460,15 @@ $('#republish').addEventListener('click', async (e) => {
 
 // ---------------------------------------------------------------- routing
 function route() {
+  flushNudge();
   const h = location.hash || '#tiles';
-  const run = h.startsWith('#tile/') ? showTile(decodeURIComponent(h.slice(6))) : h === '#queue' ? showQueue() : showTiles();
+  const run = h.startsWith('#tile/') ? showTile(decodeURIComponent(h.slice(6)))
+    : h.startsWith('#city/') ? showTiles(decodeURIComponent(h.slice(6)))
+    : h === '#queue' ? showQueue() : showCities();
   run.catch((err) => { statusEl.textContent = 'Error: ' + err.message; });
 }
 window.addEventListener('hashchange', route);
+window.addEventListener('beforeunload', (e) => { if (nudgeTimer) { flushNudge(); e.preventDefault(); } });
 route();
 </script>
 </body>

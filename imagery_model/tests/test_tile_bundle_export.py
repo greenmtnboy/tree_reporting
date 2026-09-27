@@ -150,6 +150,24 @@ def test_build_prediction_resolves_taxa_with_the_runs_taxonomy():
     )["species"] is None
 
 
+def test_build_prediction_carries_the_models_crown_beside_the_allometric_one():
+    affine = export.tile_affine(RASTER_AFFINE, 0, 0)
+    taxonomy = {"genera": ["Platanus"], "species": ["Platanus x hispanica"]}
+    row = {
+        "chip_id": "r0_c0", "output_x": 1, "output_y": 2, "score": 0.5, "dbh_in": 7.9,
+        "genus_id": 0, "species_id": 0, "crown_diameter_m": 6.4,
+    }
+    coefficients = export.CrownCoefficients(COEFFICIENT_ROWS)
+    kwargs = dict(taxonomy=taxonomy, stride=2, affine=affine, crs=CRS, coefficients=coefficients, inventory=[])
+    prediction = export.build_prediction(row, **kwargs)
+    assert prediction["modelCrownWidthM"] == 6.4
+    assert prediction["modelCrownWidthMethod"] == export.MODEL_CROWN_METHOD
+    assert prediction["crownWidthMethod"] == export.CROWN_WIDTH_METHOD
+    for missing in (None, float("nan"), 0.0):
+        row["crown_diameter_m"] = missing
+        assert export.build_prediction(row, **kwargs)["modelCrownWidthM"] is None
+
+
 def test_inventory_position_role_follows_the_source():
     trunk = export.inventory_tree("sf-1", "SF_OPENDATA", "Acer", 10, 37.8, -122.4, None, None, 5.0, "genus", "measured")
     osm = export.inventory_tree("osm-1", "OSM_USSFO", None, None, 37.8, -122.4, None, None, None, "none", None)

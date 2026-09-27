@@ -1430,6 +1430,7 @@ def satellite_source_for(city_code: str) -> str:
 SATELLITE_DATA_SOURCES: dict[str, str] = {
     "USSFO": satellite_source_for("USSFO"),
     "USBOS": satellite_source_for("USBOS"),
+    "USNYC": satellite_source_for("USNYC"),
 }
 
 DATA_SOURCES: tuple[str, ...] = tuple(

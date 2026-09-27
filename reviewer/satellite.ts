@@ -11,7 +11,8 @@
  * as approval is for photo submissions in server.ts.
  *
  * Bundles are produced by `imagery_model/src/urban_tree_ml/tile_bundle_export.py`
- * and read from `SATELLITE_TILE_DIR` (default: reviewer/fixtures/tiles).
+ * and read from `SATELLITE_TILE_DIR` (default: reviewer/fixtures/tiles) and
+ * every directory below it, one tile set per subdirectory.
  * The contract is `TilePredictionBundle` below; `assertBundle` refuses what
  * the exporter's `validate_bundle` refuses, and the two are kept in step.
  *
@@ -69,6 +70,9 @@ export interface BundlePrediction {
   crownWidthM?: number | null
   crownWidthMethod?: string | null
   crownFit?: { level: string; taxon: string; n: number } | null
+  /** The model's own crown-width head, when the run has one. */
+  modelCrownWidthM?: number | null
+  modelCrownWidthMethod?: string | null
   candidateTreeIds?: string[]
   speciesTop?: (string | null)[]
 }
@@ -281,8 +285,11 @@ export interface ObservationRecord {
   centerConfidence: number
   predictedDbhInches: number | null
   measuredDbhInches: number | null
+  /** The model's crown head when the run has one, else the Tallo estimate from DBH. */
   predictedCrownWidthM: number | null
   crownWidthMethod: string | null
+  /** The Tallo estimate from the model's DBH, kept for comparison. */
+  allometricCrownWidthM: number | null
   /** Where the row publishes: the crown centre, or the linked tree's trunk. */
   latitude: number
   longitude: number
@@ -406,8 +413,11 @@ export function buildObservation(
     centerConfidence: prediction.centerConfidence,
     predictedDbhInches: prediction.dbhInches ?? null,
     measuredDbhInches: input.measuredDbhInches ?? null,
-    predictedCrownWidthM: prediction.crownWidthM ?? null,
-    crownWidthMethod: prediction.crownWidthMethod ?? null,
+    predictedCrownWidthM: prediction.modelCrownWidthM ?? prediction.crownWidthM ?? null,
+    crownWidthMethod: prediction.modelCrownWidthM != null
+      ? prediction.modelCrownWidthMethod ?? 'model_crown_head'
+      : prediction.crownWidthMethod ?? null,
+    allometricCrownWidthM: prediction.crownWidthM ?? null,
     ...position,
     crownCenter,
     duplicateOfTreeId: duplicateOf?.treeId ?? null,
@@ -436,6 +446,8 @@ export interface ExportRow {
   predictedDbhInches: number | null
   measuredDbhInches: number | null
   predictedCrownWidthM: number | null
+  /** model_crown_head is read from the image; tallo_* is allometric from the model's DBH. */
+  crownWidthMethod: string | null
   duplicateOfTreeId: string | null
   tileId: string
   imageryVersion: string
@@ -462,6 +474,7 @@ export function exportRow(published: Record<string, unknown>): ExportRow {
     predictedDbhInches: (published.predictedDbhInches as number | null) ?? null,
     measuredDbhInches: (published.measuredDbhInches as number | null) ?? null,
     predictedCrownWidthM: (published.predictedCrownWidthM as number | null) ?? null,
+    crownWidthMethod: (published.crownWidthMethod as string | null) ?? null,
     duplicateOfTreeId: (published.duplicateOfTreeId as string | null) ?? null,
     tileId: String(published.tileId),
     imageryVersion: String(published.imageryVersion),
@@ -506,6 +519,7 @@ export function publishedTreeFrom(observation: ObservationRecord): Record<string
     predictedDbhInches: observation.predictedDbhInches,
     measuredDbhInches: observation.measuredDbhInches,
     predictedCrownWidthM: observation.predictedCrownWidthM,
+    crownWidthMethod: observation.crownWidthMethod,
     duplicateOfTreeId: observation.duplicateOfTreeId,
     tileId: observation.tileId,
     imageryVersion: observation.imageryVersion,
@@ -530,27 +544,84 @@ export interface TileSummary {
   status: 'available' | 'unavailable'
   predictionCount: number
   inventoryCount: number
+  /** The tile set: the subdirectory of the tile directory it was read from, '' at the top. */
+  collection: string
 }
 
+export interface CitySummary {
+  city: string
+  tileCount: number
+  collections: string[]
+}
+
+/**
+ * The bundles under a tile directory, at any depth, so one reviewer serves
+ * every exported set.  A tile id names a place, imagery and chip, not an
+ * export, so the same tile can sit in two sets (the committed fixtures were
+ * copied out of exports); the newest file wins, as a re-export would.
+ */
 export class TileStore {
   private cache = new Map<string, { mtimeMs: number; bundle: TilePredictionBundle }>()
+  private files = new Map<string, string>()
 
   constructor(readonly dir: string) {}
 
-  list(): TileSummary[] {
-    if (!existsSync(this.dir)) return []
-    return readdirSync(this.dir)
-      .filter((name) => name.endsWith('.json'))
-      .map((name) => this.get(name.slice(0, -'.json'.length)))
-      .filter((b): b is TilePredictionBundle => b !== null)
-      .map(summarize)
-      .sort((x, y) => x.tileId.localeCompare(y.tileId))
+  private index(): Map<string, string> {
+    const found = new Map<string, { file: string; mtimeMs: number }>()
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          walk(full)
+        } else if (entry.name.endsWith('.json')) {
+          const tileId = entry.name.slice(0, -'.json'.length)
+          const mtimeMs = statSync(full).mtimeMs
+          const seen = found.get(tileId)
+          if (!seen || mtimeMs > seen.mtimeMs) found.set(tileId, { file: full, mtimeMs })
+        }
+      }
+    }
+    if (existsSync(this.dir)) walk(this.dir)
+    this.files = new Map([...found].map(([tileId, { file }]) => [tileId, file]))
+    return this.files
+  }
+
+  private file(tileId: string): string | null {
+    const known = this.files.get(tileId)
+    if (known && existsSync(known)) return known
+    return this.index().get(tileId) ?? null
+  }
+
+  private collection(file: string): string {
+    return path.relative(this.dir, path.dirname(file)).split(path.sep).join('/')
+  }
+
+  /** Every tile, or one city's (case-insensitive), grouped by tile set. */
+  list(city?: string): TileSummary[] {
+    const wanted = city?.toUpperCase()
+    return [...this.index()]
+      .map(([tileId, file]) => ({ bundle: this.get(tileId), file }))
+      .filter((t): t is { bundle: TilePredictionBundle; file: string } =>
+        t.bundle !== null && (!wanted || t.bundle.city.toUpperCase() === wanted))
+      .map(({ bundle, file }) => summarize(bundle, this.collection(file)))
+      .sort((x, y) => x.collection.localeCompare(y.collection) || x.tileId.localeCompare(y.tileId))
+  }
+
+  cities(): CitySummary[] {
+    const byCity = new Map<string, CitySummary>()
+    for (const tile of this.list()) {
+      const entry = byCity.get(tile.city) ?? { city: tile.city, tileCount: 0, collections: [] }
+      entry.tileCount += 1
+      if (!entry.collections.includes(tile.collection)) entry.collections.push(tile.collection)
+      byCity.set(tile.city, entry)
+    }
+    return [...byCity.values()].sort((x, y) => x.city.localeCompare(y.city))
   }
 
   get(tileId: string): TilePredictionBundle | null {
     if (!/^[A-Za-z0-9._:-]+$/.test(tileId)) return null
-    const file = path.join(this.dir, `${tileId}.json`)
-    if (!existsSync(file)) return null
+    const file = this.file(tileId)
+    if (!file) return null
     const mtimeMs = statSync(file).mtimeMs
     const cached = this.cache.get(tileId)
     if (cached && cached.mtimeMs === mtimeMs) return cached.bundle
@@ -562,14 +633,15 @@ export class TileStore {
 
   imagePath(tileId: string): string | null {
     const bundle = this.get(tileId)
-    if (!bundle) return null
-    const name = path.basename(bundle.image.url)
-    const file = path.join(this.dir, name)
+    const json = bundle && this.file(tileId)
+    if (!bundle || !json) return null
+    // The PNG sits beside its bundle, in whichever set that is.
+    const file = path.join(path.dirname(json), path.basename(bundle.image.url))
     return existsSync(file) ? file : null
   }
 }
 
-export function summarize(bundle: TilePredictionBundle): TileSummary {
+export function summarize(bundle: TilePredictionBundle, collection = ''): TileSummary {
   return {
     tileId: bundle.tileId,
     city: bundle.city,
@@ -581,6 +653,7 @@ export function summarize(bundle: TilePredictionBundle): TileSummary {
     status: bundle.predictionLayer.status,
     predictionCount: bundle.predictionLayer.predictions.length,
     inventoryCount: bundle.inventoryTrees.length,
+    collection,
   }
 }
 
@@ -665,9 +738,19 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
     return publishedRef.id
   }
 
-  router.get('/tiles', async (_req, res, next) => {
+  router.get('/cities', (_req, res, next) => {
     try {
-      const summaries = tiles.list()
+      res.json(tiles.cities())
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // `?city=` narrows the listing to one city: each row costs two Firestore
+  // reads, and the tile directory holds hundreds of tiles across its sets.
+  router.get('/tiles', async (req, res, next) => {
+    try {
+      const summaries = tiles.list(typeof req.query.city === 'string' ? req.query.city : undefined)
       const rows = await Promise.all(summaries.map(async (summary) => {
         const [observations, review] = await Promise.all([
           observationsForTile(summary.tileId),
