@@ -150,13 +150,15 @@ The exporter never emits sealed test-split chips or ground truth.
 What the page shows, and what each decision means:
 
 - **Detections** are pink dots at the model's crown centre with a dashed ring
-  for its DBH-derived crown estimate (the Tallo genus fit in
+  for the model's own crown-width head (`modelCrownWidthM`). A run without a
+  crown head falls back to the DBH-derived estimate (the Tallo genus fit in
   `data/raw/crown_width_coefficients.csv`, applied as `tree_predictions.preql`
-  applies it). **Inventory trees** are blue diamonds at the trunk with a solid
-  ring for their published crown prediction. **Reviewed detections from other
-  tiles** are orange triangles, so a tree accepted on an overlapping tile is
-  not accepted twice. Crown rings are allometric estimates, not measured
-  canopies, and the legend says so.
+  applies it), and the panel shows both. A published tree records the model's
+  width as `predictedCrownWidthM`, with `crownWidthMethod` saying which it
+  was. **Inventory trees** are blue diamonds at the trunk with a solid ring for
+  their published crown prediction. **Reviewed detections from other tiles**
+  are orange triangles, so a tree accepted on an overlapping tile is not
+  accepted twice. No ring is a measured canopy, and the legend says so.
 - **Accept** (Enter) records a new tree at the crown centre (nudge it with WASD or the arrow
   keys; the trunk position of an inventory tree is never moved). The species
   is whatever the reviewer left in the box -- the model's label counts as

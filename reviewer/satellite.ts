@@ -69,6 +69,9 @@ export interface BundlePrediction {
   crownWidthM?: number | null
   crownWidthMethod?: string | null
   crownFit?: { level: string; taxon: string; n: number } | null
+  /** The model's own crown-width head, when the run has one. */
+  modelCrownWidthM?: number | null
+  modelCrownWidthMethod?: string | null
   candidateTreeIds?: string[]
   speciesTop?: (string | null)[]
 }
@@ -281,8 +284,11 @@ export interface ObservationRecord {
   centerConfidence: number
   predictedDbhInches: number | null
   measuredDbhInches: number | null
+  /** The model's crown head when the run has one, else the Tallo estimate from DBH. */
   predictedCrownWidthM: number | null
   crownWidthMethod: string | null
+  /** The Tallo estimate from the model's DBH, kept for comparison. */
+  allometricCrownWidthM: number | null
   /** Where the row publishes: the crown centre, or the linked tree's trunk. */
   latitude: number
   longitude: number
@@ -406,8 +412,11 @@ export function buildObservation(
     centerConfidence: prediction.centerConfidence,
     predictedDbhInches: prediction.dbhInches ?? null,
     measuredDbhInches: input.measuredDbhInches ?? null,
-    predictedCrownWidthM: prediction.crownWidthM ?? null,
-    crownWidthMethod: prediction.crownWidthMethod ?? null,
+    predictedCrownWidthM: prediction.modelCrownWidthM ?? prediction.crownWidthM ?? null,
+    crownWidthMethod: prediction.modelCrownWidthM != null
+      ? prediction.modelCrownWidthMethod ?? 'model_crown_head'
+      : prediction.crownWidthMethod ?? null,
+    allometricCrownWidthM: prediction.crownWidthM ?? null,
     ...position,
     crownCenter,
     duplicateOfTreeId: duplicateOf?.treeId ?? null,

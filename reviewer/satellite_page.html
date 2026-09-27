@@ -89,13 +89,13 @@ kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-
       <div>
         <div class="viewport" id="viewport"><div class="stage" id="stage"><img id="tile-image" alt="Aerial tile"><svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg></div></div>
         <div class="legend">
-          <span><i style="background:var(--pred)"></i>detection (dashed ring: DBH-derived crown estimate)</span>
+          <span><i style="background:var(--pred)"></i>detection (dashed ring: the model's predicted crown, or a DBH-derived estimate where the run has no crown head)</span>
           <span><i style="background:var(--inv)"></i>inventory tree (ring: predicted crown from the public prediction parquet)</span>
           <span><i style="background:var(--sat)"></i>reviewed detection from another tile</span>
           <span><i style="background:#5ad37a"></i>accepted</span><span><i style="background:#ffd166"></i>duplicate</span><span><i style="background:#444"></i>not a tree</span><span><i style="background:#c0c0c0"></i>uncertain</span>
           <span id="attribution"></span>
         </div>
-        <p class="muted keys" style="font-size:12px">Crown rings are allometric estimates from DBH and genus (Tallo fits in data/raw/crown_width_coefficients.csv), not measured canopies. Detections mark crown centres; inventory points mark trunks, which can sit a few metres off a tall tree's crown. Keys: <kbd>Enter</kbd>/<kbd>Space</kbd> accept <kbd>E</kbd> duplicate of nearest <kbd>F</kbd> not a tree <kbd>Q</kbd> uncertain <kbd>X</kbd> clear <kbd>N</kbd>/<kbd>P</kbd> next/previous <kbd>WASD</kbd>/arrows nudge crown centre (<kbd>Shift</kbd> ×5) <kbd>Z</kbd> fit <kbd>Shift+F</kbd> full screen.</p>
+        <p class="muted keys" style="font-size:12px">Detection rings are the model's predicted crown width where the run has a crown head, otherwise allometric estimates from DBH and genus (Tallo fits in data/raw/crown_width_coefficients.csv); inventory rings are always allometric. None are measured canopies. Detections mark crown centres; inventory points mark trunks, which can sit a few metres off a tall tree's crown. Keys: <kbd>Enter</kbd>/<kbd>Space</kbd> accept <kbd>E</kbd> duplicate of nearest <kbd>F</kbd> not a tree <kbd>Q</kbd> uncertain <kbd>X</kbd> clear <kbd>N</kbd>/<kbd>P</kbd> next/previous <kbd>WASD</kbd>/arrows nudge crown centre (<kbd>Shift</kbd> ×5) <kbd>Z</kbd> fit <kbd>Shift+F</kbd> full screen.</p>
       </div>
       <aside class="side" id="side">
         <p class="muted">Select a detection.</p>
@@ -211,7 +211,8 @@ function render() {
     const o = T.observations.get(p.predictionId);
     const center = (T.selected === p.predictionId && T.dirtyCenter) || o?.crownCenter || { xPx: p.xPx, yPx: p.yPx };
     const cls = ['pred', o?.decision, o?.status === 'published' ? 'published' : '', T.selected === p.predictionId ? 'selected' : ''].filter(Boolean).join(' ');
-    const r = p.crownWidthM ? (p.crownWidthM / 2) * ppm : 0;
+    const crown = p.modelCrownWidthM ?? p.crownWidthM;
+    const r = crown ? (crown / 2) * ppm : 0;
     let link = '';
     if (o?.decision === 'duplicate' && o.duplicateOf) {
       const t = b.inventoryTrees.find((x) => x.treeId === o.duplicateOf.treeId);
@@ -250,7 +251,8 @@ function renderSide() {
       <dt>Genus</dt><dd>${esc(p.genus)} <span class="muted">(${fmt(p.genusConfidence, 2)})</span></dd>
       <dt>Centre confidence</dt><dd>${fmt(p.centerConfidence, 2)}</dd>
       <dt>DBH estimate</dt><dd>${fmt(p.dbhInches)} in <span class="muted">— model estimate, never published as measured</span></dd>
-      <dt>Crown estimate</dt><dd>${p.crownWidthM ? `${fmt(p.crownWidthM)} m <span class="muted">(Tallo ${esc(p.crownFit?.level)} fit, ${esc(p.crownFit?.taxon)}, n=${p.crownFit?.n})</span>` : 'unavailable'}</dd>
+      <dt>Crown (model)</dt><dd>${p.modelCrownWidthM ? `${fmt(p.modelCrownWidthM)} m` : 'no crown head'}</dd>
+      <dt>Crown (from DBH)</dt><dd>${p.crownWidthM ? `${fmt(p.crownWidthM)} m <span class="muted">(Tallo ${esc(p.crownFit?.level)} fit, ${esc(p.crownFit?.taxon)}, n=${p.crownFit?.n})</span>` : 'unavailable'}</dd>
       <dt>Crown centre</dt><dd>${fmt(center.xPx, 0)}, ${fmt(center.yPx, 0)} px${center.xPx !== p.xPx || center.yPx !== p.yPx ? ' <span class="pill">moved</span>' : ''} · ${fmt(p.latitude, 6)}, ${fmt(p.longitude, 6)}</dd>
     </dl>
     <div class="field"><label>Confirmed species <span class="muted">(blank = unidentified; the model label is kept only if you leave it)</span></label><input id="f-species" value="${esc(species ?? '')}" placeholder="Latin binomial"></div>

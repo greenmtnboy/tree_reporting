@@ -94,6 +94,18 @@ test('an accepted detection publishes at its crown centre with the confirmed spe
   assert.equal(blank.speciesSource, null)
 })
 
+test('the model crown is what publishes, with the allometric estimate kept beside it', () => {
+  const bundle = fixture()
+  const p = { ...bundle.predictionLayer.predictions[0], crownWidthM: 5.1, crownWidthMethod: 'tallo_genus_power_law_from_dbh' }
+  const allometric = buildObservation(bundle, { ...p, modelCrownWidthM: null }, { decision: 'accept' }, 'tester', 1)
+  assert.equal(allometric.predictedCrownWidthM, 5.1)
+  assert.equal(allometric.crownWidthMethod, 'tallo_genus_power_law_from_dbh')
+  const modelled = buildObservation(bundle, { ...p, modelCrownWidthM: 7.2, modelCrownWidthMethod: 'model_crown_head' }, { decision: 'accept' }, 'tester', 1)
+  assert.equal(modelled.predictedCrownWidthM, 7.2)
+  assert.equal(modelled.crownWidthMethod, 'model_crown_head')
+  assert.equal(modelled.allometricCrownWidthM, 5.1)
+})
+
 test('a moved crown centre changes the published position and never the trunk', () => {
   const bundle = fixture()
   const p = bundle.predictionLayer.predictions[0]

@@ -54,6 +54,7 @@ from typing import Any, Iterable
 
 SCHEMA_VERSION = 1
 CROWN_WIDTH_METHOD = "tallo_genus_power_law_from_dbh"
+MODEL_CROWN_METHOD = "model_crown_head"
 DEFAULT_CANDIDATE_RADIUS_M = 6.0
 DEFAULT_INVENTORY_MARGIN_M = 15.0
 DBH_CM_PER_INCH = 2.54
@@ -282,6 +283,9 @@ def build_prediction(
     dbh_in = float(dbh_in) if dbh_in is not None and math.isfinite(float(dbh_in)) else None
 
     crown = coefficients.crown_width_m(genus, dbh_in) if coefficients else None
+    model_crown = _float_or_none(row.get("crown_diameter_m"))
+    if model_crown is not None and not (math.isfinite(model_crown) and model_crown > 0):
+        model_crown = None
     prediction = {
         "predictionId": prediction_id(row["chip_id"], row["output_x"], row["output_y"]),
         "xPx": x_px,
@@ -297,6 +301,8 @@ def build_prediction(
         "dbhInches": dbh_in,
         "crownWidthM": crown[0] if crown else None,
         "crownWidthMethod": CROWN_WIDTH_METHOD if crown else None,
+        "modelCrownWidthM": model_crown,
+        "modelCrownWidthMethod": MODEL_CROWN_METHOD if model_crown is not None else None,
         "crownFit": (
             {"level": crown[1].level, "taxon": crown[1].taxon, "n": crown[1].n} if crown else None
         ),
