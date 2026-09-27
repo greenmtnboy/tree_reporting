@@ -445,6 +445,8 @@ export interface ExportRow {
   predictedDbhInches: number | null
   measuredDbhInches: number | null
   predictedCrownWidthM: number | null
+  /** model_crown_head is read from the image; tallo_* is allometric from the model's DBH. */
+  crownWidthMethod: string | null
   duplicateOfTreeId: string | null
   tileId: string
   imageryVersion: string
@@ -471,6 +473,7 @@ export function exportRow(published: Record<string, unknown>): ExportRow {
     predictedDbhInches: (published.predictedDbhInches as number | null) ?? null,
     measuredDbhInches: (published.measuredDbhInches as number | null) ?? null,
     predictedCrownWidthM: (published.predictedCrownWidthM as number | null) ?? null,
+    crownWidthMethod: (published.crownWidthMethod as string | null) ?? null,
     duplicateOfTreeId: (published.duplicateOfTreeId as string | null) ?? null,
     tileId: String(published.tileId),
     imageryVersion: String(published.imageryVersion),
@@ -515,6 +518,7 @@ export function publishedTreeFrom(observation: ObservationRecord): Record<string
     predictedDbhInches: observation.predictedDbhInches,
     measuredDbhInches: observation.measuredDbhInches,
     predictedCrownWidthM: observation.predictedCrownWidthM,
+    crownWidthMethod: observation.crownWidthMethod,
     duplicateOfTreeId: observation.duplicateOfTreeId,
     tileId: observation.tileId,
     imageryVersion: observation.imageryVersion,
