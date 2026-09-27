@@ -1,10 +1,11 @@
 import ..tree_common;
 import ..community_tree_info;
+import ..satellite_tree_info;
 import ..tree_dedup;
 
-auto usnyc_published_data_updated_through <- greatest(usnyc_data_updated_through, usnyc_community_data_updated_through, usnyc_osm_data_updated_through);
+auto usnyc_published_data_updated_through <- greatest(usnyc_data_updated_through, usnyc_community_data_updated_through, usnyc_osm_data_updated_through, usnyc_satellite_data_updated_through);
 
-key usnyc_source enum<string>['NYC_OPENDATA', 'COMMUNITY_USNYC', 'OSM_USNYC']; # originating dataset for the row
+key usnyc_source enum<string>['NYC_OPENDATA', 'COMMUNITY_USNYC', 'OSM_USNYC', 'SATELLITE_USNYC']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
@@ -23,8 +24,11 @@ root datasource usnyc_community_update_time (
 )
 file `../community_update_time.py`;
 
-
-
+# Likewise for reviewed aerial-imagery detections: one column, this city's.
+root datasource usnyc_satellite_update_time (
+    usnyc_satellite_data_updated_through: usnyc_satellite_data_updated_through
+)
+file `../satellite_update_time.py`;
 
 # GCS publication time of the staged OSM parquet (see nyc_osm_extract.py);
 # it only moves when an extraction is re-run and uploaded.
@@ -99,11 +103,32 @@ complete where city = 'USNYC' and usnyc_source = 'COMMUNITY_USNYC'
 file `../community_tree_info.py`
 where city = 'USNYC';
 
+# Reviewed aerial-imagery detections (reviewer/satellite.ts), read from the
+# public export the reviewer publishes -- see ../satellite_tree_info.py and
+# the SF model.  `diameter_at_breast_height` maps to `raw_dbh` like the other
+# NYC sources, so the rows go through the same dbh merge.
+root partial datasource usnyc_satellite_tree_info (
+    tree_id: tree_id,
+    city: city,
+    data_source: usnyc_source,
+    species: ?raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    diameter_at_breast_height: ?raw_dbh,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
+)
+grain (tree_id)
+complete where city = 'USNYC' and usnyc_source = 'SATELLITE_USNYC'
+file `../satellite_tree_info.py`
+where city = 'USNYC';
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
 #
-# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# Shared: ../tree_dedup.preql groups the four partitions into one cluster per
 # tree and picks each canonical attribute across the cluster; this city's grid
 # cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
 # The only per-city line is the dbh merge, because Boston imputes it.

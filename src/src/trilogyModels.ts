@@ -40,7 +40,7 @@ export const ALL_MODEL_SOURCES = [
   { alias: 'community_tree_info', contents: COMMUNITY_TREE_INFO_MODEL },
   { alias: 'tree_dedup', contents: TREE_DEDUP_MODEL },
   // Reviewed aerial-imagery detections: the freshness columns the wired
-  // city models (SF, Boston) import; see data/raw/satellite_tree_info.preql.
+  // city models (SF, Boston, NYC) import; see data/raw/satellite_tree_info.preql.
   { alias: 'satellite_tree_info', contents: SATELLITE_TREE_INFO_MODEL },
   { alias: 'tree_position', contents: TREE_POSITION_MODEL },
   ...[...Object.entries(cityTreeModels), ...Object.entries(cityLandmarkModels)].map(

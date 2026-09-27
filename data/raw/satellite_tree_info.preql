@@ -13,3 +13,4 @@ import tree_common;
 # `test_satellite_city_is_fully_wired` names whatever is missing.
 property <*>.ussfo_satellite_data_updated_through datetime; # when published satellite trees for USSFO are through
 property <*>.usbos_satellite_data_updated_through datetime; # when published satellite trees for USBOS are through
+property <*>.usnyc_satellite_data_updated_through datetime; # when published satellite trees for USNYC are through
