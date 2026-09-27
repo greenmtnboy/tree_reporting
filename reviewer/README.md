@@ -126,6 +126,20 @@ uv run --group imagery python -m urban_tree_ml.tile_bundle_export `
 $env:SATELLITE_TILE_DIR = "$PWD/../reviewer/tiles"; cd ../reviewer; pnpm dev
 ```
 
+`--min-score 0.1` exports candidates below the run's threshold too, so the
+page's confidence slider has something to reveal, and `--threshold` sets where
+the slider starts (the run's `confidence_threshold` otherwise).
+
+**Predict at** on the tile list fetches the newest NAIP imagery around any
+latitude/longitude, runs the model on it and adds the tile to the list
+(`imagery_model/src/urban_tree_ml/point_predict.py`, about 20 s, one at a
+time). Tiles sit on a half-tile grid, so nearby points reuse a tile, and they
+carry current trees from every city whose envelope they meet. Set
+`SATELLITE_RUN` (default: the newest complete run), `SATELLITE_THRESHOLD` and
+`SATELLITE_MIN_SCORE` (default 0.1). Point tiles ignore the training splits:
+publishing from one inside a sealed test block leaks into that block's
+evaluation.
+
 A bundle is the `TilePredictionBundleV1` contract from
 `docs/PREDICTION_CURATION_HANDOFF.md`: the chip as a PNG, the tile's affine and
 CRS, the run's above-threshold detections with stable ids

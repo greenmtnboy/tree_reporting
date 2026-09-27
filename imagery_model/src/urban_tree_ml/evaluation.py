@@ -341,6 +341,39 @@ def _add_geography(
     return result
 
 
+def load_network(
+    checkpoint: Path,
+    *,
+    backbone: str,
+    input_channels: int,
+    feature_channels: int,
+    taxonomy: dict[str, Any],
+):
+    """The trained network from a Lightning checkpoint, on the CPU; the caller moves it and calls eval()."""
+    import torch
+
+    from urban_tree_ml.model import RawImageryTreeModel
+
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    has_crown = any(key.startswith("network.crown_head.") for key in payload["state_dict"])
+    network = RawImageryTreeModel(
+        backbone=backbone,
+        input_channels=input_channels,
+        feature_channels=feature_channels,
+        genus_classes=len(taxonomy["genera"]),
+        species_classes=len(taxonomy["species"]),
+        pretrained=False,
+        crown_head=has_crown,
+    )
+    state = {
+        key.removeprefix("network."): value
+        for key, value in payload["state_dict"].items()
+        if key.startswith("network.")
+    }
+    network.load_state_dict(state, strict=True)
+    return network
+
+
 def run_evaluation(
     config: ProjectConfig,
     checkpoint_path: str | Path,
@@ -367,7 +400,6 @@ def run_evaluation(
         raise RuntimeError("Install the train dependency group: uv sync --group train") from error
 
     from urban_tree_ml.dataset import NpzChipDataset
-    from urban_tree_ml.model import RawImageryTreeModel
 
     checkpoint = Path(checkpoint_path).resolve()
     if not checkpoint.exists():
@@ -389,23 +421,13 @@ def run_evaluation(
     if device.type == "cuda":
         torch.set_float32_matmul_precision("high")
 
-    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
-    has_crown = any(key.startswith("network.crown_head.") for key in payload["state_dict"])
-    network = RawImageryTreeModel(
+    network = load_network(
+        checkpoint,
         backbone=config.model.backbone,
         input_channels=config.model.input_channels,
         feature_channels=config.model.feature_channels,
-        genus_classes=len(taxonomy["genera"]),
-        species_classes=len(taxonomy["species"]),
-        pretrained=False,
-        crown_head=has_crown,
+        taxonomy=taxonomy,
     )
-    state = {
-        key.removeprefix("network."): value
-        for key, value in payload["state_dict"].items()
-        if key.startswith("network.")
-    }
-    network.load_state_dict(state, strict=True)
     network.to(device).eval()
 
     dataset = NpzChipDataset(manifest_path, split)

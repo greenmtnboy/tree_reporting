@@ -385,12 +385,18 @@ def acquisition_window(mosaic_manifest: dict[str, Any], raster_dir: Path) -> tup
 
 
 def load_predictions(
-    evaluation_dir: Path, chip_ids: set[str], *, all_detections: bool = False
+    evaluation_dir: Path,
+    chip_ids: set[str],
+    *,
+    all_detections: bool = False,
+    min_score: float | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Predictions per chip.  The export holds every candidate cell the decoder
     kept (``max_detections_per_chip``, 512 today), most of them far below the
     run's confidence threshold; only the ones above it are detections, and
-    only those are exported unless *all_detections* asks for the rest."""
+    only those are exported unless *all_detections* asks for the rest or
+    *min_score* lowers the floor, so the reviewer's confidence slider has
+    something below the threshold to reveal."""
     import pyarrow as pa
     import pyarrow.compute as pc
     import pyarrow.parquet as pq
@@ -398,7 +404,9 @@ def load_predictions(
     table = pq.read_table(evaluation_dir / "predictions.parquet")
     if chip_ids:
         table = table.filter(pc.is_in(table["chip_id"], value_set=pa.array(sorted(chip_ids))))
-    if not all_detections and "above_threshold" in table.column_names:
+    if min_score is not None and not all_detections:
+        table = table.filter(pc.greater_equal(table["score"], min_score))
+    elif not all_detections and "above_threshold" in table.column_names:
         table = table.filter(pc.equal(table["above_threshold"], True))
     by_chip: dict[str, list[dict[str, Any]]] = {}
     for row in table.to_pylist():
@@ -641,6 +649,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", required=True, help="output directory; one <tileId>.json and <tileId>.png per chip")
     parser.add_argument("--allow-test", action="store_true", help="export sealed test-split chips (never for the public reviewer)")
     parser.add_argument("--all-detections", action="store_true", help="include candidate cells below the run's confidence threshold")
+    parser.add_argument("--min-score", type=float, default=None, help="export candidates scoring at least this, below the run's threshold too (e.g. 0.1)")
+    parser.add_argument("--threshold", type=float, default=None, help="operating threshold the reviewer's slider starts at (default: the run's confidence_threshold)")
     args = parser.parse_args(argv)
 
     artifacts = Path(args.artifacts)
@@ -686,7 +696,7 @@ def main(argv: list[str] | None = None) -> int:
 
     chips = load_chips(chips_dir)
     wanted = set(args.chips)
-    by_chip = load_predictions(evaluation_dir, wanted, all_detections=args.all_detections)
+    by_chip = load_predictions(evaluation_dir, wanted, all_detections=args.all_detections, min_score=args.min_score)
     chip_ids = sorted(wanted or by_chip)
     exported = 0
     skipped_test = 0
@@ -727,7 +737,10 @@ def main(argv: list[str] | None = None) -> int:
             checkpoint_sha256=checkpoint,
             taxonomy_version=taxonomy_version,
             taxonomy=taxonomy,
-            confidence_threshold=float(config["evaluation"]["confidence_threshold"]),
+            confidence_threshold=(
+                args.threshold if args.threshold is not None
+                else float(config["evaluation"]["confidence_threshold"])
+            ),
             coefficients=coefficients,
             inventory=inventory,
             png=png,

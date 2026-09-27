@@ -6,6 +6,7 @@ import path from 'node:path'
 import sharp from 'sharp'
 
 import { createSatelliteRouter, TileStore } from './satellite.ts'
+import { parsePoint, predictPoint } from './satellitePredict.ts'
 import {
   assertCheckinPhotoPublishable,
   checkinPhotoListItem,
@@ -49,6 +50,33 @@ const MODIFICATIONS_MANIFEST_PATH = 'community/tree_modifications_manifest.json'
 const PUBLISHED_PHOTO_MAX_DIM = 1600
 
 app.use(express.json({ limit: '32kb' }))
+
+// Predict a tile at any latitude/longitude NAIP covers; the bundle is written
+// into the tile directory, so it lists like an exported one.  Configure with
+// SATELLITE_RUN (default: the newest complete run), SATELLITE_THRESHOLD and
+// SATELLITE_MIN_SCORE (default 0.1).
+const imageryModelDir = process.env.IMAGERY_MODEL_DIR ?? path.join(import.meta.dirname, '..', 'imagery_model')
+app.post('/api/satellite/predict', async (req, res) => {
+  let point: [number, number]
+  try {
+    point = parsePoint(req.body)
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message })
+    return
+  }
+  try {
+    const tile = await predictPoint(point, {
+      modelDir: imageryModelDir,
+      tileDir,
+      run: process.env.SATELLITE_RUN,
+      threshold: process.env.SATELLITE_THRESHOLD ? Number(process.env.SATELLITE_THRESHOLD) : undefined,
+      minScore: process.env.SATELLITE_MIN_SCORE ? Number(process.env.SATELLITE_MIN_SCORE) : undefined,
+    })
+    res.json(tile)
+  } catch (error) {
+    res.status(502).json({ error: (error as Error).message })
+  }
+})
 
 // The satellite page: aerial tiles, model detections, inventory overlay,
 // and a publish path of its own (see satellite.ts).
