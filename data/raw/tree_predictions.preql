@@ -307,6 +307,11 @@ end;
 
 auto predicted_crown_width_m <- 2 * crown_scale * (crown_dbh_cm ** crown_b);
 
+# The observed crown, where a source recorded one (tree_common's crown_width_m:
+# Tokyo's survey, an OSM diameter_crown tag, a reviewed satellite crown), is
+# published beside the prediction rather than folded into it, so curation can
+# plot one against the other and the prediction stays a prediction.
+
 auto crown_model_level <- case
     when crown_input_dbh_cm is null then 'none'
     when crown_fit_scale is not null then crown_fit_level
@@ -385,6 +390,7 @@ datasource tree_predictions (
     ?dbh_model_n,
     ?crown_dbh_source,
     ?predicted_crown_width_m,
+    ?crown_width_m,
     crown_model_level,
     ?crown_model_taxon,
     ?crown_model_n,

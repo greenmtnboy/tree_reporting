@@ -44,6 +44,7 @@ root partial datasource tokyo_raw_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'JPTYO' and jptyo_source = 'TOKYO_OPENDATA'
@@ -67,6 +68,7 @@ root partial datasource jptyo_community_tree_info (
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'JPTYO' and jptyo_source = 'COMMUNITY_JPTYO'
@@ -90,6 +92,7 @@ root partial datasource jptyo_osm_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'JPTYO' and jptyo_source = 'OSM_JPTYO'
@@ -122,6 +125,7 @@ partial datasource tokyo_tree_info (
     ?longitude,
     ?submission_photo_url,
     ?cultivar,
+    ?crown_width_m,
     # Redundant on its face -- the prune below means it always equals tree_id --
     # and dropped from this template for exactly that reason, which is how the
     # first three cities scaffolded from it came out with fourteen columns

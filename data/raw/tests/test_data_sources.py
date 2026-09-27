@@ -299,6 +299,7 @@ RAW_ATTRIBUTES = {
     "latitude": "raw_latitude",
     "longitude": "raw_longitude",
     "diameter_at_breast_height": "raw_dbh",
+    "crown_width_m": "raw_crown_width_m",
     "submission_photo_url": "raw_photo_url",
 }
 

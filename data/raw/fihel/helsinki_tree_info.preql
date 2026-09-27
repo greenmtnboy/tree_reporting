@@ -43,6 +43,7 @@ root partial datasource helsinki_raw_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'FIHEL' and fihel_source = 'HELSINKI_OPENDATA'
@@ -65,6 +66,7 @@ root partial datasource fihel_community_tree_info (
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'FIHEL' and fihel_source = 'COMMUNITY_FIHEL'
@@ -87,6 +89,7 @@ root partial datasource fihel_osm_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'FIHEL' and fihel_source = 'OSM_FIHEL'
@@ -118,6 +121,7 @@ partial datasource helsinki_tree_info (
     ?longitude,
     ?submission_photo_url,
     ?cultivar,
+    ?crown_width_m,
     # Redundant on its face -- the prune below means it always equals tree_id --
     # and dropped from this template for exactly that reason, which is how the
     # first three cities scaffolded from it came out with fourteen columns

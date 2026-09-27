@@ -46,6 +46,7 @@ def test_records_to_table_emits_canonical_city_rows():
             "submission_photo_url": "https://storage.googleapis.com/pub/community/photos/x.jpg",
             "borough": None,
             "cultivar": None,
+            "crown_width_m": None,
         }
     ]
     assert table.schema.field("plant_date").type == pa.date32()

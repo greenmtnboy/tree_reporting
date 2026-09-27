@@ -197,6 +197,7 @@ root partial datasource {slug}_raw_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = '{code}' and {lc}_source = '{source}'
@@ -219,6 +220,7 @@ root partial datasource {lc}_community_tree_info (
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = '{code}' and {lc}_source = 'COMMUNITY_{code}'
@@ -241,6 +243,7 @@ root partial datasource {lc}_osm_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = '{code}' and {lc}_source = 'OSM_{code}'
@@ -272,6 +275,7 @@ partial datasource {slug}_tree_info (
     ?longitude,
     ?submission_photo_url,
     ?cultivar,
+    ?crown_width_m,
     # Redundant on its face -- the prune below means it always equals tree_id --
     # and dropped from this template for exactly that reason, which is how the
     # first three cities scaffolded from it came out with fourteen columns
@@ -501,6 +505,7 @@ root datasource {lc}_osm_rows (
     data_source: data_source,
     species: ?species,
     cultivar: ?cultivar,
+    crown_width_m: ?crown_width_m,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     latitude: ?latitude,
@@ -519,6 +524,7 @@ datasource {lc}_osm_staging (
     data_source,
     ?species,
     ?cultivar,
+    ?crown_width_m,
     ?tree_name,
     ?plant_date,
     ?latitude,

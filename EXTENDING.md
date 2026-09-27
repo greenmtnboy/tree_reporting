@@ -130,7 +130,9 @@ the city re-downloads on every tick.
 
 `{slug}_tree_info.py` downloads, maps to the canonical schema (`tree_id`,
 `city`, `species`, `cultivar`, `plant_date` as `date32`, `latitude`,
-`longitude`, `diameter_at_breast_height` in inches), calls
+`longitude`, `diameter_at_breast_height` in inches, and `crown_width_m` in
+metres if the portal records a crown spread -- few do; the schema emits it as
+null otherwise), calls
 `enforce_tree_schema(table, city=..., data_source="{LABEL}_OPENDATA",
 columns={...})` last, and writes an Arrow IPC stream to stdout.
 

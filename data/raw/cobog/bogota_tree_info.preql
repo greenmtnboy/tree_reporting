@@ -44,6 +44,7 @@ root partial datasource bogota_raw_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'COBOG' and cobog_source = 'BOGOTA_OPENDATA'
@@ -67,6 +68,7 @@ root partial datasource cobog_community_tree_info (
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'COBOG' and cobog_source = 'COMMUNITY_COBOG'
@@ -90,6 +92,7 @@ root partial datasource cobog_osm_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'COBOG' and cobog_source = 'OSM_COBOG'
@@ -122,6 +125,7 @@ partial datasource bogota_tree_info (
     ?longitude,
     ?submission_photo_url,
     ?cultivar,
+    ?crown_width_m,
     # Redundant on its face -- the prune below means it always equals tree_id --
     # and dropped from this template for exactly that reason, which is how the
     # first three cities scaffolded from it came out with fourteen columns

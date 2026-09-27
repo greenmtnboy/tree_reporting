@@ -57,6 +57,7 @@ root partial datasource ussfo_osm_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'USSFO' and ussfo_source = 'OSM_USSFO'
@@ -79,6 +80,7 @@ root partial datasource sf_raw_tree_info (
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'USSFO' and ussfo_source = 'SF_OPENDATA'
@@ -100,6 +102,7 @@ root partial datasource sf_community_tree_info (
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'USSFO' and ussfo_source = 'COMMUNITY_USSFO'
@@ -123,6 +126,7 @@ root partial datasource ussfo_satellite_tree_info (
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'USSFO' and ussfo_source = 'SATELLITE_USSFO'
@@ -160,6 +164,7 @@ partial datasource sf_tree_info (
     ?longitude,
     ?submission_photo_url,
     ?cultivar,
+    ?crown_width_m,
     cluster_id,
     merged_sources,
     ?merged_tree_ids,

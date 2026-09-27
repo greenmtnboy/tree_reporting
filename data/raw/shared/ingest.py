@@ -1465,6 +1465,7 @@ TREE_COLUMN_TYPES: dict[str, pa.DataType] = {
     "latitude": pa.float64(),
     "longitude": pa.float64(),
     "diameter_at_breast_height": pa.float64(),
+    "crown_width_m": pa.float64(),
     "submission_photo_url": pa.string(),
 }
 
@@ -1474,6 +1475,10 @@ REQUIRED_TREE_COLUMNS = ("tree_id", "city", "data_source", "species")
 # The largest diameter an ingest will publish, in inches; see the guard in
 # enforce_tree_schema for why it exists and why it is 5 m.
 DBH_MAX_INCHES = 200.0
+
+# The widest crown an ingest will publish, in metres; see the guard in
+# enforce_tree_schema for why it exists and why it is 40 m.
+CROWN_WIDTH_MAX_M = 40.0
 
 # The earliest planting year an ingest will publish; see the guard in
 # enforce_tree_schema for why it is the 16th century.
@@ -1693,6 +1698,32 @@ def enforce_tree_schema(
             else:
                 report_implausible_dbh(n_implausible, city=city)
 
+    # A crown no street tree has.  Tokyo's Tama survey records 130 m, OSM
+    # carries centimetres in a metres tag, and zero is an unmeasured tree.
+    # 40 m is wider than any inventoried street or park tree (Tokyo's own
+    # widest real crown is 35 m) and narrower than the handful of record
+    # banyans and oaks no city survey holds.
+    crown_column = resolved["crown_width_m"]
+    if crown_column in table.schema.names:
+        crown_idx = table.schema.get_field_index(crown_column)
+        crown = table.column(crown_idx)
+        implausible = pc.fill_null(
+            pc.or_(pc.less_equal(crown, 0), pc.greater(crown, CROWN_WIDTH_MAX_M)), False
+        )
+        n_implausible = pc.sum(pc.cast(implausible, pa.int64())).as_py() or 0
+        if n_implausible:
+            table = table.set_column(
+                crown_idx,
+                crown_column,
+                pc.if_else(implausible, pa.scalar(None, type=pa.float64()), crown),
+            )
+            if summary is not None:
+                summary["implausible_crown_width"] = (
+                    summary.get("implausible_crown_width", 0) + n_implausible
+                )
+            else:
+                report_implausible_crown_width(n_implausible, city=city)
+
     # A date no planting has.  A planting date is a record of a planting, and
     # the inventories carry a few that are not: three-digit years in New York
     # (`202-12-25`, a dropped digit), the years 1, 8 and 15 in Amsterdam and
@@ -1747,6 +1778,18 @@ def enforce_tree_schema(
     return table
 
 
+def report_implausible_crown_width(count: int, *, city: str = "") -> None:
+    """One line for the crown widths ``enforce_tree_schema`` nulled."""
+    if not count:
+        return
+    prefix = f"{city} ingest" if city else "Ingest"
+    print(
+        f"{prefix}: {count} crown width(s) were zero, negative or over "
+        f"{CROWN_WIDTH_MAX_M:.0f} m and were published as null",
+        file=sys.stderr,
+    )
+
+
 def report_implausible_dbh(count: int, *, city: str = "") -> None:
     """One line for the diameters ``enforce_tree_schema`` nulled."""
     if not count:
@@ -1787,6 +1830,7 @@ def report_species_cleanup(counts: dict[str, int], *, city: str = "") -> None:
             file=sys.stderr,
         )
     report_implausible_dbh(counts.get("implausible_dbh", 0), city=city)
+    report_implausible_crown_width(counts.get("implausible_crown_width", 0), city=city)
     report_implausible_plant_date(counts.get("implausible_plant_date", 0), city=city)
     if any(counts.get(k) for k in ("dropped", "rewritten", "formed", "cultivared")):
         print(

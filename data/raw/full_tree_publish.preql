@@ -69,6 +69,7 @@ key tree_id string;
 property tree_id.data_source string; # originating dataset, materialised by every city
 property tree_id.species string;
 property tree_id.cultivar string;
+property tree_id.crown_width_m float;
 property tree_id.tree_name string;
 property tree_id.plant_date date;
 property tree_id.diameter_at_breast_height float;
@@ -95,6 +96,7 @@ root datasource city_published_trees (
     data_source: data_source,
     species: ?species,
     cultivar: ?cultivar,
+    crown_width_m: ?crown_width_m,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     diameter_at_breast_height: ?diameter_at_breast_height,
@@ -153,6 +155,7 @@ datasource full_tree_info (
     data_source,
     species,
     ?cultivar,
+    ?crown_width_m,
     ?tree_name,
     ?plant_date,
     ?diameter_at_breast_height,

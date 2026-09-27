@@ -82,6 +82,9 @@
           <template v-if="formatDbh(selectedTree.dbh)">
             <span class="tc-label">Trunk diameter</span><span class="tc-value">{{ formatDbh(selectedTree.dbh) }}</span>
           </template>
+          <template v-if="formatCrownWidth(selectedTree.crown_width_m)">
+            <span class="tc-label">Crown spread</span><span class="tc-value">{{ formatCrownWidth(selectedTree.crown_width_m) }}</span>
+          </template>
           <template v-if="selectedTree.ecological_fit">
             <span class="tc-label">Ecological fit</span><span class="tc-value">{{ selectedTree.ecological_fit }}</span>
           </template>
@@ -674,6 +677,8 @@ interface PopupTreeRow {
   cultivar: string | null
   plant_date: string | number | null
   dbh: number | null
+  /** Observed crown spread in metres, where a source recorded one; null for most trees. */
+  crown_width_m: number | null
   tree_form: string | null
   ecological_fit: string | null
   is_evergreen: boolean | null
@@ -1065,6 +1070,11 @@ function formatSunExposure(values: string[] | null) {
     .join(', ')
 }
 
+function formatCrownWidth(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return null
+  return `${value.toFixed(1)} m (${Math.round(value * 3.28084)} ft)`
+}
+
 function formatDbh(value: number | null) {
   if (value == null || !Number.isFinite(value)) return null
   return `${value.toFixed(2)}"`
@@ -1090,6 +1100,7 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
         tf.cultivar,
         tf.plant_date,
         tf.dbh,
+        tf.crown_width_m,
         tf.tree_form,
         CASE
           WHEN tf.native_ecoregions IS NULL OR len(tf.native_ecoregions) = 0 THEN NULL

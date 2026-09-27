@@ -43,6 +43,7 @@ root partial datasource calgary_raw_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'CACAL' and cacal_source = 'CALGARY_OPENDATA'
@@ -65,6 +66,7 @@ root partial datasource cacal_community_tree_info (
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'CACAL' and cacal_source = 'COMMUNITY_CACAL'
@@ -87,6 +89,7 @@ root partial datasource cacal_osm_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'CACAL' and cacal_source = 'OSM_CACAL'
@@ -118,6 +121,7 @@ partial datasource calgary_tree_info (
     ?longitude,
     ?submission_photo_url,
     ?cultivar,
+    ?crown_width_m,
     cluster_id,
     merged_sources,
     ?merged_tree_ids,

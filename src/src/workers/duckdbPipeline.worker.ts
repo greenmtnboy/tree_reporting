@@ -498,6 +498,10 @@ async function loadCityTrees(city?: string): Promise<void> {
   // city has been refreshed past the change.
   const hasCultivar = await parquetHasColumn(parquetUrl, 'cultivar')
   const cultivarColumn = hasCultivar ? 'cultivar' : 'CAST(NULL AS VARCHAR) AS cultivar'
+  // `crown_width_m`, the observed crown spread in metres (null for most
+  // trees), arrived the same way in September 2026; probe it likewise.
+  const hasCrownWidth = await parquetHasColumn(parquetUrl, 'crown_width_m')
+  const crownWidthColumn = hasCrownWidth ? 'crown_width_m' : 'CAST(NULL AS DOUBLE) AS crown_width_m'
 
   await conn.query(`
     CREATE OR REPLACE TABLE trees AS
@@ -509,6 +513,7 @@ async function loadCityTrees(city?: string): Promise<void> {
       plant_date,
       species,
       ${cultivarColumn},
+      ${crownWidthColumn},
       latitude,
       longitude,
       diameter_at_breast_height,
@@ -540,6 +545,7 @@ async function loadCityTrees(city?: string): Promise<void> {
         t.plant_date,
         t.species,
         t.cultivar,
+        t.crown_width_m,
         t.latitude,
         t.longitude,
         COALESCE(t.diameter_at_breast_height, 3) AS dbh,
@@ -591,6 +597,7 @@ async function loadCityTrees(city?: string): Promise<void> {
       plant_date,
       species,
       cultivar,
+      crown_width_m,
       latitude,
       longitude,
       TRY_CAST(dbh AS DOUBLE) AS dbh,

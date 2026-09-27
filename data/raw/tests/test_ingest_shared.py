@@ -816,6 +816,7 @@ def _tree_table(**overrides) -> pa.Table:
         "latitude": pa.array([37.77], type=pa.float64()),
         "longitude": pa.array([-122.42], type=pa.float64()),
         "diameter_at_breast_height": pa.array([12.5], type=pa.float64()),
+        "crown_width_m": pa.array([None], type=pa.float64()),
         "submission_photo_url": pa.array([None], type=pa.string()),
     }
     cols.update(overrides)

@@ -46,6 +46,7 @@ root partial datasource grath_osm_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'GRATH' and grath_source = 'OSM_GRATH'
@@ -66,6 +67,7 @@ root partial datasource athens_raw_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'GRATH' and grath_source = 'ATHENS_OPENDATA'
@@ -87,6 +89,7 @@ root partial datasource grath_community_tree_info (
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'GRATH' and grath_source = 'COMMUNITY_GRATH'
@@ -123,6 +126,7 @@ partial datasource athens_tree_info (
     ?longitude,
     ?submission_photo_url,
     ?cultivar,
+    ?crown_width_m,
     cluster_id,
     merged_sources,
     ?merged_tree_ids,
