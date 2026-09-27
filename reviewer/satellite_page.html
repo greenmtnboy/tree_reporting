@@ -230,6 +230,7 @@ overlay.addEventListener('click', (e) => {
 });
 
 function select(predictionId) {
+  flushNudge();
   T.selected = predictionId; T.dirtyCenter = null;
   render(); renderSide();
 }
@@ -253,7 +254,7 @@ function renderSide() {
       <dt>DBH estimate</dt><dd>${fmt(p.dbhInches)} in <span class="muted">— model estimate, never published as measured</span></dd>
       <dt>Crown (model)</dt><dd>${p.modelCrownWidthM ? `${fmt(p.modelCrownWidthM)} m` : 'no crown head'}</dd>
       <dt>Crown (from DBH)</dt><dd>${p.crownWidthM ? `${fmt(p.crownWidthM)} m <span class="muted">(Tallo ${esc(p.crownFit?.level)} fit, ${esc(p.crownFit?.taxon)}, n=${p.crownFit?.n})</span>` : 'unavailable'}</dd>
-      <dt>Crown centre</dt><dd>${fmt(center.xPx, 0)}, ${fmt(center.yPx, 0)} px${center.xPx !== p.xPx || center.yPx !== p.yPx ? ' <span class="pill">moved</span>' : ''} · ${fmt(p.latitude, 6)}, ${fmt(p.longitude, 6)}</dd>
+      <dt>Crown centre</dt><dd id="side-center">${centerText(p, center)}</dd>
     </dl>
     <div class="field"><label>Confirmed species <span class="muted">(blank = unidentified; the model label is kept only if you leave it)</span></label><input id="f-species" value="${esc(species ?? '')}" placeholder="Latin binomial"></div>
     <div class="field"><label>Measured DBH, inches <span class="muted">(only if someone measured it)</span></label><input id="f-dbh" type="number" step="0.1" min="0" value="${o?.measuredDbhInches ?? ''}"></div>
@@ -271,6 +272,10 @@ function renderSide() {
   side.querySelectorAll('[data-decision]').forEach((btn) => btn.addEventListener('click', () => decide(btn.dataset.decision)));
   side.querySelectorAll('[data-dup]').forEach((btn) => btn.addEventListener('click', () => decide('duplicate', btn.dataset.dup)));
   $('#clear').addEventListener('click', clearDecision);
+}
+
+function centerText(p, center) {
+  return `${fmt(center.xPx, 0)}, ${fmt(center.yPx, 0)} px${center.xPx !== p.xPx || center.yPx !== p.yPx ? ' <span class="pill">moved</span>' : ''} · ${fmt(p.latitude, 6)}, ${fmt(p.longitude, 6)}`;
 }
 
 function drawCloseup(center) {
@@ -302,20 +307,29 @@ function formInput(decision, duplicateOfTreeId) {
 
 async function decide(decision, duplicateOfTreeId) {
   const p = selectedPrediction(); if (!p) return;
+  clearTimeout(nudgeTimer); nudgeTimer = null; // the decision carries the moved centre
   if (decision === 'duplicate' && !duplicateOfTreeId) { duplicateOfTreeId = p.nearest?.[0]?.treeId; if (!duplicateOfTreeId) { setSave('No inventory tree on this tile to link to', true); return; } }
   await save(p, formInput(decision, duplicateOfTreeId));
 }
 
 async function save(p, body) {
   T.saving += 1; setSave('Saving…');
+  const sentCenter = T.dirtyCenter;
   try {
     const { observation } = await api(`/tiles/${encodeURIComponent(T.bundle.tileId)}/observations/${encodeURIComponent(p.predictionId)}`, { method: 'PUT', body: JSON.stringify(body) });
-    T.observations.set(p.predictionId, observation); T.dirtyCenter = null;
+    T.observations.set(p.predictionId, observation);
+    // Nudges made while this save was in flight stay dirty; only the position we sent is now saved.
+    if (T.dirtyCenter === sentCenter) T.dirtyCenter = null;
     setSave('Saved');
   } catch (err) {
     setSave(err.message, true);
     if (err.status === 409) { const fresh = await api('/tiles/' + encodeURIComponent(T.bundle.tileId)); T.observations = new Map(fresh.observations.map((o) => [o.predictionId, o])); }
-  } finally { T.saving -= 1; render(); renderSide(); }
+  } finally {
+    T.saving -= 1;
+    render();
+    // Rebuilding the panel would drop focus and half-typed fields; skip it while a move is still pending.
+    if (!T.dirtyCenter || T.selected !== p.predictionId) renderSide();
+  }
 }
 
 async function clearDecision() {
@@ -326,15 +340,28 @@ async function clearDecision() {
   render(); renderSide();
 }
 
+// A run of nudges saves once, after a pause, or at once when the selection,
+// decision or tile changes -- never one save per key.
+const NUDGE_SAVE_MS = 1000;
 let nudgeTimer = null;
+function flushNudge() {
+  if (!nudgeTimer) return;
+  clearTimeout(nudgeTimer); nudgeTimer = null;
+  const p = selectedPrediction(); const o = p && T.observations.get(p.predictionId);
+  if (!p || !o || !T.dirtyCenter) return;
+  if (T.saving) { nudgeTimer = setTimeout(flushNudge, 200); return; }
+  save(p, formInput(o.decision, o.duplicateOfTreeId));
+}
 function nudge(dx, dy) {
   const p = selectedPrediction(); if (!p) return;
   const o = T.observations.get(p.predictionId); if (o?.status === 'published') return;
   const cur = T.dirtyCenter || o?.crownCenter || { xPx: p.xPx, yPx: p.yPx };
   T.dirtyCenter = { xPx: Math.max(0, Math.min(T.bundle.image.width, cur.xPx + dx)), yPx: Math.max(0, Math.min(T.bundle.image.height, cur.yPx + dy)) };
-  render(); renderSide();
+  render();
+  const centerEl = $('#side-center'); if (centerEl) centerEl.innerHTML = centerText(p, T.dirtyCenter);
+  drawCloseup(T.dirtyCenter);
   // Only an existing decision is re-saved on a nudge; a bare move is kept locally until a decision is made.
-  if (o) { clearTimeout(nudgeTimer); nudgeTimer = setTimeout(() => save(p, formInput(o.decision, o.duplicateOfTreeId)), 400); }
+  if (o) { setSave('Moved — saving shortly'); clearTimeout(nudgeTimer); nudgeTimer = setTimeout(flushNudge, NUDGE_SAVE_MS); }
 }
 
 function step(delta) {
@@ -413,11 +440,13 @@ $('#republish').addEventListener('click', async (e) => {
 
 // ---------------------------------------------------------------- routing
 function route() {
+  flushNudge();
   const h = location.hash || '#tiles';
   const run = h.startsWith('#tile/') ? showTile(decodeURIComponent(h.slice(6))) : h === '#queue' ? showQueue() : showTiles();
   run.catch((err) => { statusEl.textContent = 'Error: ' + err.message; });
 }
 window.addEventListener('hashchange', route);
+window.addEventListener('beforeunload', (e) => { if (nudgeTimer) { flushNudge(); e.preventDefault(); } });
 route();
 </script>
 </body>
