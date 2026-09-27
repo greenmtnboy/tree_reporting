@@ -126,6 +126,13 @@ uv run --group imagery python -m urban_tree_ml.tile_bundle_export `
 $env:SATELLITE_TILE_DIR = "$PWD/../reviewer/tiles"; cd ../reviewer; pnpm dev
 ```
 
+The directory is read recursively, so export each tile set to its own
+subdirectory (`--out ../reviewer/tiles/sf-gaps-30cm-v2`) and point one
+reviewer at the parent. The page opens on the cities with tiles
+(`/satellite#tiles`). `#city/USNYC` lists one city's tiles grouped by set, and
+`#tile/<tileId>` opens a tile; all three work as links. If the same tile id
+is in two sets, the newest file wins.
+
 `--min-score 0.1` exports candidates below the run's threshold too, so the
 page's confidence slider has something to reveal, and `--threshold` sets where
 the slider starts (the run's `confidence_threshold` otherwise).

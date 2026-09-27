@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { readdirSync, readFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 
@@ -38,6 +39,29 @@ test('the committed fixtures satisfy the bundle contract', () => {
     assert.ok(store.imagePath(summary.tileId), `${summary.tileId} has its PNG beside it`)
     // Sealed test-split chips must never reach the reviewer.
     assert.notEqual(bundle.predictionLayer.cohort, 'test')
+  }
+})
+
+test('the store reads every tile set below its directory and lists by city', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'tiles-'))
+  try {
+    for (const [set, prefix] of [['sf-set', 'USSFO'], ['bos-set/nested', 'USBOS']] as const) {
+      const name = readdirSync(FIXTURES).find((f) => f.startsWith(prefix) && f.endsWith('.json'))!
+      mkdirSync(path.join(root, set), { recursive: true })
+      for (const file of [name, name.replace(/\.json$/, '.png')]) copyFileSync(path.join(FIXTURES, file), path.join(root, set, file))
+    }
+    const store = new TileStore(root)
+    assert.deepEqual(store.cities().map((c) => [c.city, c.tileCount, c.collections]), [
+      ['USBOS', 1, ['bos-set/nested']],
+      ['USSFO', 1, ['sf-set']],
+    ])
+    const [sf] = store.list('ussfo')
+    assert.equal(store.list('USSFO').length, 1)
+    assert.equal(sf.collection, 'sf-set')
+    assert.ok(store.imagePath(sf.tileId)?.includes('sf-set'), 'the PNG is found beside its bundle')
+    assert.equal(store.list('USNYC').length, 0)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
   }
 })
 

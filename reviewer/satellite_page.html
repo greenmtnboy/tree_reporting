@@ -63,12 +63,18 @@ kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-
   <section id="view-tiles" class="hidden">
     <p class="muted">NAIP aerial tiles with the model's detections. Open a tile, decide each detection, mark the tile done, then publish the accepted ones. Nothing reaches the map until a publish, and a rejection never touches an inventory tree.</p>
     <form id="predict-form" class="toolbar"><label>Predict at <input id="predict-point" placeholder="42.3400, -71.1090" size="24" required></label> <button id="predict-go">Fetch NAIP &amp; predict</button> <span id="predict-state" class="muted"></span></form>
-    <table><thead><tr><th>Tile</th><th>City</th><th>Imagery</th><th>Run</th><th>Detections</th><th>Inventory</th><th>Decided</th><th>Published</th><th>Done</th><th></th></tr></thead><tbody id="tiles-body"></tbody></table>
+    <div id="cities-view">
+      <table><thead><tr><th>City</th><th>Tiles</th><th>Tile sets</th></tr></thead><tbody id="cities-body"></tbody></table>
+    </div>
+    <div id="city-view" class="hidden">
+    <p><a href="#tiles">← Cities</a> <strong id="city-title"></strong></p>
+    <table><thead><tr><th>Tile</th><th>Set</th><th>Imagery</th><th>Run</th><th>Detections</th><th>Inventory</th><th>Decided</th><th>Published</th><th>Done</th><th></th></tr></thead><tbody id="tiles-body"></tbody></table>
+    </div>
   </section>
 
   <section id="view-tile" class="hidden">
     <div class="toolbar">
-      <a href="#tiles">← Tiles</a>
+      <a href="#tiles">Cities</a> <a id="tile-back" href="#tiles">← Tiles</a>
       <strong id="tile-title"></strong>
       <span id="tile-meta" class="muted"></span>
       <label>Min confidence <input id="threshold" type="range" min="0" max="1" step="0.01" value="0.35"> <span id="threshold-value">0.35</span></label>
@@ -121,14 +127,26 @@ async function api(path, options = {}) {
 }
 
 // ---------------------------------------------------------------- tiles list
-async function showTiles() {
+async function showCities() {
   switchView('tiles');
-  statusEl.textContent = 'Loading tiles…';
-  const rows = await api('/tiles');
-  statusEl.textContent = rows.length ? `${rows.length} tile(s)` : 'No tiles in the tile directory';
+  $('#cities-view').classList.remove('hidden'); $('#city-view').classList.add('hidden');
+  statusEl.textContent = 'Loading cities…';
+  const rows = await api('/cities');
+  statusEl.textContent = rows.length ? `${rows.reduce((n, c) => n + c.tileCount, 0)} tile(s) in ${rows.length} cities` : 'No tiles in the tile directory';
+  $('#cities-body').innerHTML = rows.map((c) => `<tr><td><a href="#city/${encodeURIComponent(c.city)}">${esc(c.city)}</a></td><td>${c.tileCount}</td><td>${c.collections.map((s) => esc(s || '(top level)')).join(', ')}</td></tr>`).join('');
+}
+
+async function showTiles(city) {
+  switchView('tiles');
+  $('#cities-view').classList.add('hidden'); $('#city-view').classList.remove('hidden');
+  $('#city-title').textContent = city;
+  $('#tiles-body').innerHTML = '';
+  statusEl.textContent = `Loading ${city} tiles…`;
+  const rows = await api('/tiles?city=' + encodeURIComponent(city));
+  statusEl.textContent = rows.length ? `${rows.length} ${city} tile(s)` : `No ${city} tiles`;
   $('#tiles-body').innerHTML = rows.map((t) => {
     const decided = t.counts.accept + t.counts.duplicate + t.counts.reject + t.counts.uncertain;
-    return `<tr><td><a href="#tile/${encodeURIComponent(t.tileId)}">${esc(t.chipId || t.tileId)}</a><div class="muted">${esc(t.tileId)}</div></td><td>${esc(t.city)}</td><td>${esc(t.acquisitionStart)}${t.acquisitionEnd !== t.acquisitionStart ? ' – ' + esc(t.acquisitionEnd) : ''}<div class="muted">${esc(t.imageryVersion)}</div></td><td>${esc(t.runId)}</td><td>${t.status === 'available' ? t.predictionCount : '<span class="pill">unavailable</span>'}</td><td>${t.inventoryCount}</td><td>${decided}/${t.predictionCount} <span class="muted">(${t.counts.accept} accept, ${t.counts.duplicate} dup, ${t.counts.reject} no, ${t.counts.uncertain} ?)</span></td><td>${t.counts.published}</td><td>${t.done ? '✓' : ''}</td><td><a href="#tile/${encodeURIComponent(t.tileId)}">Open</a></td></tr>`;
+    return `<tr><td><a href="#tile/${encodeURIComponent(t.tileId)}">${esc(t.chipId || t.tileId)}</a><div class="muted">${esc(t.tileId)}</div></td><td>${esc(t.collection || '(top level)')}</td><td>${esc(t.acquisitionStart)}${t.acquisitionEnd !== t.acquisitionStart ? ' – ' + esc(t.acquisitionEnd) : ''}<div class="muted">${esc(t.imageryVersion)}</div></td><td>${esc(t.runId)}</td><td>${t.status === 'available' ? t.predictionCount : '<span class="pill">unavailable</span>'}</td><td>${t.inventoryCount}</td><td>${decided}/${t.predictionCount} <span class="muted">(${t.counts.accept} accept, ${t.counts.duplicate} dup, ${t.counts.reject} no, ${t.counts.uncertain} ?)</span></td><td>${t.counts.published}</td><td>${t.done ? '✓' : ''}</td><td><a href="#tile/${encodeURIComponent(t.tileId)}">Open</a></td></tr>`;
   }).join('');
 }
 
@@ -173,6 +191,8 @@ async function showTile(tileId) {
   T.observations = new Map(data.observations.map((o) => [o.predictionId, o]));
   T.nearby = data.nearbyObservations;
   const b = T.bundle;
+  $('#tile-back').href = '#city/' + encodeURIComponent(b.city);
+  $('#tile-back').textContent = '← ' + b.city + ' tiles';
   $('#tile-title').textContent = b.chipId || b.tileId;
   $('#tile-meta').textContent = `${b.city} · ${b.provider.toUpperCase()} ${b.acquisitionStart}${b.acquisitionEnd !== b.acquisitionStart ? ' – ' + b.acquisitionEnd : ''} · ${b.image.resolutionM} m/px · run ${b.predictionLayer.runId} · inventory ${b.inventoryVersion}`;
   $('#attribution').textContent = b.attribution || '';
@@ -442,7 +462,9 @@ $('#republish').addEventListener('click', async (e) => {
 function route() {
   flushNudge();
   const h = location.hash || '#tiles';
-  const run = h.startsWith('#tile/') ? showTile(decodeURIComponent(h.slice(6))) : h === '#queue' ? showQueue() : showTiles();
+  const run = h.startsWith('#tile/') ? showTile(decodeURIComponent(h.slice(6)))
+    : h.startsWith('#city/') ? showTiles(decodeURIComponent(h.slice(6)))
+    : h === '#queue' ? showQueue() : showCities();
   run.catch((err) => { statusEl.textContent = 'Error: ' + err.message; });
 }
 window.addEventListener('hashchange', route);
