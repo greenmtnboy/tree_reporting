@@ -6,6 +6,7 @@ key species string; # scientific species name (Latin binomial, no common-name su
 property tree_id.cultivar string; # the cultivated selection this tree is, e.g. 'Tina' in Malus sargentii 'Tina'; a property of the tree, not of the species, and never part of the species key
 property tree_id.tree_name string; # original name field from source data, which may be unique to certain trees
 property tree_id.plant_date date; # date the tree was planted
+property tree_id.crown_width_m float; # observed crown spread in metres, where a source measured or read one: a municipal crown-spread field, an OSM diameter_crown tag, or a reviewed satellite detection's crown read from the image by the model. Null for most trees; the allometric estimate from DBH is tree_predictions' predicted_crown_width_m, never this.
 property tree_id.diameter_at_breast_height float; # diameter at breast height - standard forestry measure of tree diameter at about 4.5 feet above ground
 property tree_id.latitude float::latitude; # geographic latitude for mapping
 property tree_id.longitude float::longitude; # geographic longitude for mapping

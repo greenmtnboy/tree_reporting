@@ -63,6 +63,7 @@ def test_records_to_table_emits_canonical_city_rows():
             "submission_photo_url": None,
             "borough": None,
             "cultivar": None,
+            "crown_width_m": None,
         }
     ]
     assert table.schema.field("plant_date").type == pa.date32()
@@ -163,3 +164,19 @@ def test_probe_defaults_every_wired_city_to_the_epoch(monkeypatch):
     assert set(by_city) == set(satellite.SATELLITE_DATA_SOURCES)
     assert set(by_city.values()) == {EMPTY_DATASET_TIMESTAMP}
     assert column_for("USSFO") == "ussfo_satellite_data_updated_through"
+
+
+def test_only_a_crown_the_model_read_from_the_image_is_published():
+    read = satellite.records_to_table(
+        [record(predictedCrownWidthM=7.2, crownWidthMethod="model_crown_head")]
+    )
+    assert read.column("crown_width_m").to_pylist() == [7.2]
+    # A Tallo width is allometric from the model's DBH estimate, not an observation.
+    allometric = satellite.records_to_table(
+        [record(predictedCrownWidthM=6.1, crownWidthMethod="tallo_genus_power_law_from_dbh")]
+    )
+    assert allometric.column("crown_width_m").to_pylist() == [None]
+    # Rows published before the method was exported say nothing, so publish nothing.
+    assert satellite.records_to_table([record(predictedCrownWidthM=6.1)]).column(
+        "crown_width_m"
+    ).to_pylist() == [None]

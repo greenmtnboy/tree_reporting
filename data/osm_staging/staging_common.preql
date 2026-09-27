@@ -43,6 +43,7 @@ property tree_id.city string;
 property tree_id.data_source string;
 property tree_id.species string;
 property tree_id.cultivar string; # from the node's cultivar tag, or quoted in its species tag
+property tree_id.crown_width_m float; # from the node's diameter_crown tag, metres
 property tree_id.tree_name string;
 property tree_id.plant_date date;
 property tree_id.latitude float;

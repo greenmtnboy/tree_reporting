@@ -89,9 +89,14 @@ administrative subdivision this tree sits in" would be a parallel copy of one
 that exists.  The Tama file publishes no municipality at all -- only a route
 name, and its routes cross municipal boundaries -- so those rows carry null.
 
-The other columns are read and dropped on purpose: `樹高` (height) and `枝張`
-(crown spread) have no canonical column, and `区分` is 高木/中木, a size class
-rather than a fact about the taxon.
+**`枝張` (the Tama file's `width`) is the crown spread in metres** and maps
+onto `crown_width_m`.  The Tama file records `0` on 17,049 unmeasured trees
+and one 130 m crown; the shared range guard in `enforce_tree_schema` nulls
+both ends.
+
+The other columns are read and dropped on purpose: `樹高` (height) has no
+canonical column, and `区分` is 高木/中木, a size class rather than a fact
+about the taxon.
 """
 
 import math
@@ -119,10 +124,10 @@ TAMA = CkanResource("catalog.data.metro.tokyo.lg.jp", "033acc60-dd24-402a-9f98-6
 # `幹周(cm）` closes with a full-width parenthesis (U+FF09) where it opens with
 # an ASCII one; it is written out here rather than normalised because an exact
 # key is the thing that fails loudly if the portal ever tidies it.
-WARD_COLUMNS = {"species": "樹種", "circumference": "幹周(cm）", "borough": "行政区",
-                "longitude": "経度", "latitude": "緯度"}
-TAMA_COLUMNS = {"species": "name", "circumference": "perimeter", "borough": None,
-                "longitude": "longitude", "latitude": "latitude"}
+WARD_COLUMNS = {"species": "樹種", "circumference": "幹周(cm）", "crown": "枝張(m)",
+                "borough": "行政区", "longitude": "経度", "latitude": "緯度"}
+TAMA_COLUMNS = {"species": "name", "circumference": "perimeter", "crown": "width",
+                "borough": None, "longitude": "longitude", "latitude": "latitude"}
 
 # Tokyo's mainland spans 139.0 to 139.9 E; the Izu and Ogasawara islands are
 # part of the metropolis and carry none of these trees.  A value outside this
@@ -174,6 +179,14 @@ def coord_key(point: tuple[float, float]) -> tuple[float, float]:
     return round(point[0], COORD_DP), round(point[1], COORD_DP)
 
 
+def parse_crown_width(value) -> float | None:
+    """Crown spread in metres; blank and unparseable are unmeasured."""
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 def read_resource(resource: CkanResource, columns: dict, label: str) -> list[dict]:
     """One CSV resource as `{point, key, species, borough, circumference}` dicts.
 
@@ -197,6 +210,7 @@ def read_resource(resource: CkanResource, columns: dict, label: str) -> list[dic
                 if borough_column
                 else None,
                 "circumference": row.get(columns["circumference"]),
+                "crown": row.get(columns["crown"]),
             }
         )
     unusable = len(rows) - len(kept)
@@ -216,6 +230,7 @@ def transform(records: list[dict]) -> pa.Table:
     latitude: list[float] = []
     longitude: list[float] = []
     dbh: list[float | None] = []
+    crown: list[float | None] = []
 
     for rec in records:
         lon, lat = rec["key"]
@@ -228,6 +243,7 @@ def transform(records: list[dict]) -> pa.Table:
         latitude.append(rec["lat"])
         longitude.append(rec["lon"])
         dbh.append(parse_dbh(rec["circumference"]))
+        crown.append(parse_crown_width(rec.get("crown")))
 
     return pa.table(
         {
@@ -239,6 +255,7 @@ def transform(records: list[dict]) -> pa.Table:
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),
             "diameter_at_breast_height": pa.array(dbh, type=pa.float64()),
+            "crown_width_m": pa.array(crown, type=pa.float64()),
         }
     )
 

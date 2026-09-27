@@ -34,6 +34,7 @@ root datasource full_tree_info (
     city: city,
     species: species,
     cultivar: ?cultivar,
+    crown_width_m: ?crown_width_m,
     tree_name: ?tree_name,
     plant_date: ?plant_date,
     diameter_at_breast_height: ?diameter_at_breast_height,

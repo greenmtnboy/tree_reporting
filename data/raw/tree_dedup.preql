@@ -95,6 +95,7 @@ property tree_id.raw_plant_date date;
 property tree_id.raw_latitude float;
 property tree_id.raw_longitude float;
 property tree_id.raw_dbh float;
+property tree_id.raw_crown_width_m float;
 property tree_id.raw_photo_url string;
 
 # The row's `data_source` value as a plain string.  Each city merges its own
@@ -286,6 +287,7 @@ auto merged_tree_name <- @by_source(raw_tree_name);
 auto merged_cultivar <- @by_source(raw_cultivar);
 auto merged_plant_date <- @by_source(raw_plant_date);
 auto merged_photo_url <- @by_source(raw_photo_url);
+auto merged_crown_width_m <- @by_source(raw_crown_width_m);
 
 # A negative dbh is a source's own "not measured" sentinel; null it before the
 # merge so a real measurement from another source can win.
@@ -303,6 +305,7 @@ merge merged_tree_name into tree_name;
 merge merged_cultivar into cultivar;
 merge merged_plant_date into plant_date;
 merge merged_photo_url into submission_photo_url;
+merge merged_crown_width_m into crown_width_m;
 # dbh is merged by the city model, not here: Boston imputes a missing value
 # from the city-and-species average of the merged values and merges
 # `processed_dbh` instead, and two merges into one concept is a conflict.

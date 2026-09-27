@@ -172,6 +172,30 @@ def circumference_tag_to_cm(value: str | None) -> float | None:
     return number if number > 10 else number * 100
 
 
+def crown_diameter_tag_to_m(value: str | None) -> float | None:
+    """OSM `diameter_crown` in metres.
+
+    The documented unit is metres and most values are bare numbers or carry
+    `m`.  A `cm` suffix is honoured, and a bare value above 50 is read as
+    centimetres, as `circumference` is: no street tree has a 50 m crown.
+    enforce_tree_schema nulls whatever is still out of range.
+    """
+    if not value:
+        return None
+    m = _CIRCUMFERENCE_RE.match(value)
+    if not m:
+        return None
+    number = float(m.group(1).replace(",", "."))
+    unit = (m.group(2) or "").lower()
+    if number <= 0:
+        return None
+    if unit == "cm":
+        return number / 100
+    if unit == "m":
+        return number
+    return number / 100 if number > 50 else number
+
+
 def start_date_to_year(value: str | None):
     """OSM `start_date` is free-ish text; the leading 4-digit year is the only
     part reliable enough to keep."""
@@ -240,6 +264,7 @@ def build_table(
         "latitude": [],
         "longitude": [],
         "diameter_at_breast_height": [],
+        "crown_width_m": [],
         "osm_ref": [],
     }
     for el in elements:
@@ -264,6 +289,7 @@ def build_table(
                 circumference_tag_to_cm(tags.get("circumference"))
             )
         )
+        rows["crown_width_m"].append(crown_diameter_tag_to_m(tags.get("diameter_crown")))
         # The municipal inventory id this node was imported from, where tagged.
         # Empty for most cities, but ref-rich ones (Berlin ~6k, Paris ~4k) can
         # dedup on it exactly rather than geometrically.

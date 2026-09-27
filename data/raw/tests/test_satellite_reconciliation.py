@@ -43,7 +43,7 @@ def near(point):
 
 ROW_COLUMNS = (
     "tree_id, city, data_source, species, tree_name, plant_date, "
-    "diameter_at_breast_height, latitude, longitude, submission_photo_url, cultivar"
+    "diameter_at_breast_height, latitude, longitude, submission_photo_url, cultivar, crown_width_m"
 )
 
 # (tree_id, data_source, species, dbh, point)
@@ -80,12 +80,13 @@ def write_rows(conn, path: Path, rows, *, rename: dict[str, str] | None = None) 
         CREATE TABLE src (
             tree_id VARCHAR, city VARCHAR, data_source VARCHAR, species VARCHAR,
             tree_name VARCHAR, plant_date DATE, diameter_at_breast_height DOUBLE,
-            latitude DOUBLE, longitude DOUBLE, submission_photo_url VARCHAR, cultivar VARCHAR
+            latitude DOUBLE, longitude DOUBLE, submission_photo_url VARCHAR, cultivar VARCHAR,
+            crown_width_m DOUBLE
         )
         """
     )
     conn.executemany(
-        "INSERT INTO src VALUES (?, 'USSFO', ?, ?, NULL, NULL, ?, ?, ?, NULL, NULL)",
+        "INSERT INTO src VALUES (?, 'USSFO', ?, ?, NULL, NULL, ?, ?, ?, NULL, NULL, NULL)",
         [(tree_id, source, species, dbh, *point) for tree_id, source, species, dbh, point in rows],
     )
     select = ", ".join(

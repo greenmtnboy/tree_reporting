@@ -49,6 +49,7 @@ root partial datasource arbue_osm_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'ARBUE' and arbue_source = 'OSM_ARBUE'
@@ -66,6 +67,7 @@ root partial datasource buenosaires_raw_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'ARBUE' and arbue_source = 'BUENOSAIRES_OPENDATA'
@@ -87,6 +89,7 @@ root partial datasource arbue_community_tree_info (
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'ARBUE' and arbue_source = 'COMMUNITY_ARBUE'
@@ -123,6 +126,7 @@ partial datasource buenosaires_tree_info (
     ?longitude,
     ?submission_photo_url,
     ?cultivar,
+    ?crown_width_m,
     cluster_id,
     merged_sources,
     ?merged_tree_ids,

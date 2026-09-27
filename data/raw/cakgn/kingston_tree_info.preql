@@ -43,6 +43,7 @@ root partial datasource kingston_raw_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'CAKGN' and cakgn_source = 'KINGSTON_OPENDATA'
@@ -65,6 +66,7 @@ root partial datasource cakgn_community_tree_info (
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'CAKGN' and cakgn_source = 'COMMUNITY_CAKGN'
@@ -87,6 +89,7 @@ root partial datasource cakgn_osm_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'CAKGN' and cakgn_source = 'OSM_CAKGN'
@@ -118,6 +121,7 @@ partial datasource kingston_tree_info (
     ?longitude,
     ?submission_photo_url,
     ?cultivar,
+    ?crown_width_m,
     # Redundant on its face -- the prune below means it always equals tree_id --
     # and dropped from this template for exactly that reason, which is how the
     # first three cities scaffolded from it came out with fourteen columns

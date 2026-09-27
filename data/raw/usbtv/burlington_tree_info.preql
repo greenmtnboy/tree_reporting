@@ -78,6 +78,7 @@ root partial datasource usbtv_osm_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'USBTV' and usbtv_source = 'OSM_USBTV'
@@ -95,6 +96,7 @@ root partial datasource burlington_raw_tree_info (
     diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'USBTV' and usbtv_source = 'BURLINGTON_OPENDATA'
@@ -116,6 +118,7 @@ root partial datasource usbtv_community_tree_info (
     longitude: ?raw_longitude,
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
 )
 grain (tree_id)
 complete where city = 'USBTV' and usbtv_source = 'COMMUNITY_USBTV'
@@ -151,6 +154,7 @@ partial datasource burlington_tree_info (
     ?longitude,
     ?submission_photo_url,
     ?cultivar,
+    ?crown_width_m,
     cluster_id,
     merged_sources,
     ?merged_tree_ids,
