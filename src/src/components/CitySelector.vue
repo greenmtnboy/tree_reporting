@@ -54,7 +54,7 @@ function handleChange(e: Event) {
   if (route.name !== 'map') {
     activateCity(city)
   }
-  void router.replace({ query: { ...route.query, city } })
+  void router.replace({ query: { ...route.query, city, ...(route.name === 'map' ? { mode: 'explore' } : {}) } })
 }
 </script>
 

@@ -65,7 +65,7 @@ test.describe('Startup city resolution', () => {
     test.setTimeout(120_000)
     await setSharedLocation(context, 42.3601, -71.0589)
 
-    await page.goto('/#/')
+    await page.goto('/#/?mode=explore')
 
     const history = await waitForInitialHydratedCity(page, 'USBOS')
 
@@ -78,7 +78,7 @@ test.describe('Startup city resolution', () => {
     test.setTimeout(120_000)
     await context.clearPermissions()
 
-    await page.goto('/#/')
+    await page.goto('/#/?mode=explore')
 
     const history = await waitForInitialHydratedCity(page, 'USSFO')
 

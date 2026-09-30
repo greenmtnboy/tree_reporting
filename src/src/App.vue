@@ -11,7 +11,7 @@
     </div>
     <ChatPanel />
   </template>
-  <WelcomeModal />
+  <WelcomeModal v-if="route.name !== 'map'" />
 </template>
 
 <script setup lang="ts">
