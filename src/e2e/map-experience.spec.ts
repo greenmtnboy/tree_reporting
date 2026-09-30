@@ -78,6 +78,18 @@ for (const [label, viewport] of [
       await expect(page.locator('.tree-map')).toBeVisible()
     })
 
+    test('switching to nearby during exploration startup renders local trees', async ({ page, context }) => {
+      test.setTimeout(120_000)
+      await context.grantPermissions(['geolocation'])
+      await context.setGeolocation({ latitude: 42.3601, longitude: -71.0589 })
+      await page.goto('/#/?city=USBOS&mode=explore')
+      await expect(page.locator('.tree-map')).toHaveAttribute('data-trees-loaded-for', 'USBOS', { timeout: 60_000 })
+      await page.getByRole('button', { name: 'Near Me', exact: true }).click()
+      await expect(page).toHaveURL(/mode=nearby/)
+      await expect(page.locator('.tree-map')).toHaveAttribute('data-trees-loaded-for', 'USBOS', { timeout: 60_000 })
+      await page.waitForFunction(() => (window as any).__treeMap.queryRenderedFeatures({ layers: ['trees-circle'] }).length > 0)
+    })
+
     test('leaving a pending location request ignores its late result', async ({ page }) => {
       await page.addInitScript(() => {
         navigator.geolocation.getCurrentPosition = success => { (window as any).__finishLocation = success }
@@ -96,6 +108,16 @@ for (const [label, viewport] of [
       await page.goto('/#/?mode=nearby')
       await expect(page.getByRole('alert')).toContainText('do not have a tree inventory near you')
       await expect(page.locator('.tree-map')).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Explore City', exact: true })).toBeEnabled()
+    })
+
+    test('an empty neighborhood explains that there are no mapped trees', async ({ page, context }) => {
+      test.setTimeout(90_000)
+      await context.grantPermissions(['geolocation'])
+      // Offshore, within Boston's selection radius but outside its tree inventory.
+      await context.setGeolocation({ latitude: 42.3601, longitude: -70.7 })
+      await page.goto('/#/?mode=nearby')
+      await expect(page.locator('.nearby-empty')).toContainText('No mapped trees', { timeout: 60_000 })
       await expect(page.getByRole('button', { name: 'Explore City', exact: true })).toBeEnabled()
     })
 

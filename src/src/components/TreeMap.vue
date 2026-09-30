@@ -10,6 +10,9 @@
   <div v-if="isInitialLoading" class="map-loading" role="status">{{ nearbyLocation ? 'Loading trees around you…' : loadingMessage }}</div>
   <div v-else-if="tileRefreshing" class="map-loading map-refreshing">{{ tileRefreshMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
+  <div v-if="nearbyEmpty && !isInitialLoading && !displayError" class="nearby-empty" role="status">
+    No mapped trees in this view. Try zooming out or exploring a city.
+  </div>
   <div v-if="!isInitialLoading" class="map-legend" :class="{ 'map-legend--mobile': props.simplified }">
     <div v-for="entry in legendEntries" :key="entry.color" class="legend-entry">
       <span class="legend-swatch" :style="{ background: entry.color }"></span>
@@ -292,6 +295,7 @@ const mapRef = shallowRef<maplibregl.Map | null>(null)
 const zoomLevel = ref(13)
 const mapBearing = ref(0)
 const mapError = ref<string | null>(null)
+const nearbyEmpty = ref(false)
 const {
   phase: lifecyclePhase,
   requestedCity: lifecycleRequestedCity,
@@ -1795,6 +1799,10 @@ onMounted(async () => {
     map.on('moveend', () => { logIconLayerSnapshot('moveend') })
 
     map.on('idle', () => {
+      if (props.nearbyLocation && map.getSource('trees') && map.isSourceLoaded('trees')) {
+        const layers = ['trees-circle', 'trees-heat'].filter(id => map.getLayer(id))
+        nearbyEmpty.value = layers.length > 0 && map.queryRenderedFeatures(undefined, { layers }).length === 0
+      }
       if (!mapQueryChangedAt || firstMapIdleAfterPublishLogged) return
       firstMapIdleAfterPublishLogged = true
       console.info('[Perf] map:first-idle-after-publish', { msSincePublish: Math.round(nowMs() - mapQueryChangedAt) })
@@ -1835,6 +1843,9 @@ onUnmounted(() => {
   if (wasdRafId !== null) cancelAnimationFrame(wasdRafId)
   stopTileRefreshMessage()
   cancelIntro()
+  // The intro pauses the shared worker's tile fetcher. A replacement map
+  // (e.g. switching to Near Me mid-intro) must be able to fetch its tiles.
+  setAutoTileFetchEnabled(true)
   if (pendingSwoopFlyTimeout != null) {
     window.clearTimeout(pendingSwoopFlyTimeout)
     pendingSwoopFlyTimeout = null
@@ -1856,6 +1867,21 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.nearby-empty {
+  position: absolute;
+  top: 126px;
+  left: 12px;
+  right: 56px;
+  max-width: 320px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface-1);
+  color: var(--color-ink);
+  font-size: .85rem;
+  line-height: 1.5;
+  z-index: 5;
+}
+
 .tree-map {
   width: 100%;
   height: 100%;
