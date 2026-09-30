@@ -160,3 +160,8 @@ Mobile/desktop account-linking browser tests verify that an existing Google
 profile collision is visibly explained and focused while the guest session and
 its badges remain intact. The unit suite separately covers redirect-fallback
 errors that previously escaped without setting the displayed error state.
+The account-login alternative requires a warning confirmation before leaving
+guest work behind. Browser tests cover cancelling that warning and switching to
+an existing profile with different badges on mobile and desktop. Unit tests
+verify that switching uses sign-in rather than linking, including its redirect
+fallback, and never signs the guest out before Google sign-in succeeds.

@@ -5,7 +5,7 @@
 
       <section class="profile-status">
         <p v-if="authError" ref="authErrorElement" class="error-text" role="alert" tabindex="-1">
-          {{ isAnonymous ? 'Account linking failed' : 'Sign-in failed' }}: {{ authError.message }}
+          {{ isAnonymous && !switchingAccount ? 'Account linking failed' : 'Sign-in failed' }}: {{ authError.message }}
         </p>
         <template v-if="!firebaseAvailable">
           <p>Profile features are unavailable right now. Authentication services couldn't be reached.</p>
@@ -21,7 +21,7 @@
             if you want the fastest possible path to submit.
           </p>
           <div class="profile-actions">
-            <button class="btn-google" :disabled="pending" @click="handleGoogleSignIn">
+            <button class="btn-google" :disabled="pending" @click="handleGoogleSignIn()">
               {{ googleButtonLabel }}
             </button>
             <button class="btn-secondary" :disabled="pending" @click="handleAnonymousSignIn">
@@ -77,14 +77,25 @@
               v-if="isAnonymous"
               class="btn-google"
               :disabled="pending"
-              @click="handleGoogleSignIn"
+              @click="handleGoogleSignIn()"
             >
               {{ googleButtonLabel }}
+            </button>
+            <button v-if="isAnonymous" class="btn-secondary" :disabled="pending" @click="showAccountSwitch = true">
+              Log in as account
             </button>
             <button class="btn-secondary" :disabled="pending" @click="handleSignOut">
               Sign out
             </button>
           </div>
+          <section v-if="isAnonymous && showAccountSwitch" ref="accountSwitchElement" class="account-switch" role="alertdialog" tabindex="-1" aria-labelledby="switch-title" aria-describedby="switch-warning">
+            <h2 id="switch-title">Leave this guest account?</h2>
+            <p id="switch-warning">Your guest check-ins, photos, and badges will not transfer to your Google account and may become inaccessible when you leave this session. Your existing Google account's work stays intact.</p>
+            <div class="profile-actions">
+              <button class="btn-secondary" :disabled="pending" @click="showAccountSwitch = false">Keep guest account</button>
+              <button class="btn-google" :disabled="pending" @click="handleGoogleSignIn('switch')">{{ pending ? 'Signing in…' : 'Leave guest and log in' }}</button>
+            </div>
+          </section>
         </template>
       </section>
 
@@ -168,6 +179,15 @@ const {
   signOut,
 } = useAuth()
 const pending = ref(false)
+const showAccountSwitch = ref(false)
+const switchingAccount = ref(false)
+const accountSwitchElement = ref<HTMLElement | null>(null)
+watch(showAccountSwitch, async visible => {
+  if (!visible) return
+  await nextTick()
+  accountSwitchElement.value?.focus({ preventScroll: true })
+  accountSwitchElement.value?.scrollIntoView?.({ block: 'nearest' })
+})
 const authErrorElement = ref<HTMLElement | null>(null)
 watch(authError, async error => {
   if (!error) return
@@ -178,7 +198,7 @@ watch(authError, async error => {
 
 const googleButtonLabel = computed(() => {
   if (pending.value && redirectingToGoogle.value) return 'Redirecting to Google...'
-  if (pending.value) return isAnonymous.value ? 'Linking Google...' : 'Signing in...'
+  if (pending.value) return isAnonymous.value && !switchingAccount.value ? 'Linking Google...' : 'Signing in...'
   return isAnonymous.value ? 'Link Google account' : 'Continue with Google'
 })
 
@@ -228,10 +248,12 @@ async function handleAnonymousSignIn() {
   }
 }
 
-async function handleGoogleSignIn() {
+async function handleGoogleSignIn(mode: 'link' | 'switch' = 'link') {
+  switchingAccount.value = mode === 'switch'
   pending.value = true
   try {
-    await signInWithGoogle()
+    const signedIn = await signInWithGoogle(mode)
+    if (signedIn) showAccountSwitch.value = false
   } catch {
     /* error already surfaced via authError */
   } finally {
@@ -250,6 +272,8 @@ async function handleSignOut() {
 </script>
 
 <style scoped>
+.account-switch { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--color-moss); }
+.account-switch h2 { font-size: 1rem; margin: 0; }
 .profile-view {
   padding: 32px 20px;
   overflow-y: auto;

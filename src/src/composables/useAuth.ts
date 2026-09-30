@@ -14,7 +14,7 @@ import {
   type User,
 } from 'firebase/auth'
 import { auth, firebaseAvailable } from '../lib/firebase'
-import { e2eEnabled, e2eFixtures, e2eUser } from '../lib/e2eFixtures'
+import { e2eEnabled, e2eFixtures, e2eUser, e2eSwitchAccount } from '../lib/e2eFixtures'
 
 const GOOGLE_PROVIDER_ID = 'google.com'
 
@@ -51,7 +51,7 @@ function normalizeGoogleSignInError(err: unknown, currentUser: User | null | und
       code === 'auth/account-exists-with-different-credential')
   ) {
     return new Error(
-      "That Google account is already linked to another profile. Nothing was merged; you are still using this anonymous account. Signing out may make this account's contributions inaccessible. Sign out first, then use Continue with Google only if you want to reopen the existing profile.",
+      "That Google account is already linked to another profile. Nothing was merged; you are still using this anonymous account. Switching may make this account's contributions inaccessible. Use Log in as account to reopen the existing profile after reviewing the warning.",
     )
   }
   return err as Error
@@ -132,7 +132,7 @@ export async function signInIfNeeded(): Promise<User> {
   return signInPromise
 }
 
-export async function signInWithGoogle(): Promise<User | null> {
+export async function signInWithGoogle(mode: 'link' | 'switch' = 'link'): Promise<User | null> {
   if (!auth) {
     const err = new Error('Firebase auth is not configured')
     authError.value = err
@@ -143,13 +143,17 @@ export async function signInWithGoogle(): Promise<User | null> {
   authError.value = null
 
   const currentUser = auth.currentUser ?? user.value
+  const shouldLink = mode === 'link' && currentUser?.isAnonymous
   const provider = createGoogleProvider()
 
   try {
     const fixture = e2eEnabled ? e2eFixtures() : null
-    if (fixture?.googleLinkError) throw { code: fixture.googleLinkError }
-    const result =
-      currentUser?.isAnonymous
+    if (shouldLink && fixture?.googleLinkError) throw { code: fixture.googleLinkError }
+    const seededUser = e2eEnabled && mode === 'switch' ? e2eSwitchAccount() : null
+    // Signing in replaces the session only on success. Do not sign out first:
+    // a cancelled popup must leave the guest and their contributions accessible.
+    const result = seededUser ? { user: seededUser } :
+      shouldLink
         ? await linkWithPopup(currentUser, provider)
         : await signInWithPopup(auth, provider)
     signInPromise = null
@@ -161,7 +165,7 @@ export async function signInWithGoogle(): Promise<User | null> {
     if (shouldUseRedirectFallback(err)) {
       redirectingToGoogle.value = true
       try {
-        if (currentUser?.isAnonymous) {
+        if (shouldLink) {
           await linkWithRedirect(currentUser, provider)
         } else {
           await signInWithRedirect(auth, provider)
@@ -169,13 +173,13 @@ export async function signInWithGoogle(): Promise<User | null> {
         return null
       } catch (redirectError) {
         redirectingToGoogle.value = false
-        const normalizedError = normalizeGoogleSignInError(redirectError, currentUser)
+        const normalizedError = normalizeGoogleSignInError(redirectError, shouldLink ? currentUser : null)
         authError.value = normalizedError
         throw normalizedError
       }
     }
 
-    const normalizedError = normalizeGoogleSignInError(err, currentUser)
+    const normalizedError = normalizeGoogleSignInError(err, shouldLink ? currentUser : null)
     authError.value = normalizedError
     throw normalizedError
   }

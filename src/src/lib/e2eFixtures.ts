@@ -81,6 +81,8 @@ export interface E2EModificationFixture {
 export interface E2EFixtures {
   /** Firebase error code returned by the Google link action, e2e builds only. */
   googleLinkError?: string
+  googleSignInUser?: E2EUserFixture
+  googleSignInCheckins?: E2ECheckinFixture[]
   rankings?: RankedTree[]
   rankingsUnavailable?: boolean
   /** `null` models a signed-out visitor; omitting it leaves real auth in charge. */
@@ -133,6 +135,16 @@ export function e2eUser(): User | null | undefined {
     isAnonymous: u.isAnonymous ?? true,
     providerData: (u.providerIds ?? []).map((providerId) => ({ providerId })),
   } as unknown as User
+}
+
+export function e2eSwitchAccount(): User | null {
+  const fixtures = e2eFixtures()
+  if (!fixtures?.googleSignInUser) return null
+  fixtures.user = fixtures.googleSignInUser
+  fixtures.checkins = fixtures.googleSignInCheckins ?? []
+  fixtures.submissions = []
+  fixtures.modifications = []
+  return e2eUser() ?? null
 }
 
 export function e2eSubmissions(): Submission[] | null {
