@@ -450,9 +450,10 @@ export interface ModificationInput {
   city: string
   treeLat: number
   treeLng: number
-  userLat: number
-  userLng: number
-  distanceMeters: number
+  // Desktop corrections do not claim an on-site visit.
+  userLat: number | null
+  userLng: number | null
+  distanceMeters: number | null
   // What the tree looked like when the user opened it, so a reviewer sees
   // the proposal against the values it replaces.
   currentSpecies?: string | null

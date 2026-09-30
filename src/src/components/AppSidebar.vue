@@ -39,8 +39,7 @@
       <router-link :to="speciesRoute" class="nav-link">
         <span class="nav-icon" aria-hidden="true">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M7 10L12 2l5 8" />
-            <path d="M12 6l-8 13h16l-8-13z" />
+            <path d="M9.54 10H7l5-8 5 8h-2.54L20 19H4z" />
             <path d="M12 19v3" />
           </svg>
         </span>

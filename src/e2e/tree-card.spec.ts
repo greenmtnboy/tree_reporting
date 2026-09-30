@@ -146,6 +146,26 @@ for (const mobile of [false, true]) {
       expect(box!.x + box!.width, 'tree card overflows the right edge').toBeLessThanOrEqual(viewport.width)
 
       expect(queryErrors, `tree card query failed: ${queryErrors.join('\n')}`).toEqual([])
+
+      if (!mobile) {
+        // Stress the same layout with a community id like the original overflow.
+        await card.locator('.tree-card-pane--tree .tc-value').first().evaluate(el => {
+          el.textContent = 'community-LN351F0hhfzOVEL2v12345678901234567890'
+        })
+        const pane = card.locator('.tree-card-pane--tree')
+        expect(await pane.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+        await expect(page.getByTestId('tree-checkin-count')).toHaveCount(0)
+        await page.getByTestId('tree-report-link').click()
+        const dialog = page.getByRole('dialog', { name: 'Suggest a correction' })
+        await expect(dialog).toBeVisible()
+        await expect(dialog.getByText('Finding your location…')).toHaveCount(0)
+        await expect(dialog.getByRole('tablist')).toHaveCount(0)
+        await expect(dialog.getByRole('button', { name: 'Send fix' })).toBeDisabled()
+        await dialog.getByLabel('Species (scientific name)').fill('Acer rubrum')
+        await expect(dialog.getByRole('button', { name: 'Send fix' })).toBeEnabled()
+        await expect(dialog.locator('.location-picker__map canvas')).toBeVisible()
+        expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+      }
     })
 
     test('the card shows check-ins and visitor photos, and a check-in button only on mobile', async ({ page }) => {
@@ -174,7 +194,7 @@ for (const mobile of [false, true]) {
       await expect(visitorPhoto).toContainText('2 visitor photos')
       await expect(page.locator('.tree-card-pane--photos .tree-card-section-label').first()).toHaveText('Photo of this tree')
 
-      // Checking in is mobile-only; desktop shows the count and nothing more.
+      // Checking in is mobile-only; desktop can suggest reviewed corrections.
       const checkin = page.locator('.tree-card-checkin')
       const report = page.getByTestId('tree-report-link')
       if (mobile) {
@@ -182,7 +202,8 @@ for (const mobile of [false, true]) {
         await expect(report).toBeVisible()
       } else {
         await expect(checkin).toHaveCount(0)
-        await expect(report).toHaveCount(0)
+        await expect(report).toBeVisible()
+        await expect(report).toHaveText('Suggest a correction')
       }
     })
 

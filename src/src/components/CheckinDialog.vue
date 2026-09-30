@@ -1,8 +1,9 @@
 <template>
-  <div class="checkin-dialog" role="dialog" aria-modal="true" @click.self="handleDismiss">
+  <Teleport to="body">
+  <div class="checkin-dialog" :class="{ 'checkin-dialog--remote': remoteCorrection }" role="dialog" aria-modal="true" aria-labelledby="checkin-title" @click.self="handleDismiss">
     <div class="checkin-dialog__panel">
       <header class="checkin-dialog__header">
-        <h2 class="checkin-dialog__title">{{ MODE_TITLES[mode] }}</h2>
+        <h2 id="checkin-title" class="checkin-dialog__title">{{ remoteCorrection ? 'Suggest a correction' : MODE_TITLES[mode] }}</h2>
         <button
           type="button"
           class="checkin-dialog__close"
@@ -47,9 +48,9 @@
 
         <!-- Ready -->
         <section v-else-if="state === 'ready'" class="section">
-          <p class="ok-text">You're here — {{ formatMeters(distance) }} from the tree.</p>
+          <p v-if="!remoteCorrection" class="ok-text">You're here — {{ formatMeters(distance) }} from the tree.</p>
 
-          <div class="mode-tabs" role="tablist" aria-label="What would you like to do?">
+          <div v-if="!remoteCorrection" class="mode-tabs" role="tablist" aria-label="What would you like to do?">
             <button
               v-for="m in MODES"
               :key="m"
@@ -73,8 +74,10 @@
               <SubmitLocationPicker
                 :lat="proposedLat"
                 :lng="proposedLng"
-                :user-lat="userLat ?? treeLat"
-                :user-lng="userLng ?? treeLng"
+                :user-lat="userLat"
+                :user-lng="userLng"
+                :origin-lat="treeLat"
+                :origin-lng="treeLng"
                 :zoom="19"
                 :max-zoom="21"
                 @update="handlePinMoved"
@@ -96,6 +99,7 @@
               <input
                 v-model="proposedSpecies"
                 type="text"
+                maxlength="200"
                 class="text-input"
                 :placeholder="species || 'e.g. Platanus x hispanica'"
               />
@@ -218,6 +222,7 @@
       </div>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -242,6 +247,7 @@ const props = defineProps<{
   dbhInches?: number | null
   plantYear?: number | null
   initialMode?: 'checkin' | 'update' | 'missing'
+  remoteCorrection?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -297,7 +303,7 @@ type State =
 
 const MAX_DISTANCE_M = 50
 
-const state = ref<State>('locating')
+const state = ref<State>(props.remoteCorrection ? 'ready' : 'locating')
 const userLat = ref<number | null>(null)
 const userLng = ref<number | null>(null)
 const distance = ref<number>(0)
@@ -309,7 +315,7 @@ const photoInputRef = ref<HTMLInputElement | null>(null)
 const progress = ref(0)
 const submitError = ref<string>('')
 
-const mode = ref<Mode>(props.initialMode ?? 'checkin')
+const mode = ref<Mode>(props.remoteCorrection ? 'update' : (props.initialMode ?? 'checkin'))
 const proposedLat = ref(props.treeLat)
 const proposedLng = ref(props.treeLng)
 const proposedSpecies = ref('')
@@ -351,7 +357,7 @@ const hasChanges = computed(
   () => movedMeters.value >= MIN_MOVE_M || speciesChanged.value || dbhChanged.value,
 )
 
-const canSubmit = computed(() => mode.value !== 'update' || hasChanges.value)
+const canSubmit = computed(() => mode.value !== 'update' || (hasChanges.value && !dbhInvalid.value))
 
 function handlePinMoved(payload: { lat: number; lng: number }) {
   proposedLat.value = payload.lat
@@ -422,7 +428,7 @@ async function handlePhotoPicked(event: Event) {
 }
 
 async function handleSubmit() {
-  if (userLat.value == null || userLng.value == null) {
+  if (!props.remoteCorrection && (userLat.value == null || userLng.value == null)) {
     state.value = 'locating'
     return
   }
@@ -437,6 +443,7 @@ async function handleSubmit() {
     const city = closestCityTo(props.treeLat, props.treeLng)
     let counted = false
     if (mode.value === 'checkin') {
+      if (userLat.value == null || userLng.value == null) return
       ;({ counted } = await recordCheckin({
         treeId: props.treeId,
         treeLat: props.treeLat,
@@ -464,7 +471,7 @@ async function handleSubmit() {
         treeLng: props.treeLng,
         userLat: userLat.value,
         userLng: userLng.value,
-        distanceMeters: Math.round(distance.value),
+        distanceMeters: props.remoteCorrection ? null : Math.round(distance.value),
         currentSpecies: props.species ?? null,
         currentDbhInches: props.dbhInches ?? null,
         missingReason: missingReason.value,
@@ -496,8 +503,10 @@ function handleKey(e: KeyboardEvent) {
 
 onMounted(() => {
   window.addEventListener('keydown', handleKey)
-  void startLocation()
-  void fetchSpeciesCityCount()
+  if (!props.remoteCorrection) {
+    void startLocation()
+    void fetchSpeciesCityCount()
+  }
 })
 
 onBeforeUnmount(() => {
@@ -574,6 +583,8 @@ onBeforeUnmount(() => {
 }
 
 .checkin-dialog__tree code {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-family: var(--font-mono, ui-monospace, monospace);
   color: var(--color-leaf);
   font-size: 0.82rem;
@@ -643,6 +654,17 @@ onBeforeUnmount(() => {
 
 .picker-wrap :deep(.location-picker) {
   min-height: 0;
+}
+
+@media (min-width: 768px) {
+  .checkin-dialog--remote .checkin-dialog__panel {
+    max-width: 620px;
+  }
+
+  .checkin-dialog--remote .picker-wrap {
+    height: 300px;
+    flex-shrink: 0;
+  }
 }
 
 .field {
