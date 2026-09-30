@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef, triggerRef } from 'vue'
 import {
   GoogleAuthProvider,
   browserLocalPersistence,
@@ -18,11 +18,18 @@ import { e2eEnabled, e2eFixtures, e2eUser } from '../lib/e2eFixtures'
 
 const GOOGLE_PROVIDER_ID = 'google.com'
 
-const user = ref<User | null>(null)
+// Firebase owns and mutates User instances. Do not deep-proxy SDK objects:
+// same-UID account linking can mutate the raw instance without Vue observing it.
+const user = shallowRef<User | null>(null)
 const authReady = ref(false)
 const authError = ref<Error | null>(null)
 const redirectingToGoogle = ref(false)
 let signInPromise: Promise<User> | null = null
+
+function publishUser(nextUser: User | null) {
+  if (user.value === nextUser) triggerRef(user)
+  else user.value = nextUser
+}
 
 function createGoogleProvider() {
   const provider = new GoogleAuthProvider()
@@ -74,7 +81,7 @@ async function initializeAuthState(): Promise<void> {
   }
 
   onAuthStateChanged(auth, (nextUser) => {
-    user.value = nextUser
+    publishUser(nextUser)
     authStateSettled = true
     redirectingToGoogle.value = false
     markReadyIfDone()
@@ -82,7 +89,8 @@ async function initializeAuthState(): Promise<void> {
 
   try {
     await setPersistence(auth, browserLocalPersistence)
-    await getRedirectResult(auth)
+    const result = await getRedirectResult(auth)
+    if (result) publishUser(result.user)
   } catch (err) {
     authError.value = err as Error
   } finally {
@@ -111,7 +119,10 @@ export async function signInIfNeeded(): Promise<User> {
 
   authError.value = null
   signInPromise = signInAnonymously(auth)
-    .then((cred) => cred.user)
+    .then((cred) => {
+      publishUser(cred.user)
+      return cred.user
+    })
     .catch((err: Error) => {
       authError.value = err
       signInPromise = null
@@ -140,6 +151,9 @@ export async function signInWithGoogle(): Promise<User | null> {
         ? await linkWithPopup(currentUser, provider)
         : await signInWithPopup(auth, provider)
     signInPromise = null
+    // Linking retains the UID, so onAuthStateChanged need not fire. Explicitly
+    // publish the completed credential, including same-object SDK mutations.
+    publishUser(result.user)
     return result.user
   } catch (err) {
     if (shouldUseRedirectFallback(err)) {

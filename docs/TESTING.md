@@ -148,3 +148,10 @@ collection updates independently, exposing lookup failures while preserving its
 previous data. Badge history reads are no longer capped at 50. The public tree
 counter still only increments once per user/tree per 20 hours; this is distinct
 from personal check-in history. Cross-device history requires the same Account ID.
+
+
+`useAuth.test.ts` covers anonymous-to-Google upgrades where Firebase mutates the
+same User instance without another auth-state callback: popup and redirect
+completion, the rendered Profile label, and credential-already-in-use errors.
+The app keeps SDK users in a shallow ref and explicitly publishes completed
+credentials, including notifying Vue when object identity and UID stay the same.
