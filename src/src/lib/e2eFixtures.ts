@@ -1,7 +1,7 @@
 /**
  * Test-only data seam for the Playwright suite.
  *
- * Achievements are derived from a signed-in user's Firestore contributions, so
+ * Badges are derived from a signed-in user's Firestore contributions, so
  * nothing in the badge UI can be reached from a browser without either a
  * Firestore emulator or a seam. This is the seam: an e2e build reads a fixture
  * object off `window.__treeE2E` — injected by `page.addInitScript` before any
@@ -13,6 +13,7 @@
  * every branch guarded by it is dead code. Only `pnpm build:e2e` (which loads
  * `.env.e2e`) turns it on.
  */
+import type { RankedTree, RankingSnapshot } from './missions'
 import type { User } from 'firebase/auth'
 import type {
   Checkin,
@@ -61,6 +62,7 @@ export interface E2ECheckinFixture {
   treeForm?: string | null
   dbhInches?: number | null
   plantYear?: number | null
+  ranking?: RankingSnapshot | null
   speciesCityCount?: number | null
   distanceMeters?: number | null
 }
@@ -77,6 +79,8 @@ export interface E2EModificationFixture {
 }
 
 export interface E2EFixtures {
+  rankings?: RankedTree[]
+  rankingsUnavailable?: boolean
   /** `null` models a signed-out visitor; omitting it leaves real auth in charge. */
   user?: E2EUserFixture | null
   submissions?: E2ESubmissionFixture[]
@@ -175,6 +179,7 @@ export function e2eCheckins(): Checkin[] | null {
     dbhInches: c.dbhInches ?? null,
     plantYear: c.plantYear ?? null,
     speciesCityCount: c.speciesCityCount ?? null,
+    ranking: c.ranking ?? null,
   }))
 }
 

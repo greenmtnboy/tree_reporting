@@ -1,9 +1,10 @@
-import { ref } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import type { RankingSnapshot } from '../lib/missions'
 import {
   collection,
   doc,
   getDoc,
-  getDocs,
+  getDocsFromServer,
   increment,
   limit,
   orderBy,
@@ -73,12 +74,13 @@ export interface Checkin {
   photoReview: PhotoReviewStatus | null
   at: Date | null
   // Tree facts snapshotted at check-in time (null on older check-ins).
-  // Achievements read these because the tree's city parquet may not be
+  // Badges read these because the tree's city parquet may not be
   // loaded when they are evaluated.
   species: string | null
   treeForm: string | null
   dbhInches: number | null
   plantYear: number | null
+  ranking?: RankingSnapshot | null
   speciesCityCount: number | null
 }
 
@@ -99,6 +101,7 @@ export interface CheckinInput {
   treeForm?: string | null
   dbhInches?: number | null
   plantYear?: number | null
+  ranking?: RankingSnapshot | null
   speciesCityCount?: number | null
   onProgress?: (fraction: number) => void
 }
@@ -251,6 +254,7 @@ function mapCheckinDoc(id: string, data: Record<string, unknown>): Checkin {
     dbhInches: data.dbhInches == null ? null : Number(data.dbhInches),
     plantYear: data.plantYear == null ? null : Number(data.plantYear),
     speciesCityCount: data.speciesCityCount == null ? null : Number(data.speciesCityCount),
+    ranking: (data.ranking as RankingSnapshot | null) ?? null,
   }
 }
 
@@ -301,6 +305,7 @@ export async function recordCheckin(input: CheckinInput): Promise<{ id: string; 
     dbhInches: input.dbhInches ?? null,
     plantYear: input.plantYear ?? null,
     speciesCityCount: input.speciesCityCount ?? null,
+    ...(input.ranking ? { ranking: input.ranking } : {}),
     at: serverTimestamp(),
   }
   const checkinRef = doc(collection(firestore, 'checkins'))
@@ -564,11 +569,11 @@ export async function listMyModifications(maxResults = 50): Promise<TreeModifica
     orderBy('submittedAt', 'desc'),
     limit(maxResults),
   )
-  const snap = await getDocs(q)
+  const snap = await getDocsFromServer(q)
   return snap.docs.map((d) => mapModificationDoc(d.id, d.data()))
 }
 
-export async function listMySubmissions(maxResults = 50): Promise<Submission[]> {
+export async function listMySubmissions(maxResults?: number): Promise<Submission[]> {
   // Playwright fixtures stand in for Firestore; no-op in a normal build.
   const seeded = e2eSubmissions()
   if (seeded) return seeded.slice(0, maxResults)
@@ -579,13 +584,13 @@ export async function listMySubmissions(maxResults = 50): Promise<Submission[]> 
     collection(firestore, 'submissions'),
     where('userId', '==', user.uid),
     orderBy('submittedAt', 'desc'),
-    limit(maxResults),
+    ...(maxResults == null ? [] : [limit(maxResults)]),
   )
-  const snap = await getDocs(q)
+  const snap = await getDocsFromServer(q)
   return snap.docs.map((d) => mapSubmissionDoc(d.id, d.data()))
 }
 
-export async function listMyCheckins(maxResults = 50): Promise<Checkin[]> {
+export async function listMyCheckins(maxResults?: number): Promise<Checkin[]> {
   const seeded = e2eCheckins()
   if (seeded) return seeded.slice(0, maxResults)
 
@@ -595,9 +600,9 @@ export async function listMyCheckins(maxResults = 50): Promise<Checkin[]> {
     collection(firestore, 'checkins'),
     where('userId', '==', user.uid),
     orderBy('at', 'desc'),
-    limit(maxResults),
+    ...(maxResults == null ? [] : [limit(maxResults)]),
   )
-  const snap = await getDocs(q)
+  const snap = await getDocsFromServer(q)
   return snap.docs.map((d) => mapCheckinDoc(d.id, d.data()))
 }
 
@@ -617,29 +622,60 @@ export function useMyContributions() {
   const error = ref<Error | null>(null)
   const { user } = useAuth()
 
+  let generation = 0
+  let fetchingFor: string | null = null
+  watch(() => user.value?.uid, () => {
+    generation++
+    fetchingFor = null
+    submissions.value = []
+    checkins.value = []
+    modifications.value = []
+    error.value = null
+    loading.value = false
+  }, { flush: 'sync' })
   async function refresh() {
+    const uid = user.value?.uid
+    if (!uid || fetchingFor === uid) return
+    const token = ++generation
+    fetchingFor = uid
     loading.value = true
     error.value = null
     try {
-      const [subs, chks, mods] = await Promise.all([
-        listMySubmissions(),
-        listMyCheckins(),
-        // Reports are the newest collection; a failure here (e.g. its index
-        // still building) must not blank the photos and check-ins above it.
-        listMyModifications().catch((e: unknown) => {
-          console.warn('[contributions] could not load tree reports', e)
-          return [] as TreeModification[]
-        }),
+      const results = await Promise.allSettled([
+        listMySubmissions(), listMyCheckins(), listMyModifications(),
       ])
-      submissions.value = subs
-      checkins.value = chks
-      modifications.value = mods
+      if (token !== generation || user.value?.uid !== uid) return
+      const [subs, chks, mods] = results
+      // One failed collection must not suppress fresh data from another.
+      if (subs.status === 'fulfilled') submissions.value = subs.value
+      if (chks.status === 'fulfilled') checkins.value = chks.value
+      if (mods.status === 'fulfilled') modifications.value = mods.value
+      const labels = ['Submissions', 'Check-ins', 'Tree reports']
+      const failures = results.flatMap((result, i) => result.status === 'rejected'
+        ? [`${labels[i]}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`] : [])
+      if (failures.length) error.value = new Error(failures.join('; '))
     } catch (e) {
-      error.value = e as Error
+      if (token === generation && user.value?.uid === uid) error.value = e as Error
     } finally {
-      loading.value = false
+      if (token === generation) {
+        loading.value = false
+        fetchingFor = null
+      }
     }
   }
+
+  function refreshOnReturn() {
+    if (document.visibilityState === 'visible') void refresh()
+  }
+  onMounted(() => {
+    window.addEventListener('focus', refreshOnReturn)
+    document.addEventListener('visibilitychange', refreshOnReturn)
+  })
+  onBeforeUnmount(() => {
+    generation++
+    window.removeEventListener('focus', refreshOnReturn)
+    document.removeEventListener('visibilitychange', refreshOnReturn)
+  })
 
   return { submissions, checkins, modifications, loading, error, refresh, user }
 }

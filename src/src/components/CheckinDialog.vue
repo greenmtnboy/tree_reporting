@@ -205,6 +205,7 @@
           <p v-if="mode !== 'checkin'" class="muted">
             A reviewer will look at it. You can follow it under My contributions.
           </p>
+          <router-link v-if="mode === 'checkin'" :to="{ name: 'contributions', query: { city: rankedTree?.city ?? closestCityTo(treeLat, treeLng) } }" @click="handleDismiss">See your badges and missions →</router-link>
           <div class="actions">
             <button type="button" class="btn-primary" @click="handleDismiss">Close</button>
           </div>
@@ -236,6 +237,8 @@ import {
 } from '../composables/useSubmissions'
 import SubmitLocationPicker from './SubmitLocationPicker.vue'
 import { haversineKm, closestCityTo } from '../composables/useMapData'
+import { loadTreeRanking } from '../lib/treeRankings'
+import type { RankedTree } from '../lib/missions'
 import { useDuckDB } from '../composables/useDuckDB'
 
 const props = defineProps<{
@@ -373,6 +376,11 @@ function resetPin() {
 // currently loaded city. Null if the query fails or the tree has no species —
 // the check-in must never be blocked on this.
 const speciesCityCount = ref<number | null>(null)
+const rankedTree = ref<RankedTree | null>(null)
+let rankingRequest: Promise<void> | null = null
+function fetchRanking() {
+  rankingRequest = loadTreeRanking(props.treeId).then(t => { rankedTree.value = t }).catch(() => {})
+}
 
 async function fetchSpeciesCityCount() {
   const species = props.species?.trim()
@@ -385,7 +393,7 @@ async function fetchSpeciesCityCount() {
     const n = Number(rows[0]?.n)
     if (Number.isFinite(n) && n > 0) speciesCityCount.value = n
   } catch {
-    // Achievements simply won't see a rarity value for this check-in.
+    // Badges simply won't see a rarity value for this check-in.
   }
 }
 
@@ -440,7 +448,11 @@ async function handleSubmit() {
     progress.value = fraction
   }
   try {
-    const city = closestCityTo(props.treeLat, props.treeLng)
+    // A short bound keeps missing rankings from blocking a visit.
+    if (mode.value === 'checkin' && rankingRequest) {
+      await Promise.race([rankingRequest, new Promise(resolve => setTimeout(resolve, 2500))])
+    }
+    const city = rankedTree.value?.city ?? closestCityTo(props.treeLat, props.treeLng)
     let counted = false
     if (mode.value === 'checkin') {
       if (userLat.value == null || userLng.value == null) return
@@ -455,10 +467,11 @@ async function handleSubmit() {
         photoBlob: photoBlob.value ?? undefined,
         submitPhotoForTree: submitPhotoForTree.value,
         species: props.species ?? null,
-        treeForm: props.treeForm ?? null,
+        treeForm: rankedTree.value?.treeForm ?? props.treeForm ?? null,
         dbhInches: props.dbhInches ?? null,
         plantYear: props.plantYear ?? null,
         speciesCityCount: speciesCityCount.value,
+        ranking: rankedTree.value ? { rarityTier: rankedTree.value.rarityTier, trunkRank: rankedTree.value.trunkRank, canopyRank: rankedTree.value.canopyRank } : null,
         onProgress,
       }))
     } else {
@@ -506,6 +519,7 @@ onMounted(() => {
   if (!props.remoteCorrection) {
     void startLocation()
     void fetchSpeciesCityCount()
+    fetchRanking()
   }
 })
 

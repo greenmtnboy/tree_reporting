@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ACHIEVEMENTS,
+  BADGES,
   buildStats,
-  evaluateAchievements,
+  evaluateBadges,
   plantYearFrom,
-  type AchievementCheckin,
-  type AchievementSubmission,
-} from '../lib/achievements'
+  type BadgeCheckin,
+  type BadgeSubmission,
+} from '../lib/badges'
 
-function submission(overrides: Partial<AchievementSubmission> = {}): AchievementSubmission {
+function submission(overrides: Partial<BadgeSubmission> = {}): BadgeSubmission {
   return {
     city: 'USSFO',
     species: null,
@@ -18,7 +18,7 @@ function submission(overrides: Partial<AchievementSubmission> = {}): Achievement
   }
 }
 
-function checkin(overrides: Partial<AchievementCheckin> = {}): AchievementCheckin {
+function checkin(overrides: Partial<BadgeCheckin> = {}): BadgeCheckin {
   return {
     city: 'USSFO',
     at: new Date('2026-08-01T12:00:00'),
@@ -32,24 +32,24 @@ function checkin(overrides: Partial<AchievementCheckin> = {}): AchievementChecki
   }
 }
 
-function earnedIds(subs: AchievementSubmission[], chks: AchievementCheckin[]): Set<string> {
+function earnedIds(subs: BadgeSubmission[], chks: BadgeCheckin[]): Set<string> {
   return new Set(
-    evaluateAchievements(subs, chks)
+    evaluateBadges(subs, chks)
       .filter((a) => a.earned)
       .map((a) => a.id),
   )
 }
 
-describe('achievement evaluation', () => {
+describe('badge evaluation', () => {
   it('earns nothing with no contributions', () => {
     expect(earnedIds([], []).size).toBe(0)
   })
 
-  it('unique achievement ids and metrics that exist on stats', () => {
-    const ids = new Set(ACHIEVEMENTS.map((a) => a.id))
-    expect(ids.size).toBe(ACHIEVEMENTS.length)
+  it('unique badge ids and metrics that exist on stats', () => {
+    const ids = new Set(BADGES.map((a) => a.id))
+    expect(ids.size).toBe(BADGES.length)
     const stats = buildStats([], [])
-    for (const a of ACHIEVEMENTS) {
+    for (const a of BADGES) {
       expect(stats[a.metric]).toBeDefined()
     }
   })
@@ -95,7 +95,7 @@ describe('achievement evaluation', () => {
     expect(stats.identifiedContributionCount).toBe(1)
   })
 
-  it('tree form achievements need the snapshot', () => {
+  it('tree form badges need the snapshot', () => {
     const legacy = checkin() // pre-feature check-in without a snapshot
     expect(earnedIds([], [legacy]).has('palm')).toBe(false)
 
@@ -118,6 +118,11 @@ describe('achievement evaluation', () => {
     expect(earnedIds([], [checkin({ speciesCityCount: 2 })]).has('one-of-one')).toBe(false)
     // 0 means the count query returned nothing sensible — never rare.
     expect(earnedIds([], [checkin({ speciesCityCount: 0 })]).has('rare-find')).toBe(false)
+  })
+
+  it('uses the published rarity tier for new visits and preserves legacy awards', () => {
+    expect(earnedIds([], [checkin({ speciesCityCount: 100, ranking: { rarityTier: 'rare', trunkRank: null, canopyRank: null } })]).has('rare-find')).toBe(true)
+    expect(earnedIds([], [checkin({ speciesCityCount: 1, ranking: { rarityTier: 'common', trunkRank: null, canopyRank: null } })]).has('rare-find')).toBe(false)
   })
 
   it('size and age', () => {
@@ -160,7 +165,7 @@ describe('achievement evaluation', () => {
 
   it('progress is clamped to the target', () => {
     const subs = Array.from({ length: 7 }, () => submission())
-    const submit5 = evaluateAchievements(subs, []).find((a) => a.id === 'submit-5')
+    const submit5 = evaluateBadges(subs, []).find((a) => a.id === 'submit-5')
     expect(submit5?.progress).toBe(5)
     expect(submit5?.earned).toBe(true)
   })

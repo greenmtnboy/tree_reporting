@@ -127,3 +127,24 @@ execution connection, plain refs for map and route state).
 - `@trilogy-data/trilogy-studio-components` 0.1.25 ships a docs tool pack
   (`search_docs`, `read_doc`); its registry is not exported from the `./llm`
   entry yet.
+
+
+## Badges, missions, and contribution refresh
+
+`pnpm test:e2e e2e/badges.spec.ts e2e/missions.spec.ts e2e/contributions.spec.ts`
+covers desktop/mobile badges, points, distinct city mission progress, target
+links, biome selection, missing rankings, history beyond 50 visits and tab-return
+refresh. Fixtures use the existing e2e-only auth/contributions seam; production
+builds cannot select those fixtures.
+
+`treeRankings.test.ts` executes the actual target-query SQL in DuckDB;
+`test_tree_rankings.py` pins percentage boundaries, sentinels, ties, invalid
+measurements and scheduling. CheckinDialog tests cover delayed/failed snapshots,
+and the Firebase emulator suite tests their write shape.
+
+Profile and My Contributions fetch on mount, auth changes, visible-tab return,
+and the explicit Refresh button. Reads require a server response and each
+collection updates independently, exposing lookup failures while preserving its
+previous data. Badge history reads are no longer capped at 50. The public tree
+counter still only increments once per user/tree per 20 hours; this is distinct
+from personal check-in history. Cross-device history requires the same Account ID.

@@ -1,16 +1,18 @@
+import type { RankingSnapshot } from './missions'
+
 /**
- * Achievement definitions and the pure evaluator that scores them.
+ * Badge definitions and the pure evaluator that scores them.
  *
- * Achievements are derived entirely from the user's own contribution history
+ * Badges are derived entirely from the user's own contribution history
  * (submissions + check-ins) — nothing is stored server-side. Tree facts a
  * check-in needs (species, form, size, rarity) are snapshotted onto the
  * check-in document at write time, because the parquet data for the tree's
- * city may not be loaded when achievements are evaluated. Older check-ins
- * without those fields simply don't count toward the tree-fact achievements.
+ * city may not be loaded when badges are evaluated. Older check-ins
+ * without those fields simply don't count toward the tree-fact badges.
  */
 
-/** The subset of a submission that achievements read. */
-export interface AchievementSubmission {
+/** The subset of a submission that badges read. */
+export interface BadgeSubmission {
   city: string
   species: string | null
   submittedAt: Date | null
@@ -18,8 +20,8 @@ export interface AchievementSubmission {
   photoCount: number
 }
 
-/** The subset of a check-in that achievements read. */
-export interface AchievementCheckin {
+/** The subset of a check-in that badges read. */
+export interface BadgeCheckin {
   city: string
   at: Date | null
   hasPhoto: boolean
@@ -29,6 +31,7 @@ export interface AchievementCheckin {
   dbhInches: number | null
   plantYear: number | null
   /** How many trees of this species existed in the tree's city at check-in. */
+  ranking?: RankingSnapshot | null
   speciesCityCount: number | null
 }
 
@@ -53,16 +56,17 @@ export interface ContributionStats {
   multiPhotoSubmissionCount: number
 }
 
-export interface AchievementDef {
+export interface BadgeDef {
   id: string
   emoji: string
   title: string
   description: string
+  points: number
   target: number
   metric: keyof ContributionStats
 }
 
-export interface AchievementState extends AchievementDef {
+export interface BadgeState extends BadgeDef {
   progress: number
   earned: boolean
 }
@@ -73,52 +77,52 @@ const RARE_SPECIES_CITY_MAX = 10
 const DAWN_HOUR_END = 7
 const NIGHT_HOUR_START = 21
 
-export const ACHIEVEMENTS: AchievementDef[] = [
+export const BADGES: BadgeDef[] = [
   // Firsts
-  { id: 'first-submission', emoji: '🌱', title: 'First Roots', description: 'Submit your first tree', target: 1, metric: 'submissionCount' },
-  { id: 'first-checkin', emoji: '📍', title: 'Say Hello', description: 'Check in on a tree for the first time', target: 1, metric: 'checkinCount' },
-  { id: 'first-photo-checkin', emoji: '📸', title: 'Portrait Mode', description: 'Attach a photo to a check-in', target: 1, metric: 'photoCheckinCount' },
-  { id: 'first-identified', emoji: '🔬', title: 'Nice to Meet You', description: 'Contribute a tree with its species identified', target: 1, metric: 'identifiedContributionCount' },
-  { id: 'multi-photo', emoji: '🎞️', title: 'Full Coverage', description: 'Submit a tree with 3 or more photos', target: 1, metric: 'multiPhotoSubmissionCount' },
+  { id: 'first-submission', emoji: '🌱', title: 'First Roots', description: 'Submit your first tree', points: 25, target: 1, metric: 'submissionCount' },
+  { id: 'first-checkin', emoji: '📍', title: 'Say Hello', description: 'Check in on a tree for the first time', points: 25, target: 1, metric: 'checkinCount' },
+  { id: 'first-photo-checkin', emoji: '📸', title: 'Portrait Mode', description: 'Attach a photo to a check-in', points: 25, target: 1, metric: 'photoCheckinCount' },
+  { id: 'first-identified', emoji: '🔬', title: 'Nice to Meet You', description: 'Contribute a tree with its species identified', points: 25, target: 1, metric: 'identifiedContributionCount' },
+  { id: 'multi-photo', emoji: '🎞️', title: 'Full Coverage', description: 'Submit a tree with 3 or more photos', points: 25, target: 1, metric: 'multiPhotoSubmissionCount' },
 
   // Submission milestones
-  { id: 'submit-5', emoji: '🌿', title: 'Grove Starter', description: 'Submit 5 trees', target: 5, metric: 'submissionCount' },
-  { id: 'submit-10', emoji: '🌳', title: 'Block Botanist', description: 'Submit 10 trees', target: 10, metric: 'submissionCount' },
-  { id: 'submit-50', emoji: '🏞️', title: 'Canopy Builder', description: 'Submit 50 trees', target: 50, metric: 'submissionCount' },
-  { id: 'submit-250', emoji: '🌆', title: 'Urban Forester', description: 'Submit 250 trees', target: 250, metric: 'submissionCount' },
+  { id: 'submit-5', emoji: '🌿', title: 'Grove Starter', description: 'Submit 5 trees', points: 50, target: 5, metric: 'submissionCount' },
+  { id: 'submit-10', emoji: '🌳', title: 'Block Botanist', description: 'Submit 10 trees', points: 100, target: 10, metric: 'submissionCount' },
+  { id: 'submit-50', emoji: '🏞️', title: 'Canopy Builder', description: 'Submit 50 trees', points: 250, target: 50, metric: 'submissionCount' },
+  { id: 'submit-250', emoji: '🌆', title: 'Urban Forester', description: 'Submit 250 trees', points: 500, target: 250, metric: 'submissionCount' },
 
   // Check-in milestones
-  { id: 'checkin-5', emoji: '👣', title: 'Tree Trekker', description: 'Check in on 5 trees', target: 5, metric: 'checkinCount' },
-  { id: 'checkin-10', emoji: '🐕', title: 'Bark Ranger', description: 'Check in on 10 trees', target: 10, metric: 'checkinCount' },
-  { id: 'checkin-50', emoji: '🥾', title: 'Trail Blazer', description: 'Check in on 50 trees', target: 50, metric: 'checkinCount' },
-  { id: 'checkin-250', emoji: '🌀', title: 'Force of Nature', description: 'Check in on 250 trees', target: 250, metric: 'checkinCount' },
+  { id: 'checkin-5', emoji: '👣', title: 'Tree Trekker', description: 'Check in on 5 trees', points: 50, target: 5, metric: 'checkinCount' },
+  { id: 'checkin-10', emoji: '🐕', title: 'Bark Ranger', description: 'Check in on 10 trees', points: 100, target: 10, metric: 'checkinCount' },
+  { id: 'checkin-50', emoji: '🥾', title: 'Trail Blazer', description: 'Check in on 50 trees', points: 250, target: 50, metric: 'checkinCount' },
+  { id: 'checkin-250', emoji: '🌀', title: 'Force of Nature', description: 'Check in on 250 trees', points: 500, target: 250, metric: 'checkinCount' },
 
   // Species diversity
-  { id: 'species-5', emoji: '📖', title: 'Budding Botanist', description: 'Contribute 5 different species', target: 5, metric: 'distinctSpeciesCount' },
-  { id: 'species-15', emoji: '🗺️', title: 'Field Guide', description: 'Contribute 15 different species', target: 15, metric: 'distinctSpeciesCount' },
-  { id: 'species-40', emoji: '🎓', title: 'Dendrologist', description: 'Contribute 40 different species', target: 40, metric: 'distinctSpeciesCount' },
+  { id: 'species-5', emoji: '📖', title: 'Budding Botanist', description: 'Contribute 5 different species', points: 50, target: 5, metric: 'distinctSpeciesCount' },
+  { id: 'species-15', emoji: '🗺️', title: 'Field Guide', description: 'Contribute 15 different species', points: 100, target: 15, metric: 'distinctSpeciesCount' },
+  { id: 'species-40', emoji: '🎓', title: 'Dendrologist', description: 'Contribute 40 different species', points: 250, target: 40, metric: 'distinctSpeciesCount' },
 
   // Tree forms
-  { id: 'palm', emoji: '🌴', title: 'Palm Reader', description: 'Check in on a palm', target: 1, metric: 'palmCheckinCount' },
-  { id: 'conifer-5', emoji: '🌲', title: 'Conifer Collector', description: 'Check in on 5 conifers', target: 5, metric: 'coniferCheckinCount' },
-  { id: 'forms-4', emoji: '🔷', title: 'Shape Shifter', description: 'Check in on 4 different tree forms', target: 4, metric: 'distinctFormCount' },
+  { id: 'palm', emoji: '🌴', title: 'Palm Reader', description: 'Check in on a palm', points: 25, target: 1, metric: 'palmCheckinCount' },
+  { id: 'conifer-5', emoji: '🌲', title: 'Conifer Collector', description: 'Check in on 5 conifers', points: 50, target: 5, metric: 'coniferCheckinCount' },
+  { id: 'forms-4', emoji: '🔷', title: 'Shape Shifter', description: 'Check in on 4 different tree forms', points: 50, target: 4, metric: 'distinctFormCount' },
 
   // Rarity
-  { id: 'rare-find', emoji: '💎', title: 'Rare Find', description: `Check in on a species with ${RARE_SPECIES_CITY_MAX} or fewer trees in its city`, target: 1, metric: 'rareFindCount' },
-  { id: 'one-of-one', emoji: '🦄', title: 'One of One', description: "Check in on the only tree of its species in the city", target: 1, metric: 'onlyOneInCityCount' },
+  { id: 'rare-find', emoji: '💎', title: 'Rare Find', description: 'Check in on a rare tree (≤1% of identified city trees; older visits: ≤10 recorded trees)' , points: 25, target: 1, metric: 'rareFindCount' },
+  { id: 'one-of-one', emoji: '🦄', title: 'One of One', description: "Check in on the only tree of its species in the city", points: 25, target: 1, metric: 'onlyOneInCityCount' },
 
   // Size and age
-  { id: 'giant', emoji: '🐘', title: 'Gentle Giant', description: `Check in on a tree at least ${GIANT_DBH_INCHES}″ across`, target: 1, metric: 'giantCheckinCount' },
-  { id: 'old-growth', emoji: '🕰️', title: 'Old Soul', description: `Check in on a tree planted ${OLD_GROWTH_YEARS}+ years ago`, target: 1, metric: 'oldGrowthCheckinCount' },
+  { id: 'giant', emoji: '🐘', title: 'Gentle Giant', description: `Check in on a tree at least ${GIANT_DBH_INCHES}″ across`, points: 25, target: 1, metric: 'giantCheckinCount' },
+  { id: 'old-growth', emoji: '🕰️', title: 'Old Soul', description: `Check in on a tree planted ${OLD_GROWTH_YEARS}+ years ago`, points: 25, target: 1, metric: 'oldGrowthCheckinCount' },
 
   // Geography
-  { id: 'cities-2', emoji: '✈️', title: 'Branching Out', description: 'Contribute in 2 different cities', target: 2, metric: 'distinctCityCount' },
-  { id: 'cities-5', emoji: '🌍', title: 'World Canopy', description: 'Contribute in 5 different cities', target: 5, metric: 'distinctCityCount' },
+  { id: 'cities-2', emoji: '✈️', title: 'Branching Out', description: 'Contribute in 2 different cities', points: 50, target: 2, metric: 'distinctCityCount' },
+  { id: 'cities-5', emoji: '🌍', title: 'World Canopy', description: 'Contribute in 5 different cities', points: 50, target: 5, metric: 'distinctCityCount' },
 
   // Habits
-  { id: 'dawn', emoji: '🌅', title: 'Dawn Chorus', description: `Check in before ${DAWN_HOUR_END} am`, target: 1, metric: 'dawnCheckinCount' },
-  { id: 'night', emoji: '🦉', title: 'Night Owl', description: 'Check in after dark (9 pm or later)', target: 1, metric: 'nightCheckinCount' },
-  { id: 'days-7', emoji: '📆', title: 'Seven Rings', description: 'Contribute on 7 different days', target: 7, metric: 'distinctDayCount' },
+  { id: 'dawn', emoji: '🌅', title: 'Dawn Chorus', description: `Check in before ${DAWN_HOUR_END} am`, points: 25, target: 1, metric: 'dawnCheckinCount' },
+  { id: 'night', emoji: '🦉', title: 'Night Owl', description: 'Check in after dark (9 pm or later)', points: 25, target: 1, metric: 'nightCheckinCount' },
+  { id: 'days-7', emoji: '📆', title: 'Seven Rings', description: 'Contribute on 7 different days', points: 100, target: 7, metric: 'distinctDayCount' },
 ]
 
 function normalizeSpecies(value: string | null): string | null {
@@ -132,8 +136,8 @@ function dayKey(d: Date): string {
 }
 
 export function buildStats(
-  submissions: AchievementSubmission[],
-  checkins: AchievementCheckin[],
+  submissions: BadgeSubmission[],
+  checkins: BadgeCheckin[],
 ): ContributionStats {
   const species = new Set<string>()
   const cities = new Set<string>()
@@ -185,9 +189,10 @@ export function buildStats(
       if (c.treeForm === 'conifer') conifers += 1
     }
     if (c.speciesCityCount != null && c.speciesCityCount > 0) {
-      if (c.speciesCityCount <= RARE_SPECIES_CITY_MAX) rare += 1
+      if (!c.ranking && c.speciesCityCount <= RARE_SPECIES_CITY_MAX) rare += 1
       if (c.speciesCityCount === 1) onlyOne += 1
     }
+    if (c.ranking?.rarityTier === 'rare') rare += 1
     if (c.dbhInches != null && c.dbhInches >= GIANT_DBH_INCHES) giants += 1
     if (c.plantYear != null && currentYear - c.plantYear >= OLD_GROWTH_YEARS) oldGrowth += 1
   }
@@ -215,12 +220,12 @@ export function buildStats(
 }
 
 /** Adapt an app submission record (structural — no Firestore import here). */
-export function toAchievementSubmission(s: {
+export function toBadgeSubmission(s: {
   city: string
   species: string | null
   submittedAt: Date | null
   additionalPhotoPaths: string[]
-}): AchievementSubmission {
+}): BadgeSubmission {
   return {
     city: s.city,
     species: s.species,
@@ -230,7 +235,7 @@ export function toAchievementSubmission(s: {
 }
 
 /** Adapt an app check-in record (structural — no Firestore import here). */
-export function toAchievementCheckin(c: {
+export function toBadgeCheckin(c: {
   city: string
   at: Date | null
   photoPath: string | null
@@ -238,8 +243,9 @@ export function toAchievementCheckin(c: {
   treeForm: string | null
   dbhInches: number | null
   plantYear: number | null
+  ranking?: RankingSnapshot | null
   speciesCityCount: number | null
-}): AchievementCheckin {
+}): BadgeCheckin {
   return {
     city: c.city,
     at: c.at,
@@ -249,15 +255,16 @@ export function toAchievementCheckin(c: {
     dbhInches: c.dbhInches,
     plantYear: c.plantYear,
     speciesCityCount: c.speciesCityCount,
+    ranking: c.ranking,
   }
 }
 
-export function evaluateAchievements(
-  submissions: AchievementSubmission[],
-  checkins: AchievementCheckin[],
-): AchievementState[] {
+export function evaluateBadges(
+  submissions: BadgeSubmission[],
+  checkins: BadgeCheckin[],
+): BadgeState[] {
   const stats = buildStats(submissions, checkins)
-  return ACHIEVEMENTS.map((def) => {
+  return BADGES.map((def) => {
     const progress = Math.min(stats[def.metric], def.target)
     return { ...def, progress, earned: progress >= def.target }
   })

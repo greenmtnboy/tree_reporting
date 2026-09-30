@@ -17,10 +17,13 @@
         <router-link :to="{ name: 'profile' }" class="btn-primary">Go to profile</router-link>
       </section>
       <template v-else>
+        <button class="btn-secondary" :disabled="loading" @click="refresh">{{ loading ? 'Refreshing…' : 'Refresh contributions' }}</button>
+        <p v-if="error" role="alert">Could not refresh contributions: {{ error.message }}</p>
+        <MissionList :checkins="checkins" />
         <section class="section">
-          <h2 class="section-title">Achievements</h2>
+          <h2 class="section-title">Badges</h2>
           <p v-if="loading" class="muted">Loading…</p>
-          <AchievementGrid v-else :submissions="submissions" :checkins="checkins" />
+          <BadgeGrid v-else :key="user.uid" :submissions="submissions" :checkins="checkins" />
         </section>
 
         <section class="section">
@@ -110,7 +113,8 @@ import {
 } from '../composables/useSubmissions'
 import { firebaseAvailable } from '../lib/firebase'
 import SubmissionThumbnail from '../components/SubmissionThumbnail.vue'
-import AchievementGrid from '../components/AchievementGrid.vue'
+import MissionList from '../components/MissionList.vue'
+import BadgeGrid from '../components/BadgeGrid.vue'
 
 const { user, authReady } = useAuth()
 const { submissions, checkins, modifications, loading, error, refresh } = useMyContributions()
@@ -323,6 +327,17 @@ function formatDate(d: Date | null): string {
   font-size: 0.76rem;
   color: var(--color-leaf);
 }
+
+.btn-secondary {
+  align-self: flex-start;
+  padding: 10px 16px;
+  border: 1px solid rgba(var(--accent-rgb), .3);
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.btn-secondary:disabled { opacity: .6; cursor: wait; }
 
 .btn-primary {
   padding: 8px 14px;

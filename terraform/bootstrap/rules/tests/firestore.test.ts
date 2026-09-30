@@ -101,6 +101,15 @@ async function countFor(treeId: string): Promise<number | undefined> {
 }
 
 describe('check-ins', () => {
+  test('accepts ranking snapshots and refuses malformed snapshot fields', async () => {
+    await assertSucceeds(setDoc(doc(as('alice'), 'checkins', 'ranked'), checkinDoc('alice', 'sf-1', {
+      ranking: { rarityTier: 'rare', trunkRank: 1, canopyRank: null },
+    })))
+    for (const ranking of [{ rarityTier: 'legendary' }, { trunkRank: 'first' }, { points: 999 }]) {
+      await assertFails(setDoc(doc(as('alice'), 'checkins', 'bad-ranking'), checkinDoc('alice', 'sf-1', { ranking })))
+    }
+  })
+
   test('a check-in shaped like the client writes it is accepted', async () => {
     await assertSucceeds(setDoc(doc(as('alice'), 'checkins', 'c1'), checkinDoc('alice', 'sf-1')))
   })

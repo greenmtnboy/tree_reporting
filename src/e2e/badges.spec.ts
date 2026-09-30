@@ -1,9 +1,9 @@
 import { test, expect, type Page } from '@playwright/test'
-import { ACHIEVEMENTS } from '../src/lib/achievements'
+import { BADGES } from '../src/lib/badges'
 import type { E2EFixtures } from '../src/lib/e2eFixtures'
 
 /**
- * Achievements at both viewports.
+ * Badges at both viewports.
  *
  * Badges are derived from a signed-in user's Firestore contributions, so the
  * suite seeds the session and the contribution lists through the fixture seam
@@ -113,7 +113,7 @@ async function open(page: Page, viewport: typeof DESKTOP, path: string, fixtures
  */
 async function assertE2EBuild(page: Page) {
   await expect(
-    page.locator('.achievements, .badge-strip').first(),
+    page.locator('.badges, .badge-strip').first(),
     'seeded session did not land — the served build may predate `pnpm build:e2e`; stop any stale `vite preview` on port 6173 and rerun',
   ).toBeVisible({ timeout: 20_000 })
 }
@@ -144,20 +144,20 @@ for (const [label, viewport] of [
   ['desktop', DESKTOP],
   ['mobile', MOBILE],
 ] as const) {
-  test.describe(`Achievements — ${label}`, () => {
+  test.describe(`Badges — ${label}`, () => {
     test('the contributions page grades every badge for a contributor', async ({ page }) => {
       await open(page, viewport, '/contributions', CONTRIBUTOR)
       await assertE2EBuild(page)
 
-      const grid = page.locator('.achievements')
+      const grid = page.locator('.badges')
       await expect(grid).toBeVisible()
 
-      // Every defined achievement is rendered, earned or not.
-      await expect(page.locator('.badge')).toHaveCount(ACHIEVEMENTS.length)
-      await expect(page.locator('.achievements-summary')).toContainText(
-        `${EARNED_TITLES.length} / ${ACHIEVEMENTS.length}`,
+      // Every defined badge is rendered, earned or not.
+      await expect(page.locator('.badge')).toHaveCount(BADGES.length)
+      await expect(page.locator('.badges-summary')).toContainText(
+        `${EARNED_TITLES.length} / ${BADGES.length}`,
       )
-      await expect(page.locator('.achievements-summary')).toContainText('badges earned')
+      await expect(page.locator('.badges-summary')).toContainText('badges earned')
 
       for (const title of EARNED_TITLES) {
         const earned = badge(page, title)
@@ -211,11 +211,11 @@ for (const [label, viewport] of [
 
       // The component persists what it showed, so a revisit is quiet.
       await expect
-        .poll(() => page.evaluate(() => localStorage.getItem('treeAchievements.seen')))
+        .poll(() => page.evaluate(() => localStorage.getItem('treeBadges.seen:e2e-badge-user')))
         .not.toBeNull()
 
       await page.reload()
-      await expect(page.locator('.achievements')).toBeVisible()
+      await expect(page.locator('.badges')).toBeVisible()
       await expect(page.locator('.badge-new')).toHaveCount(0)
     })
 
@@ -249,7 +249,7 @@ for (const [label, viewport] of [
 
       const strip = page.locator('.badge-strip')
       await expect(strip).toBeVisible()
-      await expect(strip).toContainText(`${EARNED_TITLES.length} / ${ACHIEVEMENTS.length}`)
+      await expect(strip).toContainText(`${EARNED_TITLES.length} / ${BADGES.length}`)
       await expect(strip).toContainText('badges')
       await expect(strip.locator('.badge-strip__emoji')).toHaveCount(EARNED_TITLES.length)
 
@@ -261,7 +261,7 @@ for (const [label, viewport] of [
 
       await strip.click()
       await expect(page).toHaveURL(/#\/contributions/)
-      await expect(page.locator('.achievements')).toBeVisible()
+      await expect(page.locator('.badges')).toBeVisible()
       await expect(page.locator('.badge.earned')).toHaveCount(EARNED_TITLES.length)
     })
 
@@ -274,8 +274,8 @@ for (const [label, viewport] of [
       await expect(strip.locator('.badge-strip__emoji')).toHaveCount(0)
 
       await strip.click()
-      await expect(page.locator('.achievements-summary')).toContainText(
-        `0 / ${ACHIEVEMENTS.length}`,
+      await expect(page.locator('.badges-summary')).toContainText(
+        `0 / ${BADGES.length}`,
       )
       await expect(page.locator('.badge.earned')).toHaveCount(0)
       await expect(page.locator('.badge-new')).toHaveCount(0)
@@ -288,7 +288,7 @@ for (const [label, viewport] of [
       await expect(page.locator('.contributions-status')).toContainText(
         'Sign in to see your contributions',
       )
-      await expect(page.locator('.achievements')).toHaveCount(0)
+      await expect(page.locator('.badges')).toHaveCount(0)
 
       await open(page, viewport, '/profile', SIGNED_OUT)
       await expect(page.locator('.profile-status')).toContainText("You're not signed in")
@@ -297,7 +297,7 @@ for (const [label, viewport] of [
   })
 }
 
-test.describe('Achievements — mobile navigation', () => {
+test.describe('Badges — mobile navigation', () => {
   test('the mobile menu reaches the badge grid', async ({ page }) => {
     await open(page, MOBILE, '/', CONTRIBUTOR)
 
@@ -307,7 +307,7 @@ test.describe('Achievements — mobile navigation', () => {
 
     await assertE2EBuild(page)
     await expect(page.locator('.mobile-full-screen')).toBeVisible()
-    await expect(page.locator('.achievements')).toBeVisible()
+    await expect(page.locator('.badges')).toBeVisible()
     await expect(page.locator('.badge.earned')).toHaveCount(EARNED_TITLES.length)
 
     // The bottom bar keeps its own chrome above the grid rather than covering

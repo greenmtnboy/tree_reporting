@@ -4,8 +4,9 @@ import { createApp, defineComponent, h, nextTick, type App } from 'vue'
 import CheckinDialog from './CheckinDialog.vue'
 
 const mocks = vi.hoisted(() => ({
-  locate: vi.fn(), submit: vi.fn(), checkin: vi.fn(),
+  locate: vi.fn(), submit: vi.fn(), checkin: vi.fn(), ranking: vi.fn(),
 }))
+vi.mock('../lib/treeRankings', () => ({ loadTreeRanking: mocks.ranking }))
 vi.mock('../lib/geo', () => ({ getCurrentPosition: mocks.locate }))
 vi.mock('../composables/useSubmissions', () => ({
   submitTreeModification: mocks.submit, recordCheckin: mocks.checkin,
@@ -37,6 +38,7 @@ async function mount(remoteCorrection: boolean) {
     treeId: 'community-long-tree-id', treeLat: 37.775, treeLng: -122.419,
     species: 'Quercus laurifolia', dbhInches: 35.6, remoteCorrection,
   })
+  app.component('RouterLink', defineComponent({ setup(_, { slots }) { return () => h('a', slots.default?.()) } }))
   app.mount(host)
   await nextTick()
 }
@@ -52,7 +54,7 @@ async function input(selector: string, value: string) {
 }
 const submitButton = () => root.querySelector<HTMLButtonElement>('[data-testid="checkin-submit"]')!
 
-beforeEach(() => { vi.clearAllMocks(); mocks.submit.mockResolvedValue('report-1') })
+beforeEach(() => { vi.clearAllMocks(); mocks.submit.mockResolvedValue('report-1'); mocks.ranking.mockResolvedValue(null) })
 afterEach(() => { app?.unmount(); host?.remove() })
 
 describe('desktop corrections', () => {
@@ -102,5 +104,36 @@ describe('desktop corrections', () => {
     expect(mocks.locate).toHaveBeenCalledOnce()
     expect(root.textContent).toContain("You're too far from this tree.")
     expect(root.querySelector('[data-testid="checkin-submit"]')).toBeNull()
+  })
+})
+
+
+describe('ranking snapshots', () => {
+  it('waits for a pending ranking and records its city and ranks with the visit', async () => {
+    mocks.locate.mockResolvedValue({ coords: { latitude: 37.775, longitude: -122.419 } })
+    let finish!: (value: unknown) => void
+    mocks.ranking.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    mocks.checkin.mockResolvedValue({ id: 'visit', counted: true })
+    await mount(false)
+    await settle()
+    submitButton().click()
+    await settle()
+    expect(mocks.checkin).not.toHaveBeenCalled()
+    finish({ city: 'USBOS', rarityTier: 'rare', trunkRank: 1, canopyRank: null })
+    for (let i = 0; i < 5; i++) await settle()
+    expect(mocks.checkin).toHaveBeenCalledWith(expect.objectContaining({
+      city: 'USBOS', ranking: { rarityTier: 'rare', trunkRank: 1, canopyRank: null },
+    }))
+  })
+
+  it('records a visit when the ranking service is unavailable', async () => {
+    mocks.locate.mockResolvedValue({ coords: { latitude: 37.775, longitude: -122.419 } })
+    mocks.ranking.mockRejectedValue(new Error('Not published'))
+    mocks.checkin.mockResolvedValue({ id: 'visit', counted: true })
+    await mount(false)
+    await settle()
+    submitButton().click()
+    for (let i = 0; i < 5; i++) await settle()
+    expect(mocks.checkin).toHaveBeenCalledWith(expect.objectContaining({ ranking: null }))
   })
 })

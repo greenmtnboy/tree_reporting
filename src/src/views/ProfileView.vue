@@ -44,6 +44,9 @@
             <dt>Account ID</dt>
             <dd><code>{{ user.uid }}</code></dd>
           </dl>
+          <p v-if="contributionsError" role="alert">Could not refresh contributions: {{ contributionsError.message }}</p>
+          <button class="btn-secondary" :disabled="contributionsLoading" @click="refreshContributions">Refresh contributions</button>
+          <p class="total-points">{{ totalPoints }} points</p>
           <router-link :to="{ name: 'contributions' }" class="badge-strip">
             <template v-if="contributionsLoading">
               <span class="muted">Loading badges…</span>
@@ -141,16 +144,17 @@
 </template>
 
 <script setup lang="ts">
+import { evaluateCityBadges } from '../lib/missions'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { firebaseAvailable } from '../lib/firebase'
 import { useMyContributions } from '../composables/useSubmissions'
 import {
-  ACHIEVEMENTS,
-  evaluateAchievements,
-  toAchievementCheckin,
-  toAchievementSubmission,
-} from '../lib/achievements'
+  BADGES,
+  evaluateBadges,
+  toBadgeCheckin,
+  toBadgeSubmission,
+} from '../lib/badges'
 
 const {
   user,
@@ -179,16 +183,19 @@ const {
   checkins,
   loading: contributionsLoading,
   refresh: refreshContributions,
+  error: contributionsError,
 } = useMyContributions()
 
-const totalBadges = ACHIEVEMENTS.length
+const totalBadges = computed(() => BADGES.length + evaluateCityBadges(checkins.value).filter(b => b.earned).length)
 
-const earnedBadges = computed(() =>
-  evaluateAchievements(
-    submissions.value.map(toAchievementSubmission),
-    checkins.value.map(toAchievementCheckin),
+const earnedBadges = computed(() => [
+  ...evaluateBadges(
+    submissions.value.map(toBadgeSubmission),
+    checkins.value.map(toBadgeCheckin),
   ).filter((a) => a.earned),
-)
+  ...evaluateCityBadges(checkins.value).filter(b => b.earned),
+])
+const totalPoints = computed(() => earnedBadges.value.reduce((sum, b) => sum + b.points, 0))
 
 onMounted(() => {
   if (user.value) void refreshContributions()

@@ -268,3 +268,38 @@ keeps the daily job from overwriting it. Sentinel rows and alias rows are
 read-only. Needs `gcloud auth application-default login`;
 `tests/test_enrichment_admin.py` pins the invariants. See
 `docs/SPECIES_ENRICHMENT.md`.
+
+
+## City rankings and badges
+
+`refresh-rankings` refreshes `raw/tree_rankings.preql` daily after the published
+rollup and species enrichment. Its Python source reads only those two published
+parquets. Like predictions, it uses their publication times for freshness. The
+output is `tree_rankings_v{data_version}.parquet`, one row per published tree,
+ordered by city and tree ID. It stays outside the frontend Trilogy model bundle.
+
+- Trunk and canopy ranks are descending within a city. Ties share rank 1 and all
+  tied leaders qualify. Only positive finite recorded DBH/crown widths count;
+  predicted sizes do not compete with recorded measurements.
+- Species share uses identified trees in that city's mapped inventory as the
+  denominator. Sentinels have no rarity tier and do not enter that denominator.
+  Rare is ≤1%, unusual is >1–5%, common is >5%. These describe inventory
+  frequency, not conservation status or complete citywide coverage.
+- Missions are offered only when enough targets with coordinates exist. The
+  client reads at most ten candidates per mission, links to an existing tree
+  deep link, and prioritizes available palm missions in warm biomes.
+- Check-ins snapshot `rarityTier`, `trunkRank` and `canopyRank`. City missions
+  count distinct tree IDs; repeat visits do not earn the same city badge again.
+  Points are summed once per earned badge. Old check-ins keep their old badge
+  rules and cannot invent missing historical ranking facts. Legacy Rare Find
+  retains its ≤10 trees rule; new snapshots use the percentage tier.
+- Ranking lookup is best effort with a bounded wait on submission. If unavailable,
+  the check-in still saves and existing badges count, but ranking missions cannot
+  credit that visit. This initial implementation derives private points on the
+  client; it is not a server-verified competitive leaderboard.
+
+Rollout: apply the updated Firestore rules before shipping clients that attach
+`ranking`; sync and run `refresh-rankings` to publish its first parquet. Until that
+asset exists the mission panel shows a retryable unavailable state. The source
+can be checked without publishing using
+`trilogy refresh --dry-run raw/tree_rankings.preql` (exactly one output asset).
