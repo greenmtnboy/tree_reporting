@@ -47,7 +47,26 @@
   >&#x25CE; Find Me</button>
 
   <!-- Three-pane tree info card -->
-  <div v-if="selectedTree" ref="treeCardEl" class="tree-card" :style="treeCardStyle" @click.stop>
+  <div
+    v-if="treeCardLoading && !selectedTree"
+    ref="treeCardEl"
+    class="tree-card tree-card--loading"
+    :style="treeCardStyle"
+    role="status"
+    aria-live="polite"
+    @click.stop
+  >
+    <div class="tree-card-header">
+      <div class="tree-card-header-main">
+        <div class="tree-card-loading">
+          <span class="tree-card-spinner" aria-hidden="true"></span>
+          <span>Loading tree details…</span>
+        </div>
+        <button class="tree-card-close" @click="closeTreeCard" aria-label="Close">&#x2715;</button>
+      </div>
+    </div>
+  </div>
+  <div v-else-if="selectedTree" ref="treeCardEl" class="tree-card" :style="treeCardStyle" @click.stop>
     <div class="tree-card-header">
       <div class="tree-card-header-main">
         <div class="tree-card-title-wrap">
@@ -891,7 +910,43 @@ const treeCardStyle = computed(() => {
   }
 })
 
+// Tapping a tree waits on a DuckDB query before the card has anything to
+// show, which on a phone reads as the tap being ignored. Acknowledge the tap
+// at once: a pulse on the tree and a loading card anchored where the real one
+// will open.
+const treeCardLoading = ref(false)
+let treeTapPulseMarker: maplibregl.Marker | null = null
+
+function showTreeTapPulse(coords: [number, number]): void {
+  if (!mapRef.value) return
+  if (!treeTapPulseMarker) {
+    const el = document.createElement('div')
+    el.className = 'tree-tap-pulse'
+    treeTapPulseMarker = new maplibregl.Marker({ element: el })
+  }
+  treeTapPulseMarker.setLngLat(coords).addTo(mapRef.value)
+}
+
+function hideTreeTapPulse(): void {
+  treeTapPulseMarker?.remove()
+}
+
+function startTreeCardLoading(coords: [number, number]): void {
+  showTreeTapPulse(coords)
+  selectedTree.value = null
+  selectedTreeAnchor.value = coords
+  treeCardLoading.value = true
+  updateTreeCardPosition()
+  void nextTick(() => updateTreeCardPosition())
+}
+
+function stopTreeCardLoading(): void {
+  treeCardLoading.value = false
+  hideTreeTapPulse()
+}
+
 function selectTree(row: PopupTreeRow, coords: [number, number]): void {
+  stopTreeCardLoading()
   selectedTree.value = row
   selectedTreeAnchor.value = coords
   syncTreeRoute(row.tree_id)
@@ -939,6 +994,9 @@ async function ensureTreeCardVisibleOnMobile(coords: [number, number]): Promise<
 }
 
 function closeTreeCard(): void {
+  // Drop any in-flight lookup so it cannot reopen the card it was closed over.
+  popupRequestToken++
+  stopTreeCardLoading()
   selectedTree.value = null
   selectedTreeAnchor.value = null
   selectedTreeScreenPoint.value = null
@@ -1097,6 +1155,7 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
   const featureCoords = feature.geometry?.type === 'Point'
     ? (feature.geometry.coordinates as [number, number])
     : fallbackCoords
+  startTreeCardLoading(featureCoords)
   const safeId = String(id).replace(/'/g, "''")
   const cityBiome = getCityBiome(selectedCity.value).replace(/'/g, "''")
   const cityEcoregionId = getCityEcoregionId(selectedCity.value)
@@ -1150,11 +1209,16 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
       WHERE tf.tree_id = '${safeId}'
       LIMIT 1
     `)
+    if (requestToken !== popupRequestToken) return
     const row = rows[0] as unknown as PopupTreeRow | undefined
-    if (!row || requestToken !== popupRequestToken) return
+    if (!row) {
+      closeTreeCard()
+      return
+    }
     selectTree(row, featureCoords)
   } catch (e) {
     console.error('[Tree Card Query Error]', e)
+    if (requestToken === popupRequestToken) closeTreeCard()
   }
 }
 
@@ -1851,6 +1915,8 @@ onUnmounted(() => {
     pendingSwoopFlyTimeout = null
   }
   selectedTree.value = null
+  stopTreeCardLoading()
+  treeTapPulseMarker = null
   if (activeLandmarkPopup) { activeLandmarkPopup.remove(); activeLandmarkPopup = null }
   if (mapRef.value) {
     removeLandmarkLayer(mapRef.value)
@@ -2617,6 +2683,56 @@ onUnmounted(() => {
   border: 2px solid #fff;
   box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.46);
   animation: user-location-pulse 2s infinite;
+}
+
+/* Immediate tap acknowledgement while the tree card's query runs. */
+.tree-tap-pulse {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(var(--accent-rgb), 0.35);
+  border: 2px solid var(--color-leaf);
+  pointer-events: none;
+  animation: tree-tap-pulse 0.9s ease-out infinite;
+}
+
+@keyframes tree-tap-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.6); transform: scale(0.7); }
+  30% { transform: scale(1); }
+  100% { box-shadow: 0 0 0 16px rgba(var(--accent-rgb), 0); transform: scale(1); }
+}
+
+.tree-card--loading .tree-card-header {
+  border-bottom: none;
+}
+
+.tree-card-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: rgba(var(--ink-rgb), 0.72);
+  font-size: 0.82rem;
+}
+
+.tree-card-spinner {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 2px solid rgba(var(--accent-rgb), 0.2);
+  border-top-color: var(--color-leaf);
+  animation: tree-card-spin 0.7s linear infinite;
+}
+
+@keyframes tree-card-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tree-tap-pulse { animation: none; }
+  .tree-card-spinner { animation-duration: 1.6s; }
 }
 
 @keyframes user-location-pulse {
