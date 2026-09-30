@@ -266,7 +266,7 @@ jobs:
 
     # The build is Playwright's webServer command (src/playwright.config.ts):
     # `pnpm build:e2e`, which loads src/.env.e2e for the placeholder Firebase
-    # config and the fixture seam the achievement specs drive.
+    # config and the fixture seam the badge specs drive.
     - name: Run Playwright tests
       working-directory: ./src
       run: pnpm test:e2e

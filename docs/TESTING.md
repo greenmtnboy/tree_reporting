@@ -127,3 +127,41 @@ execution connection, plain refs for map and route state).
 - `@trilogy-data/trilogy-studio-components` 0.1.25 ships a docs tool pack
   (`search_docs`, `read_doc`); its registry is not exported from the `./llm`
   entry yet.
+
+
+## Badges, missions, and contribution refresh
+
+`pnpm test:e2e e2e/badges.spec.ts e2e/missions.spec.ts e2e/contributions.spec.ts e2e/account-linking.spec.ts`
+covers desktop/mobile badges, points, distinct city mission progress, target
+links, biome selection, missing rankings, history beyond 50 visits and tab-return
+refresh. Fixtures use the existing e2e-only auth/contributions seam; production
+builds cannot select those fixtures.
+
+`treeRankings.test.ts` executes the actual target-query SQL in DuckDB;
+`test_tree_rankings.py` pins percentage boundaries, sentinels, ties, invalid
+measurements and scheduling. CheckinDialog tests cover delayed/failed snapshots,
+and the Firebase emulator suite tests their write shape.
+
+Profile and My Contributions fetch on mount, auth changes, visible-tab return,
+and the explicit Refresh button. Reads require a server response and each
+collection updates independently, exposing lookup failures while preserving its
+previous data. Badge history reads are no longer capped at 50. The public tree
+counter still only increments once per user/tree per 20 hours; this is distinct
+from personal check-in history. Cross-device history requires the same Account ID.
+
+
+`useAuth.test.ts` covers anonymous-to-Google upgrades where Firebase mutates the
+same User instance without another auth-state callback: popup and redirect
+completion, the rendered Profile label, and credential-already-in-use errors.
+The app keeps SDK users in a shallow ref and explicitly publishes completed
+credentials, including notifying Vue when object identity and UID stay the same.
+
+Mobile/desktop account-linking browser tests verify that an existing Google
+profile collision is visibly explained and focused while the guest session and
+its badges remain intact. The unit suite separately covers redirect-fallback
+errors that previously escaped without setting the displayed error state.
+The account-login alternative requires a warning confirmation before leaving
+guest work behind. Browser tests cover cancelling that warning and switching to
+an existing profile with different badges on mobile and desktop. Unit tests
+verify that switching uses sign-in rather than linking, including its redirect
+fallback, and never signs the guest out before Google sign-in succeeds.

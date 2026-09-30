@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef, triggerRef } from 'vue'
 import {
   GoogleAuthProvider,
   browserLocalPersistence,
@@ -14,15 +14,22 @@ import {
   type User,
 } from 'firebase/auth'
 import { auth, firebaseAvailable } from '../lib/firebase'
-import { e2eEnabled, e2eFixtures, e2eUser } from '../lib/e2eFixtures'
+import { e2eEnabled, e2eFixtures, e2eUser, e2eSwitchAccount } from '../lib/e2eFixtures'
 
 const GOOGLE_PROVIDER_ID = 'google.com'
 
-const user = ref<User | null>(null)
+// Firebase owns and mutates User instances. Do not deep-proxy SDK objects:
+// same-UID account linking can mutate the raw instance without Vue observing it.
+const user = shallowRef<User | null>(null)
 const authReady = ref(false)
 const authError = ref<Error | null>(null)
 const redirectingToGoogle = ref(false)
 let signInPromise: Promise<User> | null = null
+
+function publishUser(nextUser: User | null) {
+  if (user.value === nextUser) triggerRef(user)
+  else user.value = nextUser
+}
 
 function createGoogleProvider() {
   const provider = new GoogleAuthProvider()
@@ -44,7 +51,7 @@ function normalizeGoogleSignInError(err: unknown, currentUser: User | null | und
       code === 'auth/account-exists-with-different-credential')
   ) {
     return new Error(
-      'That Google account is already linked to another profile. Sign out first, then use Continue with Google to reopen the existing account.',
+      "That Google account is already linked to another profile. Nothing was merged; you are still using this anonymous account. Switching may make this account's contributions inaccessible. Use Log in as account to reopen the existing profile after reviewing the warning.",
     )
   }
   return err as Error
@@ -74,7 +81,7 @@ async function initializeAuthState(): Promise<void> {
   }
 
   onAuthStateChanged(auth, (nextUser) => {
-    user.value = nextUser
+    publishUser(nextUser)
     authStateSettled = true
     redirectingToGoogle.value = false
     markReadyIfDone()
@@ -82,9 +89,10 @@ async function initializeAuthState(): Promise<void> {
 
   try {
     await setPersistence(auth, browserLocalPersistence)
-    await getRedirectResult(auth)
+    const result = await getRedirectResult(auth)
+    if (result) publishUser(result.user)
   } catch (err) {
-    authError.value = err as Error
+    authError.value = normalizeGoogleSignInError(err, auth.currentUser)
   } finally {
     redirectSettled = true
     markReadyIfDone()
@@ -111,7 +119,10 @@ export async function signInIfNeeded(): Promise<User> {
 
   authError.value = null
   signInPromise = signInAnonymously(auth)
-    .then((cred) => cred.user)
+    .then((cred) => {
+      publishUser(cred.user)
+      return cred.user
+    })
     .catch((err: Error) => {
       authError.value = err
       signInPromise = null
@@ -121,7 +132,7 @@ export async function signInIfNeeded(): Promise<User> {
   return signInPromise
 }
 
-export async function signInWithGoogle(): Promise<User | null> {
+export async function signInWithGoogle(mode: 'link' | 'switch' = 'link'): Promise<User | null> {
   if (!auth) {
     const err = new Error('Firebase auth is not configured')
     authError.value = err
@@ -132,27 +143,43 @@ export async function signInWithGoogle(): Promise<User | null> {
   authError.value = null
 
   const currentUser = auth.currentUser ?? user.value
+  const shouldLink = mode === 'link' && currentUser?.isAnonymous
   const provider = createGoogleProvider()
 
   try {
-    const result =
-      currentUser?.isAnonymous
+    const fixture = e2eEnabled ? e2eFixtures() : null
+    if (shouldLink && fixture?.googleLinkError) throw { code: fixture.googleLinkError }
+    const seededUser = e2eEnabled && mode === 'switch' ? e2eSwitchAccount() : null
+    // Signing in replaces the session only on success. Do not sign out first:
+    // a cancelled popup must leave the guest and their contributions accessible.
+    const result = seededUser ? { user: seededUser } :
+      shouldLink
         ? await linkWithPopup(currentUser, provider)
         : await signInWithPopup(auth, provider)
     signInPromise = null
+    // Linking retains the UID, so onAuthStateChanged need not fire. Explicitly
+    // publish the completed credential, including same-object SDK mutations.
+    publishUser(result.user)
     return result.user
   } catch (err) {
     if (shouldUseRedirectFallback(err)) {
       redirectingToGoogle.value = true
-      if (currentUser?.isAnonymous) {
-        await linkWithRedirect(currentUser, provider)
-      } else {
-        await signInWithRedirect(auth, provider)
+      try {
+        if (shouldLink) {
+          await linkWithRedirect(currentUser, provider)
+        } else {
+          await signInWithRedirect(auth, provider)
+        }
+        return null
+      } catch (redirectError) {
+        redirectingToGoogle.value = false
+        const normalizedError = normalizeGoogleSignInError(redirectError, shouldLink ? currentUser : null)
+        authError.value = normalizedError
+        throw normalizedError
       }
-      return null
     }
 
-    const normalizedError = normalizeGoogleSignInError(err, currentUser)
+    const normalizedError = normalizeGoogleSignInError(err, shouldLink ? currentUser : null)
     authError.value = normalizedError
     throw normalizedError
   }
@@ -161,11 +188,13 @@ export async function signInWithGoogle(): Promise<User | null> {
 export async function signOut(): Promise<void> {
   if (e2eEnabled && e2eFixtures()) {
     user.value = null
+    authError.value = null
     signInPromise = null
     return
   }
   if (!auth) return
   await firebaseSignOut(auth)
+  authError.value = null
   signInPromise = null
   redirectingToGoogle.value = false
 }

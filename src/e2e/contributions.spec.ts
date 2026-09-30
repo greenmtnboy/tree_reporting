@@ -4,7 +4,7 @@ import type { E2EFixtures } from '../src/lib/e2eFixtures'
 /**
  * The contributions page's two review-queue surfaces: where each check-in
  * photo offered for its tree has got to, and the user's tree reports. Seeded
- * through the fixture seam like achievements.spec.ts; see src/lib/e2eFixtures.ts.
+ * through the fixture seam like badges.spec.ts; see src/lib/e2eFixtures.ts.
  */
 
 const REPORTER: E2EFixtures = {

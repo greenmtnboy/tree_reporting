@@ -1,0 +1,43 @@
+# A separate published dataset, never imported into the frontend model bundle.
+# The script reads published rollup + enrichment only. Explicit job edges live
+# in trilogy.toml because its input URLs are not visible to the planner.
+import core;
+
+key ranking_tree_id string;
+property ranking_tree_id.ranking_city string;
+property ranking_tree_id.ranking_species string;
+property ranking_tree_id.ranking_latitude float;
+property ranking_tree_id.ranking_longitude float;
+property ranking_tree_id.ranking_tree_form string;
+property ranking_tree_id.species_city_count int;
+property ranking_tree_id.identified_city_count int;
+property ranking_tree_id.species_city_share float;
+property ranking_tree_id.rarity_tier string;
+property ranking_tree_id.trunk_rank int;
+property ranking_tree_id.canopy_rank int;
+property <*>.ranking_inputs_published_through datetime;
+
+root datasource ranking_inputs_probe (
+    data_updated_through: ranking_inputs_published_through
+)
+file `./prediction_inputs_probe.py`;
+
+root datasource raw_tree_rankings (
+    ranking_tree_id, ranking_city, ranking_species,
+    ?ranking_latitude, ?ranking_longitude, ?ranking_tree_form,
+    ?species_city_count, identified_city_count, ?species_city_share,
+    ?rarity_tier, ?trunk_rank, ?canopy_rank,
+)
+grain (ranking_tree_id)
+file `./tree_rankings.py`;
+
+datasource tree_rankings (
+    ranking_tree_id, ranking_city, ranking_species,
+    ?ranking_latitude, ?ranking_longitude, ?ranking_tree_form,
+    ?species_city_count, identified_city_count, ?species_city_share,
+    ?rarity_tier, ?trunk_rank, ?canopy_rank,
+    ranking_inputs_published_through,
+)
+grain (ranking_tree_id)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rankings_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_rankings_v{data_version}.parquet`
+freshness by ranking_inputs_published_through;

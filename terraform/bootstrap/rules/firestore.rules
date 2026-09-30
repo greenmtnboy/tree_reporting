@@ -197,7 +197,7 @@ service cloud.firestore {
                     && request.resource.data.keys().hasOnly([
                          'userId', 'treeId', 'lat', 'lng', 'treeLat', 'treeLng', 'city',
                          'distanceMeters', 'photoPath', 'photoReview', 'species', 'treeForm',
-                         'dbhInches', 'plantYear', 'speciesCityCount', 'at'])
+                         'dbhInches', 'plantYear', 'speciesCityCount', 'ranking', 'at'])
                     && request.resource.data.at == request.time
                     && request.resource.data.treeId is string
                     && request.resource.data.treeId.size() <= 200
@@ -211,6 +211,12 @@ service cloud.firestore {
                     && optionalNumber(request.resource.data.get('dbhInches', null))
                     && optionalNumber(request.resource.data.get('plantYear', null))
                     && optionalNumber(request.resource.data.get('speciesCityCount', null))
+                    && (!('ranking' in request.resource.data) || (
+                         request.resource.data.ranking is map
+                         && request.resource.data.ranking.keys().hasOnly(['rarityTier', 'trunkRank', 'canopyRank'])
+                         && request.resource.data.ranking.get('rarityTier', null) in [null, 'rare', 'unusual', 'common']
+                         && optionalNumber(request.resource.data.ranking.get('trunkRank', null))
+                         && optionalNumber(request.resource.data.ranking.get('canopyRank', null))))
                     // A photo offered as a public tree photo enters review as
                     // 'pending'; only the reviewer moves it on from there.
                     && (!('photoReview' in request.resource.data)

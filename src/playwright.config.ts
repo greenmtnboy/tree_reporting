@@ -38,7 +38,7 @@ export default defineConfig({
   webServer: {
     // Builds in e2e mode so the auth/contribution fixture seam is compiled in
     // (see src/lib/e2eFixtures.ts). A plain `pnpm build` dist cannot drive the
-    // achievement specs, so the build is part of starting the server rather
+    // badge specs, so the build is part of starting the server rather
     // than a step everyone has to remember.
     command: `pnpm build:e2e && pnpm preview --port ${PORT}`,
     port: PORT,

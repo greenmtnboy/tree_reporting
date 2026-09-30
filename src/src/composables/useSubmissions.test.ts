@@ -49,7 +49,7 @@ vi.mock('firebase/firestore', () => {
       exists: () => ref.path.startsWith('treeCheckinMarkers/') && state.marker != null,
       data: () => (ref.path.startsWith('treeCheckinMarkers/') ? state.marker ?? undefined : undefined),
     }),
-    getDocs: vi.fn(),
+    getDocsFromServer: vi.fn(),
     increment: (n: number) => ({ increment: n }),
     limit: vi.fn(),
     orderBy: vi.fn(),

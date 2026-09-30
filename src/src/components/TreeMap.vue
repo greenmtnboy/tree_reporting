@@ -264,7 +264,7 @@ import {
 } from '../composables/useSubmissions'
 import { formatDataSource } from '../data/dataSources'
 import { speciesSentinel } from '../data/species'
-import { plantYearFrom } from '../lib/achievements'
+import { plantYearFrom } from '../lib/badges'
 import { formatPlantDate, formatTreeAge } from '../lib/plantDate'
 import {
   acquireSharedPositionWatch,

@@ -1,8 +1,9 @@
 <template>
-  <div class="achievements">
-    <div class="achievements-summary">
-      <span class="achievements-count">{{ earnedCount }} / {{ achievements.length }}</span>
+  <div class="badges">
+    <div class="badges-summary">
+      <span class="badges-count">{{ earnedCount }} / {{ badges.length }}</span>
       <span class="muted">badges earned</span>
+      <strong class="badge-total-points">{{ totalPoints }} points</strong>
     </div>
     <ul class="badge-grid">
       <li
@@ -17,6 +18,7 @@
           <span v-if="isNew(a.id)" class="badge-new">New!</span>
         </span>
         <span class="badge-desc">{{ a.description }}</span>
+        <span class="badge-points">{{ a.points }} points</span>
         <span v-if="!a.earned && a.target > 1" class="badge-progress">
           <span class="badge-progress__bar" :style="{ width: `${(a.progress / a.target) * 100}%` }"></span>
           <span class="badge-progress__label">{{ a.progress }} / {{ a.target }}</span>
@@ -27,12 +29,14 @@
 </template>
 
 <script setup lang="ts">
+import { evaluateCityBadges } from '../lib/missions'
+import { useAuth } from '../composables/useAuth'
 import { computed, watch } from 'vue'
 import {
-  evaluateAchievements,
-  toAchievementCheckin,
-  toAchievementSubmission,
-} from '../lib/achievements'
+  evaluateBadges,
+  toBadgeCheckin,
+  toBadgeSubmission,
+} from '../lib/badges'
 import type { Checkin, Submission } from '../composables/useSubmissions'
 
 const props = defineProps<{
@@ -40,7 +44,7 @@ const props = defineProps<{
   checkins: Checkin[]
 }>()
 
-const SEEN_KEY = 'treeAchievements.seen'
+const SEEN_KEY = `treeBadges.seen:${useAuth().user.value?.uid ?? 'guest'}`
 
 function readSeen(): Set<string> {
   try {
@@ -54,26 +58,28 @@ function readSeen(): Set<string> {
 // Snapshot once so "New!" chips survive the persist below for this visit.
 const seenAtLoad = readSeen()
 
-const achievements = computed(() =>
-  evaluateAchievements(
-    props.submissions.map(toAchievementSubmission),
-    props.checkins.map(toAchievementCheckin),
+const badges = computed(() => [
+  ...evaluateBadges(
+    props.submissions.map(toBadgeSubmission),
+    props.checkins.map(toBadgeCheckin),
   ),
-)
+  ...evaluateCityBadges(props.checkins).filter(b => b.earned),
+])
 
 const sorted = computed(() =>
-  [...achievements.value].sort((a, b) => Number(b.earned) - Number(a.earned)),
+  [...badges.value].sort((a, b) => Number(b.earned) - Number(a.earned)),
 )
 
-const earnedCount = computed(() => achievements.value.filter((a) => a.earned).length)
+const totalPoints = computed(() => badges.value.filter(b => b.earned).reduce((sum, b) => sum + b.points, 0))
+const earnedCount = computed(() => badges.value.filter((a) => a.earned).length)
 
 function isNew(id: string): boolean {
-  const a = achievements.value.find((x) => x.id === id)
+  const a = badges.value.find((x) => x.id === id)
   return Boolean(a?.earned) && !seenAtLoad.has(id)
 }
 
 watch(
-  achievements,
+  badges,
   (all) => {
     const earned = all.filter((a) => a.earned).map((a) => a.id)
     if (earned.length === 0) return
@@ -88,19 +94,20 @@ watch(
 </script>
 
 <style scoped>
-.achievements {
+.badges {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.achievements-summary {
+.badges-summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
 }
 
-.achievements-count {
+.badges-count {
   font-family: var(--font-display);
   font-size: 1.1rem;
   letter-spacing: 0.06em;
