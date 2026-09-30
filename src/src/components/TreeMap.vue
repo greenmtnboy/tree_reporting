@@ -7,7 +7,7 @@
     :collapsible="!!props.simplified"
     @select="swoopToBearing"
   />
-  <div v-if="isInitialLoading" class="map-loading">{{ loadingMessage }}</div>
+  <div v-if="isInitialLoading" class="map-loading" role="status">{{ nearbyLocation ? 'Loading trees around you…' : loadingMessage }}</div>
   <div v-else-if="tileRefreshing" class="map-loading map-refreshing">{{ tileRefreshMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
   <div v-if="!isInitialLoading" class="map-legend" :class="{ 'map-legend--mobile': props.simplified }">
@@ -279,7 +279,11 @@ let mapResizeObserver: ResizeObserver | undefined
 
 const props = defineProps<{
   simplified?: boolean
+  nearbyLocation?: { lat: number; lng: number } | null
 }>()
+let disposed = false
+const loadMode = props.nearbyLocation ? 'nearby' : 'explore'
+performance.mark(`trees:${loadMode}:start`)
 
 // --- Refs ---
 
@@ -413,7 +417,7 @@ function readRouteCity(value: unknown): CityCode | null {
 
 // Initialise city from URL on first load.
 const initialRouteCity = readRouteCity(route.query.city)
-lifecycleInitialize(initialRouteCity ?? selectedCity.value)
+lifecycleStartLoading(lifecycleInitialize(initialRouteCity ?? selectedCity.value))
 
 const mapDisplayCity = computed((): CityCode => (lifecycleRequestedCity.value ?? selectedCity.value) as CityCode)
 const introCenterRef = computed((): [number, number] => CITY_CONFIG[mapDisplayCity.value].center)
@@ -508,8 +512,9 @@ function jumpMapToCity(city: CityCode) {
   if (!mapRef.value) return
   mapRef.value.stop()
   mapRef.value.jumpTo({
-    center: CITY_CONFIG[city].center,
-    zoom: props.simplified ? 13 : INTRO_START_ZOOM,
+    center: props.nearbyLocation && city === initialRouteCity
+      ? [props.nearbyLocation.lng, props.nearbyLocation.lat] : CITY_CONFIG[city].center,
+    zoom: props.nearbyLocation && city === initialRouteCity ? 17 : props.simplified ? 13 : INTRO_START_ZOOM,
     pitch: props.simplified ? 0 : 60,
     bearing: props.simplified ? INTRO_END_BEARING : INTRO_START_BEARING,
   })
@@ -592,7 +597,7 @@ function updateZoomLevel() {
 
     // Expanding range during intro can create excessive tile churn.
     // Only apply wide prefetch once intro ends.
-    if (isInitialLoading.value && !introActive.value) {
+    if (isInitialLoading.value && !introActive.value && !props.nearbyLocation) {
       const width = Math.max(1, maxX - minX + 1)
       const height = Math.max(1, maxY - minY + 1)
       const extraX = Math.ceil((width * (INITIAL_TILE_PREFETCH_SCALE - 1)) / 2)
@@ -1540,8 +1545,11 @@ watch([currentMapQuery, publishedTreeIdFilterSql, mapQueryRevision], async ([que
   lastVisibleRangeSigByZoom.clear()
   introLockedRangeByZoom.clear()
   await setColorOverrideSql(colorOverrideSql.value)
+  if (disposed) return
   await setTileQuery(query)
+  if (disposed) return
   await setPublishedTreeIdFilterSql(filterSql)
+  if (disposed) return
   // Re-arm the "trees source loaded" one-shot only once the worker is actually
   // configured for the new query and the refetch is about to be issued. Arming it
   // before the awaits let tiles still in flight from the PREVIOUS query satisfy it —
@@ -1580,7 +1588,7 @@ watch(selectedCity, (city) => {
 })
 
 async function initializeRequestedCity(map: maplibregl.Map): Promise<void> {
-  while (true) {
+  while (!disposed) {
     const city = (lifecycleRequestedCity.value ?? selectedCity.value) as CityCode
     const transition = lifecycleStartLoading(lifecycleCurrentSnapshot(city) ?? undefined)
     if (!transition) return
@@ -1594,10 +1602,13 @@ async function initializeRequestedCity(map: maplibregl.Map): Promise<void> {
     jumpMapToCity(city)
 
     await setCityContext(city)
+    if (disposed) return
     if (!lifecycleCommitContextCity(transition)) continue
     await setTileQuery(currentMapQuery.value)
+    if (disposed) return
     if (!lifecycleMatches(transition)) continue
     await setPublishedTreeIdFilterSql(publishedTreeIdFilterSql.value)
+    if (disposed) return
     if (!lifecycleMatches(transition)) continue
 
     addTreeLayers()
@@ -1629,6 +1640,7 @@ onMounted(async () => {
   window.addEventListener('keyup', onWasdKeyUp)
   // Resolve the initial city before hydrating any map or query state.
   await router.isReady()
+  if (disposed) return
   const mountedRouteCity = readRouteCity(route.query.city)
   if (!initialUserCityDetectionDone.value) {
     const bootstrapResolution = await resolveBootstrapCity({
@@ -1639,6 +1651,7 @@ onMounted(async () => {
         return lifecycleRequestedCity.value as CityCode | null
       },
     })
+    if (disposed) return
     if (initialUserCityDetectionDone.value) {
       // The user picked a city from the (never-disabled) selector while
       // detection was in flight — their choice wins over the detected city.
@@ -1654,7 +1667,8 @@ onMounted(async () => {
     const resolvedBootstrapCity = (lifecycleRequestedCity.value ?? mountedRouteCity ?? selectedCity.value) as CityCode
     commitResolvedCity(resolvedBootstrapCity)
   }
-  void restoreGrantedUserLocation(false)
+  if (disposed) return
+  if (!props.nearbyLocation) void restoreGrantedUserLocation(false)
 
   // Kick off DuckDB init now that the city is known so it runs in parallel with
   // map style loading instead of waiting until the map's 'load' event fires.
@@ -1672,8 +1686,8 @@ onMounted(async () => {
   const map = new maplibregl.Map({
     container: mapContainer.value!,
     style: basemapStyleUrl(resolvedTheme.value),
-    zoom: props.simplified ? 13 : INTRO_START_ZOOM,
-    center: CITY_CONFIG[mapDisplayCity.value].center,
+    zoom: props.nearbyLocation ? 17 : props.simplified ? 13 : INTRO_START_ZOOM,
+    center: props.nearbyLocation ? [props.nearbyLocation.lng, props.nearbyLocation.lat] : CITY_CONFIG[mapDisplayCity.value].center,
     pitch: props.simplified ? 0 : 60,
     bearing: props.simplified ? INTRO_END_BEARING : INTRO_START_BEARING,
     maxPitch: props.simplified ? 0 : 70,
@@ -1728,7 +1742,7 @@ onMounted(async () => {
           tile: (e as any).tile,
         })
       }
-      if (e.sourceId === 'trees' && !firstTreesSourceLoadedLogged) {
+      if (e.sourceId === 'trees' && e.isSourceLoaded && !firstTreesSourceLoadedLogged) {
         firstTreesSourceLoadedLogged = true
         const loadedCity = (lifecycleRequestedCity.value ?? selectedCity.value) as CityCode
         const transition = lifecycleCurrentSnapshot(loadedCity)
@@ -1742,12 +1756,14 @@ onMounted(async () => {
           lifecycleTilesLoaded(transition, !!props.simplified)
         }
         mapContainer.value?.setAttribute('data-trees-loaded-for', loadedCity)
+        performance.mark(`trees:${loadMode}:ready`)
+        performance.measure(`trees:${loadMode}:load`, `trees:${loadMode}:start`, `trees:${loadMode}:ready`)
         stopTileRefreshMessage()
         console.info('[Perf] map:trees-source:loaded', {
           msSincePublish: Math.round(nowMs() - mapQueryChangedAt),
           isSourceLoaded: e.isSourceLoaded,
         })
-        if (prewarmStartedForRevision !== mapQueryRevision.value) {
+        if (!props.nearbyLocation && prewarmStartedForRevision !== mapQueryRevision.value) {
           prewarmStartedForRevision = mapQueryRevision.value
           void prewarmLodCaches().catch((err) => { console.warn('[Perf] map:prewarm:failed', err) })
         }
@@ -1787,6 +1803,7 @@ onMounted(async () => {
 
     void ensureTileProtocolRegistered((lifecycleRequestedCity.value ?? selectedCity.value) as CityCode)
       .then(async () => {
+        if (disposed) return
         // DuckDB init is complete — colors are available
         const colors = workerDistinctColors.value
         console.info('[Perf] map:init:colors-ready', { colors })
@@ -1802,6 +1819,7 @@ onMounted(async () => {
         await initializeRequestedCity(map)
       })
       .catch((e) => {
+        if (disposed) return
         mapError.value = (e as Error).message
         lifecycleForceReady(lifecycleRenderedCity.value ? { id: 0, city: lifecycleRenderedCity.value } : null) // Force to ready so error is visible
       })
@@ -1809,6 +1827,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  disposed = true
   releaseMapTheme?.()
   mapResizeObserver?.disconnect()
   window.removeEventListener('keydown', onWasdKeyDown)

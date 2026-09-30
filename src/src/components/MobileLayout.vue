@@ -1,7 +1,7 @@
 <template>
   <div class="mobile-layout" :data-mobile-screen="currentScreen">
     <div v-if="isMapScreen" class="mobile-map-container mobile-screen">
-      <TreeMap simplified />
+      <MapExperience simplified />
     </div>
 
     <div v-else-if="isFullScreen" class="mobile-full-screen mobile-screen">
@@ -131,7 +131,7 @@
 import ThemeSelector from './ThemeSelector.vue'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import TreeMap from './TreeMap.vue'
+import MapExperience from './MapExperience.vue'
 import ChatPanel from './ChatPanel.vue'
 import CitySelector from './CitySelector.vue'
 import SummaryView from '../views/SummaryView.vue'

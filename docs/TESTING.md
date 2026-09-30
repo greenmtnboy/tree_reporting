@@ -20,6 +20,59 @@ a red run.
   `.github/workflows/ci.yml`.
 - `pnpm bench:chat`: the agent chat benchmark below. Run by hand.
 
+## Map entry paths and load benchmark
+
+The bare map route offers **Near Me** and **Explore City**, before starting the
+map or requesting location. Existing `city` and `tree` links still open directly.
+Explicit routes use one `?` and `&` between parameters:
+
+- `/#/?city=USBOS&mode=nearby`: ask for the viewer's location, resolve its city,
+  then open at zoom 17. Location takes precedence over the city hint. Coordinates
+  are never written into the link. Permission denial, timeout, unavailable
+  location, and locations outside the supported city radius expose retry/explore.
+- `/#/?city=USBOS&mode=explore`: the existing city view (zoom 13 on mobile,
+  animated intro on desktop), with no location permission prompt.
+- Shared tree destinations take precedence over nearby mode on entry, so opening
+  someone else's tree link does not redirect to the recipient's city.
+
+`e2e/map-experience.spec.ts` covers both viewports, the chooser, real rendered
+trees near a supplied browser location, reload/back navigation, mode switching,
+denial, timeout/retry, out-of-area handling, and late location cancellation.
+`startup-city-resolution.spec.ts`, `find-me.spec.ts`, and `tree-deeplink.spec.ts`
+cover the existing exploration paths.
+
+For measurements, serve a normal `pnpm build` using
+`pnpm preview --port 6173`, then run `pnpm bench:map` from another terminal.
+This uses Playwright with a 390×844 viewport, a fixed Boston browser location,
+three rounds per mode, alternating order, and both fresh contexts and reloads.
+Results are saved to the gitignored `src/bench-results/map-load.json`.
+Reload reuses browser caches but recreates DuckDB. A fresh context does not
+flush OS, CDN, or network caches. Keep other browser tests idle while measuring.
+
+Override `MAP_BENCH_URL` for a deployed site (include its base path),
+`MAP_BENCH_CITY`, `MAP_BENCH_LAT`, `MAP_BENCH_LNG` for another mapped location,
+and `MAP_BENCH_ROUNDS` for more samples. Coordinates must match the target city
+for a fair comparison. The harness fails if it cannot find rendered trees;
+choose a location with inventory rather than an empty block.
+
+The browser Performance API exposes `trees:location` and
+`trees:nearby:load` / `trees:explore:load`. Map load runs from component setup to
+the tree source being loaded; it excludes location acquisition and does not
+promise a rendered tree. The benchmark separately waits for rendered tree
+features and records navigation-to-visible-trees, including location and startup.
+No fixed millisecond CI threshold is imposed on live network data.
+
+Nearby mode skips the intro, the initial 3.5× tile-range expansion, and background
+LOD tile warming. **It still materializes the city parquet in DuckDB** and loads
+shared species metadata. It does not claim neighborhood-only network transfer.
+The next data experiment should compare spatially sorted row groups with small
+spatial partitions, measuring cold bytes, peak memory, first visible trees,
+tree-card latency, and panning across partition boundaries on a throttled phone.
+Use a representative small city and a large inventory. A bounded SQL predicate
+alone will not remove the existing full-city materialization cost. Keep the
+published full-city tables for chat and analytics while testing a separate map
+detail source; do not silently restrict their query scope to the neighborhood.
+
 ## The dashboard query sweep (`src/src/tests/dashboard-queries.test.ts`)
 
 Every chart on the summary and species pages sends PreQL to the hosted

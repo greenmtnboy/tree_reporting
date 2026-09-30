@@ -138,7 +138,7 @@ const profileSubLabel = computed(() => {
 
 // displayCity, not selectedCity: mid-swoop the committed city still lags behind
 // the city we're flying to, and these links must carry the destination city.
-const routeQuery = computed(() => ({ city: displayCity.value }))
+const routeQuery = computed(() => ({ city: displayCity.value, mode: route.query.mode }))
 const mapRoute = computed(() => ({ path: '/', query: routeQuery.value }))
 const summaryRoute = computed(() => ({ path: '/summary', query: routeQuery.value }))
 const speciesRoute = computed(() => ({ path: '/species', query: routeQuery.value }))

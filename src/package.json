@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:queries": "vitest run --config vitest.queries.config.ts",
     "bench:chat": "vitest run --config vitest.chatbench.config.ts",
+    "bench:map": "node scripts/bench-map.mjs",
     "test:e2e": "playwright test",
     "dev:artwork": "vite --open /artwork.html",
     "artwork:generate": "node src/artwork/generators/generate.mjs",
