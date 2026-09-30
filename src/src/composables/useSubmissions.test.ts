@@ -185,6 +185,27 @@ describe('recordCheckin', () => {
 describe('submitTreeModification', () => {
   const REPORT = { ...CHECKIN, treeId: 'sf-1' }
 
+  it('queues a desktop correction without inventing a visit or incrementing check-ins', async () => {
+    await submitTreeModification({
+      ...REPORT,
+      kind: 'update',
+      userLat: null,
+      userLng: null,
+      distanceMeters: null,
+      proposedLat: 37.776,
+      proposedLng: -122.420,
+      proposedSpecies: 'Quercus laurifolia',
+    })
+    const [report, marker] = state.batches[0].writes
+    expect(state.batches[0].writes).toHaveLength(2)
+    expect(report.path).toMatch(/^treeModifications\//)
+    expect(report.data).toMatchObject({
+      status: 'pending', userLat: null, userLng: null, distanceMeters: null,
+      proposedLat: 37.776, proposedLng: -122.420, proposedSpecies: 'Quercus laurifolia',
+    })
+    expect(marker.path).toBe('modificationRateLimits/alice')
+  })
+
   it('a missing report drops every proposed value', async () => {
     await submitTreeModification({
       ...REPORT,

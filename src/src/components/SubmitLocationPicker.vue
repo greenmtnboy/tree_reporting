@@ -2,7 +2,7 @@
   <div class="location-picker">
     <div ref="container" class="location-picker__map"></div>
     <button type="button" class="location-picker__recenter" @click="recenter">
-      Recenter
+      {{ hasUserLocation ? 'Recenter' : 'Back to tree' }}
     </button>
   </div>
 </template>
@@ -11,7 +11,7 @@
 import { useTheme } from '../composables/useTheme'
 import { basemapStyleUrl, bindMapTheme } from '../composables/mapTheme'
 
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import maplibregl from 'maplibre-gl'
 
 const { resolvedTheme } = useTheme()
@@ -20,8 +20,10 @@ let releaseMapTheme: (() => void) | undefined
 const props = defineProps<{
   lat: number
   lng: number
-  userLat: number
-  userLng: number
+  userLat?: number | null
+  userLng?: number | null
+  originLat?: number
+  originLng?: number
   zoom?: number
   maxZoom?: number
 }>()
@@ -33,6 +35,7 @@ const container = ref<HTMLDivElement | null>(null)
 let map: maplibregl.Map | null = null
 let marker: maplibregl.Marker | null = null
 let userMarker: maplibregl.Marker | null = null
+const hasUserLocation = computed(() => props.userLat != null && props.userLng != null)
 
 function makeUserDotEl(): HTMLDivElement {
   const el = document.createElement('div')
@@ -54,15 +57,21 @@ onMounted(() => {
     center: [props.lng, props.lat],
     zoom: props.zoom ?? 19,
     maxZoom: props.maxZoom ?? 21,
+    pitch: 0,
+    maxPitch: 0,
+    dragRotate: false,
+    touchPitch: false,
     attributionControl: false,
   })
   releaseMapTheme = bindMapTheme(map)
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
   map.on('load', () => {
     if (!map) return
-    userMarker = new maplibregl.Marker({ element: makeUserDotEl() })
-      .setLngLat([props.userLng, props.userLat])
-      .addTo(map)
+    if (props.userLng != null && props.userLat != null) {
+      userMarker = new maplibregl.Marker({ element: makeUserDotEl() })
+        .setLngLat([props.userLng, props.userLat])
+        .addTo(map)
+    }
     marker = new maplibregl.Marker({ draggable: true, color: '#A7E3B2' })
       .setLngLat([props.lng, props.lat])
       .addTo(map)
@@ -84,19 +93,21 @@ watch(
 watch(
   () => [props.userLat, props.userLng],
   ([lat, lng]) => {
-    if (userMarker) userMarker.setLngLat([lng, lat])
+    if (userMarker && lng != null && lat != null) userMarker.setLngLat([lng, lat])
   },
 )
 
 function recenter() {
   if (!map) return
+  const lat = props.userLat ?? props.originLat ?? props.lat
+  const lng = props.userLng ?? props.originLng ?? props.lng
   map.flyTo({
-    center: [props.userLng, props.userLat],
+    center: [lng, lat],
     zoom: Math.max(map.getZoom(), props.zoom ?? 19),
   })
   if (marker) {
-    marker.setLngLat([props.userLng, props.userLat])
-    emit('update', { lat: props.userLat, lng: props.userLng, source: 'recenter' })
+    marker.setLngLat([lng, lat])
+    emit('update', { lat, lng, source: 'recenter' })
   }
 }
 

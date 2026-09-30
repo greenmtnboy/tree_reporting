@@ -89,16 +89,16 @@
             <span class="tc-label">Ecological fit</span><span class="tc-value">{{ selectedTree.ecological_fit }}</span>
           </template>
         </div>
-        <div v-if="checkinStats" class="tc-social" data-testid="tree-checkin-count">
+        <div v-if="checkinStats && (simplified || checkinStats.count > 0)" class="tc-social" data-testid="tree-checkin-count">
           <span class="tc-social-count">{{ checkinCountLabel }}</span>
         </div>
         <button
-          v-if="canCheckInToSelectedTree"
+          v-if="simplified ? canCheckInToSelectedTree : firebaseAvailable"
           type="button"
           class="tc-report-link"
           data-testid="tree-report-link"
           @click="openCheckin('update')"
-        >Missing or mapped wrong? Report it</button>
+        >{{ simplified ? 'Missing or mapped wrong? Report it' : 'Suggest a correction' }}</button>
       </div>
 
       <!-- Center pane: species info -->
@@ -227,6 +227,7 @@
     :dbh-inches="checkinDialog.dbhInches"
     :plant-year="checkinDialog.plantYear"
     :initial-mode="checkinDialog.mode"
+    :remote-correction="!simplified"
     @close="checkinDialog = null"
     @success="handleCheckinSuccess"
   />
@@ -738,8 +739,7 @@ const checkinDialog = ref<{
 
 const CHECKIN_MAX_METERS = 50
 
-// Checking in (and reporting) is a phone-in-hand-at-the-tree flow. Desktop
-// shows the tree's check-in count but offers no way to add to it.
+// Check-ins require a visit. Desktop corrections go through review without GPS.
 const canCheckInToSelectedTree = computed(() => {
   if (!props.simplified) return false
   if (!firebaseAvailable) return false
@@ -2324,6 +2324,7 @@ onUnmounted(() => {
 }
 
 .tree-card-pane {
+  min-width: 0;
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
@@ -2348,7 +2349,7 @@ onUnmounted(() => {
 /* Shared grid for label/value pairs */
 .tc-grid {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: minmax(min-content, 0.9fr) minmax(0, 1.1fr);
   gap: 4px 10px;
   align-items: start;
 }
@@ -2359,11 +2360,12 @@ onUnmounted(() => {
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  white-space: nowrap;
   padding-top: 1px;
 }
 
 .tc-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: rgba(var(--ink-rgb), 0.92);
   font-size: 0.8rem;
   font-weight: 600;
