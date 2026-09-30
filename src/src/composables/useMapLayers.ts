@@ -1,6 +1,6 @@
 import type { Ref, ComputedRef } from 'vue'
 import maplibregl from 'maplibre-gl'
-import { registerCategoryColoredIcons } from './useTreeCategories'
+import { registerCategoryColoredIcons, TREE_ICON_SIZE } from './useTreeCategories'
 import type { Landmark, TreeForm } from '../types'
 
 // --- Exported constants ---
@@ -406,6 +406,14 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
         layout: {
           'icon-image': buildIconExpression(),
           'icon-size': [...buildIconSizeExpression()],
+          'icon-anchor': 'bottom',
+          // Anchor the trunk base, accounting for the canvas padding in drawTreeIcon.
+          // MapLibre scales and rotates this offset with the icon.
+          'icon-offset': [
+            'match', ['get', 'category'],
+            'multi_trunk', ['literal', [0, TREE_ICON_SIZE * 0.1]],
+            ['literal', [0, TREE_ICON_SIZE * 0.05]],
+          ],
           'icon-rotate': ['get', 'rotation'],
           'icon-rotation-alignment': 'viewport',
           'icon-pitch-alignment': 'viewport',

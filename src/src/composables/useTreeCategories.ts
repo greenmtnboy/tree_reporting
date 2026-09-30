@@ -1,6 +1,8 @@
 import type { TreeForm } from '../types'
 import { CATEGORY_COLORS } from '../treeFormColors'
 
+export const TREE_ICON_SIZE = 48
+
 interface CategoryInfo {
   category: TreeForm
   color: string
@@ -243,7 +245,7 @@ const ALL_CATEGORIES: TreeForm[] = [
  * Image names are `tree-{category}-{hex}` (e.g. `tree-broadleaf-#4CAF50`).
  * This is also used for the default category colors so the pipeline is uniform.
  */
-export function registerCategoryColoredIcons(map: maplibregl.Map, hexColors: string[], size = 48): void {
+export function registerCategoryColoredIcons(map: maplibregl.Map, hexColors: string[], size = TREE_ICON_SIZE): void {
   for (const hex of hexColors) {
     for (const cat of ALL_CATEGORIES) {
       const imageName = `tree-${cat}-${hex}`
