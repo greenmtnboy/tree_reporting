@@ -79,6 +79,8 @@ export interface E2EModificationFixture {
 }
 
 export interface E2EFixtures {
+  /** Firebase error code returned by the Google link action, e2e builds only. */
+  googleLinkError?: string
   rankings?: RankedTree[]
   rankingsUnavailable?: boolean
   /** `null` models a signed-out visitor; omitting it leaves real auth in charge. */

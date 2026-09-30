@@ -280,7 +280,9 @@ ordered by city and tree ID. It stays outside the frontend Trilogy model bundle.
 
 - Trunk and canopy ranks are descending within a city. Ties share rank 1 and all
   tied leaders qualify. Only positive finite recorded DBH/crown widths count;
-  predicted sizes do not compete with recorded measurements.
+  predicted sizes do not compete with recorded measurements. Older rollups
+  without the crown-width column still produce trunk and rarity rankings; their
+  canopy ranks stay null until the column is published.
 - Species share uses identified trees in that city's mapped inventory as the
   denominator. Sentinels have no rarity tier and do not enter that denominator.
   Rare is ≤1%, unusual is >1–5%, common is >5%. These describe inventory

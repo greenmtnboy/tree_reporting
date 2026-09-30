@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({
   auth: { currentUser: null as null | { uid: string; isAnonymous: boolean; providerData: { providerId: string }[]; email?: string } },
-  popup: vi.fn(), redirectResult: vi.fn(),
+  popup: vi.fn(), redirectResult: vi.fn(), redirect: vi.fn(),
 }))
 vi.mock('../lib/firebase', () => ({ auth: state.auth, firebaseAvailable: true }))
 vi.mock('../lib/e2eFixtures', () => ({ e2eEnabled: false, e2eUser: () => undefined }))
@@ -21,7 +21,7 @@ vi.mock('firebase/auth', () => ({
   getRedirectResult: state.redirectResult,
   linkWithPopup: state.popup,
   signInWithPopup: state.popup,
-  linkWithRedirect: vi.fn(), signInWithRedirect: vi.fn(),
+  linkWithRedirect: state.redirect, signInWithRedirect: state.redirect,
   signInAnonymously: vi.fn(), signOut: vi.fn(),
 }))
 
@@ -29,6 +29,7 @@ beforeEach(() => {
   vi.resetModules()
   state.auth.currentUser = { uid: 'same-account', isAnonymous: true, providerData: [] }
   state.popup.mockReset()
+  state.redirect.mockReset()
   state.redirectResult.mockReset().mockResolvedValue(null)
 })
 
@@ -74,6 +75,8 @@ it('keeps the anonymous account and explains a Google credential already linked 
   expect(auth.isAnonymous.value).toBe(true)
   expect(auth.uid.value).toBe('same-account')
   expect(auth.authError.value?.message).toContain('Sign out first')
+  expect(auth.authError.value?.message).toContain('Nothing was merged')
+  expect(auth.authError.value?.message).toContain('contributions inaccessible')
 })
 
 it('the Profile link button changes the rendered account status without a reload', async () => {
@@ -95,5 +98,29 @@ it('the Profile link button changes the rendered account status without a reload
     expect(host.textContent).toContain('linked@example.com')
   } finally {
     app.unmount()
+  }
+})
+
+it('shows a redirect-fallback failure as a focused Profile alert instead of swallowing it', async () => {
+  const { createApp, defineComponent, h } = await import('vue')
+  const { default: ProfileView } = await import('../views/ProfileView.vue')
+  state.popup.mockRejectedValue({ code: 'auth/popup-blocked' })
+  state.redirect.mockRejectedValue({ code: 'auth/credential-already-in-use' })
+  const host = document.createElement('div')
+  document.body.append(host)
+  const app = createApp(ProfileView)
+  app.component('RouterLink', defineComponent({ setup(_, { slots }) { return () => h('a', slots.default?.()) } }))
+  app.mount(host)
+  try {
+    await vi.waitFor(() => expect(host.textContent).toContain('Signed in anonymously.'))
+    Array.from(host.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Link Google account')!.click()
+    await vi.waitFor(() => expect(host.querySelector('[role="alert"]')?.textContent).toContain('Nothing was merged'))
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Account linking failed')
+    expect(document.activeElement).toBe(host.querySelector('[role="alert"]'))
+    expect(host.textContent).toContain('Signed in anonymously.')
+    expect(host.textContent).not.toContain('Redirecting to Google...')
+  } finally {
+    app.unmount()
+    host.remove()
   }
 })

@@ -48,3 +48,15 @@ def test_rankings_job_and_input_edges():
     assert job['schedule'] == '0 0 6 * * *'
     assert set(config['dependencies'][job['entrypoint']]['after']) == {
         'raw/full_tree_publish.preql', 'raw/tree_enrichment.preql'}
+
+
+def test_older_rollup_without_crown_width_still_produces_trunk_and_rarity():
+    with duckdb.connect() as con:
+        con.execute("""CREATE VIEW trees AS SELECT 'a' AS tree_id, 'USBOS' AS city,
+            'Quercus rubra' AS species, 42.0 AS latitude, -71.0 AS longitude,
+            20.0 AS diameter_at_breast_height""")
+        con.register('enrichment', pa.table({'species': ['Quercus rubra'], 'tree_form': ['broadleaf']}))
+        row = build_rankings(con).to_pylist()[0]
+    assert row['canopy_rank'] is None
+    assert row['trunk_rank'] == 1
+    assert row['rarity_tier'] == 'common'

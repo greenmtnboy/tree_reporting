@@ -20,6 +20,9 @@ from shared.ingest import SPECIES_SENTINELS
 def build_rankings(con: duckdb.DuckDBPyConnection) -> pa.Table:
     """Read `trees` and species-keyed `enrichment` relations on this connection."""
     sentinels = ",".join("'" + s.lower().replace("'", "''") + "'" for s in SPECIES_SENTINELS)
+    # The crown-width rollout is incremental. An older published rollup can
+    # still support trunk/rarity missions without claiming any canopy winners.
+    crown = 'crown_width_m' if 'crown_width_m' in con.table('trees').columns else 'NULL::DOUBLE'
     return con.execute(f"""
         WITH clean AS (
             SELECT tree_id, city, species, latitude, longitude,
@@ -27,8 +30,8 @@ def build_rankings(con: duckdb.DuckDBPyConnection) -> pa.Table:
                     AND lower(trim(species)) NOT IN ({sentinels}) AS identified,
                 CASE WHEN isfinite(diameter_at_breast_height) AND diameter_at_breast_height > 0
                      THEN diameter_at_breast_height END AS dbh,
-                CASE WHEN isfinite(crown_width_m) AND crown_width_m > 0
-                     THEN crown_width_m END AS crown
+                CASE WHEN isfinite({crown}) AND {crown} > 0
+                     THEN {crown} END AS crown
             FROM trees
         ), counted AS (
             SELECT *, count(*) FILTER (WHERE identified) OVER (PARTITION BY city) AS identified_city_count,

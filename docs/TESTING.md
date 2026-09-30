@@ -131,7 +131,7 @@ execution connection, plain refs for map and route state).
 
 ## Badges, missions, and contribution refresh
 
-`pnpm test:e2e e2e/badges.spec.ts e2e/missions.spec.ts e2e/contributions.spec.ts`
+`pnpm test:e2e e2e/badges.spec.ts e2e/missions.spec.ts e2e/contributions.spec.ts e2e/account-linking.spec.ts`
 covers desktop/mobile badges, points, distinct city mission progress, target
 links, biome selection, missing rankings, history beyond 50 visits and tab-return
 refresh. Fixtures use the existing e2e-only auth/contributions seam; production
@@ -155,3 +155,8 @@ same User instance without another auth-state callback: popup and redirect
 completion, the rendered Profile label, and credential-already-in-use errors.
 The app keeps SDK users in a shallow ref and explicitly publishes completed
 credentials, including notifying Vue when object identity and UID stay the same.
+
+Mobile/desktop account-linking browser tests verify that an existing Google
+profile collision is visibly explained and focused while the guest session and
+its badges remain intact. The unit suite separately covers redirect-fallback
+errors that previously escaped without setting the displayed error state.

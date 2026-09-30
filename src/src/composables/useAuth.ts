@@ -51,7 +51,7 @@ function normalizeGoogleSignInError(err: unknown, currentUser: User | null | und
       code === 'auth/account-exists-with-different-credential')
   ) {
     return new Error(
-      'That Google account is already linked to another profile. Sign out first, then use Continue with Google to reopen the existing account.',
+      "That Google account is already linked to another profile. Nothing was merged; you are still using this anonymous account. Signing out may make this account's contributions inaccessible. Sign out first, then use Continue with Google only if you want to reopen the existing profile.",
     )
   }
   return err as Error
@@ -92,7 +92,7 @@ async function initializeAuthState(): Promise<void> {
     const result = await getRedirectResult(auth)
     if (result) publishUser(result.user)
   } catch (err) {
-    authError.value = err as Error
+    authError.value = normalizeGoogleSignInError(err, auth.currentUser)
   } finally {
     redirectSettled = true
     markReadyIfDone()
@@ -146,6 +146,8 @@ export async function signInWithGoogle(): Promise<User | null> {
   const provider = createGoogleProvider()
 
   try {
+    const fixture = e2eEnabled ? e2eFixtures() : null
+    if (fixture?.googleLinkError) throw { code: fixture.googleLinkError }
     const result =
       currentUser?.isAnonymous
         ? await linkWithPopup(currentUser, provider)
@@ -158,12 +160,19 @@ export async function signInWithGoogle(): Promise<User | null> {
   } catch (err) {
     if (shouldUseRedirectFallback(err)) {
       redirectingToGoogle.value = true
-      if (currentUser?.isAnonymous) {
-        await linkWithRedirect(currentUser, provider)
-      } else {
-        await signInWithRedirect(auth, provider)
+      try {
+        if (currentUser?.isAnonymous) {
+          await linkWithRedirect(currentUser, provider)
+        } else {
+          await signInWithRedirect(auth, provider)
+        }
+        return null
+      } catch (redirectError) {
+        redirectingToGoogle.value = false
+        const normalizedError = normalizeGoogleSignInError(redirectError, currentUser)
+        authError.value = normalizedError
+        throw normalizedError
       }
-      return null
     }
 
     const normalizedError = normalizeGoogleSignInError(err, currentUser)
@@ -175,11 +184,13 @@ export async function signInWithGoogle(): Promise<User | null> {
 export async function signOut(): Promise<void> {
   if (e2eEnabled && e2eFixtures()) {
     user.value = null
+    authError.value = null
     signInPromise = null
     return
   }
   if (!auth) return
   await firebaseSignOut(auth)
+  authError.value = null
   signInPromise = null
   redirectingToGoogle.value = false
 }

@@ -4,6 +4,9 @@
       <h1 class="profile-title">Profile</h1>
 
       <section class="profile-status">
+        <p v-if="authError" ref="authErrorElement" class="error-text" role="alert" tabindex="-1">
+          {{ isAnonymous ? 'Account linking failed' : 'Sign-in failed' }}: {{ authError.message }}
+        </p>
         <template v-if="!firebaseAvailable">
           <p>Profile features are unavailable right now. Authentication services couldn't be reached.</p>
         </template>
@@ -25,7 +28,6 @@
               {{ pending ? 'Signing in...' : 'Continue anonymously' }}
             </button>
           </div>
-          <p v-if="authError" class="error-text">Sign-in failed: {{ authError.message }}</p>
         </template>
         <template v-else>
           <p>{{ signedInSummary }}</p>
@@ -83,7 +85,6 @@
               Sign out
             </button>
           </div>
-          <p v-if="authError" class="error-text">Sign-in failed: {{ authError.message }}</p>
         </template>
       </section>
 
@@ -145,7 +146,7 @@
 
 <script setup lang="ts">
 import { evaluateCityBadges } from '../lib/missions'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { firebaseAvailable } from '../lib/firebase'
 import { useMyContributions } from '../composables/useSubmissions'
@@ -167,6 +168,13 @@ const {
   signOut,
 } = useAuth()
 const pending = ref(false)
+const authErrorElement = ref<HTMLElement | null>(null)
+watch(authError, async error => {
+  if (!error) return
+  await nextTick()
+  authErrorElement.value?.focus({ preventScroll: true })
+  authErrorElement.value?.scrollIntoView?.({ block: 'nearest' })
+}, { immediate: true })
 
 const googleButtonLabel = computed(() => {
   if (pending.value && redirectingToGoogle.value) return 'Redirecting to Google...'
