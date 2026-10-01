@@ -64,6 +64,32 @@ for (const [label, viewport] of [
   test.describe(`Map experience — ${label}`, () => {
     test.use({ viewport })
 
+    test('a city hint keeps the chooser open and exploration uses that city', async ({ page }) => {
+      await page.goto('/#/?city=USBOS')
+      await expect(page.locator('.map-entry')).toBeVisible()
+      await expect(page.locator('.tree-map')).toHaveCount(0)
+      await expect(page.locator('.experience-switch')).toHaveCount(0)
+      await page.getByRole('button', { name: 'Explore City', exact: true }).click()
+      await expect(page).toHaveURL(/city=USBOS&mode=explore/)
+      await expect(page.getByTestId('city-select')).toHaveValue('USBOS')
+      await expect(page.locator('.tree-map')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Near Me', exact: true })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Explore City', exact: true })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: /Find Me/ })).toBeVisible()
+      await page.goBack()
+      await expect(page.locator('.map-entry')).toBeVisible()
+    })
+
+    test('switching a default desktop visit to mobile does not choose exploration', async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 })
+      await page.goto('/#/')
+      await expect(page).toHaveURL(/city=/)
+      await page.setViewportSize(viewport)
+      await expect(page.locator('.map-entry')).toBeVisible()
+      await expect(page.locator('.tree-map')).toHaveCount(0)
+      await expect(page.locator('.experience-switch')).toHaveCount(0)
+    })
+
     test('entry offers two paths without starting the map or requesting location', async ({ page }, testInfo) => {
       const parquets: string[] = []
       page.on('request', request => { if (request.url().includes('.parquet')) parquets.push(request.url()) })
@@ -113,7 +139,7 @@ for (const [label, viewport] of [
       await expect(page.locator('.tree-card')).toContainText('sf-1', { timeout: 90_000 })
     })
 
-    test('nearby resolves the actual city, starts at street scale, survives reload and switches to explore', async ({ page, context }, testInfo) => {
+    test('nearby resolves the city, survives reload and allows normal map navigation', async ({ page, context }, testInfo) => {
       test.setTimeout(180_000)
       await context.grantPermissions(['geolocation'])
       await context.setGeolocation({ latitude: 42.3601, longitude: -71.0589 })
@@ -133,13 +159,15 @@ for (const [label, viewport] of [
       expect(timing.some(e => e.name === 'trees:nearby:load')).toBe(true)
       await page.reload()
       await expect(page.locator('.tree-map')).toHaveAttribute('data-trees-loaded-for', 'USBOS', { timeout: 90_000 })
-      await page.getByRole('button', { name: 'Explore City', exact: true }).click()
+      await expect(page.getByRole('button', { name: 'Near Me', exact: true })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Explore City', exact: true })).toHaveCount(0)
+      await page.getByRole('button', { name: 'Zoom out', exact: true }).click()
+      await expect.poll(() => page.evaluate(() => (window as any).__treeMap.getZoom())).toBeLessThan(17)
+      await page.getByTestId('city-select').selectOption('USBOS')
       await expect(page).toHaveURL(/mode=explore/)
       await expect(page.locator('.tree-map')).toHaveAttribute('data-trees-loaded-for', 'USBOS', { timeout: 60_000 })
-      await expect(page.getByRole('button', { name: 'Near Me', exact: true })).toBeVisible()
-      await page.goBack()
-      await expect(page).toHaveURL(/mode=nearby/)
-      await expect(page.locator('.tree-map')).toHaveAttribute('data-trees-loaded-for', 'USBOS', { timeout: 60_000 })
+      await expect(page.getByRole('button', { name: 'Near Me', exact: true })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: /Find Me/ })).toBeVisible()
     })
 
     test('denied location offers retry and exploration without loading an unrelated city', async ({ page }) => {
@@ -153,18 +181,6 @@ for (const [label, viewport] of [
       await page.getByRole('button', { name: 'Explore City', exact: true }).click()
       await expect(page).toHaveURL(/mode=explore/)
       await expect(page.locator('.tree-map')).toBeVisible()
-    })
-
-    test('switching to nearby during exploration startup renders local trees', async ({ page, context }) => {
-      test.setTimeout(120_000)
-      await context.grantPermissions(['geolocation'])
-      await context.setGeolocation({ latitude: 42.3601, longitude: -71.0589 })
-      await page.goto('/#/?city=USBOS&mode=explore')
-      await expect(page.locator('.tree-map')).toHaveAttribute('data-trees-loaded-for', 'USBOS', { timeout: 60_000 })
-      await page.getByRole('button', { name: 'Near Me', exact: true }).click()
-      await expect(page).toHaveURL(/mode=nearby/)
-      await expect(page.locator('.tree-map')).toHaveAttribute('data-trees-loaded-for', 'USBOS', { timeout: 60_000 })
-      await page.waitForFunction(() => (window as any).__treeMap.queryRenderedFeatures({ layers: ['trees-circle'] }).length > 0)
     })
 
     test('leaving a pending location request ignores its late result', async ({ page }) => {
@@ -198,7 +214,9 @@ for (const [label, viewport] of [
       await context.setGeolocation({ latitude: 42.3601, longitude: -70.7 })
       await page.goto('/#/?mode=nearby')
       await expect(page.locator('.nearby-empty')).toContainText('No mapped trees', { timeout: 60_000 })
-      await expect(page.getByRole('button', { name: 'Explore City', exact: true })).toBeEnabled()
+      await expect(page.getByTestId('city-select')).toBeEnabled()
+      await expect(page.getByRole('button', { name: 'Zoom out', exact: true })).toBeEnabled()
+      await expect(page.getByRole('button', { name: 'Explore City', exact: true })).toHaveCount(0)
     })
 
     test('a timeout can be retried successfully from the entry button', async ({ page }) => {

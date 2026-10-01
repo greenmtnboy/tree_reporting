@@ -92,7 +92,7 @@ test.describe('City navigation — mobile', () => {
     await page.addInitScript(() => {
       localStorage.setItem('sf_trees_welcome_dismissed', '1')
     })
-    await page.goto('/#/?city=USSFO')
+    await page.goto('/#/?city=USSFO&mode=explore')
   })
 
   test('switching to a new city loads trees for that city', async ({ page }) => {

@@ -22,13 +22,17 @@ a red run.
 
 ## Map entry paths and load benchmark
 
-On mobile, the bare map route offers **Near Me** and **Explore City**, before
-starting the map or requesting location. Existing `city` and `tree` links still
-open directly. Desktop opens the full city map without an experience chooser
+On mobile, a map route without an explicit experience offers **Near Me** and
+**Explore City**, before starting the map or requesting location. `city` only
+sets the destination for Explore City; it never selects an experience. Explicit
+`mode` and shared `tree` links open directly. Shared tree links record explore
+mode so closing the card keeps the map open. Desktop opens the full city map without an experience chooser
 or experience-switch buttons, including when a mobile nearby link is opened.
 On mobile, the choices float in the center; map actions remain hidden through
 location acquisition. Unknown city/mode parameters keep the chooser open.
 Location denial, timeout, and missing coverage offer retry or Explore City.
+Neither map experience shows entry-choice buttons once the map opens. Use zoom,
+the city picker, and the existing **Find Me** control to navigate.
 Explicit mobile routes use one `?` and `&` between parameters:
 
 - `/#/?city=USBOS&mode=nearby`: ask for the viewer's location, resolve its city,

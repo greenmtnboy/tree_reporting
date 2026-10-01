@@ -29,18 +29,14 @@
       </div>
     </div>
   </section>
-  <template v-else>
-    <TreeMap :key="mode ?? undefined" :simplified="simplified || mode === 'nearby'" :nearby-location="mode === 'nearby' ? location : null" />
-    <button v-if="mode === 'nearby'" class="floating-action experience-switch" @click="chooseExplore">Explore City</button>
-    <button v-else class="floating-action experience-switch" @click="chooseNearby">Near Me</button>
-  </template>
+  <TreeMap v-else :key="mode ?? undefined" :simplified="simplified || mode === 'nearby'" :nearby-location="mode === 'nearby' ? location : null" />
 </template>
 
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TreeMap from './TreeMap.vue'
-import { CITY_CONFIG, cityAt, useMapData } from '../composables/useMapData'
+import { cityAt, useMapData } from '../composables/useMapData'
 import { getCurrentPosition } from '../lib/geo'
 
 defineProps<{ simplified?: boolean }>()
@@ -48,12 +44,10 @@ const emit = defineEmits<{ 'entry-change': [visible: boolean] }>()
 const route = useRoute()
 const router = useRouter()
 const { displayCity, setUserLocation } = useMapData()
-// Existing city/tree links retain their direct entry behavior.
+// City is a destination hint, never an implicit experience selection.
 const mode = computed(() => {
   if (route.query.mode === 'nearby') return 'nearby'
-  const hasCity = typeof route.query.city === 'string'
-    && Object.prototype.hasOwnProperty.call(CITY_CONFIG, route.query.city)
-  return route.query.mode === 'explore' || hasCity || route.query.tree ? 'explore' : null
+  return route.query.mode === 'explore' || route.query.tree ? 'explore' : null
 })
 const location = ref<{ lat: number; lng: number } | null>(null)
 const showEntry = computed(() => !mode.value || (mode.value === 'nearby' && !location.value))
@@ -108,6 +102,9 @@ watch(mode, (value) => {
     // the recipient's city; selecting a tree on an already-open map is unchanged.
     if (route.query.tree) void router.replace({ query: { ...route.query, mode: 'explore' } })
     else void locate()
+  } else if (value === 'explore' && route.query.tree && route.query.mode !== 'explore') {
+    // Keep exploration selected after a shared tree card is closed (or missing).
+    void router.replace({ query: { ...route.query, mode: 'explore' } })
   }
 }, { immediate: true })
 onUnmounted(() => { request++ })
@@ -128,7 +125,6 @@ p { line-height: 1.6; color: var(--color-muted); }
 .entry-action-icon { width: 24px; height: 24px; flex-shrink: 0; }
 .entry-feedback { min-height: 4.8em; font-size: .8rem; }
 .entry-error { color: var(--color-error); }
-.experience-switch { position: absolute; left: 12px; top: 72px; z-index: 5; font-size: .78rem; }
 @media (max-width: 768px) {
   .map-entry { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
 }

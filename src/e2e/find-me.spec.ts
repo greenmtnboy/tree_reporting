@@ -17,7 +17,7 @@ for (const mobile of [true, false]) {
       await page.addInitScript(() => {
         localStorage.setItem('sf_trees_welcome_dismissed', '1')
       })
-      await page.goto('/#/?city=USSFO')
+      await page.goto('/#/?city=USSFO&mode=explore')
 
       await expect(page.locator('.map-loading')).toBeVisible({ timeout: 30_000 })
       const button = page.locator(mobile ? '.locate-btn' : '.locate-btn-desktop')
@@ -36,7 +36,7 @@ test('a mid-load press on mobile moves to the user\'s city and lands on them', a
     localStorage.setItem('sf_trees_welcome_dismissed', '1')
   })
   // Opened on Boston; the user is in San Francisco.
-  await page.goto('/#/?city=USBOS')
+  await page.goto('/#/?city=USBOS&mode=explore')
 
   await expect(page.locator('.map-loading')).toBeVisible({ timeout: 30_000 })
   await page.locator('.locate-btn').click()

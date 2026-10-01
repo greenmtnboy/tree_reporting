@@ -15,7 +15,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline: 2px solid var(--color-leaf); outline-offset: 3px; }
 ::selection { background: var(--accent-soft); color: var(--color-ink); }
 
-/* Shared floating controls for map entry, experience switching and mobile actions. */
+/* Shared floating controls for map entry and mobile actions. */
 .floating-action {
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
   min-height: 44px; min-width: 0; padding: 12px 18px;
