@@ -15,6 +15,24 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline: 2px solid var(--color-leaf); outline-offset: 3px; }
 ::selection { background: var(--accent-soft); color: var(--color-ink); }
 
+/* Shared floating controls for map entry and mobile actions. */
+.floating-action {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 44px; min-width: 0; padding: 12px 18px;
+  border: 1px solid var(--color-border); border-radius: 16px;
+  background: var(--surface-1); color: var(--color-ink);
+  font: inherit; font-weight: 600; cursor: pointer;
+  box-shadow: var(--shadow-soft);
+  transition: background .15s, border-color .15s, box-shadow .15s;
+}
+.floating-action--primary { background: var(--color-leaf); border-color: var(--color-leaf); color: var(--color-on-accent); }
+@media (hover: hover) {
+  .floating-action:hover:not(:disabled) { border-color: var(--color-leaf); background: var(--accent-soft); color: var(--color-ink); }
+  .floating-action--primary:hover:not(:disabled) { background: var(--color-moss); color: var(--color-on-accent); }
+}
+.floating-action:active:not(:disabled) { box-shadow: none; }
+.floating-action:disabled { opacity: .6; cursor: wait; }
+
 .sidebar {
   width: 260px; min-width: 260px; height: 100%;
   background: rgba(var(--surface-rgb), .62);

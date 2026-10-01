@@ -12,7 +12,7 @@ test.describe('Mobile layout', () => {
     await page.addInitScript(() => {
       localStorage.setItem('sf_trees_welcome_dismissed', '1')
     })
-    await page.goto('/#/?city=USSFO')
+    await page.goto('/#/?city=USSFO&mode=explore')
   })
 
   test('renders the map and mobile navigation controls', async ({ page }) => {

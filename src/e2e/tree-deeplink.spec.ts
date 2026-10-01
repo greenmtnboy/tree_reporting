@@ -44,6 +44,8 @@ for (const [label, viewport] of [
       await expect.poll(() => page.url()).not.toContain('tree=')
       // The city survives the close.
       expect(page.url()).toContain(`city=${CITY}`)
+      await expect(page.locator('.tree-map')).toBeVisible()
+      await expect(page.locator('.map-entry')).toHaveCount(0)
     })
 
     test('drops an unknown ?tree= instead of leaving it in the URL', async ({ page }) => {
@@ -51,6 +53,8 @@ for (const [label, viewport] of [
       await page.goto(`/#/?city=${CITY}&tree=sf-does-not-exist`)
       await expect.poll(() => page.url(), { timeout: 120_000 }).not.toContain('tree=')
       await expect(page.locator('.tree-card')).toHaveCount(0)
+      await expect(page.locator('.tree-map')).toBeVisible()
+      await expect(page.locator('.map-entry')).toHaveCount(0)
     })
   })
 }

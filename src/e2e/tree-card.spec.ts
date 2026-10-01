@@ -31,7 +31,7 @@ async function openMap(page: Page, mobile: boolean): Promise<void> {
   await page.addInitScript(() => {
     localStorage.setItem('sf_trees_welcome_dismissed', '1')
   })
-  await page.goto(`/#/?city=${CITY}`)
+  await page.goto(`/#/?city=${CITY}&mode=explore`)
 
   // Tiles for the city have been generated...
   await page.waitForFunction(

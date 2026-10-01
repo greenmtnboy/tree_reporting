@@ -1,7 +1,7 @@
 <template>
   <div class="map-view">
     <div class="map-surface">
-      <MapExperience />
+      <TreeMap />
       <router-link
         v-if="firebaseAvailable"
         :to="{ name: 'submit' }"
@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import MapExperience from '../components/MapExperience.vue'
+import TreeMap from '../components/TreeMap.vue'
 import { firebaseAvailable } from '../lib/firebase'
 </script>
 
