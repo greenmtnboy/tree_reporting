@@ -1,8 +1,65 @@
 import { test, expect } from '@playwright/test'
 
+test.describe('Desktop map entry', () => {
+  test.use({ viewport: { width: 1280, height: 800 } })
+
+  for (const path of ['/#/', '/#/?mode=unknown&city=unknown', '/#/?city=USBOS&mode=nearby']) {
+    test(`opens full city exploration directly at ${path}`, async ({ page }) => {
+      await page.addInitScript(() => {
+        navigator.geolocation.getCurrentPosition = () => {
+          document.documentElement.dataset.unexpectedLocationRequest = 'true'
+        }
+      })
+      await page.goto(path)
+      await expect(page.locator('.tree-map canvas')).toBeAttached({ timeout: 15_000 })
+      await expect(page.locator('.tree-map')).not.toHaveClass(/tree-map--mobile/)
+      await expect(page.locator('.map-entry')).toHaveCount(0)
+      await expect(page.locator('.experience-switch')).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Near Me', exact: true })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Explore City', exact: true })).toHaveCount(0)
+      await expect(page.locator('html')).not.toHaveAttribute('data-unexpected-location-request', 'true')
+    })
+  }
+
+  test('a mobile shared tree link opens its destination on desktop', async ({ page }) => {
+    test.setTimeout(120_000)
+    await page.goto('/#/?city=USSFO&mode=nearby&tree=sf-1')
+    await expect(page.locator('.tree-card')).toContainText('sf-1', { timeout: 90_000 })
+    await expect(page.locator('.map-entry')).toHaveCount(0)
+    await expect(page.locator('.tree-map')).not.toHaveClass(/tree-map--mobile/)
+  })
+})
+
+for (const [name, viewport, colorScheme] of [
+  ['small phone', { width: 320, height: 568 }, 'light'],
+  ['landscape phone', { width: 667, height: 375 }, 'light'],
+  ['dark phone', { width: 390, height: 844 }, 'dark'],
+] as const) {
+  test.describe(`Map entry — ${name}`, () => {
+    test.use({ viewport, colorScheme })
+    test('both choices are visible and keyboard accessible', async ({ page }, testInfo) => {
+      await page.goto('/#/')
+      const nearMe = page.getByRole('button', { name: 'Near Me', exact: true })
+      const explore = page.getByRole('button', { name: 'Explore City', exact: true })
+      await expect(nearMe).toBeVisible()
+      for (const button of [nearMe, explore]) {
+        const box = (await button.boundingBox())!
+        expect(box.y).toBeGreaterThanOrEqual(0)
+        expect(box.y + box.height).toBeLessThan(viewport.height - 66)
+        expect(box.height).toBeGreaterThanOrEqual(44)
+      }
+      await page.keyboard.press('Tab')
+      await expect(nearMe).toBeFocused()
+      await page.keyboard.press('Tab')
+      await expect(explore).toBeFocused()
+      await expect(page.locator('.tree-map')).toHaveCount(0)
+      await page.screenshot({ path: testInfo.outputPath('entry.png') })
+    })
+  })
+}
+
 for (const [label, viewport] of [
   ['mobile', { width: 390, height: 844 }],
-  ['desktop', { width: 1280, height: 800 }],
 ] as const) {
   test.describe(`Map experience — ${label}`, () => {
     test.use({ viewport })
@@ -18,12 +75,32 @@ for (const [label, viewport] of [
       await expect(page.getByRole('button', { name: 'Near Me', exact: true })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Explore City', exact: true })).toBeVisible()
       await expect(page.locator('.tree-map')).toHaveCount(0)
+      await expect(page.locator('.experience-switch')).toHaveCount(0)
+      if (label === 'mobile') {
+        await expect(page.getByTestId('mobile-action-chat')).toHaveCount(0)
+        await expect(page.getByTestId('mobile-action-landmarks')).toHaveCount(0)
+        await expect(page.getByTestId('mobile-action-submit')).toHaveCount(0)
+        const actions = await page.locator('.entry-actions').boundingBox()
+        expect(actions).not.toBeNull()
+        expect(Math.abs(actions!.x + actions!.width / 2 - viewport.width / 2)).toBeLessThan(2)
+        expect(Math.abs(actions!.y + actions!.height / 2 - viewport.height / 2)).toBeLessThan(100)
+      }
       expect(parquets).toEqual([])
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       await testInfo.attach('entry', { body: await page.screenshot(), contentType: 'image/png' })
       await page.getByRole('button', { name: 'Explore City', exact: true }).click()
       await expect(page).toHaveURL(/mode=explore/)
       await expect(page.locator('.tree-map')).toBeVisible()
+      if (label === 'mobile') await expect(page.getByTestId('mobile-action-landmarks')).toBeVisible()
+      await page.goBack()
+      await expect(page.locator('.map-entry')).toBeVisible()
+      await expect(page.locator('.tree-map')).toHaveCount(0)
+    })
+
+    test('unknown experience and city parameters keep the choice open', async ({ page }) => {
+      await page.goto('/#/?mode=unknown&city=unknown')
+      await expect(page.getByRole('button', { name: 'Near Me', exact: true })).toBeVisible()
+      await expect(page.locator('.tree-map')).toHaveCount(0)
     })
 
     test('a shared tree link overrides nearby mode without asking for location', async ({ page }) => {
@@ -96,6 +173,9 @@ for (const [label, viewport] of [
       })
       await page.goto('/#/?mode=nearby')
       await expect(page.getByRole('status')).toContainText('Finding your location')
+      await expect(page.getByRole('button', { name: 'Near Me', exact: true })).toBeDisabled()
+      await expect(page.locator('.tree-map')).toHaveCount(0)
+      if (label === 'mobile') await expect(page.getByTestId('mobile-action-landmarks')).toHaveCount(0)
       await page.getByRole('button', { name: 'Explore City', exact: true }).click()
       await expect(page).toHaveURL(/mode=explore/)
       await page.evaluate(() => (window as any).__finishLocation({ coords: { latitude: 42.36, longitude: -71.06 }, timestamp: Date.now() }))

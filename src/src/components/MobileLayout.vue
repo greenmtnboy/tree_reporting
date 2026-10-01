@@ -1,7 +1,7 @@
 <template>
   <div class="mobile-layout" :data-mobile-screen="currentScreen">
     <div v-if="isMapScreen" class="mobile-map-container mobile-screen">
-      <MapExperience simplified />
+      <MapExperience simplified @entry-change="mapEntryVisible = $event" />
     </div>
 
     <div v-else-if="isFullScreen" class="mobile-full-screen mobile-screen">
@@ -26,11 +26,11 @@
     </div>
 
     <div class="mobile-bottom-bar" :class="{ 'mobile-bottom-bar--overlay-open': !!activeOverlay }">
-      <div class="mobile-bottom-bar-actions">
+      <div v-if="!isMapScreen || !mapEntryVisible" class="mobile-bottom-bar-actions">
         <button
           v-for="action in visibleActions"
           :key="action.key"
-          class="mobile-action-btn"
+          class="floating-action mobile-action-btn"
           :class="{
             'mobile-action-btn--active': action.key !== 'submit' && activeOverlay === action.key,
             'mobile-action-btn--icon': action.key === 'submit',
@@ -62,9 +62,10 @@
           </div>
         </transition>
         <button
-          class="mobile-nav-trigger"
+          class="floating-action mobile-nav-trigger"
           :class="{ 'mobile-nav-trigger--open': navMenuOpen }"
           aria-label="Open navigation menu"
+          :aria-expanded="navMenuOpen"
           data-testid="mobile-nav-trigger"
           @click="navMenuOpen = !navMenuOpen"
         >
@@ -162,6 +163,10 @@ const { landmarks, loading: landmarkLoading } = useLandmarkData()
 const { flyTo } = useFlyTo()
 
 const activeOverlay = ref<MobileOverlay>(null)
+const mapEntryVisible = ref(true)
+watch(mapEntryVisible, visible => {
+  if (visible) activeOverlay.value = null
+})
 const navMenuOpen = ref(false)
 const search = ref('')
 
@@ -379,9 +384,10 @@ function handleLandmarkClick(lm: Landmark) {
   position: absolute;
   left: 14px;
   right: 14px;
-  bottom: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   z-index: 30;
   display: flex;
+  justify-content: flex-end;
   gap: 10px;
   pointer-events: none;
 }
@@ -398,27 +404,13 @@ function handleLandmarkClick(lm: Landmark) {
 }
 
 .mobile-action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   gap: 8px;
-  min-height: 42px;
-  min-width: 0;
   padding: 0 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(var(--accent-rgb), 0.14);
-  background:
-    linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.64), rgba(var(--surface-rgb), 0.96));
-  color: rgba(var(--ink-rgb), 0.82);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  box-shadow: 0 14px 28px rgba(7, 10, 11, 0.28);
   pointer-events: auto;
-}
-
-.mobile-action-btn {
   flex: 1 1 0;
 }
 
@@ -469,7 +461,7 @@ function handleLandmarkClick(lm: Landmark) {
   position: fixed;
   left: 14px;
   right: 14px;
-  bottom: 72px;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
   width: auto;
   max-width: none;
   display: flex;
@@ -517,28 +509,16 @@ function handleLandmarkClick(lm: Landmark) {
 .mobile-nav-trigger {
   width: 100%;
   min-height: 50px;
-  border-radius: 16px;
-  border: 1px solid rgba(var(--accent-rgb), 0.12);
-  background:
-    radial-gradient(circle at top, rgba(var(--accent-rgb), 0.18), transparent 62%),
-    linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.98), rgba(var(--surface-rgb), 0.98));
-  box-shadow: 0 18px 36px rgba(6, 8, 10, 0.38);
-  display: inline-flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   padding: 10px;
   gap: 5px;
-  color: var(--color-ink);
   pointer-events: auto;
-  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
 .mobile-nav-trigger--open {
   border-color: rgba(var(--accent-rgb), 0.26);
   background:
     var(--accent-soft);
-  box-shadow: 0 18px 36px rgba(12, 22, 16, 0.42);
 }
 
 .mobile-nav-trigger span {
@@ -567,7 +547,7 @@ function handleLandmarkClick(lm: Landmark) {
   top: max(72px, calc(env(safe-area-inset-top, 0px) + 16px));
   left: 14px;
   right: 14px;
-  bottom: 74px;
+  bottom: calc(74px + env(safe-area-inset-bottom, 0px));
   z-index: 100;
   display: flex;
   flex-direction: column;
