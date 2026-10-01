@@ -50,6 +50,9 @@ export interface UseMapIntroAnimationOptions {
   updateZoomLevel: () => void
   computeVisibleTileRangeForZoom: (z: number) => TileRange | null
   setMapInteractions: (enabled: boolean) => void
+  /** Trees the desktop sprite layer last drew. It is a custom layer, so
+   * queryRenderedFeatures cannot see it; the readiness gates read this instead. */
+  renderedTreeSprites: () => readonly { lng: number; lat: number }[]
 }
 
 export function useMapIntroAnimation({
@@ -67,6 +70,7 @@ export function useMapIntroAnimation({
   updateZoomLevel,
   computeVisibleTileRangeForZoom,
   setMapInteractions,
+  renderedTreeSprites,
 }: UseMapIntroAnimationOptions) {
   const loadingMessage = ref('Counting our conifers...')
 
@@ -91,6 +95,21 @@ export function useMapIntroAnimation({
     const naiveEnd = startBearing + INTRO_ROTATION_DEG
     const correction = ((((INTRO_END_BEARING - naiveEnd) % 360) + 540) % 360) - 180
     return INTRO_ROTATION_DEG + correction
+  }
+
+  /** Count drawn tree sprites whose position projects inside the screen box. */
+  function countTreeSprites(box?: [[number, number], [number, number]]): number {
+    const m = map.value
+    if (!m) return 0
+    const sprites = renderedTreeSprites()
+    if (!box) return sprites.length
+    const [[minX, minY], [maxX, maxY]] = box
+    let count = 0
+    for (const sprite of sprites) {
+      const { x, y } = m.project([sprite.lng, sprite.lat])
+      if (x >= minX && x < maxX && y >= minY && y < maxY) count += 1
+    }
+    return count
   }
 
   function resetIntroPrefetchStats() {
@@ -151,7 +170,7 @@ export function useMapIntroAnimation({
       if (!map.value) return resolve(false)
       const tick = () => {
         if (!map.value) return resolve(false)
-        const iconCount = map.value.queryRenderedFeatures(undefined, { layers: ['trees-icon'] }).length
+        const iconCount = countTreeSprites()
         if (iconCount > 0) return resolve(true)
         if (nowMs() - startedAt >= timeoutMs) return resolve(false)
         requestAnimationFrame(tick)
@@ -181,10 +200,7 @@ export function useMapIntroAnimation({
           for (let col = 0; col < gridSize; col += 1) {
             const cellMinX = minX + col * cellSize
             const cellMinY = minY + row * cellSize
-            const cellIcons = map.value.queryRenderedFeatures(
-              [[cellMinX, cellMinY], [cellMinX + cellSize, cellMinY + cellSize]],
-              { layers: ['trees-icon'] },
-            ).length
+            const cellIcons = countTreeSprites([[cellMinX, cellMinY], [cellMinX + cellSize, cellMinY + cellSize]])
             totalIcons += cellIcons
             if (cellIcons > 0) populatedCells += 1
             if (row === centerIndex && col === centerIndex) centerCellIcons = cellIcons
@@ -209,11 +225,9 @@ export function useMapIntroAnimation({
         const canvas = map.value.getCanvas()
         const width = Math.max(1, canvas.clientWidth)
         const height = Math.max(1, canvas.clientHeight)
-        const features = map.value.queryRenderedFeatures(
-          [[0, 0], [width, height]],
-          { layers: ['trees-icon', 'trees-circle'] },
-        )
-        const frameReady = map.value.isSourceLoaded('trees') && features.length >= VIEWPORT_TREE_MIN_FEATURES
+        const rendered = countTreeSprites([[0, 0], [width, height]])
+          + map.value.queryRenderedFeatures([[0, 0], [width, height]], { layers: ['trees-circle'] }).length
+        const frameReady = map.value.isSourceLoaded('trees') && rendered >= VIEWPORT_TREE_MIN_FEATURES
         if (frameReady) {
           stableFrames += 1
           if (stableFrames >= VIEWPORT_TREE_STABLE_FRAMES) return resolve(true)

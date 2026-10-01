@@ -8,7 +8,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: process.env.CI ? 1 : undefined,
-  globalTimeout: 15 * 60 * 1000,
+  // main's suite runs ~12-13 min on one CI worker and slow runners add ~15%;
+  // 15 min left too little headroom once the intro-zoom spec joined.
+  globalTimeout: 20 * 60 * 1000,
 
   reporter: process.env.CI
     ? [
