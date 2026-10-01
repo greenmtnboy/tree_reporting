@@ -1737,7 +1737,9 @@ async function prepareCrownPredictions(city: string): Promise<string> {
 async function getMapTrees(camera: TreeRenderView): Promise<TreeCrown[]> {
   await ensureInit()
   await waitForCityContext()
-  if (!conn || !loadedCity || !autoTileFetchEnabled || (!camera.bounds && camera.altitude >= CROWN_DISTANCE_MAX)) return []
+  // Deliberately not gated on autoTileFetchEnabled: the desktop intro pauses
+  // tile fetching and waits for these sprites before it starts moving.
+  if (!conn || !loadedCity || (!camera.bounds && camera.altitude >= CROWN_DISTANCE_MAX)) return []
   const city = loadedCity
   const revision = tileQueryRevision
   const signature = treeFilterSignature()
