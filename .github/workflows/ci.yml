@@ -235,7 +235,8 @@ jobs:
       run: pnpm test
 
   e2e:
-    timeout-minutes: 20
+    # Covers setup, browser install (~2 min) and Playwright's 20 min globalTimeout.
+    timeout-minutes: 26
     runs-on: ubuntu-latest
     needs: build
     steps:
