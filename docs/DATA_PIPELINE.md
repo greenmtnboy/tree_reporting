@@ -250,7 +250,11 @@ has a date and no diameter (`dbh_age_coefficients.csv`, refit with
 placeholders for height and age. Each prediction records the model level
 (genus, family, division, global) and sample size. The model is not
 urban-calibrated and not density-adjusted; both are left to curation. The
-map does not read this parquet yet.
+map prepares a city-scoped projection before marking the city ready, so the
+first desktop sprite batch already has its sizing data. Recorded widths take
+precedence. Predictions stay outside the frontend Trilogy model bundle; a
+failed read consistently uses recorded-only sizing for the worker session.
+See `MAP_CROWNS.md` for rendering and limits.
 
 Planner facts the model relies on: `**` is the power operator and there is
 no `exp`, `ln` or `cos`; DuckDB's `greatest()` skips nulls; the enrichment
