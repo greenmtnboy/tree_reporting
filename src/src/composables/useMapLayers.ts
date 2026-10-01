@@ -434,6 +434,8 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
 
   return {
     pickCrownSprite: (point: { x: number; y: number }) => crownLayer?.pick(point),
+    /** Trees the sprite layer drew last frame; custom layers have no queryRenderedFeatures. */
+    renderedTreeSprites: (): readonly { lng: number; lat: number }[] => crownLayer?.trees ?? [],
     addTreeLayers,
     applyColorToLayers,
     requestTreesSourceReload,

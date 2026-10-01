@@ -680,7 +680,7 @@ function updateZoomLevel() {
 
 // --- Layer management ---
 
-const { addTreeLayers, applyColorToLayers, requestTreesSourceReload, forceTreesTileRefetchPass, pickCrownSprite } = useMapLayers({
+const { addTreeLayers, applyColorToLayers, requestTreesSourceReload, forceTreesTileRefetchPass, pickCrownSprite, renderedTreeSprites } = useMapLayers({
   map: mapRef,
   simplified: props.simplified ?? false,
   activeHeatmapColors,
@@ -705,6 +705,7 @@ const { loadingMessage, runIntroZoomOut, cancelIntro, runGlobeSwoopTo, recordInt
   updateZoomLevel,
   computeVisibleTileRangeForZoom,
   setMapInteractions,
+  renderedTreeSprites,
 })
 
 // --- Tree popup ---
