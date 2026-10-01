@@ -1,7 +1,8 @@
 import type { Ref, ComputedRef } from 'vue'
 import maplibregl from 'maplibre-gl'
-import { registerCategoryColoredIcons, TREE_ICON_SIZE } from './useTreeCategories'
 import type { Landmark, TreeForm } from '../types'
+import { TreeCrownLayer } from './treeCrownLayer'
+import { useDuckDB } from './useDuckDB'
 
 // --- Exported constants ---
 
@@ -47,14 +48,6 @@ const CIRCLE_ZOOM_OPACITY_START = CIRCLE_ZOOM_MIN
 const CIRCLE_ZOOM_OPACITY_MID = CIRCLE_ZOOM_RADIUS_MID
 const CIRCLE_ZOOM_OPACITY_END = CIRCLE_ZOOM_MAX
 
-const ICON_ZOOM_MIN = 14.4
-const ICON_ZOOM_SIZE_MID = 15
-const ICON_ZOOM_SIZE_HIGH = 18
-const ICON_ZOOM_SIZE_MAX = 21
-const ICON_ZOOM_OPACITY_START = ICON_ZOOM_MIN
-const ICON_ZOOM_OPACITY_MID = ICON_ZOOM_SIZE_MID
-const ICON_ZOOM_OPACITY_END = ICON_ZOOM_SIZE_MAX
-
 // Holds full strength down to z8 — a city's urban outline is still legible on
 // the basemap around z7, so the heat should still be there to fill it — then
 // fades out toward TREES_SOURCE_MINZOOM as the city markers fade in over the
@@ -73,13 +66,6 @@ const HEATMAP_OPACITY_NORMAL: any[] = [
 
 function buildCircleColorExpression(): maplibregl.ExpressionSpecification {
   return ['coalesce', ['get', 'display_color'], '#66BB6A'] as maplibregl.ExpressionSpecification
-}
-
-function buildIconExpression(): maplibregl.ExpressionSpecification {
-  return [
-    'concat', 'tree-', ['coalesce', ['get', 'category'], 'default'], '-',
-    ['coalesce', ['get', 'display_color'], '#66BB6A'],
-  ] as unknown as maplibregl.ExpressionSpecification
 }
 
 function buildHeatmapColorExpression(hexColor: string): maplibregl.ExpressionSpecification {
@@ -110,16 +96,6 @@ function buildCircleRadiusExpression(): maplibregl.ExpressionSpecification {
     CIRCLE_ZOOM_RADIUS_MID, buildSqrtDbhExpression(2.1, 5.6),
     CIRCLE_ZOOM_RADIUS_HIGH, buildSqrtDbhExpression(3.1, 9.5),
     CIRCLE_ZOOM_RADIUS_MAX, buildSqrtDbhExpression(3.7, 11.6),
-  ] as maplibregl.ExpressionSpecification
-}
-
-function buildIconSizeExpression(): maplibregl.ExpressionSpecification {
-  return [
-    'interpolate', ['linear'], ['zoom'],
-    ICON_ZOOM_MIN, buildSqrtDbhExpression(0.04, 0.1),
-    ICON_ZOOM_SIZE_MID, buildSqrtDbhExpression(0.055, 0.15),
-    ICON_ZOOM_SIZE_HIGH, buildSqrtDbhExpression(0.2, 0.72),
-    ICON_ZOOM_SIZE_MAX, buildSqrtDbhExpression(0.28, 1.0),
   ] as maplibregl.ExpressionSpecification
 }
 
@@ -286,6 +262,7 @@ export interface UseMapLayersOptions {
 export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRevision }: UseMapLayersOptions) {
   let lastBuiltHeatmapColors: string[] = []
   let treesSourceReloadNonce = 0
+  let crownLayer: TreeCrownLayer | undefined
 
   function nowMs(): number {
     return typeof performance !== 'undefined' ? performance.now() : Date.now()
@@ -304,6 +281,7 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
 
   function requestTreesSourceReload() {
     if (!map.value) return
+    crownLayer?.invalidate()
     const source = map.value.getSource('trees') as any
     if (source && typeof source.reload === 'function') source.reload()
     map.value.triggerRepaint()
@@ -312,6 +290,7 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
   function addTreeLayers() {
     if (!map.value) return
     const mapInstance = map.value
+    crownLayer?.invalidate()
     const t0 = nowMs()
     console.info('[Perf] map:layers:add:start')
 
@@ -322,8 +301,8 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     const existingSource = mapInstance.getSource('trees') as any
     const hasHeatLayers = heatLayerIds.length > 0 && heatLayerIds.every((id) => !!mapInstance.getLayer(id))
     const hasCircleLayer = !!mapInstance.getLayer('trees-circle')
-    const hasIconLayer = !!mapInstance.getLayer('trees-icon')
-    const hasAllLayers = hasHeatLayers && hasCircleLayer && (simplified || hasIconLayer)
+    const hasSpriteLayer = !!mapInstance.getLayer(simplified ? 'trees-crown' : 'trees-icon')
+    const hasAllLayers = hasHeatLayers && hasCircleLayer && hasSpriteLayer
 
     // Prefer in-place source URL refresh to avoid tearing down layers.
     if (existingSource && hasAllLayers) {
@@ -336,12 +315,14 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     }
 
     if (mapInstance.getLayer('trees-icon')) mapInstance.removeLayer('trees-icon')
+    if (mapInstance.getLayer('trees-crown')) mapInstance.removeLayer('trees-crown')
     if (mapInstance.getLayer('trees-circle')) mapInstance.removeLayer('trees-circle')
     removeOldHeatmapLayers(mapInstance)
     if (mapInstance.getSource('trees')) mapInstance.removeSource('trees')
 
     mapInstance.addSource('trees', {
       type: 'vector',
+      promoteId: 'id',
       tiles: treeTiles,
       // Don't request tiles below the zoom where the heatmap becomes visible.
       // Below this zoom the opacity expression renders nothing anyway, and the
@@ -364,6 +345,9 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
       })
     }
     lastBuiltHeatmapColors = [...heatColors]
+
+    crownLayer = new TreeCrownLayer(useDuckDB().getMapTrees, simplified)
+    mapInstance.addLayer(crownLayer)
 
     // Layer 2: Colored circles at medium zoom
     mapInstance.addLayer({
@@ -394,40 +378,8 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
       },
     })
 
-    // Layer 3: Tree icons at close zoom (skipped in simplified mode)
-    if (!simplified) {
-      if (heatColors.length > 0) registerCategoryColoredIcons(mapInstance, heatColors)
-      mapInstance.addLayer({
-        id: 'trees-icon',
-        type: 'symbol',
-        source: 'trees',
-        'source-layer': 'trees',
-        minzoom: ICON_ZOOM_MIN,
-        layout: {
-          'icon-image': buildIconExpression(),
-          'icon-size': [...buildIconSizeExpression()],
-          'icon-anchor': 'bottom',
-          // Anchor the trunk base, accounting for the canvas padding in drawTreeIcon.
-          // MapLibre scales and rotates this offset with the icon.
-          'icon-offset': [
-            'match', ['get', 'category'],
-            'multi_trunk', ['literal', [0, TREE_ICON_SIZE * 0.1]],
-            ['literal', [0, TREE_ICON_SIZE * 0.05]],
-          ],
-          'icon-rotate': ['get', 'rotation'],
-          'icon-rotation-alignment': 'viewport',
-          'icon-pitch-alignment': 'viewport',
-          'icon-allow-overlap': true,
-          'icon-ignore-placement': true,
-        },
-        paint: {
-          'icon-opacity': ['interpolate', ['linear'], ['zoom'],
-            ICON_ZOOM_OPACITY_START, 0,
-            ICON_ZOOM_OPACITY_MID, 0.72,
-            ICON_ZOOM_OPACITY_END, 1],
-        },
-      })
-    }
+    // One desktop sprite layer from its first appearance through close zoom.
+    if (!simplified) mapInstance.moveLayer(crownLayer.id)
 
     console.info('[Perf] map:layers:add:done', { ms: Math.round(nowMs() - t0) })
   }
@@ -439,17 +391,12 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
   }
 
   // Sync layers to the current color state. Rebuilds heatmap layers when the set
-  // of active colors changes. Registers colored icons for all active colors.
+  // of active colors changes. The sprite shader uses the refreshed color map.
   function applyColorToLayers() {
     if (!map.value) return
+    crownLayer?.invalidate()
     const mapInstance = map.value
     const colors = activeHeatmapColors.value
-
-    if (colors.length > 0) registerCategoryColoredIcons(mapInstance, colors)
-
-    if (!simplified && mapInstance.getLayer('trees-icon')) {
-      mapInstance.setLayoutProperty('trees-icon', 'icon-image', buildIconExpression())
-    }
 
     if (mapInstance.getLayer('trees-circle')) {
       mapInstance.setPaintProperty('trees-circle', 'circle-color', buildCircleColorExpression())
@@ -486,6 +433,7 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
   }
 
   return {
+    pickCrownSprite: (point: { x: number; y: number }) => crownLayer?.pick(point),
     addTreeLayers,
     applyColorToLayers,
     requestTreesSourceReload,

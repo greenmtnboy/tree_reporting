@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crown renderer verification</title>
+<style>
+  body { margin: 0; font: 14px system-ui; color: #263528; background: #fff; }
+  #map { height: calc(100vh - 90px); }
+  header { height: 90px; box-sizing: border-box; padding: 10px; }
+  button { margin: 5px 4px 0 0; padding: 4px 8px; }
+  output { margin-left: 12px; }
+  #gallery-labels { position: absolute; inset: 90px 0 0; display: none; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); pointer-events: none; }
+  .specimen { position: relative; padding: 10px 14px; border: 1px solid #eef1eb; }
+  .specimen strong { font-size: 12px; letter-spacing: .04em; color: #596953; }
+  .marker-samples { position: absolute; bottom: 12px; right: 12px; display: flex; align-items: end; gap: 5px; }
+  .marker-samples figure { margin: 0; text-align: center; }
+  .marker-samples figcaption { font-size: 9px; color: #798576; }
+</style>
+<header>
+  <strong>Recorded 12 m / predicted 20 m / recorded 6 m</strong>
+  <div>
+    <button id="flat">Top down</button><button id="pitch">Pitch 75°</button>
+    <button id="far">Distant camera</button><button id="out">Zoom out</button>
+    <button id="mobile">Mobile rings</button><button id="empty">Filter all out</button>
+    <button id="gallery">All tree shapes</button>
+    <output id="status">Loading</output>
+  </div>
+</header>
+<div id="map"></div>
+<div id="gallery-labels"></div>
+<script type="module">
+  import maplibregl from 'maplibre-gl'
+  import 'maplibre-gl/dist/maplibre-gl.css'
+  import { TreeCrownLayer } from '/src/composables/treeCrownLayer.ts'
+  import { drawTreeIcon, CATEGORY_LABELS } from '/src/composables/useTreeCategories.ts'
+  import { SPRITE_FORMS } from '/src/composables/treeSpriteAtlas.ts'
+  import { treeArtwork } from '/src/lib/treeArtwork.ts'
+  const center = [-122.4194, 37.7749]
+  const crowns = [
+    { id: 'measured', lng: center[0] - 0.00035, lat: center[1], width: 12, measured: true, color: '#4CAF50' },
+    { id: 'predicted', lng: center[0], lat: center[1], width: 20, measured: false, color: '#4CAF50' },
+    { id: 'small', lng: center[0] + 0.00035, lat: center[1], width: 6, measured: true, color: '#4CAF50' },
+  ]
+  let calls = 0, empty = false, mobile = false
+  const load = async () => {
+    calls++
+    const delay = Number(new URLSearchParams(location.search).get('delay') ?? 0)
+    if (delay) await new Promise(resolve => setTimeout(resolve, delay))
+    return empty ? [] : crowns.map(crown => ({ ...crown, category: crown.category ?? 'broadleaf', dbh: 18 }))
+  }
+  const map = new maplibregl.Map({
+    container: 'map', center, zoom: 19.5, maxPitch: 85, preserveDrawingBuffer: true,
+    style: { version: 8, sources: {}, layers: [{ id: 'ground', type: 'background', paint: { 'background-color': '#ffffff' } }] },
+  })
+  let layer = new TreeCrownLayer(load, mobile)
+  map.on('load', () => {
+    map.addLayer(layer)
+    map.addSource('trees', { type: 'geojson', promoteId: 'id', data: { type: 'FeatureCollection', features: crowns.map(crown => ({
+      type: 'Feature', geometry: { type: 'Point', coordinates: [crown.lng, crown.lat] }, properties: { id: crown.id },
+    })) } })
+
+  })
+  map.on('render', () => { document.querySelector('#status').textContent = `Zoom ${map.getZoom().toFixed(1)} · ${calls} queries` })
+  document.querySelector('#flat').onclick = () => map.jumpTo({ center, zoom: 19.5, pitch: 0, bearing: 0 })
+  document.querySelector('#pitch').onclick = () => map.jumpTo({ center, zoom: 18, pitch: 75, bearing: 30 })
+  document.querySelector('#far').onclick = () => map.jumpTo({ center: [center[0], center[1] - 0.04], zoom: 19, pitch: 85 })
+  document.querySelector('#out').onclick = () => map.jumpTo({ zoom: 14 })
+  document.querySelector('#empty').onclick = () => { empty = true; layer.invalidate() }
+  document.querySelector('#gallery').onclick = () => {
+    const labels = document.querySelector('#gallery-labels')
+    labels.replaceChildren()
+    labels.style.display = 'grid'
+    for (const form of SPRITE_FORMS) {
+      const tile = document.createElement('div'); tile.className = 'specimen'
+      const title = document.createElement('strong'); title.textContent = CATEGORY_LABELS[form]
+      tile.append(title)
+      const samples = document.createElement('div'); samples.className = 'marker-samples'
+      for (const size of [24, 48]) {
+        const figure = document.createElement('figure'), caption = document.createElement('figcaption')
+        const icon = drawTreeIcon(form, 48, '#4CAF50'); icon.style.width = `${size}px`; icon.style.height = `${size}px`
+        caption.textContent = `${size}px`
+        figure.append(icon, caption); samples.append(figure)
+      }
+      tile.append(samples); labels.append(tile)
+    }
+    map.jumpTo({ center, zoom: 21, pitch: 0, bearing: 0 })
+    const metresPerPixel = 40075016.68557849 * Math.cos(center[1] * Math.PI / 180) / (512 * 2 ** 21)
+    const width = map.getCanvas().clientWidth, height = map.getCanvas().clientHeight
+    const size = Math.min(190, height / 3 - 15)
+    crowns.splice(0, crowns.length, ...SPRITE_FORMS.map((category, i) => {
+      const point = map.unproject([(i % 3 + 0.5) * width / 3, (Math.floor(i / 3) + 1) * height / 3 - 5])
+      return { id: category, lng: point.lng, lat: point.lat, width: size * metresPerPixel * treeArtwork(category).crownFraction, measured: true, color: '#4CAF50', category }
+    }))
+    map.getSource('trees').setData({ type: 'FeatureCollection', features: crowns.map(crown => ({
+      type: 'Feature', geometry: { type: 'Point', coordinates: [crown.lng, crown.lat] }, properties: { id: crown.id },
+    })) })
+    layer.invalidate()
+  }
+  document.querySelector('#mobile').onclick = () => {
+    map.removeLayer(layer.id); mobile = true; layer = new TreeCrownLayer(load, mobile)
+    map.addLayer(layer)
+    map.jumpTo({ center, zoom: 19, pitch: 0, bearing: 0 })
+  }
+  // Test-only page, served by Vite dev and excluded from production build.
+  window.crownTest = { map, crowns, get calls() { return calls }, get layer() { return layer } }
+</script>
+</html>

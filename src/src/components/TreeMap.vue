@@ -18,6 +18,17 @@
       <span class="legend-swatch" :style="{ background: entry.color }"></span>
       <span class="legend-label">{{ entry.label }}</span>
     </div>
+    <template v-if="props.simplified && zoomLevel > CROWN_ZOOM_START">
+      <div class="legend-entry crown-legend-start">
+        <span class="legend-crown"></span><span class="legend-label">Recorded crown</span>
+      </div>
+      <div class="legend-entry">
+        <span class="legend-crown legend-crown--predicted"></span><span class="legend-label">Predicted crown</span>
+      </div>
+    </template>
+    <div v-else-if="zoomLevel > CROWN_ZOOM_START" class="legend-entry crown-legend-start">
+      <span class="legend-label">Sized by recorded / predicted crown</span>
+    </div>
   </div>
   <div v-if="!props.simplified && !isInitialLoading" class="cache-refresh-wrap">
     <div class="cache-refresh-btn-wrap">
@@ -294,6 +305,7 @@ import {
   refreshSharedPosition,
 } from '../lib/geo'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
+import { CROWN_ZOOM_START } from '../lib/treeCrowns'
 
 const { resolvedTheme } = useTheme()
 let releaseMapTheme: (() => void) | undefined
@@ -505,7 +517,7 @@ function logIconLayerSnapshot(reason: string) {
   const iconLayerExists = !!mapRef.value.getLayer('trees-icon')
   const circleLayerExists = !!mapRef.value.getLayer('trees-circle')
   const heatLayerExists = !!mapRef.value.getLayer('trees-heat')
-  const iconFeatures = iconLayerExists ? mapRef.value.queryRenderedFeatures(undefined, { layers: ['trees-icon'] }).length : 0
+  const iconFeatures = iconLayerExists ? ((mapRef.value.getLayer('trees-icon') as unknown as { implementation?: { trees: readonly unknown[] } }).implementation?.trees.length ?? 0) : 0
   const circleFeatures = circleLayerExists ? mapRef.value.queryRenderedFeatures(undefined, { layers: ['trees-circle'] }).length : 0
   const heatFeatures = heatLayerExists ? mapRef.value.queryRenderedFeatures(undefined, { layers: ['trees-heat'] }).length : 0
   logIconLayerDebug('snapshot', {
@@ -513,7 +525,6 @@ function logIconLayerSnapshot(reason: string) {
     zoom: Number(zoom.toFixed(2)),
     iconLayerExists, circleLayerExists, heatLayerExists,
     iconFeatures, circleFeatures, heatFeatures,
-    iconOpacity: iconLayerExists ? mapRef.value.getPaintProperty('trees-icon', 'icon-opacity') : null,
     circleOpacity: circleLayerExists ? mapRef.value.getPaintProperty('trees-circle', 'circle-opacity') : null,
   })
 }
@@ -669,7 +680,7 @@ function updateZoomLevel() {
 
 // --- Layer management ---
 
-const { addTreeLayers, applyColorToLayers, requestTreesSourceReload, forceTreesTileRefetchPass } = useMapLayers({
+const { addTreeLayers, applyColorToLayers, requestTreesSourceReload, forceTreesTileRefetchPass, pickCrownSprite } = useMapLayers({
   map: mapRef,
   simplified: props.simplified ?? false,
   activeHeatmapColors,
@@ -1226,7 +1237,7 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
 
 function bindTreeInteractions() {
   if (!mapRef.value || treeInteractionsBound) return
-  const interactiveLayers = props.simplified ? ['trees-circle'] : ['trees-icon', 'trees-circle']
+  const interactiveLayers = ['trees-circle']
   const updateTreeCursor = (point?: maplibregl.PointLike) => {
     if (!mapRef.value) return
     if (!point) {
@@ -1234,15 +1245,20 @@ function bindTreeInteractions() {
       return
     }
     const features = mapRef.value.queryRenderedFeatures(point, { layers: interactiveLayers })
-    mapRef.value.getCanvas().style.cursor = features.length > 0 ? 'pointer' : ''
+    const screenPoint = maplibregl.Point.convert(point)
+    mapRef.value.getCanvas().style.cursor = features.length > 0 || pickCrownSprite(screenPoint) ? 'pointer' : ''
   }
 
   mapRef.value.on('click', (e) => {
     if (!mapRef.value) return
+    const crown = pickCrownSprite(e.point)
+    if (crown) {
+      void showTreeCard({ type: 'Feature', geometry: { type: 'Point', coordinates: [crown.lng, crown.lat] }, properties: { id: crown.id } }, [crown.lng, crown.lat])
+      return
+    }
     const features = mapRef.value.queryRenderedFeatures(e.point, { layers: interactiveLayers })
     if (!features.length) return
-    const iconFeature = !props.simplified ? features.find((f) => f.layer?.id === 'trees-icon') : undefined
-    const picked = (iconFeature ?? features[0]) as unknown as GeoJSON.Feature
+    const picked = features[0] as unknown as GeoJSON.Feature
     void showTreeCard(picked, [e.lngLat.lng, e.lngLat.lat])
   })
   mapRef.value.on('mousemove', (e) => { updateTreeCursor(e.point) })
@@ -1775,12 +1791,17 @@ onMounted(async () => {
 
   if (!props.simplified) setMapInteractions(false)
 
-  try {
-    ;(map.scrollZoom as any).setWheelZoomRate?.(SCROLL_WHEEL_ZOOM_RATE)
-    ;(map.scrollZoom as any).setZoomRate?.(SCROLL_ZOOM_RATE)
-  } catch {
-    // no-op
+  const updateScrollZoomSpeed = () => {
+    // Faster traversal at city/region scale, tapering smoothly to precise
+    // street-level navigation. Extra acceleration for continent/world views.
+    const t = Math.max(0, Math.min(1, (14 - map.getZoom()) / 3))
+    const far = Math.max(0, Math.min(1, (11 - map.getZoom()) / 6))
+    const multiplier = 1.3 * (1 + 2 * t * t * (3 - 2 * t) + 2 * far * far * (3 - 2 * far))
+    map.scrollZoom.setWheelZoomRate(SCROLL_WHEEL_ZOOM_RATE * multiplier)
+    map.scrollZoom.setZoomRate(SCROLL_ZOOM_RATE * multiplier)
   }
+  updateScrollZoomSpeed()
+  map.on('zoom', updateScrollZoomSpeed)
 
   map.on('error', (e) => {
     const err = (e as any).error
@@ -2242,6 +2263,23 @@ onUnmounted(() => {
   color: rgba(var(--ink-rgb), 0.84);
   white-space: nowrap;
 }
+
+.crown-legend-start {
+  border-top: 1px solid rgba(var(--ink-rgb), 0.15);
+  margin-top: 3px;
+  padding-top: 6px;
+}
+
+.legend-crown {
+  width: 11px;
+  height: 11px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-leaf);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.legend-crown--predicted { border-style: dashed; }
 
 /* The mobile bottom action bar (16px inset + ~50px tall buttons) overlays the
    map's lower edge. Lift the OSM/Carto attribution above it, and the legend

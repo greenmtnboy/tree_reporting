@@ -45,7 +45,7 @@ async function openMap(page: Page, mobile: boolean): Promise<void> {
 }
 
 /**
- * Finds a pixel that MapLibre's own hit-test resolves to a clickable tree.
+ * Finds a pixel that the active renderer resolves to a clickable tree.
  *
  * Candidates come from a viewport-wide queryRenderedFeatures, but each one is
  * then re-queried as a single point — the same call the click handler makes —
@@ -63,7 +63,7 @@ async function findClickableTree(page: Page, mobile: boolean): Promise<Hit> {
         return null
       }
 
-      const layerIds = (isMobile ? ['trees-circle'] : ['trees-icon', 'trees-circle'])
+      const layerIds = ['trees-circle']
         .filter((id) => map.getLayer(id))
       if (!layerIds.length) return null
 
@@ -78,6 +78,22 @@ async function findClickableTree(page: Page, mobile: boolean): Promise<Hit> {
       const isTree = (f: GeoJSON.Feature) => {
         const id = f.properties?.id
         return typeof id === 'string' && id.length > 0 && id !== 'unkwn'
+      }
+
+      if (!isMobile) {
+        const sprites = (map.getLayer('trees-icon') as unknown as { implementation?: {
+          trees: readonly { lng: number; lat: number }[]
+          pick(point: { x: number; y: number }): { id: string } | undefined
+        } } | undefined)?.implementation
+        for (const tree of sprites?.trees ?? []) {
+          const point = map.project([tree.lng, tree.lat])
+          // Sample just above the ground anchor, inside the rounded trunk.
+          point.y -= 2
+          if (!usable(point)) continue
+          const hit = sprites!.pick(point)
+          if (hit) return { x: container.left + point.x, y: container.top + point.y, id: hit.id }
+        }
+        return null
       }
 
       for (const feature of map.queryRenderedFeatures(undefined, { layers: layerIds })) {

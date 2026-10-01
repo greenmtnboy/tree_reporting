@@ -1,11 +1,13 @@
 import { ref } from 'vue'
 import maplibregl from 'maplibre-gl'
 import DuckDBPipelineWorker from '../workers/duckdbPipeline.worker?worker'
+import type { TreeRenderView, TreeCrown } from '../lib/treeCrowns'
 
 type PrefetchStatus = 'executed' | 'deduped' | 'skipped'
 type TileRangeParams = { minX: number; maxX: number; minY: number; maxY: number }
 
 type WorkerMethodMap = {
+  getMapTrees: { params: TreeRenderView; result: TreeCrown[] }
   ensureInit: { params: { city?: string }; result: { ready: boolean; initError: string | null } }
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
@@ -237,6 +239,7 @@ async function query(sql: string): Promise<{ columns: string[]; rows: Record<str
 
 export function useDuckDB() {
   return {
+    getMapTrees: (camera: TreeRenderView) => rpc('getMapTrees', camera),
     ready,
     initError,
     query,

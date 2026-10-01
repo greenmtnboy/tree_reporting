@@ -19,6 +19,15 @@ a red run.
   gates every pull request as the `dashboard-queries` job in
   `.github/workflows/ci.yml`.
 - `pnpm bench:chat`: the agent chat benchmark below. Run by hand.
+- `pnpm test:crowns`: deterministic WebGL crown-renderer checks on a separate
+  Vite dev server (port 6174), with no remote map or tree data. Checks a 12 m
+  sprite canopy and mobile ring against framebuffer pixels, sprite picking,
+  delayed first loads, continuity across zoom 16, enlarged edge quality,
+  pitched views, distance/zoom limits, late responses, filtering, and resource
+  cleanup. Screenshots go to `src/test-results/`.
+  `src/workers/crownQuery.test.ts` separately executes the nearby query in
+  DuckDB, covering measurement precedence, invalid/missing data, visible-tree
+  filters, city joins, latitude correction, and the nearest-tree budget.
 
 ## Map entry paths and load benchmark
 

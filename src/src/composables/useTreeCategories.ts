@@ -1,5 +1,6 @@
 import type { TreeForm } from '../types'
 import { CATEGORY_COLORS } from '../treeFormColors'
+import { treeArtwork, fillTreeShape, TREE_TRUNK_COLOR, TREE_BLOOM_COLOR } from '../lib/treeArtwork'
 
 export const TREE_ICON_SIZE = 48
 
@@ -63,138 +64,17 @@ export function getTreeForm(qSpecies: string): CategoryInfo {
 }
 
 /** Generate a canvas image for a tree category silhouette */
-function drawTreeIcon(category: TreeForm, size: number, color?: string): HTMLCanvasElement {
+export function drawTreeIcon(category: TreeForm, size: number, color?: string): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')!
   color = color ?? CATEGORY_COLORS[category]
-  const cx = size / 2
-
-  ctx.fillStyle = '#5D4037'
-  ctx.strokeStyle = 'none'
-
-  switch (category) {
-    case 'palm': {
-      // Tall trunk with fan fronds at top
-      const trunkW = size * 0.08
-      ctx.fillRect(cx - trunkW / 2, size * 0.35, trunkW, size * 0.6)
-      ctx.fillStyle = color
-      // Fronds radiating from top
-      for (let angle = -70; angle <= 70; angle += 28) {
-        ctx.save()
-        ctx.translate(cx, size * 0.35)
-        ctx.rotate((angle * Math.PI) / 180)
-        ctx.beginPath()
-        ctx.ellipse(0, -size * 0.22, size * 0.08, size * 0.25, 0, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.restore()
-      }
-      break
-    }
-    case 'broadleaf': {
-      // Round canopy on a short trunk
-      const trunkW = size * 0.1
-      ctx.fillRect(cx - trunkW / 2, size * 0.55, trunkW, size * 0.4)
-      ctx.fillStyle = color
-      ctx.beginPath()
-      ctx.arc(cx, size * 0.38, size * 0.32, 0, Math.PI * 2)
-      ctx.fill()
-      break
-    }
-    case 'spreading': {
-      // Wide flat canopy
-      const trunkW = size * 0.1
-      ctx.fillRect(cx - trunkW / 2, size * 0.5, trunkW, size * 0.45)
-      ctx.fillStyle = color
-      ctx.beginPath()
-      ctx.ellipse(cx, size * 0.38, size * 0.42, size * 0.22, 0, 0, Math.PI * 2)
-      ctx.fill()
-      break
-    }
-    case 'conifer': {
-      // Sharp Christmas tree / conifer shape
-      const trunkW = size * 0.08
-      ctx.fillRect(cx - trunkW / 2, size * 0.7, trunkW, size * 0.25)
-      ctx.fillStyle = color
-      ctx.beginPath()
-      ctx.moveTo(cx, size * 0.08)
-      ctx.lineTo(cx + size * 0.28, size * 0.72)
-      ctx.lineTo(cx - size * 0.28, size * 0.72)
-      ctx.closePath()
-      ctx.fill()
-      break
-    }
-    case 'columnar': {
-      // Rounded narrow / columnar deciduous (e.g. Australian Willow)
-      const trunkW = size * 0.08
-      ctx.fillRect(cx - trunkW / 2, size * 0.6, trunkW, size * 0.35)
-      ctx.fillStyle = color
-      ctx.beginPath()
-      ctx.ellipse(cx, size * 0.38, size * 0.2, size * 0.32, 0, 0, Math.PI * 2)
-      ctx.fill()
-      break
-    }
-    case 'ornamental': {
-      // Small rounded tree with visible bloom dots
-      const trunkW = size * 0.08
-      ctx.fillRect(cx - trunkW / 2, size * 0.55, trunkW, size * 0.4)
-      ctx.fillStyle = color
-      ctx.beginPath()
-      ctx.arc(cx, size * 0.4, size * 0.26, 0, Math.PI * 2)
-      ctx.fill()
-      // Bloom highlights
-      ctx.fillStyle = '#F8BBD0'
-      for (const [ox, oy] of [[-0.1, -0.08], [0.12, 0.04], [-0.04, 0.1], [0.08, -0.12]]) {
-        ctx.beginPath()
-        ctx.arc(cx + size * ox, size * 0.4 + size * oy, size * 0.05, 0, Math.PI * 2)
-        ctx.fill()
-      }
-      break
-    }
-    case 'weeping': {
-      const trunkW = size * 0.08
-      ctx.fillRect(cx - trunkW / 2, size * 0.42, trunkW, size * 0.53)
-      ctx.fillStyle = color
-      ctx.beginPath()
-      ctx.ellipse(cx, size * 0.34, size * 0.22, size * 0.18, 0, Math.PI, 0, true)
-      ctx.fill()
-      for (const x of [-0.22, -0.12, -0.02, 0.08, 0.18]) {
-        ctx.beginPath()
-        ctx.ellipse(cx + size * x, size * 0.52, size * 0.055, size * 0.2, 0, 0, Math.PI * 2)
-        ctx.fill()
-      }
-      break
-    }
-    case 'multi_trunk': {
-      const trunkW = size * 0.065
-      ctx.fillRect(cx - size * 0.16, size * 0.56, trunkW, size * 0.34)
-      ctx.fillRect(cx - trunkW / 2, size * 0.5, trunkW, size * 0.4)
-      ctx.fillRect(cx + size * 0.1, size * 0.58, trunkW, size * 0.32)
-      ctx.fillStyle = color
-      for (const [ox, oy, rx, ry] of [
-        [-0.16, 0.36, 0.16, 0.18],
-        [0.02, 0.28, 0.2, 0.22],
-        [0.2, 0.38, 0.14, 0.16],
-      ]) {
-        ctx.beginPath()
-        ctx.ellipse(cx + size * ox, size * oy, size * rx, size * ry, 0, 0, Math.PI * 2)
-        ctx.fill()
-      }
-      break
-    }
-    default: {
-      // Generic round tree
-      const trunkW = size * 0.1
-      ctx.fillRect(cx - trunkW / 2, size * 0.55, trunkW, size * 0.4)
-      ctx.fillStyle = color
-      ctx.beginPath()
-      ctx.arc(cx, size * 0.38, size * 0.3, 0, Math.PI * 2)
-      ctx.fill()
-      break
-    }
+  const artwork = treeArtwork(category)
+  for (const [shapes, fill] of [[artwork.trunk, TREE_TRUNK_COLOR], [artwork.foliage, color], [artwork.blooms, TREE_BLOOM_COLOR]] as const) {
+    ctx.fillStyle = fill
+    for (const shape of shapes) fillTreeShape(ctx, shape, size)
   }
-
   // Faint outline around the whole tree silhouette
   ctx.globalCompositeOperation = 'source-over'
   const outlineData = ctx.getImageData(0, 0, size, size)

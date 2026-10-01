@@ -1,5 +1,7 @@
 import * as duckdb from '@duckdb/duckdb-wasm'
 import { DUCKDB_ASSET_URLS } from '../duckdbAssetUrls'
+import { crownQuery } from './crownQuery'
+import { CROWN_DISTANCE_MAX, type TreeRenderView, type TreeCrown } from '../lib/treeCrowns'
 
 let db: duckdb.AsyncDuckDB | null = null
 let conn: duckdb.AsyncDuckDBConnection | null = null
@@ -18,6 +20,7 @@ import { sentinelLabelSql, sentinelTreeFormSql } from '../data/species'
 import {
   REMOTE_TREES_PARQUET_URL,
   REMOTE_SPECIES_PARQUET_URL,
+  REMOTE_PREDICTIONS_PARQUET_URL,
   REMOTE_ECOREGION_PARQUET_URL,
   REMOTE_LANDMARKS_PARQUET_URL,
   cityTreeParquetUrl,
@@ -1571,6 +1574,9 @@ WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND city = '${city}'
   await buildDefaultColorMap()
   await rebuildAggCaches()
   await rebuildCityBounds(city)
+  // Crown widths are ready before opening the same gate used by the map.
+  // No first-frame marker batch can later be replaced by a new sizing model.
+  await prepareCrownPredictions(city)
   invalidateTileCaches()
   postColorMapUpdate()
   // All city tables are ready — unblock tile generation and queries.
@@ -1704,6 +1710,49 @@ async function runQuery(sql: string): Promise<{ columns: string[]; rows: Record<
   return { columns, rows }
 }
 
+// City-scoped projection prepared before publishing city readiness. Missing
+// predictions select recorded-only sizing for this worker session, consistently
+// from the first sprite batch. This never enters the Trilogy model bundle.
+const crownPredictionLoads = new Map<string, Promise<void>>()
+async function prepareCrownPredictions(city: string): Promise<string> {
+  if (!/^[a-z]{5}$/i.test(city)) throw new Error('Invalid crown city')
+  const table = `__crown_predictions_${city.toLowerCase()}`
+  if (!crownPredictionLoads.has(city)) {
+    crownPredictionLoads.set(city, (async () => {
+      await conn!.query(`CREATE TEMP TABLE ${table} (tree_id VARCHAR, city VARCHAR, width DOUBLE)`)
+      try {
+        await conn!.query(`INSERT INTO ${table}
+          SELECT tree_id, city, max(predicted_crown_width_m) AS width
+          FROM read_parquet('${REMOTE_PREDICTIONS_PARQUET_URL}')
+          WHERE city = '${city}' GROUP BY tree_id, city`)
+      } catch (error) {
+        console.warn('[TreeCrowns] predictions unavailable; using recorded crowns', error)
+      }
+    })())
+  }
+  await crownPredictionLoads.get(city)
+  return table
+}
+
+async function getMapTrees(camera: TreeRenderView): Promise<TreeCrown[]> {
+  await ensureInit()
+  await waitForCityContext()
+  if (!conn || !loadedCity || !autoTileFetchEnabled || (!camera.bounds && camera.altitude >= CROWN_DISTANCE_MAX)) return []
+  const city = loadedCity
+  const revision = tileQueryRevision
+  const signature = treeFilterSignature()
+  const table = await prepareCrownPredictions(city)
+  const current = () => cityContextReady && loadedCity === city && tileQueryRevision === revision && treeFilterSignature() === signature
+  if (!current()) return []
+  const result = await conn.query(crownQuery(camera, effectiveBaseQuery(tileQuerySql), table))
+  if (!current()) return []
+  return result.toArray().map(row => ({
+    id: String(row.id), lng: Number(row.lng), lat: Number(row.lat),
+    width: row.width == null ? null : Number(row.width), measured: Boolean(row.measured), color: String(row.color),
+    category: String(row.category), dbh: Number(row.dbh),
+  }))
+}
+
 async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Array; transient: boolean }> {
   await ensureInit()
   await waitForCityContext()
@@ -1719,6 +1768,7 @@ async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Ar
 }
 
 type WorkerMethodMap = {
+  getMapTrees: { params: TreeRenderView; result: TreeCrown[] }
   ensureInit: { params: { city?: string }; result: { ready: boolean; initError: string | null } }
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
@@ -1774,6 +1824,11 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
   try {
     switch (msg.method) {
+      case 'getMapTrees': {
+        const result = await getMapTrees(msg.params as TreeRenderView)
+        send({ type: 'response', requestId: msg.requestId, ok: true, result })
+        break
+      }
       case 'ensureInit': {
         const { city } = msg.params as WorkerMethodMap['ensureInit']['params']
         await ensureInit(city)
