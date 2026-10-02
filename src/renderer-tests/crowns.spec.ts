@@ -15,6 +15,63 @@ async function settle(page: Page) {
   })
 }
 
+test('tile completion events do not repeat independent sprite queries', async ({ page }) => {
+  await page.goto('/renderer-tests/crowns.html')
+  await settle(page)
+  const before = await page.evaluate(() => (window as any).crownTest.calls)
+  for (let i = 0; i < 3; i++) {
+    await page.evaluate(() => (window as any).crownTest.map.fire('sourcedata', { sourceId: 'trees', isSourceLoaded: true }))
+    await page.waitForTimeout(350)
+  }
+  expect(await page.evaluate(() => (window as any).crownTest.calls)).toBe(before)
+})
+
+test('small pans reuse buffered coverage, including trees whose anchors just left the viewport', async ({ page }) => {
+  await page.goto('/renderer-tests/crowns.html')
+  await settle(page)
+  await page.evaluate(() => {
+    const state = (window as any).crownTest
+    state.requests = []
+    state.layer.load = async (view: any) => {
+      state.requests.push(view)
+      return state.crowns
+    }
+    state.layer.invalidate()
+  })
+  await settle(page)
+  const buffered = await page.evaluate(() => {
+    const { map, requests } = (window as any).crownTest
+    const bounds = map.getBounds(), query = requests[0].bounds
+    return query.west < bounds.getWest() && query.east > bounds.getEast()
+      && query.south < bounds.getSouth() && query.north > bounds.getNorth()
+  })
+  expect(buffered).toBe(true)
+  for (let i = 0; i < 3; i++) {
+    await page.evaluate(() => (window as any).crownTest.map.panBy([10, 0], { duration: 0 }))
+    await page.waitForTimeout(350)
+  }
+  expect(await page.evaluate(() => (window as any).crownTest.requests.length)).toBe(1)
+})
+
+test('a slow query for a departed viewport cannot replace the displayed batch', async ({ page }) => {
+  await page.goto('/renderer-tests/crowns.html')
+  await settle(page)
+  await page.evaluate(() => {
+    const state = (window as any).crownTest
+    state.layer.load = () => new Promise(resolve => { state.finish = resolve })
+    state.layer.schedule()
+  })
+  // Move far enough to require a new coverage query.
+  await page.evaluate(() => (window as any).crownTest.map.panBy([700, 0], { duration: 0 }))
+  await page.waitForFunction(() => !!(window as any).crownTest.finish)
+  await page.evaluate(() => {
+    const state = (window as any).crownTest
+    state.map.panBy([2000, 0], { duration: 0 })
+    state.finish([{ ...state.crowns[0], id: 'obsolete-viewport' }])
+  })
+  expect(await page.evaluate(() => (window as any).crownTest.layer.trees.map((t: any) => t.id))).not.toContain('obsolete-viewport')
+})
+
 test('crowns render at metre scale, respect zoom/distance, and release their resources', async ({ page }, testInfo) => {
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -222,7 +279,7 @@ test('zooming out while loading cannot restore out-of-range sprites', async ({ p
   await page.evaluate(() => {
     const state = (window as any).crownTest
     state.layer.load = () => new Promise(resolve => { state.finish = resolve })
-    state.layer.schedule()
+    state.layer.invalidate()
   })
   await page.waitForFunction(() => !!(window as any).crownTest.finish)
   await page.getByRole('button', { name: 'Zoom out' }).click()
@@ -235,6 +292,40 @@ test('zooming out while loading cannot restore out-of-range sprites', async ({ p
     const { layer } = (window as any).crownTest
     return { count: layer.count, trees: layer.trees.length }
   })).toEqual({ count: 0, trees: 0 })
+})
+
+test('sprite depth order follows the projected ground plane through rotation and pitch', async ({ page }) => {
+  await page.goto('/renderer-tests/crowns.html')
+  await settle(page)
+  const results = await page.evaluate(() => {
+    const { map, layer, crowns } = (window as any).crownTest
+    const grid = Array.from({ length: 25 }, (_, i) => ({ ...crowns[0], id: `sort-${i}`,
+      lng: crowns[0].lng + (i % 5) * 0.0001, lat: crowns[0].lat + Math.floor(i / 5) * 0.0001 }))
+    const results: boolean[] = []
+    for (const pitch of [0, 60, 80]) {
+      for (const bearing of [0, 45, 90, -90, 180]) {
+        map.jumpTo({ pitch, bearing })
+        layer.setCrowns(grid, layer.camera())
+        const y = layer.trees.map((tree: any) => map.project([tree.lng, tree.lat]).y)
+        results.push(y.every((value: number, i: number) => !i || value >= y[i - 1] - 0.001))
+      }
+    }
+    return results
+  })
+  expect(results.every(Boolean)).toBe(true)
+})
+
+test('a failed replacement query preserves the displayed trees', async ({ page }) => {
+  await page.goto('/renderer-tests/crowns.html')
+  await settle(page)
+  const before = await page.evaluate(() => (window as any).crownTest.layer.count)
+  await page.evaluate(() => {
+    const state = (window as any).crownTest
+    state.layer.load = async () => { state.failed = true; throw new Error('temporary query failure') }
+    state.map.panBy([700, 0], { duration: 0 })
+  })
+  await page.waitForFunction(() => (window as any).crownTest.failed)
+  expect(await page.evaluate(() => (window as any).crownTest.layer.count)).toBe(before)
 })
 
 test('GPU distance fading works while a replacement query is still pending', async ({ page }) => {

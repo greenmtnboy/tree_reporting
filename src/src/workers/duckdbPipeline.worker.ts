@@ -1456,6 +1456,9 @@ async function setColorOverrideSql(sql: string | null) {
   await ensureInit()
   if (!conn) return
   const normalized = sql?.trim() || null
+  // City setup already built the default map and aggregate tables. Ordinary
+  // filter changes need neither a city-wide rebuild nor another color push.
+  if (!normalized && colorMapSignature === 'default') return
 
   if (normalized) {
     // Agent provided a color override SQL returning (tree_id, override_color).
@@ -1737,8 +1740,8 @@ async function prepareCrownPredictions(city: string): Promise<string> {
 async function getMapTrees(camera: TreeRenderView): Promise<TreeCrown[]> {
   await ensureInit()
   await waitForCityContext()
-  // Deliberately not gated on autoTileFetchEnabled: the desktop intro pauses
-  // tile fetching and waits for these sprites before it starts moving.
+  // The intro pauses vector-tile work, but still needs the independent sprite
+  // renderer to draw and satisfy its readiness gate. This reads local tables.
   if (!conn || !loadedCity || (!camera.bounds && camera.altitude >= CROWN_DISTANCE_MAX)) return []
   const city = loadedCity
   const revision = tileQueryRevision
