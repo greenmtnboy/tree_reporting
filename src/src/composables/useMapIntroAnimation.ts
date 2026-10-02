@@ -11,10 +11,6 @@ const INTRO_ROTATION_DEG = 240
 export const INTRO_END_BEARING = 0
 /** Bearing the map is created at so the intro's fixed sweep lands exactly on north. */
 export const INTRO_START_BEARING = INTRO_END_BEARING - INTRO_ROTATION_DEG
-const CENTER_ICON_GRID_RADIUS_PX = 96
-const CENTER_ICON_GRID_SIZE = 3
-const CENTER_ICON_GRID_MIN_POPULATED_CELLS = 5
-const CENTER_ICON_GRID_MIN_TOTAL_ICONS = 8
 const VIEWPORT_TREE_MIN_FEATURES = 1
 const VIEWPORT_TREE_STABLE_FRAMES = 2
 const TREES_SOURCE_MAXZOOM = 16
@@ -45,13 +41,11 @@ export interface UseMapIntroAnimationOptions {
   setAutoTileFetchEnabled: (enabled: boolean) => void
   setVisibleTileRange: (z: number, minX: number, maxX: number, minY: number, maxY: number) => void
   prefetchVisibleDetailTilesAtZoom: (z: number, range?: TileRange) => Promise<IntroPrefetchStatus>
-  requestTreesSourceReload: () => void
   forceTreesTileRefetchPass: () => void
   updateZoomLevel: () => void
   computeVisibleTileRangeForZoom: (z: number) => TileRange | null
   setMapInteractions: (enabled: boolean) => void
-  /** Trees the desktop sprite layer last drew. It is a custom layer, so
-   * queryRenderedFeatures cannot see it; the readiness gates read this instead. */
+  /** Custom sprites have no MapLibre feature index. */
   renderedTreeSprites: () => readonly { lng: number; lat: number }[]
 }
 
@@ -65,7 +59,6 @@ export function useMapIntroAnimation({
   setAutoTileFetchEnabled,
   setVisibleTileRange,
   prefetchVisibleDetailTilesAtZoom,
-  requestTreesSourceReload,
   forceTreesTileRefetchPass,
   updateZoomLevel,
   computeVisibleTileRangeForZoom,
@@ -95,21 +88,6 @@ export function useMapIntroAnimation({
     const naiveEnd = startBearing + INTRO_ROTATION_DEG
     const correction = ((((INTRO_END_BEARING - naiveEnd) % 360) + 540) % 360) - 180
     return INTRO_ROTATION_DEG + correction
-  }
-
-  /** Count drawn tree sprites whose position projects inside the screen box. */
-  function countTreeSprites(box?: [[number, number], [number, number]]): number {
-    const m = map.value
-    if (!m) return 0
-    const sprites = renderedTreeSprites()
-    if (!box) return sprites.length
-    const [[minX, minY], [maxX, maxY]] = box
-    let count = 0
-    for (const sprite of sprites) {
-      const { x, y } = m.project([sprite.lng, sprite.lat])
-      if (x >= minX && x < maxX && y >= minY && y < maxY) count += 1
-    }
-    return count
   }
 
   function resetIntroPrefetchStats() {
@@ -163,57 +141,6 @@ export function useMapIntroAnimation({
     })
   }
 
-  async function waitForInitialDetailedTrees(timeoutMs = 5000): Promise<boolean> {
-    if (!map.value) return false
-    const startedAt = nowMs()
-    return await new Promise<boolean>((resolve) => {
-      if (!map.value) return resolve(false)
-      const tick = () => {
-        if (!map.value) return resolve(false)
-        const iconCount = countTreeSprites()
-        if (iconCount > 0) return resolve(true)
-        if (nowMs() - startedAt >= timeoutMs) return resolve(false)
-        requestAnimationFrame(tick)
-      }
-      tick()
-    })
-  }
-
-  async function waitForCenteredDetailedTrees(targetCenter: [number, number], timeoutMs = 5000): Promise<boolean> {
-    if (!map.value) return false
-    const startedAt = nowMs()
-    return await new Promise<boolean>((resolve) => {
-      if (!map.value) return resolve(false)
-      const tick = () => {
-        if (!map.value) return resolve(false)
-        const centerPx = map.value.project(targetCenter)
-        const gridSize = Math.max(1, CENTER_ICON_GRID_SIZE)
-        const radiusPx = CENTER_ICON_GRID_RADIUS_PX
-        const minX = centerPx.x - radiusPx
-        const minY = centerPx.y - radiusPx
-        const cellSize = (radiusPx * 2) / gridSize
-        const centerIndex = Math.floor(gridSize / 2)
-        let totalIcons = 0
-        let populatedCells = 0
-        let centerCellIcons = 0
-        for (let row = 0; row < gridSize; row += 1) {
-          for (let col = 0; col < gridSize; col += 1) {
-            const cellMinX = minX + col * cellSize
-            const cellMinY = minY + row * cellSize
-            const cellIcons = countTreeSprites([[cellMinX, cellMinY], [cellMinX + cellSize, cellMinY + cellSize]])
-            totalIcons += cellIcons
-            if (cellIcons > 0) populatedCells += 1
-            if (row === centerIndex && col === centerIndex) centerCellIcons = cellIcons
-          }
-        }
-        if (centerCellIcons > 0 && populatedCells >= CENTER_ICON_GRID_MIN_POPULATED_CELLS && totalIcons >= CENTER_ICON_GRID_MIN_TOTAL_ICONS) return resolve(true)
-        if (nowMs() - startedAt >= timeoutMs) return resolve(false)
-        requestAnimationFrame(tick)
-      }
-      tick()
-    })
-  }
-
   async function waitForViewportTreesRendered(timeoutMs = 6000): Promise<boolean> {
     if (!map.value) return false
     const startedAt = nowMs()
@@ -221,13 +148,20 @@ export function useMapIntroAnimation({
       if (!map.value) return resolve(false)
       let stableFrames = 0
       const tick = () => {
-        if (!map.value) return resolve(false)
+        if (!map.value || introCancelled) return resolve(false)
         const canvas = map.value.getCanvas()
         const width = Math.max(1, canvas.clientWidth)
         const height = Math.max(1, canvas.clientHeight)
-        const rendered = countTreeSprites([[0, 0], [width, height]])
-          + map.value.queryRenderedFeatures([[0, 0], [width, height]], { layers: ['trees-circle'] }).length
-        const frameReady = map.value.isSourceLoaded('trees') && rendered >= VIEWPORT_TREE_MIN_FEATURES
+        // Custom WebGL sprites have no MapLibre feature index. Check their
+        // projected anchors, falling back to the vector circles at lower zoom.
+        const visibleSprite = renderedTreeSprites().some(tree => {
+          const point = map.value!.project([tree.lng, tree.lat])
+          return point.x >= 0 && point.x <= width && point.y >= 0 && point.y <= height
+        })
+        const circles = !visibleSprite && map.value.getLayer('trees-circle')
+          ? map.value.queryRenderedFeatures([[0, 0], [width, height]], { layers: ['trees-circle'] }).length
+          : 0
+        const frameReady = !!visibleSprite || (map.value.isSourceLoaded('trees') && circles >= VIEWPORT_TREE_MIN_FEATURES)
         if (frameReady) {
           stableFrames += 1
           if (stableFrames >= VIEWPORT_TREE_STABLE_FRAMES) return resolve(true)
@@ -324,14 +258,10 @@ export function useMapIntroAnimation({
 
       // During intro auto-fetch is disabled; force a source reload so MapLibre
       // re-requests viewport tiles and consumes freshly prefetched cached data.
-      requestTreesSourceReload()
       forceTreesTileRefetchPass()
 
       await waitForTreesMilestone(2500)
-      const initialReady = await waitForInitialDetailedTrees(5000)
-      const centeredReady = await waitForCenteredDetailedTrees(introCenterSnapshot, 5000)
-      const viewportReady = await waitForViewportTreesRendered(6000)
-      const canStartMotion = initialReady || centeredReady || viewportReady
+      const canStartMotion = await waitForViewportTreesRendered(6000)
 
       if (!introCancelled && canStartMotion) {
         loadingMessage.value = 'Tracking seed dispersion...'
@@ -349,7 +279,7 @@ export function useMapIntroAnimation({
         )
         didRunIntroMotion = true
       } else if (!introCancelled) {
-        console.warn('[Perf] map:intro-gate:blocked-motion', { canStartMotion, initialReady, centeredReady, viewportReady })
+        console.warn('[Perf] map:intro-gate:blocked-motion', { canStartMotion })
       }
     } finally {
       // If cancelIntro() was called, runGlobeSwoopTo has taken over camera control and owns

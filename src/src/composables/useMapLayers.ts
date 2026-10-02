@@ -279,14 +279,6 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     lastBuiltHeatmapColors = []
   }
 
-  function requestTreesSourceReload() {
-    if (!map.value) return
-    crownLayer?.invalidate()
-    const source = map.value.getSource('trees') as any
-    if (source && typeof source.reload === 'function') source.reload()
-    map.value.triggerRepaint()
-  }
-
   function addTreeLayers() {
     if (!map.value) return
     const mapInstance = map.value
@@ -308,7 +300,6 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     if (existingSource && hasAllLayers) {
       if (typeof existingSource.setTiles === 'function') {
         existingSource.setTiles(treeTiles)
-        if (typeof existingSource.reload === 'function') existingSource.reload()
         console.info('[Perf] map:layers:source-refresh', { ms: Math.round(nowMs() - t0), revision: mapQueryRevision.value })
         return
       }
@@ -394,7 +385,6 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
   // of active colors changes. The sprite shader uses the refreshed color map.
   function applyColorToLayers() {
     if (!map.value) return
-    crownLayer?.invalidate()
     const mapInstance = map.value
     const colors = activeHeatmapColors.value
 
@@ -438,7 +428,6 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     renderedTreeSprites: (): readonly { lng: number; lat: number }[] => crownLayer?.trees ?? [],
     addTreeLayers,
     applyColorToLayers,
-    requestTreesSourceReload,
     forceTreesTileRefetchPass,
   }
 }

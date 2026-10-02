@@ -14,6 +14,8 @@ export interface CrownCamera { lng: number; lat: number; altitude: number }
 export interface TreeRenderView extends CrownCamera {
   /** Desktop markers cover the viewport; only nearby ones acquire metre scale. */
   bounds?: { west: number; south: number; east: number; north: number }
+  /** Unpadded viewport, preferred over the buffer when the sprite budget fills. */
+  visibleBounds?: { west: number; south: number; east: number; north: number }
 }
 export interface TreeCrown {
   id: string

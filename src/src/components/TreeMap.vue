@@ -272,7 +272,6 @@ import { basemapStyleUrl, bindMapTheme } from '../composables/mapTheme'
 
 import { ref, shallowRef, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
 import maplibregl from 'maplibre-gl'
-import { registerCategoryColoredIcons } from '../composables/useTreeCategories'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData, CITY_CONFIG, closestCityTo, haversineKm, type CityCode } from '../composables/useMapData'
 import { getCityBiome, getCityEcoregionId } from '../composables/dashboardContextSource'
@@ -680,7 +679,7 @@ function updateZoomLevel() {
 
 // --- Layer management ---
 
-const { addTreeLayers, applyColorToLayers, requestTreesSourceReload, forceTreesTileRefetchPass, pickCrownSprite, renderedTreeSprites } = useMapLayers({
+const { addTreeLayers, applyColorToLayers, forceTreesTileRefetchPass, pickCrownSprite, renderedTreeSprites } = useMapLayers({
   map: mapRef,
   simplified: props.simplified ?? false,
   activeHeatmapColors,
@@ -700,7 +699,6 @@ const { loadingMessage, runIntroZoomOut, cancelIntro, runGlobeSwoopTo, recordInt
   setAutoTileFetchEnabled,
   setVisibleTileRange,
   prefetchVisibleDetailTilesAtZoom,
-  requestTreesSourceReload,
   forceTreesTileRefetchPass,
   updateZoomLevel,
   computeVisibleTileRangeForZoom,
@@ -1654,8 +1652,6 @@ watch([currentMapQuery, publishedTreeIdFilterSql, mapQueryRevision], async ([que
 watch(workerDistinctColors, () => {
   if (!mapRef.value?.loaded()) return
   applyColorToLayers()
-  const src = mapRef.value.getSource('trees') as any
-  if (src && typeof src.reload === 'function') src.reload()
 })
 
 // Update the landmark GeoJSON source (or add the layer for the first time) when landmark data loads.
@@ -1815,7 +1811,8 @@ onMounted(async () => {
   // The MapCompass overlay replaces the built-in compass button on both layouts.
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
   ensureZoomControlLabel()
-  map.on('zoom', updateZoomLevel)
+  // MapLibre emits move for zoom, rotation and panning. Subscribing to zoom
+  // as well doubles bounds calculations and worker RPCs during wheel zoom.
   map.on('move', updateZoomLevel)
 
   map.on('load', () => {
@@ -1864,24 +1861,6 @@ onMounted(async () => {
       }
     })
 
-    if (!props.simplified) {
-      map.on('styleimagemissing', (e) => {
-        logIconLayerDebug('style-image-missing', { id: e.id })
-        if (e.id.startsWith('tree-')) {
-          const colors = workerDistinctColors.value
-          if (colors.length === 0) {
-            console.error('[TreeIcons] styleimagemissing fired but workerDistinctColors is empty — color map not yet received from worker', { missingId: e.id })
-            return
-          }
-          try {
-            registerCategoryColoredIcons(map, colors)
-          } catch (err) {
-            console.warn('[TreeIcons] recovery registration failed', err)
-          }
-        }
-      })
-    }
-
     map.on('moveend', () => { logIconLayerSnapshot('moveend') })
 
     map.on('idle', () => {
@@ -1898,18 +1877,6 @@ onMounted(async () => {
     void ensureTileProtocolRegistered((lifecycleRequestedCity.value ?? selectedCity.value) as CityCode)
       .then(async () => {
         if (disposed) return
-        // DuckDB init is complete — colors are available
-        const colors = workerDistinctColors.value
-        console.info('[Perf] map:init:colors-ready', { colors })
-        if (!props.simplified) {
-          if (colors.length === 0) {
-            console.error('[TreeIcons] no colors from worker after init — icons will not be registered')
-          } else {
-            registerCategoryColoredIcons(map, colors)
-            console.info('[Perf] map:icons:registered', { count: colors.length })
-          }
-        }
-
         await initializeRequestedCity(map)
       })
       .catch((e) => {
