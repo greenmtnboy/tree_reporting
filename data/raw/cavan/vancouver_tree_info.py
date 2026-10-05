@@ -16,7 +16,9 @@ Field mapping:
   species_name -> species epithet (combined with genus_name)
   common_name  -> tree_name
   diameter_cm  -> diameter_at_breast_height (cm → inches: divide by 2.54)
-  date_planted -> plant_date
+  plant_date   -> always null. The portal dropped `date_planted` from the
+                  dataset on 2026-09-28, and an export that selects a missing
+                  field fails with HTTP 400 (ODSQLError "Unknown field").
   geo_point_2d -> latitude, longitude  (WKB binary)
 """
 
@@ -41,7 +43,7 @@ DATASET_URL = (
     "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/"
     "public-trees/exports/parquet"
     "?select=asset_id%2Cgenus_name%2Cspecies_name%2Ccommon_name"
-    "%2Cdiameter_cm%2Cdate_planted%2Cgeo_point_2d&lang=en&timezone=UTC"
+    "%2Cdiameter_cm%2Cgeo_point_2d&lang=en&timezone=UTC"
 )
 
 
@@ -99,7 +101,7 @@ def transform(table: pa.Table) -> pa.Table:
         type=pa.float64(),
     )
 
-    # --- plant_date: date_planted (already a date field from OpenDataSoft) ---
+    # --- plant_date: date_planted, if the portal ever publishes it again (not selected today) ---
     date_col = next((c for c in names if c.lower() == "date_planted"), None)
     if date_col is not None:
         plant_date = table[date_col].cast(pa.date32())
