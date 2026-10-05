@@ -57,6 +57,7 @@ the core, daily, reading only published parquets
   refresh-enrichment    raw/tree_enrichment.preql       -> tree_enrichment_v{n}.parquet
   refresh-predictions   raw/tree_predictions.preql      -> tree_predictions_v{n}.parquet
   validate-core         raw/core_validate.preql
+  publish-website       website_homepage.preql          -> arborary/website/v1/homepage.json
   publish-landmarks     raw/full_landmark_publish.preql (weekly, Sun 05:00)
 ```
 
@@ -86,12 +87,53 @@ Rules:
   `[dependencies]` table in `trilogy.toml` does.
 - **`validate-core` runs `validate datasource` over the rollup and the
   enrichment table after both land** and fails the tick on a repeated key.
+- **`publish-website` publishes the arborary.world homepage feed** after the
+  rollup, enrichment and ecoregions, on `when = "always"` edges so a city
+  that moved still reaches the homepage on a day the rollup did not. See
+  "The homepage feed" below.
 - **Cadence is measured.** `tools/portal_cadence.py --record` samples every
   freshness probe into `portal_cadence.json` and derives each portal's real
   interval; its verdict column compares against the live cron. Do not retune
   a cron from one observation. Twice weekly is the floor for any city.
 - **A missing job is silent.** `test_cloud_jobs.py` is the only thing that
   notices. Run the data tests after touching the job table.
+
+## The homepage feed (`website/publish_homepage.py`)
+
+arborary.world's homepage bundles a snapshot of its statistics and swaps in
+`https://storage.googleapis.com/trilogy_public_models/arborary/website/v1/homepage.json`
+after validating it, so city coverage, totals, species leaders, ecoregions,
+download links and the globe's field notes move without a website deploy. The
+contract (schema version 1) is the website's `docs/.vitepress/theme/homepage-feed.ts`
+and `scripts/build_homepage.py`; the publisher ports its rules.
+
+- **It counts the city parquets, never the rollup**, which lags any city that
+  republished since the core last ran. Every input is read at the generation
+  a bucket listing returned at the start of the run, so a city republishing
+  mid-run fails the run instead of mixing two publications into one total.
+- **All or nothing.** The candidate is validated whole and uploaded once with
+  `x-goog-if-generation-match` on the generation the run read. A missing or
+  empty city that the live feed counts, a network or auth error, or any
+  validation failure fails the job and leaves the last good object serving.
+  A city never published before goes out as pending: zero trees, no link, no
+  globe stop. An unchanged candidate is not uploaded, so `generated_at` stays
+  the time the data last changed.
+- **The upload is a V4-signed XML API request over the org's HMAC key**, the
+  pair DuckDB writes the parquets with; those keys are not ADC. Generations
+  come from a listing because the public edge cache answers GETs and HEADs
+  of a public object, signed or not, with a generation up to five minutes old.
+- **Cities come from `data/website/city_config.json`**, a mirror of
+  `src/src/cityConfig.json` (the cloud bundle holds only `data/`). The
+  country is the code's ISO prefix. `tools/new_city.py` writes both files and
+  `test_city_wiring.py` fails while they differ or a prefix has no country.
+- **The entrypoint sits at the root of `data/`.** pytrilogy resolves a `call`
+  target against the entry file's directory and then runs it from there too,
+  so from `raw/` a relative entrypoint doubles the path.
+  `test_cloud_jobs.py::test_call_entrypoints_sit_at_the_data_root` pins it.
+
+Locally, from `data/`: `uv run website/publish_homepage.py --dry-run --output homepage.json`
+builds and validates without uploading (it uploads only with
+`GOOGLE_HMAC_KEY`/`GOOGLE_HMAC_SECRET` set and no `--dry-run`).
 
 ## Partitions and the `data_source` column
 
