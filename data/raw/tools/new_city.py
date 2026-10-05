@@ -814,6 +814,12 @@ memory_mb = 2048
         head = original.rstrip().removesuffix("}").rstrip()
         e._pending[config_path] = f"{head},\n{entry}\n}}\n"
         e.applied.append(f"{config_path.relative_to(REPO)}: city config")
+        # The homepage feed's copy: the cloud bundle holds only data/, so the
+        # publisher reads this mirror, and test_city_wiring.py fails while the
+        # two differ.
+        mirror = DATA / "website" / "city_config.json"
+        e._pending[mirror] = e._pending[config_path]
+        e.applied.append(f"{mirror.relative_to(REPO)}: homepage city registry")
     else:
         e.skipped.append(f"{config_path.relative_to(REPO)}: city config (already present)")
 

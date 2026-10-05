@@ -321,6 +321,12 @@ memory_mb = 1024
 # script; `trilogy run .` applies it locally.
 "raw/tree_enrichment.preql" = { after = ["raw/full_tree_publish.preql"] }
 "raw/tree_rankings.preql" = { after = ["raw/full_tree_publish.preql", "raw/tree_enrichment.preql"] }
+# The homepage feed reads the city parquets, the enrichment table and the
+# ecoregions, so it waits for the core's producers of the last two -- but on
+# `always`, not the default: a city that republished since yesterday must
+# reach the homepage even on a day the rollup was up to date and enrichment
+# was skipped behind it. It reads whatever is published when they finish.
+"website_homepage.preql" = { after = ["raw/full_tree_publish.preql", "raw/tree_enrichment.preql", "raw/ecoregion_info.preql"], when = "always" }
 
 [[cloud.job]]
 key = "refresh-enrichment"
@@ -364,6 +370,23 @@ operation = "refresh"
 schedule = "0 0 6 * * *"
 timeout_seconds = 1800
 memory_mb = 4096
+
+# The arborary.world homepage feed: one JSON object the website swaps in for
+# its bundled statistics (gs://trilogy_public_models/arborary/website/v1/
+# homepage.json). Counts the published city parquets themselves, never the
+# rollup, and reaches no portal. Same cron as the core so it is ordered inside
+# the core's tick, after the `[dependencies]` entry above. `run`, not
+# `refresh`: the feed is not a datasource, and website/publish_homepage.py
+# builds, validates and uploads it itself, failing the run (and leaving the
+# live object alone) on anything short of a complete, valid candidate.
+[[cloud.job]]
+key = "publish-website"
+name = "urban-tree-website-homepage"
+entrypoint = "website_homepage.preql"
+operation = "run"
+schedule = "0 0 6 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
 
 # Landmarks: one refresh job per city's landmark model, then the cross-city
 # union as its own job.

@@ -1,0 +1,15 @@
+# Publishes the arborary.world homepage feed, run by the `publish-website`
+# [[cloud.job]] in trilogy.toml after the rest of the daily core.
+#
+# There is nothing to model: the feed is a JSON object, not a datasource, and
+# website/publish_homepage.py builds, validates and uploads it. A `call` is
+# how a job runs a program; the script prints the feed's URL as the run's
+# output.
+#
+# This file sits at the root of data/ on purpose. pytrilogy resolves a call
+# target against the entry file's directory and then also runs the script
+# from that directory, so from raw/ the path doubles (raw/raw/website/...)
+# whenever the job's entrypoint is a relative path, which on trilogy-cloud it
+# always is. From the root the two agree.
+
+call `./website/publish_homepage.py`;

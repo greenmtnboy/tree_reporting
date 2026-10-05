@@ -10,7 +10,7 @@ species enrichment, analytics dashboards and an agent chat over the same data.
 | Path | What it is |
 |---|---|
 | `src/` | The web app: Vite, Vue 3, TypeScript. DuckDB-WASM reads published parquets in the browser; the dashboards and chat compile PreQL through a hosted Trilogy resolver. |
-| `data/` | The Trilogy models and ingest scripts that build those parquets, and `trilogy.toml`, the job table trilogy-cloud runs them from. `data/raw/` holds the core model, one directory per city, the shared ingest library and the tests; `osm_staging/`, `overture_staging/` and `landmark_staging/` the per-city staging jobs. |
+| `data/` | The Trilogy models and ingest scripts that build those parquets, and `trilogy.toml`, the job table trilogy-cloud runs them from. `website/` publishes the arborary.world homepage feed. `data/raw/` holds the core model, one directory per city, the shared ingest library and the tests; `osm_staging/`, `overture_staging/` and `landmark_staging/` the per-city staging jobs. |
 | `reviewer/` | The local reviewer for community submissions and aerial-imagery detections; the only path that publishes a submission. |
 | `imagery_model/` | The tree-detection model over NAIP imagery and its export into the reviewer. |
 | `terraform/` | Infrastructure. |

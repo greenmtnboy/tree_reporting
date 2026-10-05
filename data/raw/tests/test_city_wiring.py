@@ -277,6 +277,31 @@ def test_city_is_in_the_frontend_config(code: str):
     )
 
 
+def test_homepage_registry_mirrors_the_frontend_config():
+    """The homepage publisher reads `data/website/city_config.json`, a copy of
+    `cityConfig.json`, because the cloud bundle holds only data/.  A copy that
+    lags is a city missing from arborary.world's homepage, or one listed under
+    its old name, with no error anywhere.  `tools/new_city.py` writes both."""
+    frontend = json.loads(read(SRC_DIR / "cityConfig.json"))
+    mirror = json.loads(read(DATA_DIR / "website" / "city_config.json"))
+    assert mirror == frontend, (
+        "data/website/city_config.json has drifted from src/src/cityConfig.json; "
+        "copy the frontend file over it"
+    )
+
+
+@pytest.mark.parametrize("code", CITY_CODES)
+def test_city_has_a_homepage_country(code: str):
+    """The homepage names each city's country from its code's ISO prefix."""
+    sys.path.insert(0, str(DATA_DIR / "website"))
+    from publish_homepage import COUNTRIES
+
+    assert code[:2] in COUNTRIES, (
+        f"{code}: add {code[:2]!r} to COUNTRIES in data/website/publish_homepage.py "
+        "so the homepage can name its country"
+    )
+
+
 def display_name(code: str) -> str:
     """The name the UI shows, which is the one attribution has to use.
 
