@@ -258,6 +258,13 @@ record what it absorbed. The published target carries
   duplicates from neighbours (distinct Cambridge trees score ~75% at every
   band to 15 m), so calibrate such a match against a distinct-tree control
   and read `d1/d2`.
+- For the same reason two neighbouring cities' inventories are never merged
+  with each other, and Boston's metro model holds four that meet: about 95
+  trees on the Somerville-Cambridge border and 6 on Brookline-Boston publish
+  twice. The fix belongs in `usbos/boston_tree_info.preql`, the one model
+  that sees every metro source; `docs/BORDER_DEDUP.md` has the model block,
+  the measurements, the three planner bugs it is waiting on, and what the
+  language would need to make it a few lines in the shared merge.
 - Needs pytrilogy 0.3.348 or later for the target-side `where`.
 - The cross-city rollup does not carry the dedup columns, and
   `tree_info.preql` derives nothing.

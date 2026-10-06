@@ -61,6 +61,7 @@ The reference for each is `docs/DATA_PIPELINE.md`.
 - `docs/SPECIES_ENRICHMENT.md`: the species key rule, synonyms and misspellings, sentinels, the enrichment job.
 - `docs/LANDMARKS.md`: landmark sources, schema, staging and building.
 - `docs/POSITION_CORRECTION.md`: moving trees out of buildings and roads with Overture; the pilot's numbers; what the language would need to own it.
+- `docs/BORDER_DEDUP.md`: trees two neighbouring inventories both record (Boston's metro); the parked model block, the planner bugs it waits on, what the language would need.
 - `docs/TESTING.md`: the dashboard query sweep, what the chat resolves against, the chat benchmark.
 - `data/raw/tools/README.md`: the workstation-only scripts.
 - `reviewer/README.md`, `imagery_model/README.md`: the two other applications.
