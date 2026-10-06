@@ -848,9 +848,9 @@ schedule = "0 20 10 * * *"
 timeout_seconds = 2400
 memory_mb = 3072
 
-# Four municipal inventories in one model (Boston, the Arnold Arboretum,
-# Cambridge and Brookline), so four probes and four partitions — but still
-# one city parquet and one job.
+# Five municipal inventories in one model (Boston, the Arnold Arboretum,
+# Cambridge, Brookline and Somerville), so five probes and five partitions —
+# but still one city parquet and one job.
 [[cloud.job]]
 key = "city-usbos"
 name = "urban-tree-city-usbos"

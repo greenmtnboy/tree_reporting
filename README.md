@@ -82,6 +82,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Boston | Analyze Boston - Trees | https://data.boston.gov/dataset/bprd-trees |
 | Boston (Cambridge) | Cambridge Open Data - Trees | https://data.cambridgema.gov/ |
 | Boston (Brookline) | Brookline GIS - Tree Viewer | ArcGIS FeatureServer |
+| Boston (Somerville) | City of Somerville - TreeKeeper public tree inventory | https://somervillema.treekeepersoftware.com/ |
 | Boston (Arboretum) | Arnold Arboretum / Harvard GIS | https://gis.arboretum.harvard.edu/ |
 | Burlington VT | City of Burlington GIS - Tree Sites | https://maps.burlingtonvt.gov/ |
 | Washington, DC | Open Data DC - Urban Forestry Street Trees | https://opendata.dc.gov/datasets/DCGIS::urban-forestry-street-trees |

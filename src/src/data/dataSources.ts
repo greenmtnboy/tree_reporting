@@ -39,6 +39,7 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   ARNOLD_ARBORETUM: 'Arnold Arboretum',
   CAMBRIDGE: 'City of Cambridge',
   BROOKLINE: 'Town of Brookline',
+  SOMERVILLE: 'City of Somerville',
   PARIS_OPENDATA: 'Paris Open Data',
   BURLINGTON_OPENDATA: 'City of Burlington, VT',
   VANCOUVER_OPENDATA: 'Vancouver Open Data',
