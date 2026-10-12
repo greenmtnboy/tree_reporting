@@ -68,7 +68,7 @@ test('the store reads every tile set below its directory and lists by city', () 
   }
 })
 
-test('a tile two runs exported opens the preferred run, else the newest file', () => {
+test('a tile two runs exported opens the run asked for, else the newest file', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'tiles-'))
   try {
     const name = readdirSync(FIXTURES).find((f) => f.startsWith('USSFO') && f.endsWith('.json'))!
@@ -81,16 +81,17 @@ test('a tile two runs exported opens the preferred run, else the newest file', (
       utimesSync(file, mtime, mtime)
     }
     const store = new TileStore(root)
-    assert.equal(store.get(original.tileId)?.predictionLayer.runId, 'run-b', 'newest file wins with no preference')
-    store.preferredRun = 'run-a'
-    assert.equal(store.get(original.tileId)?.predictionLayer.runId, 'run-a')
-    assert.equal(store.list()[0].collection, 'run-a')
-    assert.ok(store.imagePath(original.tileId)?.includes('run-a'), 'the PNG comes from the chosen set')
-    store.preferredRun = 'run-c'
-    assert.equal(store.get(original.tileId)?.predictionLayer.runId, 'run-b', 'a run with no bundle falls back to the newest')
+    assert.equal(store.get(original.tileId)?.predictionLayer.runId, 'run-b', 'newest file wins with no run named')
+    assert.equal(store.get(original.tileId, 'run-a')?.predictionLayer.runId, 'run-a')
+    assert.equal(store.list(undefined, 'run-a')[0].collection, 'run-a')
+    assert.equal(store.list(undefined, 'run-b')[0].collection, 'run-b', 'each run keeps its own choice')
+    assert.ok(store.imagePath(original.tileId, 'run-a')?.includes('run-a'), 'the PNG comes from the chosen set')
+    assert.equal(store.get(original.tileId, 'run-c')?.predictionLayer.runId, 'run-b', 'a run with no bundle falls back to the newest')
     assert.deepEqual(store.runCounts(), { 'run-a': 1, 'run-b': 1 })
     assert.deepEqual(store.runCounts('USBOS'), {})
-    assert.equal(new TileStore(root, { preferredRun: 'run-a' }).get(original.tileId)?.predictionLayer.runId, 'run-a')
+    const withDefault = new TileStore(root, { defaultRun: 'run-a' })
+    assert.equal(withDefault.get(original.tileId)?.predictionLayer.runId, 'run-a', 'no run named: the default run')
+    assert.equal(withDefault.get(original.tileId, null)?.predictionLayer.runId, 'run-b', 'null asks for no preference')
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

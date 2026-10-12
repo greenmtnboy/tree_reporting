@@ -603,27 +603,23 @@ export interface CitySummary {
  * The bundles under a tile directory, at any depth, so one reviewer serves
  * every exported set.  A tile id names a place, imagery and chip, not an
  * export, so the same tile can sit in several sets -- one per model run
- * exported over the same chips.  The preferred run's bundle wins when one
- * holds the tile; otherwise the newest file does, as a re-export would.
+ * exported over the same chips.  Every read names the run it wants (the
+ * page carries it in its URL): that run's bundle wins when one holds the
+ * tile, otherwise the newest file does, as a re-export would.  A read that
+ * names no run uses `defaultRun`.
  */
 export class TileStore {
   private cache = new Map<string, { mtimeMs: number; bundle: TilePredictionBundle }>()
-  private files = new Map<string, string>()
+  private files = new Map<string, Map<string, string>>()
   private thumbs = new Map<string, { mtimeMs: number; data: Buffer }>()
-  private preferred: string | null
+  readonly defaultRun: string | null
 
-  constructor(readonly dir: string, options: { preferredRun?: string | null } = {}) {
-    this.preferred = options.preferredRun ?? null
+  constructor(readonly dir: string, options: { defaultRun?: string | null } = {}) {
+    this.defaultRun = options.defaultRun ?? null
   }
 
-  /** The run whose bundle a tile opens when several sets hold it; null: the newest file. */
-  get preferredRun(): string | null {
-    return this.preferred
-  }
-
-  set preferredRun(runId: string | null) {
-    this.preferred = runId
-    this.files = new Map()
+  private runFor(run: string | null | undefined): string | null {
+    return run === undefined ? this.defaultRun : run
   }
 
   private read(file: string): TilePredictionBundle {
@@ -663,20 +659,20 @@ export class TileStore {
     return new Map([...found].map(([tileId, list]) => [tileId, list.sort((a, b) => b.mtimeMs - a.mtimeMs).map((c) => c.file)]))
   }
 
-  private index(): Map<string, string> {
+  private index(run: string | null): Map<string, string> {
     const chosen = new Map<string, string>()
     for (const [tileId, files] of this.candidates()) {
-      const preferred = this.preferred && files.length > 1 ? files.find((f) => this.runOf(f) === this.preferred) : undefined
+      const preferred = run && files.length > 1 ? files.find((f) => this.runOf(f) === run) : undefined
       chosen.set(tileId, preferred ?? files[0])
     }
-    this.files = chosen
+    this.files.set(run ?? '', chosen)
     return chosen
   }
 
-  private file(tileId: string): string | null {
-    const known = this.files.get(tileId)
+  private file(tileId: string, run: string | null): string | null {
+    const known = this.files.get(run ?? '')?.get(tileId)
     if (known && existsSync(known)) return known
-    return this.index().get(tileId) ?? null
+    return this.index(run).get(tileId) ?? null
   }
 
   private collection(file: string): string {
@@ -684,10 +680,11 @@ export class TileStore {
   }
 
   /** Every tile, or one city's (case-insensitive), grouped by tile set. */
-  list(city?: string): TileSummary[] {
+  list(city?: string, run?: string | null): TileSummary[] {
     const wanted = city?.toUpperCase()
-    return [...this.index()]
-      .map(([tileId, file]) => ({ bundle: this.get(tileId), file }))
+    const r = this.runFor(run)
+    return [...this.index(r)]
+      .map(([tileId, file]) => ({ bundle: this.get(tileId, r), file }))
       .filter((t): t is { bundle: TilePredictionBundle; file: string } =>
         t.bundle !== null && (!wanted || t.bundle.city.toUpperCase() === wanted))
       .map(({ bundle, file }) => summarize(bundle, this.collection(file)))
@@ -713,9 +710,9 @@ export class TileStore {
     return counts
   }
 
-  cities(): CitySummary[] {
+  cities(run?: string | null): CitySummary[] {
     const byCity = new Map<string, CitySummary>()
-    for (const tile of this.list()) {
+    for (const tile of this.list(undefined, run)) {
       const entry = byCity.get(tile.city) ?? { city: tile.city, tileCount: 0, collections: [] }
       entry.tileCount += 1
       if (!entry.collections.includes(tile.collection)) entry.collections.push(tile.collection)
@@ -724,9 +721,9 @@ export class TileStore {
     return [...byCity.values()].sort((x, y) => x.city.localeCompare(y.city))
   }
 
-  get(tileId: string): TilePredictionBundle | null {
+  get(tileId: string, run?: string | null): TilePredictionBundle | null {
     if (!/^[A-Za-z0-9._:-]+$/.test(tileId)) return null
-    const file = this.file(tileId)
+    const file = this.file(tileId, this.runFor(run))
     if (!file) return null
     const bundle = this.read(file)
     if (bundle.tileId !== tileId) throw new Error(`${file} holds tile ${bundle.tileId}, not ${tileId}`)
@@ -734,8 +731,8 @@ export class TileStore {
   }
 
   /** A small JPEG of the tile for the map overlay, re-made when the PNG changes. */
-  async thumbnail(tileId: string): Promise<Buffer | null> {
-    const file = this.imagePath(tileId)
+  async thumbnail(tileId: string, run?: string | null): Promise<Buffer | null> {
+    const file = this.imagePath(tileId, run)
     if (!file) return null
     const mtimeMs = statSync(file).mtimeMs
     const cached = this.thumbs.get(file)
@@ -745,9 +742,10 @@ export class TileStore {
     return data
   }
 
-  imagePath(tileId: string): string | null {
-    const bundle = this.get(tileId)
-    const json = bundle && this.file(tileId)
+  imagePath(tileId: string, run?: string | null): string | null {
+    const r = this.runFor(run)
+    const bundle = this.get(tileId, r)
+    const json = bundle && this.file(tileId, r)
     if (!bundle || !json) return null
     // The PNG sits beside its bundle, in whichever set that is.
     const file = path.join(path.dirname(json), path.basename(bundle.image.url))
@@ -775,9 +773,10 @@ export function summarize(bundle: TilePredictionBundle, collection = ''): TileSu
 /** The bundle as the page receives it: image URL served here, inventory and
  *  observations placed in tile pixels, each prediction's nearest trees. */
 export function presentBundle(bundle: TilePredictionBundle) {
+  const run = encodeURIComponent(bundle.predictionLayer.runId)
   return {
     ...bundle,
-    image: { ...bundle.image, url: `/api/satellite/tiles/${encodeURIComponent(bundle.tileId)}/image` },
+    image: { ...bundle.image, url: `/api/satellite/tiles/${encodeURIComponent(bundle.tileId)}/image?run=${run}` },
     inventoryTrees: bundle.inventoryTrees.map((tree) => ({ ...tree, ...lonLatToPixel(bundle, tree.longitude, tree.latitude) })),
     predictionLayer: {
       ...bundle.predictionLayer,
@@ -818,6 +817,9 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
   const { db, publishedBucket, cityCodes, tiles } = deps
   const actor = deps.actor ?? os.userInfo().username
   const router = express.Router()
+  /** The run the page is reviewing (`?run=`); absent, the store's default. */
+  const runOf = (req: express.Request): string | undefined =>
+    typeof req.query.run === 'string' && req.query.run ? req.query.run : undefined
 
   async function observationsForTile(tileId: string) {
     const snapshot = await db.collection(OBSERVATIONS).where('tileId', '==', tileId).get()
@@ -853,9 +855,9 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
     return publishedRef.id
   }
 
-  router.get('/cities', (_req, res, next) => {
+  router.get('/cities', (req, res, next) => {
     try {
-      res.json(tiles.cities())
+      res.json(tiles.cities(runOf(req)))
     } catch (error) {
       next(error)
     }
@@ -866,7 +868,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
   router.get('/tiles', async (req, res, next) => {
     try {
       const city = typeof req.query.city === 'string' ? req.query.city.toUpperCase() : undefined
-      const summaries = tiles.list(city)
+      const summaries = tiles.list(city, runOf(req))
       if (!summaries.length) {
         res.json([])
         return
@@ -907,7 +909,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
 
   router.get('/tiles/:tileId', async (req, res, next) => {
     try {
-      const bundle = tiles.get(req.params.tileId)
+      const bundle = tiles.get(req.params.tileId, runOf(req))
       if (!bundle) {
         res.status(404).json({ error: `No tile ${req.params.tileId}` })
         return
@@ -936,6 +938,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
       const reviewData = review.data()
       res.json({
         bundle: presentBundle(bundle),
+        center: { latitude: (bounds.south + bounds.north) / 2, longitude: (bounds.west + bounds.east) / 2 },
         observations: tileObservations.filter(sameRun),
         nearbyObservations,
         review: { done: Boolean(reviewData?.done) && reviewData?.runId === runId, doneAt: toIso(reviewData?.doneAt), imageryVersion: reviewData?.imageryVersion ?? null, runId: reviewData?.runId ?? null },
@@ -946,7 +949,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
   })
 
   router.get('/tiles/:tileId/image', (req, res) => {
-    const file = tiles.imagePath(req.params.tileId)
+    const file = tiles.imagePath(req.params.tileId, runOf(req))
     if (!file) {
       res.status(404).json({ error: 'No image for that tile' })
       return
@@ -956,7 +959,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
 
   router.get('/tiles/:tileId/thumb', async (req, res, next) => {
     try {
-      const data = await tiles.thumbnail(req.params.tileId)
+      const data = await tiles.thumbnail(req.params.tileId, runOf(req))
       if (!data) {
         res.status(404).json({ error: 'No image for that tile' })
         return
@@ -969,7 +972,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
 
   router.put('/tiles/:tileId/observations/:predictionId', async (req, res, next) => {
     try {
-      const bundle = tiles.get(req.params.tileId)
+      const bundle = tiles.get(req.params.tileId, runOf(req))
       if (!bundle) throw new Error(`No tile ${req.params.tileId}`)
       const prediction = bundle.predictionLayer.predictions.find((p) => p.predictionId === req.params.predictionId)
       if (!prediction) throw new Error(`No prediction ${req.params.predictionId} on ${bundle.tileId}`)
@@ -1005,7 +1008,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
 
   router.delete('/tiles/:tileId/observations/:predictionId', async (req, res, next) => {
     try {
-      const bundle = tiles.get(req.params.tileId)
+      const bundle = tiles.get(req.params.tileId, runOf(req))
       if (!bundle) throw new Error(`No tile ${req.params.tileId}`)
       const ref = db.collection(OBSERVATIONS).doc(observationId(bundle.tileId, bundle.predictionLayer.runId, req.params.predictionId))
       await db.runTransaction(async (transaction) => {
@@ -1022,7 +1025,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
 
   router.post('/tiles/:tileId/done', async (req, res, next) => {
     try {
-      const bundle = tiles.get(req.params.tileId)
+      const bundle = tiles.get(req.params.tileId, runOf(req))
       if (!bundle) throw new Error(`No tile ${req.params.tileId}`)
       const done = Boolean((req.body as { done?: unknown })?.done)
       // Keyed by imagery version and run: "done" means this image, with this
@@ -1065,7 +1068,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
 
   router.post('/tiles/:tileId/publish', async (req, res, next) => {
     try {
-      const bundle = tiles.get(req.params.tileId)
+      const bundle = tiles.get(req.params.tileId, runOf(req))
       if (!bundle) throw new Error(`No tile ${req.params.tileId}`)
       const pending = (await observationsForTile(bundle.tileId))
         .filter((o) => o.status === 'pending' && PUBLISHABLE.has(o.decision as Decision))

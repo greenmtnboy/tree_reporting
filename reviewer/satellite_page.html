@@ -4,23 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width">
 <title>Satellite tree review</title>
+<link rel="stylesheet" href="/reviewer.css">
 <style>
-:root{--bg:#0b0f0d;--panel:#111914;--line:#35513d;--text:#d7eadb;--muted:#8cab94;--accent:#6da87b;--warn:#d9a441;--bad:#c96b6b;--inv:#5ec8ff;--pred:#f0c6ff;--sat:#ffb566}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui}
-a{color:var(--accent)}button{border:1px solid var(--accent);background:#1d3624;color:#e7f5ea;padding:7px 12px;cursor:pointer;border-radius:3px;font:inherit}
-button:disabled{opacity:.45;cursor:default}button.reject{border-color:#a86d6d;background:#361d1d}button.warn{border-color:#b08a3a;background:#3a2e14}button.ghost{background:transparent;border-color:var(--line);color:var(--muted)}
-header{display:flex;gap:18px;align-items:center;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
-header h1{font-size:18px;margin:0}nav a{margin-right:14px}#status{color:var(--muted);margin-left:auto}
-main{padding:16px 20px}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);font-size:13px}th{color:var(--muted);font-weight:500}
-.hidden{display:none!important}.muted{color:var(--muted)}.pill{display:inline-block;padding:1px 7px;border-radius:9px;font-size:12px;border:1px solid var(--line);margin-right:4px}
-.banner{padding:10px 14px;border:1px solid var(--warn);background:#2a2210;margin-bottom:12px}
+:root{--inv:#5ec8ff;--pred:#f0c6ff;--sat:#ffb566}
+main{padding:14px 20px}
+#view-tiles > .toolbar,#view-map > .toolbar,#view-tile > .toolbar{margin-bottom:10px}
 /* tile view */
 .tile-layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px}
-.toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:13px}
-.toolbar label{display:inline-flex;gap:6px;align-items:center;color:var(--muted)}
-.viewport{position:relative;overflow:auto;border:1px solid var(--line);background:#050806;max-height:calc(100vh - 170px)}
+.tile-head{display:flex;gap:10px 16px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px}
+.tile-head strong{font-size:16px}
+.viewport{position:relative;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);background:#050806}
 #view-tile:fullscreen{background:var(--bg);padding:10px 14px;overflow:auto}
-#view-tile:fullscreen .viewport,#view-tile:fullscreen .side{max-height:calc(100vh - 110px)}
 #view-tile:fullscreen .legend,#view-tile:fullscreen .keys{display:none}
 #view-tile.image-only .tile-layout{grid-template-columns:1fr}#view-tile.image-only .side{display:none}
 .stage{position:relative;display:block;line-height:0}
@@ -45,14 +39,12 @@ svg .human-spoke{stroke:#7dffb0;stroke-width:1;vector-effect:non-scaling-stroke;
 .radius-hint{color:#7dffb0}
 svg .link{stroke:#ffd166;stroke-width:.8;vector-effect:non-scaling-stroke;stroke-dasharray:2 1}
 svg .hitbox{fill:transparent;cursor:pointer}
-.side{border:1px solid var(--line);background:var(--panel);padding:12px;font-size:13px;max-height:calc(100vh - 170px);overflow:auto}
+.side{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:12px;font-size:13px;overflow:auto}
 .side h2{font-size:15px;margin:0 0 8px}.side dl{display:grid;grid-template-columns:120px 1fr;gap:4px 8px;margin:0 0 10px}.side dt{color:var(--muted)}.side dd{margin:0;overflow-wrap:anywhere}
-.side input,.side textarea{width:100%;background:#0b100d;color:var(--text);border:1px solid var(--line);padding:6px;font:inherit;border-radius:3px}
-.side textarea{min-height:52px;resize:vertical}.field{margin-bottom:8px}.field label{display:block;color:var(--muted);margin-bottom:3px}
+.side input:not([type="checkbox"]),.side textarea{width:100%}.field{margin-bottom:8px}.field label{display:block;color:var(--muted);margin-bottom:3px}
 .decisions{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.nearest li{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:4px 0;border-bottom:1px dotted var(--line)}
 .nearest ul{list-style:none;padding:0;margin:0}.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
-kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-monospace,monospace;font-size:11px;color:var(--muted)}
 /* A toast, not a toolbar item: changing text must never reflow the toolbar and move the image under the cursor. */
 .savestate{position:fixed;right:16px;bottom:14px;max-width:420px;color:var(--text);background:var(--panel);border:1px solid var(--line);padding:6px 10px;border-radius:4px;z-index:5;box-shadow:0 4px 14px rgba(0,0,0,.5)}.savestate:empty{display:none}.savestate.err{color:var(--bad);border-color:var(--bad)}
 /* loading: a mask over the tile while it and its imagery arrive, a header spinner for any request */
@@ -73,55 +65,56 @@ kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-
 .closeup{width:100%;aspect-ratio:1;background:#000;border:1px solid var(--line);image-rendering:pixelated;margin-bottom:8px}
 /* map view */
 #view-map .toolbar{margin-bottom:8px}
-#map{height:calc(100vh - 150px);min-height:420px;border:1px solid var(--line)}
+#map{height:calc(100vh - 200px);min-height:420px;border:1px solid var(--line);border-radius:var(--radius)}
 .maplibregl-popup-content{background:var(--panel);color:var(--text);font:13px/1.4 system-ui;border:1px solid var(--line)}
 .maplibregl-popup-tip{display:none}.maplibregl-popup-content ul{margin:4px 0 0;padding-left:16px}
 .maplibregl-popup-close-button{color:var(--muted)}
-#model-bar{border:1px solid var(--line);background:var(--panel);padding:10px 12px;margin-bottom:12px}
-#model-bar select,#model-bar input{background:#0b100d;color:var(--text);border:1px solid var(--line);padding:4px 6px;font:inherit;border-radius:3px}
-#model-bar details{margin-top:8px}#model-bar summary{cursor:pointer;color:var(--accent)}
+#model-bar{margin-bottom:12px;padding:8px 12px}
+#model-run{max-width:min(520px,90vw)}
+#model-bar details{margin-top:6px}
 #export-log{white-space:pre-wrap;font:11px/1.35 ui-monospace,monospace;color:var(--muted);max-height:120px;overflow:auto;margin:6px 0 0}
 .swatch{display:inline-block;width:12px;height:12px;border:2px solid;margin-right:4px;vertical-align:middle}
-@media(max-width:980px){.tile-layout{grid-template-columns:1fr}.viewport,.side{max-height:none}}
+@media(max-width:980px){.tile-layout{grid-template-columns:1fr}.viewport,.side{max-height:none!important}}
 </style>
 </head>
 <body>
-<header>
-  <h1>Satellite tree review</h1>
-  <nav><a href="/">Photo submissions</a><a href="/modifications">Tree reports</a><a href="/photos">Tree photos</a><a href="#tiles">Tiles</a><a href="#map">Map</a><a href="#queue">Publish queue</a></nav>
-  <span id="status">Loading…</span><span id="busy" class="spinner small hidden" title="Loading"></span>
+<header class="topbar">
+  <a class="brand" href="/">Tree reviewer</a>
+  <nav><a href="/">Photo submissions</a><a href="/modifications">Tree reports</a><a href="/photos">Tree photos</a><a href="/satellite" aria-current="page">Satellite</a></nav>
+  <nav class="subnav" id="subnav"><a href="#tiles" data-view="tiles">Tiles</a><a href="#map" data-view="map">Map</a><a href="#queue" data-view="queue">Publish queue</a></nav>
+  <span class="status"><span id="status">Loading…</span> <span id="busy" class="spinner small hidden" title="Loading"></span></span>
 </header>
 <main>
+  <div id="model-bar" class="panel">
+    <div class="toolbar"><label title="The run under review, kept in the URL (?run=). A tile opens this run's bundle when a set holds it; point predictions use it.">Model <select id="model-run"></select></label> <label title="Hide tiles that only other runs have bundles for, in the tile list and on the map"><input id="model-only" type="checkbox" checked> only this model's tiles</label> <span id="model-note" class="muted"></span></div>
+    <details id="export-panel"><summary>Export a cohort of this model as a tile set</summary>
+      <form id="export-form" class="toolbar" style="margin-top:8px">
+        <label>Cohort <select id="export-cohort"></select></label>
+        <label>Set <input id="export-set" size="34" required pattern="[A-Za-z0-9._\-]+"></label>
+        <label title="Where the reviewer's slider starts">Threshold <input id="export-threshold" type="number" min="0" max="1" step="0.01" style="width:5em"></label>
+        <label title="Lowest candidate score written to the bundles">Min score <input id="export-min-score" type="number" min="0" max="1" step="0.01" style="width:5em"></label>
+        <button id="export-go">Export</button> <span id="export-state" class="muted"></span>
+      </form>
+      <pre id="export-log" class="hidden"></pre>
+    </details>
+  </div>
   <section id="view-tiles" class="hidden">
     <p class="muted">NAIP aerial tiles with the model's detections. Open a tile, decide each detection, mark the tile done, then publish the accepted ones. Nothing reaches the map until a publish, and a rejection never touches an inventory tree.</p>
-    <div id="model-bar">
-      <div class="toolbar" style="margin:0"><label>Model <select id="model-run"></select></label> <span id="model-note" class="muted"></span></div>
-      <details id="export-panel"><summary>Export a cohort of this model as a tile set</summary>
-        <form id="export-form" class="toolbar" style="margin:8px 0 0">
-          <label>Cohort <select id="export-cohort"></select></label>
-          <label>Set <input id="export-set" size="34" required pattern="[A-Za-z0-9._\-]+"></label>
-          <label title="Where the reviewer's slider starts">Threshold <input id="export-threshold" type="number" min="0" max="1" step="0.01" style="width:5em"></label>
-          <label title="Lowest candidate score written to the bundles">Min score <input id="export-min-score" type="number" min="0" max="1" step="0.01" style="width:5em"></label>
-          <button id="export-go">Export</button> <span id="export-state" class="muted"></span>
-        </form>
-        <pre id="export-log" class="hidden"></pre>
-      </details>
-    </div>
     <form id="predict-form" class="toolbar"><label>Predict at <input id="predict-point" placeholder="42.3400, -71.1090" size="24" required></label> <button id="predict-go">Fetch NAIP &amp; predict</button> <span id="predict-state" class="muted"></span></form>
     <div id="cities-view">
       <table><thead><tr><th>City</th><th>Tiles</th><th>Tile sets</th><th></th></tr></thead><tbody id="cities-body"></tbody></table>
     </div>
     <div id="city-view" class="hidden">
-    <p><a href="#tiles">← Cities</a> <strong id="city-title"></strong> <a id="city-map" href="#map">Map</a></p>
-    <table><thead><tr><th>Tile</th><th>Set</th><th>Imagery</th><th>Run</th><th>Detections</th><th>Inventory</th><th>Decided</th><th>Published</th><th>Done</th><th></th></tr></thead><tbody id="tiles-body"></tbody></table>
+    <div class="tile-head"><a href="#tiles">← Cities</a> <strong id="city-title"></strong> <a id="city-map" href="#map">Map</a></div>
+    <table><thead><tr><th>Tile</th><th>Set</th><th>Imagery</th><th>Run</th><th class="num">Detections</th><th class="num">Inventory</th><th class="num">Decided</th><th class="num">Published</th><th>Done</th></tr></thead><tbody id="tiles-body"></tbody></table>
     </div>
   </section>
 
   <section id="view-map" class="hidden">
     <div class="toolbar">
-      <label>City <select id="map-city"></select></label>
-      <label><input id="map-imagery" type="checkbox" checked> imagery</label>
-      <label>Opacity <input id="map-opacity" type="range" min="0" max="1" step="0.05" value="0.85"></label>
+      <span class="group"><label>City <select id="map-city"></select></label></span>
+      <span class="group"><label><input id="map-imagery" type="checkbox" checked> imagery</label>
+      <label>Opacity <input id="map-opacity" type="range" min="0" max="1" step="0.05" value="0.85"></label></span>
       <span class="muted"><i class="swatch" style="border-color:#ffffff"></i>untouched <i class="swatch" style="border-color:#ffd166"></i>decisions made <i class="swatch" style="border-color:#5ad37a"></i>tile reviewed</span>
       <span class="muted">Click a tile to review it; click open ground to predict there.</span>
     </div>
@@ -129,22 +122,33 @@ kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-
   </section>
 
   <section id="view-tile" class="hidden">
-    <div class="toolbar">
-      <a href="#tiles">Cities</a> <a id="tile-back" href="#tiles">← Tiles</a> <a id="tile-map" href="#map">Map</a>
+    <div class="tile-head">
+      <a id="tile-back" href="#tiles">← Tiles</a> <a id="tile-map" href="#map">Map</a>
       <strong id="tile-title"></strong>
       <span id="tile-meta" class="muted"></span>
-      <label>Min confidence <input id="threshold" type="range" min="0" max="1" step="0.01" value="0.35"> <span id="threshold-value">0.35</span></label>
-      <label>Zoom <input id="zoom" type="range" min="1" max="5" step="0.5" value="2"></label>
-      <label><input id="show-inventory" type="checkbox" checked> inventory rings</label>
-      <label><input id="show-crowns" type="checkbox" checked> detection rings</label>
-      <label><input id="hide-decided" type="checkbox"> hide decided</label>
-      <label><input id="crisp" type="checkbox"> crisp pixels</label>
-      <label title="Click a detection or any point to see its surroundings magnified (I toggles)"><input id="show-inset" type="checkbox" checked> inset <select id="inset-mag"><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select></label>
-      <label><input id="done" type="checkbox"> tile reviewed</label>
-      <button id="fit" class="ghost" title="Zoom so the tile fills the viewport width">Fit</button>
-      <button id="fullscreen" class="ghost" title="Full screen (Esc leaves)">Full screen</button>
-      <label><input id="image-only" type="checkbox"> hide panel</label>
-      <button id="publish-tile">Publish accepted</button>
+    </div>
+    <div id="other-run" class="banner hidden"><span id="other-run-text"></span> <button id="other-run-predict" class="small">Predict this spot with the selected model</button> <span id="other-run-state" class="muted"></span></div>
+    <div class="toolbar">
+      <span class="group">
+        <label>Min confidence <input id="threshold" type="range" min="0" max="1" step="0.01" value="0.35"> <span id="threshold-value">0.35</span></label>
+        <label>Zoom <input id="zoom" type="range" min="0.5" max="5" step="any" value="2"></label>
+        <button id="fit" class="ghost small" title="Zoom so the tile fits the viewport (Z)">Fit</button>
+      </span>
+      <span class="group">
+        <label><input id="show-inventory" type="checkbox" checked> inventory</label>
+        <label><input id="show-crowns" type="checkbox" checked> detection rings</label>
+        <label><input id="hide-decided" type="checkbox"> hide decided</label>
+        <label><input id="crisp" type="checkbox"> crisp</label>
+        <label title="Click a detection or any point to see its surroundings magnified (I toggles)"><input id="show-inset" type="checkbox" checked> inset <select id="inset-mag"><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select></label>
+      </span>
+      <span class="group">
+        <button id="fullscreen" class="ghost small" title="Full screen (Esc leaves)">Full screen</button>
+        <label><input id="image-only" type="checkbox"> hide panel</label>
+      </span>
+      <span class="group">
+        <label><input id="done" type="checkbox"> tile reviewed</label>
+        <button id="publish-tile" class="small">Publish accepted</button>
+      </span>
       <span id="savestate" class="savestate"></span>
     </div>
     <div id="unavailable" class="banner hidden">Inference unavailable for this tile: the prediction layer has no output here. This is not a tile with no trees.</div>
@@ -172,7 +176,7 @@ kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-
   </section>
 
   <section id="view-queue" class="hidden">
-    <p class="muted">Accepted and duplicate decisions waiting to be published. Publishing writes <code>satellite/published_trees.ndjson</code> and its manifest to the public bucket; the city's next refresh reads them. <button id="republish" class="ghost">Rebuild export</button></p>
+    <p class="muted">Accepted and duplicate decisions waiting to be published. Publishing writes <code>satellite/published_trees.ndjson</code> and its manifest to the public bucket; the city's next refresh reads them. <button id="republish" class="ghost small">Rebuild export</button></p>
     <table><thead><tr><th>Observation</th><th>Tile</th><th>City</th><th>Decision</th><th>Species</th><th>DBH</th><th>Position</th><th>Updated</th><th></th></tr></thead><tbody id="queue-body"></tbody></table>
   </section>
 </main>
@@ -182,10 +186,17 @@ const esc = (v) => String(v ?? '—').replace(/[&<>"']/g, (c) => ({'&':'&amp;','
 const fmt = (v, d = 1) => (v == null || Number.isNaN(v)) ? '—' : Number(v).toFixed(d);
 const statusEl = $('#status');
 let inFlight = 0;
+/** The run under review: the URL's ?run=, which the model picker writes. */
+function pageRun() { return MODEL.data?.selected || new URLSearchParams(location.search).get('run'); }
+function withRun(path) {
+  const run = pageRun();
+  if (!run || !/^\/(tiles|cities)/.test(path)) return path;
+  return path + (path.includes('?') ? '&' : '?') + 'run=' + encodeURIComponent(run);
+}
 async function api(path, options = {}) {
   inFlight += 1; $('#busy').classList.remove('hidden');
   try {
-    const r = await fetch('/api/satellite' + path, { headers: { 'content-type': 'application/json' }, ...options });
+    const r = await fetch('/api/satellite' + withRun(path), { headers: { 'content-type': 'application/json' }, ...options });
     const body = await r.json().catch(() => ({}));
     if (!r.ok) throw Object.assign(new Error(body.error || r.statusText), { status: r.status });
     return body;
@@ -197,19 +208,32 @@ async function api(path, options = {}) {
 // ---------------------------------------------------------------- model + export
 // The selected run decides which bundle a tile opens when several sets hold
 // it (one set per exported run) and which checkpoint point predictions load.
-const MODEL = { data: null, city: null, polling: null };
+var MODEL = { data: null, city: null, polling: null };
+const MODEL_ONLY_KEY = 'satellite-model-only';
+try { $('#model-only').checked = localStorage.getItem(MODEL_ONLY_KEY) !== '0'; } catch {}
+$('#model-only').addEventListener('change', (e) => { try { localStorage.setItem(MODEL_ONLY_KEY, e.target.checked ? '1' : '0'); } catch {} route(); });
+/** The tiles the list and the map show: the selected run's only, unless the filter is off. */
+function forModel(tiles) {
+  const run = MODEL.data?.selected;
+  return run && $('#model-only').checked ? tiles.filter((t) => t.runId === run) : tiles;
+}
 function runLabel(runId) { return (runId.match(/\d+cm-v\d+.*$/) || [runId])[0]; }
 async function loadModels(city) {
   MODEL.city = city || null;
-  const data = await api('/models' + (city ? '?city=' + encodeURIComponent(city) : ''));
+  const asked = new URLSearchParams(location.search).get('run');
+  const query = new URLSearchParams();
+  if (city) query.set('city', city);
+  if (asked) query.set('run', asked);
+  const data = await api('/models?' + query);
   MODEL.data = data;
+  // The URL always names the run, so it can be copied as a link.
+  if (data.selected && data.selected !== asked) history.replaceState(null, '', '?run=' + encodeURIComponent(data.selected) + location.hash);
   const here = data.tileRuns || {};
   $('#model-run').innerHTML = data.runs.map((r) => `<option value="${esc(r.runId)}"${r.runId === data.selected ? ' selected' : ''}>${esc(r.runId)}${here[r.runId] ? ` · ${here[r.runId]} tile(s)${city ? ' in ' + esc(city) : ''}` : ''}${r.checkpoint ? '' : ' · no local checkpoint'}</option>`).join('');
   const others = Object.entries(here).filter(([run]) => run !== data.selected);
   const run = data.runs.find((r) => r.runId === data.selected);
   $('#model-note').textContent = [
     run ? `completed ${run.completedAt.slice(0, 10)}` : '',
-    'tiles open this run\'s bundle where a set holds it; point predictions use it',
     others.length ? `other runs with tiles${city ? ' here' : ''}: ${others.map(([r, n]) => `${runLabel(r)} (${n})`).join(', ')}` : '',
   ].filter(Boolean).join(' · ');
   fillExportForm();
@@ -233,11 +257,10 @@ function suggestSet() {
   $('#export-set').value = `${cohort.city.toLowerCase()}-${runLabel(run)}${suffix}`;
 }
 $('#export-cohort').addEventListener('change', suggestSet);
-$('#model-run').addEventListener('change', async () => {
-  try {
-    await api('/models/selected', { method: 'PUT', body: JSON.stringify({ runId: $('#model-run').value }) });
-    route();
-  } catch (error) { statusEl.textContent = error.message; }
+$('#model-run').addEventListener('change', () => {
+  history.pushState(null, '', '?run=' + encodeURIComponent($('#model-run').value) + location.hash);
+  MODEL.data = null;
+  route();
 });
 function renderExportJob(job) {
   const cohorts = MODEL.data?.runs.find((r) => r.runId === MODEL.data.selected)?.cohorts || [];
@@ -278,7 +301,6 @@ $('#export-form').addEventListener('submit', async (event) => {
 // ---------------------------------------------------------------- tiles list
 async function showCities() {
   switchView('tiles');
-  loadModels(null).catch((error) => { $('#model-note').textContent = error.message; });
   $('#cities-view').classList.remove('hidden'); $('#city-view').classList.add('hidden');
   statusEl.textContent = 'Loading cities…';
   const rows = await api('/cities');
@@ -291,19 +313,22 @@ async function showTiles(city) {
   $('#cities-view').classList.add('hidden'); $('#city-view').classList.remove('hidden');
   $('#city-title').textContent = city;
   $('#city-map').href = '#map/' + encodeURIComponent(city);
-  loadModels(city).catch((error) => { $('#model-note').textContent = error.message; });
   $('#tiles-body').innerHTML = '';
   statusEl.textContent = `Loading ${city} tiles…`;
-  const rows = await api('/tiles?city=' + encodeURIComponent(city));
-  statusEl.textContent = rows.length ? `${rows.length} ${city} tile(s)` : `No ${city} tiles`;
+  const all = await api('/tiles?city=' + encodeURIComponent(city));
+  const rows = forModel(all);
+  const hidden = all.length - rows.length;
+  statusEl.textContent = (rows.length ? `${rows.length} ${city} tile(s)` : `No ${city} tiles for this model`) + (hidden ? ` · ${hidden} from other runs hidden` : '');
   $('#tiles-body').innerHTML = rows.map((t) => {
     const decided = t.counts.accept + t.counts.duplicate + t.counts.reject + t.counts.uncertain;
-    return `<tr><td><a href="#tile/${encodeURIComponent(t.tileId)}">${esc(t.chipId || t.tileId)}</a><div class="muted">${esc(t.tileId)}</div></td><td>${esc(t.collection || '(top level)')}</td><td>${esc(t.acquisitionStart)}${t.acquisitionEnd !== t.acquisitionStart ? ' – ' + esc(t.acquisitionEnd) : ''}<div class="muted">${esc(t.imageryVersion)}</div></td><td>${esc(t.runId)}</td><td>${t.status === 'available' ? t.predictionCount : '<span class="pill">unavailable</span>'}</td><td>${t.inventoryCount}</td><td>${decided}/${t.predictionCount} <span class="muted">(${t.counts.accept} accept, ${t.counts.duplicate} dup, ${t.counts.reject} no, ${t.counts.uncertain} ?)</span></td><td>${t.counts.published}</td><td>${t.done ? '✓' : ''}</td><td><a href="#tile/${encodeURIComponent(t.tileId)}">Open</a></td></tr>`;
+    const breakdown = `${t.counts.accept} accept, ${t.counts.duplicate} duplicate, ${t.counts.reject} not a tree, ${t.counts.uncertain} uncertain`;
+    const dates = esc(t.acquisitionStart) + (t.acquisitionEnd !== t.acquisitionStart ? ' – ' + esc(t.acquisitionEnd) : '');
+    return `<tr><td><a href="#tile/${encodeURIComponent(t.tileId)}" title="${esc(t.tileId)}">${esc(t.chipId || t.tileId)}</a></td><td class="nowrap">${esc(t.collection || '(top level)')}</td><td class="nowrap" title="${esc(t.imageryVersion)}">${dates}</td><td class="nowrap" title="${esc(t.runId)}">${esc(runLabel(t.runId))}</td><td class="num">${t.status === 'available' ? t.predictionCount : '<span class="pill">unavailable</span>'}</td><td class="num">${t.inventoryCount}</td><td class="num" title="${breakdown}">${decided}/${t.predictionCount}${t.counts.accept ? ` <span class="muted">· ${t.counts.accept} accepted</span>` : ''}</td><td class="num">${t.counts.published}</td><td>${t.done ? '✓' : ''}</td></tr>`;
   }).join('');
 }
 
 function predictAt(lat, lon) {
-  return api('/predict', { method: 'POST', body: JSON.stringify({ lat, lon }) });
+  return api('/predict', { method: 'POST', body: JSON.stringify({ lat, lon, run: pageRun() }) });
 }
 
 $('#predict-form').addEventListener('submit', async (event) => {
@@ -421,7 +446,7 @@ function setImageLayers(tiles) {
   const visibility = $('#map-imagery').checked ? 'visible' : 'none', opacity = Number($('#map-opacity').value);
   tiles.forEach((t, i) => {
     const id = 'tile-img-' + i;
-    M.map.addSource(id, { type: 'image', url: `/api/satellite/tiles/${encodeURIComponent(t.tileId)}/thumb`, coordinates: t.footprint });
+    M.map.addSource(id, { type: 'image', url: `/api/satellite/tiles/${encodeURIComponent(t.tileId)}/thumb?run=${encodeURIComponent(t.runId)}`, coordinates: t.footprint });
     M.map.addLayer({ id, type: 'raster', source: id, layout: { visibility }, paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, 'footprint-fill');
     M.images.push(id);
   });
@@ -439,14 +464,15 @@ async function showMap(city) {
   if (!M.map) await createMap();
   M.map.resize();
   statusEl.textContent = `Loading ${city} tiles…`;
-  const tiles = await api('/tiles?city=' + encodeURIComponent(city));
+  const all = await api('/tiles?city=' + encodeURIComponent(city));
+  const tiles = forModel(all);
   const firstLook = M.city !== city;
   M.city = city;
   M.map.getSource('footprints').setData(footprintFeatures(tiles));
   // Outlines refresh on every visit (review state moves); thumbnails only when the set does.
-  const key = tiles.map((t) => t.tileId).join('|');
+  const key = tiles.map((t) => t.tileId + '@' + t.runId).join('|');
   if (M.imageKey !== key) { setImageLayers(tiles); M.imageKey = key; }
-  statusEl.textContent = `${tiles.length} ${city} tile(s) · ${tiles.filter((t) => t.done).length} reviewed · ${tiles.filter((t) => !t.done && decidedCount(t)).length} in progress`;
+  statusEl.textContent = `${tiles.length} ${city} tile(s) · ${tiles.filter((t) => t.done).length} reviewed · ${tiles.filter((t) => !t.done && decidedCount(t)).length} in progress${all.length > tiles.length ? ` · ${all.length - tiles.length} from other runs hidden` : ''}`;
   if (firstLook) {
     if (saved?.city === city) M.map.jumpTo({ center: saved.center, zoom: saved.zoom });
     else if (tiles.length) {
@@ -511,11 +537,18 @@ async function showTile(tileId) {
   $('#attribution').textContent = b.attribution || '';
   $('#threshold').value = b.predictionLayer.confidenceThreshold ?? 0.35; $('#threshold-value').textContent = fmt(threshold(), 2);
   $('#done').checked = data.review.done;
+  T.center = data.center;
+  const selected = MODEL.data?.selected;
+  const otherRun = selected && b.predictionLayer.runId !== selected;
+  $('#other-run').classList.toggle('hidden', !otherRun);
+  $('#other-run-state').textContent = '';
+  $('#other-run-predict').disabled = false;
+  if (otherRun) $('#other-run-text').textContent = `${runLabel(selected)} has no bundle for this tile; showing ${runLabel(b.predictionLayer.runId)} at ${b.image.resolutionM} m/px.`;
   $('#unavailable').classList.toggle('hidden', b.predictionLayer.status === 'available');
   setTileLoading('Loading imagery…');
   const img = $('#tile-image');
   img.src = b.image.url; $('#inset-image').src = b.image.url;
-  img.decode().catch(() => {}).then(() => { if (token === T.loadToken) setTileLoading(null); });
+  img.decode().catch(() => {}).then(() => { if (token === T.loadToken) { setTileLoading(null); fitZoom(); } });
   overlay.setAttribute('viewBox', `0 0 ${b.image.width} ${b.image.height}`);
   $('#inset-overlay').setAttribute('viewBox', `0 0 ${b.image.width} ${b.image.height}`);
   applyZoom();
@@ -844,14 +877,29 @@ document.addEventListener('keydown', (e) => {
 $('#threshold').addEventListener('input', () => { $('#threshold-value').textContent = fmt(threshold(), 2); render(); });
 for (const id of ['#show-inventory', '#show-crowns', '#hide-decided']) $(id).addEventListener('change', render);
 $('#zoom').addEventListener('input', applyZoom); $('#crisp').addEventListener('change', applyZoom);
+/** Size the viewport and side panel to the window below them (full screen included). */
+function fitViewport() {
+  const vp = $('#viewport');
+  const room = Math.max(320, window.innerHeight - vp.getBoundingClientRect().top - 14);
+  vp.style.maxHeight = room + 'px'; side.style.maxHeight = room + 'px';
+  return room;
+}
 function fitZoom() {
   if (!T.bundle) return;
   const vp = $('#viewport');
-  const maxH = parseFloat(getComputedStyle(vp).maxHeight) || Infinity;
+  const maxH = fitViewport();
   const z = Math.max(0.5, Math.min(8, (vp.clientWidth - 2) / T.bundle.image.width, (maxH - 2) / T.bundle.image.height));
   $('#zoom').max = Math.max(5, Math.ceil(z)); $('#zoom').value = z; applyZoom();
 }
 $('#fit').addEventListener('click', fitZoom);
+window.addEventListener('resize', () => { if (!$('#view-tile').classList.contains('hidden') && T.bundle) fitViewport(); });
+$('#other-run-predict').addEventListener('click', async (e) => {
+  if (!T.center) return;
+  e.target.disabled = true;
+  $('#other-run-state').textContent = 'Fetching imagery and running the model (~20 s)…';
+  try { const tile = await predictAt(T.center.latitude, T.center.longitude); location.hash = '#tile/' + encodeURIComponent(tile.tileId); }
+  catch (error) { $('#other-run-state').textContent = error.message; e.target.disabled = false; }
+});
 $('#fullscreen').addEventListener('click', () => {
   const el = $('#view-tile');
   if (document.fullscreenElement) document.exitFullscreen();
@@ -895,16 +943,21 @@ $('#republish').addEventListener('click', async (e) => {
 });
 
 // ---------------------------------------------------------------- routing
-function route() {
+async function route() {
   flushNudge();
   const h = location.hash || '#tiles';
+  const view = h.startsWith('#map') ? 'map' : h === '#queue' ? 'queue' : 'tiles';
+  for (const a of document.querySelectorAll('#subnav a')) a.toggleAttribute('aria-current', a.dataset.view === view);
+  const city = h.startsWith('#city/') ? decodeURIComponent(h.slice(6)) : h.startsWith('#map/') ? decodeURIComponent(h.slice(5))
+    : h.startsWith('#tile/') ? decodeURIComponent(h.slice(6)).split('-')[0] : null;
+  await loadModels(city).catch((error) => { $('#model-note').textContent = error.message; });
   const run = h.startsWith('#tile/') ? showTile(decodeURIComponent(h.slice(6)))
     : h.startsWith('#city/') ? showTiles(decodeURIComponent(h.slice(6)))
     : h === '#map' || h.startsWith('#map/') ? showMap(h.startsWith('#map/') ? decodeURIComponent(h.slice(5)) : null)
     : h === '#queue' ? showQueue() : showCities();
   run.catch((err) => { statusEl.textContent = 'Error: ' + err.message; });
 }
-window.addEventListener('hashchange', route);
+window.addEventListener('popstate', route);
 window.addEventListener('beforeunload', (e) => { if (nudgeTimer) { flushNudge(); e.preventDefault(); } });
 route();
 </script>

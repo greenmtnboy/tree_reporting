@@ -4,20 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width">
 <title>Tree report review</title>
+<link rel="stylesheet" href="/reviewer.css">
 <style>
-body{margin:0;background:#0b0f0d;color:#d7eadb;font:15px system-ui}main{max-width:1100px;margin:auto;padding:28px}
-h1{font-size:24px}.queue{display:grid;gap:18px}.card{display:grid;grid-template-columns:minmax(260px,420px) 1fr;gap:20px;padding:18px;border:1px solid #35513d;background:#111914}
-img{width:100%;max-height:420px;object-fit:contain;background:#050806}.nophoto{display:grid;place-items:center;min-height:120px;background:#050806;color:#8cab94}
-dl{display:grid;grid-template-columns:130px 1fr;gap:8px;margin:0}dt{color:#8cab94}dd{margin:0;overflow-wrap:anywhere}
-.kind{display:inline-block;padding:2px 8px;border:1px solid #6da87b;font-size:12px;letter-spacing:.06em;text-transform:uppercase}.kind.missing{border-color:#a86d6d;color:#f0b4b4}
-.changed{color:#a7e3b2}.was{color:#8cab94;text-decoration:line-through;margin-right:6px}
-.actions{display:flex;gap:10px;margin-top:18px}button{border:1px solid #6da87b;background:#1d3624;color:#e7f5ea;padding:9px 14px;cursor:pointer}
-button.reject{border-color:#a86d6d;background:#361d1d}@media(max-width:720px){.card{grid-template-columns:1fr}}
-nav{margin-bottom:14px}nav a{color:#8cab94;margin-right:14px}a{color:#a7e3b2}
+.nophoto{display:grid;place-items:center;min-height:120px;background:#050806;color:var(--muted);border-radius:4px}
+.kind{display:inline-block;padding:2px 8px;border:1px solid var(--accent);border-radius:999px;font-size:12px;letter-spacing:.06em;text-transform:uppercase}.kind.missing{border-color:#a86d6d;color:#f0b4b4}
+.changed{color:var(--link)}.was{color:var(--muted);text-decoration:line-through;margin-right:6px}
 </style>
 </head>
-<body><main>
-<nav><a href="/">Photo submissions</a><a href="/modifications">Tree reports</a><a href="/photos">Tree photos</a><a href="/satellite">Satellite tiles</a></nav>
+<body><header class="topbar"><a class="brand" href="/">Tree reviewer</a><nav><a href="/">Photo submissions</a><a href="/modifications" aria-current="page">Tree reports</a><a href="/photos">Tree photos</a><a href="/satellite">Satellite</a></nav></header>
+<main class="page">
 <h1>Pending tree reports</h1>
 <p>Reports against trees already on the map: a tree that is gone, or a corrected position, species or trunk diameter. Approving publishes the change to <code>community/tree_modifications.ndjson</code>; the user, notes and photo stay private.</p>
 <p id="status">Loading…</p>

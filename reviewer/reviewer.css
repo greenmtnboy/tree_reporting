@@ -1,0 +1,113 @@
+/*
+ * Shared styles for every reviewer page (served at /reviewer.css): the colour
+ * tokens, the top bar, buttons, form controls, tables and review cards.  A
+ * page keeps only what is its own in an inline <style>.
+ */
+:root {
+  --bg: #0b0f0d;
+  --panel: #111914;
+  --panel-2: #16211a;
+  --field: #0b100d;
+  --line: #2c4433;
+  --line-strong: #3f6149;
+  --text: #d7eadb;
+  --muted: #8cab94;
+  --accent: #6da87b;
+  --accent-strong: #8fd09f;
+  --accent-bg: #1d3624;
+  --accent-bg-hover: #26462f;
+  --warn: #d9a441;
+  --warn-bg: #3a2e14;
+  --bad: #c96b6b;
+  --bad-bg: #361d1d;
+  --link: #a7e3b2;
+  --radius: 6px;
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent-strong);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--link); text-underline-offset: 2px; }
+a:hover { color: var(--accent-strong); }
+code, kbd { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+code { font-size: 12px; background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 11px; color: var(--muted); background: var(--panel); }
+h1 { font-size: 22px; margin: 0 0 6px; font-weight: 600; }
+h2 { font-size: 16px; margin: 0 0 8px; font-weight: 600; }
+.hidden { display: none !important; }
+.muted { color: var(--muted); }
+
+/* ---- top bar: one on every page, the current page marked aria-current ---- */
+.topbar { display: flex; gap: 6px 20px; align-items: center; flex-wrap: wrap; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
+.topbar .brand { font-weight: 600; font-size: 15px; color: var(--text); text-decoration: none; margin-right: 6px; }
+.topbar nav { display: flex; gap: 2px; flex-wrap: wrap; }
+.topbar nav a { color: var(--muted); text-decoration: none; padding: 5px 10px; border-radius: var(--radius); }
+.topbar nav a:hover { color: var(--text); background: var(--panel-2); }
+.topbar nav a[aria-current="page"] { color: var(--text); background: var(--accent-bg); }
+.topbar nav.subnav { padding-left: 14px; border-left: 1px solid var(--line); }
+.topbar .status { margin-left: auto; color: var(--muted); font-size: 13px; }
+main.page { max-width: 1100px; margin: 0 auto; padding: 24px 20px 40px; }
+main.page > p { color: var(--muted); max-width: 80ch; }
+
+/* ---- buttons ---- */
+button, .button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 32px; padding: 5px 14px; border: 1px solid var(--accent); border-radius: var(--radius);
+  background: var(--accent-bg); color: #e7f5ea; font: inherit; font-size: 13px; font-weight: 500; line-height: 1.2;
+  cursor: pointer; text-decoration: none; white-space: nowrap;
+  transition: background-color .12s, border-color .12s, color .12s, transform .06s;
+}
+button:hover, .button:hover { background: var(--accent-bg-hover); border-color: var(--accent-strong); color: #fff; }
+button:active, .button:active { transform: translateY(1px); }
+button:focus-visible, .button:focus-visible, a:focus-visible, summary:focus-visible { outline: none; box-shadow: var(--focus); }
+button:disabled, button:disabled:hover { opacity: .45; cursor: default; transform: none; background: var(--accent-bg); border-color: var(--accent); }
+button.reject, button.danger { border-color: #a86d6d; background: var(--bad-bg); }
+button.reject:hover, button.danger:hover { border-color: var(--bad); background: #4a2525; }
+button.warn { border-color: #b08a3a; background: var(--warn-bg); }
+button.warn:hover { border-color: var(--warn); background: #4a3b19; }
+button.ghost { background: transparent; border-color: var(--line-strong); color: var(--text); }
+button.ghost:hover { background: var(--panel-2); border-color: var(--accent); }
+button.small { min-height: 26px; padding: 2px 10px; font-size: 12px; }
+
+/* ---- form controls ---- */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea {
+  background: var(--field); color: var(--text); border: 1px solid var(--line-strong); border-radius: var(--radius);
+  padding: 5px 8px; font: inherit; font-size: 13px; min-height: 32px;
+}
+textarea { min-height: 56px; resize: vertical; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; border-color: var(--accent-strong); box-shadow: 0 0 0 2px rgba(143, 208, 159, .25); }
+input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: var(--accent); }
+input[type="checkbox"], input[type="radio"] { width: 15px; height: 15px; margin: 0; }
+select { cursor: pointer; }
+
+/* A row of controls; .group clusters related ones in a bordered pill. */
+.toolbar { display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.toolbar label { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); cursor: pointer; }
+.group { display: inline-flex; gap: 12px; align-items: center; flex-wrap: wrap; min-height: 34px; padding: 3px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.group.plain { border-color: transparent; background: transparent; padding: 0; }
+
+/* ---- panels, banners, pills ---- */
+.panel { border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); padding: 12px 14px; }
+.banner { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border: 1px solid var(--warn); background: #2a2210; border-radius: var(--radius); margin-bottom: 12px; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line-strong); margin-right: 4px; color: var(--muted); }
+details > summary { cursor: pointer; color: var(--link); }
+
+/* ---- tables ---- */
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+tbody tr:hover { background: rgba(255, 255, 255, .03); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.nowrap { white-space: nowrap; }
+
+/* ---- review cards (photo submissions, tree reports, tree photos) ---- */
+.queue { display: grid; gap: 16px; }
+.card { display: grid; grid-template-columns: minmax(260px, 420px) 1fr; gap: 20px; padding: 16px; border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); }
+.card img { width: 100%; max-height: 420px; object-fit: contain; background: #050806; border-radius: 4px; }
+.card dl { display: grid; grid-template-columns: 130px 1fr; gap: 6px 10px; margin: 0; }
+.card dt { color: var(--muted); }
+.card dd { margin: 0; overflow-wrap: anywhere; }
+.actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+.empty { color: var(--muted); }
+@media (max-width: 720px) { .card { grid-template-columns: 1fr; } .topbar .status { margin-left: 0; width: 100%; } }

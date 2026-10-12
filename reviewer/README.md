@@ -132,12 +132,17 @@ reviewer at the parent. The page opens on the cities with tiles
 (`/satellite#tiles`). `#city/USNYC` lists one city's tiles grouped by set, and
 `#tile/<tileId>` opens a tile; all three work as links.
 
-**Model** at the top of the tile list picks a training run from
-`imagery_model/artifacts/runs` (complete runs, newest first; start it with
-`SATELLITE_RUN`). A tile id names a place, imagery and chip, not a run, so
-two runs exported over the same chips give two sets holding the same tile
-ids: the selected run's bundle is the one a tile opens, and the newest file
-otherwise. Decisions and the "reviewed" mark belong to the run they were made
+**Model**, above every satellite view, picks a training run from
+`imagery_model/artifacts/runs` (complete runs, newest first). The run lives
+in the page URL, `/satellite?run=<runId>#city/USBOS`, so a link opens the
+same model and two tabs can review two runs; a URL without one gets
+`SATELLITE_RUN`, else the newest complete run at startup. A tile id names a
+place, imagery and chip, not a run, so two runs exported over the same chips
+give two sets holding the same tile ids: every tile request carries the run,
+and that run's bundle is the one a tile opens (the newest file otherwise, with
+a banner offering to predict the spot with the selected run). **Only this
+model's tiles** (on by default) hides the other runs' tiles from the list and
+the map. Decisions and the "reviewed" mark belong to the run they were made
 on (a v2 accept never attaches to a v12 detection that shares its cell id; it
 draws as a reviewed detection from elsewhere instead). **Export a cohort**
 under the picker runs `tile_bundle_export` on one of the selected run's
