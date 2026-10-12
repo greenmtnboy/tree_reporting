@@ -161,5 +161,9 @@ def test_an_unreported_tree_is_untouched(published):
     assert (row["species"], row["diameter_at_breast_height"], row["latitude"]) == ("Pinus radiata", 12.0, P4[0])
 
 
-def test_the_stored_gate_column_is_always_false_on_published_rows(published):
-    assert all(row["reported_missing"] is False for row in published.values())
+def test_the_published_schema_is_unchanged(published):
+    """A tree reported gone is dropped through cluster_id, not a new column:
+    a target's `where` runs on every read, so a new column in it would fail
+    every read of a parquet built before it existed."""
+    assert "reported_missing" not in next(iter(published.values()))
+    assert all(row["tree_id"] == row["cluster_id"] for row in published.values())

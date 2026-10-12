@@ -243,8 +243,7 @@ across the cluster by a value function (community first for photo and
 person, most specific species name), and the survivor is the row whose
 `tree_id` equals its cluster id. `merged_sources` and `merged_tree_ids`
 record what it absorbed. The published target carries
-`where tree_id = cluster_id and reported_missing = false`, so a parquet holds
-exactly one row per tree, and none for a tree reported gone.
+`where tree_id = cluster_id`, so a parquet holds exactly one row per tree.
 
 - The cell size is per city in `DEDUP_CELL_METRES`, rendered into the model
   by `tools/dedup_cells.py --write`. Calibrate with
@@ -292,6 +291,10 @@ cluster survivor, through `@corrected_dbh`, `@corrected_latitude` and
 `@corrected_longitude` (and `merged_species`), which a city that merges its own
 value calls too (Boston's imputed DBH, the Overture-placed point). A reported
 position is final and not snapped again (`position_adjustment = 'reported'`).
+A tree reported gone gets its own marked cluster id, so the existing prune
+drops it and everything its cluster absorbed. That way there is no new stored
+column: a target's `where` runs on every read, and a column it named would fail
+every read of a parquet built before it existed.
 `community_update_time.py` folds the modifications manifest into each city's
 community column, so an approval marks that city stale.
 `tests/test_tree_modifications_applied.py` runs reports through the SF build's

@@ -19,10 +19,9 @@
 #   merge {lc}_source_label into source_label;
 #   ... every raw source maps `raw_species`, `raw_latitude`, ... (not the
 #       canonical concepts), and the published target maps `species`,
-#       `latitude`, ... plus `merged_sources`, `merged_tree_ids` and
-#       `reported_missing`, and carries
-#       `where tree_id = cluster_id and reported_missing = false` to drop the
-#       absorbed rows and the trees an approved report says are gone.
+#       `latitude`, ... plus `merged_sources` and `merged_tree_ids`, and
+#       carries `where tree_id = cluster_id` to drop the absorbed rows (and,
+#       through cluster_id, the trees an approved report says are gone).
 #   merge merged_dbh into diameter_at_breast_height;   # or @corrected_dbh(<its own dbh>)
 #   merge merged_latitude into latitude;               # or import ../tree_position.preql,
 #   merge merged_longitude into longitude;             #   which merges the corrected point
@@ -229,7 +228,7 @@ auto self_if_municipal <- @municipal_anchor(row_key);
 auto self_if_person <- @person_anchor(row_key);
 auto self_if_not_osm <- @any_anchor(row_key);
 
-auto cluster_id <- coalesce(
+auto cluster_anchor <- coalesce(
     self_if_municipal,
     municipal_anchor_a, municipal_anchor_b, municipal_anchor_c, municipal_anchor_d,
     self_if_person,
@@ -276,9 +275,17 @@ file `./tree_modification_info.py`;
 
 merge modified_tree_id into ~tree_id;
 
-# Stored on each city's target, always false there, because a datasource's
-# `where` may only read the datasource's own columns (see "The prune").
-auto reported_missing <- coalesce(modified_missing, false);
+# A tree an approved report says is gone leaves its cluster: its cluster id
+# becomes its own id, marked, so the prune every target already carries
+# (`tree_id = cluster_id`) drops it -- and drops every row its cluster absorbed,
+# which still point at its tree_id.  Encoding it in cluster_id rather than a new
+# stored column keeps the published schema as it is: a target's `where` is
+# applied whenever the parquet is read, so a new column in it fails every read of
+# a parquet built before the column existed.
+auto cluster_id <- case
+    when coalesce(modified_missing, false) then concat(tree_id, '#reported-gone')
+    else cluster_anchor
+end;
 
 # --- Attribute merge over the cluster ---------------------------------------
 #
@@ -371,10 +378,10 @@ merge merged_crown_width_m into crown_width_m;
 # The prune
 # ---------------------------------------------------------------------------
 #
-# Each city's published target carries
-# `where tree_id = cluster_id and reported_missing = false`, so the parquet
-# holds exactly one row per tree, and none for a tree an approved report says
-# is gone (a later report that gives it values back restores it).  Absorbed rows are not published, and
+# Each city's published target carries `where tree_id = cluster_id`, so the
+# parquet holds exactly one row per tree, and none for a tree an approved
+# report says is gone (its cluster id no longer equals its tree id; a later
+# report that gives it values back restores it).  Absorbed rows are not published, and
 # no client-side filter is needed to hide them; `merged_tree_ids` is where an
 # absorbed id survives, so a link to one can still be resolved to its survivor.
 #
