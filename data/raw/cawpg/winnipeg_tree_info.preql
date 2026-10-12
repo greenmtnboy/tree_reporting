@@ -131,5 +131,5 @@ partial datasource winnipeg_tree_info (
 grain (tree_id)
 complete where city = 'CAWPG'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cawpg_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cawpg_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id
+where tree_id = cluster_id and reported_missing = false
 freshness by cawpg_published_data_updated_through;

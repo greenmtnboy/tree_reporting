@@ -17,6 +17,7 @@ invocation assume:
 | `species_audit.py` | finds published names within two edits of each other and asks POWO to adjudicate each pair. `--map` emits entries for `SPECIES_SYNONYMS` / `SPECIES_MISSPELLINGS`. Never curate those by eye. |
 | `portal_cadence.py` | records every freshness probe's watermark in `portal_cadence.json` and derives each portal's real publishing interval, compared against the cron in `trilogy.toml`. |
 | `crown_allometry_fit.py` | refits the genus-level crown-width model on Tallo and rewrites `crown_width_coefficients.csv` plus the `crown_fallbacks` block in `tree_predictions.preql`. |
+| `published_columns.py` | lists the cities whose published tree parquet does not carry a column yet. A target may gate on a new stored column only when this reports all of them (a target's `where` runs on every read). |
 | `dbh_age_fit.py` | the same for the age-to-diameter fallback, fitted on the rollup's own dated, measured trees. |
 
 The enrichment table's two hand tools are not here -- they live beside the

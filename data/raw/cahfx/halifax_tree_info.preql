@@ -141,5 +141,5 @@ partial datasource halifax_tree_info (
 grain (tree_id)
 complete where city = 'CAHFX'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cahfx_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cahfx_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id
+where tree_id = cluster_id and reported_missing = false
 freshness by cahfx_published_data_updated_through;

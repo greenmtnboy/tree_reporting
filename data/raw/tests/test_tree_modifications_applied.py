@@ -162,7 +162,6 @@ def test_an_unreported_tree_is_untouched(published):
 
 
 def test_the_stored_column_is_false_on_every_published_row(published):
-    """The target stores reported_missing (for the follow-up gate) but drops
-    gone trees through cluster_id for now, so no published row has it true."""
+    """The gate leaves no published row with reported_missing true."""
     assert all(row["reported_missing"] is False for row in published.values())
     assert all(row["tree_id"] == row["cluster_id"] for row in published.values())
