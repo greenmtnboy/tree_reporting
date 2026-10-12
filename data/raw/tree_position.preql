@@ -104,17 +104,22 @@ auto raw_placed_longitude <- coalesce(snap_longitude, raw_longitude);
 # What the published parquet carries beside latitude and longitude.
 property tree_id.source_latitude float; # the survivor's own position before correction
 property tree_id.source_longitude float;
-property tree_id.position_adjustment string; # 'building' or 'road' when the point was moved; null when it was not
+property tree_id.position_adjustment string; # 'building' or 'road' when the point was moved off one, 'reported' when an approved tree report moved it; null when it was not moved
 property tree_id.position_shift_m float; # about how far it moved, in metres (from the cell's centre, so within a cell of the truth)
 
-auto merged_placed_latitude <- @by_source(raw_placed_latitude);
-auto merged_placed_longitude <- @by_source(raw_placed_longitude);
-auto merged_position_adjustment <- @by_source(snap_reason);
-auto merged_position_shift_m <- @by_source(snap_distance_m);
+# A position an approved tree report gave (../tree_dedup.preql, "Approved
+# corrections") is where someone stood and saw the tree: it is final, and is
+# not snapped again.  The source's own point stays in source_latitude.
+auto merged_placed_latitude <- @corrected_latitude(raw_placed_latitude);
+auto merged_placed_longitude <- @corrected_longitude(raw_placed_longitude);
+auto merged_position_adjustment <- case when modified_latitude is not null then 'reported' else @by_source(snap_reason) end;
+auto merged_position_shift_m <- case when modified_latitude is not null then null else @by_source(snap_distance_m) end;
+auto merged_source_latitude <- @by_source(raw_latitude);
+auto merged_source_longitude <- @by_source(raw_longitude);
 
 merge merged_placed_latitude into latitude;
 merge merged_placed_longitude into longitude;
-merge merged_latitude into source_latitude;
-merge merged_longitude into source_longitude;
+merge merged_source_latitude into source_latitude;
+merge merged_source_longitude into source_longitude;
 merge merged_position_adjustment into position_adjustment;
 merge merged_position_shift_m into position_shift_m;

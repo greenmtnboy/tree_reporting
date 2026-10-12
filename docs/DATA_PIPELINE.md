@@ -243,7 +243,8 @@ across the cluster by a value function (community first for photo and
 person, most specific species name), and the survivor is the row whose
 `tree_id` equals its cluster id. `merged_sources` and `merged_tree_ids`
 record what it absorbed. The published target carries
-`where tree_id = cluster_id`, so a parquet holds exactly one row per tree.
+`where tree_id = cluster_id and reported_missing = false`, so a parquet holds
+exactly one row per tree, and none for a tree reported gone.
 
 - The cell size is per city in `DEDUP_CELL_METRES`, rendered into the model
   by `tools/dedup_cells.py --write`. Calibrate with
@@ -272,6 +273,29 @@ record what it absorbed. The published target carries
 - A city that imports the file but skips the `where` gate still builds,
   with counts that are simply high; `test_every_city_prunes_absorbed_rows`
   catches it.
+
+### Approved tree reports
+
+A tree report (`reviewer/modifications.ts`) corrects a tree already on the
+map: its species, DBH or position, or that it is gone. The reviewer publishes
+approved ones to `community/tree_modifications.ndjson`;
+`raw/tree_modification_info.py` resolves them to one row per tree, the latest
+report winning field by field, and the tree reported gone only when its latest
+report says so (a later update restores it). A proposed species goes through
+`sanitize_species` like every other source.
+
+`tree_dedup.preql` declares the datasource once and merges its key
+**partially** into `tree_id` (`merge modified_tree_id into ~tree_id`): a LEFT
+join, so a tree with no report keeps its row and a report for another city's
+tree adds none. The correction lands on the row the reporter saw, the
+cluster survivor, through `@corrected_dbh`, `@corrected_latitude` and
+`@corrected_longitude` (and `merged_species`), which a city that merges its own
+value calls too (Boston's imputed DBH, the Overture-placed point). A reported
+position is final and not snapped again (`position_adjustment = 'reported'`).
+`community_update_time.py` folds the modifications manifest into each city's
+community column, so an approval marks that city stale.
+`tests/test_tree_modifications_applied.py` runs reports through the SF build's
+own SQL.
 
 ## Rebuilding
 

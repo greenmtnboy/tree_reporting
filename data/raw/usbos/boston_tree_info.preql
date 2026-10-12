@@ -250,7 +250,9 @@ file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbos_
 # a by-cluster aggregate with a by-(city, species) aggregate in one expression
 # is the keyless-join planner bug again (upstream_repro/keyless_join_cell_aggregate).
 auto imputed_dbh <- coalesce(cleaned_dbh, avg(cleaned_dbh) by city, raw_species);
-auto processed_dbh <- @by_source(imputed_dbh);
+# The shared helper: the cluster merge of the imputed value, with an approved
+# tree report's DBH on top (../tree_dedup.preql).
+auto processed_dbh <- @corrected_dbh(imputed_dbh);
 merge processed_dbh into diameter_at_breast_height;
 # Position: the survivor's own point.  A city with an Overture lookup imports
 # ../tree_position.preql instead, which merges the corrected point.
@@ -354,12 +356,13 @@ partial datasource boston_tree_info (
     cluster_id,
     merged_sources,
     ?merged_tree_ids,
+    reported_missing,
     usbos_border_duplicate,
     usbos_published_data_updated_through
 )
 grain (tree_id)
 complete where city = 'USBOS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id and usbos_border_duplicate = false
+where tree_id = cluster_id and usbos_border_duplicate = false and reported_missing = false
 freshness by usbos_published_data_updated_through;
 
