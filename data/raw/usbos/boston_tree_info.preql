@@ -258,12 +258,75 @@ merge merged_latitude into latitude;
 merge merged_longitude into longitude;
 
 
+# --- Border trees between the metro's inventories ---------------------------
+#
+# The shared merge makes every municipal row its own cluster, so a tree that
+# two neighbouring cities both inventory would publish twice.  This metro is
+# the one model where that happens: Somerville meets Cambridge along most of
+# its southern edge, and Brookline meets Boston.  Measured against the
+# published rows, pairs under 1m agree on the genus ~90% of the time and
+# pairs at 1-2m ~85%; at 2-3m agreement is 0%, the next tree along the kerb.
+#
+# So a municipal row is a border duplicate when a row of an EARLIER-wired
+# inventory names the same genus and shares a 2m cell with it in any of four
+# half-cell-staggered grids (the shared merge's construction: a guaranteed
+# match within 1m, a possible one out to the 2.8m cell diagonal).  Earlier
+# wins because its ids were published first and links to them must survive.
+# Two rows of ONE inventory never mark each other: the comparison is on rank.
+#
+# Only this model pays for it: four aggregates over the metro's rows.  It
+# would be a few lines in ../tree_dedup.preql given a radius join and a
+# per-city cluster override; see docs/BORDER_DEDUP.md.
+auto usbos_border_rank <- case
+    when usbos_source = 'CITY_OF_BOSTON' then 1
+    when usbos_source = 'ARNOLD_ARBORETUM' then 2
+    when usbos_source = 'CAMBRIDGE' then 3
+    when usbos_source = 'BROOKLINE' then 4
+    when usbos_source = 'SOMERVILLE' then 5
+    else null
+end;
+auto usbos_raw_genus <- case
+    when strpos(raw_species, ' ') > 0 then substring(raw_species, 1, strpos(raw_species, ' ') - 1)
+    else raw_species
+end;
+
+# 2m at 42.36N: 2 / 111320 degrees of latitude, and that over cos(42.36)
+# for longitude.  The indices stay under 3e6, inside the 1e7 multiplier.
+def usbos_border_cell(dx, dy) ->
+    cast(floor(raw_longitude / 0.00002431 + dx) as bigint) * 10000000
+    + cast(floor(raw_latitude / 0.00001797 + dy) as bigint);
+def usbos_first_rank(cell) -> min(usbos_border_rank) by cell, usbos_raw_genus;
+
+auto usbos_border_cell_a <- @usbos_border_cell(0, 0);
+auto usbos_border_cell_b <- @usbos_border_cell(0.5, 0);
+auto usbos_border_cell_c <- @usbos_border_cell(0, 0.5);
+auto usbos_border_cell_d <- @usbos_border_cell(0.5, 0.5);
+
+# The row's own rank as a self-aggregate on `row_key`, the shape the shared
+# merge uses: comparing a cell aggregate with a row-level case directly is the
+# keyless-join planner bug (upstream_repro/keyless_join_cell_aggregate).
+auto usbos_own_border_rank <- min(usbos_border_rank) by row_key;
+# DuckDB's least() skips nulls, which is what this wants: a row with no
+# partner in a grid compares against the others.
+auto usbos_border_duplicate <- coalesce(
+    usbos_own_border_rank > least(
+        @usbos_first_rank(usbos_border_cell_a),
+        @usbos_first_rank(usbos_border_cell_b),
+        @usbos_first_rank(usbos_border_cell_c),
+        @usbos_first_rank(usbos_border_cell_d)
+    ),
+    false
+);
+
+
 # --- Merged materialized parquet (all Boston sources) ---
 
 # The `where` below is the prune: this target publishes only the row that owns
-# its cluster, so the parquet holds exactly one tree per row.  It needs
-# pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
-# ../tree_dedup.preql.
+# its cluster, so the parquet holds exactly one tree per row, and drops the
+# border duplicates above.  The prune alone needs pytrilogy 0.3.348+ and fails
+# quietly on older planners (see "The prune" in ../tree_dedup.preql); the
+# border gate needs 0.3.378+.  `usbos_border_duplicate` is stored (always false)
+# because a datasource's `where` may only read the datasource's own columns.
 partial datasource boston_tree_info (
     tree_id,
     city,
@@ -280,11 +343,12 @@ partial datasource boston_tree_info (
     cluster_id,
     merged_sources,
     ?merged_tree_ids,
+    usbos_border_duplicate,
     usbos_published_data_updated_through
 )
 grain (tree_id)
 complete where city = 'USBOS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id
+where tree_id = cluster_id and usbos_border_duplicate = false
 freshness by usbos_published_data_updated_through;
 

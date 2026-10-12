@@ -227,7 +227,8 @@ def test_every_city_prunes_absorbed_rows(code: str):
     """
     text = city_models()[code].read_text(encoding="utf-8")
     assert "import ..tree_dedup;" in text
-    assert '\nwhere tree_id = cluster_id\n' in text, (
+    # A city may add its own gates after the prune (Boston's border dedup).
+    assert re.search(r"\nwhere tree_id = cluster_id(\n| and )", text), (
         f"{code}'s published target has no `where tree_id = cluster_id`, so it "
         "publishes the rows its clusters absorbed"
     )

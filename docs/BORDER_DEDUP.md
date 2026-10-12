@@ -36,8 +36,13 @@ Brookline's fetched Boston, and both neighbours grew a public
 but it made each ingest aware of its neighbours and left the precedence order
 implicit in which script imported which. Rejected for that.
 
-The block goes after the position merges, with the target's prune extended to
-`where tree_id = cluster_id and usbos_border_duplicate = false`:
+The block goes after the position merges. The target stores
+`usbos_border_duplicate` as a column and its prune becomes
+`where tree_id = cluster_id and usbos_border_duplicate = false`. The column is
+always `false` in the published parquet; it is there because a datasource's
+`where` filters the rows read out of that datasource, so it may only read what
+the datasource stores (pytrilogy 0.3.378 enforces this). It is not a place for
+the planner to derive a cross-row rule.
 
 ```
 auto usbos_border_rank <- case
@@ -95,33 +100,28 @@ The row's own rank is a self-aggregate on `row_key` for the same reason the
 shared merge uses one: comparing a cell aggregate with a row-level `case`
 directly is the keyless-join bug (`upstream_repro/keyless_join_cell_aggregate`).
 
-## Why it is not merged
+## Pytrilogy history
 
-It does not plan on pytrilogy 0.3.374, and AGENTS.md is explicit about not
-working around a planner bug in a model. Three failures, reproduced in
-`upstream_repro/adhoc_select_drops_columns/` and all present back to 0.3.348:
+It did not plan on pytrilogy 0.3.348 through 0.3.374. Three failures, reproduced
+in `upstream_repro/adhoc_select_drops_columns/`:
 
-1. **An ad-hoc select silently drops a `case` over a merged-from concept**,
+1. **An ad-hoc select silently dropped a `case` over a merged-from concept**,
    and any aggregate in the same select with it.
-   `select usbos_source, source_class, usbos_border_duplicate, count(tree_id)`
-   returns one column and no error. Without the `merge` every shape survives,
-   and plain functions over the same concept survive. This is the one that
-   blocks verifying anything ad hoc: even the shared merge's `source_class` and
-   `cluster_id` cannot be inspected on any city. Standalone 40-line repro.
-2. **The prune and a second aggregate-derived gate together** fail to render
-   ("Missing source reference to local.source_label"). Each alone plans.
+2. **The prune and a second aggregate-derived gate together** failed to render
+   ("Missing source reference to local.source_label").
 3. **An aggregate grouped by a concept derived from a partial-union property**
-   (`count(tree_id) by usbos_raw_genus`, the genus being a `substring` of
-   `raw_species`) is a keyless join. Grouped by `raw_species` itself it plans.
+   (`count(tree_id) by usbos_raw_genus`) was a keyless join.
 
-Until those land the ~100 border trees publish twice. Somerville's trees are
-otherwise new to the map; before this they were only in OSM.
+0.3.377 fixed all three but computed every city's cluster aggregates over the
+post-prune rows and joined them back on their value, dropping trees whose
+merge changed a value (`upstream_repro/cluster_aggregate_after_prune_0377/`).
+0.3.378 fixes that, so the model needs 0.3.378 or later.
 
 ## What would make this easy from the Trilogy side
 
 In the order each would pay off:
 
-1. **Fix the three planner bugs above.** With those, the block lands as is.
+1. **Fix the three planner bugs above.** Done in 0.3.377/0.3.378; the block landed.
 2. **A proximity join, or a neighbourhood aggregate.** Everything about the
    staggered grids (four copies of every aggregate, a cell table per city, a
    half-cell guarantee instead of a radius) exists because joins are equality

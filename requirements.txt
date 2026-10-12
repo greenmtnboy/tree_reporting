@@ -19,7 +19,11 @@
 # `snap_cell` from each row's coordinates and joins the Overture lookup on it;
 # on 0.3.359 and earlier that raised "Could not resolve connections" against
 # the municipal/community/OSM partitions every city model is built from.
-pytrilogy>=0.3.360
+#
+# Raised to 0.3.378: 0.3.377 computed the shared merge's cluster aggregates
+# over the pruned rows and silently dropped trees, and usbos's border gate
+# needs the planner fixes in 0.3.377/0.3.378. See docs/BORDER_DEDUP.md.
+pytrilogy>=0.3.378
 # DuckDB 1.5.3+ is the first 1.5.x with the `nanoarrow` community extension
 # published for linux_amd64 (1.5.0 ships `arrow` but not `nanoarrow`, so
 # `LOAD arrow` fails with "Nested load of nanoarrow failed" on the runner).
