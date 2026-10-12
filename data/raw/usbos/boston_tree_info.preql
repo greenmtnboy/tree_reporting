@@ -292,10 +292,21 @@ end;
 
 # 2m at 42.36N: 2 / 111320 degrees of latitude, and that over cos(42.36)
 # for longitude.  The indices stay under 3e6, inside the 1e7 multiplier.
-def usbos_border_cell(dx, dy) ->
-    cast(floor(raw_longitude / 0.00002431 + dx) as bigint) * 10000000
-    + cast(floor(raw_latitude / 0.00001797 + dy) as bigint);
-def usbos_first_rank(cell) -> min(usbos_border_rank) by cell, usbos_raw_genus;
+#
+# The genus is part of the cell key, not a second grouping column: four
+# aggregates each joined back on (cell, genus) let DuckDB infer their genus
+# columns equal and join them to each other on genus alone -- a per-genus
+# cross product that spilled the cloud build's whole disk.  A row with no
+# genus keys on its own tree_id, so it never matches another row.
+def usbos_border_cell(dx, dy) -> concat(
+    cast(
+        cast(floor(raw_longitude / 0.00002431 + dx) as bigint) * 10000000
+        + cast(floor(raw_latitude / 0.00001797 + dy) as bigint)
+    as string),
+    '|',
+    coalesce(usbos_raw_genus, concat('#', tree_id))
+);
+def usbos_first_rank(cell) -> min(usbos_border_rank) by cell;
 
 auto usbos_border_cell_a <- @usbos_border_cell(0, 0);
 auto usbos_border_cell_b <- @usbos_border_cell(0.5, 0);
