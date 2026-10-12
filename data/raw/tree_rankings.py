@@ -34,7 +34,11 @@ def build_rankings(con: duckdb.DuckDBPyConnection) -> pa.Table:
                      THEN {crown} END AS crown
             FROM trees
         ), counted AS (
-            SELECT *, count(*) FILTER (WHERE identified) OVER (PARTITION BY city) AS identified_city_count,
+            -- Not `count(*) FILTER (WHERE identified) OVER (PARTITION BY city)`:
+            -- DuckDB evaluates a FILTERed whole-partition window per row, which is
+            -- quadratic in city size and ran past the job's 30-minute timeout at
+            -- 11.8M trees. The unfiltered sum takes the once-per-partition path.
+            SELECT *, sum(identified::BIGINT) OVER (PARTITION BY city)::BIGINT AS identified_city_count,
                 CASE WHEN identified THEN count(*) OVER (PARTITION BY city, species) END AS species_city_count
             FROM clean
         )
