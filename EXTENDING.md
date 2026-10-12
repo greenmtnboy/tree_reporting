@@ -41,7 +41,7 @@ everything in memory, so a failure leaves the tree untouched.
 Then the checks:
 
 ```bash
-cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.360" --with duckdb --with requests python -m pytest tests -q
+cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.378" --with duckdb --with requests python -m pytest tests -q
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql
 cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql
 ```
@@ -279,7 +279,7 @@ Refresh before you deploy either way.
 ## After adding a city
 
 ```bash
-cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.360" --with duckdb --with requests python -m pytest tests -q
+cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.378" --with duckdb --with requests python -m pytest tests -q
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql        # one asset
 cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql     # one asset
 cd data/raw && uv run tree_enrichment_probe.py                                # lists species needing enrichment
@@ -288,13 +288,16 @@ cd data/raw && uv run tree_enrichment_probe.py                                # 
 To build the city in the cloud before the PR merges, push it as a throwaway
 job rather than syncing the branch. The worker executes the bundle as a
 directory, so exclude every other city and every root model the city does
-not import:
+not import. Keep `raw/enrichment/` apart from its tests: `shared/ingest.py`
+imports `enrichment._common_name_style`, and without it an ingest fails with
+`No module named 'enrichment'`. On Windows write `--exclude=pattern`, since
+click expands a bare glob into file names:
 
 ```bash
 trilogy cloud --org trilogy-data jobs push --source data --config adhoc.toml \
     --name adhoc-city-{code} --operation refresh --memory-mb 2048 \
     --secret-env GOOGLE_HMAC_KEY --secret-env GOOGLE_HMAC_SECRET \
-    --exclude "raw/tests/*" --exclude "raw/enrichment/*" --exclude "raw/tools/*" \
+    --exclude "raw/tests/*" --exclude "raw/enrichment/tests/*" --exclude "raw/tools/*" \
     --exclude "osm_staging/*" --exclude "landmark_staging/*" \
     --exclude "raw/{every other city}/*" \
     --exclude raw/tree_info.preql --exclude raw/landmark_info.preql
