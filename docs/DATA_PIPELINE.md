@@ -56,6 +56,7 @@ the core, daily, reading only published parquets
   refresh-ecoregions    raw/ecoregion_info.preql
   refresh-enrichment    raw/tree_enrichment.preql       -> tree_enrichment_v{n}.parquet
   refresh-predictions   raw/tree_predictions.preql      -> tree_predictions_v{n}.parquet
+  refresh-predictions-city  raw/tree_predictions_city.preql -> {code}_tree_predictions_v{n}.parquet
   validate-core         raw/core_validate.preql
   publish-website       website_homepage.preql          -> arborary/website/v1/homepage.json
   publish-landmarks     raw/full_landmark_publish.preql (weekly, Sun 05:00)
@@ -293,7 +294,14 @@ placeholders for height and age. Each prediction records the model level
 (genus, family, division, global) and sample size. The model is not
 urban-calibrated and not density-adjusted; both are left to curation. The
 map prepares a city-scoped projection before marking the city ready, so the
-first desktop sprite batch already has its sizing data. Recorded widths take
+first desktop sprite batch already has its sizing data. It reads the city's
+slice, `{code}_tree_predictions_v{n}.parquet` (`raw/tree_predictions_city.preql`,
+three columns, about 1 MB for San Francisco), and falls back to the full file
+when a slice is missing. DuckDB-wasm downloads a whole parquet on first read,
+and the full file is ~146 MB, so before the slices every first map load
+waited on it, landmarks and charts included. The slices are filtered copies
+of the published file read as a root, ordered after `refresh-predictions` by
+a `[dependencies]` edge; `new_city.py` appends one per city. Recorded widths take
 precedence. Predictions stay outside the frontend Trilogy model bundle; a
 failed read consistently uses recorded-only sizing for the worker session.
 See `MAP_CROWNS.md` for rendering and limits.
