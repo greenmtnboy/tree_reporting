@@ -143,6 +143,21 @@ export interface ExportRequest {
   set: string
   threshold?: number
   minScore?: number
+  /** Only these chips of the cohort; absent, every chip with predictions. */
+  chips?: string[]
+}
+
+function parseUnit(b: Record<string, unknown>, key: string): number | undefined {
+  if (b[key] == null || b[key] === '') return undefined
+  const n = Number(b[key])
+  if (!Number.isFinite(n) || n < 0 || n > 1) throw new Error(`${key} must be between 0 and 1`)
+  return n
+}
+
+function parseSet(value: unknown): string {
+  const set = String(value ?? '').trim()
+  if (!/^[A-Za-z0-9._-]{1,120}$/.test(set) || set.startsWith('.')) throw new Error('set must be a plain directory name')
+  return set
 }
 
 export function parseExportRequest(body: unknown, runs: ModelRun[]): ExportRequest {
@@ -150,15 +165,7 @@ export function parseExportRequest(body: unknown, runs: ModelRun[]): ExportReque
   const run = runs.find((r) => r.runId === b.runId)
   if (!run) throw new Error(`${String(b.runId)} is not a complete run`)
   if (!run.cohorts.some((c) => c.cohort === b.cohort)) throw new Error(`${run.runId} has no exportable cohort ${String(b.cohort)}`)
-  const set = String(b.set ?? '').trim()
-  if (!/^[A-Za-z0-9._-]{1,120}$/.test(set) || set.startsWith('.')) throw new Error('set must be a plain directory name')
-  const number = (key: string): number | undefined => {
-    if (b[key] == null || b[key] === '') return undefined
-    const n = Number(b[key])
-    if (!Number.isFinite(n) || n < 0 || n > 1) throw new Error(`${key} must be between 0 and 1`)
-    return n
-  }
-  return { runId: run.runId, cohort: String(b.cohort), set, threshold: number('threshold'), minScore: number('minScore') }
+  return { runId: run.runId, cohort: String(b.cohort), set: parseSet(b.set), threshold: parseUnit(b, 'threshold'), minScore: parseUnit(b, 'minScore') }
 }
 
 export function exportArgs(request: ExportRequest, tileDir: string, mosaic: string | null, crownCoefficients: string | null): string[] {
@@ -173,18 +180,122 @@ export function exportArgs(request: ExportRequest, tileDir: string, mosaic: stri
   if (request.threshold != null) args.push('--threshold', String(request.threshold))
   if (mosaic) args.push('--raster', mosaic)
   if (crownCoefficients) args.push('--crown-coefficients', crownCoefficients)
+  if (request.chips?.length) args.push('--chips', ...request.chips)
   return args
 }
 
+// ---------------------------------------------------------------------------
+// Exporting an area: the run's chips under a map view, across its cohorts
+// ---------------------------------------------------------------------------
+
+/** More chips than this in one area export is a zoomed-out click, not a block to curate. */
+export const MAX_AREA_CHIPS = 300
+
+export interface AreaRequest {
+  runId: string
+  city: string
+  /** west, south, east, north in degrees. */
+  bbox: [number, number, number, number]
+  threshold?: number
+  minScore?: number
+  /** Plan only: report what would be exported. */
+  dryRun: boolean
+}
+
+export function parseAreaRequest(body: unknown, runs: ModelRun[]): AreaRequest {
+  const b = (body ?? {}) as Record<string, unknown>
+  const run = runs.find((r) => r.runId === b.runId)
+  if (!run) throw new Error(`${String(b.runId)} is not a complete run`)
+  const city = String(b.city ?? '').toUpperCase()
+  if (!/^[A-Z]{5}$/.test(city)) throw new Error('city must be a five-letter city code')
+  if (!run.cohorts.some((c) => c.city === city)) throw new Error(`${run.runId} has no ${city} cohort`)
+  const bbox = Array.isArray(b.bbox) ? b.bbox.map(Number) : []
+  const [west, south, east, north] = bbox
+  if (bbox.length !== 4 || bbox.some((v) => !Number.isFinite(v)) || west >= east || south >= north
+    || Math.abs(south) > 90 || Math.abs(north) > 90 || Math.abs(west) > 180 || Math.abs(east) > 180) {
+    throw new Error('bbox must be [west, south, east, north] in degrees')
+  }
+  return { runId: run.runId, city, bbox: [west, south, east, north], threshold: parseUnit(b, 'threshold'), minScore: parseUnit(b, 'minScore'), dryRun: Boolean(b.dryRun) }
+}
+
+/** The tile set an area export writes to: one per city and run, growing with each export. */
+export function areaSetName(city: string, runId: string): string {
+  return `${city.toLowerCase()}-${(runId.match(/\d+cm-v\d+.*$/) || [runId])[0]}-areas`
+}
+
+/** The run's chips in the box, by cohort (scripts/chips_in_area.py, in the imagery model's environment). */
+export function chipsInArea(modelDir: string, request: AreaRequest, mosaic: string): Promise<Record<string, string[]>> {
+  const script = path.join(import.meta.dirname, 'scripts', 'chips_in_area.py')
+  const args = ['run', '--group', 'imagery', 'python', script, '--run', request.runId, '--city', request.city,
+    `--bbox=${request.bbox.join(',')}`, '--raster', mosaic]
+  return new Promise((resolve, reject) => {
+    const child = spawn('uv', args, { cwd: modelDir, env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, windowsHide: true })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => { stdout += chunk })
+    child.stderr.on('data', (chunk) => { stderr += chunk })
+    child.on('error', reject)
+    child.on('close', (code) => {
+      try {
+        const parsed = JSON.parse(stdout.trim().split('\n').pop() ?? '') as { cohorts: Record<string, string[]> }
+        if (code === 0) return resolve(parsed.cohorts)
+      } catch {
+        // fall through
+      }
+      reject(new Error(`finding chips failed (exit ${code}): ${stderr.trim().split('\n').slice(-2).join(' | ') || 'no output'}`))
+    })
+  })
+}
+
+export interface AreaPlan {
+  set: string
+  /** New chips by cohort, the ones already exported for this run left out. */
+  cohorts: Record<string, string[]>
+  newChips: number
+  alreadyExported: number
+}
+
+/** Drop the chips this run already has tiles for; refuse an area too large to curate. */
+export function planArea(found: Record<string, string[]>, exportedChips: ReadonlySet<string>, request: AreaRequest): AreaPlan {
+  const cohorts: Record<string, string[]> = {}
+  let newChips = 0
+  let alreadyExported = 0
+  const seen = new Set<string>()
+  for (const [cohort, chips] of Object.entries(found)) {
+    const fresh = chips.filter((c) => {
+      if (exportedChips.has(c)) { alreadyExported += 1; return false }
+      if (seen.has(c)) return false
+      seen.add(c)
+      return true
+    })
+    if (fresh.length) cohorts[cohort] = fresh
+    newChips += fresh.length
+  }
+  if (newChips > MAX_AREA_CHIPS) throw new Error(`${newChips} chips in view; zoom in to at most ${MAX_AREA_CHIPS}`)
+  return { set: areaSetName(request.city, request.runId), cohorts, newChips, alreadyExported }
+}
+
+export function areaExportRequests(plan: AreaPlan, request: AreaRequest): ExportRequest[] {
+  return Object.entries(plan.cohorts).map(([cohort, chips]) => ({
+    runId: request.runId, cohort, set: plan.set, threshold: request.threshold, minScore: request.minScore, chips,
+  }))
+}
+
+// ---------------------------------------------------------------------------
+// Jobs
+// ---------------------------------------------------------------------------
+
 export interface ExportJob {
   id: number
+  /** The first step, for display; `steps` holds every cohort's. */
   request: ExportRequest
+  steps: ExportRequest[]
   status: 'running' | 'done' | 'failed'
   startedAt: string
   finishedAt: string | null
   /** Tiles written so far (one "<tileId>: N predictions" line each). */
   exported: number
-  /** Chips the cohort has, when its coverage file says. */
+  /** Chips to export, when known. */
   total: number | null
   mosaic: string | null
   log: string[]
@@ -206,40 +317,53 @@ export class ExportJobs {
     return this.jobs.find((j) => j.id === id)
   }
 
-  start(request: ExportRequest, total: number | null): ExportJob {
-    if (this.jobs.some((j) => j.status === 'running')) throw new Error('An export is already running')
-    const mosaic = resolveMosaic(this.modelDir, request.runId, request.cohort)
+  get running(): boolean {
+    return this.jobs.some((j) => j.status === 'running')
+  }
+
+  /** Run the steps one after another; the job fails at the first step that does. */
+  start(steps: ExportRequest | ExportRequest[], total: number | null): ExportJob {
+    const list = Array.isArray(steps) ? steps : [steps]
+    if (!list.length) throw new Error('Nothing to export')
+    if (this.running) throw new Error('An export is already running')
     const job: ExportJob = {
-      id: this.nextId++, request, status: 'running', startedAt: new Date().toISOString(), finishedAt: null,
-      exported: 0, total, mosaic, log: [], error: null,
+      id: this.nextId++, request: list[0], steps: list, status: 'running', startedAt: new Date().toISOString(), finishedAt: null,
+      exported: 0, total, mosaic: resolveMosaic(this.modelDir, list[0].runId, list[0].cohort), log: [], error: null,
     }
     this.jobs.push(job)
-    const child = spawn('uv', exportArgs(request, this.tileDir, mosaic, this.crownCoefficients), {
-      cwd: this.modelDir,
-      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
-      windowsHide: true,
-    })
-    const onData = (chunk: Buffer) => {
-      for (const line of chunk.toString('utf8').split(/\r?\n/)) {
-        if (!line.trim()) continue
-        if (/: \d+ predictions/.test(line)) job.exported += 1
-        job.log.push(line)
-        if (job.log.length > 40) job.log.shift()
-      }
+    const finish = (error: string | null) => {
+      job.status = error ? 'failed' : 'done'
+      job.error = error
+      job.finishedAt = new Date().toISOString()
     }
-    child.stdout.on('data', onData)
-    child.stderr.on('data', onData)
-    child.on('error', (error) => {
-      job.status = 'failed'
-      job.error = error.message
-      job.finishedAt = new Date().toISOString()
-    })
-    child.on('close', (code) => {
-      if (job.status !== 'running') return
-      job.status = code === 0 ? 'done' : 'failed'
-      if (code !== 0) job.error = `exit ${code}: ${job.log.slice(-3).join(' | ')}`
-      job.finishedAt = new Date().toISOString()
-    })
+    const runStep = (index: number) => {
+      if (index >= list.length) return finish(null)
+      const request = list[index]
+      const mosaic = index === 0 ? job.mosaic : resolveMosaic(this.modelDir, request.runId, request.cohort)
+      const child = spawn('uv', exportArgs(request, this.tileDir, mosaic, this.crownCoefficients), {
+        cwd: this.modelDir,
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+        windowsHide: true,
+      })
+      const onData = (chunk: Buffer) => {
+        for (const line of chunk.toString('utf8').split(/\r?\n/)) {
+          if (!line.trim()) continue
+          if (/: \d+ predictions/.test(line)) job.exported += 1
+          job.log.push(line)
+          if (job.log.length > 40) job.log.shift()
+        }
+      }
+      child.stdout.on('data', onData)
+      child.stderr.on('data', onData)
+      let failed = false
+      child.on('error', (error) => { failed = true; finish(error.message) })
+      child.on('close', (code) => {
+        if (failed) return
+        if (code !== 0) return finish(`${request.cohort}: exit ${code}: ${job.log.slice(-3).join(' | ')}`)
+        runStep(index + 1)
+      })
+    }
+    runStep(0)
     return job
   }
 }

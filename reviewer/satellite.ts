@@ -710,6 +710,23 @@ export class TileStore {
     return counts
   }
 
+  /** The chips one run already has a bundle for in a city, in any set. */
+  chipIds(city: string, runId: string): Set<string> {
+    const wanted = city.toUpperCase()
+    const chips = new Set<string>()
+    for (const files of this.candidates().values()) {
+      for (const file of files) {
+        try {
+          const bundle = this.read(file)
+          if (bundle.chipId && bundle.city.toUpperCase() === wanted && bundle.predictionLayer.runId === runId) chips.add(bundle.chipId)
+        } catch {
+          // an unreadable bundle is reported when the tile is opened
+        }
+      }
+    }
+    return chips
+  }
+
   cities(run?: string | null): CitySummary[] {
     const byCity = new Map<string, CitySummary>()
     for (const tile of this.list(undefined, run)) {

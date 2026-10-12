@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 
-import { exportArgs, listRuns, parseExportRequest, resolveMosaic } from '../satelliteModels.ts'
+import { areaExportRequests, areaSetName, exportArgs, listRuns, MAX_AREA_CHIPS, parseAreaRequest, parseExportRequest, planArea, resolveMosaic } from '../satelliteModels.ts'
 
 const ITEMS = ['ma_b', 'ma_a']
 
@@ -98,4 +98,39 @@ test('an export request names a complete run, one of its cohorts and a plain set
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test('an area request names a run with that city, and a real box', () => {
+  const root = modelDir()
+  try {
+    const runs = listRuns(root)
+    const good = { runId: 'new-30cm-v12', city: 'usbos', bbox: [-71.113, 42.3075, -71.102, 42.3125], threshold: '0.13', dryRun: 1 }
+    const request = parseAreaRequest(good, runs)
+    assert.deepEqual(request, { runId: 'new-30cm-v12', city: 'USBOS', bbox: [-71.113, 42.3075, -71.102, 42.3125], threshold: 0.13, minScore: undefined, dryRun: true })
+    assert.throws(() => parseAreaRequest({ ...good, city: 'USNYC' }, runs), /no USNYC cohort/)
+    assert.throws(() => parseAreaRequest({ ...good, bbox: [-71.1, 42.3, -71.2, 42.4] }, runs), /bbox/)
+    assert.throws(() => parseAreaRequest({ ...good, bbox: [1, 2, 3] }, runs), /bbox/)
+    assert.throws(() => parseAreaRequest({ ...good, runId: 'unfinished' }, runs), /not a complete run/)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('an area plan skips chips the run already has and refuses a zoomed-out view', () => {
+  const request = { runId: 'sf-boston-nyc-naip-swin-30cm-v12-curated-finetune', city: 'USBOS', bbox: [0, 0, 1, 1] as [number, number, number, number], dryRun: false }
+  const found = { 'train-usbos': ['r1_c1', 'r1_c2', 'r1_c3'], 'validation-usbos': ['r2_c1', 'r1_c1'] }
+  const plan = planArea(found, new Set(['r1_c2']), request)
+  assert.equal(plan.set, 'usbos-30cm-v12-curated-finetune-areas')
+  assert.deepEqual(plan.cohorts, { 'train-usbos': ['r1_c1', 'r1_c3'], 'validation-usbos': ['r2_c1'] }, 'a chip in two cohorts is exported once')
+  assert.equal(plan.newChips, 3)
+  assert.equal(plan.alreadyExported, 1)
+  const steps = areaExportRequests(plan, { ...request, threshold: 0.13 })
+  assert.deepEqual(steps.map((r) => [r.cohort, r.chips, r.set, r.threshold]), [
+    ['train-usbos', ['r1_c1', 'r1_c3'], plan.set, 0.13],
+    ['validation-usbos', ['r2_c1'], plan.set, 0.13],
+  ])
+  assert.deepEqual(exportArgs(steps[1], 'tiles', null, null).slice(-2), ['--chips', 'r2_c1'])
+  const many = { 'train-usbos': Array.from({ length: MAX_AREA_CHIPS + 1 }, (_, i) => `r${i}_c0`) }
+  assert.throws(() => planArea(many, new Set(), request), /zoom in/)
+  assert.equal(areaSetName('USNYC', 'odd-run'), 'usnyc-odd-run-areas')
 })

@@ -115,6 +115,7 @@ svg .hitbox{fill:transparent;cursor:pointer}
       <span class="group"><label>City <select id="map-city"></select></label></span>
       <span class="group"><label><input id="map-imagery" type="checkbox" checked> imagery</label>
       <label>Opacity <input id="map-opacity" type="range" min="0" max="1" step="0.05" value="0.85"></label></span>
+      <span class="group"><button id="map-export" class="small" title="Export the selected model's tiles under this view, from its validation and training chips (never test); tiles it already has are skipped">Export model tiles in view</button> <span id="map-export-state" class="muted"></span></span>
       <span class="muted"><i class="swatch" style="border-color:#ffffff"></i>untouched <i class="swatch" style="border-color:#ffd166"></i>decisions made <i class="swatch" style="border-color:#5ad37a"></i>tile reviewed</span>
       <span class="muted">Click a tile to review it; click open ground to predict there.</span>
     </div>
@@ -263,12 +264,15 @@ $('#model-run').addEventListener('change', () => {
   route();
 });
 function renderExportJob(job) {
-  const cohorts = MODEL.data?.runs.find((r) => r.runId === MODEL.data.selected)?.cohorts || [];
-  $('#export-go').disabled = !cohorts.length || job?.status === 'running';
+  const runCohorts = MODEL.data?.runs.find((r) => r.runId === MODEL.data.selected)?.cohorts || [];
+  $('#export-go').disabled = !runCohorts.length || job?.status === 'running';
   if (!job) return;
   const progress = job.total ? `${job.exported}/${job.total}` : `${job.exported}`;
-  $('#export-state').textContent = job.status === 'running' ? `Exporting ${job.request.cohort} → ${job.request.set}: ${progress} tiles…`
+  const cohorts = job.steps.map((r) => r.cohort).join(' + ');
+  $('#export-state').textContent = job.status === 'running' ? `Exporting ${cohorts} → ${job.request.set}: ${progress} tiles…`
     : job.status === 'done' ? `Exported ${job.exported} tile(s) to ${job.request.set}` : `Export failed: ${job.error}`;
+  $('#map-export-state').textContent = $('#export-state').textContent;
+  $('#map-export').disabled = job.status === 'running';
   $('#export-log').classList.remove('hidden');
   $('#export-log').textContent = (job.mosaic ? `mosaic ${job.mosaic}\n` : 'mosaic: exporter default\n') + job.log.slice(-12).join('\n');
 }
@@ -482,6 +486,32 @@ async function showMap(city) {
     }
   }
 }
+
+// Export the selected run's chips under the map view: a dry run first, so the
+// count (and what is already exported) is confirmed before any work starts.
+$('#map-export').addEventListener('click', async (e) => {
+  if (!M.map || !M.city || !MODEL.data?.selected) return;
+  const b = M.map.getBounds();
+  const body = { runId: MODEL.data.selected, city: M.city, bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+    threshold: MODEL.data.threshold ?? '', minScore: MODEL.data.minScore ?? '' };
+  const state = $('#map-export-state');
+  e.target.disabled = true; state.textContent = 'Finding chips in view…';
+  try {
+    const { plan } = await api('/exports/area', { method: 'POST', body: JSON.stringify({ ...body, dryRun: true }) });
+    const already = plan.alreadyExported ? ` (${plan.alreadyExported} already exported)` : '';
+    if (!plan.newChips) { state.textContent = `Nothing new in view for ${runLabel(MODEL.data.selected)}${already}`; e.target.disabled = false; return; }
+    const split = Object.entries(plan.cohorts).map(([c, chips]) => `${chips.length} ${c}`).join(', ');
+    if (!confirm(`Export ${plan.newChips} ${runLabel(MODEL.data.selected)} tile(s) in view${already} into ${plan.set}?\n\n${split}`)) {
+      state.textContent = ''; e.target.disabled = false; return;
+    }
+    const { job } = await api('/exports/area', { method: 'POST', body: JSON.stringify(body) });
+    MODEL.running = true;
+    renderExportJob(job);
+    MODEL.polling = setTimeout(pollExport, 1500);
+  } catch (error) {
+    state.textContent = error.message; e.target.disabled = false;
+  }
+});
 
 $('#map-city').addEventListener('change', (e) => { location.hash = '#map/' + encodeURIComponent(e.target.value); });
 $('#map-imagery').addEventListener('change', (e) => { for (const id of M.images) M.map.setLayoutProperty(id, 'visibility', e.target.checked ? 'visible' : 'none'); });

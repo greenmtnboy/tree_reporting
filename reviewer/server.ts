@@ -8,7 +8,7 @@ import sharp from 'sharp'
 
 import { createSatelliteRouter, TileStore } from './satellite.ts'
 import { parsePoint, predictPoint } from './satellitePredict.ts'
-import { ExportJobs, listRuns, parseExportRequest } from './satelliteModels.ts'
+import { areaExportRequests, chipsInArea, ExportJobs, listRuns, parseAreaRequest, parseExportRequest, planArea, resolveMosaic } from './satelliteModels.ts'
 import {
   assertCheckinPhotoPublishable,
   checkinPhotoListItem,
@@ -96,6 +96,29 @@ app.post('/api/satellite/exports', (req, res) => {
     const request = parseExportRequest(req.body, runs)
     const cohort = runs.find((r) => r.runId === request.runId)?.cohorts.find((c) => c.cohort === request.cohort)
     res.json(exportJobs.start(request, cohort?.chips ?? null))
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message })
+  }
+})
+
+// Export the run's chips under a map view: every non-test cohort of the city,
+// minus the chips this run already has tiles for, into one growing set per
+// city and run.  `dryRun` reports the plan for the page to confirm.
+app.post('/api/satellite/exports/area', async (req, res) => {
+  try {
+    const runs = listRuns(imageryModelDir)
+    const request = parseAreaRequest(req.body, runs)
+    if (!request.dryRun && exportJobs.running) throw new Error('An export is already running')
+    const cohort = runs.find((r) => r.runId === request.runId)?.cohorts.find((c) => c.city === request.city)
+    const mosaic = cohort && resolveMosaic(imageryModelDir, request.runId, cohort.cohort)
+    if (!mosaic) throw new Error(`No local mosaic for ${request.runId}'s ${request.city} chips`)
+    const found = await chipsInArea(imageryModelDir, request, mosaic)
+    const plan = planArea(found, satelliteTiles.chipIds(request.city, request.runId), request)
+    if (request.dryRun || !plan.newChips) {
+      res.json({ plan })
+      return
+    }
+    res.json({ plan, job: exportJobs.start(areaExportRequests(plan, request), plan.newChips) })
   } catch (error) {
     res.status(400).json({ error: (error as Error).message })
   }

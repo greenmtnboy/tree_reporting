@@ -89,6 +89,8 @@ test('a tile two runs exported opens the run asked for, else the newest file', (
     assert.equal(store.get(original.tileId, 'run-c')?.predictionLayer.runId, 'run-b', 'a run with no bundle falls back to the newest')
     assert.deepEqual(store.runCounts(), { 'run-a': 1, 'run-b': 1 })
     assert.deepEqual(store.runCounts('USBOS'), {})
+    assert.deepEqual([...store.chipIds('ussfo', 'run-a')], [original.chipId], 'chips a run already has, in any set')
+    assert.equal(store.chipIds('USSFO', 'run-z').size, 0)
     const withDefault = new TileStore(root, { defaultRun: 'run-a' })
     assert.equal(withDefault.get(original.tileId)?.predictionLayer.runId, 'run-a', 'no run named: the default run')
     assert.equal(withDefault.get(original.tileId, null)?.predictionLayer.runId, 'run-b', 'null asks for no preference')
