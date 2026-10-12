@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
@@ -8,6 +8,7 @@ import {
   assertBundle,
   buildManifest,
   buildObservation,
+  DUPLICATE_RADIUS_M,
   exportRow,
   lonLatToPixel,
   nearestInventory,
@@ -16,6 +17,8 @@ import {
   pixelToLonLat,
   presentBundle,
   publishedTreeFrom,
+  tileEnvelope,
+  tileFootprint,
   TileStore,
   type TilePredictionBundle,
 } from '../satellite.ts'
@@ -63,6 +66,54 @@ test('the store reads every tile set below its directory and lists by city', () 
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test('a tile two runs exported opens the preferred run, else the newest file', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'tiles-'))
+  try {
+    const name = readdirSync(FIXTURES).find((f) => f.startsWith('USSFO') && f.endsWith('.json'))!
+    const original = JSON.parse(readFileSync(path.join(FIXTURES, name), 'utf8'))
+    for (const [set, runId, mtime] of [['run-a', 'run-a', 1_000], ['run-b', 'run-b', 2_000]] as const) {
+      mkdirSync(path.join(root, set))
+      const file = path.join(root, set, name)
+      writeFileSync(file, JSON.stringify({ ...original, predictionLayer: { ...original.predictionLayer, runId } }))
+      copyFileSync(path.join(FIXTURES, name.replace(/\.json$/, '.png')), file.replace(/\.json$/, '.png'))
+      utimesSync(file, mtime, mtime)
+    }
+    const store = new TileStore(root)
+    assert.equal(store.get(original.tileId)?.predictionLayer.runId, 'run-b', 'newest file wins with no preference')
+    store.preferredRun = 'run-a'
+    assert.equal(store.get(original.tileId)?.predictionLayer.runId, 'run-a')
+    assert.equal(store.list()[0].collection, 'run-a')
+    assert.ok(store.imagePath(original.tileId)?.includes('run-a'), 'the PNG comes from the chosen set')
+    store.preferredRun = 'run-c'
+    assert.equal(store.get(original.tileId)?.predictionLayer.runId, 'run-b', 'a run with no bundle falls back to the newest')
+    assert.deepEqual(store.runCounts(), { 'run-a': 1, 'run-b': 1 })
+    assert.deepEqual(store.runCounts('USBOS'), {})
+    assert.equal(new TileStore(root, { preferredRun: 'run-a' }).get(original.tileId)?.predictionLayer.runId, 'run-a')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('a tile footprint is its four corners, clockwise from the top left', async () => {
+  const bundle = fixture()
+  const corners = tileFootprint(bundle)
+  assert.equal(corners.length, 4)
+  const [tl, tr, br, bl] = corners
+  assert.ok(tl[0] < tr[0] && bl[0] < br[0], 'west edge is left of the east edge')
+  assert.ok(tl[1] > bl[1] && tr[1] > br[1], 'north edge is above the south edge')
+  // Every detection falls inside the footprint's envelope.
+  for (const p of bundle.predictionLayer.predictions) {
+    assert.ok(p.longitude >= Math.min(tl[0], bl[0]) - 1e-6 && p.longitude <= Math.max(tr[0], br[0]) + 1e-6, p.predictionId)
+    assert.ok(p.latitude >= Math.min(bl[1], br[1]) - 1e-6 && p.latitude <= Math.max(tl[1], tr[1]) + 1e-6, p.predictionId)
+  }
+  const store = new TileStore(FIXTURES)
+  const [summary] = store.list('USSFO')
+  assert.deepEqual(summary.footprint, tileFootprint(store.get(summary.tileId)!))
+  const thumb = await store.thumbnail(summary.tileId)
+  assert.ok(thumb && thumb[0] === 0xff && thumb[1] === 0xd8, 'the map thumbnail is a JPEG')
+  assert.equal(await store.thumbnail('USSFO-no-such-tile'), null)
 })
 
 test('assertBundle refuses what the exporter refuses', () => {
@@ -130,6 +181,28 @@ test('the model crown is what publishes, with the allometric estimate kept besid
   assert.equal(modelled.allometricCrownWidthM, 5.1)
 })
 
+test('a crown the reviewer traced is kept beside the model crown and exported', () => {
+  const bundle = fixture()
+  const p = { ...bundle.predictionLayer.predictions[0], modelCrownWidthM: 7.2, modelCrownWidthMethod: 'model_crown_head' }
+  const traced = buildObservation(bundle, p, parseObservationInput({ decision: 'accept', humanCrownWidthM: 9.4 }), 'tester', 1)
+  assert.equal(traced.humanCrownWidthM, 9.4)
+  assert.equal(traced.predictedCrownWidthM, 7.2, 'the model crown is still recorded')
+  assert.equal(exportRow({ ...publishedTreeFrom(traced), publishedAt: '2026-10-04T00:00:00.000Z' }).humanCrownWidthM, 9.4)
+  const untraced = buildObservation(bundle, p, parseObservationInput({ decision: 'accept' }), 'tester', 1)
+  assert.equal(untraced.humanCrownWidthM, null)
+  assert.throws(() => parseObservationInput({ decision: 'accept', humanCrownWidthM: 80 }), /at most/)
+  assert.throws(() => parseObservationInput({ decision: 'accept', humanCrownWidthM: -2 }), /positive/)
+})
+
+test('a tile envelope bounds its footprint', () => {
+  const bundle = fixture()
+  const env = tileEnvelope(bundle)
+  for (const [lon, lat] of tileFootprint(bundle)) {
+    assert.ok(lon >= env.west && lon <= env.east && lat >= env.south && lat <= env.north)
+  }
+  assert.ok(env.west < env.east && env.south < env.north)
+})
+
 test('a moved crown centre changes the published position and never the trunk', () => {
   const bundle = fixture()
   const p = bundle.predictionLayer.predictions[0]
@@ -145,7 +218,7 @@ test('a moved crown centre changes the published position and never the trunk', 
 test('a duplicate publishes at the linked inventory tree, and only to a tree on the tile', () => {
   const bundle = fixture()
   const p = bundle.predictionLayer.predictions[0]
-  const target = nearestInventory(bundle, p.longitude, p.latitude, 1)[0]
+  const target = nearestInventory(bundle, p.longitude, p.latitude, 1, Infinity)[0]
   assert.ok(target)
   const record = buildObservation(bundle, p, { decision: 'duplicate', duplicateOfTreeId: target.treeId }, 'tester', 1)
   assert.equal(record.positionRole, 'linked_trunk')
@@ -166,8 +239,10 @@ test('nearest inventory is ordered by distance and capped', () => {
   const nearest = nearestInventory(bundle, p.longitude, p.latitude, 3)
   assert.ok(nearest.length <= 3)
   for (let i = 1; i < nearest.length; i += 1) assert.ok(nearest[i - 1].distanceM <= nearest[i].distanceM)
+  assert.ok(nearest.every((n) => n.distanceM <= DUPLICATE_RADIUS_M), 'only trees within the duplicate radius are offered')
   // The exporter's candidate list, when present, names the same nearest tree.
-  if (p.candidateTreeIds?.length) assert.equal(nearest[0].treeId, p.candidateTreeIds[0])
+  const unbounded = nearestInventory(bundle, p.longitude, p.latitude, 3, Infinity)
+  if (p.candidateTreeIds?.length) assert.equal(unbounded[0].treeId, p.candidateTreeIds[0])
 })
 
 test('parseObservationInput validates what the page sends', () => {
@@ -193,7 +268,7 @@ test('the public export carries no notes or actor and keeps estimate and measure
   assert.equal(row.measuredDbhInches, 9)
   assert.equal(row.city, 'USSFO')
   assert.deepEqual(Object.keys(row).sort(), [
-    'acquisitionDate', 'city', 'crownWidthMethod', 'duplicateOfTreeId', 'imageryVersion', 'latitude', 'longitude',
+    'acquisitionDate', 'city', 'crownWidthMethod', 'duplicateOfTreeId', 'humanCrownWidthM', 'imageryVersion', 'latitude', 'longitude',
     'measuredDbhInches', 'positionRole', 'predictedCrownWidthM', 'predictedDbhInches', 'predictionId',
     'publishedAt', 'runId', 'schemaVersion', 'species', 'speciesSource', 'tileId', 'treeId',
   ])

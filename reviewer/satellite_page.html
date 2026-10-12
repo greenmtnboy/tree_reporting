@@ -27,6 +27,7 @@ main{padding:16px 20px}table{border-collapse:collapse;width:100%}th,td{text-alig
 .stage img{display:block;width:100%;height:auto;image-rendering:auto;user-select:none;-webkit-user-drag:none}
 .stage svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 .stage[data-crisp="1"] img{image-rendering:pixelated}
+.stage img:not([src]),.inset-stage img:not([src]){visibility:hidden}
 svg .crown{fill:none;stroke-width:.7;vector-effect:non-scaling-stroke}
 svg .pred .crown{stroke:var(--pred);stroke-dasharray:3 2;opacity:.75}
 svg .inv .crown{stroke:var(--inv);opacity:.8}
@@ -38,6 +39,10 @@ svg .pred.accept .dot{fill:#5ad37a}svg .pred.duplicate .dot{fill:#ffd166}svg .pr
 svg .pred.reject .crown,svg .pred.uncertain .crown{display:none}
 svg .pred.published .dot{stroke:#fff;stroke-width:1.2}
 svg .pred.selected .dot{stroke:#fff;stroke-width:1.6;r:4}svg .pred.selected .crown{opacity:1;stroke-width:1.2}
+svg .human{fill:none;stroke:#7dffb0;stroke-width:1.6;vector-effect:non-scaling-stroke}
+svg .human-spoke{stroke:#7dffb0;stroke-width:1;vector-effect:non-scaling-stroke;stroke-dasharray:2 2}
+.stage.radius-mode svg,.inset.radius-mode svg{cursor:crosshair}
+.radius-hint{color:#7dffb0}
 svg .link{stroke:#ffd166;stroke-width:.8;vector-effect:non-scaling-stroke;stroke-dasharray:2 1}
 svg .hitbox{fill:transparent;cursor:pointer}
 .side{border:1px solid var(--line);background:var(--panel);padding:12px;font-size:13px;max-height:calc(100vh - 170px);overflow:auto}
@@ -48,33 +53,84 @@ svg .hitbox{fill:transparent;cursor:pointer}
 .nearest ul{list-style:none;padding:0;margin:0}.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
 kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-monospace,monospace;font-size:11px;color:var(--muted)}
-.savestate{margin-left:auto;color:var(--muted)}.savestate.err{color:var(--bad)}
+/* A toast, not a toolbar item: changing text must never reflow the toolbar and move the image under the cursor. */
+.savestate{position:fixed;right:16px;bottom:14px;max-width:420px;color:var(--text);background:var(--panel);border:1px solid var(--line);padding:6px 10px;border-radius:4px;z-index:5;box-shadow:0 4px 14px rgba(0,0,0,.5)}.savestate:empty{display:none}.savestate.err{color:var(--bad);border-color:var(--bad)}
+/* loading: a mask over the tile while it and its imagery arrive, a header spinner for any request */
+.loading-mask{position:absolute;inset:0;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;background:rgba(5,8,6,.82);color:var(--muted);z-index:3}
+.viewport-wrap.loading{min-height:420px}
+.spinner{width:36px;height:36px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+.spinner.small{width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* inset: the surroundings of the selected point at a multiple of the main zoom */
+.viewport-wrap{position:relative}
+.inset{position:absolute;top:8px;right:8px;width:280px;height:280px;overflow:hidden;border:2px solid var(--accent);background:#050806;box-shadow:0 4px 18px rgba(0,0,0,.6);z-index:2}
+.inset.left{right:auto;left:8px}
+.inset-stage{position:absolute;line-height:0}.inset-stage img{display:block;width:100%;height:auto;user-select:none;-webkit-user-drag:none}
+.inset-stage svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.inset[data-crisp="1"] img{image-rendering:pixelated}
+.inset-cross{position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;border:1px solid rgba(255,255,255,.75);border-radius:50%;pointer-events:none}
+.inset-label{position:absolute;left:4px;bottom:3px;font-size:11px;line-height:1.2;color:#fff;text-shadow:0 0 3px #000;pointer-events:none}
 .closeup{width:100%;aspect-ratio:1;background:#000;border:1px solid var(--line);image-rendering:pixelated;margin-bottom:8px}
+/* map view */
+#view-map .toolbar{margin-bottom:8px}
+#map{height:calc(100vh - 150px);min-height:420px;border:1px solid var(--line)}
+.maplibregl-popup-content{background:var(--panel);color:var(--text);font:13px/1.4 system-ui;border:1px solid var(--line)}
+.maplibregl-popup-tip{display:none}.maplibregl-popup-content ul{margin:4px 0 0;padding-left:16px}
+.maplibregl-popup-close-button{color:var(--muted)}
+#model-bar{border:1px solid var(--line);background:var(--panel);padding:10px 12px;margin-bottom:12px}
+#model-bar select,#model-bar input{background:#0b100d;color:var(--text);border:1px solid var(--line);padding:4px 6px;font:inherit;border-radius:3px}
+#model-bar details{margin-top:8px}#model-bar summary{cursor:pointer;color:var(--accent)}
+#export-log{white-space:pre-wrap;font:11px/1.35 ui-monospace,monospace;color:var(--muted);max-height:120px;overflow:auto;margin:6px 0 0}
+.swatch{display:inline-block;width:12px;height:12px;border:2px solid;margin-right:4px;vertical-align:middle}
 @media(max-width:980px){.tile-layout{grid-template-columns:1fr}.viewport,.side{max-height:none}}
 </style>
 </head>
 <body>
 <header>
   <h1>Satellite tree review</h1>
-  <nav><a href="/">Photo submissions</a><a href="/modifications">Tree reports</a><a href="/photos">Tree photos</a><a href="#tiles">Tiles</a><a href="#queue">Publish queue</a></nav>
-  <span id="status">Loading…</span>
+  <nav><a href="/">Photo submissions</a><a href="/modifications">Tree reports</a><a href="/photos">Tree photos</a><a href="#tiles">Tiles</a><a href="#map">Map</a><a href="#queue">Publish queue</a></nav>
+  <span id="status">Loading…</span><span id="busy" class="spinner small hidden" title="Loading"></span>
 </header>
 <main>
   <section id="view-tiles" class="hidden">
     <p class="muted">NAIP aerial tiles with the model's detections. Open a tile, decide each detection, mark the tile done, then publish the accepted ones. Nothing reaches the map until a publish, and a rejection never touches an inventory tree.</p>
+    <div id="model-bar">
+      <div class="toolbar" style="margin:0"><label>Model <select id="model-run"></select></label> <span id="model-note" class="muted"></span></div>
+      <details id="export-panel"><summary>Export a cohort of this model as a tile set</summary>
+        <form id="export-form" class="toolbar" style="margin:8px 0 0">
+          <label>Cohort <select id="export-cohort"></select></label>
+          <label>Set <input id="export-set" size="34" required pattern="[A-Za-z0-9._\-]+"></label>
+          <label title="Where the reviewer's slider starts">Threshold <input id="export-threshold" type="number" min="0" max="1" step="0.01" style="width:5em"></label>
+          <label title="Lowest candidate score written to the bundles">Min score <input id="export-min-score" type="number" min="0" max="1" step="0.01" style="width:5em"></label>
+          <button id="export-go">Export</button> <span id="export-state" class="muted"></span>
+        </form>
+        <pre id="export-log" class="hidden"></pre>
+      </details>
+    </div>
     <form id="predict-form" class="toolbar"><label>Predict at <input id="predict-point" placeholder="42.3400, -71.1090" size="24" required></label> <button id="predict-go">Fetch NAIP &amp; predict</button> <span id="predict-state" class="muted"></span></form>
     <div id="cities-view">
-      <table><thead><tr><th>City</th><th>Tiles</th><th>Tile sets</th></tr></thead><tbody id="cities-body"></tbody></table>
+      <table><thead><tr><th>City</th><th>Tiles</th><th>Tile sets</th><th></th></tr></thead><tbody id="cities-body"></tbody></table>
     </div>
     <div id="city-view" class="hidden">
-    <p><a href="#tiles">← Cities</a> <strong id="city-title"></strong></p>
+    <p><a href="#tiles">← Cities</a> <strong id="city-title"></strong> <a id="city-map" href="#map">Map</a></p>
     <table><thead><tr><th>Tile</th><th>Set</th><th>Imagery</th><th>Run</th><th>Detections</th><th>Inventory</th><th>Decided</th><th>Published</th><th>Done</th><th></th></tr></thead><tbody id="tiles-body"></tbody></table>
     </div>
   </section>
 
+  <section id="view-map" class="hidden">
+    <div class="toolbar">
+      <label>City <select id="map-city"></select></label>
+      <label><input id="map-imagery" type="checkbox" checked> imagery</label>
+      <label>Opacity <input id="map-opacity" type="range" min="0" max="1" step="0.05" value="0.85"></label>
+      <span class="muted"><i class="swatch" style="border-color:#ffffff"></i>untouched <i class="swatch" style="border-color:#ffd166"></i>decisions made <i class="swatch" style="border-color:#5ad37a"></i>tile reviewed</span>
+      <span class="muted">Click a tile to review it; click open ground to predict there.</span>
+    </div>
+    <div id="map"></div>
+  </section>
+
   <section id="view-tile" class="hidden">
     <div class="toolbar">
-      <a href="#tiles">Cities</a> <a id="tile-back" href="#tiles">← Tiles</a>
+      <a href="#tiles">Cities</a> <a id="tile-back" href="#tiles">← Tiles</a> <a id="tile-map" href="#map">Map</a>
       <strong id="tile-title"></strong>
       <span id="tile-meta" class="muted"></span>
       <label>Min confidence <input id="threshold" type="range" min="0" max="1" step="0.01" value="0.35"> <span id="threshold-value">0.35</span></label>
@@ -83,6 +139,7 @@ kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-
       <label><input id="show-crowns" type="checkbox" checked> detection rings</label>
       <label><input id="hide-decided" type="checkbox"> hide decided</label>
       <label><input id="crisp" type="checkbox"> crisp pixels</label>
+      <label title="Click a detection or any point to see its surroundings magnified (I toggles)"><input id="show-inset" type="checkbox" checked> inset <select id="inset-mag"><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select></label>
       <label><input id="done" type="checkbox"> tile reviewed</label>
       <button id="fit" class="ghost" title="Zoom so the tile fills the viewport width">Fit</button>
       <button id="fullscreen" class="ghost" title="Full screen (Esc leaves)">Full screen</button>
@@ -93,15 +150,20 @@ kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;font-family:ui-
     <div id="unavailable" class="banner hidden">Inference unavailable for this tile: the prediction layer has no output here. This is not a tile with no trees.</div>
     <div class="tile-layout">
       <div>
-        <div class="viewport" id="viewport"><div class="stage" id="stage"><img id="tile-image" alt="Aerial tile"><svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg></div></div>
+        <div class="viewport-wrap" id="viewport-wrap">
+          <div id="tile-loading" class="loading-mask hidden"><div class="spinner"></div><span id="tile-loading-text">Loading tile…</span></div>
+          <div class="viewport" id="viewport"><div class="stage" id="stage"><img id="tile-image" alt="Aerial tile"><svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg></div></div>
+          <div id="inset" class="inset hidden"><div class="inset-stage" id="inset-stage"><img id="inset-image" alt=""><svg id="inset-overlay" xmlns="http://www.w3.org/2000/svg"></svg></div><span class="inset-cross"></span><span class="inset-label" id="inset-label"></span></div>
+        </div>
         <div class="legend">
           <span><i style="background:var(--pred)"></i>detection (dashed ring: the model's predicted crown, or a DBH-derived estimate where the run has no crown head)</span>
           <span><i style="background:var(--inv)"></i>inventory tree (ring: predicted crown from the public prediction parquet)</span>
           <span><i style="background:var(--sat)"></i>reviewed detection from another tile</span>
+          <span><i style="background:transparent;border:2px solid #7dffb0"></i>crown (human)</span>
           <span><i style="background:#5ad37a"></i>accepted</span><span><i style="background:#ffd166"></i>duplicate</span><span><i style="background:#444"></i>not a tree</span><span><i style="background:#c0c0c0"></i>uncertain</span>
           <span id="attribution"></span>
         </div>
-        <p class="muted keys" style="font-size:12px">Detection rings are the model's predicted crown width where the run has a crown head, otherwise allometric estimates from DBH and genus (Tallo fits in data/raw/crown_width_coefficients.csv); inventory rings are always allometric. None are measured canopies. Detections mark crown centres; inventory points mark trunks, which can sit a few metres off a tall tree's crown. Keys: <kbd>Enter</kbd>/<kbd>Space</kbd> accept <kbd>E</kbd> duplicate of nearest <kbd>F</kbd> not a tree <kbd>Q</kbd> uncertain <kbd>X</kbd> clear <kbd>N</kbd>/<kbd>P</kbd> next/previous <kbd>WASD</kbd>/arrows nudge crown centre (<kbd>Shift</kbd> ×5) <kbd>Z</kbd> fit <kbd>Shift+F</kbd> full screen.</p>
+        <p class="muted keys" style="font-size:12px">Detection rings are the model's predicted crown width where the run has a crown head, otherwise allometric estimates from DBH and genus (Tallo fits in data/raw/crown_width_coefficients.csv); inventory rings are always allometric. None are measured canopies. Detections mark crown centres; inventory points mark trunks, which can sit a few metres off a tall tree's crown. Keys: <kbd>Enter</kbd>/<kbd>Space</kbd> accept <kbd>E</kbd> duplicate of nearest (within 5 m) <kbd>F</kbd> not a tree <kbd>Q</kbd> uncertain <kbd>X</kbd> clear <kbd>N</kbd>/<kbd>P</kbd> next/previous <kbd>WASD</kbd>/arrows nudge crown centre (<kbd>Shift</kbd> ×5) <kbd>R</kbd> then click the crown edge: crown (human) <kbd>Z</kbd> fit <kbd>I</kbd> inset <kbd>Shift+F</kbd> full screen.</p>
       </div>
       <aside class="side" id="side">
         <p class="muted">Select a detection.</p>
@@ -119,27 +181,117 @@ const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? '—').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = (v, d = 1) => (v == null || Number.isNaN(v)) ? '—' : Number(v).toFixed(d);
 const statusEl = $('#status');
+let inFlight = 0;
 async function api(path, options = {}) {
-  const r = await fetch('/api/satellite' + path, { headers: { 'content-type': 'application/json' }, ...options });
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw Object.assign(new Error(body.error || r.statusText), { status: r.status });
-  return body;
+  inFlight += 1; $('#busy').classList.remove('hidden');
+  try {
+    const r = await fetch('/api/satellite' + path, { headers: { 'content-type': 'application/json' }, ...options });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(body.error || r.statusText), { status: r.status });
+    return body;
+  } finally {
+    inFlight -= 1; $('#busy').classList.toggle('hidden', inFlight === 0);
+  }
 }
+
+// ---------------------------------------------------------------- model + export
+// The selected run decides which bundle a tile opens when several sets hold
+// it (one set per exported run) and which checkpoint point predictions load.
+const MODEL = { data: null, city: null, polling: null };
+function runLabel(runId) { return (runId.match(/\d+cm-v\d+.*$/) || [runId])[0]; }
+async function loadModels(city) {
+  MODEL.city = city || null;
+  const data = await api('/models' + (city ? '?city=' + encodeURIComponent(city) : ''));
+  MODEL.data = data;
+  const here = data.tileRuns || {};
+  $('#model-run').innerHTML = data.runs.map((r) => `<option value="${esc(r.runId)}"${r.runId === data.selected ? ' selected' : ''}>${esc(r.runId)}${here[r.runId] ? ` · ${here[r.runId]} tile(s)${city ? ' in ' + esc(city) : ''}` : ''}${r.checkpoint ? '' : ' · no local checkpoint'}</option>`).join('');
+  const others = Object.entries(here).filter(([run]) => run !== data.selected);
+  const run = data.runs.find((r) => r.runId === data.selected);
+  $('#model-note').textContent = [
+    run ? `completed ${run.completedAt.slice(0, 10)}` : '',
+    'tiles open this run\'s bundle where a set holds it; point predictions use it',
+    others.length ? `other runs with tiles${city ? ' here' : ''}: ${others.map(([r, n]) => `${runLabel(r)} (${n})`).join(', ')}` : '',
+  ].filter(Boolean).join(' · ');
+  fillExportForm();
+}
+function fillExportForm() {
+  const data = MODEL.data; if (!data) return;
+  const run = data.runs.find((r) => r.runId === data.selected);
+  const cohorts = run ? run.cohorts : [];
+  const preferred = cohorts.find((c) => MODEL.city && c.city === MODEL.city && c.split === 'validation') || cohorts.find((c) => c.split === 'validation') || cohorts[0];
+  $('#export-cohort').innerHTML = cohorts.map((c) => `<option value="${esc(c.cohort)}"${c === preferred ? ' selected' : ''}>${esc(c.cohort)} · ${esc(c.city)} · ${esc(c.split)}${c.chips != null ? ' · ' + c.chips + ' chips' : ''}</option>`).join('');
+  suggestSet();
+  $('#export-threshold').value = data.threshold ?? run?.confidenceThreshold ?? '';
+  $('#export-min-score').value = data.minScore ?? 0.1;
+  pollExport();
+}
+function suggestSet() {
+  const run = MODEL.data?.selected;
+  const cohort = MODEL.data?.runs.find((r) => r.runId === run)?.cohorts.find((c) => c.cohort === $('#export-cohort').value);
+  if (!run || !cohort) { $('#export-set').value = ''; return; }
+  const suffix = cohort.split === 'validation' ? '' : '-' + cohort.split;
+  $('#export-set').value = `${cohort.city.toLowerCase()}-${runLabel(run)}${suffix}`;
+}
+$('#export-cohort').addEventListener('change', suggestSet);
+$('#model-run').addEventListener('change', async () => {
+  try {
+    await api('/models/selected', { method: 'PUT', body: JSON.stringify({ runId: $('#model-run').value }) });
+    route();
+  } catch (error) { statusEl.textContent = error.message; }
+});
+function renderExportJob(job) {
+  const cohorts = MODEL.data?.runs.find((r) => r.runId === MODEL.data.selected)?.cohorts || [];
+  $('#export-go').disabled = !cohorts.length || job?.status === 'running';
+  if (!job) return;
+  const progress = job.total ? `${job.exported}/${job.total}` : `${job.exported}`;
+  $('#export-state').textContent = job.status === 'running' ? `Exporting ${job.request.cohort} → ${job.request.set}: ${progress} tiles…`
+    : job.status === 'done' ? `Exported ${job.exported} tile(s) to ${job.request.set}` : `Export failed: ${job.error}`;
+  $('#export-log').classList.remove('hidden');
+  $('#export-log').textContent = (job.mosaic ? `mosaic ${job.mosaic}\n` : 'mosaic: exporter default\n') + job.log.slice(-12).join('\n');
+}
+async function pollExport() {
+  clearTimeout(MODEL.polling);
+  const job = (await api('/exports').catch(() => []))[0];
+  const wasRunning = MODEL.running;
+  MODEL.running = job?.status === 'running';
+  renderExportJob(job);
+  if (MODEL.running) MODEL.polling = setTimeout(pollExport, 2000);
+  else if (wasRunning) route();
+}
+$('#export-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  $('#export-go').disabled = true;
+  try {
+    const job = await api('/exports', { method: 'POST', body: JSON.stringify({
+      runId: MODEL.data.selected, cohort: $('#export-cohort').value, set: $('#export-set').value.trim(),
+      threshold: $('#export-threshold').value, minScore: $('#export-min-score').value,
+    }) });
+    MODEL.running = true;
+    renderExportJob(job);
+    MODEL.polling = setTimeout(pollExport, 1500);
+  } catch (error) {
+    $('#export-state').textContent = error.message;
+    $('#export-go').disabled = false;
+  }
+});
 
 // ---------------------------------------------------------------- tiles list
 async function showCities() {
   switchView('tiles');
+  loadModels(null).catch((error) => { $('#model-note').textContent = error.message; });
   $('#cities-view').classList.remove('hidden'); $('#city-view').classList.add('hidden');
   statusEl.textContent = 'Loading cities…';
   const rows = await api('/cities');
   statusEl.textContent = rows.length ? `${rows.reduce((n, c) => n + c.tileCount, 0)} tile(s) in ${rows.length} cities` : 'No tiles in the tile directory';
-  $('#cities-body').innerHTML = rows.map((c) => `<tr><td><a href="#city/${encodeURIComponent(c.city)}">${esc(c.city)}</a></td><td>${c.tileCount}</td><td>${c.collections.map((s) => esc(s || '(top level)')).join(', ')}</td></tr>`).join('');
+  $('#cities-body').innerHTML = rows.map((c) => `<tr><td><a href="#city/${encodeURIComponent(c.city)}">${esc(c.city)}</a></td><td>${c.tileCount}</td><td>${c.collections.map((s) => esc(s || '(top level)')).join(', ')}</td><td><a href="#map/${encodeURIComponent(c.city)}">Map</a></td></tr>`).join('');
 }
 
 async function showTiles(city) {
   switchView('tiles');
   $('#cities-view').classList.add('hidden'); $('#city-view').classList.remove('hidden');
   $('#city-title').textContent = city;
+  $('#city-map').href = '#map/' + encodeURIComponent(city);
+  loadModels(city).catch((error) => { $('#model-note').textContent = error.message; });
   $('#tiles-body').innerHTML = '';
   statusEl.textContent = `Loading ${city} tiles…`;
   const rows = await api('/tiles?city=' + encodeURIComponent(city));
@@ -150,6 +302,10 @@ async function showTiles(city) {
   }).join('');
 }
 
+function predictAt(lat, lon) {
+  return api('/predict', { method: 'POST', body: JSON.stringify({ lat, lon }) });
+}
+
 $('#predict-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const parts = $('#predict-point').value.split(/[\s,]+/).filter(Boolean).map(Number);
@@ -157,7 +313,7 @@ $('#predict-form').addEventListener('submit', async (event) => {
   $('#predict-go').disabled = true;
   $('#predict-state').textContent = 'Fetching imagery and running the model (~20 s)…';
   try {
-    const tile = await api('/predict', { method: 'POST', body: JSON.stringify({ lat: parts[0], lon: parts[1] }) });
+    const tile = await predictAt(parts[0], parts[1]);
     $('#predict-state').textContent = `${tile.aboveThreshold} detections, ${tile.inventoryTrees} current trees`;
     location.hash = '#tile/' + encodeURIComponent(tile.tileId);
   } catch (error) {
@@ -167,12 +323,150 @@ $('#predict-form').addEventListener('submit', async (event) => {
   }
 });
 
+// ---------------------------------------------------------------- map view
+// OpenStreetMap underneath, each tile's thumbnail on its footprint, and an
+// outline per tile coloured by review state. MapLibre loads on first use.
+const MAPLIBRE = 'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl';
+const M = { map: null, city: null, images: [], popup: null };
+const MAP_VIEW_KEY = 'satellite-map-view';
+
+function loadMapLibre() {
+  if (window.maplibregl) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = MAPLIBRE + '.css'; document.head.append(css);
+    const js = document.createElement('script'); js.src = MAPLIBRE + '.js'; js.onload = resolve;
+    js.onerror = () => reject(new Error('Could not load MapLibre from jsdelivr'));
+    document.head.append(js);
+  });
+}
+
+function decidedCount(t) { return t.counts.accept + t.counts.duplicate + t.counts.reject + t.counts.uncertain; }
+
+function footprintFeatures(tiles) {
+  return {
+    type: 'FeatureCollection',
+    features: tiles.map((t, i) => ({
+      type: 'Feature',
+      id: i,
+      properties: { tileId: t.tileId, label: t.chipId || t.tileId, collection: t.collection, state: t.done ? 'done' : decidedCount(t) ? 'decided' : 'untouched', detections: t.predictionCount, decided: decidedCount(t) },
+      geometry: { type: 'Polygon', coordinates: [[...t.footprint, t.footprint[0]]] },
+    })),
+  };
+}
+
+// The map position survives opening a tile and coming back (per tab).
+function saveMapView() {
+  if (!M.map || !M.city) return;
+  const c = M.map.getCenter();
+  try { sessionStorage.setItem(MAP_VIEW_KEY, JSON.stringify({ city: M.city, center: [c.lng, c.lat], zoom: M.map.getZoom() })); } catch {}
+}
+function savedMapView() {
+  try { return JSON.parse(sessionStorage.getItem(MAP_VIEW_KEY) || 'null'); } catch { return null; }
+}
+
+async function createMap() {
+  await loadMapLibre();
+  M.map = new maplibregl.Map({
+    container: 'map',
+    style: {
+      version: 8,
+      sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, maxzoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors · NAIP imagery USDA' } },
+      layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+    },
+    center: [-98, 39], zoom: 3, maxZoom: 20,
+  });
+  M.map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
+  await new Promise((resolve) => M.map.once('load', resolve));
+  M.map.addSource('footprints', { type: 'geojson', data: footprintFeatures([]) });
+  M.map.addLayer({ id: 'footprint-fill', type: 'fill', source: 'footprints', paint: { 'fill-color': '#ffffff', 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.2, 0] } });
+  M.map.addLayer({ id: 'footprint-line', type: 'line', source: 'footprints', paint: {
+    'line-color': ['match', ['get', 'state'], 'done', '#5ad37a', 'decided', '#ffd166', '#ffffff'],
+    'line-width': ['case', ['boolean', ['feature-state', 'hover'], false], 3, 1.2],
+  } });
+  let hovered = null;
+  const setHover = (id) => {
+    if (hovered != null) M.map.setFeatureState({ source: 'footprints', id: hovered }, { hover: false });
+    hovered = id;
+    if (id != null) M.map.setFeatureState({ source: 'footprints', id }, { hover: true });
+  };
+  M.map.on('mousemove', 'footprint-fill', (e) => { M.map.getCanvas().style.cursor = 'pointer'; setHover(e.features[0].id); });
+  M.map.on('mouseleave', 'footprint-fill', () => { M.map.getCanvas().style.cursor = ''; setHover(null); });
+  M.map.on('click', onMapClick);
+  M.map.on('moveend', saveMapView);
+}
+
+function onMapClick(e) {
+  M.popup?.remove();
+  const hits = M.map.queryRenderedFeatures(e.point, { layers: ['footprint-fill'] });
+  // Overlapping tiles: one hit opens it, several ask which.
+  const tiles = [...new Map(hits.map((f) => [f.properties.tileId, f.properties])).values()];
+  if (tiles.length === 1) { location.hash = '#tile/' + encodeURIComponent(tiles[0].tileId); return; }
+  const lat = e.lngLat.lat, lon = e.lngLat.lng;
+  const html = tiles.length
+    ? `<strong>${tiles.length} tiles here</strong><ul>${tiles.map((t) => `<li><a href="#tile/${encodeURIComponent(t.tileId)}">${esc(t.label)}</a> <span class="muted">${esc(t.collection || '(top level)')} · ${t.decided}/${t.detections} decided</span></li>`).join('')}</ul>`
+    : `<div>${fmt(lat, 5)}, ${fmt(lon, 5)}</div><button id="map-predict" style="margin-top:6px">Fetch NAIP &amp; predict here</button><div id="map-predict-state" class="muted"></div>`;
+  M.popup = new maplibregl.Popup({ maxWidth: '380px' }).setLngLat(e.lngLat).setHTML(html).addTo(M.map);
+  const button = document.getElementById('map-predict');
+  button?.addEventListener('click', async () => {
+    button.disabled = true;
+    document.getElementById('map-predict-state').textContent = 'Fetching imagery and running the model (~20 s)…';
+    try { const tile = await predictAt(lat, lon); location.hash = '#tile/' + encodeURIComponent(tile.tileId); }
+    catch (error) { document.getElementById('map-predict-state').textContent = error.message; button.disabled = false; }
+  });
+}
+
+function setImageLayers(tiles) {
+  for (const id of M.images) { M.map.removeLayer(id); M.map.removeSource(id); }
+  M.images = [];
+  const visibility = $('#map-imagery').checked ? 'visible' : 'none', opacity = Number($('#map-opacity').value);
+  tiles.forEach((t, i) => {
+    const id = 'tile-img-' + i;
+    M.map.addSource(id, { type: 'image', url: `/api/satellite/tiles/${encodeURIComponent(t.tileId)}/thumb`, coordinates: t.footprint });
+    M.map.addLayer({ id, type: 'raster', source: id, layout: { visibility }, paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, 'footprint-fill');
+    M.images.push(id);
+  });
+}
+
+async function showMap(city) {
+  switchView('map');
+  const cities = await api('/cities');
+  if (!cities.length) { statusEl.textContent = 'No tiles in the tile directory'; return; }
+  const saved = savedMapView();
+  city = (city || M.city || saved?.city || cities[0].city).toUpperCase();
+  if (!cities.some((c) => c.city === city)) city = cities[0].city;
+  $('#map-city').innerHTML = cities.map((c) => `<option value="${esc(c.city)}">${esc(c.city)} (${c.tileCount})</option>`).join('');
+  $('#map-city').value = city;
+  if (!M.map) await createMap();
+  M.map.resize();
+  statusEl.textContent = `Loading ${city} tiles…`;
+  const tiles = await api('/tiles?city=' + encodeURIComponent(city));
+  const firstLook = M.city !== city;
+  M.city = city;
+  M.map.getSource('footprints').setData(footprintFeatures(tiles));
+  // Outlines refresh on every visit (review state moves); thumbnails only when the set does.
+  const key = tiles.map((t) => t.tileId).join('|');
+  if (M.imageKey !== key) { setImageLayers(tiles); M.imageKey = key; }
+  statusEl.textContent = `${tiles.length} ${city} tile(s) · ${tiles.filter((t) => t.done).length} reviewed · ${tiles.filter((t) => !t.done && decidedCount(t)).length} in progress`;
+  if (firstLook) {
+    if (saved?.city === city) M.map.jumpTo({ center: saved.center, zoom: saved.zoom });
+    else if (tiles.length) {
+      const bounds = new maplibregl.LngLatBounds();
+      for (const t of tiles) for (const c of t.footprint) bounds.extend(c);
+      M.map.fitBounds(bounds, { padding: 30, duration: 0 });
+    }
+  }
+}
+
+$('#map-city').addEventListener('change', (e) => { location.hash = '#map/' + encodeURIComponent(e.target.value); });
+$('#map-imagery').addEventListener('change', (e) => { for (const id of M.images) M.map.setLayoutProperty(id, 'visibility', e.target.checked ? 'visible' : 'none'); });
+$('#map-opacity').addEventListener('input', (e) => { for (const id of M.images) M.map.setPaintProperty(id, 'raster-opacity', Number(e.target.value)); });
+
 // ---------------------------------------------------------------- tile view
 const T = { bundle: null, observations: new Map(), nearby: [], selected: null, dirtyCenter: null, saving: 0 };
 const overlay = $('#overlay'), side = $('#side');
 
 function switchView(name) {
-  for (const v of ['tiles', 'tile', 'queue']) $('#view-' + v).classList.toggle('hidden', v !== name);
+  for (const v of ['tiles', 'map', 'tile', 'queue']) $('#view-' + v).classList.toggle('hidden', v !== name);
 }
 function setSave(text, err = false) { const el = $('#savestate'); el.textContent = text; el.classList.toggle('err', err); }
 function pxPerM() { return 1 / T.bundle.image.resolutionM; }
@@ -182,25 +476,48 @@ function visiblePredictions() {
   return T.bundle.predictionLayer.predictions.filter((p) => p.centerConfidence >= threshold() && !(hideDecided && T.observations.has(p.predictionId)));
 }
 
+// Blank the previous tile at once, so a slow fetch never shows the old one
+// under the new title; a newer navigation discards an older response.
+function setTileLoading(text) {
+  T.loading = Boolean(text);
+  $('#tile-loading').classList.toggle('hidden', !text);
+  $('#viewport-wrap').classList.toggle('loading', Boolean(text));
+  if (text) $('#tile-loading-text').textContent = text;
+}
+
 async function showTile(tileId) {
+  const token = T.loadToken = (T.loadToken || 0) + 1;
   switchView('tile');
   statusEl.textContent = 'Opening…';
+  T.selected = null; T.dirtyCenter = null; T.dirtyCrown = undefined; T.insetPoint = null; setRadiusMode(false);
   side.innerHTML = '<p class="muted">Select a detection.</p>';
-  const data = await api('/tiles/' + encodeURIComponent(tileId));
-  T.bundle = data.bundle; T.selected = null; T.dirtyCenter = null;
+  $('#tile-image').removeAttribute('src'); $('#inset-image').removeAttribute('src');
+  overlay.innerHTML = ''; $('#inset').classList.add('hidden');
+  $('#tile-title').textContent = tileId.replace(/^.*-(p\d+_e\d+_n\d+|r\d+_c\d+)$/, '$1'); $('#tile-meta').textContent = '';
+  setTileLoading('Loading tile…');
+  let data;
+  try { data = await api('/tiles/' + encodeURIComponent(tileId)); }
+  catch (error) { if (token === T.loadToken) setTileLoading(null); throw error; }
+  if (token !== T.loadToken) return;
+  T.bundle = data.bundle;
   T.observations = new Map(data.observations.map((o) => [o.predictionId, o]));
   T.nearby = data.nearbyObservations;
   const b = T.bundle;
   $('#tile-back').href = '#city/' + encodeURIComponent(b.city);
   $('#tile-back').textContent = '← ' + b.city + ' tiles';
+  $('#tile-map').href = '#map/' + encodeURIComponent(b.city);
   $('#tile-title').textContent = b.chipId || b.tileId;
   $('#tile-meta').textContent = `${b.city} · ${b.provider.toUpperCase()} ${b.acquisitionStart}${b.acquisitionEnd !== b.acquisitionStart ? ' – ' + b.acquisitionEnd : ''} · ${b.image.resolutionM} m/px · run ${b.predictionLayer.runId} · inventory ${b.inventoryVersion}`;
   $('#attribution').textContent = b.attribution || '';
   $('#threshold').value = b.predictionLayer.confidenceThreshold ?? 0.35; $('#threshold-value').textContent = fmt(threshold(), 2);
   $('#done').checked = data.review.done;
   $('#unavailable').classList.toggle('hidden', b.predictionLayer.status === 'available');
-  $('#tile-image').src = b.image.url;
+  setTileLoading('Loading imagery…');
+  const img = $('#tile-image');
+  img.src = b.image.url; $('#inset-image').src = b.image.url;
+  img.decode().catch(() => {}).then(() => { if (token === T.loadToken) setTileLoading(null); });
   overlay.setAttribute('viewBox', `0 0 ${b.image.width} ${b.image.height}`);
+  $('#inset-overlay').setAttribute('viewBox', `0 0 ${b.image.width} ${b.image.height}`);
   applyZoom();
   render();
   statusEl.textContent = `${b.predictionLayer.predictions.length} detections · ${b.inventoryTrees.length} inventory trees`;
@@ -210,6 +527,7 @@ function applyZoom() {
   const z = Number($('#zoom').value);
   $('#stage').style.width = `${T.bundle.image.width * z}px`;
   $('#stage').dataset.crisp = $('#crisp').checked ? '1' : '0';
+  updateInset();
 }
 
 function circle(cx, cy, r, cls) { return `<circle class="${cls}" cx="${cx}" cy="${cy}" r="${r}"></circle>`; }
@@ -238,21 +556,131 @@ function render() {
       const t = b.inventoryTrees.find((x) => x.treeId === o.duplicateOf.treeId);
       if (t) link = `<line class="link" x1="${center.xPx}" y1="${center.yPx}" x2="${t.xPx}" y2="${t.yPx}"></line>`;
     }
-    parts.push(`<g class="${cls}" data-pred="${esc(p.predictionId)}"><title>${esc(p.species || 'no species')} ${fmt(p.speciesConfidence, 2)} · centre ${fmt(p.centerConfidence, 2)} · DBH est. ${fmt(p.dbhInches)} in</title>${showCrowns && r ? circle(center.xPx, center.yPx, r, 'crown') : ''}${link}<circle class="hitbox" cx="${center.xPx}" cy="${center.yPx}" r="6"></circle>${circle(center.xPx, center.yPx, 3, 'dot')}</g>`);
+    const human = humanCrownFor(p, o);
+    const humanRing = human ? `<circle class="human" cx="${center.xPx}" cy="${center.yPx}" r="${(human / 2) * ppm}"></circle>` : '';
+    parts.push(`<g class="${cls}" data-pred="${esc(p.predictionId)}"><title>${esc(p.species || 'no species')} ${fmt(p.speciesConfidence, 2)} · centre ${fmt(p.centerConfidence, 2)} · DBH est. ${fmt(p.dbhInches)} in</title>${showCrowns && r ? circle(center.xPx, center.yPx, r, 'crown') : ''}${humanRing}${link}<circle class="hitbox" cx="${center.xPx}" cy="${center.yPx}" r="6"></circle>${circle(center.xPx, center.yPx, 3, 'dot')}</g>`);
   }
   overlay.innerHTML = parts.join('');
+  updateInset();
   $('#publish-tile').textContent = `Publish accepted (${[...T.observations.values()].filter((o) => o.status === 'pending' && (o.decision === 'accept' || o.decision === 'duplicate')).length})`;
 }
 
+// Tile pixel under a click on either overlay (both share the tile's viewBox).
+function imagePoint(svg, e) {
+  const r = svg.getBoundingClientRect();
+  return { xPx: (e.clientX - r.left) / r.width * T.bundle.image.width, yPx: (e.clientY - r.top) / r.height * T.bundle.image.height };
+}
+
 overlay.addEventListener('click', (e) => {
+  if (T.loading) return;
+  if (T.radiusMode) { setHumanCrown(imagePoint(overlay, e)); return; }
+  const g = e.target.closest('[data-pred]');
+  if (g) { select(g.dataset.pred); return; }
+  // Open ground: look around it without changing the selection.
+  T.insetPoint = imagePoint(overlay, e);
+  T.insetFollowsSelection = false;
+  placeInset(e.clientX, e.clientY);
+  updateInset();
+});
+$('#inset-overlay').addEventListener('click', (e) => {
+  if (T.loading) return;
+  if (T.radiusMode) { setHumanCrown(imagePoint($('#inset-overlay'), e)); return; }
   const g = e.target.closest('[data-pred]');
   if (g) select(g.dataset.pred);
 });
 
+// ---------------------------------------------------------------- crown (human)
+// R arms radius mode for the selected detection; the next click on the tile
+// (or the inset) sets the crown radius to the distance from the crown centre
+// to that point. The width saves with the decision, or at once if one exists,
+// and when set it is the crown that publishes.
+function humanCrownFor(p, o) {
+  if (T.selected === p.predictionId && T.dirtyCrown !== undefined) return T.dirtyCrown;
+  return o?.humanCrownWidthM ?? null;
+}
+function setRadiusMode(on) {
+  T.radiusMode = Boolean(on);
+  $('#stage').classList.toggle('radius-mode', T.radiusMode);
+  $('#inset').classList.toggle('radius-mode', T.radiusMode);
+  if (on) setSave('Click the crown edge (Esc cancels)');
+}
+function armRadius() {
+  const p = selectedPrediction(); if (!p) { setSave('Select a detection first', true); return; }
+  if (T.observations.get(p.predictionId)?.status === 'published') return;
+  setRadiusMode(!T.radiusMode);
+  if (!T.radiusMode) setSave('');
+}
+function setHumanCrown(point) {
+  setRadiusMode(false);
+  const p = selectedPrediction(); if (!p) return;
+  const o = T.observations.get(p.predictionId);
+  const center = T.dirtyCenter || o?.crownCenter || { xPx: p.xPx, yPx: p.yPx };
+  const radiusPx = Math.hypot(point.xPx - center.xPx, point.yPx - center.yPx);
+  const width = Math.round(2 * radiusPx * T.bundle.image.resolutionM * 10) / 10;
+  if (width <= 0) return;
+  if (width > 50) { setSave(`A ${fmt(width)} m crown is not a tree; try again`, true); return; }
+  T.dirtyCrown = width;
+  afterHumanCrownChange(p, o);
+}
+function clearHumanCrown() {
+  const p = selectedPrediction(); if (!p) return;
+  T.dirtyCrown = null;
+  afterHumanCrownChange(p, T.observations.get(p.predictionId));
+}
+function afterHumanCrownChange(p, o) {
+  render();
+  const el = $('#side-human'); if (el) el.innerHTML = humanCrownText(p, o);
+  // An existing decision re-saves with the new crown; otherwise it rides on the next decision.
+  if (o) { clearTimeout(nudgeTimer); nudgeTimer = null; save(p, formInput(o.decision, o.duplicateOfTreeId)); }
+  else setSave(T.dirtyCrown ? `Crown ${fmt(T.dirtyCrown)} m — saved with the decision` : 'Crown cleared');
+}
+function humanCrownText(p, o) {
+  const w = humanCrownFor(p, o);
+  return w ? `<strong>${fmt(w)} m</strong> <span class="muted">— publishes instead of the model's</span> <button id="clear-human" class="ghost" style="padding:1px 6px">clear</button>`
+    : '<span class="muted">not set — press <kbd>R</kbd>, then click the crown edge</span>';
+}
+
+// ---------------------------------------------------------------- inset
+// The surroundings of the selected detection (or the last clicked point) at a
+// multiple of the main view's zoom, with the same overlay. It follows nudges.
+const INSET_PX = 280;
+function insetCenter() {
+  if (T.insetFollowsSelection !== false) {
+    const p = selectedPrediction();
+    if (p) { const o = T.observations.get(p.predictionId); return T.dirtyCenter || o?.crownCenter || { xPx: p.xPx, yPx: p.yPx }; }
+  }
+  return T.insetPoint;
+}
+function updateInset() {
+  const box = $('#inset'), center = T.bundle && $('#show-inset').checked ? insetCenter() : null;
+  box.classList.toggle('hidden', !center);
+  if (!center) return;
+  const mag = Number($('#inset-mag').value), scale = Number($('#zoom').value) * mag; // screen px per image px
+  const stage = $('#inset-stage');
+  stage.style.width = `${T.bundle.image.width * scale}px`;
+  stage.style.left = `${INSET_PX / 2 - center.xPx * scale}px`;
+  stage.style.top = `${INSET_PX / 2 - center.yPx * scale}px`;
+  box.dataset.crisp = $('#crisp').checked ? '1' : '0';
+  $('#inset-overlay').innerHTML = overlay.innerHTML;
+  $('#inset-label').textContent = `${mag}× · ${fmt(INSET_PX / scale * T.bundle.image.resolutionM, 0)} m across`;
+}
+// Keep the inset off the point it is showing: swap corners when it would cover it.
+function placeInset(clientX, clientY) {
+  const wrap = $('.viewport-wrap').getBoundingClientRect();
+  const underRight = clientX > wrap.right - INSET_PX - 16 && clientY < wrap.top + INSET_PX + 16;
+  const underLeft = clientX < wrap.left + INSET_PX + 16 && clientY < wrap.top + INSET_PX + 16;
+  const box = $('#inset');
+  if (underRight) box.classList.add('left'); else if (underLeft) box.classList.remove('left');
+}
+$('#show-inset').addEventListener('change', updateInset);
+$('#inset-mag').addEventListener('change', updateInset);
+
 function select(predictionId) {
   flushNudge();
-  T.selected = predictionId; T.dirtyCenter = null;
+  T.selected = predictionId; T.dirtyCenter = null; T.dirtyCrown = undefined; T.insetFollowsSelection = true; setRadiusMode(false);
   render(); renderSide();
+  const dot = overlay.querySelector(`[data-pred="${CSS.escape(predictionId)}"] .dot`);
+  if (dot) { const r = dot.getBoundingClientRect(); placeInset(r.left + r.width / 2, r.top + r.height / 2); }
 }
 
 function selectedPrediction() { return T.bundle?.predictionLayer.predictions.find((p) => p.predictionId === T.selected) || null; }
@@ -273,6 +701,7 @@ function renderSide() {
       <dt>Centre confidence</dt><dd>${fmt(p.centerConfidence, 2)}</dd>
       <dt>DBH estimate</dt><dd>${fmt(p.dbhInches)} in <span class="muted">— model estimate, never published as measured</span></dd>
       <dt>Crown (model)</dt><dd>${p.modelCrownWidthM ? `${fmt(p.modelCrownWidthM)} m` : 'no crown head'}</dd>
+      <dt>Crown (human)</dt><dd id="side-human">${humanCrownText(p, o)}</dd>
       <dt>Crown (from DBH)</dt><dd>${p.crownWidthM ? `${fmt(p.crownWidthM)} m <span class="muted">(Tallo ${esc(p.crownFit?.level)} fit, ${esc(p.crownFit?.taxon)}, n=${p.crownFit?.n})</span>` : 'unavailable'}</dd>
       <dt>Crown centre</dt><dd id="side-center">${centerText(p, center)}</dd>
     </dl>
@@ -285,14 +714,16 @@ function renderSide() {
       <button data-decision="uncertain" class="warn" ${o?.status === 'published' ? 'disabled' : ''}>Uncertain <kbd>Q</kbd></button>
       <button id="clear" class="ghost" ${!o || o.status === 'published' ? 'disabled' : ''}>Clear <kbd>X</kbd></button>
     </div>
-    <h2>Nearest inventory trees</h2>
-    <div class="nearest"><ul>${(p.nearest || []).map((n) => `<li><span>${esc(n.treeId)} <span class="muted">${fmt(n.distanceM)} m · ${esc(n.species || 'unidentified')} · ${n.dbhInches != null ? fmt(n.dbhInches) + ' in' : 'no DBH'} · ${esc(n.source)}</span></span><button data-dup="${esc(n.treeId)}" ${o?.status === 'published' ? 'disabled' : ''}>${o?.duplicateOfTreeId === n.treeId ? '✓ linked' : 'Duplicate of'}</button></li>`).join('') || '<li class="muted">none within the tile</li>'}</ul></div>
+    <h2>Inventory trees within 5 m</h2>
+    <div class="nearest"><ul>${(p.nearest || []).map((n) => `<li><span>${esc(n.treeId)} <span class="muted">${fmt(n.distanceM)} m · ${esc(n.species || 'unidentified')} · ${n.dbhInches != null ? fmt(n.dbhInches) + ' in' : 'no DBH'} · ${esc(n.source)}</span></span><button data-dup="${esc(n.treeId)}" ${o?.status === 'published' ? 'disabled' : ''}>${o?.duplicateOfTreeId === n.treeId ? '✓ linked' : 'Duplicate of'}</button></li>`).join('') || '<li class="muted">none within 5 m of this detection</li>'}</ul></div>
     <p class="muted" style="font-size:12px">A duplicate publishes at the linked tree's coordinates and only fills what the inventory left empty; the trunk position is never overwritten. "Not a tree" and "uncertain" are about this image only and never publish.</p>`;
   drawCloseup(center);
   side.querySelectorAll('[data-decision]').forEach((btn) => btn.addEventListener('click', () => decide(btn.dataset.decision)));
   side.querySelectorAll('[data-dup]').forEach((btn) => btn.addEventListener('click', () => decide('duplicate', btn.dataset.dup)));
   $('#clear').addEventListener('click', clearDecision);
 }
+// The panel is rebuilt on every selection; one delegated listener serves every build.
+side.addEventListener('click', (e) => { if (e.target.id === 'clear-human') clearHumanCrown(); });
 
 function centerText(p, center) {
   return `${fmt(center.xPx, 0)}, ${fmt(center.yPx, 0)} px${center.xPx !== p.xPx || center.yPx !== p.yPx ? ' <span class="pill">moved</span>' : ''} · ${fmt(p.latitude, 6)}, ${fmt(p.longitude, 6)}`;
@@ -321,6 +752,7 @@ function formInput(decision, duplicateOfTreeId) {
     measuredDbhInches: dbh === '' || dbh == null ? null : Number(dbh), notes,
     duplicateOfTreeId: decision === 'duplicate' ? duplicateOfTreeId : null,
     crownCenter: center && (center.xPx !== p.xPx || center.yPx !== p.yPx) ? { xPx: center.xPx, yPx: center.yPx } : null,
+    humanCrownWidthM: T.dirtyCrown !== undefined ? T.dirtyCrown : (o?.humanCrownWidthM ?? null),
     baseRevision: o?.revision ?? null,
   };
 }
@@ -328,18 +760,19 @@ function formInput(decision, duplicateOfTreeId) {
 async function decide(decision, duplicateOfTreeId) {
   const p = selectedPrediction(); if (!p) return;
   clearTimeout(nudgeTimer); nudgeTimer = null; // the decision carries the moved centre
-  if (decision === 'duplicate' && !duplicateOfTreeId) { duplicateOfTreeId = p.nearest?.[0]?.treeId; if (!duplicateOfTreeId) { setSave('No inventory tree on this tile to link to', true); return; } }
+  if (decision === 'duplicate' && !duplicateOfTreeId) { duplicateOfTreeId = p.nearest?.[0]?.treeId; if (!duplicateOfTreeId) { setSave('No inventory tree within 5 m to link to', true); return; } }
   await save(p, formInput(decision, duplicateOfTreeId));
 }
 
 async function save(p, body) {
   T.saving += 1; setSave('Saving…');
-  const sentCenter = T.dirtyCenter;
+  const sentCenter = T.dirtyCenter, sentCrown = T.dirtyCrown;
   try {
     const { observation } = await api(`/tiles/${encodeURIComponent(T.bundle.tileId)}/observations/${encodeURIComponent(p.predictionId)}`, { method: 'PUT', body: JSON.stringify(body) });
     T.observations.set(p.predictionId, observation);
     // Nudges made while this save was in flight stay dirty; only the position we sent is now saved.
     if (T.dirtyCenter === sentCenter) T.dirtyCenter = null;
+    if (T.selected === p.predictionId && T.dirtyCrown === sentCrown) T.dirtyCrown = undefined;
     setSave('Saved');
   } catch (err) {
     setSave(err.message, true);
@@ -392,12 +825,15 @@ function step(delta) {
 }
 
 document.addEventListener('keydown', (e) => {
-  if ($('#view-tile').classList.contains('hidden')) return;
+  if ($('#view-tile').classList.contains('hidden') || T.loading) return;
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
   const k = e.key.toLowerCase(); const s = e.shiftKey ? 5 : 1;
   if (k === 'z') { e.preventDefault(); fitZoom(); return; }
+  if (k === 'i' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); $('#show-inset').checked = !$('#show-inset').checked; updateInset(); return; }
   if (k === 'f' && e.shiftKey) { e.preventDefault(); $('#fullscreen').click(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (k === 'escape' && T.radiusMode) { e.preventDefault(); setRadiusMode(false); setSave(''); return; }
+  if (k === 'r') { e.preventDefault(); armRadius(); return; }
   // WASD and the arrows only move the selected crown centre; decisions sit on other keys.
   const map = { enter: () => decide('accept'), ' ': () => decide('accept'), f: () => decide('reject'), q: () => decide('uncertain'), e: () => decide('duplicate'), x: clearDecision, n: () => step(1), ']': () => step(1), p: () => step(-1), '[': () => step(-1),
     w: () => nudge(0, -s), arrowup: () => nudge(0, -s), s: () => nudge(0, s), arrowdown: () => nudge(0, s), a: () => nudge(-s, 0), arrowleft: () => nudge(-s, 0), d: () => nudge(s, 0), arrowright: () => nudge(s, 0) };
@@ -464,6 +900,7 @@ function route() {
   const h = location.hash || '#tiles';
   const run = h.startsWith('#tile/') ? showTile(decodeURIComponent(h.slice(6)))
     : h.startsWith('#city/') ? showTiles(decodeURIComponent(h.slice(6)))
+    : h === '#map' || h.startsWith('#map/') ? showMap(h.startsWith('#map/') ? decodeURIComponent(h.slice(5)) : null)
     : h === '#queue' ? showQueue() : showCities();
   run.catch((err) => { statusEl.textContent = 'Error: ' + err.message; });
 }

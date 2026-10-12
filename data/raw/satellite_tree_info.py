@@ -32,9 +32,10 @@ What a row carries, and what it deliberately does not:
   matching is a grid equi-join, is guaranteed to put the two in one cluster;
   the municipal position then wins the merge and the satellite row only
   fills attributes the inventory left empty.  `positionRole` records which.
-* `crown_width_m` is `predictedCrownWidthM` only when `crownWidthMethod` is
-  `model_crown_head`: a width the model read from the image, which is an
-  observation of this crown in the sense the column means.  A Tallo width
+* `crown_width_m` is the reviewer's traced crown (`humanCrownWidthM`) when
+  there is one.  Otherwise it is `predictedCrownWidthM`, but only when
+  `crownWidthMethod` is `model_crown_head`: a width the model read from the
+  image, which is an observation of this crown in the sense the column means.  A Tallo width
   (`tallo_*`) is allometric from the model's own DBH estimate -- a guess
   from a guess -- and tree_predictions already computes that for every
   tree, so it stays out.
@@ -160,7 +161,8 @@ def records_to_table(records: Iterable[Mapping[str, Any]]) -> pa.Table:
                 "diameter_at_breast_height": _positive_float_or_none(
                     record.get("measuredDbhInches")
                 ),
-                "crown_width_m": (
+                "crown_width_m": _positive_float_or_none(record.get("humanCrownWidthM"))
+                or (
                     _positive_float_or_none(record.get("predictedCrownWidthM"))
                     if record.get("crownWidthMethod") == MODEL_CROWN_METHOD
                     else None

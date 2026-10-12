@@ -37,6 +37,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore'
+import sharp from 'sharp'
 
 export const BUNDLE_SCHEMA_VERSION = 1
 export const EXPORT_SCHEMA_VERSION = 1
@@ -46,9 +47,15 @@ export const OBSERVATIONS = 'satelliteObservations'
 export const PUBLISHED = 'satelliteTrees'
 export const TILE_REVIEWS = 'satelliteTileReviews'
 const NEAREST_LIMIT = 6
+/** Inventory trees farther than this from a detection are not offered as its duplicate. */
+export const DUPLICATE_RADIUS_M = 5
 const MAX_NOTES = 500
 const MAX_SPECIES = 120
+/** A reviewer-traced crown wider than this is a slip of the mouse, not a tree. */
+export const MAX_HUMAN_CROWN_M = 50
 const EARTH_RADIUS_M = 6_371_008.8
+/** Longest side of the map overlay's tile thumbnails, in pixels. */
+const THUMB_PX = 256
 
 // ---------------------------------------------------------------------------
 // The bundle contract
@@ -213,6 +220,27 @@ export function lonLatToPixel(bundle: TilePredictionBundle, longitude: number, l
   return { xPx: (e * dx - b * dy) / det, yPx: (a * dy - d * dx) / det }
 }
 
+/**
+ * The tile's corners as [longitude, latitude]: top-left, top-right,
+ * bottom-right, bottom-left, the order a MapLibre image source takes.  The
+ * tile is square in its own CRS (UTM), so on the map it is slightly rotated.
+ */
+export function tileFootprint(bundle: TilePredictionBundle): [number, number][] {
+  const { width, height } = bundle.image
+  return ([[0, 0], [width, 0], [width, height], [0, height]] as const).map(([x, y]) => {
+    const { longitude, latitude } = pixelToLonLat(bundle, x, y)
+    return [longitude, latitude]
+  })
+}
+
+/** The footprint's lon/lat envelope. */
+export function tileEnvelope(bundle: TilePredictionBundle): { west: number; east: number; south: number; north: number } {
+  const corners = tileFootprint(bundle)
+  const lons = corners.map((c) => c[0])
+  const lats = corners.map((c) => c[1])
+  return { west: Math.min(...lons), east: Math.max(...lons), south: Math.min(...lats), north: Math.max(...lats) }
+}
+
 export interface NearestTree {
   treeId: string
   distanceM: number
@@ -223,12 +251,13 @@ export interface NearestTree {
   predictedCrownWidthM: number | null
 }
 
-/** Inventory trees nearest a point, nearest first.  Suggestions, never a merge. */
+/** Inventory trees within maxDistanceM of a point, nearest first.  Suggestions, never a merge. */
 export function nearestInventory(
   bundle: TilePredictionBundle,
   longitude: number,
   latitude: number,
   limit = NEAREST_LIMIT,
+  maxDistanceM = DUPLICATE_RADIUS_M,
 ): NearestTree[] {
   return bundle.inventoryTrees
     .map((tree) => ({
@@ -240,6 +269,7 @@ export function nearestInventory(
       positionRole: tree.positionRole,
       predictedCrownWidthM: tree.predictedCrownWidthM ?? null,
     }))
+    .filter((tree) => tree.distanceM <= maxDistanceM)
     .sort((x, y) => x.distanceM - y.distanceM)
     .slice(0, limit)
 }
@@ -263,6 +293,8 @@ export interface ObservationInput {
   duplicateOfTreeId?: string | null
   /** A nudged crown centre, tile-local pixels; the trunk is never moved. */
   crownCenter?: { xPx: number; yPx: number } | null
+  /** Crown width the reviewer traced on the image, metres; null when not traced. */
+  humanCrownWidthM?: number | null
   notes?: string | null
   /** Optimistic concurrency: the revision the client last saw, or null for a first write. */
   baseRevision?: number | null
@@ -290,6 +322,8 @@ export interface ObservationRecord {
   crownWidthMethod: string | null
   /** The Tallo estimate from the model's DBH, kept for comparison. */
   allometricCrownWidthM: number | null
+  /** Traced by the reviewer on the image; when set, this is the crown that publishes. */
+  humanCrownWidthM: number | null
   /** Where the row publishes: the crown centre, or the linked tree's trunk. */
   latitude: number
   longitude: number
@@ -336,6 +370,10 @@ export function parseObservationInput(body: unknown): ObservationInput {
     input.speciesSource = b.speciesSource
   }
   input.measuredDbhInches = cleanPositive(b.measuredDbhInches, 'measuredDbhInches')
+  input.humanCrownWidthM = cleanPositive(b.humanCrownWidthM, 'humanCrownWidthM')
+  if (input.humanCrownWidthM != null && input.humanCrownWidthM > MAX_HUMAN_CROWN_M) {
+    throw new Error(`humanCrownWidthM must be at most ${MAX_HUMAN_CROWN_M} m`)
+  }
   input.duplicateOfTreeId = cleanString(b.duplicateOfTreeId, 200, 'duplicateOfTreeId')
   input.notes = cleanString(b.notes, MAX_NOTES, 'notes')
   if (b.crownCenter != null) {
@@ -418,6 +456,7 @@ export function buildObservation(
       ? prediction.modelCrownWidthMethod ?? 'model_crown_head'
       : prediction.crownWidthMethod ?? null,
     allometricCrownWidthM: prediction.crownWidthM ?? null,
+    humanCrownWidthM: input.humanCrownWidthM ?? null,
     ...position,
     crownCenter,
     duplicateOfTreeId: duplicateOf?.treeId ?? null,
@@ -448,6 +487,8 @@ export interface ExportRow {
   predictedCrownWidthM: number | null
   /** model_crown_head is read from the image; tallo_* is allometric from the model's DBH. */
   crownWidthMethod: string | null
+  /** Traced by the reviewer on the image; the ingest prefers it to the model's. */
+  humanCrownWidthM: number | null
   duplicateOfTreeId: string | null
   tileId: string
   imageryVersion: string
@@ -475,6 +516,7 @@ export function exportRow(published: Record<string, unknown>): ExportRow {
     measuredDbhInches: (published.measuredDbhInches as number | null) ?? null,
     predictedCrownWidthM: (published.predictedCrownWidthM as number | null) ?? null,
     crownWidthMethod: (published.crownWidthMethod as string | null) ?? null,
+    humanCrownWidthM: (published.humanCrownWidthM as number | null) ?? null,
     duplicateOfTreeId: (published.duplicateOfTreeId as string | null) ?? null,
     tileId: String(published.tileId),
     imageryVersion: String(published.imageryVersion),
@@ -520,6 +562,7 @@ export function publishedTreeFrom(observation: ObservationRecord): Record<string
     measuredDbhInches: observation.measuredDbhInches,
     predictedCrownWidthM: observation.predictedCrownWidthM,
     crownWidthMethod: observation.crownWidthMethod,
+    humanCrownWidthM: observation.humanCrownWidthM ?? null,
     duplicateOfTreeId: observation.duplicateOfTreeId,
     tileId: observation.tileId,
     imageryVersion: observation.imageryVersion,
@@ -546,6 +589,8 @@ export interface TileSummary {
   inventoryCount: number
   /** The tile set: the subdirectory of the tile directory it was read from, '' at the top. */
   collection: string
+  /** Corners on the map, see tileFootprint. */
+  footprint: [number, number][]
 }
 
 export interface CitySummary {
@@ -557,17 +602,50 @@ export interface CitySummary {
 /**
  * The bundles under a tile directory, at any depth, so one reviewer serves
  * every exported set.  A tile id names a place, imagery and chip, not an
- * export, so the same tile can sit in two sets (the committed fixtures were
- * copied out of exports); the newest file wins, as a re-export would.
+ * export, so the same tile can sit in several sets -- one per model run
+ * exported over the same chips.  The preferred run's bundle wins when one
+ * holds the tile; otherwise the newest file does, as a re-export would.
  */
 export class TileStore {
   private cache = new Map<string, { mtimeMs: number; bundle: TilePredictionBundle }>()
   private files = new Map<string, string>()
+  private thumbs = new Map<string, { mtimeMs: number; data: Buffer }>()
+  private preferred: string | null
 
-  constructor(readonly dir: string) {}
+  constructor(readonly dir: string, options: { preferredRun?: string | null } = {}) {
+    this.preferred = options.preferredRun ?? null
+  }
 
-  private index(): Map<string, string> {
-    const found = new Map<string, { file: string; mtimeMs: number }>()
+  /** The run whose bundle a tile opens when several sets hold it; null: the newest file. */
+  get preferredRun(): string | null {
+    return this.preferred
+  }
+
+  set preferredRun(runId: string | null) {
+    this.preferred = runId
+    this.files = new Map()
+  }
+
+  private read(file: string): TilePredictionBundle {
+    const mtimeMs = statSync(file).mtimeMs
+    const cached = this.cache.get(file)
+    if (cached && cached.mtimeMs === mtimeMs) return cached.bundle
+    const bundle = assertBundle(JSON.parse(readFileSync(file, 'utf8')))
+    this.cache.set(file, { mtimeMs, bundle })
+    return bundle
+  }
+
+  private runOf(file: string): string | null {
+    try {
+      return this.read(file).predictionLayer.runId
+    } catch {
+      return null
+    }
+  }
+
+  /** Every bundle file, by tile id, newest first. */
+  private candidates(): Map<string, string[]> {
+    const found = new Map<string, { file: string; mtimeMs: number }[]>()
     const walk = (dir: string) => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name)
@@ -575,15 +653,24 @@ export class TileStore {
           walk(full)
         } else if (entry.name.endsWith('.json')) {
           const tileId = entry.name.slice(0, -'.json'.length)
-          const mtimeMs = statSync(full).mtimeMs
-          const seen = found.get(tileId)
-          if (!seen || mtimeMs > seen.mtimeMs) found.set(tileId, { file: full, mtimeMs })
+          const list = found.get(tileId) ?? []
+          list.push({ file: full, mtimeMs: statSync(full).mtimeMs })
+          found.set(tileId, list)
         }
       }
     }
     if (existsSync(this.dir)) walk(this.dir)
-    this.files = new Map([...found].map(([tileId, { file }]) => [tileId, file]))
-    return this.files
+    return new Map([...found].map(([tileId, list]) => [tileId, list.sort((a, b) => b.mtimeMs - a.mtimeMs).map((c) => c.file)]))
+  }
+
+  private index(): Map<string, string> {
+    const chosen = new Map<string, string>()
+    for (const [tileId, files] of this.candidates()) {
+      const preferred = this.preferred && files.length > 1 ? files.find((f) => this.runOf(f) === this.preferred) : undefined
+      chosen.set(tileId, preferred ?? files[0])
+    }
+    this.files = chosen
+    return chosen
   }
 
   private file(tileId: string): string | null {
@@ -607,6 +694,25 @@ export class TileStore {
       .sort((x, y) => x.collection.localeCompare(y.collection) || x.tileId.localeCompare(y.tileId))
   }
 
+  /** How many tiles each run has bundles for, shadowed ones included. */
+  runCounts(city?: string): Record<string, number> {
+    const wanted = city?.toUpperCase()
+    const counts: Record<string, number> = {}
+    for (const files of this.candidates().values()) {
+      const runs = new Set<string>()
+      for (const file of files) {
+        try {
+          const bundle = this.read(file)
+          if (!wanted || bundle.city.toUpperCase() === wanted) runs.add(bundle.predictionLayer.runId)
+        } catch {
+          // an unreadable bundle is reported when the tile is opened
+        }
+      }
+      for (const run of runs) counts[run] = (counts[run] ?? 0) + 1
+    }
+    return counts
+  }
+
   cities(): CitySummary[] {
     const byCity = new Map<string, CitySummary>()
     for (const tile of this.list()) {
@@ -622,13 +728,21 @@ export class TileStore {
     if (!/^[A-Za-z0-9._:-]+$/.test(tileId)) return null
     const file = this.file(tileId)
     if (!file) return null
-    const mtimeMs = statSync(file).mtimeMs
-    const cached = this.cache.get(tileId)
-    if (cached && cached.mtimeMs === mtimeMs) return cached.bundle
-    const bundle = assertBundle(JSON.parse(readFileSync(file, 'utf8')))
+    const bundle = this.read(file)
     if (bundle.tileId !== tileId) throw new Error(`${file} holds tile ${bundle.tileId}, not ${tileId}`)
-    this.cache.set(tileId, { mtimeMs, bundle })
     return bundle
+  }
+
+  /** A small JPEG of the tile for the map overlay, re-made when the PNG changes. */
+  async thumbnail(tileId: string): Promise<Buffer | null> {
+    const file = this.imagePath(tileId)
+    if (!file) return null
+    const mtimeMs = statSync(file).mtimeMs
+    const cached = this.thumbs.get(file)
+    if (cached && cached.mtimeMs === mtimeMs) return cached.data
+    const data = await sharp(file).resize(THUMB_PX, THUMB_PX, { fit: 'inside' }).removeAlpha().jpeg({ quality: 80 }).toBuffer()
+    this.thumbs.set(file, { mtimeMs, data })
+    return data
   }
 
   imagePath(tileId: string): string | null {
@@ -654,6 +768,7 @@ export function summarize(bundle: TilePredictionBundle, collection = ''): TileSu
     predictionCount: bundle.predictionLayer.predictions.length,
     inventoryCount: bundle.inventoryTrees.length,
     collection,
+    footprint: tileFootprint(bundle),
   }
 }
 
@@ -750,20 +865,40 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
   // reads, and the tile directory holds hundreds of tiles across its sets.
   router.get('/tiles', async (req, res, next) => {
     try {
-      const summaries = tiles.list(typeof req.query.city === 'string' ? req.query.city : undefined)
-      const rows = await Promise.all(summaries.map(async (summary) => {
-        const [observations, review] = await Promise.all([
-          observationsForTile(summary.tileId),
-          db.collection(TILE_REVIEWS).doc(summary.tileId).get(),
-        ])
+      const city = typeof req.query.city === 'string' ? req.query.city.toUpperCase() : undefined
+      const summaries = tiles.list(city)
+      if (!summaries.length) {
+        res.json([])
+        return
+      }
+      // Two reads for the whole listing rather than two per tile: the city's
+      // decisions in one query, and every tile's review doc in one batch.
+      const observationQuery = city
+        ? db.collection(OBSERVATIONS).where('city', '==', city)
+        : db.collection(OBSERVATIONS)
+      const [observationSnapshot, reviews] = await Promise.all([
+        observationQuery.get(),
+        db.getAll(...summaries.map((s) => db.collection(TILE_REVIEWS).doc(s.tileId))),
+      ])
+      const byTile = new Map<string, Record<string, unknown>[]>()
+      for (const doc of observationSnapshot.docs) {
+        const o = doc.data()
+        const list = byTile.get(o.tileId as string) ?? []
+        list.push(o)
+        byTile.set(o.tileId as string, list)
+      }
+      const rows = summaries.map((summary, i) => {
         const counts: Record<string, number> = { accept: 0, duplicate: 0, reject: 0, uncertain: 0, published: 0 }
-        for (const o of observations) {
+        for (const o of byTile.get(summary.tileId) ?? []) {
+          if (o.runId !== summary.runId) continue
           counts[o.decision as string] = (counts[o.decision as string] ?? 0) + 1
           if (o.status === 'published') counts.published += 1
         }
-        const reviewData = review.data()
-        return { ...summary, counts, done: Boolean(reviewData?.done), doneAt: toIso(reviewData?.doneAt) }
-      }))
+        const reviewData = reviews[i].data()
+        // Done is per prediction layer: another run's review of this tile is not this one's.
+        const done = Boolean(reviewData?.done) && reviewData?.runId === summary.runId
+        return { ...summary, counts, done, doneAt: done ? toIso(reviewData?.doneAt) : null }
+      })
       res.json(rows)
     } catch (error) {
       next(error)
@@ -777,29 +912,33 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
         res.status(404).json({ error: `No tile ${req.params.tileId}` })
         return
       }
-      const [observations, review, nearby] = await Promise.all([
+      const bounds = tileEnvelope(bundle)
+      const [tileObservations, review, nearby] = await Promise.all([
         observationsForTile(bundle.tileId),
         db.collection(TILE_REVIEWS).doc(bundle.tileId).get(),
         // Decisions from other tiles that fall on this one (tiles overlap
         // at their edges, and an imagery re-run makes a new tile id): the
         // page draws them so a tree accepted once is not accepted twice.
-        db.collection(OBSERVATIONS).where('city', '==', bundle.city).get(),
+        // Only the tile's latitude band is read -- a single-field range, so
+        // no composite index -- and the rest is filtered here.
+        db.collection(OBSERVATIONS).where('latitude', '>=', bounds.south).where('latitude', '<=', bounds.north).get(),
       ])
-      const bounds = bundle.image.bounds
-      const nearbyObservations = nearby.docs
-        .map(serializeObservation)
-        .filter((o) => o.tileId !== bundle.tileId && PUBLISHABLE.has(o.decision as Decision))
-        .filter((o) => !bounds || (
-          (o.latitude as number) >= bounds.south && (o.latitude as number) <= bounds.north &&
-          (o.longitude as number) >= bounds.west && (o.longitude as number) <= bounds.east
-        ))
+      // A prediction id is a cell of the chip, so another run's decision on
+      // this tile can share one with this run's detection; only this run's
+      // decisions attach to its detections, the rest draw as nearby ones.
+      const runId = bundle.predictionLayer.runId
+      const sameRun = (o: Record<string, unknown>) => o.tileId === bundle.tileId && o.runId === runId
+      const nearbyObservations = [...nearby.docs.map(serializeObservation), ...tileObservations.filter((o) => !sameRun(o))]
+        .filter((o, i, all) => all.findIndex((x) => x.id === o.id) === i)
+        .filter((o) => o.city === bundle.city && !sameRun(o) && PUBLISHABLE.has(o.decision as Decision))
+        .filter((o) => (o.longitude as number) >= bounds.west && (o.longitude as number) <= bounds.east)
         .map((o) => ({ ...o, ...lonLatToPixel(bundle, o.longitude as number, o.latitude as number) }))
       const reviewData = review.data()
       res.json({
         bundle: presentBundle(bundle),
-        observations,
+        observations: tileObservations.filter(sameRun),
         nearbyObservations,
-        review: { done: Boolean(reviewData?.done), doneAt: toIso(reviewData?.doneAt), imageryVersion: reviewData?.imageryVersion ?? null, runId: reviewData?.runId ?? null },
+        review: { done: Boolean(reviewData?.done) && reviewData?.runId === runId, doneAt: toIso(reviewData?.doneAt), imageryVersion: reviewData?.imageryVersion ?? null, runId: reviewData?.runId ?? null },
       })
     } catch (error) {
       next(error)
@@ -813,6 +952,19 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
       return
     }
     res.type('image/png').sendFile(file)
+  })
+
+  router.get('/tiles/:tileId/thumb', async (req, res, next) => {
+    try {
+      const data = await tiles.thumbnail(req.params.tileId)
+      if (!data) {
+        res.status(404).json({ error: 'No image for that tile' })
+        return
+      }
+      res.type('image/jpeg').set('Cache-Control', 'no-cache').send(data)
+    } catch (error) {
+      next(error)
+    }
   })
 
   router.put('/tiles/:tileId/observations/:predictionId', async (req, res, next) => {

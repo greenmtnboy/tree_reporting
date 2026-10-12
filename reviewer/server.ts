@@ -2,11 +2,13 @@ import express from 'express'
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import sharp from 'sharp'
 
 import { createSatelliteRouter, TileStore } from './satellite.ts'
 import { parsePoint, predictPoint } from './satellitePredict.ts'
+import { ExportJobs, listRuns, parseExportRequest } from './satelliteModels.ts'
 import {
   assertCheckinPhotoPublishable,
   checkinPhotoListItem,
@@ -51,11 +53,62 @@ const PUBLISHED_PHOTO_MAX_DIM = 1600
 
 app.use(express.json({ limit: '32kb' }))
 
-// Predict a tile at any latitude/longitude NAIP covers; the bundle is written
-// into the tile directory, so it lists like an exported one.  Configure with
-// SATELLITE_RUN (default: the newest complete run), SATELLITE_THRESHOLD and
-// SATELLITE_MIN_SCORE (default 0.1).
+// The model the satellite page works with.  SATELLITE_RUN picks the starting
+// run (default: the newest complete one); the page can switch it.  The
+// selected run decides which bundle a tile opens when several sets hold it,
+// and which checkpoint point predictions load.
 const imageryModelDir = process.env.IMAGERY_MODEL_DIR ?? path.join(import.meta.dirname, '..', 'imagery_model')
+const defaultThreshold = process.env.SATELLITE_THRESHOLD ? Number(process.env.SATELLITE_THRESHOLD) : undefined
+const defaultMinScore = process.env.SATELLITE_MIN_SCORE ? Number(process.env.SATELLITE_MIN_SCORE) : undefined
+const satelliteTiles = new TileStore(tileDir, { preferredRun: process.env.SATELLITE_RUN ?? listRuns(imageryModelDir)[0]?.runId ?? null })
+const crownCoefficients = path.join(import.meta.dirname, '..', 'data', 'raw', 'crown_width_coefficients.csv')
+const exportJobs = new ExportJobs(imageryModelDir, tileDir, existsSync(crownCoefficients) ? crownCoefficients : null)
+
+app.get('/api/satellite/models', (req, res, next) => {
+  try {
+    const city = typeof req.query.city === 'string' ? req.query.city : undefined
+    res.json({
+      selected: satelliteTiles.preferredRun,
+      threshold: defaultThreshold ?? null,
+      minScore: defaultMinScore ?? 0.1,
+      runs: listRuns(imageryModelDir),
+      tileRuns: satelliteTiles.runCounts(city),
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/satellite/models/selected', (req, res) => {
+  const runId = (req.body as { runId?: unknown })?.runId
+  if (runId !== null && !listRuns(imageryModelDir).some((r) => r.runId === runId)) {
+    res.status(400).json({ error: `${String(runId)} is not a complete run` })
+    return
+  }
+  satelliteTiles.preferredRun = runId as string | null
+  res.json({ ok: true, selected: satelliteTiles.preferredRun })
+})
+
+// Export a run's evaluation cohort into the tile directory as a new set.
+app.get('/api/satellite/exports', (_req, res) => {
+  res.json(exportJobs.list())
+})
+
+app.post('/api/satellite/exports', (req, res) => {
+  try {
+    const runs = listRuns(imageryModelDir)
+    const request = parseExportRequest(req.body, runs)
+    const cohort = runs.find((r) => r.runId === request.runId)?.cohorts.find((c) => c.cohort === request.cohort)
+    res.json(exportJobs.start(request, cohort?.chips ?? null))
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message })
+  }
+})
+
+// Predict a tile at any latitude/longitude NAIP covers with the selected
+// run; the bundle is written to a points-<run> set in the tile directory, so
+// it lists like an exported one.  SATELLITE_THRESHOLD and SATELLITE_MIN_SCORE
+// (default 0.1) set its slider start and candidate floor.
 app.post('/api/satellite/predict', async (req, res) => {
   let point: [number, number]
   try {
@@ -65,12 +118,14 @@ app.post('/api/satellite/predict', async (req, res) => {
     return
   }
   try {
+    const run = satelliteTiles.preferredRun ?? listRuns(imageryModelDir)[0]?.runId
+    if (!run) throw new Error(`No complete run under ${imageryModelDir}`)
     const tile = await predictPoint(point, {
       modelDir: imageryModelDir,
-      tileDir,
-      run: process.env.SATELLITE_RUN,
-      threshold: process.env.SATELLITE_THRESHOLD ? Number(process.env.SATELLITE_THRESHOLD) : undefined,
-      minScore: process.env.SATELLITE_MIN_SCORE ? Number(process.env.SATELLITE_MIN_SCORE) : undefined,
+      tileDir: path.join(tileDir, `points-${run}`),
+      run,
+      threshold: defaultThreshold,
+      minScore: defaultMinScore,
     })
     res.json(tile)
   } catch (error) {
@@ -84,7 +139,7 @@ app.use('/api/satellite', createSatelliteRouter({
   db,
   publishedBucket,
   cityCodes: CITY_CODES,
-  tiles: new TileStore(tileDir),
+  tiles: satelliteTiles,
 }))
 app.get('/satellite', (_req, res) => {
   res.sendFile(path.join(import.meta.dirname, 'satellite_page.html'))
