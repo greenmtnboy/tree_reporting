@@ -288,13 +288,16 @@ cd data/raw && uv run tree_enrichment_probe.py                                # 
 To build the city in the cloud before the PR merges, push it as a throwaway
 job rather than syncing the branch. The worker executes the bundle as a
 directory, so exclude every other city and every root model the city does
-not import:
+not import. Keep `raw/enrichment/` apart from its tests: `shared/ingest.py`
+imports `enrichment._common_name_style`, and without it an ingest fails with
+`No module named 'enrichment'`. On Windows write `--exclude=pattern`, since
+click expands a bare glob into file names:
 
 ```bash
 trilogy cloud --org trilogy-data jobs push --source data --config adhoc.toml \
     --name adhoc-city-{code} --operation refresh --memory-mb 2048 \
     --secret-env GOOGLE_HMAC_KEY --secret-env GOOGLE_HMAC_SECRET \
-    --exclude "raw/tests/*" --exclude "raw/enrichment/*" --exclude "raw/tools/*" \
+    --exclude "raw/tests/*" --exclude "raw/enrichment/tests/*" --exclude "raw/tools/*" \
     --exclude "osm_staging/*" --exclude "landmark_staging/*" \
     --exclude "raw/{every other city}/*" \
     --exclude raw/tree_info.preql --exclude raw/landmark_info.preql
