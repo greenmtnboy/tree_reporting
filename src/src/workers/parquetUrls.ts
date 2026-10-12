@@ -13,6 +13,13 @@ export function cityTreeParquetUrl(city: string): string | null {
   return `${REMOTE_TREES_BASE_URL}/${lower}_tree_info_v${TREE_DATA_VERSION}.parquet`
 }
 
+/** Per-city crown-predictions slice (data/raw/tree_predictions_city.preql). Returns null if city code is unknown. */
+export function cityPredictionsParquetUrl(city: string): string | null {
+  const lower = city.toLowerCase()
+  if (!lower.match(/^[a-z]{2}[a-z]{3}$/)) return null
+  return `${REMOTE_TREES_BASE_URL}/${lower}_tree_predictions_v${TREE_DATA_VERSION}.parquet`
+}
+
 // Multi-city landmark data
 const REMOTE_LANDMARKS_BASE_URL = 'https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks'
 const LANDMARK_DATA_VERSION = 2

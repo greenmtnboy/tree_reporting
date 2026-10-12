@@ -312,6 +312,35 @@ def test_rollup_reads_every_city():
     )
 
 
+def test_crown_slices_cover_every_city():
+    """Every city has one crown-predictions slice, and a job builds them.
+
+    The map reads `{city}_tree_predictions_v{N}.parquet` and falls back to the
+    ~146 MB all-city file when it is missing, so a city left out here still
+    works -- it just makes every visitor download every city's predictions
+    before the city opens, which nothing else would report.
+    """
+    text = statements(RAW_DIR / "tree_predictions_city.preql")
+    datasources = re.findall(r"partial datasource ([a-z]{5})_tree_predictions\b", text)
+    files = re.findall(r"trees/([a-z]{5})_tree_predictions_v\{data_version\}\.parquet`:", text)
+    scopes = re.findall(r"complete where city = '([A-Z]{5})'", text)
+    expected = sorted(code.lower() for code in MUNICIPAL_DATA_SOURCES)
+    assert sorted(datasources) == expected, (
+        f"missing slices: {sorted(set(expected) - set(datasources))}; "
+        f"extra: {sorted(set(datasources) - set(expected))}"
+    )
+    assert sorted(files) == expected and sorted(s.lower() for s in scopes) == expected
+    # Each slice writes its own city's file and scopes to its own city.
+    for code in expected:
+        block = re.search(
+            rf"partial datasource {code}_tree_predictions\b.*?freshness by", text, re.S
+        ).group(0)
+        assert f"complete where city = '{code.upper()}'" in block, code
+        assert f"trees/{code}_tree_predictions_v" in block, code
+    entrypoints = {job["entrypoint"] for job in jobs()}
+    assert "raw/tree_predictions_city.preql" in entrypoints
+
+
 def test_the_rollup_producer_and_consumer_share_a_datasource_name():
     """The core's ordering is a derived edge, and a rename would delete it.
 

@@ -25,6 +25,7 @@ import {
   REMOTE_LANDMARKS_PARQUET_URL,
   cityTreeParquetUrl,
   cityLandmarkParquetUrl,
+  cityPredictionsParquetUrl,
 } from './parquetUrls'
 import { normalizeValue } from './normalizeValue'
 
@@ -1723,14 +1724,26 @@ async function prepareCrownPredictions(city: string): Promise<string> {
   if (!crownPredictionLoads.has(city)) {
     crownPredictionLoads.set(city, (async () => {
       await conn!.query(`CREATE TEMP TABLE ${table} (tree_id VARCHAR, city VARCHAR, width DOUBLE)`)
-      try {
-        await conn!.query(`INSERT INTO ${table}
-          SELECT tree_id, city, max(predicted_crown_width_m) AS width
-          FROM read_parquet('${REMOTE_PREDICTIONS_PARQUET_URL}')
-          WHERE city = '${city}' GROUP BY tree_id, city`)
-      } catch (error) {
-        console.warn('[TreeCrowns] predictions unavailable; using recorded crowns', error)
+      // The city's own slice is a few MB; the all-city file is ~146 MB and
+      // DuckDB-wasm downloads a whole object on first read, which held city
+      // readiness (landmarks, charts, the map) behind it. The full file stays
+      // as the fallback for a city whose slice is not published yet.
+      const sources = [cityPredictionsParquetUrl(city), REMOTE_PREDICTIONS_PARQUET_URL]
+        .filter((url): url is string => url !== null)
+      let loaded = false
+      for (const url of sources) {
+        try {
+          await conn!.query(`INSERT INTO ${table}
+            SELECT tree_id, city, max(predicted_crown_width_m) AS width
+            FROM read_parquet('${url}')
+            WHERE city = '${city}' GROUP BY tree_id, city`)
+          loaded = true
+          break
+        } catch (error) {
+          console.info('[TreeCrowns] predictions source unavailable', url, error)
+        }
       }
+      if (!loaded) console.warn('[TreeCrowns] predictions unavailable; using recorded crowns')
     })())
   }
   await crownPredictionLoads.get(city)

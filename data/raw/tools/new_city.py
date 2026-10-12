@@ -753,6 +753,23 @@ def build(args) -> Edits:
         rf"trees/{lc}_tree_info_v{{data_version}}.parquet`\2",
         what="rollup file list", marker=f"trees/{lc}_tree_info_v",
     )
+    e.sub_once(
+        RAW / "tree_predictions_city.preql",
+        r"(freshness by published_prediction_inputs_through;\n)\Z",
+        rf"""\1
+partial datasource {lc}_tree_predictions (
+    tree_id,
+    city,
+    predicted_crown_width_m: ?published_crown_width_m,
+    prediction_inputs_published_through: published_prediction_inputs_through,
+)
+grain (tree_id)
+complete where city = '{code}'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{lc}_tree_predictions_v{{data_version}}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{lc}_tree_predictions_v{{data_version}}.parquet`
+freshness by published_prediction_inputs_through;
+""",
+        what="crown predictions slice", marker=f"datasource {lc}_tree_predictions",
+    )
 
     # --- trilogy.toml -----------------------------------------------------
     jobs = f'''
