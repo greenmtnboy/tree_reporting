@@ -162,6 +162,7 @@ partial datasource nyc_tree_info (
     cluster_id,
     merged_sources,
     ?merged_tree_ids,
+    reported_missing,
     usnyc_published_data_updated_through,
     # ?condition,
     # ?structure,

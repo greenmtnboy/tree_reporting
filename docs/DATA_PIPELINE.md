@@ -291,10 +291,12 @@ cluster survivor, through `@corrected_dbh`, `@corrected_latitude` and
 `@corrected_longitude` (and `merged_species`), which a city that merges its own
 value calls too (Boston's imputed DBH, the Overture-placed point). A reported
 position is final and not snapped again (`position_adjustment = 'reported'`).
-A tree reported gone gets its own marked cluster id, so the existing prune
-drops it and everything its cluster absorbed. That way there is no new stored
-column: a target's `where` runs on every read, and a column it named would fail
-every read of a parquet built before it existed.
+Every target stores `reported_missing`. For now a tree reported gone gets its
+own marked cluster id instead, so the existing prune drops it and everything
+its cluster absorbed. A target's `where` runs on every read, so gating on the
+column would fail every read of a parquet built before it existed. Once every
+published parquet carries the column, the follow-up gates on it and drops the
+cluster-id mark.
 `community_update_time.py` folds the modifications manifest into each city's
 community column, so an approval marks that city stale.
 `tests/test_tree_modifications_applied.py` runs reports through the SF build's

@@ -19,9 +19,10 @@
 #   merge {lc}_source_label into source_label;
 #   ... every raw source maps `raw_species`, `raw_latitude`, ... (not the
 #       canonical concepts), and the published target maps `species`,
-#       `latitude`, ... plus `merged_sources` and `merged_tree_ids`, and
-#       carries `where tree_id = cluster_id` to drop the absorbed rows (and,
-#       through cluster_id, the trees an approved report says are gone).
+#       `latitude`, ... plus `merged_sources`, `merged_tree_ids` and
+#       `reported_missing`, and carries `where tree_id = cluster_id` to drop
+#       the absorbed rows (and, through cluster_id, the trees an approved
+#       report says are gone).
 #   merge merged_dbh into diameter_at_breast_height;   # or @corrected_dbh(<its own dbh>)
 #   merge merged_latitude into latitude;               # or import ../tree_position.preql,
 #   merge merged_longitude into longitude;             #   which merges the corrected point
@@ -275,13 +276,19 @@ file `./tree_modification_info.py`;
 
 merge modified_tree_id into ~tree_id;
 
-# A tree an approved report says is gone leaves its cluster: its cluster id
-# becomes its own id, marked, so the prune every target already carries
-# (`tree_id = cluster_id`) drops it -- and drops every row its cluster absorbed,
-# which still point at its tree_id.  Encoding it in cluster_id rather than a new
-# stored column keeps the published schema as it is: a target's `where` is
-# applied whenever the parquet is read, so a new column in it fails every read of
-# a parquet built before the column existed.
+# Whether the latest approved report says the tree is gone.  Every target
+# stores it, so it reaches each parquet as the city next rebuilds.
+auto reported_missing <- coalesce(modified_missing, false);
+
+# Until every published parquet has that column, a tree reported gone is
+# dropped through cluster_id instead: it leaves its cluster, taking its own id,
+# marked, so the prune every target already carries (`tree_id = cluster_id`)
+# drops it -- and every row its cluster absorbed, which still point at its
+# tree_id.  The target cannot gate on `reported_missing` yet: its `where` is
+# applied whenever the parquet is read, so it would fail every read of a
+# parquet built before the column existed.  The follow-up gates on the column
+# and drops this.  It reads modified_missing, not the stored column, so no plan
+# reaches for `reported_missing` in an old parquet.
 auto cluster_id <- case
     when coalesce(modified_missing, false) then concat(tree_id, '#reported-gone')
     else cluster_anchor

@@ -135,6 +135,7 @@ partial datasource ottawa_tree_info (
     cluster_id,
     merged_sources,
     ?merged_tree_ids,
+    reported_missing,
     caott_published_data_updated_through,
 )
 grain (tree_id)
