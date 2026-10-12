@@ -179,6 +179,9 @@ svg .hitbox{fill:transparent;cursor:pointer}
   <section id="view-queue" class="hidden">
     <p class="muted">Accepted and duplicate decisions waiting to be published. Publishing writes <code>satellite/published_trees.ndjson</code> and its manifest to the public bucket; the city's next refresh reads them. <button id="republish" class="ghost small">Rebuild export</button></p>
     <table><thead><tr><th>Observation</th><th>Tile</th><th>City</th><th>Decision</th><th>Species</th><th>DBH</th><th>Position</th><th>Updated</th><th></th></tr></thead><tbody id="queue-body"></tbody></table>
+    <h2 style="margin-top:24px">Stacked satellite rows</h2>
+    <p class="muted">Published rows that duplicate another satellite tree. Two satellite rows in one cluster merge field by field, so the second is not a reliable correction. <strong>Fold</strong> moves the values a person entered (typed species, measured DBH, traced crown) onto the target and withdraws the stacked row; <strong>Withdraw</strong> only removes it.</p>
+    <table><thead><tr><th>Stacked row</th><th>Target</th><th>Would move</th><th></th></tr></thead><tbody id="stacked-body"></tbody></table>
   </section>
 </main>
 <script>
@@ -750,6 +753,7 @@ function selectedPrediction() { return T.bundle?.predictionLayer.predictions.fin
 
 function renderSide() {
   const p = selectedPrediction();
+  if (T.correctingFor !== p?.predictionId) { T.correcting = null; T.correctingFor = p?.predictionId; }
   if (!p) { side.innerHTML = '<p class="muted">Select a detection.</p>'; return; }
   const o = T.observations.get(p.predictionId);
   const center = T.dirtyCenter || o?.crownCenter || { xPx: p.xPx, yPx: p.yPx };
@@ -777,14 +781,97 @@ function renderSide() {
       <button data-decision="uncertain" class="warn" ${o?.status === 'published' ? 'disabled' : ''}>Uncertain <kbd>Q</kbd></button>
       <button id="clear" class="ghost" ${!o || o.status === 'published' ? 'disabled' : ''}>Clear <kbd>X</kbd></button>
     </div>
-    <h2>Inventory trees within 5 m</h2>
-    <div class="nearest"><ul>${(p.nearest || []).map((n) => `<li><span>${esc(n.treeId)} <span class="muted">${fmt(n.distanceM)} m · ${esc(n.species || 'unidentified')} · ${n.dbhInches != null ? fmt(n.dbhInches) + ' in' : 'no DBH'} · ${esc(n.source)}</span></span><button data-dup="${esc(n.treeId)}" ${o?.status === 'published' ? 'disabled' : ''}>${o?.duplicateOfTreeId === n.treeId ? '✓ linked' : 'Duplicate of'}</button></li>`).join('') || '<li class="muted">none within 5 m of this detection</li>'}</ul></div>
-    <p class="muted" style="font-size:12px">A duplicate publishes at the linked tree's coordinates and only fills what the inventory left empty; the trunk position is never overwritten. "Not a tree" and "uncertain" are about this image only and never publish.</p>`;
+    <h2>Trees within 5 m</h2>
+    <div class="nearest"><ul>${nearbyTrees(p).map((n) => nearestRow(n, o)).join('') || '<li class="muted">none within 5 m of this detection</li>'}</ul></div>
+    <div id="correct-panel"></div>
+    <p class="muted" style="font-size:12px">A duplicate of an inventory tree publishes at that tree's coordinates and only fills what the inventory left empty; the trunk position is never overwritten. A satellite tree (<code>sat-…</code>) is <strong>corrected in place</strong> instead: "Same tree" records the link privately and publishes nothing, so no second satellite row is stacked on it. "Not a tree" and "uncertain" are about this image only and never publish.</p>`;
   drawCloseup(center);
   side.querySelectorAll('[data-decision]').forEach((btn) => btn.addEventListener('click', () => decide(btn.dataset.decision)));
   side.querySelectorAll('[data-dup]').forEach((btn) => btn.addEventListener('click', () => decide('duplicate', btn.dataset.dup)));
+  side.querySelectorAll('[data-correct]').forEach((btn) => btn.addEventListener('click', () => openCorrection(btn.dataset.correct)));
+  if (T.correcting) openCorrection(T.correcting);
   $('#clear').addEventListener('click', clearDecision);
 }
+// ---- satellite trees near a detection: corrected in place, never stacked
+const isSatTree = (id) => typeof id === 'string' && id.startsWith('sat-');
+/** Inventory trees within 5 m, plus satellite trees published since the tile was exported (drawn orange). */
+function nearbyTrees(p) {
+  const rows = (p.nearest || []).map((n) => ({ ...n, inInventory: true }));
+  const seen = new Set(rows.map((n) => n.treeId));
+  for (const o of T.nearby || []) {
+    const id = o.publishedTreeId || o.id;
+    if (o.status !== 'published' || seen.has(id)) continue;
+    const d = haversine(p.longitude, p.latitude, o.longitude, o.latitude);
+    if (d <= 5) { rows.push({ treeId: id, distanceM: d, species: o.species, dbhInches: o.measuredDbhInches, source: 'reviewed detection', inInventory: false }); seen.add(id); }
+  }
+  return rows.sort((a, b) => a.distanceM - b.distanceM);
+}
+function haversine(lon1, lat1, lon2, lat2) {
+  const r = Math.PI / 180, dLat = (lat2 - lat1) * r, dLon = (lon2 - lon1) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371008.8 * Math.asin(Math.sqrt(h));
+}
+function nearestRow(n, o) {
+  const published = o?.status === 'published';
+  const linked = o?.duplicateOfTreeId === n.treeId;
+  const info = `${fmt(n.distanceM)} m · ${esc(n.species || 'unidentified')} · ${n.dbhInches != null ? fmt(n.dbhInches) + ' in' : 'no DBH'} · ${esc(n.source)}`;
+  const buttons = isSatTree(n.treeId)
+    ? `<button class="small" data-correct="${esc(n.treeId)}" title="Edit this published satellite tree in place">Correct</button>${n.inInventory ? `<button class="small ghost" data-dup="${esc(n.treeId)}" ${published ? 'disabled' : ''} title="Record that this detection is that tree; nothing is published">${linked ? '✓ same tree' : 'Same tree'}</button>` : ''}`
+    : `<button class="small" data-dup="${esc(n.treeId)}" ${published ? 'disabled' : ''}>${linked ? '✓ linked' : 'Duplicate of'}</button>`;
+  return `<li><span>${esc(n.treeId)} <span class="muted">${info}</span></span><span class="toolbar">${buttons}</span></li>`;
+}
+
+/** The correction editor for one published satellite tree, under the nearest list. */
+async function openCorrection(treeId) {
+  T.correcting = treeId;
+  const panel = $('#correct-panel'); if (!panel) return;
+  panel.innerHTML = '<p class="muted">Loading the stored tree…</p>';
+  let tree;
+  try { tree = await api('/published/' + encodeURIComponent(treeId)); }
+  catch (error) { panel.innerHTML = `<p class="banner">${esc(error.message)}</p>`; return; }
+  if (T.correcting !== treeId || !$('#correct-panel')) return;
+  const p = selectedPrediction(), o = T.observations.get(p.predictionId);
+  const here = o?.crownCenter || { latitude: p.latitude, longitude: p.longitude };
+  const moveM = haversine(tree.longitude, tree.latitude, here.longitude, here.latitude);
+  const canMove = tree.positionRole === 'crown_center';
+  const detectionCrown = T.dirtyCrown !== undefined ? T.dirtyCrown : (o?.humanCrownWidthM ?? null);
+  $('#correct-panel').innerHTML = `
+    <div class="panel" style="margin:10px 0">
+      <h2>Correct ${esc(tree.treeId)} <span class="pill">rev ${tree.revision}</span>${tree.withdrawnAt ? ' <span class="pill">withdrawn</span>' : ''}</h2>
+      <p class="muted" style="margin:0 0 8px">Stored: ${esc(tree.species || 'unidentified')} <span class="muted">(${esc(tree.speciesSource || 'no source')})</span> · ${tree.measuredDbhInches != null ? fmt(tree.measuredDbhInches) + ' in measured' : 'no measured DBH'} · crown ${tree.humanCrownWidthM != null ? fmt(tree.humanCrownWidthM) + ' m traced' : tree.predictedCrownWidthM ? fmt(tree.predictedCrownWidthM) + ' m model' : '—'} · ${esc(tree.positionRole)}${tree.corrections.length ? ` · ${tree.corrections.length} earlier correction(s)` : ''}</p>
+      <div class="field"><label>Species</label><input id="c-species" value="${esc(tree.species ?? '')}" placeholder="Latin binomial; blank = unidentified"></div>
+      <div class="field"><label>Measured DBH, inches</label><input id="c-dbh" type="number" step="0.1" min="0" value="${tree.measuredDbhInches ?? ''}"></div>
+      <div class="field"><label>Crown, metres <span class="muted">(traced)</span></label><input id="c-crown" type="number" step="0.1" min="0" value="${tree.humanCrownWidthM ?? ''}"></div>
+      <label class="muted" style="display:flex;gap:6px;align-items:center;margin-bottom:8px" title="${canMove ? '' : 'A linked-trunk tree stays on the trunk it was linked to'}"><input id="c-move" type="checkbox" ${canMove ? '' : 'disabled'}> move it to this detection's crown centre (${fmt(moveM)} m)</label>
+      <div class="toolbar"><button id="c-fill" class="ghost small" title="Copy the species, measured DBH and traced crown you entered for this detection">Use this detection's values</button><button id="c-save" class="small">Save correction</button><button id="c-close" class="ghost small">Close</button></div>
+    </div>`;
+  $('#c-fill').addEventListener('click', () => {
+    const sp = ($('#f-species')?.value ?? '').trim(); if (sp) $('#c-species').value = sp;
+    const dbh = $('#f-dbh')?.value; if (dbh) $('#c-dbh').value = dbh;
+    if (detectionCrown != null) $('#c-crown').value = fmt(detectionCrown, 1);
+  });
+  $('#c-close').addEventListener('click', () => { T.correcting = null; $('#correct-panel').innerHTML = ''; });
+  $('#c-save').addEventListener('click', async (e) => {
+    const body = { baseRevision: tree.revision };
+    const species = $('#c-species').value.trim() || null;
+    if (species !== (tree.species ?? null)) body.species = species;
+    const num = (v) => (v === '' ? null : Number(v));
+    if (num($('#c-dbh').value) !== (tree.measuredDbhInches ?? null)) body.measuredDbhInches = num($('#c-dbh').value);
+    if (num($('#c-crown').value) !== (tree.humanCrownWidthM ?? null)) body.humanCrownWidthM = num($('#c-crown').value);
+    if ($('#c-move').checked) { body.latitude = here.latitude; body.longitude = here.longitude; }
+    if (Object.keys(body).length === 1) { setSave('Nothing changed', true); return; }
+    e.target.disabled = true; setSave('Saving correction…');
+    try {
+      const r = await api('/published/' + encodeURIComponent(treeId), { method: 'PATCH', body: JSON.stringify(body) });
+      setSave(`Corrected ${treeId} (rev ${r.revision}) · export holds ${r.exported}; the city's next refresh picks it up`);
+      // Record the link privately, so the detection counts as decided.
+      const inInventory = (p.nearest || []).some((n) => n.treeId === treeId);
+      if (inInventory && !o) await decide('duplicate', treeId);
+      else openCorrection(treeId);
+    } catch (error) { setSave(error.message, true); e.target.disabled = false; }
+  });
+}
+
 // The panel is rebuilt on every selection; one delegated listener serves every build.
 side.addEventListener('click', (e) => { if (e.target.id === 'clear-human') clearHumanCrown(); });
 
@@ -957,8 +1044,29 @@ async function showQueue() {
   switchView('queue'); statusEl.textContent = 'Loading queue…';
   const rows = await api('/queue');
   statusEl.textContent = rows.length ? `${rows.length} awaiting publish` : 'Queue is empty';
+  showStacked().catch((err) => { $('#stacked-body').innerHTML = `<tr><td colspan="4">${esc(err.message)}</td></tr>`; });
   $('#queue-body').innerHTML = rows.map((o) => `<tr data-id="${esc(o.id)}"><td>${esc(o.id)}<div class="muted">${esc(o.predictionId)}</div></td><td><a href="#tile/${encodeURIComponent(o.tileId)}">${esc(o.chipId || o.tileId)}</a></td><td>${esc(o.city)}</td><td>${esc(o.decision)}${o.duplicateOfTreeId ? ` → ${esc(o.duplicateOfTreeId)}` : ''}</td><td>${esc(o.species || 'unidentified')} <span class="muted">${esc(o.speciesSource || '')}</span></td><td>${o.measuredDbhInches != null ? fmt(o.measuredDbhInches) + ' in measured' : `<span class="muted">est. ${fmt(o.predictedDbhInches)} in</span>`}</td><td>${esc(o.positionRole)} ${fmt(o.latitude, 5)}, ${fmt(o.longitude, 5)}</td><td>${esc(o.updatedAt)}</td><td><button data-publish>Publish</button></td></tr>`).join('');
 }
+async function showStacked() {
+  const rows = await api('/stacked');
+  const tree = (t) => `${esc(t.treeId)}<div class="muted">${esc(t.species || 'unidentified')} · ${t.measuredDbhInches != null ? fmt(t.measuredDbhInches) + ' in' : 'no DBH'} · crown ${t.humanCrownWidthM != null ? fmt(t.humanCrownWidthM) + ' m' : '—'}</div>`;
+  $('#stacked-body').innerHTML = rows.map((r) => `<tr data-id="${esc(r.stacked.treeId)}"><td>${tree(r.stacked)}</td><td>${r.target ? tree(r.target) + (r.target.withdrawnAt ? ' <span class="pill">withdrawn</span>' : '') : '<span class="muted">target missing</span>'}</td><td>${r.wouldMove.length ? esc(r.wouldMove.join(', ')) : '<span class="muted">nothing</span>'}</td><td class="toolbar">${r.target && !r.target.withdrawnAt ? '<button class="small" data-fold>Fold into target</button>' : ''}<button class="small reject" data-withdraw>Withdraw</button></td></tr>`).join('')
+    || '<tr><td colspan="4" class="muted">None.</td></tr>';
+}
+$('#stacked-body').addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-fold],button[data-withdraw]'); if (!b) return;
+  const id = b.closest('tr').dataset.id;
+  if (b.hasAttribute('data-withdraw') && !confirm(`Withdraw ${id} from the public export?`)) return;
+  b.disabled = true;
+  try {
+    const r = b.hasAttribute('data-fold')
+      ? await api(`/published/${encodeURIComponent(id)}/fold`, { method: 'POST', body: '{}' })
+      : await api(`/published/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: '{}' });
+    statusEl.textContent = r.targetId ? `Folded ${id} into ${r.targetId}${r.moved.length ? ` (${r.moved.join(', ')})` : ''} · export holds ${r.exported}` : `Withdrew ${id} · export holds ${r.exported}`;
+    await showStacked();
+  } catch (err) { alert(err.message); b.disabled = false; }
+});
+
 $('#queue-body').addEventListener('click', async (e) => {
   const b = e.target.closest('button[data-publish]'); if (!b) return;
   b.disabled = true;

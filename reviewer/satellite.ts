@@ -24,6 +24,12 @@
  *  - A model estimate is never promoted to a measurement.  The export carries
  *    `predictedDbhInches` and `measuredDbhInches` separately; the ingest
  *    (`data/raw/satellite_tree_info.py`) publishes only the measured one.
+ *  - A satellite tree is corrected in place, never stacked.  Linking a
+ *    detection to an already-published satellite tree publishes nothing (two
+ *    satellite rows in one cluster merge field by field with max(), so a
+ *    second row is not a reliable correction and can split the position);
+ *    the reviewer edits that tree's record instead, and a stacked row can be
+ *    folded into its target and withdrawn.
  *  - A duplicate is a link the reviewer made, not a merge the model made.
  *    It is exported at the linked tree's coordinates so the shared cluster
  *    merge (`data/raw/tree_dedup.preql`) is guaranteed to absorb it into
@@ -283,6 +289,16 @@ export const DECISIONS: readonly Decision[] = ['accept', 'duplicate', 'reject', 
 /** Decisions that publish.  A rejection or an uncertain is about this image only. */
 export const PUBLISHABLE: ReadonlySet<Decision> = new Set<Decision>(['accept', 'duplicate'])
 
+/** A tree this reviewer published: its id is the observation's (see observationId). */
+export function isSatelliteTreeId(treeId: unknown): boolean {
+  return typeof treeId === 'string' && treeId.startsWith('sat-')
+}
+
+/** Accepts and duplicates publish -- except a duplicate of a satellite tree, which is corrected instead. */
+export function isPublishable(o: { decision?: unknown; duplicateOfTreeId?: unknown }): boolean {
+  return PUBLISHABLE.has(o.decision as Decision) && !(o.decision === 'duplicate' && isSatelliteTreeId(o.duplicateOfTreeId))
+}
+
 export interface ObservationInput {
   decision: Decision
   /** The confirmed species; null when the reviewer could not say. */
@@ -333,7 +349,7 @@ export interface ObservationRecord {
   duplicateOf: { treeId: string; latitude: number; longitude: number; source: string; species: string | null } | null
   notes: string | null
   acquisitionDate: string
-  status: 'pending' | 'published'
+  status: 'pending' | 'published' | 'withdrawn'
   revision: number
   /** Private: who made the decision on this machine.  Never exported. */
   actor: string
@@ -496,13 +512,17 @@ export interface ExportRow {
   predictionId: string
   acquisitionDate: string
   publishedAt: string | null
+  /** The last in-place correction of this tree, if any. */
+  correctedAt: string | null
+}
+
+function isoOrNull(value: unknown): string | null {
+  return value instanceof Timestamp ? value.toDate().toISOString() : typeof value === 'string' ? value : null
 }
 
 /** The public shape of a published tree: no notes, no actor, no private ids. */
 export function exportRow(published: Record<string, unknown>): ExportRow {
-  const publishedAt = published.publishedAt instanceof Timestamp
-    ? published.publishedAt.toDate().toISOString()
-    : typeof published.publishedAt === 'string' ? published.publishedAt : null
+  const publishedAt = isoOrNull(published.publishedAt)
   return {
     schemaVersion: EXPORT_SCHEMA_VERSION,
     treeId: String(published.treeId),
@@ -524,6 +544,7 @@ export function exportRow(published: Record<string, unknown>): ExportRow {
     predictionId: String(published.predictionId),
     acquisitionDate: String(published.acquisitionDate),
     publishedAt,
+    correctedAt: isoOrNull(published.correctedAt),
   }
 }
 
@@ -535,14 +556,23 @@ export interface ExportManifest {
   latestPublishedAtByCity: Record<string, string>
 }
 
-export function buildManifest(rows: ExportRow[]): ExportManifest {
+/**
+ * The freshness the city refresh probes.  "Published" means the city's export
+ * last changed: a publish, an in-place correction, or a withdrawal (whose row
+ * is gone, so it is passed separately) all move it forward.
+ */
+export function buildManifest(rows: ExportRow[], withdrawals: { city: string; at: string | null }[] = []): ExportManifest {
   let latestPublishedAt: string | null = null
   const latestPublishedAtByCity: Record<string, string> = {}
-  for (const row of rows) {
-    if (!row.publishedAt) continue
-    if (!latestPublishedAt || row.publishedAt > latestPublishedAt) latestPublishedAt = row.publishedAt
-    const current = latestPublishedAtByCity[row.city]
-    if (!current || row.publishedAt > current) latestPublishedAtByCity[row.city] = row.publishedAt
+  const changes = [
+    ...rows.map((row) => ({ city: row.city, at: [row.publishedAt, row.correctedAt].filter(Boolean).sort().pop() ?? null })),
+    ...withdrawals.map((w) => ({ city: w.city.toUpperCase(), at: w.at })),
+  ]
+  for (const { city, at } of changes) {
+    if (!at) continue
+    if (!latestPublishedAt || at > latestPublishedAt) latestPublishedAt = at
+    const current = latestPublishedAtByCity[city]
+    if (!current || at > current) latestPublishedAtByCity[city] = at
   }
   return { schemaVersion: 1, count: rows.length, latestPublishedAt, latestPublishedAtByCity }
 }
@@ -570,6 +600,97 @@ export function publishedTreeFrom(observation: ObservationRecord): Record<string
     predictionId: observation.predictionId,
     acquisitionDate: observation.acquisitionDate,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Correcting a published satellite tree in place
+// ---------------------------------------------------------------------------
+
+/** A correction moving a tree farther than this is a mis-click, not a nudge. */
+export const MAX_CORRECTION_MOVE_M = 25
+const MAX_DBH_INCHES = 200
+const MAX_CORRECTIONS_KEPT = 20
+const CORRECTABLE = ['species', 'measuredDbhInches', 'humanCrownWidthM', 'latitude', 'longitude'] as const
+type Correctable = (typeof CORRECTABLE)[number]
+
+export interface CorrectionInput {
+  /** Only the fields present are changed; null clears one. */
+  changes: Partial<Record<Correctable, string | number | null>>
+  baseRevision: number | null
+}
+
+export function parseCorrection(body: unknown): CorrectionInput {
+  if (typeof body !== 'object' || body === null) throw new Error('Body must be a JSON object')
+  const b = body as Record<string, unknown>
+  const changes: CorrectionInput['changes'] = {}
+  if ('species' in b) changes.species = cleanString(b.species, MAX_SPECIES, 'species')
+  if ('measuredDbhInches' in b) {
+    const dbh = cleanPositive(b.measuredDbhInches, 'measuredDbhInches')
+    if (dbh != null && dbh > MAX_DBH_INCHES) throw new Error(`measuredDbhInches must be at most ${MAX_DBH_INCHES}`)
+    changes.measuredDbhInches = dbh
+  }
+  if ('humanCrownWidthM' in b) {
+    const crown = cleanPositive(b.humanCrownWidthM, 'humanCrownWidthM')
+    if (crown != null && crown > MAX_HUMAN_CROWN_M) throw new Error(`humanCrownWidthM must be at most ${MAX_HUMAN_CROWN_M} m`)
+    changes.humanCrownWidthM = crown
+  }
+  if ('latitude' in b || 'longitude' in b) {
+    const lat = Number(b.latitude), lon = Number(b.longitude)
+    if (!isFiniteNumber(lat) || !isFiniteNumber(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) throw new Error('a position needs both latitude and longitude')
+    changes.latitude = lat
+    changes.longitude = lon
+  }
+  if (!Object.keys(changes).length) throw new Error('Nothing to correct')
+  const base = b.baseRevision
+  if (base != null && (!Number.isInteger(base) || (base as number) < 0)) throw new Error('baseRevision must be a non-negative integer')
+  return { changes, baseRevision: (base as number | null) ?? null }
+}
+
+/**
+ * The update a correction makes to a published record: the changed fields,
+ * a bumped revision, correctedAt, and a short history of what each field was.
+ * A linked-trunk row sits on another tree's trunk by design, so it never moves.
+ */
+export function correctionUpdate(current: Record<string, unknown>, input: CorrectionInput, actor: string, now: string): Record<string, unknown> {
+  if (current.withdrawnAt) throw new Error(`${String(current.treeId)} is withdrawn`)
+  const revision = (current.revision as number | undefined) ?? 0
+  if (input.baseRevision != null && input.baseRevision !== revision) {
+    const error = new Error(`Stale correction: ${String(current.treeId)} is at revision ${revision}, you saw ${input.baseRevision}`)
+    ;(error as Error & { status?: number }).status = 409
+    throw error
+  }
+  const changes = { ...input.changes }
+  if ('latitude' in changes) {
+    if (current.positionRole !== 'crown_center') throw new Error('A linked-trunk tree stays on the trunk it was linked to; its position is not corrected')
+    const moved = haversineM(current.longitude as number, current.latitude as number, changes.longitude as number, changes.latitude as number)
+    if (moved > MAX_CORRECTION_MOVE_M) throw new Error(`That moves the tree ${moved.toFixed(0)} m; a correction moves it at most ${MAX_CORRECTION_MOVE_M} m`)
+  }
+  const diff: Record<string, { from: unknown; to: unknown }> = {}
+  for (const key of CORRECTABLE) {
+    if (!(key in changes)) continue
+    const from = current[key] ?? null
+    if (from !== changes[key]) diff[key] = { from, to: changes[key] }
+  }
+  if (!Object.keys(diff).length) throw new Error('That is what the tree already holds')
+  const update: Record<string, unknown> = Object.fromEntries(Object.entries(diff).map(([k, v]) => [k, v.to]))
+  if ('species' in diff) update.speciesSource = diff.species.to ? 'reviewer' : null
+  const history = Array.isArray(current.corrections) ? current.corrections : []
+  update.corrections = [...history, { at: now, actor, changes: diff }].slice(-MAX_CORRECTIONS_KEPT)
+  update.revision = revision + 1
+  return update
+}
+
+/**
+ * What a stacked row (a duplicate of a satellite tree, published before that
+ * was refused) can give its target: the values a person entered -- a typed
+ * species, a measured DBH, a traced crown.  The model's own estimates stay.
+ */
+export function foldChanges(stacked: Record<string, unknown>, target: Record<string, unknown>): CorrectionInput['changes'] {
+  const changes: CorrectionInput['changes'] = {}
+  if (stacked.speciesSource === 'reviewer' && stacked.species && stacked.species !== target.species) changes.species = stacked.species as string
+  if (stacked.measuredDbhInches != null && stacked.measuredDbhInches !== target.measuredDbhInches) changes.measuredDbhInches = stacked.measuredDbhInches as number
+  if (stacked.humanCrownWidthM != null && stacked.humanCrownWidthM !== target.humanCrownWidthM) changes.humanCrownWidthM = stacked.humanCrownWidthM as number
+  return changes
 }
 
 // ---------------------------------------------------------------------------
@@ -846,8 +967,11 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
   /** Rewrite the public export from every published satellite tree. */
   async function rewritePublicExport(): Promise<ExportManifest> {
     const snapshot = await db.collection(PUBLISHED).orderBy('publishedAt', 'asc').get()
-    const rows = snapshot.docs.map((doc) => exportRow(doc.data()))
-    const manifest = buildManifest(rows)
+    const live = snapshot.docs.filter((doc) => !doc.data().withdrawnAt)
+    const rows = live.map((doc) => exportRow(doc.data()))
+    const withdrawals = snapshot.docs.filter((doc) => doc.data().withdrawnAt)
+      .map((doc) => ({ city: String(doc.data().city), at: isoOrNull(doc.data().withdrawnAt) }))
+    const manifest = buildManifest(rows, withdrawals)
     // No cache: the freshness probe must observe a publish on the next run.
     const writeOptions = { contentType: 'application/json', metadata: { cacheControl: 'no-cache' } }
     await publishedBucket.file(SATELLITE_EXPORT_PATH).save(`${rows.map((r) => JSON.stringify(r)).join('\n')}\n`, writeOptions)
@@ -865,6 +989,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
       const observation = snapshot.data() as ObservationRecord
       if (observation.status !== 'pending') throw new Error(`Observation ${observationId} is already ${observation.status}`)
       if (!PUBLISHABLE.has(observation.decision)) throw new Error(`A ${observation.decision} decision is not published`)
+      if (!isPublishable(observation)) throw new Error(`${observation.duplicateOfTreeId} is a satellite tree: correct it instead of stacking a second row on it`)
       if (!cityCodes.has(observation.city)) throw new Error(`${observation.city} is not a supported city code`)
       transaction.create(publishedRef, { ...publishedTreeFrom(observation), publishedAt: FieldValue.serverTimestamp() })
       transaction.update(observationRef, { status: 'published', publishedAt: FieldValue.serverTimestamp(), publishedTreeId: publishedRef.id })
@@ -1065,7 +1190,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
   router.get('/queue', async (_req, res, next) => {
     try {
       const snapshot = await db.collection(OBSERVATIONS).where('status', '==', 'pending').get()
-      const rows = snapshot.docs.map(serializeObservation).filter((o) => PUBLISHABLE.has(o.decision as Decision))
+      const rows = snapshot.docs.map(serializeObservation).filter((o) => isPublishable(o))
       rows.sort((x, y) => String(x.updatedAt ?? '').localeCompare(String(y.updatedAt ?? '')))
       res.json(rows)
     } catch (error) {
@@ -1088,7 +1213,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
       const bundle = tiles.get(req.params.tileId, runOf(req))
       if (!bundle) throw new Error(`No tile ${req.params.tileId}`)
       const pending = (await observationsForTile(bundle.tileId))
-        .filter((o) => o.status === 'pending' && PUBLISHABLE.has(o.decision as Decision))
+        .filter((o) => o.status === 'pending' && isPublishable(o))
       const published: string[] = []
       const failed: { id: string; error: string }[] = []
       for (const observation of pending) {
@@ -1102,6 +1227,120 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
       // what did publish, and reports the rest.
       const manifest = published.length ? await rewritePublicExport() : null
       res.json({ ok: failed.length === 0, published, failed, exported: manifest?.count ?? null })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // -- Published satellite trees: corrected in place, never stacked -------
+
+  router.get('/published/:treeId', async (req, res, next) => {
+    try {
+      const doc = await db.collection(PUBLISHED).doc(req.params.treeId).get()
+      if (!doc.exists) {
+        res.status(404).json({ error: `No published satellite tree ${req.params.treeId}` })
+        return
+      }
+      const data = doc.data() ?? {}
+      res.json({ ...exportRow(data), revision: data.revision ?? 0, withdrawnAt: isoOrNull(data.withdrawnAt), corrections: data.corrections ?? [] })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  /** Apply a correction to one published tree inside a transaction. */
+  async function correctTree(treeId: string, input: CorrectionInput, transaction: FirebaseFirestore.Transaction, now: string) {
+    const ref = db.collection(PUBLISHED).doc(treeId)
+    const snapshot = await transaction.get(ref)
+    if (!snapshot.exists) throw new Error(`No published satellite tree ${treeId}`)
+    const update = correctionUpdate(snapshot.data() ?? {}, input, actor, now)
+    return { ref, update: { ...update, correctedAt: FieldValue.serverTimestamp(), correctedBy: actor } as Record<string, unknown> }
+  }
+
+  router.patch('/published/:treeId', async (req, res, next) => {
+    try {
+      const input = parseCorrection(req.body)
+      const now = new Date().toISOString()
+      const update = await db.runTransaction(async (transaction) => {
+        const { ref, update } = await correctTree(req.params.treeId, input, transaction, now)
+        transaction.update(ref, update as FirebaseFirestore.DocumentData)
+        return update
+      })
+      const manifest = await rewritePublicExport()
+      res.json({ ok: true, revision: update.revision, exported: manifest.count })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  /** Take a tree out of the export (kept, marked, for the history and the freshness probe). */
+  function withdraw(transaction: FirebaseFirestore.Transaction, treeId: string, data: Record<string, unknown>, reason: string) {
+    if (data.withdrawnAt) throw new Error(`${treeId} is already withdrawn`)
+    transaction.update(db.collection(PUBLISHED).doc(treeId), { withdrawnAt: FieldValue.serverTimestamp(), withdrawnBy: actor, withdrawReason: reason })
+    if (data.observationId) transaction.update(db.collection(OBSERVATIONS).doc(String(data.observationId)), { status: 'withdrawn', updatedAt: FieldValue.serverTimestamp() })
+  }
+
+  router.post('/published/:treeId/withdraw', async (req, res, next) => {
+    try {
+      const reason = cleanString((req.body as { reason?: unknown })?.reason, MAX_NOTES, 'reason') ?? 'withdrawn by the reviewer'
+      await db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(db.collection(PUBLISHED).doc(req.params.treeId))
+        if (!snapshot.exists) throw new Error(`No published satellite tree ${req.params.treeId}`)
+        withdraw(transaction, req.params.treeId, snapshot.data() ?? {}, reason)
+      })
+      const manifest = await rewritePublicExport()
+      res.json({ ok: true, exported: manifest.count })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // Fold a stacked row into the satellite tree it duplicates: the values a
+  // person entered move onto the target, and the stacked row is withdrawn.
+  router.post('/published/:treeId/fold', async (req, res, next) => {
+    try {
+      const now = new Date().toISOString()
+      const result = await db.runTransaction(async (transaction) => {
+        const stackedSnap = await transaction.get(db.collection(PUBLISHED).doc(req.params.treeId))
+        if (!stackedSnap.exists) throw new Error(`No published satellite tree ${req.params.treeId}`)
+        const stacked = stackedSnap.data() ?? {}
+        const targetId = stacked.duplicateOfTreeId
+        if (!isSatelliteTreeId(targetId)) throw new Error(`${req.params.treeId} does not duplicate a satellite tree`)
+        const targetSnap = await transaction.get(db.collection(PUBLISHED).doc(String(targetId)))
+        if (!targetSnap.exists) throw new Error(`Its target ${String(targetId)} is not a published satellite tree`)
+        const changes = foldChanges(stacked, targetSnap.data() ?? {})
+        // Every read before any write, as Firestore transactions require.
+        const corrected = Object.keys(changes).length
+          ? correctionUpdate(targetSnap.data() ?? {}, { changes, baseRevision: null }, actor, now)
+          : null
+        if (corrected) transaction.update(targetSnap.ref, { ...corrected, correctedAt: FieldValue.serverTimestamp(), correctedBy: actor })
+        withdraw(transaction, req.params.treeId, stacked, `folded into ${String(targetId)}`)
+        return { targetId: String(targetId), moved: Object.keys(changes) }
+      })
+      const manifest = await rewritePublicExport()
+      res.json({ ok: true, ...result, exported: manifest.count })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // Rows already stacked on a satellite tree (published before that was refused).
+  router.get('/stacked', async (_req, res, next) => {
+    try {
+      const snapshot = await db.collection(PUBLISHED).get()
+      const byId = new Map(snapshot.docs.map((doc) => [doc.id, doc.data()]))
+      const rows = snapshot.docs
+        .map((doc) => doc.data())
+        .filter((d) => !d.withdrawnAt && isSatelliteTreeId(d.duplicateOfTreeId))
+        .map((d) => {
+          const target = byId.get(String(d.duplicateOfTreeId))
+          return {
+            stacked: exportRow(d),
+            target: target ? { ...exportRow(target), withdrawnAt: isoOrNull(target.withdrawnAt) } : null,
+            wouldMove: target ? Object.keys(foldChanges(d, target)) : [],
+          }
+        })
+      res.json(rows)
     } catch (error) {
       next(error)
     }

@@ -8,7 +8,12 @@ import {
   assertBundle,
   buildManifest,
   buildObservation,
+  correctionUpdate,
   DUPLICATE_RADIUS_M,
+  foldChanges,
+  isPublishable,
+  MAX_CORRECTION_MOVE_M,
+  parseCorrection,
   exportRow,
   lonLatToPixel,
   nearestInventory,
@@ -271,7 +276,7 @@ test('the public export carries no notes or actor and keeps estimate and measure
   assert.equal(row.measuredDbhInches, 9)
   assert.equal(row.city, 'USSFO')
   assert.deepEqual(Object.keys(row).sort(), [
-    'acquisitionDate', 'city', 'crownWidthMethod', 'duplicateOfTreeId', 'humanCrownWidthM', 'imageryVersion', 'latitude', 'longitude',
+    'acquisitionDate', 'city', 'correctedAt', 'crownWidthMethod', 'duplicateOfTreeId', 'humanCrownWidthM', 'imageryVersion', 'latitude', 'longitude',
     'measuredDbhInches', 'positionRole', 'predictedCrownWidthM', 'predictedDbhInches', 'predictionId',
     'publishedAt', 'runId', 'schemaVersion', 'species', 'speciesSource', 'tileId', 'treeId',
   ])
@@ -288,4 +293,60 @@ test('the manifest tracks the latest publish per city', () => {
   assert.equal(manifest.count, 4)
   assert.equal(manifest.latestPublishedAt, '2026-09-03T00:00:00.000Z')
   assert.deepEqual(manifest.latestPublishedAtByCity, { USSFO: '2026-09-02T00:00:00.000Z', USBOS: '2026-09-03T00:00:00.000Z' })
+})
+
+test('a duplicate of a satellite tree never publishes: that tree is corrected instead', () => {
+  assert.equal(isPublishable({ decision: 'accept', duplicateOfTreeId: null }), true)
+  assert.equal(isPublishable({ decision: 'duplicate', duplicateOfTreeId: 'USBOS-12345' }), true)
+  assert.equal(isPublishable({ decision: 'duplicate', duplicateOfTreeId: 'sat-fa82c65d973934cdbe48' }), false)
+  assert.equal(isPublishable({ decision: 'reject', duplicateOfTreeId: null }), false)
+})
+
+test('a correction changes only what it names, keeps a history and bumps the revision', () => {
+  const tree = { treeId: 'sat-a', city: 'USBOS', latitude: 42.31, longitude: -71.108, positionRole: 'crown_center', species: 'Quercus palustris', speciesSource: 'model', measuredDbhInches: null, humanCrownWidthM: null, revision: 2 }
+  const input = parseCorrection({ species: 'Quercus rubra', measuredDbhInches: '15.4', baseRevision: 2 })
+  const update = correctionUpdate(tree, input, 'ethan', '2026-10-12T12:00:00.000Z')
+  assert.equal(update.species, 'Quercus rubra')
+  assert.equal(update.speciesSource, 'reviewer')
+  assert.equal(update.measuredDbhInches, 15.4)
+  assert.equal(update.revision, 3)
+  assert.ok(!('latitude' in update) && !('humanCrownWidthM' in update))
+  assert.deepEqual(update.corrections, [{ at: '2026-10-12T12:00:00.000Z', actor: 'ethan', changes: {
+    species: { from: 'Quercus palustris', to: 'Quercus rubra' }, measuredDbhInches: { from: null, to: 15.4 },
+  } }])
+  // Clearing a species is allowed and says nothing about its source.
+  assert.equal(correctionUpdate(tree, parseCorrection({ species: '' }), 'e', 'now').speciesSource, null)
+  assert.throws(() => correctionUpdate(tree, parseCorrection({ species: 'Quercus palustris' }), 'e', 'now'), /already holds/)
+  assert.throws(() => correctionUpdate(tree, { ...input, baseRevision: 1 }, 'e', 'now'), /Stale correction/)
+  assert.throws(() => correctionUpdate({ ...tree, withdrawnAt: 'x' }, input, 'e', 'now'), /withdrawn/)
+  assert.throws(() => parseCorrection({}), /Nothing to correct/)
+  assert.throws(() => parseCorrection({ measuredDbhInches: 900 }), /at most/)
+  assert.throws(() => parseCorrection({ latitude: 42.3 }), /both latitude and longitude/)
+})
+
+test('a correction nudges a crown-centre tree but never moves a linked trunk', () => {
+  const tree = { treeId: 'sat-a', latitude: 42.31, longitude: -71.108, positionRole: 'crown_center', revision: 0 }
+  const nudge = correctionUpdate(tree, parseCorrection({ latitude: 42.31003, longitude: -71.108 }), 'e', 'now')
+  assert.equal(nudge.latitude, 42.31003)
+  const far = parseCorrection({ latitude: 42.311, longitude: -71.108 })
+  assert.throws(() => correctionUpdate(tree, far, 'e', 'now'), new RegExp(`at most ${MAX_CORRECTION_MOVE_M} m`))
+  assert.throws(() => correctionUpdate({ ...tree, positionRole: 'linked_trunk' }, parseCorrection({ latitude: 42.31001, longitude: -71.108 }), 'e', 'now'), /linked-trunk/)
+})
+
+test('folding a stacked row moves only what a person entered onto its target', () => {
+  const target = { species: 'Quercus palustris', measuredDbhInches: null, humanCrownWidthM: 1.3 }
+  assert.deepEqual(foldChanges({ species: 'Quercus rubra', speciesSource: 'reviewer', measuredDbhInches: 15.4, humanCrownWidthM: 6.2 }, target),
+    { species: 'Quercus rubra', measuredDbhInches: 15.4, humanCrownWidthM: 6.2 })
+  assert.deepEqual(foldChanges({ species: 'Acer rubrum', speciesSource: 'model', measuredDbhInches: null, humanCrownWidthM: null }, target), {},
+    "the model's label is not a person's correction")
+})
+
+test('the manifest moves forward on a correction and on a withdrawal', () => {
+  const row = (city: string, publishedAt: string, correctedAt: string | null = null) => ({ city, publishedAt, correctedAt }) as Parameters<typeof buildManifest>[0][number]
+  const manifest = buildManifest(
+    [row('USBOS', '2026-09-01T00:00:00.000Z', '2026-10-12T00:00:00.000Z'), row('USSFO', '2026-09-02T00:00:00.000Z')],
+    [{ city: 'ussfo', at: '2026-10-11T00:00:00.000Z' }, { city: 'USNYC', at: null }],
+  )
+  assert.deepEqual(manifest.latestPublishedAtByCity, { USBOS: '2026-10-12T00:00:00.000Z', USSFO: '2026-10-11T00:00:00.000Z' })
+  assert.equal(manifest.count, 2, 'a withdrawn row is not counted')
 })

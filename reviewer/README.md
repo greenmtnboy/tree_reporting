@@ -182,6 +182,22 @@ checkout whose `artifacts/` holds the runs (a worktree has none). Point tiles ig
 publishing from one inside a sealed test block leaks into that block's
 evaluation.
 
+**Correcting a satellite tree.** A tree this reviewer published (`sat-…`)
+is corrected in place, never stacked. Two satellite rows in one cluster merge
+field by field with `max()` in `data/raw/tree_dedup.preql`, so a second row
+is not a reliable correction, and its latitude and longitude can come from
+different rows. So linking a detection to a satellite tree ("Same tree")
+records the link privately and publishes nothing. **Correct** on that tree in
+the side panel edits its stored species, measured DBH, traced crown and, for
+a crown-centre row, its position (at most 25 m; a linked-trunk row stays on
+its trunk). The tree keeps its id; the record gains a revision, `correctedAt`
+and a short history, and the public export is rewritten. The publish queue
+lists rows already **stacked** on a satellite tree: **Fold** moves what a
+person entered onto the target and withdraws the stacked row, and **Withdraw**
+only removes it (the record is kept, marked `withdrawnAt`). The manifest's
+`latestPublishedAtByCity` advances on a correction or a withdrawal as well as
+a publish, so the city's refresh picks either up.
+
 A bundle is the `TilePredictionBundleV1` contract from
 `docs/PREDICTION_CURATION_HANDOFF.md`: the chip as a PNG, the tile's affine and
 CRS, the run's above-threshold detections with stable ids
