@@ -28,16 +28,23 @@ from shared.platforms.socrata import SocrataDataset, iter_rows, point_lon_lat
 
 DATASET = SocrataDataset("data.calgary.ca", "99yf-6c5u")
 
+# Renamed by the city on 2026-10-07 (resource_alternate_nm -> alt_name,
+# resource_ty -> resource_type); a $select naming a missing column is a 400.
 SELECT = (
-    "id,name,resource_alternate_nm,resource_ty,address,community,"
+    "id,name,alt_name,resource_type,address,community,"
     "construction_yr,point"
 )
+
+# alt_name and resource_type write "N/A" where they mean nothing.
+PLACEHOLDERS = {"n/a", "na"}
 
 
 def clean(value) -> str | None:
     if value is None:
         return None
     text = " ".join(str(value).split())
+    if text.lower() in PLACEHOLDERS:
+        return None
     return text or None
 
 
@@ -85,7 +92,7 @@ def transform(rows: list[dict]) -> pa.Table:
         # addressed one.
         label = (
             clean(rec.get("name"))
-            or clean(rec.get("resource_alternate_nm"))
+            or clean(rec.get("alt_name"))
             or street
         )
         if label is None:
@@ -98,7 +105,7 @@ def transform(rows: list[dict]) -> pa.Table:
         address.append(street)
         neighborhood.append(clean(rec.get("community")))
         year_built.append(parse_year(rec.get("construction_yr")))
-        property_type.append(clean(rec.get("resource_ty")))
+        property_type.append(clean(rec.get("resource_type")))
 
     return pa.table(
         {
