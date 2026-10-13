@@ -2495,13 +2495,18 @@ def validate_coordinates(
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
-# Overpass API rejects the default `python-requests/...` User-Agent with
-# HTTP 406 ("Not Acceptable"). OSM etiquette also requires identifying the
-# application. Cities that fetch from Overpass should pass these headers to
-# `post_with_retry` / `get_with_retry`.
-OVERPASS_HEADERS = {
+# Every request identifies the application. Portals reject the default
+# `python-requests/...` User-Agent: Overpass with HTTP 406, Montreal's CKAN
+# with 403 (from 2026-10). `_send` and the streaming downloads add this unless
+# the caller sets its own User-Agent.
+DEFAULT_HEADERS = {
     "User-Agent": "sf-tree-reporting/1.0 (https://github.com/greenmtnboy/tree_reporting)"
 }
+OVERPASS_HEADERS = DEFAULT_HEADERS
+
+
+def _with_default_headers(headers: dict | None) -> dict:
+    return {**DEFAULT_HEADERS, **(headers or {})}
 
 
 class UpstreamUnavailable(RuntimeError):
@@ -2638,6 +2643,7 @@ def _send(method: str, url: str, **kwargs) -> requests.Response:
     import requests
 
     try:
+        kwargs["headers"] = _with_default_headers(kwargs.get("headers"))
         r = requests.request(method, url, **kwargs)
     except requests.exceptions.RequestException as e:
         raise UpstreamUnavailable(str(e)) from e
@@ -2776,7 +2782,7 @@ def download_parquet(url: str, timeout: int = 300) -> io.BytesIO:
     """Stream-download a parquet file into a BytesIO buffer and return it seeked to 0."""
     import requests
 
-    r = requests.get(url, stream=True, timeout=timeout)
+    r = requests.get(url, stream=True, timeout=timeout, headers=_with_default_headers(None))
     r.raise_for_status()
     buf = io.BytesIO()
     for chunk in r.iter_content(chunk_size=1024 * 1024):
@@ -3021,7 +3027,7 @@ def iter_csv_row_chunks(
     handle, path = tempfile.mkstemp(suffix=".csv")
     os.close(handle)
     try:
-        with requests.get(url, stream=True, timeout=timeout) as r:
+        with requests.get(url, stream=True, timeout=timeout, headers=_with_default_headers(None)) as r:
             r.raise_for_status()
             with open(path, "wb") as fh:
                 for block_ in r.iter_content(chunk_size=1024 * 1024):
