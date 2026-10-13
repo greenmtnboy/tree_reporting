@@ -289,6 +289,7 @@ partial datasource {slug}_tree_info (
     cluster_id,
     merged_sources,
     ?merged_tree_ids,
+    reported_missing,
     {lc}_published_data_updated_through,
 )
 grain (tree_id)

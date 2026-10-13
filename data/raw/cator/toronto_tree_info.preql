@@ -135,6 +135,7 @@ partial datasource toronto_tree_info (
     cluster_id,
     merged_sources,
     ?merged_tree_ids,
+    reported_missing,
     cator_published_data_updated_through,
 )
 grain (tree_id)

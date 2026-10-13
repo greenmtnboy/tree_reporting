@@ -235,6 +235,22 @@ def test_every_city_prunes_absorbed_rows(code: str):
 
 
 @pytest.mark.parametrize("code", sorted(MUNICIPAL_DATA_SOURCES))
+def test_every_city_stores_reported_missing(code: str):
+    """Every city's published target stores `reported_missing`.
+
+    The target gates on it once every published parquet carries it (until
+    then a tree reported gone is dropped through cluster_id; see
+    ../tree_dedup.preql).  A city that does not store it never gets the column,
+    and the gate would fail every read of that city's parquet.
+    """
+    text = city_models()[code].read_text(encoding="utf-8")
+    target = re.search(r"^partial datasource \w+_tree_info \((.*?)^\)", text, re.S | re.M)
+    assert target and re.search(r"^\s*reported_missing,\s*$", target.group(1), re.M), (
+        f"{code}'s published target does not store reported_missing"
+    )
+
+
+@pytest.mark.parametrize("code", sorted(MUNICIPAL_DATA_SOURCES))
 def test_every_city_publishes_cluster_id(code: str):
     """Every city's published target projects `cluster_id`.
 

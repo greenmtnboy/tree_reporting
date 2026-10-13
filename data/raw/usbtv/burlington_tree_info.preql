@@ -158,6 +158,7 @@ partial datasource burlington_tree_info (
     cluster_id,
     merged_sources,
     ?merged_tree_ids,
+    reported_missing,
     ?source_latitude,
     ?source_longitude,
     ?position_adjustment,

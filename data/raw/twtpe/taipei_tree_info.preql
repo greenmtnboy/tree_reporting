@@ -139,6 +139,7 @@ partial datasource taipei_tree_info (
     cluster_id,
     merged_sources,
     ?merged_tree_ids,
+    reported_missing,
     twtpe_published_data_updated_through,
 )
 grain (tree_id)

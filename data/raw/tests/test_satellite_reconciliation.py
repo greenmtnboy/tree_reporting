@@ -95,6 +95,18 @@ def write_rows(conn, path: Path, rows, *, rename: dict[str, str] | None = None) 
     conn.execute(f"COPY (SELECT {select} FROM src) TO '{path.as_posix()}' (FORMAT PARQUET)")
 
 
+def write_modifications(conn, path: Path, rows) -> None:
+    """A tree_modification_info.py fixture: (tree_id, species, dbh, lat, lon, missing)."""
+    conn.execute("DROP TABLE IF EXISTS mods")
+    conn.execute(
+        "CREATE TABLE mods (tree_id VARCHAR, species VARCHAR, diameter_at_breast_height DOUBLE, "
+        "latitude DOUBLE, longitude DOUBLE, missing BOOLEAN)"
+    )
+    if rows:
+        conn.executemany("INSERT INTO mods VALUES (?, ?, ?, ?, ?, ?)", rows)
+    conn.execute(f"COPY mods TO '{path.as_posix()}' (FORMAT PARQUET)")
+
+
 @pytest.fixture(scope="module")
 def published(tmp_path_factory) -> dict[str, dict]:
     import duckdb
@@ -108,6 +120,7 @@ def published(tmp_path_factory) -> dict[str, dict]:
         "community_tree_info.py": tmp / "community.parquet",
         "satellite_tree_info.py": tmp / "satellite.parquet",
         "ussfo_osm_staging.parquet": tmp / "osm.parquet",
+        "tree_modification_info.py": tmp / "modifications.parquet",
     }
     # Every one of the four scripts emits canonical names, so none of these
     # needs a rename.  The SF script used to emit the portal's own spelling
@@ -119,6 +132,8 @@ def published(tmp_path_factory) -> dict[str, dict]:
     write_rows(conn, fixtures["community_tree_info.py"], COMMUNITY)
     write_rows(conn, fixtures["satellite_tree_info.py"], SATELLITE)
     write_rows(conn, fixtures["ussfo_osm_staging.parquet"], OSM)
+    # No approved tree reports: the merge must publish exactly what it did before.
+    write_modifications(conn, fixtures["tree_modification_info.py"], [])
 
     env = Environment(working_path=MODEL.parent)
     env.parse(MODEL.read_text(encoding="utf-8"))

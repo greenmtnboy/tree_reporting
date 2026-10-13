@@ -200,6 +200,7 @@ T_ROAD = (44.4760, -73.2120)
 T_BUILDING = (44.4770, -73.2130)
 T_OPEN = (44.4780, -73.2140)
 T_SHARED = (44.4790, -73.2150)
+REPORTED = (44.47705, -73.21305)  # where a tree report says m-building stands
 
 
 def cell(point):
@@ -283,6 +284,7 @@ def published() -> dict[str, dict]:
     """What a refresh of the fixture city would publish, keyed by tree_id."""
     import duckdb
     from trilogy import Dialects, Environment
+    from trilogy.dialect.config import DuckDBConfig
 
     osm = (T_OPEN[0] + 0.00001, T_OPEN[1] + 0.00001)  # same dedup cell as m-open
     model = CITY_MODEL.format(
@@ -294,7 +296,8 @@ def published() -> dict[str, dict]:
     )
     env = Environment(working_path=RAW_DIR)
     env.parse(model)
-    executor = Dialects.DUCK_DB.default_executor(environment=env)
+    # The tree reports are a python datasource; the SQL is planned, never run against it.
+    executor = Dialects.DUCK_DB.default_executor(environment=env, conf=DuckDBConfig(enable_python_datasources=True))
     (sql,) = executor.generate_sql(
         """
         select
@@ -304,6 +307,15 @@ def published() -> dict[str, dict]:
         where city = 'USBTV';
         """
     )
+    # Approved tree reports (../tree_modification_info.py): one moves the tree
+    # in the building to where the reporter saw it.
+    sql = re.sub(
+        r"uv_run\('[^']*tree_modification_info\.py'(?:,\s*args := '(?:[^']|'')*')?\)",
+        "(SELECT * FROM (VALUES ('m-building', CAST(NULL AS VARCHAR), CAST(NULL AS DOUBLE), "
+        f"{REPORTED[0]}, {REPORTED[1]}, false)) AS t(tree_id, species, diameter_at_breast_height, latitude, longitude, missing))",
+        sql,
+    )
+    assert "uv_run" not in sql, sql
     for name, value in model_constants().items():
         sql = re.sub(rf":{name}\b", repr(value), sql)
     assert ":" not in re.sub(r"'[^']*'", "", sql), "an unbound parameter survived"
@@ -327,10 +339,20 @@ def test_a_tree_in_the_road_is_moved_and_its_origin_kept(published):
     assert close(row["position_shift_m"], 2.9)
 
 
-def test_a_tree_in_a_building_is_moved(published):
+def test_a_reported_position_is_final_and_not_snapped_again(published):
+    """m-building's cell snaps out of the building, but an approved tree report
+    placed it: the report wins, and the source's own point is kept."""
     row = published["m-building"]
+    assert row["position_adjustment"] == "reported"
+    assert row["position_shift_m"] is None
+    assert close(row["latitude"], REPORTED[0]) and close(row["longitude"], REPORTED[1])
+    assert close(row["source_latitude"], T_BUILDING[0]) and close(row["source_longitude"], T_BUILDING[1])
+
+
+def test_a_tree_in_a_building_is_moved(published):
+    """The shared tree in a building: no report, so the snap applies."""
+    row = published["m-shared"]
     assert row["position_adjustment"] == "building"
-    assert close(row["latitude"], 44.47702)
 
 
 def test_open_ground_is_untouched(published):

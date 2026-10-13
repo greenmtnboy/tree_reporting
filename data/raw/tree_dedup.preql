@@ -19,9 +19,11 @@
 #   merge {lc}_source_label into source_label;
 #   ... every raw source maps `raw_species`, `raw_latitude`, ... (not the
 #       canonical concepts), and the published target maps `species`,
-#       `latitude`, ... plus `merged_sources` and `merged_tree_ids`, and
-#       carries `where tree_id = cluster_id` to drop the absorbed rows.
-#   merge merged_dbh into diameter_at_breast_height;   # or a city-specific dbh
+#       `latitude`, ... plus `merged_sources`, `merged_tree_ids` and
+#       `reported_missing`, and carries `where tree_id = cluster_id` to drop
+#       the absorbed rows (and, through cluster_id, the trees an approved
+#       report says are gone).
+#   merge merged_dbh into diameter_at_breast_height;   # or @corrected_dbh(<its own dbh>)
 #   merge merged_latitude into latitude;               # or import ../tree_position.preql,
 #   merge merged_longitude into longitude;             #   which merges the corrected point
 #
@@ -227,7 +229,7 @@ auto self_if_municipal <- @municipal_anchor(row_key);
 auto self_if_person <- @person_anchor(row_key);
 auto self_if_not_osm <- @any_anchor(row_key);
 
-auto cluster_id <- coalesce(
+auto cluster_anchor <- coalesce(
     self_if_municipal,
     municipal_anchor_a, municipal_anchor_b, municipal_anchor_c, municipal_anchor_d,
     self_if_person,
@@ -236,6 +238,61 @@ auto cluster_id <- coalesce(
     anchor_a, anchor_b, anchor_c, anchor_d,
     tree_id
 );
+
+# --- Approved corrections ----------------------------------------------------
+#
+# A tree report (reviewer/modifications.ts) corrects a tree already on the map:
+# its species, its DBH, its position, or that it is gone.  The reviewer
+# publishes the approved ones to `community/tree_modifications.ndjson`, and
+# ./tree_modification_info.py resolves them to one row per tree, the latest
+# report winning field by field.  A report names the tree id the reporter saw,
+# which is the id of the published row -- the cluster survivor -- so the
+# correction lands on that row and the survivor publishes it.
+#
+# The rows carry their own key, merged PARTIALLY into tree_id: `~` makes the
+# join a LEFT OUTER from the tree rows, so a tree with no report keeps its row
+# and a report for a tree in another city (or no longer in any source) adds
+# none.  A plain merge would be a FULL join over the coalesced key and publish
+# the other city's reported trees here.  The datasource is declared once, in
+# this shared file, because it is not one of a city's source partitions: every
+# city reads the same export and the join keeps only its own trees.
+key modified_tree_id string; # the published tree an approved tree report corrects
+property modified_tree_id.modified_species string; # the species the latest report gave this tree, as an accepted scientific name
+property modified_tree_id.modified_dbh float; # the trunk diameter, inches, the latest report gave this tree
+property modified_tree_id.modified_latitude float; # the corrected position's latitude (always with its longitude)
+property modified_tree_id.modified_longitude float; # the corrected position's longitude (always with its latitude)
+property modified_tree_id.modified_missing bool; # the latest approved report says this tree is gone
+
+root datasource tree_modifications (
+    tree_id: modified_tree_id,
+    species: modified_species,
+    diameter_at_breast_height: modified_dbh,
+    latitude: modified_latitude,
+    longitude: modified_longitude,
+    missing: modified_missing,
+)
+grain (modified_tree_id)
+file `./tree_modification_info.py`;
+
+merge modified_tree_id into ~tree_id;
+
+# Whether the latest approved report says the tree is gone.  Every target
+# stores it, so it reaches each parquet as the city next rebuilds.
+auto reported_missing <- coalesce(modified_missing, false);
+
+# Until every published parquet has that column, a tree reported gone is
+# dropped through cluster_id instead: it leaves its cluster, taking its own id,
+# marked, so the prune every target already carries (`tree_id = cluster_id`)
+# drops it -- and every row its cluster absorbed, which still point at its
+# tree_id.  The target cannot gate on `reported_missing` yet: its `where` is
+# applied whenever the parquet is read, so it would fail every read of a
+# parquet built before the column existed.  The follow-up gates on the column
+# and drops this.  It reads modified_missing, not the stored column, so no plan
+# reaches for `reported_missing` in an old parquet.
+auto cluster_id <- case
+    when coalesce(modified_missing, false) then concat(tree_id, '#reported-gone')
+    else cluster_anchor
+end;
 
 # --- Attribute merge over the cluster ---------------------------------------
 #
@@ -271,15 +328,25 @@ auto species_specificity <- case
     else 3
 end;
 auto species_key <- concat(cast(species_specificity as string), cast(source_rank as string), '|', raw_species);
-auto merged_species <- substring((max(species_key) by cluster_id), 4, 200);
+# An approved correction wins over every source.
+auto merged_species <- coalesce(modified_species, substring((max(species_key) by cluster_id), 4, 200));
 
 # Position comes from the survivor's own source via @by_source, which is a
 # single row, so latitude and longitude always travel together.  Preferring a
 # partner's unshared point over an address centroid is parked: it needs either
 # a string round-trip (`cast(... as float)` renders 32-bit REAL) or a filtered
 # aggregate on an aggregate-derived flag, which does not plan yet.
-auto merged_latitude <- @by_source(raw_latitude);
-auto merged_longitude <- @by_source(raw_longitude);
+# The merge with the approved correction on top, as functions, so a city
+# (or ../tree_position.preql) that merges its own value -- Boston's imputed
+# dbh, the Overture-placed point -- applies corrections by calling the same
+# helper rather than repeating the coalesce.  A corrected position is final:
+# the ingest only ever emits the pair, and it is not snapped again.
+def corrected_dbh(dbh) -> coalesce(modified_dbh, @by_source(dbh));
+def corrected_latitude(lat) -> coalesce(modified_latitude, @by_source(lat));
+def corrected_longitude(lon) -> coalesce(modified_longitude, @by_source(lon));
+
+auto merged_latitude <- @corrected_latitude(raw_latitude);
+auto merged_longitude <- @corrected_longitude(raw_longitude);
 auto merged_tree_name <- @by_source(raw_tree_name);
 # The cultivar travels by source rather than with the winning species: a
 # community submission that names the selection is more specific than an
@@ -292,7 +359,7 @@ auto merged_crown_width_m <- @by_source(raw_crown_width_m);
 # A negative dbh is a source's own "not measured" sentinel; null it before the
 # merge so a real measurement from another source can win.
 auto cleaned_dbh <- case when raw_dbh < 0 then null else raw_dbh end;
-auto merged_dbh <- @by_source(cleaned_dbh);
+auto merged_dbh <- @corrected_dbh(cleaned_dbh);
 
 # Provenance: every source that contributed to the cluster, and every id the
 # survivor absorbed, so no id is ever lost -- a link to an absorbed tree can be
@@ -319,7 +386,9 @@ merge merged_crown_width_m into crown_width_m;
 # ---------------------------------------------------------------------------
 #
 # Each city's published target carries `where tree_id = cluster_id`, so the
-# parquet holds exactly one row per tree.  Absorbed rows are not published, and
+# parquet holds exactly one row per tree, and none for a tree an approved
+# report says is gone (its cluster id no longer equals its tree id; a later
+# report that gives it values back restores it).  Absorbed rows are not published, and
 # no client-side filter is needed to hide them; `merged_tree_ids` is where an
 # absorbed id survives, so a link to one can still be resolved to its survivor.
 #

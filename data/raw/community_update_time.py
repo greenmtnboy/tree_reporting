@@ -44,6 +44,14 @@ MANIFEST_URL = os.environ.get(
     "COMMUNITY_PUBLISHED_MANIFEST_URL",
     f"https://storage.googleapis.com/{PUBLISHED_BUCKET}/community/manifest.json",
 )
+# Approved tree reports (reviewer/modifications.ts) change a city's published
+# trees too -- ../tree_dedup.preql applies them -- so the same per-city column
+# also advances when one is approved.  Folding them in here rather than adding
+# a fifth probe keeps every city's `greatest()` as it is.
+MODIFICATIONS_MANIFEST_URL = os.environ.get(
+    "TREE_MODIFICATIONS_MANIFEST_URL",
+    f"https://storage.googleapis.com/{PUBLISHED_BUCKET}/community/tree_modifications_manifest.json",
+)
 
 
 def column_for(city_code: str) -> str:
@@ -52,7 +60,15 @@ def column_for(city_code: str) -> str:
 
 
 def fetch_published_at_by_city() -> dict[str, datetime]:
-    """Newest `publishedAt` per city code, defaulting every city to the epoch.
+    """Newest community change per city: an approved submission or tree report."""
+    by_city = fetch_manifest(MANIFEST_URL, "Community freshness probe")
+    for code, at in fetch_manifest(MODIFICATIONS_MANIFEST_URL, "Tree modification freshness probe").items():
+        by_city[code] = max(by_city[code], at)
+    return by_city
+
+
+def fetch_manifest(url: str, label: str) -> dict[str, datetime]:
+    """Newest `publishedAt` per city code in one manifest, defaulting every city to the epoch.
 
     A missing or unreadable manifest means nothing has been approved yet.
     Returning epochs rather than raising matters: every city's
@@ -62,15 +78,14 @@ def fetch_published_at_by_city() -> dict[str, datetime]:
     """
     by_city = {code: EMPTY_DATASET_TIMESTAMP for code in COMMUNITY_DATA_SOURCES}
     try:
-        response = requests.get(MANIFEST_URL, timeout=30)
+        response = requests.get(url, timeout=30)
         if response.status_code == 404:
             return by_city
         response.raise_for_status()
         published = response.json().get("latestPublishedAtByCity") or {}
     except (requests.RequestException, ValueError) as e:
         print(
-            f"Community freshness probe: {MANIFEST_URL} unavailable ({e}); "
-            "treating community data as empty",
+            f"{label}: {url} unavailable ({e}); treating it as empty",
             file=sys.stderr,
         )
         return by_city
