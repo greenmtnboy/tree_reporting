@@ -176,6 +176,14 @@ def test_only_a_crown_the_model_read_from_the_image_is_published():
         [record(predictedCrownWidthM=6.1, crownWidthMethod="tallo_genus_power_law_from_dbh")]
     )
     assert allometric.column("crown_width_m").to_pylist() == [None]
+    # A crown the reviewer traced on the image wins over either.
+    traced = satellite.records_to_table(
+        [
+            record(predictedCrownWidthM=7.2, crownWidthMethod="model_crown_head", humanCrownWidthM=9.4),
+            record(treeId="sat-def", predictedCrownWidthM=6.1, crownWidthMethod="tallo_genus_power_law_from_dbh", humanCrownWidthM=5.0),
+        ]
+    )
+    assert traced.column("crown_width_m").to_pylist() == [9.4, 5.0]
     # Rows published before the method was exported say nothing, so publish nothing.
     assert satellite.records_to_table([record(predictedCrownWidthM=6.1)]).column(
         "crown_width_m"

@@ -130,8 +130,41 @@ The directory is read recursively, so export each tile set to its own
 subdirectory (`--out ../reviewer/tiles/sf-gaps-30cm-v2`) and point one
 reviewer at the parent. The page opens on the cities with tiles
 (`/satellite#tiles`). `#city/USNYC` lists one city's tiles grouped by set, and
-`#tile/<tileId>` opens a tile; all three work as links. If the same tile id
-is in two sets, the newest file wins.
+`#tile/<tileId>` opens a tile; all three work as links.
+
+**Model**, above every satellite view, picks a training run from
+`imagery_model/artifacts/runs` (complete runs, newest first). The run lives
+in the page URL, `/satellite?run=<runId>#city/USBOS`, so a link opens the
+same model and two tabs can review two runs; a URL without one gets
+`SATELLITE_RUN`, else the newest complete run at startup. A tile id names a
+place, imagery and chip, not a run, so two runs exported over the same chips
+give two sets holding the same tile ids: every tile request carries the run,
+and that run's bundle is the one a tile opens (the newest file otherwise, with
+a banner offering to predict the spot with the selected run). **Only this
+model's tiles** (on by default) hides the other runs' tiles from the list and
+the map. Decisions and the "reviewed" mark belong to the run they were made
+on (a v2 accept never attaches to a v12 detection that shares its cell id; it
+draws as a reviewed detection from elsewhere instead). **Export a cohort**
+under the picker runs `tile_bundle_export` on one of the selected run's
+evaluation cohorts into a new set, one export at a time, with progress on the
+page. Runs over the same NAIP items share one mosaic, but each names its own
+VRT and the workstation usually has only the first run's, so the server
+passes `--raster` with a local mosaic over the run's items at its resolution
+(or, for a config that lists no items, one cut from the same base mosaic).
+A cohort that reads a single NAIP GeoTIFF (NYC's) is refused by the exporter,
+whose imagery version needs a mosaic manifest; point-predict those instead.
+
+**Map** (`#map`, or `#map/USNYC`) lays every tile of a city over
+OpenStreetMap: a thumbnail of the chip on its exact footprint (the tile is
+square in UTM, so it sits slightly rotated), outlined white when untouched,
+yellow once it has decisions and green when marked reviewed. Click a tile to
+open it (overlapping tiles offer a list); click open ground to fetch NAIP and
+predict there. In a tile, clicking a detection or any point opens an
+inset of its surroundings at 2× (3×, 4×) the main zoom, which follows WASD
+nudges and swaps corners rather than cover the point; <kbd>I</kbd> toggles it.
+The map remembers its position for the tab, so returning from
+a tile lands where you left. MapLibre loads from jsdelivr and the base map
+from tile.openstreetmap.org, so the map view needs network access.
 
 `--min-score 0.1` exports candidates below the run's threshold too, so the
 page's confidence slider has something to reveal, and `--threshold` sets where
@@ -140,12 +173,30 @@ the slider starts (the run's `confidence_threshold` otherwise).
 **Predict at** on the tile list fetches the newest NAIP imagery around any
 latitude/longitude, runs the model on it and adds the tile to the list
 (`imagery_model/src/urban_tree_ml/point_predict.py`, about 20 s, one at a
-time). Tiles sit on a half-tile grid, so nearby points reuse a tile, and they
-carry current trees from every city whose envelope they meet. Set
-`SATELLITE_RUN` (default: the newest complete run), `SATELLITE_THRESHOLD` and
-`SATELLITE_MIN_SCORE` (default 0.1). Point tiles ignore the training splits:
+time) with the selected run, writing to a `points-<run>` set. Tiles sit on a
+half-tile grid, so nearby points reuse a tile, and they carry current trees
+from every city whose envelope they meet. `SATELLITE_THRESHOLD` and
+`SATELLITE_MIN_SCORE` (default 0.1) set the slider start and candidate floor
+for both point tiles and the export form. `IMAGERY_MODEL_DIR` points at the
+checkout whose `artifacts/` holds the runs (a worktree has none). Point tiles ignore the training splits:
 publishing from one inside a sealed test block leaks into that block's
 evaluation.
+
+**Correcting a satellite tree.** A tree this reviewer published (`sat-…`)
+is corrected in place, never stacked. Two satellite rows in one cluster merge
+field by field with `max()` in `data/raw/tree_dedup.preql`, so a second row
+is not a reliable correction, and its latitude and longitude can come from
+different rows. So linking a detection to a satellite tree ("Same tree")
+records the link privately and publishes nothing. **Correct** on that tree in
+the side panel edits its stored species, measured DBH, traced crown and, for
+a crown-centre row, its position (at most 25 m; a linked-trunk row stays on
+its trunk). The tree keeps its id; the record gains a revision, `correctedAt`
+and a short history, and the public export is rewritten. The publish queue
+lists rows already **stacked** on a satellite tree: **Fold** moves what a
+person entered onto the target and withdraws the stacked row, and **Withdraw**
+only removes it (the record is kept, marked `withdrawnAt`). The manifest's
+`latestPublishedAtByCity` advances on a correction or a withdrawal as well as
+a publish, so the city's refresh picks either up.
 
 A bundle is the `TilePredictionBundleV1` contract from
 `docs/PREDICTION_CURATION_HANDOFF.md`: the chip as a PNG, the tile's affine and
@@ -172,7 +223,15 @@ What the page shows, and what each decision means:
   confirmed only because a person kept it, and `speciesSource` records which.
   A measured DBH can be typed; the model's estimate is stored separately and
   the ingest never publishes it as a measurement.
-- **Duplicate of** links the detection to an inventory tree on the tile. It
+- **Duplicate of** links the detection to an inventory tree within 5 m of it
+  (`DUPLICATE_RADIUS_M`; farther trees are not offered, and <kbd>E</kbd> links
+  the nearest of them).
+- **Crown (human)**: with a detection selected, <kbd>R</kbd> then a click on
+  the crown's edge sets the crown radius to that distance from the crown
+  centre (a solid green ring; <kbd>Esc</kbd> cancels, **clear** removes it).
+  It is stored as `humanCrownWidthM` beside the model's width, exported, and
+  preferred by the ingest for `crown_width_m` over the model's crown head,
+  since a person traced it on the image. It
   publishes *at that tree's coordinates*, so the shared cluster merge in
   `data/raw/tree_dedup.preql` is guaranteed to absorb it: the municipal values
   win, the satellite species or DBH fills only what the inventory left empty,

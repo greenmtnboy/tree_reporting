@@ -2,11 +2,13 @@ import express from 'express'
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import sharp from 'sharp'
 
 import { createSatelliteRouter, TileStore } from './satellite.ts'
 import { parsePoint, predictPoint } from './satellitePredict.ts'
+import { areaExportRequests, chipsInArea, ExportJobs, listRuns, parseAreaRequest, parseExportRequest, planArea, resolveMosaic } from './satelliteModels.ts'
 import {
   assertCheckinPhotoPublishable,
   checkinPhotoListItem,
@@ -51,11 +53,81 @@ const PUBLISHED_PHOTO_MAX_DIM = 1600
 
 app.use(express.json({ limit: '32kb' }))
 
-// Predict a tile at any latitude/longitude NAIP covers; the bundle is written
-// into the tile directory, so it lists like an exported one.  Configure with
-// SATELLITE_RUN (default: the newest complete run), SATELLITE_THRESHOLD and
-// SATELLITE_MIN_SCORE (default 0.1).
+// The model the satellite page works with lives in the page's URL
+// (`/satellite?run=<runId>`), so a link opens the same model and two tabs can
+// review two runs.  The run decides which bundle a tile opens when several
+// sets hold it, and which checkpoint point predictions load.  SATELLITE_RUN
+// sets the default for a URL without one (else the newest complete run at
+// startup).
 const imageryModelDir = process.env.IMAGERY_MODEL_DIR ?? path.join(import.meta.dirname, '..', 'imagery_model')
+const defaultThreshold = process.env.SATELLITE_THRESHOLD ? Number(process.env.SATELLITE_THRESHOLD) : undefined
+const defaultMinScore = process.env.SATELLITE_MIN_SCORE ? Number(process.env.SATELLITE_MIN_SCORE) : undefined
+const satelliteTiles = new TileStore(tileDir, { defaultRun: process.env.SATELLITE_RUN ?? listRuns(imageryModelDir)[0]?.runId ?? null })
+const crownCoefficients = path.join(import.meta.dirname, '..', 'data', 'raw', 'crown_width_coefficients.csv')
+const exportJobs = new ExportJobs(imageryModelDir, tileDir, existsSync(crownCoefficients) ? crownCoefficients : null)
+
+app.get('/api/satellite/models', (req, res, next) => {
+  try {
+    const city = typeof req.query.city === 'string' ? req.query.city : undefined
+    const runs = listRuns(imageryModelDir)
+    const asked = typeof req.query.run === 'string' ? req.query.run : null
+    res.json({
+      // An unknown ?run= falls back to the default, and the page rewrites its URL.
+      selected: asked && runs.some((r) => r.runId === asked) ? asked : satelliteTiles.defaultRun,
+      defaultRun: satelliteTiles.defaultRun,
+      threshold: defaultThreshold ?? null,
+      minScore: defaultMinScore ?? 0.1,
+      runs,
+      tileRuns: satelliteTiles.runCounts(city),
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// Export a run's evaluation cohort into the tile directory as a new set.
+app.get('/api/satellite/exports', (_req, res) => {
+  res.json(exportJobs.list())
+})
+
+app.post('/api/satellite/exports', (req, res) => {
+  try {
+    const runs = listRuns(imageryModelDir)
+    const request = parseExportRequest(req.body, runs)
+    const cohort = runs.find((r) => r.runId === request.runId)?.cohorts.find((c) => c.cohort === request.cohort)
+    res.json(exportJobs.start(request, cohort?.chips ?? null))
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message })
+  }
+})
+
+// Export the run's chips under a map view: every non-test cohort of the city,
+// minus the chips this run already has tiles for, into one growing set per
+// city and run.  `dryRun` reports the plan for the page to confirm.
+app.post('/api/satellite/exports/area', async (req, res) => {
+  try {
+    const runs = listRuns(imageryModelDir)
+    const request = parseAreaRequest(req.body, runs)
+    if (!request.dryRun && exportJobs.running) throw new Error('An export is already running')
+    const cohort = runs.find((r) => r.runId === request.runId)?.cohorts.find((c) => c.city === request.city)
+    const mosaic = cohort && resolveMosaic(imageryModelDir, request.runId, cohort.cohort)
+    if (!mosaic) throw new Error(`No local mosaic for ${request.runId}'s ${request.city} chips`)
+    const found = await chipsInArea(imageryModelDir, request, mosaic)
+    const plan = planArea(found, satelliteTiles.chipIds(request.city, request.runId), request)
+    if (request.dryRun || !plan.newChips) {
+      res.json({ plan })
+      return
+    }
+    res.json({ plan, job: exportJobs.start(areaExportRequests(plan, request), plan.newChips) })
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message })
+  }
+})
+
+// Predict a tile at any latitude/longitude NAIP covers with the page's run
+// (`run` in the body); the bundle is written to a points-<run> set in the tile directory, so
+// it lists like an exported one.  SATELLITE_THRESHOLD and SATELLITE_MIN_SCORE
+// (default 0.1) set its slider start and candidate floor.
 app.post('/api/satellite/predict', async (req, res) => {
   let point: [number, number]
   try {
@@ -65,12 +137,15 @@ app.post('/api/satellite/predict', async (req, res) => {
     return
   }
   try {
+    const asked = (req.body as { run?: unknown })?.run
+    const run = typeof asked === 'string' && asked ? asked : satelliteTiles.defaultRun
+    if (!run || !listRuns(imageryModelDir).some((r) => r.runId === run)) throw new Error(`${run ?? 'No run'} is not a complete run under ${imageryModelDir}`)
     const tile = await predictPoint(point, {
       modelDir: imageryModelDir,
-      tileDir,
-      run: process.env.SATELLITE_RUN,
-      threshold: process.env.SATELLITE_THRESHOLD ? Number(process.env.SATELLITE_THRESHOLD) : undefined,
-      minScore: process.env.SATELLITE_MIN_SCORE ? Number(process.env.SATELLITE_MIN_SCORE) : undefined,
+      tileDir: path.join(tileDir, `points-${run}`),
+      run,
+      threshold: defaultThreshold,
+      minScore: defaultMinScore,
     })
     res.json(tile)
   } catch (error) {
@@ -84,8 +159,12 @@ app.use('/api/satellite', createSatelliteRouter({
   db,
   publishedBucket,
   cityCodes: CITY_CODES,
-  tiles: new TileStore(tileDir),
+  tiles: satelliteTiles,
 }))
+// Styles every page shares: tokens, top bar, buttons, controls, tables, cards.
+app.get('/reviewer.css', (_req, res) => {
+  res.sendFile(path.join(import.meta.dirname, 'reviewer.css'))
+})
 app.get('/satellite', (_req, res) => {
   res.sendFile(path.join(import.meta.dirname, 'satellite_page.html'))
 })
@@ -521,15 +600,8 @@ app.get('/', (_req, res) => {
   res.type('html').send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Tree submission review</title>
-<style>
-body{margin:0;background:#0b0f0d;color:#d7eadb;font:15px system-ui}main{max-width:1100px;margin:auto;padding:28px}
-h1{font-size:24px}.queue{display:grid;gap:18px}.card{display:grid;grid-template-columns:minmax(260px,420px) 1fr;gap:20px;padding:18px;border:1px solid #35513d;background:#111914}
-img{width:100%;max-height:420px;object-fit:contain;background:#050806}.thumbs{display:flex;gap:8px;margin-top:8px}.thumbs img{width:80px;height:80px}
-dl{display:grid;grid-template-columns:110px 1fr;gap:8px;margin:0}dt{color:#8cab94}dd{margin:0;overflow-wrap:anywhere}
-.actions{display:flex;gap:10px;margin-top:18px}button{border:1px solid #6da87b;background:#1d3624;color:#e7f5ea;padding:9px 14px;cursor:pointer}
-button.reject{border-color:#a86d6d;background:#361d1d}.empty{color:#8cab94}@media(max-width:720px){.card{grid-template-columns:1fr}}
-nav{margin-bottom:14px}nav a{color:#8cab94;margin-right:14px}
-</style></head><body><main><nav><a href="/">Photo submissions</a><a href="/modifications">Tree reports</a><a href="/photos">Tree photos</a><a href="/satellite">Satellite tiles</a><a href="/satellite#queue">Satellite publish queue</a></nav><h1>Pending tree submissions</h1><p id="status">Loading…</p><section id="queue" class="queue"></section></main>
+<link rel="stylesheet" href="/reviewer.css">
+<style>.thumbs{display:flex;gap:8px;margin-top:8px}.card .thumbs img{width:80px;height:80px}.card dl{grid-template-columns:110px 1fr}</style></head><body><header class="topbar"><a class="brand" href="/">Tree reviewer</a><nav><a href="/" aria-current="page">Photo submissions</a><a href="/modifications">Tree reports</a><a href="/photos">Tree photos</a><a href="/satellite">Satellite</a></nav></header><main class="page"><h1>Pending tree submissions</h1><p id="status">Loading…</p><section id="queue" class="queue"></section></main>
 <script>
 const queue=document.querySelector('#queue'),status=document.querySelector('#status');
 const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

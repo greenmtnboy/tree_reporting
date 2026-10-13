@@ -24,6 +24,12 @@
  *  - A model estimate is never promoted to a measurement.  The export carries
  *    `predictedDbhInches` and `measuredDbhInches` separately; the ingest
  *    (`data/raw/satellite_tree_info.py`) publishes only the measured one.
+ *  - A satellite tree is corrected in place, never stacked.  Linking a
+ *    detection to an already-published satellite tree publishes nothing (two
+ *    satellite rows in one cluster merge field by field with max(), so a
+ *    second row is not a reliable correction and can split the position);
+ *    the reviewer edits that tree's record instead, and a stacked row can be
+ *    folded into its target and withdrawn.
  *  - A duplicate is a link the reviewer made, not a merge the model made.
  *    It is exported at the linked tree's coordinates so the shared cluster
  *    merge (`data/raw/tree_dedup.preql`) is guaranteed to absorb it into
@@ -37,6 +43,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore'
+import sharp from 'sharp'
 
 export const BUNDLE_SCHEMA_VERSION = 1
 export const EXPORT_SCHEMA_VERSION = 1
@@ -46,9 +53,15 @@ export const OBSERVATIONS = 'satelliteObservations'
 export const PUBLISHED = 'satelliteTrees'
 export const TILE_REVIEWS = 'satelliteTileReviews'
 const NEAREST_LIMIT = 6
+/** Inventory trees farther than this from a detection are not offered as its duplicate. */
+export const DUPLICATE_RADIUS_M = 5
 const MAX_NOTES = 500
 const MAX_SPECIES = 120
+/** A reviewer-traced crown wider than this is a slip of the mouse, not a tree. */
+export const MAX_HUMAN_CROWN_M = 50
 const EARTH_RADIUS_M = 6_371_008.8
+/** Longest side of the map overlay's tile thumbnails, in pixels. */
+const THUMB_PX = 256
 
 // ---------------------------------------------------------------------------
 // The bundle contract
@@ -213,6 +226,27 @@ export function lonLatToPixel(bundle: TilePredictionBundle, longitude: number, l
   return { xPx: (e * dx - b * dy) / det, yPx: (a * dy - d * dx) / det }
 }
 
+/**
+ * The tile's corners as [longitude, latitude]: top-left, top-right,
+ * bottom-right, bottom-left, the order a MapLibre image source takes.  The
+ * tile is square in its own CRS (UTM), so on the map it is slightly rotated.
+ */
+export function tileFootprint(bundle: TilePredictionBundle): [number, number][] {
+  const { width, height } = bundle.image
+  return ([[0, 0], [width, 0], [width, height], [0, height]] as const).map(([x, y]) => {
+    const { longitude, latitude } = pixelToLonLat(bundle, x, y)
+    return [longitude, latitude]
+  })
+}
+
+/** The footprint's lon/lat envelope. */
+export function tileEnvelope(bundle: TilePredictionBundle): { west: number; east: number; south: number; north: number } {
+  const corners = tileFootprint(bundle)
+  const lons = corners.map((c) => c[0])
+  const lats = corners.map((c) => c[1])
+  return { west: Math.min(...lons), east: Math.max(...lons), south: Math.min(...lats), north: Math.max(...lats) }
+}
+
 export interface NearestTree {
   treeId: string
   distanceM: number
@@ -223,12 +257,13 @@ export interface NearestTree {
   predictedCrownWidthM: number | null
 }
 
-/** Inventory trees nearest a point, nearest first.  Suggestions, never a merge. */
+/** Inventory trees within maxDistanceM of a point, nearest first.  Suggestions, never a merge. */
 export function nearestInventory(
   bundle: TilePredictionBundle,
   longitude: number,
   latitude: number,
   limit = NEAREST_LIMIT,
+  maxDistanceM = DUPLICATE_RADIUS_M,
 ): NearestTree[] {
   return bundle.inventoryTrees
     .map((tree) => ({
@@ -240,6 +275,7 @@ export function nearestInventory(
       positionRole: tree.positionRole,
       predictedCrownWidthM: tree.predictedCrownWidthM ?? null,
     }))
+    .filter((tree) => tree.distanceM <= maxDistanceM)
     .sort((x, y) => x.distanceM - y.distanceM)
     .slice(0, limit)
 }
@@ -253,6 +289,16 @@ export const DECISIONS: readonly Decision[] = ['accept', 'duplicate', 'reject', 
 /** Decisions that publish.  A rejection or an uncertain is about this image only. */
 export const PUBLISHABLE: ReadonlySet<Decision> = new Set<Decision>(['accept', 'duplicate'])
 
+/** A tree this reviewer published: its id is the observation's (see observationId). */
+export function isSatelliteTreeId(treeId: unknown): boolean {
+  return typeof treeId === 'string' && treeId.startsWith('sat-')
+}
+
+/** Accepts and duplicates publish -- except a duplicate of a satellite tree, which is corrected instead. */
+export function isPublishable(o: { decision?: unknown; duplicateOfTreeId?: unknown }): boolean {
+  return PUBLISHABLE.has(o.decision as Decision) && !(o.decision === 'duplicate' && isSatelliteTreeId(o.duplicateOfTreeId))
+}
+
 export interface ObservationInput {
   decision: Decision
   /** The confirmed species; null when the reviewer could not say. */
@@ -263,6 +309,8 @@ export interface ObservationInput {
   duplicateOfTreeId?: string | null
   /** A nudged crown centre, tile-local pixels; the trunk is never moved. */
   crownCenter?: { xPx: number; yPx: number } | null
+  /** Crown width the reviewer traced on the image, metres; null when not traced. */
+  humanCrownWidthM?: number | null
   notes?: string | null
   /** Optimistic concurrency: the revision the client last saw, or null for a first write. */
   baseRevision?: number | null
@@ -290,6 +338,8 @@ export interface ObservationRecord {
   crownWidthMethod: string | null
   /** The Tallo estimate from the model's DBH, kept for comparison. */
   allometricCrownWidthM: number | null
+  /** Traced by the reviewer on the image; when set, this is the crown that publishes. */
+  humanCrownWidthM: number | null
   /** Where the row publishes: the crown centre, or the linked tree's trunk. */
   latitude: number
   longitude: number
@@ -299,7 +349,7 @@ export interface ObservationRecord {
   duplicateOf: { treeId: string; latitude: number; longitude: number; source: string; species: string | null } | null
   notes: string | null
   acquisitionDate: string
-  status: 'pending' | 'published'
+  status: 'pending' | 'published' | 'withdrawn'
   revision: number
   /** Private: who made the decision on this machine.  Never exported. */
   actor: string
@@ -336,6 +386,10 @@ export function parseObservationInput(body: unknown): ObservationInput {
     input.speciesSource = b.speciesSource
   }
   input.measuredDbhInches = cleanPositive(b.measuredDbhInches, 'measuredDbhInches')
+  input.humanCrownWidthM = cleanPositive(b.humanCrownWidthM, 'humanCrownWidthM')
+  if (input.humanCrownWidthM != null && input.humanCrownWidthM > MAX_HUMAN_CROWN_M) {
+    throw new Error(`humanCrownWidthM must be at most ${MAX_HUMAN_CROWN_M} m`)
+  }
   input.duplicateOfTreeId = cleanString(b.duplicateOfTreeId, 200, 'duplicateOfTreeId')
   input.notes = cleanString(b.notes, MAX_NOTES, 'notes')
   if (b.crownCenter != null) {
@@ -418,6 +472,7 @@ export function buildObservation(
       ? prediction.modelCrownWidthMethod ?? 'model_crown_head'
       : prediction.crownWidthMethod ?? null,
     allometricCrownWidthM: prediction.crownWidthM ?? null,
+    humanCrownWidthM: input.humanCrownWidthM ?? null,
     ...position,
     crownCenter,
     duplicateOfTreeId: duplicateOf?.treeId ?? null,
@@ -448,6 +503,8 @@ export interface ExportRow {
   predictedCrownWidthM: number | null
   /** model_crown_head is read from the image; tallo_* is allometric from the model's DBH. */
   crownWidthMethod: string | null
+  /** Traced by the reviewer on the image; the ingest prefers it to the model's. */
+  humanCrownWidthM: number | null
   duplicateOfTreeId: string | null
   tileId: string
   imageryVersion: string
@@ -455,13 +512,17 @@ export interface ExportRow {
   predictionId: string
   acquisitionDate: string
   publishedAt: string | null
+  /** The last in-place correction of this tree, if any. */
+  correctedAt: string | null
+}
+
+function isoOrNull(value: unknown): string | null {
+  return value instanceof Timestamp ? value.toDate().toISOString() : typeof value === 'string' ? value : null
 }
 
 /** The public shape of a published tree: no notes, no actor, no private ids. */
 export function exportRow(published: Record<string, unknown>): ExportRow {
-  const publishedAt = published.publishedAt instanceof Timestamp
-    ? published.publishedAt.toDate().toISOString()
-    : typeof published.publishedAt === 'string' ? published.publishedAt : null
+  const publishedAt = isoOrNull(published.publishedAt)
   return {
     schemaVersion: EXPORT_SCHEMA_VERSION,
     treeId: String(published.treeId),
@@ -475,6 +536,7 @@ export function exportRow(published: Record<string, unknown>): ExportRow {
     measuredDbhInches: (published.measuredDbhInches as number | null) ?? null,
     predictedCrownWidthM: (published.predictedCrownWidthM as number | null) ?? null,
     crownWidthMethod: (published.crownWidthMethod as string | null) ?? null,
+    humanCrownWidthM: (published.humanCrownWidthM as number | null) ?? null,
     duplicateOfTreeId: (published.duplicateOfTreeId as string | null) ?? null,
     tileId: String(published.tileId),
     imageryVersion: String(published.imageryVersion),
@@ -482,6 +544,7 @@ export function exportRow(published: Record<string, unknown>): ExportRow {
     predictionId: String(published.predictionId),
     acquisitionDate: String(published.acquisitionDate),
     publishedAt,
+    correctedAt: isoOrNull(published.correctedAt),
   }
 }
 
@@ -493,14 +556,23 @@ export interface ExportManifest {
   latestPublishedAtByCity: Record<string, string>
 }
 
-export function buildManifest(rows: ExportRow[]): ExportManifest {
+/**
+ * The freshness the city refresh probes.  "Published" means the city's export
+ * last changed: a publish, an in-place correction, or a withdrawal (whose row
+ * is gone, so it is passed separately) all move it forward.
+ */
+export function buildManifest(rows: ExportRow[], withdrawals: { city: string; at: string | null }[] = []): ExportManifest {
   let latestPublishedAt: string | null = null
   const latestPublishedAtByCity: Record<string, string> = {}
-  for (const row of rows) {
-    if (!row.publishedAt) continue
-    if (!latestPublishedAt || row.publishedAt > latestPublishedAt) latestPublishedAt = row.publishedAt
-    const current = latestPublishedAtByCity[row.city]
-    if (!current || row.publishedAt > current) latestPublishedAtByCity[row.city] = row.publishedAt
+  const changes = [
+    ...rows.map((row) => ({ city: row.city, at: [row.publishedAt, row.correctedAt].filter(Boolean).sort().pop() ?? null })),
+    ...withdrawals.map((w) => ({ city: w.city.toUpperCase(), at: w.at })),
+  ]
+  for (const { city, at } of changes) {
+    if (!at) continue
+    if (!latestPublishedAt || at > latestPublishedAt) latestPublishedAt = at
+    const current = latestPublishedAtByCity[city]
+    if (!current || at > current) latestPublishedAtByCity[city] = at
   }
   return { schemaVersion: 1, count: rows.length, latestPublishedAt, latestPublishedAtByCity }
 }
@@ -520,6 +592,7 @@ export function publishedTreeFrom(observation: ObservationRecord): Record<string
     measuredDbhInches: observation.measuredDbhInches,
     predictedCrownWidthM: observation.predictedCrownWidthM,
     crownWidthMethod: observation.crownWidthMethod,
+    humanCrownWidthM: observation.humanCrownWidthM ?? null,
     duplicateOfTreeId: observation.duplicateOfTreeId,
     tileId: observation.tileId,
     imageryVersion: observation.imageryVersion,
@@ -527,6 +600,97 @@ export function publishedTreeFrom(observation: ObservationRecord): Record<string
     predictionId: observation.predictionId,
     acquisitionDate: observation.acquisitionDate,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Correcting a published satellite tree in place
+// ---------------------------------------------------------------------------
+
+/** A correction moving a tree farther than this is a mis-click, not a nudge. */
+export const MAX_CORRECTION_MOVE_M = 25
+const MAX_DBH_INCHES = 200
+const MAX_CORRECTIONS_KEPT = 20
+const CORRECTABLE = ['species', 'measuredDbhInches', 'humanCrownWidthM', 'latitude', 'longitude'] as const
+type Correctable = (typeof CORRECTABLE)[number]
+
+export interface CorrectionInput {
+  /** Only the fields present are changed; null clears one. */
+  changes: Partial<Record<Correctable, string | number | null>>
+  baseRevision: number | null
+}
+
+export function parseCorrection(body: unknown): CorrectionInput {
+  if (typeof body !== 'object' || body === null) throw new Error('Body must be a JSON object')
+  const b = body as Record<string, unknown>
+  const changes: CorrectionInput['changes'] = {}
+  if ('species' in b) changes.species = cleanString(b.species, MAX_SPECIES, 'species')
+  if ('measuredDbhInches' in b) {
+    const dbh = cleanPositive(b.measuredDbhInches, 'measuredDbhInches')
+    if (dbh != null && dbh > MAX_DBH_INCHES) throw new Error(`measuredDbhInches must be at most ${MAX_DBH_INCHES}`)
+    changes.measuredDbhInches = dbh
+  }
+  if ('humanCrownWidthM' in b) {
+    const crown = cleanPositive(b.humanCrownWidthM, 'humanCrownWidthM')
+    if (crown != null && crown > MAX_HUMAN_CROWN_M) throw new Error(`humanCrownWidthM must be at most ${MAX_HUMAN_CROWN_M} m`)
+    changes.humanCrownWidthM = crown
+  }
+  if ('latitude' in b || 'longitude' in b) {
+    const lat = Number(b.latitude), lon = Number(b.longitude)
+    if (!isFiniteNumber(lat) || !isFiniteNumber(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) throw new Error('a position needs both latitude and longitude')
+    changes.latitude = lat
+    changes.longitude = lon
+  }
+  if (!Object.keys(changes).length) throw new Error('Nothing to correct')
+  const base = b.baseRevision
+  if (base != null && (!Number.isInteger(base) || (base as number) < 0)) throw new Error('baseRevision must be a non-negative integer')
+  return { changes, baseRevision: (base as number | null) ?? null }
+}
+
+/**
+ * The update a correction makes to a published record: the changed fields,
+ * a bumped revision, correctedAt, and a short history of what each field was.
+ * A linked-trunk row sits on another tree's trunk by design, so it never moves.
+ */
+export function correctionUpdate(current: Record<string, unknown>, input: CorrectionInput, actor: string, now: string): Record<string, unknown> {
+  if (current.withdrawnAt) throw new Error(`${String(current.treeId)} is withdrawn`)
+  const revision = (current.revision as number | undefined) ?? 0
+  if (input.baseRevision != null && input.baseRevision !== revision) {
+    const error = new Error(`Stale correction: ${String(current.treeId)} is at revision ${revision}, you saw ${input.baseRevision}`)
+    ;(error as Error & { status?: number }).status = 409
+    throw error
+  }
+  const changes = { ...input.changes }
+  if ('latitude' in changes) {
+    if (current.positionRole !== 'crown_center') throw new Error('A linked-trunk tree stays on the trunk it was linked to; its position is not corrected')
+    const moved = haversineM(current.longitude as number, current.latitude as number, changes.longitude as number, changes.latitude as number)
+    if (moved > MAX_CORRECTION_MOVE_M) throw new Error(`That moves the tree ${moved.toFixed(0)} m; a correction moves it at most ${MAX_CORRECTION_MOVE_M} m`)
+  }
+  const diff: Record<string, { from: unknown; to: unknown }> = {}
+  for (const key of CORRECTABLE) {
+    if (!(key in changes)) continue
+    const from = current[key] ?? null
+    if (from !== changes[key]) diff[key] = { from, to: changes[key] }
+  }
+  if (!Object.keys(diff).length) throw new Error('That is what the tree already holds')
+  const update: Record<string, unknown> = Object.fromEntries(Object.entries(diff).map(([k, v]) => [k, v.to]))
+  if ('species' in diff) update.speciesSource = diff.species.to ? 'reviewer' : null
+  const history = Array.isArray(current.corrections) ? current.corrections : []
+  update.corrections = [...history, { at: now, actor, changes: diff }].slice(-MAX_CORRECTIONS_KEPT)
+  update.revision = revision + 1
+  return update
+}
+
+/**
+ * What a stacked row (a duplicate of a satellite tree, published before that
+ * was refused) can give its target: the values a person entered -- a typed
+ * species, a measured DBH, a traced crown.  The model's own estimates stay.
+ */
+export function foldChanges(stacked: Record<string, unknown>, target: Record<string, unknown>): CorrectionInput['changes'] {
+  const changes: CorrectionInput['changes'] = {}
+  if (stacked.speciesSource === 'reviewer' && stacked.species && stacked.species !== target.species) changes.species = stacked.species as string
+  if (stacked.measuredDbhInches != null && stacked.measuredDbhInches !== target.measuredDbhInches) changes.measuredDbhInches = stacked.measuredDbhInches as number
+  if (stacked.humanCrownWidthM != null && stacked.humanCrownWidthM !== target.humanCrownWidthM) changes.humanCrownWidthM = stacked.humanCrownWidthM as number
+  return changes
 }
 
 // ---------------------------------------------------------------------------
@@ -546,6 +710,8 @@ export interface TileSummary {
   inventoryCount: number
   /** The tile set: the subdirectory of the tile directory it was read from, '' at the top. */
   collection: string
+  /** Corners on the map, see tileFootprint. */
+  footprint: [number, number][]
 }
 
 export interface CitySummary {
@@ -557,17 +723,46 @@ export interface CitySummary {
 /**
  * The bundles under a tile directory, at any depth, so one reviewer serves
  * every exported set.  A tile id names a place, imagery and chip, not an
- * export, so the same tile can sit in two sets (the committed fixtures were
- * copied out of exports); the newest file wins, as a re-export would.
+ * export, so the same tile can sit in several sets -- one per model run
+ * exported over the same chips.  Every read names the run it wants (the
+ * page carries it in its URL): that run's bundle wins when one holds the
+ * tile, otherwise the newest file does, as a re-export would.  A read that
+ * names no run uses `defaultRun`.
  */
 export class TileStore {
   private cache = new Map<string, { mtimeMs: number; bundle: TilePredictionBundle }>()
-  private files = new Map<string, string>()
+  private files = new Map<string, Map<string, string>>()
+  private thumbs = new Map<string, { mtimeMs: number; data: Buffer }>()
+  readonly defaultRun: string | null
 
-  constructor(readonly dir: string) {}
+  constructor(readonly dir: string, options: { defaultRun?: string | null } = {}) {
+    this.defaultRun = options.defaultRun ?? null
+  }
 
-  private index(): Map<string, string> {
-    const found = new Map<string, { file: string; mtimeMs: number }>()
+  private runFor(run: string | null | undefined): string | null {
+    return run === undefined ? this.defaultRun : run
+  }
+
+  private read(file: string): TilePredictionBundle {
+    const mtimeMs = statSync(file).mtimeMs
+    const cached = this.cache.get(file)
+    if (cached && cached.mtimeMs === mtimeMs) return cached.bundle
+    const bundle = assertBundle(JSON.parse(readFileSync(file, 'utf8')))
+    this.cache.set(file, { mtimeMs, bundle })
+    return bundle
+  }
+
+  private runOf(file: string): string | null {
+    try {
+      return this.read(file).predictionLayer.runId
+    } catch {
+      return null
+    }
+  }
+
+  /** Every bundle file, by tile id, newest first. */
+  private candidates(): Map<string, string[]> {
+    const found = new Map<string, { file: string; mtimeMs: number }[]>()
     const walk = (dir: string) => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name)
@@ -575,21 +770,30 @@ export class TileStore {
           walk(full)
         } else if (entry.name.endsWith('.json')) {
           const tileId = entry.name.slice(0, -'.json'.length)
-          const mtimeMs = statSync(full).mtimeMs
-          const seen = found.get(tileId)
-          if (!seen || mtimeMs > seen.mtimeMs) found.set(tileId, { file: full, mtimeMs })
+          const list = found.get(tileId) ?? []
+          list.push({ file: full, mtimeMs: statSync(full).mtimeMs })
+          found.set(tileId, list)
         }
       }
     }
     if (existsSync(this.dir)) walk(this.dir)
-    this.files = new Map([...found].map(([tileId, { file }]) => [tileId, file]))
-    return this.files
+    return new Map([...found].map(([tileId, list]) => [tileId, list.sort((a, b) => b.mtimeMs - a.mtimeMs).map((c) => c.file)]))
   }
 
-  private file(tileId: string): string | null {
-    const known = this.files.get(tileId)
+  private index(run: string | null): Map<string, string> {
+    const chosen = new Map<string, string>()
+    for (const [tileId, files] of this.candidates()) {
+      const preferred = run && files.length > 1 ? files.find((f) => this.runOf(f) === run) : undefined
+      chosen.set(tileId, preferred ?? files[0])
+    }
+    this.files.set(run ?? '', chosen)
+    return chosen
+  }
+
+  private file(tileId: string, run: string | null): string | null {
+    const known = this.files.get(run ?? '')?.get(tileId)
     if (known && existsSync(known)) return known
-    return this.index().get(tileId) ?? null
+    return this.index(run).get(tileId) ?? null
   }
 
   private collection(file: string): string {
@@ -597,19 +801,56 @@ export class TileStore {
   }
 
   /** Every tile, or one city's (case-insensitive), grouped by tile set. */
-  list(city?: string): TileSummary[] {
+  list(city?: string, run?: string | null): TileSummary[] {
     const wanted = city?.toUpperCase()
-    return [...this.index()]
-      .map(([tileId, file]) => ({ bundle: this.get(tileId), file }))
+    const r = this.runFor(run)
+    return [...this.index(r)]
+      .map(([tileId, file]) => ({ bundle: this.get(tileId, r), file }))
       .filter((t): t is { bundle: TilePredictionBundle; file: string } =>
         t.bundle !== null && (!wanted || t.bundle.city.toUpperCase() === wanted))
       .map(({ bundle, file }) => summarize(bundle, this.collection(file)))
       .sort((x, y) => x.collection.localeCompare(y.collection) || x.tileId.localeCompare(y.tileId))
   }
 
-  cities(): CitySummary[] {
+  /** How many tiles each run has bundles for, shadowed ones included. */
+  runCounts(city?: string): Record<string, number> {
+    const wanted = city?.toUpperCase()
+    const counts: Record<string, number> = {}
+    for (const files of this.candidates().values()) {
+      const runs = new Set<string>()
+      for (const file of files) {
+        try {
+          const bundle = this.read(file)
+          if (!wanted || bundle.city.toUpperCase() === wanted) runs.add(bundle.predictionLayer.runId)
+        } catch {
+          // an unreadable bundle is reported when the tile is opened
+        }
+      }
+      for (const run of runs) counts[run] = (counts[run] ?? 0) + 1
+    }
+    return counts
+  }
+
+  /** The chips one run already has a bundle for in a city, in any set. */
+  chipIds(city: string, runId: string): Set<string> {
+    const wanted = city.toUpperCase()
+    const chips = new Set<string>()
+    for (const files of this.candidates().values()) {
+      for (const file of files) {
+        try {
+          const bundle = this.read(file)
+          if (bundle.chipId && bundle.city.toUpperCase() === wanted && bundle.predictionLayer.runId === runId) chips.add(bundle.chipId)
+        } catch {
+          // an unreadable bundle is reported when the tile is opened
+        }
+      }
+    }
+    return chips
+  }
+
+  cities(run?: string | null): CitySummary[] {
     const byCity = new Map<string, CitySummary>()
-    for (const tile of this.list()) {
+    for (const tile of this.list(undefined, run)) {
       const entry = byCity.get(tile.city) ?? { city: tile.city, tileCount: 0, collections: [] }
       entry.tileCount += 1
       if (!entry.collections.includes(tile.collection)) entry.collections.push(tile.collection)
@@ -618,22 +859,31 @@ export class TileStore {
     return [...byCity.values()].sort((x, y) => x.city.localeCompare(y.city))
   }
 
-  get(tileId: string): TilePredictionBundle | null {
+  get(tileId: string, run?: string | null): TilePredictionBundle | null {
     if (!/^[A-Za-z0-9._:-]+$/.test(tileId)) return null
-    const file = this.file(tileId)
+    const file = this.file(tileId, this.runFor(run))
     if (!file) return null
-    const mtimeMs = statSync(file).mtimeMs
-    const cached = this.cache.get(tileId)
-    if (cached && cached.mtimeMs === mtimeMs) return cached.bundle
-    const bundle = assertBundle(JSON.parse(readFileSync(file, 'utf8')))
+    const bundle = this.read(file)
     if (bundle.tileId !== tileId) throw new Error(`${file} holds tile ${bundle.tileId}, not ${tileId}`)
-    this.cache.set(tileId, { mtimeMs, bundle })
     return bundle
   }
 
-  imagePath(tileId: string): string | null {
-    const bundle = this.get(tileId)
-    const json = bundle && this.file(tileId)
+  /** A small JPEG of the tile for the map overlay, re-made when the PNG changes. */
+  async thumbnail(tileId: string, run?: string | null): Promise<Buffer | null> {
+    const file = this.imagePath(tileId, run)
+    if (!file) return null
+    const mtimeMs = statSync(file).mtimeMs
+    const cached = this.thumbs.get(file)
+    if (cached && cached.mtimeMs === mtimeMs) return cached.data
+    const data = await sharp(file).resize(THUMB_PX, THUMB_PX, { fit: 'inside' }).removeAlpha().jpeg({ quality: 80 }).toBuffer()
+    this.thumbs.set(file, { mtimeMs, data })
+    return data
+  }
+
+  imagePath(tileId: string, run?: string | null): string | null {
+    const r = this.runFor(run)
+    const bundle = this.get(tileId, r)
+    const json = bundle && this.file(tileId, r)
     if (!bundle || !json) return null
     // The PNG sits beside its bundle, in whichever set that is.
     const file = path.join(path.dirname(json), path.basename(bundle.image.url))
@@ -654,15 +904,17 @@ export function summarize(bundle: TilePredictionBundle, collection = ''): TileSu
     predictionCount: bundle.predictionLayer.predictions.length,
     inventoryCount: bundle.inventoryTrees.length,
     collection,
+    footprint: tileFootprint(bundle),
   }
 }
 
 /** The bundle as the page receives it: image URL served here, inventory and
  *  observations placed in tile pixels, each prediction's nearest trees. */
 export function presentBundle(bundle: TilePredictionBundle) {
+  const run = encodeURIComponent(bundle.predictionLayer.runId)
   return {
     ...bundle,
-    image: { ...bundle.image, url: `/api/satellite/tiles/${encodeURIComponent(bundle.tileId)}/image` },
+    image: { ...bundle.image, url: `/api/satellite/tiles/${encodeURIComponent(bundle.tileId)}/image?run=${run}` },
     inventoryTrees: bundle.inventoryTrees.map((tree) => ({ ...tree, ...lonLatToPixel(bundle, tree.longitude, tree.latitude) })),
     predictionLayer: {
       ...bundle.predictionLayer,
@@ -703,6 +955,9 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
   const { db, publishedBucket, cityCodes, tiles } = deps
   const actor = deps.actor ?? os.userInfo().username
   const router = express.Router()
+  /** The run the page is reviewing (`?run=`); absent, the store's default. */
+  const runOf = (req: express.Request): string | undefined =>
+    typeof req.query.run === 'string' && req.query.run ? req.query.run : undefined
 
   async function observationsForTile(tileId: string) {
     const snapshot = await db.collection(OBSERVATIONS).where('tileId', '==', tileId).get()
@@ -712,8 +967,11 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
   /** Rewrite the public export from every published satellite tree. */
   async function rewritePublicExport(): Promise<ExportManifest> {
     const snapshot = await db.collection(PUBLISHED).orderBy('publishedAt', 'asc').get()
-    const rows = snapshot.docs.map((doc) => exportRow(doc.data()))
-    const manifest = buildManifest(rows)
+    const live = snapshot.docs.filter((doc) => !doc.data().withdrawnAt)
+    const rows = live.map((doc) => exportRow(doc.data()))
+    const withdrawals = snapshot.docs.filter((doc) => doc.data().withdrawnAt)
+      .map((doc) => ({ city: String(doc.data().city), at: isoOrNull(doc.data().withdrawnAt) }))
+    const manifest = buildManifest(rows, withdrawals)
     // No cache: the freshness probe must observe a publish on the next run.
     const writeOptions = { contentType: 'application/json', metadata: { cacheControl: 'no-cache' } }
     await publishedBucket.file(SATELLITE_EXPORT_PATH).save(`${rows.map((r) => JSON.stringify(r)).join('\n')}\n`, writeOptions)
@@ -731,6 +989,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
       const observation = snapshot.data() as ObservationRecord
       if (observation.status !== 'pending') throw new Error(`Observation ${observationId} is already ${observation.status}`)
       if (!PUBLISHABLE.has(observation.decision)) throw new Error(`A ${observation.decision} decision is not published`)
+      if (!isPublishable(observation)) throw new Error(`${observation.duplicateOfTreeId} is a satellite tree: correct it instead of stacking a second row on it`)
       if (!cityCodes.has(observation.city)) throw new Error(`${observation.city} is not a supported city code`)
       transaction.create(publishedRef, { ...publishedTreeFrom(observation), publishedAt: FieldValue.serverTimestamp() })
       transaction.update(observationRef, { status: 'published', publishedAt: FieldValue.serverTimestamp(), publishedTreeId: publishedRef.id })
@@ -738,9 +997,9 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
     return publishedRef.id
   }
 
-  router.get('/cities', (_req, res, next) => {
+  router.get('/cities', (req, res, next) => {
     try {
-      res.json(tiles.cities())
+      res.json(tiles.cities(runOf(req)))
     } catch (error) {
       next(error)
     }
@@ -750,20 +1009,40 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
   // reads, and the tile directory holds hundreds of tiles across its sets.
   router.get('/tiles', async (req, res, next) => {
     try {
-      const summaries = tiles.list(typeof req.query.city === 'string' ? req.query.city : undefined)
-      const rows = await Promise.all(summaries.map(async (summary) => {
-        const [observations, review] = await Promise.all([
-          observationsForTile(summary.tileId),
-          db.collection(TILE_REVIEWS).doc(summary.tileId).get(),
-        ])
+      const city = typeof req.query.city === 'string' ? req.query.city.toUpperCase() : undefined
+      const summaries = tiles.list(city, runOf(req))
+      if (!summaries.length) {
+        res.json([])
+        return
+      }
+      // Two reads for the whole listing rather than two per tile: the city's
+      // decisions in one query, and every tile's review doc in one batch.
+      const observationQuery = city
+        ? db.collection(OBSERVATIONS).where('city', '==', city)
+        : db.collection(OBSERVATIONS)
+      const [observationSnapshot, reviews] = await Promise.all([
+        observationQuery.get(),
+        db.getAll(...summaries.map((s) => db.collection(TILE_REVIEWS).doc(s.tileId))),
+      ])
+      const byTile = new Map<string, Record<string, unknown>[]>()
+      for (const doc of observationSnapshot.docs) {
+        const o = doc.data()
+        const list = byTile.get(o.tileId as string) ?? []
+        list.push(o)
+        byTile.set(o.tileId as string, list)
+      }
+      const rows = summaries.map((summary, i) => {
         const counts: Record<string, number> = { accept: 0, duplicate: 0, reject: 0, uncertain: 0, published: 0 }
-        for (const o of observations) {
+        for (const o of byTile.get(summary.tileId) ?? []) {
+          if (o.runId !== summary.runId) continue
           counts[o.decision as string] = (counts[o.decision as string] ?? 0) + 1
           if (o.status === 'published') counts.published += 1
         }
-        const reviewData = review.data()
-        return { ...summary, counts, done: Boolean(reviewData?.done), doneAt: toIso(reviewData?.doneAt) }
-      }))
+        const reviewData = reviews[i].data()
+        // Done is per prediction layer: another run's review of this tile is not this one's.
+        const done = Boolean(reviewData?.done) && reviewData?.runId === summary.runId
+        return { ...summary, counts, done, doneAt: done ? toIso(reviewData?.doneAt) : null }
+      })
       res.json(rows)
     } catch (error) {
       next(error)
@@ -772,34 +1051,39 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
 
   router.get('/tiles/:tileId', async (req, res, next) => {
     try {
-      const bundle = tiles.get(req.params.tileId)
+      const bundle = tiles.get(req.params.tileId, runOf(req))
       if (!bundle) {
         res.status(404).json({ error: `No tile ${req.params.tileId}` })
         return
       }
-      const [observations, review, nearby] = await Promise.all([
+      const bounds = tileEnvelope(bundle)
+      const [tileObservations, review, nearby] = await Promise.all([
         observationsForTile(bundle.tileId),
         db.collection(TILE_REVIEWS).doc(bundle.tileId).get(),
         // Decisions from other tiles that fall on this one (tiles overlap
         // at their edges, and an imagery re-run makes a new tile id): the
         // page draws them so a tree accepted once is not accepted twice.
-        db.collection(OBSERVATIONS).where('city', '==', bundle.city).get(),
+        // Only the tile's latitude band is read -- a single-field range, so
+        // no composite index -- and the rest is filtered here.
+        db.collection(OBSERVATIONS).where('latitude', '>=', bounds.south).where('latitude', '<=', bounds.north).get(),
       ])
-      const bounds = bundle.image.bounds
-      const nearbyObservations = nearby.docs
-        .map(serializeObservation)
-        .filter((o) => o.tileId !== bundle.tileId && PUBLISHABLE.has(o.decision as Decision))
-        .filter((o) => !bounds || (
-          (o.latitude as number) >= bounds.south && (o.latitude as number) <= bounds.north &&
-          (o.longitude as number) >= bounds.west && (o.longitude as number) <= bounds.east
-        ))
+      // A prediction id is a cell of the chip, so another run's decision on
+      // this tile can share one with this run's detection; only this run's
+      // decisions attach to its detections, the rest draw as nearby ones.
+      const runId = bundle.predictionLayer.runId
+      const sameRun = (o: Record<string, unknown>) => o.tileId === bundle.tileId && o.runId === runId
+      const nearbyObservations = [...nearby.docs.map(serializeObservation), ...tileObservations.filter((o) => !sameRun(o))]
+        .filter((o, i, all) => all.findIndex((x) => x.id === o.id) === i)
+        .filter((o) => o.city === bundle.city && !sameRun(o) && PUBLISHABLE.has(o.decision as Decision))
+        .filter((o) => (o.longitude as number) >= bounds.west && (o.longitude as number) <= bounds.east)
         .map((o) => ({ ...o, ...lonLatToPixel(bundle, o.longitude as number, o.latitude as number) }))
       const reviewData = review.data()
       res.json({
         bundle: presentBundle(bundle),
-        observations,
+        center: { latitude: (bounds.south + bounds.north) / 2, longitude: (bounds.west + bounds.east) / 2 },
+        observations: tileObservations.filter(sameRun),
         nearbyObservations,
-        review: { done: Boolean(reviewData?.done), doneAt: toIso(reviewData?.doneAt), imageryVersion: reviewData?.imageryVersion ?? null, runId: reviewData?.runId ?? null },
+        review: { done: Boolean(reviewData?.done) && reviewData?.runId === runId, doneAt: toIso(reviewData?.doneAt), imageryVersion: reviewData?.imageryVersion ?? null, runId: reviewData?.runId ?? null },
       })
     } catch (error) {
       next(error)
@@ -807,7 +1091,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
   })
 
   router.get('/tiles/:tileId/image', (req, res) => {
-    const file = tiles.imagePath(req.params.tileId)
+    const file = tiles.imagePath(req.params.tileId, runOf(req))
     if (!file) {
       res.status(404).json({ error: 'No image for that tile' })
       return
@@ -815,9 +1099,22 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
     res.type('image/png').sendFile(file)
   })
 
+  router.get('/tiles/:tileId/thumb', async (req, res, next) => {
+    try {
+      const data = await tiles.thumbnail(req.params.tileId, runOf(req))
+      if (!data) {
+        res.status(404).json({ error: 'No image for that tile' })
+        return
+      }
+      res.type('image/jpeg').set('Cache-Control', 'no-cache').send(data)
+    } catch (error) {
+      next(error)
+    }
+  })
+
   router.put('/tiles/:tileId/observations/:predictionId', async (req, res, next) => {
     try {
-      const bundle = tiles.get(req.params.tileId)
+      const bundle = tiles.get(req.params.tileId, runOf(req))
       if (!bundle) throw new Error(`No tile ${req.params.tileId}`)
       const prediction = bundle.predictionLayer.predictions.find((p) => p.predictionId === req.params.predictionId)
       if (!prediction) throw new Error(`No prediction ${req.params.predictionId} on ${bundle.tileId}`)
@@ -853,7 +1150,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
 
   router.delete('/tiles/:tileId/observations/:predictionId', async (req, res, next) => {
     try {
-      const bundle = tiles.get(req.params.tileId)
+      const bundle = tiles.get(req.params.tileId, runOf(req))
       if (!bundle) throw new Error(`No tile ${req.params.tileId}`)
       const ref = db.collection(OBSERVATIONS).doc(observationId(bundle.tileId, bundle.predictionLayer.runId, req.params.predictionId))
       await db.runTransaction(async (transaction) => {
@@ -870,7 +1167,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
 
   router.post('/tiles/:tileId/done', async (req, res, next) => {
     try {
-      const bundle = tiles.get(req.params.tileId)
+      const bundle = tiles.get(req.params.tileId, runOf(req))
       if (!bundle) throw new Error(`No tile ${req.params.tileId}`)
       const done = Boolean((req.body as { done?: unknown })?.done)
       // Keyed by imagery version and run: "done" means this image, with this
@@ -893,7 +1190,7 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
   router.get('/queue', async (_req, res, next) => {
     try {
       const snapshot = await db.collection(OBSERVATIONS).where('status', '==', 'pending').get()
-      const rows = snapshot.docs.map(serializeObservation).filter((o) => PUBLISHABLE.has(o.decision as Decision))
+      const rows = snapshot.docs.map(serializeObservation).filter((o) => isPublishable(o))
       rows.sort((x, y) => String(x.updatedAt ?? '').localeCompare(String(y.updatedAt ?? '')))
       res.json(rows)
     } catch (error) {
@@ -913,10 +1210,10 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
 
   router.post('/tiles/:tileId/publish', async (req, res, next) => {
     try {
-      const bundle = tiles.get(req.params.tileId)
+      const bundle = tiles.get(req.params.tileId, runOf(req))
       if (!bundle) throw new Error(`No tile ${req.params.tileId}`)
       const pending = (await observationsForTile(bundle.tileId))
-        .filter((o) => o.status === 'pending' && PUBLISHABLE.has(o.decision as Decision))
+        .filter((o) => o.status === 'pending' && isPublishable(o))
       const published: string[] = []
       const failed: { id: string; error: string }[] = []
       for (const observation of pending) {
@@ -930,6 +1227,120 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
       // what did publish, and reports the rest.
       const manifest = published.length ? await rewritePublicExport() : null
       res.json({ ok: failed.length === 0, published, failed, exported: manifest?.count ?? null })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // -- Published satellite trees: corrected in place, never stacked -------
+
+  router.get('/published/:treeId', async (req, res, next) => {
+    try {
+      const doc = await db.collection(PUBLISHED).doc(req.params.treeId).get()
+      if (!doc.exists) {
+        res.status(404).json({ error: `No published satellite tree ${req.params.treeId}` })
+        return
+      }
+      const data = doc.data() ?? {}
+      res.json({ ...exportRow(data), revision: data.revision ?? 0, withdrawnAt: isoOrNull(data.withdrawnAt), corrections: data.corrections ?? [] })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  /** Apply a correction to one published tree inside a transaction. */
+  async function correctTree(treeId: string, input: CorrectionInput, transaction: FirebaseFirestore.Transaction, now: string) {
+    const ref = db.collection(PUBLISHED).doc(treeId)
+    const snapshot = await transaction.get(ref)
+    if (!snapshot.exists) throw new Error(`No published satellite tree ${treeId}`)
+    const update = correctionUpdate(snapshot.data() ?? {}, input, actor, now)
+    return { ref, update: { ...update, correctedAt: FieldValue.serverTimestamp(), correctedBy: actor } as Record<string, unknown> }
+  }
+
+  router.patch('/published/:treeId', async (req, res, next) => {
+    try {
+      const input = parseCorrection(req.body)
+      const now = new Date().toISOString()
+      const update = await db.runTransaction(async (transaction) => {
+        const { ref, update } = await correctTree(req.params.treeId, input, transaction, now)
+        transaction.update(ref, update as FirebaseFirestore.DocumentData)
+        return update
+      })
+      const manifest = await rewritePublicExport()
+      res.json({ ok: true, revision: update.revision, exported: manifest.count })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  /** Take a tree out of the export (kept, marked, for the history and the freshness probe). */
+  function withdraw(transaction: FirebaseFirestore.Transaction, treeId: string, data: Record<string, unknown>, reason: string) {
+    if (data.withdrawnAt) throw new Error(`${treeId} is already withdrawn`)
+    transaction.update(db.collection(PUBLISHED).doc(treeId), { withdrawnAt: FieldValue.serverTimestamp(), withdrawnBy: actor, withdrawReason: reason })
+    if (data.observationId) transaction.update(db.collection(OBSERVATIONS).doc(String(data.observationId)), { status: 'withdrawn', updatedAt: FieldValue.serverTimestamp() })
+  }
+
+  router.post('/published/:treeId/withdraw', async (req, res, next) => {
+    try {
+      const reason = cleanString((req.body as { reason?: unknown })?.reason, MAX_NOTES, 'reason') ?? 'withdrawn by the reviewer'
+      await db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(db.collection(PUBLISHED).doc(req.params.treeId))
+        if (!snapshot.exists) throw new Error(`No published satellite tree ${req.params.treeId}`)
+        withdraw(transaction, req.params.treeId, snapshot.data() ?? {}, reason)
+      })
+      const manifest = await rewritePublicExport()
+      res.json({ ok: true, exported: manifest.count })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // Fold a stacked row into the satellite tree it duplicates: the values a
+  // person entered move onto the target, and the stacked row is withdrawn.
+  router.post('/published/:treeId/fold', async (req, res, next) => {
+    try {
+      const now = new Date().toISOString()
+      const result = await db.runTransaction(async (transaction) => {
+        const stackedSnap = await transaction.get(db.collection(PUBLISHED).doc(req.params.treeId))
+        if (!stackedSnap.exists) throw new Error(`No published satellite tree ${req.params.treeId}`)
+        const stacked = stackedSnap.data() ?? {}
+        const targetId = stacked.duplicateOfTreeId
+        if (!isSatelliteTreeId(targetId)) throw new Error(`${req.params.treeId} does not duplicate a satellite tree`)
+        const targetSnap = await transaction.get(db.collection(PUBLISHED).doc(String(targetId)))
+        if (!targetSnap.exists) throw new Error(`Its target ${String(targetId)} is not a published satellite tree`)
+        const changes = foldChanges(stacked, targetSnap.data() ?? {})
+        // Every read before any write, as Firestore transactions require.
+        const corrected = Object.keys(changes).length
+          ? correctionUpdate(targetSnap.data() ?? {}, { changes, baseRevision: null }, actor, now)
+          : null
+        if (corrected) transaction.update(targetSnap.ref, { ...corrected, correctedAt: FieldValue.serverTimestamp(), correctedBy: actor })
+        withdraw(transaction, req.params.treeId, stacked, `folded into ${String(targetId)}`)
+        return { targetId: String(targetId), moved: Object.keys(changes) }
+      })
+      const manifest = await rewritePublicExport()
+      res.json({ ok: true, ...result, exported: manifest.count })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // Rows already stacked on a satellite tree (published before that was refused).
+  router.get('/stacked', async (_req, res, next) => {
+    try {
+      const snapshot = await db.collection(PUBLISHED).get()
+      const byId = new Map(snapshot.docs.map((doc) => [doc.id, doc.data()]))
+      const rows = snapshot.docs
+        .map((doc) => doc.data())
+        .filter((d) => !d.withdrawnAt && isSatelliteTreeId(d.duplicateOfTreeId))
+        .map((d) => {
+          const target = byId.get(String(d.duplicateOfTreeId))
+          return {
+            stacked: exportRow(d),
+            target: target ? { ...exportRow(target), withdrawnAt: isoOrNull(target.withdrawnAt) } : null,
+            wouldMove: target ? Object.keys(foldChanges(d, target)) : [],
+          }
+        })
+      res.json(rows)
     } catch (error) {
       next(error)
     }
