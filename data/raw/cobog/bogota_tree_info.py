@@ -66,8 +66,14 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.platforms.arcgis import FeatureLayer, coded_value_domain, iter_attributes
+from shared.platforms.arcgis import (
+    FeatureLayer,
+    coded_value_domain,
+    feature_count,
+    iter_attributes,
+)
 from shared.ingest import (
+    UpstreamUnavailable,
     emit,
     enforce_tree_schema,
     stream_to_table,
@@ -86,6 +92,21 @@ OUT_FIELDS = "Codigo_Arbol,Nombre_Esp,Con_Especie_ID,Codigo_Localidad,Latitud,Lo
 
 # Localidad codes that are not a localidad.
 NO_BOROUGH = {"0", "99"}
+
+# On 2026-10-13 this layer (FeatureServer, MapServer and WFS alike) served 100
+# rows instead of ~1.47M, and a run published them over the city.  Until
+# Trilogy can guard a refresh against the asset it replaces, refuse a layer
+# below this floor: the run fails and the published parquet is untouched.
+# Ask the layer first so a collapsed one fails in seconds, not ~700 pages in.
+MIN_MUNICIPAL_ROWS = 1_000_000
+
+
+def check_floor(rows: int, what: str) -> None:
+    if rows < MIN_MUNICIPAL_ROWS:
+        raise UpstreamUnavailable(
+            f"Bogotá ingest: {what} {rows:,} rows, below the {MIN_MUNICIPAL_ROWS:,} "
+            f"floor; refusing to publish a collapsed layer"
+        )
 
 
 def clean(value) -> str | None:
@@ -153,12 +174,14 @@ def make_transform(localidad_names: dict[str, str]):
 
 
 def main() -> None:
+    check_floor(feature_count(LAYER), "the layer reports")
     localidad_names = coded_value_domain(LAYER, "Codigo_Localidad")
     table = stream_to_table(
         iter_attributes(LAYER, out_fields=OUT_FIELDS, order_by="OBJECTID"),
         make_transform(localidad_names),
         label="Bogotá OpenData",
     )
+    check_floor(table.num_rows, "paging returned")
     table = validate_coordinates(table, city="Bogotá", city_code="COBOG")
     table = enforce_tree_schema(table, city="Bogotá", data_source="BOGOTA_OPENDATA")
     emit(table)

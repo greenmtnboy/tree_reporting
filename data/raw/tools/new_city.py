@@ -295,7 +295,7 @@ partial datasource {slug}_tree_info (
 grain (tree_id)
 complete where city = '{code}'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{lc}_tree_info_v{{data_version}}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{lc}_tree_info_v{{data_version}}.parquet`
-where tree_id = cluster_id
+where tree_id = cluster_id and reported_missing = false
 freshness by {lc}_published_data_updated_through;
 '''
 

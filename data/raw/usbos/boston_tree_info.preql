@@ -363,6 +363,6 @@ partial datasource boston_tree_info (
 grain (tree_id)
 complete where city = 'USBOS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id and usbos_border_duplicate = false
+where tree_id = cluster_id and usbos_border_duplicate = false and reported_missing = false
 freshness by usbos_published_data_updated_through;
 
