@@ -11,7 +11,14 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit, enforce_tree_schema, normalize_species, validate_coordinates
+from shared.ingest import (
+    DEFAULT_HEADERS,
+    UpstreamUnavailable,
+    emit,
+    enforce_tree_schema,
+    normalize_species,
+    validate_coordinates,
+)
 
 DATASET_URL = 'https://data.tempe.gov/api/download/v1/items/542d8f16fff2466fb3115f209df03fd6/geojson?layers=0'
 
@@ -30,12 +37,30 @@ def web_mercator_to_wgs84(x: float, y: float) -> tuple[float, float]:
     return lon, lat
 
 
+# While Hub regenerates the export it answers 202 with a JSON status
+# ("Up to date download file is being generated...", status Pending) instead
+# of the file. Parsing that as GeoJSON fails the CRS check below.
+EXPORT_POLL_SECONDS = 30
+EXPORT_WAIT_SECONDS = 15 * 60
+
+
 def download_geojson() -> dict:
+    import time
+
     import requests
 
-    response = requests.get(DATASET_URL, timeout=300)
-    response.raise_for_status()
-    return response.json()
+    deadline = time.monotonic() + EXPORT_WAIT_SECONDS
+    while True:
+        response = requests.get(DATASET_URL, timeout=300, headers=DEFAULT_HEADERS)
+        response.raise_for_status()
+        if response.status_code != 202:
+            return response.json()
+        if time.monotonic() > deadline:
+            raise UpstreamUnavailable(
+                f'Tempe Hub export still being generated after {EXPORT_WAIT_SECONDS}s: '
+                f'{response.text[:200]}'
+            )
+        time.sleep(EXPORT_POLL_SECONDS)
 
 
 def transform(payload: dict) -> pa.Table:
