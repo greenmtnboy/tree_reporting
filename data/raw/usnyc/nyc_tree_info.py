@@ -19,14 +19,17 @@ from trilogy.io.arrow import emit_arrow_batches
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.ingest import (
+    UpstreamUnavailable,
     stream_table_batches,
     enforce_tree_schema,
     normalize_species,
     report_species_cleanup,
     validate_coordinates,
 )
+from shared.platforms.socrata import SocrataDataset, row_count
 
 DATASET_ID = "hn5i-inap"
+DATASET = SocrataDataset("data.cityofnewyork.us", DATASET_ID)
 DATASET_URL = f"https://data.cityofnewyork.us/resource/{DATASET_ID}.csv"
 # A page is what one request downloads and parses; a whole page is held in
 # Arrow while its slices are emitted (see iter_pages), so the page, not the
@@ -166,6 +169,10 @@ def load_arrow_table(csv_bytes: io.BytesIO) -> tuple[pa.Table, int]:
         ),
     )
     raw_count = table.num_rows
+    if raw_count == 0:
+        # The page after the last full one, when the city is an exact multiple
+        # of PAGE_SIZE; `stream_table_batches` refuses an empty source.
+        return table, 0
     # Batched: PAGE_SIZE is 500,000 and `cast_columns` calls `.to_pylist()`
     # on each column, so a single page materialised more Python objects
     # than Amsterdam's entire dataset did before it started failing every
@@ -198,10 +205,19 @@ def iter_pages() -> Iterator[pa.Table]:
     """
     seen: set[str] = set()
     summary: dict[str, int] = {}
+    # The loop ends on a short page, so a page that comes back short or empty
+    # without an error ends the city there.  From 2026-10-08 to 10-13 the
+    # published parquet held exactly 750,000 of 1,123,163 rows -- three full
+    # pages and nothing after -- and the rollup published it.  Count first and
+    # refuse a run that fetched fewer; the rows are already streamed by then,
+    # but a failing exit fails the build and the parquet is not replaced.
+    expected = row_count(DATASET)
+    fetched = 0
     offset = 0
     while True:
         csv_bytes = download_csv_page(offset)
         page, raw_count = load_arrow_table(csv_bytes)
+        fetched += raw_count
         del csv_bytes
         # The download stays at PAGE_SIZE (three requests for the city) but
         # the Python-object work below is done a slice at a time: a whole
@@ -227,6 +243,11 @@ def iter_pages() -> Iterator[pa.Table]:
         if raw_count < PAGE_SIZE:
             break
         offset += PAGE_SIZE
+    if fetched < expected:
+        raise UpstreamUnavailable(
+            f"New York City: paging returned {fetched:,} rows of the {expected:,} "
+            f"count(*) reported; a page came back short"
+        )
     report_species_cleanup(summary, city="New York City")
 
 
