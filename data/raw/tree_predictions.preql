@@ -402,4 +402,8 @@ datasource tree_predictions (
 grain (tree_id)
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_predictions_v{data_version}.parquet`
 where tree_id is not null
-freshness by prediction_inputs_published_through;
+freshness by prediction_inputs_published_through
+# A city's rows vanishing from this build (its parquet unreadable or shed)
+# fails it; see `kept_by` in core.preql.  Dropping a city on purpose takes
+# one local `trilogy refresh --skip-validation tree_predictions` build.
+assert @kept_by(tree_id, city, 0.75);

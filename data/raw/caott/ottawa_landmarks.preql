@@ -9,30 +9,18 @@ file `./ottawa_landmarks_probe.py`;
 # same ArcGIS Server as the trees -- see the ingest for why the city's Part IV
 # designation register, which is not catalogued as open data and is a third
 # unnamed, is not used.
-root partial datasource raw_ottawa_landmark_info (
-    landmark_id: landmark_id,
-    city: city,
-    name: name,
-    geometry_raw: ?geometry_raw,
+root partial datasource raw_ottawa_landmark_info extends landmark_partition (
     address: ?address,
     property_type: ?property_type,
 )
-grain (landmark_id)
 complete where city = 'CAOTT'
 file `./ottawa_landmarks.py`;
 
-partial datasource ottawa_landmark_info (
-    landmark_id,
-    city,
-    name,
-    ?geometry,
-    ?latitude,
-    ?longitude,
+partial datasource ottawa_landmark_info extends published_landmark_info (
     ?address,
     ?property_type,
     caott_landmark_data_updated_through,
 )
-grain (landmark_id)
 complete where city = 'CAOTT'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/caott_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/caott_landmark_info_v{data_version}.parquet`
 freshness by caott_landmark_data_updated_through;

@@ -23,7 +23,13 @@
 # Raised to 0.3.378: 0.3.377 computed the shared merge's cluster aggregates
 # over the pruned rows and silently dropped trees, and usbos's border gate
 # needs the planner fixes in 0.3.377/0.3.378. See docs/BORDER_DEDUP.md.
-pytrilogy>=0.3.378
+#
+# Raised to 0.3.389: every city model extends the `template datasource`s in
+# data/raw/tree_dedup.preql and landmark_common.preql, and published targets
+# carry `assert` guards (core.preql); both parse from 0.3.389, and 0.3.391 is
+# the first that can check a guard on a partial target (scoped to its
+# `complete where`) instead of failing every city's `source_kept`.
+pytrilogy>=0.3.391
 # DuckDB 1.5.3+ is the first 1.5.x with the `nanoarrow` community extension
 # published for linux_amd64 (1.5.0 ships `arrow` but not `nanoarrow`, so
 # `LOAD arrow` fails with "Nested load of nanoarrow failed" on the runner).

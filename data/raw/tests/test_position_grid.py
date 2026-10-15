@@ -50,7 +50,7 @@ from shared.overture import (  # noqa: E402
     snap_staging_name,
 )
 from test_cloud_jobs import jobs_by_key, statements  # noqa: E402
-from test_data_sources import city_models  # noqa: E402
+from test_data_sources import city_models, published_target, raw_partitions, stored  # noqa: E402
 
 MODEL = RAW_DIR / "tree_position.preql"
 DEDUP = RAW_DIR / "tree_dedup.preql"
@@ -413,10 +413,12 @@ def test_a_snap_city_is_fully_wired(code: str):
     # the cell is derived in tree_position.preql from the row's own
     # coordinates; a partition that maps it as a column is reading a stale
     # stamped value from before the derivation moved into the model
-    partitions = re.findall(r"root partial datasource \w+ \((.*?)\)\s*grain \(tree_id\)", text, re.S)
+    partitions = raw_partitions(code)
     assert partitions, f"{code} declares no raw partitions"
-    for body in partitions:
-        assert "snap_cell" not in body, f"{code}: a raw partition still maps snap_cell as a column"
+    for partition in partitions:
+        assert "snap_cell" not in stored(partition), (
+            f"{code}: {partition.name} still maps snap_cell as a column"
+        )
 
     assert f"root datasource {lower}_overture_snap (" in text
     assert snap_staging_name(code) in text
@@ -433,8 +435,8 @@ def test_a_snap_city_is_fully_wired(code: str):
     assert (model.parent / f"{model.stem.removesuffix('_tree_info')}_overture_extract.py").exists()
 
     # the published columns
-    target = text.split(f"partial datasource {model.stem} (", 1)[1].split(")", 1)[0]
-    for column in ("?source_latitude", "?source_longitude", "?position_adjustment", "?position_shift_m"):
+    target = stored(published_target(code))
+    for column in ("source_latitude", "source_longitude", "position_adjustment", "position_shift_m"):
         assert column in target, f"{code}'s target does not publish {column}"
 
     # the staging model and its job

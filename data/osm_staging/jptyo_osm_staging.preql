@@ -13,43 +13,13 @@ import staging_common;
 # staging_common.preql does not declare it.
 property tree_id.borough string;
 
-root datasource jptyo_osm_rows (
-    tree_id: tree_id,
-    city: city,
-    data_source: data_source,
-    species: ?species,
-    cultivar: ?cultivar,
-    crown_width_m: ?crown_width_m,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
-    osm_ref: ?osm_ref,
+root datasource jptyo_osm_rows extends osm_rows (
     borough: ?borough,
 )
-grain (tree_id)
 file `./osm_rows.py`
 where city = 'JPTYO';
 
-datasource jptyo_osm_staging (
-    tree_id,
-    city,
-    data_source,
-    ?species,
-    ?cultivar,
-    ?crown_width_m,
-    ?tree_name,
-    ?plant_date,
-    ?latitude,
-    ?longitude,
-    ?diameter_at_breast_height,
-    ?submission_photo_url,
-    ?osm_ref,
+datasource jptyo_osm_staging extends osm_staging (
     ?borough,
-    osm_extracted_through,
 )
-grain (tree_id)
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/jptyo_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/jptyo_osm_staging.parquet`
-freshness by osm_extracted_through;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/jptyo_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/jptyo_osm_staging.parquet`;

@@ -31,21 +31,9 @@ root datasource camon_osm_update_time (
 )
 file `./moncton_osm_probe.py`;
 
-root partial datasource moncton_raw_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource moncton_raw_tree_info extends tree_partition (
     data_source: camon_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'CAMON' and camon_source = 'MONCTON_OPENDATA'
 file `./moncton_tree_info.py`;
 
@@ -54,21 +42,9 @@ file `./moncton_tree_info.py`;
 # every city's rows; the `complete where` clause narrows it to CAMON and makes
 # it a disjoint partition, and the `where` clause is what actually filters --
 # `complete where` asserts, it does not promise a predicate.
-root partial datasource camon_community_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource camon_community_tree_info extends tree_partition (
     data_source: camon_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'CAMON' and camon_source = 'COMMUNITY_CAMON'
 file `../community_tree_info.py`
 where city = 'CAMON';
@@ -77,21 +53,9 @@ where city = 'CAMON';
 # OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
 # -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
 # by construction; the overlap is resolved by ../tree_dedup.preql.
-root partial datasource camon_osm_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource camon_osm_tree_info extends tree_partition (
     data_source: camon_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'CAMON' and camon_source = 'OSM_CAMON'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/camon_osm_staging.parquet`;
 
@@ -109,37 +73,12 @@ merge merged_latitude into latitude;
 merge merged_longitude into longitude;
 
 
-partial datasource moncton_tree_info (
-    tree_id,
-    city,
+partial datasource moncton_tree_info extends published_tree_info (
     data_source: camon_source,
-    species,
-    ?tree_name,
-    ?plant_date,
-    ?diameter_at_breast_height,
-    ?latitude,
-    ?longitude,
-    ?submission_photo_url,
-    ?cultivar,
-    ?crown_width_m,
-    # Redundant on its face -- the prune below means it always equals tree_id --
-    # and dropped from this template for exactly that reason, which is how the
-    # first three cities scaffolded from it came out with fourteen columns
-    # where every other city has fifteen.  The rollup reads them all as one
-    # DuckDB multi-file scan; it projects only the shared columns, so a ragged
-    # set does not fail it, but `select *` over that scan silently drops the
-    # column when a short file is read first and raises when a long one is.
-    # It is also the column any check of the prune reads.  Keep it.
-    # `test_every_city_publishes_cluster_id` pins it and spells out the
-    # measured behaviour.
-    cluster_id,
-    merged_sources,
-    ?merged_tree_ids,
-    reported_missing,
     camon_published_data_updated_through,
 )
-grain (tree_id)
 complete where city = 'CAMON'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camon_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/camon_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id and reported_missing = false
-freshness by camon_published_data_updated_through;
+freshness by camon_published_data_updated_through
+assert @source_kept(tree_id, camon_source, 'MONCTON_OPENDATA', 0.75)
+assert @source_kept(tree_id, camon_source, 'OSM_CAMON', 0.75);

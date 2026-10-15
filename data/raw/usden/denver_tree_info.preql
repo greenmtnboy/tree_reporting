@@ -32,21 +32,9 @@ root datasource usden_osm_update_time (
 )
 file `./denver_osm_probe.py`;
 
-root partial datasource denver_raw_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource denver_raw_tree_info extends tree_partition (
     data_source: usden_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USDEN' and usden_source = 'DENVER_OPENDATA'
 file `./denver_tree_info.py`;
 
@@ -54,21 +42,9 @@ file `./denver_tree_info.py`;
 # Approved community submissions for this city. The shared ingest script
 # emits every city's rows; the `complete where` clause narrows it to USDEN
 # and makes it a disjoint partition alongside denver_raw_tree_info.
-root partial datasource usden_community_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource usden_community_tree_info extends tree_partition (
     data_source: usden_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USDEN' and usden_source = 'COMMUNITY_USDEN'
 file `../community_tree_info.py`
 where city = 'USDEN';
@@ -79,21 +55,9 @@ where city = 'USDEN';
 # global timestamp advances continuously; see denver_osm_extract.py).  OSM
 # overlaps the municipal inventory by construction; overlapping rows are resolved by the
 # shared cluster merge (../tree_dedup.preql).
-root partial datasource usden_osm_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource usden_osm_tree_info extends tree_partition (
     data_source: usden_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USDEN' and usden_source = 'OSM_USDEN'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usden_osm_staging.parquet`;
 
@@ -115,27 +79,12 @@ merge merged_longitude into longitude;
 # its cluster, so the parquet holds exactly one tree per row.  It needs
 # pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
 # ../tree_dedup.preql.
-partial datasource denver_tree_info (
-    tree_id,
-    city,
+partial datasource denver_tree_info extends published_tree_info (
     data_source: usden_source,
-    species,
-    ?tree_name,
-    ?plant_date,
-    ?diameter_at_breast_height,
-    ?latitude,
-    ?longitude,
-    ?submission_photo_url,
-    ?cultivar,
-    ?crown_width_m,
-    cluster_id,
-    merged_sources,
-    ?merged_tree_ids,
-    reported_missing,
     usden_published_data_updated_through,
 )
-grain (tree_id)
 complete where city = 'USDEN'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usden_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usden_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id and reported_missing = false
-freshness by usden_published_data_updated_through;
+freshness by usden_published_data_updated_through
+assert @source_kept(tree_id, usden_source, 'DENVER_OPENDATA', 0.75)
+assert @source_kept(tree_id, usden_source, 'OSM_USDEN', 0.75);

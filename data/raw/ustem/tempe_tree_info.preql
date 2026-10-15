@@ -32,21 +32,9 @@ root datasource ustem_osm_update_time (
 )
 file `./tempe_osm_probe.py`;
 
-root partial datasource tempe_raw_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource tempe_raw_tree_info extends tree_partition (
     data_source: ustem_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USTEM' and ustem_source = 'TEMPE_OPENDATA'
 file `./tempe_tree_info.py`;
 
@@ -54,21 +42,9 @@ file `./tempe_tree_info.py`;
 # Approved community submissions for this city. The shared ingest script
 # emits every city's rows; the `complete where` clause narrows it to USTEM
 # and makes it a disjoint partition alongside tempe_raw_tree_info.
-root partial datasource ustem_community_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource ustem_community_tree_info extends tree_partition (
     data_source: ustem_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USTEM' and ustem_source = 'COMMUNITY_USTEM'
 file `../community_tree_info.py`
 where city = 'USTEM';
@@ -79,21 +55,9 @@ where city = 'USTEM';
 # global timestamp advances continuously; see tempe_osm_extract.py).  OSM
 # overlaps the municipal inventory by construction; overlapping rows are resolved by the
 # shared cluster merge (../tree_dedup.preql).
-root partial datasource ustem_osm_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource ustem_osm_tree_info extends tree_partition (
     data_source: ustem_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USTEM' and ustem_source = 'OSM_USTEM'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ustem_osm_staging.parquet`;
 
@@ -115,27 +79,12 @@ merge merged_longitude into longitude;
 # its cluster, so the parquet holds exactly one tree per row.  It needs
 # pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
 # ../tree_dedup.preql.
-partial datasource tempe_tree_info (
-    tree_id,
-    city,
+partial datasource tempe_tree_info extends published_tree_info (
     data_source: ustem_source,
-    species,
-    ?tree_name,
-    ?plant_date,
-    ?diameter_at_breast_height,
-    ?latitude,
-    ?longitude,
-    ?submission_photo_url,
-    ?cultivar,
-    ?crown_width_m,
-    cluster_id,
-    merged_sources,
-    ?merged_tree_ids,
-    reported_missing,
     ustem_published_data_updated_through,
 )
-grain (tree_id)
 complete where city = 'USTEM'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ustem_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ustem_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id and reported_missing = false
-freshness by ustem_published_data_updated_through;
+freshness by ustem_published_data_updated_through
+assert @source_kept(tree_id, ustem_source, 'TEMPE_OPENDATA', 0.75)
+assert @source_kept(tree_id, ustem_source, 'OSM_USTEM', 0.75);

@@ -333,7 +333,7 @@ def test_crown_slices_cover_every_city():
     # Each slice writes its own city's file and scopes to its own city.
     for code in expected:
         block = re.search(
-            rf"partial datasource {code}_tree_predictions\b.*?freshness by", text, re.S
+            rf"partial datasource {code}_tree_predictions\b.*?;", text, re.S
         ).group(0)
         assert f"complete where city = '{code.upper()}'" in block, code
         assert f"trees/{code}_tree_predictions_v" in block, code

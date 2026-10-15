@@ -41,45 +41,26 @@ file `./nyc_osm_probe.py`;
 # Overpass -- extraction is decoupled from refresh (see shared/osm.py and
 # EXTENDING.md).  Overlapping rows are resolved by the
 # shared cluster merge (../tree_dedup.preql).
-root partial datasource usnyc_osm_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource usnyc_osm_tree_info extends tree_partition (
     data_source: usnyc_source,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USNYC' and usnyc_source = 'OSM_USNYC'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usnyc_osm_staging.parquet`;
 
-root partial datasource nyc_raw_tree_info (
+root partial datasource nyc_raw_tree_info extends tree_partition (
     objectid: tree_id,
-    city: city,
     data_source: usnyc_source,
     genusspecies: raw_species,
-    tree_name: ?raw_tree_name,
     dbh: ?raw_dbh,
     planteddate: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
     # tpcondition: ?condition,
     # tpstructure: ?structure,
     # stumpdiameter: ?stump_diameter,
     # riskrating: ?risk_rating,
     # riskratingdate: ?risk_rating_date,
     # globalid: ?global_id,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USNYC' and usnyc_source = 'NYC_OPENDATA'
 file `./nyc_tree_info.py`;
 
@@ -87,21 +68,9 @@ file `./nyc_tree_info.py`;
 # Approved community submissions for this city. The shared ingest script
 # emits every city's rows; the `complete where` clause narrows it to USNYC
 # and makes it a disjoint partition alongside nyc_raw_tree_info.
-root partial datasource usnyc_community_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource usnyc_community_tree_info extends tree_partition (
     data_source: usnyc_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USNYC' and usnyc_source = 'COMMUNITY_USNYC'
 file `../community_tree_info.py`
 where city = 'USNYC';
@@ -110,20 +79,10 @@ where city = 'USNYC';
 # public export the reviewer publishes -- see ../satellite_tree_info.py and
 # the SF model.  `diameter_at_breast_height` maps to `raw_dbh` like the other
 # NYC sources, so the rows go through the same dbh merge.
-root partial datasource usnyc_satellite_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource usnyc_satellite_tree_info extends tree_partition (
     data_source: usnyc_source,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
 )
-grain (tree_id)
 complete where city = 'USNYC' and usnyc_source = 'SATELLITE_USNYC'
 file `../satellite_tree_info.py`
 where city = 'USNYC';
@@ -146,23 +105,8 @@ merge merged_longitude into longitude;
 # its cluster, so the parquet holds exactly one tree per row.  It needs
 # pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
 # ../tree_dedup.preql.
-partial datasource nyc_tree_info (
-    tree_id,
-    city,
+partial datasource nyc_tree_info extends published_tree_info (
     data_source: usnyc_source,
-    species,
-    ?tree_name,
-    ?diameter_at_breast_height,
-    ?plant_date,
-    ?latitude,
-    ?longitude,
-    ?submission_photo_url,
-    ?cultivar,
-    ?crown_width_m,
-    cluster_id,
-    merged_sources,
-    ?merged_tree_ids,
-    reported_missing,
     usnyc_published_data_updated_through,
     # ?condition,
     # ?structure,
@@ -171,11 +115,11 @@ partial datasource nyc_tree_info (
     # ?risk_rating_date,
     # ?global_id,
 )
-grain (tree_id)
 complete where city = 'USNYC'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnyc_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id and reported_missing = false
-freshness by usnyc_published_data_updated_through;
+freshness by usnyc_published_data_updated_through
+assert @source_kept(tree_id, usnyc_source, 'NYC_OPENDATA', 0.75)
+assert @source_kept(tree_id, usnyc_source, 'OSM_USNYC', 0.75);
 
 #trilogy refresh C:\Users\ethan\coding_projects\sf_tree_reporting\data\raw\nyc\nyc_tree_info.preql --force=nyc_tree_info
 # trilogy refresh C:\Users\ethan\coding_projects\sf_tree_reporting\data\raw\tree_info.preql --force=nyc_tree_info

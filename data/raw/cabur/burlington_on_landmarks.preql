@@ -7,32 +7,20 @@ file `./burlington_on_landmarks_probe.py`;
 
 # Burlington's municipal heritage register, read live off the same ArcGIS
 # Server as the trees -- the runbook's first-preference landmark source.
-root partial datasource raw_burlington_on_landmark_info (
-    landmark_id: landmark_id,
-    city: city,
-    name: name,
-    geometry_raw: ?geometry_raw,
+root partial datasource raw_burlington_on_landmark_info extends landmark_partition (
     address: ?address,
     year_built: ?year_built,
     property_type: ?property_type,
 )
-grain (landmark_id)
 complete where city = 'CABUR'
 file `./burlington_on_landmarks.py`;
 
-partial datasource burlington_on_landmark_info (
-    landmark_id,
-    city,
-    name,
-    ?geometry,
-    ?latitude,
-    ?longitude,
+partial datasource burlington_on_landmark_info extends published_landmark_info (
     ?address,
     ?year_built,
     ?property_type,
     cabur_landmark_data_updated_through,
 )
-grain (landmark_id)
 complete where city = 'CABUR'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cabur_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/cabur_landmark_info_v{data_version}.parquet`
 freshness by cabur_landmark_data_updated_through;

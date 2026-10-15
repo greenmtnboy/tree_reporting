@@ -183,4 +183,7 @@ datasource tree_enrichment (
 )
 grain (species)
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_enrichment_v{data_version}.parquet`
-freshness by `./tree_enrichment_probe.py`;
+freshness by `./tree_enrichment_probe.py`
+# Species are only ever added; a build that lost a quarter of them is refused
+# and the published table kept (`kept`, core.preql).
+assert @kept(species, 0.75);

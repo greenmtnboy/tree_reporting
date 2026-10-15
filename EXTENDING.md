@@ -41,7 +41,7 @@ everything in memory, so a failure leaves the tree untouched.
 Then the checks:
 
 ```bash
-cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.378" --with duckdb --with requests python -m pytest tests -q
+cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.391" --with duckdb --with requests python -m pytest tests -q
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql
 cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql
 ```
@@ -166,16 +166,36 @@ columns={...})` last, and writes an Arrow IPC stream to stdout.
 
 `{slug}_tree_info.preql`: the probe datasource, the `{code}_source` enum
 (`{LABEL}_OPENDATA`, `COMMUNITY_{CODE}`, `OSM_{CODE}`), one root partial
-datasource per partition mapping onto the shared `raw_*` concepts (never the
-canonical ones; the dedup merge derives those), the staged-OSM partition,
-`import ..tree_dedup;`, the dbh and position merges (`merge merged_dbh
-into diameter_at_breast_height;`, `merge merged_latitude into latitude;`,
-`merge merged_longitude into longitude;`), and the published target with
-`complete where city = '{CODE}'`, `where tree_id = cluster_id`, and
-`freshness by {code}_published_data_updated_through`. The scaffolder writes
-this file; verify the dry run's SQL contains a `UNION ALL` and references
-`community_tree_info.py`. A new city starts without the Overture position
-correction; opting in is a separate step (`docs/POSITION_CORRECTION.md`).
+datasource per partition, the staged-OSM partition, `import ..tree_dedup;`,
+the dbh and position merges (`merge merged_dbh into
+diameter_at_breast_height;`, `merge merged_latitude into latitude;`, `merge
+merged_longitude into longitude;`), and the published target. The scaffolder
+writes this file; verify the dry run's SQL contains a `UNION ALL` and
+references `community_tree_info.py`. A new city starts without the Overture
+position correction; opting in is a separate step
+(`docs/POSITION_CORRECTION.md`).
+
+The shapes are templates in `tree_dedup.preql`, so the city file holds only
+what is its own:
+
+- Each partition `extends tree_partition`, which maps the shared `raw_*`
+  concepts (never the canonical ones; the dedup merge derives those). The
+  city adds `data_source: {code}_source`, its `complete where` and its file,
+  and re-binds any column its source names differently (`dbh: ?raw_dbh`) or
+  leaves empty (`species: ?raw_species`). A child cannot drop a column, so a
+  source without one emits it null.
+- The target `extends published_tree_info`, which brings the canonical
+  columns, the prune (`where tree_id = cluster_id and reported_missing =
+  false`) and the publish guard `@kept(tree_id, 0.75)`. The city adds
+  `data_source`, its watermark, `complete where city = '{CODE}'`, the file,
+  `freshness by`, and one `assert @source_kept(tree_id, {code}_source,
+  '{LABEL}', 0.75)` per municipal and OSM label
+  (`test_every_city_refuses_a_collapsed_build`). Any extra `where` is ANDed
+  onto the prune.
+
+`test_data_sources.py` parses the model to check these, so a column moved
+between the template and the city is judged by what Trilogy composes, not by
+the text.
 
 **Mark any column a source can leave empty `?`** in every datasource that
 maps it; an unmarked column joins with `=` and drops null rows without an
@@ -235,7 +255,9 @@ Every city needs `{slug}_landmarks.preql` even if it yields zero rows;
 `landmark_common.preql` gets the freshness property and `landmark_info.preql`
 the import. Schema: `landmark_id` (prefixed), `city`, `name`, `geometry_raw`
 (WKT), `latitude`, `longitude`; city-specific extras are declared in
-`landmark_common.preql`.
+`landmark_common.preql`. The raw datasource `extends landmark_partition` and
+the target `extends published_landmark_info` (both in `landmark_common.preql`,
+the target with its publish guard), so a city lists only its extras.
 
 Source preference: an official designation registry; a heritage dataset on
 the trees' own portal; Overpass, **staged** and never fetched at refresh
@@ -279,7 +301,7 @@ Refresh before you deploy either way.
 ## After adding a city
 
 ```bash
-cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.378" --with duckdb --with requests python -m pytest tests -q
+cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.391" --with duckdb --with requests python -m pytest tests -q
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql        # one asset
 cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql     # one asset
 cd data/raw && uv run tree_enrichment_probe.py                                # lists species needing enrichment

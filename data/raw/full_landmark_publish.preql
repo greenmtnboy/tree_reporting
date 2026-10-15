@@ -159,4 +159,8 @@ file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/ful
 # such rows reached the union, sharing a null `landmark_id` against a target whose
 # grain is that column. Same clause and same reason as `tree_predictions.preql`.
 where landmark_id is not null
-freshness by latest_landmark_update_through;
+freshness by latest_landmark_update_through
+# A city's rows vanishing from this build (its parquet unreadable or shed)
+# fails it; see `kept_by` in core.preql.  Dropping a city on purpose takes
+# one local `trilogy refresh --skip-validation full_landmark_info` build.
+assert @kept_by(landmark_id, city, 0.75);

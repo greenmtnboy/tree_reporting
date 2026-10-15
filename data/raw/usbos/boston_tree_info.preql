@@ -72,94 +72,41 @@ file `./boston_osm_probe.py`;
 
 # --- Raw sources ---
 
-root partial datasource city_raw_tree_info (
+root partial datasource city_raw_tree_info extends tree_partition (
     id: tree_id,
-    city: city,
     data_source: usbos_source,
     spp_bot: ?raw_species,
-    tree_name: ?raw_tree_name,
-    
     date_plant: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
     dbh: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'CITY_OF_BOSTON'
 file `./boston_tree_info.py`;
 
-root partial datasource arboretum_raw_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource arboretum_raw_tree_info extends tree_partition (
     data_source: usbos_source,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'ARNOLD_ARBORETUM'
 file `./arboretum_tree_info.py`;
 
-root partial datasource cambridge_raw_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource cambridge_raw_tree_info extends tree_partition (
     data_source: usbos_source,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'CAMBRIDGE'
 file `./cambridge_tree_info.py`;
 
-root partial datasource brookline_raw_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource brookline_raw_tree_info extends tree_partition (
     data_source: usbos_source,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'BROOKLINE'
 file `./brookline_tree_info.py`;
 
-root partial datasource somerville_raw_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource somerville_raw_tree_info extends tree_partition (
     data_source: usbos_source,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'SOMERVILLE'
 file `./somerville_tree_info.py`;
 
@@ -170,21 +117,10 @@ file `./somerville_tree_info.py`;
 # same species-average imputation. Mapping it directly would leave
 # `diameter_at_breast_height` resolvable only from partial sources and make the
 # whole Boston model unresolvable.
-root partial datasource usbos_community_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource usbos_community_tree_info extends tree_partition (
     data_source: usbos_source,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'COMMUNITY_USBOS'
 file `../community_tree_info.py`
 where city = 'USBOS';
@@ -194,21 +130,10 @@ where city = 'USBOS';
 # the SF model.  `diameter_at_breast_height` maps to `raw_dbh` like every
 # other Boston source so the rows go through the same species-average
 # imputation.
-root partial datasource usbos_satellite_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource usbos_satellite_tree_info extends tree_partition (
     data_source: usbos_source,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'SATELLITE_USBOS'
 file `../satellite_tree_info.py`
 where city = 'USBOS';
@@ -219,21 +144,10 @@ where city = 'USBOS';
 # shared cluster merge (../tree_dedup.preql).  `diameter_at_breast_height` maps
 # to `raw_dbh` like every other Boston source so OSM rows go through the same
 # species-average imputation.
-root partial datasource usbos_osm_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource usbos_osm_tree_info extends tree_partition (
     data_source: usbos_source,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USBOS' and usbos_source = 'OSM_USBOS'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbos_osm_staging.parquet`;
 
@@ -340,29 +254,20 @@ auto usbos_border_duplicate <- coalesce(
 # quietly on older planners (see "The prune" in ../tree_dedup.preql); the
 # border gate needs 0.3.378+.  `usbos_border_duplicate` is stored (always false)
 # because a datasource's `where` may only read the datasource's own columns.
-partial datasource boston_tree_info (
-    tree_id,
-    city,
+partial datasource boston_tree_info extends published_tree_info (
     data_source: usbos_source,
     ?species,
-    ?tree_name,
-    ?diameter_at_breast_height,
-    ?plant_date,
-    ?latitude,
-    ?longitude,
-    ?submission_photo_url,
-    ?cultivar,
-    ?crown_width_m,
-    cluster_id,
-    merged_sources,
-    ?merged_tree_ids,
-    reported_missing,
     usbos_border_duplicate,
     usbos_published_data_updated_through
 )
-grain (tree_id)
 complete where city = 'USBOS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id and usbos_border_duplicate = false and reported_missing = false
-freshness by usbos_published_data_updated_through;
+where usbos_border_duplicate = false
+freshness by usbos_published_data_updated_through
+assert @source_kept(tree_id, usbos_source, 'CITY_OF_BOSTON', 0.75)
+assert @source_kept(tree_id, usbos_source, 'ARNOLD_ARBORETUM', 0.75)
+assert @source_kept(tree_id, usbos_source, 'CAMBRIDGE', 0.75)
+assert @source_kept(tree_id, usbos_source, 'BROOKLINE', 0.75)
+assert @source_kept(tree_id, usbos_source, 'SOMERVILLE', 0.75)
+assert @source_kept(tree_id, usbos_source, 'OSM_USBOS', 0.75);
 

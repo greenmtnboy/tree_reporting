@@ -37,41 +37,18 @@ file `./london_osm_probe.py`;
 # Overpass -- extraction is decoupled from refresh (see shared/osm.py and
 # EXTENDING.md).  Overlapping rows are resolved by the
 # shared cluster merge (../tree_dedup.preql).
-root partial datasource gblon_osm_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource gblon_osm_tree_info extends tree_partition (
     data_source: gblon_source,
     borough: ?borough,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'GBLON' and gblon_source = 'OSM_GBLON'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/gblon_osm_staging.parquet`;
 
-root partial datasource london_raw_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource london_raw_tree_info extends tree_partition (
     data_source: gblon_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
     borough: ?borough,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'GBLON' and gblon_source = 'LONDON_OPENDATA'
 file `./london_tree_info.py`;
 
@@ -79,22 +56,10 @@ file `./london_tree_info.py`;
 # Approved community submissions for this city. The shared ingest script
 # emits every city's rows; the `complete where` clause narrows it to GBLON
 # and makes it a disjoint partition alongside london_raw_tree_info.
-root partial datasource gblon_community_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource gblon_community_tree_info extends tree_partition (
     data_source: gblon_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
     borough: ?borough,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'GBLON' and gblon_source = 'COMMUNITY_GBLON'
 file `../community_tree_info.py`
 where city = 'GBLON';
@@ -118,28 +83,13 @@ merge merged_longitude into longitude;
 # its cluster, so the parquet holds exactly one tree per row.  It needs
 # pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
 # ../tree_dedup.preql.
-partial datasource london_tree_info (
-    tree_id,
-    city,
+partial datasource london_tree_info extends published_tree_info (
     data_source: gblon_source,
-    species,
-    ?tree_name,
     ?borough,
-    ?plant_date,
-    ?diameter_at_breast_height,
-    ?latitude,
-    ?longitude,
-    ?submission_photo_url,
-    ?cultivar,
-    ?crown_width_m,
-    cluster_id,
-    merged_sources,
-    ?merged_tree_ids,
-    reported_missing,
     gblon_published_data_updated_through,
 )
-grain (tree_id)
 complete where city = 'GBLON'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gblon_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/gblon_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id and reported_missing = false
-freshness by gblon_published_data_updated_through;
+freshness by gblon_published_data_updated_through
+assert @source_kept(tree_id, gblon_source, 'LONDON_OPENDATA', 0.75)
+assert @source_kept(tree_id, gblon_source, 'OSM_GBLON', 0.75);

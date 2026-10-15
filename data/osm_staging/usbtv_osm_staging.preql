@@ -6,41 +6,11 @@
 
 import staging_common;
 
-root datasource usbtv_osm_rows (
-    tree_id: tree_id,
-    city: city,
-    data_source: data_source,
-    species: ?species,
-    cultivar: ?cultivar,
-    crown_width_m: ?crown_width_m,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
-    osm_ref: ?osm_ref,
+root datasource usbtv_osm_rows extends osm_rows (
 )
-grain (tree_id)
 file `./osm_rows.py`
 where city = 'USBTV';
 
-datasource usbtv_osm_staging (
-    tree_id,
-    city,
-    data_source,
-    ?species,
-    ?cultivar,
-    ?crown_width_m,
-    ?tree_name,
-    ?plant_date,
-    ?latitude,
-    ?longitude,
-    ?diameter_at_breast_height,
-    ?submission_photo_url,
-    ?osm_ref,
-    osm_extracted_through,
+datasource usbtv_osm_staging extends osm_staging (
 )
-grain (tree_id)
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbtv_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/usbtv_osm_staging.parquet`
-freshness by osm_extracted_through;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbtv_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/usbtv_osm_staging.parquet`;
