@@ -9,30 +9,18 @@ file `./victoria_landmarks_probe.py`;
 # ArcGIS portal as the trees.  Twenty-three rows: the city's 933-row Heritage
 # Properties layer is larger and carries no name column at all, so it names no
 # ground -- see victoria_landmarks.py.
-root partial datasource raw_victoria_landmark_info (
-    landmark_id: landmark_id,
-    city: city,
-    name: name,
-    geometry_raw: ?geometry_raw,
+root partial datasource raw_victoria_landmark_info extends landmark_partition (
     address: ?address,
     property_type: ?property_type,
 )
-grain (landmark_id)
 complete where city = 'CAVIC'
 file `./victoria_landmarks.py`;
 
-partial datasource victoria_landmark_info (
-    landmark_id,
-    city,
-    name,
-    ?geometry,
-    ?latitude,
-    ?longitude,
+partial datasource victoria_landmark_info extends published_landmark_info (
     ?address,
     ?property_type,
     cavic_landmark_data_updated_through,
 )
-grain (landmark_id)
 complete where city = 'CAVIC'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cavic_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/cavic_landmark_info_v{data_version}.parquet`
 freshness by cavic_landmark_data_updated_through;

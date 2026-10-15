@@ -6,29 +6,18 @@ root datasource nyc_landmarks_update_time (
 file `./nyc_landmarks_probe.py`;
 
 
-root partial datasource raw_nyc_landmark_info (
-    landmark_id: landmark_id,
-    city: city,
-    name: name,
+root partial datasource raw_nyc_landmark_info extends landmark_partition (
     borough: ?borough,
     the_geom: ?geometry_raw,
 )
-grain (landmark_id)
 complete where city = 'USNYC'
 file `./nyc_landmarks.py`;
 
 
-partial datasource nyc_landmark_info (
-    landmark_id,
-    city,
-    name,
+partial datasource nyc_landmark_info extends published_landmark_info (
     ?borough,
-    ?latitude,
-    ?longitude,
-    ?geometry,
     usnyc_landmark_data_updated_through,
 )
-grain (landmark_id)
 complete where city = 'USNYC'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usnyc_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usnyc_landmark_info_v{data_version}.parquet`
 freshness by usnyc_landmark_data_updated_through;

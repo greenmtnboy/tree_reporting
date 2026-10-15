@@ -312,6 +312,40 @@ each city with San Francisco first (it heads the rollup's file list), then
 run `urban-tree-full`. DuckDB's multi-file scan takes its schema from the
 first file and raises on a later file that lacks a column.
 
+### Publish guards
+
+Every published parquet carries `assert` clauses that pytrilogy checks on the
+staged file before it replaces the published one; `prior(...)` is the same
+aggregate over the parquet being replaced. A failing build keeps the
+published parquet and fails the run with each measured value in the error.
+The functions are in `core.preql` (`staging_common.preql` has its own `kept`):
+
+| Datasource | Guard |
+|---|---|
+| each city's tree target (template) | `@kept(tree_id, 0.75)`: the city's survivors |
+| each city's tree target (its own) | `@source_kept(tree_id, {code}_source, '<label>', 0.75)` per municipal and OSM label |
+| each city's landmark target (template) | `@kept(landmark_id, 0.75)` |
+| each OSM staging target (template) | `@kept(tree_id, 0.75)`: a truncated Overpass answer |
+| each crown-predictions slice (template) | `@kept(tree_id, 0.75)` |
+| `full_tree_info`, `full_landmark_info`, `tree_predictions` | `@kept_by(<key>, city, 0.75)`: no city vanishes from a rollup |
+| `tree_enrichment` | `@kept(species, 0.75)` |
+
+They replace hardcoded floors (Bogotá's 1,000,000-row check after its portal
+served 100 rows on 2026-10-13): a ratio needs no revising as a city grows.
+
+- Community and satellite labels are not guarded per source, and nothing is
+  grouped `by data_source`: pytrilogy fails a group that is missing from the
+  new build, and a city's few community or satellite trees can all be
+  absorbed by its inventory in one rebuild.
+- A first build, or one whose previous parquet lacks a column the guard reads,
+  has no prior and passes with a warning.
+- A drop known to be real (a portal migration) is built once locally:
+  `trilogy refresh <file> --skip-validation <datasource>`. That build is the
+  next one's prior. Cloud jobs cannot pass the flag, so until it is built
+  locally the city's job keeps failing and its parquet keeps its old rows.
+- `refresh --dry-run` lists each stale asset's guards; `validate datasource`
+  runs the prior-free ones against the published parquet.
+
 Data versioning: `data_version` in `core.preql` and the two constants in
 `src/src/workers/parquetUrls.ts` move together, only for a change that breaks
 an existing reader.

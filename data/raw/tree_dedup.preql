@@ -394,3 +394,67 @@ merge merged_crown_width_m into crown_width_m;
 # later; on an older planner the prune does not fail loudly, it either does
 # nothing or refuses to resolve.  upstream_repro/keyless_join_cell_aggregate
 # has the three spellings and the enum toggle that isolated it.
+
+# ---------------------------------------------------------------------------
+# The datasource shapes every city declares
+# ---------------------------------------------------------------------------
+#
+# Each city reads the same partitions and publishes the same target; only the
+# city's own source enum, its watermark, its `complete where` and its file
+# differ.  A city datasource `extends` one of these and declares just those:
+#
+#   root partial datasource {city}_raw_tree_info extends tree_partition (
+#       data_source: {lc}_source,
+#   )
+#   complete where city = '{CODE}' and {lc}_source = '{LABEL}'
+#   file `./{city}_tree_info.py`;
+#
+# A column the child names again takes the child's binding: an OSM partition
+# re-binds `species: ?raw_species`, NYC reads `genusspecies: raw_species`.  A
+# child cannot drop a column, so a source that lacks one emits it as null.
+
+template datasource tree_partition (
+    tree_id: tree_id,
+    city: city,
+    species: raw_species,
+    tree_name: ?raw_tree_name,
+    plant_date: ?raw_plant_date,
+    latitude: ?raw_latitude,
+    longitude: ?raw_longitude,
+    diameter_at_breast_height: ?raw_dbh,
+    submission_photo_url: ?raw_photo_url,
+    cultivar: ?raw_cultivar,
+    crown_width_m: ?raw_crown_width_m,
+)
+grain (tree_id);
+
+# A build may not shed more than a quarter of the city's trees, or of any
+# municipal or OSM source (each city adds one `@source_kept` per such label to
+# its own target: the template cannot name the city's source enum).  See
+# `kept` in core.preql.
+template datasource published_tree_info (
+    tree_id,
+    city,
+    species,
+    ?tree_name,
+    ?plant_date,
+    ?diameter_at_breast_height,
+    ?latitude,
+    ?longitude,
+    ?submission_photo_url,
+    ?cultivar,
+    ?crown_width_m,
+    # Redundant on its face -- the prune means it always equals tree_id -- and
+    # once dropped from the scaffold for exactly that reason, which left three
+    # cities with fourteen columns where every other had fifteen.  It is the
+    # column any check of the prune reads.  Keep it;
+    # `test_every_city_publishes_cluster_id` pins it.
+    cluster_id,
+    merged_sources,
+    ?merged_tree_ids,
+    reported_missing,
+)
+grain (tree_id)
+# The prune; see above.  A child's own `where` is ANDed onto it.
+where tree_id = cluster_id and reported_missing = false
+assert @kept(tree_id, 0.75);

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 import sys
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -44,6 +45,48 @@ def city_models() -> dict[str, Path]:
         code = match.group(1)[: -len("_source")].upper()
         models[code] = path
     return models
+
+
+@cache
+def parsed(path: Path):
+    """The model as Trilogy reads it.
+
+    A city's datasources `extend` the templates in tree_dedup.preql, so what a
+    datasource stores, its `where` and its assertions are only visible
+    composed; the text names just what the city adds.
+    """
+    from trilogy import Environment
+
+    env = Environment(working_path=path.parent)
+    env.parse(path.read_text(encoding="utf-8"))
+    return env
+
+
+def published_target(code: str):
+    """A city's published tree target, named after its model file."""
+    path = city_models()[code]
+    return parsed(path).datasources[path.stem]
+
+
+def raw_partitions(code: str) -> list:
+    """The city's raw sources: every root datasource that maps its source enum."""
+    source = f"local.{code.lower()}_source"
+    return [
+        ds
+        for ds in parsed(city_models()[code]).datasources.values()
+        if ds.is_root and any(c.concept.address == source for c in ds.columns)
+    ]
+
+
+def stored(datasource) -> set[str]:
+    """The concepts a datasource stores, without the `local.` namespace."""
+    return {c.concept.address.removeprefix("local.") for c in datasource.columns}
+
+
+def where(datasource) -> str:
+    from trilogy.parsing.render import Renderer
+
+    return Renderer().to_string(datasource.where) if datasource.where else ""
 
 
 def enum_values(path: Path) -> list[str]:
@@ -227,8 +270,9 @@ def test_every_city_prunes_absorbed_rows(code: str):
     """
     text = city_models()[code].read_text(encoding="utf-8")
     assert "import ..tree_dedup;" in text
-    # A city may add its own gates after the prune (Boston's border dedup).
-    assert re.search(r"\nwhere tree_id = cluster_id(\n| and )", text), (
+    # The prune comes from the template; a city may AND its own gates onto it
+    # (Boston's border dedup).
+    assert where(published_target(code)).startswith("tree_id = cluster_id"), (
         f"{code}'s published target has no `where tree_id = cluster_id`, so it "
         "publishes the rows its clusters absorbed"
     )
@@ -243,14 +287,39 @@ def test_every_city_drops_trees_reported_gone(code: str):
     stored column.  A city missing either half publishes removed trees without
     any error.
     """
-    text = city_models()[code].read_text(encoding="utf-8")
-    target = re.search(r"^partial datasource \w+_tree_info \((.*?)^\)", text, re.S | re.M)
-    assert target and re.search(r"^\s*reported_missing,\s*$", target.group(1), re.M), (
+    target = published_target(code)
+    assert "reported_missing" in stored(target), (
         f"{code}'s published target does not store reported_missing"
     )
-    assert re.search(r"\nwhere tree_id = cluster_id[^\n]* and reported_missing = false\n", text), (
+    assert "reported_missing = False" in where(target).split(" and "), (
         f"{code}'s published target does not drop trees an approved report says are gone"
     )
+
+
+@pytest.mark.parametrize("code", sorted(MUNICIPAL_DATA_SOURCES))
+def test_every_city_refuses_a_collapsed_build(code: str):
+    """A build that lost a quarter of a city, or of one of its bulk sources,
+    is refused and the published parquet kept.
+
+    On 2026-10-13 Bogotá's portal served 100 rows instead of ~1.47M and a run
+    published them.  The total comes from the template; the per-source checks
+    are the city's own, because only the city names its source enum, so a
+    label added to the enum without its check is what this catches.  Community
+    and satellite labels are left out on purpose: their rows are few and can
+    all be absorbed by the inventory in one build (see `kept` in core.preql).
+    """
+    from trilogy.parsing.render import Renderer
+
+    lower = code.lower()
+    rendered = {
+        Renderer().to_string(a.condition) for a in published_target(code).assertions
+    }
+    expected = {"@kept(tree_id, 0.75)"} | {
+        f"@source_kept(tree_id, {lower}_source, '{label}', 0.75)"
+        for label in enum_values(city_models()[code])
+        if not label.startswith(("COMMUNITY_", "SATELLITE_"))
+    }
+    assert expected <= rendered, f"{code} is missing {sorted(expected - rendered)}"
 
 
 @pytest.mark.parametrize("code", sorted(MUNICIPAL_DATA_SOURCES))
@@ -282,12 +351,7 @@ def test_every_city_publishes_cluster_id(code: str):
     reach for, and a city whose parquet does not match the others is a
     difference nobody chose.
     """
-    text = city_models()[code].read_text(encoding="utf-8")
-    target = re.search(
-        r"^partial datasource \w+_tree_info \((.*?)^\)", text, re.S | re.M
-    )
-    assert target, f"{code} has no published tree target"
-    assert re.search(r"^\s*cluster_id,\s*$", target.group(1), re.M), (
+    assert "cluster_id" in stored(published_target(code)), (
         f"{code}'s published target does not project cluster_id, so its parquet "
         "will have a different column set from every other city's and the "
         "rollup's multi-file scan will fail"
@@ -340,20 +404,23 @@ def test_city_feeds_the_shared_cluster_merge(code: str):
     assert f"merge {lower}_source_label into source_label;" in text, (
         f"{code} does not feed source_label; the shared merge cannot classify its rows"
     )
+    partitions = raw_partitions(code)
+    assert partitions, f"{code} declares no raw sources"
     for attr, raw in RAW_ATTRIBUTES.items():
-        assert re.search(rf"^\s+\w+: \??{attr},$", text, re.M) is None, (
-            f"{code} maps {attr} straight onto the canonical concept; map "
-            f"{raw} and let tree_dedup.preql derive it"
-        )
-        assert re.search(rf"^\s+\w+: \??{raw},$", text, re.M), (
+        for partition in partitions:
+            assert attr not in stored(partition), (
+                f"{code}'s {partition.name} maps {attr} straight onto the "
+                f"canonical concept; map {raw} and let tree_dedup.preql derive it"
+            )
+        assert any(raw in stored(p) for p in partitions), (
             f"{code} never maps {raw}, so the merge has nothing to pick from"
         )
     dbh_merge = "processed_dbh" if code == "USBOS" else "merged_dbh"
     assert f"merge {dbh_merge} into diameter_at_breast_height;" in text, (
         f"{code} does not merge {dbh_merge} into diameter_at_breast_height"
     )
-    for column in ("    merged_sources,", "    ?merged_tree_ids,"):
-        assert column in text, f"{code} does not publish {column.strip()}"
+    for column in ("merged_sources", "merged_tree_ids"):
+        assert column in stored(published_target(code)), f"{code} does not publish {column}"
 
 
 def test_shared_dedup_merges_every_attribute_but_dbh_and_position():

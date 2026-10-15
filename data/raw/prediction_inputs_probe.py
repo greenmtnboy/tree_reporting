@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "pytrilogy", "requests"]
+# dependencies = ["pyarrow", "pytrilogy>=0.3.391", "requests"]
 # ///
 """Freshness probe for tree_predictions: when either of its inputs last published.
 

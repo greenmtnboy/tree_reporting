@@ -30,453 +30,179 @@ root datasource published_tree_predictions (
 grain (tree_id)
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_predictions_v{data_version}.parquet`;
 
-partial datasource arbue_tree_predictions (
+# Every slice is this, scoped to one city and written to its own file.  A
+# slice that would lose a quarter of its city's rows is refused, keeping the
+# published one (`kept`, core.preql).
+template datasource city_tree_predictions (
     tree_id,
     city,
     predicted_crown_width_m: ?published_crown_width_m,
     prediction_inputs_published_through: published_prediction_inputs_through,
 )
 grain (tree_id)
+freshness by published_prediction_inputs_through
+assert @kept(tree_id, 0.75);
+
+partial datasource arbue_tree_predictions extends city_tree_predictions ()
 complete where city = 'ARBUE'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/arbue_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/arbue_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/arbue_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/arbue_tree_predictions_v{data_version}.parquet`;
 
-partial datasource aumel_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource aumel_tree_predictions extends city_tree_predictions ()
 complete where city = 'AUMEL'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aumel_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/aumel_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aumel_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/aumel_tree_predictions_v{data_version}.parquet`;
 
-partial datasource caajx_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource caajx_tree_predictions extends city_tree_predictions ()
 complete where city = 'CAAJX'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caajx_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caajx_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caajx_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caajx_tree_predictions_v{data_version}.parquet`;
 
-partial datasource cabur_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource cabur_tree_predictions extends city_tree_predictions ()
 complete where city = 'CABUR'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cabur_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cabur_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cabur_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cabur_tree_predictions_v{data_version}.parquet`;
 
-partial datasource cacal_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource cacal_tree_predictions extends city_tree_predictions ()
 complete where city = 'CACAL'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cacal_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cacal_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cacal_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cacal_tree_predictions_v{data_version}.parquet`;
 
-partial datasource caedm_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource caedm_tree_predictions extends city_tree_predictions ()
 complete where city = 'CAEDM'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caedm_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caedm_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caedm_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caedm_tree_predictions_v{data_version}.parquet`;
 
-partial datasource cahfx_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource cahfx_tree_predictions extends city_tree_predictions ()
 complete where city = 'CAHFX'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cahfx_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cahfx_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cahfx_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cahfx_tree_predictions_v{data_version}.parquet`;
 
-partial datasource cakel_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource cakel_tree_predictions extends city_tree_predictions ()
 complete where city = 'CAKEL'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cakel_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cakel_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cakel_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cakel_tree_predictions_v{data_version}.parquet`;
 
-partial datasource cakgn_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource cakgn_tree_predictions extends city_tree_predictions ()
 complete where city = 'CAKGN'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cakgn_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cakgn_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cakgn_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cakgn_tree_predictions_v{data_version}.parquet`;
 
-partial datasource calet_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource calet_tree_predictions extends city_tree_predictions ()
 complete where city = 'CALET'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/calet_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/calet_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/calet_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/calet_tree_predictions_v{data_version}.parquet`;
 
-partial datasource calon_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource calon_tree_predictions extends city_tree_predictions ()
 complete where city = 'CALON'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/calon_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/calon_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/calon_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/calon_tree_predictions_v{data_version}.parquet`;
 
-partial datasource camis_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource camis_tree_predictions extends city_tree_predictions ()
 complete where city = 'CAMIS'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camis_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/camis_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camis_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/camis_tree_predictions_v{data_version}.parquet`;
 
-partial datasource camon_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource camon_tree_predictions extends city_tree_predictions ()
 complete where city = 'CAMON'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camon_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/camon_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camon_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/camon_tree_predictions_v{data_version}.parquet`;
 
-partial datasource camtl_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource camtl_tree_predictions extends city_tree_predictions ()
 complete where city = 'CAMTL'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camtl_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/camtl_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camtl_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/camtl_tree_predictions_v{data_version}.parquet`;
 
-partial datasource canwe_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource canwe_tree_predictions extends city_tree_predictions ()
 complete where city = 'CANWE'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/canwe_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/canwe_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/canwe_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/canwe_tree_predictions_v{data_version}.parquet`;
 
-partial datasource caott_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource caott_tree_predictions extends city_tree_predictions ()
 complete where city = 'CAOTT'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caott_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caott_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caott_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caott_tree_predictions_v{data_version}.parquet`;
 
-partial datasource caque_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource caque_tree_predictions extends city_tree_predictions ()
 complete where city = 'CAQUE'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caque_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caque_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caque_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caque_tree_predictions_v{data_version}.parquet`;
 
-partial datasource cator_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource cator_tree_predictions extends city_tree_predictions ()
 complete where city = 'CATOR'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cator_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cator_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cator_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cator_tree_predictions_v{data_version}.parquet`;
 
-partial datasource cavan_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource cavan_tree_predictions extends city_tree_predictions ()
 complete where city = 'CAVAN'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavan_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cavan_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavan_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cavan_tree_predictions_v{data_version}.parquet`;
 
-partial datasource cavic_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource cavic_tree_predictions extends city_tree_predictions ()
 complete where city = 'CAVIC'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavic_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cavic_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavic_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cavic_tree_predictions_v{data_version}.parquet`;
 
-partial datasource cawpg_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource cawpg_tree_predictions extends city_tree_predictions ()
 complete where city = 'CAWPG'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cawpg_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cawpg_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cawpg_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cawpg_tree_predictions_v{data_version}.parquet`;
 
-partial datasource cobog_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource cobog_tree_predictions extends city_tree_predictions ()
 complete where city = 'COBOG'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cobog_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cobog_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cobog_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cobog_tree_predictions_v{data_version}.parquet`;
 
-partial datasource deber_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource deber_tree_predictions extends city_tree_predictions ()
 complete where city = 'DEBER'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/deber_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/deber_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/deber_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/deber_tree_predictions_v{data_version}.parquet`;
 
-partial datasource dkcph_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource dkcph_tree_predictions extends city_tree_predictions ()
 complete where city = 'DKCPH'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/dkcph_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/dkcph_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/dkcph_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/dkcph_tree_predictions_v{data_version}.parquet`;
 
-partial datasource fihel_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource fihel_tree_predictions extends city_tree_predictions ()
 complete where city = 'FIHEL'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/fihel_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/fihel_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/fihel_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/fihel_tree_predictions_v{data_version}.parquet`;
 
-partial datasource frpar_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource frpar_tree_predictions extends city_tree_predictions ()
 complete where city = 'FRPAR'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frpar_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/frpar_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frpar_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/frpar_tree_predictions_v{data_version}.parquet`;
 
-partial datasource gblon_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource gblon_tree_predictions extends city_tree_predictions ()
 complete where city = 'GBLON'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gblon_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/gblon_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gblon_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/gblon_tree_predictions_v{data_version}.parquet`;
 
-partial datasource grath_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource grath_tree_predictions extends city_tree_predictions ()
 complete where city = 'GRATH'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grath_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grath_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grath_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grath_tree_predictions_v{data_version}.parquet`;
 
-partial datasource grmlo_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource grmlo_tree_predictions extends city_tree_predictions ()
 complete where city = 'GRMLO'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grmlo_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grmlo_tree_predictions_v{data_version}.parquet`;
 
-partial datasource grsan_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource grsan_tree_predictions extends city_tree_predictions ()
 complete where city = 'GRSAN'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grsan_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grsan_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grsan_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grsan_tree_predictions_v{data_version}.parquet`;
 
-partial datasource jptyo_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource jptyo_tree_predictions extends city_tree_predictions ()
 complete where city = 'JPTYO'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/jptyo_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/jptyo_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/jptyo_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/jptyo_tree_predictions_v{data_version}.parquet`;
 
-partial datasource nlams_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource nlams_tree_predictions extends city_tree_predictions ()
 complete where city = 'NLAMS'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlams_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/nlams_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlams_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/nlams_tree_predictions_v{data_version}.parquet`;
 
-partial datasource twtpe_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource twtpe_tree_predictions extends city_tree_predictions ()
 complete where city = 'TWTPE'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/twtpe_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/twtpe_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/twtpe_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/twtpe_tree_predictions_v{data_version}.parquet`;
 
-partial datasource usbos_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource usbos_tree_predictions extends city_tree_predictions ()
 complete where city = 'USBOS'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbos_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbos_tree_predictions_v{data_version}.parquet`;
 
-partial datasource usbtv_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource usbtv_tree_predictions extends city_tree_predictions ()
 complete where city = 'USBTV'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbtv_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbtv_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbtv_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbtv_tree_predictions_v{data_version}.parquet`;
 
-partial datasource usden_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource usden_tree_predictions extends city_tree_predictions ()
 complete where city = 'USDEN'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usden_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usden_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usden_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usden_tree_predictions_v{data_version}.parquet`;
 
-partial datasource uslax_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource uslax_tree_predictions extends city_tree_predictions ()
 complete where city = 'USLAX'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslax_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uslax_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslax_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uslax_tree_predictions_v{data_version}.parquet`;
 
-partial datasource usnyc_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource usnyc_tree_predictions extends city_tree_predictions ()
 complete where city = 'USNYC'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnyc_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnyc_tree_predictions_v{data_version}.parquet`;
 
-partial datasource ussfo_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource ussfo_tree_predictions extends city_tree_predictions ()
 complete where city = 'USSFO'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ussfo_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ussfo_tree_predictions_v{data_version}.parquet`;
 
-partial datasource ustem_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource ustem_tree_predictions extends city_tree_predictions ()
 complete where city = 'USTEM'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ustem_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ustem_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ustem_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ustem_tree_predictions_v{data_version}.parquet`;
 
-partial datasource uswas_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource uswas_tree_predictions extends city_tree_predictions ()
 complete where city = 'USWAS'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uswas_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uswas_tree_predictions_v{data_version}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uswas_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uswas_tree_predictions_v{data_version}.parquet`;

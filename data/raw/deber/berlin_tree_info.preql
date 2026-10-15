@@ -65,39 +65,16 @@ file `./berlin_osm_probe.py`;
 # Overpass -- extraction is decoupled from refresh (see shared/osm.py and
 # EXTENDING.md).  Overlapping rows are resolved by the
 # shared cluster merge (../tree_dedup.preql).
-root partial datasource deber_osm_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource deber_osm_tree_info extends tree_partition (
     data_source: deber_source,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'DEBER' and deber_source = 'OSM_DEBER'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/deber_osm_staging.parquet`;
 
-root partial datasource berlin_raw_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource berlin_raw_tree_info extends tree_partition (
     data_source: deber_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'DEBER' and deber_source = 'BERLIN_OPENDATA'
 file `./berlin_tree_info.py`;
 
@@ -105,21 +82,9 @@ file `./berlin_tree_info.py`;
 # Approved community submissions for this city. The shared ingest script
 # emits every city's rows; the `complete where` clause narrows it to DEBER
 # and makes it a disjoint partition alongside berlin_raw_tree_info.
-root partial datasource deber_community_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource deber_community_tree_info extends tree_partition (
     data_source: deber_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'DEBER' and deber_source = 'COMMUNITY_DEBER'
 file `../community_tree_info.py`
 where city = 'DEBER';
@@ -143,27 +108,12 @@ merge merged_longitude into longitude;
 # its cluster, so the parquet holds exactly one tree per row.  It needs
 # pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
 # ../tree_dedup.preql.
-partial datasource berlin_tree_info (
-    tree_id,
-    city,
+partial datasource berlin_tree_info extends published_tree_info (
     data_source: deber_source,
-    species,
-    ?tree_name,
-    ?plant_date,
-    ?diameter_at_breast_height,
-    ?latitude,
-    ?longitude,
-    ?submission_photo_url,
-    ?cultivar,
-    ?crown_width_m,
-    cluster_id,
-    merged_sources,
-    ?merged_tree_ids,
-    reported_missing,
     deber_published_data_updated_through,
 )
-grain (tree_id)
 complete where city = 'DEBER'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/deber_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/deber_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id and reported_missing = false
-freshness by deber_published_data_updated_through;
+freshness by deber_published_data_updated_through
+assert @source_kept(tree_id, deber_source, 'BERLIN_OPENDATA', 0.75)
+assert @source_kept(tree_id, deber_source, 'OSM_DEBER', 0.75);

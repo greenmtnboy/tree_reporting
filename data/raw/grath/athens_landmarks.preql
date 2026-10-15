@@ -12,26 +12,14 @@ file `./athens_landmarks_probe.py`;
 # `landmarks-grath` cloud job publishes from the committed CSV (see
 # landmark_staging/grath_landmarks_staging.preql); firing that job is what
 # marks this city's landmark Parquet stale.
-root partial datasource raw_athens_landmark_info (
-    landmark_id: landmark_id,
-    city: city,
-    name: name,
-    geometry_raw: ?geometry_raw,
+root partial datasource raw_athens_landmark_info extends landmark_partition (
 )
-grain (landmark_id)
 complete where city = 'GRATH'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grath_landmarks_staging.parquet`;
 
-partial datasource athens_landmark_info (
-    landmark_id,
-    city,
-    name,
-    ?geometry,
-    ?latitude,
-    ?longitude,
+partial datasource athens_landmark_info extends published_landmark_info (
     grath_landmark_data_updated_through,
 )
-grain (landmark_id)
 complete where city = 'GRATH'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/grath_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/grath_landmark_info_v{data_version}.parquet`
 freshness by grath_landmark_data_updated_through;

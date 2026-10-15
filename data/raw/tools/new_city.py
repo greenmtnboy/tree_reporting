@@ -185,21 +185,12 @@ root datasource {lc}_osm_update_time (
 )
 file `./{slug}_osm_probe.py`;
 
-root partial datasource {slug}_raw_tree_info (
-    tree_id: tree_id,
-    city: city,
+# Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
+# the shared raw_* columns; a source that names a column differently re-binds
+# it here (`dbh: ?raw_dbh`).
+root partial datasource {slug}_raw_tree_info extends tree_partition (
     data_source: {lc}_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = '{code}' and {lc}_source = '{source}'
 file `./{slug}_tree_info.py`;
 
@@ -208,21 +199,9 @@ file `./{slug}_tree_info.py`;
 # every city's rows; the `complete where` clause narrows it to {code} and makes
 # it a disjoint partition, and the `where` clause is what actually filters --
 # `complete where` asserts, it does not promise a predicate.
-root partial datasource {lc}_community_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource {lc}_community_tree_info extends tree_partition (
     data_source: {lc}_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = '{code}' and {lc}_source = 'COMMUNITY_{code}'
 file `../community_tree_info.py`
 where city = '{code}';
@@ -231,21 +210,9 @@ where city = '{code}';
 # OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
 # -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
 # by construction; the overlap is resolved by ../tree_dedup.preql.
-root partial datasource {lc}_osm_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource {lc}_osm_tree_info extends tree_partition (
     data_source: {lc}_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = '{code}' and {lc}_source = 'OSM_{code}'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/{lc}_osm_staging.parquet`;
 
@@ -263,40 +230,20 @@ merge merged_latitude into latitude;
 merge merged_longitude into longitude;
 
 
-partial datasource {slug}_tree_info (
-    tree_id,
-    city,
+# The published target extends ../tree_dedup.preql's `published_tree_info`:
+# the canonical columns, the prune, and the guard that refuses a build which
+# lost a quarter of the city.  The two `@source_kept` lines are the same guard
+# per bulk source; add one for every municipal or OSM label in the enum
+# (`test_every_city_refuses_a_collapsed_build`).
+partial datasource {slug}_tree_info extends published_tree_info (
     data_source: {lc}_source,
-    species,
-    ?tree_name,
-    ?plant_date,
-    ?diameter_at_breast_height,
-    ?latitude,
-    ?longitude,
-    ?submission_photo_url,
-    ?cultivar,
-    ?crown_width_m,
-    # Redundant on its face -- the prune below means it always equals tree_id --
-    # and dropped from this template for exactly that reason, which is how the
-    # first three cities scaffolded from it came out with fourteen columns
-    # where every other city has fifteen.  The rollup reads them all as one
-    # DuckDB multi-file scan; it projects only the shared columns, so a ragged
-    # set does not fail it, but `select *` over that scan silently drops the
-    # column when a short file is read first and raises when a long one is.
-    # It is also the column any check of the prune reads.  Keep it.
-    # `test_every_city_publishes_cluster_id` pins it and spells out the
-    # measured behaviour.
-    cluster_id,
-    merged_sources,
-    ?merged_tree_ids,
-    reported_missing,
     {lc}_published_data_updated_through,
 )
-grain (tree_id)
 complete where city = '{code}'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{lc}_tree_info_v{{data_version}}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{lc}_tree_info_v{{data_version}}.parquet`
-where tree_id = cluster_id and reported_missing = false
-freshness by {lc}_published_data_updated_through;
+freshness by {lc}_published_data_updated_through
+assert @source_kept(tree_id, {lc}_source, '{source}', 0.75)
+assert @source_kept(tree_id, {lc}_source, 'OSM_{code}', 0.75);
 '''
 
 TREE_INGEST = '''#!/usr/bin/env -S uv run
@@ -500,44 +447,14 @@ OSM_STAGING_MODEL = '''# Scheduled OSM extraction for {name}, run by the `osm-{l
 
 import staging_common;
 
-root datasource {lc}_osm_rows (
-    tree_id: tree_id,
-    city: city,
-    data_source: data_source,
-    species: ?species,
-    cultivar: ?cultivar,
-    crown_width_m: ?crown_width_m,
-    tree_name: ?tree_name,
-    plant_date: ?plant_date,
-    latitude: ?latitude,
-    longitude: ?longitude,
-    diameter_at_breast_height: ?diameter_at_breast_height,
-    submission_photo_url: ?submission_photo_url,
-    osm_ref: ?osm_ref,
+root datasource {lc}_osm_rows extends osm_rows (
 )
-grain (tree_id)
 file `./osm_rows.py`
 where city = '{code}';
 
-datasource {lc}_osm_staging (
-    tree_id,
-    city,
-    data_source,
-    ?species,
-    ?cultivar,
-    ?crown_width_m,
-    ?tree_name,
-    ?plant_date,
-    ?latitude,
-    ?longitude,
-    ?diameter_at_breast_height,
-    ?submission_photo_url,
-    ?osm_ref,
-    osm_extracted_through,
+datasource {lc}_osm_staging extends osm_staging (
 )
-grain (tree_id)
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/{lc}_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/{lc}_osm_staging.parquet`
-freshness by osm_extracted_through;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/{lc}_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/{lc}_osm_staging.parquet`;
 '''
 
 LANDMARK_MODEL = '''import ..landmark_common;
@@ -555,26 +472,17 @@ file `./{slug}_landmarks_probe.py`;
 # order: an official designation registry, the same portal as the trees, an
 # Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
 # geocoded via Nominatim (then add a `landmarks-{lc}` job with NO cron).
-root partial datasource raw_{slug}_landmark_info (
-    landmark_id: landmark_id,
-    city: city,
-    name: name,
-    geometry_raw: ?geometry_raw,
+#
+# Both datasources extend ../landmark_common.preql's templates: add the
+# register's own attributes to both, mapped in one and stored in the other.
+root partial datasource raw_{slug}_landmark_info extends landmark_partition (
 )
-grain (landmark_id)
 complete where city = '{code}'
 file `./{slug}_landmarks.py`;
 
-partial datasource {slug}_landmark_info (
-    landmark_id,
-    city,
-    name,
-    ?geometry,
-    ?latitude,
-    ?longitude,
+partial datasource {slug}_landmark_info extends published_landmark_info (
     {lc}_landmark_data_updated_through,
 )
-grain (landmark_id)
 complete where city = '{code}'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/{lc}_landmark_info_v{{data_version}}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/{lc}_landmark_info_v{{data_version}}.parquet`
 freshness by {lc}_landmark_data_updated_through;
@@ -756,18 +664,11 @@ def build(args) -> Edits:
     )
     e.sub_once(
         RAW / "tree_predictions_city.preql",
-        r"(freshness by published_prediction_inputs_through;\n)\Z",
+        r"(_tree_predictions_v\{data_version\}\.parquet`;\n)\Z",
         rf"""\1
-partial datasource {lc}_tree_predictions (
-    tree_id,
-    city,
-    predicted_crown_width_m: ?published_crown_width_m,
-    prediction_inputs_published_through: published_prediction_inputs_through,
-)
-grain (tree_id)
+partial datasource {lc}_tree_predictions extends city_tree_predictions ()
 complete where city = '{code}'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{lc}_tree_predictions_v{{data_version}}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{lc}_tree_predictions_v{{data_version}}.parquet`
-freshness by published_prediction_inputs_through;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{lc}_tree_predictions_v{{data_version}}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{lc}_tree_predictions_v{{data_version}}.parquet`;
 """,
         what="crown predictions slice", marker=f"datasource {lc}_tree_predictions",
     )

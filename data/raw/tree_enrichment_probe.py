@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["duckdb","pytrilogy"]
+# dependencies = ["duckdb","pytrilogy>=0.3.391"]
 # ///
 # Freshness probe for tree_enrichment datasource.
 # Prints "true" if every species in tree_info is completely enriched, "false" otherwise.

@@ -66,39 +66,16 @@ file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbtv_
 # Overpass -- extraction is decoupled from refresh (see shared/osm.py and
 # EXTENDING.md).  Overlapping rows are resolved by the
 # shared cluster merge (../tree_dedup.preql).
-root partial datasource usbtv_osm_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource usbtv_osm_tree_info extends tree_partition (
     data_source: usbtv_source,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USBTV' and usbtv_source = 'OSM_USBTV'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbtv_osm_staging.parquet`;
 
-root partial datasource burlington_raw_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource burlington_raw_tree_info extends tree_partition (
     data_source: usbtv_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USBTV' and usbtv_source = 'BURLINGTON_OPENDATA'
 file `./burlington_tree_info.py`;
 
@@ -106,21 +83,9 @@ file `./burlington_tree_info.py`;
 # Approved community submissions for this city. The shared ingest script
 # emits every city's rows; the `complete where` clause narrows it to USBTV
 # and makes it a disjoint partition alongside burlington_raw_tree_info.
-root partial datasource usbtv_community_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource usbtv_community_tree_info extends tree_partition (
     data_source: usbtv_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USBTV' and usbtv_source = 'COMMUNITY_USBTV'
 file `../community_tree_info.py`
 where city = 'USBTV';
@@ -142,31 +107,16 @@ merge merged_dbh into diameter_at_breast_height;
 # its cluster, so the parquet holds exactly one tree per row.  It needs
 # pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
 # ../tree_dedup.preql.
-partial datasource burlington_tree_info (
-    tree_id,
-    city,
+partial datasource burlington_tree_info extends published_tree_info (
     data_source: usbtv_source,
-    species,
-    ?tree_name,
-    ?plant_date,
-    ?diameter_at_breast_height,
-    ?latitude,
-    ?longitude,
-    ?submission_photo_url,
-    ?cultivar,
-    ?crown_width_m,
-    cluster_id,
-    merged_sources,
-    ?merged_tree_ids,
-    reported_missing,
     ?source_latitude,
     ?source_longitude,
     ?position_adjustment,
     ?position_shift_m,
     usbtv_published_data_updated_through,
 )
-grain (tree_id)
 complete where city = 'USBTV'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbtv_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbtv_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id and reported_missing = false
-freshness by usbtv_published_data_updated_through;
+freshness by usbtv_published_data_updated_through
+assert @source_kept(tree_id, usbtv_source, 'BURLINGTON_OPENDATA', 0.75)
+assert @source_kept(tree_id, usbtv_source, 'OSM_USBTV', 0.75);

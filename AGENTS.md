@@ -37,7 +37,7 @@ pnpm test:queries    # compiles and executes the whole dashboard catalog against
 pnpm bench:chat      # the agent chat benchmark; spends the demo model budget, run by hand
 
 # data, from data/raw
-uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.378" --with duckdb --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
+uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.391" --with duckdb --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql   # must report exactly one asset
 ```
 
@@ -52,6 +52,7 @@ The reference for each is `docs/DATA_PIPELINE.md`.
 - **Do not hand-write a city addition.** `data/raw/tools/new_city.py` writes the registry edits and `test_city_wiring.py` names what is still missing; the judgement steps (field mapping, freshness probe, landmarks, dedup cell size) are in `EXTENDING.md`.
 - **Do not work around a planner bug in a query.** File a repro under `upstream_repro/` (gitignored) and let the test stay red; see `docs/TESTING.md`.
 - **The chat's `imports` decide what the browser downloads.** Both screens must reach a tree datasource; `dashboard-pushdown.test.ts` pins it.
+- **City datasources extend shared templates, and every published parquet is guarded.** Partitions extend `tree_partition`, targets `published_tree_info` (`tree_dedup.preql`); landmarks, OSM staging and crown slices have theirs. Each target carries `assert` ratio guards (`kept`, `source_kept` in `core.preql`) that refuse a build losing a quarter of its rows; use a ratio, never a hardcoded row floor. Tests read a model's composed datasources by parsing it (`parsed()` in `test_data_sources.py`), not by grepping the text.
 - **Every city has exactly one position policy.** A city imports `tree_position` (Overture lookup, corrected `latitude`/`longitude`, `source_*` kept) or merges `merged_latitude`/`merged_longitude` itself; `tree_dedup` merges neither. The grid key is derived in `tree_position.preql` from the row's own coordinates (pytrilogy 0.3.360+), not stamped on the rows; see `docs/POSITION_CORRECTION.md`.
 
 ## Where to read next

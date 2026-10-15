@@ -218,13 +218,16 @@ def iter_rows(
       about the order of an unordered result, so `$offset` paging over one may
       repeat or skip rows between requests — and a short page from that ends
       the loop early, which is a silently truncated city that looks exactly
-      like a portal publishing less.  New York's ingest pages by `$offset`
-      today with no `$order` at all.  Passing an empty string is refused, the
+      like a portal publishing less.  Passing an empty string is refused, the
       same way `shared.platforms.arcgis.iter_features` refuses an empty `order_by`.
-    * **Termination is on a short page**, which is exact here in a way it is
-      not on ArcGIS: `$limit` is a promise Socrata keeps unless the data ran
-      out, and there is no server-side cap quietly rewriting it (a request for
-      more than the dataset holds returns the dataset, not an error).
+    * **Termination is on a short page, and is then checked against
+      `count(*)`.**  There is no server-side cap rewriting `$limit` (a request
+      for more than the dataset holds returns the dataset), but a page can
+      still come back short without an error: New York's ingest, which pages
+      the same way, published exactly 750,000 of 1,123,163 rows for five days
+      in October 2026.  The count is read before the first page; fewer rows
+      fetched than it reported raises `UpstreamUnavailable` after the last
+      page, which fails the build and keeps the published parquet.
 
     Every value in a returned dict is a **string** — see the module docstring.
     """
@@ -234,6 +237,7 @@ def iter_rows(
             "result can repeat or skip rows, which truncates a city silently"
         )
     headers = app_token_headers() or None
+    expected = row_count(dataset, where=where)
     offset = 0
     while True:
         params = {
@@ -254,12 +258,16 @@ def iter_rows(
             timeout=dataset.timeout,
             headers=headers,
         )
-        if not page:
-            return
-        yield page
+        if page:
+            yield page
+            offset += len(page)
         if len(page) < page_size:
-            return
-        offset += len(page)
+            break
+    if offset < expected:
+        raise UpstreamUnavailable(
+            f"{dataset.landing_url}: paging returned {offset:,} rows of the "
+            f"{expected:,} count(*) reported; a page came back short"
+        )
 
 
 # ---------------------------------------------------------------------------

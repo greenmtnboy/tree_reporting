@@ -45,21 +45,10 @@ file `./sf_osm_probe.py`;
 # Overpass -- extraction is decoupled from refresh (see shared/osm.py and
 # EXTENDING.md).  Overlapping rows are resolved by the
 # shared cluster merge (../tree_dedup.preql).
-root partial datasource ussfo_osm_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource ussfo_osm_tree_info extends tree_partition (
     data_source: ussfo_source,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USSFO' and ussfo_source = 'OSM_USSFO'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ussfo_osm_staging.parquet`;
 
@@ -68,21 +57,9 @@ file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ussfo_
 # It used to emit the portal's own spelling (treeid, qspecies, plantdate, dbh)
 # and lean on this block to rename them; that ended when the portal renamed
 # every one of those columns out from under us.
-root partial datasource sf_raw_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource sf_raw_tree_info extends tree_partition (
     data_source: ussfo_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USSFO' and ussfo_source = 'SF_OPENDATA'
 file `./sf_tree_info.py`;
 
@@ -90,21 +67,9 @@ file `./sf_tree_info.py`;
 # Approved community submissions for this city. The shared ingest script emits
 # every city's rows; the `complete where` clause is what narrows it to SF and
 # makes this a disjoint partition alongside sf_raw_tree_info.
-root partial datasource sf_community_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource sf_community_tree_info extends tree_partition (
     data_source: ussfo_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USSFO' and ussfo_source = 'COMMUNITY_USSFO'
 file `../community_tree_info.py`
 where city = 'USSFO';
@@ -114,21 +79,9 @@ where city = 'USSFO';
 # an inventory tree arrives at that tree's coordinates, so the shared cluster
 # merge absorbs it; an unlinked one publishes as its own tree until the
 # inventory catches up.  See ../satellite_tree_info.py.
-root partial datasource ussfo_satellite_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource ussfo_satellite_tree_info extends tree_partition (
     data_source: ussfo_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'USSFO' and ussfo_source = 'SATELLITE_USSFO'
 file `../satellite_tree_info.py`
 where city = 'USSFO';
@@ -152,27 +105,12 @@ merge merged_longitude into longitude;
 # its cluster, so the parquet holds exactly one tree per row.  It needs
 # pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
 # ../tree_dedup.preql.
-partial datasource sf_tree_info (
-    tree_id,
-    city,
+partial datasource sf_tree_info extends published_tree_info (
     data_source: ussfo_source,
-    species,
-    ?tree_name,
-    ?plant_date,
-    ?diameter_at_breast_height,
-    ?latitude,
-    ?longitude,
-    ?submission_photo_url,
-    ?cultivar,
-    ?crown_width_m,
-    cluster_id,
-    merged_sources,
-    ?merged_tree_ids,
-    reported_missing,
     ussfo_published_data_updated_through,
 )
-grain (tree_id)
 complete where city = 'USSFO'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ussfo_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id and reported_missing = false
-freshness by ussfo_published_data_updated_through;
+freshness by ussfo_published_data_updated_through
+assert @source_kept(tree_id, ussfo_source, 'SF_OPENDATA', 0.75)
+assert @source_kept(tree_id, ussfo_source, 'OSM_USSFO', 0.75);

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["duckdb", "pyarrow", "pytrilogy", "requests"]
+# dependencies = ["duckdb", "pyarrow", "pytrilogy>=0.3.391", "requests"]
 # ///
 """City rankings over published, deduplicated inventories. Emits Arrow IPC.
 

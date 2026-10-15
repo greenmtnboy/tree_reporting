@@ -43,42 +43,19 @@ file `./milos_osm_probe.py`;
 # Overpass -- extraction is decoupled from refresh (see shared/osm.py and
 # EXTENDING.md).  Overlapping rows are resolved by the
 # shared cluster merge (../tree_dedup.preql).
-root partial datasource grmlo_osm_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource grmlo_osm_tree_info extends tree_partition (
     data_source: grmlo_source,
     species: ?raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    diameter_at_breast_height: ?raw_dbh,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'GRMLO' and grmlo_source = 'OSM_GRMLO'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grmlo_osm_staging.parquet`;
 
 # Approved community submissions for this city. The shared ingest script
 # emits every city's rows; the `where` clause narrows it to GRMLO and the
 # `complete where` makes it a disjoint partition alongside the OSM staging.
-root partial datasource grmlo_community_tree_info (
-    tree_id: tree_id,
-    city: city,
+root partial datasource grmlo_community_tree_info extends tree_partition (
     data_source: grmlo_source,
-    species: raw_species,
-    tree_name: ?raw_tree_name,
-    plant_date: ?raw_plant_date,
-    diameter_at_breast_height: ?raw_dbh,
-    latitude: ?raw_latitude,
-    longitude: ?raw_longitude,
-    submission_photo_url: ?raw_photo_url,
-    cultivar: ?raw_cultivar,
-    crown_width_m: ?raw_crown_width_m,
 )
-grain (tree_id)
 complete where city = 'GRMLO' and grmlo_source = 'COMMUNITY_GRMLO'
 file `../community_tree_info.py`
 where city = 'GRMLO';
@@ -101,27 +78,11 @@ merge merged_longitude into longitude;
 # its cluster, so the parquet holds exactly one tree per row.  It needs
 # pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
 # ../tree_dedup.preql.
-partial datasource milos_tree_info (
-    tree_id,
-    city,
+partial datasource milos_tree_info extends published_tree_info (
     data_source: grmlo_source,
-    species,
-    ?tree_name,
-    ?plant_date,
-    ?diameter_at_breast_height,
-    ?latitude,
-    ?longitude,
-    ?submission_photo_url,
-    ?cultivar,
-    ?crown_width_m,
-    cluster_id,
-    merged_sources,
-    ?merged_tree_ids,
-    reported_missing,
     grmlo_published_data_updated_through,
 )
-grain (tree_id)
 complete where city = 'GRMLO'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grmlo_tree_info_v{data_version}.parquet`
-where tree_id = cluster_id and reported_missing = false
-freshness by grmlo_published_data_updated_through;
+freshness by grmlo_published_data_updated_through
+assert @source_kept(tree_id, grmlo_source, 'OSM_GRMLO', 0.75);

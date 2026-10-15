@@ -10,26 +10,14 @@ file `./milos_landmarks_probe.py`;
 # which the ad-hoc `landmarks-grmlo` cloud job publishes from the committed
 # CSV (see landmark_staging/grmlo_landmarks_staging.preql); firing that job
 # is what marks this city's landmark Parquet stale.
-root partial datasource raw_milos_landmark_info (
-    landmark_id: landmark_id,
-    city: city,
-    name: name,
-    geometry_raw: ?geometry_raw,
+root partial datasource raw_milos_landmark_info extends landmark_partition (
 )
-grain (landmark_id)
 complete where city = 'GRMLO'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grmlo_landmarks_staging.parquet`;
 
-partial datasource milos_landmark_info (
-    landmark_id,
-    city,
-    name,
-    ?geometry,
-    ?latitude,
-    ?longitude,
+partial datasource milos_landmark_info extends published_landmark_info (
     grmlo_landmark_data_updated_through,
 )
-grain (landmark_id)
 complete where city = 'GRMLO'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/grmlo_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/grmlo_landmark_info_v{data_version}.parquet`
 freshness by grmlo_landmark_data_updated_through;

@@ -60,3 +60,50 @@ root datasource overpass_timestamp (
     data_updated_through: osm_extracted_through
 )
 file `./overpass_timestamp.py`;
+
+# The two datasources every extract model declares.  A city's model extends
+# them, adding its `file` and `where city = '<CODE>'` -- and `borough` where
+# its city partitions carry one (see cobog_osm_staging.preql).
+template datasource osm_rows (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: ?species,
+    cultivar: ?cultivar,
+    crown_width_m: ?crown_width_m,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    submission_photo_url: ?submission_photo_url,
+    osm_ref: ?osm_ref,
+)
+grain (tree_id);
+
+# An Overpass answer can be cut short (a timeout or a memory limit comes back
+# as a 200 with a truncated body and a `remark`), and an extract that lost a
+# quarter of its city's nodes since the last one is that, not OSM: it is
+# refused and the staged parquet kept.  The same guard as raw/core.preql's
+# `kept`, declared here because nothing in this directory imports raw/.
+def kept(key, pct) -> count(key) >= pct * prior(count(key));
+
+template datasource osm_staging (
+    tree_id,
+    city,
+    data_source,
+    ?species,
+    ?cultivar,
+    ?crown_width_m,
+    ?tree_name,
+    ?plant_date,
+    ?latitude,
+    ?longitude,
+    ?diameter_at_breast_height,
+    ?submission_photo_url,
+    ?osm_ref,
+    osm_extracted_through,
+)
+grain (tree_id)
+freshness by osm_extracted_through
+assert @kept(tree_id, 0.75);
