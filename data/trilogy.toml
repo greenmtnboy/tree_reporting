@@ -331,6 +331,7 @@ memory_mb = 1024
 # reach the homepage even on a day the rollup was up to date and enrichment
 # was skipped behind it. It reads whatever is published when they finish.
 "website_homepage.preql" = { after = ["raw/full_tree_publish.preql", "raw/tree_enrichment.preql", "raw/ecoregion_info.preql"], when = "always" }
+"website_species.preql" = { after = ["raw/full_tree_publish.preql", "raw/tree_enrichment.preql", "raw/ecoregion_info.preql"], when = "always" }
 
 [[cloud.job]]
 key = "refresh-enrichment"
@@ -400,6 +401,17 @@ memory_mb = 2048
 key = "publish-website"
 name = "urban-tree-website-homepage"
 entrypoint = "website_homepage.preql"
+operation = "run"
+schedule = "0 0 6 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
+
+# Publish the species index, full catalogue and per-species records atomically.
+# Same producer ordering as the homepage, even if enrichment was unchanged.
+[[cloud.job]]
+key = "publish-website-species"
+name = "urban-tree-website-species"
+entrypoint = "website_species.preql"
 operation = "run"
 schedule = "0 0 6 * * *"
 timeout_seconds = 1800

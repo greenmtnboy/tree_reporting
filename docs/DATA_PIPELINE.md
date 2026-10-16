@@ -99,6 +99,39 @@ Rules:
 - **A missing job is silent.** `test_cloud_jobs.py` is the only thing that
   notices. Run the data tests after touching the job table.
 
+## The species feed (`website/publish_species.py`)
+
+`publish-website-species` runs on the core's daily schedule, after the rollup,
+enrichment and ecoregion producers, with `when = "always"` so independently
+updated cities still reach the site. It reads generation-pinned city parquets,
+never portals or the cross-city rollup. `website/species_catalogue.py` owns the
+top 2,000 entries, city/diameter/age statistics, traits, overview and trunk
+photos, and genus rankings over the complete named inventory.
+
+The public pointer is
+`https://storage.googleapis.com/trilogy_public_models/arborary/website/v1/species/index.json`.
+It includes the compact index, schema version 1, generation timestamp and a
+SHA-256 release revision. Under `species/releases/<revision>/`, `catalogue.json`
+contains the full dataset (its exact bytes hash to the revision), and
+`<slug>.json` wraps each individual record with the same timestamp/revision.
+The website downloads only an index and the viewed record; site builds download
+the catalogue for static fallback pages, without recalculating species data.
+
+The publisher uploads immutable files with create-only generation preconditions,
+then compare-and-swaps the index generation. A failure leaves the old release
+live. Previously published cities cannot silently disappear or empty, and a
+candidate losing over a quarter of the named inventory fails. Old releases are
+retained for cached indexes and open tabs. `website/species_slugs.json` seeds
+existing website URLs; the live index carries the accumulated slug registry,
+including retired names, so a new taxon cannot take over an old URL.
+
+Local validation (no uploads):
+`uv run website/publish_species.py --dry-run --output species.json` from `data/`.
+Merge this job, let Cloud Sync register it, and run/wait for its first successful
+publication to activate the website's live species consumer. The matching site
+change preserves its static fallback until the feed exists. No website deploy
+is required for subsequent species updates or new shared-detail links.
+
 ## The homepage feed (`website/publish_homepage.py`)
 
 arborary.world's homepage bundles a snapshot of its statistics and swaps in

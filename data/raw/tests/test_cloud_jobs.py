@@ -402,14 +402,15 @@ def test_enrichment_is_declared_after_the_rollup():
     )
 
 
-def test_the_homepage_feed_waits_for_its_inputs_on_always_edges():
+@pytest.mark.parametrize('key', ['publish-website', 'publish-website-species'])
+def test_the_homepage_feed_waits_for_its_inputs_on_always_edges(key):
     """The feed reads the enrichment table and the ecoregions, so it is ordered
     after their producers in the core's tick -- on `always`. A default edge
     skips the feed whenever the rollup was up to date and enrichment skipped
     behind it, and a city that republished since yesterday would then never
     reach the homepage."""
     config = tomllib.loads(CONFIG.read_text(encoding="utf-8"))
-    feed = jobs_by_key()["publish-website"]["entrypoint"]
+    feed = jobs_by_key()[key]["entrypoint"]
     edge = config.get("dependencies", {}).get(feed, {})
     producers = {jobs_by_key()[k]["entrypoint"] for k in ("publish-full", "refresh-enrichment", "refresh-ecoregions")}
     assert producers <= set(edge.get("after", [])), f"[dependencies] must order {feed!r} after {sorted(producers)}"
@@ -491,7 +492,7 @@ def test_the_core_shares_one_cron():
         key: jobs_by_key()[key]["schedule"]
         for key in (
             "publish-full", "refresh-enrichment", "refresh-ecoregions", "refresh-predictions", "validate-core",
-            "publish-website",
+            "publish-website", "publish-website-species",
         )
     }
     assert len(set(crons.values())) == 1, (
