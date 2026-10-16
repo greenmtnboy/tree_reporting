@@ -14,6 +14,7 @@ have to hold for a hand-written row as much as for a generated one.
 
 from __future__ import annotations
 
+import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -484,6 +485,103 @@ def test_publish_with_nothing_staged_is_refused(tmp_path):
     state = _state(tmp_path, _row("Acer rubrum"))
     with pytest.raises(admin.ValidationError, match="nothing to publish"):
         state.publish()
+
+
+# ── iNaturalist taxon resolution and photo ranking ─────────────────────────────
+
+FIREBUG = {"id": 1, "name": "Pyrrhocoris apterus", "rank": "species", "iconic_taxon_name": "Insecta"}
+LINDENS = {"id": 54856, "name": "Tilia", "rank": "genus", "iconic_taxon_name": "Plantae"}
+
+
+def _fake_inat(monkeypatch, taxa: list[dict]) -> list[tuple[str, dict]]:
+    calls: list[tuple[str, dict]] = []
+
+    def get(path: str, params: dict) -> dict:
+        calls.append((path, params))
+        if path == "/taxa":
+            return {"results": taxa}
+        return {"results": []}  # /observations
+
+    monkeypatch.setattr(admin._te, "_inat_get", get)
+    return calls
+
+
+def test_a_genus_row_is_searched_at_genus_rank_and_only_plants_are_accepted(monkeypatch):
+    # Searched as a species, `Tilia` came back as a firebug and shipped its photo.
+    calls = _fake_inat(monkeypatch, [FIREBUG, LINDENS])
+    assert admin._te.resolve_inat_taxon("Tilia")["name"] == "Tilia"
+    assert calls[0][1]["rank"] == "genus"
+    _fake_inat(monkeypatch, [FIREBUG])
+    assert admin._te.resolve_inat_taxon("Tilia") is None
+
+
+def test_a_binomial_is_still_searched_at_species_rank(monkeypatch):
+    calls = _fake_inat(monkeypatch, [{"id": 2, "name": "Tilia cordata", "iconic_taxon_name": "Plantae"}])
+    assert admin._te.resolve_inat_taxon("Tilia cordata")["id"] == 2
+    assert calls[0][1]["rank"] == "species,hybrid"
+
+
+def test_the_picker_searches_the_reviewers_taxon_when_one_is_typed(monkeypatch):
+    calls = _fake_inat(monkeypatch, [LINDENS])
+    out = admin.inat_candidates("Tilia x euchlora", query="Tilia", rank="genus")
+    assert out["taxon"]["name"] == "Tilia" and out["taxon"]["rank"] == "genus"
+    assert calls[0][1]["q"] == "Tilia" and calls[0][1]["rank"] == "genus"
+
+
+class _Proc:
+    def __init__(self, returncode: int, stdout: str = "", stderr: str = ""):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+def test_ranking_runs_the_ranker_once_per_distinct_https_url():
+    seen = {}
+
+    def runner(cmd, **kw):
+        seen["cmd"], seen["input"] = cmd, kw["input"]
+        return _Proc(0, '{"labels": ["tree"], "scores": {}, "duplicate_of": {}}')
+
+    out = admin.rank_photos(["https://a/1.jpg", "https://a/1.jpg", "file:///etc/passwd", "https://a/2.jpg"], runner=runner)
+    assert out["labels"] == ["tree"]
+    assert seen["cmd"][-1].endswith("photo_rank.py")
+    assert json.loads(seen["input"]) == {"urls": ["https://a/1.jpg", "https://a/2.jpg"]}
+
+
+def test_ranking_nothing_or_a_failed_ranker_is_reported():
+    with pytest.raises(admin.ValidationError, match="no photo URLs"):
+        admin.rank_photos([], runner=lambda *a, **k: _Proc(0))
+    with pytest.raises(RuntimeError, match="out of memory"):
+        admin.rank_photos(["https://a/1.jpg"], runner=lambda *a, **k: _Proc(1, stderr="Traceback\nRuntimeError: out of memory"))
+
+
+def _ranker():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("photo_rank", RAW_DIR / "enrichment" / "admin" / "photo_rank.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_ranker_sums_prompt_probabilities_per_label_and_covers_every_label():
+    rank = _ranker()
+    labels = [label for label, ps in rank.PROMPTS.items() for _ in ps]
+    probs = [1.0 / len(labels)] * len(labels)
+    out = rank.aggregate(labels, probs)
+    assert list(out) == list(rank.PROMPTS)
+    assert out["tree"] == pytest.approx(len(rank.PROMPTS["tree"]) / len(labels), abs=1e-3)
+    assert sum(out.values()) == pytest.approx(1.0, abs=1e-3)
+
+
+def test_ranker_maps_a_reupload_to_the_first_copy_only():
+    rank = _ranker()
+    a, near_a, b = 0b1010 << 200, (0b1010 << 200) ^ 0b111, (1 << 256) - 1
+    dup = rank.duplicates(["u1", "u2", "u3", "u4"], {"u1": a, "u2": near_a, "u3": b, "u4": None})
+    assert dup == {"u2": "u1"}
+
+
+def test_ranker_reads_the_small_rendition():
+    rank = _ranker()
+    assert rank.small_url("https://x/photos/9/medium.jpeg") == "https://x/photos/9/small.jpeg"
 
 
 if __name__ == "__main__":

@@ -73,6 +73,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import threading
 from datetime import datetime, timezone
@@ -777,17 +778,29 @@ def row_equals(a: dict, b: dict) -> bool:
 INAT_PAGE_SIZE = 24
 
 
-def inat_candidates(species: str, page: int = 1, taxon_id: int | None = None, limit: int = INAT_PAGE_SIZE) -> dict:
+def inat_candidates(
+    species: str,
+    page: int = 1,
+    taxon_id: int | None = None,
+    limit: int = INAT_PAGE_SIZE,
+    query: str | None = None,
+    rank: str | None = None,
+) -> dict:
     """Openly licensed photos for the picker, one page at a time.
 
     Page 1 is the taxon's default photo followed by the best research-grade
     observation photos (by votes); each later page is the next `limit`
     observations, all of their photos.  Same sources and licence filter as
     `tree_enrichment.fetch_inat_photo`.  The first ten are often foliage
-    close-ups, and a bark or habit shot -- what the trunk slot wants -- is
+    close-ups, and a whole-tree shot -- what the trunk slot wants -- is
     usually a few pages down, so the picker keeps a "more" button until iNat
     runs out.  The taxon id comes back with page 1 and is passed in for the
     rest, so a later page is one request rather than two.
+
+    The taxon is resolved the way the run resolves it (`resolve_inat_taxon`:
+    a one-word name at genus rank, plants only), unless the reviewer types a
+    `query` and `rank` of their own -- the way to reach the right taxon when
+    the row's name does not.
     """
     licenses = _te._INAT_ACCEPTABLE_LICENSES
     photos: list[dict] = []
@@ -797,15 +810,13 @@ def inat_candidates(species: str, page: int = 1, taxon_id: int | None = None, li
         data = _te._inat_get(f"/taxa/{taxon_id}", {})
         results = data.get("results", [])
         taxon = results[0] if results else None
+    elif query and query.strip():
+        taxon = _te.resolve_inat_taxon(query.strip(), rank or None)
     else:
-        for query in _te.build_inat_lookup_candidates(species):
-            data = _te._inat_get("/taxa", {"q": query, "rank": "species,hybrid", "per_page": 5})
-            results = data.get("results", [])
-            if not results:
-                continue
-            lower = query.lower().replace(" x ", " × ")
-            taxon = next((r for r in results if r.get("name", "").lower() in (lower, query.lower())), results[0])
-            break
+        for candidate in _te.build_inat_lookup_candidates(species):
+            taxon = _te.resolve_inat_taxon(candidate)
+            if taxon is not None:
+                break
     if taxon is None:
         return {"taxon": None, "photos": [], "page": page, "has_more": False}
 
@@ -843,6 +854,7 @@ def inat_candidates(species: str, page: int = 1, taxon_id: int | None = None, li
         "taxon": {
             "id": taxon["id"],
             "name": taxon.get("name"),
+            "rank": taxon.get("rank"),
             "common_name": taxon.get("preferred_common_name"),
             "url": f"https://www.inaturalist.org/taxa/{taxon['id']}",
         },
@@ -850,6 +862,45 @@ def inat_candidates(species: str, page: int = 1, taxon_id: int | None = None, li
         "page": page,
         "has_more": len(results) >= limit,
     }
+
+
+# ── ranking candidates by what they show ──────────────────────────────────────
+
+RANKER = HERE / "photo_rank.py"
+# One ranking at a time: each loads a ~1.7 GB CLIP model, and two at once is
+# what pushes a laptop into swap.
+_RANK_LOCK = threading.Lock()
+RANK_TIMEOUT_S = 900
+
+
+def rank_photos(urls: list[str], runner=subprocess.run) -> dict:
+    """Score candidate photos with `photo_rank.py` (zero-shot CLIP).
+
+    Runs as its own `uv run` process: torch is a heavy dependency the admin does
+    not otherwise need, and the model is released when the process exits rather
+    than sitting in this server's memory.  Returns the ranker's JSON:
+    `{"scores": {url: {label: p}}, "duplicate_of": {url: url}, "labels": [...]}`.
+    """
+    urls = [u for u in dict.fromkeys(urls) if isinstance(u, str) and u.startswith("https://")]
+    if not urls:
+        raise ValidationError(["no photo URLs to rank"])
+    if not _RANK_LOCK.acquire(blocking=False):
+        raise ValidationError(["a ranking is already running; wait for it to finish"])
+    try:
+        proc = runner(
+            ["uv", "run", "--quiet", str(RANKER)],
+            input=json.dumps({"urls": urls}),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=RANK_TIMEOUT_S,
+        )
+    finally:
+        _RANK_LOCK.release()
+    if proc.returncode != 0:
+        tail = (proc.stderr or "").strip().splitlines()[-5:]
+        raise RuntimeError("photo ranker failed: " + " | ".join(tail))
+    return json.loads(proc.stdout)
 
 
 # ── HTTP ───────────────────────────────────────────────────────────────────────
@@ -923,6 +974,8 @@ class Handler(BaseHTTPRequestHandler):
                     q.get("species", ""),
                     page=max(1, int(q.get("page", 1))),
                     taxon_id=int(q["taxon_id"]) if q.get("taxon_id") else None,
+                    query=q.get("taxon_q") or None,
+                    rank=q.get("rank") or None,
                 ))
             else:
                 self._error(HTTPStatus.NOT_FOUND, "not found")
@@ -962,6 +1015,8 @@ class Handler(BaseHTTPRequestHandler):
                     STATE.discard_all()
                 STATE.load()
                 self._json(STATE.status())
+            elif parts == ["api", "rank"]:
+                self._json(rank_photos(self._body().get("urls") or []))
             elif parts == ["api", "recount"]:
                 STATE.load_counts()
                 self._json(STATE.status())
