@@ -1,5 +1,31 @@
 # Urban Tree Reporting
 
+### Share a filtered city map
+
+Map links use the hash route, for example:
+`https://greenmtnboy.github.io/tree_reporting/#/?city=USNYC&mode=explore&filter.species=Platanus+x+hispanica&colorBy=dbh`.
+
+Supported query parameters:
+
+| Parameter | Meaning |
+| --- | --- |
+| `city` | Published city code, such as `USNYC` or `USSFO`. |
+| `mode=explore` | Open the city map directly, including on mobile. A recognized nonempty filter also opens exploration when mode is omitted. |
+| `filter.species` | Exact published scientific name, including genus-only inventory entries. |
+| `filter.genus` | First word of the published scientific name; includes all matching species and genus-only entries. |
+| `colorBy` | `dbh` for trunk diameter in inches, or `tree_form` for the normal category colors. Filtered links default to DBH. |
+
+Encode values with `URLSearchParams`; a slug or common name is not a species key.
+Repeat a filter key for alternatives (OR); different filter fields combine with
+AND. Unknown filter keys and empty values are ignored. An unmatched name shows
+an empty map. URL filters intersect with chat filters and survive city changes,
+reloads and browser history. Chat color overrides take precedence until a color
+is selected in the legend. “Show all trees” clears URL filters and URL coloring;
+any separate chat filter still applies. DBH's gray category includes missing,
+nonfinite and nonpositive measurements, without substituting a rendered size.
+
+Deploy this map support before publishing arborary.world's species links.
+
 An interactive browser-based map of city trees. Explore hundreds of thousands of street trees by location, species, and ecological attributes.
 
 Urban forests are a key part of modern urban design - they can reduce city heat, absorb runoff, improve air quality, and enhance the mental health of residents. Read more [here](https://www.climatecentral.org/climate-matters/the-power-of-urban-trees-2023).

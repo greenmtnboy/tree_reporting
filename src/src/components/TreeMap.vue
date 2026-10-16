@@ -11,9 +11,25 @@
   <div v-else-if="tileRefreshing" class="map-loading map-refreshing">{{ tileRefreshMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
   <div v-if="nearbyEmpty && !isInitialLoading && !displayError" class="nearby-empty" role="status">
-    No mapped trees in this view. Try zooming out or exploring a city.
+    {{ hasUrlFilters ? 'No matching trees in this view. Try zooming out or clearing the filters.' : 'No mapped trees in this view. Try zooming out or exploring a city.' }}
   </div>
-  <div v-if="!isInitialLoading" class="map-legend" :class="{ 'map-legend--mobile': props.simplified }">
+  <div v-if="!isInitialLoading || hasUrlFilters" class="map-legend" :class="{ 'map-legend--mobile': props.simplified }" role="region" aria-label="Map legend">
+    <div v-if="hasUrlFilters" class="legend-scope" aria-live="polite">
+      <strong>Filtered trees</strong>
+      <div v-for="field in activeUrlFilters" :key="field.name"><span>{{ field.name }}: </span><i>{{ field.values.join(' or ') }}</i></div>
+      <span v-if="isInitialLoading || tileRefreshing">Loading matching trees…</span>
+      <span v-else>Only matching trees are shown.</span>
+      <button type="button" class="legend-clear" @click="clearUrlFilters">Show all trees</button>
+    </div>
+    <label v-if="hasUrlFilters || route.query.colorBy" class="legend-color-control">
+      Color by
+      <select aria-label="Color trees by" :value="colorOverrideSql ? 'custom' : mapColorBy" @change="changeMapColor">
+        <option v-if="colorOverrideSql" value="custom" disabled>Custom colors</option>
+        <option value="dbh">Trunk diameter (DBH)</option>
+        <option value="tree_form">Tree form</option>
+      </select>
+    </label>
+    <strong v-if="mapColorBy === 'dbh' && !colorOverrideSql" class="legend-heading">Trunk diameter · inches (approx. cm)</strong>
     <div v-for="entry in legendEntries" :key="entry.color" class="legend-entry">
       <span class="legend-swatch" :style="{ background: entry.color }"></span>
       <span class="legend-label">{{ entry.label }}</span>
@@ -305,6 +321,7 @@ import {
 } from '../lib/geo'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
 import { CROWN_ZOOM_START } from '../lib/treeCrowns'
+import { applyMapUrlFilters, DBH_COLOR_SQL, DBH_LEGEND, hasMapUrlFilters, MAP_FILTER_FIELDS, readMapColorBy, readMapUrlFilters } from '../lib/mapUrlFilters'
 
 const { resolvedTheme } = useTheme()
 let releaseMapTheme: (() => void) | undefined
@@ -442,7 +459,52 @@ const {
   setUserLocation,
   commitResolvedCity,
   markInitialUserCityDetectionDone,
+  clearColorOverride,
 } = useMapData()
+
+const urlFilters = computed(() => readMapUrlFilters(route.query))
+const hasUrlFilters = computed(() => hasMapUrlFilters(urlFilters.value))
+const activeUrlFilters = computed(() => MAP_FILTER_FIELDS
+  .filter(field => urlFilters.value[field].length)
+  .map(field => ({ name: field === 'species' ? 'Species' : 'Genus', values: urlFilters.value[field] })))
+const mapColorBy = computed(() => readMapColorBy(route.query, urlFilters.value))
+const effectiveMapQuery = computed(() => applyMapUrlFilters(currentMapQuery.value, urlFilters.value))
+const effectiveColorSql = computed(() => colorOverrideSql.value ?? (mapColorBy.value === 'dbh' ? DBH_COLOR_SQL : null))
+
+// Worker configuration mutates shared SQL tables. Serialize changes and skip
+// superseded requests so rapid Back/Forward cannot restore an older scope.
+let workerConfigRevision = 0
+let workerConfiguration: Promise<boolean> = Promise.resolve(true)
+function configureMapQuery(): Promise<boolean> {
+  const revision = ++workerConfigRevision
+  const current = () => !disposed && revision === workerConfigRevision
+  const next = workerConfiguration.catch(() => false).then(async () => {
+    if (!current()) return false
+    const query = effectiveMapQuery.value
+    const filterSql = publishedTreeIdFilterSql.value
+    const colorSql = effectiveColorSql.value
+    await setColorOverrideSql(colorSql)
+    if (!current()) return false
+    await setTileQuery(query)
+    if (!current()) return false
+    await setPublishedTreeIdFilterSql(filterSql)
+    return current()
+  })
+  workerConfiguration = next
+  return next
+}
+
+function clearUrlFilters() {
+  const query: Record<string, string | null | (string | null)[]> = { ...route.query, mode: 'explore' }
+  for (const field of MAP_FILTER_FIELDS) delete query[`filter.${field}`]
+  delete query.colorBy
+  void router.push({ query })
+}
+
+function changeMapColor(event: Event) {
+  if (colorOverrideSql.value) clearColorOverride()
+  void router.push({ query: { ...route.query, colorBy: (event.target as HTMLSelectElement).value } })
+}
 
 function readRouteCity(value: unknown): CityCode | null {
   const city = Array.isArray(value) ? value[0] : value
@@ -473,7 +535,9 @@ const activeHeatmapColors = computed(() => {
 // Color keys may be SQL-escaped by the agent (e.g. _RRGGBB, char_43_RRGGBB, u_0023RRGGBB).
 // Normalize by extracting the trailing 6 hex digits; drop entries with no valid hex tail.
 const legendEntries = computed(() => {
-  const labelMap = colorLabelMap.value ?? workerColorLabelMap.value
+  const labelMap = colorOverrideSql.value
+    ? colorLabelMap.value ?? workerColorLabelMap.value
+    : mapColorBy.value === 'dbh' ? DBH_LEGEND : workerColorLabelMap.value
   if (!labelMap || Object.keys(labelMap).length === 0) return []
   return Object.entries(labelMap).flatMap(([rawColor, label]) => {
     const m = rawColor.match(/([0-9a-fA-F]{6})$/i)
@@ -1013,6 +1077,10 @@ function closeTreeCard(): void {
   deepLinkInFlight = null
   syncTreeRoute(null)
 }
+
+watch(() => JSON.stringify(urlFilters.value), () => {
+  if (selectedTree.value) closeTreeCard()
+})
 
 // --- Tree deep links: #/?city=USLAX&tree=lax-54642 ---
 //
@@ -1615,24 +1683,23 @@ watch(flyToTarget, (t) => {
 // --- Watchers ---
 
 // Reload tiles when query, filter, or revision changes
-watch([currentMapQuery, publishedTreeIdFilterSql, mapQueryRevision], async ([query, filterSql], [oldQuery]) => {
+watch([effectiveMapQuery, publishedTreeIdFilterSql, mapQueryRevision, effectiveColorSql], async () => {
   if (!mapRef.value) return
-  // Only show the tile-refresh spinner for filter-only changes (not city switches,
-  // which are managed by the lifecycle state machine).
-  const isQueryChange = query !== oldQuery
-  if (isQueryChange) {
-    loadingMessage.value = 'Counting our conifers...'
-  } else {
+  // City loads have their own overlay; route and chat changes refresh in place.
+  if (lifecyclePhase.value === 'ready') {
     startTileRefreshMessage()
+  } else {
+    loadingMessage.value = 'Counting our conifers...'
   }
   lastVisibleRangeSigByZoom.clear()
   introLockedRangeByZoom.clear()
-  await setColorOverrideSql(colorOverrideSql.value)
-  if (disposed) return
-  await setTileQuery(query)
-  if (disposed) return
-  await setPublishedTreeIdFilterSql(filterSql)
-  if (disposed) return
+  try {
+    if (!await configureMapQuery()) return
+  } catch (error) {
+    mapError.value = (error as Error).message
+    stopTileRefreshMessage()
+    return
+  }
   // Re-arm the "trees source loaded" one-shot only once the worker is actually
   // configured for the new query and the refetch is about to be issued. Arming it
   // before the awaits let tiles still in flight from the PREVIOUS query satisfy it —
@@ -1685,10 +1752,7 @@ async function initializeRequestedCity(map: maplibregl.Map): Promise<void> {
     await setCityContext(city)
     if (disposed) return
     if (!lifecycleCommitContextCity(transition)) continue
-    await setTileQuery(currentMapQuery.value)
-    if (disposed) return
-    if (!lifecycleMatches(transition)) continue
-    await setPublishedTreeIdFilterSql(publishedTreeIdFilterSql.value)
+    if (!await configureMapQuery()) continue
     if (disposed) return
     if (!lifecycleMatches(transition)) continue
 
@@ -1864,9 +1928,15 @@ onMounted(async () => {
     map.on('moveend', () => { logIconLayerSnapshot('moveend') })
 
     map.on('idle', () => {
-      if (props.nearbyLocation && map.getSource('trees') && map.isSourceLoaded('trees')) {
+      if ((props.nearbyLocation || hasUrlFilters.value) && map.getSource('trees') && map.isSourceLoaded('trees')) {
         const layers = ['trees-circle', 'trees-heat'].filter(id => map.getLayer(id))
-        nearbyEmpty.value = layers.length > 0 && map.queryRenderedFeatures(undefined, { layers }).length === 0
+        // The desktop's close-up renderer is a custom layer, so rendered circle
+        // features disappear there even while matching trees are on screen.
+        nearbyEmpty.value = hasUrlFilters.value
+          ? map.querySourceFeatures('trees', { sourceLayer: 'trees' }).length === 0
+          : layers.length > 0 && map.queryRenderedFeatures(undefined, { layers }).length === 0
+      } else {
+        nearbyEmpty.value = false
       }
       if (!mapQueryChangedAt || firstMapIdleAfterPublishLogged) return
       firstMapIdleAfterPublishLogged = true
@@ -2207,7 +2277,10 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  pointer-events: none;
+  pointer-events: auto;
+  max-width: min(320px, calc(100% - 16px));
+  max-height: min(50%, 400px);
+  overflow-y: auto;
   box-shadow: 0 16px 32px rgba(7, 10, 11, 0.22);
 }
 
@@ -2229,8 +2302,15 @@ onUnmounted(() => {
 .legend-label {
   font-size: 0.72rem;
   color: rgba(var(--ink-rgb), 0.84);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
+
+.legend-scope { display: grid; gap: 5px; font-size: .78rem; overflow-wrap: anywhere; }
+.legend-scope > span { color: var(--color-muted); font-size: .72rem; }
+.legend-clear { justify-self: start; padding: 6px 0; color: var(--color-leaf); text-decoration: underline; background: none; border: 0; cursor: pointer; }
+.legend-color-control { display: grid; gap: 4px; font-size: .72rem; margin: 4px 0; }
+.legend-color-control select { min-width: 0; max-width: 100%; color: var(--color-ink); background: var(--color-surface); border: 1px solid var(--color-muted); border-radius: 4px; padding: 5px; }
+.legend-heading { font-size: .72rem; }
 
 .crown-legend-start {
   border-top: 1px solid rgba(var(--ink-rgb), 0.15);
