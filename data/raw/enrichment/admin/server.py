@@ -193,8 +193,8 @@ GROUPS: list[tuple[str, list[str]]] = [
         "usda_zone_min", "usda_zone_max",
     ]),
     ("Ecology", ["bloom_months", "wildlife_value", "fire_risk", "native_ecoregions"]),
-    ("Photo", ["photo_url", "photo_license", "photo_attribution"]),
-    ("Trunk photo", ["trunk_photo_url", "trunk_photo_license", "trunk_photo_attribution"]),
+    ("Full tree photo", ["trunk_photo_url", "trunk_photo_license", "trunk_photo_attribution"]),
+    ("Leaf photo", ["photo_url", "photo_license", "photo_attribution"]),
 ]
 
 

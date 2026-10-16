@@ -928,8 +928,8 @@ if __name__ == "__main__":
             "photo_url":            photo_url,
             "photo_license":        photo_license,
             "photo_attribution":    photo_attribution,
-            # A bark / trunk view is hand-picked in enrichment/admin/server.py: iNat
-            # cannot be asked for one, and the run's photo is the leaf close-up.
+            # A full-tree view is hand-picked in enrichment/admin/server.py;
+            # the legacy trunk_photo keys are kept for compatibility.
             "trunk_photo_url":      None,
             "trunk_photo_license":  None,
             "trunk_photo_attribution": None,

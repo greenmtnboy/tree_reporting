@@ -1,0 +1,3 @@
+# Species catalogue and per-species JSON, independent of the website build.
+# Root entrypoint keeps relative call resolution consistent on trilogy-cloud.
+call `./website/publish_species.py`;
