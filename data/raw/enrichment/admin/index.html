@@ -117,8 +117,8 @@
         <button data-f="" class="on">All</button>
         <button data-f="pending">Staged</button>
         <button data-f="incomplete">Incomplete</button>
-        <button data-f="nophoto">No photo</button>
-        <button data-f="notrunk">No trunk photo</button>
+        <button data-f="nophoto">No leaf photo</button>
+        <button data-f="notrunk">No full tree photo</button>
         <button data-f="nodesc">No description</button>
       </div>
       <label class="sort">Sort <select id="sort">
@@ -157,8 +157,8 @@
     canopy_spread_min_ft: 'Canopy spread min (ft)', canopy_spread_max_ft: 'Canopy spread max (ft)',
     lifespan_min_years: 'Lifespan min (years)', lifespan_max_years: 'Lifespan max (years)',
     usda_zone_min: 'USDA zone min', usda_zone_max: 'USDA zone max', is_evergreen: 'Foliage',
-    photo_url: 'Photo URL', photo_license: 'Photo licence', photo_attribution: 'Photo attribution',
-    trunk_photo_url: 'Trunk photo URL', trunk_photo_license: 'Trunk photo licence', trunk_photo_attribution: 'Trunk photo attribution',
+    photo_url: 'Leaf photo URL', photo_license: 'Leaf photo licence', photo_attribution: 'Leaf photo attribution',
+    trunk_photo_url: 'Full tree photo URL', trunk_photo_license: 'Full tree photo licence', trunk_photo_attribution: 'Full tree photo attribution',
   }
   const label = (n) => LABELS[n] || n.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
 
@@ -262,8 +262,8 @@
     for (const [title, names] of schema.groups) {
       parts.push(`<fieldset><legend>${esc(title)}</legend><div class="grid">`)
       for (const name of names) parts.push(field(name, row[name], changed.has(name)))
-      if (title === 'Photo') parts.push(photoPanel('photo'))
-      if (title === 'Trunk photo') parts.push(photoPanel('trunk_photo'))
+      if (title === 'Leaf photo') parts.push(photoPanel('photo'))
+      if (title === 'Full tree photo') parts.push(photoPanel('trunk_photo'))
       parts.push('</div></fieldset>')
     }
     parts.push('</form>')
@@ -382,17 +382,17 @@
 
   // ── photo pickers ───────────────────────────────────────────────────────────
   // One panel per photo slot: `photo` (the species close-up the run fetches
-  // from iNaturalist) and `trunk_photo` (a bark / trunk view, which no source
-  // can be asked for -- the reviewer picks one from the same licensed pool).
+  // from iNaturalist) and `trunk_photo` (the legacy key for a full-tree view,
+  // which the reviewer picks from the same licensed pool).
   function photoPanel(p) {
-    const trunk = p === 'trunk_photo'
+    const fullTree = p === 'trunk_photo'
     return `<div class="wide photo">
       <div id="${p}Preview"></div>
       <div>
         <button type="button" id="${p}InatBtn">Find openly licensed photos on iNaturalist</button>
         <button type="button" id="${p}MoreBtn" hidden>More photos</button>
-        <button type="button" id="${p}ClearBtn">Clear ${trunk ? 'trunk ' : ''}photo</button>
-        <div class="hint">${trunk ? 'Pick a photo showing the trunk or bark; the run never fills this slot. ' : ''}Only the medium-size iNaturalist URL shape (…/photos/&lt;id&gt;/medium.jpg) renders on arborary.world; any http(s) URL is accepted here.</div>
+        <button type="button" id="${p}ClearBtn">Clear ${fullTree ? 'full tree' : 'leaf'} photo</button>
+        <div class="hint">${fullTree ? 'Pick a photo showing the whole tree, including its crown and overall shape; the run never fills this slot. ' : 'Pick a close-up showing the leaves. '}Only the medium-size iNaturalist URL shape (…/photos/&lt;id&gt;/medium.jpg) renders on arborary.world; any http(s) URL is accepted here.</div>
         <div id="${p}InatInfo" class="hint"></div>
         <div class="cands" id="${p}Cands"></div>
       </div></div>`
@@ -409,7 +409,7 @@
     drawPreview(p)
     form.elements[`${p}_url`].addEventListener('input', () => drawPreview(p))
     $(`#${p}ClearBtn`).onclick = () => { for (const n of ['url', 'license', 'attribution']) form.elements[`${p}_${n}`].value = ''; dirty = true; drawPreview(p) }
-    // Paged: the first page is rarely where the bark shot is.  Each page is
+    // Paged: the first page may not include a full-tree view. Each page is
     // appended to the same grid, and the taxon id from page one is reused so a
     // later page is one iNat request rather than two.
     let photos = [], taxon = null, page = 0

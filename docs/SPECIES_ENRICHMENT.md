@@ -4,8 +4,13 @@ One city-agnostic table, `tree_enrichment_v{n}.parquet`, keyed on the
 scientific name, maps each species to common names, growth form, ecology
 (`native_ecoregions`, `is_evergreen`, height and spread ranges, `bloom_months`
 as month numbers, tolerances, USDA zones) and two licensed photos
-(`photo_url`, a foliage or flower view fetched by the run; `trunk_photo_url`,
-picked by hand in the admin form). The browser joins `t.species = se.species`
+(`photo_url`, the leaf close-up fetched by the run; `trunk_photo_url`,
+the full-tree view picked by hand in the admin form). The full-tree photo
+should show the whole tree, including its crown and overall shape. The legacy
+`trunk_photo_*` field names are retained for compatibility; the editor and
+website label this view **Full tree**, and the close-up **Leaf**. Existing
+photos remain until reviewed; changing the label does not replace their images.
+The browser joins `t.species = se.species`
 and takes the first common name as the label. The model is
 `data/raw/tree_enrichment.preql`; the job is `data/raw/enrichment/`.
 
