@@ -193,8 +193,15 @@ async function prewarmLodCaches(): Promise<void> {
   await rpc('prewarmLodCaches', {})
 }
 
-/** How long MapLibre may cache a tile that was answered while fetching was paused. */
-const TRANSIENT_TILE_TTL_MS = 4000
+/**
+ * How long MapLibre may cache a tile that was answered while fetching was paused.
+ * This expiry is the only thing that refreshes those empties after the intro:
+ * MapLibre re-requests an expired tile in place, keeping every other tile on
+ * screen, where a URL-nonce bump would clear the whole source first. Kept
+ * short so stragglers fill in right after landing; each re-poll while still
+ * paused is a cache lookup in the worker, not a query.
+ */
+const TRANSIENT_TILE_TTL_MS = 1500
 
 async function ensureTileProtocolRegistered(initialCity?: string) {
   if (protocolRegistered) return

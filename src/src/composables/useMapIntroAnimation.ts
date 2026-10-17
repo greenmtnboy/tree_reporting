@@ -41,7 +41,6 @@ export interface UseMapIntroAnimationOptions {
   setAutoTileFetchEnabled: (enabled: boolean) => void
   setVisibleTileRange: (z: number, minX: number, maxX: number, minY: number, maxY: number) => void
   prefetchVisibleDetailTilesAtZoom: (z: number, range?: TileRange) => Promise<IntroPrefetchStatus>
-  forceTreesTileRefetchPass: () => void
   updateZoomLevel: () => void
   computeVisibleTileRangeForZoom: (z: number) => TileRange | null
   setMapInteractions: (enabled: boolean) => void
@@ -59,7 +58,6 @@ export function useMapIntroAnimation({
   setAutoTileFetchEnabled,
   setVisibleTileRange,
   prefetchVisibleDetailTilesAtZoom,
-  forceTreesTileRefetchPass,
   updateZoomLevel,
   computeVisibleTileRangeForZoom,
   setMapInteractions,
@@ -256,9 +254,11 @@ export function useMapIntroAnimation({
         recordIntroPrefetchStatus(z, status)
       }
 
-      // During intro auto-fetch is disabled; force a source reload so MapLibre
-      // re-requests viewport tiles and consumes freshly prefetched cached data.
-      forceTreesTileRefetchPass()
+      // No source reload here. The tiles on screen were fetched with real data
+      // before this ran (the intro starts on the trees source's loaded event),
+      // and the prefetch only warms the worker cache for the next LOD. A URL
+      // nonce bump would make MapLibre clear every tile and blank the sprite
+      // layer, then redraw identical data a few hundred ms later.
 
       await waitForTreesMilestone(2500)
       const canStartMotion = await waitForViewportTreesRendered(6000)
@@ -294,10 +294,11 @@ export function useMapIntroAnimation({
             pitch: startPitch,
           })
         }
-        // Tiles requested during the motion were answered with empties while
-        // auto-fetch was off and are now cached by MapLibre; bump the URL nonce
-        // so every tile is fetched fresh.
-        forceTreesTileRefetchPass()
+        // Tiles requested during the motion that missed the worker cache were
+        // answered with transient empties carrying a short expiry; MapLibre
+        // re-requests those on its own, in place, once fetching is back on.
+        // Deliberately no URL-nonce bump here: setTiles() makes MapLibre clear
+        // every loaded tile first, so the city view blanked and redrew at landing.
         introActive.value = false
         setMapInteractions(true)
       }
