@@ -89,21 +89,32 @@ def _inat_get(path: str, params: dict) -> dict:
         return _json.loads(resp.read())
 
 
-def _fetch_inat_photo_for_query(query_name: str) -> tuple[int | None, str | None, str | None, str | None]:
-    data = _inat_get("/taxa", {"q": query_name, "rank": "species,hybrid", "per_page": 3})
-    results = data.get("results", [])
-    if not results:
-        return None, None, None, None
+def inat_rank_for(query_name: str) -> str:
+    """The iNat rank a scientific name is searched at: a one-word name is a genus."""
+    return "genus" if len(query_name.split()) == 1 else "species,hybrid"
 
-    lower_name = query_name.lower().replace(" x ", " × ")
-    taxon = None
-    for r in results:
-        r_name = r.get("name", "").lower()
-        if r_name == lower_name or r_name == query_name.lower():
-            taxon = r
-            break
+
+def resolve_inat_taxon(query_name: str, rank: str | None = None) -> dict | None:
+    """The iNat plant taxon `query_name` names, or None.
+
+    A genus row (`Tilia`, `Pyrus`) has to be searched at genus rank.  Searched
+    as a species, iNat answers with whichever species' text matches best -- the
+    firebug *Pyrrhocoris apterus* for `Tilia`, *Sorbus aucuparia* for `Pyrus` --
+    and that is the photo the row shipped with.  Only plants are accepted, so a
+    name shared with an animal never resolves to it.
+    """
+    data = _inat_get("/taxa", {"q": query_name, "rank": rank or inat_rank_for(query_name), "per_page": 5})
+    results = [r for r in data.get("results", []) if r.get("iconic_taxon_name") == "Plantae"]
+    if not results:
+        return None
+    wanted = {query_name.lower(), query_name.lower().replace(" x ", " × ")}
+    return next((r for r in results if r.get("name", "").lower() in wanted), results[0])
+
+
+def _fetch_inat_photo_for_query(query_name: str) -> tuple[int | None, str | None, str | None, str | None]:
+    taxon = resolve_inat_taxon(query_name)
     if taxon is None:
-        taxon = results[0]
+        return None, None, None, None
 
     taxon_id: int = taxon["id"]
 

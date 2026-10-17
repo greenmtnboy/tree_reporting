@@ -70,3 +70,5 @@ data/raw/tools/.cache/
 # Satellite review tile exports for a live session (reviewer/README.md);
 # the two committed fixtures live in reviewer/fixtures/tiles instead.
 reviewer/tiles/
+# Photos and CLIP scores cached by data/raw/enrichment/admin/photo_rank.py.
+data/raw/enrichment/admin/.photo_rank_cache/
