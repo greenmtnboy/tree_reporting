@@ -239,5 +239,66 @@ export function checkResult(
     }
   }
 
+  // A bucket chart partitions the trees: every tree lands in exactly one row.
+  // Per-row counts under the total do not prove that. Two fixture trees of one
+  // species counted 2² = 4 times each still fit under the total, and that is
+  // the shape that shipped: a species-grain bucket planned off a tree-grain
+  // parent and joined back on species counts every species n² times, which
+  // made Bogotá's 1.5M trees a 40-billion-row join. Check each bucket against
+  // the fixtures' own derivation instead.
+  const bucketField = BUCKET_CHART_FIELDS[id]
+  if (bucketField) {
+    const context = cityContext(queryCase.state.city)
+    const wanted = new Map<string, number>()
+    for (const tree of expected) {
+      const bucket = fixtureFieldValue(tree, bucketField, context)
+      if (bucket == null) continue
+      wanted.set(bucket, (wanted.get(bucket) ?? 0) + 1)
+    }
+    const got = new Map<string, number>()
+    for (const row of rows) {
+      const bucket = row[bucketField]
+      if (bucket == null) continue
+      got.set(String(bucket), (got.get(String(bucket)) ?? 0) + (numeric(row.tree_count) ?? 0))
+    }
+    for (const [bucket, count] of wanted) {
+      if (got.get(bucket) !== count) {
+        return `${bucketField} = ${bucket}: tree_count ${got.get(bucket) ?? 'missing'}, fixtures say ${count}`
+      }
+    }
+    for (const [bucket, count] of got) {
+      if (!wanted.has(bucket) && count > 0) {
+        return `${bucketField} = ${bucket}: tree_count ${count}, fixtures hold no such tree`
+      }
+    }
+  }
+
   return null
+}
+
+/**
+ * The summary charts that count trees per bucket, by the result column the
+ * bucket lands in. The species page renders the same charts under a species
+ * or genus filter, so both prefixes map here. The nativeness chart is left
+ * out on purpose: a species native to several ecoregions reaches several
+ * rows through `unnest(native_ecoregions)`, and which of them counts is a
+ * modelling question the fixtures answer with "the best match", which the
+ * live plan does not promise.
+ */
+const BUCKET_CHART_FIELDS: Record<string, string> = {
+  'summary:hardiness-fit': 'hardiness_fit_bucket',
+  'summary:water-resilience': 'water_resilience_bucket',
+  'summary:lifespan-profile': 'lifespan_bucket',
+  'summary:sun-exposure': 'sun_exposure_label',
+  'summary:tree-form': 'tree_form',
+  'summary:wildlife-value': 'wildlife_value',
+  'summary:growth-rate': 'growth_rate',
+  'summary:fire-risk': 'fire_risk',
+  'species:sp-hardiness-fit': 'hardiness_fit_bucket',
+  'species:sp-water-resilience': 'water_resilience_bucket',
+  'species:sp-lifespan': 'lifespan_bucket',
+  'species:sp-tree-form': 'tree_form',
+  'species:sp-wildlife-value': 'wildlife_value',
+  'species:sp-growth-rate': 'growth_rate',
+  'species:sp-fire-risk': 'fire_risk',
 }
