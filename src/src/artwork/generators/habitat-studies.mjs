@@ -133,19 +133,28 @@ export function generateMontaneSvg() {
 }
 
 export const tundraScene = {
-  shrub: curve([355, 478], [242, 455], [155, 401]),
+  shrub: curve([312, 479], [251, 453], [205, 402]),
+  fork: { at: .40, bend: [268, 414], tip: [280, 382] },
   branches: [
-    { at: .20, bend: [315, 433], tip: [316, 414], length: 25, width: 12 },
-    { at: .35, bend: [273, 465], tip: [253, 466], length: 24, width: 12 },
-    { at: .50, bend: [249, 410], tip: [254, 390], length: 27, width: 13 },
-    { at: .68, bend: [204, 428], tip: [189, 429], length: 23, width: 12 },
-    { at: .83, bend: [183, 384], tip: [188, 369], length: 23, width: 11 },
+    { at: .28, bend: [272, 459], tip: [264, 452], length: 24, width: 13 },
+    { at: .52, bend: [247, 432], tip: [248, 420], length: 23, width: 12 },
+    { at: .76, bend: [221, 423], tip: [213, 422], length: 21, width: 12 },
+  ],
+  forkLeaves: [
+    { at: .35, bend: [280, 427], tip: [288, 420], length: 23, width: 12 },
+    { at: .72, bend: [269, 400], tip: [262, 393], length: 20, width: 11 },
   ],
 }
 
 export function generateTundraSvg() {
-  const { shrub, branches } = tundraScene
-  const leaves = branches.map(b => ({ ...b, base: onCurve(shrub, b.at) }))
+  const { shrub, branches, forkLeaves } = tundraScene
+  const fork = { ...tundraScene.fork, base: onCurve(shrub, tundraScene.fork.at) }
+  const leaves = [
+    ...branches.map(b => ({ ...b, base: onCurve(shrub, b.at) })),
+    ...forkLeaves.map(b => ({ ...b, base: onCurve(fork, b.at) })),
+    { ...shrub, length: 20, width: 11 },
+    { ...fork, length: 22, width: 12 },
+  ]
   const sedges = [curve([356, 474], [339, 403], [331, 350]), curve([366, 479], [384, 417], [396, 389])]
   const heads = sedges.map(s => {
     const [x, y] = s.tip

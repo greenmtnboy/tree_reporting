@@ -71,8 +71,8 @@ export const fieldSketches = {
   },
   tundra: {
     svg: tundra, title: 'Tundra', example: 'Low-growing open tundra',
-    motif: 'Prostrate small-leaved shrub, cottony sedge heads, and lichen',
-    review: 'A deliberately low silhouette with creeping woody growth and short sedges. Edit tundraScene in generators/habitat-studies.mjs.',
+    motif: 'Low branching small-leaved shrub, cottony sedge heads, and lichen',
+    review: 'A compact forked shrub with short petioles, alternating leaves, and leafy shoot tips beside short sedges. Edit tundraScene in generators/habitat-studies.mjs.',
   },
   city: {
     svg: city, title: 'City geometry', example: 'Shared upper-left drawing',

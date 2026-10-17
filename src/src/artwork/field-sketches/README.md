@@ -36,7 +36,7 @@ complete drawing immediately. Exported SVGs remain static.
 | `dry-forest.svg` | Dry tropical forest: exposed branches, sparse leaves, and leaf litter |
 | `wetland.svg` | Flooded grasslands/savannas: emergent reeds and sedges in shallow water |
 | `montane.svg` | Montane grasslands/shrublands: tussocks, rocks, and mountain contours |
-| `tundra.svg` | Tundra: prostrate shrub, cottony sedge heads, and lichen |
+| `tundra.svg` | Tundra: low branching shrub, cottony sedge heads, and lichen |
 
 `index.ts` registers drawings and their review notes. `FieldSketch.vue` renders
 only these trusted, static SVG imports. The app's `FieldBackdrop.vue` chooses
