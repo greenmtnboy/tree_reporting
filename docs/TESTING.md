@@ -109,6 +109,15 @@ compile and still answer the wrong question.
   are derived from the fixtures by a reference implementation of the
   `dashboard_context` buckets. A per-city parquet is seeded with only that
   city's trees. Resolver `parameters` keys carry their leading colon.
+- A bucket chart (hardiness, water, lifespan, sun, form, wildlife, growth,
+  fire) is checked **per bucket** against the fixtures, not just against the
+  total. The fixtures hold two trees of one species on purpose: a
+  species-grain bucket planned off a tree-grain parent and joined back on
+  species counts every species n² times, which stays under the total for
+  small n and made Bogotá's 1.5M trees a 40-billion-row join in production
+  (pytrilogy #747). Nativeness is excluded: a species native to several
+  ecoregions reaches several rows, and the fixtures' "best match" rule is a
+  modelling choice the live plan does not promise.
 - **Never work around a planner bug in a query.** File a self-contained
   repro under `upstream_repro/` (gitignored) and let the test stay red until
   the resolver's pytrilogy pin moves.

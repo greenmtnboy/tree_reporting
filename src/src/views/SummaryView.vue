@@ -53,6 +53,7 @@
         v-bind="sharedChartProps"
         :dashboard-group="embeddedDashboardGroup"
         :filters="filtersForChart('tree-dot-map')"
+        :priority="100"
       />
     </div>
 
@@ -161,6 +162,12 @@ const embeddedDashboardGroup = useEmbeddedDashboardGroup({
   connectionId,
   queryExecutionService,
   imports: SUMMARY_DASHBOARD_IMPORTS as DashboardImport[],
+  // One resolver round trip for the whole page. The executor compiles a batch
+  // of at most this many items per request, and each request re-hydrates the
+  // full model bundle (~300 KB, 2-3 s); the default of ten split the page's
+  // eighteen charts into two serial requests, the second of which could not
+  // start until every query of the first had returned.
+  maxConcurrentQueries: 64,
 })
 
 const cityFilter = ref<CityCode | null>(null)

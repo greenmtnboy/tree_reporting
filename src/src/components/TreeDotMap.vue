@@ -8,9 +8,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, watchEffect, onMounted, onBeforeUnmount, nextTick, toValue, computed } from 'vue'
+import { ref, watch, watchEffect, onMounted, onBeforeUnmount, nextTick, toRaw, toValue, computed } from 'vue'
 import type { DashboardImport, DashboardExecutionService, SqlFilterLike, EmbeddedDashboardGroup } from '@trilogy-data/trilogy-studio-components/dashboard'
 import { TREE_DOT_MAP_QUERY } from '../composables/summaryDashboardConfig'
+
+type Point = { latitude: number; longitude: number }
 
 const props = withDefaults(
   defineProps<{
@@ -21,12 +23,21 @@ const props = withDefaults(
     parameters?: Record<string, unknown>
     itemId: string
     dashboardGroup?: EmbeddedDashboardGroup
+    /**
+     * Where this query sits in the dashboard group's run order (lower runs
+     * first). The map pulls one row per tree, 1.5M for Bogotá, and the
+     * group executes its queries one after another, so the pages that
+     * embed it put it last: it is decorative, and the headline numbers
+     * should not wait behind it.
+     */
+    priority?: number
   }>(),
   {
     imports: () => [],
     filters: () => [],
     parameters: () => ({}),
     dashboardGroup: undefined,
+    priority: 0,
   },
 )
 
@@ -35,7 +46,9 @@ const wrapperRef = ref<HTMLDivElement | null>(null)
 const loading = ref(false)
 const latestLoadId = ref(0)
 const activeCancellation = ref<{ cancel: () => void } | null>(null)
-const lastPoints = ref<Array<{ latitude: number; longitude: number }>>([])
+// Plain, not a ref: a reactive array of a million row objects would proxy
+// every row on each read, and nothing needs to watch the points themselves.
+let lastPoints: Point[] = []
 
 const QUERY = TREE_DOT_MAP_QUERY
 
@@ -63,7 +76,7 @@ function syncWithGroup() {
     itemId: props.itemId,
     title: 'Tree Distribution',
     query: QUERY,
-    priority: 0,
+    priority: props.priority,
     allowCrossFilter: false,
     filters: buildGroupFilters(),
     chartFilters: [],
@@ -93,13 +106,24 @@ watchEffect(() => {
     return
   }
   loading.value = false
-  const results = data.results as { data?: Array<{ latitude: number; longitude: number }> } | null
+  // The group's store is reactive; read the rows raw so a million-row result
+  // is not wrapped in a proxy per row on the way to the canvas.
+  const results = toRaw(data.results) as { data?: Point[] } | null
   const points = results?.data ?? []
-  lastPoints.value = points
+  lastPoints = points
   nextTick().then(() => renderDots(points))
 })
 
-function renderDots(points: Array<{ latitude: number; longitude: number }>) {
+// One tree is one 0.6 CSS px square at 45% opacity; overlapping trees compound,
+// which is what shades a dense street darker. Compounded alpha by tree count.
+const DOT_RGB = [107, 195, 140] as const
+const DOT_ALPHA = 0.45
+const ALPHA_BY_COUNT = new Uint8Array(256)
+for (let n = 1; n < 256; n++) {
+  ALPHA_BY_COUNT[n] = Math.round(255 * (1 - Math.pow(1 - DOT_ALPHA, n)))
+}
+
+function renderDots(points: Point[]) {
   const canvas = canvasRef.value
   if (!canvas) return
 
@@ -107,17 +131,18 @@ function renderDots(points: Array<{ latitude: number; longitude: number }>) {
   const rect = canvas.getBoundingClientRect()
   if (rect.width === 0 || rect.height === 0) return
 
-  canvas.width = rect.width * dpr
-  canvas.height = rect.height * dpr
+  const cw = Math.round(rect.width * dpr)
+  const ch = Math.round(rect.height * dpr)
+  canvas.width = cw
+  canvas.height = ch
 
   const ctx = canvas.getContext('2d')
   if (!ctx) return
-  ctx.scale(dpr, dpr)
 
   const W = rect.width
   const H = rect.height
 
-  ctx.clearRect(0, 0, W, H)
+  ctx.clearRect(0, 0, cw, ch)
 
   if (!points.length) return
 
@@ -148,14 +173,31 @@ function renderDots(points: Array<{ latitude: number; longitude: number }>) {
   const originX = pad + (availW - adjustedLonRange * scale) / 2
   const originY = pad + (availH - latRange * scale) / 2
 
-  // Vary opacity by density — single pass, fixed small dot
-  ctx.fillStyle = 'rgba(107, 195, 140, 0.45)'
-
+  // Count trees per device pixel, then paint the bitmap once. A million
+  // fillRect calls cost seconds on the main thread; a million array
+  // increments and one putImageData cost tens of milliseconds.
+  const counts = new Uint8Array(cw * ch)
+  const lonScale = cosLat * scale * dpr
+  const latScale = scale * dpr
+  const x0 = originX * dpr
+  const y0 = (H - originY) * dpr
   for (const p of points) {
-    const x = originX + (p.longitude - minLon) * cosLat * scale
-    const y = H - (originY + (p.latitude - minLat) * scale)
-    ctx.fillRect(x - 0.3, y - 0.3, 0.6, 0.6)
+    const x = (x0 + (p.longitude - minLon) * lonScale) | 0
+    const y = (y0 - (p.latitude - minLat) * latScale) | 0
+    if (x < 0 || y < 0 || x >= cw || y >= ch) continue
+    const i = y * cw + x
+    if (counts[i] < 255) counts[i]++
   }
+
+  const image = ctx.createImageData(cw, ch)
+  const pixels = new Uint32Array(image.data.buffer)
+  const [r, g, b] = DOT_RGB
+  const rgb = (b << 16) | (g << 8) | r
+  for (let i = 0; i < counts.length; i++) {
+    const n = counts[i]
+    if (n) pixels[i] = (ALPHA_BY_COUNT[n] << 24) | rgb
+  }
+  ctx.putImageData(image, 0, 0)
 }
 
 async function loadDirect() {
@@ -191,9 +233,9 @@ async function loadDirect() {
     const result = batch.results[0]
     if (!result?.success || !result.results) return
 
-    const payload = result.results.toJSON() as { data?: Array<{ latitude: number; longitude: number }> }
+    const payload = result.results.toJSON() as { data?: Point[] }
     const points = payload.data ?? []
-    lastPoints.value = points
+    lastPoints = points
 
     await nextTick()
     renderDots(points)
@@ -212,7 +254,7 @@ let resizeObserver: ResizeObserver | null = null
 onMounted(() => {
   if (wrapperRef.value) {
     resizeObserver = new ResizeObserver(() => {
-      renderDots(lastPoints.value)
+      renderDots(lastPoints)
     })
     resizeObserver.observe(wrapperRef.value)
   }

@@ -58,7 +58,6 @@ async function executeSql(
     throw new Error('Summary DuckDB connection unavailable')
   }
 
-  console.log('[executeSql] parameters:', JSON.stringify(parameters), 'has :param:', sql.includes(':active_city'))
   return connection.query_core(sql, parameters ?? null, null)
 }
 
