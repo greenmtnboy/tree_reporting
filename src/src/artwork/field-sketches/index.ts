@@ -6,6 +6,11 @@ import desert from './desert.svg?raw'
 import grassland from './grassland.svg?raw'
 import tropical from './tropical.svg?raw'
 import boreal from './boreal.svg?raw'
+import mangrove from './mangrove.svg?raw'
+import dryForest from './dry-forest.svg?raw'
+import wetland from './wetland.svg?raw'
+import montane from './montane.svg?raw'
+import tundra from './tundra.svg?raw'
 
 /** Static, repository-owned SVG only. Never add user-supplied markup here. */
 export const fieldSketches = {
@@ -43,6 +48,31 @@ export const fieldSketches = {
     svg: boreal, title: 'Boreal forest & taiga', example: 'Helsinki',
     motif: 'Open pairs of pine needles above a small-leaved forest-floor spray',
     review: 'Needles grow in pairs from shared points on three curved shoots. Their open fans stay separate, with bare branch junctions and no cones. The lower spray uses small entire leaves attached by curved petioles. Edit borealScene in generators/boreal.mjs, then run pnpm artwork:generate.',
+  },
+  mangrove: {
+    svg: mangrove, title: 'Mangroves', example: 'Tidal shores',
+    motif: 'Leathery leaves above arching prop roots and tidal ripples',
+    review: 'A red-mangrove-inspired sapling. Roots and branches attach to the same trunk curve; root forms vary among mangrove species. Edit mangroveScene in generators/habitat-studies.mjs.',
+  },
+  'dry-forest': {
+    svg: dryForest, title: 'Dry tropical forest', example: 'Seasonal tropical forests',
+    motif: 'Open deciduous branching, sparse broad leaves, and fallen foliage',
+    review: 'A dry-season study with exposed twigs and a few retained leaves. It replaces the moist-forest fern motif. Edit dryForestScene in generators/habitat-studies.mjs.',
+  },
+  wetland: {
+    svg: wetland, title: 'Flooded grasslands', example: 'Marshes and flooded savannas',
+    motif: 'Emergent reeds, sedges, and broken water lines',
+    review: 'A representative marsh margin, with reed heads and long leaves attached to curved stalks. Edit wetlandScene in generators/habitat-studies.mjs.',
+  },
+  montane: {
+    svg: montane, title: 'Montane grasslands', example: 'High-elevation grasslands and shrublands',
+    motif: 'Coarse tussocks among angular stones and mountain contours',
+    review: 'A high-elevation tussock study, separated from lowland seed-bearing grasses. Edit montaneScene in generators/habitat-studies.mjs.',
+  },
+  tundra: {
+    svg: tundra, title: 'Tundra', example: 'Low-growing open tundra',
+    motif: 'Prostrate small-leaved shrub, cottony sedge heads, and lichen',
+    review: 'A deliberately low silhouette with creeping woody growth and short sedges. Edit tundraScene in generators/habitat-studies.mjs.',
   },
   city: {
     svg: city, title: 'City geometry', example: 'Shared upper-left drawing',

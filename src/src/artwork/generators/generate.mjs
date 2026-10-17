@@ -8,6 +8,7 @@ import { generateConiferSvg } from './conifer.mjs'
 import { generateDesertSvg } from './desert.mjs'
 import { generateTropicalSvg } from './tropical.mjs'
 import { generateBorealSvg } from './boreal.mjs'
+import { generateMangroveSvg, generateDryForestSvg, generateWetlandSvg, generateMontaneSvg, generateTundraSvg } from './habitat-studies.mjs'
 
 const generators = [
   ['city', generateCitySvg],
@@ -18,6 +19,11 @@ const generators = [
   ['desert', generateDesertSvg],
   ['tropical', generateTropicalSvg],
   ['boreal', generateBorealSvg],
+  ['mangrove', generateMangroveSvg],
+  ['dry-forest', generateDryForestSvg],
+  ['wetland', generateWetlandSvg],
+  ['montane', generateMontaneSvg],
+  ['tundra', generateTundraSvg],
 ]
 
 for (const [name, generate] of generators) {

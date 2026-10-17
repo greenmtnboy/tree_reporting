@@ -32,12 +32,18 @@ complete drawing immediately. Exported SVGs remain static.
 | `grassland.svg` | Grassland/savanna: grasses and seed heads |
 | `tropical.svg` | Moist tropical/subtropical forest: pointed evergreen leaves and a fern |
 | `boreal.svg` | Boreal forest/taiga: paired pine needles and low understory foliage |
+| `mangrove.svg` | Mangroves: leathery leaves, arching prop roots, and tidal ripples |
+| `dry-forest.svg` | Dry tropical forest: exposed branches, sparse leaves, and leaf litter |
+| `wetland.svg` | Flooded grasslands/savannas: emergent reeds and sedges in shallow water |
+| `montane.svg` | Montane grasslands/shrublands: tussocks, rocks, and mountain contours |
+| `tundra.svg` | Tundra: prostrate shrub, cottony sedge heads, and lichen |
 
 `index.ts` registers drawings and their review notes. `FieldSketch.vue` renders
 only these trusted, static SVG imports. The app's `FieldBackdrop.vue` chooses
 the biome via the explicit RESOLVE-label mapping in `../biomeSketch.ts` and
 handles position/opacity. All 41 configured cities have an explicit choice
-across seven biomes; `biomeSketch.test.ts` fails if a future city's biome is
+across seven biomes; the catalog now covers all 14 RESOLVE terrestrial biome
+labels with 12 botanical sketches. `biomeSketch.test.ts` fails if a future city's biome is
 unmapped. The all-cities view retains the broadleaf study. The studio lists
 the cities using each drawing from the same context and mapping.
 The smaller city study lives inside
@@ -142,6 +148,32 @@ Both use `botanical-geometry.mjs` for shared curve evaluation, local frames,
 and entire-leaf construction. They preserve the same growth groups, static
 SVG exports, theme inheritance, and reduced-motion behavior as earlier art.
 
+## Additional habitat studies and sharing with the website
+
+`../generators/habitat-studies.mjs` owns the five additional scenes above.
+Run the same generate/check commands. These are representative decorative
+studies, not universal species assemblages. The audit separates mangroves
+from rainforest, dry forest from moist forest, and flooded grasslands,
+montane grasslands, and tundra from the general grassland drawing.
+Temperate and tropical conifer forests still share `conifer.svg`; temperate
+and tropical grasslands still share `grassland.svg`. Those shared plant
+motifs remain reasonable at this level of illustration.
+
+The mangrove scene takes its prop-root cue from red mangroves, rather than
+assuming all mangrove species have that root form. Habitat references:
+
+- [NPS: Red mangrove](https://www.nps.gov/bicy/learn/nature/red-mangrove.htm)
+- [NPS: Arctic tundra vegetation](https://www.nps.gov/articles/000/fire-in-ecosystems-arctic-tundra.htm)
+- [NPS: Freshwater marsh community](https://home.nps.gov/prsf/learn/nature/freshwater-marsh-community.htm)
+
+The Arborary website vendors these 12 SVGs unchanged in
+`docs/.vitepress/theme/artwork/biomes/`. When changing a sketch, generate it
+here first, copy the corresponding SVG there, update both exact-label
+mappings (`biomeSketch.ts` here and `biome-artwork.ts` there), and record this
+repository's source commit in the website's artwork README and credits.
+The website keeps its no-art fallback for unknown labels; this app retains
+its broadleaf fallback for the all-cities/unknown context.
+
 ## Iteration contract
 
 - Preserve the viewBox: biome drawings use `0 0 460 510`; the city uses
@@ -163,7 +195,7 @@ SVG exports, theme inheritance, and reduced-motion behavior as earlier art.
 
 ## Current review baseline
 
-All eight studies use generators. Botanical attachments share their stem
+All 13 studies (12 botanical and one city) use generators. Botanical attachments share their stem
 geometry; desert contours stop behind the plants. Low opacity, panel overlays,
 and cropping also make parts less visible. Per-drawing notes are in the
 studio. Use Git history for before/after comparisons rather than duplicating
