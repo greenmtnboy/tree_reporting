@@ -12,6 +12,13 @@ export const biomeSketches = {
   'Temperate Grasslands, Savannas & Shrublands': 'grassland',
   'Tropical & Subtropical Moist Broadleaf Forests': 'tropical',
   'Boreal Forests/Taiga': 'boreal',
+  'Mangroves': 'mangrove',
+  'Tropical & Subtropical Dry Broadleaf Forests': 'dry-forest',
+  'Flooded Grasslands & Savannas': 'wetland',
+  'Montane Grasslands & Shrublands': 'montane',
+  'Tundra': 'tundra',
+  'Tropical & Subtropical Coniferous Forests': 'conifer',
+  'Tropical & Subtropical Grasslands, Savannas & Shrublands': 'grassland',
 } as const satisfies Record<string, BiomeSketchName>
 
 /** The all-cities view (and unknown future contexts) retains the neutral oak study. */
