@@ -38,6 +38,7 @@ import { useRoute, useRouter } from 'vue-router'
 import TreeMap from './TreeMap.vue'
 import { cityAt, useMapData } from '../composables/useMapData'
 import { getCurrentPosition } from '../lib/geo'
+import { hasMapUrlFilters, readMapUrlFilters } from '../lib/mapUrlFilters'
 
 defineProps<{ simplified?: boolean }>()
 const emit = defineEmits<{ 'entry-change': [visible: boolean] }>()
@@ -47,7 +48,7 @@ const { displayCity, setUserLocation } = useMapData()
 // City is a destination hint, never an implicit experience selection.
 const mode = computed(() => {
   if (route.query.mode === 'nearby') return 'nearby'
-  return route.query.mode === 'explore' || route.query.tree ? 'explore' : null
+  return route.query.mode === 'explore' || route.query.tree || hasMapUrlFilters(readMapUrlFilters(route.query)) ? 'explore' : null
 })
 const location = ref<{ lat: number; lng: number } | null>(null)
 const showEntry = computed(() => !mode.value || (mode.value === 'nearby' && !location.value))

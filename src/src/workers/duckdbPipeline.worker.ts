@@ -840,6 +840,7 @@ async function ensureInit(city?: string): Promise<void> {
 
 async function ensurePreparedFeatureTableForZoom(z: number, baseQuery: string): Promise<void> {
   if (!conn || z !== PREPARED_FEATURE_TABLE_ZOOM) return
+  if (baseQuery !== effectiveBaseQuery(tileQuerySql)) return
 
   const rev = tileQueryRevision
   const key = featureTableBuildKey(rev, z)
@@ -911,9 +912,11 @@ WHERE xtile >= 0
 
 async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, baseQuery: string): Promise<void> {
   if (!conn) return
+  if (baseQuery !== effectiveBaseQuery(tileQuerySql)) return
   if (z === PREPARED_FEATURE_TABLE_ZOOM) {
     await ensurePreparedFeatureTableForZoom(PREPARED_FEATURE_TABLE_ZOOM, baseQuery)
   }
+  if (baseQuery !== effectiveBaseQuery(tileQuerySql)) return
   const blockSize = neighborhoodBlockSizeForZoom(z)
   if (blockSize <= 1) return
 
@@ -1060,6 +1063,9 @@ GROUP BY xtile, ytile
 
 async function ensureZoomBatchTiles(z: number, baseQuery: string, simplifyGridMeters: number): Promise<void> {
   if (!conn) return
+  // A prewarm started before a filter change can resume after an await. Never
+  // stamp its old SQL result with the current revision's cache key.
+  if (baseQuery !== effectiveBaseQuery(tileQuerySql)) return
   const rev = tileQueryRevision
   const bKey = zoomBatchKey(rev, z)
   if (zoomBatchReady.has(bKey)) return
