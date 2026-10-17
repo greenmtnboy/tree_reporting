@@ -763,7 +763,6 @@ const { loadingMessage, runIntroZoomOut, cancelIntro, runGlobeSwoopTo, recordInt
   setAutoTileFetchEnabled,
   setVisibleTileRange,
   prefetchVisibleDetailTilesAtZoom,
-  forceTreesTileRefetchPass,
   updateZoomLevel,
   computeVisibleTileRangeForZoom,
   setMapInteractions,
