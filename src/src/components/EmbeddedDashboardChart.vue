@@ -1,5 +1,5 @@
 <template>
-  <TrilogyEmbedProvider :theme="resolvedTheme">
+  <TrilogyEmbedProvider :theme="embedTheme">
     <div ref="containerRef" class="embedded-dashboard-chart">
       <DashboardChart
         :dashboard-id="resolvedDashboardId"
@@ -33,6 +33,33 @@ import {
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toValue, watch, watchEffect } from 'vue'
 
 const { resolvedTheme } = useTheme()
+
+// The embed ships its own slate palette for both modes. Point its tokens at
+// the journal's instead, so the chart chrome (error panels, controls) and the
+// charts themselves (axes, labels, headline text, via `--trilogy-chart-*`
+// fallbacks) follow the page theme. Values are var() references, so a theme
+// switch repaints without this computed changing.
+const embedTheme = computed(() => ({
+  mode: resolvedTheme.value,
+  variables: {
+    '--font': 'var(--font-body)',
+    '--text-color': 'var(--color-ink)',
+    '--text-color-muted': 'var(--color-muted)',
+    '--border-color': 'var(--color-border)',
+    '--border': 'var(--color-border)',
+    '--border-light': 'rgba(var(--ink-rgb), 0.1)',
+    '--bg-color': 'transparent',
+    '--dashboard-background': 'transparent',
+    '--result-window-bg': 'transparent',
+    '--panel-header-bg': 'var(--surface-2)',
+    '--special-text': 'var(--color-leaf)',
+    '--special-text-rgb': 'var(--accent-rgb)',
+    '--floating-surface': 'rgba(var(--surface-rgb), 0.92)',
+    '--floating-surface-strong': 'var(--surface-1)',
+    '--floating-text': 'var(--color-ink)',
+    '--overlay-border': 'var(--color-border)',
+  },
+}))
 
 const props = withDefaults(
   defineProps<{
