@@ -13,6 +13,16 @@
 #     on purpose. trilogy-cloud derives a tick's ordering from asset names when
 #     the address is templated, so a job that imports this file is ordered
 #     after `refresh-enrichment` in the same schedule tick.
+#   * `species: ~species`, not `partial datasource`. The table is complete for
+#     every column it carries but does not hold every species, and that is a
+#     partial *key*: the planner pads the join, a tree whose species has no
+#     row yet is still predicted (with its fallbacks), and the columns and
+#     the scalars derived from them stay complete at tree grain. Declared as
+#     a partial datasource, every column and every derivation over one is
+#     partial too, and pytrilogy >= 0.3.391 refuses `predicted_dbh_cm` and
+#     its siblings as "only resolvable from partial sources". Declared fully
+#     complete, the species join becomes an INNER JOIN and unenriched trees
+#     disappear. `test_tree_predictions.py` pins the spelling.
 #   * It must never be in the frontend's model bundle. `tree_enrichment.preql`
 #     declares `genus` as a property of `species`; this file declares it as a
 #     key so a coefficient table can be joined on it, and the two declarations
@@ -23,8 +33,8 @@ import tree_common;
 key genus string; # the genus the enrichment table assigns the species -- corrected for a misspelt binomial, and occasionally a superseded name (Sapium for Triadica)
 property species.tree_form string; # broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default
 
-root partial datasource tree_enrichment (
-    species: species,
+root datasource tree_enrichment (
+    species: ~species,
     genus: ?genus,
     tree_form: ?tree_form,
 )
