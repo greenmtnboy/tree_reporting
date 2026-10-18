@@ -79,6 +79,35 @@ test.describe('City navigation — desktop', () => {
     await expect(citySelect).toBeVisible({ timeout: 30_000 })
     await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
   })
+
+  // App.vue keeps MapView alive: a visit to another tab must not rebuild the
+  // MapLibre instance, and a city picked there must be on the map on return.
+  test('the map survives a tab visit and follows a city picked there', async ({ page }) => {
+    test.setTimeout(180_000)
+    await assertCitySwitch(page, 'San Francisco', SWITCH_TIMEOUT)
+    await page.evaluate(() => { (window as any).__mapBeforeTab = (window as any).__treeMap })
+
+    await page.locator('.sidebar-nav a', { hasText: 'City Summary' }).click()
+    await expect(page).toHaveURL(/#\/summary/)
+    await page.locator('.sidebar-nav a', { hasText: 'Map' }).click()
+    await expect(page.locator('.tree-map')).toBeVisible()
+    expect(await page.evaluate(() => (window as any).__treeMap === (window as any).__mapBeforeTab)).toBe(true)
+
+    await page.locator('.sidebar-nav a', { hasText: 'City Summary' }).click()
+    await page.getByTestId('city-select').selectOption('USBTV')
+    await expect(page).toHaveURL(/city=USBTV/)
+    await page.locator('.sidebar-nav a', { hasText: 'Map' }).click()
+    await page.waitForFunction(
+      () => document.querySelector('.tree-map')?.getAttribute('data-trees-loaded-for') === 'USBTV',
+      undefined,
+      { timeout: SWITCH_TIMEOUT },
+    )
+    expect(await page.evaluate(() => (window as any).__treeMap === (window as any).__mapBeforeTab)).toBe(true)
+    const chatInput = page.locator('.chat-input-area input')
+    if (await chatInput.count() > 0) {
+      await expect(chatInput).toBeEnabled({ timeout: 15_000 })
+    }
+  })
 })
 
 // ── Mobile ────────────────────────────────────────────────────────────────────

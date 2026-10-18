@@ -168,6 +168,9 @@ function handleClick(lm: Landmark) {
   pointer-events: none;
 }
 .sidebar-appearance { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--color-border); }
+/* Two auto margins split the free space and strand the profile link mid-column;
+   when it is present it carries the push and Appearance sits right under it. */
+.sidebar-profile + .sidebar-appearance { margin-top: 0; }
 .appearance-label { display: block; margin-bottom: 8px; font-size: .65rem; letter-spacing: .12em; text-transform: none; color: var(--color-muted); }
 .nav-link {
   position: relative;

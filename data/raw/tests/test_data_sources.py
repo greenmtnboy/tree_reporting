@@ -26,6 +26,7 @@ from shared.ingest import (  # noqa: E402
     DATA_SOURCES,
     MUNICIPAL_DATA_SOURCES,
     OSM_DATA_SOURCES,
+    PREDICTED_DATA_SOURCES,
     SATELLITE_DATA_SOURCES,
     community_source_for,
 )
@@ -111,6 +112,8 @@ def test_preql_enum_matches_python_picklist(code: str):
         expected.append(OSM_DATA_SOURCES[code])
     if code in SATELLITE_DATA_SOURCES:
         expected.append(SATELLITE_DATA_SOURCES[code])
+    if code in PREDICTED_DATA_SOURCES:
+        expected.append(PREDICTED_DATA_SOURCES[code])
     assert sorted(enum_values(city_models()[code])) == sorted(expected)
 
 
@@ -307,6 +310,8 @@ def test_every_city_refuses_a_collapsed_build(code: str):
     label added to the enum without its check is what this catches.  Community
     and satellite labels are left out on purpose: their rows are few and can
     all be absorbed by the inventory in one build (see `kept` in core.preql).
+    Bulk predictions are left out too: a new run at a stricter threshold may
+    rightly shed a quarter of them.
     """
     from trilogy.parsing.render import Renderer
 
@@ -317,7 +322,7 @@ def test_every_city_refuses_a_collapsed_build(code: str):
     expected = {"@kept(tree_id, 0.75)"} | {
         f"@source_kept(tree_id, {lower}_source, '{label}', 0.75)"
         for label in enum_values(city_models()[code])
-        if not label.startswith(("COMMUNITY_", "SATELLITE_"))
+        if not label.startswith(("COMMUNITY_", "SATELLITE_", "PREDICTED_"))
     }
     assert expected <= rendered, f"{code} is missing {sorted(expected - rendered)}"
 

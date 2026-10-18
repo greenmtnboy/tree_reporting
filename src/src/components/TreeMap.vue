@@ -286,7 +286,7 @@
 import { useTheme } from '../composables/useTheme'
 import { basemapStyleUrl, bindMapTheme } from '../composables/mapTheme'
 
-import { ref, shallowRef, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
+import { ref, shallowRef, onMounted, onUnmounted, onActivated, onDeactivated, watch, computed, nextTick } from 'vue'
 import maplibregl from 'maplibre-gl'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData, CITY_CONFIG, closestCityTo, haversineKm, type CityCode } from '../composables/useMapData'
@@ -332,6 +332,8 @@ const props = defineProps<{
   nearbyLocation?: { lat: number; lng: number } | null
 }>()
 let disposed = false
+// False while App.vue's KeepAlive holds the map behind another tab.
+let mapActive = true
 const loadMode = props.nearbyLocation ? 'nearby' : 'explore'
 performance.mark(`trees:${loadMode}:start`)
 
@@ -1155,6 +1157,7 @@ watch(lifecyclePhase, (phase) => {
 watch(
   () => route.query.tree,
   (value) => {
+    if (!mapActive) return
     if (readRouteTreeId(value)) {
       void openTreeFromRoute()
     } else if (selectedTree.value) {
@@ -1446,7 +1449,7 @@ async function purgeAndRefresh() {
 
 // --- City switching ---
 
-async function switchCity(city: CityCode, landingCoords?: [number, number]) {
+async function switchCity(city: CityCode, landingCoords?: [number, number], animate = true) {
   if (city === lifecycleRequestedCity.value && city === lifecycleRenderedCity.value) return
   closeTreeCard()
   const transition = lifecycleStartCitySwitch(city)
@@ -1455,7 +1458,9 @@ async function switchCity(city: CityCode, landingCoords?: [number, number]) {
     const { center, name } = CITY_CONFIG[city]
     mapRef.value?.stop()
 
-    if (props.simplified) {
+    if (!animate) {
+      mapRef.value?.jumpTo({ center: landingCoords ?? center, zoom: 13.5, bearing: INTRO_END_BEARING })
+    } else if (props.simplified) {
       // On mobile, use a smooth but shorter animation than the globe swoop
       await new Promise<void>((resolve) => {
         if (!mapRef.value) return resolve()
@@ -1502,6 +1507,8 @@ watch(
   (newCity) => {
     const city = Array.isArray(newCity) ? newCity[0] : newCity
     if (typeof city !== 'string' || !(city in CITY_CONFIG)) return
+    // Kept alive behind another tab: onActivated catches the map up on return.
+    if (!mapActive) return
     if (city === lifecycleRequestedCity.value && city === selectedCity.value) return
     // A switch to this city is already mid-flight (its swoop hasn't committed the
     // context yet) — a link that echoes the destination city must not restart it.
@@ -1954,6 +1961,37 @@ onMounted(async () => {
         lifecycleForceReady(lifecycleRenderedCity.value ? { id: 0, city: lifecycleRenderedCity.value } : null) // Force to ready so error is visible
       })
   })
+})
+
+// App.vue keeps MapView alive across tabs, so the MapLibre instance, its tiles
+// and the loaded city survive a visit to Summary or Species. Those tabs can
+// change the city (CitySelector/activateCity) while the map is hidden; on return
+// jump straight to it rather than replaying the globe swoop.
+let firstActivation = true
+
+onActivated(() => {
+  if (firstActivation) { firstActivation = false; return }
+  mapActive = true
+  window.addEventListener('keydown', onWasdKeyDown)
+  window.addEventListener('keyup', onWasdKeyUp)
+  const map = mapRef.value
+  if (!map) return
+  map.resize()
+  const city = readRouteCity(route.query.city) ?? (lifecycleRequestedCity.value ?? selectedCity.value) as CityCode
+  // Before the first city has rendered, initializeRequestedCity's loop is still
+  // running and follows lifecycleRequestedCity itself.
+  if (lifecycleRenderedCity.value === null) return
+  if (city !== lifecycleRenderedCity.value || lifecyclePhase.value === 'loading') {
+    void switchCity(city, undefined, false)
+  }
+})
+
+onDeactivated(() => {
+  mapActive = false
+  window.removeEventListener('keydown', onWasdKeyDown)
+  window.removeEventListener('keyup', onWasdKeyUp)
+  wasdHeld.clear()
+  if (wasdRafId !== null) { cancelAnimationFrame(wasdRafId); wasdRafId = null }
 })
 
 onUnmounted(() => {
