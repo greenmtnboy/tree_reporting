@@ -44,6 +44,12 @@ export function useWorkerDashboardExecution() {
         name: CONNECTION_ID,
         queryType: 'duckdb',
         isConnected: () => ready.value,
+        // The SQL editor's multi-statement path; the dashboards never call it.
+        async runScript(sql: string) {
+          await workerQuery(sql)
+        },
+        // Parquets are read by URL over httpfs; nothing is registered on the connection.
+        listRegisteredFiles: () => [],
         async executeSql(sql: string, parameters?: Record<string, any> | null) {
           if (parameters && Object.keys(parameters).length > 0) {
             throw new Error('Parameterized dashboard queries are not supported in the worker adapter')

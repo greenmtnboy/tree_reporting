@@ -255,11 +255,17 @@ def test_the_prediction_job_consumes_its_inputs_by_name():
     assert "import full_tree_info_source;" in model
     assert "import tree_enrichment_source;" in model
     enrichment_source = statements(RAW_DIR / "tree_enrichment_source.preql")
-    assert re.search(r"^root partial datasource tree_enrichment \(", enrichment_source, re.M), (
+    assert re.search(r"^root datasource tree_enrichment \(", enrichment_source, re.M), (
         "tree_enrichment_source.preql must declare `tree_enrichment` as a root "
-        "*partial* datasource: root so a consumer never rebuilds it, partial so "
-        "the planner joins it with an outer join and a tree whose species has "
-        "no enrichment row yet is still predicted"
+        "datasource: root so a consumer never rebuilds it"
+    )
+    assert re.search(r"^\s+species: ~species,$", enrichment_source, re.M), (
+        "tree_enrichment_source.preql must bind `species: ~species`, a partial "
+        "key on an otherwise complete table: the planner pads the join and a "
+        "tree whose species has no enrichment row yet is still predicted, with "
+        "its fallbacks. A `partial datasource` instead stamps every column and "
+        "every scalar derived from one partial, and pytrilogy >= 0.3.391 "
+        "refuses the prediction columns outright."
     )
     assert re.search(r"^datasource tree_enrichment \(", statements(RAW_DIR / "tree_enrichment.preql"), re.M)
     # And the model itself must not be a second route to either.

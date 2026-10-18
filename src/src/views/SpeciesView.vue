@@ -141,6 +141,7 @@
               v-bind="sharedChartProps"
               :dashboard-group="embeddedDashboardGroup"
               :filters="filtersForChart(card.id)"
+              :priority="100"
             />
           </template>
           <template v-else>
@@ -249,6 +250,8 @@ const embeddedDashboardGroup = useEmbeddedDashboardGroup({
   connectionId,
   queryExecutionService,
   imports: SPECIES_DASHBOARD_IMPORTS as DashboardImport[],
+  // One resolver round trip for the whole page; see SummaryView.
+  maxConcurrentQueries: 64,
 })
 
 const cityFilter = ref<CityCode | null>(null)
