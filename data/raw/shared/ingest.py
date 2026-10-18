@@ -1433,6 +1433,23 @@ SATELLITE_DATA_SOURCES: dict[str, str] = {
     "USNYC": satellite_source_for("USNYC"),
 }
 
+def predicted_source_for(city_code: str) -> str:
+    """The `data_source` label for unreviewed bulk imagery predictions in *city_code*."""
+    return f"PREDICTED_{city_code}"
+
+
+# Cities with a bulk prediction partition: model detections published
+# WITHOUT a person looking at each one, staged per city by the imagery side as
+# `{code}_predicted_staging.parquet` and read by `predicted_tree_info.py`.
+# A fifth source class, below OSM: a predicted row is absorbed by any tree
+# another source has (OSM included), never anchors one, never merges with
+# another predicted row, and gives the cluster nothing -- its values publish
+# only when it is alone (see tree_dedup.preql).  A person confirming one in the
+# reviewer publishes a `SATELLITE_{code}` row, which then owns the cluster.
+PREDICTED_DATA_SOURCES: dict[str, str] = {
+    "USBOS": predicted_source_for("USBOS"),
+}
+
 DATA_SOURCES: tuple[str, ...] = tuple(
     label
     for code in MUNICIPAL_DATA_SOURCES
@@ -1441,6 +1458,7 @@ DATA_SOURCES: tuple[str, ...] = tuple(
         COMMUNITY_DATA_SOURCES[code],
         *((OSM_DATA_SOURCES[code],) if code in OSM_DATA_SOURCES else ()),
         *((SATELLITE_DATA_SOURCES[code],) if code in SATELLITE_DATA_SOURCES else ()),
+        *((PREDICTED_DATA_SOURCES[code],) if code in PREDICTED_DATA_SOURCES else ()),
     )
 )
 
