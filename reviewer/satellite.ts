@@ -693,6 +693,26 @@ export function foldChanges(stacked: Record<string, unknown>, target: Record<str
   return changes
 }
 
+/**
+ * Why one published satellite tree cannot be linked as a duplicate of
+ * another, or null when it can.  Two accepts of one tree (another run, an
+ * overlapping tile) publish as separate rows that the shared merge never
+ * joins; the link is what puts the later one in the stacked list to fold.
+ */
+export function linkProblem(source: Record<string, unknown> | null, target: Record<string, unknown> | null, sourceId: string, targetId: string): string | null {
+  if (!isSatelliteTreeId(sourceId) || !isSatelliteTreeId(targetId)) return 'Only satellite trees (sat-…) link to each other'
+  if (sourceId === targetId) return 'A tree cannot duplicate itself'
+  if (!source) return `No published satellite tree ${sourceId}`
+  if (!target) return `No published satellite tree ${targetId}`
+  if (source.withdrawnAt) return `${sourceId} is withdrawn`
+  if (target.withdrawnAt) return `${targetId} is withdrawn`
+  if (target.duplicateOfTreeId === sourceId) return `${targetId} is already linked to ${sourceId}`
+  if (String(source.city).toUpperCase() !== String(target.city).toUpperCase()) return 'The two trees are in different cities'
+  const d = haversineM(source.longitude as number, source.latitude as number, target.longitude as number, target.latitude as number)
+  if (!(d <= DUPLICATE_RADIUS_M)) return `The trees are ${d.toFixed(1)} m apart; a link needs ${DUPLICATE_RADIUS_M} m or less`
+  return null
+}
+
 // ---------------------------------------------------------------------------
 // Tile store: bundles on disk
 // ---------------------------------------------------------------------------
@@ -965,7 +985,18 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
   }
 
   /** Rewrite the public export from every published satellite tree. */
-  async function rewritePublicExport(): Promise<ExportManifest> {
+  // Rewrites run one at a time: two folds a moment apart each read Firestore
+  // and then write, and an older read finishing last would bring a withdrawn
+  // tree back into the export.  Each rewrite starts after the one before it
+  // ends, so it reads every change committed before its caller asked.
+  let exportChain: Promise<unknown> = Promise.resolve()
+  function rewritePublicExport(): Promise<ExportManifest> {
+    const run = exportChain.then(writePublicExport, writePublicExport)
+    exportChain = run.catch(() => {})
+    return run
+  }
+
+  async function writePublicExport(): Promise<ExportManifest> {
     const snapshot = await db.collection(PUBLISHED).orderBy('publishedAt', 'asc').get()
     const live = snapshot.docs.filter((doc) => !doc.data().withdrawnAt)
     const rows = live.map((doc) => exportRow(doc.data()))
@@ -1290,6 +1321,29 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
       })
       const manifest = await rewritePublicExport()
       res.json({ ok: true, exported: manifest.count })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // Link one published satellite tree as a duplicate of another (an accept
+  // from another run or tile that should have been "Same tree").  Private:
+  // the export is not rewritten, and the row then waits in the stacked list
+  // for Fold or Withdraw.
+  router.post('/published/:treeId/link', async (req, res, next) => {
+    try {
+      const targetId = cleanString((req.body as { targetId?: unknown })?.targetId, 200, 'targetId') ?? ''
+      await db.runTransaction(async (transaction) => {
+        const ref = db.collection(PUBLISHED).doc(req.params.treeId)
+        const [sourceSnap, targetSnap] = await Promise.all([
+          transaction.get(ref),
+          targetId ? transaction.get(db.collection(PUBLISHED).doc(targetId)) : Promise.resolve(null),
+        ])
+        const problem = linkProblem(sourceSnap.exists ? (sourceSnap.data() ?? {}) : null, targetSnap?.exists ? (targetSnap.data() ?? {}) : null, req.params.treeId, targetId)
+        if (problem) throw Object.assign(new Error(problem), { status: 409 })
+        transaction.update(ref, { duplicateOfTreeId: targetId, linkedAt: FieldValue.serverTimestamp(), linkedBy: actor })
+      })
+      res.json({ ok: true, treeId: req.params.treeId, duplicateOfTreeId: targetId })
     } catch (error) {
       next(error)
     }

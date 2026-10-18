@@ -581,7 +581,7 @@ async function showTile(tileId) {
   setTileLoading('Loading imagery…');
   const img = $('#tile-image');
   img.src = b.image.url; $('#inset-image').src = b.image.url;
-  img.decode().catch(() => {}).then(() => { if (token === T.loadToken) { setTileLoading(null); fitZoom(); } });
+  img.decode().catch(() => {}).then(() => { if (token === T.loadToken) { setTileLoading(null); fitZoom(); focusPending(); } });
   overlay.setAttribute('viewBox', `0 0 ${b.image.width} ${b.image.height}`);
   $('#inset-overlay').setAttribute('viewBox', `0 0 ${b.image.width} ${b.image.height}`);
   applyZoom();
@@ -788,6 +788,7 @@ function renderSide() {
   drawCloseup(center);
   side.querySelectorAll('[data-decision]').forEach((btn) => btn.addEventListener('click', () => decide(btn.dataset.decision)));
   side.querySelectorAll('[data-dup]').forEach((btn) => btn.addEventListener('click', () => decide('duplicate', btn.dataset.dup)));
+  side.querySelectorAll('[data-satlink]').forEach((btn) => btn.addEventListener('click', () => linkPublished(o.publishedTreeId, btn.dataset.satlink)));
   side.querySelectorAll('[data-correct]').forEach((btn) => btn.addEventListener('click', () => openCorrection(btn.dataset.correct)));
   if (T.correcting) openCorrection(T.correcting);
   $('#clear').addEventListener('click', clearDecision);
@@ -816,9 +817,22 @@ function nearestRow(n, o) {
   const linked = o?.duplicateOfTreeId === n.treeId;
   const info = `${fmt(n.distanceM)} m · ${esc(n.species || 'unidentified')} · ${n.dbhInches != null ? fmt(n.dbhInches) + ' in' : 'no DBH'} · ${esc(n.source)}`;
   const buttons = isSatTree(n.treeId)
-    ? `<button class="small" data-correct="${esc(n.treeId)}" title="Edit this published satellite tree in place">Correct</button>${n.inInventory ? `<button class="small ghost" data-dup="${esc(n.treeId)}" ${published ? 'disabled' : ''} title="Record that this detection is that tree; nothing is published">${linked ? '✓ same tree' : 'Same tree'}</button>` : ''}`
+    ? `<button class="small" data-correct="${esc(n.treeId)}" title="Edit this published satellite tree in place">Correct</button>${!n.inInventory && published && o.publishedTreeId && o.publishedTreeId !== n.treeId ? `<button class="small ghost" data-satlink="${esc(n.treeId)}" ${linked ? 'disabled' : ''} title="Both are published: record ${esc(o.publishedTreeId)} as a duplicate of this tree, then Fold or Withdraw it from the publish queue">${linked ? '✓ same tree' : 'Same tree'}</button>` : ''}${n.inInventory ? `<button class="small ghost" data-dup="${esc(n.treeId)}" ${published ? 'disabled' : ''} title="Record that this detection is that tree; nothing is published">${linked ? '✓ same tree' : 'Same tree'}</button>` : ''}`
     : `<button class="small" data-dup="${esc(n.treeId)}" ${published ? 'disabled' : ''}>${linked ? '✓ linked' : 'Duplicate of'}</button>`;
   return `<li><span>${esc(n.treeId)} <span class="muted">${info}</span></span><span class="toolbar">${buttons}</span></li>`;
+}
+
+/** Link this published detection's tree as a duplicate of another published satellite tree. */
+async function linkPublished(treeId, targetId) {
+  if (!confirm(`Record ${treeId} as the same tree as ${targetId}?
+
+Nothing is published; ${treeId} then waits in the publish queue's stacked list to Fold into ${targetId} or Withdraw.`)) return;
+  try {
+    await api('/published/' + encodeURIComponent(treeId) + '/link', { method: 'POST', body: JSON.stringify({ targetId }) });
+    const o = T.observations.get(T.selected); if (o) o.duplicateOfTreeId = targetId;
+    renderSide();
+    setSave(`Linked ${treeId} → ${targetId}; fold it from the Publish queue`);
+  } catch (error) { setSave(error.message, true); }
 }
 
 /** The correction editor for one published satellite tree, under the nearest list. */
@@ -1049,7 +1063,7 @@ async function showQueue() {
 }
 async function showStacked() {
   const rows = await api('/stacked');
-  const tree = (t) => `${esc(t.treeId)}<div class="muted">${esc(t.species || 'unidentified')} · ${t.measuredDbhInches != null ? fmt(t.measuredDbhInches) + ' in' : 'no DBH'} · crown ${t.humanCrownWidthM != null ? fmt(t.humanCrownWidthM) + ' m' : '—'}</div>`;
+  const tree = (t) => `<a href="#tree/${encodeURIComponent(t.treeId)}">${esc(t.treeId)}</a><div class="muted">${esc(t.species || 'unidentified')} · ${t.measuredDbhInches != null ? fmt(t.measuredDbhInches) + ' in' : 'no DBH'} · crown ${t.humanCrownWidthM != null ? fmt(t.humanCrownWidthM) + ' m' : '—'}</div>`;
   $('#stacked-body').innerHTML = rows.map((r) => `<tr data-id="${esc(r.stacked.treeId)}"><td>${tree(r.stacked)}</td><td>${r.target ? tree(r.target) + (r.target.withdrawnAt ? ' <span class="pill">withdrawn</span>' : '') : '<span class="muted">target missing</span>'}</td><td>${r.wouldMove.length ? esc(r.wouldMove.join(', ')) : '<span class="muted">nothing</span>'}</td><td class="toolbar">${r.target && !r.target.withdrawnAt ? '<button class="small" data-fold>Fold into target</button>' : ''}<button class="small reject" data-withdraw>Withdraw</button></td></tr>`).join('')
     || '<tr><td colspan="4" class="muted">None.</td></tr>';
 }
@@ -1081,9 +1095,35 @@ $('#republish').addEventListener('click', async (e) => {
 });
 
 // ---------------------------------------------------------------- routing
+// #tree/<sat-id>: open the tile and run that published satellite tree came
+// from, select its detection and zoom to it.
+async function openTree(treeId) {
+  statusEl.textContent = 'Finding ' + treeId + '…';
+  const tree = await api('/published/' + encodeURIComponent(treeId));
+  T.focus = { tileId: tree.tileId, predictionId: tree.predictionId, treeId };
+  history.replaceState(null, '', '?run=' + encodeURIComponent(tree.runId) + '#tile/' + encodeURIComponent(tree.tileId));
+  return route();
+}
+/** Select and centre the deep-linked detection once its tile's image is laid out. */
+function focusPending() {
+  const f = T.focus; if (!f || !T.bundle || f.tileId !== T.bundle.tileId) return;
+  T.focus = null;
+  const p = T.bundle.predictionLayer.predictions.find((x) => x.predictionId === f.predictionId);
+  if (!p) { statusEl.textContent = `${f.treeId}: detection ${f.predictionId} is not in this tile's bundle`; return; }
+  if (p.centerConfidence < threshold()) { $('#threshold').value = p.centerConfidence; $('#threshold-value').textContent = fmt(threshold(), 2); }
+  $('#hide-decided').checked = false;
+  const z = Math.max(Number($('#zoom').value), 4);
+  $('#zoom').max = Math.max(Number($('#zoom').max), z); $('#zoom').value = z; applyZoom();
+  const vp = $('#viewport'), o = T.observations.get(p.predictionId), c = o?.crownCenter || p;
+  vp.scrollLeft = c.xPx * z - vp.clientWidth / 2; vp.scrollTop = c.yPx * z - vp.clientHeight / 2;
+  select(p.predictionId);
+  statusEl.textContent = `${f.treeId} · ${p.predictionId}`;
+}
+
 async function route() {
   flushNudge();
   const h = location.hash || '#tiles';
+  if (h.startsWith('#tree/')) return openTree(decodeURIComponent(h.slice(6))).catch((err) => { statusEl.textContent = 'Error: ' + err.message; });
   const view = h.startsWith('#map') ? 'map' : h === '#queue' ? 'queue' : 'tiles';
   for (const a of document.querySelectorAll('#subnav a')) a.toggleAttribute('aria-current', a.dataset.view === view);
   const city = h.startsWith('#city/') ? decodeURIComponent(h.slice(6)) : h.startsWith('#map/') ? decodeURIComponent(h.slice(5))

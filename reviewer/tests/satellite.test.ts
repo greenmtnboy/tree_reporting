@@ -12,6 +12,7 @@ import {
   DUPLICATE_RADIUS_M,
   foldChanges,
   isPublishable,
+  linkProblem,
   MAX_CORRECTION_MOVE_M,
   parseCorrection,
   exportRow,
@@ -349,4 +350,17 @@ test('the manifest moves forward on a correction and on a withdrawal', () => {
   )
   assert.deepEqual(manifest.latestPublishedAtByCity, { USBOS: '2026-10-12T00:00:00.000Z', USSFO: '2026-10-11T00:00:00.000Z' })
   assert.equal(manifest.count, 2, 'a withdrawn row is not counted')
+})
+
+test('a published satellite tree links only to a nearby, live one in its city', () => {
+  const a = { city: 'USBOS', latitude: 42.308234, longitude: -71.109438 }
+  const b = { city: 'USBOS', latitude: 42.308229, longitude: -71.109424 }
+  assert.equal(linkProblem(b, a, 'sat-b', 'sat-a'), null)
+  assert.match(linkProblem(b, a, 'sat-b', '1234') ?? '', /Only satellite trees/)
+  assert.match(linkProblem(b, b, 'sat-b', 'sat-b') ?? '', /itself/)
+  assert.match(linkProblem(b, null, 'sat-b', 'sat-a') ?? '', /No published/)
+  assert.match(linkProblem(b, { ...a, withdrawnAt: 'x' }, 'sat-b', 'sat-a') ?? '', /withdrawn/)
+  assert.match(linkProblem(b, { ...a, duplicateOfTreeId: 'sat-b' }, 'sat-b', 'sat-a') ?? '', /already linked/)
+  assert.match(linkProblem(b, { ...a, city: 'USNYC' }, 'sat-b', 'sat-a') ?? '', /different cities/)
+  assert.match(linkProblem(b, { ...a, latitude: 42.3090 }, 'sat-b', 'sat-a') ?? '', new RegExp(`${DUPLICATE_RADIUS_M} m or less`))
 })
