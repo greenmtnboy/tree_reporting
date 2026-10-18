@@ -75,6 +75,12 @@ export function useSummaryDashboardExecution() {
         queryType: 'duckdb',
         isConnected: () => ready.value && connection?.connected === true,
         executeSql,
+        // The SQL editor's multi-statement path; the dashboards never call it.
+        runScript: async (sql: string) => {
+          await executeSql(sql)
+        },
+        // Parquets are read by URL over httpfs; nothing is registered on the connection.
+        listRegisteredFiles: () => [],
       }
     },
     async ensureConnected(connectionId: string): Promise<void> {
