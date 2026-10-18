@@ -315,6 +315,133 @@ class Predictor:
         return records
 
 
+def predict_tile(
+    predictor: "Predictor",
+    lat: float,
+    lon: float,
+    *,
+    artifacts: Path,
+    run: str,
+    year: int | None,
+    stac_url: str,
+    city: str | None,
+    envelopes: dict[str, Box],
+    territory: dict[str, tuple[Box, ...]],
+    min_score: float,
+    threshold: float,
+    coefficients: "CrownCoefficients | None",
+    readers: "dict[str, InventoryReader] | None",
+) -> dict[str, Any] | None:
+    """Fetch (or reuse the cached) grid tile nearest a point, predict it and build its bundle.
+
+    Returns None for a tile with too little imagery or in no city's territory.
+    *readers* caches inventory readers across calls; None skips the
+    current-tree overlay.  bulk_predict.py runs the same path over a grid, so
+    what it publishes is what the reviewer shows for the tile.
+    """
+    from pyproj import Transformer
+
+    tile_m = predictor.chip_pixels * predictor.resolution_m
+    items = search_items(lat, lon, year, stac_url)
+    props = items[0].properties
+    epsg = int(props.get("proj:epsg") or str(props["proj:code"]).removeprefix("EPSG:"))
+    crs = f"EPSG:{epsg}"
+    x, y = Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform(lon, lat)
+    west, north = grid_tile_origin(x, y, tile_m)
+    chip_id = point_chip_id(epsg, west, north)
+    affine = [predictor.resolution_m, 0.0, west, 0.0, -predictor.resolution_m, north]
+    bounds = tile_bounds_lonlat(affine, crs, predictor.chip_pixels, predictor.chip_pixels)
+
+    year = items[0].datetime.year
+    stem = artifacts / "point-tiles" / f"naip{year}" / f"{chip_id}_{round(predictor.resolution_m * 100)}cm"
+    tif_path = stem.parent / f"{stem.name}.tif"
+    manifest_path = stem.parent / f"{stem.name}.manifest.json"
+    if manifest_path.exists():
+        import rasterio
+
+        manifest = read_json(manifest_path)
+        with rasterio.open(tif_path) as cached:
+            image = cached.read()
+        valid_fraction = float(manifest["valid_fraction"])
+    else:
+        candidates = tile_items(items, bounds, stac_url)
+        image, valid, used = read_tile(
+            candidates, crs=crs, west=west, north=north, pixels=predictor.chip_pixels,
+            resolution_m=predictor.resolution_m, bands=predictor.bands,
+        )
+        valid_fraction = float(valid.mean())
+        by_id = {item.id: item for item in candidates}
+        manifest = {
+            "collection": "naip",
+            "year": str(year),
+            "crs": crs,
+            "west": west,
+            "north": north,
+            "resolution_m": predictor.resolution_m,
+            "valid_fraction": valid_fraction,
+            "sources": [
+                {"item_id": i, "acquisition_datetime": by_id[i].datetime.isoformat()} for i in used
+            ],
+        }
+        if used:
+            write_cached_tile(tif_path, image, crs=crs, west=west, north=north,
+                              resolution_m=predictor.resolution_m)
+            manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    if valid_fraction < MIN_VALID_FRACTION:
+        print(f"{lat},{lon}: only {valid_fraction:.0%} of the tile has imagery; skipped", file=sys.stderr)
+        return None
+
+    centre_lat = (bounds["north"] + bounds["south"]) / 2
+    centre_lon = (bounds["east"] + bounds["west"]) / 2
+    city = (city or owning_city(centre_lat, centre_lon, envelopes, territory) or "").upper()
+    if not city:
+        print(f"{lat},{lon}: in no city's territory; pass --city", file=sys.stderr)
+        return None
+
+    inventory = None
+    if readers is not None:
+        for code in cities_meeting(bounds, envelopes):
+            if code not in readers:
+                try:
+                    readers[code] = InventoryReader(PARQUET_URL.format(code=code.lower()), PREDICTIONS_URL, code)
+                except Exception as error:  # an unbuilt city has no parquet yet
+                    print(f"{code}: no current trees ({error.__class__.__name__})", file=sys.stderr)
+                    readers[code] = None  # type: ignore[assignment]
+        inventory = MultiInventory({
+            code: readers[code] for code in cities_meeting(bounds, envelopes) if readers.get(code)
+        })
+
+    records = [r for r in predictor.predict(image, chip_id) if float(r["score"]) >= min_score]
+    dates = sorted(date.fromisoformat(s["acquisition_datetime"][:10]).isoformat() for s in manifest["sources"])
+    version = imagery_version(manifest)
+    tid = tile_id(city, version, chip_id)
+    png = render_png(image)
+    bundle = build_bundle(
+        chip={"chip_id": chip_id, "column_offset": 0, "row_offset": 0},
+        predictions=records,
+        city=city,
+        version=version,
+        provider="naip",
+        acquisition=(dates[0], dates[-1], [s["item_id"] for s in manifest["sources"]]),
+        raster_affine=tuple(affine),
+        crs=crs,
+        resolution_m=predictor.resolution_m,
+        chip_pixels=predictor.chip_pixels,
+        stride=predictor.stride,
+        run_id=run,
+        checkpoint_sha256=predictor.checkpoint_sha256,
+        taxonomy_version=predictor.taxonomy_version,
+        taxonomy=predictor.taxonomy,
+        confidence_threshold=threshold,
+        coefficients=coefficients,
+        inventory=inventory,
+        png=png,
+        image_url=f"{tid}.png",
+        cohort="point",
+    )
+    return {"bundle": bundle, "records": records, "tileId": tid, "city": city, "png": png, "inventory": inventory}
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -364,110 +491,19 @@ def main(argv: list[str] | None = None) -> int:
     readers: dict[str, InventoryReader] = {}
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    tile_m = predictor.chip_pixels * predictor.resolution_m
     results: list[dict[str, Any]] = []
 
     for lat, lon in args.point:
-        from pyproj import Transformer
-
-        items = search_items(lat, lon, args.year, stac_url)
-        props = items[0].properties
-        epsg = int(props.get("proj:epsg") or str(props["proj:code"]).removeprefix("EPSG:"))
-        crs = f"EPSG:{epsg}"
-        x, y = Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform(lon, lat)
-        west, north = grid_tile_origin(x, y, tile_m)
-        chip_id = point_chip_id(epsg, west, north)
-        affine = [predictor.resolution_m, 0.0, west, 0.0, -predictor.resolution_m, north]
-        bounds = tile_bounds_lonlat(affine, crs, predictor.chip_pixels, predictor.chip_pixels)
-
-        year = items[0].datetime.year
-        stem = artifacts / "point-tiles" / f"naip{year}" / f"{chip_id}_{round(predictor.resolution_m * 100)}cm"
-        tif_path = stem.parent / f"{stem.name}.tif"
-        manifest_path = stem.parent / f"{stem.name}.manifest.json"
-        if manifest_path.exists():
-            import rasterio
-
-            manifest = read_json(manifest_path)
-            with rasterio.open(tif_path) as cached:
-                image = cached.read()
-            valid_fraction = float(manifest["valid_fraction"])
-        else:
-            candidates = tile_items(items, bounds, stac_url)
-            image, valid, used = read_tile(
-                candidates, crs=crs, west=west, north=north, pixels=predictor.chip_pixels,
-                resolution_m=predictor.resolution_m, bands=predictor.bands,
-            )
-            valid_fraction = float(valid.mean())
-            by_id = {item.id: item for item in candidates}
-            manifest = {
-                "collection": "naip",
-                "year": str(year),
-                "crs": crs,
-                "west": west,
-                "north": north,
-                "resolution_m": predictor.resolution_m,
-                "valid_fraction": valid_fraction,
-                "sources": [
-                    {"item_id": i, "acquisition_datetime": by_id[i].datetime.isoformat()} for i in used
-                ],
-            }
-            if used:
-                write_cached_tile(tif_path, image, crs=crs, west=west, north=north,
-                                  resolution_m=predictor.resolution_m)
-                manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-        if valid_fraction < MIN_VALID_FRACTION:
-            print(f"{lat},{lon}: only {valid_fraction:.0%} of the tile has imagery; skipped", file=sys.stderr)
-            continue
-
-        centre_lat = (bounds["north"] + bounds["south"]) / 2
-        centre_lon = (bounds["east"] + bounds["west"]) / 2
-        city = (args.city or owning_city(centre_lat, centre_lon, envelopes, territory) or "").upper()
-        if not city:
-            print(f"{lat},{lon}: in no city's territory; pass --city", file=sys.stderr)
-            continue
-
-        inventory = None
-        if not args.no_inventory:
-            for code in cities_meeting(bounds, envelopes):
-                if code not in readers:
-                    try:
-                        readers[code] = InventoryReader(PARQUET_URL.format(code=code.lower()), PREDICTIONS_URL, code)
-                    except Exception as error:  # an unbuilt city has no parquet yet
-                        print(f"{code}: no current trees ({error.__class__.__name__})", file=sys.stderr)
-                        readers[code] = None  # type: ignore[assignment]
-            inventory = MultiInventory({
-                code: readers[code] for code in cities_meeting(bounds, envelopes) if readers.get(code)
-            })
-
-        records = [r for r in predictor.predict(image, chip_id) if float(r["score"]) >= args.min_score]
-        dates = sorted(date.fromisoformat(s["acquisition_datetime"][:10]).isoformat() for s in manifest["sources"])
-        version = imagery_version(manifest)
-        tid = tile_id(city, version, chip_id)
-        png = render_png(image)
-        bundle = build_bundle(
-            chip={"chip_id": chip_id, "column_offset": 0, "row_offset": 0},
-            predictions=records,
-            city=city,
-            version=version,
-            provider="naip",
-            acquisition=(dates[0], dates[-1], [s["item_id"] for s in manifest["sources"]]),
-            raster_affine=tuple(affine),
-            crs=crs,
-            resolution_m=predictor.resolution_m,
-            chip_pixels=predictor.chip_pixels,
-            stride=predictor.stride,
-            run_id=run,
-            checkpoint_sha256=predictor.checkpoint_sha256,
-            taxonomy_version=predictor.taxonomy_version,
-            taxonomy=predictor.taxonomy,
-            confidence_threshold=threshold,
-            coefficients=coefficients,
-            inventory=inventory,
-            png=png,
-            image_url=f"{tid}.png",
-            cohort="point",
+        tile = predict_tile(
+            predictor, lat, lon, artifacts=artifacts, run=run, year=args.year, stac_url=stac_url,
+            city=args.city, envelopes=envelopes, territory=territory, min_score=args.min_score,
+            threshold=threshold, coefficients=coefficients,
+            readers=None if args.no_inventory else readers,
         )
-        (out / f"{tid}.png").write_bytes(png)
+        if tile is None:
+            continue
+        bundle, records, tid, city, inventory = tile["bundle"], tile["records"], tile["tileId"], tile["city"], tile["inventory"]
+        (out / f"{tid}.png").write_bytes(tile["png"])
         (out / f"{tid}.json").write_text(json.dumps(bundle, indent=1), encoding="utf-8")
         above = sum(1 for r in records if float(r["score"]) >= threshold)
         results.append({
