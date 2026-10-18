@@ -6,7 +6,13 @@
     <div class="main-col">
       <TopBar />
       <main class="main-content">
-        <router-view />
+        <!-- The map stays alive across tabs so returning to it doesn't rebuild
+             MapLibre and reload the city; see TreeMap's onActivated. -->
+        <router-view v-slot="{ Component }">
+          <KeepAlive include="MapView">
+            <component :is="Component" />
+          </KeepAlive>
+        </router-view>
       </main>
     </div>
     <ChatPanel />
