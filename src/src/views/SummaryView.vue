@@ -5,6 +5,7 @@
         <div>
           <p class="summary-eyebrow">Urban Forest Dashboard</p>
           <h1>{{ summaryTitle }}</h1>
+          <span class="sketch-rule sketch-rule--title" aria-hidden="true"></span>
         </div>
         <div v-if="cityContextPills.length" class="city-context-pills">
           <span v-for="pill in cityContextPills" :key="pill.label" class="city-context-pill">
@@ -74,6 +75,7 @@
           :class="[
             'chart-card',
             card.width === 'wide' ? 'chart-card--wide' : null,
+            chartById(card.id).renderMode === 'carousel' ? 'chart-card--carousel' : null,
             emptyChartIds.has(card.id) ? 'chart-card--empty' : null,
           ]"
         >
@@ -338,75 +340,82 @@ watch(
 </script>
 
 <style scoped>
+/* A page of the field journal: paper cards with a hairline, no drop shadows,
+   serif titles underlined by a pencil stroke, the biome sketch showing faintly
+   through. Charts take their colours from the same tokens (see
+   EmbeddedDashboardChart), so the plot areas are transparent on the paper. */
 .summary-page {
-  padding: 28px 30px 40px;
+  --journal-paper: rgba(var(--surface-rgb), 0.78);
+  --journal-rule: color-mix(in srgb, var(--color-border) 80%, transparent);
+  --journal-corners: 18px 14px 20px 15px / 15px 20px 14px 18px;
+  --trilogy-chart-font: var(--font-body);
+  padding: 28px 30px 48px;
   overflow-y: auto;
   height: 100%;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 26px;
   color: var(--color-ink);
+}
+
+/* A short hand-drawn stroke, masked so it takes the ink colour of its owner. */
+.sketch-rule,
+.summary-section-header h2::after,
+.chart-card-header h3::after {
+  content: '';
+  display: block;
+  width: 72px;
+  height: 7px;
+  margin-top: 6px;
+  background: var(--sketch-leaf);
+  opacity: 0.7;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 8' preserveAspectRatio='none'%3E%3Cpath d='M1 5.4C18 2.4 32 6.6 48 4.2S78 1.6 96 4.6s17 1.4 23 .4' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat left center / 100% 100%;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 8' preserveAspectRatio='none'%3E%3Cpath d='M1 5.4C18 2.4 32 6.6 48 4.2S78 1.6 96 4.6s17 1.4 23 .4' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat left center / 100% 100%;
 }
 
 .summary-header {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.city-context-pill {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid rgba(var(--accent-rgb), 0.12);
-  border-radius: 999px;
-  background: rgba(var(--accent-rgb), 0.1);
-}
-
-.city-context-pill-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(var(--muted-rgb), 0.82);
-}
-
-.city-context-pill-value {
-  font-size: 0.82rem;
-  color: var(--color-foam);
+  gap: 14px;
 }
 
 .summary-title-row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 14px;
   flex-wrap: wrap;
 }
 
 .summary-eyebrow {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   font-size: 0.72rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--color-moss);
 }
 
-.summary-intro {
-  margin: 0;
-  max-width: 760px;
-  color: rgba(var(--ink-rgb), 0.78);
-  line-height: 1.55;
-}
-
 .summary-title-row h1 {
   margin: 0;
-  font-size: 2rem;
+  font-size: 2.1rem;
   font-family: var(--font-display);
   font-weight: 400;
   letter-spacing: -.025em;
+  line-height: 1.1;
+}
+
+.sketch-rule--title {
+  width: 132px;
+  height: 9px;
+  margin-top: 10px;
+}
+
+.summary-intro {
+  margin: 0;
+  max-width: 720px;
+  color: rgba(var(--ink-rgb), 0.78);
+  line-height: 1.55;
 }
 
 .city-context-pills {
@@ -415,6 +424,29 @@ watch(
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.city-context-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--journal-rule);
+  border-radius: 999px;
+  background: var(--journal-paper);
+}
+
+.city-context-pill-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-moss);
+}
+
+.city-context-pill-value {
+  font-size: 0.82rem;
+  color: var(--color-ink);
 }
 
 .active-filters {
@@ -428,47 +460,66 @@ watch(
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px 6px 12px;
-  border: 1px solid rgba(var(--accent-rgb), 0.18);
-  background: rgba(var(--accent-rgb), 0.12);
+  padding: 5px 8px 5px 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  background: var(--accent-soft);
   border-radius: 999px;
   font-size: 0.78rem;
   color: var(--color-leaf);
 }
 
 .filter-chip-clear {
-  background: none;
+  width: 20px;
+  height: 20px;
   border: none;
+  border-radius: 999px;
+  background: transparent;
   color: inherit;
   cursor: pointer;
   font-size: 0.8rem;
+  line-height: 1;
+}
+
+.filter-chip-clear:hover {
+  background: rgba(var(--accent-rgb), 0.18);
 }
 
 .clear-all-btn {
   background: none;
   border: none;
-  color: rgba(var(--ink-rgb), 0.65);
+  color: var(--color-muted);
   cursor: pointer;
   font-size: 0.78rem;
   text-decoration: underline;
+  text-underline-offset: 3px;
   padding: 0;
+}
+
+.clear-all-btn:hover {
+  color: var(--color-ink);
 }
 
 .kpi-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 16px;
+  gap: 14px;
+}
+
+/* The paper card. */
+.chart-card,
+.tree-map-card {
+  position: relative;
+  background: var(--journal-paper);
+  border: 1px solid var(--journal-rule);
+  border-radius: var(--journal-corners);
+  box-shadow: none;
 }
 
 .tree-map-card {
   flex-shrink: 0;
   width: 100%;
-  height: 400px;
-  border-radius: 14px;
+  height: 380px;
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.5), rgba(var(--surface-rgb), 0.65));
-  border: 1px solid rgba(var(--accent-rgb), 0.07);
-  box-shadow: 0 16px 36px rgba(7, 10, 11, 0.2);
 }
 
 .summary-section {
@@ -480,66 +531,62 @@ watch(
 .summary-section-header {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .summary-section-header h2 {
   margin: 0;
-  font-size: 1.08rem;
+  font-size: 1.3rem;
   font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  font-weight: 400;
+  letter-spacing: -.01em;
 }
 
 .summary-section-header p {
   margin: 0;
-  color: rgba(var(--muted-rgb), 0.82);
-  font-size: 0.82rem;
+  color: var(--color-muted);
+  font-size: 0.84rem;
   line-height: 1.45;
 }
 
 .chart-row {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   align-items: stretch;
   flex-wrap: wrap;
 }
 
 .chart-card {
-  position: relative;
   display: flex;
   flex-direction: column;
-  background:
-    linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.62), rgba(var(--surface-rgb), 0.72));
-  border: 1px solid rgba(var(--accent-rgb), 0.1);
-  border-radius: 14px;
-  padding: 20px 22px;
+  padding: 18px 20px 16px;
   flex: 1 1 260px;
   min-width: 0;
   height: 380px;
   min-height: 0;
   overflow: hidden;
-  box-shadow: 0 16px 36px rgba(7, 10, 11, 0.2);
   isolation: isolate;
 }
 
 .chart-card--kpi {
-  height: 150px;
-  padding: 16px 18px;
+  --trilogy-chart-font: var(--font-display);
+  height: 140px;
+  padding: 14px 16px 10px;
+  border-radius: 14px 18px 15px 17px / 17px 14px 18px 15px;
 }
 
 .chart-card--metric {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .metric-label {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(var(--muted-rgb), 0.85);
+  color: var(--color-moss);
 }
 
 .chart-card--wide {
@@ -549,52 +596,68 @@ watch(
 .chart-card--empty {
   height: auto;
   min-height: 0;
+  padding: 14px 20px;
+  background: transparent;
+  border-style: dashed;
 }
 
 .chart-card--empty .chart-card-header {
   margin-bottom: 0;
 }
 
+.chart-card--empty .chart-card-header h3 {
+  font-size: 0.9rem;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--color-muted);
+}
+
+.chart-card--empty .chart-card-header h3::after {
+  display: none;
+}
+
 .chart-card-header {
   position: relative;
   z-index: 1;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   flex: 0 0 auto;
 }
 
 .chart-card-header h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.08rem;
   font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  font-weight: 400;
+  letter-spacing: -.005em;
+  line-height: 1.25;
+}
+
+.chart-card-header h3::after {
+  width: 56px;
+  height: 6px;
+  margin-top: 5px;
+  opacity: 0.55;
 }
 
 .chart-sub {
   display: block;
   font-size: 0.78rem;
-  color: rgba(var(--muted-rgb), 0.82);
-  margin-top: 8px;
+  color: var(--color-muted);
+  margin-top: 6px;
   line-height: 1.45;
-}
-
-.chart-card::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 88px;
-  height: 1px;
-  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.58), rgba(var(--accent-rgb), 0));
 }
 
 @media (max-width: 900px) {
   .summary-page {
-    padding: 20px 18px 30px;
+    padding: 20px 18px 36px;
   }
 
   .summary-title-row h1 {
     font-size: 1.7rem;
+  }
+
+  .city-context-pills {
+    justify-content: flex-start;
   }
 }
 
@@ -602,6 +665,13 @@ watch(
   .chart-card,
   .chart-card--wide {
     flex-basis: 100%;
+  }
+
+  /* The carousel stacks its photo over its text on a phone; let the card
+     grow with it instead of clipping the species name. */
+  .chart-card--carousel {
+    height: auto;
+    min-height: 380px;
   }
 }
 </style>
