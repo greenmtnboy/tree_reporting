@@ -482,9 +482,12 @@ async function showMap(city) {
   statusEl.textContent = `${tiles.length} ${city} tile(s) · ${tiles.filter((t) => t.done).length} reviewed · ${tiles.filter((t) => !t.done && decidedCount(t)).length} in progress${all.length > tiles.length ? ` · ${all.length - tiles.length} from other runs hidden` : ''}`;
   if (firstLook) {
     if (saved?.city === city) M.map.jumpTo({ center: saved.center, zoom: saved.zoom });
-    else if (tiles.length) {
+    else if (all.length) {
+      // Frame this run's tiles, or -- when the run has none here yet, and only
+      // point predictions will draw -- the city's tiles from any run, rather
+      // than leaving the map on its default continental view.
       const bounds = new maplibregl.LngLatBounds();
-      for (const t of tiles) for (const c of t.footprint) bounds.extend(c);
+      for (const t of tiles.length ? tiles : all) for (const c of t.footprint) bounds.extend(c);
       M.map.fitBounds(bounds, { padding: 30, duration: 0 });
     }
   }
