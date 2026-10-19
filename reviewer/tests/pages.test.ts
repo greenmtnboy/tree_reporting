@@ -46,3 +46,13 @@ for (const file of ['checkin_photos_page.html', 'modifications_page.html']) {
     assert.equal(esc('<img onerror="x">'), '&lt;img onerror=&quot;x&quot;&gt;')
   })
 }
+
+test('satellite_page.html: bulk tile counts split detections by merge fate', () => {
+  const html = readFileSync(path.join(import.meta.dirname, '..', 'satellite_page.html'), 'utf8')
+  const source = html.match(/^function bulkTileCounts[\s\S]*?^}$/m)?.[0]
+  assert.ok(source, 'satellite_page.html defines bulkTileCounts() at the top level')
+  const bulkTileCounts = new Function(`${source}\nreturn bulkTileCounts;`)()
+  const predictions = { tile: [0, 0, 1, 1, 2], score: [0.5, 0.2, 0.4, 0.31, 0.9], absorbed: [0, 0, 1, 0, 0] }
+  assert.deepEqual(bulkTileCounts(predictions, 4, 0.3), { shown: [1, 1, 1, 0], absorbed: [0, 1, 0, 0] })
+  assert.deepEqual(bulkTileCounts(predictions, 4, 0.95), { shown: [0, 0, 0, 0], absorbed: [0, 0, 0, 0] })
+})

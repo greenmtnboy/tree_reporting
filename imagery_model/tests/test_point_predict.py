@@ -1,3 +1,10 @@
+import json
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+from urban_tree_ml import point_predict
 from urban_tree_ml.point_predict import (
     MultiInventory,
     cities_meeting,
@@ -60,3 +67,45 @@ def test_multi_inventory_merges_cities_once_per_tree():
     })
     assert [t["treeId"] for t in inventory.within({})] == ["a1", "b1", "shared"]
     assert inventory.version == "AAAAA:v1;BBBBB:v2"
+
+
+def _cache_tile(artifacts, year, chip_id, west, north):
+    stem = artifacts / "point-tiles" / f"naip{year}" / f"{chip_id}_30cm"
+    point_predict.write_cached_tile(
+        stem.with_suffix(".tif"), np.zeros((4, 8, 8), dtype=np.uint8),
+        crs="EPSG:26919", west=west, north=north, resolution_m=0.3,
+    )
+    stem.with_name(stem.name + ".manifest.json").write_text(json.dumps({
+        "collection": "naip", "year": str(year), "valid_fraction": 1.0,
+        "sources": [{"item_id": f"item-{year}", "acquisition_datetime": f"{year}-07-01T00:00:00+00:00"}],
+    }), encoding="utf-8")
+
+
+def test_a_hinted_cached_tile_is_predicted_without_a_catalog_search(tmp_path, monkeypatch):
+    def search(*args, **kwargs):
+        raise AssertionError("searched STAC for a cached tile")
+
+    monkeypatch.setattr(point_predict, "search_items", search)
+    predictor = SimpleNamespace(
+        chip_pixels=8, resolution_m=0.3, stride=4, checkpoint_sha256="c", taxonomy_version="t",
+        taxonomy={"genera": [], "species": []}, predict=lambda image, chip_id: [],
+    )
+    lat, lon = 42.35, -71.06
+    from pyproj import Transformer
+
+    x, y = Transformer.from_crs("EPSG:4326", "EPSG:26919", always_xy=True).transform(lon, lat)
+    west, north = grid_tile_origin(x, y, 8 * 0.3)
+    chip_id = point_chip_id(26919, west, north)
+    for year in (2021, 2023):
+        _cache_tile(tmp_path, year, chip_id, west, north)
+    kwargs = dict(
+        artifacts=tmp_path, run="run", year=None, stac_url="unused", city="USBOS", envelopes={},
+        territory={}, min_score=0.1, threshold=0.35, coefficients=None, readers=None,
+    )
+
+    result = point_predict.predict_tile(predictor, lat, lon, epsg_hint=26919, **kwargs)
+    assert result["bundle"]["chipId"] == chip_id
+    assert result["bundle"]["imageryVersion"].startswith("naip2023-")  # the newest cached year
+
+    with pytest.raises(AssertionError, match="searched STAC"):
+        point_predict.predict_tile(predictor, lat, lon, **kwargs)  # no hint: always asks the catalog

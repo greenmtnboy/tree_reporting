@@ -84,29 +84,38 @@ def record(**overrides):
         "tree_id": "pred-1", "city": "USBOS", "latitude": 42.33, "longitude": -71.08,
         "genus": "Acer", "species": "Acer rubrum", "score": 0.4, "crown_width_m": 5.5,
         "run_id": "run", "imagery_version": "naip2023",
+        "species_confidence": 0.85, "genus_confidence": 0.9,
     }
     return {**base, **overrides}
 
 
-def test_ingest_publishes_the_genus_and_never_a_diameter():
+def test_ingest_publishes_a_confident_species_and_never_a_diameter():
     from predicted_tree_info import records_to_table
 
     row = records_to_table([record()], "USBOS").to_pylist()[0]
     assert row["data_source"] == "PREDICTED_USBOS"
-    assert row["species"] == "Acer"
+    assert row["species"] == "Acer rubrum"
     assert row["diameter_at_breast_height"] is None
     assert row["crown_width_m"] == 5.5
 
 
-def test_ingest_falls_back_to_the_species_labels_genus():
-    from predicted_tree_info import records_to_table
+def test_ingest_names_only_what_the_model_is_sure_of():
+    """Species at NAME_CONFIDENCE or more, else a confident genus, else Unknown;
+    the threshold is inclusive, and a file without confidences names nothing."""
+    from predicted_tree_info import NAME_CONFIDENCE, records_to_table
 
     rows = records_to_table(
-        [record(genus=None, species="quercus palustris"), record(tree_id="pred-2", genus=None, species=None)],
+        [
+            record(tree_id="pred-1", species_confidence=NAME_CONFIDENCE),
+            record(tree_id="pred-2", species_confidence=0.5, genus_confidence=0.95),
+            record(tree_id="pred-3", species_confidence=0.5, genus_confidence=0.5),
+            record(tree_id="pred-4", species=None, genus_confidence=0.9),
+            record(tree_id="pred-5", species_confidence=None, genus_confidence=None),
+            record(tree_id="pred-6", species="quercus palustris", genus=None, species_confidence=0.3),
+        ],
         "USBOS",
     ).to_pylist()
-    assert rows[0]["species"] == "Quercus"
-    assert rows[1]["species"] == "Unknown"
+    assert [r["species"] for r in rows] == ["Acer rubrum", "Acer", "Unknown", "Acer", "Unknown", "Unknown"]
 
 
 def test_ingest_skips_rows_it_cannot_trust():

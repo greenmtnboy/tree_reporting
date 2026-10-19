@@ -9,6 +9,7 @@ import sharp from 'sharp'
 import { createSatelliteRouter, TileStore } from './satellite.ts'
 import { parsePoint, predictPoint } from './satellitePredict.ts'
 import { areaExportRequests, chipsInArea, ExportJobs, listRuns, parseAreaRequest, parseExportRequest, planArea, resolveMosaic } from './satelliteModels.ts'
+import { bulkOverviewPath, listBulkSets } from './satelliteBulk.ts'
 import {
   assertCheckinPhotoPublishable,
   checkinPhotoListItem,
@@ -151,6 +152,24 @@ app.post('/api/satellite/predict', async (req, res) => {
   } catch (error) {
     res.status(502).json({ error: (error as Error).message })
   }
+})
+
+// Bulk prediction sets for the map (see satelliteBulk.ts).
+app.get('/api/satellite/bulk', (req, res, next) => {
+  try {
+    res.json(listBulkSets(imageryModelDir, typeof req.query.city === 'string' ? req.query.city : undefined))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/satellite/bulk/:set/overview', (req, res) => {
+  const file = bulkOverviewPath(imageryModelDir, req.params.set)
+  if (!file) {
+    res.status(404).json({ error: `No overview for ${req.params.set}; run bulk_predict overview` })
+    return
+  }
+  res.sendFile(file, { headers: { 'Cache-Control': 'no-store' } })
 })
 
 // The satellite page: aerial tiles, model detections, inventory overlay,
