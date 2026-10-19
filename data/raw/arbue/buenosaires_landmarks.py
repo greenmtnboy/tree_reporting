@@ -89,9 +89,6 @@ def build_table() -> pa.Table:
             "geometry_raw": pa.array(
                 [row["geometry_raw"] for row in LANDMARKS], type=pa.string()
             ),
-            "arbue_landmark_data_updated_through": pa.array(
-                [UPDATED_AT for _ in LANDMARKS], type=pa.timestamp("us", tz="UTC")
-            ),
         }
     )
 

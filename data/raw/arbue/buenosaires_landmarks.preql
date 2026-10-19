@@ -1,7 +1,11 @@
 import ..landmark_common;
 
+root datasource buenosaires_landmarks_update_time (
+    data_updated_through: arbue_landmark_data_updated_through
+)
+file `./buenosaires_landmarks_probe.py`;
+
 root partial datasource raw_buenosaires_landmark_info extends landmark_partition (
-    arbue_landmark_data_updated_through: arbue_landmark_data_updated_through,
 )
 complete where city = 'ARBUE'
 file `./buenosaires_landmarks.py`;
