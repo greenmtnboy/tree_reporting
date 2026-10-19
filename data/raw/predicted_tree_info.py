@@ -27,13 +27,19 @@ The staged parquet's contract, one row per detection:
     crown_width_m    double   the model's crown-head width, or null
     run_id           string   the training run that predicted it
     imagery_version  string
+    species_confidence double the model's probability for `species`, or null
+    genus_confidence double   the model's probability for `genus`, or null
 
 What reaches the canonical columns, and what deliberately does not:
 
-* `species` is the model's *genus* (from `genus`, or the first word of
-  `species`).  The model's top-1 species is right well under half the time,
-  and `species` is shown as an identification everywhere; a genus is a claim
-  it can usually back.  The species label stays in the staged file.
+* `species` is the model's species when its confidence is at least
+  NAME_CONFIDENCE, else its genus when that confidence is, else Unknown.
+  Top-1 species is right under half the time overall (and the genus head no
+  more often), but both are calibrated: on the three-city v13 run's Boston
+  validation, names at 0.8 or more were right about 80% of the time, on
+  about 30% of matched trees.  `species` is shown as an identification
+  everywhere and feeds the species charts, so an unsure name stays out.  A
+  file without the confidence columns names nothing.
 * `diameter_at_breast_height` is always null: the column means a measurement.
 * `crown_width_m` is the crown-head width, an observation of this crown from
   the image, as for reviewed detections.
@@ -70,6 +76,8 @@ from shared.ingest import (  # noqa: E402
 )
 
 ID_PREFIX = "pred-"
+# The probability a species or genus label needs before it is published.
+NAME_CONFIDENCE = 0.8
 
 
 def staging_name(city_code: str) -> str:
@@ -100,12 +108,27 @@ def load_staged(city_code: str) -> list[Mapping[str, Any]]:
     return pq.read_table(io.BytesIO(response.content)).to_pylist()
 
 
-def _genus(record: Mapping[str, Any]) -> str | None:
-    raw = record.get("genus") or record.get("species")
-    if not raw or not str(raw).strip():
+def _confident(record: Mapping[str, Any], label: str) -> str | None:
+    """The record's *label* ("species" or "genus") when its confidence clears
+    NAME_CONFIDENCE, else None."""
+    raw = record.get(label)
+    try:
+        confidence = float(record.get(f"{label}_confidence"))
+    except (TypeError, ValueError):
         return None
+    if not raw or not str(raw).strip() or not confidence >= NAME_CONFIDENCE:
+        return None
+    return str(raw).strip()
+
+
+def _name(record: Mapping[str, Any]) -> str | None:
+    """A confident species, else a confident genus, else None (Unknown)."""
+    species = _confident(record, "species")
+    if species:
+        return normalize_species(species)
+    genus = _confident(record, "genus")
     # normalize_species capitalises a bare genus like any other name.
-    return normalize_species(str(raw).strip().split()[0])
+    return normalize_species(genus.split()[0]) if genus else None
 
 
 def _positive_float_or_none(value: Any) -> float | None:
@@ -164,7 +187,7 @@ def records_to_table(records, city_code: str) -> pa.Table:
                 "tree_id": tree_id,
                 "city": city_code,
                 "data_source": data_source,
-                "species": _genus(record),
+                "species": _name(record),
                 "tree_name": None,
                 "plant_date": None,
                 "diameter_at_breast_height": None,

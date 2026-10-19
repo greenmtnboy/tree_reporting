@@ -23,10 +23,12 @@ def bundle(tile="USBOS-naip2023-abc-p1", chip="p1", predictions=(), run="run-v13
     }
 
 
-def prediction(pid, lat, lon, score, genus="Acer", species="Acer rubrum", crown=5.0, method="model_crown_head"):
+def prediction(pid, lat, lon, score, genus="Acer", species="Acer rubrum", crown=5.0, method="model_crown_head",
+               species_conf=0.9, genus_conf=0.95):
     return {
         "predictionId": pid, "latitude": lat, "longitude": lon, "centerConfidence": score,
         "genus": genus, "species": species, "modelCrownWidthM": crown, "modelCrownWidthMethod": method,
+        "speciesConfidence": species_conf, "genusConfidence": genus_conf,
     }
 
 
@@ -66,6 +68,7 @@ def test_rows_carry_only_a_model_crown_head_width():
     ]))
     assert [r["crown_width_m"] for r in rows] == [5.0, None]
     assert rows[0]["genus"] == "Acer" and rows[0]["score"] == 0.5
+    assert rows[0]["species_confidence"] == 0.9 and rows[0]["genus_confidence"] == 0.95
     assert {"run_id", "imagery_version", "_tile"} <= set(rows[0])
 
 
@@ -115,3 +118,28 @@ def test_the_staged_contract_is_the_ingest_contract():
     ingest = (Path(__file__).resolve().parents[2] / "data" / "raw" / "predicted_tree_info.py").read_text(encoding="utf-8")
     for column in STAGED_COLUMNS:
         assert f"    {column} " in ingest, column
+
+
+def test_boston_merge_cell_is_ten_metres():
+    cell_lat, cell_lon = bulk_predict.cell_degrees("USBOS")
+    assert abs(cell_lat * 111320.0 - 10.0) < 1e-9
+    assert cell_lon > cell_lat  # a degree of longitude is shorter at 42 N
+
+
+def test_a_prediction_beside_a_published_tree_is_absorbed():
+    cell_lat, cell_lon = bulk_predict.cell_degrees("USBOS")
+    tree = (42.316, -71.115)
+    near = (42.316 + 3 / 111320.0, -71.115)  # 3 m north
+    far = (42.316 + 40 / 111320.0, -71.115)  # 40 m north
+    assert bulk_predict.absorbed_flags([near, far], [tree], cell_lat, cell_lon) == [True, False]
+
+
+def test_a_cell_boundary_does_not_split_a_close_pair():
+    """Two points 1 m apart on either side of a grid-a boundary still share a
+    staggered cell, as they do in the merge."""
+    cell_lat, cell_lon = bulk_predict.cell_degrees("USBOS")
+    edge = 471100 * cell_lat  # a grid-a latitude boundary, about 42.32 N
+    lon = -71.115
+    below, above = (edge - 0.5 / 111320.0, lon), (edge + 0.5 / 111320.0, lon)
+    assert bulk_predict.dedup_cells(*below, cell_lat, cell_lon)[0] != bulk_predict.dedup_cells(*above, cell_lat, cell_lon)[0]
+    assert bulk_predict.absorbed_flags([above], [below], cell_lat, cell_lon) == [True]

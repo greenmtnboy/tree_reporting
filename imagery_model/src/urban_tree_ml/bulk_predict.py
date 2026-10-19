@@ -32,6 +32,12 @@ dies loses at most the tile it was on:
     the ingest documents.  ``--from-bundles DIR`` assembles reviewer tile
     bundles instead, for a pilot over tiles already exported.
 
+``overview``
+    Writes ``<out>/overview.json`` for the reviewer's map: every planned
+    tile's footprint and state, every detection (score, genus, and whether a
+    published tree would absorb it in the merge), and the city's published
+    trees.  Cheap; rerun it after each ``predict`` batch.
+
 Uploading is deliberately a separate, manual step -- it is what makes the
 city's next refresh publish the rows::
 
@@ -45,7 +51,7 @@ Example (Boston, v13)::
     uv run --group imagery --group train python -m urban_tree_ml.bulk_predict predict \\
       --out artifacts/bulk/usbos-v13 --max-minutes 15
     uv run --group imagery python -m urban_tree_ml.bulk_predict assemble \\
-      --out artifacts/bulk/usbos-v13 --threshold 0.35
+      --out artifacts/bulk/usbos-v13 --threshold 0.15
 
 Nothing here knows about splits: these rows are published as unreviewed
 predictions, and keeping them out of training labels is the training side's
@@ -63,13 +69,13 @@ import time
 from pathlib import Path
 from typing import Any, Iterable
 
-from urban_tree_ml.point_predict import PARQUET_URL, city_boxes, owning_city
+from urban_tree_ml.point_predict import INGEST_PATH, PARQUET_URL, city_boxes, owning_city
 
 ID_PREFIX = "pred-"
 MODEL_CROWN_METHOD = "model_crown_head"
 STAGED_COLUMNS = (
     "tree_id", "city", "latitude", "longitude", "genus", "species", "score",
-    "crown_width_m", "run_id", "imagery_version",
+    "crown_width_m", "run_id", "imagery_version", "species_confidence", "genus_confidence",
 )
 
 
@@ -123,11 +129,17 @@ def rows_from_bundle(bundle: dict[str, Any]) -> list[dict[str, Any]]:
             "species": p.get("species"),
             "score": float(p["centerConfidence"]),
             "crown_width_m": float(crown) if crown else None,
+            "species_confidence": _float_or_none(p.get("speciesConfidence")),
+            "genus_confidence": _float_or_none(p.get("genusConfidence")),
             "run_id": run_id,
             "imagery_version": version,
             "_tile": str(bundle["tileId"]),
         })
     return rows
+
+
+def _float_or_none(value: Any) -> float | None:
+    return None if value is None else float(value)
 
 
 def drop_seam_duplicates(rows: list[dict[str, Any]], radius_m: float) -> list[dict[str, Any]]:
@@ -166,6 +178,45 @@ def drop_seam_duplicates(rows: list[dict[str, Any]], radius_m: float) -> list[di
     return kept
 
 
+def dedup_cells(lat: float, lon: float, cell_lat_deg: float, cell_lon_deg: float) -> list[tuple[str, int, int]]:
+    """The four half-cell-staggered merge cells of a point (tree_dedup.preql's
+    ``cell_a``..``cell_d``): two rows sharing any one are merge candidates."""
+    return [
+        (name, math.floor(lon / cell_lon_deg + dx), math.floor(lat / cell_lat_deg + dy))
+        for name, dx, dy in (("a", 0, 0), ("b", 0.5, 0), ("c", 0, 0.5), ("d", 0.5, 0.5))
+    ]
+
+
+def absorbed_flags(
+    predictions: list[tuple[float, float]], trees: list[tuple[float, float]],
+    cell_lat_deg: float, cell_lon_deg: float,
+) -> list[bool]:
+    """Whether each (lat, lon) prediction shares a merge cell with a published
+    tree -- the merge then folds it into that tree and it never shows as its
+    own.  Published positions stand in for the raw ones the build keys on."""
+    occupied = {c for lat, lon in trees for c in dedup_cells(lat, lon, cell_lat_deg, cell_lon_deg)}
+    return [
+        any(c in occupied for c in dedup_cells(lat, lon, cell_lat_deg, cell_lon_deg))
+        for lat, lon in predictions
+    ]
+
+
+def cell_degrees(city: str, ingest_path: Path = INGEST_PATH) -> tuple[float, float]:
+    """(lat, lon) degrees of the city's merge cell, as shared/ingest.py's
+    cell_degrees computes them; the literals are read, not imported."""
+    import ast
+
+    found: dict[str, Any] = {}
+    for node in ast.parse(ingest_path.read_text(encoding="utf-8")).body:
+        target = getattr(node, "target", None) or (getattr(node, "targets", None) or [None])[0]
+        if getattr(target, "id", None) in ("DEDUP_CELL_METRES", "CITY_BOUNDS") and node.value is not None:
+            found[target.id] = ast.literal_eval(node.value)
+    metres = found["DEDUP_CELL_METRES"][city]
+    lat_min, lat_max, _, _ = found["CITY_BOUNDS"][city]
+    lat = math.radians((lat_min + lat_max) / 2)
+    return metres / 111320.0, metres / (111320.0 * math.cos(lat))
+
+
 def staged_table(rows: list[dict[str, Any]]):
     import pyarrow as pa
 
@@ -173,7 +224,8 @@ def staged_table(rows: list[dict[str, Any]]):
         ("tree_id", pa.string()), ("city", pa.string()), ("latitude", pa.float64()),
         ("longitude", pa.float64()), ("genus", pa.string()), ("species", pa.string()),
         ("score", pa.float64()), ("crown_width_m", pa.float64()), ("run_id", pa.string()),
-        ("imagery_version", pa.string()),
+        ("imagery_version", pa.string()), ("species_confidence", pa.float64()),
+        ("genus_confidence", pa.float64()),
     ])
     return pa.Table.from_pylist([{c: r[c] for c in STAGED_COLUMNS} for r in rows], schema=schema)
 
@@ -261,6 +313,12 @@ def predict(args: argparse.Namespace) -> int:
     todo = [t for t in manifest["tiles"] if pending(t)]
     total = len(manifest["tiles"])
     print(f"{total - len(todo)}/{total} tiles done; {len(todo)} to go", file=sys.stderr)
+    if args.near:
+        # Nearest first, so a limited batch is one contiguous block, not a strip
+        # along the plan's (i, j) order.
+        lat0, lon0 = (float(v) for v in args.near.split(","))
+        scale = math.cos(math.radians(lat0))
+        todo.sort(key=lambda t: (t["lat"] - lat0) ** 2 + ((t["lon"] - lon0) * scale) ** 2)
     if args.limit:
         todo = todo[: args.limit]
     if not todo:
@@ -298,6 +356,7 @@ def predict(args: argparse.Namespace) -> int:
                         "predictions": [
                             {k: p.get(k) for k in (
                                 "predictionId", "latitude", "longitude", "genus", "species",
+                                "speciesConfidence", "genusConfidence",
                                 "centerConfidence", "modelCrownWidthM", "modelCrownWidthMethod",
                             )}
                             for p in bundle["predictionLayer"]["predictions"]
@@ -345,6 +404,79 @@ def assemble(args: argparse.Namespace) -> int:
     return 0
 
 
+def overview(args: argparse.Namespace) -> int:
+    import duckdb
+    from pyproj import Transformer
+
+    out = Path(args.out)
+    manifest = json.loads((out / "plan.json").read_text(encoding="utf-8"))
+    city, tile_m = manifest["city"], float(manifest["tileM"])
+    back = Transformer.from_crs(f"EPSG:{manifest['epsg']}", "EPSG:4326", always_xy=True)
+
+    tiles, detections = [], []
+    for k, tile in enumerate(manifest["tiles"]):
+        i, j = tile["i"], tile["j"]
+        xs = [i * tile_m, (i + 1) * tile_m, (i + 1) * tile_m, i * tile_m]
+        ys = [(j + 1) * tile_m, (j + 1) * tile_m, j * tile_m, j * tile_m]
+        lons, lats = back.transform(xs, ys)
+        path = tile_path(out, tile)
+        record = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"status": "pending"}
+        tiles.append({
+            "key": f"{i}_{j}", "lat": round(tile["lat"], 6), "lon": round(tile["lon"], 6),
+            # NW, NE, SE, SW: the corner order MapLibre's image sources use.
+            "footprint": [[round(x, 6), round(y, 6)] for x, y in zip(lons, lats)],
+            "status": record["status"], "tileId": record.get("tileId"),
+        })
+        for p in (record.get("predictionLayer") or {}).get("predictions") or []:
+            detections.append((k, p))
+
+    url = PARQUET_URL.format(code=city.lower())
+    published = duckdb.execute(
+        f"select latitude, longitude, data_source from read_parquet('{url}') "
+        "where latitude is not null and longitude is not null and data_source not like 'PREDICTED_%'"
+    ).fetchall()
+    cell_lat, cell_lon = cell_degrees(city)
+    flags = absorbed_flags(
+        [(p["latitude"], p["longitude"]) for _, p in detections],
+        [(lat, lon) for lat, lon, _ in published], cell_lat, cell_lon,
+    )
+
+    genera: dict[str, int] = {}
+    sources: dict[str, int] = {}
+    doc = {
+        "city": city, "run": manifest["run"], "tileM": tile_m,
+        "dedupCellM": round(cell_lat * 111320.0, 3),
+        "tiles": tiles,
+        # Column arrays: tens of thousands of points stay a few MB.
+        "predictions": {"tile": [], "lon": [], "lat": [], "score": [], "genus": [], "absorbed": []},
+        "genera": [],
+        "trees": {"lon": [], "lat": [], "source": []},
+        "sources": [],
+    }
+    cols = doc["predictions"]
+    for (k, p), absorbed in zip(detections, flags):
+        genus = p.get("genus") or ""
+        cols["tile"].append(k)
+        cols["lon"].append(round(p["longitude"], 6))
+        cols["lat"].append(round(p["latitude"], 6))
+        cols["score"].append(round(float(p["centerConfidence"]), 3))
+        cols["genus"].append(genera.setdefault(genus, len(genera)))
+        cols["absorbed"].append(1 if absorbed else 0)
+    for lat, lon, source in published:
+        doc["trees"]["lon"].append(round(lon, 6))
+        doc["trees"]["lat"].append(round(lat, 6))
+        doc["trees"]["source"].append(sources.setdefault(source, len(sources)))
+    doc["genera"] = list(genera)
+    doc["sources"] = list(sources)
+    target = out / "overview.json"
+    target.write_text(json.dumps(doc, separators=(",", ":")) + "\n", encoding="utf-8")
+    done = sum(t["status"] == "ok" for t in tiles)
+    print(f"{city}: {done}/{len(tiles)} tiles predicted, {len(detections)} detections "
+          f"({sum(flags)} absorbed by a published tree), {len(published)} published trees -> {target}",
+          file=sys.stderr)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--artifacts", default="artifacts", help="artifacts root (default: ./artifacts)")
@@ -360,6 +492,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", required=True)
     p.add_argument("--max-minutes", type=float, default=15.0)
     p.add_argument("--limit", type=int, default=None, help="at most this many tiles this batch")
+    p.add_argument("--near", default=None, metavar="LAT,LON", help="predict the tiles nearest this point first")
     p.add_argument("--min-score", type=float, default=0.1, help="keep candidates scoring at least this (default 0.1)")
     p.add_argument("--year", type=int, default=None)
     p.add_argument("--device", default="auto")
@@ -372,8 +505,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--city", default=None)
     p.add_argument("--from-bundles", default=None, help="assemble reviewer tile bundles under this directory instead")
 
+    p = sub.add_parser("overview", help="write overview.json for the reviewer's map")
+    p.add_argument("--out", required=True)
+
     args = parser.parse_args(argv)
-    return {"plan": plan, "predict": predict, "assemble": assemble}[args.step](args)
+    return {"plan": plan, "predict": predict, "assemble": assemble, "overview": overview}[args.step](args)
 
 
 if __name__ == "__main__":
