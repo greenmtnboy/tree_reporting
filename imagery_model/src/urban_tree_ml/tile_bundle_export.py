@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import functools
 import hashlib
 import io
 import json
@@ -113,13 +114,18 @@ def apply_affine(affine: list[float], x_px: float, y_px: float) -> tuple[float, 
     return a * x_px + b * y_px + c, d * x_px + e * y_px + f
 
 
-def pixel_to_lonlat(affine: list[float], crs: str, x_px: float, y_px: float) -> tuple[float, float]:
-    """Tile-local pixel to (longitude, latitude), the way _add_geography does it."""
+@functools.lru_cache(maxsize=8)
+def _to_wgs84(crs: str):
+    # Building a Transformer costs ~15 ms; a tile converts every detection.
     from pyproj import Transformer
 
+    return Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+
+
+def pixel_to_lonlat(affine: list[float], crs: str, x_px: float, y_px: float) -> tuple[float, float]:
+    """Tile-local pixel to (longitude, latitude), the way _add_geography does it."""
     x, y = apply_affine(affine, x_px, y_px)
-    to_wgs84 = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
-    lon, lat = to_wgs84.transform(x, y)
+    lon, lat = _to_wgs84(crs).transform(x, y)
     return float(lon), float(lat)
 
 

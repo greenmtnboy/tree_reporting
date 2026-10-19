@@ -20,8 +20,9 @@ dies loses at most the tile it was on:
     reviewer shows for that tile -- inside a time budget, and writes one small
     JSON per tile under ``<out>/tiles``.  Run it again to continue; a tile
     already written is skipped.  NAIP windows are cached under
-    ``artifacts/point-tiles``, so predicting again with a later run reads no
-    imagery.
+    ``artifacts/point-tiles`` and a cached tile is found from the plan's UTM
+    zone, so predicting again with a later run neither reads imagery nor
+    searches the STAC catalog (it uses the newest year cached).
 
 ``assemble``
     Keeps the detections at or above ``--threshold``, drops the second of two
@@ -337,6 +338,7 @@ def predict(args: argparse.Namespace) -> int:
                 predictor, tile["lat"], tile["lon"], artifacts=artifacts, run=run, year=args.year,
                 stac_url=stac_url, city=city, envelopes=envelopes, territory=territory,
                 min_score=args.min_score, threshold=manifest["runThreshold"], coefficients=None, readers=None,
+                epsg_hint=int(manifest["epsg"]),
             )
         except Exception as error:  # one bad tile must not end the batch
             record = {"status": "error", "error": f"{error.__class__.__name__}: {error}"}

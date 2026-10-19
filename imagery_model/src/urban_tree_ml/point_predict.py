@@ -331,6 +331,7 @@ def predict_tile(
     threshold: float,
     coefficients: "CrownCoefficients | None",
     readers: "dict[str, InventoryReader] | None",
+    epsg_hint: int | None = None,
 ) -> dict[str, Any] | None:
     """Fetch (or reuse the cached) grid tile nearest a point, predict it and build its bundle.
 
@@ -338,24 +339,42 @@ def predict_tile(
     *readers* caches inventory readers across calls; None skips the
     current-tree overlay.  bulk_predict.py runs the same path over a grid, so
     what it publishes is what the reviewer shows for the tile.
+
+    *epsg_hint* (bulk_predict knows its grid's zone) looks for the tile in the
+    window cache first -- *year*'s, or the newest cached -- and searches STAC
+    only on a miss; without it every call searches, so a newer NAIP year is
+    picked up.
     """
-    from pyproj import Transformer
+    def locate(epsg: int) -> tuple[str, str, float, float]:
+        from pyproj import Transformer
+
+        crs = f"EPSG:{epsg}"
+        x, y = Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform(lon, lat)
+        west, north = grid_tile_origin(x, y, tile_m)
+        return crs, point_chip_id(epsg, west, north), west, north
 
     tile_m = predictor.chip_pixels * predictor.resolution_m
-    items = search_items(lat, lon, year, stac_url)
-    props = items[0].properties
-    epsg = int(props.get("proj:epsg") or str(props["proj:code"]).removeprefix("EPSG:"))
-    crs = f"EPSG:{epsg}"
-    x, y = Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform(lon, lat)
-    west, north = grid_tile_origin(x, y, tile_m)
-    chip_id = point_chip_id(epsg, west, north)
+    suffix = f"_{round(predictor.resolution_m * 100)}cm"
+    cache = artifacts / "point-tiles"
+    items: list[Any] = []
+    manifest_path = None
+    if epsg_hint is not None:
+        crs, chip_id, west, north = locate(epsg_hint)
+        # naip2022 sorts before naip2023: the last match is the newest year.
+        hits = sorted(cache.glob(f"naip{year or '*'}/{chip_id}{suffix}.manifest.json"))
+        manifest_path = hits[-1] if hits else None
+    if manifest_path is None:
+        items = search_items(lat, lon, year, stac_url)
+        props = items[0].properties
+        crs, chip_id, west, north = locate(
+            int(props.get("proj:epsg") or str(props["proj:code"]).removeprefix("EPSG:"))
+        )
+        year = items[0].datetime.year
+        manifest_path = cache / f"naip{year}" / f"{chip_id}{suffix}.manifest.json"
     affine = [predictor.resolution_m, 0.0, west, 0.0, -predictor.resolution_m, north]
     bounds = tile_bounds_lonlat(affine, crs, predictor.chip_pixels, predictor.chip_pixels)
 
-    year = items[0].datetime.year
-    stem = artifacts / "point-tiles" / f"naip{year}" / f"{chip_id}_{round(predictor.resolution_m * 100)}cm"
-    tif_path = stem.parent / f"{stem.name}.tif"
-    manifest_path = stem.parent / f"{stem.name}.manifest.json"
+    tif_path = manifest_path.with_name(manifest_path.name.removesuffix(".manifest.json") + ".tif")
     if manifest_path.exists():
         import rasterio
 
