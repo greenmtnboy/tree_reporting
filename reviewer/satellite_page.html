@@ -124,7 +124,7 @@ svg .hitbox{fill:transparent;cursor:pointer}
       <span class="group"><label>Bulk predictions <select id="bulk-set"></select></label> <button id="bulk-reload" class="ghost small" title="Reload the set's overview.json (rewrite it with bulk_predict overview after a predict batch)">Reload</button></span>
       <span class="group"><label>Min score <input id="bulk-threshold" type="range" min="0.1" max="0.6" step="0.01" value="0.15"> <span id="bulk-threshold-value">0.15</span></label></span>
       <span class="group"><label><input id="bulk-absorbed" type="checkbox"> absorbed</label> <label><input id="bulk-trees" type="checkbox" checked> city trees</label></span>
-      <span class="muted"><i class="dot" style="background:#eb6834"></i>would show <i class="dot" style="background:#ffffff;border:1.5px solid #6b6a63"></i>absorbed by a published tree <i class="dot" style="background:#008300"></i>city tree</span>
+      <span class="muted"><i class="dot" style="background:#eb6834"></i>would show <i class="dot" style="background:#ffffff;border:1.5px solid #6b6a63"></i>absorbed by a published tree <i class="dot" style="background:#008300"></i>city tree <i class="dot" style="border-radius:0;height:0;border-top:3px solid #7a3cff;width:14px"></i>plan boundary</span>
       <span id="bulk-state" class="muted"></span>
     </div>
     <div id="map"></div>
@@ -538,7 +538,18 @@ function addBulkLayers() {
   M.map.addSource('bulk-tiles', { type: 'geojson', data: emptyCollection() });
   M.map.addSource('bulk-preds', { type: 'geojson', data: emptyCollection() });
   M.map.addSource('bulk-trees', { type: 'geojson', data: emptyCollection() });
+  M.map.addSource('bulk-boundary', { type: 'geojson', data: emptyCollection() });
   const before = 'footprint-fill';
+  // The plan's boundary: where bulk predictions stop.
+  // Solid with a white halo: the basemap already draws dashed blue admin lines.
+  M.map.addLayer({ id: 'bulk-boundary-halo', type: 'line', source: 'bulk-boundary', paint: {
+    'line-color': '#ffffff', 'line-opacity': 0.8,
+    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 4, 16, 7],
+  } }, before);
+  M.map.addLayer({ id: 'bulk-boundary', type: 'line', source: 'bulk-boundary', paint: {
+    'line-color': '#7a3cff',
+    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2, 16, 3.5],
+  } }, before);
   M.map.addLayer({ id: 'bulk-tile-fill', type: 'fill', source: 'bulk-tiles', paint: {
     'fill-color': ['interpolate', ['linear'], ['coalesce', ['feature-state', 'shown'], 0], ...BULK_RAMP],
     // zoom may only feed a top-level interpolate, so the status test sits inside each stop.
@@ -603,6 +614,7 @@ function setBulkData() {
     type: 'Feature', properties: { k, score, absorbed: d.predictions.absorbed[k], tile: d.predictions.tile[k] },
     geometry: { type: 'Point', coordinates: [d.predictions.lon[k], d.predictions.lat[k]] },
   })) });
+  M.map.getSource('bulk-boundary').setData(d?.boundary || emptyCollection());
   M.map.getSource('bulk-trees').setData(!d ? emptyCollection() : { type: 'FeatureCollection', features: d.trees.lat.map((lat, k) => ({
     type: 'Feature', properties: { source: d.trees.source[k] },
     geometry: { type: 'Point', coordinates: [d.trees.lon[k], lat] },

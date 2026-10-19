@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pyarrow.parquet as pq
 
@@ -113,8 +114,6 @@ def test_assemble_from_bundles_writes_the_staged_contract(tmp_path):
 
 def test_the_staged_contract_is_the_ingest_contract():
     """data/raw/predicted_tree_info.py documents the columns it reads."""
-    from pathlib import Path
-
     ingest = (Path(__file__).resolve().parents[2] / "data" / "raw" / "predicted_tree_info.py").read_text(encoding="utf-8")
     for column in STAGED_COLUMNS:
         assert f"    {column} " in ingest, column
@@ -143,3 +142,27 @@ def test_a_cell_boundary_does_not_split_a_close_pair():
     below, above = (edge - 0.5 / 111320.0, lon), (edge + 0.5 / 111320.0, lon)
     assert bulk_predict.dedup_cells(*below, cell_lat, cell_lon)[0] != bulk_predict.dedup_cells(*above, cell_lat, cell_lon)[0]
     assert bulk_predict.absorbed_flags([above], [below], cell_lat, cell_lon) == [True]
+
+
+def test_in_boundary_handles_holes_and_parts():
+    square = lambda x0, y0, x1, y1: [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]
+    geometry = {"type": "MultiPolygon", "coordinates": [
+        [square(0, 0, 10, 10), square(4, 4, 6, 6)],  # a square with a hole
+        [square(20, 0, 30, 10)],
+    ]}
+    polygons = bulk_predict.boundary_polygons({"type": "Feature", "geometry": geometry})
+    assert bulk_predict.in_boundary(2, 2, polygons)
+    assert not bulk_predict.in_boundary(5, 5, polygons)  # in the hole
+    assert bulk_predict.in_boundary(5, 25, polygons)  # the second part (lat 5, lon 25)
+    assert not bulk_predict.in_boundary(5, 15, polygons)
+
+
+def test_the_boston_metro_circle():
+    path = Path(__file__).resolve().parents[1] / "bulk_areas" / "usbos-metro-circle.geojson"
+    polygons = bulk_predict.boundary_polygons(json.loads(path.read_text(encoding="utf-8")))
+    inside = {"downtown": (42.355, -71.060), "East Boston": (42.375, -71.030), "Logan": (42.365, -71.005),
+              "Hyde Park": (42.230, -71.125), "West Roxbury": (42.283, -71.188), "Somerville": (42.417, -71.115),
+              "Brookline": (42.320, -71.176), "Newton": (42.337, -71.209), "Milton": (42.250, -71.070)}
+    outside = {"Quincy": (42.252, -71.002), "Lynn": (42.466, -70.950), "Needham": (42.280, -71.235)}
+    assert [k for k, p in inside.items() if not bulk_predict.in_boundary(*p, polygons)] == []
+    assert [k for k, p in outside.items() if bulk_predict.in_boundary(*p, polygons)] == []

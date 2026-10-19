@@ -7,10 +7,14 @@ dies loses at most the tile it was on:
 ``plan``
     Which tiles.  Every published tree of the city (any source but an earlier
     prediction) marks the grid tile it falls in, the marks are dilated by one
-    tile in every direction, and tiles whose centre is outside the city's
-    territory are dropped.  That covers the streets, yards and parks around
-    the inventory and skips open water and the airport, without a boundary
-    file.  The grid is full-tile steps on point_predict's half-tile lattice in
+    tile in every direction (``--rings``), and tiles whose centre is outside
+    the city's territory are dropped.  That covers the streets, yards and
+    parks around the inventory and skips open water and the airport.
+    ``--boundary FILE`` (GeoJSON) also drops tiles whose centre is outside
+    its polygons, and with ``--fill`` every tile inside is planned, published
+    trees or not -- for suburbs with no inventory, whose few OSM points miss
+    most streets (``bulk_areas/usbos-metro-circle.geojson``).  The plan keeps
+    the polygon, and the reviewer map draws it.  The grid is full-tile steps on point_predict's half-tile lattice in
     the imagery's UTM zone, so each planned tile is exactly the tile
     ``point_predict`` (and the reviewer's "Predict at") would cut there.
 
@@ -83,6 +87,31 @@ STAGED_COLUMNS = (
 # ---------------------------------------------------------------------------
 # Pure pieces
 # ---------------------------------------------------------------------------
+
+
+def boundary_polygons(geometry: dict[str, Any]) -> list[list[list[list[float]]]]:
+    """A GeoJSON geometry, Feature or FeatureCollection as a list of polygons
+    (each a list of [lon, lat] rings)."""
+    if geometry.get("type") == "FeatureCollection":
+        return [p for f in geometry["features"] for p in boundary_polygons(f)]
+    if geometry.get("type") == "Feature":
+        return boundary_polygons(geometry["geometry"])
+    if geometry["type"] == "Polygon":
+        return [geometry["coordinates"]]
+    if geometry["type"] == "MultiPolygon":
+        return list(geometry["coordinates"])
+    raise ValueError(f"not a polygon boundary: {geometry['type']}")
+
+
+def in_boundary(lat: float, lon: float, polygons: list[list[list[list[float]]]]) -> bool:
+    """Even-odd ray test over every ring, so holes and separate parts both work."""
+    inside = False
+    for polygon in polygons:
+        for ring in polygon:
+            for (x1, y1), (x2, y2) in zip(ring, ring[1:] + ring[:1]):
+                if (y1 > lat) != (y2 > lat) and lon < x1 + (lat - y1) * (x2 - x1) / (y2 - y1):
+                    inside = not inside
+    return inside
 
 
 def utm_epsg(lon: float) -> int:
@@ -272,23 +301,38 @@ def plan(args: argparse.Namespace) -> int:
     back = Transformer.from_crs(f"EPSG:{epsg}", "EPSG:4326", always_xy=True)
     xs, ys = forward.transform([p[1] for p in points], [p[0] for p in points])
     marked = {tile_index(x, y, tile_m) for x, y in zip(xs, ys)}
+    boundary = polygons = None
+    if args.boundary:
+        boundary = json.loads(Path(args.boundary).read_text(encoding="utf-8"))
+        polygons = boundary_polygons(boundary)
+    if args.fill:
+        if not polygons:
+            raise SystemExit("--fill plans every tile inside --boundary; pass one")
+        ring_points = [point for polygon in polygons for ring in polygon for point in ring]
+        bxs, bys = forward.transform([p[0] for p in ring_points], [p[1] for p in ring_points])
+        (i0, j0), (i1, j1) = tile_index(min(bxs), min(bys), tile_m), tile_index(max(bxs), max(bys), tile_m)
+        candidates = {(i, j) for i in range(i0, i1 + 1) for j in range(j0, j1 + 1)}
+    else:
+        candidates = dilate(marked, args.rings)
     tiles = []
-    for index in sorted(dilate(marked, args.rings)):
+    for index in sorted(candidates):
         cx, cy = tile_centre(index, tile_m)
         lon, lat = back.transform(cx, cy)
-        if owning_city(lat, lon, envelopes, territory) == city:
+        if owning_city(lat, lon, envelopes, territory) == city and (
+            polygons is None or in_boundary(lat, lon, polygons)
+        ):
             tiles.append({"i": index[0], "j": index[1], "lat": lat, "lon": lon})
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     manifest = {
         "city": city, "run": args.run, "epsg": epsg, "tileM": tile_m, "rings": args.rings,
         "runThreshold": run_threshold, "publishedTrees": len(points),
-        "markedTiles": len(marked), "tiles": tiles,
+        "markedTiles": len(marked), "fill": bool(args.fill), "boundary": boundary, "tiles": tiles,
     }
     (out / "plan.json").write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
     area_km2 = len(tiles) * tile_m * tile_m / 1e6
     print(f"{city}: {len(tiles)} tiles (~{area_km2:.0f} km2) around {len(points)} published trees; "
-          f"at ~6 s/tile about {len(tiles) * 6 / 3600:.1f} h", file=sys.stderr)
+          f"at ~3 s/tile about {len(tiles) * 3 / 3600:.1f} h", file=sys.stderr)
     return 0
 
 
@@ -448,6 +492,7 @@ def overview(args: argparse.Namespace) -> int:
     doc = {
         "city": city, "run": manifest["run"], "tileM": tile_m,
         "dedupCellM": round(cell_lat * 111320.0, 3),
+        "boundary": manifest.get("boundary"),
         "tiles": tiles,
         # Column arrays: tens of thousands of points stay a few MB.
         "predictions": {"tile": [], "lon": [], "lat": [], "score": [], "genus": [], "absorbed": []},
@@ -488,6 +533,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--city", required=True)
     p.add_argument("--run", required=True, help="training run id")
     p.add_argument("--rings", type=int, default=1, help="tiles of margin around the published trees (default 1)")
+    p.add_argument("--boundary", default=None, help="GeoJSON polygon(s); keep only tiles centred inside")
+    p.add_argument("--fill", action="store_true", help="plan every tile inside --boundary, not only those near published trees")
     p.add_argument("--out", required=True)
 
     p = sub.add_parser("predict", help="predict planned tiles within a time budget; rerun to continue")
