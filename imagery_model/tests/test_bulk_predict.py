@@ -157,12 +157,12 @@ def test_in_boundary_handles_holes_and_parts():
     assert not bulk_predict.in_boundary(5, 15, polygons)
 
 
-def test_the_boston_core_boundary():
-    path = Path(__file__).resolve().parents[1] / "bulk_areas" / "usbos-core.geojson"
+def test_the_boston_metro_circle():
+    path = Path(__file__).resolve().parents[1] / "bulk_areas" / "usbos-metro-circle.geojson"
     polygons = bulk_predict.boundary_polygons(json.loads(path.read_text(encoding="utf-8")))
-    inside = {"downtown": (42.355, -71.060), "East Boston": (42.375, -71.030), "Roslindale": (42.285, -71.127),
-              "Brookline": (42.332, -71.121), "Somerville": (42.395, -71.100), "Cambridge": (42.374, -71.111)}
-    outside = {"Newton": (42.337, -71.209), "Quincy": (42.252, -71.002), "Everett": (42.408, -71.054),
-               "Watertown": (42.371, -71.183)}
+    inside = {"downtown": (42.355, -71.060), "East Boston": (42.375, -71.030), "Logan": (42.365, -71.005),
+              "Hyde Park": (42.230, -71.125), "West Roxbury": (42.283, -71.188), "Somerville": (42.417, -71.115),
+              "Brookline": (42.320, -71.176), "Newton": (42.337, -71.209), "Milton": (42.250, -71.070)}
+    outside = {"Quincy": (42.252, -71.002), "Lynn": (42.466, -70.950), "Needham": (42.280, -71.235)}
     assert [k for k, p in inside.items() if not bulk_predict.in_boundary(*p, polygons)] == []
     assert [k for k, p in outside.items() if bulk_predict.in_boundary(*p, polygons)] == []
