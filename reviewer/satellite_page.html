@@ -74,6 +74,7 @@ svg .hitbox{fill:transparent;cursor:pointer}
 #model-bar details{margin-top:6px}
 #export-log{white-space:pre-wrap;font:11px/1.35 ui-monospace,monospace;color:var(--muted);max-height:120px;overflow:auto;margin:6px 0 0}
 .swatch{display:inline-block;width:12px;height:12px;border:2px solid;margin-right:4px;vertical-align:middle}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 4px 0 8px;vertical-align:middle;box-sizing:border-box}
 @media(max-width:980px){.tile-layout{grid-template-columns:1fr}.viewport,.side{max-height:none!important}}
 </style>
 </head>
@@ -118,6 +119,13 @@ svg .hitbox{fill:transparent;cursor:pointer}
       <span class="group"><button id="map-export" class="small" title="Export the selected model's tiles under this view, from its validation and training chips (never test); tiles it already has are skipped">Export model tiles in view</button> <span id="map-export-state" class="muted"></span></span>
       <span class="muted"><i class="swatch" style="border-color:#ffffff"></i>untouched <i class="swatch" style="border-color:#ffd166"></i>decisions made <i class="swatch" style="border-color:#5ad37a"></i>tile reviewed</span>
       <span class="muted">Click a tile to review it; click open ground to predict there.</span>
+    </div>
+    <div id="bulk-controls" class="toolbar hidden">
+      <span class="group"><label>Bulk predictions <select id="bulk-set"></select></label> <button id="bulk-reload" class="ghost small" title="Reload the set's overview.json (rewrite it with bulk_predict overview after a predict batch)">Reload</button></span>
+      <span class="group"><label>Min score <input id="bulk-threshold" type="range" min="0.1" max="0.6" step="0.01" value="0.15"> <span id="bulk-threshold-value">0.15</span></label></span>
+      <span class="group"><label><input id="bulk-absorbed" type="checkbox"> absorbed</label> <label><input id="bulk-trees" type="checkbox" checked> city trees</label></span>
+      <span class="muted"><i class="dot" style="background:#eb6834"></i>would show <i class="dot" style="background:#ffffff;border:1.5px solid #6b6a63"></i>absorbed by a published tree <i class="dot" style="background:#008300"></i>city tree</span>
+      <span id="bulk-state" class="muted"></span>
     </div>
     <div id="map"></div>
   </section>
@@ -334,8 +342,8 @@ async function showTiles(city) {
   }).join('');
 }
 
-function predictAt(lat, lon) {
-  return api('/predict', { method: 'POST', body: JSON.stringify({ lat, lon, run: pageRun() }) });
+function predictAt(lat, lon, run = pageRun()) {
+  return api('/predict', { method: 'POST', body: JSON.stringify({ lat, lon, run }) });
 }
 
 $('#predict-form').addEventListener('submit', async (event) => {
@@ -421,6 +429,7 @@ async function createMap() {
     hovered = id;
     if (id != null) M.map.setFeatureState({ source: 'footprints', id }, { hover: true });
   };
+  addBulkLayers();
   M.map.on('mousemove', 'footprint-fill', (e) => { M.map.getCanvas().style.cursor = 'pointer'; setHover(e.features[0].id); });
   M.map.on('mouseleave', 'footprint-fill', () => { M.map.getCanvas().style.cursor = ''; setHover(null); });
   M.map.on('click', onMapClick);
@@ -433,6 +442,7 @@ function onMapClick(e) {
   // Overlapping tiles: one hit opens it, several ask which.
   const tiles = [...new Map(hits.map((f) => [f.properties.tileId, f.properties])).values()];
   if (tiles.length === 1) { location.hash = '#tile/' + encodeURIComponent(tiles[0].tileId); return; }
+  if (!tiles.length && B.data && bulkPopup(e)) return;
   const lat = e.lngLat.lat, lon = e.lngLat.lng;
   const html = tiles.length
     ? `<strong>${tiles.length} tiles here</strong><ul>${tiles.map((t) => `<li><a href="#tile/${encodeURIComponent(t.tileId)}">${esc(t.label)}</a> <span class="muted">${esc(t.collection || '(top level)')} · ${t.decided}/${t.detections} decided</span></li>`).join('')}</ul>`
@@ -454,7 +464,7 @@ function setImageLayers(tiles) {
   tiles.forEach((t, i) => {
     const id = 'tile-img-' + i;
     M.map.addSource(id, { type: 'image', url: `/api/satellite/tiles/${encodeURIComponent(t.tileId)}/thumb?run=${encodeURIComponent(t.runId)}`, coordinates: t.footprint });
-    M.map.addLayer({ id, type: 'raster', source: id, layout: { visibility }, paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, 'footprint-fill');
+    M.map.addLayer({ id, type: 'raster', source: id, layout: { visibility }, paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, 'bulk-tile-fill');
     M.images.push(id);
   });
 }
@@ -474,6 +484,7 @@ async function showMap(city) {
   const all = await api('/tiles?city=' + encodeURIComponent(city));
   const tiles = forModel(all);
   const firstLook = M.city !== city;
+  await loadBulkSets(city);
   M.city = city;
   M.map.getSource('footprints').setData(footprintFeatures(tiles));
   // Outlines refresh on every visit (review state moves); thumbnails only when the set does.
@@ -489,9 +500,165 @@ async function showMap(city) {
       const bounds = new maplibregl.LngLatBounds();
       for (const t of tiles.length ? tiles : all) for (const c of t.footprint) bounds.extend(c);
       M.map.fitBounds(bounds, { padding: 30, duration: 0 });
+    } else if (B.data) {
+      const bounds = new maplibregl.LngLatBounds();
+      for (const t of B.data.tiles) if (t.status === 'ok') for (const c of t.footprint) bounds.extend(c);
+      if (!bounds.isEmpty()) M.map.fitBounds(bounds, { padding: 30, duration: 0 });
     }
   }
 }
+
+// ---------------------------------------------------------------- bulk predictions
+// A bulk set (imagery_model/artifacts/bulk/<set>, bulk_predict) is drawn from
+// its overview.json.  Zoomed out, each predicted tile is shaded by how many
+// of its detections would show on the public map at the chosen score: at or
+// above it and not absorbed by a published tree (sharing a merge cell with
+// one).  Zoomed in, the detections and the city's trees draw as points.
+// Clicking a bulk tile predicts it again through "predict here", which
+// writes a full reviewer bundle, and opens it.
+const B = { sets: [], set: null, data: null, key: null };
+const BULK_POINTS_ZOOM = 14.5;
+// One-hue sequential ramp: detections that would show, per tile (2.4 ha).
+const BULK_RAMP = [0, '#cde2fb', 5, '#9ec5f4', 15, '#6da7ec', 30, '#3987e5', 60, '#256abf', 100, '#104281'];
+
+// Per tile: detections at or above the threshold, split by merge fate.
+function bulkTileCounts(predictions, tileCount, threshold) {
+  const shown = new Array(tileCount).fill(0), absorbed = new Array(tileCount).fill(0);
+  for (let k = 0; k < predictions.score.length; k++) {
+    if (predictions.score[k] < threshold) continue;
+    if (predictions.absorbed[k]) absorbed[predictions.tile[k]]++;
+    else shown[predictions.tile[k]]++;
+  }
+  return { shown, absorbed };
+}
+
+function emptyCollection() { return { type: 'FeatureCollection', features: [] }; }
+
+function addBulkLayers() {
+  M.map.addSource('bulk-tiles', { type: 'geojson', data: emptyCollection() });
+  M.map.addSource('bulk-preds', { type: 'geojson', data: emptyCollection() });
+  M.map.addSource('bulk-trees', { type: 'geojson', data: emptyCollection() });
+  const before = 'footprint-fill';
+  M.map.addLayer({ id: 'bulk-tile-fill', type: 'fill', source: 'bulk-tiles', paint: {
+    'fill-color': ['interpolate', ['linear'], ['coalesce', ['feature-state', 'shown'], 0], ...BULK_RAMP],
+    // zoom may only feed a top-level interpolate, so the status test sits inside each stop.
+    'fill-opacity': ['interpolate', ['linear'], ['zoom'],
+      13, ['case', ['==', ['get', 'status'], 'ok'], 0.7, 0],
+      BULK_POINTS_ZOOM, ['case', ['==', ['get', 'status'], 'ok'], 0.35, 0],
+      17, 0],
+  } }, before);
+  M.map.addLayer({ id: 'bulk-tile-line', type: 'line', source: 'bulk-tiles', paint: {
+    'line-color': ['match', ['get', 'status'], 'ok', '#ffffff', 'error', '#d62e2e', '#6b6a63'],
+    // The plan's unpredicted tiles are a faint coverage grid, fading out zoomed out.
+    'line-opacity': ['interpolate', ['linear'], ['zoom'],
+      11, ['match', ['get', 'status'], 'pending', 0.04, 0.8],
+      14, ['match', ['get', 'status'], 'pending', 0.25, 0.8]],
+    'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 16, 1],
+  } }, before);
+  M.map.addLayer({ id: 'bulk-trees', type: 'circle', source: 'bulk-trees', minzoom: BULK_POINTS_ZOOM - 0.5, paint: {
+    'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 1.5, 18, 5],
+    'circle-color': '#008300', 'circle-opacity': 0.75,
+    'circle-stroke-color': '#ffffff', 'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 15, 0, 17, 1],
+  } }, before);
+  M.map.addLayer({ id: 'bulk-preds', type: 'circle', source: 'bulk-preds', minzoom: BULK_POINTS_ZOOM - 0.5, paint: {
+    'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 2, 18, 6],
+    'circle-color': ['case', ['==', ['get', 'absorbed'], 1], '#ffffff', '#eb6834'],
+    'circle-stroke-color': ['case', ['==', ['get', 'absorbed'], 1], '#6b6a63', '#ffffff'],
+    'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 14, 0.5, 17, 2],
+  } }, before);
+}
+
+function bulkThreshold() { return Number($('#bulk-threshold').value); }
+
+async function loadBulkSets(city) {
+  B.sets = await api('/bulk?city=' + encodeURIComponent(city)).catch(() => []);
+  $('#bulk-controls').classList.toggle('hidden', !B.sets.length);
+  if (!B.sets.length) { B.set = null; B.data = null; B.key = null; setBulkData(); return; }
+  if (!B.sets.some((s) => s.set === B.set)) B.set = B.sets[0].set;
+  $('#bulk-set').innerHTML = B.sets.map((s) => `<option value="${esc(s.set)}">${esc(s.set)} (${esc(runLabel(s.run))})</option>`).join('');
+  $('#bulk-set').value = B.set;
+  await loadBulkOverview();
+}
+
+async function loadBulkOverview(force = false) {
+  const set = B.sets.find((s) => s.set === B.set);
+  if (!set?.overviewAt) { B.data = null; B.key = null; setBulkData(); $('#bulk-state').textContent = `${B.set}: no overview.json yet — run bulk_predict overview`; return; }
+  const key = set.set + '@' + set.overviewAt;
+  if (key === B.key && !force) return;
+  $('#bulk-state').textContent = 'Loading bulk predictions…';
+  B.data = await api(`/bulk/${encodeURIComponent(set.set)}/overview`);
+  B.data.set = set;
+  B.key = key;
+  setBulkData();
+}
+
+function setBulkData() {
+  if (!M.map) return;
+  const d = B.data;
+  M.map.getSource('bulk-tiles').setData(!d ? emptyCollection() : { type: 'FeatureCollection', features: d.tiles.map((t, k) => ({
+    type: 'Feature', id: k, properties: { k, status: t.status },
+    geometry: { type: 'Polygon', coordinates: [[...t.footprint, t.footprint[0]]] },
+  })) });
+  M.map.getSource('bulk-preds').setData(!d ? emptyCollection() : { type: 'FeatureCollection', features: d.predictions.score.map((score, k) => ({
+    type: 'Feature', properties: { k, score, absorbed: d.predictions.absorbed[k], tile: d.predictions.tile[k] },
+    geometry: { type: 'Point', coordinates: [d.predictions.lon[k], d.predictions.lat[k]] },
+  })) });
+  M.map.getSource('bulk-trees').setData(!d ? emptyCollection() : { type: 'FeatureCollection', features: d.trees.lat.map((lat, k) => ({
+    type: 'Feature', properties: { source: d.trees.source[k] },
+    geometry: { type: 'Point', coordinates: [d.trees.lon[k], lat] },
+  })) });
+  applyBulkFilters();
+}
+
+function applyBulkFilters() {
+  if (!M.map) return;
+  const t = bulkThreshold();
+  $('#bulk-threshold-value').textContent = t.toFixed(2);
+  const absorbed = $('#bulk-absorbed').checked;
+  M.map.setFilter('bulk-preds', ['all', ['>=', ['get', 'score'], t], ...(absorbed ? [] : [['==', ['get', 'absorbed'], 0]])]);
+  M.map.setLayoutProperty('bulk-trees', 'visibility', $('#bulk-trees').checked ? 'visible' : 'none');
+  const d = B.data;
+  if (!d) return;
+  const { shown, absorbed: folded } = bulkTileCounts(d.predictions, d.tiles.length, t);
+  d.counts = { shown, absorbed: folded };
+  d.tiles.forEach((tile, k) => { if (tile.status === 'ok') M.map.setFeatureState({ source: 'bulk-tiles', id: k }, { shown: shown[k] }); });
+  const done = d.tiles.filter((x) => x.status === 'ok').length, errors = d.tiles.filter((x) => x.status === 'error').length;
+  const nShown = shown.reduce((a, b) => a + b, 0), nAbsorbed = folded.reduce((a, b) => a + b, 0);
+  $('#bulk-state').textContent = `${done}/${d.tiles.length} tiles predicted${errors ? ` (${errors} errors)` : ''} · at ≥${t.toFixed(2)}: ${nShown.toLocaleString()} would show, ${nAbsorbed.toLocaleString()} absorbed · ${d.trees.lat.length.toLocaleString()} city trees · merge cell ${fmt(d.dedupCellM, 0)} m`;
+}
+
+// A click on a bulk tile (or one of its detections): its numbers, and a
+// button that predicts it as a reviewer tile and opens it.
+function bulkPopup(e) {
+  const d = B.data;
+  const point = M.map.queryRenderedFeatures(e.point, { layers: ['bulk-preds'] })[0];
+  const hit = point ? { k: point.properties.tile } : M.map.queryRenderedFeatures(e.point, { layers: ['bulk-tile-fill'] })[0]?.properties;
+  if (!hit) return false;
+  const tile = d.tiles[hit.k];
+  const t = bulkThreshold();
+  const detail = point
+    ? `<div>score ${fmt(point.properties.score, 2)} · ${esc(d.genera[d.predictions.genus[point.properties.k]] || 'no genus')}${point.properties.absorbed ? ' · absorbed by a published tree' : ''}</div>`
+    : '';
+  const counts = tile.status === 'ok'
+    ? `<div class="muted">at ≥${t.toFixed(2)}: ${d.counts.shown[hit.k]} would show, ${d.counts.absorbed[hit.k]} absorbed</div>`
+    : `<div class="muted">${tile.status === 'error' ? 'prediction failed' : 'not predicted yet'}</div>`;
+  const html = `<strong>Bulk tile ${esc(tile.key)}</strong>${detail}${counts}<button id="bulk-open" style="margin-top:6px">Open for review (${esc(runLabel(d.run))})</button><div id="bulk-open-state" class="muted"></div>`;
+  M.popup = new maplibregl.Popup({ maxWidth: '380px' }).setLngLat(e.lngLat).setHTML(html).addTo(M.map);
+  const button = document.getElementById('bulk-open');
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    document.getElementById('bulk-open-state').textContent = 'Fetching imagery and running the model (~20 s)…';
+    try { const opened = await predictAt(tile.lat, tile.lon, d.run); location.hash = '#tile/' + encodeURIComponent(opened.tileId); }
+    catch (error) { document.getElementById('bulk-open-state').textContent = error.message; button.disabled = false; }
+  });
+  return true;
+}
+
+$('#bulk-set').addEventListener('change', async (e) => { B.set = e.target.value; await loadBulkOverview(); });
+$('#bulk-reload').addEventListener('click', async () => { if (M.city) { B.key = null; await loadBulkSets(M.city); } });
+$('#bulk-threshold').addEventListener('input', applyBulkFilters);
+$('#bulk-absorbed').addEventListener('change', applyBulkFilters);
+$('#bulk-trees').addEventListener('change', applyBulkFilters);
 
 // Export the selected run's chips under the map view: a dry run first, so the
 // count (and what is already exported) is confirmed before any work starts.
