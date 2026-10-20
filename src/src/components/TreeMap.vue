@@ -101,7 +101,7 @@
           <div v-if="scientificName" class="tree-card-species">{{ scientificName }}<span v-if="selectedTree.cultivar" class="tree-card-cultivar"> '{{ selectedTree.cultivar }}'</span></div>
         </div>
         <div class="tree-card-header-actions">
-          <button v-if="!simplified && firebaseAvailable" type="button" class="tree-card-checkin"
+          <button v-if="!simplified && firebaseAvailable" type="button" class="tree-card-correction"
             data-testid="tree-report-link" @click="openCheckin('update')">Correct or confirm info</button>
           <button
             v-if="canCheckInToSelectedTree"
@@ -2510,7 +2510,8 @@ onUnmounted(() => {
   color: var(--color-leaf);
 }
 
-.tree-card-checkin {
+.tree-card-checkin,
+.tree-card-correction {
   background: var(--color-leaf);
   color: var(--color-on-accent);
   border: 1px solid var(--color-leaf);
@@ -2523,7 +2524,8 @@ onUnmounted(() => {
   transition: background 0.15s, color 0.15s;
 }
 
-.tree-card-checkin:hover {
+.tree-card-checkin:hover,
+.tree-card-correction:hover {
   background: transparent;
   color: var(--color-leaf);
 }

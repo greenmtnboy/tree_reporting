@@ -219,7 +219,8 @@ for (const mobile of [false, true]) {
       } else {
         await expect(checkin).toHaveCount(0)
         await expect(report).toBeVisible()
-        await expect(report).toHaveText('Suggest a correction')
+        await expect(report).toHaveText('Correct or confirm info')
+        await expect(page.locator('.tree-card-header-actions').getByTestId('tree-report-link')).toBeVisible()
       }
     })
 
