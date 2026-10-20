@@ -103,3 +103,8 @@ export function formatDataSource(value: string | null | undefined): string | nul
       .join(' ')
   )
 }
+
+/** Only a successful zero-count read can establish an unconfirmed prediction. */
+export function isUnconfirmedPrediction(source: string | null | undefined, checkinCount: number | null | undefined): boolean {
+  return isPredictedSource(source) && checkinCount === 0
+}
