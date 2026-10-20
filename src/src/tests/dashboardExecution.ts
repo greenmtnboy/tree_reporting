@@ -6,6 +6,7 @@ import {
   FIXTURE_SPECIES,
   FIXTURE_TREES,
   fixtureFieldValue,
+  nativeLocalityBucket,
   type FixtureTree,
 } from './dashboardFixtures'
 import { cityContext, type DashboardQueryCase, type QueryState } from './dashboardQueryCatalog'
@@ -225,6 +226,20 @@ export function checkResult(
     }
   }
 
+  // A species native to several ecoregions fans out to one row per ecoregion;
+  // a tree whose best match is the city's own ecoregion or biome is a full fit.
+  if (id === 'summary:local-native-share' || id === 'species:sp-biome-fit') {
+    const context = cityContext(queryCase.state.city)
+    const fits = expected.filter((tree) =>
+      ['Native', 'Same biome, non-native'].includes(nativeLocalityBucket(tree, context) ?? ''),
+    ).length
+    const wanted = expected.length ? fits / expected.length : null
+    const actual = numeric(rows[0]?.biome_fit_pct)
+    if (wanted != null && (actual == null || Math.abs(actual - wanted) > 1e-6)) {
+      return `biome_fit_pct = ${actual}, fixtures say ${wanted}`
+    }
+  }
+
   if (id === 'summary:tree-dot-map' || id === 'species:tree-dot-map') {
     const coordinates = new Set(expected.map((tree) => `${tree.latitude},${tree.longitude}`))
     if (rows.length !== coordinates.size) {
@@ -280,10 +295,10 @@ export function checkResult(
  * The summary charts that count trees per bucket, by the result column the
  * bucket lands in. The species page renders the same charts under a species
  * or genus filter, so both prefixes map here. The nativeness chart is left
- * out on purpose: a species native to several ecoregions reaches several
- * rows through `unnest(native_ecoregions)`, and which of them counts is a
- * modelling question the fixtures answer with "the best match", which the
- * live plan does not promise.
+ * out: a species native to several ecoregions reaches several rows through
+ * `unnest(native_ecoregions)` and lands in each of their buckets, where the
+ * fixtures take the best match. A per-species best match is blocked on
+ * trilogy-data/pytrilogy#758.
  */
 const BUCKET_CHART_FIELDS: Record<string, string> = {
   'summary:hardiness-fit': 'hardiness_fit_bucket',
