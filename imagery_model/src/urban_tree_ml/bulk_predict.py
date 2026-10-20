@@ -43,18 +43,36 @@ dies loses at most the tile it was on:
     published tree would absorb it in the merge), and the city's published
     trees.  Cheap; rerun it after each ``predict`` batch.
 
+``sync`` and ``run-bundle``
+    Carry a run between machines through a private bucket (default
+    ``gs://arborary-world-curation-archive/bulk``).  ``sync`` pulls then
+    pushes ``plan.json`` and ``tiles/`` (never deleting, never replacing a
+    newer file), so either machine continues where the other stopped -- but
+    run ``predict`` on one machine at a time.  ``predict --sync`` pulls
+    before its batch and pushes after it.  ``run-bundle push|pull`` copies
+    the files ``predict`` loads -- the checkpoint the evaluation names, the
+    run and cohort metadata, the chip normalization -- about 350 MB.
+
 Uploading is deliberately a separate, manual step -- it is what makes the
 city's next refresh publish the rows::
 
     gcloud storage cp <out>/usbos_predicted_staging.parquet \\
       gs://trilogy_public_models/duckdb/staging/usbos_predicted_staging.parquet
 
-Example (Boston, v13)::
+Example (Boston, v13: every tile in the metro circle)::
 
     uv run --group imagery --group train python -m urban_tree_ml.bulk_predict plan \\
-      --city USBOS --run sf-boston-nyc-naip-swin-30cm-v13-curated-finetune --out artifacts/bulk/usbos-v13
+      --city USBOS --run sf-boston-nyc-naip-swin-30cm-v13-curated-finetune --out artifacts/bulk/usbos-v13 \\
+      --fill --boundary bulk_areas/usbos-metro-circle.geojson
     uv run --group imagery --group train python -m urban_tree_ml.bulk_predict predict \\
-      --out artifacts/bulk/usbos-v13 --max-minutes 15
+      --out artifacts/bulk/usbos-v13 --max-minutes 15 --near 42.33,-71.08 --sync
+
+Continuing on another machine (gcloud signed in; stop ``predict`` on the first
+one), then rerun the ``predict`` line above until nothing is left::
+
+    uv run --group imagery python -m urban_tree_ml.bulk_predict run-bundle pull \\
+      --run sf-boston-nyc-naip-swin-30cm-v13-curated-finetune
+    uv run --group imagery python -m urban_tree_ml.bulk_predict sync pull --out artifacts/bulk/usbos-v13
     uv run --group imagery python -m urban_tree_ml.bulk_predict assemble \\
       --out artifacts/bulk/usbos-v13 --threshold 0.15
 
@@ -69,6 +87,8 @@ import argparse
 import hashlib
 import json
 import math
+import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -344,6 +364,8 @@ def predict(args: argparse.Namespace) -> int:
     from urban_tree_ml.point_predict import Predictor, predict_tile
 
     out = Path(args.out)
+    if args.sync:
+        sync(argparse.Namespace(out=args.out, remote=args.remote, direction="pull"))
     manifest = json.loads((out / "plan.json").read_text(encoding="utf-8"))
     city, run = manifest["city"], manifest["run"]
     artifacts = Path(args.artifacts)
@@ -412,6 +434,8 @@ def predict(args: argparse.Namespace) -> int:
         path.write_text(json.dumps(record) + "\n", encoding="utf-8")
         done += 1
     remaining = len(todo) - done
+    if args.sync:
+        sync(argparse.Namespace(out=args.out, remote=args.remote, direction="push"))
     print(f"predicted {done} tiles this batch; {remaining} still to go"
           + (" (rerun to continue)" if remaining else ""), file=sys.stderr)
     return 0
@@ -524,6 +548,61 @@ def overview(args: argparse.Namespace) -> int:
     return 0
 
 
+DEFAULT_REMOTE = "gs://arborary-world-curation-archive/bulk"
+
+
+def _gcloud(*args: str) -> None:
+    command = ["gcloud.cmd" if os.name == "nt" else "gcloud", "storage", *args]
+    print("$ " + " ".join(command), file=sys.stderr)
+    subprocess.run(command, check=True)
+
+
+def run_bundle_files(artifacts: Path, run: str) -> list[str]:
+    """Paths, relative to *artifacts*, that point_predict.Predictor loads for *run*."""
+    run_dir = artifacts / "runs" / run
+    files = [f"runs/{run}/{p.name}" for p in sorted(run_dir.iterdir())
+             if p.is_file() and (p.suffix == ".json" or p.name == "COMPLETE")]
+    checkpoints, datasets = set(), set()
+    for metadata_path in sorted((run_dir / "evaluation").glob("*/evaluation-metadata.json")):
+        cohort = metadata_path.parent.name
+        files += [f"runs/{run}/evaluation/{cohort}/evaluation-metadata.json",
+                  f"runs/{run}/evaluation/{cohort}/taxonomy.json"]
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        checkpoints.add(Path(str(metadata["checkpoint"])).name)
+        datasets.add(metadata["config"]["dataset"])
+    files += [f"runs/{run}/checkpoints/{name}" for name in sorted(checkpoints)]
+    files += [f"chips/{dataset}/normalization.json" for dataset in sorted(datasets)]
+    return files
+
+
+def run_bundle(args: argparse.Namespace) -> int:
+    artifacts = Path(args.artifacts)
+    remote = f"{args.remote.rstrip('/')}/runs/{args.run}"
+    if args.direction == "push":
+        for rel in run_bundle_files(artifacts, args.run):
+            _gcloud("cp", "--no-clobber", str(artifacts / rel), f"{remote}/{rel}")
+    else:
+        # Mirror the remote tree into artifacts/; files already here are kept.
+        _gcloud("rsync", "--recursive", "--no-clobber", f"{remote}/runs", str(artifacts / "runs"))
+        _gcloud("rsync", "--recursive", "--no-clobber", f"{remote}/chips", str(artifacts / "chips"))
+    return 0
+
+
+def sync(args: argparse.Namespace) -> int:
+    out = Path(args.out)
+    remote = f"{args.remote.rstrip('/')}/{out.name}"
+    (out / "tiles").mkdir(parents=True, exist_ok=True)
+    # -u never replaces a newer file: a tile retried on one machine is not
+    # overwritten by the other's older error record.
+    if args.direction in ("pull", "both"):
+        _gcloud("rsync", "-u", f"{remote}/tiles", str(out / "tiles"))
+        _gcloud("rsync", "-u", "--exclude", r"^(?!plan\.json$).*", remote, str(out))
+    if args.direction in ("push", "both"):
+        _gcloud("rsync", "-u", str(out / "tiles"), f"{remote}/tiles")
+        _gcloud("cp", str(out / "plan.json"), f"{remote}/plan.json")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--artifacts", default="artifacts", help="artifacts root (default: ./artifacts)")
@@ -542,6 +621,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--max-minutes", type=float, default=15.0)
     p.add_argument("--limit", type=int, default=None, help="at most this many tiles this batch")
     p.add_argument("--near", default=None, metavar="LAT,LON", help="predict the tiles nearest this point first")
+    p.add_argument("--sync", action="store_true", help="sync with --remote before and after the batch")
+    p.add_argument("--remote", default=DEFAULT_REMOTE)
     p.add_argument("--min-score", type=float, default=0.1, help="keep candidates scoring at least this (default 0.1)")
     p.add_argument("--year", type=int, default=None)
     p.add_argument("--device", default="auto")
@@ -557,8 +638,21 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("overview", help="write overview.json for the reviewer's map")
     p.add_argument("--out", required=True)
 
+    p = sub.add_parser("sync", help="merge plan.json and tiles/ with the remote copy")
+    p.add_argument("--out", required=True)
+    p.add_argument("--remote", default=DEFAULT_REMOTE)
+    p.add_argument("direction", nargs="?", choices=["both", "pull", "push"], default="both")
+
+    p = sub.add_parser("run-bundle", help="push or pull the files predict needs for a run")
+    p.add_argument("direction", choices=["push", "pull"])
+    p.add_argument("--run", required=True)
+    p.add_argument("--remote", default=DEFAULT_REMOTE)
+
     args = parser.parse_args(argv)
-    return {"plan": plan, "predict": predict, "assemble": assemble, "overview": overview}[args.step](args)
+    return {
+        "plan": plan, "predict": predict, "assemble": assemble, "overview": overview,
+        "sync": sync, "run-bundle": run_bundle,
+    }[args.step](args)
 
 
 if __name__ == "__main__":

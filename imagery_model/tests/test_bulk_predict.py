@@ -166,3 +166,25 @@ def test_the_boston_metro_circle():
     outside = {"Quincy": (42.252, -71.002), "Lynn": (42.466, -70.950), "Needham": (42.280, -71.235)}
     assert [k for k, p in inside.items() if not bulk_predict.in_boundary(*p, polygons)] == []
     assert [k for k, p in outside.items() if bulk_predict.in_boundary(*p, polygons)] == []
+
+
+def test_a_run_bundle_holds_what_predict_loads_and_one_checkpoint(tmp_path):
+    run = tmp_path / "runs" / "r1"
+    for cohort, dataset in (("validation-usbos", "d-usbos"), ("train-usnyc", "d-usnyc")):
+        (run / "evaluation" / cohort).mkdir(parents=True)
+        (run / "evaluation" / cohort / "evaluation-metadata.json").write_text(json.dumps(
+            {"checkpoint": "/remote/runs/r1/checkpoints/000-0000282.ckpt", "config": {"dataset": dataset}}))
+        (run / "evaluation" / cohort / "predictions.parquet").write_text("big")
+    (run / "checkpoints").mkdir()
+    for name in ("000-0000282.ckpt", "last.ckpt"):
+        (run / "checkpoints" / name).write_text("weights")
+    (run / "config-usbos.json").write_text("{}")
+    (run / "COMPLETE").write_text("")
+
+    files = bulk_predict.run_bundle_files(tmp_path, "r1")
+    assert "runs/r1/checkpoints/000-0000282.ckpt" in files
+    assert "runs/r1/checkpoints/last.ckpt" not in files
+    assert {"runs/r1/COMPLETE", "runs/r1/config-usbos.json",
+            "runs/r1/evaluation/validation-usbos/taxonomy.json",
+            "chips/d-usbos/normalization.json", "chips/d-usnyc/normalization.json"} <= set(files)
+    assert not any(f.endswith(".parquet") for f in files)

@@ -879,15 +879,17 @@ memory_mb = 3072
 
 # Five municipal inventories in one model (Boston, the Arnold Arboretum,
 # Cambridge, Brookline and Somerville), so five probes and five partitions —
-# but still one city parquet and one job.
+# but still one city parquet and one job.  Memory is for PREDICTED_USBOS: a
+# 331k-row staged file peaked at 1.46 GiB locally (2026-10-19), and the full
+# metro circle stages ~1.9M rows.
 [[cloud.job]]
 key = "city-usbos"
 name = "urban-tree-city-usbos"
 entrypoint = "raw/usbos/boston_tree_info.preql"
 operation = "refresh"
 schedule = "0 40 10 * * *"
-timeout_seconds = 1800
-memory_mb = 2048
+timeout_seconds = 2400
+memory_mb = 6144
 
 [[cloud.job]]
 key = "city-frpar"
