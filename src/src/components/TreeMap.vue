@@ -2422,7 +2422,8 @@ onUnmounted(() => {
   top: 50%;
   left: 50%;
   transform: translate(-50%, calc(-100% - 18px));
-  z-index: 10;
+  /* Selected-tree actions must sit above the map controls (submit FAB: 20). */
+  z-index: 21;
   width: min(840px, calc(100% - 24px));
   max-height: min(420px, 55vh);
   background: linear-gradient(160deg, rgba(var(--surface-raised-rgb), 0.98), rgba(var(--surface-rgb), 0.98));
