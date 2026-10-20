@@ -60,7 +60,13 @@ export type FixtureTree = {
 }
 
 // San Francisco's own ecoregion is 423 (see dashboardContextSource.ts); 425
-// shares its biome, 339 shares only its realm, 664 shares neither.
+// shares its biome, 339 shares only its realm, 664 shares neither. Coast live
+// oak is native to all three nearctic ones, so in San Francisco it fans out to
+// one row per bucket and only the best match may count; the sample species,
+// London plane, likewise reaches a realm and a same-biome row. Neither reaches
+// a non-native row: a cross-filter on a bucket still matches any of a
+// species' rows, not its best one, so that would fail until the bucket itself
+// is best-match per species (trilogy-data/pytrilogy#758).
 export const FIXTURE_ECOREGIONS: FixtureEcoregion[] = [
   {
     ecoregion_id: 423,
@@ -94,7 +100,7 @@ export const FIXTURE_SPECIES: FixtureSpecies[] = [
     genus: 'Quercus',
     common_names: ['Coast live oak', 'California live oak'],
     tree_form: 'broadleaf',
-    native_ecoregions: [423],
+    native_ecoregions: [339, 425, 423],
     usda_zone_min: 8,
     usda_zone_max: 10,
     water_needs: 'low',
@@ -121,7 +127,7 @@ export const FIXTURE_SPECIES: FixtureSpecies[] = [
     common_names: ['London plane'],
     tree_form: 'broadleaf',
     // Same biome as SF, different ecoregion.
-    native_ecoregions: [425],
+    native_ecoregions: [339, 425],
     usda_zone_min: 5,
     usda_zone_max: 9,
     water_needs: 'high',

@@ -63,7 +63,7 @@ export const SPECIES_KPI_CHARTS: SpeciesDashboardKpi[] = [
     id: 'sp-biome-fit',
     label: 'Ecological Fit',
     title: 'Biome Fit %',
-    query: "import std.display; SELECT (count(tree_id ? native_locality_bucket = 'Native' or native_locality_bucket = 'Same biome, non-native') / count(tree_id))::float::percent as biome_fit_pct;",
+    query: "import std.display; SELECT (count_distinct(tree_id ? native_locality_bucket = 'Native' or native_locality_bucket = 'Same biome, non-native') / count_distinct(tree_id))::float::percent as biome_fit_pct;",
     xField: 'biome_fit_pct',
     requiresCitySelection: true,
   },
