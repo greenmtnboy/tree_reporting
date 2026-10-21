@@ -72,7 +72,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.street-dialog { width: min(1000px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid rgba(var(--ink-rgb), .2); border-radius: 12px; background: rgb(var(--surface-raised-rgb)); color: rgb(var(--ink-rgb)); }
+.street-dialog { position: fixed; inset: 0; margin: auto; overflow: auto; width: min(1000px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid rgba(var(--ink-rgb), .2); border-radius: 12px; background: rgb(var(--surface-raised-rgb)); color: rgb(var(--ink-rgb)); }
 .street-dialog::backdrop { background: #0009; }
 header, footer { display: flex; align-items: center; gap: 16px; padding: 14px 18px; }
 header { justify-content: space-between; }
