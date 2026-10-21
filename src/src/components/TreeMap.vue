@@ -2524,10 +2524,22 @@ onUnmounted(() => {
   transition: background 0.15s, color 0.15s;
 }
 
-.tree-card-checkin:hover,
-.tree-card-correction:hover {
+.tree-card-checkin:hover {
   background: transparent;
   color: var(--color-leaf);
+}
+
+/* Match the card's quiet, translucent header controls on both themes. */
+.tree-card-correction {
+  background: rgba(var(--ink-rgb), 0.04);
+  color: rgba(var(--ink-rgb), 0.8);
+  border-color: rgba(var(--accent-rgb), 0.18);
+  border-radius: 6px;
+}
+
+.tree-card-correction:hover {
+  background: rgba(var(--ink-rgb), 0.09);
+  color: rgba(var(--ink-rgb), 0.95);
 }
 
 .tree-card-header {
