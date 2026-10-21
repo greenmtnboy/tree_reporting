@@ -101,6 +101,8 @@
           <div v-if="scientificName" class="tree-card-species">{{ scientificName }}<span v-if="selectedTree.cultivar" class="tree-card-cultivar"> '{{ selectedTree.cultivar }}'</span></div>
         </div>
         <div class="tree-card-header-actions">
+          <button v-if="!simplified && firebaseAvailable" type="button" class="tree-card-correction"
+            data-testid="tree-report-link" @click="openCheckin('update')">Correct or confirm info</button>
           <button
             v-if="canCheckInToSelectedTree"
             class="tree-card-checkin"
@@ -115,6 +117,7 @@
       <!-- Left pane: this tree -->
       <div class="tree-card-pane tree-card-pane--tree">
         <div class="tree-card-section-label">This tree</div>
+        <p v-if="showPredictionNote" class="tc-prediction-note" data-testid="tree-prediction-note">This tree is predicted from aerial imagery; check in to confirm its existence.</p>
         <div class="tc-grid">
           <template v-if="selectedTree.tree_id">
             <span class="tc-label">ID</span><span class="tc-value">{{ selectedTree.tree_id }}</span>
@@ -142,12 +145,13 @@
           <span class="tc-social-count">{{ checkinCountLabel }}</span>
         </div>
         <button
-          v-if="simplified ? canCheckInToSelectedTree : firebaseAvailable"
+          v-if="simplified && canCheckInToSelectedTree"
           type="button"
           class="tc-report-link"
           data-testid="tree-report-link"
           @click="openCheckin('update')"
-        >{{ simplified ? 'Missing or mapped wrong? Report it' : 'Suggest a correction' }}</button>
+        >Missing or mapped wrong? Report it</button>
+        <button v-if="selectedTreeAnchor" type="button" class="tc-report-link" @click="streetViewOpen = true">Street View</button>
       </div>
 
       <!-- Center pane: species info -->
@@ -202,7 +206,7 @@
            species. -->
       <div class="tree-card-pane tree-card-pane--photos">
         <div class="tree-card-section-label">
-          {{ selectedTree.submission_photo_url || visitorPhotoUrl ? 'Photo of this tree' : 'Example species photo' }}
+          {{ selectedTree.submission_photo_url || visitorPhotoUrl ? 'Photo of this tree' : unknownSpecies && !selectedTree.photo_url ? 'Unidentified tree' : 'Example species photo' }}
         </div>
         <div v-if="selectedTree.submission_photo_url" class="tc-photo-wrap">
           <img
@@ -248,6 +252,10 @@
             <span class="tc-photo-attr">{{ selectedTree.photo_attribution }}</span>
           </div>
         </div>
+        <div v-else-if="unknownSpecies" class="tc-unknown-tree">
+          <div class="tc-photo tc-unknown-tree-symbol" aria-hidden="true">?</div>
+          <span>Species not recorded</span>
+        </div>
         <div v-else class="tc-photo-placeholder">No photo available</div>
         <!-- A trunk / bark view of the species, when a reviewer has picked one. -->
         <div v-if="selectedTree.trunk_photo_url" class="tc-photo-wrap tc-photo-wrap--trunk">
@@ -266,6 +274,8 @@
     </div>
   </div>
 
+  <StreetViewDialog v-if="streetViewOpen && selectedTreeAnchor"
+    :position="{ lat: selectedTreeAnchor[1], lng: selectedTreeAnchor[0] }" @close="streetViewOpen = false" />
   <CheckinDialog
     v-if="checkinDialog"
     :tree-id="checkinDialog.treeId"
@@ -303,6 +313,8 @@ import { resolveBootstrapCity } from '../composables/bootstrapCity'
 import CitySelector from './CitySelector.vue'
 import MapCompass from './MapCompass.vue'
 import CheckinDialog from './CheckinDialog.vue'
+import StreetViewDialog from './StreetViewDialog.vue'
+import { isUnconfirmedPrediction } from '../data/dataSources'
 import { firebaseAvailable } from '../lib/firebase'
 import {
   getTreeCheckinStats,
@@ -811,6 +823,9 @@ interface PopupTreeRow {
 }
 
 const selectedTree = ref<PopupTreeRow | null>(null)
+const streetViewOpen = ref(false)
+watch(() => selectedTree.value?.tree_id, () => { streetViewOpen.value = false })
+const unknownSpecies = computed(() => !selectedTree.value?.species || selectedTree.value.species === 'Unknown')
 
 // A placeholder `species` is not a taxon and has no enrichment row (see
 // src/src/data/species.ts). Showing the raw sentinel in the italic
@@ -875,6 +890,8 @@ function openCheckin(mode: 'checkin' | 'update' | 'missing'): void {
 // read (offline, Firebase unconfigured) just leaves the line off.
 const checkinStats = ref<TreeCheckinStats | null>(null)
 let checkinStatsToken = 0
+// Unknown/unavailable counts are not evidence that nobody has checked in.
+const showPredictionNote = computed(() => isUnconfirmedPrediction(selectedTree.value?.data_source, checkinStats.value?.count))
 
 watch(
   () => selectedTree.value?.tree_id ?? null,
@@ -2404,7 +2421,8 @@ onUnmounted(() => {
   top: 50%;
   left: 50%;
   transform: translate(-50%, calc(-100% - 18px));
-  z-index: 10;
+  /* Selected-tree actions must sit above the map controls (submit FAB: 20). */
+  z-index: 21;
   width: min(840px, calc(100% - 24px));
   max-height: min(420px, 55vh);
   background: linear-gradient(160deg, rgba(var(--surface-raised-rgb), 0.98), rgba(var(--surface-rgb), 0.98));
@@ -2492,7 +2510,8 @@ onUnmounted(() => {
   color: var(--color-leaf);
 }
 
-.tree-card-checkin {
+.tree-card-checkin,
+.tree-card-correction {
   background: var(--color-leaf);
   color: var(--color-on-accent);
   border: 1px solid var(--color-leaf);
@@ -2505,7 +2524,8 @@ onUnmounted(() => {
   transition: background 0.15s, color 0.15s;
 }
 
-.tree-card-checkin:hover {
+.tree-card-checkin:hover,
+.tree-card-correction:hover {
   background: transparent;
   color: var(--color-leaf);
 }
@@ -2863,4 +2883,10 @@ onUnmounted(() => {
   70% { box-shadow: 0 0 0 10px rgba(var(--accent-rgb), 0); }
   100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
 }
+</style>
+
+<style scoped>
+.tc-prediction-note { font-size: 12px; line-height: 1.5; color: rgba(var(--ink-rgb), .65); margin: 0 0 12px; }
+.tc-unknown-tree { display: flex; flex-direction: column; align-items: center; color: rgba(var(--ink-rgb), .65); font-size: 11px; }
+.tc-unknown-tree-symbol { display: grid; place-items: center; font-size: 120px; font-weight: 300; line-height: 1; color: rgba(var(--ink-rgb), .32); }
 </style>
