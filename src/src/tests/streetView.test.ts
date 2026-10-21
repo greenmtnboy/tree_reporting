@@ -1,82 +1,75 @@
 // @vitest-environment happy-dom
 import { createApp, nextTick } from 'vue'
 import { afterEach, expect, it, vi } from 'vitest'
-import { headingToTree } from '../lib/streetView'
+import { streetViewEmbedUrl, streetViewExternalUrl } from '../lib/streetView'
 import StreetViewDialog from '../components/StreetViewDialog.vue'
-const state = vi.hoisted(() => ({ load: vi.fn(), request: vi.fn(), panorama: vi.fn(), callbacks: {} as Record<string, () => void>, removed: vi.fn(), heading: 90, setIcon: vi.fn(), fit: vi.fn(), visible: vi.fn() }))
-vi.mock('../lib/streetView', async (original) => ({ ...await original<typeof import('../lib/streetView')>(), loadStreetView: state.load }))
+
+const state = vi.hoisted(() => ({ map: vi.fn(), markerPosition: vi.fn(), removeMap: vi.fn(), removeMarker: vi.fn(), unbind: vi.fn() }))
+vi.mock('maplibre-gl', () => ({ default: {
+  Map: class { constructor(options: unknown) { state.map(options) } remove = state.removeMap },
+  Marker: class { setLngLat(position: unknown) { state.markerPosition(position); return this } addTo() { return this } remove = state.removeMarker },
+} }))
+vi.mock('../composables/mapTheme', () => ({ basemapStyleUrl: () => 'https://basemaps.cartocdn.com/test/style.json', bindMapTheme: () => state.unbind }))
+vi.mock('../composables/useTheme', () => ({ useTheme: () => ({ resolvedTheme: { value: 'light' } }) }))
+const position = { lat: 42.001, lng: -71 }
 let unmount: (() => void) | undefined
-async function mount() {
+const closed = vi.fn()
+async function mount(key = 'test-key') {
+  vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', key)
   HTMLDialogElement.prototype.showModal = function () { this.open = true }
+  HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new Event('close')) }
   const host = document.createElement('div')
   document.body.append(host)
-  const app = createApp(StreetViewDialog, { position: { lat: 42.001, lng: -71 } })
+  const app = createApp(StreetViewDialog, { position, onClose: closed })
   app.mount(host)
   unmount = () => { app.unmount(); host.remove() }
-  for (let i = 0; i < 8; i++) await nextTick()
-}
-afterEach(() => { unmount?.(); vi.clearAllMocks(); vi.unstubAllGlobals() })
-function fakeMaps() {
-  return {
-    StreetViewService: class { getPanorama = state.request },
-    StreetViewPreference: { NEAREST: 'nearest' }, StreetViewSource: { OUTDOOR: 'outdoor' },
-    SymbolPath: { CIRCLE: 'circle', FORWARD_CLOSED_ARROW: 'arrow' },
-    StreetViewPanorama: class {
-      constructor(...args: unknown[]) { state.panorama(...args) }
-      getPosition() { return { toJSON: () => ({ lat: 42, lng: -71 }) } }
-      getPov() { return { heading: state.heading } }
-      setPov() {}
-      setVisible = state.visible
-      addListener(name: string, callback: () => void) { state.callbacks[name] = callback; return { remove: state.removed } }
-    },
-    Map: class { fitBounds = state.fit },
-    Marker: class { setPosition() {} setIcon = state.setIcon; setMap() {} },
-    Polyline: class { setPath() {} setMap() {} },
-    LatLngBounds: class { extend() { return this } },
-  }
-}
-it.each([[1, 0, 0], [0, 1, 90], [-1, 0, 180], [0, -1, 270]])('faces a tree at %s,%s', (lat, lng, expected) => {
-  expect(headingToTree({ lat: 0, lng: 0 }, { lat, lng })).toBeCloseTo(expected)
-})
-it('handles the antimeridian', () => {
-  expect(headingToTree({ lat: 0, lng: 179 }, { lat: 0, lng: -179 })).toBeCloseTo(90)
-})
-it('shows configuration failures with an external fallback', async () => {
-  state.load.mockRejectedValue(new Error('Street View is not configured yet.'))
-  await mount()
-  expect(document.querySelector('[role=status]')?.textContent).toContain('not configured')
-  expect(document.querySelector('dialog a')?.getAttribute('href')).toContain('42.001,-71')
-})
-it('handles unavailable imagery', async () => {
-  state.load.mockResolvedValue(fakeMaps())
-  state.request.mockResolvedValue({ data: {} })
-  await mount()
-  expect(document.querySelector('[role=status]')?.textContent).toContain('No outdoor Street View')
-  expect(state.panorama).not.toHaveBeenCalled()
-})
-it('uses the nearest outdoor panorama and synchronizes the camera', async () => {
-  const maps = fakeMaps()
-  vi.stubGlobal('google', { maps })
-  state.load.mockResolvedValue(maps)
-  state.request.mockResolvedValue({ data: { location: { pano: 'closest', latLng: { toJSON: () => ({ lat: 42, lng: -71 }) } } } })
-  await mount()
-  expect(state.request).toHaveBeenCalledWith(expect.objectContaining({ preference: 'nearest', sources: ['outdoor'], radius: 100 }))
-  expect(state.panorama.mock.calls[0][1]).toMatchObject({ pano: 'closest', pov: { heading: 0, pitch: 0 } })
-  state.heading = 215
-  state.callbacks.pov_changed()
-  expect(state.setIcon).toHaveBeenLastCalledWith(expect.objectContaining({ rotation: 215 }))
-  state.callbacks.position_changed()
-  expect(state.fit).toHaveBeenCalledTimes(2)
-  unmount!(); unmount = undefined
-  expect(state.removed).toHaveBeenCalledTimes(2)
-  expect(state.visible).toHaveBeenCalledWith(false)
-})
-it('does not create a viewer if closed during loading', async () => {
-  let resolve!: (value: unknown) => void
-  state.load.mockReturnValue(new Promise(r => { resolve = r }))
-  await mount()
-  unmount!(); unmount = undefined
-  resolve(fakeMaps())
   await nextTick()
-  expect(state.request).not.toHaveBeenCalled()
+}
+afterEach(() => { unmount?.(); unmount = undefined; vi.clearAllMocks(); vi.unstubAllEnvs() })
+
+it('requests nearby outdoor imagery exclusively through Embed, safely encoding the key', () => {
+  const url = new URL(streetViewEmbedUrl(position, 'test&key=other')!)
+  expect(url.origin + url.pathname).toBe('https://www.google.com/maps/embed/v1/streetview')
+  expect(Object.fromEntries(url.searchParams)).toEqual({ key: 'test&key=other', location: '42.001,-71', radius: '100', source: 'outdoor' })
+})
+it.each([undefined, '', '  '])('does not create an embed URL with missing key %s', key => {
+  expect(streetViewEmbedUrl(position, key)).toBeNull()
+})
+it('keeps the external fallback key-free', () => {
+  expect(streetViewExternalUrl(position)).toBe('https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=42.001,-71')
+})
+it('renders an accessible iframe and a separate tree-location map without loading the Google JS SDK', async () => {
+  await mount()
+  const frame = document.querySelector('iframe')!
+  expect(frame.title).toBe('Google Street View near this tree')
+  expect(frame.getAttribute('referrerpolicy')).toBe('strict-origin-when-cross-origin')
+  expect(frame.hasAttribute('allowfullscreen')).toBe(true)
+  expect(new URL(frame.src).pathname).toBe('/maps/embed/v1/streetview')
+  expect(document.querySelector('script[src*="maps.googleapis.com"]')).toBeNull()
+  expect(document.querySelector('dialog')?.textContent).toContain('does not track Street View')
+  expect(document.querySelector('dialog')?.textContent).not.toContain('Face tree')
+  expect(state.map).toHaveBeenCalledWith(expect.objectContaining({ center: [-71, 42.001], interactive: false }))
+  expect(state.markerPosition).toHaveBeenCalledWith([-71, 42.001])
+})
+it('shows missing configuration and the external fallback without creating a map', async () => {
+  await mount('')
+  expect(document.querySelector('[role=status]')?.textContent).toContain('not configured')
+  expect(document.querySelector('iframe')).toBeNull()
+  expect(state.map).not.toHaveBeenCalled()
+  expect(document.querySelector('dialog a')?.getAttribute('href')).toBe(streetViewExternalUrl(position))
+})
+it('closes from the button and releases the inset, iframe, and focus on unmount', async () => {
+  const opener = document.createElement('button')
+  document.body.append(opener)
+  opener.focus()
+  await mount()
+  document.querySelector<HTMLButtonElement>('dialog header button')!.click()
+  expect(closed).toHaveBeenCalledOnce()
+  unmount!(); unmount = undefined
+  expect(state.unbind).toHaveBeenCalledOnce()
+  expect(state.removeMap).toHaveBeenCalledOnce()
+  expect(state.removeMarker).toHaveBeenCalledOnce()
+  expect(document.querySelector('iframe')).toBeNull()
+  expect(document.activeElement).toBe(opener)
+  opener.remove()
 })
