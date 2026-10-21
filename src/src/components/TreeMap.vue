@@ -1268,30 +1268,30 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
         tf.crown_width_m,
         tf.tree_form,
         CASE
-          WHEN tf.native_ecoregions IS NULL OR len(tf.native_ecoregions) = 0 THEN NULL
-          WHEN list_contains(tf.native_ecoregions, ${cityEcoregionId}) THEN 'Native here'
+          WHEN se.native_ecoregions IS NULL OR len(se.native_ecoregions) = 0 THEN NULL
+          WHEN list_contains(se.native_ecoregions, ${cityEcoregionId}) THEN 'Native here'
           WHEN EXISTS (
             SELECT 1
             FROM ecoregion_info ei
-            WHERE list_contains(tf.native_ecoregions, ei.ecoregion_id)
+            WHERE list_contains(se.native_ecoregions, ei.ecoregion_id)
               AND ei.biome = '${cityBiome}'
           ) THEN 'Biome match'
           ELSE 'Different biome'
         END AS ecological_fit,
-        tf.is_evergreen,
-        tf.mature_height_min_ft,
-        tf.mature_height_max_ft,
-        tf.canopy_spread_min_ft,
-        tf.canopy_spread_max_ft,
-        tf.growth_rate,
-        tf.lifespan_min_years,
-        tf.lifespan_max_years,
-        tf.drought_tolerance,
-        tf.water_needs,
-        tf.sun_exposure,
-        tf.bloom_months,
-        tf.wildlife_value,
-        tf.fire_risk,
+        se.is_evergreen,
+        se.mature_height_min_ft,
+        se.mature_height_max_ft,
+        se.canopy_spread_min_ft,
+        se.canopy_spread_max_ft,
+        se.growth_rate,
+        se.lifespan_min_years,
+        se.lifespan_max_years,
+        se.drought_tolerance,
+        se.water_needs,
+        se.sun_exposure,
+        se.bloom_months,
+        se.wildlife_value,
+        se.fire_risk,
         tf.data_source,
         tf.submission_photo_url,
         se.description,
@@ -1937,7 +1937,10 @@ onMounted(async () => {
           msSincePublish: Math.round(nowMs() - mapQueryChangedAt),
           isSourceLoaded: e.isSourceLoaded,
         })
-        if (!props.nearbyLocation && prewarmStartedForRevision !== mapQueryRevision.value) {
+        // The LOD prewarm serves the desktop intro's wide prefetch ranges; it
+        // materialises the whole city again (the z15 feature table) and a phone
+        // has no memory to spare for that. Nearby mode skips it for the same reason.
+        if (!props.nearbyLocation && !props.simplified && prewarmStartedForRevision !== mapQueryRevision.value) {
           prewarmStartedForRevision = mapQueryRevision.value
           void prewarmLodCaches().catch((err) => { console.warn('[Perf] map:prewarm:failed', err) })
         }

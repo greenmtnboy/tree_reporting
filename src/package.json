@@ -13,6 +13,7 @@
     "test:queries": "vitest run --config vitest.queries.config.ts",
     "bench:chat": "vitest run --config vitest.chatbench.config.ts",
     "bench:map": "node scripts/bench-map.mjs",
+    "bench:memory": "node scripts/bench-map-memory.mjs",
     "test:e2e": "playwright test",
     "test:crowns": "playwright test --config playwright.crowns.config.ts",
     "dev:artwork": "vite --open /artwork.html",
