@@ -252,8 +252,8 @@
             <span class="tc-photo-attr">{{ selectedTree.photo_attribution }}</span>
           </div>
         </div>
-        <div v-else-if="unknownSpecies" class="tc-ghost-tree">
-          <img :src="ghostTreeUrl" alt="Outline sketch of an unidentified tree" />
+        <div v-else-if="unknownSpecies" class="tc-unknown-tree">
+          <div class="tc-photo tc-unknown-tree-symbol" aria-hidden="true">?</div>
           <span>Species not recorded</span>
         </div>
         <div v-else class="tc-photo-placeholder">No photo available</div>
@@ -314,7 +314,6 @@ import CitySelector from './CitySelector.vue'
 import MapCompass from './MapCompass.vue'
 import CheckinDialog from './CheckinDialog.vue'
 import StreetViewDialog from './StreetViewDialog.vue'
-import ghostTreeUrl from '../artwork/field-sketches/ghost-tree.svg'
 import { isUnconfirmedPrediction } from '../data/dataSources'
 import { firebaseAvailable } from '../lib/firebase'
 import {
@@ -2888,6 +2887,6 @@ onUnmounted(() => {
 
 <style scoped>
 .tc-prediction-note { font-size: 12px; line-height: 1.5; color: rgba(var(--ink-rgb), .65); margin: 0 0 12px; }
-.tc-ghost-tree { display: flex; flex-direction: column; align-items: center; color: rgba(var(--ink-rgb), .65); font-size: 11px; }
-.tc-ghost-tree img { width: 100%; max-height: 220px; object-fit: contain; }
+.tc-unknown-tree { display: flex; flex-direction: column; align-items: center; color: rgba(var(--ink-rgb), .65); font-size: 11px; }
+.tc-unknown-tree-symbol { display: grid; place-items: center; font-size: 120px; font-weight: 300; line-height: 1; color: rgba(var(--ink-rgb), .32); }
 </style>

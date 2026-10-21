@@ -20,10 +20,10 @@ message and a link to Google Maps. The native modal provides focus containment,
 Escape to close, and focus restoration. Closing during asynchronous loading
 prevents a late viewer from being created.
 
-The ghost-tree SVG is bundled by Vite from
-`src/src/artwork/field-sketches/ghost-tree.svg`; no GCS object or output-table URL
-is needed. It is an unidentified-tree illustration, not a picture of that tree.
-Visitor and submission photos retain priority.
+Unknown species display a muted text question mark in the same responsive space
+as a tree photo, with “Species not recorded” beneath it. No image asset, GCS
+object, or output-table URL is needed. Visitor and submission photos retain
+priority.
 
 Prediction notes use `PREDICTED_*` sources only, and only after a successful
 check-in count read reports zero. Unknown counts (loading, offline, or missing
