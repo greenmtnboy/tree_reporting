@@ -268,7 +268,11 @@ const filtered = computed(() => {
 watch(
   () => route.name,
   () => {
-    activeOverlay.value = null
+    // The chat follows the screen rather than closing with it: its
+    // conversation lives for the session (useChat keeps it at module level,
+    // as the desktop sidebar relies on), and its title, suggestions and tools
+    // already track the route. The landmarks overlay belongs to the map.
+    if (activeOverlay.value !== 'chat') activeOverlay.value = null
     navMenuOpen.value = false
   },
 )
