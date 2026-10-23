@@ -255,6 +255,31 @@ it from Firestore.
 `pnpm test` runs the pure logic (bundle contract, observation shaping, export
 shape) against the committed fixtures; `pnpm typecheck` covers both pages.
 
+### Freezing confirmed bulk predictions
+
+Bulk predictions (`pred-…`, the `PREDICTED_{code}` partition) are replaced
+whole by each model run, ids included. A check-in on a predicted tree, or an
+update report about one, confirms that the tree is there, so before a new run
+is uploaded `POST /api/satellite/freeze-confirmed` copies every confirmed
+prediction into `satelliteTrees` (`reviewer/frozenPredictions.ts`):
+
+- The frozen tree is a satellite tree with `origin: 'bulk-confirmed'`, the card's
+  position and name, and its own id (`sat-` + sha1 of the prediction id; the
+  prediction keeps its row until the upload, and `tree_id` keys the merge). It
+  absorbs whatever later runs predict at the same spot, and it can be corrected
+  or withdrawn like any other satellite tree.
+- Its check-in counter and published photos move to the new id, and a photo
+  approved later follows it there.
+- A prediction within 5 m of a published satellite tree is not frozen a second
+  time. Its counter moves to that tree, and a withdrawn record keeps the sweep
+  idempotent. A tree the reviewer withdrew is never frozen again.
+- A "missing" report does not confirm a tree. Machines never freeze one: an
+  automated review is regenerable and belongs in the staged parquet.
+
+`GET` on the same path shows what a sweep would do. `bulk_predict upload`
+(imagery_model) calls the sweep and refuses to upload when the reviewer is not
+running.
+
 ## Data refresh
 
 Approval does not trigger a rebuild. The normal scheduled `trilogy refresh raw`
