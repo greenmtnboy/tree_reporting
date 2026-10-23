@@ -21,6 +21,9 @@ test-results/
 *.tsbuildinfo
 
 src/vite.run.log
+# Local copies of the published parquets for `pnpm bench:memory` against a
+# file that is not published yet (VITE_TREES_BASE_URL, docs/MOBILE_LOAD_BUDGET.md).
+src/public/local-trees/
 
 # Chat benchmark runs (pnpm bench:chat): transcripts and the summary of each sweep.
 src/bench-results/

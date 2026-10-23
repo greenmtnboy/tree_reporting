@@ -57,16 +57,24 @@ export const CITY_ENUM_TYPES = {
 } as const
 
 export type CityTableOptions = {
+  /**
+   * The city's browser projection (data/raw/tree_browser_city.preql), when
+   * it is published: the pipeline has already resolved the display name, the
+   * growth form and the crown prediction, so the load is one scan of this
+   * file and nothing below is read. Null falls back to assembling the same
+   * shape here from the published inventory.
+   */
+  projectionUrl: string | null
   /** The city's published parquet (or the cross-city rollup as a last resort). */
   parquetUrl: string
   /** The crown predictions parquet to fold in, or null when none is reachable. */
   predictionsUrl: string | null
   /**
-   * True when `predictionsUrl` holds one row per tree (the per-city slice,
-   * `grain (tree_id)` in tree_predictions_city.preql). The all-city file is
-   * not guaranteed that, so it is aggregated first; the aggregate's hash
-   * table is the single largest transient of the load, and the wasm heap
-   * keeps whatever it grows to.
+   * True when `predictionsUrl` holds one row per tree (a per-city slice,
+   * `grain (tree_id)`). The all-city file is not guaranteed that, so it is
+   * aggregated first; the aggregate's hash table is the single largest
+   * transient of the fallback load, and the wasm heap keeps whatever it
+   * grows to.
    */
   predictionsAreUnique: boolean
   city: string
@@ -97,36 +105,56 @@ export function dropCityTablesSql(): string[] {
  * row scan casts into them, so the wide VARCHAR table never exists.
  */
 export function loadCityTablesSql(options: CityTableOptions): string[] {
-  const { parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth } = options
-  const dedupFilter = hasDedupFlag ? 'AND NOT COALESCE(is_duplicate, false)' : ''
-  const cultivarColumn = hasCultivar ? 'cultivar' : 'CAST(NULL AS VARCHAR) AS cultivar'
-  const crownWidthColumn = hasCrownWidth ? 'crown_width_m' : 'CAST(NULL AS DOUBLE) AS crown_width_m'
-  const predictionRows = predictionsUrl
-    ? predictionsAreUnique
-      ? `SELECT tree_id, predicted_crown_width_m AS width
-        FROM read_parquet(${sqlString(predictionsUrl)})
-        WHERE city = ${sqlString(city)}`
-      : `SELECT tree_id, max(predicted_crown_width_m) AS width
-        FROM read_parquet(${sqlString(predictionsUrl)})
-        WHERE city = ${sqlString(city)}
-        GROUP BY tree_id`
-    : null
-  const predictionsJoin = predictionRows ? `LEFT JOIN (${predictionRows}) p ON t.tree_id = p.tree_id` : ''
-  const predictedWidth = predictionsUrl ? 'CAST(p.width AS FLOAT)' : 'CAST(NULL AS FLOAT)'
+  const { projectionUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth } = options
   const clampedLat = 'LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878)'
   const n = 2 ** TILE_INDEX_ZOOM
 
-  // The display name: enrichment's first common name, else the source's own
-  // name, else the sentinel's label, else the scientific name. A placeholder
-  // species has no enrichment row by design, so it is named here rather than
-  // falling through to the bare sentinel string.
-  const displayName = `COALESCE(
-        NULLIF(TRIM(CAST(list_extract(se.common_names, 1) AS VARCHAR)), ''),
-        t.tree_name,
-        ${sentinelLabelSql('t.species')},
-        t.species
-      )`
-  const source = `SELECT
+  // The rows, the display name, the growth form and the predicted width: from
+  // the projection as columns, or assembled here from the published inventory,
+  // the enrichment table and the predictions.
+  let source: string
+  let displayName: string
+  let formExpr: string
+  let predictedWidth: string
+  let joins: string
+  if (projectionUrl) {
+    source = `SELECT
+        tree_id,
+        city,
+        data_source,
+        tree_name,
+        display_name,
+        tree_form,
+        plant_date,
+        species,
+        cultivar,
+        crown_width_m,
+        predicted_crown_width_m,
+        latitude,
+        longitude,
+        diameter_at_breast_height,
+        submission_photo_url
+      FROM read_parquet(${sqlString(projectionUrl)})
+      WHERE latitude IS NOT NULL AND longitude IS NOT NULL`
+    displayName = 't.display_name'
+    formExpr = 't.tree_form'
+    predictedWidth = 'CAST(t.predicted_crown_width_m AS FLOAT)'
+    joins = ''
+  } else {
+    const dedupFilter = hasDedupFlag ? 'AND NOT COALESCE(is_duplicate, false)' : ''
+    const cultivarColumn = hasCultivar ? 'cultivar' : 'CAST(NULL AS VARCHAR) AS cultivar'
+    const crownWidthColumn = hasCrownWidth ? 'crown_width_m' : 'CAST(NULL AS DOUBLE) AS crown_width_m'
+    const predictionRows = predictionsUrl
+      ? predictionsAreUnique
+        ? `SELECT tree_id, predicted_crown_width_m AS width
+          FROM read_parquet(${sqlString(predictionsUrl)})
+          WHERE city = ${sqlString(city)}`
+        : `SELECT tree_id, max(predicted_crown_width_m) AS width
+          FROM read_parquet(${sqlString(predictionsUrl)})
+          WHERE city = ${sqlString(city)}
+          GROUP BY tree_id`
+      : null
+    source = `SELECT
         tree_id,
         city,
         data_source,
@@ -142,6 +170,24 @@ export function loadCityTablesSql(options: CityTableOptions): string[] {
       FROM read_parquet(${sqlString(parquetUrl)})
       WHERE latitude IS NOT NULL AND longitude IS NOT NULL
         ${dedupFilter}`
+    // The display name: enrichment's first common name, else the source's own
+    // name, else the sentinel's label, else the scientific name. A placeholder
+    // species has no enrichment row by design, so it is named here rather
+    // than falling through to the bare sentinel string.
+    displayName = `COALESCE(
+        NULLIF(TRIM(CAST(list_extract(se.common_names, 1) AS VARCHAR)), ''),
+        t.tree_name,
+        ${sentinelLabelSql('t.species')},
+        t.species
+      )`
+    // "Palm"/"Shrub"/"Cactus" name a growth form the source recorded without
+    // a species; that is worth an icon even with no enrichment row.
+    formExpr = `COALESCE(se.tree_form, ${sentinelTreeFormSql('t.species')}, 'default')`
+    predictedWidth = predictionsUrl ? 'CAST(p.width AS FLOAT)' : 'CAST(NULL AS FLOAT)'
+    joins = `LEFT JOIN species_enrichment se
+      ON t.species = se.species
+    ${predictionRows ? `LEFT JOIN (${predictionRows}) p ON t.tree_id = p.tree_id` : ''}`
+  }
 
   // Each vocabulary is a projection of the parquet's string columns, read
   // before the rows so the one row scan can cast straight into the ENUMs.
@@ -150,12 +196,12 @@ export function loadCityTablesSql(options: CityTableOptions): string[] {
   // keeps for the life of the tab.
   const vocabulary = (expr: string, join = '') =>
     `SELECT DISTINCT ${expr} AS value FROM (${source}) t ${join} WHERE ${expr} IS NOT NULL ORDER BY 1`
-  const enrichmentJoin = 'LEFT JOIN species_enrichment se ON t.species = se.species'
+  const nameJoin = projectionUrl ? '' : 'LEFT JOIN species_enrichment se ON t.species = se.species'
   const enumSources: Array<[keyof typeof CITY_ENUM_TYPES, string]> = [
     ['city', vocabulary('t.city')],
     ['source', vocabulary('t.data_source')],
     ['species', vocabulary('t.species')],
-    ['name', vocabulary(displayName, enrichmentJoin)],
+    ['name', vocabulary(displayName, nameJoin)],
     ['sourceName', vocabulary('t.tree_name')],
     ['cultivar', vocabulary('t.cultivar')],
   ]
@@ -182,9 +228,9 @@ export function loadCityTablesSql(options: CityTableOptions): string[] {
       t.longitude,
       t.diameter_at_breast_height,
       COALESCE(t.diameter_at_breast_height, 3) AS dbh,
-      -- "Palm"/"Shrub"/"Cactus" name a growth form the source recorded
-      -- without a species; that is worth an icon even with no enrichment row.
-      CAST(CASE lower(trim(COALESCE(se.tree_form, ${sentinelTreeFormSql('t.species')}, 'default')))
+      -- A form outside the vocabulary (a drifted enrichment value) is 'default'
+      -- rather than a cast error that fails the whole load.
+      CAST(CASE lower(trim(${formExpr}))
         ${TREE_FORMS.filter((form) => form !== 'default').map((form) => `WHEN '${form}' THEN '${form}'`).join('\n        ')}
         ELSE 'default'
       END AS ${CITY_ENUM_TYPES.form}) AS tree_form,
@@ -193,9 +239,7 @@ export function loadCityTablesSql(options: CityTableOptions): string[] {
       CAST(floor(((t.longitude + 180.0) / 360.0) * ${n}) AS INTEGER) AS xtile_z${TILE_INDEX_ZOOM},
       CAST(floor((1.0 - ln(tan(radians(${clampedLat})) + 1.0 / cos(radians(${clampedLat}))) / pi()) / 2.0 * ${n}) AS INTEGER) AS ytile_z${TILE_INDEX_ZOOM}
     FROM source t
-    LEFT JOIN species_enrichment se
-      ON t.species = se.species
-    ${predictionsJoin}`,
+    ${joins}`,
   ]
 
   // The published schema, as the chat, the URL filters and the default map

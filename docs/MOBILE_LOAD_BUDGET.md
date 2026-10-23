@@ -95,26 +95,53 @@ the native growth, the enrichment join and vocabulary reads cost nothing
 measurable, and the other 340 MB the browser shows is wasm's allocator and
 range-request buffers, which no file shape changes.
 
-Levers not pulled yet, in the order they are worth trying; the first two are
-the planned follow-up:
+### The browser projection (stage 1b)
 
-1. **A browser projection per city, written by the pipeline.** A parquet
-   with exactly the columns the worker keeps, the display name and form
-   precomputed, the prediction folded in, rows ordered along a space-filling
-   curve. The load becomes a single scan and cast: no enrichment join, no
-   predictions join, no vocabulary reads. Worth about 80 MB of native peak
-   on NYC (more in wasm, where the hash join's churn fragments a heap that
-   never shrinks) and half the load time; confirm the wasm figure with the
-   bench before building it. This is ordinary Trilogy, a target like
-   `tree_predictions_city.preql`, and it is also the file stage 2
-   partitions.
-2. **A slim ecoregion file.** The worker reads three small columns of
-   `ecoregion_info_v2.parquet` and downloads all 5.75 MB, almost all of it
-   the geojson column; publish a projection without it.
-3. **Coarser overview grids at z11 and z12.** The 32 m grid at z13 gives NYC
+The pipeline now publishes the worker's row shape per city
+(`data/raw/tree_browser_city.preql`, `{code}_tree_browser_v2.parquet`): the
+display name, the growth form and the crown prediction are columns, so the
+load is one scan and a cast, with no enrichment join, no predictions join
+and no probes. The worker falls back to assembling the shape itself for a
+city whose projection is not out yet. `ecoregion_browser_v2.parquet` is the
+same for the ecoregion dimension: three columns instead of 5.75 MB.
+
+Measured on NYC, phone layout, the same production build serving both files
+from localhost, twice each, with the bench's zoom walk (z13, 15, 16, 17, 18):
+
+| Path | Trees on screen | Renderer at load | Peak over the zoom walk |
+|---|---:|---:|---:|
+| Assembled (the stage 1 load) | 13.2 s, 14.8 s | 973 MB, 981 MB | 1,866 MB, 2,020 MB |
+| Projection | 9.0 s, 12.3 s | 988 MB, 970 MB | 2,061 MB, 1,754 MB |
+
+So the projection is worth about three seconds of a thirteen-second load
+and nothing at all in memory: wasm's heap after the load is the same with
+or without the joins, which the native probe's 80 MB did not predict. The
+pipeline job stays because the load is simpler, faster and probe-free, and
+because the projection is the file stage 2 partitions.
+
+### What sets the peak now: the tiles, not the load
+
+The zoom walk is the finding. After the load the renderer sits near 970 MB,
+and serving tiles at z15 to z18 then pushes the peak to 1.6 to 2.1 GB,
+varying by several hundred MB between identical runs. The stage 1
+measurement settled at one camera and never saw this; a phone that survives
+the load is still reloaded by the first zoom in. The transient is somewhere
+in the per-viewport work: the neighbourhood batch (a 4x4 block of z15 tiles
+is about 17 km² of NYC), the crown query at z17+, and whatever MapLibre
+holds for the tiles it was handed. None of it is isolated yet. This is the
+next measurement to make, per step, with DuckDB's memory tags and the
+worker's `[Perf]` lines, before any further lever is chosen.
+
+Levers after that, in the order they are worth trying:
+
+1. **Size the neighbourhood block by tree count, not by zoom.** The block
+   is a constant per zoom band in `neighborhoodBlockSizeForZoom`; NYC at
+   z15 puts tens of thousands of trees in one batch, Burlington a few
+   hundred.
+2. **Coarser overview grids at z11 and z12.** The 32 m grid at z13 gives NYC
    640k aggregate points, nearly one per tree; the grid is a constant in
-   `baseSimplifyGridMetersForZoom`. A visual change, so not in stage 1.
-4. **Replace the spatial extension.** `ST_AsMVT` is its only use and a
+   `baseSimplifyGridMetersForZoom`. A visual change.
+3. **Replace the spatial extension.** `ST_AsMVT` is its only use and a
    point-only MVT encoder is small JavaScript, but there is no evidence it
    is faster: the engine runs in its own worker, so the encoder would run
    beside it, and Arrow rows are a few times the bytes of an MVT blob per
@@ -152,8 +179,17 @@ pnpm bench:memory                   # MAP_BENCH_LAYOUT=desktop for the other lay
 `scripts/bench-map-memory.mjs` prints the renderer's private memory at each
 step and the bytes each remote file cost, counted from the worker's own
 requests. It reads process memory from the OS on Windows and Linux. Compare
-peaks, not final figures, and run one scenario at a time: a second browser
-on the machine skews both.
+peaks, not final figures, run one scenario at a time (a second browser on
+the machine skews both), and run each scenario at least twice: the zoom
+walk's peak moves by several hundred MB between identical runs.
+
+To measure against a file that is not published yet, build with
+`VITE_TREES_BASE_URL=http://localhost:6180/local-trees` and put the files
+the worker will ask for under `src/public/local-trees/` (gitignored): the
+city parquet, `tree_enrichment_v2.parquet`, the city's predictions slice
+and the candidate file. The preview then serves them with range requests
+like the bucket does, and removing the candidate from `dist/local-trees/`
+between runs gives the fallback path on the same build.
 
 The worker logs `[Perf] duckdb-worker:city-load` with per-statement
 milliseconds and DuckDB's own memory tags after every city load, so a

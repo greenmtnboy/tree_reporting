@@ -282,7 +282,13 @@ def test_the_source_views_stay_out_of_the_frontend_bundle():
     someone adds it; this is what says not to.
     """
     bundle = (REPO_DIR / "src" / "src" / "trilogyModels.ts").read_text(encoding="utf-8")
-    for name in ("full_tree_info_source", "tree_enrichment_source", "tree_predictions"):
+    for name in (
+        "full_tree_info_source",
+        "tree_enrichment_source",
+        "tree_predictions",
+        "tree_browser_city",
+        "ecoregion_browser",
+    ):
         assert name not in bundle, f"{name}.preql is in the frontend model bundle"
 
 

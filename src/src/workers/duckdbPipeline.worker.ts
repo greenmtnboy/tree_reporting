@@ -21,8 +21,10 @@ import {
   REMOTE_SPECIES_PARQUET_URL,
   REMOTE_PREDICTIONS_PARQUET_URL,
   REMOTE_ECOREGION_PARQUET_URL,
+  REMOTE_ECOREGION_BROWSER_PARQUET_URL,
   REMOTE_LANDMARKS_PARQUET_URL,
   cityTreeParquetUrl,
+  cityBrowserParquetUrl,
   cityLandmarkParquetUrl,
   cityPredictionsParquetUrl,
 } from './parquetUrls'
@@ -505,7 +507,18 @@ async function loadCityTrees(city?: string): Promise<void> {
   // first credentialed build.
   //
   // Delete this once every city has been rebuilt past the prune.
-  const hasDedupFlag = await parquetHasColumn(parquetUrl, 'is_duplicate')
+  // The browser projection, when the pipeline has published it: the display
+  // name, the growth form and the crown prediction are columns, so the load
+  // is one scan and none of the probes or joins below run. A city whose
+  // projection is not out yet (a new city before the next core tick) takes
+  // the assembled path, as every city did before the projection existed.
+  const projectionCandidate = cityBrowserParquetUrl(city)
+  const projectionUrl = projectionCandidate && await parquetHasColumn(projectionCandidate, 'display_name')
+    ? projectionCandidate
+    : null
+  if (!projectionUrl) console.info('[duckdb-worker] browser projection unavailable; assembling the city from its published files', projectionCandidate)
+
+  const hasDedupFlag = !projectionUrl && await parquetHasColumn(parquetUrl, 'is_duplicate')
 
   // `cultivar` is the tree's cultivated selection ('Tina' in Malus sargentii
   // 'Tina'), kept on the tree row by the ingest since September 2026. A
@@ -513,34 +526,37 @@ async function loadCityTrees(city?: string): Promise<void> {
   // column fails the whole load -- so probe for it the same way, and read a
   // null until the city is rebuilt. Fold this into the plain select once every
   // city has been refreshed past the change.
-  const hasCultivar = await parquetHasColumn(parquetUrl, 'cultivar')
+  const hasCultivar = !projectionUrl && await parquetHasColumn(parquetUrl, 'cultivar')
   // `crown_width_m`, the observed crown spread in metres (null for most
   // trees), arrived the same way in September 2026; probe it likewise.
-  const hasCrownWidth = await parquetHasColumn(parquetUrl, 'crown_width_m')
+  const hasCrownWidth = !projectionUrl && await parquetHasColumn(parquetUrl, 'crown_width_m')
 
-  // The published crown prediction joins in at load, so the first sprite
-  // batch is sized correctly and the city switch has no second table. The
-  // city's own slice is a few MB; the all-city file is ~170 MB and
-  // DuckDB-wasm downloads a whole object on first read, so it is only the
-  // fallback for a city whose slice is not published yet. A city with
-  // neither reachable keeps recorded crowns only; reload to retry.
+  // The assembled path folds the published crown prediction in at load, so
+  // the first sprite batch is sized correctly and the city switch has no
+  // second table. The per-city slices the retired slice job left are a few
+  // MB; the all-city file is ~170 MB and DuckDB-wasm downloads a whole
+  // object on first read, so it is only the fallback for a city with no
+  // slice. A city with neither reachable keeps recorded crowns only; reload
+  // to retry.
   let predictionsUrl: string | null = null
   const citySliceUrl = cityPredictionsParquetUrl(city)
-  for (const url of [citySliceUrl, REMOTE_PREDICTIONS_PARQUET_URL]) {
-    if (url && await parquetHasColumn(url, 'predicted_crown_width_m')) {
-      predictionsUrl = url
-      break
+  if (!projectionUrl) {
+    for (const url of [citySliceUrl, REMOTE_PREDICTIONS_PARQUET_URL]) {
+      if (url && await parquetHasColumn(url, 'predicted_crown_width_m')) {
+        predictionsUrl = url
+        break
+      }
+      console.info('[TreeCrowns] predictions source unavailable', url)
     }
-    console.info('[TreeCrowns] predictions source unavailable', url)
+    if (!predictionsUrl) console.warn('[TreeCrowns] predictions unavailable; using recorded crowns')
   }
-  if (!predictionsUrl) console.warn('[TreeCrowns] predictions unavailable; using recorded crowns')
   // The slice is one row per tree by its model's grain; the all-city file is
   // aggregated to be sure (see CityTableOptions.predictionsAreUnique).
   const predictionsAreUnique = predictionsUrl !== null && predictionsUrl === citySliceUrl
 
   for (const sql of dropCityTablesSql()) await conn.query(sql)
   const timings: Array<[string, number]> = []
-  for (const sql of loadCityTablesSql({ parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth })) {
+  for (const sql of loadCityTablesSql({ projectionUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth })) {
     const started = nowMs()
     await conn.query(sql)
     timings.push([sql.trim().slice(0, 48).replace(/\s+/g, ' '), Math.round(nowMs() - started)])
@@ -550,6 +566,7 @@ async function loadCityTrees(city?: string): Promise<void> {
     FROM duckdb_memory() WHERE memory_usage_bytes > 0 GROUP BY tag ORDER BY mb DESC`)
   console.info('[Perf] duckdb-worker:city-load', {
     city,
+    source: projectionUrl ? 'projection' : 'assembled',
     ms: timings.map(([label, ms]) => `${ms} ${label}`).join(' | '),
     duckdbMb: memory.toArray().map((row) => `${row.tag}=${row.mb}`).join(' '),
   })
@@ -643,14 +660,20 @@ async function doInit(city?: string) {
     console.error('[duckdb-worker] species-enrichment load failed — parquet schema may be out of date', e)
   }
 
-  try {
-    await conn.query(`
-      CREATE OR REPLACE TABLE ecoregion_info AS
-      SELECT ecoregion_id, biome, realm
-      FROM read_parquet('${REMOTE_ECOREGION_PARQUET_URL}')
-    `)
-  } catch (e) {
-    console.warn('[Perf] duckdb-worker:ecoregion-load:failed', e)
+  // The three columns the worker keeps, from the projection the pipeline
+  // publishes for it; the full dimension (5.75 MB, almost all geometry) only
+  // while the projection is not out yet.
+  for (const url of [REMOTE_ECOREGION_BROWSER_PARQUET_URL, REMOTE_ECOREGION_PARQUET_URL]) {
+    try {
+      await conn.query(`
+        CREATE OR REPLACE TABLE ecoregion_info AS
+        SELECT ecoregion_id, biome, realm
+        FROM read_parquet('${url}')
+      `)
+      break
+    } catch (e) {
+      console.warn('[Perf] duckdb-worker:ecoregion-load:failed', url, e)
+    }
   }
 
   spatialExtensionReady = false

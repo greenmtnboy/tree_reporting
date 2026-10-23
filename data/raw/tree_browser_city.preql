@@ -1,0 +1,239 @@
+# The browser projection: one small parquet per city holding exactly the
+# rows and columns the map's worker keeps resident, so a city opens with one
+# scan and no joins.
+#
+# The worker used to assemble this shape itself on every visit: the city's
+# published inventory, a LEFT JOIN to the enrichment table for the display
+# name and growth form, a LEFT JOIN to the crown-prediction slice for the
+# predicted width, and a vocabulary pass per string column. In DuckDB-wasm
+# the heap keeps whatever those joins grew it to, and on NYC the predictions
+# join alone was a third of the load's transient (docs/MOBILE_LOAD_BUDGET.md).
+# Resolving the joins here, once a day, takes them out of every phone's
+# budget; the map falls back to assembling the shape itself only for a city
+# whose projection has not been published yet.
+#
+# Inputs are the three published parquets this job must never rebuild, each
+# reached through its root `_source.preql` view: the rollup (`full_tree_info`),
+# the enrichment table (`tree_enrichment`) and the predictions
+# (`tree_predictions`). The views are named like the managed datasources that
+# write them, which is the edge trilogy-cloud orders the tick by, so this job
+# runs after all three producers (test_browser_projection.py pins the names).
+#
+# What each column is:
+#   display_name   the enrichment table's first common name, else the name the
+#                  source recorded, else the species. The sentinels (`Unknown`,
+#                  `Palm`, ...) have authored enrichment rows (ingest.py,
+#                  SENTINEL_ENRICHMENT), so they label themselves the same way.
+#   tree_form      the enrichment growth form, `default` where there is none;
+#                  the icon and the default colour are chosen from it.
+#   tree_name      the source's own name field, unchanged.
+#   predicted_crown_width_m  tree_predictions' allometric estimate; null for a
+#                  tree the model could not size (a palm, or no diameter and
+#                  no planting date).
+#
+# Rows are not ordered. The next step (the cell files in
+# docs/TRILOGY_BUCKETED_OUTPUT_SPEC.md) wants them along a space-filling
+# curve, and that is the language feature the spec asks for.
+#
+# Every city in MUNICIPAL_DATA_SOURCES has exactly one projection
+# (test_cloud_jobs.py::test_browser_projections_cover_every_city); new_city.py
+# appends one.
+
+import tree_common;
+import full_tree_info_source;
+import tree_enrichment_source;
+import tree_predictions_source;
+
+# What the map shows where a common name goes, and the growth form the icon
+# and default colour are chosen from (never null).
+auto display_name <- coalesce(nullif(trim(common_names[1]), ''), nullif(trim(tree_name), ''), species);
+auto browser_tree_form <- coalesce(tree_form, 'default');
+
+# Every projection is this, scoped to one city and written to its own file.
+# One that would lose a quarter of its city's rows is refused, keeping the
+# published one (`kept`, core.preql).
+template datasource city_tree_browser (
+    tree_id,
+    city,
+    data_source,
+    species,
+    cultivar: ?cultivar,
+    tree_name: ?tree_name,
+    display_name,
+    tree_form: browser_tree_form,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    crown_width_m: ?crown_width_m,
+    predicted_crown_width_m: ?predicted_crown_width_m,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    prediction_inputs_published_through,
+)
+grain (tree_id)
+freshness by prediction_inputs_published_through
+assert @kept(tree_id, 0.75);
+
+partial datasource arbue_tree_browser extends city_tree_browser ()
+complete where city = 'ARBUE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/arbue_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/arbue_tree_browser_v{data_version}.parquet`;
+
+partial datasource aumel_tree_browser extends city_tree_browser ()
+complete where city = 'AUMEL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aumel_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/aumel_tree_browser_v{data_version}.parquet`;
+
+partial datasource caajx_tree_browser extends city_tree_browser ()
+complete where city = 'CAAJX'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caajx_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caajx_tree_browser_v{data_version}.parquet`;
+
+partial datasource cabur_tree_browser extends city_tree_browser ()
+complete where city = 'CABUR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cabur_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cabur_tree_browser_v{data_version}.parquet`;
+
+partial datasource cacal_tree_browser extends city_tree_browser ()
+complete where city = 'CACAL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cacal_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cacal_tree_browser_v{data_version}.parquet`;
+
+partial datasource caedm_tree_browser extends city_tree_browser ()
+complete where city = 'CAEDM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caedm_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caedm_tree_browser_v{data_version}.parquet`;
+
+partial datasource cahfx_tree_browser extends city_tree_browser ()
+complete where city = 'CAHFX'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cahfx_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cahfx_tree_browser_v{data_version}.parquet`;
+
+partial datasource cakel_tree_browser extends city_tree_browser ()
+complete where city = 'CAKEL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cakel_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cakel_tree_browser_v{data_version}.parquet`;
+
+partial datasource cakgn_tree_browser extends city_tree_browser ()
+complete where city = 'CAKGN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cakgn_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cakgn_tree_browser_v{data_version}.parquet`;
+
+partial datasource calet_tree_browser extends city_tree_browser ()
+complete where city = 'CALET'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/calet_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/calet_tree_browser_v{data_version}.parquet`;
+
+partial datasource calon_tree_browser extends city_tree_browser ()
+complete where city = 'CALON'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/calon_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/calon_tree_browser_v{data_version}.parquet`;
+
+partial datasource camis_tree_browser extends city_tree_browser ()
+complete where city = 'CAMIS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camis_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/camis_tree_browser_v{data_version}.parquet`;
+
+partial datasource camon_tree_browser extends city_tree_browser ()
+complete where city = 'CAMON'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camon_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/camon_tree_browser_v{data_version}.parquet`;
+
+partial datasource camtl_tree_browser extends city_tree_browser ()
+complete where city = 'CAMTL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camtl_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/camtl_tree_browser_v{data_version}.parquet`;
+
+partial datasource canwe_tree_browser extends city_tree_browser ()
+complete where city = 'CANWE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/canwe_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/canwe_tree_browser_v{data_version}.parquet`;
+
+partial datasource caott_tree_browser extends city_tree_browser ()
+complete where city = 'CAOTT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caott_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caott_tree_browser_v{data_version}.parquet`;
+
+partial datasource caque_tree_browser extends city_tree_browser ()
+complete where city = 'CAQUE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caque_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caque_tree_browser_v{data_version}.parquet`;
+
+partial datasource cator_tree_browser extends city_tree_browser ()
+complete where city = 'CATOR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cator_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cator_tree_browser_v{data_version}.parquet`;
+
+partial datasource cavan_tree_browser extends city_tree_browser ()
+complete where city = 'CAVAN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavan_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cavan_tree_browser_v{data_version}.parquet`;
+
+partial datasource cavic_tree_browser extends city_tree_browser ()
+complete where city = 'CAVIC'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavic_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cavic_tree_browser_v{data_version}.parquet`;
+
+partial datasource cawpg_tree_browser extends city_tree_browser ()
+complete where city = 'CAWPG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cawpg_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cawpg_tree_browser_v{data_version}.parquet`;
+
+partial datasource cobog_tree_browser extends city_tree_browser ()
+complete where city = 'COBOG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cobog_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/cobog_tree_browser_v{data_version}.parquet`;
+
+partial datasource deber_tree_browser extends city_tree_browser ()
+complete where city = 'DEBER'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/deber_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/deber_tree_browser_v{data_version}.parquet`;
+
+partial datasource dkcph_tree_browser extends city_tree_browser ()
+complete where city = 'DKCPH'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/dkcph_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/dkcph_tree_browser_v{data_version}.parquet`;
+
+partial datasource fihel_tree_browser extends city_tree_browser ()
+complete where city = 'FIHEL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/fihel_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/fihel_tree_browser_v{data_version}.parquet`;
+
+partial datasource frpar_tree_browser extends city_tree_browser ()
+complete where city = 'FRPAR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frpar_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/frpar_tree_browser_v{data_version}.parquet`;
+
+partial datasource gblon_tree_browser extends city_tree_browser ()
+complete where city = 'GBLON'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gblon_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/gblon_tree_browser_v{data_version}.parquet`;
+
+partial datasource grath_tree_browser extends city_tree_browser ()
+complete where city = 'GRATH'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grath_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grath_tree_browser_v{data_version}.parquet`;
+
+partial datasource grmlo_tree_browser extends city_tree_browser ()
+complete where city = 'GRMLO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grmlo_tree_browser_v{data_version}.parquet`;
+
+partial datasource grsan_tree_browser extends city_tree_browser ()
+complete where city = 'GRSAN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grsan_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/grsan_tree_browser_v{data_version}.parquet`;
+
+partial datasource jptyo_tree_browser extends city_tree_browser ()
+complete where city = 'JPTYO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/jptyo_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/jptyo_tree_browser_v{data_version}.parquet`;
+
+partial datasource nlams_tree_browser extends city_tree_browser ()
+complete where city = 'NLAMS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlams_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/nlams_tree_browser_v{data_version}.parquet`;
+
+partial datasource twtpe_tree_browser extends city_tree_browser ()
+complete where city = 'TWTPE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/twtpe_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/twtpe_tree_browser_v{data_version}.parquet`;
+
+partial datasource usbos_tree_browser extends city_tree_browser ()
+complete where city = 'USBOS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbos_tree_browser_v{data_version}.parquet`;
+
+partial datasource usbtv_tree_browser extends city_tree_browser ()
+complete where city = 'USBTV'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbtv_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbtv_tree_browser_v{data_version}.parquet`;
+
+partial datasource usden_tree_browser extends city_tree_browser ()
+complete where city = 'USDEN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usden_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usden_tree_browser_v{data_version}.parquet`;
+
+partial datasource uslax_tree_browser extends city_tree_browser ()
+complete where city = 'USLAX'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslax_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uslax_tree_browser_v{data_version}.parquet`;
+
+partial datasource usnyc_tree_browser extends city_tree_browser ()
+complete where city = 'USNYC'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnyc_tree_browser_v{data_version}.parquet`;
+
+partial datasource ussfo_tree_browser extends city_tree_browser ()
+complete where city = 'USSFO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ussfo_tree_browser_v{data_version}.parquet`;
+
+partial datasource ustem_tree_browser extends city_tree_browser ()
+complete where city = 'USTEM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ustem_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ustem_tree_browser_v{data_version}.parquet`;
+
+partial datasource uswas_tree_browser extends city_tree_browser ()
+complete where city = 'USWAS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uswas_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uswas_tree_browser_v{data_version}.parquet`;
