@@ -162,20 +162,20 @@ test.describe('Mobile layout', () => {
 
     await page.getByTestId('mobile-action-chat').click()
     await expect(page.locator('.mobile-chat-overlay')).toBeVisible()
-    await expect(page.locator('.mobile-chat-overlay')).toContainText('Analytics Assistant')
+    await expect(page.locator('.mobile-chat-overlay')).toContainText('Assistant')
   })
 
-  test('the chat overlay stays open across screens and retitles', async ({ page }) => {
+  test('the chat overlay stays open across screens', async ({ page }) => {
     await openMobileMenu(page)
     await page.locator('.mobile-nav-item').filter({ hasText: 'Analytics' }).click()
     await expect(page.locator('.mobile-route-header')).toContainText('City Summary')
     await page.getByTestId('mobile-action-chat').click()
-    await expect(page.locator('.mobile-chat-overlay')).toContainText('Analytics Assistant')
+    await expect(page.locator('.mobile-chat-overlay')).toBeVisible()
 
     await openMobileMenu(page)
     await page.locator('.mobile-nav-item').filter({ hasText: 'Species' }).click()
     await expect(page.locator('.mobile-route-header')).toContainText('Species Explorer')
     await expect(page.locator('.mobile-chat-overlay')).toBeVisible()
-    await expect(page.locator('.mobile-chat-overlay')).toContainText('Species Assistant')
+    await expect(page.locator('.mobile-chat-overlay')).toContainText('Assistant')
   })
 })

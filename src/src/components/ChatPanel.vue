@@ -1,7 +1,7 @@
 <template>
   <aside class="chat-panel">
     <div class="chat-header">
-      <span>Tree Assistant</span>
+      <span>Assistant</span>
       <div class="chat-header-actions">
         <button
           v-if="isConfigured && messages.length"

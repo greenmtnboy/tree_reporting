@@ -114,7 +114,7 @@
     <transition name="mobile-slide">
       <div v-if="activeOverlay === 'chat'" class="mobile-overlay mobile-chat-overlay">
         <div class="mobile-overlay-header">
-          <span class="mobile-overlay-title">{{ chatOverlayTitle }}</span>
+          <span class="mobile-overlay-title">Assistant</span>
           <button
             class="mobile-overlay-close"
             aria-label="Close overlay"
@@ -199,13 +199,6 @@ const routeTitle = computed(() => {
   return 'Project Info'
 })
 
-const chatOverlayTitle = computed(() => {
-  if (isSummaryScreen.value) return 'Analytics Assistant'
-  if (isSpeciesScreen.value) return 'Species Assistant'
-  if (isMapScreen.value) return 'Tree Assistant'
-  return 'Project Assistant'
-})
-
 const navItems = computed<Array<{ screen: MobileScreen; label: string; copy: string }>>(() => {
   const items: Array<{ screen: MobileScreen; label: string; copy: string }> = [
     { screen: 'map', label: 'Map', copy: 'Explore trees and landmarks' },
@@ -270,7 +263,7 @@ watch(
   () => {
     // The chat follows the screen rather than closing with it: its
     // conversation lives for the session (useChat keeps it at module level,
-    // as the desktop sidebar relies on), and its title, suggestions and tools
+    // as the desktop sidebar relies on), and its suggestions and tools
     // already track the route. The landmarks overlay belongs to the map.
     if (activeOverlay.value !== 'chat') activeOverlay.value = null
     navMenuOpen.value = false
