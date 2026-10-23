@@ -250,7 +250,7 @@ If you're someone who cares:
 | Routing | Vue Router 4 |
 | Preprocessing/data access | Trilogy |
 
-Data pipeline dependencies: Python 3.13, PyArrow, Pytrilogy, DuckDB, Pillow, instructor, google-genai. The fun stuff!
+Data pipeline dependencies: Python 3.13, PyArrow, Pytrilogy, DuckDB, Pillow, google-genai. The fun stuff!
 
 ---
 

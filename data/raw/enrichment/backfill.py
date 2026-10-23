@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests", "instructor[litellm]", "duckdb", "google-genai", "jsonref", "pytrilogy>=0.3.391", "pydantic", "google-cloud-storage"]
+# dependencies = ["pyarrow", "requests", "duckdb", "google-genai>=1.30", "pytrilogy>=0.3.391", "pydantic", "google-cloud-storage"]
 # ///
 """
 Backfill NULL fields in the enrichment parquet without re-running full enrichment.
@@ -364,16 +364,16 @@ def main() -> None:
             print("[error] --model is required when backfilling LLM fields", file=sys.stderr)
             raise SystemExit(1)
         from enrichment._tree_enrichment_llm import (
-            create_instructor_client,
-            normalize_instructor_model_name,
+            create_llm_client,
+            normalize_model_name,
             DEFAULT_VERTEX_PROJECT,
             DEFAULT_VERTEX_LOCATION,
         )
-        model = normalize_instructor_model_name(args.model)
+        model = normalize_model_name(args.model)
         project = args.vertex_project or DEFAULT_VERTEX_PROJECT
         location = args.vertex_location or DEFAULT_VERTEX_LOCATION
         print(f"[info] llm model={model}", file=sys.stderr)
-        llm_client = create_instructor_client(model, project, location)
+        llm_client = create_llm_client(model, project, location)
 
     # Load existing table
     source = args.source

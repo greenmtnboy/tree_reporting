@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import TypeVar
 
-import instructor
+from pydantic import BaseModel, ValidationError
 
 from .ecoregion_matcher import EcoregionReference
 
@@ -11,28 +12,73 @@ from ._tree_enrichment_models import TreeEnrichment
 from ._tree_enrichment_sources import SourceTexts, build_reference_text
 
 
-DEFAULT_INSTRUCTOR_MODEL = os.getenv("TREE_ENRICHMENT_MODEL", "google/gemini-2.5-flash")
+DEFAULT_LLM_MODEL = os.getenv("TREE_ENRICHMENT_MODEL", "google/gemini-2.5-flash")
 DEFAULT_VERTEX_PROJECT = os.getenv("TREE_ENRICHMENT_VERTEX_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT") or "preqldata"
 DEFAULT_VERTEX_LOCATION = os.getenv("TREE_ENRICHMENT_VERTEX_LOCATION", "us-central1")
 
+# A reply that fails validation is sent back with the error and asked again,
+# this many times in all -- the same budget instructor gave us.
+DEFAULT_MAX_ATTEMPTS = 3
 
-def normalize_instructor_model_name(model_name: str) -> str:
+T = TypeVar("T", bound=BaseModel)
+
+
+def normalize_model_name(model_name: str) -> str:
     cleaned = model_name.strip()
     if not cleaned:
-        return DEFAULT_INSTRUCTOR_MODEL
+        return DEFAULT_LLM_MODEL
     if "/" in cleaned:
+        provider = cleaned.split("/", 1)[0]
+        if provider != "google":
+            raise ValueError(f"only Gemini models on Vertex AI are supported, got {cleaned!r}")
         return cleaned
     return f"google/{cleaned}"
 
 
-def create_instructor_client(model_name: str, project: str, location: str):
-    normalized_model = normalize_instructor_model_name(model_name)
-    return instructor.from_provider(
-        normalized_model,
-        vertexai=True,
-        project=project,
-        location=location,
-    )
+class GeminiStructuredClient:
+    """Structured output from Gemini on Vertex AI, validated against a pydantic model.
+
+    Replaces instructor (and the litellm it dragged in): Gemini constrains its
+    reply to the model's JSON schema, pydantic checks it, and a reply that does
+    not validate is returned to the model with the error for another try.
+    """
+
+    def __init__(self, model_name: str, project: str, location: str, max_attempts: int = DEFAULT_MAX_ATTEMPTS):
+        from google import genai
+
+        self.model_name = normalize_model_name(model_name)
+        self.model = self.model_name.split("/", 1)[1]
+        self.max_attempts = max_attempts
+        self._genai = genai.Client(vertexai=True, project=project, location=location)
+
+    def generate(self, response_model: type[T], prompt: str) -> T:
+        from google.genai import types
+
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_json_schema=response_model.model_json_schema(),
+        )
+        contents: list = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
+        last_error: Exception | None = None
+        for _ in range(self.max_attempts):
+            response = self._genai.models.generate_content(model=self.model, contents=contents, config=config)
+            text = response.text or ""
+            try:
+                return response_model.model_validate_json(text)
+            except ValidationError as exc:
+                last_error = exc
+                contents.append(types.Content(role="model", parts=[types.Part.from_text(text=text)]))
+                contents.append(
+                    types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(text=f"That reply failed validation; correct it and answer again.\n{exc}")],
+                    )
+                )
+        raise RuntimeError(f"no valid reply after {self.max_attempts} attempts: {last_error}")
+
+
+def create_llm_client(model_name: str, project: str, location: str) -> GeminiStructuredClient:
+    return GeminiStructuredClient(model_name, project, location)
 
 
 def format_ecoregion_candidates(candidates: list[EcoregionReference]) -> str:
@@ -127,12 +173,9 @@ def parse_enrichment_from_text_v2(
 
     def ask(content: str) -> TreeEnrichment | None:
         try:
-            return client.chat.completions.create(
-                response_model=TreeEnrichment,
-                messages=[{"role": "user", "content": content}],
-            )
+            return client.generate(TreeEnrichment, content)
         except Exception as exc:
-            print(f"  [error] instructor failed for {scientific_name!r}: {exc}", file=sys.stderr)
+            print(f"  [error] LLM enrichment failed for {scientific_name!r}: {exc}", file=sys.stderr)
             return None
 
     enrichment = ask(prompt)

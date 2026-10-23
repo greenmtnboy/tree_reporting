@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests", "pillow", "instructor[litellm]", "duckdb", "google-genai", "jsonref", "pytrilogy", "pydantic"]
+# dependencies = ["pyarrow", "requests", "pillow", "duckdb", "google-genai>=1.30", "pytrilogy", "pydantic"]
 # ///
 
 import sys
@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import enrichment._tree_enrichment_llm as llm
 import enrichment._tree_enrichment_sources as sources
+from enrichment._tree_enrichment_models import TreeEnrichment
 from enrichment._tree_enrichment_helpers import (
     convert_length_range_to_feet,
     normalize_bloom_months,
@@ -22,8 +23,8 @@ from enrichment._tree_enrichment_helpers import (
 
 
 class TreeEnrichmentTests(unittest.TestCase):
-    def test_default_instructor_model_is_flash(self) -> None:
-        self.assertEqual("google/gemini-2.5-flash", llm.DEFAULT_INSTRUCTOR_MODEL)
+    def test_default_llm_model_is_flash(self) -> None:
+        self.assertEqual("google/gemini-2.5-flash", llm.DEFAULT_LLM_MODEL)
 
     def test_normalize_enrichment_search_name_trims_after_species(self) -> None:
         self.assertEqual(
@@ -83,37 +84,60 @@ class TreeEnrichmentTests(unittest.TestCase):
             normalize_growth_rate(None, None, None, "slow"),
         )
 
-    def test_normalize_instructor_model_name_adds_google_prefix(self) -> None:
+    def test_normalize_model_name_adds_google_prefix(self) -> None:
         self.assertEqual(
             "google/gemini-2.5-flash",
-            llm.normalize_instructor_model_name("gemini-2.5-flash"),
+            llm.normalize_model_name("gemini-2.5-flash"),
         )
         self.assertEqual(
             "google/gemini-2.5-pro",
-            llm.normalize_instructor_model_name("google/gemini-2.5-pro"),
+            llm.normalize_model_name("google/gemini-2.5-pro"),
         )
 
-    def test_create_instructor_client_uses_normalized_model(self) -> None:
-        mock_from_provider = Mock(return_value="client")
-        with patch.object(
-            llm,
-            "instructor",
-            types.SimpleNamespace(from_provider=mock_from_provider),
-        ):
-            client = llm.create_instructor_client(
-                "gemini-2.5-flash",
-                "demo-project",
-                "us-central1",
-            )
+    def test_normalize_model_name_rejects_other_providers(self) -> None:
+        with self.assertRaises(ValueError):
+            llm.normalize_model_name("openai/gpt-4o")
 
-        self.assertEqual("client", client)
-        mock_from_provider.assert_called_once_with(
-            "google/gemini-2.5-flash",
-            vertexai=True,
-            project="demo-project",
-            location="us-central1",
+    def _client_with_replies(self, *replies: str) -> tuple[llm.GeminiStructuredClient, Mock]:
+        genai_client = Mock()
+        genai_client.models.generate_content.side_effect = [types.SimpleNamespace(text=r) for r in replies]
+        with patch("google.genai.Client", return_value=genai_client) as client_cls:
+            client = llm.create_llm_client("gemini-2.5-flash", "demo-project", "us-central1")
+        client_cls.assert_called_once_with(vertexai=True, project="demo-project", location="us-central1")
+        return client, genai_client
+
+    def test_generate_validates_against_response_model(self) -> None:
+        client, genai_client = self._client_with_replies('{"common_names": ["Coast live oak"], "tree_form": "spreading"}')
+
+        result = client.generate(TreeEnrichment, "prompt")
+
+        self.assertEqual(["Coast live oak"], result.common_names)
+        self.assertEqual("spreading", result.tree_form)
+        call = genai_client.models.generate_content.call_args
+        self.assertEqual("gemini-2.5-flash", call.kwargs["model"])
+        self.assertEqual("application/json", call.kwargs["config"].response_mime_type)
+        self.assertEqual(TreeEnrichment.model_json_schema(), call.kwargs["config"].response_json_schema)
+
+    def test_generate_sends_validation_error_back_and_retries(self) -> None:
+        client, genai_client = self._client_with_replies(
+            '{"common_names": ["Coast live oak"], "tree_form": "round"}',
+            '{"common_names": ["Coast live oak"], "tree_form": "broadleaf"}',
         )
 
+        result = client.generate(TreeEnrichment, "prompt")
+
+        self.assertEqual("broadleaf", result.tree_form)
+        retry_contents = genai_client.models.generate_content.call_args_list[1].kwargs["contents"]
+        self.assertEqual(["user", "model", "user"], [c.role for c in retry_contents])
+        self.assertIn("tree_form", retry_contents[2].parts[0].text)
+
+    def test_generate_gives_up_after_max_attempts(self) -> None:
+        bad = '{"common_names": []}'
+        client, genai_client = self._client_with_replies(bad, bad, bad)
+
+        with self.assertRaises(RuntimeError):
+            client.generate(TreeEnrichment, "prompt")
+        self.assertEqual(llm.DEFAULT_MAX_ATTEMPTS, genai_client.models.generate_content.call_count)
 
 if __name__ == "__main__":
     unittest.main()

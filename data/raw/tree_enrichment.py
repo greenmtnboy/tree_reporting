@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "requests", "pillow", "instructor[litellm]", "duckdb", "google-genai", "jsonref", "pytrilogy>=0.3.391", "pydantic", "google-cloud-storage"]
+# dependencies = ["pyarrow", "requests", "pillow", "duckdb", "google-genai>=1.30", "pytrilogy>=0.3.391", "pydantic", "google-cloud-storage"]
 # ///
 
 import sys
@@ -60,12 +60,12 @@ from enrichment._tree_enrichment_helpers import (
     split_scientific_parts,
 )
 from enrichment._tree_enrichment_llm import (
-    DEFAULT_INSTRUCTOR_MODEL,
+    DEFAULT_LLM_MODEL,
     DEFAULT_VERTEX_LOCATION,
     DEFAULT_VERTEX_PROJECT,
-    create_instructor_client,
+    create_llm_client,
     debug_print_source_details,
-    normalize_instructor_model_name,
+    normalize_model_name,
     parse_enrichment_from_text_v2,
 )
 from enrichment._tree_enrichment_models import TreeEnrichment
@@ -780,33 +780,33 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--model",
-        default=DEFAULT_INSTRUCTOR_MODEL,
+        default=DEFAULT_LLM_MODEL,
         help=(
-            "Instructor model to use for enrichment. Accepts either a full provider "
-            f"model name or a Gemini shorthand (default: {DEFAULT_INSTRUCTOR_MODEL})."
+            "Gemini model on Vertex AI to use for enrichment, e.g. gemini-2.5-pro "
+            f"or google/gemini-2.5-pro (default: {DEFAULT_LLM_MODEL})."
         ),
     )
     parser.add_argument(
         "--vertex-project",
         dest="vertex_project",
         default=DEFAULT_VERTEX_PROJECT,
-        help=f"Vertex AI project for instructor provider calls (default: {DEFAULT_VERTEX_PROJECT}).",
+        help=f"Vertex AI project for Gemini calls (default: {DEFAULT_VERTEX_PROJECT}).",
     )
     parser.add_argument(
         "--vertex-location",
         dest="vertex_location",
         default=DEFAULT_VERTEX_LOCATION,
-        help=f"Vertex AI location for instructor provider calls (default: {DEFAULT_VERTEX_LOCATION}).",
+        help=f"Vertex AI location for Gemini calls (default: {DEFAULT_VERTEX_LOCATION}).",
     )
     args = parser.parse_args()
 
-    normalized_model = normalize_instructor_model_name(args.model)
+    normalized_model = normalize_model_name(args.model)
     print(
-        f"[info] instructor model={normalized_model} | "
+        f"[info] llm model={normalized_model} | "
         f"vertex_project={args.vertex_project} | vertex_location={args.vertex_location}",
         file=sys.stderr,
     )
-    client = create_instructor_client(
+    client = create_llm_client(
         normalized_model,
         args.vertex_project,
         args.vertex_location,

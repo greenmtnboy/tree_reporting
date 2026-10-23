@@ -93,7 +93,11 @@ cities publish.
 - The prompt asks for `common_names` and `tree_form` explicitly and re-asks
   once when the name comes back empty; a species that returns empty twice is
   taken at its word. Model: `google/gemini-2.5-flash`, overridable with
-  `TREE_ENRICHMENT_MODEL`.
+  `TREE_ENRICHMENT_MODEL`. Calls go straight to Vertex AI through
+  `google-genai`'s structured output (`GeminiStructuredClient` in
+  `_tree_enrichment_llm.py`): the reply is constrained to `TreeEnrichment`'s
+  JSON schema, validated with pydantic, and a reply that fails validation is
+  sent back with the error, three attempts in all. No instructor or litellm.
 - `assert_checkpoint_is_not_stale` refuses to resume from a local `--output`
   checkpoint holding fewer rows than the published table;
   `MAX_SPECIES_PER_RUN` caps a run and reports what it left;

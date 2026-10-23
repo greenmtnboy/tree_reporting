@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pytest", "pyarrow", "requests", "pillow", "instructor[litellm]", "duckdb", "google-genai", "jsonref", "pytrilogy", "pydantic", "google-cloud-storage"]
+# dependencies = ["pytest", "pyarrow", "requests", "pillow", "duckdb", "google-genai>=1.30", "pytrilogy", "pydantic", "google-cloud-storage"]
 # ///
 """The enrichment admin must only ever write rows the pipeline would have.
 
@@ -25,12 +25,12 @@ import pytest
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
-# The admin reuses tree_enrichment.py, which imports the LLM client at module
-# scope.  The lightweight `uv run --with pytest python -m pytest tests -q` sweep
+# The admin reuses tree_enrichment.py, which needs the enrichment job's full
+# dependency set (google-genai among it).  The lightweight `uv run --with pytest python -m pytest tests -q` sweep
 # does not carry that dependency, so this file steps aside there rather than
 # breaking collection for every other test; run it in full with
 # `uv run tests/test_enrichment_admin.py`, which resolves its own dependencies.
-pytest.importorskip("instructor", reason="run `uv run tests/test_enrichment_admin.py` for the admin tests")
+pytest.importorskip("google.genai", reason="run `uv run tests/test_enrichment_admin.py` for the admin tests")
 
 from enrichment.admin import server as admin  # noqa: E402
 from enrichment._tree_shared import (  # noqa: E402
