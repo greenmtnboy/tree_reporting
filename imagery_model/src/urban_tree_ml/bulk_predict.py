@@ -365,7 +365,7 @@ def predict(args: argparse.Namespace) -> int:
 
     out = Path(args.out)
     if args.sync:
-        sync(argparse.Namespace(out=args.out, remote=args.remote, direction="pull"))
+        _sync_or_warn(args, "pull")
     manifest = json.loads((out / "plan.json").read_text(encoding="utf-8"))
     city, run = manifest["city"], manifest["run"]
     artifacts = Path(args.artifacts)
@@ -435,7 +435,7 @@ def predict(args: argparse.Namespace) -> int:
         done += 1
     remaining = len(todo) - done
     if args.sync:
-        sync(argparse.Namespace(out=args.out, remote=args.remote, direction="push"))
+        _sync_or_warn(args, "push")
     print(f"predicted {done} tiles this batch; {remaining} still to go"
           + (" (rerun to continue)" if remaining else ""), file=sys.stderr)
     return 0
@@ -549,12 +549,23 @@ def overview(args: argparse.Namespace) -> int:
 
 
 DEFAULT_REMOTE = "gs://arborary-world-curation-archive/bulk"
+# A gcloud rsync hung for three days on Windows and froze the batch loop with it.
+GCLOUD_TIMEOUT_SECONDS = 900
 
 
 def _gcloud(*args: str) -> None:
     command = ["gcloud.cmd" if os.name == "nt" else "gcloud", "storage", *args]
     print("$ " + " ".join(command), file=sys.stderr)
-    subprocess.run(command, check=True)
+    subprocess.run(command, check=True, timeout=GCLOUD_TIMEOUT_SECONDS)
+
+
+def _sync_or_warn(args: argparse.Namespace, direction: str) -> None:
+    """Sync around a predict batch; a failed sync is not a failed batch, since the
+    tiles are on disk and the next batch's push sends them."""
+    try:
+        sync(argparse.Namespace(out=args.out, remote=args.remote, direction=direction))
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+        print(f"WARNING: sync {direction} failed, continuing: {error}", file=sys.stderr)
 
 
 def run_bundle_files(artifacts: Path, run: str) -> list[str]:
