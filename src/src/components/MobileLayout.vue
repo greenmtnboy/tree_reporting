@@ -114,7 +114,7 @@
     <transition name="mobile-slide">
       <div v-if="activeOverlay === 'chat'" class="mobile-overlay mobile-chat-overlay">
         <div class="mobile-overlay-header">
-          <span class="mobile-overlay-title">{{ chatOverlayTitle }}</span>
+          <span class="mobile-overlay-title">Assistant</span>
           <button
             class="mobile-overlay-close"
             aria-label="Close overlay"
@@ -130,17 +130,20 @@
 
 <script setup lang="ts">
 import ThemeSelector from './ThemeSelector.vue'
-import { computed, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MapExperience from './MapExperience.vue'
-import ChatPanel from './ChatPanel.vue'
 import CitySelector from './CitySelector.vue'
-import SummaryView from '../views/SummaryView.vue'
-import SpeciesView from '../views/SpeciesView.vue'
-import InfoView from '../views/InfoView.vue'
-import ProfileView from '../views/ProfileView.vue'
-import SubmitView from '../views/SubmitView.vue'
-import ContributionsView from '../views/ContributionsView.vue'
+// The map is the entry; everything else arrives when first shown, so the
+// phone's first load carries neither the chat's LLM client nor the
+// dashboards' chart and editor code. See docs/MOBILE_LOAD_BUDGET.md.
+const ChatPanel = defineAsyncComponent(() => import('./ChatPanel.vue'))
+const SummaryView = defineAsyncComponent(() => import('../views/SummaryView.vue'))
+const SpeciesView = defineAsyncComponent(() => import('../views/SpeciesView.vue'))
+const InfoView = defineAsyncComponent(() => import('../views/InfoView.vue'))
+const ProfileView = defineAsyncComponent(() => import('../views/ProfileView.vue'))
+const SubmitView = defineAsyncComponent(() => import('../views/SubmitView.vue'))
+const ContributionsView = defineAsyncComponent(() => import('../views/ContributionsView.vue'))
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData } from '../composables/useMapData'
@@ -194,13 +197,6 @@ const routeTitle = computed(() => {
   if (isSummaryScreen.value) return 'City Summary'
   if (isSpeciesScreen.value) return 'Species Explorer'
   return 'Project Info'
-})
-
-const chatOverlayTitle = computed(() => {
-  if (isSummaryScreen.value) return 'Analytics Assistant'
-  if (isSpeciesScreen.value) return 'Species Assistant'
-  if (isMapScreen.value) return 'Tree Assistant'
-  return 'Project Assistant'
 })
 
 const navItems = computed<Array<{ screen: MobileScreen; label: string; copy: string }>>(() => {
@@ -265,7 +261,11 @@ const filtered = computed(() => {
 watch(
   () => route.name,
   () => {
-    activeOverlay.value = null
+    // The chat follows the screen rather than closing with it: its
+    // conversation lives for the session (useChat keeps it at module level,
+    // as the desktop sidebar relies on), and its suggestions and tools
+    // already track the route. The landmarks overlay belongs to the map.
+    if (activeOverlay.value !== 'chat') activeOverlay.value = null
     navMenuOpen.value = false
   },
 )

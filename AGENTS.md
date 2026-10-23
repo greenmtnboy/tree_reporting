@@ -35,6 +35,7 @@ pnpm lint
 pnpm test:e2e        # Playwright against a --mode e2e build
 pnpm test:queries    # compiles and executes the whole dashboard catalog against the live resolver; gates PRs
 pnpm bench:chat      # the agent chat benchmark; spends the demo model budget, run by hand
+pnpm bench:memory    # renderer memory and bytes for one city load against a preview; run before and after any loader change (docs/MOBILE_LOAD_BUDGET.md)
 
 # data, from data/raw
 uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.391" --with "duckdb<2" --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
@@ -64,5 +65,6 @@ The reference for each is `docs/DATA_PIPELINE.md`.
 - `docs/POSITION_CORRECTION.md`: moving trees out of buildings and roads with Overture; the pilot's numbers; what the language would need to own it.
 - `docs/BORDER_DEDUP.md`: trees two neighbouring inventories both record (Boston's metro); the parked model block, the planner bugs it waits on, what the language would need.
 - `docs/TESTING.md`: the dashboard query sweep, what the chat resolves against, the chat benchmark.
+- `docs/MOBILE_LOAD_BUDGET.md`: why big cities crash phone tabs, the measured peaks, the row shape the worker keeps, the cell plan; `docs/TRILOGY_BUCKETED_OUTPUT_SPEC.md` is the upstream ask it waits on.
 - `data/raw/tools/README.md`: the workstation-only scripts.
 - `reviewer/README.md`, `imagery_model/README.md`: the two other applications.

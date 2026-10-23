@@ -16,7 +16,6 @@ FROM trees
 WHERE latitude IS NOT NULL AND longitude IS NOT NULL
 `
 
-import { sentinelLabelSql, sentinelTreeFormSql } from '../data/species'
 import {
   REMOTE_TREES_PARQUET_URL,
   REMOTE_SPECIES_PARQUET_URL,
@@ -28,14 +27,23 @@ import {
   cityPredictionsParquetUrl,
 } from './parquetUrls'
 import { normalizeValue } from './normalizeValue'
+import {
+  AGG_CACHE_ZOOM,
+  COLOR_OVERRIDE_TABLE,
+  WEB_MERCATOR_MAX,
+  WEB_MERCATOR_WORLD,
+  aggCacheSql,
+  cityTileBoundsSql,
+  colorSql,
+  dropCityTablesSql,
+  loadCityTablesSql,
+  tileIndexSql,
+} from './cityTables'
 
-const WEB_MERCATOR_MAX = 20037508.342789244
-const WEB_MERCATOR_WORLD = WEB_MERCATOR_MAX * 2
 const MAX_TILE_CACHE_ENTRIES = 1536
 const MAX_PARALLEL_TILE_WORK = 3
 const PREPARED_FEATURE_TABLE_ZOOM = 15
 const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
-const COLOR_MAP_TABLE = '__tree_color_map'
 
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 
@@ -83,6 +91,8 @@ let tileQueryRevision = 0
 let publishedTreeIdFilterSql: string | null = null
 let publishedTreeIdFilterSignature = 'all'
 let colorMapSignature = 'default'
+/** True while `__tree_color_override` exists; every colour read joins it then. */
+let colorOverrideActive = false
 let activeDistinctColors: string[] = Object.values(DEFAULT_CATEGORY_COLORS)
 let activeColorLabelMap: Record<string, string> = { ...DEFAULT_CATEGORY_LABELS }
 let activeViewportZoom = 13
@@ -234,17 +244,18 @@ function neighborhoodBlockSizeForZoom(z: number): number {
   if (z === 16) return 6
   if (z >= 19) return 4
   if (z >= 17) return 6
+  // Overview zooms: a 4x4 block of z13 tiles is about 20 km across at a
+  // city's latitude, more than a phone shows, so one aggregate covers a pan.
+  if (z >= 11) return 4
   return 1
 }
 
 function tileXExpr(alias: string, z: number): string {
-  if (z >= 13 && z <= 20) return `${alias}.xtile_z${z}`
-  return `CAST(floor(((${alias}.x_3857) + ${WEB_MERCATOR_MAX}) / (${WEB_MERCATOR_WORLD} / pow(2, ${z}))) AS INTEGER)`
+  return tileIndexSql(alias, 'x', z)
 }
 
 function tileYExpr(alias: string, z: number): string {
-  if (z >= 13 && z <= 20) return `${alias}.ytile_z${z}`
-  return `CAST(floor((${WEB_MERCATOR_MAX} - (${alias}.y_3857)) / (${WEB_MERCATOR_WORLD} / pow(2, ${z}))) AS INTEGER)`
+  return tileIndexSql(alias, 'y', z)
 }
 
 function getDataTileBounds(z: number): TileBounds | null {
@@ -448,17 +459,14 @@ async function parquetHasColumn(url: string, column: string): Promise<boolean> {
 }
 
 /**
- * Load (or reload) the `trees_fast` table, and the `trees` view over it, for
- * `city` from the per-city optimised parquet. Pass undefined to load all
- * cities from the full file (only as a last-resort fallback when city is
- * genuinely unknown).
+ * Load (or reload) `trees_fast`, and the `trees` view over it, for `city`
+ * from the per-city parquet. Pass undefined to load all cities from the full
+ * file (only as a last-resort fallback when city is genuinely unknown).
  *
  * Memory is the constraint. The whole city is materialised in the DuckDB-wasm
  * heap, which only ever grows, and on an iPhone that heap sits in the same
- * process budget as the map: Boston (400k rows) held about 720 MB here when
- * every tree row also carried its species' seventeen enrichment columns and
- * the rows were stored twice (`trees` and `trees_fast`), and iOS Safari was
- * reloading the page on zoom-in. Keep each tree row narrow and stored once.
+ * process budget as the map. The row shape lives in cityTables.ts, with the
+ * numbers; what this function decides is which files to read.
  */
 async function loadCityTrees(city?: string): Promise<void> {
   if (!conn) return
@@ -468,13 +476,11 @@ async function loadCityTrees(city?: string): Promise<void> {
     throw new Error('City must be specified to load trees, to avoid accidentally loading all cities into memory.')
   }
 
-  // Drop dependent tables so CREATE OR REPLACE can rebuild cleanly.
-  await conn.query(`DROP TABLE IF EXISTS ${COLOR_MAP_TABLE}`)
-  await conn.query(`DROP TABLE IF EXISTS agg_z14_cache`)
   preparedFeatureTablesReady.clear()
   hasAggCacheByZoom.clear()
   zoomBatchReady.clear()
   dataTileBoundsByZoom.clear()
+  colorOverrideActive = false
 
   const cityUrl = city ? cityTreeParquetUrl(city) : null
   const parquetUrl = cityUrl ?? REMOTE_TREES_PARQUET_URL
@@ -500,7 +506,6 @@ async function loadCityTrees(city?: string): Promise<void> {
   //
   // Delete this once every city has been rebuilt past the prune.
   const hasDedupFlag = await parquetHasColumn(parquetUrl, 'is_duplicate')
-  const dedupFilter = hasDedupFlag ? 'AND NOT COALESCE(is_duplicate, false)' : ''
 
   // `cultivar` is the tree's cultivated selection ('Tina' in Malus sargentii
   // 'Tina'), kept on the tree row by the ingest since September 2026. A
@@ -509,139 +514,45 @@ async function loadCityTrees(city?: string): Promise<void> {
   // null until the city is rebuilt. Fold this into the plain select once every
   // city has been refreshed past the change.
   const hasCultivar = await parquetHasColumn(parquetUrl, 'cultivar')
-  const cultivarColumn = hasCultivar ? 'cultivar' : 'CAST(NULL AS VARCHAR) AS cultivar'
   // `crown_width_m`, the observed crown spread in metres (null for most
   // trees), arrived the same way in September 2026; probe it likewise.
   const hasCrownWidth = await parquetHasColumn(parquetUrl, 'crown_width_m')
-  const crownWidthColumn = hasCrownWidth ? 'crown_width_m' : 'CAST(NULL AS DOUBLE) AS crown_width_m'
 
-  // One copy of the city's rows, not two. `trees_fast` is the table every
-  // map, card and chat query reads; `trees` is a view over it that presents
-  // the published tree schema. The wasm heap is the budget here: a city's
-  // rows are the largest allocation in the browser, DuckDB-wasm never gives
-  // that memory back, and iOS Safari reloads the page when the tab grows past
-  // its limit (see loadCityTrees' doc comment). So the tree row carries only
-  // what the renderer and the chat need; the per-species facts stay in
-  // `species_enrichment` and join in at card time.
-  await conn.query(`DROP VIEW IF EXISTS trees`)
-  await conn.query(`
-    CREATE OR REPLACE TABLE trees_fast AS
-    WITH source AS (
-      SELECT
-        tree_id,
-        city,
-        data_source,
-        tree_name,
-        plant_date,
-        species,
-        ${cultivarColumn},
-        ${crownWidthColumn},
-        latitude,
-        longitude,
-        diameter_at_breast_height,
-        submission_photo_url
-      FROM read_parquet('${parquetUrl}')
-      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-        ${dedupFilter}
-    ), joined AS (
-      SELECT
-        t.tree_id,
-        t.city,
-        t.data_source,
-        t.submission_photo_url,
-        COALESCE(
-          NULLIF(TRIM(CAST(list_extract(se.common_names, 1) AS VARCHAR)), ''),
-          t.tree_name,
-          -- A placeholder species has no enrichment row by design, so name it
-          -- here rather than falling through to the bare sentinel string.
-          ${sentinelLabelSql('t.species')},
-          t.species
-        ) AS tree_name,
-        t.tree_name AS source_tree_name,
-        t.plant_date,
-        t.species,
-        t.cultivar,
-        t.crown_width_m,
-        t.latitude,
-        t.longitude,
-        t.diameter_at_breast_height,
-        COALESCE(t.diameter_at_breast_height, 3) AS dbh,
-        -- "Palm"/"Shrub"/"Cactus" name a growth form the source recorded
-        -- without a species; that is worth an icon even with no enrichment row.
-        CASE lower(trim(COALESCE(se.tree_form, ${sentinelTreeFormSql('t.species')}, 'default')))
-          WHEN 'palm' THEN 'palm'
-          WHEN 'broadleaf' THEN 'broadleaf'
-          WHEN 'conifer' THEN 'conifer'
-          WHEN 'spreading' THEN 'spreading'
-          WHEN 'columnar' THEN 'columnar'
-          WHEN 'ornamental' THEN 'ornamental'
-          WHEN 'weeping' THEN 'weeping'
-          WHEN 'multi_trunk' THEN 'multi_trunk'
-          ELSE 'default'
-        END AS tree_form,
-        LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878) AS latitude_clamped,
-        ((t.longitude + 180.0) / 360.0) AS x_norm,
-        ((1.0 - ln(tan(radians(LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878))) + (1.0 / cos(radians(LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878))))) / pi()) / 2.0) AS y_norm
-      FROM source t
-      LEFT JOIN species_enrichment se
-        ON t.species = se.species
-    )
-    SELECT
-      tree_id,
-      city,
-      data_source,
-      submission_photo_url,
-      tree_name,
-      source_tree_name,
-      plant_date,
-      species,
-      cultivar,
-      crown_width_m,
-      latitude,
-      longitude,
-      diameter_at_breast_height,
-      TRY_CAST(dbh AS DOUBLE) AS dbh,
-      tree_form,
-      ((longitude * ${WEB_MERCATOR_MAX}) / 180.0) AS x_3857,
-      (6378137.0 * ln(tan(pi() / 4.0 + radians(latitude_clamped) / 2.0))) AS y_3857,
-      CAST(floor(x_norm * pow(2, 13)) AS INTEGER) AS xtile_z13,
-      CAST(floor(y_norm * pow(2, 13)) AS INTEGER) AS ytile_z13,
-      CAST(floor(x_norm * pow(2, 14)) AS INTEGER) AS xtile_z14,
-      CAST(floor(y_norm * pow(2, 14)) AS INTEGER) AS ytile_z14,
-      CAST(floor(x_norm * pow(2, 15)) AS INTEGER) AS xtile_z15,
-      CAST(floor(y_norm * pow(2, 15)) AS INTEGER) AS ytile_z15,
-      CAST(floor(x_norm * pow(2, 16)) AS INTEGER) AS xtile_z16,
-      CAST(floor(y_norm * pow(2, 16)) AS INTEGER) AS ytile_z16,
-      CAST(floor(x_norm * pow(2, 17)) AS INTEGER) AS xtile_z17,
-      CAST(floor(y_norm * pow(2, 17)) AS INTEGER) AS ytile_z17,
-      CAST(floor(x_norm * pow(2, 18)) AS INTEGER) AS xtile_z18,
-      CAST(floor(y_norm * pow(2, 18)) AS INTEGER) AS ytile_z18,
-      CAST(floor(x_norm * pow(2, 19)) AS INTEGER) AS xtile_z19,
-      CAST(floor(y_norm * pow(2, 19)) AS INTEGER) AS ytile_z19,
-      CAST(floor(x_norm * pow(2, 20)) AS INTEGER) AS xtile_z20,
-      CAST(floor(y_norm * pow(2, 20)) AS INTEGER) AS ytile_z20
-    FROM joined
-  `)
+  // The published crown prediction joins in at load, so the first sprite
+  // batch is sized correctly and the city switch has no second table. The
+  // city's own slice is a few MB; the all-city file is ~170 MB and
+  // DuckDB-wasm downloads a whole object on first read, so it is only the
+  // fallback for a city whose slice is not published yet. A city with
+  // neither reachable keeps recorded crowns only; reload to retry.
+  let predictionsUrl: string | null = null
+  const citySliceUrl = cityPredictionsParquetUrl(city)
+  for (const url of [citySliceUrl, REMOTE_PREDICTIONS_PARQUET_URL]) {
+    if (url && await parquetHasColumn(url, 'predicted_crown_width_m')) {
+      predictionsUrl = url
+      break
+    }
+    console.info('[TreeCrowns] predictions source unavailable', url)
+  }
+  if (!predictionsUrl) console.warn('[TreeCrowns] predictions unavailable; using recorded crowns')
+  // The slice is one row per tree by its model's grain; the all-city file is
+  // aggregated to be sure (see CityTableOptions.predictionsAreUnique).
+  const predictionsAreUnique = predictionsUrl !== null && predictionsUrl === citySliceUrl
 
-  // The published schema, as the chat, the URL filters and the default map
-  // query address it. A view costs nothing per row.
-  await conn.query(`
-    CREATE OR REPLACE VIEW trees AS
-    SELECT
-      tree_id,
-      city,
-      data_source,
-      source_tree_name AS tree_name,
-      plant_date,
-      species,
-      cultivar,
-      crown_width_m,
-      latitude,
-      longitude,
-      diameter_at_breast_height,
-      submission_photo_url
-    FROM trees_fast
-  `)
+  for (const sql of dropCityTablesSql()) await conn.query(sql)
+  const timings: Array<[string, number]> = []
+  for (const sql of loadCityTablesSql({ parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth })) {
+    const started = nowMs()
+    await conn.query(sql)
+    timings.push([sql.trim().slice(0, 48).replace(/\s+/g, ' '), Math.round(nowMs() - started)])
+  }
+  const memory = await conn.query(`
+    SELECT tag, CAST(round(sum(memory_usage_bytes) / 1048576) AS INTEGER) AS mb
+    FROM duckdb_memory() WHERE memory_usage_bytes > 0 GROUP BY tag ORDER BY mb DESC`)
+  console.info('[Perf] duckdb-worker:city-load', {
+    city,
+    ms: timings.map(([label, ms]) => `${ms} ${label}`).join(' | '),
+    duckdbMb: memory.toArray().map((row) => `${row.tag}=${row.mb}`).join(' '),
+  })
 
   loadedCity = city ?? null
 
@@ -681,6 +592,11 @@ async function doInit(city?: string) {
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
 
   conn = await db.connect()
+
+  // Nothing here depends on row order, and keeping it makes every CREATE
+  // TABLE AS buffer its whole input before writing. The wasm heap never
+  // shrinks, so the peak during the city load is what the tab keeps.
+  await conn.query('SET preserve_insertion_order = false')
 
   // Load species enrichment and landmarks once — these are city-agnostic / small.
   //
@@ -773,54 +689,35 @@ function postColorMapUpdate() {
   })
 }
 
-/** Create / reset the __tree_color_map table from default category→color assignment */
-async function buildDefaultColorMap() {
+/** Drop any chat colour override; every colour read falls back to the tree-form CASE. */
+async function clearColorOverride() {
   if (!conn) return
-  await conn.query(`
-    CREATE OR REPLACE TABLE ${COLOR_MAP_TABLE} AS
-    SELECT
-      tree_id,
-      CASE COALESCE(tree_form, 'default')
-        WHEN 'palm'        THEN '${DEFAULT_CATEGORY_COLORS.palm}'
-        WHEN 'broadleaf'   THEN '${DEFAULT_CATEGORY_COLORS.broadleaf}'
-        WHEN 'conifer'     THEN '${DEFAULT_CATEGORY_COLORS.conifer}'
-        WHEN 'spreading'   THEN '${DEFAULT_CATEGORY_COLORS.spreading}'
-        WHEN 'columnar'    THEN '${DEFAULT_CATEGORY_COLORS.columnar}'
-        WHEN 'ornamental'  THEN '${DEFAULT_CATEGORY_COLORS.ornamental}'
-        WHEN 'weeping'     THEN '${DEFAULT_CATEGORY_COLORS.weeping}'
-        WHEN 'multi_trunk' THEN '${DEFAULT_CATEGORY_COLORS.multi_trunk}'
-        ELSE '${DEFAULT_CATEGORY_COLORS.default}'
-      END AS display_color
-    FROM trees_fast
-  `)
+  await conn.query(`DROP TABLE IF EXISTS ${COLOR_OVERRIDE_TABLE}`)
+  colorOverrideActive = false
   activeDistinctColors = Object.values(DEFAULT_CATEGORY_COLORS)
   activeColorLabelMap = { ...DEFAULT_CATEGORY_LABELS }
   colorMapSignature = 'default'
 }
 
-/** Rebuild the z14 aggregate cache using display_color from the color map */
+/** Forget the z14 aggregate; the next whole-city overview batch rebuilds it. */
+async function dropAggCaches() {
+  hasAggCacheByZoom.clear()
+  if (conn) await conn.query('DROP TABLE IF EXISTS agg_z14_cache')
+}
+
+/**
+ * Build the z14 aggregate cache with the active colours. Built for the first
+ * whole-city overview batch (the desktop prewarm), not at city load: it is a
+ * hash aggregate over every row, and a phone never asks for the full city.
+ */
 async function rebuildAggCaches() {
   if (!conn) return
   hasAggCacheByZoom.clear()
-  const z = 14
+  const z = AGG_CACHE_ZOOM
   const gridM = baseSimplifyGridMetersForZoom(z)
   if (gridM <= 0) return
   try {
-    await conn.query(`
-      CREATE OR REPLACE TABLE agg_z${z}_cache AS
-      SELECT
-        tf.xtile_z${z} AS xtile,
-        tf.ytile_z${z} AS ytile,
-        floor(tf.x_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gx,
-        floor(tf.y_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gy,
-        COALESCE(tf.tree_form, 'default') AS category,
-        cm.display_color,
-        AVG(TRY_CAST(tf.dbh AS DOUBLE)) AS dbh,
-        COUNT(*) AS point_count
-      FROM trees_fast tf
-      INNER JOIN ${COLOR_MAP_TABLE} cm ON tf.tree_id = cm.tree_id
-      GROUP BY 1, 2, 3, 4, 5, 6
-    `)
+    await conn.query(aggCacheSql(gridM, colorOverrideActive))
     hasAggCacheByZoom.add(z)
   } catch {
     // runtime fallback stays active
@@ -856,6 +753,7 @@ async function ensurePreparedFeatureTableForZoom(z: number, baseQuery: string): 
   const xExpr = tileXExpr('tf', z)
   const yExpr = tileYExpr('tf', z)
   const table = featureTableName(z)
+  const color = colorSql('tf', colorOverrideActive)
 
   const request = (async () => {
     const sql = `
@@ -877,7 +775,7 @@ WITH base AS (
       'id': COALESCE(base.tree_id, tf.tree_id, 'unkwn'),
       'dbh': TRY_CAST(COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS DOUBLE),
       'category': COALESCE(tf.tree_form, 'default'),
-      'display_color': cm.display_color,
+      'display_color': ${color.expr},
       'rotation': 0,
       'point_count': 1,
       'grid_m': 32
@@ -885,8 +783,7 @@ WITH base AS (
   FROM base
   INNER JOIN trees_fast tf
     ON base.tree_id = tf.tree_id
-  INNER JOIN ${COLOR_MAP_TABLE} cm
-    ON tf.tree_id = cm.tree_id
+  ${color.join}
 )
 SELECT xtile, ytile, feature
 FROM rows
@@ -911,13 +808,14 @@ WHERE xtile >= 0
   }
 }
 
-async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, baseQuery: string): Promise<void> {
+async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, baseQuery: string, simplifyGridMeters = 0): Promise<void> {
   if (!conn) return
   if (baseQuery !== effectiveBaseQuery(tileQuerySql)) return
   const blockSize = neighborhoodBlockSizeForZoom(z)
   if (blockSize <= 1) return
 
   const rev = tileQueryRevision
+  const color = colorSql('tf', colorOverrideActive)
   // The z15 feature table is a whole-city materialisation (one MVT geometry
   // per tree) that the desktop intro and the LOD prewarm build to serve their
   // wide prefetch ranges. A tile request reads it when it is there and runs
@@ -984,6 +882,65 @@ SELECT
   ST_AsMVT(feature, 'trees', 4096, 'geom') AS mvt
 FROM rows
 GROUP BY xtile, ytile
+` : simplifyGridMeters > 0 ? `
+WITH base AS (
+  ${baseQuery}
+), pts AS (
+  SELECT
+    tf.x_3857,
+    tf.y_3857,
+    COALESCE(tf.tree_form, 'default') AS category,
+    ${color.expr} AS display_color,
+    COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
+    ${tileXExpr('tf', z)} AS xtile,
+    ${tileYExpr('tf', z)} AS ytile
+  FROM base
+  INNER JOIN trees_fast tf
+    ON base.tree_id = tf.tree_id
+  ${color.join}
+  WHERE ${tileXExpr('tf', z)} BETWEEN ${minX} AND ${maxX}
+    AND ${tileYExpr('tf', z)} BETWEEN ${minY} AND ${maxY}
+), agg AS (
+  SELECT
+    xtile,
+    ytile,
+    floor(x_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gx,
+    floor(y_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gy,
+    category,
+    display_color,
+    AVG(dbh) AS dbh,
+    COUNT(*) AS point_count
+  FROM pts
+  GROUP BY 1, 2, 3, 4, 5, 6
+), rows AS (
+  SELECT
+    xtile,
+    ytile,
+    {
+      'geometry': ST_AsMVTGeom(
+        ST_Point(gx, gy),
+        ST_Extent(ST_TileEnvelope(${z}, xtile, ytile)),
+        4096,
+        64,
+        true
+      ),
+      'id': -1,
+      'dbh': TRY_CAST(dbh AS DOUBLE),
+      'category': COALESCE(category, 'default'),
+      'display_color': display_color,
+      'rotation': 0,
+      'point_count': TRY_CAST(point_count AS INTEGER),
+      'grid_m': ${simplifyGridMeters}
+    } AS feature
+  FROM agg
+)
+SELECT
+  xtile,
+  ytile,
+  ST_AsMVT(feature, 'trees', 4096, 'geometry') AS mvt
+FROM rows
+WHERE feature.geometry IS NOT NULL AND NOT ST_IsEmpty(feature.geometry)
+GROUP BY xtile, ytile
 ` : `
 WITH base AS (
   ${baseQuery}
@@ -994,15 +951,14 @@ WITH base AS (
     COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
     COALESCE(tf.tree_form, 'default') AS category,
-    cm.display_color,
+    ${color.expr} AS display_color,
     0 AS rotation,
     ${tileXExpr('tf', z)} AS xtile,
     ${tileYExpr('tf', z)} AS ytile
   FROM base
   INNER JOIN trees_fast tf
     ON base.tree_id = tf.tree_id
-  INNER JOIN ${COLOR_MAP_TABLE} cm
-    ON tf.tree_id = cm.tree_id
+  ${color.join}
   WHERE ${tileXExpr('tf', z)} BETWEEN ${minX} AND ${maxX}
     AND ${tileYExpr('tf', z)} BETWEEN ${minY} AND ${maxY}
 ), rows AS (
@@ -1084,7 +1040,11 @@ async function ensureZoomBatchTiles(z: number, baseQuery: string, simplifyGridMe
   const boundedFilter = bounds
     ? `WHERE xtile BETWEEN ${bounds.minX} AND ${bounds.maxX}\n    AND ytile BETWEEN ${bounds.minY} AND ${bounds.maxY}`
     : `WHERE xtile >= 0\n    AND ytile >= 0\n    AND xtile < CAST(pow(2, ${z}) AS INTEGER)\n    AND ytile < CAST(pow(2, ${z}) AS INTEGER)`
+  if (simplifyGridMeters > 0 && z === AGG_CACHE_ZOOM && isDefaultBaseQuery(baseQuery) && !hasAggCacheByZoom.has(z)) {
+    await rebuildAggCaches()
+  }
   const useAggCache = simplifyGridMeters > 0 && hasAggCacheByZoom.has(z) && isDefaultBaseQuery(baseQuery)
+  const color = colorSql('tf', colorOverrideActive)
 
   const request = (async () => {
     const sql = useAggCache ? `
@@ -1137,15 +1097,14 @@ WITH base AS (
     tf.x_3857,
     tf.y_3857,
     COALESCE(tf.tree_form, 'default') AS category,
-    cm.display_color,
+    ${color.expr} AS display_color,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
     ${tileXExpr('tf', z)} AS xtile,
     ${tileYExpr('tf', z)} AS ytile
   FROM base
   INNER JOIN trees_fast tf
     ON base.tree_id = tf.tree_id
-  INNER JOIN ${COLOR_MAP_TABLE} cm
-    ON tf.tree_id = cm.tree_id
+  ${color.join}
 ), bounded AS (
   SELECT *
   FROM pts
@@ -1201,15 +1160,14 @@ WITH base AS (
     COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
     COALESCE(tf.tree_form, 'default') AS category,
-    cm.display_color,
+    ${color.expr} AS display_color,
     0 AS rotation,
     ${tileXExpr('tf', z)} AS xtile,
     ${tileYExpr('tf', z)} AS ytile
   FROM base
   INNER JOIN trees_fast tf
     ON base.tree_id = tf.tree_id
-  INNER JOIN ${COLOR_MAP_TABLE} cm
-    ON tf.tree_id = cm.tree_id
+  ${color.join}
 ), bounded AS (
   SELECT *
   FROM points
@@ -1286,20 +1244,22 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
   const { simplifyGridMeters } = adaptiveLodForTile(z, x, y)
   const bounds = tileBounds3857(z, x, y)
   const batchKey = zoomBatchKey(tileQueryRevision, z)
+  const color = colorSql('tf', colorOverrideActive)
 
-  if (shouldUseZoomBatch(z)) {
-    await ensureZoomBatchTiles(z, baseQuery, simplifyGridMeters)
+  // A whole-city overview batch exists only when the desktop prewarm built
+  // it. Nothing else asks for the full city at once: an overview tile on a
+  // phone is served from an aggregate over the visible neighbourhood, whose
+  // transient memory is proportional to the viewport, not the city.
+  if (shouldUseZoomBatch(z) && zoomBatchReady.has(batchKey)) {
     const batched = getCachedTile(key)
     if (batched) return batched
-    if (zoomBatchReady.has(batchKey)) {
-      const emptyTile = new Uint8Array()
-      setCachedTile(key, emptyTile)
-      return new Uint8Array(emptyTile)
-    }
+    const emptyTile = new Uint8Array()
+    setCachedTile(key, emptyTile)
+    return new Uint8Array(emptyTile)
   }
 
-  if (simplifyGridMeters === 0 && z >= 15) {
-    await ensureNeighborhoodBatchTiles(z, x, y, baseQuery)
+  if (shouldUseZoomBatch(z) || (simplifyGridMeters === 0 && z >= 15)) {
+    await ensureNeighborhoodBatchTiles(z, x, y, baseQuery, simplifyGridMeters)
     const neighborBatched = getCachedTile(key)
     if (neighborBatched) return neighborBatched
   }
@@ -1313,13 +1273,12 @@ WITH base AS (
     tf.x_3857,
     tf.y_3857,
     COALESCE(tf.tree_form, 'default') AS category,
-    cm.display_color,
+    ${color.expr} AS display_color,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh
   FROM base
   INNER JOIN trees_fast tf
     ON base.tree_id = tf.tree_id
-  INNER JOIN ${COLOR_MAP_TABLE} cm
-    ON tf.tree_id = cm.tree_id
+  ${color.join}
   WHERE tf.x_3857 BETWEEN ${bounds.minX} AND ${bounds.maxX}
     AND tf.y_3857 BETWEEN ${bounds.minY} AND ${bounds.maxY}
 ), agg AS (
@@ -1362,7 +1321,7 @@ WITH base AS (
     COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
     COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
     COALESCE(tf.tree_form, 'default') AS category,
-    cm.display_color,
+    ${color.expr} AS display_color,
     0 AS rotation,
     1 AS point_count,
     32 AS grid_m,
@@ -1376,8 +1335,7 @@ WITH base AS (
   FROM base
   INNER JOIN trees_fast tf
     ON base.tree_id = tf.tree_id
-  INNER JOIN ${COLOR_MAP_TABLE} cm
-    ON tf.tree_id = cm.tree_id
+  ${color.join}
   WHERE tf.x_3857 BETWEEN ${bounds.minX} AND ${bounds.maxX}
     AND tf.y_3857 BETWEEN ${bounds.minY} AND ${bounds.maxY}
   LIMIT 50000
@@ -1466,83 +1424,57 @@ async function setColorOverrideSql(sql: string | null) {
   await ensureInit()
   if (!conn) return
   const normalized = sql?.trim() || null
-  // City setup already built the default map and aggregate tables. Ordinary
-  // filter changes need neither a city-wide rebuild nor another color push.
+  // City setup already cleared the override and built the aggregate table.
+  // Ordinary filter changes need neither a city-wide rebuild nor another
+  // color push.
   if (!normalized && colorMapSignature === 'default') return
 
   if (normalized) {
     // Agent provided a color override SQL returning (tree_id, override_color).
-    // Rebuild __tree_color_map: use agent colors where provided, fall back to
-    // category defaults for unmatched trees.
-    await conn.query(`DROP TABLE IF EXISTS __agent_color_override`)
+    // Keep it as a sparse table: the colour reads COALESCE it over the
+    // tree-form default, so unmatched trees keep their category colour and no
+    // per-tree table exists for the city's other rows.
+    await conn.query(`DROP TABLE IF EXISTS ${COLOR_OVERRIDE_TABLE}`)
     await conn.query(`
-CREATE TEMP TABLE __agent_color_override AS
+CREATE TEMP TABLE ${COLOR_OVERRIDE_TABLE} AS
 SELECT DISTINCT CAST(tree_id AS VARCHAR) AS tree_id, CAST(override_color AS VARCHAR) AS display_color
 FROM (
   ${normalized}
 ) __color_ids
 WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
 `)
-    const countResult = await conn.query(`SELECT COUNT(*) AS cnt FROM __agent_color_override`)
+    const countResult = await conn.query(`SELECT COUNT(*) AS cnt FROM ${COLOR_OVERRIDE_TABLE}`)
     const count = Number(countResult.get(0)?.cnt ?? 0)
 
     if (Number.isFinite(count) && count > 0) {
-      // Rebuild color map: agent colors override category defaults
-      await conn.query(`
-CREATE OR REPLACE TABLE ${COLOR_MAP_TABLE} AS
-SELECT
-  tf.tree_id,
-  COALESCE(aco.display_color,
-    CASE COALESCE(tf.tree_form, 'default')
-      WHEN 'palm'        THEN '${DEFAULT_CATEGORY_COLORS.palm}'
-      WHEN 'broadleaf'   THEN '${DEFAULT_CATEGORY_COLORS.broadleaf}'
-      WHEN 'conifer'     THEN '${DEFAULT_CATEGORY_COLORS.conifer}'
-      WHEN 'spreading'   THEN '${DEFAULT_CATEGORY_COLORS.spreading}'
-      WHEN 'columnar'    THEN '${DEFAULT_CATEGORY_COLORS.columnar}'
-      WHEN 'ornamental'  THEN '${DEFAULT_CATEGORY_COLORS.ornamental}'
-      WHEN 'weeping'     THEN '${DEFAULT_CATEGORY_COLORS.weeping}'
-      WHEN 'multi_trunk' THEN '${DEFAULT_CATEGORY_COLORS.multi_trunk}'
-      ELSE '${DEFAULT_CATEGORY_COLORS.default}'
-    END
-  ) AS display_color
+      colorOverrideActive = true
+      const color = colorSql('tf', true)
+      const distinctResult = await conn.query(`
+SELECT DISTINCT ${color.expr} AS display_color
 FROM trees_fast tf
-LEFT JOIN __agent_color_override aco ON tf.tree_id = aco.tree_id
+${color.join}
 `)
-      // Compute distinct colors from the rebuilt map
-      const distinctResult = await conn.query(`SELECT DISTINCT display_color FROM ${COLOR_MAP_TABLE}`)
       activeDistinctColors = distinctResult.toArray().map((r: Record<string, unknown>) => String(r.display_color))
       colorMapSignature = `color-${hashText(normalizeSql(normalized))}`
     } else {
       // No valid override rows — reset to defaults
-      await buildDefaultColorMap()
+      await clearColorOverride()
     }
-    await conn.query(`DROP TABLE IF EXISTS __agent_color_override`)
   } else {
     // No override — reset to category defaults
-    await buildDefaultColorMap()
+    await clearColorOverride()
   }
 
-  await rebuildAggCaches()
+  await dropAggCaches()
   invalidateTileCaches()
   postColorMapUpdate()
 }
 
-async function rebuildCityBounds(cityCode: string) {
+async function rebuildCityBounds() {
   if (!conn) return
   dataTileBoundsByZoom.clear()
-  const boundsResult = await conn.query(`
-    SELECT
-      MIN(xtile_z13) AS min_x13, MAX(xtile_z13) AS max_x13, MIN(ytile_z13) AS min_y13, MAX(ytile_z13) AS max_y13,
-      MIN(xtile_z14) AS min_x14, MAX(xtile_z14) AS max_x14, MIN(ytile_z14) AS min_y14, MAX(ytile_z14) AS max_y14,
-      MIN(xtile_z15) AS min_x15, MAX(xtile_z15) AS max_x15, MIN(ytile_z15) AS min_y15, MAX(ytile_z15) AS max_y15,
-      MIN(xtile_z16) AS min_x16, MAX(xtile_z16) AS max_x16, MIN(ytile_z16) AS min_y16, MAX(ytile_z16) AS max_y16,
-      MIN(xtile_z17) AS min_x17, MAX(xtile_z17) AS max_x17, MIN(ytile_z17) AS min_y17, MAX(ytile_z17) AS max_y17,
-      MIN(xtile_z18) AS min_x18, MAX(xtile_z18) AS max_x18, MIN(ytile_z18) AS min_y18, MAX(ytile_z18) AS max_y18,
-      MIN(xtile_z19) AS min_x19, MAX(xtile_z19) AS max_x19, MIN(ytile_z19) AS min_y19, MAX(ytile_z19) AS max_y19,
-      MIN(xtile_z20) AS min_x20, MAX(xtile_z20) AS max_x20, MIN(ytile_z20) AS min_y20, MAX(ytile_z20) AS max_y20
-    FROM trees_fast
-    WHERE city = '${cityCode}'
-  `)
+  const zooms = Array.from({ length: 8 }, (_, i) => 13 + i)
+  const boundsResult = await conn.query(cityTileBoundsSql(zooms))
   const boundsRow = boundsResult.toArray()[0] as Record<string, unknown> | undefined
   if (boundsRow) {
     for (let z = 13; z <= 20; z += 1) {
@@ -1584,12 +1516,8 @@ SELECT
 FROM trees
 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND city = '${city}'
 `
-  await buildDefaultColorMap()
-  await rebuildAggCaches()
-  await rebuildCityBounds(city)
-  // Crown widths are ready before opening the same gate used by the map.
-  // No first-frame marker batch can later be replaced by a new sizing model.
-  await prepareCrownPredictions(city)
+  await clearColorOverride()
+  await rebuildCityBounds()
   invalidateTileCaches()
   postColorMapUpdate()
   // All city tables are ready — unblock tile generation and queries.
@@ -1723,42 +1651,6 @@ async function runQuery(sql: string): Promise<{ columns: string[]; rows: Record<
   return { columns, rows }
 }
 
-// City-scoped projection prepared before publishing city readiness. Missing
-// predictions select recorded-only sizing for this worker session, consistently
-// from the first sprite batch. This never enters the Trilogy model bundle.
-const crownPredictionLoads = new Map<string, Promise<void>>()
-async function prepareCrownPredictions(city: string): Promise<string> {
-  if (!/^[a-z]{5}$/i.test(city)) throw new Error('Invalid crown city')
-  const table = `__crown_predictions_${city.toLowerCase()}`
-  if (!crownPredictionLoads.has(city)) {
-    crownPredictionLoads.set(city, (async () => {
-      await conn!.query(`CREATE TEMP TABLE ${table} (tree_id VARCHAR, city VARCHAR, width DOUBLE)`)
-      // The city's own slice is a few MB; the all-city file is ~146 MB and
-      // DuckDB-wasm downloads a whole object on first read, which held city
-      // readiness (landmarks, charts, the map) behind it. The full file stays
-      // as the fallback for a city whose slice is not published yet.
-      const sources = [cityPredictionsParquetUrl(city), REMOTE_PREDICTIONS_PARQUET_URL]
-        .filter((url): url is string => url !== null)
-      let loaded = false
-      for (const url of sources) {
-        try {
-          await conn!.query(`INSERT INTO ${table}
-            SELECT tree_id, city, max(predicted_crown_width_m) AS width
-            FROM read_parquet('${url}')
-            WHERE city = '${city}' GROUP BY tree_id, city`)
-          loaded = true
-          break
-        } catch (error) {
-          console.info('[TreeCrowns] predictions source unavailable', url, error)
-        }
-      }
-      if (!loaded) console.warn('[TreeCrowns] predictions unavailable; using recorded crowns')
-    })())
-  }
-  await crownPredictionLoads.get(city)
-  return table
-}
-
 async function getMapTrees(camera: TreeRenderView): Promise<TreeCrown[]> {
   await ensureInit()
   await waitForCityContext()
@@ -1768,10 +1660,9 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrown[]> {
   const city = loadedCity
   const revision = tileQueryRevision
   const signature = treeFilterSignature()
-  const table = await prepareCrownPredictions(city)
   const current = () => cityContextReady && loadedCity === city && tileQueryRevision === revision && treeFilterSignature() === signature
   if (!current()) return []
-  const result = await conn.query(crownQuery(camera, effectiveBaseQuery(tileQuerySql), table))
+  const result = await conn.query(crownQuery(camera, effectiveBaseQuery(tileQuerySql), colorSql('tf', colorOverrideActive)))
   if (!current()) return []
   return result.toArray().map(row => ({
     id: String(row.id), lng: Number(row.lng), lat: Number(row.lat),

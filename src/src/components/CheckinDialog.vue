@@ -243,6 +243,8 @@ import { useDuckDB } from '../composables/useDuckDB'
 
 const props = defineProps<{
   treeId: string
+  /** The loaded city the tree belongs to; scopes the ranking lookup. */
+  city: string
   treeLat: number
   treeLng: number
   species?: string | null
@@ -379,7 +381,7 @@ const speciesCityCount = ref<number | null>(null)
 const rankedTree = ref<RankedTree | null>(null)
 let rankingRequest: Promise<void> | null = null
 function fetchRanking() {
-  rankingRequest = loadTreeRanking(props.treeId).then(t => { rankedTree.value = t }).catch(() => {})
+  rankingRequest = loadTreeRanking(props.treeId, props.city).then(t => { rankedTree.value = t }).catch(() => {})
 }
 
 async function fetchSpeciesCityCount() {

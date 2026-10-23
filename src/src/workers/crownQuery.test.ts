@@ -1,43 +1,54 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api'
 import { crownQuery } from './crownQuery'
+import { colorSql } from './cityTables'
+import { CATEGORY_COLORS } from '../treeFormColors'
 import { CROWN_DISTANCE_MAX, MAX_CROWNS, MAX_TREE_SPRITES, crownZoomOpacity, spriteCrownBlend, spriteOpacity, validCrownWidth } from '../lib/treeCrowns'
+
+const BROADLEAF = CATEGORY_COLORS.broadleaf
 
 describe('nearby crown query', () => {
   let conn: DuckDBConnection
   beforeAll(async () => {
     conn = await (await DuckDBInstance.create(':memory:')).connect()
+    // The city load folds the published prediction into the row
+    // (`predicted_crown_width_m`); a city without a reachable prediction file
+    // has the column all null. `wrong-city` stands for a prediction row the
+    // load's `WHERE city = ...` already excluded.
     await conn.run(`CREATE TABLE trees_fast (
       tree_id VARCHAR, city VARCHAR, longitude DOUBLE, latitude DOUBLE,
-      x_3857 DOUBLE, y_3857 DOUBLE, crown_width_m DOUBLE);
-      CREATE TABLE predictions (tree_id VARCHAR, city VARCHAR, width DOUBLE);
-      CREATE TABLE __tree_color_map (tree_id VARCHAR, display_color VARCHAR);`)
+      x_3857 DOUBLE, y_3857 DOUBLE, crown_width_m DOUBLE, predicted_crown_width_m FLOAT);
+      CREATE TABLE __tree_color_override (tree_id VARCHAR, display_color VARCHAR);`)
     await conn.run(`INSERT INTO trees_fast VALUES
-      ('measured', 'USSFO', 0, 0, 0, 0, 12),
-      ('predicted', 'USSFO', 0, 0, 10, 0, NULL),
-      ('missing', 'USSFO', 0, 0, 20, 0, NULL),
-      ('invalid', 'USSFO', 0, 0, 30, 0, 'NaN'),
-      ('huge', 'USSFO', 0, 0, 40, 0, 1000),
-      ('far', 'USSFO', 0, 0, 10000, 0, 10),
-      ('edge', 'USSFO', 0, 0, 1700, 0, 10),
-      ('wrong-city', 'USSFO', 0, 0, 50, 0, NULL);
-      INSERT INTO predictions VALUES
-      ('measured', 'USSFO', 8), ('predicted', 'USSFO', 7),
-      ('invalid', 'USSFO', 9), ('huge', 'USSFO', 'Infinity'),
-      ('wrong-city', 'USBOS', 20);
-      INSERT INTO __tree_color_map SELECT tree_id, '#123456' FROM trees_fast;`)
+      ('measured', 'USSFO', 0, 0, 0, 0, 12, 8),
+      ('predicted', 'USSFO', 0, 0, 10, 0, NULL, 7),
+      ('missing', 'USSFO', 0, 0, 20, 0, NULL, NULL),
+      ('invalid', 'USSFO', 0, 0, 30, 0, 'NaN', 9),
+      ('huge', 'USSFO', 0, 0, 40, 0, 1000, 'Infinity'),
+      ('far', 'USSFO', 0, 0, 10000, 0, 10, NULL),
+      ('edge', 'USSFO', 0, 0, 1700, 0, 10, NULL),
+      ('wrong-city', 'USSFO', 0, 0, 50, 0, NULL, NULL);
+      INSERT INTO __tree_color_override VALUES ('predicted', '#abcdef');`)
     await conn.run("ALTER TABLE trees_fast ADD COLUMN tree_form VARCHAR DEFAULT 'broadleaf'; ALTER TABLE trees_fast ADD COLUMN dbh DOUBLE DEFAULT 18")
   })
   afterAll(() => conn.closeSync())
   const camera = { lng: 0, lat: 0, altitude: 800 }
-  const run = async (base = 'SELECT tree_id FROM trees_fast', eye = camera) =>
-    (await conn.runAndReadAll(crownQuery(eye, base, 'predictions'))).getRowObjects().map(({ category: _category, dbh: _dbh, ...row }) => row)
+  const color = colorSql('tf', false)
+  const run = async (base = 'SELECT tree_id FROM trees_fast', eye = camera, colour = color) =>
+    (await conn.runAndReadAll(crownQuery(eye, base, colour))).getRowObjects().map(({ category: _category, dbh: _dbh, ...row }) => row)
 
   test('prefers measurements, uses published predictions, rejects missing and corrupt widths', async () => {
     expect(await run()).toEqual([
-      { id: 'measured', lng: 0, lat: 0, width: 12, measured: true, color: '#123456' },
-      { id: 'predicted', lng: 0, lat: 0, width: 7, measured: false, color: '#123456' },
-      { id: 'invalid', lng: 0, lat: 0, width: 9, measured: false, color: '#123456' },
+      { id: 'measured', lng: 0, lat: 0, width: 12, measured: true, color: BROADLEAF },
+      { id: 'predicted', lng: 0, lat: 0, width: 7, measured: false, color: BROADLEAF },
+      { id: 'invalid', lng: 0, lat: 0, width: 9, measured: false, color: BROADLEAF },
+    ])
+  })
+
+  test('an active colour override wins where it has a row and falls back elsewhere', async () => {
+    const rows = await run(undefined, camera, colorSql('tf', true))
+    expect(rows.map(row => [row.id, row.color])).toEqual([
+      ['measured', BROADLEAF], ['predicted', '#abcdef'], ['invalid', BROADLEAF],
     ])
   })
 
@@ -52,28 +63,33 @@ describe('nearby crown query', () => {
   })
 
   test('measured crowns survive an absent prediction publication', async () => {
-    await conn.run('CREATE TABLE empty_predictions AS SELECT * FROM predictions WHERE false')
-    const rows = (await conn.runAndReadAll(crownQuery(camera, 'SELECT tree_id FROM trees_fast', 'empty_predictions'))).getRowObjects()
-    expect(rows.map(row => row.id)).toEqual(['measured'])
+    // A load with no reachable prediction file leaves the column null.
+    await conn.run(`CREATE TABLE saved AS SELECT tree_id, predicted_crown_width_m FROM trees_fast;
+      UPDATE trees_fast SET predicted_crown_width_m = NULL`)
+    try {
+      expect((await run()).map(row => row.id)).toEqual(['measured'])
+    } finally {
+      await conn.run(`UPDATE trees_fast SET predicted_crown_width_m = s.predicted_crown_width_m FROM saved s WHERE trees_fast.tree_id = s.tree_id;
+        DROP TABLE saved`)
+    }
   })
 
   test('desktop first batches include missing widths and distant markers with sizing already resolved', async () => {
     const rows = (await conn.runAndReadAll(crownQuery({ ...camera, altitude: 3000,
-      bounds: { west: -1, east: 1, south: -1, north: 1 } }, 'SELECT tree_id FROM trees_fast', 'predictions'))).getRowObjects()
+      bounds: { west: -1, east: 1, south: -1, north: 1 } }, 'SELECT tree_id FROM trees_fast', color))).getRowObjects()
     expect(rows.find(row => row.id === 'measured')?.width).toBe(12)
     expect(rows.find(row => row.id === 'predicted')?.width).toBe(7)
     expect(rows.find(row => row.id === 'missing')?.width).toBeNull()
     expect(rows.some(row => row.id === 'far')).toBe(true)
     const empty = (await conn.runAndReadAll(crownQuery({ ...camera,
-      bounds: { west: 1, east: 2, south: 1, north: 2 } }, 'SELECT tree_id FROM trees_fast', 'predictions'))).getRowObjects()
+      bounds: { west: 1, east: 2, south: 1, north: 2 } }, 'SELECT tree_id FROM trees_fast', color))).getRowObjects()
     expect(empty).toEqual([])
   })
 
   test('desktop density budget is finite even for flat viewports', async () => {
-    await conn.run(`INSERT INTO trees_fast SELECT 'view-' || i, 'USSFO', 0, 0, i, 0, NULL, 'broadleaf', 18 FROM range(${MAX_TREE_SPRITES + 50}) t(i);
-      INSERT INTO __tree_color_map SELECT 'view-' || i, '#123456' FROM range(${MAX_TREE_SPRITES + 50}) t(i);`)
+    await conn.run(`INSERT INTO trees_fast SELECT 'view-' || i, 'USSFO', 0, 0, i, 0, NULL, NULL, 'broadleaf', 18 FROM range(${MAX_TREE_SPRITES + 50}) t(i)`)
     const rows = (await conn.runAndReadAll(crownQuery({ ...camera,
-      bounds: { west: -180, east: 180, south: -85, north: 85 } }, "SELECT tree_id FROM trees_fast WHERE tree_id LIKE 'view-%'", 'predictions'))).getRowObjects()
+      bounds: { west: -180, east: 180, south: -85, north: 85 } }, "SELECT tree_id FROM trees_fast WHERE tree_id LIKE 'view-%'", color))).getRowObjects()
     expect(rows).toHaveLength(MAX_TREE_SPRITES)
     expect(rows[0].id).toBe('view-0')
     expect(rows[rows.length - 1]?.id).toBe(`view-${MAX_TREE_SPRITES - 1}`)
@@ -81,19 +97,17 @@ describe('nearby crown query', () => {
 
   test('buffered desktop queries spend the budget on visible trees first', async () => {
     await conn.run(`INSERT INTO trees_fast VALUES
-      ('visible-far', 'USSFO', 0.5, 0, 55659, 0, 12, 'broadleaf', 18);
-      INSERT INTO __tree_color_map VALUES ('visible-far', '#123456');`)
+      ('visible-far', 'USSFO', 0.5, 0, 55659, 0, 12, NULL, 'broadleaf', 18)`)
     const rows = (await conn.runAndReadAll(crownQuery({ ...camera,
       bounds: { west: -1, east: 1, south: -1, north: 1 },
       visibleBounds: { west: 0.4, east: 0.6, south: -0.1, north: 0.1 },
-    }, "SELECT tree_id FROM trees_fast WHERE tree_id LIKE 'view-%' OR tree_id = 'visible-far'", 'predictions'))).getRowObjects()
+    }, "SELECT tree_id FROM trees_fast WHERE tree_id LIKE 'view-%' OR tree_id = 'visible-far'", color))).getRowObjects()
     expect(rows).toHaveLength(MAX_TREE_SPRITES)
     expect(rows[0].id).toBe('visible-far')
   })
 
   test('dense neighborhoods return only the nearest bounded batch', async () => {
-    await conn.run(`INSERT INTO trees_fast SELECT 'dense-' || i, 'USSFO', 0, 0, i / 10.0, 0, 5, 'broadleaf', 18 FROM range(5000) t(i);
-      INSERT INTO __tree_color_map SELECT 'dense-' || i, '#123456' FROM range(5000) t(i);`)
+    await conn.run(`INSERT INTO trees_fast SELECT 'dense-' || i, 'USSFO', 0, 0, i / 10.0, 0, 5, NULL, 'broadleaf', 18 FROM range(5000) t(i)`)
     const rows = await run("SELECT tree_id FROM trees_fast WHERE tree_id LIKE 'dense-%'")
     expect(rows).toHaveLength(MAX_CROWNS)
     expect(rows[0].id).toBe('dense-0')
@@ -103,8 +117,7 @@ describe('nearby crown query', () => {
   test('latitude correction preserves the metre cutoff', async () => {
     // At latitude 60, a Mercator metre is half a ground metre.
     await conn.run(`INSERT INTO trees_fast VALUES
-      ('north', 'USSFO', 0, 60, 2000, 8399737.889818357, 10, 'broadleaf', 18);
-      INSERT INTO __tree_color_map VALUES ('north', '#123456');`)
+      ('north', 'USSFO', 0, 60, 2000, 8399737.889818357, 10, NULL, 'broadleaf', 18)`)
     expect((await run("SELECT 'north' AS tree_id", { lng: 0, lat: 60, altitude: 500 })).map(row => row.id)).toEqual(['north'])
   })
 })
@@ -120,5 +133,5 @@ test('zoom fades and invalid widths are bounded', () => {
   expect(spriteCrownBlend(18)).toBeGreaterThan(0.5)
   expect(spriteOpacity(14.4)).toBe(0)
   expect(spriteOpacity(15)).toBe(0.72)
-  expect(() => crownQuery({ lng: NaN, lat: 0, altitude: 0 }, '', '')).toThrow('Invalid crown camera')
+  expect(() => crownQuery({ lng: NaN, lat: 0, altitude: 0 }, '', colorSql('tf', false))).toThrow('Invalid crown camera')
 })

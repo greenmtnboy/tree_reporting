@@ -10,8 +10,15 @@ function boundsPredicate({ west, east, north, south }: NonNullable<TreeRenderVie
   return `${longitude} AND tf.latitude BETWEEN ${Math.max(-85.05112878, south)} AND ${Math.min(85.05112878, north)}`
 }
 
-/** The base query already includes the current chat/species filters. */
-export function crownQuery(camera: TreeRenderView, baseQuery: string, predictionsTable: string): string {
+/** How the query reads a tree's colour; see `colorSql` in cityTables.ts. */
+export type CrownColor = { join: string; expr: string }
+
+/**
+ * The base query already includes the current chat/species filters. The
+ * published crown prediction is a column of `trees_fast`
+ * (`predicted_crown_width_m`), folded in at city load.
+ */
+export function crownQuery(camera: TreeRenderView, baseQuery: string, color: CrownColor): string {
   if (![camera.lng, camera.lat, camera.altitude].every(Number.isFinite) || Math.abs(camera.lat) > 85.05112878 || camera.altitude < 0) {
     throw new Error('Invalid crown camera')
   }
@@ -29,17 +36,16 @@ export function crownQuery(camera: TreeRenderView, baseQuery: string, prediction
 WITH base AS (${baseQuery}), nearby AS (
   SELECT tf.tree_id AS id, tf.longitude AS lng, tf.latitude AS lat,
     CASE WHEN ${valid('tf.crown_width_m')} THEN tf.crown_width_m
-      WHEN ${valid('p.width')} THEN p.width END AS width,
+      WHEN ${valid('tf.predicted_crown_width_m')} THEN tf.predicted_crown_width_m END AS width,
     COALESCE(${valid('tf.crown_width_m')}, false) AS measured,
-    cm.display_color AS color,
-    tf.tree_form AS category, tf.dbh,
+    ${color.expr} AS color,
+    CAST(tf.tree_form AS VARCHAR) AS category, tf.dbh,
     ${camera.visibleBounds ? `(${boundsPredicate(camera.visibleBounds)})` : 'true'} AS in_viewport,
     ((tf.x_3857 - ${x}) * ${cosLat}) ** 2 +
     ((tf.y_3857 - ${y}) * ${cosLat}) ** 2 + ${camera.altitude ** 2} AS distance_squared
   FROM trees_fast tf
   INNER JOIN (SELECT DISTINCT tree_id FROM base) visible ON tf.tree_id = visible.tree_id
-  INNER JOIN __tree_color_map cm ON tf.tree_id = cm.tree_id
-  LEFT JOIN ${predictionsTable} p ON tf.tree_id = p.tree_id AND tf.city = p.city
+  ${color.join}
   WHERE ${extent}
 )
 SELECT id, lng, lat, width, measured, color, category, dbh FROM nearby
