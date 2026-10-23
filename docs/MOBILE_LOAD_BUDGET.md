@@ -79,24 +79,48 @@ load, 1,064 MB once the first tiles are up. The 600 MB of load growth against
 185 MB of resident tables is the parquet read, the predictions join and the
 ENUM casts; the wasm heap keeps whatever those grew it to.
 
-Levers not pulled yet, in the order they are worth trying:
+How much of that growth the load's SQL shape owns was measured by replaying
+the shipped statements in native DuckDB (single thread, NYC, each variant in
+a fresh process, peak process memory sampled during the `CREATE TABLE`):
+
+| Load | Peak growth | Time |
+|---|---:|---:|
+| As shipped: enrichment join, predictions join, vocabulary reads | +260 MB | 0.88 s |
+| Same, without the predictions join | +178 MB | 0.70 s |
+| One scan of a pre-projected 24 MB parquet, no joins | +173 MB | 0.48 s |
+
+The resident table is 179 MB in all three, so below the predictions join
+there is no transient left: the growth is the table. The join is a third of
+the native growth, the enrichment join and vocabulary reads cost nothing
+measurable, and the other 340 MB the browser shows is wasm's allocator and
+range-request buffers, which no file shape changes.
+
+Levers not pulled yet, in the order they are worth trying; the first two are
+the planned follow-up:
 
 1. **A browser projection per city, written by the pipeline.** A parquet
    with exactly the columns the worker keeps, the display name and form
    precomputed, the prediction folded in, rows ordered along a space-filling
    curve. The load becomes a single scan and cast: no enrichment join, no
-   predictions join, no vocabulary reads. This is ordinary Trilogy, a target
-   like `tree_predictions_city.preql`, and it is also the file stage 2
+   predictions join, no vocabulary reads. Worth about 80 MB of native peak
+   on NYC (more in wasm, where the hash join's churn fragments a heap that
+   never shrinks) and half the load time; confirm the wasm figure with the
+   bench before building it. This is ordinary Trilogy, a target like
+   `tree_predictions_city.preql`, and it is also the file stage 2
    partitions.
 2. **A slim ecoregion file.** The worker reads three small columns of
    `ecoregion_info_v2.parquet` and downloads all 5.75 MB, almost all of it
    the geojson column; publish a projection without it.
-3. **Replace the spatial extension.** `ST_AsMVT` is its only use; a point-only
-   MVT encoder is small JavaScript, and the extension is a 6 MB download and
-   its share of the wasm heap on every load.
-4. **Coarser overview grids at z11 and z12.** The 32 m grid at z13 gives NYC
+3. **Coarser overview grids at z11 and z12.** The 32 m grid at z13 gives NYC
    640k aggregate points, nearly one per tree; the grid is a constant in
    `baseSimplifyGridMetersForZoom`. A visual change, so not in stage 1.
+4. **Replace the spatial extension.** `ST_AsMVT` is its only use and a
+   point-only MVT encoder is small JavaScript, but there is no evidence it
+   is faster: the engine runs in its own worker, so the encoder would run
+   beside it, and Arrow rows are a few times the bytes of an MVT blob per
+   tile. The case is the 6 MB extension download and its heap share, neither
+   isolated yet. Gate on measuring tile latency and that share, not on the
+   argument.
 
 ## Stage 2: cells
 
