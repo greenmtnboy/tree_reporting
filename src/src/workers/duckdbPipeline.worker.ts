@@ -448,9 +448,17 @@ async function parquetHasColumn(url: string, column: string): Promise<boolean> {
 }
 
 /**
- * Load (or reload) the `trees` and `trees_fast` tables for `city` from the
- * per-city optimised parquet. Pass undefined to load all cities from the full
- * file (only as a last-resort fallback when city is genuinely unknown).
+ * Load (or reload) the `trees_fast` table, and the `trees` view over it, for
+ * `city` from the per-city optimised parquet. Pass undefined to load all
+ * cities from the full file (only as a last-resort fallback when city is
+ * genuinely unknown).
+ *
+ * Memory is the constraint. The whole city is materialised in the DuckDB-wasm
+ * heap, which only ever grows, and on an iPhone that heap sits in the same
+ * process budget as the map: Boston (400k rows) held about 720 MB here when
+ * every tree row also carried its species' seventeen enrichment columns and
+ * the rows were stored twice (`trees` and `trees_fast`), and iOS Safari was
+ * reloading the page on zoom-in. Keep each tree row narrow and stored once.
  */
 async function loadCityTrees(city?: string): Promise<void> {
   if (!conn) return
@@ -507,32 +515,35 @@ async function loadCityTrees(city?: string): Promise<void> {
   const hasCrownWidth = await parquetHasColumn(parquetUrl, 'crown_width_m')
   const crownWidthColumn = hasCrownWidth ? 'crown_width_m' : 'CAST(NULL AS DOUBLE) AS crown_width_m'
 
-  await conn.query(`
-    CREATE OR REPLACE TABLE trees AS
-    SELECT
-      tree_id,
-      city,
-      data_source,
-      tree_name,
-      plant_date,
-      species,
-      ${cultivarColumn},
-      ${crownWidthColumn},
-      latitude,
-      longitude,
-      diameter_at_breast_height,
-      submission_photo_url
-    FROM read_parquet('${parquetUrl}')
-    WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-      ${dedupFilter}
-  `)
-
-  loadedCity = city ?? null
-
-  // Rebuild trees_fast (join with enrichment + pre-computed tile coordinates).
+  // One copy of the city's rows, not two. `trees_fast` is the table every
+  // map, card and chat query reads; `trees` is a view over it that presents
+  // the published tree schema. The wasm heap is the budget here: a city's
+  // rows are the largest allocation in the browser, DuckDB-wasm never gives
+  // that memory back, and iOS Safari reloads the page when the tab grows past
+  // its limit (see loadCityTrees' doc comment). So the tree row carries only
+  // what the renderer and the chat need; the per-species facts stay in
+  // `species_enrichment` and join in at card time.
+  await conn.query(`DROP VIEW IF EXISTS trees`)
   await conn.query(`
     CREATE OR REPLACE TABLE trees_fast AS
-    WITH joined AS (
+    WITH source AS (
+      SELECT
+        tree_id,
+        city,
+        data_source,
+        tree_name,
+        plant_date,
+        species,
+        ${cultivarColumn},
+        ${crownWidthColumn},
+        latitude,
+        longitude,
+        diameter_at_breast_height,
+        submission_photo_url
+      FROM read_parquet('${parquetUrl}')
+      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+        ${dedupFilter}
+    ), joined AS (
       SELECT
         t.tree_id,
         t.city,
@@ -546,12 +557,14 @@ async function loadCityTrees(city?: string): Promise<void> {
           ${sentinelLabelSql('t.species')},
           t.species
         ) AS tree_name,
+        t.tree_name AS source_tree_name,
         t.plant_date,
         t.species,
         t.cultivar,
         t.crown_width_m,
         t.latitude,
         t.longitude,
+        t.diameter_at_breast_height,
         COALESCE(t.diameter_at_breast_height, 3) AS dbh,
         -- "Palm"/"Shrub"/"Cactus" name a growth form the source recorded
         -- without a species; that is worth an icon even with no enrichment row.
@@ -566,31 +579,12 @@ async function loadCityTrees(city?: string): Promise<void> {
           WHEN 'multi_trunk' THEN 'multi_trunk'
           ELSE 'default'
         END AS tree_form,
-        se.native_ecoregions,
-        se.is_evergreen,
-        se.mature_height_min_ft,
-        se.mature_height_max_ft,
-        se.canopy_spread_min_ft,
-        se.canopy_spread_max_ft,
-        se.growth_rate,
-        se.lifespan_min_years,
-        se.lifespan_max_years,
-        se.water_needs,
-        se.sun_exposure,
-        se.bloom_months,
-        se.wildlife_value,
-        se.fire_risk,
-        se.drought_tolerance,
-        se.usda_zone_min,
-        se.usda_zone_max,
         LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878) AS latitude_clamped,
         ((t.longitude + 180.0) / 360.0) AS x_norm,
         ((1.0 - ln(tan(radians(LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878))) + (1.0 / cos(radians(LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878))))) / pi()) / 2.0) AS y_norm
-      FROM trees t
+      FROM source t
       LEFT JOIN species_enrichment se
         ON t.species = se.species
-      WHERE t.latitude IS NOT NULL
-        AND t.longitude IS NOT NULL
     )
     SELECT
       tree_id,
@@ -598,31 +592,16 @@ async function loadCityTrees(city?: string): Promise<void> {
       data_source,
       submission_photo_url,
       tree_name,
+      source_tree_name,
       plant_date,
       species,
       cultivar,
       crown_width_m,
       latitude,
       longitude,
+      diameter_at_breast_height,
       TRY_CAST(dbh AS DOUBLE) AS dbh,
       tree_form,
-      native_ecoregions,
-      is_evergreen,
-      mature_height_min_ft,
-      mature_height_max_ft,
-      canopy_spread_min_ft,
-      canopy_spread_max_ft,
-      growth_rate,
-      lifespan_min_years,
-      lifespan_max_years,
-      water_needs,
-      sun_exposure,
-      bloom_months,
-      wildlife_value,
-      fire_risk,
-      drought_tolerance,
-      usda_zone_min,
-      usda_zone_max,
       ((longitude * ${WEB_MERCATOR_MAX}) / 180.0) AS x_3857,
       (6378137.0 * ln(tan(pi() / 4.0 + radians(latitude_clamped) / 2.0))) AS y_3857,
       CAST(floor(x_norm * pow(2, 13)) AS INTEGER) AS xtile_z13,
@@ -643,6 +622,28 @@ async function loadCityTrees(city?: string): Promise<void> {
       CAST(floor(y_norm * pow(2, 20)) AS INTEGER) AS ytile_z20
     FROM joined
   `)
+
+  // The published schema, as the chat, the URL filters and the default map
+  // query address it. A view costs nothing per row.
+  await conn.query(`
+    CREATE OR REPLACE VIEW trees AS
+    SELECT
+      tree_id,
+      city,
+      data_source,
+      source_tree_name AS tree_name,
+      plant_date,
+      species,
+      cultivar,
+      crown_width_m,
+      latitude,
+      longitude,
+      diameter_at_breast_height,
+      submission_photo_url
+    FROM trees_fast
+  `)
+
+  loadedCity = city ?? null
 
   const landmarkUrl = cityLandmarkParquetUrl(city) ?? REMOTE_LANDMARKS_PARQUET_URL
   try {
@@ -913,14 +914,17 @@ WHERE xtile >= 0
 async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, baseQuery: string): Promise<void> {
   if (!conn) return
   if (baseQuery !== effectiveBaseQuery(tileQuerySql)) return
-  if (z === PREPARED_FEATURE_TABLE_ZOOM) {
-    await ensurePreparedFeatureTableForZoom(PREPARED_FEATURE_TABLE_ZOOM, baseQuery)
-  }
-  if (baseQuery !== effectiveBaseQuery(tileQuerySql)) return
   const blockSize = neighborhoodBlockSizeForZoom(z)
   if (blockSize <= 1) return
 
   const rev = tileQueryRevision
+  // The z15 feature table is a whole-city materialisation (one MVT geometry
+  // per tree) that the desktop intro and the LOD prewarm build to serve their
+  // wide prefetch ranges. A tile request reads it when it is there and runs
+  // the direct join otherwise; it never builds it, so a phone, which neither
+  // runs the intro nor prewarms, never pays for it.
+  const useFeatureTable = z === PREPARED_FEATURE_TABLE_ZOOM
+    && preparedFeatureTablesReady.has(featureTableBuildKey(rev, PREPARED_FEATURE_TABLE_ZOOM))
   const tileCount = Math.pow(2, z)
   const blockX = Math.floor(x / blockSize)
   const blockY = Math.floor(y / blockSize)
@@ -964,7 +968,7 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   }
 
   const request = (async () => {
-    const sql = z === PREPARED_FEATURE_TABLE_ZOOM ? `
+    const sql = useFeatureTable ? `
 WITH rows AS (
   SELECT
     xtile,
@@ -1295,7 +1299,6 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
   }
 
   if (simplifyGridMeters === 0 && z >= 15) {
-    await ensurePreparedFeatureTableForZoom(z, baseQuery)
     await ensureNeighborhoodBatchTiles(z, x, y, baseQuery)
     const neighborBatched = getCachedTile(key)
     if (neighborBatched) return neighborBatched

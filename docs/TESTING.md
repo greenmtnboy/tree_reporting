@@ -91,6 +91,29 @@ alone will not remove the existing full-city materialization cost. Keep the
 published full-city tables for chat and analytics while testing a separate map
 detail source; do not silently restrict their query scope to the neighborhood.
 
+### Memory
+
+`pnpm bench:memory` loads a city on the same phone viewport, zooms in step by
+step and prints the renderer's resident memory after each step; the same
+`MAP_BENCH_*` variables select the target, plus `MAP_BENCH_ZOOMS` for the
+steps and `MAP_BENCH_CHROMIUM` for a Chromium binary. It reads `ps`, so it
+runs on Linux. Serve the preview cross-origin isolated (COOP `same-origin`,
+COEP `credentialless`) and it also splits that figure by realm through
+`performance.measureUserAgentSpecificMemory`: the DuckDB worker's wasm heap,
+the page, the MapLibre workers.
+
+The DuckDB worker is the figure to watch. It holds the whole city, it never
+shrinks (a wasm heap only grows, so every query's peak ratchets it up), and on
+an iPhone it shares one process budget with the map; past that budget iOS
+Safari kills the tab and reloads the page, which users see as the map
+"reloading" on zoom-in. Boston (404k rows) measured about 720 MB in that
+worker and 1.2 GB for the renderer before each tree row stopped carrying its
+species' enrichment columns and the rows stopped being stored twice; San
+Francisco (145k rows) about 370 MB and 0.85 GB. Headless Chromium also shows a
+large transient spike at every zoom jump that survives removing every layer
+and terminating the DuckDB worker; it is a headless artefact, not a figure a
+device would see, so read the settled numbers.
+
 ## The dashboard query sweep (`src/src/tests/dashboard-queries.test.ts`)
 
 Every chart on the summary and species pages sends PreQL to the hosted
