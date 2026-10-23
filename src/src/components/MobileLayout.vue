@@ -130,17 +130,20 @@
 
 <script setup lang="ts">
 import ThemeSelector from './ThemeSelector.vue'
-import { computed, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MapExperience from './MapExperience.vue'
-import ChatPanel from './ChatPanel.vue'
 import CitySelector from './CitySelector.vue'
-import SummaryView from '../views/SummaryView.vue'
-import SpeciesView from '../views/SpeciesView.vue'
-import InfoView from '../views/InfoView.vue'
-import ProfileView from '../views/ProfileView.vue'
-import SubmitView from '../views/SubmitView.vue'
-import ContributionsView from '../views/ContributionsView.vue'
+// The map is the entry; everything else arrives when first shown, so the
+// phone's first load carries neither the chat's LLM client nor the
+// dashboards' chart and editor code. See docs/MOBILE_LOAD_BUDGET.md.
+const ChatPanel = defineAsyncComponent(() => import('./ChatPanel.vue'))
+const SummaryView = defineAsyncComponent(() => import('../views/SummaryView.vue'))
+const SpeciesView = defineAsyncComponent(() => import('../views/SpeciesView.vue'))
+const InfoView = defineAsyncComponent(() => import('../views/InfoView.vue'))
+const ProfileView = defineAsyncComponent(() => import('../views/ProfileView.vue'))
+const SubmitView = defineAsyncComponent(() => import('../views/SubmitView.vue'))
+const ContributionsView = defineAsyncComponent(() => import('../views/ContributionsView.vue'))
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData } from '../composables/useMapData'

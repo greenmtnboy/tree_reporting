@@ -30,7 +30,8 @@ it('executes the real catalog SQL with a bounded, deduplicated set of targets', 
   expect(await loadMissionTrees("USBOS' OR 1=1 --")).toEqual([])
 })
 
-it('loads a tree snapshot and returns null for an unknown ID', async () => {
-  expect(await loadTreeRanking('boston-1')).toMatchObject({ city: 'USBOS', trunkRank: 1, rarityTier: 'rare' })
-  expect(await loadTreeRanking("boston-1' OR 1=1 --")).toBeNull()
+it('loads a tree snapshot scoped to its city and returns null for an unknown ID', async () => {
+  expect(await loadTreeRanking('boston-1', 'USBOS')).toMatchObject({ city: 'USBOS', trunkRank: 1, rarityTier: 'rare' })
+  expect(await loadTreeRanking('boston-1', 'USNYC')).toBeNull()
+  expect(await loadTreeRanking("boston-1' OR 1=1 --", 'USBOS')).toBeNull()
 })

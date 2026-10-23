@@ -41,9 +41,17 @@ export async function loadMissionTrees(city: string): Promise<RankedTree[]> {
   return rows.map(fromRow)
 }
 
-export async function loadTreeRanking(treeId: string): Promise<RankedTree | null> {
+/**
+ * One tree's ranking row. The rankings parquet is every published tree
+ * (~300 MB, 12M rows) ordered by city, so the city predicate is what lets
+ * DuckDB skip every other city's row groups from the footer statistics; an
+ * id-only lookup from a phone read most of the id column.
+ */
+export async function loadTreeRanking(treeId: string, city: string): Promise<RankedTree | null> {
   const fixture = e2eFixtures()
   if (fixture) return fixture.rankings?.find(t => t.treeId === treeId) ?? null
-  const { rows } = await useDuckDB().query(`SELECT * FROM ${SOURCE} WHERE ranking_tree_id = ${quote(treeId)} LIMIT 1`)
+  const { rows } = await useDuckDB().query(
+    `SELECT * FROM ${SOURCE} WHERE ranking_city = ${quote(city)} AND ranking_tree_id = ${quote(treeId)} LIMIT 1`,
+  )
   return rows[0] ? fromRow(rows[0]) : null
 }

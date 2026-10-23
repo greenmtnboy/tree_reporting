@@ -21,11 +21,14 @@
 </template>
 
 <script setup lang="ts">
+import { defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FieldBackdrop from './components/FieldBackdrop.vue'
 import AppSidebar from './components/AppSidebar.vue'
-import ChatPanel from './components/ChatPanel.vue'
 import MobileLayout from './components/MobileLayout.vue'
+// The chat brings the LLM client and markdown renderer with it; load it
+// beside the map rather than before it. See docs/MOBILE_LOAD_BUDGET.md.
+const ChatPanel = defineAsyncComponent(() => import('./components/ChatPanel.vue'))
 import TopBar from './components/TopBar.vue'
 import WelcomeModal from './components/WelcomeModal.vue'
 import { useIsMobile } from './composables/useIsMobile'

@@ -286,6 +286,7 @@
     :dbh-inches="checkinDialog.dbhInches"
     :plant-year="checkinDialog.plantYear"
     :initial-mode="checkinDialog.mode"
+    :city="selectedCity"
     :remote-correction="!simplified"
     @close="checkinDialog = null"
     @success="handleCheckinSuccess"
