@@ -41,7 +41,8 @@ studio_url="http://localhost:5173/trilogy-studio-core/"
 #
 # and then ONE core that takes the seventeen published city parquets and
 # publishes the cross-city rollup, the species enrichment, the tree-level
-# predictions and the ecoregion dimension the app actually reads.
+# predictions, the ecoregion dimension and the per-city browser projections
+# the app actually reads.
 #
 # This replaced a single `urban-tree-data` job that refreshed all seventeen
 # cities together, three times a day.  Three things were wrong with it and
@@ -249,10 +250,10 @@ exclude = [
 # what the platform fires as one tick and orders by dependency — so this is
 # not three jobs that happen to start together, it is one ordered firing:
 #
-#     publish-full ──▶ refresh-enrichment ──▶ refresh-predictions   (derived edges)
-#              │                          └─▶ validate-core
-#              └──────────────────────────────▶ refresh-predictions, validate-core
-#     refresh-ecoregions                          (independent, runs alongside)
+#     publish-full ──▶ refresh-enrichment ──▶ refresh-predictions ──▶ refresh-browser-city   (derived edges)
+#              │                          └─▶ validate-core            ▲
+#              └──────────────────────────────▶ refresh-predictions, validate-core, refresh-browser-city
+#     refresh-ecoregions ──▶ refresh-ecoregions-browser   (independent of the rest, runs alongside)
 #
 # The edge is derived, not declared, and it exists because of how the two
 # models name the rollup. trilogy-cloud reads a job's outputs from its managed
@@ -321,10 +322,6 @@ memory_mb = 1024
 # script; `trilogy run .` applies it locally.
 "raw/tree_enrichment.preql" = { after = ["raw/full_tree_publish.preql"] }
 "raw/tree_rankings.preql" = { after = ["raw/full_tree_publish.preql", "raw/tree_enrichment.preql"] }
-# The browser's per-city crown slices copy the published predictions parquet,
-# which they read by URL as a root, so nothing in their model names the job
-# that writes it.
-"raw/tree_predictions_city.preql" = { after = ["raw/tree_predictions.preql"] }
 # The homepage feed reads the city parquets, the enrichment table and the
 # ecoregions, so it waits for the core's producers of the last two -- but on
 # `always`, not the default: a city that republished since yesterday must
@@ -376,18 +373,36 @@ schedule = "0 0 6 * * *"
 timeout_seconds = 1800
 memory_mb = 4096
 
-# One small predictions parquet per city, for the map's crown sizing: the
-# browser downloads a whole parquet on first read, and the full predictions
-# file is ~146 MB. Each slice is a filtered copy of the published file (three
-# columns), ordered after refresh-predictions by the `[dependencies]` edge.
+# The browser projection: one small parquet per city with exactly the rows
+# and columns the map's worker keeps, the display name and growth form
+# resolved from the enrichment table and the crown prediction folded in, so
+# a phone opens a city with one scan and no joins (docs/MOBILE_LOAD_BUDGET.md).
+# Reads the rollup, the enrichment table and the predictions through their
+# `_source.preql` root views, named like the managed datasources that write
+# them, so the platform orders it after all three in the same tick.
+#
+# 4 GiB: each city filters the rollup (10.5M rows) and the predictions file
+# once, and the join holds one city at a time.
 [[cloud.job]]
-key = "refresh-predictions-city"
-name = "urban-tree-data-predictions-city"
-entrypoint = "raw/tree_predictions_city.preql"
+key = "refresh-browser-city"
+name = "urban-tree-data-browser-city"
+entrypoint = "raw/tree_browser_city.preql"
 operation = "refresh"
 schedule = "0 0 6 * * *"
 timeout_seconds = 1800
-memory_mb = 2048
+memory_mb = 4096
+
+# The ecoregion dimension as the browser reads it (three columns, no
+# geometry), read from the published ecoregion parquet through a root named
+# `ecoregion_info`, so it runs after refresh-ecoregions in the same tick.
+[[cloud.job]]
+key = "refresh-ecoregions-browser"
+name = "urban-tree-data-ecoregions-browser"
+entrypoint = "raw/ecoregion_browser.preql"
+operation = "refresh"
+schedule = "0 0 6 * * *"
+timeout_seconds = 900
+memory_mb = 1024
 
 # The arborary.world homepage feed: one JSON object the website swaps in for
 # its bundled statistics (gs://trilogy_public_models/arborary/website/v1/

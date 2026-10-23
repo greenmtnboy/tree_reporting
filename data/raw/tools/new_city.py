@@ -663,14 +663,14 @@ def build(args) -> Edits:
         what="rollup file list", marker=f"trees/{lc}_tree_info_v",
     )
     e.sub_once(
-        RAW / "tree_predictions_city.preql",
-        r"(_tree_predictions_v\{data_version\}\.parquet`;\n)\Z",
+        RAW / "tree_browser_city.preql",
+        r"(_tree_browser_v\{data_version\}\.parquet`;\n)\Z",
         rf"""\1
-partial datasource {lc}_tree_predictions extends city_tree_predictions ()
+partial datasource {lc}_tree_browser extends city_tree_browser ()
 complete where city = '{code}'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{lc}_tree_predictions_v{{data_version}}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{lc}_tree_predictions_v{{data_version}}.parquet`;
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{lc}_tree_browser_v{{data_version}}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{lc}_tree_browser_v{{data_version}}.parquet`;
 """,
-        what="crown predictions slice", marker=f"datasource {lc}_tree_predictions",
+        what="browser projection", marker=f"datasource {lc}_tree_browser",
     )
 
     # --- trilogy.toml -----------------------------------------------------

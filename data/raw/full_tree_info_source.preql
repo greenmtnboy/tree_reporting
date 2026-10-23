@@ -29,9 +29,12 @@
 
 import tree_common;
 
+property tree_id.data_source string; # originating dataset, as every city materialises it and the rollup carries it
+
 root datasource full_tree_info (
     tree_id: tree_id,
     city: city,
+    data_source: data_source,
     species: species,
     cultivar: ?cultivar,
     crown_width_m: ?crown_width_m,

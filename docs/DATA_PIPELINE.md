@@ -56,7 +56,8 @@ the core, daily, reading only published parquets
   refresh-ecoregions    raw/ecoregion_info.preql
   refresh-enrichment    raw/tree_enrichment.preql       -> tree_enrichment_v{n}.parquet
   refresh-predictions   raw/tree_predictions.preql      -> tree_predictions_v{n}.parquet
-  refresh-predictions-city  raw/tree_predictions_city.preql -> {code}_tree_predictions_v{n}.parquet
+  refresh-browser-city  raw/tree_browser_city.preql     -> {code}_tree_browser_v{n}.parquet
+  refresh-ecoregions-browser  raw/ecoregion_browser.preql -> ecoregion_browser_v{n}.parquet
   validate-core         raw/core_validate.preql
   publish-website       website_homepage.preql          -> arborary/website/v1/homepage.json
   publish-landmarks     raw/full_landmark_publish.preql (weekly, Sun 05:00)
@@ -73,13 +74,14 @@ Rules:
   refuses one. Check with `trilogy refresh --dry-run <entrypoint>`: a city job
   must show one asset.
 - **The core never reaches a portal.** `full_tree_publish.preql` reads the
-  city parquets with one `file [...]` multi-file scan; the enrichment and
-  prediction jobs reach published tables through root `_source.preql` views
-  named the same as the managed datasources that write them. That shared
-  name is the edge trilogy-cloud orders a tick by, so `refresh-predictions`
-  runs after its two producers. `test_cloud_jobs.py` pins that the core
-  imports no city model, and `test_tree_predictions.py` pins that no
-  `_source.preql` enters the frontend bundle.
+  city parquets with one `file [...]` multi-file scan; the enrichment,
+  prediction and browser-projection jobs reach published tables through
+  root `_source.preql` views named the same as the managed datasources that
+  write them. That shared name is the edge trilogy-cloud orders a tick by,
+  so `refresh-predictions` runs after its two producers and
+  `refresh-browser-city` after all three of its. `test_cloud_jobs.py` pins
+  that the core imports no city model, and `test_tree_predictions.py` pins
+  that no `_source.preql` or projection model enters the frontend bundle.
 - **Enrichment is ordered by a declared edge.** The job refreshes
   `raw/tree_enrichment.preql`, which the browser also bundles and which must
   stay species-only: a second tree source in the browser's scope changes join
@@ -394,18 +396,32 @@ has a date and no diameter (`dbh_age_coefficients.csv`, refit with
 placeholders for height and age. Each prediction records the model level
 (genus, family, division, global) and sample size. The model is not
 urban-calibrated and not density-adjusted; both are left to curation. The
-map prepares a city-scoped projection before marking the city ready, so the
-first desktop sprite batch already has its sizing data. It reads the city's
-slice, `{code}_tree_predictions_v{n}.parquet` (`raw/tree_predictions_city.preql`,
-three columns, about 1 MB for San Francisco), and falls back to the full file
-when a slice is missing. DuckDB-wasm downloads a whole parquet on first read,
-and the full file is ~146 MB, so before the slices every first map load
-waited on it, landmarks and charts included. The slices are filtered copies
-of the published file read as a root, ordered after `refresh-predictions` by
-a `[dependencies]` edge; `new_city.py` appends one per city. Recorded widths take
-precedence. Predictions stay outside the frontend Trilogy model bundle; a
-failed read consistently uses recorded-only sizing for the worker session.
-See `MAP_CROWNS.md` for rendering and limits.
+map reads the crown width from the city's browser projection (below), where
+the pipeline has already folded it in; recorded widths take precedence.
+Predictions stay outside the frontend Trilogy model bundle. See
+`MAP_CROWNS.md` for rendering and limits.
+
+## The browser projections (`raw/tree_browser_city.preql`, `raw/ecoregion_browser.preql`)
+
+Publishes `{code}_tree_browser_v{n}.parquet`, one per city: the rows and
+columns the map's worker keeps resident, with the display name (the
+enrichment table's first common name, else the source's name, else the
+species), the growth form (`default` where enrichment has none) and the
+predicted crown width resolved as columns. The worker used to assemble that
+shape on every visit from the city parquet, the enrichment table and a
+per-city predictions slice, and in DuckDB-wasm the joins' transients are
+kept by the heap for the life of the tab (`MOBILE_LOAD_BUDGET.md`). Each
+projection is a template datasource scoped `complete where city = ...` over
+the rollup, the enrichment table and the predictions, all reached through
+their `_source.preql` roots, so the job is ordered after all three in the
+core tick; `new_city.py` appends one per city, and a new city takes the
+assembled path in the browser until the next tick publishes its file. The
+projections replaced the per-city predictions slices
+(`{code}_tree_predictions_v{n}.parquet`); the slice files stay in the bucket,
+unrefreshed, and feed only that fallback. `ecoregion_browser_v{n}.parquet`
+is the same idea for the ecoregion dimension: the three columns the worker
+reads, without the 5 MB geometry column. `test_browser_projection.py` runs
+the model's SQL over fixtures and pins the wiring.
 
 Planner facts the model relies on: `**` is the power operator and there is
 no `exp`, `ln` or `cos`; DuckDB's `greatest()` skips nulls; the enrichment

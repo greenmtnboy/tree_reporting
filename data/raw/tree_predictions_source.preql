@@ -1,0 +1,39 @@
+# The published crown predictions, as a *source*.
+#
+# One `root datasource` over `tree_predictions_v{n}.parquet`, mapping the one
+# prediction a consumer of published data reads (the crown width) and the
+# file's watermark, and nothing else. Root means unmanaged: a job importing
+# this reads the table and never tries to build it -- the managed declaration
+# in `tree_predictions.preql` is the one whose refresh runs the model.
+#
+# This is `full_tree_info_source.preql` for the predictions, with the same
+# rules:
+#
+#   * The datasource is named `tree_predictions`, the same as the managed one,
+#     on purpose. trilogy-cloud derives a tick's ordering from asset names when
+#     the address is templated, so a job that imports this file is ordered
+#     after `refresh-predictions` in the same schedule tick.
+#   * `tree_id: ~tree_id`: the file holds a row for every tree the rollup had
+#     when the model last ran, which is not every tree a consumer may be
+#     reading now, and that is a partial *key*: the planner pads the join and
+#     a tree with no prediction row keeps its other columns, with a null
+#     width, instead of vanishing from the consumer's output.
+#   * It must never be in the frontend's model bundle, which carries no
+#     predictions at all (`test_tree_predictions.py`).
+
+import tree_common;
+
+property tree_id.predicted_crown_width_m float; # the allometric crown width, as tree_predictions.preql published it; null where the model had nothing to size from
+# A tree-grain property, although every row carries the same value: declared
+# model-wide (`<*>`) the planner fetches it through a second scan of the
+# predictions parquet joined back by tree_id, once per city.
+property tree_id.prediction_inputs_published_through datetime; # the newer of the rollup's and the enrichment table's publication, as published
+
+root datasource tree_predictions (
+    tree_id: ~tree_id,
+    city: city,
+    predicted_crown_width_m: ?predicted_crown_width_m,
+    prediction_inputs_published_through: prediction_inputs_published_through,
+)
+grain (tree_id)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_predictions_v{data_version}.parquet`;
