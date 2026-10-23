@@ -25,6 +25,7 @@ import {
   type PendingModification,
 } from './modifications.ts'
 import { assertCoordinatesAreInCity, CITY_CODES } from './submissionCity.ts'
+import { currentTreeId } from './frozenPredictions.ts'
 
 const projectId = process.env.GOOGLE_CLOUD_PROJECT ?? 'sf-tree-reporting-prod'
 const storageBucket = process.env.FIREBASE_STORAGE_BUCKET ?? 'sf-tree-reporting-submissions'
@@ -553,14 +554,16 @@ app.post('/api/checkin-photos/:id/approve', async (req, res, next) => {
     // Re-encode into the public bucket before the transaction records the URL;
     // if the transaction then fails the copy is simply unreferenced.
     const photoUrl = await publishPhotoTo(checkin.photoPath, checkinPhotoObjectPath(checkin.treeId, checkinRef.id))
-    const treePhotosRef = db.collection('treePhotos').doc(treeDocKey(checkin.treeId))
+    // A predicted tree frozen since the check-in keeps its photos under its new id.
+    const treeId = await currentTreeId(db, checkin.treeId)
+    const treePhotosRef = db.collection('treePhotos').doc(treeDocKey(treeId))
 
     await db.runTransaction(async (transaction) => {
       const [snapshot, treePhotos] = await Promise.all([transaction.get(checkinRef), transaction.get(treePhotosRef)])
       const current = snapshot.data() as PendingCheckinPhoto | undefined
       if (current?.photoReview !== 'pending') throw new Error(`Photo is already ${current?.photoReview ?? 'gone'}`)
       transaction.set(treePhotosRef, {
-        treeId: checkin.treeId,
+        treeId,
         ...nextTreePhotos(treePhotos.data(), photoUrl),
         latestPublishedAt: FieldValue.serverTimestamp(),
       })

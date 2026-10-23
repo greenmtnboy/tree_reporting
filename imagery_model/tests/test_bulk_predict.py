@@ -188,3 +188,37 @@ def test_a_run_bundle_holds_what_predict_loads_and_one_checkpoint(tmp_path):
             "runs/r1/evaluation/validation-usbos/taxonomy.json",
             "chips/d-usbos/normalization.json", "chips/d-usnyc/normalization.json"} <= set(files)
     assert not any(f.endswith(".parquet") for f in files)
+
+
+def _staged(tmp_path: Path) -> Path:
+    (tmp_path / "plan.json").write_text(json.dumps({"city": "USBOS"}), encoding="utf-8")
+    (tmp_path / "usbos_predicted_staging.parquet").write_bytes(b"PAR1")
+    return tmp_path
+
+
+def test_upload_freezes_confirmed_predictions_before_replacing_the_staged_file(tmp_path, monkeypatch):
+    calls: list[tuple] = []
+    monkeypatch.setattr(bulk_predict, "freeze_confirmed", lambda reviewer: calls.append(("freeze", reviewer)) or {"frozenNow": 2})
+    monkeypatch.setattr(bulk_predict, "_gcloud", lambda *args: calls.append(("gcloud", *args)))
+
+    assert bulk_predict.main(["upload", "--out", str(_staged(tmp_path))]) == 0
+
+    assert calls == [
+        ("freeze", bulk_predict.DEFAULT_REVIEWER),
+        ("gcloud", "cp", str(tmp_path / "usbos_predicted_staging.parquet"),
+         f"{bulk_predict.DEFAULT_STAGING}/usbos_predicted_staging.parquet"),
+    ]
+
+
+def test_upload_refuses_when_the_reviewer_cannot_freeze(tmp_path, monkeypatch):
+    def unreachable(reviewer):
+        raise bulk_predict.urllib.error.URLError("connection refused")
+    uploads: list[tuple] = []
+    monkeypatch.setattr(bulk_predict, "freeze_confirmed", unreachable)
+    monkeypatch.setattr(bulk_predict, "_gcloud", lambda *args: uploads.append(args))
+
+    assert bulk_predict.main(["upload", "--out", str(_staged(tmp_path))]) == 1
+    assert uploads == []
+
+    assert bulk_predict.main(["upload", "--out", str(tmp_path), "--no-freeze"]) == 0
+    assert len(uploads) == 1

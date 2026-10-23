@@ -188,3 +188,25 @@ def test_only_a_crown_the_model_read_from_the_image_is_published():
     assert satellite.records_to_table([record(predictedCrownWidthM=6.1)]).column(
         "crown_width_m"
     ).to_pylist() == [None]
+
+
+def test_a_frozen_prediction_ingests_as_a_satellite_tree():
+    """A bulk prediction someone checked in on is frozen by the reviewer
+    (reviewer/frozenPredictions.ts) into the satellite export: its own `sat-`
+    id, the card's position and name, no tile provenance and no crown, so it
+    outlives the run that predicted it and absorbs the next run's prediction."""
+    frozen = record(
+        treeId="sat-0f1e2d3c4b5a69788796", city="USBOS", latitude=42.3, longitude=-71.1,
+        species="Acer", speciesSource="model", predictedDbhInches=None, predictedCrownWidthM=None,
+        crownWidthMethod=None, tileId=None, imageryVersion=None, runId=None, predictionId=None,
+        acquisitionDate=None, origin="bulk-confirmed",
+    )
+
+    (row,) = satellite.records_to_table([frozen]).to_pylist()
+
+    assert row["tree_id"] == "sat-0f1e2d3c4b5a69788796"
+    assert row["data_source"] == "SATELLITE_USBOS"
+    assert row["species"] == "Acer"
+    assert (row["latitude"], row["longitude"]) == (42.3, -71.1)
+    assert row["diameter_at_breast_height"] is None
+    assert row["crown_width_m"] is None

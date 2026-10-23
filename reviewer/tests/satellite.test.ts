@@ -278,7 +278,7 @@ test('the public export carries no notes or actor and keeps estimate and measure
   assert.equal(row.city, 'USSFO')
   assert.deepEqual(Object.keys(row).sort(), [
     'acquisitionDate', 'city', 'correctedAt', 'crownWidthMethod', 'duplicateOfTreeId', 'humanCrownWidthM', 'imageryVersion', 'latitude', 'longitude',
-    'measuredDbhInches', 'positionRole', 'predictedCrownWidthM', 'predictedDbhInches', 'predictionId',
+    'measuredDbhInches', 'origin', 'positionRole', 'predictedCrownWidthM', 'predictedDbhInches', 'predictionId',
     'publishedAt', 'runId', 'schemaVersion', 'species', 'speciesSource', 'tileId', 'treeId',
   ])
 })

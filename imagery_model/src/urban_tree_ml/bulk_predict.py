@@ -53,11 +53,14 @@ dies loses at most the tile it was on:
     the files ``predict`` loads -- the checkpoint the evaluation names, the
     run and cohort metadata, the chip normalization -- about 350 MB.
 
-Uploading is deliberately a separate, manual step -- it is what makes the
-city's next refresh publish the rows::
-
-    gcloud storage cp <out>/usbos_predicted_staging.parquet \\
-      gs://trilogy_public_models/duckdb/staging/usbos_predicted_staging.parquet
+``upload``
+    Replaces the city's staged parquet in the public staging prefix, which
+    is what makes the city's next refresh publish the rows -- and retires
+    every prediction id of the run before.  So it first asks the local
+    reviewer to freeze the predictions people have checked in on or reported
+    (``POST /api/satellite/freeze-confirmed``, reviewer/frozenPredictions.ts),
+    and refuses to upload when the reviewer cannot be reached.  Start it with
+    ``cd reviewer && pnpm start``.
 
 Example (Boston, v13: every tile in the metro circle)::
 
@@ -91,6 +94,8 @@ import os
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -614,6 +619,47 @@ def sync(args: argparse.Namespace) -> int:
     return 0
 
 
+DEFAULT_STAGING = "gs://trilogy_public_models/duckdb/staging"
+DEFAULT_REVIEWER = "http://127.0.0.1:4174"
+
+
+def freeze_confirmed(reviewer: str) -> dict[str, Any]:
+    """Freeze every confirmed prediction through the local reviewer; its summary."""
+    request = urllib.request.Request(
+        f"{reviewer.rstrip('/')}/api/satellite/freeze-confirmed", data=b"{}", method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=600) as response:
+        return json.load(response)
+
+
+def upload(args: argparse.Namespace) -> int:
+    out = Path(args.out)
+    city = args.city or json.loads((out / "plan.json").read_text(encoding="utf-8"))["city"]
+    staged = out / f"{city.lower()}_predicted_staging.parquet"
+    if not staged.exists():
+        print(f"no {staged}; run assemble first", file=sys.stderr)
+        return 1
+    if args.no_freeze:
+        print("WARNING: not freezing confirmed predictions; check-ins on this city's "
+              "predicted trees lose their tree when the new file is read", file=sys.stderr)
+    else:
+        try:
+            result = freeze_confirmed(args.reviewer)
+        except (urllib.error.URLError, OSError) as error:
+            print(f"refusing to upload: could not freeze confirmed predictions through {args.reviewer} "
+                  f"({error}). Start the reviewer (cd reviewer && pnpm start), or pass --no-freeze.",
+                  file=sys.stderr)
+            return 1
+        print(f"froze {result.get('frozenNow', 0)} confirmed predictions, "
+              f"{result.get('coveredNow', 0)} already covered by a satellite tree, "
+              f"{result.get('alreadyFrozen', 0)} frozen before", file=sys.stderr)
+        for skipped in result.get("skipped", []):
+            print(f"WARNING: not frozen: {skipped.get('predictedTreeId')}: {skipped.get('reason')}", file=sys.stderr)
+    _gcloud("cp", str(staged), f"{args.staging.rstrip('/')}/{staged.name}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--artifacts", default="artifacts", help="artifacts root (default: ./artifacts)")
@@ -659,10 +705,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--run", required=True)
     p.add_argument("--remote", default=DEFAULT_REMOTE)
 
+    p = sub.add_parser("upload", help="freeze confirmed predictions, then replace the city's staged parquet")
+    p.add_argument("--out", required=True)
+    p.add_argument("--city", default=None, help="default: the plan's city")
+    p.add_argument("--staging", default=DEFAULT_STAGING)
+    p.add_argument("--reviewer", default=DEFAULT_REVIEWER, help=f"the local reviewer (default {DEFAULT_REVIEWER})")
+    p.add_argument("--no-freeze", action="store_true", help="upload without freezing confirmed predictions")
+
     args = parser.parse_args(argv)
     return {
         "plan": plan, "predict": predict, "assemble": assemble, "overview": overview,
-        "sync": sync, "run-bundle": run_bundle,
+        "sync": sync, "run-bundle": run_bundle, "upload": upload,
     }[args.step](args)
 
 

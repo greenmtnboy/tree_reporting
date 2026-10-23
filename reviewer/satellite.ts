@@ -44,6 +44,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore'
 import sharp from 'sharp'
+import { addFreezeRoutes } from './frozenPredictions.ts'
 
 export const BUNDLE_SCHEMA_VERSION = 1
 export const EXPORT_SCHEMA_VERSION = 1
@@ -506,11 +507,14 @@ export interface ExportRow {
   /** Traced by the reviewer on the image; the ingest prefers it to the model's. */
   humanCrownWidthM: number | null
   duplicateOfTreeId: string | null
-  tileId: string
-  imageryVersion: string
-  runId: string
-  predictionId: string
-  acquisitionDate: string
+  /** Null on a frozen prediction, which no reviewed tile produced. */
+  tileId: string | null
+  imageryVersion: string | null
+  runId: string | null
+  predictionId: string | null
+  acquisitionDate: string | null
+  /** `bulk-confirmed` for a bulk prediction a person confirmed (frozenPredictions.ts); null for a reviewed detection. */
+  origin: string | null
   publishedAt: string | null
   /** The last in-place correction of this tree, if any. */
   correctedAt: string | null
@@ -518,6 +522,10 @@ export interface ExportRow {
 
 function isoOrNull(value: unknown): string | null {
   return value instanceof Timestamp ? value.toDate().toISOString() : typeof value === 'string' ? value : null
+}
+
+function stringOrNull(value: unknown): string | null {
+  return value === null || value === undefined ? null : String(value)
 }
 
 /** The public shape of a published tree: no notes, no actor, no private ids. */
@@ -538,11 +546,12 @@ export function exportRow(published: Record<string, unknown>): ExportRow {
     crownWidthMethod: (published.crownWidthMethod as string | null) ?? null,
     humanCrownWidthM: (published.humanCrownWidthM as number | null) ?? null,
     duplicateOfTreeId: (published.duplicateOfTreeId as string | null) ?? null,
-    tileId: String(published.tileId),
-    imageryVersion: String(published.imageryVersion),
-    runId: String(published.runId),
-    predictionId: String(published.predictionId),
-    acquisitionDate: String(published.acquisitionDate),
+    tileId: stringOrNull(published.tileId),
+    imageryVersion: stringOrNull(published.imageryVersion),
+    runId: stringOrNull(published.runId),
+    predictionId: stringOrNull(published.predictionId),
+    acquisitionDate: stringOrNull(published.acquisitionDate),
+    origin: stringOrNull(published.origin),
     publishedAt,
     correctedAt: isoOrNull(published.correctedAt),
   }
@@ -1399,6 +1408,8 @@ export function createSatelliteRouter(deps: SatelliteDeps): express.Router {
       next(error)
     }
   })
+
+  addFreezeRoutes(router, { db, cityCodes, rewritePublicExport })
 
   // Rebuild the export from Firestore without publishing anything -- the first
   // run, or recovery if a publish committed but the export write failed.
