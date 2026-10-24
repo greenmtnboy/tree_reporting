@@ -32,11 +32,13 @@ import tree_common;
 
 key genus string; # the genus the enrichment table assigns the species -- corrected for a misspelt binomial, and occasionally a superseded name (Sapium for Triadica)
 property species.tree_form string; # broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default
+property species.common_names list<string>; # ordered by familiarity; the first is what the map shows as the tree's name
 
 root datasource tree_enrichment (
     species: ~species,
     genus: ?genus,
     tree_form: ?tree_form,
+    common_names: ?common_names,
 )
 grain (species)
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment_v{data_version}.parquet`;

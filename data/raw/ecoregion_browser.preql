@@ -1,0 +1,37 @@
+# The ecoregion dimension as the browser reads it: three columns, no geometry.
+#
+# The map's worker keeps a table of `ecoregion_id`, `biome` and `realm` for
+# the species context. It read them from `ecoregion_info_v{n}.parquet`,
+# which is 5.75 MB, almost all of it the `geometry_geojson` column, and
+# DuckDB-wasm fetched the whole object on every first visit for three small
+# columns (docs/MOBILE_LOAD_BUDGET.md). This publishes the projection the
+# worker actually wants, a few kilobytes, and the worker falls back to the
+# full file only while this one is unpublished.
+#
+# The source is the published ecoregion parquet, read as a root named
+# `ecoregion_info` like the managed datasource that writes it, so this job is
+# ordered after `refresh-ecoregions` in the same tick. The dashboards keep
+# reading the full file through the model bundle; this file is not in it.
+
+import core;
+import ecoregion_common;
+
+root datasource ecoregion_info (
+    ecoregion_id,
+    ?biome,
+    ?realm,
+    ecoregion_data_updated_through,
+)
+grain (ecoregion_id)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ecoregion_info_v{data_version}.parquet`;
+
+datasource ecoregion_browser (
+    ecoregion_id,
+    ?biome,
+    ?realm,
+    ecoregion_data_updated_through,
+)
+grain (ecoregion_id)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ecoregion_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ecoregion_browser_v{data_version}.parquet`
+freshness by ecoregion_data_updated_through
+assert @kept(ecoregion_id, 0.75);

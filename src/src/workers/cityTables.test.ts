@@ -47,7 +47,7 @@ describe('city tables', () => {
     dir = mkdtempSync(join(tmpdir(), 'city-tables-'))
     const trees = sql(join(dir, 'city.parquet'))
     const predictions = sql(join(dir, 'predictions.parquet'))
-    options = { parquetUrl: trees, predictionsUrl: predictions, predictionsAreUnique: false, city: 'USSFO', hasDedupFlag: true, hasCultivar: true, hasCrownWidth: true }
+    options = { projectionUrl: null, parquetUrl: trees, predictionsUrl: predictions, predictionsAreUnique: false, city: 'USSFO', hasDedupFlag: true, hasCultivar: true, hasCrownWidth: true }
 
     await conn.run(`CREATE TABLE species_enrichment (species VARCHAR, common_names VARCHAR[], tree_form VARCHAR);
       INSERT INTO species_enrichment VALUES
@@ -217,6 +217,55 @@ describe('city tables', () => {
     expect(Number(none.n)).toBe(0)
     const one = (await conn.runAndReadAll(`SELECT count(*) AS n FROM ${TREES_TABLE} WHERE species = 'Palm' AND city = 'USSFO'`)).getRowObjects()[0]
     expect(Number(one.n)).toBe(1)
+  })
+
+  test('the browser projection loads with one scan, no joins, and the same row shape', async () => {
+    // The pipeline's output (data/raw/tree_browser_city.preql): the display
+    // name, the growth form and the prediction are columns.
+    const projection = sql(join(dir, 'projection.parquet'))
+    await conn.run(`COPY (
+      SELECT * REPLACE (
+        CAST(diameter_at_breast_height AS DOUBLE) AS diameter_at_breast_height, CAST(latitude AS DOUBLE) AS latitude,
+        CAST(longitude AS DOUBLE) AS longitude, CAST(crown_width_m AS DOUBLE) AS crown_width_m,
+        CAST(predicted_crown_width_m AS DOUBLE) AS predicted_crown_width_m
+      ) FROM (VALUES
+        ('sf-1', 'USSFO', 'SF_OPENDATA', 'Quercus agrifolia', NULL, 'Oak', 'Coast live oak', 'spreading', DATE '2001-03-04', 12.5, 9.5, 7.0, 37.76, -122.43, NULL),
+        ('sf-2', 'USSFO', 'SF_OPENDATA', 'Washingtonia robusta', NULL, NULL, 'Mexican fan palm', 'palm', NULL, NULL, NULL, 5.0, 37.77, -122.42, NULL),
+        ('sf-4', 'USSFO', 'OSM_USSFO', 'Palm', NULL, NULL, 'Palm (species not recorded)', 'palm', NULL, 4, NULL, NULL, 37.79, -122.40, NULL),
+        ('sf-6', 'USSFO', 'OSM_USSFO', 'Acer rubrum', 'October Glory', NULL, 'Acer rubrum', 'drifted_form', NULL, 8, NULL, 3.0, 37.80, -122.39, NULL),
+        ('sf-nowhere', 'USSFO', 'OSM_USSFO', 'Acer rubrum', NULL, NULL, 'Acer rubrum', 'default', NULL, 8, NULL, NULL, NULL, NULL, NULL)
+      ) v(tree_id, city, data_source, species, cultivar, tree_name, display_name, tree_form, plant_date,
+          diameter_at_breast_height, crown_width_m, predicted_crown_width_m, latitude, longitude, submission_photo_url)
+    ) TO '${projection}' (FORMAT PARQUET)`)
+    const statements = loadCityTablesSql({ ...options, projectionUrl: projection })
+    // Nothing but the projection is read: no enrichment join, no predictions.
+    expect(statements.join('\n')).not.toMatch(/species_enrichment|predictions\.parquet|city\.parquet/)
+    expect(statements.join('\n').match(/read_parquet\(/g)?.length).toBeGreaterThan(0)
+    for (const statement of dropCityTablesSql()) await conn.run(statement)
+    for (const statement of statements) await conn.run(statement)
+
+    const columns = await describeTable(TREES_TABLE)
+    expect(columns.tree_name).toMatch(/^ENUM\(/)
+    expect(columns.tree_form).toMatch(/^ENUM\('default', 'palm'/)
+    expect(columns.predicted_crown_width_m).toBe('FLOAT')
+    const rows = (await conn.runAndReadAll(
+      `SELECT tree_id, CAST(tree_name AS VARCHAR) AS name, CAST(source_tree_name AS VARCHAR) AS source_name,
+              CAST(tree_form AS VARCHAR) AS form, predicted_crown_width_m AS width, CAST(cultivar AS VARCHAR) AS cultivar
+       FROM ${TREES_TABLE} ORDER BY 1`,
+    )).getRowObjects().map((r) => [r.tree_id, r.name, r.source_name, r.form, r.width, r.cultivar])
+    expect(rows).toEqual([
+      ['sf-1', 'Coast live oak', 'Oak', 'spreading', 7, null],
+      ['sf-2', 'Mexican fan palm', null, 'palm', 5, null],
+      ['sf-4', 'Palm (species not recorded)', null, 'palm', null, null],
+      // A form outside the vocabulary is 'default', not a failed load.
+      ['sf-6', 'Acer rubrum', null, 'default', 3, 'October Glory'],
+    ])
+    // The view is the published schema either way.
+    expect(Object.keys(await describeTable(TREES_VIEW))).toEqual([
+      'tree_id', 'city', 'data_source', 'tree_name', 'plant_date', 'species', 'cultivar', 'crown_width_m',
+      'latitude', 'longitude', 'diameter_at_breast_height', 'submission_photo_url',
+    ])
+    await load()
   })
 
   test('a city switch drops and rebuilds every table and type', async () => {
