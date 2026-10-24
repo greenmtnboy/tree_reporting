@@ -557,7 +557,7 @@ def load_existing_table(source: str) -> pa.Table | None:
             FROM read_parquet(?)
             """,
             [source],
-        ).fetch_arrow_table()
+        ).to_arrow_table()
     except Exception as exc:
         raise RuntimeError(f"load_existing_table({source!r}) failed: {exc}") from exc
     finally:

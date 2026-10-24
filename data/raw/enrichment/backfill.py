@@ -156,7 +156,7 @@ def load_full_table(source: str) -> pa.Table:
         table = conn.execute(
             f"SELECT {col_list}, {enriched_at_sql} FROM read_parquet(?)",
             [source],
-        ).fetch_arrow_table()
+        ).to_arrow_table()
     finally:
         conn.close()
 
