@@ -57,10 +57,11 @@ All of it is in `src/`; no published file changed.
   active and is `COALESCE`d over the default. The city load no longer builds
   a 1.16M-row colour map, and no tile query joins one.
 - **Overview tiles are viewport-bounded.** At zooms 11 to 14 a tile is served
-  from an aggregate over the visible 4x4 block of tiles. The whole-city
-  overview batch and the z14 aggregate cache are built only when the desktop
-  prewarm asks for them; a phone never pays for the full city at once. This
-  was the largest single transient after the load itself.
+  from an aggregate over the 4x4 block of tiles it sits in; nothing builds
+  the whole city at once. The whole-city overview batch and the z14
+  aggregate cache were the largest single transient after the load itself.
+  (Stage 1 kept them for the desktop prewarm; the tile-latency work below
+  removed them.)
 - `SET preserve_insertion_order = false`: nothing depends on row order, and
   keeping it made every `CREATE TABLE AS` buffer its input.
 - **Routing and layout load the dashboards lazily** (`src/router.ts`,
@@ -138,16 +139,137 @@ Levers after that, in the order they are worth trying:
    is a constant per zoom band in `neighborhoodBlockSizeForZoom`; NYC at
    z15 puts tens of thousands of trees in one batch, Burlington a few
    hundred.
-2. **Coarser overview grids at z11 and z12.** The 32 m grid at z13 gives NYC
-   640k aggregate points, nearly one per tree; the grid is a constant in
-   `baseSimplifyGridMetersForZoom`. A visual change.
+2. **Coarser overview grids at z11 and z12.** Done in the tile-latency work
+   below: 128 m at z11, 64 m at z12, where the heatmap is the only layer.
 3. **Replace the spatial extension.** `ST_AsMVT` is its only use and a
    point-only MVT encoder is small JavaScript, but there is no evidence it
    is faster: the engine runs in its own worker, so the encoder would run
    beside it, and Arrow rows are a few times the bytes of an MVT blob per
    tile. The case is the 6 MB extension download and its heap share, neither
-   isolated yet. Gate on measuring tile latency and that share, not on the
-   argument.
+   isolated yet. The native profile below puts the encoding at about 6 µs a
+   feature on one thread, so it is the cost of an overview batch; gate on
+   that share and the download, not on the argument.
+
+## Tile latency
+
+Stage 1 made the map slower to use while making it cheaper to load, and
+the load bench could not see it: it settles at one camera. `pnpm bench:tiles`
+covers interaction. It loads a city, waits for the desktop intro to land,
+then jumps through z11 to z18 with pans and records, per step, the time until
+the camera is still and every tile is loaded ("settled"), when the trees
+source's first tile arrived and how long the rest trickled in, and the
+renderer's memory. Boston, desktop 1400x900, each build served from
+localhost against the same live data (1.57M rows, 62% of them predicted;
+the stage 1 table above measured Boston at 404k):
+
+| Step | Before stage 1 (f380c0c) | Stage 1 + 1b | Batching fixes | + intro fix |
+|---|---:|---:|---:|---:|
+| Trees on screen | 50 s | 19 to 29 s | 11 to 14 s | 7 to 10 s |
+| Intro lands | 66 s | 51 to 75 s | after 120 s | 18 to 22 s |
+| z11 settles | 13.1 s | 16.3 to 22.7 s | 2.6 s | 3.6 to 3.8 s |
+| z12 | 4.8 s | 7.8 to 8.6 s | 2.9 s | 2.9 to 3.1 s |
+| z13 | 1.6 s | 2.0 to 2.8 s | 2.4 s | 1.2 to 2.1 s |
+| pan at z13 | 0.4 s | 1.5 to 1.7 s | 0.3 s | 0.3 s |
+| z14 | 1.0 s | 1.7 to 2.2 s | 3.3 s | 2.8 to 3.4 s |
+| z15 | 0.65 s | 2.0 to 2.5 s | 1.1 s | 0.65 to 2.4 s |
+| Whole walk | 24.1 s | 36.5 to 40.0 s | 15.2 s | 16.8 to 17.0 s |
+| Renderer peak | 2,029 MB | 2,072 to 2,082 MB | 1,772 MB | 1,659 to 1,663 MB |
+
+The "batching fixes" column walked the map two minutes after the load,
+once the prewarm had long finished; the last column walks it as soon as
+the intro lands, so its first steps share the connection with the
+prewarm's last few seconds.
+
+What the worker's `[Perf]` timeline showed on the stage 1 build, in order
+of cost:
+
+- The z15 feature table (20 to 28 s of wasm) was built twice: the first
+  build started under tile-query revision 0 just before the first
+  `setTileQuery` bumped it to 1, so its guard discarded the result.
+- Each overview zoom ran two overlapping neighbourhood aggregates, one for
+  the 4x4 block and one for the reported visible range, 15 s apiece at z11.
+  That is the popping at the far zoom: the tiles land when the second
+  aggregate does.
+- The 32 m grid at z11 is half a pixel (76 m per pixel there), so the far
+  zoom aggregated half a million cells to draw a heatmap.
+- The desktop prewarm then built whole-city z14 and z13 batches, 27 s on
+  the single connection right after the load. Every tile request queued
+  behind them, which is the "less snappy once it is up".
+- Republishing an unchanged tile query or tree filter invalidated every
+  cache.
+
+A native profile of the same SQL (DuckDB, one thread, Boston projection)
+put the z11 overview at 5.8 s on the 32 m grid through the `trees` view and
+0.8 s on a 128 m grid; MVT encoding dominates at about 6 µs a feature, and
+a z18 points batch costs 211 to 332 ms through the view against 55 ms
+reading `trees_fast` directly.
+
+What changed (`src/workers/duckdbPipeline.worker.ts`):
+
+- Overview grids follow the pixel: 128 m at z11, 64 m at z12, 32 m at z13,
+  24 m at z14. The circle layer starts at z12.8 and the heatmap weights by
+  `grid_m`, so z11 and z12 look the same.
+- The feature table is keyed by its content (base query, tree filter,
+  zoom), not by the revision counter, so a republish of the same query
+  reuses it; and `setTileQuery` and `setPublishedTreeIdFilterSql` return
+  early when nothing changed.
+- Overview batches cover the fixed 4x4 block only, and a request whose
+  range an in-flight batch already covers waits for that batch.
+- The default tile query reads `trees_fast` directly instead of joining
+  the `trees` view back to it; a chat or URL query still goes through the
+  view.
+- The whole-city overview batch, the z14 aggregate cache and the prewarm's
+  z13 and z14 calls are gone. The prewarm builds the z15 feature table and
+  the z16 to z18 blocks around the camera.
+- Every batch, feature-table build, prewarm and cache invalidation logs a
+  `[Perf]` line with its milliseconds and reason, so the bench's timeline
+  is the worker's.
+
+What it costs: a z13 or z14 view that falls outside a built block costs
+1.5 to 3 s with tiles trickling in, where the stage 1 desktop served them
+instantly after its 27 s stall; a pan within the block is free. Dropping
+the feature table saves another 360 MB of peak but makes a z15 view cost
+12 s, so it stays.
+
+### The intro
+
+The batching fixes left the desktop intro held at its start pose for over
+two minutes. The cause had been there since the intro was written and
+grew with the city: Boston went from 404k rows to 1.57M when the predicted
+partition went live.
+
+- The intro gates its motion on a prefetch of the z15 and z16 tiles in
+  view, and the z15 prefetch built the whole-city z15 feature table first.
+- The prewarm started at the same moment, and the worker has one
+  connection, so every query queued behind the other.
+- Each "four-tile" points batch cost 8 to 15 s. `EXPLAIN ANALYZE` in the
+  browser showed why: DuckDB-WASM (1.33) pushes the outer
+  `WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)` into
+  the scan, ahead of the tile-range filter, and runs `ST_AsMVTGeom` on
+  every tree in the city to keep 1,585. Native DuckDB 1.5 orders the same
+  filter correctly (82 ms), so a native profile never shows it.
+
+What changed:
+
+- The points batch and the feature-table reader carry the geometry guard
+  as the aggregate's `FILTER (WHERE ...)`, which cannot be pushed down:
+  8.3 s to 32 ms for a four-tile z16 batch, same bytes. The feature table
+  drops the guard (a point clipped to its own tile is never empty; 0 of
+  1,573,245 were): 11.4 s to 3.6 s, where the filter ran the geometry
+  twice. The aggregate modes filter above their GROUP BY, which already
+  stops the pushdown.
+- The intro's z15 prefetch batches the visible range only and no longer
+  builds the feature table.
+- The prewarm, which still builds it, starts once the intro has landed
+  (or at once after a city switch, which has no intro).
+
+On Boston the intro now starts moving one to two seconds after the
+trees appear, lands 10 s later (the animation's length), and the prewarm is
+done 7 to 10 s after that. The phone layout's walk settles in 10.5 s.
+
+Worth re-measuring: the 12 s z15 view that kept the feature table (above)
+was a points batch, and so paid the same pushdown. With it fixed the
+table may no longer earn its 360 MB.
 
 ## Stage 2: cells
 
@@ -182,6 +304,16 @@ requests. It reads process memory from the OS on Windows and Linux. Compare
 peaks, not final figures, run one scenario at a time (a second browser on
 the machine skews both), and run each scenario at least twice: the zoom
 walk's peak moves by several hundred MB between identical runs.
+
+`pnpm bench:tiles` (`scripts/bench-tile-latency.mjs`) takes the same
+`MAP_BENCH_*` variables, defaults to the desktop layout, and prints one row
+per step of its walk (`MAP_BENCH_STEPS` to change it, e.g.
+`z11,pan,z13,pan,z15`) followed by the page's `[Perf]` lines with seconds
+since navigation. Run it before and after any change to the tile queries,
+the batching or the prewarm, on the same data, with a baseline build served
+from a second preview port. Settle times move by about half a second between
+identical runs; the trickle span and the `[Perf]` batch milliseconds are
+the steadier signal.
 
 To measure against a file that is not published yet, build with
 `VITE_TREES_BASE_URL=http://localhost:6180/local-trees` and put the files

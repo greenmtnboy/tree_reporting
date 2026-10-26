@@ -1938,14 +1938,21 @@ onMounted(async () => {
           msSincePublish: Math.round(nowMs() - mapQueryChangedAt),
           isSourceLoaded: e.isSourceLoaded,
         })
-        // The LOD prewarm serves the desktop intro's wide prefetch ranges; it
-        // materialises the whole city again (the z15 feature table) and a phone
-        // has no memory to spare for that. Nearby mode skips it for the same reason.
-        if (!props.nearbyLocation && !props.simplified && prewarmStartedForRevision !== mapQueryRevision.value) {
-          prewarmStartedForRevision = mapQueryRevision.value
-          void prewarmLodCaches().catch((err) => { console.warn('[Perf] map:prewarm:failed', err) })
+        // The LOD prewarm materialises the whole city again (the z15 feature
+        // table) and a phone has no memory to spare for that; nearby mode skips
+        // it for the same reason. On the desktop it waits for the intro to land:
+        // the worker has one connection, and a prewarm beside the fly-out held
+        // the camera at the start pose for over a minute on Boston. A city
+        // switch has no intro, so runIntroZoomOut resolves at once.
+        const intro = props.simplified ? Promise.resolve() : runIntroZoomOut()
+        if (!props.nearbyLocation && !props.simplified) {
+          void intro.then(() => {
+            // A city switch that cancelled the intro starts its own prewarm.
+            if (disposed || lifecyclePhase.value !== 'ready' || prewarmStartedForRevision === mapQueryRevision.value) return
+            prewarmStartedForRevision = mapQueryRevision.value
+            return prewarmLodCaches()
+          }).catch((err) => { console.warn('[Perf] map:prewarm:failed', err) })
         }
-        if (!props.simplified) runIntroZoomOut()
       }
       if (e.sourceId === 'carto-dark' && e.isSourceLoaded) {
         console.info('[Perf] map:basemap-source:loaded', { msSinceMapInit: Math.round(nowMs() - mapInitStartedAt) })

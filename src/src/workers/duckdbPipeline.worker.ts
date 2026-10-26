@@ -30,11 +30,9 @@ import {
 } from './parquetUrls'
 import { normalizeValue } from './normalizeValue'
 import {
-  AGG_CACHE_ZOOM,
   COLOR_OVERRIDE_TABLE,
   WEB_MERCATOR_MAX,
   WEB_MERCATOR_WORLD,
-  aggCacheSql,
   cityTileBoundsSql,
   colorSql,
   dropCityTablesSql,
@@ -77,14 +75,14 @@ const tileCache = new Map<string, Uint8Array>()
 const emptyTileKeys = new Set<string>()
 const persistentTileCacheKeys = new Set<string>()
 const inflightTileRequests = new Map<string, Promise<Uint8Array>>()
-const zoomBatchReady = new Set<string>()
-const inflightZoomBatch = new Map<string, Promise<void>>()
 const inflightNeighborhoodBatch = new Map<string, Promise<void>>()
-const preparedFeatureTablesReady = new Set<string>()
+/** The ground each in-flight neighbourhood batch covers, by its key. */
+const inflightNeighborhoodRanges = new Map<string, { rev: number; z: number } & TileBounds>()
+/** The content key of the feature table each zoom currently holds. */
+const preparedFeatureTablesReady = new Map<number, string>()
 const inflightFeatureTableBuild = new Map<string, Promise<void>>()
 const dataTileBoundsByZoom = new Map<number, TileBounds>()
 const visibleTileRangeByZoom = new Map<number, TileBounds>()
-const hasAggCacheByZoom = new Set<number>()
 const prefetchedVisibleRangeSigByZoom = new Map<number, string>()
 const pendingTileQueue: QueuedTileRequest[] = []
 
@@ -171,12 +169,40 @@ function effectiveBaseQuery(sql: string | null): string {
   return applyTreeFilterToBaseQuery(sanitizeBaseQuery(sql))
 }
 
+/**
+ * The rows a tile query reads. When the published query is the city default
+ * (no chat scope, no URL filter) the city table is read as it stands; the
+ * join back through the `trees` view cost a third to a half of every
+ * overview batch for nothing. Any other query is joined to the table by id,
+ * as before.
+ */
+function tileRowSource(baseQuery: string, color: { join: string }): { prelude: string; from: string; where: string; dbh: string; id: string } {
+  if (isDefaultBaseQuery(baseQuery)) {
+    return {
+      prelude: 'WITH',
+      from: `trees_fast tf\n  ${color.join}`,
+      where: 'tf.latitude IS NOT NULL AND tf.longitude IS NOT NULL\n    AND ',
+      dbh: 'COALESCE(tf.dbh, 3)',
+      id: 'tf.tree_id',
+    }
+  }
+  return {
+    prelude: `WITH base AS (\n  ${baseQuery}\n),`,
+    from: `base\n  INNER JOIN trees_fast tf\n    ON base.tree_id = tf.tree_id\n  ${color.join}`,
+    where: '',
+    dbh: 'COALESCE(base.diameter_at_breast_height, tf.dbh, 3)',
+    id: "COALESCE(base.tree_id, tf.tree_id, 'unkwn')",
+  }
+}
+
 function normalizeSql(sql: string): string {
   return sql.replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
+/** True for the city's default query, with or without its city clause: one city is loaded, so both read every row. */
 function isDefaultBaseQuery(sql: string): boolean {
-  return normalizeSql(sql) === normalizeSql(activeCityDefaultQuery)
+  const normalized = normalizeSql(sql)
+  return normalized === normalizeSql(activeCityDefaultQuery) || normalized === normalizeSql(DEFAULT_BASE_QUERY_SQL)
 }
 
 function tileCacheKey(z: number, x: number, y: number): string {
@@ -221,16 +247,19 @@ function shouldPersistLowZoomSfTile(key: string): boolean {
     && parsed.y <= bounds.maxY
 }
 
-function zoomBatchKey(rev: number, z: number): string {
-  return `${rev}:${treeFilterSignature()}:${z}`
-}
-
 function neighborhoodBatchKey(rev: number, z: number, minX: number, maxX: number, minY: number, maxY: number): string {
   return `${rev}:${treeFilterSignature()}:${z}:${minX}-${maxX}:${minY}-${maxY}`
 }
 
-function featureTableBuildKey(rev: number, z: number): string {
-  return `${rev}:${treeFilterSignature()}:${z}`
+/**
+ * What a feature table's rows depend on: the query, the published filter and
+ * the colours baked into it. Not the query revision: a republish of the same
+ * SQL must find the table it already has, and a build that started a moment
+ * before the first publish must still count.
+ */
+function featureTableBuildKey(baseQuery: string, z: number): string {
+  const query = isDefaultBaseQuery(baseQuery) ? 'default' : hashText(normalizeSql(baseQuery))
+  return `${query}:${treeFilterSignature()}:${z}`
 }
 
 function featureTableName(z: number): string {
@@ -274,8 +303,17 @@ function isTileOutsideDataBounds(z: number, x: number, y: number): boolean {
   return x < b.minX || x > b.maxX || y < b.minY || y > b.maxY
 }
 
+/**
+ * Aggregate cell size for the overview zooms. Below the circle layer's
+ * minimum (z12.8) only the heatmap draws, and its weight is normalised by
+ * `grid_m`, so the cell can follow the pixel: a 32 m cell at z11 is half a
+ * pixel at a mid-latitude city, and aggregating a million of them to draw
+ * one overview was the cost of the far zooms.
+ */
 function baseSimplifyGridMetersForZoom(z: number): number {
-  if (z <= 13) return 32
+  if (z <= 11) return 128
+  if (z === 12) return 64
+  if (z === 13) return 32
   if (z === 14) return 24
   return 0
 }
@@ -479,8 +517,6 @@ async function loadCityTrees(city?: string): Promise<void> {
   }
 
   preparedFeatureTablesReady.clear()
-  hasAggCacheByZoom.clear()
-  zoomBatchReady.clear()
   dataTileBoundsByZoom.clear()
   colorOverrideActive = false
 
@@ -722,31 +758,6 @@ async function clearColorOverride() {
   colorMapSignature = 'default'
 }
 
-/** Forget the z14 aggregate; the next whole-city overview batch rebuilds it. */
-async function dropAggCaches() {
-  hasAggCacheByZoom.clear()
-  if (conn) await conn.query('DROP TABLE IF EXISTS agg_z14_cache')
-}
-
-/**
- * Build the z14 aggregate cache with the active colours. Built for the first
- * whole-city overview batch (the desktop prewarm), not at city load: it is a
- * hash aggregate over every row, and a phone never asks for the full city.
- */
-async function rebuildAggCaches() {
-  if (!conn) return
-  hasAggCacheByZoom.clear()
-  const z = AGG_CACHE_ZOOM
-  const gridM = baseSimplifyGridMetersForZoom(z)
-  if (gridM <= 0) return
-  try {
-    await conn.query(aggCacheSql(gridM, colorOverrideActive))
-    hasAggCacheByZoom.add(z)
-  } catch {
-    // runtime fallback stays active
-  }
-}
-
 async function ensureInit(city?: string): Promise<void> {
   if (ready) return
   if (!initPromise) {
@@ -763,9 +774,8 @@ async function ensurePreparedFeatureTableForZoom(z: number, baseQuery: string): 
   if (!conn || z !== PREPARED_FEATURE_TABLE_ZOOM) return
   if (baseQuery !== effectiveBaseQuery(tileQuerySql)) return
 
-  const rev = tileQueryRevision
-  const key = featureTableBuildKey(rev, z)
-  if (preparedFeatureTablesReady.has(key)) return
+  const key = featureTableBuildKey(baseQuery, z)
+  if (preparedFeatureTablesReady.get(z) === key) return
 
   const inflight = inflightFeatureTableBuild.get(key)
   if (inflight) {
@@ -777,13 +787,12 @@ async function ensurePreparedFeatureTableForZoom(z: number, baseQuery: string): 
   const yExpr = tileYExpr('tf', z)
   const table = featureTableName(z)
   const color = colorSql('tf', colorOverrideActive)
+  const src = tileRowSource(baseQuery, color)
 
   const request = (async () => {
     const sql = `
 CREATE OR REPLACE TEMP TABLE ${table} AS
-WITH base AS (
-  ${baseQuery}
-), rows AS (
+${src.prelude} rows AS (
   SELECT
     ${xExpr} AS xtile,
     ${yExpr} AS ytile,
@@ -795,18 +804,15 @@ WITH base AS (
         64,
         true
       ),
-      'id': COALESCE(base.tree_id, tf.tree_id, 'unkwn'),
-      'dbh': TRY_CAST(COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS DOUBLE),
+      'id': ${src.id},
+      'dbh': TRY_CAST(${src.dbh} AS DOUBLE),
       'category': COALESCE(tf.tree_form, 'default'),
       'display_color': ${color.expr},
       'rotation': 0,
       'point_count': 1,
       'grid_m': 32
     } AS feature
-  FROM base
-  INNER JOIN trees_fast tf
-    ON base.tree_id = tf.tree_id
-  ${color.join}
+  FROM ${src.from}
 )
 SELECT xtile, ytile, feature
 FROM rows
@@ -814,13 +820,16 @@ WHERE xtile >= 0
   AND ytile >= 0
   AND xtile < CAST(pow(2, ${z}) AS INTEGER)
   AND ytile < CAST(pow(2, ${z}) AS INTEGER)
-  AND feature.geom IS NOT NULL
-  AND NOT ST_IsEmpty(feature.geom)
 `
+    // No geometry filter here: DuckDB-WASM pushes one into the scan and runs
+    // ST_AsMVTGeom twice per tree (11.4 s against 3.6 s on Boston). A point
+    // clipped to its own tile is never empty; the readers' ST_AsMVT FILTER
+    // keeps the guard.
+    const t0 = nowMs()
     await conn.query(sql)
-    if (rev === tileQueryRevision && key === featureTableBuildKey(tileQueryRevision, z)) {
-      preparedFeatureTablesReady.add(key)
-    }
+    console.info('[Perf] duckdb-worker:feature-table', { z, ms: Math.round(nowMs() - t0) })
+    // CREATE OR REPLACE swapped the table under whatever key was there.
+    preparedFeatureTablesReady.set(z, key)
   })()
 
   inflightFeatureTableBuild.set(key, request)
@@ -838,14 +847,30 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   if (blockSize <= 1) return
 
   const rev = tileQueryRevision
+
+  // A view's tiles arrive in two waves: the first before the main thread has
+  // reported the visible range (batched by block), the rest after (batched by
+  // range). A second aggregate over ground the first is already covering must
+  // wait for it, not start beside it: at z11 each one is most of the city.
+  for (const [key, range] of inflightNeighborhoodRanges) {
+    if (range.rev !== rev || range.z !== z) continue
+    if (x < range.minX || x > range.maxX || y < range.minY || y > range.maxY) continue
+    const pending = inflightNeighborhoodBatch.get(key)
+    if (pending) {
+      await pending
+      return
+    }
+  }
+
   const color = colorSql('tf', colorOverrideActive)
+  const src = tileRowSource(baseQuery, color)
   // The z15 feature table is a whole-city materialisation (one MVT geometry
-  // per tree) that the desktop intro and the LOD prewarm build to serve their
-  // wide prefetch ranges. A tile request reads it when it is there and runs
-  // the direct join otherwise; it never builds it, so a phone, which neither
-  // runs the intro nor prewarms, never pays for it.
+  // per tree) that the desktop's LOD prewarm builds after the intro lands. A
+  // tile request reads it when it is there and runs the direct join
+  // otherwise; it never builds it, so a phone, which never prewarms, never
+  // pays for it.
   const useFeatureTable = z === PREPARED_FEATURE_TABLE_ZOOM
-    && preparedFeatureTablesReady.has(featureTableBuildKey(rev, PREPARED_FEATURE_TABLE_ZOOM))
+    && preparedFeatureTablesReady.get(PREPARED_FEATURE_TABLE_ZOOM) === featureTableBuildKey(baseQuery, PREPARED_FEATURE_TABLE_ZOOM)
   const tileCount = Math.pow(2, z)
   const blockX = Math.floor(x / blockSize)
   const blockY = Math.floor(y / blockSize)
@@ -854,11 +879,13 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   let minY = Math.max(0, blockY * blockSize)
   let maxY = Math.min(tileCount - 1, minY + blockSize - 1)
 
-  // Batch over the reported visible range only when it contains the requested
-  // tile — a stale range (pan or zoom drift since the last report) would
-  // otherwise batch the wrong area and leave the requested tile to a slow
-  // single-tile fallback query.
-  const visibleRange = getVisibleTileRange(z)
+  // At the detail zooms, batch over the reported visible range when it
+  // contains the requested tile — a stale range (pan or zoom drift since the
+  // last report) would otherwise batch the wrong area and leave the requested
+  // tile to a slow single-tile fallback query. The overview zooms keep the
+  // fixed block: a view's first tiles arrive before its range is reported,
+  // and a second aggregate over the range would redo most of the block.
+  const visibleRange = z >= PREPARED_FEATURE_TABLE_ZOOM ? getVisibleTileRange(z) : null
   if (visibleRange
     && x >= visibleRange.minX && x <= visibleRange.maxX
     && y >= visibleRange.minY && y <= visibleRange.maxY) {
@@ -902,26 +929,21 @@ WITH rows AS (
 SELECT
   xtile,
   ytile,
-  ST_AsMVT(feature, 'trees', 4096, 'geom') AS mvt
+  ST_AsMVT(feature, 'trees', 4096, 'geom') FILTER (WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)) AS mvt
 FROM rows
 GROUP BY xtile, ytile
 ` : simplifyGridMeters > 0 ? `
-WITH base AS (
-  ${baseQuery}
-), pts AS (
+${src.prelude} pts AS (
   SELECT
     tf.x_3857,
     tf.y_3857,
     COALESCE(tf.tree_form, 'default') AS category,
     ${color.expr} AS display_color,
-    COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
+    ${src.dbh} AS dbh,
     ${tileXExpr('tf', z)} AS xtile,
     ${tileYExpr('tf', z)} AS ytile
-  FROM base
-  INNER JOIN trees_fast tf
-    ON base.tree_id = tf.tree_id
-  ${color.join}
-  WHERE ${tileXExpr('tf', z)} BETWEEN ${minX} AND ${maxX}
+  FROM ${src.from}
+  WHERE ${src.where}${tileXExpr('tf', z)} BETWEEN ${minX} AND ${maxX}
     AND ${tileYExpr('tf', z)} BETWEEN ${minY} AND ${maxY}
 ), agg AS (
   SELECT
@@ -965,24 +987,19 @@ FROM rows
 WHERE feature.geometry IS NOT NULL AND NOT ST_IsEmpty(feature.geometry)
 GROUP BY xtile, ytile
 ` : `
-WITH base AS (
-  ${baseQuery}
-), pts AS (
+${src.prelude} pts AS (
   SELECT
     tf.x_3857,
     tf.y_3857,
-    COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
-    COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
+    ${src.id} AS id,
+    ${src.dbh} AS dbh,
     COALESCE(tf.tree_form, 'default') AS category,
     ${color.expr} AS display_color,
     0 AS rotation,
     ${tileXExpr('tf', z)} AS xtile,
     ${tileYExpr('tf', z)} AS ytile
-  FROM base
-  INNER JOIN trees_fast tf
-    ON base.tree_id = tf.tree_id
-  ${color.join}
-  WHERE ${tileXExpr('tf', z)} BETWEEN ${minX} AND ${maxX}
+  FROM ${src.from}
+  WHERE ${src.where}${tileXExpr('tf', z)} BETWEEN ${minX} AND ${maxX}
     AND ${tileYExpr('tf', z)} BETWEEN ${minY} AND ${maxY}
 ), rows AS (
   SELECT
@@ -1009,14 +1026,25 @@ WITH base AS (
 SELECT
   xtile,
   ytile,
-  ST_AsMVT(feature, 'trees', 4096, 'geom') AS mvt
+  -- The geometry guard is the aggregate's FILTER, not a WHERE: DuckDB-WASM
+  -- pushes a WHERE on feature.geom into the scan ahead of the tile range and
+  -- runs ST_AsMVTGeom on every tree in the city (8.3 s against 32 ms for a
+  -- four-tile z16 batch on Boston).
+  ST_AsMVT(feature, 'trees', 4096, 'geom') FILTER (WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)) AS mvt
 FROM rows
-WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)
 GROUP BY xtile, ytile
 `
 
+    const t0 = nowMs()
     const result = await conn.query(sql)
     const rows = result.toArray()
+    console.info('[Perf] duckdb-worker:neighborhood-batch', {
+      z,
+      mode: useFeatureTable ? 'feature-table' : simplifyGridMeters > 0 ? `agg${simplifyGridMeters}` : 'points',
+      tiles: (maxX - minX + 1) * (maxY - minY + 1),
+      nonEmpty: rows.length,
+      ms: Math.round(nowMs() - t0),
+    })
 
     if (rev === tileQueryRevision) {
       for (let tx = minX; tx <= maxX; tx += 1) {
@@ -1037,216 +1065,12 @@ GROUP BY xtile, ytile
   })()
 
   inflightNeighborhoodBatch.set(bKey, request)
+  inflightNeighborhoodRanges.set(bKey, { rev, z, minX, maxX, minY, maxY })
   try {
     await request
   } finally {
     inflightNeighborhoodBatch.delete(bKey)
-  }
-}
-
-async function ensureZoomBatchTiles(z: number, baseQuery: string, simplifyGridMeters: number): Promise<void> {
-  if (!conn) return
-  // A prewarm started before a filter change can resume after an await. Never
-  // stamp its old SQL result with the current revision's cache key.
-  if (baseQuery !== effectiveBaseQuery(tileQuerySql)) return
-  const rev = tileQueryRevision
-  const bKey = zoomBatchKey(rev, z)
-  if (zoomBatchReady.has(bKey)) return
-
-  const inflight = inflightZoomBatch.get(bKey)
-  if (inflight) {
-    await inflight
-    return
-  }
-
-  const bounds = getDataTileBounds(z)
-  const boundedFilter = bounds
-    ? `WHERE xtile BETWEEN ${bounds.minX} AND ${bounds.maxX}\n    AND ytile BETWEEN ${bounds.minY} AND ${bounds.maxY}`
-    : `WHERE xtile >= 0\n    AND ytile >= 0\n    AND xtile < CAST(pow(2, ${z}) AS INTEGER)\n    AND ytile < CAST(pow(2, ${z}) AS INTEGER)`
-  if (simplifyGridMeters > 0 && z === AGG_CACHE_ZOOM && isDefaultBaseQuery(baseQuery) && !hasAggCacheByZoom.has(z)) {
-    await rebuildAggCaches()
-  }
-  const useAggCache = simplifyGridMeters > 0 && hasAggCacheByZoom.has(z) && isDefaultBaseQuery(baseQuery)
-  const color = colorSql('tf', colorOverrideActive)
-
-  const request = (async () => {
-    const sql = useAggCache ? `
-WITH agg AS (
-  SELECT
-    xtile,
-    ytile,
-    gx,
-    gy,
-    category,
-    display_color,
-    dbh,
-    point_count
-  FROM agg_z${z}_cache
-  ${boundedFilter}
-), rows AS (
-  SELECT
-    xtile,
-    ytile,
-    {
-      'geometry': ST_AsMVTGeom(
-        ST_Point(gx, gy),
-        ST_Extent(ST_TileEnvelope(${z}, xtile, ytile)),
-        4096,
-        64,
-        true
-      ),
-      'id': -1,
-      'dbh': TRY_CAST(dbh AS DOUBLE),
-      'category': COALESCE(category, 'default'),
-      'display_color': display_color,
-      'rotation': 0,
-      'point_count': TRY_CAST(point_count AS INTEGER),
-      'grid_m': ${simplifyGridMeters}
-    } AS feature
-  FROM agg
-)
-SELECT
-  xtile,
-  ytile,
-  ST_AsMVT(feature, 'trees', 4096, 'geometry') AS mvt
-FROM rows
-WHERE feature.geometry IS NOT NULL AND NOT ST_IsEmpty(feature.geometry)
-GROUP BY xtile, ytile
-` : simplifyGridMeters > 0 ? `
-WITH base AS (
-  ${baseQuery}
-), pts AS (
-  SELECT
-    tf.x_3857,
-    tf.y_3857,
-    COALESCE(tf.tree_form, 'default') AS category,
-    ${color.expr} AS display_color,
-    COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
-    ${tileXExpr('tf', z)} AS xtile,
-    ${tileYExpr('tf', z)} AS ytile
-  FROM base
-  INNER JOIN trees_fast tf
-    ON base.tree_id = tf.tree_id
-  ${color.join}
-), bounded AS (
-  SELECT *
-  FROM pts
-  ${boundedFilter}
-), agg AS (
-  SELECT
-    xtile,
-    ytile,
-    floor(x_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gx,
-    floor(y_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gy,
-    category,
-    display_color,
-    AVG(dbh) AS dbh,
-    COUNT(*) AS point_count
-  FROM bounded
-  GROUP BY 1, 2, 3, 4, 5, 6
-), rows AS (
-  SELECT
-    xtile,
-    ytile,
-    {
-      'geometry': ST_AsMVTGeom(
-        ST_Point(gx, gy),
-        ST_Extent(ST_TileEnvelope(${z}, xtile, ytile)),
-        4096,
-        64,
-        true
-      ),
-      'id': -1,
-      'dbh': TRY_CAST(dbh AS DOUBLE),
-      'category': COALESCE(category, 'default'),
-      'display_color': display_color,
-      'rotation': 0,
-      'point_count': TRY_CAST(point_count AS INTEGER),
-      'grid_m': ${simplifyGridMeters}
-    } AS feature
-  FROM agg
-)
-SELECT
-  xtile,
-  ytile,
-  ST_AsMVT(feature, 'trees', 4096, 'geometry') AS mvt
-FROM rows
-WHERE feature.geometry IS NOT NULL AND NOT ST_IsEmpty(feature.geometry)
-GROUP BY xtile, ytile
-` : `
-WITH base AS (
-  ${baseQuery}
-), points AS (
-  SELECT
-    tf.x_3857,
-    tf.y_3857,
-    COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
-    COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
-    COALESCE(tf.tree_form, 'default') AS category,
-    ${color.expr} AS display_color,
-    0 AS rotation,
-    ${tileXExpr('tf', z)} AS xtile,
-    ${tileYExpr('tf', z)} AS ytile
-  FROM base
-  INNER JOIN trees_fast tf
-    ON base.tree_id = tf.tree_id
-  ${color.join}
-), bounded AS (
-  SELECT *
-  FROM points
-  ${boundedFilter}
-), rows AS (
-  SELECT
-    xtile,
-    ytile,
-    {
-      'geom': ST_AsMVTGeom(
-        ST_Point(x_3857, y_3857),
-        ST_Extent(ST_TileEnvelope(${z}, xtile, ytile)),
-        4096,
-        64,
-        true
-      ),
-      'id': id,
-      'dbh': TRY_CAST(dbh AS DOUBLE),
-      'category': category,
-      'display_color': display_color,
-      'rotation': rotation,
-      'point_count': 1,
-      'grid_m': 32
-    } AS feature
-  FROM bounded
-)
-SELECT
-  xtile,
-  ytile,
-  ST_AsMVT(feature, 'trees', 4096, 'geom') AS mvt
-FROM rows
-WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)
-GROUP BY xtile, ytile
-`
-
-    const result = await conn.query(sql)
-    const rows = result.toArray()
-    if (rev === tileQueryRevision) {
-      for (const row of rows) {
-        const xtile = Number(row.xtile)
-        const ytile = Number(row.ytile)
-        const raw = row.mvt as Uint8Array | undefined
-        const tile = !raw || raw.length === 0
-          ? new Uint8Array()
-          : new Uint8Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength))
-        setCachedTile(tileCacheKeyForRevision(rev, z, xtile, ytile), tile)
-      }
-      zoomBatchReady.add(bKey)
-    }
-  })()
-
-  inflightZoomBatch.set(bKey, request)
-  try {
-    await request
-  } finally {
-    inflightZoomBatch.delete(bKey)
+    inflightNeighborhoodRanges.delete(bKey)
   }
 }
 
@@ -1266,21 +1090,12 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
   const baseQuery = effectiveBaseQuery(tileQuerySql)
   const { simplifyGridMeters } = adaptiveLodForTile(z, x, y)
   const bounds = tileBounds3857(z, x, y)
-  const batchKey = zoomBatchKey(tileQueryRevision, z)
   const color = colorSql('tf', colorOverrideActive)
+  const src = tileRowSource(baseQuery, color)
 
-  // A whole-city overview batch exists only when the desktop prewarm built
-  // it. Nothing else asks for the full city at once: an overview tile on a
-  // phone is served from an aggregate over the visible neighbourhood, whose
-  // transient memory is proportional to the viewport, not the city.
-  if (shouldUseZoomBatch(z) && zoomBatchReady.has(batchKey)) {
-    const batched = getCachedTile(key)
-    if (batched) return batched
-    const emptyTile = new Uint8Array()
-    setCachedTile(key, emptyTile)
-    return new Uint8Array(emptyTile)
-  }
-
+  // An overview tile (z11 to z14) is served from an aggregate over the
+  // visible neighbourhood, never the whole city: the transient is
+  // proportional to the viewport, and the cell size follows the pixel.
   if (shouldUseZoomBatch(z) || (simplifyGridMeters === 0 && z >= 15)) {
     await ensureNeighborhoodBatchTiles(z, x, y, baseQuery, simplifyGridMeters)
     const neighborBatched = getCachedTile(key)
@@ -1289,20 +1104,15 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
 
   const request = (async () => {
     const sql = simplifyGridMeters > 0 ? `
-WITH base AS (
-  ${baseQuery}
-), pts AS (
+${src.prelude} pts AS (
   SELECT
     tf.x_3857,
     tf.y_3857,
     COALESCE(tf.tree_form, 'default') AS category,
     ${color.expr} AS display_color,
-    COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh
-  FROM base
-  INNER JOIN trees_fast tf
-    ON base.tree_id = tf.tree_id
-  ${color.join}
-  WHERE tf.x_3857 BETWEEN ${bounds.minX} AND ${bounds.maxX}
+    ${src.dbh} AS dbh
+  FROM ${src.from}
+  WHERE ${src.where}tf.x_3857 BETWEEN ${bounds.minX} AND ${bounds.maxX}
     AND tf.y_3857 BETWEEN ${bounds.minY} AND ${bounds.maxY}
 ), agg AS (
   SELECT
@@ -1337,12 +1147,10 @@ SELECT ST_AsMVT(feature, 'trees', 4096, 'geometry') AS mvt
 FROM tiles
 WHERE feature.geometry IS NOT NULL AND NOT ST_IsEmpty(feature.geometry)
 ` : `
-WITH base AS (
-  ${baseQuery}
-), points AS (
+${src.prelude} points AS (
   SELECT
-    COALESCE(base.tree_id, tf.tree_id, 'unkwn') AS id,
-    COALESCE(base.diameter_at_breast_height, tf.dbh, 3) AS dbh,
+    ${src.id} AS id,
+    ${src.dbh} AS dbh,
     COALESCE(tf.tree_form, 'default') AS category,
     ${color.expr} AS display_color,
     0 AS rotation,
@@ -1355,11 +1163,8 @@ WITH base AS (
       64,
       true
     ) AS geom
-  FROM base
-  INNER JOIN trees_fast tf
-    ON base.tree_id = tf.tree_id
-  ${color.join}
-  WHERE tf.x_3857 BETWEEN ${bounds.minX} AND ${bounds.maxX}
+  FROM ${src.from}
+  WHERE ${src.where}tf.x_3857 BETWEEN ${bounds.minX} AND ${bounds.maxX}
     AND tf.y_3857 BETWEEN ${bounds.minY} AND ${bounds.maxY}
   LIMIT 50000
 )
@@ -1385,16 +1190,16 @@ WHERE geom IS NOT NULL
   }
 }
 
-function invalidateTileCaches() {
+function invalidateTileCaches(reason: string) {
+  console.info('[Perf] duckdb-worker:invalidate', { reason, revision: tileQueryRevision })
   tileCache.clear()
   emptyTileKeys.clear()
   persistentTileCacheKeys.clear()
   inflightTileRequests.clear()
-  zoomBatchReady.clear()
-  inflightZoomBatch.clear()
   inflightNeighborhoodBatch.clear()
-  preparedFeatureTablesReady.clear()
-  inflightFeatureTableBuild.clear()
+  inflightNeighborhoodRanges.clear()
+  // Feature tables are keyed by content, not revision: a table built for
+  // this query, filter and colour set is still right after a republish.
   visibleTileRangeByZoom.clear()
   prefetchedVisibleRangeSigByZoom.clear()
   prewarmDoneRevision = -1
@@ -1402,15 +1207,24 @@ function invalidateTileCaches() {
 }
 
 function setTileQuery(sql: string | null) {
+  // The map republishes its query on every configuration pass, most of them
+  // with the same SQL. Bumping the revision then throws away every tile and
+  // batch and rebuilds the z15 feature table (20 s for a 1.5M-row city) for
+  // rows that did not change.
+  if (normalizeSql(sql ?? '') === normalizeSql(tileQuerySql ?? '')) return
   tileQuerySql = sql
   tileQueryRevision += 1
-  invalidateTileCaches()
+  invalidateTileCaches('tile-query')
 }
 
 async function setPublishedTreeIdFilterSql(sql: string | null) {
   await ensureInit()
   if (!conn) return
   const normalized = sql?.trim() || null
+  // Every configuration pass republishes the filter, usually unchanged (most
+  // often: none, as before). Rebuilding the table then invalidating every
+  // tile for the same rows cost the desktop a second z15 feature table.
+  if ((normalized ?? '') === (publishedTreeIdFilterSql ?? '')) return
 
   await conn.query(`DROP TABLE IF EXISTS ${PUBLISHED_TREE_FILTER_TABLE}`)
 
@@ -1440,7 +1254,7 @@ WHERE tree_id IS NOT NULL
     publishedTreeIdFilterSignature = 'all'
   }
 
-  invalidateTileCaches()
+  invalidateTileCaches('tree-filter')
 }
 
 async function setColorOverrideSql(sql: string | null) {
@@ -1488,8 +1302,7 @@ ${color.join}
     await clearColorOverride()
   }
 
-  await dropAggCaches()
-  invalidateTileCaches()
+  invalidateTileCaches('color-override')
   postColorMapUpdate()
 }
 
@@ -1526,7 +1339,7 @@ async function setCityContext(city: string) {
   if (loadedCity !== city) {
     resetCityReadyGate()
     await loadCityTrees(city)
-    invalidateTileCaches()
+    invalidateTileCaches('city-load')
   }
 
   activeCityDefaultQuery = `
@@ -1541,7 +1354,7 @@ WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND city = '${city}'
 `
   await clearColorOverride()
   await rebuildCityBounds()
-  invalidateTileCaches()
+  invalidateTileCaches('city-context')
   postColorMapUpdate()
   // All city tables are ready — unblock tile generation and queries.
   signalCityReady()
@@ -1585,10 +1398,11 @@ async function prefetchVisibleDetailTilesAtZoom(z: number, rangeOverride?: TileB
   const sig = `${tileQueryRevision}:${treeFilterSignature()}:${z}:${range.minX}-${range.maxX}:${range.minY}-${range.maxY}`
   if (prefetchedVisibleRangeSigByZoom.get(z) === sig) return 'deduped'
 
+  // The visible range only: the intro gates its motion on this, and the
+  // whole-city z15 feature table (20 to 100 s of wasm on Boston) held the
+  // camera at the start pose until it finished. The prewarm builds it once
+  // the intro has landed; until then the range is a points batch.
   const baseQuery = effectiveBaseQuery(tileQuerySql)
-  if (z === PREPARED_FEATURE_TABLE_ZOOM) {
-    await ensurePreparedFeatureTableForZoom(PREPARED_FEATURE_TABLE_ZOOM, baseQuery)
-  }
 
   const centerX = Math.floor((range.minX + range.maxX) / 2)
   const centerY = Math.floor((range.minY + range.maxY) / 2)
@@ -1610,6 +1424,8 @@ async function prewarmLodCaches(): Promise<void> {
   }
 
   const baseQuery = effectiveBaseQuery(tileQuerySql)
+  const prewarmStartedAt = nowMs()
+  console.info('[Perf] duckdb-worker:prewarm:start', { zoom: Math.floor(activeViewportZoom) })
   prewarmPromise = (async () => {
     const viewport = activeViewportCenter
     const focusZoom = Math.max(PREPARED_FEATURE_TABLE_ZOOM, Math.min(19, Math.floor(activeViewportZoom)))
@@ -1638,12 +1454,11 @@ async function prewarmLodCaches(): Promise<void> {
       await ensureNeighborhoodBatchTiles(PREPARED_FEATURE_TABLE_ZOOM, c15.x, c15.y, baseQuery)
     }
 
-    await ensureZoomBatchTiles(14, baseQuery, 32)
-    await ensureZoomBatchTiles(13, baseQuery, 32)
 
     if (tileQueryRevision === rev) {
       prewarmDoneRevision = rev
     }
+    console.info('[Perf] duckdb-worker:prewarm:done', { ms: Math.round(nowMs() - prewarmStartedAt), stale: tileQueryRevision !== rev })
   })()
 
   try {
@@ -1836,7 +1651,7 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       }
       case 'invalidateTileCaches': {
-        invalidateTileCaches()
+        invalidateTileCaches('rpc')
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }
