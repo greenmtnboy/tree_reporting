@@ -162,18 +162,23 @@ renderer's memory. Boston, desktop 1400x900, each build served from
 localhost against the same live data (1.57M rows, 62% of them predicted;
 the stage 1 table above measured Boston at 404k):
 
-| Step | Before stage 1 (f380c0c) | Stage 1 + 1b | After this work |
-|---|---:|---:|---:|
-| Trees on screen | 50 s | 19 to 29 s | 11 to 14 s |
-| Intro lands | 66 s | 51 to 75 s | after 120 s (see below) |
-| z11 settles | 13.1 s | 16.3 to 22.7 s | 2.6 s |
-| z12 | 4.8 s | 7.8 to 8.6 s | 2.9 s |
-| z13 | 1.6 s | 2.0 to 2.8 s | 2.4 s |
-| pan at z13 | 0.4 s | 1.5 to 1.7 s | 0.3 s |
-| z14 | 1.0 s | 1.7 to 2.2 s | 3.3 s |
-| z15 | 0.65 s | 2.0 to 2.5 s | 1.1 s |
-| Whole walk | 24.1 s | 36.5 to 40.0 s | 15.2 s |
-| Renderer peak | 2,029 MB | 2,072 to 2,082 MB | 1,772 MB |
+| Step | Before stage 1 (f380c0c) | Stage 1 + 1b | Batching fixes | + intro fix |
+|---|---:|---:|---:|---:|
+| Trees on screen | 50 s | 19 to 29 s | 11 to 14 s | 7 to 10 s |
+| Intro lands | 66 s | 51 to 75 s | after 120 s | 18 to 22 s |
+| z11 settles | 13.1 s | 16.3 to 22.7 s | 2.6 s | 3.6 to 3.8 s |
+| z12 | 4.8 s | 7.8 to 8.6 s | 2.9 s | 2.9 to 3.1 s |
+| z13 | 1.6 s | 2.0 to 2.8 s | 2.4 s | 1.2 to 2.1 s |
+| pan at z13 | 0.4 s | 1.5 to 1.7 s | 0.3 s | 0.3 s |
+| z14 | 1.0 s | 1.7 to 2.2 s | 3.3 s | 2.8 to 3.4 s |
+| z15 | 0.65 s | 2.0 to 2.5 s | 1.1 s | 0.65 to 2.4 s |
+| Whole walk | 24.1 s | 36.5 to 40.0 s | 15.2 s | 16.8 to 17.0 s |
+| Renderer peak | 2,029 MB | 2,072 to 2,082 MB | 1,772 MB | 1,659 to 1,663 MB |
+
+The "batching fixes" column walked the map two minutes after the load,
+once the prewarm had long finished; the last column walks it as soon as
+the intro lands, so its first steps share the connection with the
+prewarm's last few seconds.
 
 What the worker's `[Perf]` timeline showed on the stage 1 build, in order
 of cost:
@@ -226,11 +231,45 @@ instantly after its 27 s stall; a pan within the block is free. Dropping
 the feature table saves another 360 MB of peak but makes a z15 view cost
 12 s, so it stays.
 
-Open: the intro lands later than before, because trees appear at 11 s and
-the fly-out then shares the connection with the prewarm (85 s on Boston,
-most of it the feature table under contention). Deferring the prewarm
-until the intro has landed, or splitting the feature table out of it, is
-the follow-up; measure it with the bench's "intro lands" line.
+### The intro
+
+The batching fixes left the desktop intro held at its start pose for over
+two minutes. The cause had been there since the intro was written and
+grew with the city: Boston went from 404k rows to 1.57M when the predicted
+partition went live.
+
+- The intro gates its motion on a prefetch of the z15 and z16 tiles in
+  view, and the z15 prefetch built the whole-city z15 feature table first.
+- The prewarm started at the same moment, and the worker has one
+  connection, so every query queued behind the other.
+- Each "four-tile" points batch cost 8 to 15 s. `EXPLAIN ANALYZE` in the
+  browser showed why: DuckDB-WASM (1.33) pushes the outer
+  `WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)` into
+  the scan, ahead of the tile-range filter, and runs `ST_AsMVTGeom` on
+  every tree in the city to keep 1,585. Native DuckDB 1.5 orders the same
+  filter correctly (82 ms), so a native profile never shows it.
+
+What changed:
+
+- The points batch and the feature-table reader carry the geometry guard
+  as the aggregate's `FILTER (WHERE ...)`, which cannot be pushed down:
+  8.3 s to 32 ms for a four-tile z16 batch, same bytes. The feature table
+  drops the guard (a point clipped to its own tile is never empty; 0 of
+  1,573,245 were): 11.4 s to 3.6 s, where the filter ran the geometry
+  twice. The aggregate modes filter above their GROUP BY, which already
+  stops the pushdown.
+- The intro's z15 prefetch batches the visible range only and no longer
+  builds the feature table.
+- The prewarm, which still builds it, starts once the intro has landed
+  (or at once after a city switch, which has no intro).
+
+On Boston the intro now starts moving one to two seconds after the
+trees appear, lands 10 s later (the animation's length), and the prewarm is
+done 7 to 10 s after that. The phone layout's walk settles in 10.5 s.
+
+Worth re-measuring: the 12 s z15 view that kept the feature table (above)
+was a points batch, and so paid the same pushdown. With it fixed the
+table may no longer earn its 360 MB.
 
 ## Stage 2: cells
 

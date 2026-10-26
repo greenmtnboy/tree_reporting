@@ -820,9 +820,11 @@ WHERE xtile >= 0
   AND ytile >= 0
   AND xtile < CAST(pow(2, ${z}) AS INTEGER)
   AND ytile < CAST(pow(2, ${z}) AS INTEGER)
-  AND feature.geom IS NOT NULL
-  AND NOT ST_IsEmpty(feature.geom)
 `
+    // No geometry filter here: DuckDB-WASM pushes one into the scan and runs
+    // ST_AsMVTGeom twice per tree (11.4 s against 3.6 s on Boston). A point
+    // clipped to its own tile is never empty; the readers' ST_AsMVT FILTER
+    // keeps the guard.
     const t0 = nowMs()
     await conn.query(sql)
     console.info('[Perf] duckdb-worker:feature-table', { z, ms: Math.round(nowMs() - t0) })
@@ -863,10 +865,10 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   const color = colorSql('tf', colorOverrideActive)
   const src = tileRowSource(baseQuery, color)
   // The z15 feature table is a whole-city materialisation (one MVT geometry
-  // per tree) that the desktop intro and the LOD prewarm build to serve their
-  // wide prefetch ranges. A tile request reads it when it is there and runs
-  // the direct join otherwise; it never builds it, so a phone, which neither
-  // runs the intro nor prewarms, never pays for it.
+  // per tree) that the desktop's LOD prewarm builds after the intro lands. A
+  // tile request reads it when it is there and runs the direct join
+  // otherwise; it never builds it, so a phone, which never prewarms, never
+  // pays for it.
   const useFeatureTable = z === PREPARED_FEATURE_TABLE_ZOOM
     && preparedFeatureTablesReady.get(PREPARED_FEATURE_TABLE_ZOOM) === featureTableBuildKey(baseQuery, PREPARED_FEATURE_TABLE_ZOOM)
   const tileCount = Math.pow(2, z)
@@ -927,7 +929,7 @@ WITH rows AS (
 SELECT
   xtile,
   ytile,
-  ST_AsMVT(feature, 'trees', 4096, 'geom') AS mvt
+  ST_AsMVT(feature, 'trees', 4096, 'geom') FILTER (WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)) AS mvt
 FROM rows
 GROUP BY xtile, ytile
 ` : simplifyGridMeters > 0 ? `
@@ -1024,9 +1026,12 @@ ${src.prelude} pts AS (
 SELECT
   xtile,
   ytile,
-  ST_AsMVT(feature, 'trees', 4096, 'geom') AS mvt
+  -- The geometry guard is the aggregate's FILTER, not a WHERE: DuckDB-WASM
+  -- pushes a WHERE on feature.geom into the scan ahead of the tile range and
+  -- runs ST_AsMVTGeom on every tree in the city (8.3 s against 32 ms for a
+  -- four-tile z16 batch on Boston).
+  ST_AsMVT(feature, 'trees', 4096, 'geom') FILTER (WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)) AS mvt
 FROM rows
-WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)
 GROUP BY xtile, ytile
 `
 
@@ -1393,10 +1398,11 @@ async function prefetchVisibleDetailTilesAtZoom(z: number, rangeOverride?: TileB
   const sig = `${tileQueryRevision}:${treeFilterSignature()}:${z}:${range.minX}-${range.maxX}:${range.minY}-${range.maxY}`
   if (prefetchedVisibleRangeSigByZoom.get(z) === sig) return 'deduped'
 
+  // The visible range only: the intro gates its motion on this, and the
+  // whole-city z15 feature table (20 to 100 s of wasm on Boston) held the
+  // camera at the start pose until it finished. The prewarm builds it once
+  // the intro has landed; until then the range is a points batch.
   const baseQuery = effectiveBaseQuery(tileQuerySql)
-  if (z === PREPARED_FEATURE_TABLE_ZOOM) {
-    await ensurePreparedFeatureTableForZoom(PREPARED_FEATURE_TABLE_ZOOM, baseQuery)
-  }
 
   const centerX = Math.floor((range.minX + range.maxX) / 2)
   const centerY = Math.floor((range.minY + range.maxY) / 2)
