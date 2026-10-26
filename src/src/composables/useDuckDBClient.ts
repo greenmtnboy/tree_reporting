@@ -16,7 +16,7 @@ type WorkerMethodMap = {
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
   setVisibleTileRange: { params: { z: number; minX: number; maxX: number; minY: number; maxY: number }; result: void }
-  prefetchVisibleDetailTilesAtZoom: { params: { z: number; range?: TileRangeParams }; result: PrefetchStatus }
+  prefetchVisibleTilesAtZoom: { params: { z: number; range?: TileRangeParams }; result: PrefetchStatus }
   prewarmLodCaches: { params: Record<string, never>; result: void }
   setAutoTileFetchEnabled: { params: { enabled: boolean }; result: void }
   invalidateTileCaches: { params: Record<string, never>; result: void }
@@ -122,7 +122,7 @@ function parseDuckdbTileUrl(url: string): { z: number; x: number; y: number } | 
 }
 
 function fireAndForget<K extends Exclude<keyof WorkerMethodMap,
-  'ensureInit' | 'prefetchVisibleDetailTilesAtZoom' | 'prewarmLodCaches' | 'query' | 'getTile'>>(
+  'ensureInit' | 'prefetchVisibleTilesAtZoom' | 'prewarmLodCaches' | 'query' | 'getTile'>>(
     method: K,
     params: WorkerMethodMap[K]['params'],
   ): void {
@@ -183,9 +183,9 @@ function setVisibleTileRange(z: number, minX: number, maxX: number, minY: number
   fireAndForget('setVisibleTileRange', { z, minX, maxX, minY, maxY })
 }
 
-async function prefetchVisibleDetailTilesAtZoom(z: number, range?: TileRangeParams): Promise<PrefetchStatus> {
+async function prefetchVisibleTilesAtZoom(z: number, range?: TileRangeParams): Promise<PrefetchStatus> {
   await ensureInit()
-  return rpc('prefetchVisibleDetailTilesAtZoom', { z, range })
+  return rpc('prefetchVisibleTilesAtZoom', { z, range })
 }
 
 async function prewarmLodCaches(): Promise<void> {
@@ -260,7 +260,7 @@ export function useDuckDB() {
     setViewportZoom,
     setViewportCenter,
     setVisibleTileRange,
-    prefetchVisibleDetailTilesAtZoom,
+    prefetchVisibleTilesAtZoom,
     prewarmLodCaches,
     setAutoTileFetchEnabled,
     invalidateTileCaches,

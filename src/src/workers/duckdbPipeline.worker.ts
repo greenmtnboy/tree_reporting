@@ -840,7 +840,7 @@ WHERE xtile >= 0
   }
 }
 
-async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, baseQuery: string, simplifyGridMeters = 0): Promise<void> {
+async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, baseQuery: string, simplifyGridMeters = 0, explicitRange?: TileBounds): Promise<void> {
   if (!conn) return
   if (baseQuery !== effectiveBaseQuery(tileQuerySql)) return
   const blockSize = neighborhoodBlockSizeForZoom(z)
@@ -852,7 +852,8 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   // reported the visible range (batched by block), the rest after (batched by
   // range). A second aggregate over ground the first is already covering must
   // wait for it, not start beside it: at z11 each one is most of the city.
-  for (const [key, range] of inflightNeighborhoodRanges) {
+  // An explicit range is the intro's whole footprint and runs regardless.
+  for (const [key, range] of explicitRange ? [] : inflightNeighborhoodRanges) {
     if (range.rev !== rev || range.z !== z) continue
     if (x < range.minX || x > range.maxX || y < range.minY || y > range.maxY) continue
     const pending = inflightNeighborhoodBatch.get(key)
@@ -874,10 +875,10 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   const tileCount = Math.pow(2, z)
   const blockX = Math.floor(x / blockSize)
   const blockY = Math.floor(y / blockSize)
-  let minX = Math.max(0, blockX * blockSize)
-  let maxX = Math.min(tileCount - 1, minX + blockSize - 1)
-  let minY = Math.max(0, blockY * blockSize)
-  let maxY = Math.min(tileCount - 1, minY + blockSize - 1)
+  let minX = Math.max(0, explicitRange ? explicitRange.minX : blockX * blockSize)
+  let maxX = Math.min(tileCount - 1, explicitRange ? explicitRange.maxX : minX + blockSize - 1)
+  let minY = Math.max(0, explicitRange ? explicitRange.minY : blockY * blockSize)
+  let maxY = Math.min(tileCount - 1, explicitRange ? explicitRange.maxY : minY + blockSize - 1)
 
   // At the detail zooms, batch over the reported visible range when it
   // contains the requested tile — a stale range (pan or zoom drift since the
@@ -885,7 +886,7 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   // tile to a slow single-tile fallback query. The overview zooms keep the
   // fixed block: a view's first tiles arrive before its range is reported,
   // and a second aggregate over the range would redo most of the block.
-  const visibleRange = z >= PREPARED_FEATURE_TABLE_ZOOM ? getVisibleTileRange(z) : null
+  const visibleRange = !explicitRange && z >= PREPARED_FEATURE_TABLE_ZOOM ? getVisibleTileRange(z) : null
   if (visibleRange
     && x >= visibleRange.minX && x <= visibleRange.maxX
     && y >= visibleRange.minY && y <= visibleRange.maxY) {
@@ -1383,10 +1384,25 @@ function setVisibleTileRange(z: number, minX: number, maxX: number, minY: number
   })
 }
 
-async function prefetchVisibleDetailTilesAtZoom(z: number, rangeOverride?: TileBounds): Promise<PrefetchStatus> {
+async function prefetchVisibleTilesAtZoom(z: number, rangeOverride?: TileBounds): Promise<PrefetchStatus> {
   await ensureInit()
   await waitForCityContext()
-  if (!conn || !spatialExtensionReady || z < 15) return 'skipped'
+  if (!conn || !spatialExtensionReady || !shouldUseZoomBatch(z) && z < PREPARED_FEATURE_TABLE_ZOOM) return 'skipped'
+
+  // An overview zoom's tile requests batch fixed 4x4 blocks, and each block's
+  // aggregate scans the city: the intro's footprint at z14 spans six of them
+  // (7.3 s on Boston). The range is warmed as one aggregate instead, and it
+  // is passed in, never stored, because the main thread's range reports for
+  // these zooms drive nothing else. The intro holds its camera on this.
+  if (z < PREPARED_FEATURE_TABLE_ZOOM) {
+    if (!rangeOverride) return 'skipped'
+    const sig = `${tileQueryRevision}:${treeFilterSignature()}:${z}:${rangeOverride.minX}-${rangeOverride.maxX}:${rangeOverride.minY}-${rangeOverride.maxY}`
+    if (prefetchedVisibleRangeSigByZoom.get(z) === sig) return 'deduped'
+    const { simplifyGridMeters } = adaptiveLodForTile(z, rangeOverride.minX, rangeOverride.minY)
+    await ensureNeighborhoodBatchTiles(z, rangeOverride.minX, rangeOverride.minY, effectiveBaseQuery(tileQuerySql), simplifyGridMeters, rangeOverride)
+    prefetchedVisibleRangeSigByZoom.set(z, sig)
+    return 'executed'
+  }
 
   if (rangeOverride) {
     setVisibleTileRange(z, rangeOverride.minX, rangeOverride.maxX, rangeOverride.minY, rangeOverride.maxY)
@@ -1533,7 +1549,7 @@ type WorkerMethodMap = {
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
   setVisibleTileRange: { params: { z: number; minX: number; maxX: number; minY: number; maxY: number }; result: void }
-  prefetchVisibleDetailTilesAtZoom: {
+  prefetchVisibleTilesAtZoom: {
     params: { z: number; range?: { minX: number; maxX: number; minY: number; maxY: number } }
     result: PrefetchStatus
   }
@@ -1633,9 +1649,9 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }
-      case 'prefetchVisibleDetailTilesAtZoom': {
-        const { z, range } = msg.params as WorkerMethodMap['prefetchVisibleDetailTilesAtZoom']['params']
-        const status = await prefetchVisibleDetailTilesAtZoom(z, range)
+      case 'prefetchVisibleTilesAtZoom': {
+        const { z, range } = msg.params as WorkerMethodMap['prefetchVisibleTilesAtZoom']['params']
+        const status = await prefetchVisibleTilesAtZoom(z, range)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: status })
         break
       }
