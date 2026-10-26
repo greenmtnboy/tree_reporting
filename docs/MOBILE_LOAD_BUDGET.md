@@ -267,6 +267,30 @@ On Boston the intro now starts moving one to two seconds after the
 trees appear, lands 10 s later (the animation's length), and the prewarm is
 done 7 to 10 s after that. The phone layout's walk settles in 10.5 s.
 
+### The fly-out's own levels
+
+Once the intro moved again its trees vanished on the way out. Tile
+fetching is paused while the camera moves, so a tile not already in the
+worker's cache is answered empty (with a 1.5 s expiry), and only z16 and
+z15 were warmed. On Boston the map was blank from z14.7 through landing
+and for 4 s after it, and the city view filled in 6 s after landing.
+
+The intro now predicts the footprint it will show at each level below the
+sprites (z15, z14, z13) from its start pose: the canvas corners, scaled
+with the zoom and turned with the bearing along the path, padded a quarter
+tile. It warms those ranges nearest first, each as one aggregate (an
+overview zoom's tile requests batch fixed 4x4 blocks, and Boston's z14
+footprint spans six of them: 7.3 s, against 2.1 to 2.6 s for the range).
+The camera brakes to a hover above any level not yet warm and speeds up
+again once it is; a level still cold after 15 s is entered anyway.
+
+On Boston the predicted ranges match the tiles MapLibre requested exactly,
+the fly-out never holds, it lands in 10.6 to 11.0 s after the trees
+appear (10.2 s before) and the trees stay on screen the whole way down.
+`src/tests/introFlyOut.test.ts` pins both halves without a browser: the
+footprint against the tiles requested from that start pose, and the
+pacing, which must not show a level before its gate opens.
+
 Worth re-measuring: the 12 s z15 view that kept the feature table (above)
 was a points batch, and so paid the same pushdown. With it fixed the
 table may no longer earn its 360 MB.

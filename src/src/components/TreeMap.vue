@@ -448,7 +448,7 @@ const {
   setViewportZoom,
   setViewportCenter,
   setVisibleTileRange,
-  prefetchVisibleDetailTilesAtZoom,
+  prefetchVisibleTilesAtZoom,
   prewarmLodCaches,
   setAutoTileFetchEnabled,
   invalidateTileCaches,
@@ -741,7 +741,7 @@ function updateZoomLevel() {
         lastVisibleRangeSigByZoom.set(targetZoom, rangeSig)
         setVisibleTileRange(targetZoom, minX, maxX, minY, maxY)
         if (introActive.value && targetZoom >= 15) {
-          void prefetchVisibleDetailTilesAtZoom(targetZoom, { minX, maxX, minY, maxY })
+          void prefetchVisibleTilesAtZoom(targetZoom, { minX, maxX, minY, maxY })
             .then((status) => { recordIntroPrefetchStatus(targetZoom, status) })
             .catch((err) => { console.warn('[Perf] map:intro-prefetch:failed', { z: targetZoom, err }) })
         }
@@ -777,7 +777,7 @@ const { loadingMessage, runIntroZoomOut, cancelIntro, runGlobeSwoopTo, recordInt
   onIntroFinished: lifecycleIntroFinished,
   setAutoTileFetchEnabled,
   setVisibleTileRange,
-  prefetchVisibleDetailTilesAtZoom,
+  prefetchVisibleTilesAtZoom,
   updateZoomLevel,
   computeVisibleTileRangeForZoom,
   setMapInteractions,
