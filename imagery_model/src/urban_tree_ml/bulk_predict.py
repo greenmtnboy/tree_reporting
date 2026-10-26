@@ -20,13 +20,31 @@ dies loses at most the tile it was on:
 
 ``predict``
     Runs planned tiles through ``point_predict.predict_tile`` -- the
-    reviewer's own fetch, decode and bundle path, so a staged row is what the
-    reviewer shows for that tile -- inside a time budget, and writes one small
-    JSON per tile under ``<out>/tiles``.  Run it again to continue; a tile
+    reviewer's own fetch, decode and bundle path -- inside a time budget, and
+    writes one small JSON per tile under ``<out>/tiles``.  Each tile is
+    predicted in context (``point_predict.context_image``): four chip-sized
+    windows a quarter tile outside it, each keeping its middle half, so no
+    detection comes from within a quarter tile of a window edge.  A tile
+    predicted alone piles low-score detections on its border (Boston's v13
+    pass: 5x the interior density in the outer 0.6 m).  It costs four passes
+    a tile; ``--no-context`` predicts tiles alone, as the reviewer's
+    "Predict at" does.  Run it again to continue; a tile
     already written is skipped.  NAIP windows are cached under
-    ``artifacts/point-tiles`` and a cached tile is found from the plan's UTM
+    ``artifacts/point-tiles/coverage-v2`` and a cached tile is found from the plan's UTM
     zone, so predicting again with a later run neither reads imagery nor
     searches the STAC catalog (it uses the newest year cached).
+
+    After the coverage fix, use ``--refresh-imagery --year 2023`` to rerun
+    legacy records, including status=ok. This is opt-in and resumes across
+    batches: records stamped with the new imagery version are skipped.
+    Without ``--tile-list`` this refreshes ALL legacy records, not just known
+    blank strips. For a scoped repair, ``--tile-list selection.json`` accepts
+    a JSON array of plan record stems, e.g. ["2084_30525", "2074_30515"]. Include
+    neighbouring prediction tiles when their context windows used damaged
+    imagery. Old image caches remain intact; rebuilding predictions replaces
+    selected records, so back up tiles/ first if retaining old outputs matters.
+    Neither option assembles, uploads, or publishes anything. Deploy this code
+    to the prediction host first: run-bundle transfers model files, not code.
 
 ``assemble``
     Keeps the detections at or above ``--threshold``, drops the second of two
@@ -88,9 +106,11 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import itertools
 import json
 import math
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -99,7 +119,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Iterable
 
-from urban_tree_ml.point_predict import INGEST_PATH, PARQUET_URL, city_boxes, owning_city
+from urban_tree_ml.point_predict import IMAGERY_CACHE_VERSION, INGEST_PATH, PARQUET_URL, city_boxes, owning_city
 
 ID_PREFIX = "pred-"
 MODEL_CROWN_METHOD = "model_crown_head"
@@ -365,6 +385,87 @@ def tile_path(out: Path, tile: dict[str, Any]) -> Path:
     return out / "tiles" / f"{tile['i']}_{tile['j']}.json"
 
 
+def prediction_pending(path: Path, *, retry_errors: bool = False, refresh_imagery: bool = False) -> bool:
+    if not path.exists():
+        return True
+    record = json.loads(path.read_text(encoding="utf-8"))
+    if refresh_imagery and record.get("imageryCacheVersion") != IMAGERY_CACHE_VERSION:
+        return True
+    return retry_errors and record.get("status") == "error"
+
+
+def selected_tiles(tiles: list[dict[str, Any]], tile_list: str | None) -> list[dict[str, Any]]:
+    """Optional JSON array of plan record stems, e.g. [\"2084_30525\"]."""
+    if tile_list is None:
+        return tiles
+    requested = json.loads(Path(tile_list).read_text(encoding="utf-8"))
+    if not isinstance(requested, list) or not all(isinstance(key, str) for key in requested):
+        raise ValueError("--tile-list must contain a JSON array of i_j strings")
+    known = {f"{t['i']}_{t['j']}" for t in tiles}
+    unknown = set(requested) - known
+    if unknown:
+        raise ValueError(f"--tile-list contains tiles absent from plan: {sorted(unknown)}")
+    requested = set(requested)
+    return [t for t in tiles if f"{t['i']}_{t['j']}" in requested]
+
+
+NETWORK_RETRY_S = 30
+NETWORK_RETRY_MAX_S = 300
+NETWORK_MARKERS = (
+    "NameResolution", "getaddrinfo", "Failed to resolve", "Could not resolve host",
+    "Max retries exceeded", "timed out", "Timeout was reached", "Connection reset", "Connection aborted",
+)
+
+
+def network_failure(error: BaseException) -> bool:
+    """Whether *error*, or anything it was raised from, is the network failing
+    (a lookup, connect or read that failed or timed out) rather than the tile."""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, (ConnectionError, TimeoutError, socket.gaierror)):
+            return True
+        if any(marker in str(current) for marker in NETWORK_MARKERS):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def wait_for_network(attempt: int, deadline: float) -> bool:
+    """Sleep before the *attempt*-th retry (30 s doubling to 5 min); False, without
+    sleeping, when that would pass the batch deadline."""
+    wait = min(NETWORK_RETRY_S * 2 ** attempt, NETWORK_RETRY_MAX_S)
+    if time.monotonic() + wait > deadline:
+        return False
+    time.sleep(wait)
+    return True
+
+
+def tile_record(result: dict[str, Any] | None, *, context: bool) -> dict[str, Any]:
+    """A predicted tile's record: the bundle minus its imagery and inventory, what assemble reads."""
+    if result is None:
+        return {"status": "skipped", "imageryCacheVersion": IMAGERY_CACHE_VERSION}
+    bundle = result["bundle"]
+    return {
+        "status": "ok", "context": context,
+        "imageryCacheVersion": IMAGERY_CACHE_VERSION,
+        "tileId": bundle["tileId"], "chipId": bundle["chipId"], "city": bundle["city"],
+        "imageryVersion": bundle["imageryVersion"],
+        "predictionLayer": {
+            "runId": bundle["predictionLayer"]["runId"],
+            "predictions": [
+                {k: p.get(k) for k in (
+                    "predictionId", "latitude", "longitude", "genus", "species",
+                    "speciesConfidence", "genusConfidence",
+                    "centerConfidence", "modelCrownWidthM", "modelCrownWidthMethod",
+                )}
+                for p in bundle["predictionLayer"]["predictions"]
+            ],
+        },
+    }
+
+
 def predict(args: argparse.Namespace) -> int:
     from urban_tree_ml.point_predict import Predictor, predict_tile
 
@@ -377,13 +478,12 @@ def predict(args: argparse.Namespace) -> int:
     (out / "tiles").mkdir(parents=True, exist_ok=True)
 
     def pending(tile: dict[str, Any]) -> bool:
-        path = tile_path(out, tile)
-        if not path.exists():
-            return True
-        return args.retry_errors and json.loads(path.read_text(encoding="utf-8")).get("status") == "error"
+        return prediction_pending(tile_path(out, tile), retry_errors=args.retry_errors,
+                                  refresh_imagery=getattr(args, "refresh_imagery", False))
 
-    todo = [t for t in manifest["tiles"] if pending(t)]
-    total = len(manifest["tiles"])
+    tiles = selected_tiles(manifest["tiles"], getattr(args, "tile_list", None))
+    todo = [t for t in tiles if pending(t)]
+    total = len(tiles)
     print(f"{total - len(todo)}/{total} tiles done; {len(todo)} to go", file=sys.stderr)
     if args.near:
         # Nearest first, so a limited batch is one contiguous block, not a strip
@@ -400,44 +500,35 @@ def predict(args: argparse.Namespace) -> int:
     envelopes, territory = city_boxes()
     deadline = time.monotonic() + args.max_minutes * 60
     done = 0
+    offline = False
     for tile in todo:
-        if time.monotonic() > deadline:
+        if offline or time.monotonic() > deadline:
             break
         path = tile_path(out, tile)
-        try:
-            result = predict_tile(
-                predictor, tile["lat"], tile["lon"], artifacts=artifacts, run=run, year=args.year,
-                stac_url=stac_url, city=city, envelopes=envelopes, territory=territory,
-                min_score=args.min_score, threshold=manifest["runThreshold"], coefficients=None, readers=None,
-                epsg_hint=int(manifest["epsg"]),
-            )
-        except Exception as error:  # one bad tile must not end the batch
-            record = {"status": "error", "error": f"{error.__class__.__name__}: {error}"}
-            print(f"{path.name}: {record['error']}", file=sys.stderr)
-        else:
-            if result is None:
-                record = {"status": "skipped"}
+        for attempt in itertools.count():
+            try:
+                result = predict_tile(
+                    predictor, tile["lat"], tile["lon"], artifacts=artifacts, run=run, year=args.year,
+                    stac_url=stac_url, city=city, envelopes=envelopes, territory=territory,
+                    min_score=args.min_score, threshold=manifest["runThreshold"], coefficients=None, readers=None,
+                    epsg_hint=int(manifest["epsg"]), context=not args.no_context,
+                )
+            except Exception as error:  # one bad tile must not end the batch
+                if network_failure(error):
+                    # Not the tile's fault (a machine just woken from sleep has no DNS
+                    # for a minute): wait and try the same tile, never record it.
+                    print(f"{path.name}: network unavailable ({error.__class__.__name__}); waiting", file=sys.stderr)
+                    if wait_for_network(attempt, deadline):
+                        continue
+                    offline = True
+                    break
+                record = {"status": "error", "error": f"{error.__class__.__name__}: {error}"}
+                print(f"{path.name}: {record['error']}", file=sys.stderr)
             else:
-                bundle = result["bundle"]
-                # The bundle minus its imagery and inventory: what assemble reads.
-                record = {
-                    "status": "ok",
-                    "tileId": bundle["tileId"], "chipId": bundle["chipId"], "city": bundle["city"],
-                    "imageryVersion": bundle["imageryVersion"],
-                    "predictionLayer": {
-                        "runId": bundle["predictionLayer"]["runId"],
-                        "predictions": [
-                            {k: p.get(k) for k in (
-                                "predictionId", "latitude", "longitude", "genus", "species",
-                                "speciesConfidence", "genusConfidence",
-                                "centerConfidence", "modelCrownWidthM", "modelCrownWidthMethod",
-                            )}
-                            for p in bundle["predictionLayer"]["predictions"]
-                        ],
-                    },
-                }
-        path.write_text(json.dumps(record) + "\n", encoding="utf-8")
-        done += 1
+                record = tile_record(result, context=not args.no_context)
+            path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            done += 1
+            break
     remaining = len(todo) - done
     if args.sync:
         _sync_or_warn(args, "push")
@@ -465,6 +556,8 @@ def assemble(args: argparse.Namespace) -> int:
     runs = {b["predictionLayer"]["runId"] for b in bundles}
     if len(runs) > 1:
         raise SystemExit(f"bundles from {len(runs)} runs ({', '.join(sorted(runs))}); assemble one run at a time")
+    if len({bool(b.get("context")) for b in bundles}) > 1:
+        raise SystemExit("tiles predicted both in context and alone; predict the rest again into a fresh --out")
     envelopes, territory = city_boxes()
     rows = [
         r for b in bundles if str(b["city"]).upper() == city for r in rows_from_bundle(b)
@@ -684,6 +777,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--year", type=int, default=None)
     p.add_argument("--device", default="auto")
     p.add_argument("--retry-errors", action="store_true")
+    p.add_argument("--refresh-imagery", action="store_true",
+                   help="also rerun legacy records against coverage-v2 imagery; resumable, no publication")
+    p.add_argument("--tile-list", default=None,
+                   help="restrict to a JSON array of plan record stems (i_j); combine with --refresh-imagery")
+    p.add_argument("--no-context", action="store_true", help="predict each tile alone (edge artefacts; 1/4 the passes)")
 
     p = sub.add_parser("assemble", help="threshold, seam dedup and write the staged parquet")
     p.add_argument("--out", required=True)

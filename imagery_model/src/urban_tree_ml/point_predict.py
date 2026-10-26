@@ -20,8 +20,10 @@ trees come from every published city parquet whose envelope meets the tile,
 so a tile on a city boundary shows the trees of both.  The bundle's ``city``
 is the one whose territory holds the tile centre.
 
-The fetched window is cached under ``artifacts/point-tiles`` with its source
-items, so predicting the same place with a later model reads no imagery.
+The fetched window is cached under ``artifacts/point-tiles/coverage-v2`` with
+its source items and an explicit coverage mask. Legacy point-tiles caches are
+preserved but never used, including for context neighbours. Predicting the
+same place with a later model reuses the versioned imagery.
 
     uv run --group imagery --group train python -m urban_tree_ml.point_predict \\
       --point 42.3505,-71.0760 --run sf-boston-naip-swin-30cm-v2-finetune \\
@@ -39,6 +41,7 @@ import ast
 import hashlib
 import io
 import json
+import os
 import sys
 from datetime import date
 from pathlib import Path
@@ -60,6 +63,21 @@ INGEST_PATH = REPO_ROOT / "data" / "raw" / "shared" / "ingest.py"
 PARQUET_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{code}_tree_info_v2.parquet"
 PREDICTIONS_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_predictions_v2.parquet"
 MIN_VALID_FRACTION = 0.9
+IMAGERY_CACHE_VERSION = "coverage-v2"
+# A NAIP search or read that stalls fails instead of hanging a bulk batch
+# overnight (bulk_predict waits out a network failure and retries the tile).
+# GDAL reads these from the environment when it opens a URL.
+STAC_TIMEOUT_S = 60
+for _option, _value in {"GDAL_HTTP_CONNECTTIMEOUT": "30", "GDAL_HTTP_TIMEOUT": "120",
+                        "GDAL_HTTP_MAX_RETRY": "3", "GDAL_HTTP_RETRY_DELAY": "5"}.items():
+    os.environ.setdefault(_option, _value)
+
+
+def point_cache_root(artifacts: Path) -> Path:
+    # Legacy masks marked out-of-source fill valid. Never silently reuse those
+    # files, including as context neighbours. Keep them intact for rollback.
+    return artifacts / "point-tiles" / IMAGERY_CACHE_VERSION
+
 
 Box = tuple[float, float, float, float]  # lat_min, lat_max, lon_min, lon_max
 
@@ -79,6 +97,49 @@ def grid_tile_origin(x: float, y: float, tile_m: float) -> tuple[float, float]:
 
 def point_chip_id(epsg: int, west: float, north: float) -> str:
     return f"p{epsg}_e{int(round(west))}_n{int(round(north))}"
+
+
+# A tile predicted alone sees zero padding at its border and the peak decoder
+# takes any slope running off it for a peak: Boston's v13 bulk pass had five
+# times the interior density in each tile's outer 0.6 m.  So a tile is
+# predicted in context instead -- four chip-sized windows a quarter tile
+# outside it, each keeping only its middle half, which together are exactly
+# the tile and leave every kept cell at least a quarter tile from the edge of
+# the window that saw it.  The input stays the size the model was trained on.
+# The stitched maps carry a ring of the neighbours' cells as wide as the peak
+# decoder's reach, so a crown peaking just across the seam is not also a peak
+# on this side's border cell; peaks found in the ring are the neighbour's.
+WINDOW_OFFSETS = ((0, 0), (1, 0), (0, 1), (1, 1))  # (column, row) in half tiles
+
+
+def context_windows(image, pixels: int):
+    """The four windows of a ``context_image`` (1.5 tiles a side), [4, bands, pixels, pixels]."""
+    import numpy as np
+
+    half = pixels // 2
+    return np.stack([image[:, r * half:r * half + pixels, c * half:c * half + pixels] for c, r in WINDOW_OFFSETS])
+
+
+def stitch_cores(output: dict[str, Any], cells: int, ring: int = 0) -> dict[str, Any]:
+    """One tile's output maps from the four windows' (``context_windows`` order):
+    the middle half of each window, *cells* output cells a side, plus *ring*
+    cells of the neighbours on every side (cell (ring, ring) is the tile's first)."""
+    if cells % 4:
+        raise ValueError(f"a tile of {cells} output cells does not split into window cores")
+    quarter, half = cells // 4, cells // 2
+    if ring > quarter:
+        raise ValueError(f"a ring of {ring} cells reaches past the windows")
+    # A window's core in its own cells, widened by the ring on the tile's outer side.
+    spans = ((quarter - ring, quarter + half), (quarter, quarter + half + ring))
+    stitched = {}
+    for key, value in output.items():
+        tile = value.new_empty((1, *value.shape[1:-2], cells + 2 * ring, cells + 2 * ring))
+        for k, (c, r) in enumerate(WINDOW_OFFSETS):
+            (r0, r1), (c0, c1) = spans[r], spans[c]
+            row, col = r * (half + ring), c * (half + ring)
+            tile[0, ..., row:row + r1 - r0, col:col + c1 - c0] = value[k, ..., r0:r1, c0:c1]
+        stitched[key] = tile
+    return stitched
 
 
 def city_boxes(ingest_path: Path = INGEST_PATH) -> tuple[dict[str, Box], dict[str, tuple[Box, ...]]]:
@@ -146,12 +207,17 @@ class MultiInventory:
 # ---------------------------------------------------------------------------
 
 
-def search_items(lat: float, lon: float, year: int | None, stac_url: str) -> list[Any]:
-    """NAIP items covering the point, newest acquisition year only."""
+def naip_catalog(stac_url: str):
+    """The STAC catalog, signing assets for reading, with a request timeout."""
     import planetary_computer
     import pystac_client
 
-    catalog = pystac_client.Client.open(stac_url, modifier=planetary_computer.sign_inplace)
+    return pystac_client.Client.open(stac_url, modifier=planetary_computer.sign_inplace, timeout=STAC_TIMEOUT_S)
+
+
+def search_items(lat: float, lon: float, year: int | None, stac_url: str) -> list[Any]:
+    """NAIP items covering the point, newest acquisition year only."""
+    catalog = naip_catalog(stac_url)
     search = catalog.search(
         collections=["naip"],
         intersects={"type": "Point", "coordinates": [lon, lat]},
@@ -166,11 +232,8 @@ def search_items(lat: float, lon: float, year: int | None, stac_url: str) -> lis
 
 def tile_items(items_at_point: list[Any], bounds: dict[str, float], stac_url: str) -> list[Any]:
     """Every item of the point's acquisition year that meets the tile."""
-    import planetary_computer
-    import pystac_client
-
     year = items_at_point[0].datetime.year
-    catalog = pystac_client.Client.open(stac_url, modifier=planetary_computer.sign_inplace)
+    catalog = naip_catalog(stac_url)
     search = catalog.search(
         collections=["naip"],
         bbox=[bounds["west"], bounds["south"], bounds["east"], bounds["north"]],
@@ -197,7 +260,7 @@ def read_tile(
     """(image uint8 [bands, pixels, pixels], valid mask, ids of items used)."""
     import numpy as np
     import rasterio
-    from rasterio.enums import Resampling
+    from rasterio.enums import ColorInterp, Resampling
     from rasterio.transform import from_origin
     from rasterio.vrt import WarpedVRT
 
@@ -208,12 +271,19 @@ def read_tile(
     for item in items:
         if valid.all():
             break
-        with rasterio.open(item.assets["image"].href) as source, WarpedVRT(
-            source, crs=crs, transform=transform, width=pixels, height=pixels,
-            resampling=Resampling.bilinear,
-        ) as warped:
-            data = warped.read(bands)
-            mask = np.all(warped.read_masks(bands) > 0, axis=0)
+        with rasterio.open(item.assets["image"].href) as source:
+            # No-nodata RGB+NIR sources return all_valid read_masks even outside
+            # their footprint. A generated alpha carries actual warped coverage.
+            # Read it explicitly: with five bands read_masks can still be all_valid.
+            alpha = next((i for i, c in enumerate(source.colorinterp, 1)
+                          if c == ColorInterp.alpha), None)
+            with WarpedVRT(
+                source, crs=crs, transform=transform, width=pixels, height=pixels,
+                resampling=Resampling.bilinear, add_alpha=alpha is None,
+            ) as warped:
+                data = warped.read(bands)
+                mask = (warped.read(alpha or warped.count) > 0)
+                mask &= np.all(warped.read_masks(bands) > 0, axis=0)
         fill = mask & ~valid
         if fill.any():
             image[:, fill] = data[:, fill]
@@ -222,19 +292,113 @@ def read_tile(
     return image, valid, used
 
 
-def write_cached_tile(path: Path, image, *, crs: str, west: float, north: float, resolution_m: float) -> None:
+def write_cached_tile(path: Path, image, *, crs: str, west: float, north: float,
+                      resolution_m: float, valid=None) -> None:
+    import numpy as np
     import rasterio
+    from rasterio.enums import ColorInterp
     from rasterio.transform import from_origin
+    from uuid import uuid4
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.parent / f"{path.stem}.tmp.tif"
-    with rasterio.open(
-        temporary, "w", driver="GTiff", width=image.shape[2], height=image.shape[1],
-        count=image.shape[0], dtype="uint8", crs=crs,
-        transform=from_origin(west, north, resolution_m, resolution_m), compress="deflate",
-    ) as out:
-        out.write(image)
-    temporary.replace(path)
+    valid = np.ones(image.shape[1:], dtype=bool) if valid is None else np.asarray(valid, dtype=bool)
+    if valid.shape != image.shape[1:]:
+        raise ValueError("coverage mask does not match image shape")
+    temporary = path.parent / f"{path.stem}.{uuid4().hex}.tmp.tif"
+    try:
+        # Internal mask moves atomically with the image, unlike a .msk sidecar.
+        with rasterio.Env(GDAL_TIFF_INTERNAL_MASK=True), rasterio.open(
+            temporary, "w", driver="GTiff", width=image.shape[2], height=image.shape[1],
+            count=image.shape[0], dtype="uint8", crs=crs,
+            transform=from_origin(west, north, resolution_m, resolution_m), compress="deflate",
+        ) as out:
+            if image.shape[0] == 4:
+                out.colorinterp = (ColorInterp.red, ColorInterp.green, ColorInterp.blue, ColorInterp.undefined)
+            out.write(image)
+            out.write_mask(valid.astype("uint8") * 255)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def tile_manifest(year: int | str, crs: str, west: float, north: float, resolution_m: float,
+                  valid_fraction: float, candidates: list[Any], used: list[str]) -> dict[str, Any]:
+    by_id = {item.id: item for item in candidates}
+    return {
+        "collection": "naip",
+        "cache_version": IMAGERY_CACHE_VERSION,
+        "year": str(year),
+        "crs": crs,
+        "west": west,
+        "north": north,
+        "resolution_m": resolution_m,
+        "valid_fraction": valid_fraction,
+        "sources": [
+            {"item_id": i, "acquisition_datetime": by_id[i].datetime.isoformat()} for i in used
+        ],
+    }
+
+
+def year_items(bounds: dict[str, float], year: int, stac_url: str) -> list[Any]:
+    """Every NAIP item of *year* that meets *bounds*."""
+    catalog = naip_catalog(stac_url)
+    search = catalog.search(
+        collections=["naip"],
+        bbox=[bounds["west"], bounds["south"], bounds["east"], bounds["north"]],
+        datetime=f"{year}-01-01/{year}-12-31",
+    )
+    return sorted(search.items(), key=lambda item: item.id)
+
+
+def neighbour_tile(cache_dir: Path, *, crs: str, west: float, north: float, pixels: int,
+                   resolution_m: float, bands: list[int], stac_url: str):
+    """The cached grid tile at (west, north) of *cache_dir*'s year, read and cached
+    when missing; zeros where that year has no imagery."""
+    import numpy as np
+    import rasterio
+
+    epsg = int(crs.removeprefix("EPSG:"))
+    stem = cache_dir / f"{point_chip_id(epsg, west, north)}_{round(resolution_m * 100)}cm"
+    tif_path, manifest_path = stem.with_name(stem.name + ".tif"), stem.with_name(stem.name + ".manifest.json")
+    if manifest_path.exists() and read_json(manifest_path).get("cache_version") == IMAGERY_CACHE_VERSION:
+        with rasterio.open(tif_path) as cached:
+            return cached.read()
+    year = int(cache_dir.name.removeprefix("naip"))
+    affine = [resolution_m, 0.0, west, 0.0, -resolution_m, north]
+    candidates = year_items(tile_bounds_lonlat(affine, crs, pixels, pixels), year, stac_url)
+    if not candidates:
+        return np.zeros((len(bands), pixels, pixels), dtype=np.uint8)
+    image, valid, used = read_tile(
+        candidates, crs=crs, west=west, north=north, pixels=pixels, resolution_m=resolution_m, bands=bands,
+    )
+    if used:
+        write_cached_tile(tif_path, image, crs=crs, west=west, north=north,
+                          resolution_m=resolution_m, valid=valid)
+        manifest = tile_manifest(year, crs, west, north, resolution_m, float(valid.mean()), candidates, used)
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return image
+
+
+def context_image(image, cache_dir: Path, *, crs: str, west: float, north: float, pixels: int,
+                  resolution_m: float, bands: list[int], stac_url: str):
+    """*image*, the grid tile at (west, north), with a quarter tile of each of its
+    eight neighbours around it: [bands, 1.5 * pixels, 1.5 * pixels].
+
+    A bulk plan has cached most neighbours already; the rest (past the plan's
+    edge) are read once and cached like any other tile.
+    """
+    import numpy as np
+
+    tile_m, margin = pixels * resolution_m, pixels // 4
+    canvas = np.zeros((image.shape[0], 3 * pixels, 3 * pixels), dtype=image.dtype)
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            tile = image if dx == dy == 0 else neighbour_tile(
+                cache_dir, crs=crs, west=west + dx * tile_m, north=north - dy * tile_m,
+                pixels=pixels, resolution_m=resolution_m, bands=bands, stac_url=stac_url,
+            )
+            canvas[:, (dy + 1) * pixels:(dy + 2) * pixels, (dx + 1) * pixels:(dx + 2) * pixels] = tile
+    return canvas[:, pixels - margin:2 * pixels + margin, pixels - margin:2 * pixels + margin]
 
 
 def render_png(image) -> bytes:
@@ -295,23 +459,40 @@ class Predictor:
             json.dumps(self.taxonomy, sort_keys=True).encode("utf-8")
         ).hexdigest()[:12]
 
-    def predict(self, image, chip_id: str) -> list[dict[str, Any]]:
-        """Every decoded candidate, highest score first (as evaluation decodes them)."""
+    def _forward(self, images) -> dict[str, Any]:
+        """The network's output maps for a batch of chips, [n, bands, pixels, pixels]."""
         import torch
 
+        tensor = torch.from_numpy(images.astype("float32") * self.input_scale)
+        tensor = ((tensor - self.mean) / self.std).to(self.device)
+        with torch.inference_mode():
+            return self.network(tensor)
+
+    def _decode(self, output: dict[str, Any], chip_id: str) -> list[dict[str, Any]]:
         from urban_tree_ml.evaluation import _decode_batch
 
-        tensor = torch.from_numpy(image.astype("float32") * self.input_scale)
-        tensor = ((tensor - self.mean) / self.std)[None].to(self.device)
         evaluation = self.config["evaluation"]
-        with torch.inference_mode():
-            output = self.network(tensor)
-        records = _decode_batch(
+        return _decode_batch(
             output,
             [chip_id],
             max_detections_per_chip=int(evaluation["max_detections_per_chip"]),
             nms_kernel=int(evaluation["nms_kernel"]),
         )
+
+    def predict(self, image, chip_id: str) -> list[dict[str, Any]]:
+        """Every decoded candidate, highest score first (as evaluation decodes them)."""
+        return self._decode(self._forward(image[None]), chip_id)
+
+    def predict_in_context(self, image, chip_id: str) -> list[dict[str, Any]]:
+        """Every candidate of the tile at the centre of *image* (``context_image``),
+        each output cell taken from the window it sits in the middle of."""
+        cells, ring = self.chip_pixels // self.stride, int(self.config["evaluation"]["nms_kernel"]) // 2
+        output = self._forward(context_windows(image, self.chip_pixels))
+        records = []
+        for record in self._decode(stitch_cores(output, cells, ring), chip_id):
+            x, y = int(record["output_x"]) - ring, int(record["output_y"]) - ring
+            if 0 <= x < cells and 0 <= y < cells:
+                records.append({**record, "output_x": x, "output_y": y})
         return records
 
 
@@ -332,6 +513,7 @@ def predict_tile(
     coefficients: "CrownCoefficients | None",
     readers: "dict[str, InventoryReader] | None",
     epsg_hint: int | None = None,
+    context: bool = False,
 ) -> dict[str, Any] | None:
     """Fetch (or reuse the cached) grid tile nearest a point, predict it and build its bundle.
 
@@ -344,6 +526,10 @@ def predict_tile(
     window cache first -- *year*'s, or the newest cached -- and searches STAC
     only on a miss; without it every call searches, so a newer NAIP year is
     picked up.
+
+    *context* predicts the tile with its neighbours' imagery around it
+    (``context_image``, ``Predictor.predict_in_context``): no detections
+    piled on the tile's edges, at four forward passes a tile.
     """
     def locate(epsg: int) -> tuple[str, str, float, float]:
         from pyproj import Transformer
@@ -355,7 +541,7 @@ def predict_tile(
 
     tile_m = predictor.chip_pixels * predictor.resolution_m
     suffix = f"_{round(predictor.resolution_m * 100)}cm"
-    cache = artifacts / "point-tiles"
+    cache = point_cache_root(artifacts)
     items: list[Any] = []
     manifest_path = None
     if epsg_hint is not None:
@@ -375,36 +561,28 @@ def predict_tile(
     bounds = tile_bounds_lonlat(affine, crs, predictor.chip_pixels, predictor.chip_pixels)
 
     tif_path = manifest_path.with_name(manifest_path.name.removesuffix(".manifest.json") + ".tif")
-    if manifest_path.exists():
+    if manifest_path.exists() and read_json(manifest_path).get("cache_version") == IMAGERY_CACHE_VERSION:
         import rasterio
 
         manifest = read_json(manifest_path)
         with rasterio.open(tif_path) as cached:
             image = cached.read()
-        valid_fraction = float(manifest["valid_fraction"])
+            valid_fraction = float((cached.dataset_mask() > 0).mean())
     else:
+        if not items:
+            # A hinted but obsolete manifest supplied the grid, not STAC items.
+            year = int(manifest_path.parent.name.removeprefix("naip"))
+            items = search_items(lat, lon, year, stac_url)
         candidates = tile_items(items, bounds, stac_url)
         image, valid, used = read_tile(
             candidates, crs=crs, west=west, north=north, pixels=predictor.chip_pixels,
             resolution_m=predictor.resolution_m, bands=predictor.bands,
         )
         valid_fraction = float(valid.mean())
-        by_id = {item.id: item for item in candidates}
-        manifest = {
-            "collection": "naip",
-            "year": str(year),
-            "crs": crs,
-            "west": west,
-            "north": north,
-            "resolution_m": predictor.resolution_m,
-            "valid_fraction": valid_fraction,
-            "sources": [
-                {"item_id": i, "acquisition_datetime": by_id[i].datetime.isoformat()} for i in used
-            ],
-        }
+        manifest = tile_manifest(year, crs, west, north, predictor.resolution_m, valid_fraction, candidates, used)
         if used:
             write_cached_tile(tif_path, image, crs=crs, west=west, north=north,
-                              resolution_m=predictor.resolution_m)
+                              resolution_m=predictor.resolution_m, valid=valid)
             manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     if valid_fraction < MIN_VALID_FRACTION:
         print(f"{lat},{lon}: only {valid_fraction:.0%} of the tile has imagery; skipped", file=sys.stderr)
@@ -430,7 +608,15 @@ def predict_tile(
             code: readers[code] for code in cities_meeting(bounds, envelopes) if readers.get(code)
         })
 
-    records = [r for r in predictor.predict(image, chip_id) if float(r["score"]) >= min_score]
+    if context:
+        surround = context_image(
+            image, manifest_path.parent, crs=crs, west=west, north=north, pixels=predictor.chip_pixels,
+            resolution_m=predictor.resolution_m, bands=predictor.bands, stac_url=stac_url,
+        )
+        detections = predictor.predict_in_context(surround, chip_id)
+    else:
+        detections = predictor.predict(image, chip_id)
+    records = [r for r in detections if float(r["score"]) >= min_score]
     dates = sorted(date.fromisoformat(s["acquisition_datetime"][:10]).isoformat() for s in manifest["sources"])
     version = imagery_version(manifest)
     tid = tile_id(city, version, chip_id)
@@ -494,6 +680,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--min-score", type=float, default=0.1, help="export candidates scoring at least this (default 0.1)")
     parser.add_argument("--threshold", type=float, default=None, help="operating threshold the reviewer's slider starts at (default: the run's)")
     parser.add_argument("--no-inventory", action="store_true", help="skip the current-tree overlay")
+    parser.add_argument("--context", action="store_true",
+                        help="predict with the neighbouring tiles' imagery around the tile, as bulk_predict does (4x the passes)")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--out", required=True, help="reviewer tile directory")
     args = parser.parse_args(argv)
@@ -517,7 +705,7 @@ def main(argv: list[str] | None = None) -> int:
             predictor, lat, lon, artifacts=artifacts, run=run, year=args.year, stac_url=stac_url,
             city=args.city, envelopes=envelopes, territory=territory, min_score=args.min_score,
             threshold=threshold, coefficients=coefficients,
-            readers=None if args.no_inventory else readers,
+            readers=None if args.no_inventory else readers, context=args.context,
         )
         if tile is None:
             continue

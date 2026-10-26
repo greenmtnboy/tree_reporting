@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pyarrow.parquet as pq
+import pytest
 
 from urban_tree_ml import bulk_predict
 from urban_tree_ml.bulk_predict import (
@@ -15,6 +16,111 @@ from urban_tree_ml.bulk_predict import (
     utm_epsg,
 )
 from urban_tree_ml.point_predict import grid_tile_origin
+
+
+def test_refresh_imagery_is_explicit_and_resumable(tmp_path):
+    from urban_tree_ml.point_predict import IMAGERY_CACHE_VERSION
+
+    path = tmp_path / "tile.json"
+    assert bulk_predict.prediction_pending(path)
+    path.write_text(json.dumps({"status": "ok"}))
+    assert not bulk_predict.prediction_pending(path, retry_errors=True)
+    assert bulk_predict.prediction_pending(path, refresh_imagery=True)
+    for status in ("ok", "skipped"):
+        path.write_text(json.dumps({"status": status, "imageryCacheVersion": IMAGERY_CACHE_VERSION}))
+        assert not bulk_predict.prediction_pending(path, refresh_imagery=True)
+    path.write_text(json.dumps({"status": "error"}))
+    assert bulk_predict.prediction_pending(path, retry_errors=True)
+    assert bulk_predict.prediction_pending(path, refresh_imagery=True)
+
+
+def test_targeted_refresh_restricts_to_known_plan_tiles(tmp_path):
+    tiles = [{"i": 1, "j": 2}, {"i": 3, "j": 4}]
+    path = tmp_path / "selection.json"
+    path.write_text('["3_4", "3_4"]')
+    assert bulk_predict.selected_tiles(tiles, str(path)) == [tiles[1]]
+    assert bulk_predict.selected_tiles(tiles, None) == tiles
+    path.write_text('["99_99"]')
+    with pytest.raises(ValueError, match="absent from plan"):
+        bulk_predict.selected_tiles(tiles, str(path))
+    path.write_text('{}')
+    with pytest.raises(ValueError, match="JSON array"):
+        bulk_predict.selected_tiles(tiles, str(path))
+
+
+def test_a_failed_lookup_is_the_network_not_the_tile():
+    # What pystac-client raised for 120 Boston tiles the minute after the machine woke.
+    lookup = Exception("HTTPSConnectionPool(host='planetarycomputer.microsoft.com', port=443): Max retries "
+                       "exceeded with url: /api/stac/v1 (Caused by NameResolutionError(\"Failed to resolve "
+                       "'planetarycomputer.microsoft.com' ([Errno 11001] getaddrinfo failed)\"))")
+    assert bulk_predict.network_failure(lookup)
+    assert bulk_predict.network_failure(Exception("CURL error: Timeout was reached"))
+    try:
+        try:
+            raise TimeoutError("read")
+        except TimeoutError as cause:
+            raise RuntimeError("tile failed") from cause
+    except RuntimeError as wrapped:
+        assert bulk_predict.network_failure(wrapped)
+    assert not bulk_predict.network_failure(ValueError("no NAIP item covers 42.3,-71.1"))
+
+
+def _plan(out: Path, tiles: int) -> None:
+    (out / "plan.json").write_text(json.dumps({
+        "city": "USBOS", "run": "run-v13", "runThreshold": 0.35, "epsg": 26919,
+        "tiles": [{"i": i, "j": 1, "lat": 42.35, "lon": -71.08} for i in range(tiles)],
+    }))
+
+
+def _fake_predict(monkeypatch, outcomes):
+    from urban_tree_ml import point_predict
+
+    class Predictor:
+        config = {"imagery": {}}
+
+        def __init__(self, *args):
+            pass
+
+    calls = []
+
+    def predict_tile(*args, **kwargs):
+        calls.append(args[1:3])
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return {"bundle": bundle()}
+
+    monkeypatch.setattr(point_predict, "Predictor", Predictor)
+    monkeypatch.setattr(point_predict, "predict_tile", predict_tile)
+    monkeypatch.setattr(bulk_predict, "city_boxes", lambda: ({}, {}))
+    return calls
+
+
+def test_predict_waits_out_a_network_failure_and_predicts_the_same_tile(tmp_path, monkeypatch):
+    _plan(tmp_path, 1)
+    calls = _fake_predict(monkeypatch, [OSError("getaddrinfo failed"), None])
+    sleeps = []
+    monkeypatch.setattr(bulk_predict.time, "sleep", sleeps.append)
+    assert bulk_predict.main(["predict", "--out", str(tmp_path)]) == 0
+    assert len(calls) == 2 and sleeps == [bulk_predict.NETWORK_RETRY_S]
+    record = json.loads((tmp_path / "tiles" / "0_1.json").read_text())
+    assert record["status"] == "ok" and record["context"] is True
+
+
+def test_predict_ends_the_batch_without_records_when_the_network_outlasts_it(tmp_path, monkeypatch):
+    _plan(tmp_path, 2)
+    _fake_predict(monkeypatch, [OSError("getaddrinfo failed")])
+    monkeypatch.setattr(bulk_predict.time, "sleep", lambda s: pytest.fail("slept past the deadline"))
+    assert bulk_predict.main(["predict", "--out", str(tmp_path), "--max-minutes", "0.1"]) == 0
+    assert not list((tmp_path / "tiles").iterdir())
+
+
+def test_predict_records_a_tile_that_fails_on_its_own(tmp_path, monkeypatch):
+    _plan(tmp_path, 1)
+    _fake_predict(monkeypatch, [ValueError("bad chip")])
+    assert bulk_predict.main(["predict", "--out", str(tmp_path)]) == 0
+    record = json.loads((tmp_path / "tiles" / "0_1.json").read_text())
+    assert record == {"status": "error", "error": "ValueError: bad chip"}
 
 
 def bundle(tile="USBOS-naip2023-abc-p1", chip="p1", predictions=(), run="run-v13", city="USBOS"):
@@ -110,6 +216,18 @@ def test_assemble_from_bundles_writes_the_staged_contract(tmp_path):
     assert tuple(table.column_names) == STAGED_COLUMNS
     rows = table.to_pylist()
     assert len(rows) == 1 and rows[0]["tree_id"].startswith("pred-") and rows[0]["city"] == "USBOS"
+
+
+def test_assemble_refuses_tiles_predicted_in_context_and_alone(tmp_path):
+    tiles = tmp_path / "out" / "tiles"
+    tiles.mkdir(parents=True)
+    for name, context in (("a", True), ("b", False)):
+        record = {"status": "ok", "context": context, **bundle(tile=f"t-{name}", chip=name)}
+        (tiles / f"{name}.json").write_text(json.dumps(record))
+    import pytest
+
+    with pytest.raises(SystemExit, match="in context and alone"):
+        bulk_predict.main(["assemble", "--out", str(tmp_path / "out"), "--threshold", "0.35"])
 
 
 def test_the_staged_contract_is_the_ingest_contract():
