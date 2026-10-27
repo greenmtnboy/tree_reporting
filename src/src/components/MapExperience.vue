@@ -56,18 +56,35 @@ watch(showEntry, value => emit('entry-change', value), { immediate: true })
 const locating = ref(false)
 const locationError = ref('')
 let request = 0
+// Set when a Near Me tap has already asked for the location it navigates to.
+let locateStartedByTap = false
+let entryNavigation: Promise<unknown> = Promise.resolve()
+// The Geolocation `timeout` does not count time spent on the permission prompt,
+// and a prompt the browser shows quietly (or not at all) never answers. Without
+// a deadline of our own the entry sat on "Finding your location…" for good.
+// A fix that arrives after the deadline still opens the map.
+const LOCATION_DEADLINE_MS = 15_000
+const STALLED_MESSAGE = 'Finding your location is taking too long. Allow location access if your browser asked, try again, or choose Explore City.'
 
 async function locate() {
   const id = ++request
   locating.value = true
   locationError.value = ''
   performance.mark('trees:location:start')
+  const deadline = window.setTimeout(() => {
+    if (id !== request || !locating.value) return
+    locating.value = false
+    locationError.value = STALLED_MESSAGE
+  }, LOCATION_DEADLINE_MS)
   try {
     const fix = await getCurrentPosition({ enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 })
     if (id !== request) return
+    locationError.value = ''
     const position = { lat: fix.coords.latitude, lng: fix.coords.longitude }
     const city = cityAt(position.lat, position.lng)
     if (!city) throw new Error('We do not have a tree inventory near you yet. Choose Explore City to visit a mapped city.')
+    await entryNavigation
+    if (id !== request) return
     await router.replace({ query: { ...route.query, city, mode: 'nearby', tree: undefined } })
     if (id !== request) return
     setUserLocation(position.lat, position.lng, fix.coords.accuracy)
@@ -82,18 +99,28 @@ async function locate() {
         : code === 2 ? 'Your location is unavailable. Try again or choose Explore City.'
           : (error as Error).message
   } finally {
+    window.clearTimeout(deadline)
     if (id === request) locating.value = false
   }
 }
 
 function chooseNearby() {
-  if (mode.value === 'nearby') void locate()
-  else void router.push({ query: { ...route.query, mode: 'nearby', tree: undefined } })
+  // Ask inside the tap: browsers quiet or drop a location prompt that is not
+  // tied to a user gesture, and the route push below resolves asynchronously.
+  void locate()
+  if (mode.value === 'nearby') return
+  locateStartedByTap = true
+  entryNavigation = router.push({ query: { ...route.query, mode: 'nearby', tree: undefined } })
 }
 function chooseExplore() {
   void router.push({ query: { ...route.query, mode: 'explore', city: displayCity.value } })
 }
 watch(mode, (value) => {
+  if (value === 'nearby' && locateStartedByTap) {
+    locateStartedByTap = false
+    return
+  }
+  locateStartedByTap = false
   request++
   locating.value = false
   location.value = null

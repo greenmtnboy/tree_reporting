@@ -219,6 +219,42 @@ for (const [label, viewport] of [
       await expect(page.getByRole('button', { name: 'Explore City', exact: true })).toHaveCount(0)
     })
 
+    test('Near Me asks for location from the tap itself, once', async ({ page }) => {
+      await page.addInitScript(() => {
+        const calls: string[] = []
+        ;(window as any).__locationCalls = calls
+        navigator.geolocation.getCurrentPosition = () => { calls.push(location.hash) }
+      })
+      await page.goto('/#/')
+      await page.getByRole('button', { name: 'Near Me', exact: true }).click()
+      await expect(page).toHaveURL(/mode=nearby/)
+      await expect(page.getByRole('status')).toContainText('Finding your location')
+      // Requested before the route changed, inside the gesture a browser ties its prompt to.
+      expect(await page.evaluate(() => (window as any).__locationCalls)).toEqual(['#/'])
+    })
+
+    test('a location request that never answers stops waiting, and a late fix still opens the map', async ({ page }) => {
+      test.setTimeout(90_000)
+      // A quiet or dismissed permission prompt calls neither callback, and the
+      // Geolocation timeout does not run while a prompt is pending.
+      await page.addInitScript(() => {
+        navigator.geolocation.getCurrentPosition = success => { (window as any).__finishLocation = success }
+      })
+      await page.clock.install()
+      await page.goto('/#/')
+      await page.getByRole('button', { name: 'Near Me', exact: true }).click()
+      await expect(page.getByRole('status')).toContainText('Finding your location')
+      await page.clock.fastForward(16_000)
+      await expect(page.getByRole('alert')).toContainText('taking too long')
+      await expect(page.getByRole('button', { name: 'Try location again' })).toBeEnabled()
+      await expect(page.getByRole('button', { name: 'Explore City', exact: true })).toBeEnabled()
+      await page.evaluate(() => (window as any).__finishLocation({ coords: { latitude: 42.3601, longitude: -71.0589, accuracy: 10 }, timestamp: Date.now() }))
+      await expect(page).toHaveURL(/city=USBOS/)
+      await expect(page).toHaveURL(/mode=nearby/)
+      await expect(page.locator('.tree-map')).toBeVisible()
+      await expect(page.locator('.map-entry')).toHaveCount(0)
+    })
+
     test('a timeout can be retried successfully from the entry button', async ({ page }) => {
       test.setTimeout(90_000)
       await page.addInitScript(() => {
