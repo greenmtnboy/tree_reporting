@@ -73,11 +73,13 @@
     @click="toggleUserLocation"
   >&#x25CE; Find Me</button>
 
-  <!-- Three-pane tree info card -->
+  <!-- Three-pane tree info card; a full-screen sheet on mobile -->
+  <Teleport v-if="mapShown" to="body" :disabled="!props.simplified">
   <div
     v-if="treeCardLoading && !selectedTree"
     ref="treeCardEl"
     class="tree-card tree-card--loading"
+    :class="{ 'tree-card--sheet': props.simplified }"
     :style="treeCardStyle"
     role="status"
     aria-live="polite"
@@ -93,7 +95,7 @@
       </div>
     </div>
   </div>
-  <div v-else-if="selectedTree" ref="treeCardEl" class="tree-card" :style="treeCardStyle" @click.stop>
+  <div v-else-if="selectedTree" ref="treeCardEl" class="tree-card" :class="{ 'tree-card--sheet': props.simplified }" :style="treeCardStyle" @click.stop>
     <div class="tree-card-header">
       <div class="tree-card-header-main">
         <div class="tree-card-title-wrap">
@@ -273,6 +275,7 @@
       </div>
     </div>
   </div>
+  </Teleport>
 
   <StreetViewDialog v-if="streetViewOpen && selectedTreeAnchor"
     :position="{ lat: selectedTreeAnchor[1], lng: selectedTreeAnchor[0] }" @close="streetViewOpen = false" />
@@ -424,8 +427,10 @@ const SCROLL_ZOOM_RATE = 1 / 400
 const WASD_ACCEL = 3
 const WASD_MAX_SPEED = 22
 const WASD_FRICTION = 0.82
-const MOBILE_TREE_CARD_EDGE_MARGIN = 12
-const MOBILE_TREE_CARD_POINTER_GAP = 18
+// A fingertip covers far more than a close-up tree circle, so a mobile tap
+// takes the nearest tree within this many pixels instead of the exact pixel.
+const TREE_TAP_RADIUS_PX = 22
+const MAP_TAP_RING_MS = 650
 const COMPASS_SWOOP_MS = 1600
 
 const WASD_DIRS: Record<string, [number, number]> = {
@@ -996,7 +1001,7 @@ function clampTreeCardPoint(x: number, y: number): { x: number; y: number } {
 
 const treeCardStyle = computed(() => {
   const point = selectedTreeScreenPoint.value
-  if (!point) return {}
+  if (!point || props.simplified) return {}
   return {
     left: `${point.x}px`,
     top: `${point.y}px`,
@@ -1008,6 +1013,9 @@ const treeCardStyle = computed(() => {
 // at once: a pulse on the tree and a loading card anchored where the real one
 // will open.
 const treeCardLoading = ref(false)
+// The mobile sheet lives on <body>, outside the kept-alive map, so it has to
+// leave with the map when another tab takes the screen.
+const mapShown = ref(true)
 let treeTapPulseMarker: maplibregl.Marker | null = null
 
 function showTreeTapPulse(coords: [number, number]): void {
@@ -1022,6 +1030,39 @@ function showTreeTapPulse(coords: [number, number]): void {
 
 function hideTreeTapPulse(): void {
   treeTapPulseMarker?.remove()
+}
+
+// Every mobile tap leaves a brief ring where it landed, filled on a tree and
+// hollow on a miss, so a near miss reads as a miss rather than a dead map.
+function showMapTapRing(point: maplibregl.Point, hit: boolean): void {
+  const container = mapRef.value?.getContainer()
+  if (!container) return
+  const ring = document.createElement('div')
+  ring.className = hit ? 'map-tap-ring map-tap-ring--hit' : 'map-tap-ring'
+  ring.style.left = `${point.x}px`
+  ring.style.top = `${point.y}px`
+  container.appendChild(ring)
+  window.setTimeout(() => ring.remove(), MAP_TAP_RING_MS)
+}
+
+function isSelectableTree(feature: maplibregl.MapGeoJSONFeature): boolean {
+  const id = feature.properties?.id
+  return id != null && id !== '' && id !== 'unkwn'
+}
+
+function pickTappedTree(point: maplibregl.Point, layers: string[]): maplibregl.MapGeoJSONFeature | undefined {
+  const map = mapRef.value
+  if (!map) return undefined
+  if (!props.simplified) return map.queryRenderedFeatures(point, { layers })[0]
+  const r = TREE_TAP_RADIUS_PX
+  let best: maplibregl.MapGeoJSONFeature | undefined
+  let bestDistance = r
+  for (const feature of map.queryRenderedFeatures([[point.x - r, point.y - r], [point.x + r, point.y + r]], { layers })) {
+    if (feature.geometry.type !== 'Point' || !isSelectableTree(feature)) continue
+    const distance = map.project(feature.geometry.coordinates as [number, number]).dist(point)
+    if (distance <= bestDistance) { best = feature; bestDistance = distance }
+  }
+  return best
 }
 
 function startTreeCardLoading(coords: [number, number]): void {
@@ -1047,43 +1088,6 @@ function selectTree(row: PopupTreeRow, coords: [number, number]): void {
   // The card element does not exist yet on the first call, so clamping has no
   // dimensions to work with. Re-run once it has been rendered and measured.
   void nextTick(() => updateTreeCardPosition())
-  void ensureTreeCardVisibleOnMobile(coords)
-}
-
-async function ensureTreeCardVisibleOnMobile(coords: [number, number]): Promise<void> {
-  if (!props.simplified || !mapRef.value || typeof window === 'undefined') return
-  if (!window.matchMedia('(max-width: 640px)').matches) return
-
-  await nextTick()
-  if (!mapRef.value) return
-
-  const container = mapRef.value.getContainer()
-  const viewportHeight = container.clientHeight
-  if (!viewportHeight) return
-
-  const containerRect = container.getBoundingClientRect()
-  const cardEl = container.parentElement?.querySelector('.tree-card') as HTMLElement | null
-  const headerEl = container.parentElement?.querySelector('.city-selector--mobile') as HTMLElement | null
-  const bottomBarEl = document.querySelector('.mobile-bottom-bar') as HTMLElement | null
-
-  const topSafe = headerEl
-    ? (headerEl.getBoundingClientRect().bottom - containerRect.top) + MOBILE_TREE_CARD_EDGE_MARGIN
-    : MOBILE_TREE_CARD_EDGE_MARGIN
-  const bottomSafe = bottomBarEl
-    ? (bottomBarEl.getBoundingClientRect().top - containerRect.top) - MOBILE_TREE_CARD_EDGE_MARGIN
-    : viewportHeight - MOBILE_TREE_CARD_EDGE_MARGIN
-  const cardHeight = cardEl?.offsetHeight ?? Math.round(viewportHeight * 0.65)
-  const minAnchorY = topSafe + cardHeight + MOBILE_TREE_CARD_POINTER_GAP
-  const maxAnchorY = Math.max(MOBILE_TREE_CARD_EDGE_MARGIN, bottomSafe)
-  const desiredAnchorY = Math.max(minAnchorY, maxAnchorY)
-
-  const targetYOffset = Math.round(desiredAnchorY - viewportHeight / 2)
-  mapRef.value.easeTo({
-    center: coords,
-    offset: [0, targetYOffset],
-    duration: 400,
-    essential: true,
-  })
 }
 
 function closeTreeCard(): void {
@@ -1339,14 +1343,14 @@ function bindTreeInteractions() {
   mapRef.value.on('click', (e) => {
     if (!mapRef.value) return
     const crown = pickCrownSprite(e.point)
+    const picked = crown ? undefined : pickTappedTree(e.point, interactiveLayers)
+    if (props.simplified) showMapTapRing(e.point, !!crown || (!!picked && isSelectableTree(picked)))
     if (crown) {
       void showTreeCard({ type: 'Feature', geometry: { type: 'Point', coordinates: [crown.lng, crown.lat] }, properties: { id: crown.id } }, [crown.lng, crown.lat])
       return
     }
-    const features = mapRef.value.queryRenderedFeatures(e.point, { layers: interactiveLayers })
-    if (!features.length) return
-    const picked = features[0] as unknown as GeoJSON.Feature
-    void showTreeCard(picked, [e.lngLat.lng, e.lngLat.lat])
+    if (!picked) return
+    void showTreeCard(picked as unknown as GeoJSON.Feature, [e.lngLat.lng, e.lngLat.lat])
   })
   mapRef.value.on('mousemove', (e) => { updateTreeCursor(e.point) })
   mapRef.value.on('mouseout', () => { updateTreeCursor() })
@@ -1998,6 +2002,7 @@ onMounted(async () => {
 let firstActivation = true
 
 onActivated(() => {
+  mapShown.value = true
   if (firstActivation) { firstActivation = false; return }
   mapActive = true
   window.addEventListener('keydown', onWasdKeyDown)
@@ -2015,6 +2020,7 @@ onActivated(() => {
 })
 
 onDeactivated(() => {
+  mapShown.value = false
   mapActive = false
   window.removeEventListener('keydown', onWasdKeyDown)
   window.removeEventListener('keyup', onWasdKeyUp)
@@ -2851,6 +2857,49 @@ onUnmounted(() => {
   animation: user-location-pulse 2s infinite;
 }
 
+/* Mobile: the card is a full-screen sheet, open the moment a tree is tapped. */
+.tree-card.tree-card--sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  width: auto;
+  max-height: none;
+  transform: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  overflow: hidden;
+  background: rgb(var(--surface-rgb));
+}
+.tree-card--sheet::after { display: none; }
+.tree-card--sheet .tree-card-header { padding: 12px 12px 10px 16px; }
+.tree-card--sheet .tree-card-body { flex: 1 1 auto; min-height: 0; grid-template-columns: 1fr; overflow-y: auto; }
+.tree-card--sheet .tree-card-close { width: 44px; height: 44px; font-size: 1rem; flex: 0 0 auto; }
+.tree-card--sheet.tree-card--loading { justify-content: flex-start; }
+
+.map-tap-ring {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
+  border-radius: 50%;
+  border: 3px solid rgba(var(--ink-rgb), 0.7);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
+  pointer-events: none;
+  z-index: 2;
+  animation: map-tap-ring 0.65s ease-out forwards;
+}
+.map-tap-ring--hit {
+  border-color: var(--color-leaf);
+  background: rgba(var(--accent-rgb), 0.3);
+}
+@keyframes map-tap-ring {
+  0% { transform: scale(0.7); opacity: 1; }
+  50% { opacity: 1; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+
 /* Immediate tap acknowledgement while the tree card's query runs. */
 .tree-tap-pulse {
   width: 18px;
@@ -2898,6 +2947,7 @@ onUnmounted(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .tree-tap-pulse { animation: none; }
+  .map-tap-ring { animation: none; }
   .tree-card-spinner { animation-duration: 1.6s; }
 }
 

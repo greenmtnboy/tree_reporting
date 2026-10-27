@@ -278,3 +278,103 @@ test('a check-in photo is only offered as a tree photo once one is attached', as
   await page.getByTestId('checkin-mode-missing').click()
   await expect(share).toHaveCount(0)
 })
+
+test.describe('Tree taps — mobile', () => {
+  test('a tap opens a full-screen sheet at once, before the tree data arrives', async ({ page }) => {
+    test.setTimeout(180_000)
+    await openMap(page, true)
+    const tree = await findClickableTree(page, true)
+    await page.evaluate(() => {
+      const seen: string[] = []
+      ;(window as unknown as { __cardsSeen: string[] }).__cardsSeen = seen
+      new MutationObserver(() => {
+        const card = document.querySelector('.tree-card')
+        if (card && !seen.includes(card.className)) seen.push(card.className)
+      }).observe(document.body, { childList: true, subtree: true })
+    })
+
+    await page.mouse.click(tree.x, tree.y)
+    const card = page.locator('.tree-card')
+    await expect(card).toContainText(tree.id, { timeout: 15_000 })
+
+    // The first card on screen is the loading sheet: the tap is answered before
+    // the worker's query returns, not after it.
+    const seen = await page.evaluate(() => (window as unknown as { __cardsSeen: string[] }).__cardsSeen)
+    expect(seen[0]).toContain('tree-card--loading')
+    expect(seen[0]).toContain('tree-card--sheet')
+
+    const viewport = page.viewportSize()!
+    const box = (await card.boundingBox())!
+    expect(box.x).toBe(0)
+    expect(box.y).toBe(0)
+    expect(box.width).toBe(viewport.width)
+    expect(box.height).toBe(viewport.height)
+    // Above the bottom bar and the city selector, with a thumb-sized close.
+    expect(await page.evaluate(({ w, h }) => [[w / 2, 30], [w / 2, h - 30]]
+      .every(([x, y]) => !!document.elementFromPoint(x, y)?.closest('.tree-card')), { w: viewport.width, h: viewport.height })).toBe(true)
+    const close = (await card.locator('.tree-card-close').boundingBox())!
+    expect(close.width).toBeGreaterThanOrEqual(44)
+    expect(close.height).toBeGreaterThanOrEqual(44)
+    await card.locator('.tree-card-close').click()
+    await expect(card).toHaveCount(0)
+  })
+
+  test('a near miss still picks the tree, and a clear miss shows where the tap landed', async ({ page }) => {
+    test.setTimeout(180_000)
+    await openMap(page, true)
+    await findClickableTree(page, true)
+    // A tree with no other tree within reach, and a tap 14px off its center.
+    const near = await page.waitForFunction(() => {
+      const map = window.__treeMap!
+      const box = map.getContainer().getBoundingClientRect()
+      const trees = map.queryRenderedFeatures(undefined, { layers: ['trees-circle'] })
+        .filter(f => f.geometry.type === 'Point' && f.properties?.id && f.properties.id !== 'unkwn')
+        .map(f => ({ id: String(f.properties!.id), p: map.project((f.geometry as GeoJSON.Point).coordinates as [number, number]) }))
+      for (const t of trees) {
+        if (t.p.x < 120 || t.p.y < 160 || t.p.x > box.width - 120 || t.p.y > box.height - 220) continue
+        const tap = { x: t.p.x + 14, y: t.p.y }
+        if (trees.some(o => o.id !== t.id && Math.hypot(o.p.x - tap.x, o.p.y - tap.y) < 30)) continue
+        // The exact pixel misses: this tap only lands with the tolerance.
+        if (map.queryRenderedFeatures([tap.x, tap.y], { layers: ['trees-circle'] }).length) continue
+        return { id: t.id, x: box.left + tap.x, y: box.top + tap.y }
+      }
+      return null
+    }, undefined, { timeout: 30_000, polling: 500 })
+    const target = (await near.jsonValue())!
+
+    await page.evaluate(() => {
+      const rings: string[] = []
+      ;(window as unknown as { __rings: string[] }).__rings = rings
+      new MutationObserver(records => {
+        for (const r of records) for (const n of r.addedNodes) {
+          if (n instanceof HTMLElement && n.classList.contains('map-tap-ring')) rings.push(n.className)
+        }
+      }).observe(window.__treeMap!.getContainer(), { childList: true })
+    })
+    const rings = () => page.evaluate(() => (window as unknown as { __rings: string[] }).__rings)
+
+    await page.mouse.click(target.x, target.y)
+    await expect(page.locator('.tree-card')).toContainText(target.id, { timeout: 15_000 })
+    expect(await rings()).toEqual(['map-tap-ring map-tap-ring--hit'])
+    await page.locator('.tree-card-close').click()
+
+    const empty = await page.evaluate(() => {
+      const map = window.__treeMap!
+      const box = map.getContainer().getBoundingClientRect()
+      for (let y = 200; y < box.height - 240; y += 20) {
+        for (let x = 80; x < box.width - 80; x += 20) {
+          if (!map.queryRenderedFeatures([[x - 40, y - 40], [x + 40, y + 40]], { layers: ['trees-circle'] }).length) {
+            return { x: box.left + x, y: box.top + y }
+          }
+        }
+      }
+      return null
+    })
+    test.skip(!empty, 'no empty patch of map in view')
+    await page.mouse.click(empty!.x, empty!.y)
+    await expect.poll(rings).toEqual(['map-tap-ring map-tap-ring--hit', 'map-tap-ring'])
+    await expect(page.locator('.tree-card')).toHaveCount(0)
+    // The ring is a transient acknowledgement, not a marker left on the map.
+    await expect(page.locator('.map-tap-ring')).toHaveCount(0)
+  })
+})
