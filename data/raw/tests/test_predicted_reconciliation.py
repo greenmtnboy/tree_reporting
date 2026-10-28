@@ -118,6 +118,7 @@ def published(tmp_path_factory) -> dict[str, dict]:
         "cambridge_tree_info.py": ([], None),
         "brookline_tree_info.py": ([], None),
         "somerville_tree_info.py": ([], None),
+        "belmont_tree_info.py": ([], None),
         "community_tree_info.py": ([], None),
         "satellite_tree_info.py": (SATELLITE, None),
         "predicted_tree_info.py": (PREDICTED, None),

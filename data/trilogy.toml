@@ -892,8 +892,9 @@ schedule = "0 20 10 * * *"
 timeout_seconds = 2400
 memory_mb = 3072
 
-# Five municipal inventories in one model (Boston, the Arnold Arboretum,
-# Cambridge, Brookline and Somerville), so five probes and five partitions —
+# Six municipal inventories in one model (Boston, the Arnold Arboretum,
+# Cambridge, Brookline, Somerville and Belmont), so six partitions and five
+# probes (Belmont's map exposes no date) —
 # but still one city parquet and one job.  Memory is for PREDICTED_USBOS: a
 # 331k-row staged file peaked at 1.46 GiB locally (2026-10-19), and the full
 # metro circle stages ~1.9M rows.
