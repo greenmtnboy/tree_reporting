@@ -5,6 +5,8 @@ import { CROWN_DISTANCE_MAX, type TreeRenderView, type TreeCrown } from '../lib/
 
 let db: duckdb.AsyncDuckDB | null = null
 let conn: duckdb.AsyncDuckDBConnection | null = null
+/** The connection capped chat reads stream on (runQuery). */
+let streamConn: duckdb.AsyncDuckDBConnection | null = null
 let ready = false
 let initError: string | null = null
 let initPromise: Promise<void> | null = null
@@ -31,6 +33,7 @@ import {
 import { normalizeValue } from './normalizeValue'
 import {
   COLOR_OVERRIDE_TABLE,
+  treeKeySql,
   WEB_MERCATOR_MAX,
   WEB_MERCATOR_WORLD,
   cityTileBoundsSql,
@@ -205,7 +208,7 @@ WITH __base AS (
 SELECT __base.*
 FROM __base
 INNER JOIN ${PUBLISHED_TREE_FILTER_TABLE} __filter_ids
-  ON CAST(__base.tree_id AS VARCHAR) = __filter_ids.tree_id
+  ON ${treeKeySql('__base.tree_id')} = __filter_ids.tree_key
 `
 }
 
@@ -1454,7 +1457,7 @@ async function setPublishedTreeIdFilterSql(sql: string | null) {
   if (normalized) {
     await conn.query(`
 CREATE TEMP TABLE ${PUBLISHED_TREE_FILTER_TABLE} AS
-SELECT DISTINCT CAST(tree_id AS VARCHAR) AS tree_id
+SELECT DISTINCT ${treeKeySql('tree_id')} AS tree_key
 FROM (
   ${normalized}
 ) __published_ids
@@ -1497,7 +1500,7 @@ async function setColorOverrideSql(sql: string | null) {
     await conn.query(`DROP TABLE IF EXISTS ${COLOR_OVERRIDE_TABLE}`)
     await conn.query(`
 CREATE TEMP TABLE ${COLOR_OVERRIDE_TABLE} AS
-SELECT DISTINCT CAST(tree_id AS VARCHAR) AS tree_id, CAST(override_color AS VARCHAR) AS display_color
+SELECT DISTINCT ${treeKeySql('tree_id')} AS tree_key, CAST(override_color AS VARCHAR) AS display_color
 FROM (
   ${normalized}
 ) __color_ids
@@ -1508,13 +1511,16 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
 
     if (Number.isFinite(count) && count > 0) {
       colorOverrideActive = true
+      // The colours the map draws a heatmap layer for. A whole city reads
+      // them off its rows. A window holds only the ground near the camera,
+      // and a colour first met in a cell loaded later would have no layer, so
+      // it lists every override colour and every category default instead.
       const color = colorSql('tf', true)
-      const distinctResult = await conn.query(`
-SELECT DISTINCT ${color.expr} AS display_color
-FROM trees_fast tf
-${color.join}
-`)
-      activeDistinctColors = distinctResult.toArray().map((r: Record<string, unknown>) => String(r.display_color))
+      const distinctResult = await conn.query(cityWindow
+        ? `SELECT DISTINCT display_color FROM ${COLOR_OVERRIDE_TABLE}`
+        : `SELECT DISTINCT ${color.expr} AS display_color FROM trees_fast tf ${color.join}`)
+      const colors = distinctResult.toArray().map((r: Record<string, unknown>) => String(r.display_color))
+      activeDistinctColors = cityWindow ? [...new Set([...colors, ...Object.values(DEFAULT_CATEGORY_COLORS)])] : colors
       colorMapSignature = `color-${hashText(normalizeSql(normalized))}`
     } else {
       // No valid override rows — reset to defaults
@@ -1722,22 +1728,56 @@ function setAutoTileFetchEnabled(enabled: boolean) {
   autoTileFetchEnabled = !!enabled
 }
 
-async function runQuery(sql: string): Promise<{ columns: string[]; rows: Record<string, unknown>[] }> {
+type QueryResult = { columns: string[]; rows: Record<string, unknown>[]; totalRows: number }
+
+function rowObjects(columns: string[], rows: Iterable<Record<string, unknown>>): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = []
+  for (const row of rows) {
+    const obj: Record<string, unknown> = {}
+    for (const col of columns) obj[col] = normalizeValue(row[col])
+    out.push(obj)
+  }
+  return out
+}
+
+/**
+ * Run `sql`; with `maxRows`, return at most that many rows and count the
+ * rest. A chat query reads the published files, not the phone's window, and
+ * one that lists a city's rows would otherwise build the whole result here
+ * and again on the main thread: Boston's 1.4M rows took a phone tab from
+ * 0.8 to 2.4 GB (docs/MOBILE_LOAD_BUDGET.md). Streamed, only one batch is
+ * held at a time, in the query's own order. The stream runs on its own
+ * connection: a tile query on the shared one would close it mid-read.
+ */
+async function runQuery(sql: string, maxRows?: number): Promise<QueryResult> {
   await ensureInit()
   await waitForCityContext()
-  if (!conn) throw new Error('DuckDB not initialized')
+  if (!conn || !db) throw new Error('DuckDB not initialized')
   await windowLoadsSettled()
 
-  const result = await conn.query(sql)
-  const columns = result.schema.fields.map((f) => f.name)
-  const rows = result.toArray().map((row) => {
-    const obj: Record<string, unknown> = {}
-    for (const col of columns) {
-      obj[col] = normalizeValue(row[col])
+  if (maxRows === undefined) {
+    const result = await conn.query(sql)
+    const columns = result.schema.fields.map((f) => f.name)
+    const rows = rowObjects(columns, result.toArray())
+    return { columns, rows, totalRows: rows.length }
+  }
+
+  streamConn ??= await db.connect()
+  const reader = await streamConn.send(sql, true)
+  const kept: Record<string, unknown>[] = []
+  let totalRows = 0
+  // The browser's reader drops its schema once read to the end; take it from a batch.
+  let columns: string[] | null = null
+  for await (const batch of reader) {
+    columns ??= batch.schema.fields.map((f) => f.name)
+    if (kept.length < maxRows) {
+      const take = Math.min(batch.numRows, maxRows - kept.length)
+      for (let i = 0; i < take; i += 1) kept.push(batch.get(i)!.toJSON())
     }
-    return obj
-  })
-  return { columns, rows }
+    totalRows += batch.numRows
+  }
+  columns ??= reader.schema?.fields.map((f) => f.name) ?? []
+  return { columns, rows: rowObjects(columns, kept), totalRows }
 }
 
 async function getMapTrees(camera: TreeRenderView): Promise<TreeCrown[]> {
@@ -1799,7 +1839,7 @@ type WorkerMethodMap = {
   prewarmLodCaches: { params: Record<string, never>; result: void }
   setAutoTileFetchEnabled: { params: { enabled: boolean }; result: void }
   invalidateTileCaches: { params: Record<string, never>; result: void }
-  query: { params: { sql: string }; result: { columns: string[]; rows: Record<string, unknown>[] } }
+  query: { params: { sql: string; maxRows?: number }; result: QueryResult }
   getTile: { params: { z: number; x: number; y: number }; result: { tileBuffer: ArrayBuffer; transient: boolean } }
 }
 
@@ -1926,8 +1966,8 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       }
       case 'query': {
-        const { sql } = msg.params as WorkerMethodMap['query']['params']
-        const result = await runQuery(sql)
+        const { sql, maxRows } = msg.params as WorkerMethodMap['query']['params']
+        const result = await runQuery(sql, maxRows)
         send({ type: 'response', requestId: msg.requestId, ok: true, result })
         break
       }

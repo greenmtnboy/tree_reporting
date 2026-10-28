@@ -18,7 +18,7 @@ describe('nearby crown query', () => {
     await conn.run(`CREATE TABLE trees_fast (
       tree_id VARCHAR, city VARCHAR, longitude DOUBLE, latitude DOUBLE,
       x_3857 DOUBLE, y_3857 DOUBLE, crown_width_m DOUBLE, predicted_crown_width_m FLOAT);
-      CREATE TABLE __tree_color_override (tree_id VARCHAR, display_color VARCHAR);`)
+      CREATE TABLE __tree_color_override (tree_key UBIGINT, display_color VARCHAR);`)
     await conn.run(`INSERT INTO trees_fast VALUES
       ('measured', 'USSFO', 0, 0, 0, 0, 12, 8),
       ('predicted', 'USSFO', 0, 0, 10, 0, NULL, 7),
@@ -28,7 +28,7 @@ describe('nearby crown query', () => {
       ('far', 'USSFO', 0, 0, 10000, 0, 10, NULL),
       ('edge', 'USSFO', 0, 0, 1700, 0, 10, NULL),
       ('wrong-city', 'USSFO', 0, 0, 50, 0, NULL, NULL);
-      INSERT INTO __tree_color_override VALUES ('predicted', '#abcdef');`)
+      INSERT INTO __tree_color_override VALUES (hash('predicted'), '#abcdef');`)
     await conn.run("ALTER TABLE trees_fast ADD COLUMN tree_form VARCHAR DEFAULT 'broadleaf'; ALTER TABLE trees_fast ADD COLUMN dbh DOUBLE DEFAULT 18")
   })
   afterAll(() => conn.closeSync())

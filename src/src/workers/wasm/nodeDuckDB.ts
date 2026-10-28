@@ -45,6 +45,12 @@ export class AsyncDuckDBConnection {
     executedSql.push(sql)
     return this.conn.query(sql)
   }
+
+  /** Streamed, as the browser's `send`: the blocking reader is a sync iterable, which `for await` takes. */
+  async send(sql: string, allowStreamResult?: boolean) {
+    executedSql.push(sql)
+    return this.conn.send(sql, allowStreamResult)
+  }
 }
 
 export class AsyncDuckDB {

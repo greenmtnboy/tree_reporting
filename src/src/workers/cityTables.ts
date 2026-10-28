@@ -396,6 +396,17 @@ export function defaultColorSql(formExpr: string, colors: Record<string, string>
 }
 
 /**
+ * A tree id as the chat's published tables hold it: a 64-bit hash, not the
+ * string. The chat's ids come from the whole city's file, not the phone's
+ * window, so a publish can hold every tree in the city: 11 MB for Boston's
+ * 1.4M as hashes. Two ids sharing a hash among a city's 1.6M has odds near
+ * 1 in 10^7, and would mark one extra tree.
+ */
+export function treeKeySql(expr: string): string {
+  return `hash(CAST(${expr} AS VARCHAR))`
+}
+
+/**
  * How a query reads a tree's display colour. With no override active there is
  * no join at all; with one, the override table is joined and wins where it
  * has a row. `join` goes after the `trees_fast` alias in the FROM clause.
@@ -404,7 +415,7 @@ export function colorSql(alias: string, overrideActive: boolean): { join: string
   const fallback = defaultColorSql(`${alias}.tree_form`)
   if (!overrideActive) return { join: '', expr: fallback }
   return {
-    join: `LEFT JOIN ${COLOR_OVERRIDE_TABLE} __co ON ${alias}.tree_id = __co.tree_id`,
+    join: `LEFT JOIN ${COLOR_OVERRIDE_TABLE} __co ON ${treeKeySql(`${alias}.tree_id`)} = __co.tree_key`,
     expr: `COALESCE(__co.display_color, ${fallback})`,
   }
 }

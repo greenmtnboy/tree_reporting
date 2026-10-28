@@ -360,7 +360,10 @@ How it works (`src/workers/cityWindow.ts`, `src/composables/useMapWindow.ts`):
   position and the check-in dialog's species count. The deep link then loads
   the tree's cell (`ensureWindowAt`) before its card is read. Every URL
   filter, chat publish and colour override is row-local, so it is correct on
-  whatever is held.
+  whatever is held. The one list that is not row-local is the colours the
+  map draws a heatmap layer for: a window lists every override colour and
+  every category default, rather than reading them off the held rows, so a
+  colour first met in a cell loaded later still draws.
 - **The floor.** `minZoom` 13, rotation off (a rotated screen's corners
   reach a fifth further out), lifted for the city-switch flight with tile
   fetching paused. The first pinch against it shows a one-line hint.
@@ -391,6 +394,53 @@ groups (`docs/TRILOGY_ORDER_BY_SPEC.md`, pytrilogy #778) a 4.5 km window
 reads 5 MB of 68, and the budget can move back toward the 500k the subset
 sweep allows. Re-measure with `MAP_BENCH_PANS` when it lands.
 
+### The chat reads the whole city
+
+The map chat's `run_query` and `publish_results` compile against `tree_info`
+(`chatModelImports.ts`), so they read the city's published file, not the
+window: a question about the whole city is answered for the whole city. The
+window bounds only what the map then draws of a publish. But the reads run
+on the map worker's DuckDB, so their peaks land on the heap the window
+protects.
+
+Measured 2026-10-28, Boston on a phone, each step from a fresh tab
+(`MAP_BENCH_CHAT`, below), renderer private memory with the map at about
+820 MB:
+
+| Chat step | Peak, before | Peak, after | Settled, before | Settled, after |
+|---|---:|---:|---:|---:|
+| `run_query`, top 10 species | 1,175 MB | 1,010 MB | 857 MB | 870 MB |
+| `run_query`, every row (1.42M) | 2,433 MB | 1,043 to 1,269 MB | 2,050 MB | 937 to 949 MB |
+| `publish_results`, every tree | 1,234 MB | 1,160 to 1,178 MB | 1,047 MB | 1,020 to 1,060 MB |
+| `publish_results`, every tree coloured | 2,252 MB | 1,305 MB | about 1,950 MB | 1,146 MB |
+
+The two gigabyte steps were the main thread copying whole results it then
+discarded: `run_query` fetched every row to keep 100, and `publish_results`
+ran the colour query to the main thread only to see whether it failed. Now
+`run_query` streams on its own connection, keeping 100 rows and counting the
+rest, and `publish_results` counts the ids and evaluates every colour in one
+pass that returns two numbers. The published ids and colours are held as
+64-bit hashes of the tree id (`treeKeySql`), 11 MB for Boston rather than the
+strings. None of this changes what the agent or the map gets, so it applies
+to desktop too; only the heatmap colour list above is phone-only.
+
+What remains is the scan itself. The per-realm breakdown puts it in DuckDB's
+heap, which grows from 382 MB at the city load to 605 MB after a streamed
+read of every row and 701 MB after a publish of every tree, and keeps that
+high-water mark. The hashed ids are 11 MB of it; turning off DuckDB's
+external file cache changed nothing. The chat reads `{code}_tree_info_v2`
+(90 MB for Boston, in DuckDB's default 122k-row groups), and the likely
+lever is that file's row-group size, as for the projection; not yet
+measured. A question that reads a few columns of a small subset costs far
+less than these whole-city steps.
+
+The summary and species screens' chat and dashboards run on a second
+DuckDB-WASM instance (`useSummaryDashboardExecution.ts`), with its own heap
+in the same tab. Those views are not windowed; the plan for phones is
+targeted aggregates for the default dashboard loads, which Trilogy resolves
+to for non-interactive cuts, with interactivity off (and a banner) on
+mobile.
+
 The bucketed-output proposal (`docs/TRILOGY_BUCKETED_OUTPUT_SPEC.md`,
 one file per cell and a manifest) is not needed for this: one sorted file
 prunes as well from its footer.
@@ -413,6 +463,11 @@ lines during the step, and the bytes each remote file cost, counted from the
 worker's own requests. It reads process memory from the OS on Windows and
 Linux. `MAP_BENCH_PANS=n` adds n pans a screen east at the walk's first
 zoom, which is what makes a phone's window load and drop cells.
+`MAP_BENCH_CHAT` runs the map chat's tools after the load through the page's
+`__treeChatTool` handle, the path an agent's tool call takes (the live
+resolver compiles, the map worker runs), with no model: `1` for every step,
+or a comma list of `aggregate`, `rows`, `publish`, `colour`. Measure one step
+per run; they stack.
 `MAP_BENCH_ISOLATE=1` adds the per-realm breakdown after each step
 (DuckDB's worker, the page, MapLibre's workers); the breakdown allocates
 too, so a step's peak starts after it. Compare peaks, not final figures, run

@@ -22,7 +22,7 @@ type WorkerMethodMap = {
   prewarmLodCaches: { params: Record<string, never>; result: void }
   setAutoTileFetchEnabled: { params: { enabled: boolean }; result: void }
   invalidateTileCaches: { params: Record<string, never>; result: void }
-  query: { params: { sql: string }; result: { columns: string[]; rows: Record<string, unknown>[] } }
+  query: { params: { sql: string; maxRows?: number }; result: { columns: string[]; rows: Record<string, unknown>[]; totalRows: number } }
   getTile: { params: { z: number; x: number; y: number }; result: { tileBuffer: ArrayBuffer; transient?: boolean } }
 }
 
@@ -255,9 +255,10 @@ async function invalidateTileCaches(): Promise<void> {
   await rpc('invalidateTileCaches', {})
 }
 
-async function query(sql: string): Promise<{ columns: string[]; rows: Record<string, unknown>[] }> {
+/** Run `sql` in the map's worker; `maxRows` keeps that many rows and counts the rest. */
+async function query(sql: string, options: { maxRows?: number } = {}): Promise<{ columns: string[]; rows: Record<string, unknown>[]; totalRows: number }> {
   await ensureInit()
-  return rpc('query', { sql })
+  return rpc('query', { sql, maxRows: options.maxRows })
 }
 
 export function useDuckDB() {

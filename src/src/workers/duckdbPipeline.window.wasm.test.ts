@@ -19,10 +19,12 @@ const ROWS = 300_000
 const BBOX: [number, number, number, number] = [-71.20, 42.28, -70.92, 42.44]
 const CENTER: [number, number] = [-71.06, 42.36]
 const FAR: [number, number] = [-71.19, 42.43]
+/** A corner of the city no test looks at, so its cells are never held. */
+const UNSEEN = 'longitude > -70.95 AND latitude < 42.30'
 const POLICY: WindowPolicy = { floorZoom: 13, budgetRows: 40_000, radiusCells: 3 }
 
 type TileResult = { tileBuffer: ArrayBuffer; transient: boolean }
-type QueryResult = { columns: string[]; rows: Record<string, unknown>[] }
+type QueryResult = { columns: string[]; rows: Record<string, unknown>[]; totalRows: number }
 
 function lngLatToTile(lng: number, lat: number, z: number) {
   const n = 2 ** z
@@ -119,6 +121,47 @@ describe('a phone holds the city in windows', () => {
     await lookAt(CENTER, 16.5)
     const t = lngLatToTile(CENTER[0], CENTER[1], 16)
     expect((await worker.call<TileResult>('getTile', { z: 16, ...t })).tileBuffer.byteLength).toBeGreaterThan(0)
+  })
+
+  // The chat reads the whole city, not the window (useChat.ts), and its
+  // results land on the same heap.
+  it('returns a capped read in its own order and counts the rest', async () => {
+    const result = await worker.call<QueryResult>('query', {
+      sql: 'SELECT tree_id FROM trees_published ORDER BY tree_id DESC',
+      maxRows: 5,
+    })
+    expect(result.columns).toEqual(['tree_id'])
+    expect(result.rows).toHaveLength(5)
+    expect(result.totalRows).toBe(ROWS)
+    const ids = result.rows.map((row) => String(row.tree_id))
+    expect(ids.every((id) => id !== 'undefined')).toBe(true)
+    expect(ids).toEqual([...ids].sort().reverse())
+    const empty = await worker.call<QueryResult>('query', { sql: 'SELECT tree_id FROM trees_published WHERE false', maxRows: 5 })
+    expect(empty).toEqual({ columns: ['tree_id'], rows: [], totalRows: 0 })
+  })
+
+  it("filters tiles by the chat's published ids, wherever in the city they are", async () => {
+    await lookAt(CENTER, 16.5)
+    const t = lngLatToTile(CENTER[0], CENTER[1], 16)
+    const tileBytes = async () => (await worker.call<TileResult>('getTile', { z: 16, ...t })).tileBuffer.byteLength
+    const unfiltered = await tileBytes()
+
+    await worker.call('setPublishedTreeIdFilterSql', { sql: 'SELECT tree_id FROM trees_published' })
+    expect(await tileBytes()).toBe(unfiltered)
+    await worker.call('setPublishedTreeIdFilterSql', { sql: `SELECT tree_id FROM trees_published WHERE ${UNSEEN}` })
+    expect(await tileBytes()).toBeLessThan(unfiltered / 10)
+    await worker.call('setPublishedTreeIdFilterSql', { sql: null })
+  })
+
+  it('lists a chat colour first met outside the window, so the map draws it', async () => {
+    expect(await count(`SELECT count(*) AS n FROM trees_fast WHERE ${UNSEEN}`)).toBe(0)
+    const before = worker.messages.length
+    await worker.call('setColorOverrideSql', { sql: `SELECT tree_id,
+      CASE WHEN ${UNSEEN} THEN '#123456' ELSE '#654321' END AS override_color
+      FROM trees_published` })
+    const update = worker.messages.slice(before).filter((m) => m.type === 'colorMapUpdate').pop()
+    expect(update?.distinctColors).toEqual(expect.arrayContaining(['#123456', '#654321']))
+    await worker.call('setColorOverrideSql', { sql: null })
   })
 
   it('holds the whole city again when the window is turned off', async () => {

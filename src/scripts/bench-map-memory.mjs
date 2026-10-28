@@ -35,6 +35,21 @@ const executablePath = process.env.MAP_BENCH_CHROMIUM
 // does not change which engine runs.
 const isolate = process.env.MAP_BENCH_ISOLATE === '1'
 const sampleMs = Number(process.env.MAP_BENCH_SAMPLE_MS ?? 250)
+// Chat tool calls after the load, the same path an agent's call takes
+// (compiled by the live resolver, run in the map's DuckDB worker): the chat
+// reads the published parquets, not the phone's window, so its peaks land
+// on the same heap. Needs the chat panel mounted once (it registers the
+// handle), which the bench does by opening it. MAP_BENCH_CHAT=1 runs every
+// step; a comma list of keys (aggregate,rows,publish,colour) runs those, so
+// one step can be measured from a fresh tab.
+const chatKeys = (process.env.MAP_BENCH_CHAT ?? '').split(',').filter(Boolean)
+const ALL_CHAT_STEPS = [
+  ['aggregate', 'run_query', 'aggregate', { query: `select species, count(tree_id) as trees where city = '${city}' order by trees desc limit 10;` }],
+  ['rows', 'run_query', 'every row', { query: `select tree_id, species, latitude, longitude where city = '${city}';` }],
+  ['publish', 'publish_results', 'every tree', { query: `select tree_id where city = '${city}';` }],
+  ['colour', 'publish_results', 'every tree, coloured', { query: `select tree_id, case when diameter_at_breast_height >= 20 then '#FF69B4' else '#4169E1' end as override_color where city = '${city}';`, color_labels: [{ color: '#FF69B4', label: 'DBH 20+' }, { color: '#4169E1', label: 'DBH < 20' }] }],
+]
+const CHAT_STEPS = ALL_CHAT_STEPS.filter(([key]) => chatKeys.includes('1') || chatKeys.includes(key))
 
 // The headless shell has no measureUserAgentSpecificMemory; isolated runs
 // use the full browser's headless mode, which does.
@@ -167,6 +182,21 @@ try {
   }
   console.log(`${layout} ${city}: trees loaded ${(loadedAfterMs / 1000).toFixed(1)} s after navigation`)
   await report('loaded')
+  if (CHAT_STEPS.length > 0) {
+    await page.locator('[data-testid="mobile-action-chat"], [aria-label$="chat"]').first().click()
+    await page.waitForFunction(() => typeof window.__treeChatTool === 'function', null, { timeout: 30_000 })
+    await page.locator('[data-testid="overlay-close"]').click().catch(() => {})
+    for (const [, tool, label, input] of CHAT_STEPS) {
+      const t0 = Date.now()
+      const result = await page.evaluate(async ([tool, input]) => {
+        const r = await window.__treeChatTool(tool, input)
+        return { success: r.success, text: String(r.message ?? r.error ?? '').slice(0, 160) }
+      }, [tool, input])
+      await page.waitForTimeout(4000)
+      console.log(`   ${tool} (${label}): ${((Date.now() - t0 - 4000) / 1000).toFixed(1)} s, ${result.success ? 'ok' : 'FAILED'}: ${result.text}`)
+      await report(`chat ${tool}: ${label}`)
+    }
+  }
   for (const zoom of zooms) {
     // A block body: jumpTo returns the map, and an evaluate that returns it
     // has Playwright serialize the whole object graph (tile buffers as
