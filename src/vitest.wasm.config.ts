@@ -9,6 +9,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.wasm.test.ts'],
+    // One file at a time: each worker fetches the spatial extension on its
+    // first LOAD, and two fetching at once on CI broke the signature check.
+    fileParallelism: false,
     testTimeout: 120_000,
     hookTimeout: 180_000,
   },
