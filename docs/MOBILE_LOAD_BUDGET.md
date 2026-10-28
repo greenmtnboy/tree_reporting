@@ -109,7 +109,7 @@ same for the ecoregion dimension: three columns instead of 5.75 MB.
 Measured on NYC, phone layout, the same production build serving both files
 from localhost, twice each, with the bench's zoom walk (z13, 15, 16, 17, 18):
 
-| Path | Trees on screen | Renderer at load | Peak over the zoom walk |
+| Path | Trees on screen | Renderer at load | Peak over the zoom walk (inflated; see below) |
 |---|---:|---:|---:|
 | Assembled (the stage 1 load) | 13.2 s, 14.8 s | 973 MB, 981 MB | 1,866 MB, 2,020 MB |
 | Projection | 9.0 s, 12.3 s | 988 MB, 970 MB | 2,061 MB, 1,754 MB |
@@ -120,28 +120,60 @@ or without the joins, which the native probe's 80 MB did not predict. The
 pipeline job stays because the load is simpler, faster and probe-free, and
 because the projection is the file stage 2 partitions.
 
-### What sets the peak now: the tiles, not the load
+### The zoom walk's spike was the bench's
 
-The zoom walk is the finding. After the load the renderer sits near 970 MB,
-and serving tiles at z15 to z18 then pushes the peak to 1.6 to 2.1 GB,
-varying by several hundred MB between identical runs. The stage 1
-measurement settled at one camera and never saw this; a phone that survives
-the load is still reloaded by the first zoom in. The transient is somewhere
-in the per-viewport work: the neighbourhood batch (a 4x4 block of z15 tiles
-is about 17 km² of NYC), the crown query at z17+, and whatever MapLibre
-holds for the tiles it was handed. None of it is isolated yet. This is the
-next measurement to make, per step, with DuckDB's memory tags and the
-worker's `[Perf]` lines, before any further lever is chosen.
+The figures above, and every "peak over the zoom walk" measured before
+2026-10-27, include a transient of 600 to 850 MB that the page never
+allocated. `bench:memory` moved the camera with
+`page.evaluate(() => window.__treeMap.jumpTo(...))`; `jumpTo` returns the
+map, so Playwright serialized the whole MapLibre object graph back to Node
+on every step, tile buffers included, as base64 (1.35 GB of allocation in
+1.6 s on the renderer's main thread, attributed to Playwright's own
+`innerSerialize` and `typedArrayToBase64` in an allocation profile that
+counts collected objects). Over open water the same walk spiked less, which
+made it look like the cost of drawing trees. The bench now evaluates a block
+body that returns nothing, and reports each step's peak, a per-second
+timeline of the step, and the worker's `[Perf]` lines during it.
 
-Levers after that, in the order they are worth trying:
+How it was isolated, for the next spike: `MAP_BENCH_ISOLATE=1` serves the
+app cross-origin isolated, which unlocks the per-realm breakdown
+(`measureUserAgentSpecificMemory`). That showed DuckDB's heap at 691 MB from
+the load to z18, and the JS realms small, so the transient was freed memory
+outside both. A memory-infra trace then showed the renderer's main thread
+blocked for 1.6 s inside the evaluate, and a CPU and allocation profile of
+that one call named the serializer. The worker isolation is safe because it
+ships no threaded DuckDB bundle; isolation does not change the engine.
 
-1. **Size the neighbourhood block by tree count, not by zoom.** The block
-   is a constant per zoom band in `neighborhoodBlockSizeForZoom`; NYC at
-   z15 puts tens of thousands of trees in one batch, Burlington a few
-   hundred.
+Boston on a phone with the corrected bench, centred on its densest square
+(Blue Hills, 62% predicted rows), z13 to z18, two runs each, local files.
+The subsets are squares of the published projection cut around that centre:
+
+| Trees loaded | Renderer after load | Peak over the walk | Peak, old bench |
+|---:|---:|---:|---:|
+| 38k (2 km) | 533 MB | 598, 613 MB | 710, 716 MB |
+| 96k (4 km) | 557 MB | 645, 657 MB | 1,072, 1,284 MB |
+| 169k (6 km) | 575 MB | 724, 736 MB | 1,190, 1,378 MB |
+| 311k (9 km) | 605 MB | 812, 824 MB | 1,430, 1,579 MB |
+| 495k (13 km) | 650 MB | 859, 886 MB | 1,283, 1,468 MB |
+| 1.57M (whole metro) | 1,173 MB | 1,288, 1,310 MB | 1,924, 2,195 MB |
+
+What sets the peak is the load, plus 100 to 250 MB for the overview zooms
+(z13 and z14 aggregate the visible block); z15 to z18 add nothing above
+that. DuckDB's heap does not move during the walk. So a phone tab survives
+zooming in if it survives the load and the overview, and the levers are the
+rows held and the overview batch, not the detail tiles or the crowns. A
+window of up to about 500k trees keeps the whole walk under 900 MB; the
+whole Boston metro is over budget at the load alone.
+
+Levers, in the order they are worth trying:
+
+1. **Hold a window, not the city.** Done for phones (stage 2 below); the
+   file side is `docs/TRILOGY_ORDER_BY_SPEC.md`.
 2. **Coarser overview grids at z11 and z12.** Done in the tile-latency work
    below: 128 m at z11, 64 m at z12, where the heatmap is the only layer.
-3. **Replace the spatial extension.** `ST_AsMVT` is its only use and a
+3. **Size the neighbourhood block by tree count, not by zoom.** Now only a
+   latency question: the detail-zoom batches do not show in memory.
+4. **Replace the spatial extension.** `ST_AsMVT` is its only use and a
    point-only MVT encoder is small JavaScript, but there is no evidence it
    is faster: the engine runs in its own worker, so the encoder would run
    beside it, and Arrow rows are a few times the bytes of an MVT blob per
@@ -295,21 +327,73 @@ Worth re-measuring: the 12 s z15 view that kept the feature table (above)
 was a points batch, and so paid the same pushdown. With it fixed the
 table may no longer earn its 360 MB.
 
-## Stage 2: cells
+## Stage 2: the phone's window
 
 The premise is that what the map shows is arbitrary (linked-in filters, chat
 publishes, colour overrides), so there is one rendering path, DuckDB over
-whatever rows are resident, and the question is which rows are resident. The
-city becomes a directory of cell files (z12 or z13 web-mercator tiles) plus a
-manifest; the worker loads and evicts cells by viewport into the same
-`trees_fast` shape. A filter that is row-local (a predicate on a row's own
-columns, which is every URL filter and every `CASE` colour) is correct on a
-partial load; one that is not (an aggregate, a window, a `LIMIT`) loads the
-whole city first, which stage 1 made affordable. Zooming out to the city
-overview is the other moment that loads everything, with a progress state.
+whatever rows are resident, and the question is which rows are resident. On
+a phone (the mobile layout below 768 px) the answer is the ground near the
+camera, and the map cannot zoom out past a floor, so that ground is bounded.
+Desktop holds the whole city, as before.
 
-The pipeline side is a native Trilogy feature, not a Python script:
-`docs/TRILOGY_BUCKETED_OUTPUT_SPEC.md`.
+How it works (`src/workers/cityWindow.ts`, `src/composables/useMapWindow.ts`):
+
+- **Cells.** The load and eviction unit is a z14 web-mercator tile, about
+  1.8 km across at Boston's latitude. Every tree belongs to one cell (its
+  own z20 tile index, shifted), so loads never overlap.
+- **Tile requests pull cells in.** `getTile` loads the cells a tile draws
+  from before the tile is queued. Requests are gathered for 40 ms, so a
+  view's tiles cost one scan of the file. The scan lands in a staging table
+  that is split into one table per cell; `trees_fast` is a view over them.
+  A tile below the floor, or farther than `radiusCells` from the camera (one
+  MapLibre asks for mid-flight), is answered empty and transient.
+- **Nothing partial is cached.** A tile batch reaching past the held cells
+  is drawn but not cached, so it is asked for again once they load.
+- **Eviction.** Once the held rows pass the budget, the cells farthest from
+  the camera are dropped, never one within `radiusCells` of it. DuckDB-wasm
+  reuses a dropped table's memory: ten pans across Boston held its heap flat.
+- **The vocabularies are whole-city.** The ENUMs are built from the whole
+  file before any cell loads, so a value first met in a later cell is
+  already in them. Those columns are a couple of MB of the file.
+- **Reads a window cannot answer** go to `trees_published` (the projection
+  file on a phone, `trees_fast` on desktop): the deep-linked tree's
+  position and the check-in dialog's species count. The deep link then loads
+  the tree's cell (`ensureWindowAt`) before its card is read. Every URL
+  filter, chat publish and colour override is row-local, so it is correct on
+  whatever is held.
+- **The floor.** `minZoom` 13, rotation off (a rotated screen's corners
+  reach a fifth further out), lifted for the city-switch flight with tile
+  fetching paused. The first pinch against it shows a one-line hint.
+- **Tiers.** `normal`: floor z13, 300k rows. `low`: floor z14, 150k rows,
+  for a phone reporting `navigator.deviceMemory` of 4 or less, or one whose
+  last city load never settled (a flag set before the load and cleared 8 s
+  after the first view is up; Safari's memory reload leaves it set). The low
+  tier shows a banner with "Try full detail"; a second reload under full
+  detail goes back to low rather than looping.
+
+Measured 2026-10-28, Boston on a phone (iPhone 13 profile), production data
+(the published projection, not yet sorted), centred on Blue Hills, then a
+z13/z14 walk and ten pans east at z13:
+
+| | Whole city | Windowed |
+|---|---:|---:|
+| Trees on screen | 9.7 to 11.7 s | 8.4 s |
+| DuckDB heap | 691 MB | 382 MB at load, 509 MB from the first walk on |
+| Renderer peak | 1,288 to 1,310 MB | 1,024 to 1,033 MB |
+| Renderer settled | 1,120 to 1,160 MB | 826 to 890 MB |
+| Rows held | 1.57M | 104k at load, under 300k after |
+
+Each window load still reads the whole unsorted file in 122k-row groups
+(about 0.5 s a load on localhost) and the heap keeps that transient: the
+heap grew 127 MB for a 167k-row load. The 300k budget is set for that. The
+fix is the file, not the loader: written in Hilbert order with 10k-row
+groups (`docs/TRILOGY_ORDER_BY_SPEC.md`, pytrilogy #778) a 4.5 km window
+reads 5 MB of 68, and the budget can move back toward the 500k the subset
+sweep allows. Re-measure with `MAP_BENCH_PANS` when it lands.
+
+The bucketed-output proposal (`docs/TRILOGY_BUCKETED_OUTPUT_SPEC.md`,
+one file per cell and a manifest) is not needed for this: one sorted file
+prunes as well from its footer.
 
 ## Measuring
 
@@ -323,11 +407,21 @@ pnpm bench:memory                   # MAP_BENCH_LAYOUT=desktop for the other lay
 ```
 
 `scripts/bench-map-memory.mjs` prints the renderer's private memory at each
-step and the bytes each remote file cost, counted from the worker's own
-requests. It reads process memory from the OS on Windows and Linux. Compare
-peaks, not final figures, run one scenario at a time (a second browser on
-the machine skews both), and run each scenario at least twice: the zoom
-walk's peak moves by several hundred MB between identical runs.
+step (settled, the step's peak, and one figure per second of the step, from
+a 250 ms sample; `MAP_BENCH_SAMPLE_MS` to change it), the worker's `[Perf]`
+lines during the step, and the bytes each remote file cost, counted from the
+worker's own requests. It reads process memory from the OS on Windows and
+Linux. `MAP_BENCH_PANS=n` adds n pans a screen east at the walk's first
+zoom, which is what makes a phone's window load and drop cells.
+`MAP_BENCH_ISOLATE=1` adds the per-realm breakdown after each step
+(DuckDB's worker, the page, MapLibre's workers); the breakdown allocates
+too, so a step's peak starts after it. Compare peaks, not final figures, run
+one scenario at a time (a second browser on the machine skews both), and
+run each scenario twice: identical runs agree within about 30 MB.
+
+Anything the bench passes to `page.evaluate` must return a plain value.
+Returning a MapLibre object has Playwright serialize its whole graph, which
+was the 600 to 850 MB "zoom spike" in every walk measured before 2026-10-27.
 
 `pnpm bench:tiles` (`scripts/bench-tile-latency.mjs`) takes the same
 `MAP_BENCH_*` variables, defaults to the desktop layout, and prints one row

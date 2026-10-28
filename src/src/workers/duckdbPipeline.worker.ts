@@ -38,7 +38,25 @@ import {
   dropCityTablesSql,
   loadCityTablesSql,
   tileIndexSql,
+  windowCellSplitSql,
+  windowCellTable,
+  windowStagingSql,
+  windowViewSql,
+  windowedCityTablesSql,
+  type CityTableOptions,
 } from './cityTables'
+import {
+  CELL_ZOOM,
+  cellAt,
+  cellDistance,
+  cellFromKey,
+  cellKey,
+  cellsBounds,
+  cellsForTile,
+  chunksToEvict,
+  type Chunk,
+  type WindowPolicy,
+} from './cityWindow'
 
 const MAX_TILE_CACHE_ENTRIES = 1536
 const MAX_PARALLEL_TILE_WORK = 3
@@ -105,6 +123,32 @@ let activeQueuedWorkers = 0
 let activeCityDefaultQuery: string = DEFAULT_BASE_QUERY_SQL
 /** The city code whose rows are currently loaded in the `trees` table (null = all cities). */
 let loadedCity: string | null = null
+
+// The phone's window (cityWindow.ts). `windowPolicy` is what the main thread
+// asked for; `cityWindow` is set while the loaded city is held in windows,
+// and is null for a city held whole (desktop, or a city with no projection).
+let windowPolicy: WindowPolicy | null = null
+let cityWindow: {
+  options: CityTableOptions
+  /** Bumped on every city load, so a load that lands after a switch is dropped. */
+  generation: number
+  /** The city's extent from the parquet footer, since no table holds all of it. */
+  bounds: { west: number; east: number; south: number; north: number } | null
+  treeCount: number
+  chunks: Map<string, Chunk>
+  /** Every loaded cell, with the table holding it ('' for a cell with no trees). */
+  cellTable: Map<number, string>
+  /** Cells whose load is queued or running. */
+  cellLoads: Map<number, Promise<void>>
+  pending: Set<number>
+  flush: Promise<void> | null
+} | null = null
+let windowGeneration = 0
+/** Whether the loaded city was loaded with a window policy (it may still be whole: no projection). */
+let loadedWithWindowPolicy = false
+let windowChunkSeq = 0
+/** How long tile requests are gathered before their cells are loaded in one scan. */
+const WINDOW_GATHER_MS = 40
 
 // City-context gate: tile generation and city-table queries must not run until
 // setCityContext has fully completed (color map, agg caches, bounds all built).
@@ -503,14 +547,18 @@ async function parquetHasColumn(url: string, column: string): Promise<boolean> {
  * from the per-city parquet. Pass undefined to load all cities from the full
  * file (only as a last-resort fallback when city is genuinely unknown).
  *
- * Memory is the constraint. The whole city is materialised in the DuckDB-wasm
- * heap, which only ever grows, and on an iPhone that heap sits in the same
- * process budget as the map. The row shape lives in cityTables.ts, with the
- * numbers; what this function decides is which files to read.
+ * Memory is the constraint. The DuckDB-wasm heap only ever grows, and on an
+ * iPhone it sits in the same process budget as the map. Desktop materialises
+ * the whole city; a phone (`windowPolicy`) loads only the vocabularies here
+ * and its rows cell by cell as tiles ask (cityWindow.ts). The row shape lives
+ * in cityTables.ts, with the numbers; what this function decides is which
+ * files to read.
  */
 async function loadCityTrees(city?: string): Promise<void> {
   if (!conn) return
-  if (city && loadedCity === city) return // already loaded
+  // Already loaded, in the shape asked for: a phone that turns its window off
+  // (or on) reloads the same city.
+  if (city && loadedCity === city && loadedWithWindowPolicy === (windowPolicy !== null)) return
 
   if (!city) {
     throw new Error('City must be specified to load trees, to avoid accidentally loading all cities into memory.')
@@ -590,12 +638,50 @@ async function loadCityTrees(city?: string): Promise<void> {
   // aggregated to be sure (see CityTableOptions.predictionsAreUnique).
   const predictionsAreUnique = predictionsUrl !== null && predictionsUrl === citySliceUrl
 
-  for (const sql of dropCityTablesSql()) await conn.query(sql)
+  // A window load still running holds a staging table over the city's types.
+  await windowLoadsSettled()
+  for (const sql of dropCityTablesSql(cityWindow ? { chunkTables: [...cityWindow.chunks.keys()] } : null)) await conn.query(sql)
+  cityWindow = null
+  windowGeneration += 1
+  loadedWithWindowPolicy = windowPolicy !== null
+
+  const options: CityTableOptions = { projectionUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth }
+  // A phone holds the city in windows when the projection is published; the
+  // assembled fallback joins three files and is held whole, as before.
+  const windowed = windowPolicy !== null && projectionUrl !== null
   const timings: Array<[string, number]> = []
-  for (const sql of loadCityTablesSql({ projectionUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth })) {
+  for (const sql of windowed ? windowedCityTablesSql(options) : loadCityTablesSql(options)) {
     const started = nowMs()
     await conn.query(sql)
     timings.push([sql.trim().slice(0, 48).replace(/\s+/g, ' '), Math.round(nowMs() - started)])
+  }
+  if (windowed && projectionUrl) {
+    cityWindow = {
+      options,
+      generation: windowGeneration,
+      bounds: null,
+      treeCount: 0,
+      chunks: new Map(),
+      cellTable: new Map(),
+      cellLoads: new Map(),
+      pending: new Set(),
+      flush: null,
+    }
+    // The extent and the count come from the footer: no table holds the city.
+    const stats = (await conn.query(`
+      SELECT path_in_schema AS col,
+        min(TRY_CAST(COALESCE(stats_min_value, stats_min) AS DOUBLE)) AS lo,
+        max(TRY_CAST(COALESCE(stats_max_value, stats_max) AS DOUBLE)) AS hi
+      FROM parquet_metadata('${projectionUrl}')
+      WHERE path_in_schema IN ('latitude', 'longitude')
+      GROUP BY 1`)).toArray()
+    const range = (col: string) => stats.find((row) => row.col === col)
+    const lat = range('latitude'), lng = range('longitude')
+    if (lat && lng && [lat.lo, lat.hi, lng.lo, lng.hi].every((v) => Number.isFinite(Number(v)))) {
+      cityWindow.bounds = { south: Number(lat.lo), north: Number(lat.hi), west: Number(lng.lo), east: Number(lng.hi) }
+    }
+    const count = await conn.query(`SELECT sum(num_rows) AS n FROM parquet_file_metadata('${projectionUrl}')`)
+    cityWindow.treeCount = Number(count.toArray()[0]?.n ?? 0)
   }
   const memory = await conn.query(`
     SELECT tag, CAST(round(sum(memory_usage_bytes) / 1048576) AS INTEGER) AS mb
@@ -603,6 +689,7 @@ async function loadCityTrees(city?: string): Promise<void> {
   console.info('[Perf] duckdb-worker:city-load', {
     city,
     source: projectionUrl ? 'projection' : 'assembled',
+    windowed,
     ms: timings.map(([label, ms]) => `${ms} ${label}`).join(' | '),
     duckdbMb: memory.toArray().map((row) => `${row.tag}=${row.mb}`).join(' '),
   })
@@ -620,6 +707,138 @@ async function loadCityTrees(city?: string): Promise<void> {
   } catch (e) {
     console.warn('[duckdb-worker] landmarks-load:failed', e)
   }
+}
+
+/** The cells of a tile that hold any of the city, by the footer's extent. */
+function windowCellsForTile(z: number, x: number, y: number): number[] {
+  const keys = cellsForTile(z, x, y)
+  const bounds = getDataTileBounds(CELL_ZOOM)
+  if (!bounds) return keys
+  return keys.filter((key) => {
+    const cell = cellFromKey(key)
+    return cell.x >= bounds.minX && cell.x <= bounds.maxX && cell.y >= bounds.minY && cell.y <= bounds.maxY
+  })
+}
+
+/** True when every row a tile could draw is loaded, so its result may be cached. */
+function windowCoversTile(z: number, x: number, y: number): boolean {
+  if (!cityWindow) return true
+  const held = cityWindow.cellTable
+  return windowCellsForTile(z, x, y).every((key) => held.has(key))
+}
+
+/**
+ * Whether a tile is near enough the camera to pull its trees in: within the
+ * policy's radius of the camera's cell. A tile MapLibre asks for mid-flight,
+ * or below the floor, is answered empty and transient instead.
+ */
+function windowAllowsTile(z: number, x: number, y: number): boolean {
+  if (!cityWindow || !windowPolicy) return true
+  if (z < Math.floor(windowPolicy.floorZoom)) return false
+  if (!activeViewportCenter) return true
+  const camera = cellAt(activeViewportCenter.lng, activeViewportCenter.lat)
+  const span = z >= CELL_ZOOM ? 1 : 2 ** (CELL_ZOOM - z)
+  const middle = z >= CELL_ZOOM
+    ? cellFromKey(cellsForTile(z, x, y)[0])
+    : { x: x * span + span / 2, y: y * span + span / 2 }
+  return cellDistance(middle, camera) <= windowPolicy.radiusCells + span / 2
+}
+
+/** Load whichever of `keys` are not held, gathering concurrent requests into one scan. */
+async function ensureWindowCells(keys: number[]): Promise<void> {
+  const win = cityWindow
+  if (!win) return
+  const waits: Promise<void>[] = []
+  for (const key of keys) {
+    if (win.cellTable.has(key)) continue
+    const inflight = win.cellLoads.get(key)
+    if (inflight) {
+      waits.push(inflight)
+      continue
+    }
+    win.pending.add(key)
+    if (!win.flush) {
+      win.flush = new Promise<void>((resolve) => setTimeout(resolve, WINDOW_GATHER_MS)).then(() => {
+        const cells = [...win.pending]
+        win.pending.clear()
+        win.flush = null
+        return loadWindowCells(win, cells)
+      })
+    }
+    win.cellLoads.set(key, win.flush)
+    waits.push(win.flush)
+  }
+  await Promise.all(waits)
+}
+
+/**
+ * One load: the rows of `cells` in one scan, split into a table per cell,
+ * `trees_fast` redefined over them, then the farthest cells dropped while the
+ * held rows exceed the budget. A load that lands after a city switch is
+ * dropped unseen.
+ */
+async function loadWindowCells(win: NonNullable<typeof cityWindow>, cells: number[]): Promise<void> {
+  if (!conn || cells.length === 0) return
+  const t0 = nowMs()
+  const staging = `trees_window_staging_${(windowChunkSeq += 1)}`
+  const added: Chunk[] = []
+  try {
+    const sql = windowStagingSql(staging, win.options, cells, cellsBounds(cells), CELL_ZOOM)
+    await conn.query(sql.create)
+    const counts = new Map((await conn.query(sql.counts)).toArray().map((row) => [Number(row.cell), Number(row.n)]))
+    if (cityWindow !== win || win.generation !== windowGeneration) return
+    for (const key of cells) {
+      const rows = counts.get(key) ?? 0
+      if (rows > 0) {
+        await conn.query(windowCellSplitSql(staging, key, CELL_ZOOM))
+        added.push({ table: windowCellTable(key), cells: [key], rows })
+      }
+    }
+    await conn.query(`DROP TABLE IF EXISTS ${staging}`)
+    for (const key of cells) win.cellTable.set(key, counts.get(key) ? windowCellTable(key) : '')
+    for (const chunk of added) win.chunks.set(chunk.table, chunk)
+
+    // The cells just loaded are what the view is waiting to draw: never the
+    // ones dropped to make room for them.
+    const camera = activeViewportCenter ? cellAt(activeViewportCenter.lng, activeViewportCenter.lat) : null
+    const fresh = new Set(added.map((chunk) => chunk.table))
+    const evict = windowPolicy
+      ? chunksToEvict([...win.chunks.values()].filter((chunk) => !fresh.has(chunk.table)), camera,
+        windowPolicy.budgetRows - added.reduce((sum, chunk) => sum + chunk.rows, 0), windowPolicy.radiusCells)
+      : []
+    for (const name of evict) {
+      for (const key of win.chunks.get(name)?.cells ?? []) win.cellTable.delete(key)
+      win.chunks.delete(name)
+    }
+    // The view moves off the dropped tables before they go.
+    if (added.length > 0 || evict.length > 0) await conn.query(windowViewSql([...win.chunks.keys()]))
+    for (const name of evict) await conn.query(`DROP TABLE IF EXISTS ${name}`)
+    if (added.length > 0 || evict.length > 0) preparedFeatureTablesReady.clear()
+
+    console.info('[Perf] duckdb-worker:window-load', {
+      cells: cells.length,
+      rows: added.reduce((sum, chunk) => sum + chunk.rows, 0),
+      held: [...win.chunks.values()].reduce((sum, chunk) => sum + chunk.rows, 0),
+      tables: win.chunks.size,
+      evicted: evict.length,
+      ms: Math.round(nowMs() - t0),
+    })
+  } finally {
+    // A load that failed or was superseded leaves nothing behind.
+    if (cityWindow !== win || win.generation !== windowGeneration) {
+      for (const chunk of added) await conn.query(`DROP TABLE IF EXISTS ${chunk.table}`).catch(() => {})
+    }
+    await conn.query(`DROP TABLE IF EXISTS ${staging}`).catch(() => {})
+    for (const key of cells) win.cellLoads.delete(key)
+  }
+}
+
+/** Wait for every window load queued or running, so a read sees the ground it asked about. */
+async function windowLoadsSettled(): Promise<void> {
+  const win = cityWindow
+  if (!win) return
+  // A failed load has already left cellLoads; the read goes ahead on what is held.
+  while (win.cellLoads.size > 0) await Promise.all([...new Set(win.cellLoads.values())].map((load) => load.catch(() => {})))
 }
 
 async function doInit(city?: string) {
@@ -1048,14 +1267,17 @@ GROUP BY xtile, ytile
     })
 
     if (rev === tileQueryRevision) {
+      // A windowed city's batch covers whatever cells are held; a tile reaching
+      // past them is drawn but not cached, so it is asked for again once they load.
       for (let tx = minX; tx <= maxX; tx += 1) {
         for (let ty = minY; ty <= maxY; ty += 1) {
-          setCachedTile(tileCacheKeyForRevision(rev, z, tx, ty), new Uint8Array())
+          if (windowCoversTile(z, tx, ty)) setCachedTile(tileCacheKeyForRevision(rev, z, tx, ty), new Uint8Array())
         }
       }
       for (const row of rows) {
         const xtile = Number(row.xtile)
         const ytile = Number(row.ytile)
+        if (!windowCoversTile(z, xtile, ytile)) continue
         const raw = row.mvt as Uint8Array | undefined
         const tile = !raw || raw.length === 0
           ? new Uint8Array()
@@ -1179,7 +1401,7 @@ WHERE geom IS NOT NULL
     const tile = !raw || raw.length === 0
       ? new Uint8Array()
       : new Uint8Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength))
-    setCachedTile(key, tile)
+    if (windowCoversTile(z, x, y)) setCachedTile(key, tile)
     return new Uint8Array(tile)
   })()
 
@@ -1310,6 +1532,17 @@ ${color.join}
 async function rebuildCityBounds() {
   if (!conn) return
   dataTileBoundsByZoom.clear()
+  // A windowed city's extent is the footer's; the table holds only the window.
+  if (cityWindow) {
+    const { bounds } = cityWindow
+    if (!bounds) return
+    for (let z = CELL_ZOOM - 1; z <= 20; z += 1) {
+      const nw = lngLatToTile(bounds.west, bounds.north, z)
+      const se = lngLatToTile(bounds.east, bounds.south, z)
+      dataTileBoundsByZoom.set(z, { minX: nw.x, maxX: se.x, minY: nw.y, maxY: se.y })
+    }
+    return
+  }
   const zooms = Array.from({ length: 8 }, (_, i) => 13 + i)
   const boundsResult = await conn.query(cityTileBoundsSql(zooms))
   const boundsRow = boundsResult.toArray()[0] as Record<string, unknown> | undefined
@@ -1337,7 +1570,7 @@ async function setCityContext(city: string) {
   // If trees/trees_fast are loaded for a different city (or not yet loaded),
   // reload them for the requested city before rebuilding caches.
   // Reset the gate first so in-flight tile/query requests queue up while we load.
-  if (loadedCity !== city) {
+  if (loadedCity !== city || loadedWithWindowPolicy !== (windowPolicy !== null)) {
     resetCityReadyGate()
     await loadCityTrees(city)
     invalidateTileCaches('city-load')
@@ -1359,8 +1592,9 @@ WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND city = '${city}'
   postColorMapUpdate()
   // All city tables are ready — unblock tile generation and queries.
   signalCityReady()
-  const countResult = await conn.query(`SELECT COUNT(*) AS cnt FROM trees WHERE city = '${city}'`)
-  const treeCount = Number(countResult.toArray()[0]?.cnt ?? 0)
+  const treeCount = cityWindow
+    ? cityWindow.treeCount
+    : Number((await conn.query(`SELECT COUNT(*) AS cnt FROM trees WHERE city = '${city}'`)).toArray()[0]?.cnt ?? 0)
   ctx.postMessage({ type: 'cityContextReady', loadMs: Math.round(nowMs() - cityLoadStartAt), treeCount })
 }
 
@@ -1492,6 +1726,7 @@ async function runQuery(sql: string): Promise<{ columns: string[]; rows: Record<
   await ensureInit()
   await waitForCityContext()
   if (!conn) throw new Error('DuckDB not initialized')
+  await windowLoadsSettled()
 
   const result = await conn.query(sql)
   const columns = result.schema.fields.map((f) => f.name)
@@ -1536,18 +1771,26 @@ async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Ar
     const cached = getCachedTile(tileCacheKey(z, x, y))
     return { tile: cached ?? new Uint8Array(), transient: cached == null }
   }
+  // A windowed city draws a tile only from loaded cells. The cells are loaded
+  // here, before the tile queue, so every tile of a view asks at once and the
+  // gather in ensureWindowCells makes one scan of them.
+  if (cityWindow && !getCachedTile(tileCacheKey(z, x, y)) && !windowCoversTile(z, x, y)) {
+    if (!windowAllowsTile(z, x, y)) return { tile: new Uint8Array(), transient: true }
+    await ensureWindowCells(windowCellsForTile(z, x, y))
+  }
   return { tile: await queueTileRequest(z, x, y), transient: false }
 }
 
 type WorkerMethodMap = {
   getMapTrees: { params: TreeRenderView; result: TreeCrown[] }
-  ensureInit: { params: { city?: string }; result: { ready: boolean; initError: string | null } }
+  ensureInit: { params: { city?: string; window?: WindowPolicy | null }; result: { ready: boolean; initError: string | null } }
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
   setColorOverrideSql: { params: { sql: string | null }; result: void }
-  setCityContext: { params: { city: string }; result: void }
+  setCityContext: { params: { city: string; window?: WindowPolicy | null }; result: void }
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
+  ensureWindowAt: { params: { lng: number; lat: number }; result: void }
   setVisibleTileRange: { params: { z: number; minX: number; maxX: number; minY: number; maxY: number }; result: void }
   prefetchVisibleTilesAtZoom: {
     params: { z: number; range?: { minX: number; maxX: number; minY: number; maxY: number } }
@@ -1602,7 +1845,8 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       }
       case 'ensureInit': {
-        const { city } = msg.params as WorkerMethodMap['ensureInit']['params']
+        const { city, window } = msg.params as WorkerMethodMap['ensureInit']['params']
+        if (window !== undefined) windowPolicy = window
         await ensureInit(city)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: { ready, initError } })
         break
@@ -1626,7 +1870,8 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       }
       case 'setCityContext': {
-        const { city } = msg.params as WorkerMethodMap['setCityContext']['params']
+        const { city, window } = msg.params as WorkerMethodMap['setCityContext']['params']
+        if (window !== undefined) windowPolicy = window
         await setCityContext(city)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
@@ -1640,6 +1885,15 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'setViewportCenter': {
         const { lng, lat } = msg.params as WorkerMethodMap['setViewportCenter']['params']
         setViewportCenter(lng, lat)
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
+        break
+      }
+      case 'ensureWindowAt': {
+        // A read about one tree (a deep link's card) before its tile is asked for.
+        const { lng, lat } = msg.params as WorkerMethodMap['ensureWindowAt']['params']
+        await waitForCityContext()
+        const cell = cellAt(lng, lat)
+        await ensureWindowCells([cellKey(cell.x, cell.y)])
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }

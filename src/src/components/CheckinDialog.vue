@@ -390,7 +390,7 @@ async function fetchSpeciesCityCount() {
   try {
     const { query } = useDuckDB()
     const { rows } = await query(
-      `SELECT count(*) AS n FROM trees_fast WHERE species = '${species.replace(/'/g, "''")}'`,
+      `SELECT count(*) AS n FROM trees_published WHERE species = '${species.replace(/'/g, "''")}'`,
     )
     const n = Number(rows[0]?.n)
     if (Number.isFinite(n) && n > 0) speciesCityCount.value = n
