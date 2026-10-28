@@ -34,6 +34,7 @@ pnpm test            # vitest, offline apart from two resolver-backed suites
 pnpm lint
 pnpm test:e2e        # Playwright against a --mode e2e build
 pnpm test:queries    # compiles and executes the whole dashboard catalog against the live resolver; gates PRs
+pnpm test:wasm       # the tile worker on DuckDB-WASM under Node, ~20 s; fetches the spatial extension; run after any worker SQL change
 pnpm bench:chat      # the agent chat benchmark; spends the demo model budget, run by hand
 pnpm bench:memory    # renderer memory and bytes for one city load against a preview; run before and after any loader change (docs/MOBILE_LOAD_BUDGET.md)
 pnpm bench:tiles     # time to settle after each zoom and pan, and how long tiles trickle in; run before and after any tile-query change

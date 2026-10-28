@@ -18,6 +18,23 @@ a red run.
 - `pnpm test:queries`: the dashboard query sweep below. Needs the network;
   gates every pull request as the `dashboard-queries` job in
   `.github/workflows/ci.yml`.
+- `pnpm test:wasm`: the tile worker (`src/workers/duckdbPipeline.worker.ts`),
+  unmodified, on DuckDB-WASM under Node (`src/workers/duckdbPipeline.wasm.test.ts`),
+  as its own `wasm-tests` CI job. The browser-only modules are swapped by
+  `vi.mock`: `@duckdb/duckdb-wasm` for the package's blocking Node build
+  (`src/workers/wasm/nodeDuckDB.ts`, the same wasm engine in-process), the
+  parquet URLs for a temporary directory holding a synthetic 300k-tree browser
+  projection (`wasm/fixtures.ts`), and the tests drive the worker through its
+  message protocol (`wasm/workerHarness.ts`). It walks z11 to z18, then checks
+  every tile query it ran with `EXPLAIN (FORMAT json)`: nothing in a table
+  scan's filter may evaluate `ST_AsMVTGeom` or `ST_IsEmpty`. That is the
+  wasm-only pushdown from #144 (12.5 s against 18 ms for one z16 batch over
+  1.5M rows); native DuckDB plans it correctly, so `cityTables.test.ts` cannot
+  see it. It also checks the intro's overview warm-up (#146): one aggregate
+  over the range, and every tile in it served while fetching is paused.
+  Needs the network: spatial is fetched from extensions.duckdb.org on first
+  LOAD, because a LOAD from a local file, a registered buffer or a local
+  repository hangs under the Node runtime.
 - `pnpm bench:chat`: the agent chat benchmark below. Run by hand.
 - `pnpm test:crowns`: deterministic WebGL crown-renderer checks on a separate
   Vite dev server (port 6174), with no remote map or tree data. Checks a 12 m

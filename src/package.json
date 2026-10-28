@@ -11,6 +11,7 @@
     "lint": "eslint . --ext .vue,.ts,.js",
     "test": "vitest run",
     "test:queries": "vitest run --config vitest.queries.config.ts",
+    "test:wasm": "vitest run --config vitest.wasm.config.ts",
     "bench:chat": "vitest run --config vitest.chatbench.config.ts",
     "bench:map": "node scripts/bench-map.mjs",
     "bench:memory": "node scripts/bench-map-memory.mjs",
