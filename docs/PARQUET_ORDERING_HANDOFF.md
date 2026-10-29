@@ -11,10 +11,11 @@ phone's window, `mobile-map-window`). This is the next session's brief.
 - **0.3.414 cannot build the sorted projection.** The write-order select
   grain-pins the stored derived columns, and a CTE usage walk renders
   `array_reduce` with the generic dialect. Both are fixed together upstream
-  (pytrilogy branch `fix-write-order-derived-columns`); the repros are in
-  `upstream_repro/write_order_derived_column/`. Raise the floors to the
-  release that carries the fix before merging, or the daily projection job
-  fails for every city on its next rebuild.
+  in trilogy-data/pytrilogy#783 (0.3.416); the repros are in
+  `upstream_repro/write_order_derived_column/`. Raise the floors to 0.3.416
+  once it is on PyPI, and check the cloud worker runs it, before merging.
+  Otherwise the daily projection job fails for every city on its next
+  rebuild.
 - Step 5 was done with the patched pytrilogy, written to a local file: 166
   row groups of ~10k rows, the same 1,695,102 rows as the published file,
   and no extra column. A 4.5 km Blue Hills window overlaps 5 of 166 groups.
