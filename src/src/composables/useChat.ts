@@ -696,14 +696,15 @@ export function useChat() {
           }
           const compiled = await compilePreQL(query)
           const sql = applySqlParameters(compiled.sql, compiled.parameters)
-          const { columns, rows } = await duckQuery(sql)
-          const truncated = rows.slice(0, 100)
+          // The query reads the whole city's file, not the phone's window;
+          // the worker keeps the first 100 rows and only counts the rest.
+          const { columns, rows, totalRows } = await duckQuery(sql, { maxRows: 100 })
           return {
             success: true,
             message: safeJsonStringifyHelper({
               columns,
-              rows: toJsonSafeRowsHelper(truncated),
-              totalRows: rows.length,
+              rows: toJsonSafeRowsHelper(rows),
+              totalRows,
             }),
           }
         }
@@ -777,9 +778,18 @@ ${sql}
 ) AS __publish_ids
 WHERE tree_id IS NOT NULL
 `
-          const { rows } = await duckQuery(
-            `SELECT COUNT(*) AS cnt FROM (${wrappedSql}) AS __count_ids`,
-          )
+          // One pass counts the ids and, with a colour, evaluates every
+          // override_color, so a runtime error (an invalid datetime cast)
+          // comes back here for the agent to refine. Nothing but the counts
+          // leaves the worker: the ids and colours are built into the map's
+          // own tables by publishing below.
+          const { rows } = await duckQuery(`
+SELECT
+  COUNT(tree_id) AS cnt${hasColor ? `,
+  COUNT(CAST(override_color AS VARCHAR)) AS colored` : ''}
+FROM (
+${sql}
+) AS __count_ids`)
           const count = Number(rows[0]?.cnt ?? 0)
 
           if (!Number.isFinite(count) || count <= 0) {
@@ -798,9 +808,6 @@ ${sql}
 ) AS __color_src
 WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
 `
-            // Execute the full color SQL before publishing so any runtime errors (e.g. invalid datetime
-            // casts) are caught here and returned to the agent as a tool failure to refine.
-            await duckQuery(colorOverrideSql)
             console.log('[publish_results] publishing color override, labels:', normalizedColorLabels)
             publishColorOverride(colorOverrideSql, normalizedColorLabels)
           } else {
@@ -1095,6 +1102,9 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
       return { success: false, error: err.message }
     }
   }
+  // Bench handle: bench:memory runs the map chat's tools without a model,
+  // the same path an agent's tool call takes (scripts/bench-map-memory.mjs).
+  ;(window as unknown as { __treeChatTool?: typeof executeTool }).__treeChatTool = executeTool
 
   async function sendMessage(userText: string) {
     // Add to UI and to LLM history (runToolLoop slices off the last entry as the current prompt)

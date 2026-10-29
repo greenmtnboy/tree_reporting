@@ -2,25 +2,27 @@ import { ref } from 'vue'
 import maplibregl from 'maplibre-gl'
 import DuckDBPipelineWorker from '../workers/duckdbPipeline.worker?worker'
 import type { TreeRenderView, TreeCrown } from '../lib/treeCrowns'
+import type { WindowPolicy } from '../workers/cityWindow'
 
 type PrefetchStatus = 'executed' | 'deduped' | 'skipped'
 type TileRangeParams = { minX: number; maxX: number; minY: number; maxY: number }
 
 type WorkerMethodMap = {
   getMapTrees: { params: TreeRenderView; result: TreeCrown[] }
-  ensureInit: { params: { city?: string }; result: { ready: boolean; initError: string | null } }
+  ensureInit: { params: { city?: string; window?: WindowPolicy | null }; result: { ready: boolean; initError: string | null } }
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
   setColorOverrideSql: { params: { sql: string | null }; result: void }
-  setCityContext: { params: { city: string }; result: void }
+  setCityContext: { params: { city: string; window?: WindowPolicy | null }; result: void }
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
+  ensureWindowAt: { params: { lng: number; lat: number }; result: void }
   setVisibleTileRange: { params: { z: number; minX: number; maxX: number; minY: number; maxY: number }; result: void }
   prefetchVisibleTilesAtZoom: { params: { z: number; range?: TileRangeParams }; result: PrefetchStatus }
   prewarmLodCaches: { params: Record<string, never>; result: void }
   setAutoTileFetchEnabled: { params: { enabled: boolean }; result: void }
   invalidateTileCaches: { params: Record<string, never>; result: void }
-  query: { params: { sql: string }; result: { columns: string[]; rows: Record<string, unknown>[] } }
+  query: { params: { sql: string; maxRows?: number }; result: { columns: string[]; rows: Record<string, unknown>[]; totalRows: number } }
   getTile: { params: { z: number; x: number; y: number }; result: { tileBuffer: ArrayBuffer; transient?: boolean } }
 }
 
@@ -43,6 +45,8 @@ let worker: Worker | null = null
 let nextRequestId = 1
 let initPromise: Promise<void> | null = null
 let protocolRegistered = false
+/** The phone's window (useMapWindow.ts), sent with every city load; null holds the whole city. */
+let windowPolicy: WindowPolicy | null = null
 
 const pending = new Map<number, {
   resolve: (value: unknown) => void
@@ -134,7 +138,7 @@ function fireAndForget<K extends Exclude<keyof WorkerMethodMap,
 async function ensureInit(city?: string) {
   if (ready.value) return
   if (!initPromise) {
-    initPromise = rpc('ensureInit', { city })
+    initPromise = rpc('ensureInit', { city, window: windowPolicy })
       .then((state) => {
         // Do NOT set ready.value here — city data isn't loaded yet.
         // setCityContext sets ready.value = true once city tables exist.
@@ -166,9 +170,21 @@ async function setColorOverrideSql(sql: string | null): Promise<void> {
 
 async function setCityContext(city: string): Promise<void> {
   await ensureInit(city)
-  await rpc('setCityContext', { city })
+  await rpc('setCityContext', { city, window: windowPolicy })
   // Trees and landmarks are now loaded — signal the rest of the app.
   ready.value = true
+}
+
+/** Load a phone window's cell under a point, before a read about one tree there. */
+async function ensureWindowAt(lng: number, lat: number): Promise<void> {
+  if (!windowPolicy) return
+  await ensureInit()
+  await rpc('ensureWindowAt', { lng, lat })
+}
+
+/** Set before the first city load; the map's layout decides it. */
+function setWindowPolicy(policy: WindowPolicy | null): void {
+  windowPolicy = policy
 }
 
 function setViewportZoom(zoom: number) {
@@ -239,9 +255,10 @@ async function invalidateTileCaches(): Promise<void> {
   await rpc('invalidateTileCaches', {})
 }
 
-async function query(sql: string): Promise<{ columns: string[]; rows: Record<string, unknown>[] }> {
+/** Run `sql` in the map's worker; `maxRows` keeps that many rows and counts the rest. */
+async function query(sql: string, options: { maxRows?: number } = {}): Promise<{ columns: string[]; rows: Record<string, unknown>[]; totalRows: number }> {
   await ensureInit()
-  return rpc('query', { sql })
+  return rpc('query', { sql, maxRows: options.maxRows })
 }
 
 export function useDuckDB() {
@@ -257,6 +274,8 @@ export function useDuckDB() {
     setPublishedTreeIdFilterSql,
     setColorOverrideSql,
     setCityContext,
+    setWindowPolicy,
+    ensureWindowAt,
     setViewportZoom,
     setViewportCenter,
     setVisibleTileRange,

@@ -7,6 +7,7 @@ import {
   AGG_CACHE_TABLE,
   CITY_ENUM_TYPES,
   COLOR_OVERRIDE_TABLE,
+  treeKeySql,
   TILE_INDEX_ZOOM,
   TREES_TABLE,
   TREES_VIEW,
@@ -189,7 +190,7 @@ describe('city tables', () => {
     expect(defaults.map((r) => r.c)).toEqual([
       CATEGORY_COLORS.spreading, CATEGORY_COLORS.palm, CATEGORY_COLORS.default, CATEGORY_COLORS.palm, CATEGORY_COLORS.default,
     ])
-    await conn.run(`CREATE TEMP TABLE ${COLOR_OVERRIDE_TABLE} AS SELECT 'sf-1' AS tree_id, '#ff0000' AS display_color`)
+    await conn.run(`CREATE TEMP TABLE ${COLOR_OVERRIDE_TABLE} AS SELECT ${treeKeySql("'sf-1'")} AS tree_key, '#ff0000' AS display_color`)
     const over = colorSql('tf', true)
     const colours = (await conn.runAndReadAll(`SELECT tf.tree_id, ${over.expr} AS c FROM ${TREES_TABLE} tf ${over.join} ORDER BY 1`)).getRowObjects()
     expect(colours.map((r) => r.c)).toEqual([

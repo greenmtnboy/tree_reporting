@@ -18,15 +18,21 @@ export type WorkerHarness = {
   call<T = unknown>(method: string, params?: unknown): Promise<T>
   /** Every `[Perf]` line the worker logged, oldest first. */
   perf: { label: string; detail: Record<string, unknown> }[]
+  /** Every message the worker posted unasked (`colorMapUpdate`, ...), oldest first. */
+  messages: { type: string; [key: string]: unknown }[]
 }
 
 export async function startWorker(): Promise<WorkerHarness> {
   const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>()
+  const messages: WorkerHarness['messages'] = []
   const ctx: { onmessage: ((event: { data: unknown }) => void) | null; postMessage: (m: unknown) => void } = {
     onmessage: null,
     postMessage: (message) => {
       const msg = message as Response
-      if (msg?.type !== 'response') return
+      if (msg?.type !== 'response') {
+        messages.push(message as WorkerHarness['messages'][number])
+        return
+      }
       const entry = pending.get(msg.requestId)
       if (!entry) return
       pending.delete(msg.requestId)
@@ -54,6 +60,7 @@ export async function startWorker(): Promise<WorkerHarness> {
   let nextId = 1
   return {
     perf,
+    messages,
     call<T>(method: string, params: unknown = {}) {
       const requestId = nextId++
       return new Promise<T>((resolve, reject) => {

@@ -10,6 +10,14 @@
   <div v-if="isInitialLoading" class="map-loading" role="status">{{ nearbyLocation ? 'Loading trees around you…' : loadingMessage }}</div>
   <div v-else-if="tileRefreshing" class="map-loading map-refreshing">{{ tileRefreshMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
+  <div v-if="mapWindow?.reason && !windowNoticeDismissed && !isInitialLoading" class="map-window-notice" role="status">
+    <span>{{ mapWindow.reason === 'reloaded'
+      ? 'The map reloaded last time, so it is holding a smaller area to stay within this phone’s memory.'
+      : 'Holding a smaller area of the map to stay within this phone’s memory.' }}</span>
+    <button type="button" @click="chooseFullDetail()">Try full detail</button>
+    <button type="button" aria-label="Dismiss" @click="windowNoticeDismissed = true">&times;</button>
+  </div>
+  <div v-if="floorHintVisible" class="map-floor-hint" role="status">Zoomed out as far as this phone can hold</div>
   <div v-if="nearbyEmpty && !isInitialLoading && !displayError" class="nearby-empty" role="status">
     {{ hasUrlFilters ? 'No matching trees in this view. Try zooming out or clearing the filters.' : 'No mapped trees in this view. Try zooming out or exploring a city.' }}
   </div>
@@ -314,6 +322,8 @@ import { useLandmarkData } from '../composables/useLandmarkData'
 import { addCityMarkers, updateCityMarkersSelected, removeCityMarkers, bindCityMarkerInteractions } from '../composables/useGlobeCityMarkers'
 import { useMapIntroAnimation, INTRO_START_ZOOM, INTRO_START_BEARING, INTRO_END_BEARING } from '../composables/useMapIntroAnimation'
 import { resolveBootstrapCity } from '../composables/bootstrapCity'
+import { useIsMobile } from '../composables/useIsMobile'
+import { chooseFullDetail, markMapLoadSettled, markMapLoadStarted, resolveMapWindow } from '../composables/useMapWindow'
 import CitySelector from './CitySelector.vue'
 import MapCompass from './MapCompass.vue'
 import CheckinDialog from './CheckinDialog.vue'
@@ -450,6 +460,8 @@ const {
   setPublishedTreeIdFilterSql,
   setColorOverrideSql,
   setCityContext,
+  setWindowPolicy,
+  ensureWindowAt,
   setViewportZoom,
   setViewportCenter,
   setVisibleTileRange,
@@ -462,6 +474,24 @@ const {
   dbPopulatedMs,
   dbTreeCount,
 } = useDuckDB()
+
+// A phone holds only the ground near the camera and cannot zoom out past a
+// floor (useMapWindow.ts). Decided once, before the first city load, so the
+// worker never loads a whole city it would then have to drop.
+const mapWindow = resolveMapWindow(!!props.simplified && useIsMobile().isMobile.value)
+setWindowPolicy(mapWindow?.policy ?? null)
+const windowNoticeDismissed = ref(false)
+const floorHintVisible = ref(false)
+let floorHintShown = false
+let floorHintTimer: ReturnType<typeof setTimeout> | null = null
+let loadSettleTimer: ReturnType<typeof setTimeout> | null = null
+
+/** Mark a city load as running, for the reload check on the next visit. */
+function markWindowLoadStarted() {
+  if (!mapWindow) return
+  if (loadSettleTimer) clearTimeout(loadSettleTimer)
+  markMapLoadStarted()
+}
 
 const { landmarks } = useLandmarkData()
 const { target: flyToTarget, flyTo } = useFlyTo()
@@ -623,6 +653,17 @@ function setMapInteractions(enabled: boolean) {
   mapRef.value.scrollZoom[action]()
   mapRef.value.touchZoomRotate[action]()
   mapRef.value.touchPitch[action]()
+  if (mapWindow) lockWindowRotation(mapRef.value)
+}
+
+/**
+ * A windowed map stays north-up: the window covers the screen at the floor
+ * zoom, and a rotated screen's corners reach a fifth further out.
+ */
+function lockWindowRotation(map: maplibregl.Map) {
+  map.dragRotate.disable()
+  map.touchZoomRotate.disableRotation()
+  map.keyboard.disableRotation()
 }
 
 function jumpMapToCity(city: CityCode) {
@@ -1140,8 +1181,9 @@ async function openTreeFromRoute(): Promise<void> {
   deepLinkInFlight = treeId
   try {
     const safeId = treeId.replace(/'/g, "''")
+    // trees_published: a phone's window may not hold the tree yet.
     const { rows } = await duckQuery(
-      `SELECT longitude, latitude FROM trees_fast WHERE tree_id = '${safeId}' LIMIT 1`,
+      `SELECT longitude, latitude FROM trees_published WHERE tree_id = '${safeId}' LIMIT 1`,
     )
     const row = rows[0] as { longitude: number; latitude: number } | undefined
     // The URL or the city may have moved on while the query ran.
@@ -1154,9 +1196,11 @@ async function openTreeFromRoute(): Promise<void> {
     }
     const coords: [number, number] = [Number(row.longitude), Number(row.latitude)]
     const map = mapRef.value
-    map.once('moveend', () => {
+    map.once('moveend', async () => {
       if (deepLinkInFlight !== treeId) return
       deepLinkInFlight = null
+      if (readRouteTreeId(route.query.tree) !== treeId) return
+      await ensureWindowAt(coords[0], coords[1])
       if (readRouteTreeId(route.query.tree) !== treeId) return
       void showTreeCard(
         { type: 'Feature', properties: { id: treeId }, geometry: { type: 'Point', coordinates: coords } },
@@ -1172,6 +1216,12 @@ async function openTreeFromRoute(): Promise<void> {
 
 watch(lifecyclePhase, (phase) => {
   if (phase === 'ready') void openTreeFromRoute()
+  // A load counts as survived once the first view has been up a while: the
+  // overview's batches are the last allocation the load sets off.
+  if (phase === 'ready' && mapWindow) {
+    if (loadSettleTimer) clearTimeout(loadSettleTimer)
+    loadSettleTimer = setTimeout(markMapLoadSettled, 8000)
+  }
 })
 
 // A `?tree=` edited in the address bar (or restored by the back button) opens
@@ -1483,19 +1533,33 @@ async function switchCity(city: CityCode, landingCoords?: [number, number], anim
     if (!animate) {
       mapRef.value?.jumpTo({ center: landingCoords ?? center, zoom: 13.5, bearing: INTRO_END_BEARING })
     } else if (props.simplified) {
-      // On mobile, use a smooth but shorter animation than the globe swoop
-      await new Promise<void>((resolve) => {
-        if (!mapRef.value) return resolve()
-        mapRef.value.flyTo({
-          center: landingCoords ?? center,
-          zoom: 13.5,
-          bearing: INTRO_END_BEARING,
-          duration: 5000,
-          essential: true,
+      // On mobile, use a smooth but shorter animation than the globe swoop.
+      // A windowed map lifts its floor for the flight (flyTo arcs out between
+      // cities) and fetches no tiles until it lands: the old city's window
+      // has nothing to draw along the way.
+      if (mapWindow) {
+        mapRef.value?.setMinZoom(0)
+        setAutoTileFetchEnabled(false)
+      }
+      try {
+        await new Promise<void>((resolve) => {
+          if (!mapRef.value) return resolve()
+          mapRef.value.flyTo({
+            center: landingCoords ?? center,
+            zoom: 13.5,
+            bearing: INTRO_END_BEARING,
+            duration: 5000,
+            essential: true,
+          })
+          const onEnd = () => { mapRef.value?.off('moveend', onEnd); resolve() }
+          mapRef.value.once('moveend', onEnd)
         })
-        const onEnd = () => { mapRef.value?.off('moveend', onEnd); resolve() }
-        mapRef.value.once('moveend', onEnd)
-      })
+      } finally {
+        if (mapWindow) {
+          mapRef.value?.setMinZoom(mapWindow.policy.floorZoom)
+          setAutoTileFetchEnabled(true)
+        }
+      }
     } else {
       await runGlobeSwoopTo(center, name, landingCoords)
     }
@@ -1504,6 +1568,7 @@ async function switchCity(city: CityCode, landingCoords?: [number, number], anim
 
     // Load the new city's parquet before accepting the transition so stale
     // switch completions cannot overwrite the lifecycle's current request.
+    markWindowLoadStarted()
     await setCityContext(city)
     if (!lifecycleCommitContextCity(transition)) return
     if (readRouteCity(route.query.city) !== city) {
@@ -1777,6 +1842,7 @@ async function initializeRequestedCity(map: maplibregl.Map): Promise<void> {
     introLockedRangeByZoom.clear()
     jumpMapToCity(city)
 
+    markWindowLoadStarted()
     await setCityContext(city)
     if (disposed) return
     if (!lifecycleCommitContextCity(transition)) continue
@@ -1865,9 +1931,21 @@ onMounted(async () => {
     bearing: props.simplified ? INTRO_END_BEARING : INTRO_START_BEARING,
     maxPitch: props.simplified ? 0 : 70,
     maxZoom: 21,
+    minZoom: mapWindow?.policy.floorZoom,
     keyboard: true,
   })
   mapRef.value = map
+  if (mapWindow) {
+    lockWindowRotation(map)
+    // The first pinch against the floor says why the map stops there.
+    map.on('zoomend', (e) => {
+      if (floorHintShown || !(e as { originalEvent?: unknown }).originalEvent) return
+      if (map.getZoom() > mapWindow.policy.floorZoom + 0.05) return
+      floorHintShown = true
+      floorHintVisible.value = true
+      floorHintTimer = setTimeout(() => { floorHintVisible.value = false }, 4000)
+    })
+  }
   releaseMapTheme = bindMapTheme(map)
   mapResizeObserver = new ResizeObserver(() => map.resize())
   mapResizeObserver.observe(mapContainer.value!)
@@ -2030,6 +2108,8 @@ onDeactivated(() => {
 
 onUnmounted(() => {
   disposed = true
+  if (floorHintTimer) clearTimeout(floorHintTimer)
+  if (loadSettleTimer) clearTimeout(loadSettleTimer)
   releaseMapTheme?.()
   mapResizeObserver?.disconnect()
   window.removeEventListener('keydown', onWasdKeyDown)
@@ -2063,6 +2143,46 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.map-window-notice,
+.map-floor-hint {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface-1);
+  color: var(--color-ink);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  box-shadow: 0 10px 24px rgba(7, 10, 11, 0.24);
+  font-size: .8rem;
+  line-height: 1.45;
+  z-index: 6;
+}
+
+.map-window-notice {
+  bottom: 96px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.map-window-notice button {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--color-leaf);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.map-floor-hint {
+  top: 50%;
+  pointer-events: none;
+}
+
 .nearby-empty {
   position: absolute;
   top: 126px;

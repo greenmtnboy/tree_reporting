@@ -179,3 +179,51 @@ test.describe('Mobile layout', () => {
     await expect(page.locator('.mobile-chat-overlay')).toContainText('Assistant')
   })
 })
+
+// The phone holds only the ground near the camera (src/workers/cityWindow.ts):
+// the map stops zooming out at a floor, stays north-up, and still draws trees.
+test.describe('Mobile map window', () => {
+  type Page = import('@playwright/test').Page
+  const treesLoaded = (page: Page) =>
+    page.waitForFunction(() => performance.getEntriesByName('trees:explore:load').length > 0, null, { timeout: 90_000 })
+  const minZoom = (page: Page) => page.evaluate(() => (window as any).__treeMap.getMinZoom() as number)
+
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.addInitScript(() => localStorage.setItem('sf_trees_welcome_dismissed', '1'))
+  })
+
+  test('stops at the z13 floor, keeps north up, and draws trees from the window', async ({ page }) => {
+    await page.goto('/#/?city=USSFO&mode=explore')
+    await treesLoaded(page)
+    expect(await minZoom(page)).toBe(13)
+    expect(await page.evaluate(() => (window as any).__treeMap.dragRotate.isEnabled())).toBe(false)
+    await page.evaluate(() => { (window as any).__treeMap.jumpTo({ zoom: 10 }) })
+    expect(await page.evaluate(() => (window as any).__treeMap.getZoom())).toBeGreaterThanOrEqual(13)
+    await expect.poll(() => page.evaluate(() =>
+      (window as any).__treeMap.queryRenderedFeatures(undefined, { layers: ['trees-circle'] }).length), { timeout: 30_000 })
+      .toBeGreaterThan(0)
+    await expect(page.locator('.map-window-notice')).toHaveCount(0)
+  })
+
+  test('a load that never settled last time drops to the lower tier, and full detail can be chosen back', async ({ page }) => {
+    await page.addInitScript(() => {
+      // The flag a city load sets and clears once the view is up; still set
+      // on arrival means Safari reloaded the tab mid-load. Seeded once.
+      if (!sessionStorage.getItem('e2e-seeded')) {
+        sessionStorage.setItem('e2e-seeded', '1')
+        localStorage.setItem('arborary:map-load-pending', String(Date.now()))
+      }
+    })
+    await page.goto('/#/?city=USSFO&mode=explore')
+    await treesLoaded(page)
+    expect(await minZoom(page)).toBe(14)
+    const notice = page.locator('.map-window-notice')
+    await expect(notice).toContainText('reloaded last time')
+    await notice.getByRole('button', { name: 'Try full detail' }).click()
+    await page.waitForLoadState('load')
+    await treesLoaded(page)
+    expect(await minZoom(page)).toBe(13)
+    await expect(page.locator('.map-window-notice')).toHaveCount(0)
+  })
+})

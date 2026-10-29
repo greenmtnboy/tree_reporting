@@ -207,13 +207,7 @@ WHERE city = 'USBOS' AND species LIKE 'Gleditsia triacanthos%'`,
         return { columns: ['tree_id', 'override_color'], rows: [] }
       }
       if (sql.includes('__count_ids')) {
-        return { columns: ['cnt'], rows: [{ cnt: 1 }] }
-      }
-      if (sql.includes('__color_src')) {
-        return {
-          columns: ['tree_id', 'override_color'],
-          rows: [{ tree_id: 'tree-1', override_color: '#DAA520' }],
-        }
+        return { columns: ['cnt', 'colored'], rows: [{ cnt: 1, colored: 1 }] }
       }
       throw new Error(`Unexpected SQL: ${sql}`)
     })
@@ -224,7 +218,11 @@ WHERE city = 'USBOS' AND species LIKE 'Gleditsia triacanthos%'`,
     await chat.sendMessage('Highlight honey locusts in Boston')
 
     expect(mocks.resolveQuery).toHaveBeenCalledTimes(1)
-    expect(mocks.duckQuery).toHaveBeenCalledTimes(3)
+    // A probe for the columns and one counting pass, which also evaluates
+    // every colour. No result rows come back to this thread: the map's
+    // worker builds the ids and colours into its own tables.
+    expect(mocks.duckQuery).toHaveBeenCalledTimes(2)
+    expect(mocks.duckQuery.mock.calls[1][0]).toContain('COUNT(CAST(override_color AS VARCHAR))')
 
     // The resolver is mocked here, so this pins the call site to the shared
     // import list and nothing more; that the list itself resolves a tree query

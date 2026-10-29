@@ -87,13 +87,30 @@ export type CityTableOptions = {
 
 const sqlString = (value: string) => `'${value.replace(/'/g, "''")}'`
 
-/** Statements that remove a loaded city, in dependency order. */
-export function dropCityTablesSql(): string[] {
+/** The empty table a windowed city's `trees_fast` view always unions in, for its shape. */
+export const WINDOW_SHAPE_TABLE = 'trees_window_shape'
+/**
+ * Every tree of the city, for the few reads a phone's window cannot answer (a
+ * deep-linked tree, a species count). A whole city is `trees_fast` itself; a
+ * windowed one reads the projection file. Readers use only the columns both
+ * share: tree_id, species, latitude, longitude.
+ */
+export const PUBLISHED_TREES_VIEW = 'trees_published'
+
+/**
+ * Statements that remove a loaded city, in dependency order. A windowed city
+ * has `trees_fast` as a view over its chunk tables; a whole city has it as
+ * one table.
+ */
+export function dropCityTablesSql(windowed: { chunkTables: string[] } | null = null): string[] {
   return [
     `DROP VIEW IF EXISTS ${TREES_VIEW}`,
+    `DROP VIEW IF EXISTS ${PUBLISHED_TREES_VIEW}`,
     `DROP TABLE IF EXISTS ${AGG_CACHE_TABLE}`,
     `DROP TABLE IF EXISTS ${COLOR_OVERRIDE_TABLE}`,
-    `DROP TABLE IF EXISTS ${TREES_TABLE}`,
+    ...windowed
+      ? [`DROP VIEW IF EXISTS ${TREES_TABLE}`, ...windowed.chunkTables.map((table) => `DROP TABLE IF EXISTS ${table}`), `DROP TABLE IF EXISTS ${WINDOW_SHAPE_TABLE}`]
+      : [`DROP TABLE IF EXISTS ${TREES_TABLE}`],
     ...Object.values(CITY_ENUM_TYPES).reverse().map((type) => `DROP TYPE IF EXISTS ${type}`),
   ]
 }
@@ -105,6 +122,87 @@ export function dropCityTablesSql(): string[] {
  * row scan casts into them, so the wide VARCHAR table never exists.
  */
 export function loadCityTablesSql(options: CityTableOptions): string[] {
+  const shape = cityShape(options)
+  return [
+    ...shape.types,
+    `CREATE TABLE ${TREES_TABLE} AS ${shape.rows('')}`,
+    treesViewSql(),
+    `CREATE VIEW ${PUBLISHED_TREES_VIEW} AS SELECT * FROM ${TREES_TABLE}`,
+  ]
+}
+
+/**
+ * Statements that set up a windowed city: the vocabularies over the whole
+ * file (a phone pans into ground it has not loaded, and a value first met in
+ * the fifth cell must already be in the ENUM), an empty `trees_fast` view of
+ * the right shape, the `trees` view over it, and `trees_published` over the
+ * file. Rows arrive later, one `windowChunkSql` at a time. Only the browser
+ * projection is windowed; the assembled fallback holds the whole city.
+ */
+export function windowedCityTablesSql(options: CityTableOptions): string[] {
+  if (!options.projectionUrl) throw new Error('Only the browser projection can be loaded in windows')
+  const shape = cityShape(options)
+  return [
+    ...shape.types,
+    `CREATE TABLE ${WINDOW_SHAPE_TABLE} AS ${shape.rows('')} LIMIT 0`,
+    windowViewSql([]),
+    treesViewSql(),
+    `CREATE VIEW ${PUBLISHED_TREES_VIEW} AS SELECT * FROM read_parquet(${sqlString(options.projectionUrl)})`,
+  ]
+}
+
+/** A row's cell at `cellZoom` as one integer (cityWindow.ts `cellKey`), from its stored z20 index. */
+export function windowCellSql(alias: string, cellZoom: number): string {
+  const shift = TILE_INDEX_ZOOM - cellZoom
+  return `((${alias}.xtile_z${TILE_INDEX_ZOOM} >> ${shift}) * ${2 ** cellZoom} + (${alias}.ytile_z${TILE_INDEX_ZOOM} >> ${shift}))`
+}
+
+/** The table one loaded cell is held in. */
+export function windowCellTable(cellKey: number): string {
+  return `trees_cell_${cellKey}`
+}
+
+/**
+ * One load of a windowed city, as three steps: the rows of `cellKeys`
+ * (see cityWindow.ts) into `staging` in one scan, a count per cell, and
+ * then `windowCellSplitSql` per cell with rows. The box is what the parquet
+ * reader prunes row groups on; the cell list is what makes the load exact,
+ * so a tree on a box edge is never loaded twice. Each cell gets its own
+ * table because a cell is what the window drops.
+ */
+export function windowStagingSql(
+  staging: string,
+  options: CityTableOptions,
+  cellKeys: number[],
+  box: { west: number; east: number; south: number; north: number },
+  cellZoom: number,
+): { create: string; counts: string } {
+  const where = `AND latitude BETWEEN ${box.south} AND ${box.north} AND longitude BETWEEN ${box.west} AND ${box.east}`
+  return {
+    create: `CREATE TABLE ${staging} AS
+    SELECT * FROM (${cityShape(options).rows(where)}) chunk
+    WHERE ${windowCellSql('chunk', cellZoom)} IN (${cellKeys.join(', ')})`,
+    counts: `SELECT ${windowCellSql('s', cellZoom)} AS cell, count(*) AS n FROM ${staging} s GROUP BY 1`,
+  }
+}
+
+export function windowCellSplitSql(staging: string, cellKey: number, cellZoom: number): string {
+  return `CREATE TABLE ${windowCellTable(cellKey)} AS SELECT * FROM ${staging} s WHERE ${windowCellSql('s', cellZoom)} = ${cellKey}`
+}
+
+/** `trees_fast` for a windowed city: the empty shape and every chunk held. */
+export function windowViewSql(chunkTables: string[]): string {
+  return `CREATE OR REPLACE VIEW ${TREES_TABLE} AS
+    ${[WINDOW_SHAPE_TABLE, ...chunkTables].map((table) => `SELECT * FROM ${table}`).join('\n    UNION ALL ')}`
+}
+
+/**
+ * The ENUM types a city declares and its row select. `rows(where)` is the
+ * select that produces `trees_fast`'s rows; `where` is appended to the
+ * source scan's own filter (the window's box), so it reaches the parquet
+ * reader.
+ */
+function cityShape(options: CityTableOptions): { types: string[]; rows: (where: string) => string } {
   const { projectionUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth } = options
   const clampedLat = 'LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878)'
   const n = 2 ** TILE_INDEX_ZOOM
@@ -112,13 +210,13 @@ export function loadCityTablesSql(options: CityTableOptions): string[] {
   // The rows, the display name, the growth form and the predicted width: from
   // the projection as columns, or assembled here from the published inventory,
   // the enrichment table and the predictions.
-  let source: string
+  let source: (where: string) => string
   let displayName: string
   let formExpr: string
   let predictedWidth: string
   let joins: string
   if (projectionUrl) {
-    source = `SELECT
+    source = (where) => `SELECT
         tree_id,
         city,
         data_source,
@@ -135,7 +233,7 @@ export function loadCityTablesSql(options: CityTableOptions): string[] {
         diameter_at_breast_height,
         submission_photo_url
       FROM read_parquet(${sqlString(projectionUrl)})
-      WHERE latitude IS NOT NULL AND longitude IS NOT NULL`
+      WHERE latitude IS NOT NULL AND longitude IS NOT NULL ${where}`
     displayName = 't.display_name'
     formExpr = 't.tree_form'
     predictedWidth = 'CAST(t.predicted_crown_width_m AS FLOAT)'
@@ -154,7 +252,7 @@ export function loadCityTablesSql(options: CityTableOptions): string[] {
           WHERE city = ${sqlString(city)}
           GROUP BY tree_id`
       : null
-    source = `SELECT
+    source = (where) => `SELECT
         tree_id,
         city,
         data_source,
@@ -169,7 +267,7 @@ export function loadCityTablesSql(options: CityTableOptions): string[] {
         submission_photo_url
       FROM read_parquet(${sqlString(parquetUrl)})
       WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-        ${dedupFilter}`
+        ${dedupFilter} ${where}`
     // The display name: enrichment's first common name, else the source's own
     // name, else the sentinel's label, else the scientific name. A placeholder
     // species has no enrichment row by design, so it is named here rather
@@ -195,7 +293,7 @@ export function loadCityTablesSql(options: CityTableOptions): string[] {
   // materialises the wide table first, and that peak is what the wasm heap
   // keeps for the life of the tab.
   const vocabulary = (expr: string, join = '') =>
-    `SELECT DISTINCT ${expr} AS value FROM (${source}) t ${join} WHERE ${expr} IS NOT NULL ORDER BY 1`
+    `SELECT DISTINCT ${expr} AS value FROM (${source('')}) t ${join} WHERE ${expr} IS NOT NULL ORDER BY 1`
   const nameJoin = projectionUrl ? '' : 'LEFT JOIN species_enrichment se ON t.species = se.species'
   const enumSources: Array<[keyof typeof CITY_ENUM_TYPES, string]> = [
     ['city', vocabulary('t.city')],
@@ -205,12 +303,14 @@ export function loadCityTablesSql(options: CityTableOptions): string[] {
     ['sourceName', vocabulary('t.tree_name')],
     ['cultivar', vocabulary('t.cultivar')],
   ]
-  const statements = [
-    `CREATE TYPE ${CITY_ENUM_TYPES.form} AS ENUM (${TREE_FORMS.map(sqlString).join(', ')})`,
-    ...enumSources.map(([key, query]) => `CREATE TYPE ${CITY_ENUM_TYPES[key]} AS ENUM (${query})`),
-    `CREATE TABLE ${TREES_TABLE} AS
+  return {
+    types: [
+      `CREATE TYPE ${CITY_ENUM_TYPES.form} AS ENUM (${TREE_FORMS.map(sqlString).join(', ')})`,
+      ...enumSources.map(([key, query]) => `CREATE TYPE ${CITY_ENUM_TYPES[key]} AS ENUM (${query})`),
+    ],
+    rows: (where) => `
     WITH source AS (
-      ${source}
+      ${source(where)}
     )
     SELECT
       t.tree_id,
@@ -240,27 +340,30 @@ export function loadCityTablesSql(options: CityTableOptions): string[] {
       CAST(floor((1.0 - ln(tan(radians(${clampedLat})) + 1.0 / cos(radians(${clampedLat}))) / pi()) / 2.0 * ${n}) AS INTEGER) AS ytile_z${TILE_INDEX_ZOOM}
     FROM source t
     ${joins}`,
-  ]
+  }
+}
 
-  // The published schema, as the chat, the URL filters and the default map
-  // query address it. A view costs nothing per row; the casts run only for
-  // the columns a query actually reads.
-  statements.push(`CREATE VIEW ${TREES_VIEW} AS
-    SELECT
-      tree_id,
-      CAST(city AS VARCHAR) AS city,
-      CAST(data_source AS VARCHAR) AS data_source,
-      CAST(source_tree_name AS VARCHAR) AS tree_name,
-      plant_date,
-      CAST(species AS VARCHAR) AS species,
-      CAST(cultivar AS VARCHAR) AS cultivar,
-      crown_width_m,
-      latitude,
-      longitude,
-      diameter_at_breast_height,
-      submission_photo_url
-    FROM ${TREES_TABLE}`)
-  return statements
+/**
+ * The published schema, as the chat, the URL filters and the default map
+ * query address it. A view costs nothing per row; the casts run only for
+ * the columns a query actually reads.
+ */
+function treesViewSql(): string {
+  return `CREATE VIEW ${TREES_VIEW} AS
+  SELECT
+    tree_id,
+    CAST(city AS VARCHAR) AS city,
+    CAST(data_source AS VARCHAR) AS data_source,
+    CAST(source_tree_name AS VARCHAR) AS tree_name,
+    plant_date,
+    CAST(species AS VARCHAR) AS species,
+    CAST(cultivar AS VARCHAR) AS cultivar,
+    crown_width_m,
+    latitude,
+    longitude,
+    diameter_at_breast_height,
+    submission_photo_url
+  FROM ${TREES_TABLE}`
 }
 
 /**
@@ -293,6 +396,17 @@ export function defaultColorSql(formExpr: string, colors: Record<string, string>
 }
 
 /**
+ * A tree id as the chat's published tables hold it: a 64-bit hash, not the
+ * string. The chat's ids come from the whole city's file, not the phone's
+ * window, so a publish can hold every tree in the city: 11 MB for Boston's
+ * 1.4M as hashes. Two ids sharing a hash among a city's 1.6M has odds near
+ * 1 in 10^7, and would mark one extra tree.
+ */
+export function treeKeySql(expr: string): string {
+  return `hash(CAST(${expr} AS VARCHAR))`
+}
+
+/**
  * How a query reads a tree's display colour. With no override active there is
  * no join at all; with one, the override table is joined and wins where it
  * has a row. `join` goes after the `trees_fast` alias in the FROM clause.
@@ -301,7 +415,7 @@ export function colorSql(alias: string, overrideActive: boolean): { join: string
   const fallback = defaultColorSql(`${alias}.tree_form`)
   if (!overrideActive) return { join: '', expr: fallback }
   return {
-    join: `LEFT JOIN ${COLOR_OVERRIDE_TABLE} __co ON ${alias}.tree_id = __co.tree_id`,
+    join: `LEFT JOIN ${COLOR_OVERRIDE_TABLE} __co ON ${treeKeySql(`${alias}.tree_id`)} = __co.tree_key`,
     expr: `COALESCE(__co.display_color, ${fallback})`,
   }
 }
