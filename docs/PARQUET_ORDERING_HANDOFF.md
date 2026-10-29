@@ -17,8 +17,11 @@ phone's window, `mobile-map-window`). This is the next session's brief.
   and builds tree_info, and the floors are `>=`, so anything installing the
   latest pytrilogy (CI, and the cloud worker if it upgrades) breaks the daily
   builds. Repro: `upstream_repro/complete_where_statement_graph/`.
-- Still owed before merging: a release fixing #786; floors raised to it; the
-  cloud worker on it.
+- #786 is fixed in 0.3.419 (#788: a persist's own target is no longer in its
+  statement's domain). On 0.3.419 all 41 tree_info builds and all 41
+  projection sorts plan, and the offline suite passes (7248). The floors are
+  now 0.3.419.
+- Still owed before merging: the cloud worker on >=0.3.419.
 
 ## Progress (2026-10-28, second session)
 

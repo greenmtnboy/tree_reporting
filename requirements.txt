@@ -33,9 +33,10 @@
 # Raised to 0.3.414: the browser projection (data/raw/tree_browser_city.preql)
 # declares a datasource `order by` and `storage (row_group_size = n)`, and
 # sorts by `@hilbert_index` from std.geography; all three first ship there.
-# Raised again to 0.3.417: 0.3.414 cannot plan that sort for a target with
-# stored derived columns (pytrilogy #783, released in 0.3.417).
-pytrilogy>=0.3.417
+# Raised again to 0.3.419: 0.3.414 cannot plan that sort for a target with
+# stored derived columns (pytrilogy #783, released in 0.3.417), and 0.3.417
+# and 0.3.418 cannot plan any city's tree_info build (#786, fixed in 0.3.419).
+pytrilogy>=0.3.419
 # DuckDB 1.5.3+ is the first 1.5.x with the `nanoarrow` community extension
 # published for linux_amd64 (1.5.0 ships `arrow` but not `nanoarrow`, so
 # `LOAD arrow` fails with "Nested load of nanoarrow failed" on the runner).
