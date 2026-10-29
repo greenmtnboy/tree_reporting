@@ -31,14 +31,20 @@
 #                  tree the model could not size (a palm, or no diameter and
 #                  no planting date).
 #
-# Rows are not ordered. The next step (the cell files in
-# docs/TRILOGY_BUCKETED_OUTPUT_SPEC.md) wants them along a space-filling
-# curve, and that is the language feature the spec asks for.
+# Rows are written along a Hilbert curve over (latitude, longitude), in row
+# groups of 10,240. The phone's window filters on a lat/long box
+# (windowStagingSql in src/src/workers/cityTables.ts), and DuckDB skips every
+# row group whose footer min/max falls outside it, so a window load reads the
+# few groups near the camera instead of the whole file. 10,240 rather than
+# 20,480 because it prunes better for a little more footer; the arithmetic is
+# in docs/TRILOGY_ORDER_BY_SPEC.md. The sort key is computed for the write and
+# not stored. Trees with no position sort last (the index is null).
 #
 # Every city in MUNICIPAL_DATA_SOURCES has exactly one projection
 # (test_cloud_jobs.py::test_browser_projections_cover_every_city); new_city.py
 # appends one.
 
+import std.geography;
 import tree_common;
 import full_tree_info_source;
 import tree_enrichment_source;
@@ -72,6 +78,8 @@ template datasource city_tree_browser (
 )
 grain (tree_id)
 freshness by prediction_inputs_published_through
+order by @hilbert_index(latitude, longitude) asc nulls last
+storage (row_group_size = 10240)
 assert @kept(tree_id, 0.75);
 
 partial datasource arbue_tree_browser extends city_tree_browser ()

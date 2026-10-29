@@ -3,6 +3,36 @@
 Written 2026-10-28 at the end of the session that finished PR #152 (the
 phone's window, `mobile-map-window`). This is the next session's brief.
 
+## Progress (2026-10-28, second session)
+
+- Step 1 and step 2 are on branch `parquet-hilbert-order`. The floors are at
+  0.3.414 in `AGENTS.md`, `EXTENDING.md`, CI, cloud-sync and
+  `requirements.txt`. The template carries the order and the row-group size.
+- **0.3.414 cannot build the sorted projection.** The write-order select
+  grain-pins the stored derived columns, and a CTE usage walk renders
+  `array_reduce` with the generic dialect. Both are fixed together upstream
+  (pytrilogy branch `fix-write-order-derived-columns`); the repros are in
+  `upstream_repro/write_order_derived_column/`. Raise the floors to the
+  release that carries the fix before merging, or the daily projection job
+  fails for every city on its next rebuild.
+- Step 5 was done with the patched pytrilogy, written to a local file: 166
+  row groups of ~10k rows, the same 1,695,102 rows as the published file,
+  and no extra column. A 4.5 km Blue Hills window overlaps 5 of 166 groups.
+  The file is 71.3 MB against the published 73.0 MB, not the 47 MB the spec
+  estimated. Steps 6 to 8 (re-measure, budget, rollout) wait on the release.
+- **Precomputed aggregates for the summary and species default views are
+  parked.** Datasources storing `count(tree_id)` at (city, species) and
+  (city, species, plant_year) answer only the Top 100 carousel on the
+  resolver's planner (0.3.404, and 0.3.414 too). With one in scope:
+  - the Total Trees KPI fails to plan;
+  - the dominance curve reads the rollup without the city filter, so its
+    numbers are wrong;
+  - the no-city batch 422s;
+  - the bucket charts never use the rollup.
+
+  Filed as trilogy-data/pytrilogy#782; the repro is in
+  `upstream_repro/rollup_default_views/`.
+
 ## Goal
 
 Write each city's browser projection, and probably its published

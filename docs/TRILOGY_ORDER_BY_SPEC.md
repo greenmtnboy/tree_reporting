@@ -7,10 +7,22 @@ is the `order by` part of `docs/TRILOGY_BUCKETED_OUTPUT_SPEC.md`, split out
 because it is the part worth shipping first and it does not depend on the
 rest (per-file partitioning, manifests).
 
-Status: requested 2026-10-27; implemented upstream in pytrilogy #778
-(0.3.414, open as of 2026-10-28) as `order by` plus `storage (row_group_size
-= n)`, with `hilbert_index` as a `std.geography` def. The syntax there is
-what this repo will use; the proposal below is kept as the request was made.
+Status: requested 2026-10-27; shipped in pytrilogy #778 (0.3.414) as
+`order by` plus `storage (row_group_size = n)`, with `hilbert_index` as a
+`std.geography` def. The syntax there is what this repo uses; the proposal
+below is kept as the request was made.
+
+0.3.414 cannot build this repo's projection (2026-10-28). The sort is planned
+as a select over the target pinned to the build's rows, and two things break
+it. That select grain-pins the stored derived columns (`display_name`,
+`tree_form`) to its keys and tries to re-derive them from inputs the pinned
+scope does not bind. And a CTE usage walk renders `array_reduce` with the
+generic dialect, which has no form for it. Both are fixed together upstream;
+step 1 below waits on the release that carries the fix. A local Boston build
+with the fix gave 166 row groups of ~10k rows (the published file has 15)
+and the same 1,695,102 rows. A 4.5 km window at Blue Hills overlaps 5 of
+the groups. The file is 71.3 MB against the published 73.0 MB; the ~47 MB
+estimate below did not hold.
 
 ## Why
 
