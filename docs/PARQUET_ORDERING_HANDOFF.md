@@ -3,6 +3,23 @@
 Written 2026-10-28 at the end of the session that finished PR #152 (the
 phone's window, `mobile-map-window`). This is the next session's brief.
 
+## Progress (2026-10-29)
+
+- pytrilogy #783 is merged and released as **0.3.417**, not 0.3.416
+  (0.3.416 is #784 and doesn't contain it). The floors are now 0.3.417. On
+  0.3.417 from PyPI, the sort plans for all 41 cities' projections, and a
+  local Boston build is row for row identical to the patched build below:
+  166 groups, 1,695,102 rows, 71.3 MB.
+- **0.3.417 cannot plan any city's tree_info build** (trilogy-data/pytrilogy#786):
+  "Missing source reference to local.modified_missing", 41 of 41 cities, while
+  0.3.416 plans all 41. The cause is #783's `statement_graph`; the offline
+  reconciliation tests error on it. No release yet both sorts the projection
+  and builds tree_info, and the floors are `>=`, so anything installing the
+  latest pytrilogy (CI, and the cloud worker if it upgrades) breaks the daily
+  builds. Repro: `upstream_repro/complete_where_statement_graph/`.
+- Still owed before merging: a release fixing #786; floors raised to it; the
+  cloud worker on it.
+
 ## Progress (2026-10-28, second session)
 
 - Step 1 and step 2 are on branch `parquet-hilbert-order`. The floors are at

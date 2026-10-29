@@ -18,7 +18,8 @@ it. That select grain-pins the stored derived columns (`display_name`,
 `tree_form`) to its keys and tries to re-derive them from inputs the pinned
 scope does not bind. And a CTE usage walk renders `array_reduce` with the
 generic dialect, which has no form for it. Both are fixed together upstream
-in pytrilogy #783 (0.3.416); step 1 below waits on that release. A local Boston build
+in pytrilogy #783 (released in 0.3.417, on which every city's sort plans;
+0.3.417 breaks the tree_info builds instead, pytrilogy #786). A local Boston build
 with the fix gave 166 row groups of ~10k rows (the published file has 15)
 and the same 1,695,102 rows. A 4.5 km window at Blue Hills overlaps 5 of
 the groups. The file is 71.3 MB against the published 73.0 MB; the ~47 MB

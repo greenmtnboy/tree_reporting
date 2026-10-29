@@ -47,7 +47,7 @@ env:
   # whatever that branch happens to say today.
   # 0.3.378 is also the floor the models need (the derived-key join in
   # raw/tree_position.preql, the shared merge's prune); see requirements.txt.
-  TRILOGY_CLI: 'pytrilogy>=0.3.414'
+  TRILOGY_CLI: 'pytrilogy>=0.3.417'
   # pytrilogy publishes real platform wheels only for cp311-cp313; the cp314
   # "wheel" is wasm32, so an unpinned interpreter can silently fall back to a
   # slow, fragile source build. Pin to one that has wheels.

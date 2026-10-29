@@ -40,7 +40,7 @@ pnpm bench:memory    # renderer memory and bytes for one city load against a pre
 pnpm bench:tiles     # time to settle after each zoom and pan, and how long tiles trickle in; run before and after any tile-query change
 
 # data, from data/raw
-uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.414" --with "duckdb<2" --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
+uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.417" --with "duckdb<2" --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql   # must report exactly one asset
 ```
 
