@@ -439,3 +439,11 @@ file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uswas_t
 partial datasource uswas_tree_vocab extends city_tree_vocab ()
 complete where city = 'USWAS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uswas_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uswas_tree_vocab_v{data_version}.parquet`;
+
+partial datasource ussto_tree_browser extends city_tree_browser ()
+complete where city = 'USSTO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussto_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ussto_tree_browser_v{data_version}.parquet`;
+
+partial datasource ussto_tree_vocab extends city_tree_vocab ()
+complete where city = 'USSTO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussto_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ussto_tree_vocab_v{data_version}.parquet`;
