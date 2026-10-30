@@ -3,6 +3,57 @@
 Written 2026-10-28 at the end of the session that finished PR #152 (the
 phone's window, `mobile-map-window`). This is the next session's brief.
 
+## Progress (2026-10-29)
+
+- pytrilogy #783 is merged and released as **0.3.417**, not 0.3.416
+  (0.3.416 is #784 and doesn't contain it). The floors are now 0.3.417. On
+  0.3.417 from PyPI, the sort plans for all 41 cities' projections, and a
+  local Boston build is row for row identical to the patched build below:
+  166 groups, 1,695,102 rows, 71.3 MB.
+- **0.3.417 cannot plan any city's tree_info build** (trilogy-data/pytrilogy#786):
+  "Missing source reference to local.modified_missing", 41 of 41 cities, while
+  0.3.416 plans all 41. The cause is #783's `statement_graph`; the offline
+  reconciliation tests error on it. No release yet both sorts the projection
+  and builds tree_info, and the floors are `>=`, so anything installing the
+  latest pytrilogy (CI, and the cloud worker if it upgrades) breaks the daily
+  builds. Repro: `upstream_repro/complete_where_statement_graph/`.
+- #786 is fixed in 0.3.419 (#788: a persist's own target is no longer in its
+  statement's domain). On 0.3.419 all 41 tree_info builds and all 41
+  projection sorts plan, and the offline suite passes (7248). The floors are
+  now 0.3.419.
+- Still owed before merging: the cloud worker on >=0.3.419.
+
+## Progress (2026-10-28, second session)
+
+- Step 1 and step 2 are on branch `parquet-hilbert-order`. The floors are at
+  0.3.414 in `AGENTS.md`, `EXTENDING.md`, CI, cloud-sync and
+  `requirements.txt`. The template carries the order and the row-group size.
+- **0.3.414 cannot build the sorted projection.** The write-order select
+  grain-pins the stored derived columns, and a CTE usage walk renders
+  `array_reduce` with the generic dialect. Both are fixed together upstream
+  in trilogy-data/pytrilogy#783 (0.3.416); the repros are in
+  `upstream_repro/write_order_derived_column/`. Raise the floors to 0.3.416
+  once it is on PyPI, and check the cloud worker runs it, before merging.
+  Otherwise the daily projection job fails for every city on its next
+  rebuild.
+- Step 5 was done with the patched pytrilogy, written to a local file: 166
+  row groups of ~10k rows, the same 1,695,102 rows as the published file,
+  and no extra column. A 4.5 km Blue Hills window overlaps 5 of 166 groups.
+  The file is 71.3 MB against the published 73.0 MB, not the 47 MB the spec
+  estimated. Steps 6 to 8 (re-measure, budget, rollout) wait on the release.
+- **Precomputed aggregates for the summary and species default views are
+  parked.** Datasources storing `count(tree_id)` at (city, species) and
+  (city, species, plant_year) answer only the Top 100 carousel on the
+  resolver's planner (0.3.404, and 0.3.414 too). With one in scope:
+  - the Total Trees KPI fails to plan;
+  - the dominance curve reads the rollup without the city filter, so its
+    numbers are wrong;
+  - the no-city batch 422s;
+  - the bucket charts never use the rollup.
+
+  Filed as trilogy-data/pytrilogy#782; the repro is in
+  `upstream_repro/rollup_default_views/`.
+
 ## Goal
 
 Write each city's browser projection, and probably its published
