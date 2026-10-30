@@ -1,0 +1,31 @@
+# LIDAR canopy-height lookup for the Boston metro, run by the `canopy-usbos`
+# [[cloud.job]] in ../trilogy.toml.  Two surveys, Boston's 2024 tree centroids
+# and Cambridge's 2024 crown polygons, rasterised into one table; what is
+# shared with other cities lives in staging_common.preql.
+
+import staging_common;
+
+root datasource usbos_canopy_height_rows (
+    canopy_cell: canopy_cell,
+    city: city,
+    canopy_crown_id: canopy_crown_id,
+    canopy_height_m: canopy_height_m,
+    canopy_crown_radius_m: canopy_crown_radius_m,
+    canopy_source: canopy_source,
+)
+grain (canopy_cell)
+file `./canopy_height_rows.py`
+where city = 'USBOS';
+
+datasource usbos_canopy_height (
+    canopy_cell,
+    city,
+    canopy_crown_id,
+    canopy_height_m,
+    canopy_crown_radius_m,
+    canopy_source,
+    canopy_staged_through,
+)
+grain (canopy_cell)
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbos_canopy_height.parquet`:`gcs://trilogy_public_models/duckdb/staging/usbos_canopy_height.parquet`
+freshness by canopy_staged_through;

@@ -1181,6 +1181,26 @@ schedule = "0 0 1 * * TUE"
 timeout_seconds = 3600
 memory_mb = 3072
 
+# ---------------------------------------------------------------------------
+# LIDAR canopy-height lookups
+# ---------------------------------------------------------------------------
+#
+# `canopy-{code}` builds the table raw/tree_height.preql heights a city's trees
+# from: one row per ~2 m grid cell under a LIDAR crown, with that crown's
+# height (raw/shared/canopy.py).  The surveys are one-off snapshots whose
+# layers publish no edit date, so there is no cron: the watermark is
+# CANOPY_STAGED_THROUGH, set by hand, and the job is fired after bumping it.
+# Publishing marks the city's tree parquet stale through its canopy probe.
+# Boston pages 497k centroids at 2,000 a request (a few minutes) and the
+# raster is ~10M rows before the per-cell reduce.  See docs/TREE_HEIGHT.md.
+[[cloud.job]]
+key = "canopy-usbos"
+name = "urban-tree-canopy-usbos"
+entrypoint = "canopy_staging/usbos_canopy_staging.preql"
+operation = "refresh"
+timeout_seconds = 3600
+memory_mb = 3072
+
 # --- Wednesday -------------------------------------------------------------
 [[cloud.job]]
 key = "osm-frpar"
