@@ -68,6 +68,22 @@ from shared.ingest import (  # noqa: E402
 # https://overpass.kumi.systems/api/interpreter) when it is overloaded.
 OVERPASS_URL = os.environ.get("OVERPASS_URL", "https://overpass-api.de/api/interpreter")
 
+# Cities with no `natural=tree` node in their territory when they were wired,
+# so an empty answer is the true one and stages an empty object instead of
+# raising.  The raise exists because an over-budget Overpass answers 200 with
+# no elements, and that is indistinguishable from an unmapped town; a city is
+# listed here only after a control query in the same request (a mapped
+# neighbour's box) came back non-empty.  Once mappers add trees, a spurious
+# empty answer is still caught one step later: the city target's
+# `@source_kept(..., 'OSM_{CODE}', 0.75)` refuses the collapse.  Remove the
+# city from this set when its extract first stages rows.
+OSM_UNMAPPED_CITIES: frozenset[str] = frozenset(
+    {
+        # 2026-10-30: 0 nodes in the territory; Madison's isthmus 3,825.
+        "USSTO",
+    }
+)
+
 _CIRCUMFERENCE_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(cm|m)?\s*$", re.I)
 
 # What each city is called in logs, and any column its OSM partition has to
@@ -83,6 +99,7 @@ _CIRCUMFERENCE_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(cm|m)?\s*$", re.I)
 # that type", which is a long way from "you forgot a column".  London is the
 # only instance today.
 OSM_CITY_NAMES: dict[str, str] = {
+    "USSTO": "Stoughton, WI",
     "FIHEL": "Helsinki",
     "DKCPH": "Copenhagen",
     "TWTPE": "Taipei",
@@ -231,7 +248,7 @@ def fetch_osm_trees(city_code: str, timeout_s: int = 300) -> list[dict]:
         for el in payload.get("elements") or []
         if in_city_territory(city_code, el.get("lat"), el.get("lon"))
     ]
-    if not elements:
+    if not elements and city_code not in OSM_UNMAPPED_CITIES:
         raise RuntimeError(
             f"Overpass returned no tree nodes for {city_code} territory {boxes} — "
             "either the query drifted or the territory is wrong"
@@ -312,7 +329,10 @@ def build_table(
     )
     for name, dtype in (extra_null_columns or {}).items():
         table = table.append_column(name, pa.nulls(table.num_rows, type=dtype))
-    table = validate_coordinates(table, city=city_name, city_code=city_code)
+    # An unmapped city's empty answer (OSM_UNMAPPED_CITIES) has no coordinates
+    # to validate; every other city never reaches here empty.
+    if table.num_rows:
+        table = validate_coordinates(table, city=city_name, city_code=city_code)
     return enforce_tree_schema(
         table, city=city_name, data_source=OSM_DATA_SOURCES[city_code]
     )

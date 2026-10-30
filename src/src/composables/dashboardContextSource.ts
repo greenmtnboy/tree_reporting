@@ -266,6 +266,12 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Boreal Forests/Taiga',
     realm: 'palearctic',
   },
+  USSTO: {
+    ecoregionId: 387, // Central US forest-grasslands transition
+    usdaZone: 5,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

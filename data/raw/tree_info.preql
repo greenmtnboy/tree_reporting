@@ -40,6 +40,7 @@ import cobog.bogota_tree_info;
 import twtpe.taipei_tree_info;
 import dkcph.copenhagen_tree_info;
 import fihel.helsinki_tree_info;
+import ussto.stoughton_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -87,6 +88,7 @@ merge cobog_source into data_source;
 merge twtpe_source into data_source;
 merge dkcph_source into data_source;
 merge fihel_source into data_source;
+merge ussto_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -143,7 +145,8 @@ jptyo_published_data_updated_through,
 cobog_published_data_updated_through,
 twtpe_published_data_updated_through,
 dkcph_published_data_updated_through,
-fihel_published_data_updated_through);
+fihel_published_data_updated_through,
+ussto_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

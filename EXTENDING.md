@@ -22,7 +22,7 @@ cd data/raw && uv run tools/new_city.py \
     --center 39.7392,-104.9903 \
     --bounds 39.45,39.95,-105.65,-104.55 \
     --source-label DENVER_OPENDATA \
-    --ecoregion 402 \
+    --ecoregion 402 --usda-zone 6 \
     --city-cron "0 40 15 * * SUN,WED" --osm-cron "0 30 2 * * SAT"
 ```
 
@@ -33,15 +33,22 @@ everything in memory, so a failure leaves the tree untouched.
 
 1. **Fill in `{slug}_tree_info.py` and `{slug}_update_time.py`** (steps 4 and 5).
 2. **Find a landmark source** and write `{slug}_landmarks.py` plus its probe (Landmarks below).
-3. **Bootstrap the OSM staging object**: `uv run {slug}/{slug}_osm_extract.py`.
-4. **Calibrate the dedup cell size**: `uv run tools/osm_dedup_validation.py --city {CODE}`.
+3. **Bootstrap the OSM staging object**: `uv run {code}/{slug}_osm_extract.py`.
+   The extract raises on an empty answer, because an over-budget Overpass
+   answers 200 with no elements. A town nobody has mapped trees in really is
+   empty: confirm it with a control box (a mapped neighbour) in the same
+   query, then list the city in `OSM_UNMAPPED_CITIES` (`shared/osm.py`) and
+   re-run, which stages an empty object. Stoughton is the instance.
+4. **Calibrate the dedup cell size**: `uv run tools/osm_dedup_validation.py --city {CODE}`,
+   then set `DEDUP_CELL_METRES` and run `uv run tools/dedup_cells.py --write`.
    Never copy one. Before the first cloud build pass `--osm-parquet` and
-   `--inventory-parquet` to calibrate against local files.
+   `--inventory-parquet` to calibrate against local files. A city with no OSM
+   rows cannot be calibrated; keep the default and say so in its comment.
 
 Then the checks:
 
 ```bash
-cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.419" --with duckdb --with requests python -m pytest tests -q
+cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.419" --with "duckdb<2" --with requests python -m pytest tests -q
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql
 cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql
 ```
@@ -49,6 +56,12 @@ cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql
 `test_city_wiring.py` walks every registry a city must appear in and names
 anything missing. Each dry run must report **exactly one** asset; more means
 an import reaches too far.
+
+Run `trilogy` at the same floor as the tests (`uv run --no-project --with
+"pytrilogy[cli]>=0.3.419" --with "duckdb<2" --with pyarrow --with requests
+trilogy ...`), not whatever an old virtualenv has on `PATH`: 0.3.401 answers
+a dry run of a never-built city with "No stale assets found", which reads
+like a pass.
 
 ## City codes
 
@@ -129,7 +142,8 @@ the city re-downloads on every tick.
 ### 5. The fetch script
 
 `{slug}_tree_info.py` downloads, maps to the canonical schema (`tree_id`,
-`city`, `species`, `cultivar`, `plant_date` as `date32`, `latitude`,
+`city`, `species`, `cultivar`, `tree_name` (the portal's own common name,
+through `normalize_tree_name`), `plant_date` as `date32`, `latitude`,
 `longitude`, `diameter_at_breast_height` in inches, and `crown_width_m` in
 metres if the portal records a crown spread -- few do; the schema emits it as
 null otherwise), calls
@@ -282,7 +296,9 @@ cd data && trilogy refresh raw/{code}/{slug}_landmarks.preql -f {slug}_landmark_
   never null.
 - Never curate the synonym or misspelling maps by eye or by tree count:
   `tools/species_audit.py` asks POWO about every near pair. A name merely
-  misapplied in the trade is not a synonym.
+  misapplied in the trade is not a synonym. Audit a new city **before** its
+  first publish: write the ingest's stream to a local parquet and pass it with
+  `--parquet`, so its spellings are paired against every published city's.
 - A sentinel or a chimera (a real genus welded to another species' epithet)
   is never enriched; the exclusion and purge lists derive from
   `SPECIES_SENTINELS` and `CHIMERA_SPECIES`.
@@ -301,7 +317,7 @@ Refresh before you deploy either way.
 ## After adding a city
 
 ```bash
-cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.419" --with duckdb --with requests python -m pytest tests -q
+cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.419" --with "duckdb<2" --with requests python -m pytest tests -q
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql        # one asset
 cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql     # one asset
 cd data/raw && uv run tree_enrichment_probe.py                                # lists species needing enrichment
@@ -326,6 +342,23 @@ trilogy cloud --org trilogy-data jobs push --source data --config adhoc.toml \
 trilogy cloud --org trilogy-data jobs run adhoc-city-{code} --wait --logs
 trilogy cloud --org trilogy-data jobs delete adhoc-city-{code}
 ```
+
+**Publish a new city's tree and landmark parquets before the PR merges.**
+`full_tree_publish.preql` and `full_landmark_publish.preql` list every city's
+file, and a listed file that does not exist fails the whole rollup, not just
+the new city. A local build writes straight to the bucket:
+
+```bash
+cd data && trilogy refresh raw/{code}/{slug}_tree_info.preql
+cd data && trilogy refresh raw/{code}/{slug}_landmarks.preql -f {slug}_landmark_info
+```
+
+**Do not force the browser projection** (`{code}_tree_browser` in
+`tree_browser_city.preql`) before the rollup includes the city. It reads
+`full_tree_info`, so it builds with zero rows and publishes them, and an
+empty projection replaces the map's fallback (assembling the shape from the
+city parquet) with an empty city. The daily core builds it on the first tick
+after `urban-tree-full` has picked the city up.
 
 A new column does not make a parquet stale. Force each city with
 `trilogy refresh raw/{code}/{slug}_tree_info.preql -f {slug}_tree_info`, San

@@ -8,6 +8,7 @@
     cd data/raw && uv run tools/species_audit.py                 # report, all cities
     cd data/raw && uv run tools/species_audit.py --city USDEN    # one city's names
     cd data/raw && uv run tools/species_audit.py --map           # emit map entries
+    cd data/raw && uv run tools/species_audit.py --parquet new.parquet  # plus an unpublished city
 
 Inventories disagree about spelling, and `species` is the join key into the
 enrichment table, so a disagreement is not cosmetic: `Liquidambar stryaciflua`
@@ -18,9 +19,13 @@ September 2026 sweep mapped 232 such names over 167,813 published trees --
 rows the LLM had been paid for twice and took the fleet from 4,172 distinct
 species to 3,912.  It refused 57 more pairs as two real taxa.
 
-Re-run it after a city lands, and expect it to report nothing: a name the maps
-already fold is no longer a candidate, so a clean sweep is the converged
-state rather than a sign the tool did not run.
+Run it while a city is being added, before its first publish, by writing the
+ingest's output to a local parquet and passing `--parquet`: the new city's
+names are then paired against every published one, which is where a new
+city's typos find their accepted spelling.  Re-run it after the city lands,
+and expect it to report nothing: a name the maps already fold is no longer a
+candidate, so a clean sweep is the converged state rather than a sign the
+tool did not run.
 
 `SPECIES_SYNONYMS` and `SPECIES_MISSPELLINGS` in `shared/ingest.py` are what
 fixes one, and this is the tool that decides what belongs in them.
@@ -133,6 +138,11 @@ class Powo:
     def save(self) -> None:
         self.path.write_text(json.dumps(self.cache, indent=0, sort_keys=True), "utf8")
 
+    def cached(self, name: str) -> bool:
+        """True for an answer worth keeping; a cached `error` is asked again,
+        or one bad minute at Kew would freeze those names out of every re-run."""
+        return self.cache.get(name, {}).get("status", "error") != "error"
+
     def lookup(self, name: str) -> dict:
         """`{'status': accepted|synonym|unplaced|not_found|ambiguous|error}`.
 
@@ -153,7 +163,7 @@ class Powo:
         as `not_found`: an unreachable Kew must never read as evidence that a
         name does not exist.
         """
-        if name in self.cache:
+        if self.cached(name):
             return self.cache[name]
         import requests
 
@@ -222,12 +232,15 @@ class Powo:
 # ---------------------------------------------------------------------------
 
 
-def published_species(cities: list[str]) -> list[tuple[str, int, int]]:
+def published_species(
+    cities: list[str], local: list[str] | None = None
+) -> list[tuple[str, int, int]]:
     """`(species, trees, cities)` over every city parquet that exists.
 
     A city with no parquet yet is skipped rather than failed, the same carve-out
     `parquetSchema.test.ts` makes: a city added this week has nothing published
-    to audit and must not take the sweep down.
+    to audit and must not take the sweep down.  `local` adds parquets read from
+    disk -- an ingest's output before its first publish.
     """
     import duckdb
     import urllib.request
@@ -242,6 +255,7 @@ def published_species(cities: list[str]) -> list[tuple[str, int, int]]:
                     live.append(url)
         except Exception:
             print(f"  {code}: no published parquet yet, skipping", file=sys.stderr)
+    live += [Path(p).resolve().as_posix() for p in local or []]
     if not live:
         raise SystemExit("no published city parquets found")
     con = duckdb.connect()
@@ -476,11 +490,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--city", action="append", help="restrict to these city codes")
     parser.add_argument("--map", action="store_true", help="emit map entries to paste")
+    parser.add_argument(
+        "--parquet", action="append", help="also read this local parquet (an unpublished city)"
+    )
     args = parser.parse_args()
 
     cities = args.city or sorted(MUNICIPAL_DATA_SOURCES)
     print(f"reading {len(cities)} cities...", file=sys.stderr)
-    rows = published_species([c.upper() for c in cities])
+    rows = published_species([c.upper() for c in cities], args.parquet)
     pairs = candidate_pairs(rows)
     print(
         f"{len(rows):,} distinct species, {len(pairs)} pairs within {MAX_EDITS} edits;"
@@ -490,7 +507,7 @@ def main() -> None:
 
     powo = Powo()
     names = sorted({p[0] for p in pairs} | {p[3] for p in pairs})
-    todo = [n for n in names if n not in powo.cache]
+    todo = [n for n in names if not powo.cached(n)]
     for i, name in enumerate(todo, 1):
         powo.lookup(name)
         time.sleep(0.35)

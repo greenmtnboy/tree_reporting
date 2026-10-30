@@ -49,6 +49,7 @@ import cobog.bogota_landmarks;
 import twtpe.taipei_landmarks;
 import dkcph.copenhagen_landmarks;
 import fihel.helsinki_landmarks;
+import ussto.stoughton_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

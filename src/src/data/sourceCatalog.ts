@@ -11,6 +11,7 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Stoughton, WI', label: 'City of Stoughton - Public Tree Inventory (ArcGIS)', url: 'https://experience.arcgis.com/experience/f9b95eddac104c708619ccaf4c2c9de0' },
   { city: 'Helsinki', label: 'Helsinki Region Infoshare - City of Helsinki Tree Register (Puurekisteri, CC BY 4.0)', url: 'https://hri.fi/data/en_GB/dataset/helsingin-kaupungin-puurekisteri' },
   { city: 'Copenhagen', label: 'City of Copenhagen Open Data - Tree Register (trae_basis, CC BY 4.0)', url: 'https://www.opendata.dk/city-of-copenhagen/trae_basis' },
   { city: 'Taipei', label: 'Taipei City Open Data - Parks and Street Lights Office, Street and Park Trees (OGDL-Taiwan-1.0)', url: 'https://data.gov.tw/dataset/128274' },
@@ -73,6 +74,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Stoughton, WI', label: 'City of Stoughton - Historical Landmarks (Stoughton Landmarks Commission)', url: 'https://stoughtonwi.maps.arcgis.com/home/item.html?id=0ac41bae1fac4f4abdb873deed6f8d75' },
   { city: 'Helsinki', label: 'City of Helsinki WFS - Buildings Protected by Detailed Plans, Protected Natural Monuments (CC BY 4.0)', url: 'https://hri.fi/data/en_GB/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa' },
   { city: 'Copenhagen', label: 'City of Copenhagen WFS - Monuments (monumenter, CC BY 4.0)', url: 'https://wfs-kbhkort.kk.dk/k101/ows?service=WFS&request=GetCapabilities' },
   { city: 'Taipei', label: 'Bureau of Cultural Heritage, Ministry of Culture - Monuments and Historic Buildings (OGDL-Taiwan-1.0)', url: 'https://data.gov.tw/dataset/6246' },

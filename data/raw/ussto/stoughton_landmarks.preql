@@ -1,0 +1,29 @@
+import ..landmark_common;
+
+root datasource stoughton_landmarks_update_time (
+    data_updated_through: ussto_landmark_data_updated_through
+)
+file `./stoughton_landmarks_probe.py`;
+
+# The Stoughton Landmarks Commission's register is a live ArcGIS layer on the
+# same organisation as the trees, so this reads it directly: no Nominatim
+# geocoding, no committed CSV and no staging object.
+root partial datasource raw_stoughton_landmark_info extends landmark_partition (
+    address: ?address,
+    property_type: ?property_type,
+    neighborhood: ?neighborhood,
+    year_built: ?year_built,
+)
+complete where city = 'USSTO'
+file `./stoughton_landmarks.py`;
+
+partial datasource stoughton_landmark_info extends published_landmark_info (
+    ?address,
+    ?property_type,
+    ?neighborhood,
+    ?year_built,
+    ussto_landmark_data_updated_through,
+)
+complete where city = 'USSTO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/ussto_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/ussto_landmark_info_v{data_version}.parquet`
+freshness by ussto_landmark_data_updated_through;

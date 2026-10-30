@@ -10,7 +10,7 @@
         --center 39.7392,-104.9903 \\
         --bounds 39.45,39.95,-105.65,-104.55 \\
         --source-label DENVER_OPENDATA \\
-        --ecoregion 402
+        --ecoregion 402 --usda-zone 6
 
 Adding a city touches roughly twenty files across Python, preql, TOML and
 TypeScript, and the city code appears in them about forty times.  Almost none
@@ -46,6 +46,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -53,6 +54,42 @@ RAW = Path(__file__).resolve().parents[1]
 DATA = RAW.parent
 REPO = DATA.parent
 SRC = REPO / "src" / "src"
+
+RESOLVE_QUERY_URL = (
+    "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/"
+    "Resolve_Ecoregions/FeatureServer/0/query"
+)
+# RESOLVE's REALM values as the frontend's dashboard context spells them.
+REALM_KEYS = {
+    "Nearctic": "nearctic",
+    "Palearctic": "palearctic",
+    "Neotropic": "neotropical",
+    "Australasia": "australasia",
+    "Indomalayan": "indo_malay",
+    "Afrotropic": "afrotropic",
+    "Oceania": "oceania",
+}
+
+
+def resolve_ecoregion(eco_id: int) -> dict:
+    """ECO_NAME, BIOME_NAME and REALM for one RESOLVE ecoregion."""
+    import requests
+
+    response = requests.get(
+        RESOLVE_QUERY_URL,
+        params={
+            "where": f"ECO_ID={eco_id}",
+            "outFields": "ECO_NAME,BIOME_NAME,REALM",
+            "returnGeometry": "false",
+            "f": "json",
+        },
+        timeout=60,
+    )
+    response.raise_for_status()
+    features = response.json().get("features") or []
+    if not features:
+        raise SystemExit(f"RESOLVE has no ecoregion {eco_id}")
+    return features[0]["attributes"]
 
 
 class Edits:
@@ -663,6 +700,13 @@ def build(args) -> Edits:
         what="rollup file list", marker=f"trees/{lc}_tree_info_v",
     )
     e.sub_once(
+        RAW / "full_landmark_publish.preql",
+        r"(landmarks/\w+_landmark_info_v\{data_version\}\.parquet`)(\n\];)",
+        rf"\1,\n    f`https://storage.googleapis.com/trilogy_public_models/duckdb/"
+        rf"landmarks/{lc}_landmark_info_v{{data_version}}.parquet`\2",
+        what="landmark rollup file list", marker=f"landmarks/{lc}_landmark_info_v",
+    )
+    e.sub_once(
         RAW / "tree_browser_city.preql",
         r"(_tree_vocab_v\{data_version\}\.parquet`;\n)\Z",
         rf"""\1
@@ -768,6 +812,29 @@ memory_mb = 2048
         what="landmark source attribution", marker=f"city: '{name}',",
         scope=r"export const LANDMARK_SOURCES: CitySourceLink\[\] = \[",
     )
+    # The chat and dashboards' ecoregion, zone, biome and realm parameters,
+    # and the biome the city's artwork is drawn from
+    # (dashboardContextSource.test.ts, biomeSketch.test.ts).
+    context_path = SRC / "composables" / "dashboardContextSource.ts"
+    if f"\n  {code}: {{" in context_path.read_text(encoding="utf-8"):
+        e.skipped.append(f"{context_path.relative_to(REPO)}: dashboard context (already present)")
+    else:
+        eco = resolve_ecoregion(args.ecoregion)
+        realm = REALM_KEYS.get(eco["REALM"])
+        if realm is None:
+            raise SystemExit(f"no realm key for RESOLVE realm {eco['REALM']!r}; add it to REALM_KEYS")
+        e.sub_once(
+            context_path,
+            r"(\n  \},\n)(\}\n)",
+            rf"""\1  {code}: {{
+    ecoregionId: {args.ecoregion}, // {eco["ECO_NAME"]}
+    usdaZone: {args.usda_zone},
+    biome: '{eco["BIOME_NAME"]}',
+    realm: '{realm}',
+  }},
+\2""",
+            what="dashboard context", marker=f"\n  {code}: {{",
+        )
     return e
 
 
@@ -812,6 +879,7 @@ def main() -> None:
     ap.add_argument("--bounds", required=True, type=parse_bounds, help="lat_min,lat_max,lon_min,lon_max")
     ap.add_argument("--source-label", required=True, help="Municipal data_source value, e.g. DENVER_OPENDATA")
     ap.add_argument("--ecoregion", required=True, type=int, help="RESOLVE ECO_ID at the city centre")
+    ap.add_argument("--usda-zone", required=True, type=int, help="USDA hardiness zone, whole number (5 for 5a/5b)")
     ap.add_argument("--city-cron", default="0 0 12 * * SUN,WED", help="Quartz cron for the city refresh job")
     ap.add_argument("--osm-cron", default="0 0 4 * * SUN", help="Quartz cron for the OSM extract job")
     ap.add_argument("--dry-run", action="store_true", help="Report the edits without writing")
@@ -831,6 +899,13 @@ def main() -> None:
         print("\ndry run -- nothing written")
         return
     edits.commit()
+    # The dedup grid in tree_dedup.preql is generated from DEDUP_CELL_METRES,
+    # which the commit just edited; `test_dedup_cells.py` fails until it is
+    # regenerated, so regenerate it here rather than leave a red test.
+    subprocess.run(
+        [sys.executable, str(Path(__file__).with_name("dedup_cells.py")), "--write"],
+        check=True,
+    )
     print(f"""
 {args.code} scaffolded.  What is left is the part that needs judgement:
 
@@ -842,12 +917,13 @@ def main() -> None:
        cd data/raw && uv run {args.code.lower()}/{args.slug}_osm_extract.py
   4. CALIBRATE the dedup cell size -- do not ship the placeholder:
        uv run tools/osm_dedup_validation.py --city {args.code}
+     then set DEDUP_CELL_METRES and run `uv run tools/dedup_cells.py --write`.
   5. Fill in the two TODO attribution lines in src/src/data/sourceCatalog.ts
      and the README source tables.
 
 Then check the wiring:
 
-  cd data/raw && uv run --with pytest python -m pytest tests -q
+  cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.419" --with "duckdb<2" --with requests python -m pytest tests -q
   cd data && trilogy refresh --dry-run raw/{args.code.lower()}/{args.slug}_tree_info.preql
   cd data && trilogy refresh --dry-run osm_staging/{args.code.lower()}_osm_staging.preql
 
