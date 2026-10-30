@@ -44,9 +44,11 @@ All of it is in `src/`; no published file changed.
   DuckDB, same storage format as wasm). The `trees` view casts the ENUMs back
   to VARCHAR, so chat SQL and the URL filters see the published types.
 - **The vocabularies are read before the rows.** Each ENUM is built from a
-  `SELECT DISTINCT` projection of the parquet, which DuckDB-wasm serves as
-  column-chunk range requests at no extra bytes, so the one row scan casts
-  straight into the ENUMs and the wide VARCHAR table never exists. Retyping
+  `SELECT DISTINCT` projection of the parquet, so the one row scan casts
+  straight into the ENUMs and the wide VARCHAR table never exists. (This
+  once said the projection cost no extra bytes as column-chunk range
+  requests. It cost none because the worker downloaded the whole file
+  anyway; see "Range reads" below.) Retyping
   columns in place after the load was tried first; it materialised the wide
   table and cost four seconds of `ALTER`.
 - **The crown prediction is a column, not a table.** The per-city slice is
@@ -352,9 +354,10 @@ How it works (`src/workers/cityWindow.ts`, `src/composables/useMapWindow.ts`):
 - **Eviction.** Once the held rows pass the budget, the cells farthest from
   the camera are dropped, never one within `radiusCells` of it. DuckDB-wasm
   reuses a dropped table's memory: ten pans across Boston held its heap flat.
-- **The vocabularies are whole-city.** The ENUMs are built from the whole
-  file before any cell loads, so a value first met in a later cell is
-  already in them. Those columns are a couple of MB of the file.
+- **The vocabularies are whole-city.** The ENUMs are built before any cell
+  loads, so a value first met in a later cell is already in them. They come
+  from the city's vocabulary file (`{code}_tree_vocab_v2.parquet`), not the
+  projection; see "Range reads" below.
 - **Reads a window cannot answer** go to `trees_published` (the projection
   file on a phone, `trees_fast` on desktop): the deep-linked tree's
   position and the check-in dialog's species count. The deep link then loads
@@ -393,6 +396,49 @@ fix is the file, not the loader: written in Hilbert order with 10k-row
 groups (`docs/TRILOGY_ORDER_BY_SPEC.md`, pytrilogy #778) a 4.5 km window
 reads 5 MB of 68, and the budget can move back toward the 500k the subset
 sweep allows. Re-measure with `MAP_BENCH_PANS` when it lands.
+
+### Range reads, the sorted file and the vocabulary
+
+Until 2026-10-29 the worker downloaded every parquet whole. It opened
+DuckDB-wasm without `db.open()`, and since duckdb-wasm 1.31 an unset
+`forceFullHTTPReads` means true: one GET for the full file, whatever the
+query reads. (Studio's dashboards had the same bug, fixed in
+trilogy-studio-core #277, components 0.1.31.) So the Hilbert-sorted
+projection pruned nothing, and every earlier byte count here is a whole
+file.
+
+Range reads alone made things worse. With 10,240-row groups each string
+column chunk is a few KB, and DuckDB-wasm reads in blocks that grow from
+256 KB to 16 MB, so the vocabulary pass (one `SELECT DISTINCT` per ENUM
+column) read 71 of Boston's 71 MB in about 400 requests. The vocabularies
+now come from `{code}_tree_vocab_v2.parquet` (171 KB for Boston, the
+projection's string tuples with their tree counts, built by the same job),
+which the worker trusts only when its counts sum to the projection's row
+count.
+
+Boston on a phone (iPhone 13 profile), the sorted projection served by
+`scripts/bench-serve.mjs` with the data files on a 10 Mbit/s, 70 ms link,
+Blue Hills, walk plus ten pans; two runs each:
+
+| | Whole-file download (before) | Range reads + vocabulary file |
+|---|---:|---:|
+| City load (`init:done`) | 75.8 to 83.4 s | 8.0 to 8.9 s |
+| Trees on screen | 81.7 to 92.2 s | 29.2 to 33.3 s |
+| Bytes from the projection | 71.3 MB, 1 request | 40.0 to 45.6 MB, 86 to 101 |
+| Renderer at load (step peak) | 823 to 826 MB | 727 to 738 MB |
+| Renderer peak, whole walk | 844 to 846 MB | 804 to 873 MB |
+| A pan into unloaded ground | 0.2 to 4 s (file is local) | 12 to 19 s for 60k to 95k rows |
+
+The first view is three times sooner. The cost is a pan: the old path paid
+for every pan up front, and now each new stretch of ground is a fetch.
+Those fetches are larger than they need to be: a 61k-row window (about six
+row groups, ~2.6 MB) was one 16.8 MB read, the readahead having grown on
+the reused file handle. `enable_external_file_cache = false` and
+`disable_parquet_prefetching` change nothing; the growth is in
+DuckDB-wasm's web filesystem. That is the next lever for pans, and
+`TIERS.normal.budgetRows` stays at 300k until it is measured. On an
+unthrottled localhost the old path looks better (one local GET is free),
+which is why this table is throttled.
 
 ### The chat reads the whole city
 
@@ -492,9 +538,16 @@ To measure against a file that is not published yet, build with
 `VITE_TREES_BASE_URL=http://localhost:6180/local-trees` and put the files
 the worker will ask for under `src/public/local-trees/` (gitignored): the
 city parquet, `tree_enrichment_v2.parquet`, the city's predictions slice
-and the candidate file. The preview then serves them with range requests
-like the bucket does, and removing the candidate from `dist/local-trees/`
+and the candidate file. Removing the candidate from `dist/local-trees/`
 between runs gives the fallback path on the same build.
+
+`pnpm preview` is not the bucket for byte counts: its static server answers
+`Range: bytes=0-0`, the probe DuckDB-wasm opens a file with, with the whole
+file, where GCS sends one byte. Serve `dist/` with a server that implements
+ranges, such as `node scripts/bench-serve.mjs dist 6180` (with `THROTTLE_MBPS`
+and `RTT_MS` to give the data files a phone's link), before comparing
+bytes. `MAP_BENCH_RANGES=<substring>` prints every request
+for matching URLs with its `Range` header, size and time.
 
 The worker logs `[Perf] duckdb-worker:city-load` with per-statement
 milliseconds and DuckDB's own memory tags after every city load, so a

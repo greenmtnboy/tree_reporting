@@ -31,6 +31,17 @@ export function cityBrowserParquetUrl(city: string): string | null {
 }
 
 /**
+ * The projection's vocabularies (data/raw/tree_browser_city.preql,
+ * `city_tree_vocab`): one row per distinct string tuple with its tree count,
+ * a few thousand rows. Returns null if city code is unknown.
+ */
+export function cityVocabParquetUrl(city: string): string | null {
+  const lower = city.toLowerCase()
+  if (!lower.match(/^[a-z]{2}[a-z]{3}$/)) return null
+  return `${REMOTE_TREES_BASE_URL}/${lower}_tree_vocab_v${TREE_DATA_VERSION}.parquet`
+}
+
+/**
  * Per-city crown-predictions slice. The job that wrote these is gone (the
  * browser projection carries the prediction); the files it left stay
  * published and feed the fallback load of a city whose projection is not

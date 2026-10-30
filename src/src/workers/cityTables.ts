@@ -65,6 +65,14 @@ export type CityTableOptions = {
    * shape here from the published inventory.
    */
   projectionUrl: string | null
+  /**
+   * The projection's vocabulary file, when it is published and its tree
+   * counts sum to the projection's row count: the ENUMs are built from it
+   * instead of a SELECT DISTINCT per column over the projection, which in
+   * DuckDB-wasm reads most of the file. Null scans the projection (or the
+   * assembled source) as before. Only read with `projectionUrl`.
+   */
+  vocabUrl?: string | null
   /** The city's published parquet (or the cross-city rollup as a last resort). */
   parquetUrl: string
   /** The crown predictions parquet to fold in, or null when none is reachable. */
@@ -203,7 +211,7 @@ export function windowViewSql(chunkTables: string[]): string {
  * reader.
  */
 function cityShape(options: CityTableOptions): { types: string[]; rows: (where: string) => string } {
-  const { projectionUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth } = options
+  const { projectionUrl, vocabUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth } = options
   const clampedLat = 'LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878)'
   const n = 2 ** TILE_INDEX_ZOOM
 
@@ -294,14 +302,20 @@ function cityShape(options: CityTableOptions): { types: string[]; rows: (where: 
   // keeps for the life of the tab.
   const vocabulary = (expr: string, join = '') =>
     `SELECT DISTINCT ${expr} AS value FROM (${source('')}) t ${join} WHERE ${expr} IS NOT NULL ORDER BY 1`
+  // From the pipeline's vocabulary file when there is one: the same values,
+  // a superset in fact (it also counts trees with no position, which the
+  // scan above filters out), for a few KB instead of the projection.
+  const fromVocab = (column: string) =>
+    `SELECT DISTINCT ${column} AS value FROM read_parquet(${sqlString(vocabUrl!)}) WHERE ${column} IS NOT NULL ORDER BY 1`
   const nameJoin = projectionUrl ? '' : 'LEFT JOIN species_enrichment se ON t.species = se.species'
+  const useVocab = Boolean(projectionUrl && vocabUrl)
   const enumSources: Array<[keyof typeof CITY_ENUM_TYPES, string]> = [
-    ['city', vocabulary('t.city')],
-    ['source', vocabulary('t.data_source')],
-    ['species', vocabulary('t.species')],
-    ['name', vocabulary(displayName, nameJoin)],
-    ['sourceName', vocabulary('t.tree_name')],
-    ['cultivar', vocabulary('t.cultivar')],
+    ['city', useVocab ? fromVocab('city') : vocabulary('t.city')],
+    ['source', useVocab ? fromVocab('data_source') : vocabulary('t.data_source')],
+    ['species', useVocab ? fromVocab('species') : vocabulary('t.species')],
+    ['name', useVocab ? fromVocab('display_name') : vocabulary(displayName, nameJoin)],
+    ['sourceName', useVocab ? fromVocab('tree_name') : vocabulary('t.tree_name')],
+    ['cultivar', useVocab ? fromVocab('cultivar') : vocabulary('t.cultivar')],
   ]
   return {
     types: [

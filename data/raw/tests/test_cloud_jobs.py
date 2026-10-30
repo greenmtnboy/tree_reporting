@@ -312,32 +312,34 @@ def test_rollup_reads_every_city():
     )
 
 
-def test_browser_projections_cover_every_city():
-    """Every city has one browser projection, and a job builds them.
+@pytest.mark.parametrize("kind", ["tree_browser", "tree_vocab"])
+def test_browser_projections_cover_every_city(kind):
+    """Every city has one browser projection and one vocabulary, and a job builds them.
 
     The map reads `{city}_tree_browser_v{N}.parquet` and, when it is missing,
     assembles the same shape itself from the city parquet, the enrichment
     table and whatever predictions it can reach, so a city left out here still
     opens -- it just pays the joins on every phone, which nothing else would
-    report.
+    report. A missing `{city}_tree_vocab_v{N}.parquet` is as quiet: the worker
+    scans its ENUM vocabularies out of the projection instead, which reads
+    most of the file.
     """
     text = statements(RAW_DIR / "tree_browser_city.preql")
-    datasources = re.findall(r"partial datasource ([a-z]{5})_tree_browser\b", text)
-    files = re.findall(r"trees/([a-z]{5})_tree_browser_v\{data_version\}\.parquet`:", text)
-    scopes = re.findall(r"complete where city = '([A-Z]{5})'", text)
+    datasources = re.findall(rf"partial datasource ([a-z]{{5}})_{kind}\b", text)
+    files = re.findall(rf"trees/([a-z]{{5}})_{kind}_v\{{data_version\}}\.parquet`:", text)
     expected = sorted(code.lower() for code in MUNICIPAL_DATA_SOURCES)
     assert sorted(datasources) == expected, (
-        f"missing projections: {sorted(set(expected) - set(datasources))}; "
+        f"missing {kind}: {sorted(set(expected) - set(datasources))}; "
         f"extra: {sorted(set(datasources) - set(expected))}"
     )
-    assert sorted(files) == expected and sorted(s.lower() for s in scopes) == expected
-    # Each projection writes its own city's file and scopes to its own city.
+    assert sorted(files) == expected
+    # Each one writes its own city's file and scopes to its own city.
     for code in expected:
         block = re.search(
-            rf"partial datasource {code}_tree_browser\b.*?;", text, re.S
+            rf"partial datasource {code}_{kind}\b.*?;", text, re.S
         ).group(0)
         assert f"complete where city = '{code.upper()}'" in block, code
-        assert f"trees/{code}_tree_browser_v" in block, code
+        assert f"trees/{code}_{kind}_v" in block, code
     entrypoints = {job["entrypoint"] for job in jobs()}
     assert "raw/tree_browser_city.preql" in entrypoints
 

@@ -73,7 +73,9 @@ async function findClickableTree(page: Page, mobile: boolean): Promise<Hit> {
       const margin = 100
       const usable = (p: { x: number; y: number }) =>
         p.x > margin && p.y > margin &&
-        p.x < container.width - margin && p.y < container.height - margin
+        p.x < container.width - margin && p.y < container.height - margin &&
+        // The phone legend reaches further in than the margin.
+        document.elementFromPoint(container.left + p.x, container.top + p.y) === map.getCanvas()
 
       const isTree = (f: GeoJSON.Feature) => {
         const id = f.properties?.id
@@ -96,8 +98,9 @@ async function findClickableTree(page: Page, mobile: boolean): Promise<Hit> {
         return null
       }
 
-      for (const feature of map.queryRenderedFeatures(undefined, { layers: layerIds })) {
-        if (!isTree(feature as unknown as GeoJSON.Feature)) continue
+      const trees = map.queryRenderedFeatures(undefined, { layers: layerIds })
+        .filter((f) => isTree(f as unknown as GeoJSON.Feature))
+      for (const feature of trees) {
         const geometry = feature.geometry
         if (geometry.type !== 'Point') continue
         const point = map.project(geometry.coordinates as [number, number])
@@ -107,6 +110,11 @@ async function findClickableTree(page: Page, mobile: boolean): Promise<Hit> {
         const atPoint = map.queryRenderedFeatures([point.x, point.y], { layers: layerIds })
         const hit = atPoint.find((f) => isTree(f as unknown as GeoJSON.Feature))
         if (!hit) continue
+        // A phone tap opens the nearest tree, the last one drawn on a tie, so
+        // two trees recorded at the same spot are an ambiguous target.
+        const stacked = trees.some((o) => o !== feature && o.geometry.type === 'Point' &&
+          map.project(o.geometry.coordinates as [number, number]).dist(point) < 3)
+        if (stacked) continue
 
         return {
           x: container.left + point.x,
@@ -324,8 +332,14 @@ test.describe('Tree taps — mobile', () => {
     await openMap(page, true)
     await findClickableTree(page, true)
     // A tree with no other tree within reach, and a tap 14px off its center.
+    // Chosen on a settled map, and only once the same tree has held for
+    // 1.5 s: on a phone a tile drawn while its cells load is transient and
+    // redrawn when they land, and a window load reads the projection over
+    // the network, so a candidate found mid-load can be gone at the tap.
     const near = await page.waitForFunction(() => {
       const map = window.__treeMap!
+      if (!map.loaded() || !map.areTilesLoaded()) return null
+      const held = window as unknown as { __nearCandidate?: { id: string; x: number; y: number; since: number } }
       const box = map.getContainer().getBoundingClientRect()
       const trees = map.queryRenderedFeatures(undefined, { layers: ['trees-circle'] })
         .filter(f => f.geometry.type === 'Point' && f.properties?.id && f.properties.id !== 'unkwn')
@@ -333,13 +347,22 @@ test.describe('Tree taps — mobile', () => {
       for (const t of trees) {
         if (t.p.x < 120 || t.p.y < 160 || t.p.x > box.width - 120 || t.p.y > box.height - 220) continue
         const tap = { x: t.p.x + 14, y: t.p.y }
+        // Not under the legend or another control floating over the map.
+        if (document.elementFromPoint(box.left + tap.x, box.top + tap.y) !== map.getCanvas()) continue
         if (trees.some(o => o.id !== t.id && Math.hypot(o.p.x - tap.x, o.p.y - tap.y) < 30)) continue
         // The exact pixel misses: this tap only lands with the tolerance.
         if (map.queryRenderedFeatures([tap.x, tap.y], { layers: ['trees-circle'] }).length) continue
-        return { id: t.id, x: box.left + tap.x, y: box.top + tap.y }
+        const found = { id: t.id, x: box.left + tap.x, y: box.top + tap.y }
+        const last = held.__nearCandidate
+        if (!last || last.id !== found.id || Math.hypot(last.x - found.x, last.y - found.y) > 1) {
+          held.__nearCandidate = { ...found, since: Date.now() }
+          return null
+        }
+        return Date.now() - last.since >= 1_500 ? found : null
       }
+      held.__nearCandidate = undefined
       return null
-    }, undefined, { timeout: 30_000, polling: 500 })
+    }, undefined, { timeout: 60_000, polling: 500 })
     const target = (await near.jsonValue())!
 
     await page.evaluate(() => {
@@ -363,6 +386,7 @@ test.describe('Tree taps — mobile', () => {
       const box = map.getContainer().getBoundingClientRect()
       for (let y = 200; y < box.height - 240; y += 20) {
         for (let x = 80; x < box.width - 80; x += 20) {
+          if (document.elementFromPoint(box.left + x, box.top + y) !== map.getCanvas()) continue
           if (!map.queryRenderedFeatures([[x - 40, y - 40], [x + 40, y + 40]], { layers: ['trees-circle'] }).length) {
             return { x: box.left + x, y: box.top + y }
           }
