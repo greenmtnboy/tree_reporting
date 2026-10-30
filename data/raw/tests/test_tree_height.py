@@ -225,7 +225,7 @@ def published() -> dict[str, dict]:
     env.parse(CITY_MODEL.format(**fmt))
     executor = Dialects.DUCK_DB.default_executor(environment=env, conf=DuckDBConfig(enable_python_datasources=True))
     (sql,) = executor.generate_sql(
-        "select tree_id, cluster_id, height_m, height_source, height_crown_id where city = 'USBOS';"
+        "select tree_id, cluster_id, height_m where city = 'USBOS';"
     )
     # No approved tree reports in the fixture.
     sql = re.sub(
@@ -251,14 +251,13 @@ def published() -> dict[str, dict]:
 def test_an_inventory_tree_under_a_crown_gets_its_height(published):
     row = published["m-under"]
     assert row["height_m"] == 15.5
-    assert row["height_source"] == "TEST_LIDAR" and row["height_crown_id"] == "TEST-1"
 
 
 def test_an_absorbed_prediction_lends_its_crown(published):
     """The inventory point misses; the prediction it absorbed is on the crown."""
     assert published["clusters"]["p-kerb"] == "m-kerb"
     row = published["m-kerb"]
-    assert row["height_m"] == 11.0 and row["height_crown_id"] == "TEST-2"
+    assert row["height_m"] == 11.0
 
 
 def test_a_lone_prediction_and_a_lone_osm_node_get_theirs(published):
@@ -301,8 +300,10 @@ def test_a_height_city_is_fully_wired(code: str):
     assert probe in text.split(f"auto {lower}_published_data_updated_through <- greatest(", 1)[1].split(")", 1)[0]
 
     target = stored(published_target(code))
-    for column in ("height_m", "height_source", "height_crown_id"):
-        assert column in target, f"{code}'s target does not publish {column}"
+    assert "height_m" in target, f"{code}'s target does not publish height_m"
+    # provenance stays in staging; see "What the published parquet carries" in tree_height.preql
+    for column in ("height_source", "height_crown_id", "canopy_crown_id", "canopy_source"):
+        assert column not in target, f"{code}'s target publishes {column}"
 
     staging = DATA_DIR / "canopy_staging" / f"{lower}_canopy_staging.preql"
     assert staging.exists(), f"{code} has no canopy staging model"

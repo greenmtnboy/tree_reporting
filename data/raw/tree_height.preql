@@ -25,7 +25,7 @@
 #       file `.../staging/{lc}_canopy_height.parquet`;
 #   a probe on that object's publication time, folded into the city's
 #       published watermark so a new survey rebuilds the parquet;
-#   the published target maps ?height_m, ?height_source and ?height_crown_id.
+#   the published target maps ?height_m.
 #
 # A city that does not import this file publishes no height column at all;
 # nothing in ../tree_dedup.preql or the rollup depends on one.
@@ -70,10 +70,14 @@ property canopy_cell.canopy_crown_id string; # the crown object, '{SURVEY}-{obje
 property canopy_cell.canopy_crown_radius_m float; # that crown's radius, metres, as the survey gives it (clamped)
 property canopy_cell.canopy_source string; # the survey, e.g. BOSTON_LIDAR_2024
 
-# What the published parquet carries.
+# What the published parquet carries: the height alone.  Which survey and
+# which crown stay in the staging table.  No other attribute publishes its
+# own provenance (the row's merged_sources is the convention), and both
+# surveys here are 2024 LIDAR made the same way, so a label would restate the
+# tree's city; a per-crown id is not stable across surveys and would invite
+# consumers to key on it.  A year or method column earns its place once
+# heights of different kinds or vintages are mixed; see docs/TREE_HEIGHT.md.
 property tree_id.height_m float; # tree height in metres, from a LIDAR canopy survey: the height of the crown over the tree's point. Null where the city has no survey or the point is under no crown.
-property tree_id.height_source string; # the survey height_m came from, e.g. BOSTON_LIDAR_2024
-property tree_id.height_crown_id string; # the survey's crown object the tree was matched to; two trees under one merged crown share it
 
 # @by_source, with a prediction's value admitted last whatever the cluster.
 def by_survey(value) -> coalesce(
@@ -85,9 +89,5 @@ def by_survey(value) -> coalesce(
 );
 
 auto merged_height_m <- @by_survey(canopy_height_m);
-auto merged_height_source <- @by_survey(canopy_source);
-auto merged_height_crown_id <- @by_survey(canopy_crown_id);
 
 merge merged_height_m into height_m;
-merge merged_height_source into height_source;
-merge merged_height_crown_id into height_crown_id;

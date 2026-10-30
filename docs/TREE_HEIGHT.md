@@ -36,7 +36,7 @@ raw tree rows (every partition) ─► canopy_cell ──────┘ LEFT JO
                                          │
                           @by_survey over the cluster
                                          │
-                       usbos_tree_info: height_m, height_source, height_crown_id
+                               usbos_tree_info: height_m
 ```
 
 1. **Stage** (`canopy-usbos`, by hand). `fetch_city_crowns` pages both
@@ -57,9 +57,15 @@ raw tree rows (every partition) ─► canopy_cell ──────┘ LEFT JO
    geocode. When an inventory trunk misses every crown but the prediction it
    absorbed sits on one, the tree gets that crown's height
    (`test_an_absorbed_prediction_lends_its_crown`).
-4. **Publish**. Boston's target stores `?height_m`, `?height_source` and
-   `?height_crown_id`. Nothing else reads them yet: not the rollup, the
-   browser projection, or the app.
+4. **Publish**. Boston's target stores `?height_m` and nothing else new.
+   Which survey and which crown stay in the staging table: no other
+   attribute publishes its own provenance (`merged_sources` is the row-level
+   convention), both surveys are 2024 LIDAR made the same way so a label
+   would restate the tree's city, and a crown id is not stable across
+   surveys. A year or method column earns a place once heights of different
+   kinds (an inventory's measured heights) or vintages are mixed. Nothing
+   reads `height_m` yet: not the rollup, the browser projection, or the
+   app.
 
 ## What it matches (measured 2026-10-29)
 
@@ -96,13 +102,9 @@ Sanity checks:
 - **Merged crowns.** A segment can cover several trees, and its height is
   the 98th percentile of the whole segment, so a short tree under a tall
   neighbour's merged crown gets the tall one's height.
-  `height_crown_id` exposes the sharing. A downstream "trees per crown" of
-  more than 1 is the flag.
-- **Field consistency.** `height_m`, `height_source` and `height_crown_id`
-  are three separate `max()`s by class. They can disagree only when two
-  rows of the *same* class in one cluster hit different crowns (two OSM
-  nodes, two satellite rows), which is rare. A packed key like the species
-  merge's would close it.
+  The staging table's `canopy_crown_id` shows the sharing when re-derived
+  from a tree's position. If it matters for analysis, publish it as a
+  derived "shares its crown" flag, not the raw id.
 - **Survey vintage.** 2024. A tree planted since then has no crown, and a
   tree felled since then still lends its crown's height to anything standing
   where it was.
