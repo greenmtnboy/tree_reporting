@@ -37,6 +37,8 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.ussto_data_updated_through datetime; # when Stoughton, WI data is through
+property <*>.ussto_osm_data_updated_through datetime; # GCS publication time of Stoughton, WI's staged OSM parquet
 property <*>.usbos_predicted_data_updated_through datetime; # GCS publication time of Boston's staged bulk imagery predictions (predicted_update_time.py)
 property <*>.uswas_osm_data_updated_through datetime; # GCS publication time of Washington DC's staged OSM parquet
 property <*>.uslax_osm_data_updated_through datetime; # GCS publication time of Los Angeles's staged OSM parquet

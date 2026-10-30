@@ -705,6 +705,7 @@ SPECIES_SYNONYMS: dict[str, str] = {
     "Quercus bimundorum": "Quercus x bimundorum",
     "Quercus jackiana": "Quercus x jackiana",
     "Quercus libanerris": "Quercus x libanerris",
+    "Quercus schuettei": "Quercus x schuettei",
     "Quercus turneri": "Quercus x turneri",
     "Quercus warei": "Quercus x warei",
     "Robinia ambigua": "Robinia x ambigua",
@@ -1023,6 +1024,25 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Vitex angus-castus": "Vitex agnus-castus",
     "Zelcova serrata": "Zelkova serrata",
     "Zolkova serrata": "Zelkova serrata",
+    # Stoughton, WI (2026-10-30), whose epithet domain carries these typos.
+    # POWO sat behind a Cloudflare challenge that day, so each pair was put to
+    # GBIF's backbone instead (`/v1/species/match?strict=true`): the key has
+    # no exact match, the value is an exact accepted name.  `Ginkgo bicolor`
+    # is the epithet column's slip in a monotypic genus.  Re-run
+    # `species_audit.py` once Kew answers again.
+    "Acer platiniodes": "Acer platanoides",
+    "Acer rubra": "Acer rubrum",
+    "Aesculus hippacastanum": "Aesculus hippocastanum",
+    "Aesculus hippacasttanum": "Aesculus hippocastanum",
+    "Ginkgo bicolor": "Ginkgo biloba",
+    "Malas": "Malus",
+    "Malcura pomifera": "Maclura pomifera",
+    "Metasequoia glyptostoboide": "Metasequoia glyptostroboides",
+    "Platanus acerifolla": "Platanus x hispanica",
+    "Prunus cerifera": "Prunus cerasifera",
+    "Quercus meuhlengergil": "Quercus muehlenbergii",
+    "Quercus robar": "Quercus robur",
+    "Syriga reticulata": "Syringa reticulata",
 }
 
 
@@ -1291,6 +1311,7 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USSTO": ("STOUGHTON_OPENDATA",),
     "FIHEL": ("HELSINKI_OPENDATA",),
     "DKCPH": ("COPENHAGEN_OPENDATA",),
     "TWTPE": ("TAIPEI_OPENDATA",),
@@ -1364,6 +1385,7 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USSTO": "OSM_USSTO",
     "FIHEL": "OSM_FIHEL",
     "DKCPH": "OSM_DKCPH",
     "TWTPE": "OSM_TWTPE",
@@ -1927,6 +1949,7 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USSTO": (42.85, 42.97, -89.3, -89.11),
     "FIHEL": (60.05, 60.35, 24.75, 25.3),
     "DKCPH": (55.58, 55.76, 12.4, 12.7),
     "TWTPE": (24.95, 25.22, 121.45, 121.68),
@@ -2025,6 +2048,11 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Uncalibratable for now, so the default: OSM had no tree node in
+    # Stoughton when it was wired (OSM_UNMAPPED_CITIES), and the cell only
+    # decides which OSM or community rows fold into an inventory tree.
+    # Measure with osm_dedup_validation.py once the extract stages rows.
+    "USSTO": 10,
     # Calibrated 2026-09-11 against the staged extract (67,545 OSM nodes --
     # more than the register itself) and the ingest's 66,380 rows.  5-10 m
     # band 19.2% mutual-NN over n=1,358: neighbour-dominated, so the band
@@ -2252,6 +2280,7 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USSTO': ((42.85, 42.97, -89.3, -89.11),),
     'FIHEL': ((60.05, 60.35, 24.75, 25.3),),
     'DKCPH': ((55.58, 55.76, 12.4, 12.7),),
     'TWTPE': ((24.95, 25.22, 121.45, 121.68),),

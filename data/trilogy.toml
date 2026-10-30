@@ -1855,6 +1855,40 @@ schedule = "0 30 4 * * FRI"
 timeout_seconds = 1800
 memory_mb = 1024
 
+[[cloud.job]]
+key = "city-ussto"
+name = "urban-tree-city-ussto"
+entrypoint = "raw/ussto/stoughton_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city USSTO`.
+schedule = "0 20 23 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-ussto"
+name = "urban-tree-osm-ussto"
+entrypoint = "osm_staging/ussto_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 30 4 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-ussto"
+name = "urban-tree-landmarks-refresh-ussto"
+entrypoint = "raw/ussto/stoughton_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 22 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
 # ===========================================================================
 # Ad-hoc landmark staging publish — one job per curated-CSV city
 # ===========================================================================

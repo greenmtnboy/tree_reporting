@@ -39,5 +39,6 @@
   "COBOG": { "name": "Bogotá", "center": [-74.0721, 4.711] },
   "TWTPE": { "name": "Taipei", "center": [121.5654, 25.033] },
   "DKCPH": { "name": "Copenhagen", "center": [12.5683, 55.6761] },
-  "FIHEL": { "name": "Helsinki", "center": [24.9384, 60.1699] }
+  "FIHEL": { "name": "Helsinki", "center": [24.9384, 60.1699] },
+  "USSTO": { "name": "Stoughton, WI", "center": [-89.2179, 42.9169] }
 }
