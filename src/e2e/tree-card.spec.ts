@@ -339,6 +339,8 @@ test.describe('Tree taps — mobile', () => {
       for (const t of trees) {
         if (t.p.x < 120 || t.p.y < 160 || t.p.x > box.width - 120 || t.p.y > box.height - 220) continue
         const tap = { x: t.p.x + 14, y: t.p.y }
+        // Not under the legend or another control floating over the map.
+        if (document.elementFromPoint(box.left + tap.x, box.top + tap.y) !== map.getCanvas()) continue
         if (trees.some(o => o.id !== t.id && Math.hypot(o.p.x - tap.x, o.p.y - tap.y) < 30)) continue
         // The exact pixel misses: this tap only lands with the tolerance.
         if (map.queryRenderedFeatures([tap.x, tap.y], { layers: ['trees-circle'] }).length) continue
@@ -376,6 +378,7 @@ test.describe('Tree taps — mobile', () => {
       const box = map.getContainer().getBoundingClientRect()
       for (let y = 200; y < box.height - 240; y += 20) {
         for (let x = 80; x < box.width - 80; x += 20) {
+          if (document.elementFromPoint(box.left + x, box.top + y) !== map.getCanvas()) continue
           if (!map.queryRenderedFeatures([[x - 40, y - 40], [x + 40, y + 40]], { layers: ['trees-circle'] }).length) {
             return { x: box.left + x, y: box.top + y }
           }
