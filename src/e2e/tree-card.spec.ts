@@ -324,8 +324,14 @@ test.describe('Tree taps — mobile', () => {
     await openMap(page, true)
     await findClickableTree(page, true)
     // A tree with no other tree within reach, and a tap 14px off its center.
+    // Chosen on a settled map, and only once the same tree has held for
+    // 1.5 s: on a phone a tile drawn while its cells load is transient and
+    // redrawn when they land, and a window load reads the projection over
+    // the network, so a candidate found mid-load can be gone at the tap.
     const near = await page.waitForFunction(() => {
       const map = window.__treeMap!
+      if (!map.loaded() || !map.areTilesLoaded()) return null
+      const held = window as unknown as { __nearCandidate?: { id: string; x: number; y: number; since: number } }
       const box = map.getContainer().getBoundingClientRect()
       const trees = map.queryRenderedFeatures(undefined, { layers: ['trees-circle'] })
         .filter(f => f.geometry.type === 'Point' && f.properties?.id && f.properties.id !== 'unkwn')
@@ -336,10 +342,17 @@ test.describe('Tree taps — mobile', () => {
         if (trees.some(o => o.id !== t.id && Math.hypot(o.p.x - tap.x, o.p.y - tap.y) < 30)) continue
         // The exact pixel misses: this tap only lands with the tolerance.
         if (map.queryRenderedFeatures([tap.x, tap.y], { layers: ['trees-circle'] }).length) continue
-        return { id: t.id, x: box.left + tap.x, y: box.top + tap.y }
+        const found = { id: t.id, x: box.left + tap.x, y: box.top + tap.y }
+        const last = held.__nearCandidate
+        if (!last || last.id !== found.id || Math.hypot(last.x - found.x, last.y - found.y) > 1) {
+          held.__nearCandidate = { ...found, since: Date.now() }
+          return null
+        }
+        return Date.now() - last.since >= 1_500 ? found : null
       }
+      held.__nearCandidate = undefined
       return null
-    }, undefined, { timeout: 30_000, polling: 500 })
+    }, undefined, { timeout: 60_000, polling: 500 })
     const target = (await near.jsonValue())!
 
     await page.evaluate(() => {
