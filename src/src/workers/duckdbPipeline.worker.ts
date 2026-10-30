@@ -27,6 +27,7 @@ import {
   REMOTE_LANDMARKS_PARQUET_URL,
   cityTreeParquetUrl,
   cityBrowserParquetUrl,
+  cityVocabParquetUrl,
   cityLandmarkParquetUrl,
   cityPredictionsParquetUrl,
 } from './parquetUrls'
@@ -526,6 +527,34 @@ function setCachedTile(key: string, tile: Uint8Array): void {
 }
 
 /**
+ * The projection's vocabulary file, if it is published and describes the
+ * projection being loaded: its tree counts must sum to the projection's row
+ * count, read from the footer. The two are written by the same job, but a
+ * run that failed between them, or a cached copy of either, would leave a
+ * value out of an ENUM, and a cast to an ENUM of a value it lacks fails the
+ * window load. Anything else (missing, unreadable, a count that disagrees)
+ * returns null and the vocabularies are scanned from the projection.
+ */
+async function verifiedVocabUrl(city: string, projectionUrl: string): Promise<string | null> {
+  const vocabUrl = cityVocabParquetUrl(city)
+  if (!vocabUrl || !conn) return null
+  try {
+    const result = await conn.query(`
+      SELECT
+        (SELECT sum(tree_count) FROM read_parquet('${vocabUrl}')) AS vocab_trees,
+        (SELECT sum(num_rows) FROM parquet_file_metadata('${projectionUrl}')) AS projection_rows`)
+    const row = result.toArray()[0]
+    const vocabTrees = Number(row?.vocab_trees)
+    const projectionRows = Number(row?.projection_rows)
+    if (Number.isFinite(vocabTrees) && vocabTrees > 0 && vocabTrees === projectionRows) return vocabUrl
+    console.info('[duckdb-worker] vocabulary file does not match the projection; scanning it', { vocabTrees, projectionRows })
+  } catch (error) {
+    console.info('[duckdb-worker] vocabulary file unavailable; scanning the projection', vocabUrl, error)
+  }
+  return null
+}
+
+/**
  * True when `url`'s parquet has `column`. Reads only the file footer, so this
  * is a metadata round trip rather than a scan. Returns false on any error: the
  * caller uses it to decide whether to add an optional predicate, and guessing
@@ -604,6 +633,7 @@ async function loadCityTrees(city?: string): Promise<void> {
     ? projectionCandidate
     : null
   if (!projectionUrl) console.info('[duckdb-worker] browser projection unavailable; assembling the city from its published files', projectionCandidate)
+  const vocabUrl = projectionUrl ? await verifiedVocabUrl(city, projectionUrl) : null
 
   const hasDedupFlag = !projectionUrl && await parquetHasColumn(parquetUrl, 'is_duplicate')
 
@@ -648,7 +678,7 @@ async function loadCityTrees(city?: string): Promise<void> {
   windowGeneration += 1
   loadedWithWindowPolicy = windowPolicy !== null
 
-  const options: CityTableOptions = { projectionUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth }
+  const options: CityTableOptions = { projectionUrl, vocabUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth }
   // A phone holds the city in windows when the projection is published; the
   // assembled fallback joins three files and is held whole, as before.
   const windowed = windowPolicy !== null && projectionUrl !== null
@@ -692,6 +722,7 @@ async function loadCityTrees(city?: string): Promise<void> {
   console.info('[Perf] duckdb-worker:city-load', {
     city,
     source: projectionUrl ? 'projection' : 'assembled',
+    vocabulary: vocabUrl ? 'vocab-file' : 'scan',
     windowed,
     ms: timings.map(([label, ms]) => `${ms} ${label}`).join(' | '),
     duckdbMb: memory.toArray().map((row) => `${row.tag}=${row.mb}`).join(' '),
@@ -865,6 +896,14 @@ async function doInit(city?: string) {
   const worker = new Worker(bundle.mainWorker!)
   db = new duckdb.AsyncDuckDB(logger, worker)
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
+  // Since duckdb-wasm 1.31 an unset forceFullHTTPReads means true: every
+  // remote parquet was downloaded whole on first touch, so a window load
+  // fetched the full projection and its row groups pruned nothing. Range
+  // reads need it off; the ranged-HEAD sizing (reliableHeadRequests false)
+  // is the one studio uses for the dashboards (trilogy-studio-core #277).
+  await db.open({
+    filesystem: { reliableHeadRequests: false, allowFullHTTPReads: true, forceFullHTTPReads: false },
+  })
 
   conn = await db.connect()
 

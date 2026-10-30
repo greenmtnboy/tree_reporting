@@ -7,6 +7,8 @@
 // Reports, per step, the renderer process's private memory (the page and
 // its dedicated workers, DuckDB included, share one renderer) and, at the
 // end, the bytes each remote file cost, counted from the worker's requests.
+// MAP_BENCH_RANGES=<url substring> also prints each matching request as it
+// finishes: seconds since start, method, Range header and size.
 // Renderer memory is read from the OS: `ps` on Linux, Get-Process on
 // Windows, with the renderer pids taken from the browser's own process list
 // so another browser on the machine cannot be mistaken for it. Serving the
@@ -115,6 +117,7 @@ page.on('console', async (message) => {
 // Bytes per remote file. Playwright reports the requests of nested workers
 // (the DuckDB worker is spawned by the pipeline worker) on the page.
 const bytes = new Map()
+const benchStart = Date.now()
 page.on('requestfinished', async (request) => {
   try {
     const sizes = await request.sizes()
@@ -123,6 +126,10 @@ page.on('requestfinished', async (request) => {
     entry.body += sizes.responseBodySize
     entry.requests += 1
     bytes.set(key, entry)
+    if (process.env.MAP_BENCH_RANGES && key.includes(process.env.MAP_BENCH_RANGES)) {
+      const range = (await request.allHeaders())['range'] ?? 'whole'
+      console.log(`   range ${((Date.now() - benchStart) / 1000).toFixed(1)} s ${request.method()} ${range} ${(sizes.responseBodySize / 1e6).toFixed(2)} MB`)
+    }
   } catch { /* the response was gone before it could be sized */ }
 })
 

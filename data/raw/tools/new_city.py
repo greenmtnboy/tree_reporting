@@ -664,13 +664,17 @@ def build(args) -> Edits:
     )
     e.sub_once(
         RAW / "tree_browser_city.preql",
-        r"(_tree_browser_v\{data_version\}\.parquet`;\n)\Z",
+        r"(_tree_vocab_v\{data_version\}\.parquet`;\n)\Z",
         rf"""\1
 partial datasource {lc}_tree_browser extends city_tree_browser ()
 complete where city = '{code}'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{lc}_tree_browser_v{{data_version}}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{lc}_tree_browser_v{{data_version}}.parquet`;
+
+partial datasource {lc}_tree_vocab extends city_tree_vocab ()
+complete where city = '{code}'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{lc}_tree_vocab_v{{data_version}}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{lc}_tree_vocab_v{{data_version}}.parquet`;
 """,
-        what="browser projection", marker=f"datasource {lc}_tree_browser",
+        what="browser projection and vocabulary", marker=f"datasource {lc}_tree_browser",
     )
 
     # --- trilogy.toml -----------------------------------------------------

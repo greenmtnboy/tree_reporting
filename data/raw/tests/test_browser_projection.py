@@ -104,6 +104,7 @@ def test_the_models_parse():
         assert name in names, name
     for code in MUNICIPAL_DATA_SOURCES:
         assert f"{code.lower()}_tree_browser" in names, code
+        assert f"{code.lower()}_tree_vocab" in names, code
 
     env = Environment(working_path=RAW_DIR)
     env.parse(ECOREGION_MODEL.read_text(encoding="utf-8"))
@@ -126,15 +127,9 @@ FIXTURE_TREES = [
 
 
 @pytest.fixture(scope="module")
-def rows(tmp_path_factory) -> list[dict]:
-    """The model's own SQL, run by DuckDB over fixture parquets.
-
-    The planner is asked for the template's columns scoped to one city, the
-    three `read_parquet` URLs it names are pointed at small local parquets,
-    and what comes back is what that city's projection would hold.
-    """
+def fixture_files(tmp_path_factory):
+    """The three published inputs as small local parquets, and a connection."""
     import duckdb
-    from trilogy import Dialects, Environment
 
     tmp = tmp_path_factory.mktemp("browser")
     conn = duckdb.connect()
@@ -182,15 +177,39 @@ def rows(tmp_path_factory) -> list[dict]:
         path = tmp / f"{table}.parquet"
         conn.execute(f"COPY {table} TO '{path.as_posix()}' (FORMAT PARQUET)")
         files[pattern] = path
+    return conn, files
 
+
+def run_model(fixture_files, query: str, one_scan: bool = True) -> list[dict]:
+    """The model's own SQL, run by DuckDB over the fixture parquets.
+
+    The planner is asked for the query scoped to one city, the three
+    `read_parquet` URLs it names are pointed at the local parquets, and what
+    comes back is what that city's published file would hold.
+    """
+    from trilogy import Dialects, Environment
+
+    conn, files = fixture_files
     env = Environment(working_path=RAW_DIR)
     env.parse(MODEL.read_text(encoding="utf-8"))
-    # Ask for the derivation, not a published projection: with the targets in
-    # scope the planner would read ussfo_tree_browser_v2.parquet back instead.
-    for key in [k for k, d in env.datasources.items() if d.name.endswith("_tree_browser")]:
+    # Ask for the derivation, not a published file: with the targets in scope
+    # the planner would read ussfo_tree_browser_v2.parquet back instead.
+    for key in [k for k, d in env.datasources.items() if d.name.endswith(("_tree_browser", "_tree_vocab"))]:
         del env.datasources[key]
     executor = Dialects.DUCK_DB.default_executor(environment=env)
-    (sql,) = executor.generate_sql(
+    (sql,) = executor.generate_sql(query)
+    for pattern, path in files.items():
+        sql, n = re.subn(rf"read_parquet\('[^']*{pattern}[^']*'\)", f"read_parquet('{path.as_posix()}')", sql)
+        assert n == 1 if one_scan else n >= 1, f"{pattern}: expected one scan, found {n}"
+    assert "read_parquet('https" not in sql, "a published file survived the substitution"
+    columns = [d[0] for d in conn.execute(sql).description]
+    return [dict(zip(columns, row)) for row in conn.execute(sql).fetchall()]
+
+
+@pytest.fixture(scope="module")
+def rows(fixture_files) -> list[dict]:
+    return run_model(
+        fixture_files,
         """
         select
             tree_id, city, data_source, species, cultivar, tree_name, display_name,
@@ -198,14 +217,24 @@ def rows(tmp_path_factory) -> list[dict]:
             predicted_crown_width_m, latitude, longitude, submission_photo_url,
             prediction_inputs_published_through
         where city = 'USSFO';
-        """
+        """,
     )
-    for pattern, path in files.items():
-        sql, n = re.subn(rf"read_parquet\('[^']*{pattern}[^']*'\)", f"read_parquet('{path.as_posix()}')", sql)
-        assert n == 1, f"{pattern}: expected one scan, found {n}"
-    assert "read_parquet('https" not in sql, "a published file survived the substitution"
-    columns = [d[0] for d in conn.execute(sql).description]
-    return [dict(zip(columns, row)) for row in conn.execute(sql).fetchall()]
+
+
+@pytest.fixture(scope="module")
+def vocab(fixture_files) -> list[dict]:
+    return run_model(
+        fixture_files,
+        """
+        select
+            city, data_source, species, cultivar, tree_name, display_name,
+            vocab_tree_count, vocab_inputs_published_through
+        where city = 'USSFO';
+        """,
+        # The plan counts and names in two reads of the rollup; a few
+        # thousand output rows, so this is planner cost and not a phone's.
+        one_scan=False,
+    )
 
 
 def by_id(rows: list[dict]) -> dict[str, dict]:
@@ -266,3 +295,34 @@ def test_the_prediction_is_folded_in(rows):
     assert trees["sf-1"]["predicted_crown_width_m"] == pytest.approx(4.5)
     assert trees["sf-3"]["predicted_crown_width_m"] is None, "a prediction row with nothing to size from"
     assert trees["sf-1"]["prediction_inputs_published_through"] is not None
+
+
+# --- The vocabulary ------------------------------------------------------------
+
+VOCAB_KEY = ("city", "data_source", "species", "cultivar", "tree_name", "display_name")
+
+
+def test_the_vocabulary_is_the_projection_grouped(rows, vocab):
+    """Every string tuple the projection holds, once, with its tree count.
+
+    The worker builds the projection's ENUMs from this file alone, so a value
+    it lacks would fail the cast of every window holding that tree.
+    """
+    from collections import Counter
+
+    expected = Counter(tuple(row[c] for c in VOCAB_KEY) for row in rows)
+    got = {tuple(row[c] for c in VOCAB_KEY): row["vocab_tree_count"] for row in vocab}
+    assert len(got) == len(vocab), "a tuple appears twice"
+    assert got == dict(expected)
+
+
+def test_the_vocabulary_counts_sum_to_the_projection(rows, vocab):
+    """The worker's check that the two files describe the same build."""
+    assert sum(row["vocab_tree_count"] for row in vocab) == len(rows)
+
+
+def test_a_tree_with_no_prediction_row_does_not_split_its_tuple(vocab):
+    """One watermark per city: the per-tree column is null without a prediction
+    row (sf-4), and grouping by it split Boston's tuples in two."""
+    assert len({row["vocab_inputs_published_through"] for row in vocab}) == 1
+    assert vocab[0]["vocab_inputs_published_through"] is not None

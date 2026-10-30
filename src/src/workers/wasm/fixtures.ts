@@ -26,6 +26,7 @@ export const fixtureParquetUrls = {
   REMOTE_LANDMARKS_PARQUET_URL: `${FIXTURE_DIR}/full_landmark_info_v2.parquet`,
   cityTreeParquetUrl: (city: string) => `${FIXTURE_DIR}/${lower(city)}_tree_info_v2.parquet`,
   cityBrowserParquetUrl: (city: string) => `${FIXTURE_DIR}/${lower(city)}_tree_browser_v2.parquet`,
+  cityVocabParquetUrl: (city: string) => `${FIXTURE_DIR}/${lower(city)}_tree_vocab_v2.parquet`,
   cityPredictionsParquetUrl: (city: string) => `${FIXTURE_DIR}/${lower(city)}_tree_predictions_v2.parquet`,
   cityLandmarkParquetUrl: (city: string) => `${FIXTURE_DIR}/${lower(city)}_landmark_info_v2.parquet`,
 }
@@ -65,6 +66,30 @@ export async function writeCityProjection({ city, rows, bbox }: CityFixture): Pr
       CAST(5 + i % 30 AS DOUBLE) AS diameter_at_breast_height,
       CAST(NULL AS VARCHAR) AS submission_photo_url
     FROM range(${rows}) t(i)
+  ) TO '${path}' (FORMAT parquet)`)
+  conn.close()
+  return path
+}
+
+/**
+ * A city's vocabulary file (tree_browser_city.preql's `city_tree_vocab`),
+ * grouped from its projection fixture. `extraTrees` adds to one tuple's
+ * count, the way a vocabulary from another build of the projection would
+ * disagree with it.
+ */
+export async function writeCityVocab(city: string, { extraTrees = 0 } = {}): Promise<string> {
+  const path = fixtureParquetUrls.cityVocabParquetUrl(city)
+  const db = await createNodeDuckDB()
+  const conn = db.connect()
+  conn.query(`COPY (
+    SELECT * EXCLUDE (n),
+      n + CASE WHEN row_number() OVER (ORDER BY species) = 1 THEN ${extraTrees} ELSE 0 END AS tree_count,
+      TIMESTAMPTZ '2026-10-27 06:43:06+00' AS inputs_published_through
+    FROM (
+      SELECT city, data_source, species, cultivar, tree_name, display_name, count(*) AS n
+      FROM read_parquet('${fixtureParquetUrls.cityBrowserParquetUrl(city)}')
+      GROUP BY ALL
+    )
   ) TO '${path}' (FORMAT parquet)`)
   conn.close()
   return path

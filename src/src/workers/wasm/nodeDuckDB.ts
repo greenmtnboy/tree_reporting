@@ -62,6 +62,12 @@ export class AsyncDuckDB {
     this.db = await createNodeDuckDB()
   }
 
+  /** The browser's filesystem flags; the Node runtime reads local files, so they only have to be accepted. */
+  async open(config: Parameters<BlockingDb['open']>[0]): Promise<void> {
+    if (!this.db) throw new Error('instantiate() first')
+    this.db.open(config)
+  }
+
   async connect(): Promise<AsyncDuckDBConnection> {
     if (!this.db) throw new Error('instantiate() first')
     return new AsyncDuckDBConnection(this.db.connect())

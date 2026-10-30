@@ -3,6 +3,17 @@
 Written 2026-10-28 at the end of the session that finished PR #152 (the
 phone's window, `mobile-map-window`). This is the next session's brief.
 
+## Progress (2026-10-30)
+
+- All 41 projections were force-built sorted on 0.3.420 (the cloud job
+  called them up to date). Re-measuring found the worker downloaded every
+  parquet whole (`forceFullHTTPReads`), so the sort had pruned nothing; with
+  range reads on, the ENUM vocabulary scans read the whole file instead. The
+  fix and the new `{code}_tree_vocab_v2` files, with numbers, are in
+  `MOBILE_LOAD_BUDGET.md` ("Range reads, the sorted file and the
+  vocabulary"). Step 7 (the budget) waits on the pan cost: DuckDB-wasm's
+  readahead grows to 16 MB reads on a reused file handle.
+
 ## Progress (2026-10-29)
 
 - pytrilogy #783 is merged and released as **0.3.417**, not 0.3.416

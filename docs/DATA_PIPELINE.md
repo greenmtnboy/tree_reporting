@@ -57,6 +57,7 @@ the core, daily, reading only published parquets
   refresh-enrichment    raw/tree_enrichment.preql       -> tree_enrichment_v{n}.parquet
   refresh-predictions   raw/tree_predictions.preql      -> tree_predictions_v{n}.parquet
   refresh-browser-city  raw/tree_browser_city.preql     -> {code}_tree_browser_v{n}.parquet
+                                                        {code}_tree_vocab_v{n}.parquet
   refresh-ecoregions-browser  raw/ecoregion_browser.preql -> ecoregion_browser_v{n}.parquet
   validate-core         raw/core_validate.preql
   publish-website       website_homepage.preql          -> arborary/website/v1/homepage.json
@@ -422,6 +423,17 @@ unrefreshed, and feed only that fallback. `ecoregion_browser_v{n}.parquet`
 is the same idea for the ecoregion dimension: the three columns the worker
 reads, without the 5 MB geometry column. `test_browser_projection.py` runs
 the model's SQL over fixtures and pins the wiring.
+
+Each projection is written in Hilbert order over (latitude, longitude) in
+row groups of 10,240, so a phone's window reads the few groups near the
+camera. Beside it the same job writes `{code}_tree_vocab_v{n}.parquet`
+(`city_tree_vocab`): `count(tree_id)` by (city, data_source, species,
+cultivar, tree_name, display_name), a few thousand rows. The worker builds
+the resident table's ENUM types from it, because a `SELECT DISTINCT` over
+the projection reads most of the file in DuckDB-wasm, and trusts it only
+when its counts sum to the projection's row count; otherwise it scans the
+projection. Its watermark is the city's `max()` of the projection's, since
+the per-tree column is null for a tree with no prediction row.
 
 Planner facts the model relies on: `**` is the power operator and there is
 no `exp`, `ln` or `cos`; DuckDB's `greatest()` skips nulls; the enrichment
