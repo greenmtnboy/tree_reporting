@@ -1,0 +1,46 @@
+# Summary tables the city dashboards answer their default views from.
+#
+# The Summary and Species pages open with forty-odd charts, and most of them
+# are a tree count grouped by species or by something that hangs off species
+# (a growth form, a hardiness bucket): answerable from a few thousand
+# (city, species) rows instead of a scan of the city's tree file, which is
+# 110 MB for Boston. With `tree_rollup_source.preql` in the dashboard scope
+# the planner reads the summary wherever it can and re-sums it per bucket;
+# a query it cannot answer from the summary still reads the trees.
+#
+# Built from the published cross-city rollup, through a root named
+# `full_tree_info` (full_tree_info_source.preql), so this job runs after
+# publish-full in the same tick. It is never in the frontend bundle; the
+# browser reads the parquet through tree_rollup_source.preql, whose root
+# carries the same datasource name and the same `rollup_tree_count`.
+#
+# One grain for now. A (city, species, plant year) summary was tried and no
+# query reads it: a summary whose grain holds a derived concept is never
+# used (pytrilogy #803, E). The shapes the species summary could serve but
+# does not yet are listed in the same issue.
+import tree_common;
+import full_tree_info_source;
+
+property <*>.rollup_inputs_published_through datetime;
+
+# The newer of the rollup's and the enrichment table's publication; only the
+# rollup matters here, and a rebuild on an enrichment change costs seconds.
+root datasource rollup_inputs_probe (
+    data_updated_through: rollup_inputs_published_through
+)
+file `./prediction_inputs_probe.py`;
+
+auto rollup_tree_count <- count(tree_id);
+
+datasource tree_rollup_species (
+    city,
+    species,
+    rollup_tree_count,
+    rollup_inputs_published_through,
+)
+grain (city, species)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_species_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_rollup_species_v{data_version}.parquet`
+freshness by rollup_inputs_published_through
+# A city that lost a quarter of its species, or had its parquet missing from
+# the rollup's scan, is refused and the published summary kept.
+assert @kept_by(species, city, 0.75);

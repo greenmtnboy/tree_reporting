@@ -1,0 +1,19 @@
+# The published dashboard summary, as a *source*: what the browser's
+# dashboard scope imports. `tree_rollups.preql` builds it.
+#
+# Same two rules as full_tree_info_source.preql: the root is named like the
+# managed datasource that writes it, and it is root, so nothing that imports
+# this ever tries to rebuild it. `rollup_tree_count` is declared exactly as
+# the producer declares it; that derivation is what lets the planner answer
+# `count(tree_id)` from the summary (test_tree_rollups.py pins both).
+import tree_common;
+
+auto rollup_tree_count <- count(tree_id);
+
+root datasource tree_rollup_species (
+    city: city,
+    species: species,
+    rollup_tree_count: rollup_tree_count,
+)
+grain (city, species)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_species_v{data_version}.parquet`;
