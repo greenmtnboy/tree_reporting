@@ -17,6 +17,10 @@ import TREE_POSITION_MODEL from '../../data/raw/tree_position.preql?raw'
 // LIDAR tree height, imported by the cities with a canopy survey (Boston
 // first); see data/raw/tree_height.preql.
 import TREE_HEIGHT_MODEL from '../../data/raw/tree_height.preql?raw'
+// The (city, species) tree-count summary the dashboard scope imports, so the
+// planner can answer a per-species count without the city's tree file; see
+// data/raw/tree_rollups.preql.
+import TREE_ROLLUP_SOURCE_MODEL from '../../data/raw/tree_rollup_source.preql?raw'
 
 // Auto-discover all per-city preql files — no changes needed here when adding a city.
 // Matches data/raw/{city}/{city}_tree_info.preql and data/raw/{city}/{city}_landmarks.preql
@@ -47,6 +51,7 @@ export const ALL_MODEL_SOURCES = [
   { alias: 'satellite_tree_info', contents: SATELLITE_TREE_INFO_MODEL },
   { alias: 'tree_position', contents: TREE_POSITION_MODEL },
   { alias: 'tree_height', contents: TREE_HEIGHT_MODEL },
+  { alias: 'tree_rollup_source', contents: TREE_ROLLUP_SOURCE_MODEL },
   ...[...Object.entries(cityTreeModels), ...Object.entries(cityLandmarkModels)].map(
     ([path, mod]) => ({ alias: pathToAlias(path), contents: (mod as { default: string }).default })
   ),

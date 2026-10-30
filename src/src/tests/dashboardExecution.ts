@@ -27,7 +27,7 @@ import { cityContext, type DashboardQueryCase, type QueryState } from './dashboa
 
 const PARQUET_READ = /read_parquet\('([^']+)'\)/g
 
-type SeedKind = 'trees' | 'species' | 'ecoregions' | 'empty'
+type SeedKind = 'trees' | 'species' | 'ecoregions' | 'rollup' | 'empty'
 
 type Seed = { kind: SeedKind; city?: string }
 
@@ -43,6 +43,7 @@ function seedFor(url: string): Seed {
   const name = url.split('/').pop() ?? url
   if (name.includes('tree_enrichment')) return { kind: 'species' }
   if (name.includes('ecoregion_info')) return { kind: 'ecoregions' }
+  if (name.includes('tree_rollup_species')) return { kind: 'rollup' }
   if (name.includes('full_tree_info')) return { kind: 'trees' }
   const perCity = /^([a-z]{5})_tree_info/.exec(name)
   if (perCity) return { kind: 'trees', city: perCity[1].toUpperCase() }
@@ -79,9 +80,25 @@ function rowsForSeed(seed: Seed): Array<Record<string, unknown>> {
       return FIXTURE_SPECIES as unknown as Array<Record<string, unknown>>
     case 'ecoregions':
       return FIXTURE_ECOREGIONS as unknown as Array<Record<string, unknown>>
+    case 'rollup':
+      // The (city, species) summary is the published trees grouped
+      // (data/raw/tree_rollups.preql), so it is the fixture trees grouped: a
+      // chart the planner answers from it must agree with one that counts.
+      return rollupRows()
     case 'empty':
       return []
   }
+}
+
+function rollupRows(): Array<Record<string, unknown>> {
+  const counts = new Map<string, { city: string; species: string; rollup_tree_count: number }>()
+  for (const tree of FIXTURE_TREES) {
+    const key = `${tree.city}|${tree.species}`
+    const row = counts.get(key) ?? { city: tree.city, species: tree.species, rollup_tree_count: 0 }
+    row.rollup_tree_count += 1
+    counts.set(key, row)
+  }
+  return [...counts.values()]
 }
 
 export class FixtureDatabase {

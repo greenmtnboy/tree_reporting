@@ -75,6 +75,9 @@ type PushdownGroup = {
 /** Tree parquets named by one query's SQL, without the version suffix. */
 type CompiledCase = { parquets?: string[]; error?: string }
 
+/** The (city, species) count summary `dashboard_context` imports. */
+const SUMMARY_PARQUET = 'tree_rollup_species'
+
 function treeParquetsIn(sql: string): string[] {
   return [...new Set([...sql.matchAll(/duckdb\/trees\/([a-z_]+)_v\d+\.parquet/g)].map((m) => m[1]))]
 }
@@ -370,7 +373,7 @@ describe('dashboard parquet pushdown', () => {
 
   for (const group of CITY_GROUPS) {
     const city = group.city as CityCode
-    it(`plans ${city} against ${city.toLowerCase()}_tree_info, not the rollup`, () => {
+    it(`plans ${city} against ${city.toLowerCase()}_tree_info or the summary, not the rollup`, () => {
       for (const queryCase of group.cases) {
         const parquets = parquetsFor(group, queryCase.id)
         expect(parquets, `${queryCase.id} named no tree parquet`).not.toHaveLength(0)
@@ -379,15 +382,29 @@ describe('dashboard parquet pushdown', () => {
           `${queryCase.id} reads the cross-city rollup for a single city; the ` +
             `browser would download 5.9M rows instead of ${city}'s own file`,
         ).not.toContain('full_tree_info')
-        expect(parquets).toContain(`${city.toLowerCase()}_tree_info`)
+        // A count the (city, species) summary answers reads it instead of the
+        // trees; anything else must still be the city's own file.
+        if (!parquets.includes(SUMMARY_PARQUET)) {
+          expect(parquets).toContain(`${city.toLowerCase()}_tree_info`)
+        }
       }
+    })
+
+    it(`answers some of ${city}'s default charts from the summary`, () => {
+      const served = group.cases.filter((queryCase) =>
+        parquetsFor(group, queryCase.id).includes(SUMMARY_PARQUET),
+      )
+      expect(served, 'no sampled chart read tree_rollup_species; the summary fell out of scope').not.toHaveLength(0)
     })
   }
 
   for (const city of CHAT_CITIES) {
     it(`resolves a chat query filtering to ${city} down to its parquet`, () => {
       const parquets = parquetsFor(CHAT_GROUP, `chat:${city}`)
-      expect(parquets).toContain(`${city.toLowerCase()}_tree_info`)
+      // A species count the chat asks for is the summary's own shape.
+      if (!parquets.includes(SUMMARY_PARQUET)) {
+        expect(parquets).toContain(`${city.toLowerCase()}_tree_info`)
+      }
       expect(
         parquets,
         `a chat query filtered to ${city} scanned the cross-city rollup`,
@@ -412,8 +429,9 @@ describe('dashboard parquet pushdown', () => {
       it(`answers a ${cities.length}-city ${group.key} query from a complete source`, () => {
         const parquets = parquetsFor(group, id)
         expect(parquets, `${id} named no tree parquet`).not.toHaveLength(0)
-        // The rollup covers every city, so it is complete by construction.
-        if (parquets.includes('full_tree_info')) return
+        // The rollup and the summary cover every city, so either is complete
+        // by construction.
+        if (parquets.includes('full_tree_info') || parquets.includes(SUMMARY_PARQUET)) return
         const cityParquets = parquets.filter(
           (parquet) => parquet !== 'full_tree_info' && parquet.endsWith('_tree_info'),
         )
@@ -440,7 +458,7 @@ describe('dashboard parquet pushdown', () => {
     const every = Object.keys(CITY_CONFIG).map((c) => `${c.toLowerCase()}_tree_info`)
     for (const queryCase of ALL_GROUP.cases) {
       const parquets = parquetsFor(ALL_GROUP, queryCase.id)
-      if (parquets.includes('full_tree_info')) continue
+      if (parquets.includes('full_tree_info') || parquets.includes(SUMMARY_PARQUET)) continue
       expect(
         parquets.filter((p) => p !== 'full_tree_info').sort(),
         `${queryCase.id} read a strict subset of the cities and not the rollup`,
