@@ -14,6 +14,9 @@ import SATELLITE_TREE_INFO_MODEL from '../../data/raw/satellite_tree_info.preql?
 // The Overture position correction, imported by the cities that opt in
 // (Burlington first); see data/raw/tree_position.preql.
 import TREE_POSITION_MODEL from '../../data/raw/tree_position.preql?raw'
+// LIDAR tree height, imported by the cities with a canopy survey (Boston
+// first); see data/raw/tree_height.preql.
+import TREE_HEIGHT_MODEL from '../../data/raw/tree_height.preql?raw'
 
 // Auto-discover all per-city preql files — no changes needed here when adding a city.
 // Matches data/raw/{city}/{city}_tree_info.preql and data/raw/{city}/{city}_landmarks.preql
@@ -43,6 +46,7 @@ export const ALL_MODEL_SOURCES = [
   // city models (SF, Boston, NYC) import; see data/raw/satellite_tree_info.preql.
   { alias: 'satellite_tree_info', contents: SATELLITE_TREE_INFO_MODEL },
   { alias: 'tree_position', contents: TREE_POSITION_MODEL },
+  { alias: 'tree_height', contents: TREE_HEIGHT_MODEL },
   ...[...Object.entries(cityTreeModels), ...Object.entries(cityLandmarkModels)].map(
     ([path, mod]) => ({ alias: pathToAlias(path), contents: (mod as { default: string }).default })
   ),
