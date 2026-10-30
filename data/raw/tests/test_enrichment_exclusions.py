@@ -374,8 +374,9 @@ def test_hybrid_alias_does_not_duplicate_an_existing_twin():
 
 
 def test_hybrid_alias_leaves_non_hybrids_alone():
-    out = with_species_aliases(_hybrid_table(["Acer rubrum"]))
-    assert out.column("species").to_pylist() == ["Acer rubrum"]
+    # A name no synonym or misspelling folds into, so nothing aliases it.
+    out = with_species_aliases(_hybrid_table(["Quercus alba"]))
+    assert out.column("species").to_pylist() == ["Quercus alba"]
 
 
 # ---------------------------------------------------------------------------
