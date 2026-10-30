@@ -166,6 +166,19 @@ def published(tmp_path_factory) -> dict[str, dict]:
         f"read_parquet('{fixtures['usbos_osm_staging.parquet'].as_posix()}')",
         sql,
     )
+    # The LIDAR height lookup (../tree_height.preql): empty here, so no tree
+    # matches a crown; test_tree_height.py covers the matching.
+    sql = re.sub(
+        r"read_parquet\('[^']*usbos_canopy_height\.parquet[^']*'\)",
+        "(SELECT CAST(NULL AS BIGINT) AS canopy_cell, CAST(NULL AS VARCHAR) AS canopy_crown_id, "
+        "CAST(NULL AS DOUBLE) AS canopy_height_m, CAST(NULL AS DOUBLE) AS canopy_crown_radius_m, "
+        "CAST(NULL AS VARCHAR) AS canopy_source WHERE false)",
+        sql,
+    )
+    # ../tree_height.preql's grid `const`s render as bound parameters.
+    height_model = (RAW_DIR / "tree_height.preql").read_text(encoding="utf-8")
+    for name, value in re.findall(r"^const (\w+) <- ([-\d.]+);", height_model, re.M):
+        sql = re.sub(rf":{name}\b", value, sql)
     assert "uv_run" not in sql and "storage.googleapis.com" not in sql, sql
     cursor = conn.execute(sql)
     columns = [d[0] for d in cursor.description]

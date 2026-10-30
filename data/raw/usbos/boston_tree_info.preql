@@ -2,13 +2,15 @@ import ..tree_common;
 import ..community_tree_info;
 import ..satellite_tree_info;
 import ..tree_dedup;
+import ..tree_height;
 
 property <*>.arboretum_data_updated_through datetime; # when Arnold Arboretum data is through
 property <*>.boston_city_data_updated_through datetime; # when Boston city open-data is through
 property <*>.cambridge_data_updated_through datetime; # when Cambridge open-data is through
 property <*>.brookline_data_updated_through datetime; # when Brookline open-data is through
 property <*>.somerville_data_updated_through datetime; # when Somerville's TreeKeeper inventory is through
-auto usbos_published_data_updated_through <- greatest(usbos_data_updated_through, usbos_community_data_updated_through, usbos_osm_data_updated_through, usbos_satellite_data_updated_through, usbos_predicted_data_updated_through);
+property <*>.usbos_canopy_data_updated_through datetime; # GCS publication time of the staged LIDAR canopy-height lookup
+auto usbos_published_data_updated_through <- greatest(usbos_data_updated_through, usbos_community_data_updated_through, usbos_osm_data_updated_through, usbos_satellite_data_updated_through, usbos_predicted_data_updated_through, usbos_canopy_data_updated_through);
 auto usbos_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through, cambridge_data_updated_through, brookline_data_updated_through, somerville_data_updated_through);
 key usbos_source enum<string>['CITY_OF_BOSTON', 'ARNOLD_ARBORETUM', 'CAMBRIDGE', 'BROOKLINE', 'SOMERVILLE', 'BELMONT', 'WATERTOWN', 'COMMUNITY_USBOS', 'OSM_USBOS', 'SATELLITE_USBOS', 'PREDICTED_USBOS']; # originating dataset within the Boston metro; materialized as the uniform `data_source` column
 
@@ -76,6 +78,32 @@ root datasource usbos_osm_update_time (
     data_updated_through: usbos_osm_data_updated_through
 )
 file `./boston_osm_probe.py`;
+
+# GCS publication time of the staged LIDAR canopy-height lookup (see
+# ../../canopy_staging/); it moves when the `canopy-usbos` job publishes a
+# rebuilt table, and that is what re-heights every tree.
+root datasource usbos_canopy_update_time (
+    data_updated_through: usbos_canopy_data_updated_through
+)
+file `./boston_canopy_probe.py`;
+
+# --- Tree height ---------------------------------------------------------------
+#
+# Boston's 2024 tree centroids and Cambridge's 2024 crowns, rasterised onto
+# the position grid by shared/canopy.py: one row per cell under a crown.
+# ../tree_height.preql keys every raw row into the grid and carries the
+# crown's height through the cluster merge; the partitions need no column.
+# The surveys stop at their city limits, so Brookline, Somerville, Belmont,
+# Watertown and the predicted ring outside them publish no height.
+root datasource usbos_canopy_height (
+    canopy_cell: canopy_cell,
+    canopy_crown_id: canopy_crown_id,
+    canopy_height_m: canopy_height_m,
+    canopy_crown_radius_m: canopy_crown_radius_m,
+    canopy_source: canopy_source,
+)
+grain (canopy_cell)
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbos_canopy_height.parquet`;
 
 # --- Raw sources ---
 
@@ -299,6 +327,9 @@ partial datasource boston_tree_info extends published_tree_info (
     data_source: usbos_source,
     ?species,
     usbos_border_duplicate,
+    ?height_m,
+    ?height_source,
+    ?height_crown_id,
     usbos_published_data_updated_through
 )
 complete where city = 'USBOS'

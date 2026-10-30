@@ -1,0 +1,33 @@
+# Shared declarations for every LIDAR canopy-height staging model.
+#
+# One `{code}_canopy_staging.preql` per city, each run by its own
+# `canopy-{code}` [[cloud.job]] in ../trilogy.toml -- never by a city
+# refresh.  What the table is and how it is built is the docstring of
+# raw/shared/canopy.py; how a city refresh uses it is raw/tree_height.preql.
+#
+# Standalone like overture_staging/staging_common.preql: nothing here imports
+# raw/, and nothing in raw/ imports this, which keeps a city refresh job from
+# adopting a staging asset.  The concepts mirror raw/tree_height.preql's
+# lookup columns *by name*: the staging parquet's column names are the
+# contract the city model reads.
+#
+# The watermark is CANOPY_STAGED_THROUGH in raw/shared/canopy.py, a date set
+# by hand: the surveys are one-off snapshots whose layers publish no edit
+# date, so the job has no cron and is fired when that date is bumped.
+
+key canopy_cell bigint; # one cell of the position grid, packed as lon_index * 1e8 + lat_index
+property canopy_cell.city string;
+property canopy_cell.canopy_crown_id string; # the survey's crown object, '{SURVEY}-{objectid}'
+property canopy_cell.canopy_height_m float; # the crown's height, metres
+property canopy_cell.canopy_crown_radius_m float; # the crown's radius, metres (clamped)
+property canopy_cell.canopy_source string; # the survey, e.g. BOSTON_LIDAR_2024
+
+property <*>.canopy_staged_through datetime; # the latest CANOPY_STAGED_THROUGH
+
+# City-agnostic, like the Overture release probe: a freshness probe is not
+# given the model's pushdown filter, so it reports the newest date across
+# cities and bumping one city's date re-stages them all (a few minutes each).
+root datasource canopy_staged (
+    data_updated_through: canopy_staged_through
+)
+file `./canopy_staged_through.py`;

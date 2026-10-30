@@ -65,6 +65,7 @@ The reference for each is `docs/DATA_PIPELINE.md`.
 - `docs/SPECIES_ENRICHMENT.md`: the species key rule, synonyms and misspellings, sentinels, the enrichment job.
 - `docs/LANDMARKS.md`: landmark sources, schema, staging and building.
 - `docs/POSITION_CORRECTION.md`: moving trees out of buildings and roads with Overture; the pilot's numbers; what the language would need to own it.
+- `docs/TREE_HEIGHT.md`: `height_m` from LIDAR canopy surveys (Boston metro pilot); crowns are a grid lookup every tree row asks, never a source; match rates per source.
 - `docs/BORDER_DEDUP.md`: trees two neighbouring inventories both record (Boston's metro); the parked model block, the planner bugs it waits on, what the language would need.
 - `docs/TESTING.md`: the dashboard query sweep, what the chat resolves against, the chat benchmark.
 - `docs/MOBILE_LOAD_BUDGET.md`: why big cities crash phone tabs, the measured peaks, the row shape the worker keeps, the cell plan; `docs/TRILOGY_BUCKETED_OUTPUT_SPEC.md` is the upstream ask it waits on.
