@@ -73,7 +73,9 @@ async function findClickableTree(page: Page, mobile: boolean): Promise<Hit> {
       const margin = 100
       const usable = (p: { x: number; y: number }) =>
         p.x > margin && p.y > margin &&
-        p.x < container.width - margin && p.y < container.height - margin
+        p.x < container.width - margin && p.y < container.height - margin &&
+        // The phone legend reaches further in than the margin.
+        document.elementFromPoint(container.left + p.x, container.top + p.y) === map.getCanvas()
 
       const isTree = (f: GeoJSON.Feature) => {
         const id = f.properties?.id
@@ -96,8 +98,9 @@ async function findClickableTree(page: Page, mobile: boolean): Promise<Hit> {
         return null
       }
 
-      for (const feature of map.queryRenderedFeatures(undefined, { layers: layerIds })) {
-        if (!isTree(feature as unknown as GeoJSON.Feature)) continue
+      const trees = map.queryRenderedFeatures(undefined, { layers: layerIds })
+        .filter((f) => isTree(f as unknown as GeoJSON.Feature))
+      for (const feature of trees) {
         const geometry = feature.geometry
         if (geometry.type !== 'Point') continue
         const point = map.project(geometry.coordinates as [number, number])
@@ -107,6 +110,11 @@ async function findClickableTree(page: Page, mobile: boolean): Promise<Hit> {
         const atPoint = map.queryRenderedFeatures([point.x, point.y], { layers: layerIds })
         const hit = atPoint.find((f) => isTree(f as unknown as GeoJSON.Feature))
         if (!hit) continue
+        // A phone tap opens the nearest tree, the last one drawn on a tie, so
+        // two trees recorded at the same spot are an ambiguous target.
+        const stacked = trees.some((o) => o !== feature && o.geometry.type === 'Point' &&
+          map.project(o.geometry.coordinates as [number, number]).dist(point) < 3)
+        if (stacked) continue
 
         return {
           x: container.left + point.x,
