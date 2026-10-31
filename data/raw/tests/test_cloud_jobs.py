@@ -495,7 +495,7 @@ def test_the_core_shares_one_cron():
         key: jobs_by_key()[key]["schedule"]
         for key in (
             "publish-full", "refresh-enrichment", "refresh-ecoregions", "refresh-predictions", "validate-core",
-            "publish-website", "publish-website-species",
+            "publish-website", "publish-website-species", "refresh-rollups",
         )
     }
     assert len(set(crons.values())) == 1, (
@@ -514,7 +514,7 @@ def test_the_core_reads_only_published_parquets():
     root datasources instead of importing the city models; this asserts they
     have not quietly re-acquired the import.
     """
-    for key in ("publish-full", "refresh-enrichment", "refresh-predictions", "validate-core"):
+    for key in ("publish-full", "refresh-enrichment", "refresh-predictions", "validate-core", "refresh-rollups"):
         entrypoint = jobs_by_key()[key]["entrypoint"]
         text = statements(DATA_DIR / entrypoint)
         for code in CITY_CODES:

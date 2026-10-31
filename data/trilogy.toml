@@ -392,6 +392,19 @@ schedule = "0 0 6 * * *"
 timeout_seconds = 1800
 memory_mb = 4096
 
+# The dashboard summary: tree counts at (city, species), the grain most of
+# the Summary and Species pages' default charts re-sum from. Read from the
+# published rollup through a root named `full_tree_info`, so it runs after
+# publish-full in the same tick. See raw/tree_rollups.preql.
+[[cloud.job]]
+key = "refresh-rollups"
+name = "urban-tree-data-rollups"
+entrypoint = "raw/tree_rollups.preql"
+operation = "refresh"
+schedule = "0 0 6 * * *"
+timeout_seconds = 900
+memory_mb = 2048
+
 # The ecoregion dimension as the browser reads it (three columns, no
 # geometry), read from the published ecoregion parquet through a root named
 # `ecoregion_info`, so it runs after refresh-ecoregions in the same tick.
