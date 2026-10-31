@@ -16,6 +16,7 @@
     "bench:map": "node scripts/bench-map.mjs",
     "bench:memory": "node scripts/bench-map-memory.mjs",
     "bench:tiles": "node scripts/bench-tile-latency.mjs",
+    "bench:dashboard": "node scripts/bench-dashboard.mjs",
     "test:e2e": "playwright test",
     "test:crowns": "playwright test --config playwright.crowns.config.ts",
     "dev:artwork": "vite --open /artwork.html",

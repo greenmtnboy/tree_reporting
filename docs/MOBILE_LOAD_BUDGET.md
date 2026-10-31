@@ -534,6 +534,18 @@ from a second preview port. Settle times move by about half a second between
 identical runs; the trickle span and the `[Perf]` batch milliseconds are
 the steadier signal.
 
+`pnpm bench:dashboard` (`scripts/bench-dashboard.mjs`) opens the summary
+dashboard (`#/summary?city=$DASH_BENCH_CITY`) on the phone layout and reports
+the bytes per data file, the resolver round trips, the renderer's settled and
+peak memory, and when the data requests stopped (`DASH_BENCH_QUIET_MS` of no
+traffic, default 5 s). `DASH_BENCH_CLEAR=1` then presses "Clear all" and
+measures the no-city view as a second step; the app has no URL for it. Compare
+two local builds served the same way, and run each one at least twice: in
+Boston's first measurements the settle time moved between 32 and 61 s and the
+tree file's bytes between 79 and 104 MiB across identical runs. The no-city
+view reads 400-560 MiB of `full_tree_info` and its renderer can peak above
+3 GB, so it needs a machine with the memory free.
+
 To measure against a file that is not published yet, build with
 `VITE_TREES_BASE_URL=http://localhost:6180/local-trees` and put the files
 the worker will ask for under `src/public/local-trees/` (gitignored): the
