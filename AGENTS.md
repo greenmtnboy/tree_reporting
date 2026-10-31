@@ -38,6 +38,7 @@ pnpm test:wasm       # the tile worker on DuckDB-WASM under Node, ~20 s; fetches
 pnpm bench:chat      # the agent chat benchmark; spends the demo model budget, run by hand
 pnpm bench:memory    # renderer memory and bytes for one city load against a preview; run before and after any loader change (docs/MOBILE_LOAD_BUDGET.md)
 pnpm bench:tiles     # time to settle after each zoom and pan, and how long tiles trickle in; run before and after any tile-query change
+pnpm bench:dashboard # the summary dashboard's first open on a phone: bytes per file, renderer memory, time until its queries stop
 
 # data, from data/raw
 uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.419" --with "duckdb<2" --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
