@@ -334,8 +334,21 @@ export function buildDashboardContextSource(city: CityCode | null): DashboardCon
     // a single-city query from that city's parquet instead of downloading the
     // whole 1.4M-row rollup into the browser. `trilogy-smoketest.test.ts`
     // asserts the per-city choice for exactly this reason.
+    //
+    // `tree_rollup_source` is the (city, species) count summary: a chart that
+    // is a tree count by species, or by anything that hangs off species, is
+    // re-summed from its ~15k rows instead of reading the city's tree file.
+    // A query it cannot answer still plans against the trees.
+    //
+    // It is imported before `ecoregion_info`, and the order matters: the
+    // summary re-imports `core`, whose `property city.ecoregion_id` redeclares
+    // the ecoregion key, and arriving after `ecoregion_info` that unbinds
+    // ecoregion_id from it, so every nativeness chart fails to plan. That is a
+    // pytrilogy bug (trilogy-data/pytrilogy#817); keep this order until it is
+    // fixed.
     contents: `import tree_enrichment;
 import tree_info;
+import tree_rollup_source;
 import ecoregion_info;
 import std.display;
 
