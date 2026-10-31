@@ -5,7 +5,12 @@ export type TreeShape =
   | { kind: 'ellipse'; x: number; y: number; rx: number; ry: number; angle?: number }
   | { kind: 'polygon'; points: [number, number][] }
 
-export interface TreeArtwork { trunk: TreeShape[]; foliage: TreeShape[]; blooms: TreeShape[]; crownFraction: number }
+/**
+ * `crownFraction` is the foliage's width as a fraction of the cell; `crownTop`
+ * the foliage's highest point, as a y in the cell (0 is the top). With the
+ * foot's y, the latter gives the drawn tree's height for metre scaling.
+ */
+export interface TreeArtwork { trunk: TreeShape[]; foliage: TreeShape[]; blooms: TreeShape[]; crownFraction: number; crownTop: number }
 export const TREE_TRUNK_COLOR = '#5D4037'
 export const TREE_BLOOM_COLOR = '#F8BBD0'
 
@@ -102,7 +107,10 @@ export function treeArtwork(form: TreeForm): TreeArtwork {
     const radius = Math.hypot(shape.rx * Math.cos(shape.angle ?? 0), shape.ry * Math.sin(shape.angle ?? 0))
     return [shape.x - radius, shape.x + radius]
   })
-  return { trunk, foliage, blooms, crownFraction: Math.max(...bounds.map(b => b[1])) - Math.min(...bounds.map(b => b[0])) }
+  const tops = foliage.map(shape => shape.kind === 'polygon'
+    ? Math.min(...shape.points.map(p => p[1]))
+    : shape.y - Math.hypot(shape.rx * Math.sin(shape.angle ?? 0), shape.ry * Math.cos(shape.angle ?? 0)))
+  return { trunk, foliage, blooms, crownFraction: Math.max(...bounds.map(b => b[1])) - Math.min(...bounds.map(b => b[0])), crownTop: Math.min(...tops) }
 }
 
 export function fillTreeShape(ctx: CanvasRenderingContext2D, shape: TreeShape, size: number) {

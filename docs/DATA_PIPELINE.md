@@ -393,12 +393,18 @@ predicted crown width (a genus-level power law fitted on Tallo, committed as
 `crown_width_coefficients.csv`, refit with `tools/crown_allometry_fit.py
 --write --coverage`), a diameter predicted from planting age where the tree
 has a date and no diameter (`dbh_age_coefficients.csv`, refit with
-`tools/dbh_age_fit.py --write`), a stand-density covariate, and null
-placeholders for height and age. Each prediction records the model level
-(genus, family, division, global) and sample size. The model is not
-urban-calibrated and not density-adjusted; both are left to curation. The
-map reads the crown width from the city's browser projection (below), where
-the pipeline has already folded it in; recorded widths take precedence.
+`tools/dbh_age_fit.py --write`), a predicted height (a genus-level power
+law fitted on the map's own LIDAR-heighted trees, `tree_height_coefficients.csv`,
+refit with `tools/height_allometry_fit.py --write`), the observed LIDAR
+`height_m` carried beside it (`tree_height_source.preql`, because the rollup
+cannot carry a column only some cities have), a stand-density covariate, and
+a null placeholder for age. Each crown and diameter prediction records the
+model level (genus, family, division, global) and sample size. The crown
+model is not urban-calibrated and not density-adjusted; both are left to
+curation. The height model is one metro's street trees until a second LIDAR
+city is added. The map reads the crown width and both heights from the
+city's browser projection (below), where the pipeline has already folded
+them in; recorded values take precedence.
 Predictions stay outside the frontend Trilogy model bundle. See
 `MAP_CROWNS.md` for rendering and limits.
 

@@ -127,9 +127,47 @@ Sanity checks:
 - **Crown width.** The staged radius is an observed crown, so
   `2 * canopy_crown_radius_m` could fill `crown_width_m` where nothing else
   does. Not wired. It would change an existing published column.
-- **Allometry.** Height against DBH by species, fitted on the matched
-  inventory rows, the same way `crown_width_coefficients.csv` was, would
-  give a predicted height everywhere else.
+- **Allometry.** Done: `predicted_height_m`, below.
+- **Crown width, recalibrated.** Against the LIDAR crown diameter, Tallo's
+  `predicted_crown_width_m` runs 1.15x (60 cm+ DBH) to 1.7x (under 15 cm)
+  narrow for inventory trees alone in their crown (48k), by genus from 1.08x
+  (Platanus) to 1.77x (Pyrus); Tokyo's measured crowns run the other way,
+  0.57x. The small-tree end is partly the 3 m minimum crown. Refitting the
+  crown model on `canopy_crown_radius_m`, the way the height model is
+  fitted, is the follow-up.
+
+## Predicted height, and the map
+
+`tree_predictions.preql` publishes `predicted_height_m` for every tree the
+crown model can size, from the same input diameter (measured, else predicted
+from age), with the same fallbacks by growth form and no height for a palm:
+
+    height_m = scale * dbh_cm ** b        (dbh clamped to the fitted range)
+
+fitted per genus by `tools/height_allometry_fit.py` on the LIDAR-heighted
+inventory trees of every city in its `HEIGHT_CITIES` (84,063 in October
+2026, all Boston metro). Not Tallo: fitted on Boston and the Arboretum and
+held out on Cambridge's 26.8k matched trees, a Tallo genus fit missed by a
+median 6.2 m and called a 24"+ street tree 29 m against the survey's 19 m;
+the LIDAR fit missed by 2.8 m with no bias in any diameter band (DBH alone,
+3.0 m; one constant, 4.0 m). It is a northeastern-US street tree wherever it
+is applied until another city's survey is added, so the map labels every
+predicted height an estimate.
+
+The predictions also carry the observed `height_m`, read from the height
+cities' parquets by `tree_height_source.preql`, so the browser projection
+gets both from one input. The worker probes the projection (or, on the
+assembled path, the predictions file) for `height_m` and reads null heights
+from a file built before them.
+
+On the map: the tree card shows "Height 12.3 m (40 ft) aerial LIDAR, 2024"
+for a measured height and "~12 m (39 ft) est. from trunk diameter" for a
+predicted one; the sprite is drawn to that height (MAP_CROWNS.md).
+
+Adding a LIDAR city to the map, beyond the steps below: its parquet to
+`tree_height_source.preql`'s file list, its code to `HEIGHT_CITIES`, a
+refit, and a forced `refresh-predictions` after its first build.
+`test_tree_height.py` checks both lists against the importers.
 
 ## Rolling it out
 

@@ -14,6 +14,8 @@ export interface SpriteCell {
   top: number
   bottom: number
   crownFraction: number
+  /** Foot to crown top, as a fraction of the cell's height. */
+  heightFraction: number
   base: number
   alpha: Uint8Array
   size: number
@@ -60,11 +62,13 @@ function buildAtlas() {
         }
       }
     }
+    const base = form === 'multi_trunk' ? 0.9 : 0.95
     cells.set(form, {
       left: left / distance.width, right: (left + IMAGE_SIZE) / distance.width,
       top: top / distance.height, bottom: (top + IMAGE_SIZE) / distance.height,
       crownFraction: artwork.crownFraction,
-      base: form === 'multi_trunk' ? 0.9 : 0.95,
+      heightFraction: base - artwork.crownTop,
+      base,
       alpha, size: IMAGE_SIZE,
     })
   })

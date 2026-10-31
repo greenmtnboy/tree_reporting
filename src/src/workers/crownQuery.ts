@@ -1,4 +1,4 @@
-import { CROWN_DISTANCE_MAX, MAX_CROWNS, MAX_TREE_SPRITES, MAX_CROWN_WIDTH, MERCATOR_WORLD_METERS, mercatorPoint, metersPerMercatorUnit, type TreeRenderView } from '../lib/treeCrowns'
+import { CROWN_DISTANCE_MAX, MAX_CROWNS, MAX_TREE_SPRITES, MAX_CROWN_WIDTH, MAX_TREE_HEIGHT, MERCATOR_WORLD_METERS, mercatorPoint, metersPerMercatorUnit, type TreeRenderView } from '../lib/treeCrowns'
 
 function boundsPredicate({ west, east, north, south }: NonNullable<TreeRenderView['bounds']>): string {
   if (![west, east, north, south].every(Number.isFinite) || north < south || east < west) throw new Error('Invalid sprite viewport')
@@ -15,8 +15,9 @@ export type CrownColor = { join: string; expr: string }
 
 /**
  * The base query already includes the current chat/species filters. The
- * published crown prediction is a column of `trees_fast`
- * (`predicted_crown_width_m`), folded in at city load.
+ * published crown and height predictions are columns of `trees_fast`
+ * (`predicted_crown_width_m`, `predicted_height_m`), folded in at city load;
+ * a valid measurement wins over either.
  */
 export function crownQuery(camera: TreeRenderView, baseQuery: string, color: CrownColor): string {
   if (![camera.lng, camera.lat, camera.altitude].every(Number.isFinite) || Math.abs(camera.lat) > 85.05112878 || camera.altitude < 0) {
@@ -31,7 +32,7 @@ export function crownQuery(camera: TreeRenderView, baseQuery: string, color: Cro
   if (camera.bounds) {
     extent = boundsPredicate(camera.bounds)
   }
-  const valid = (col: string) => `isfinite(${col}) AND ${col} > 0 AND ${col} <= ${MAX_CROWN_WIDTH}`
+  const valid = (col: string, max = MAX_CROWN_WIDTH) => `isfinite(${col}) AND ${col} > 0 AND ${col} <= ${max}`
   return `
 WITH base AS (${baseQuery}), nearby AS (
   SELECT tf.tree_id AS id, tf.longitude AS lng, tf.latitude AS lat,
@@ -39,6 +40,8 @@ WITH base AS (${baseQuery}), nearby AS (
       WHEN ${valid('tf.predicted_crown_width_m')} THEN tf.predicted_crown_width_m END AS width,
     COALESCE(${valid('tf.crown_width_m')}, false) AS measured,
     ${color.expr} AS color,
+    CASE WHEN ${valid('tf.height_m', MAX_TREE_HEIGHT)} THEN tf.height_m
+      WHEN ${valid('tf.predicted_height_m', MAX_TREE_HEIGHT)} THEN tf.predicted_height_m END AS height,
     CAST(tf.tree_form AS VARCHAR) AS category, tf.dbh,
     ${camera.visibleBounds ? `(${boundsPredicate(camera.visibleBounds)})` : 'true'} AS in_viewport,
     ((tf.x_3857 - ${x}) * ${cosLat}) ** 2 +
@@ -48,7 +51,7 @@ WITH base AS (${baseQuery}), nearby AS (
   ${color.join}
   WHERE ${extent}
 )
-SELECT id, lng, lat, width, measured, color, category, dbh FROM nearby
+SELECT id, lng, lat, width, measured, color, category, dbh, height FROM nearby
 ${camera.bounds ? '' : `WHERE width IS NOT NULL AND distance_squared < ${CROWN_DISTANCE_MAX ** 2}`}
 ORDER BY in_viewport DESC, distance_squared, id LIMIT ${camera.bounds ? MAX_TREE_SPRITES : MAX_CROWNS}`
 }

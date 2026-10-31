@@ -3,7 +3,10 @@ import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api'
 import { crownQuery } from './crownQuery'
 import { colorSql } from './cityTables'
 import { CATEGORY_COLORS } from '../treeFormColors'
-import { CROWN_DISTANCE_MAX, MAX_CROWNS, MAX_TREE_SPRITES, crownZoomOpacity, spriteCrownBlend, spriteOpacity, validCrownWidth } from '../lib/treeCrowns'
+import {
+  CROWN_DISTANCE_MAX, MAX_CROWNS, MAX_SPRITE_ASPECT, MAX_TREE_SPRITES, MIN_SPRITE_ASPECT,
+  crownZoomOpacity, spriteAspect, spriteCrownBlend, spriteOpacity, validCrownWidth, validTreeHeight,
+} from '../lib/treeCrowns'
 
 const BROADLEAF = CATEGORY_COLORS.broadleaf
 
@@ -29,13 +32,14 @@ describe('nearby crown query', () => {
       ('edge', 'USSFO', 0, 0, 1700, 0, 10, NULL),
       ('wrong-city', 'USSFO', 0, 0, 50, 0, NULL, NULL);
       INSERT INTO __tree_color_override VALUES (hash('predicted'), '#abcdef');`)
-    await conn.run("ALTER TABLE trees_fast ADD COLUMN tree_form VARCHAR DEFAULT 'broadleaf'; ALTER TABLE trees_fast ADD COLUMN dbh DOUBLE DEFAULT 18")
+    await conn.run(`ALTER TABLE trees_fast ADD COLUMN tree_form VARCHAR DEFAULT 'broadleaf'; ALTER TABLE trees_fast ADD COLUMN dbh DOUBLE DEFAULT 18;
+      ALTER TABLE trees_fast ADD COLUMN height_m FLOAT; ALTER TABLE trees_fast ADD COLUMN predicted_height_m FLOAT`)
   })
   afterAll(() => conn.closeSync())
   const camera = { lng: 0, lat: 0, altitude: 800 }
   const color = colorSql('tf', false)
   const run = async (base = 'SELECT tree_id FROM trees_fast', eye = camera, colour = color) =>
-    (await conn.runAndReadAll(crownQuery(eye, base, colour))).getRowObjects().map(({ category: _category, dbh: _dbh, ...row }) => row)
+    (await conn.runAndReadAll(crownQuery(eye, base, colour))).getRowObjects().map(({ category: _category, dbh: _dbh, height: _height, ...row }) => row)
 
   test('prefers measurements, uses published predictions, rejects missing and corrupt widths', async () => {
     expect(await run()).toEqual([
@@ -74,6 +78,18 @@ describe('nearby crown query', () => {
     }
   })
 
+  test('a valid measured height wins, then the prediction; corrupt ones are dropped', async () => {
+    await conn.run(`UPDATE trees_fast SET height_m = 18, predicted_height_m = 11 WHERE tree_id = 'measured';
+      UPDATE trees_fast SET predicted_height_m = 9 WHERE tree_id = 'predicted';
+      UPDATE trees_fast SET height_m = 'NaN', predicted_height_m = 500 WHERE tree_id = 'invalid'`)
+    try {
+      const rows = (await conn.runAndReadAll(crownQuery(camera, 'SELECT tree_id FROM trees_fast', color))).getRowObjects()
+      expect(Object.fromEntries(rows.map(row => [row.id, row.height]))).toEqual({ measured: 18, predicted: 9, invalid: null })
+    } finally {
+      await conn.run(`UPDATE trees_fast SET height_m = NULL, predicted_height_m = NULL`)
+    }
+  })
+
   test('desktop first batches include missing widths and distant markers with sizing already resolved', async () => {
     const rows = (await conn.runAndReadAll(crownQuery({ ...camera, altitude: 3000,
       bounds: { west: -1, east: 1, south: -1, north: 1 } }, 'SELECT tree_id FROM trees_fast', color))).getRowObjects()
@@ -87,7 +103,7 @@ describe('nearby crown query', () => {
   })
 
   test('desktop density budget is finite even for flat viewports', async () => {
-    await conn.run(`INSERT INTO trees_fast SELECT 'view-' || i, 'USSFO', 0, 0, i, 0, NULL, NULL, 'broadleaf', 18 FROM range(${MAX_TREE_SPRITES + 50}) t(i)`)
+    await conn.run(`INSERT INTO trees_fast SELECT 'view-' || i, 'USSFO', 0, 0, i, 0, NULL, NULL, 'broadleaf', 18, NULL, NULL FROM range(${MAX_TREE_SPRITES + 50}) t(i)`)
     const rows = (await conn.runAndReadAll(crownQuery({ ...camera,
       bounds: { west: -180, east: 180, south: -85, north: 85 } }, "SELECT tree_id FROM trees_fast WHERE tree_id LIKE 'view-%'", color))).getRowObjects()
     expect(rows).toHaveLength(MAX_TREE_SPRITES)
@@ -97,7 +113,7 @@ describe('nearby crown query', () => {
 
   test('buffered desktop queries spend the budget on visible trees first', async () => {
     await conn.run(`INSERT INTO trees_fast VALUES
-      ('visible-far', 'USSFO', 0.5, 0, 55659, 0, 12, NULL, 'broadleaf', 18)`)
+      ('visible-far', 'USSFO', 0.5, 0, 55659, 0, 12, NULL, 'broadleaf', 18, NULL, NULL)`)
     const rows = (await conn.runAndReadAll(crownQuery({ ...camera,
       bounds: { west: -1, east: 1, south: -1, north: 1 },
       visibleBounds: { west: 0.4, east: 0.6, south: -0.1, north: 0.1 },
@@ -107,7 +123,7 @@ describe('nearby crown query', () => {
   })
 
   test('dense neighborhoods return only the nearest bounded batch', async () => {
-    await conn.run(`INSERT INTO trees_fast SELECT 'dense-' || i, 'USSFO', 0, 0, i / 10.0, 0, 5, NULL, 'broadleaf', 18 FROM range(5000) t(i)`)
+    await conn.run(`INSERT INTO trees_fast SELECT 'dense-' || i, 'USSFO', 0, 0, i / 10.0, 0, 5, NULL, 'broadleaf', 18, NULL, NULL FROM range(5000) t(i)`)
     const rows = await run("SELECT tree_id FROM trees_fast WHERE tree_id LIKE 'dense-%'")
     expect(rows).toHaveLength(MAX_CROWNS)
     expect(rows[0].id).toBe('dense-0')
@@ -117,9 +133,23 @@ describe('nearby crown query', () => {
   test('latitude correction preserves the metre cutoff', async () => {
     // At latitude 60, a Mercator metre is half a ground metre.
     await conn.run(`INSERT INTO trees_fast VALUES
-      ('north', 'USSFO', 0, 60, 2000, 8399737.889818357, 10, NULL, 'broadleaf', 18)`)
+      ('north', 'USSFO', 0, 60, 2000, 8399737.889818357, 10, NULL, 'broadleaf', 18, NULL, NULL)`)
     expect((await run("SELECT 'north' AS tree_id", { lng: 0, lat: 60, altitude: 500 })).map(row => row.id)).toEqual(['north'])
   })
+})
+
+test('a sprite is drawn as tall as its height needs, within bounds', () => {
+  for (const height of [null, undefined, 0, -1, NaN, Infinity, 500, '12']) expect(validTreeHeight(height)).toBe(false)
+  expect(validTreeHeight(12.5)).toBe(true)
+  // Proportions as drawn: an 8 m crown in 0.8 of the cell, a 9 m tree in 0.9 of it.
+  expect(spriteAspect(8, 9, 0.8, 0.9)).toBeCloseTo(1)
+  expect(spriteAspect(8, 18, 0.8, 0.9)).toBeCloseTo(2)
+  expect(spriteAspect(8, 400, 0.8, 0.9)).toBe(1)
+  expect(spriteAspect(8, 100, 0.8, 0.9)).toBe(MAX_SPRITE_ASPECT)
+  expect(spriteAspect(30, 2, 0.8, 0.9)).toBe(MIN_SPRITE_ASPECT)
+  // Without both dimensions, the artwork keeps its own proportions.
+  expect(spriteAspect(null, 18, 0.8, 0.9)).toBe(1)
+  expect(spriteAspect(8, null, 0.8, 0.9)).toBe(1)
 })
 
 test('zoom fades and invalid widths are bounded', () => {

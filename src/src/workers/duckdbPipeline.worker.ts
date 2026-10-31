@@ -670,6 +670,12 @@ async function loadCityTrees(city?: string): Promise<void> {
   // The slice is one row per tree by its model's grain; the all-city file is
   // aggregated to be sure (see CityTableOptions.predictionsAreUnique).
   const predictionsAreUnique = predictionsUrl !== null && predictionsUrl === citySliceUrl
+  // Tree heights (a LIDAR `height_m` and the allometric `predicted_height_m`)
+  // arrived in November 2026, in the projection and, for the assembled path,
+  // in the predictions file. Either may predate them until its next build;
+  // probe like `cultivar` and read null heights, sizing sprites as before.
+  const heightSource = projectionUrl ?? predictionsUrl
+  const hasHeight = heightSource !== null && await parquetHasColumn(heightSource, 'height_m')
 
   // A window load still running holds a staging table over the city's types.
   await windowLoadsSettled()
@@ -678,7 +684,7 @@ async function loadCityTrees(city?: string): Promise<void> {
   windowGeneration += 1
   loadedWithWindowPolicy = windowPolicy !== null
 
-  const options: CityTableOptions = { projectionUrl, vocabUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth }
+  const options: CityTableOptions = { projectionUrl, vocabUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth, hasHeight }
   // A phone holds the city in windows when the projection is published; the
   // assembled fallback joins three files and is held whole, as before.
   const windowed = windowPolicy !== null && projectionUrl !== null
@@ -1836,6 +1842,7 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrown[]> {
     id: String(row.id), lng: Number(row.lng), lat: Number(row.lat),
     width: row.width == null ? null : Number(row.width), measured: Boolean(row.measured), color: String(row.color),
     category: String(row.category), dbh: Number(row.dbh),
+    height: row.height == null ? null : Number(row.height),
   }))
 }
 

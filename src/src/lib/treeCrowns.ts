@@ -8,6 +8,8 @@ export const CROWN_DISTANCE_MAX = 1800
 export const MAX_CROWNS = 4096
 export const MAX_TREE_SPRITES = 32768
 export const MAX_CROWN_WIDTH = 60
+/** Above the tallest living trees (~116 m); the LIDAR staging already drops crowns over 60 m. */
+export const MAX_TREE_HEIGHT = 120
 export const MERCATOR_WORLD_METERS = 40075016.68557849
 
 export interface CrownCamera { lng: number; lat: number; altitude: number }
@@ -26,6 +28,8 @@ export interface TreeCrown {
   color: string
   category?: string
   dbh?: number
+  /** Metres: a measured height where valid, else the published prediction; null keeps the artwork's proportions. */
+  height?: number | null
 }
 
 export function crownZoomOpacity(zoom: number): number {
@@ -58,6 +62,24 @@ export function spriteBaseScale(zoom: number): [number, number] {
 /** Reject corrupt sizes instead of rendering a plausible-looking clipped measurement. */
 export function validCrownWidth(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= MAX_CROWN_WIDTH
+}
+
+export function validTreeHeight(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= MAX_TREE_HEIGHT
+}
+
+/**
+ * How much taller than the artwork's own proportions a tree is drawn once it
+ * reaches metre scale: the cell height its height needs over the cell width
+ * its crown needs. 1 (the artwork as drawn) without both. Clamped so a stub
+ * or a pole stays recognisably the same form.
+ */
+export const MIN_SPRITE_ASPECT = 0.5
+export const MAX_SPRITE_ASPECT = 2.5
+export function spriteAspect(width: unknown, height: unknown, crownFraction: number, heightFraction: number): number {
+  if (!validCrownWidth(width) || !validTreeHeight(height) || !(crownFraction > 0) || !(heightFraction > 0)) return 1
+  const aspect = (height / heightFraction) / (width / crownFraction)
+  return Math.max(MIN_SPRITE_ASPECT, Math.min(MAX_SPRITE_ASPECT, aspect))
 }
 
 export function mercatorPoint(lng: number, lat: number): [number, number] {

@@ -1,0 +1,35 @@
+# The published LIDAR heights, as a *source*.
+#
+# One `root datasource` over the parquets of the cities that publish a
+# `height_m` (the ones importing tree_height.preql; docs/TREE_HEIGHT.md),
+# mapping `tree_id` and `height_m` and nothing else. Root means unmanaged:
+# the predictions job reads the heights and never rebuilds a city.
+#
+# Why not the rollup: `full_tree_publish.preql` reads all the city parquets
+# as one multi-file scan, which binds its schema from the first file, so a
+# column only some cities carry cannot be selected there without adding it
+# to every city first (the crown-width outage;
+# docs/CROWN_WIDTH_ROLLOUT_FAILURES_HANDOFF.md). This file lists only the
+# cities that have the column. Adding a height city is one more entry in the
+# file list; test_tree_height.py checks the list against the importers.
+#
+# Freshness needs no edge of its own: a city rebuild republishes the rollup,
+# and the rollup's publication is one of the predictions job's watermarks.
+#
+# `tree_id: ~tree_id`: these files hold a fraction of the rollup's trees,
+# which is a partial key on a complete table -- the planner pads the join and
+# a tree with no height row keeps its other columns. Never a `partial
+# datasource` (memory: pytrilogy-0401-partial-only-regression).
+
+import tree_common;
+
+property tree_id.height_m float; # tree height in metres from a LIDAR canopy survey, as the city published it; null where the tree is under no surveyed crown
+
+root datasource published_tree_heights (
+    tree_id: ~tree_id,
+    height_m: ?height_m,
+)
+grain (tree_id)
+file [
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`,
+];

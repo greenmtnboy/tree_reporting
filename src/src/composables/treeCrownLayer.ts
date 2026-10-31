@@ -2,14 +2,14 @@ import type { CustomLayerInterface, Map as TreeMap } from 'maplibre-gl'
 import { createTreeSpriteAtlas } from './treeSpriteAtlas'
 import {
   CROWN_DISTANCE_FULL, CROWN_DISTANCE_MAX, MAX_CROWNS, MAX_TREE_SPRITES, CROWN_ZOOM_START,
-  crownZoomOpacity, mercatorPoint, metersPerMercatorUnit, validCrownWidth,
+  crownZoomOpacity, mercatorPoint, metersPerMercatorUnit, validCrownWidth, spriteAspect,
   spriteCrownBlend, spriteBaseScale, spriteOpacity, SPRITE_CROWN_ZOOM_START,
   type CrownCamera, type TreeRenderView, type TreeCrown,
 } from '../lib/treeCrowns'
 
 type GL = WebGLRenderingContext | WebGL2RenderingContext
 type LoadCrowns = (camera: TreeRenderView) => Promise<TreeCrown[]>
-const STRIDE = 14
+const STRIDE = 15
 const CORNERS = [-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]
 type ViewBounds = NonNullable<TreeRenderView['bounds']>
 
@@ -181,6 +181,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
         vertices[cursor++] = cell?.crownFraction ?? 1
         vertices[cursor++] = Math.min(1, Math.sqrt(dbh / 42))
         vertices[cursor++] = cell?.base ?? 0.95
+        vertices[cursor++] = cell ? spriteAspect(crown.width, crown.height, cell.crownFraction, cell.heightFraction) : 1
       }
       this.drawnCrowns.push(crown)
     }
@@ -229,7 +230,8 @@ export class TreeCrownLayer implements CustomLayerInterface {
       const base = 48 * (low + (high - low) * this.data[offset + 12]) * Math.max(0, Math.min(4, 0.5 + 0.5 * map.transform.cameraToCenterDistance / w))
       const target = Math.abs(rightClip * this.data[offset + 4] / cell.crownFraction) / w * width
       const size = base * Math.pow(Math.max(0.01, target) / base, fade)
-      const u = (point.x - sx) / size + 0.5, v = (point.y - sy) / size + cell.base
+      const tall = size * Math.pow(this.data[offset + 14], fade)
+      const u = (point.x - sx) / size + 0.5, v = (point.y - sy) / tall + cell.base
       if (u < 0 || u >= 1 || v < 0 || v >= 1) continue
       if (cell.alpha[Math.floor(v * cell.size) * cell.size + Math.floor(u * cell.size)] > 32) return crown
     }
@@ -263,7 +265,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
       ${attribute} float a_radius;
       ${attribute} vec4 a_color;
       ${!this.simplified ? `${attribute} vec2 a_uv;
-      ${attribute} vec3 a_shape;
+      ${attribute} vec4 a_shape;
       uniform vec2 u_viewport;
       uniform vec2 u_right;
       uniform vec2 u_base_scale;
@@ -297,9 +299,10 @@ export class TreeCrownLayer implements CustomLayerInterface {
         // Geometric interpolation makes each increment a proportional size
         // change rather than a sudden jump toward a much larger crown.
         float halfWidth = baseHalfWidth * pow(max(0.000001, abs(crownRight.x)) / baseHalfWidth, v_fade * u_opacity);
-        // Separate dimensions: a future height model can replace halfHeight
-        // independently. For now retain each sprite's aspect ratio.
-        float halfHeight = halfWidth * u_viewport.x / u_viewport.y;
+        // Height scales with the same blend as width: a marker keeps the
+        // artwork's proportions, and a tree at metre scale is as tall as its
+        // measured or predicted height (a_shape.w, clamped on the CPU).
+        float halfHeight = halfWidth * u_viewport.x / u_viewport.y * pow(a_shape.w, v_fade * u_opacity);
         anchor.xy += vec2(a_corner.x * halfWidth, (a_corner.y + 2.0 * a_shape.z - 1.0) * halfHeight);
         gl_Position = anchor.w > 0.0 ? anchor : vec4(2.0, 2.0, 2.0, 1.0);
         v_uv = a_uv;`}
@@ -395,7 +398,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
     gl.useProgram(this.program)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer!)
     if (this.upload) { gl.bufferData(gl.ARRAY_BUFFER, this.data, gl.DYNAMIC_DRAW); this.upload = false }
-    for (const [i, size, offset] of [[0, 2, 0], [1, 2, 2], [2, 1, 4], [3, 4, 5], [4, 2, 9], [5, 3, 11]]) {
+    for (const [i, size, offset] of [[0, 2, 0], [1, 2, 2], [2, 1, 4], [3, 4, 5], [4, 2, 9], [5, 4, 11]]) {
       if (this.attributes[i] < 0) continue
       gl.enableVertexAttribArray(this.attributes[i])
       gl.vertexAttribPointer(this.attributes[i], size, gl.FLOAT, false, STRIDE * 4, offset * 4)
