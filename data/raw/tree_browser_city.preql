@@ -30,6 +30,12 @@
 #   predicted_crown_width_m  tree_predictions' allometric estimate; null for a
 #                  tree the model could not size (a palm, or no diameter and
 #                  no planting date).
+#   height_m       the LIDAR height a city published (only the cities that
+#                  import tree_height.preql; null everywhere else), reached
+#                  through the predictions because the rollup cannot carry a
+#                  column only some cities have (tree_height_source.preql).
+#   predicted_height_m  tree_predictions' allometric height, on the same
+#                  inputs and nulls as the crown.
 #
 # Rows are written along a Hilbert curve over (latitude, longitude), in row
 # groups of 10,240. The phone's window filters on a lat/long box
@@ -71,6 +77,8 @@ template datasource city_tree_browser (
     diameter_at_breast_height: ?diameter_at_breast_height,
     crown_width_m: ?crown_width_m,
     predicted_crown_width_m: ?predicted_crown_width_m,
+    height_m: ?height_m,
+    predicted_height_m: ?predicted_height_m,
     latitude: ?latitude,
     longitude: ?longitude,
     submission_photo_url: ?submission_photo_url,

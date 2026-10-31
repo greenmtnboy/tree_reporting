@@ -35,10 +35,12 @@ sys.path.insert(0, str(RAW_DIR / "tools"))
 
 import crown_allometry_fit as fit  # noqa: E402
 import dbh_age_fit as age_fit  # noqa: E402
+import height_allometry_fit as height_fit  # noqa: E402
 
 MODEL = RAW_DIR / "tree_predictions.preql"
 COEFFICIENTS = RAW_DIR / "crown_width_coefficients.csv"
 AGE_COEFFICIENTS = RAW_DIR / "dbh_age_coefficients.csv"
+HEIGHT_COEFFICIENTS = RAW_DIR / "tree_height_coefficients.csv"
 
 
 def statements(path: Path) -> str:
@@ -56,6 +58,12 @@ def rows() -> list[dict[str, str]]:
 @pytest.fixture(scope="module")
 def age_rows() -> list[dict[str, str]]:
     with AGE_COEFFICIENTS.open(encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+@pytest.fixture(scope="module")
+def height_rows() -> list[dict[str, str]]:
+    with HEIGHT_COEFFICIENTS.open(encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
 
 
@@ -241,6 +249,78 @@ def test_the_nulled_dates_are_the_ones_the_city_ingests_null():
         )
 
 
+# --- the height model's table ------------------------------------------------
+
+
+def test_height_csv_has_the_columns_the_model_reads(height_rows):
+    assert list(height_rows[0].keys()) == height_fit.CSV_COLUMNS
+    for column in ("level", "taxon", "fit_level", "n", "b", "scale", "dbh_max_cm"):
+        assert f"{column}:" in statements(MODEL), f"the model no longer maps {column}"
+
+
+def test_every_height_genus_row_is_a_usable_power_law(height_rows):
+    """The gate `height_allometry_fit.py` applies, re-checked on what was committed."""
+    genus_rows = [r for r in height_rows if r["level"] == "genus"]
+    assert len(genus_rows) > 30, "Boston's LIDAR alone heights trees of ~50 genera"
+    assert len({r["taxon"] for r in genus_rows}) == len(genus_rows), "duplicate genus rows"
+    for r in genus_rows:
+        n, b, scale = int(r["n"]), float(r["b"]), float(r["scale"])
+        assert n >= height_fit.MIN_N, r
+        assert height_fit.B_RANGE[0] <= b <= height_fit.B_RANGE[1], r
+        assert math.isfinite(scale) and scale > 0, r
+        assert float(r["dbh_max_cm"]) >= height_fit.MIN_FITTED_DBH_MAX_CM, r
+        assert set(r["cities"].split(";")) <= set(height_fit.HEIGHT_CITIES), r
+        assert r["fit_level"] in ("genus", "division", "global"), r
+        expected = math.exp(float(r["ln_a"]) + float(r["sigma"]) ** 2 / 2)
+        assert math.isclose(scale, expected, rel_tol=1e-4), r
+
+
+def test_height_fallback_rows_exist(height_rows):
+    by_key = {(r["level"], r["taxon"]) for r in height_rows}
+    assert ("division", "Angiosperm") in by_key
+    assert ("division", "Gymnosperm") in by_key
+    assert ("global", "all") in by_key
+
+
+def test_the_height_fallback_block_in_the_model_is_current(height_rows):
+    text = MODEL.read_text(encoding="utf-8")
+    assert height_fit.current_block(text) == height_fit.render_block(height_rows), (
+        "tree_predictions.preql's height_fallbacks block disagrees with "
+        "tree_height_coefficients.csv; run height_allometry_fit.py --write"
+    )
+
+
+def test_height_check_flag_agrees():
+    result = subprocess.run(
+        [sys.executable, str(RAW_DIR / "tools" / "height_allometry_fit.py"), "--check"],
+        capture_output=True,
+        text=True,
+        cwd=RAW_DIR,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_common_street_genera_get_their_own_height_fit(height_rows):
+    by_genus = {r["taxon"]: r for r in height_rows if r["level"] == "genus"}
+    for genus in ("Acer", "Quercus", "Gleditsia", "Tilia", "Ulmus", "Platanus", "Pyrus", "Malus", "Pinus"):
+        assert by_genus[genus]["fit_level"] == "genus", f"{genus} fell back to {by_genus[genus]['fit_level']}"
+
+
+def test_height_predictions_are_plausible(height_rows):
+    """Boston's matched inventory: a median 13.4 m at 12-24 inches (30-61 cm).
+
+    A common street genus outside 7-20 m at 30 cm is a fit the gate should
+    have stopped, and a height that falls as the stem thickens is not one.
+    """
+    by_genus = {r["taxon"]: r for r in height_rows if r["level"] == "genus"}
+    for genus in ("Acer", "Quercus", "Gleditsia", "Tilia", "Ulmus", "Platanus", "Pyrus"):
+        r = by_genus[genus]
+        height_30 = float(r["scale"]) * 30 ** float(r["b"])
+        height_60 = float(r["scale"]) * 60 ** float(r["b"])
+        assert 7 < height_30 < 20, (genus, height_30)
+        assert height_60 > height_30, (genus, height_30, height_60)
+
+
 # --- wiring -----------------------------------------------------------------
 
 
@@ -304,6 +384,8 @@ def test_the_model_parses():
     assert "tree_enrichment" in names
     assert "crown_width_coefficients" in names
     assert "dbh_age_coefficients" in names
+    assert "tree_height_coefficients" in names
+    assert "published_tree_heights" in names
 
 
 # --- execution ------------------------------------------------------------
@@ -386,10 +468,23 @@ def predictions(tmp_path_factory) -> list[dict]:
         ) AS t(species, genus, tree_form)
         """
     )
+    # The published LIDAR heights: a city parquet holds a fraction of the
+    # rollup's trees, and a tree it lacks keeps its row with a null height.
+    conn.execute(
+        """
+        CREATE TABLE heights AS SELECT * FROM (VALUES
+            ('t-acer-30', 14.5::FLOAT),
+            ('t-palm',    9.0::FLOAT),
+            ('t-elsewhere', 20.0::FLOAT)
+        ) AS t(tree_id, height_m)
+        """
+    )
     rollup = tmp / "full_tree_info.parquet"
     enrichment = tmp / "tree_enrichment.parquet"
+    heights = tmp / "usbos_tree_info.parquet"
     conn.execute(f"COPY rollup TO '{rollup.as_posix()}' (FORMAT PARQUET)")
     conn.execute(f"COPY enrichment TO '{enrichment.as_posix()}' (FORMAT PARQUET)")
+    conn.execute(f"COPY heights TO '{heights.as_posix()}' (FORMAT PARQUET)")
 
     env = Environment(working_path=RAW_DIR)
     env.parse(MODEL.read_text(encoding="utf-8"))
@@ -403,12 +498,13 @@ def predictions(tmp_path_factory) -> list[dict]:
             tree_id, city, genus, dbh_cm, age_years, predicted_dbh_cm,
             dbh_model_level, dbh_model_taxon, dbh_model_n, crown_dbh_source,
             predicted_crown_width_m, crown_model_level, crown_model_taxon, crown_model_n,
-            local_tree_density_per_ha, predicted_height_m, predicted_age_years
+            local_tree_density_per_ha, predicted_height_m, height_m, predicted_age_years
         where tree_id is not null;
         """
     )
     sql = re.sub(r"read_parquet\('[^']*full_tree_info_v[^']*'\)", f"read_parquet('{rollup.as_posix()}')", sql)
     sql = re.sub(r"read_parquet\('[^']*tree_enrichment_v[^']*'\)", f"read_parquet('{enrichment.as_posix()}')", sql)
+    sql = re.sub(r"read_parquet\(\[?'[^']*usbos_tree_info_v[^']*'\]?\)", f"read_parquet('{heights.as_posix()}')", sql)
     for name, value in re.findall(r"^const (\w+) <- ([-\d.]+);", MODEL.read_text(encoding="utf-8"), re.M):
         sql = re.sub(rf":{name}\b", value, sql)
     assert "uv_run" not in sql, "the probe should not be needed for these columns"
@@ -596,7 +692,55 @@ def test_density_counts_the_cell_and_tolerates_no_coordinates(predictions):
     assert got["t-nowhere"]["predicted_crown_width_m"] > 0, "a tree with no coordinates still has a crown"
 
 
-def test_placeholders_are_null(predictions):
+def test_the_age_placeholder_is_null(predictions):
     for row in predictions:
-        assert row["predicted_height_m"] is None
         assert row["predicted_age_years"] is None
+
+
+# --- the height model --------------------------------------------------------
+
+
+def height_from(row: dict[str, str], dbh_cm: float) -> float:
+    dbh_cm = min(max(dbh_cm, 1.0), float(row["dbh_max_cm"]))
+    return float(row["scale"]) * dbh_cm ** float(row["b"])
+
+
+def test_a_genus_height_fit_is_applied_as_documented(predictions, height_rows):
+    got = by_id(predictions)
+    acer = genus_row(height_rows, "Acer")
+    assert math.isclose(got["t-acer-30"]["predicted_height_m"], height_from(acer, 30.0), rel_tol=1e-5)
+    # The clamp: a data-entry diameter is the largest tree the fit saw.
+    assert math.isclose(got["t-acer-huge"]["predicted_height_m"], height_from(acer, 1e9), rel_tol=1e-5)
+
+
+def test_height_is_predicted_from_the_crown_models_input(predictions, height_rows):
+    """A dated tree with no diameter is heighted from its age-predicted diameter."""
+    row = by_id(predictions)["t-aged"]
+    assert row["crown_dbh_source"] == "age"
+    expected = height_from(genus_row(height_rows, "Acer"), row["predicted_dbh_cm"])
+    assert math.isclose(row["predicted_height_m"], expected, rel_tol=1e-5)
+    assert by_id(predictions)["t-acer-nodbh"]["predicted_height_m"] is None
+
+
+def test_height_fallbacks_by_form_and_sentinel(predictions):
+    got = by_id(predictions)
+    consts = dict(re.findall(r"^const (\w+) <- ([-\d.]+);", MODEL.read_text(encoding="utf-8"), re.M))
+
+    def from_consts(prefix: str, dbh_cm: float) -> float:
+        dbh_cm = min(max(dbh_cm, 1.0), float(consts[f"{prefix}_height_dbh_max_cm"]))
+        return float(consts[f"{prefix}_height_scale"]) * dbh_cm ** float(consts[f"{prefix}_height_b"])
+
+    dbh = 12.0 * 2.54
+    assert math.isclose(got["t-unknown"]["predicted_height_m"], from_consts("global", dbh), rel_tol=1e-5)
+    assert math.isclose(got["t-new"]["predicted_height_m"], from_consts("angiosperm", dbh), rel_tol=1e-5)
+    assert math.isclose(got["t-conifer"]["predicted_height_m"], from_consts("gymnosperm", dbh), rel_tol=1e-5)
+    assert got["t-palm"]["predicted_height_m"] is None, "a palm gets no height model, as it gets no crown"
+
+
+def test_an_observed_height_is_carried_beside_the_prediction(predictions):
+    got = by_id(predictions)
+    assert got["t-acer-30"]["height_m"] == pytest.approx(14.5)
+    assert got["t-acer-30"]["predicted_height_m"] > 0, "the prediction is published even where a height was measured"
+    assert got["t-palm"]["height_m"] == pytest.approx(9.0), "a measured palm keeps its measurement"
+    assert got["t-new"]["height_m"] is None
+    assert "t-elsewhere" not in got, "a height row with no rollup tree is not a prediction row"

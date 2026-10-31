@@ -314,3 +314,23 @@ def test_a_height_city_is_fully_wired(code: str):
     job = jobs_by_key().get(f"canopy-{lower}")
     assert job, f"{code} has no canopy-{lower} job; nothing would ever rebuild its lookup"
     assert job["entrypoint"] == f"canopy_staging/{lower}_canopy_staging.preql"
+
+
+def test_the_height_consumers_list_every_height_city():
+    """Two hand-kept lists read the published heights; both must name every city.
+
+    tree_height_source.preql is how the predictions (and through them the
+    map) reach `height_m`, and height_allometry_fit.py fits the height model
+    on it. A city added to neither keeps its LIDAR heights in its own parquet
+    and nowhere else.
+    """
+    sys.path.insert(0, str(RAW_DIR / "tools"))
+    import height_allometry_fit
+
+    cities = height_cities()
+    assert sorted(height_allometry_fit.HEIGHT_CITIES) == cities, (
+        "HEIGHT_CITIES in tools/height_allometry_fit.py must list the cities importing tree_height"
+    )
+    source = statements(RAW_DIR / "tree_height_source.preql")
+    listed = sorted(code.upper() for code in re.findall(r"/trees/(\w+)_tree_info_v\{data_version\}\.parquet", source))
+    assert listed == cities, "tree_height_source.preql's file list must be the cities importing tree_height"

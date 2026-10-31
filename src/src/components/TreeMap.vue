@@ -147,6 +147,10 @@
           <template v-if="formatCrownWidth(selectedTree.crown_width_m)">
             <span class="tc-label">Crown spread</span><span class="tc-value">{{ formatCrownWidth(selectedTree.crown_width_m) }}</span>
           </template>
+          <template v-if="selectedTreeHeight">
+            <span class="tc-label">Height</span>
+            <span class="tc-value" data-testid="tree-height">{{ selectedTreeHeight.value }} <span class="tc-hint">{{ selectedTreeHeight.hint }}</span></span>
+          </template>
           <template v-if="selectedTree.ecological_fit">
             <span class="tc-label">Ecological fit</span><span class="tc-value">{{ selectedTree.ecological_fit }}</span>
           </template>
@@ -346,7 +350,7 @@ import {
   refreshSharedPosition,
 } from '../lib/geo'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
-import { CROWN_ZOOM_START } from '../lib/treeCrowns'
+import { CROWN_ZOOM_START, validTreeHeight } from '../lib/treeCrowns'
 import { applyMapUrlFilters, DBH_COLOR_SQL, DBH_LEGEND, hasMapUrlFilters, MAP_FILTER_FIELDS, readMapColorBy, readMapUrlFilters } from '../lib/mapUrlFilters'
 
 const { resolvedTheme } = useTheme()
@@ -842,6 +846,10 @@ interface PopupTreeRow {
   dbh: number | null
   /** Observed crown spread in metres, where a source recorded one; null for most trees. */
   crown_width_m: number | null
+  /** LIDAR height in metres, where the city has a canopy survey. */
+  height_m: number | null
+  /** The allometric height from the trunk diameter; null where nothing to size from. */
+  predicted_height_m: number | null
   tree_form: string | null
   ecological_fit: string | null
   is_evergreen: boolean | null
@@ -870,6 +878,7 @@ interface PopupTreeRow {
 }
 
 const selectedTree = ref<PopupTreeRow | null>(null)
+const selectedTreeHeight = computed(() => selectedTree.value ? formatTreeHeight(selectedTree.value) : null)
 const streetViewOpen = ref(false)
 watch(() => selectedTree.value?.tree_id, () => { streetViewOpen.value = false })
 const unknownSpecies = computed(() => !selectedTree.value?.species || selectedTree.value.species === 'Unknown')
@@ -1294,6 +1303,22 @@ function formatCrownWidth(value: number | null | undefined) {
   return `${value.toFixed(1)} m (${Math.round(value * 3.28084)} ft)`
 }
 
+/**
+ * A measured height as measured; a predicted one rounded to the metre and
+ * marked as an estimate. Every measured height today is the 2024 LIDAR
+ * surveys' (docs/TREE_HEIGHT.md).
+ */
+function formatTreeHeight(tree: Pick<PopupTreeRow, 'height_m' | 'predicted_height_m'>): { value: string; hint: string } | null {
+  if (validTreeHeight(tree.height_m)) {
+    return { value: `${tree.height_m.toFixed(1)} m (${Math.round(tree.height_m * 3.28084)} ft)`, hint: 'aerial LIDAR, 2024' }
+  }
+  if (validTreeHeight(tree.predicted_height_m)) {
+    const metres = Math.round(tree.predicted_height_m)
+    return { value: `~${metres} m (${Math.round(tree.predicted_height_m * 3.28084)} ft)`, hint: 'est. from trunk diameter' }
+  }
+  return null
+}
+
 function formatDbh(value: number | null) {
   if (value == null || !Number.isFinite(value)) return null
   return `${value.toFixed(2)}"`
@@ -1321,6 +1346,8 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
         tf.plant_date,
         tf.dbh,
         tf.crown_width_m,
+        tf.height_m,
+        tf.predicted_height_m,
         tf.tree_form,
         CASE
           WHEN se.native_ecoregions IS NULL OR len(se.native_ecoregions) = 0 THEN NULL
@@ -2764,6 +2791,12 @@ onUnmounted(() => {
   letter-spacing: 0.07em;
   text-transform: uppercase;
   padding-top: 1px;
+}
+
+.tc-hint {
+  color: rgba(var(--muted-rgb), 0.75);
+  font-size: 0.68rem;
+  font-weight: 500;
 }
 
 .tc-value {

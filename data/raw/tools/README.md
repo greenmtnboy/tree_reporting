@@ -19,6 +19,7 @@ invocation assume:
 | `crown_allometry_fit.py` | refits the genus-level crown-width model on Tallo and rewrites `crown_width_coefficients.csv` plus the `crown_fallbacks` block in `tree_predictions.preql`. |
 | `published_columns.py` | lists the cities whose published tree parquet does not carry a column yet. A target may gate on a new stored column only when this reports all of them (a target's `where` runs on every read). |
 | `dbh_age_fit.py` | the same for the age-to-diameter fallback, fitted on the rollup's own dated, measured trees. |
+| `height_allometry_fit.py` | the same for the height model, fitted on the LIDAR heights of the cities in `HEIGHT_CITIES`; rewrites `tree_height_coefficients.csv` and the `height_fallbacks` block. Rerun after adding a LIDAR city. |
 
 The enrichment table's two hand tools are not here -- they live beside the
 package they edit, as `enrichment/admin/server.py` and

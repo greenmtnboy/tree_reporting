@@ -61,6 +61,8 @@ export async function writeCityProjection({ city, rows, bbox }: CityFixture): Pr
       CAST(NULL AS VARCHAR) AS cultivar,
       CAST(NULL AS DOUBLE) AS crown_width_m,
       CAST(4 + i % 9 AS DOUBLE) AS predicted_crown_width_m,
+      CAST(CASE WHEN i % 5 = 0 THEN 8 + i % 15 END AS FLOAT) AS height_m,
+      CAST(6 + i % 12 AS FLOAT) AS predicted_height_m,
       ${south} + random() * ${north - south} AS latitude,
       ${west} + random() * ${east - west} AS longitude,
       CAST(5 + i % 30 AS DOUBLE) AS diameter_at_breast_height,

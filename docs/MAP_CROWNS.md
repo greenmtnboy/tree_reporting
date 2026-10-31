@@ -3,9 +3,17 @@
 Desktop has one `trees-icon` custom layer, from its first appearance at zoom
 14.4 through maximum zoom. The same distance-field sprite scales continuously
 with zoom and camera distance. There is no native-symbol fallback, feature-state
-hide/show handoff, second icon layer, or delayed growth animation. Height is
-proportional to crown width; the shader keeps separate dimensions for a future
-height prediction.
+hide/show handoff, second icon layer, or delayed growth animation.
+
+At metre scale a sprite is as wide as its crown and as tall as its height,
+each a valid measurement where there is one, else the published prediction
+(`predicted_crown_width_m`, `predicted_height_m`; see TREE_HEIGHT.md). The
+height enters as one per-sprite aspect, the cell height the tree's height
+needs (over the artwork's foot-to-crown-top fraction) against the cell width
+its crown needs (over `crownFraction`), clamped to 0.5-2.5 so a form stays
+recognisable. It blends in with the same zoom and distance fade as the width,
+so a marker keeps the artwork's proportions. A tree with no width or no
+height keeps them too.
 
 Mobile uses ground-plane rings in `trees-crown`, fading in from zoom 16.5 to 18.
 Solid outlines mean recorded widths; broken outlines mean published predictions.
@@ -70,7 +78,7 @@ texture samples or shader work. Vector canopy extents exclude transparent
 padding when converting measured crown widths to sprite size.
 
 Desktop submits one draw of at most 196,608 vertices (six per sprite), using at
-most a 10.5 MiB vertex buffer. Mobile submits at most 24,576 vertices / 1.3125 MiB.
+most an 11.25 MiB vertex buffer (15 floats a vertex). Mobile submits at most 24,576 vertices / 1.40625 MiB.
 Camera motion changes uniforms; it does not regenerate artwork or geometry each
 frame. Query refreshes rebuild the bounded batch, sorted back-to-front. Both
 layouts use a local coordinate origin to avoid street-level float32 jitter.

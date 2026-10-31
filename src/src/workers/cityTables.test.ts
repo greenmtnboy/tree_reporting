@@ -48,7 +48,7 @@ describe('city tables', () => {
     dir = mkdtempSync(join(tmpdir(), 'city-tables-'))
     const trees = sql(join(dir, 'city.parquet'))
     const predictions = sql(join(dir, 'predictions.parquet'))
-    options = { projectionUrl: null, parquetUrl: trees, predictionsUrl: predictions, predictionsAreUnique: false, city: 'USSFO', hasDedupFlag: true, hasCultivar: true, hasCrownWidth: true }
+    options = { projectionUrl: null, parquetUrl: trees, predictionsUrl: predictions, predictionsAreUnique: false, city: 'USSFO', hasDedupFlag: true, hasCultivar: true, hasCrownWidth: true, hasHeight: true }
 
     await conn.run(`CREATE TABLE species_enrichment (species VARCHAR, common_names VARCHAR[], tree_form VARCHAR);
       INSERT INTO species_enrichment VALUES
@@ -72,9 +72,10 @@ describe('city tables', () => {
           submission_photo_url, cultivar, crown_width_m, data_source, is_duplicate)
     ) TO '${trees}' (FORMAT PARQUET)`)
     await conn.run(`COPY (
-      SELECT tree_id, city, CAST(predicted_crown_width_m AS DOUBLE) AS predicted_crown_width_m FROM (VALUES
-        ('sf-1', 'USSFO', 7.0), ('sf-2', 'USSFO', 5.0), ('sf-2', 'USSFO', 6.0), ('sf-3', 'USBOS', 40.0)
-      ) v(tree_id, city, predicted_crown_width_m)
+      SELECT tree_id, city, CAST(predicted_crown_width_m AS DOUBLE) AS predicted_crown_width_m,
+        CAST(height_m AS FLOAT) AS height_m, CAST(predicted_height_m AS FLOAT) AS predicted_height_m FROM (VALUES
+        ('sf-1', 'USSFO', 7.0, 14.5, 11.0), ('sf-2', 'USSFO', 5.0, NULL, 9.0), ('sf-2', 'USSFO', 6.0, NULL, 10.0), ('sf-3', 'USBOS', 40.0, 30.0, 30.0)
+      ) v(tree_id, city, predicted_crown_width_m, height_m, predicted_height_m)
     ) TO '${predictions}' (FORMAT PARQUET)`)
     await load()
   })
@@ -141,15 +142,28 @@ describe('city tables', () => {
     await load()
   })
 
+  test('heights ride in with the prediction, measured and predicted side by side', async () => {
+    const columns = await describeTable(TREES_TABLE)
+    expect(columns.height_m).toBe('FLOAT')
+    expect(columns.predicted_height_m).toBe('FLOAT')
+    const rows = (await conn.runAndReadAll(`SELECT tree_id, height_m AS h, predicted_height_m AS p FROM ${TREES_TABLE} ORDER BY 1`)).getRowObjects()
+    expect(rows.map((r) => [r.tree_id, r.h, r.p])).toEqual([
+      ['sf-1', 14.5, 11], ['sf-2', null, 10], ['sf-3', null, null], ['sf-4', null, null], ['sf-5', null, null],
+    ])
+  })
+
   test('a per-city slice is joined as it is, without the aggregate', async () => {
     // The slice's grain is one row per tree, so the load trusts it and skips
     // the hash aggregate the all-city file needs.
     const slice = sql(join(dir, 'slice.parquet'))
     await conn.run(`COPY (SELECT tree_id, city, CAST(width AS DOUBLE) AS predicted_crown_width_m FROM (VALUES
       ('sf-1', 'USSFO', 7.5), ('sf-4', 'USSFO', 3.0), ('sf-9', 'USBOS', 40.0)) v(tree_id, city, width)) TO '${slice}' (FORMAT PARQUET)`)
-    await load({ predictionsUrl: slice, predictionsAreUnique: true })
-    const rows = (await conn.runAndReadAll(`SELECT tree_id, predicted_crown_width_m AS w FROM ${TREES_TABLE} ORDER BY 1`)).getRowObjects()
+    // Built before heights: no height columns, so the probe says so and the
+    // load reads null heights rather than failing.
+    await load({ predictionsUrl: slice, predictionsAreUnique: true, hasHeight: false })
+    const rows = (await conn.runAndReadAll(`SELECT tree_id, predicted_crown_width_m AS w, height_m, predicted_height_m FROM ${TREES_TABLE} ORDER BY 1`)).getRowObjects()
     expect(rows.map((r) => [r.tree_id, r.w])).toEqual([['sf-1', 7.5], ['sf-2', null], ['sf-3', null], ['sf-4', 3], ['sf-5', null]])
+    expect(rows.every((r) => r.height_m === null && r.predicted_height_m === null)).toBe(true)
     await load()
   })
 
@@ -228,15 +242,17 @@ describe('city tables', () => {
       SELECT * REPLACE (
         CAST(diameter_at_breast_height AS DOUBLE) AS diameter_at_breast_height, CAST(latitude AS DOUBLE) AS latitude,
         CAST(longitude AS DOUBLE) AS longitude, CAST(crown_width_m AS DOUBLE) AS crown_width_m,
-        CAST(predicted_crown_width_m AS DOUBLE) AS predicted_crown_width_m
+        CAST(predicted_crown_width_m AS DOUBLE) AS predicted_crown_width_m,
+        CAST(height_m AS FLOAT) AS height_m, CAST(predicted_height_m AS FLOAT) AS predicted_height_m
       ) FROM (VALUES
-        ('sf-1', 'USSFO', 'SF_OPENDATA', 'Quercus agrifolia', NULL, 'Oak', 'Coast live oak', 'spreading', DATE '2001-03-04', 12.5, 9.5, 7.0, 37.76, -122.43, NULL),
-        ('sf-2', 'USSFO', 'SF_OPENDATA', 'Washingtonia robusta', NULL, NULL, 'Mexican fan palm', 'palm', NULL, NULL, NULL, 5.0, 37.77, -122.42, NULL),
-        ('sf-4', 'USSFO', 'OSM_USSFO', 'Palm', NULL, NULL, 'Palm (species not recorded)', 'palm', NULL, 4, NULL, NULL, 37.79, -122.40, NULL),
-        ('sf-6', 'USSFO', 'OSM_USSFO', 'Acer rubrum', 'October Glory', NULL, 'Acer rubrum', 'drifted_form', NULL, 8, NULL, 3.0, 37.80, -122.39, NULL),
-        ('sf-nowhere', 'USSFO', 'OSM_USSFO', 'Acer rubrum', NULL, NULL, 'Acer rubrum', 'default', NULL, 8, NULL, NULL, NULL, NULL, NULL)
+        ('sf-1', 'USSFO', 'SF_OPENDATA', 'Quercus agrifolia', NULL, 'Oak', 'Coast live oak', 'spreading', DATE '2001-03-04', 12.5, 9.5, 7.0, 13.0, 12.0, 37.76, -122.43, NULL),
+        ('sf-2', 'USSFO', 'SF_OPENDATA', 'Washingtonia robusta', NULL, NULL, 'Mexican fan palm', 'palm', NULL, NULL, NULL, 5.0, NULL, NULL, 37.77, -122.42, NULL),
+        ('sf-4', 'USSFO', 'OSM_USSFO', 'Palm', NULL, NULL, 'Palm (species not recorded)', 'palm', NULL, 4, NULL, NULL, NULL, NULL, 37.79, -122.40, NULL),
+        ('sf-6', 'USSFO', 'OSM_USSFO', 'Acer rubrum', 'October Glory', NULL, 'Acer rubrum', 'drifted_form', NULL, 8, NULL, 3.0, NULL, 8.5, 37.80, -122.39, NULL),
+        ('sf-nowhere', 'USSFO', 'OSM_USSFO', 'Acer rubrum', NULL, NULL, 'Acer rubrum', 'default', NULL, 8, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
       ) v(tree_id, city, data_source, species, cultivar, tree_name, display_name, tree_form, plant_date,
-          diameter_at_breast_height, crown_width_m, predicted_crown_width_m, latitude, longitude, submission_photo_url)
+          diameter_at_breast_height, crown_width_m, predicted_crown_width_m, height_m, predicted_height_m,
+          latitude, longitude, submission_photo_url)
     ) TO '${projection}' (FORMAT PARQUET)`)
     const statements = loadCityTablesSql({ ...options, projectionUrl: projection })
     // Nothing but the projection is read: no enrichment join, no predictions.
@@ -266,6 +282,17 @@ describe('city tables', () => {
       'tree_id', 'city', 'data_source', 'tree_name', 'plant_date', 'species', 'cultivar', 'crown_width_m',
       'latitude', 'longitude', 'diameter_at_breast_height', 'submission_photo_url',
     ])
+    const heights = (await conn.runAndReadAll(`SELECT tree_id, height_m AS h, predicted_height_m AS p FROM ${TREES_TABLE} ORDER BY 1`)).getRowObjects()
+    expect(heights.map((r) => [r.tree_id, r.h, r.p])).toEqual([['sf-1', 13, 12], ['sf-2', null, null], ['sf-4', null, null], ['sf-6', null, 8.5]])
+
+    // A projection built before heights has neither column; the probe's false
+    // keeps the select from naming them.
+    const older = sql(join(dir, 'projection-older.parquet'))
+    await conn.run(`COPY (SELECT * EXCLUDE (height_m, predicted_height_m) FROM read_parquet('${projection}')) TO '${older}' (FORMAT PARQUET)`)
+    for (const statement of dropCityTablesSql()) await conn.run(statement)
+    for (const statement of loadCityTablesSql({ ...options, projectionUrl: older, hasHeight: false })) await conn.run(statement)
+    const none = (await conn.runAndReadAll(`SELECT count(height_m) + count(predicted_height_m) AS n, count(*) AS rows FROM ${TREES_TABLE}`)).getRowObjects()[0]
+    expect([Number(none.n), Number(none.rows)]).toEqual([0, 4])
     await load()
   })
 

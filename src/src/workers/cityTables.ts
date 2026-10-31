@@ -91,6 +91,12 @@ export type CityTableOptions = {
   /** Parquet built before September 2026 lacks these columns. */
   hasCultivar: boolean
   hasCrownWidth: boolean
+  /**
+   * The rows' source carries `height_m` and `predicted_height_m`: the
+   * projection, or on the assembled path the predictions file, built after
+   * November 2026. Older files read null heights and size sprites as before.
+   */
+  hasHeight: boolean
 }
 
 const sqlString = (value: string) => `'${value.replace(/'/g, "''")}'`
@@ -211,7 +217,7 @@ export function windowViewSql(chunkTables: string[]): string {
  * reader.
  */
 function cityShape(options: CityTableOptions): { types: string[]; rows: (where: string) => string } {
-  const { projectionUrl, vocabUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth } = options
+  const { projectionUrl, vocabUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth, hasHeight } = options
   const clampedLat = 'LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878)'
   const n = 2 ** TILE_INDEX_ZOOM
 
@@ -222,6 +228,8 @@ function cityShape(options: CityTableOptions): { types: string[]; rows: (where: 
   let displayName: string
   let formExpr: string
   let predictedWidth: string
+  let height: string
+  let predictedHeight: string
   let joins: string
   if (projectionUrl) {
     source = (where) => `SELECT
@@ -236,6 +244,7 @@ function cityShape(options: CityTableOptions): { types: string[]; rows: (where: 
         cultivar,
         crown_width_m,
         predicted_crown_width_m,
+        ${hasHeight ? 'height_m, predicted_height_m,' : ''}
         latitude,
         longitude,
         diameter_at_breast_height,
@@ -245,17 +254,20 @@ function cityShape(options: CityTableOptions): { types: string[]; rows: (where: 
     displayName = 't.display_name'
     formExpr = 't.tree_form'
     predictedWidth = 'CAST(t.predicted_crown_width_m AS FLOAT)'
+    height = hasHeight ? 'CAST(t.height_m AS FLOAT)' : 'CAST(NULL AS FLOAT)'
+    predictedHeight = hasHeight ? 'CAST(t.predicted_height_m AS FLOAT)' : 'CAST(NULL AS FLOAT)'
     joins = ''
   } else {
     const dedupFilter = hasDedupFlag ? 'AND NOT COALESCE(is_duplicate, false)' : ''
     const cultivarColumn = hasCultivar ? 'cultivar' : 'CAST(NULL AS VARCHAR) AS cultivar'
     const crownWidthColumn = hasCrownWidth ? 'crown_width_m' : 'CAST(NULL AS DOUBLE) AS crown_width_m'
+    const heights = hasHeight ? ['height_m', 'predicted_height_m'] : []
     const predictionRows = predictionsUrl
       ? predictionsAreUnique
-        ? `SELECT tree_id, predicted_crown_width_m AS width
+        ? `SELECT tree_id, predicted_crown_width_m AS width${heights.map((c) => `, ${c}`).join('')}
           FROM read_parquet(${sqlString(predictionsUrl)})
           WHERE city = ${sqlString(city)}`
-        : `SELECT tree_id, max(predicted_crown_width_m) AS width
+        : `SELECT tree_id, max(predicted_crown_width_m) AS width${heights.map((c) => `, max(${c}) AS ${c}`).join('')}
           FROM read_parquet(${sqlString(predictionsUrl)})
           WHERE city = ${sqlString(city)}
           GROUP BY tree_id`
@@ -290,6 +302,8 @@ function cityShape(options: CityTableOptions): { types: string[]; rows: (where: 
     // a species; that is worth an icon even with no enrichment row.
     formExpr = `COALESCE(se.tree_form, ${sentinelTreeFormSql('t.species')}, 'default')`
     predictedWidth = predictionsUrl ? 'CAST(p.width AS FLOAT)' : 'CAST(NULL AS FLOAT)'
+    height = predictionsUrl && hasHeight ? 'CAST(p.height_m AS FLOAT)' : 'CAST(NULL AS FLOAT)'
+    predictedHeight = predictionsUrl && hasHeight ? 'CAST(p.predicted_height_m AS FLOAT)' : 'CAST(NULL AS FLOAT)'
     joins = `LEFT JOIN species_enrichment se
       ON t.species = se.species
     ${predictionRows ? `LEFT JOIN (${predictionRows}) p ON t.tree_id = p.tree_id` : ''}`
@@ -338,6 +352,8 @@ function cityShape(options: CityTableOptions): { types: string[]; rows: (where: 
       CAST(t.cultivar AS ${CITY_ENUM_TYPES.cultivar}) AS cultivar,
       t.crown_width_m,
       ${predictedWidth} AS predicted_crown_width_m,
+      ${height} AS height_m,
+      ${predictedHeight} AS predicted_height_m,
       t.latitude,
       t.longitude,
       t.diameter_at_breast_height,

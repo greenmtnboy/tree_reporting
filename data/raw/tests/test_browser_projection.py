@@ -160,14 +160,15 @@ def fixture_files(tmp_path_factory):
         """
         CREATE TABLE predictions (
             tree_id VARCHAR, city VARCHAR, predicted_crown_width_m DOUBLE,
+            predicted_height_m FLOAT, height_m FLOAT,
             prediction_inputs_published_through TIMESTAMPTZ
         )
         """
     )
     conn.executemany(
-        "INSERT INTO predictions VALUES (?, ?, ?, TIMESTAMPTZ '2026-10-01 06:00:00+00')",
+        "INSERT INTO predictions VALUES (?, ?, ?, ?, ?, TIMESTAMPTZ '2026-10-01 06:00:00+00')",
         [
-            (tree_id, city, 4.5 if dbh else None)
+            (tree_id, city, 4.5 if dbh else None, 11.0 if dbh else None, 13.5 if tree_id == "sf-1" else None)
             for tree_id, city, _, _, dbh, predicted in FIXTURE_TREES
             if predicted
         ],
@@ -214,8 +215,8 @@ def rows(fixture_files) -> list[dict]:
         select
             tree_id, city, data_source, species, cultivar, tree_name, display_name,
             browser_tree_form, plant_date, diameter_at_breast_height, crown_width_m,
-            predicted_crown_width_m, latitude, longitude, submission_photo_url,
-            prediction_inputs_published_through
+            predicted_crown_width_m, height_m, predicted_height_m, latitude, longitude,
+            submission_photo_url, prediction_inputs_published_through
         where city = 'USSFO';
         """,
     )
@@ -295,6 +296,16 @@ def test_the_prediction_is_folded_in(rows):
     assert trees["sf-1"]["predicted_crown_width_m"] == pytest.approx(4.5)
     assert trees["sf-3"]["predicted_crown_width_m"] is None, "a prediction row with nothing to size from"
     assert trees["sf-1"]["prediction_inputs_published_through"] is not None
+
+
+def test_heights_are_folded_in(rows):
+    """Measured and predicted, side by side, from the predictions file."""
+    trees = by_id(rows)
+    assert trees["sf-1"]["height_m"] == pytest.approx(13.5)
+    assert trees["sf-1"]["predicted_height_m"] == pytest.approx(11.0)
+    assert trees["sf-2"]["height_m"] is None
+    assert trees["sf-3"]["predicted_height_m"] is None
+    assert trees["sf-4"]["height_m"] is None and trees["sf-4"]["predicted_height_m"] is None, "no prediction row"
 
 
 # --- The vocabulary ------------------------------------------------------------
