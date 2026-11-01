@@ -60,6 +60,23 @@ a true answer for a genus that stays small whatever its stem (Malus: r2
 0.02, 9-11 m from 10 to 60 cm), and an r2 floor sent it to the angiosperm
 fit, which calls a 30 cm crabapple 13 m.
 
+The gates
+---------
+A LIDAR height is the height of whatever crown is over the tree's point, so
+some of the survey's heights belong to another tree, and a fit on them
+learns the wrong tree. tree_predictions.preql refuses two kinds before the
+map draws them, and the fit leaves the same two out:
+
+* shaded: the crown is wider than SHADED_CROWN_RATIO times the radius the
+  crown model predicts from the stem (the published `predicted_crown_width_m`;
+  needs the city parquet's `height_crown_radius_m`). Dropped before fitting.
+* out of band: more than BAND_SIGMAS standard deviations of the log
+  residual from the fit the tree's genus row carries, either way. Dropped
+  and refitted until a round drops nothing, so the outliers do not widen
+  the band that judges them; each row's band is written to the CSV as
+  `gate_low` / `gate_high`, multipliers on the bias-corrected prediction
+  the model publishes.
+
 What this model is not
 ----------------------
 * Global. Every height today is from one metro, one climate and one
@@ -68,8 +85,9 @@ What this model is not
   estimate, and the `cities` column says which cities stand behind each
   fit. Each new LIDAR city widens it: add it to `HEIGHT_CITIES` and refit.
 * Free of the survey's own limits. A crown the segmentation merged lends its
-  tallest point to every tree under it, which pushes small trees up a few
-  metres; a tree planted since the survey is absent from the fit.
+  tallest point to every tree under it; the shading gate catches the trees
+  far smaller than their crown, not the ones a few metres short of it. A
+  tree planted since the survey is absent from the fit.
 """
 
 from __future__ import annotations
@@ -91,6 +109,7 @@ END = "# END height_fallbacks\n"
 
 TREES_BASE_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees"
 ENRICHMENT_URL = f"{TREES_BASE_URL}/tree_enrichment_v2.parquet"
+PREDICTIONS_URL = f"{TREES_BASE_URL}/tree_predictions_v2.parquet"
 
 # The cities whose published parquet carries a LIDAR `height_m`; the same set
 # as the city models importing tree_height.preql (test_tree_height.py).
@@ -104,6 +123,14 @@ B_RANGE = (0.01, 1.0)
 MIN_FITTED_DBH_MAX_CM = 30.0  # a fit made on saplings alone would clamp every mature tree to a sapling's height
 DBH_MIN_CM = 2.5  # one inch: below it a "diameter" is a placeholder
 DBH_MAX_INCHES = 200.0  # shared.ingest.DBH_MAX_INCHES
+
+# tree_predictions.preql's `shaded_crown_ratio` (test_tree_predictions.py pins
+# that they agree): a crown wider than this times the stem's predicted crown
+# radius is a neighbour's.
+SHADED_CROWN_RATIO = 3.0
+# The band, in standard deviations of the log residual.
+BAND_SIGMAS = 3.0
+MAX_BAND_ROUNDS = 20
 
 CSV_COLUMNS = [
     "level",           # genus | division | global
@@ -119,6 +146,8 @@ CSV_COLUMNS = [
     "dbh_min_cm",
     "dbh_max_cm",
     "scale",           # exp(ln_a + sigma^2/2): height_m = scale * dbh_cm ** b
+    "gate_low",        # exp(-BAND_SIGMAS * sigma - sigma^2/2): the band's floor, as a multiple of the prediction
+    "gate_high",       # exp(BAND_SIGMAS * sigma - sigma^2/2): its ceiling
 ]
 
 # `crown_fallback_class` in tree_predictions.preql, which decides which
@@ -154,7 +183,7 @@ def city_parquet_url(code: str) -> str:
     return f"{TREES_BASE_URL}/{code.lower()}_tree_info_v2.parquet"
 
 
-def load(conn: duckdb.DuckDBPyConnection, parquets: list[str], enrichment: str) -> None:
+def load(conn: duckdb.DuckDBPyConnection, parquets: list[str], enrichment: str, predictions: str) -> None:
     conn.execute("INSTALL httpfs; LOAD httpfs")
     files = ", ".join(f"'{p}'" for p in parquets)
     modelled = " OR ".join(f"t.data_source LIKE '{pattern}'" for pattern in MODELLED_DIAMETER_SOURCES)
@@ -162,9 +191,11 @@ def load(conn: duckdb.DuckDBPyConnection, parquets: list[str], enrichment: str) 
         f"""
         CREATE TABLE usable AS
         SELECT t.city, t.species, e.genus, {CLASS_SQL} AS division,
-               ln(t.diameter_at_breast_height * 2.54) AS x, ln(t.height_m) AS y
+               ln(t.diameter_at_breast_height * 2.54) AS x, ln(t.height_m) AS y,
+               coalesce(t.height_crown_radius_m > {SHADED_CROWN_RATIO} * p.predicted_crown_width_m / 2, false) AS shaded
         FROM read_parquet([{files}]) t
         LEFT JOIN read_parquet('{enrichment}') e ON e.species = t.species
+        LEFT JOIN read_parquet('{predictions}') p ON p.tree_id = t.tree_id
         WHERE t.height_m > 0
           AND t.diameter_at_breast_height * 2.54 >= {DBH_MIN_CM}
           AND t.diameter_at_breast_height <= {DBH_MAX_INCHES}
@@ -172,6 +203,9 @@ def load(conn: duckdb.DuckDBPyConnection, parquets: list[str], enrichment: str) 
         """
     )
     conn.execute("DELETE FROM usable WHERE division = 'none'")
+    shaded = conn.execute("SELECT count(*) FILTER (WHERE shaded), count(*) FROM usable").fetchone()
+    print(f"shaded: {shaded[0]:,} of {shaded[1]:,} dropped before fitting", file=sys.stderr)
+    conn.execute("DELETE FROM usable WHERE shaded")
 
 
 def passes_gate(row: dict) -> bool:
@@ -190,8 +224,56 @@ def fits(conn: duckdb.DuckDBPyConnection, group: str, extra: str = "") -> dict[s
 
 def with_scale(row: dict) -> dict:
     out = dict(row)
-    out["scale"] = math.exp(row["ln_a"] + row["sigma"] ** 2 / 2)
+    sigma = row["sigma"]
+    out["scale"] = math.exp(row["ln_a"] + sigma ** 2 / 2)
+    out["gate_low"] = math.exp(-BAND_SIGMAS * sigma - sigma ** 2 / 2)
+    out["gate_high"] = math.exp(BAND_SIGMAS * sigma - sigma ** 2 / 2)
     return out
+
+
+def drop_out_of_band(conn: duckdb.DuckDBPyConnection, rows: list[dict]) -> int:
+    """Drop the usable rows outside their applied fit's band; how many went.
+
+    A tree is judged by the fit tree_predictions.preql would give it: its
+    genus row, else its division's, else the global one, with the diameter
+    clamped as the model clamps it.
+    """
+    conn.execute("DROP TABLE IF EXISTS applied")
+    conn.execute("CREATE TABLE applied (level VARCHAR, taxon VARCHAR, ln_a DOUBLE, b DOUBLE, sigma DOUBLE, dbh_max_cm DOUBLE)")
+    conn.executemany(
+        "INSERT INTO applied VALUES (?, ?, ?, ?, ?, ?)",
+        [(r["level"], r["taxon"], r["ln_a"], r["b"], r["sigma"], r["dbh_max_cm"]) for r in rows],
+    )
+    before = conn.execute("SELECT count(*) FROM usable").fetchone()[0]
+    conn.execute(
+        f"""
+        DELETE FROM usable WHERE rowid IN (
+            SELECT u.rowid
+            FROM usable u
+            LEFT JOIN applied g ON g.level = 'genus' AND g.taxon = u.genus
+            LEFT JOIN applied d ON d.level = 'division' AND d.taxon = u.division
+            CROSS JOIN (SELECT * FROM applied WHERE level = 'global') a
+            WHERE abs(
+                u.y - coalesce(g.ln_a, d.ln_a, a.ln_a)
+                - coalesce(g.b, d.b, a.b) * least(greatest(u.x, 0), ln(coalesce(g.dbh_max_cm, d.dbh_max_cm, a.dbh_max_cm)))
+            ) > {BAND_SIGMAS} * coalesce(g.sigma, d.sigma, a.sigma)
+        )
+        """
+    )
+    return before - conn.execute("SELECT count(*) FROM usable").fetchone()[0]
+
+
+def fit_with_band(conn: duckdb.DuckDBPyConnection) -> list[dict]:
+    """Fit, drop what falls outside the band, refit, until a round drops nothing."""
+    total = 0
+    for _ in range(MAX_BAND_ROUNDS):
+        rows = build_rows(conn)
+        dropped = drop_out_of_band(conn, rows)
+        total += dropped
+        if dropped == 0:
+            print(f"out of band: {total:,} dropped", file=sys.stderr)
+            return rows
+    raise RuntimeError(f"the band did not settle in {MAX_BAND_ROUNDS} rounds")
 
 
 def build_rows(conn: duckdb.DuckDBPyConnection) -> list[dict]:
@@ -285,6 +367,8 @@ def render_block(rows: list[dict[str, str]]) -> str:
         lines.append(f"const {label}_height_b <- {float(row['b']):.6g};\n")
         lines.append(f"const {label}_height_n <- {int(row['n'])};\n")
         lines.append(f"const {label}_height_dbh_max_cm <- {float(row['dbh_max_cm']):.6g};\n")
+        lines.append(f"const {label}_height_gate_low <- {float(row['gate_low']):.6g};\n")
+        lines.append(f"const {label}_height_gate_high <- {float(row['gate_high']):.6g};\n")
     lines.append(END)
     return "".join(lines)
 
@@ -325,6 +409,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="exit 1 if the model's fallback block disagrees with the CSV")
     parser.add_argument("--parquet", action="append", help="a height city's parquet to fit on, instead of the published ones (repeatable; a local path works)")
     parser.add_argument("--enrichment", default=ENRICHMENT_URL, help="the enrichment parquet to take genus and form from")
+    parser.add_argument("--predictions", default=PREDICTIONS_URL, help="the predictions parquet to take predicted_crown_width_m from")
     args = parser.parse_args()
 
     if args.check:
@@ -339,8 +424,8 @@ def main() -> int:
         parser.error("one of --write or --check is required")
 
     conn = duckdb.connect()
-    load(conn, args.parquet or [city_parquet_url(code) for code in HEIGHT_CITIES], args.enrichment)
-    rows = build_rows(conn)
+    load(conn, args.parquet or [city_parquet_url(code) for code in HEIGHT_CITIES], args.enrichment, args.predictions)
+    rows = fit_with_band(conn)
     write_csv(rows)
     text = MODEL.read_text(encoding="utf-8")
     MODEL.write_text(splice_block(text, render_block(read_csv_rows())), encoding="utf-8")

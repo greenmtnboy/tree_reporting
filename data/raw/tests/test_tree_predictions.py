@@ -470,13 +470,18 @@ def predictions(tmp_path_factory) -> list[dict]:
     )
     # The published LIDAR heights: a city parquet holds a fraction of the
     # rollup's trees, and a tree it lacks keeps its row with a null height.
+    # Each 12" tree below is one gate's case (test_the_height_gates).
     conn.execute(
         """
         CREATE TABLE heights AS SELECT * FROM (VALUES
-            ('t-acer-30', 14.5::FLOAT),
-            ('t-palm',    9.0::FLOAT),
-            ('t-elsewhere', 20.0::FLOAT)
-        ) AS t(tree_id, height_m)
+            ('t-acer-30',   14.5::FLOAT,  4.0::FLOAT),  -- its own crown, a plausible height
+            ('t-palm',       9.0::FLOAT,  3.0::FLOAT),  -- no height model to check against
+            ('t-new',       12.0::FLOAT, 15.0::FLOAT),  -- under a crown five times its own
+            ('t-unknown',   45.0::FLOAT,  3.0::FLOAT),  -- its own crown, far too tall
+            ('t-conifer',    2.0::FLOAT,  2.0::FLOAT),  -- its own crown, far too short
+            ('t-aged',      40.0::FLOAT, 15.0::FLOAT),  -- a diameter from age, not a measured stem
+            ('t-elsewhere', 20.0::FLOAT,  3.0::FLOAT)
+        ) AS t(tree_id, height_m, height_crown_radius_m)
         """
     )
     rollup = tmp / "full_tree_info.parquet"
@@ -498,7 +503,8 @@ def predictions(tmp_path_factory) -> list[dict]:
             tree_id, city, genus, dbh_cm, age_years, predicted_dbh_cm,
             dbh_model_level, dbh_model_taxon, dbh_model_n, crown_dbh_source,
             predicted_crown_width_m, crown_model_level, crown_model_taxon, crown_model_n,
-            local_tree_density_per_ha, predicted_height_m, height_m, predicted_age_years
+            local_tree_density_per_ha, predicted_height_m, height_m, predicted_age_years,
+            height_crown_radius_m, height_check, accepted_height_m
         where tree_id is not null;
         """
     )
@@ -742,5 +748,40 @@ def test_an_observed_height_is_carried_beside_the_prediction(predictions):
     assert got["t-acer-30"]["height_m"] == pytest.approx(14.5)
     assert got["t-acer-30"]["predicted_height_m"] > 0, "the prediction is published even where a height was measured"
     assert got["t-palm"]["height_m"] == pytest.approx(9.0), "a measured palm keeps its measurement"
-    assert got["t-new"]["height_m"] is None
+    assert got["t-acer-nodbh"]["height_m"] is None
     assert "t-elsewhere" not in got, "a height row with no rollup tree is not a prediction row"
+
+
+def test_the_height_gates(predictions):
+    """Shaded and out-of-band heights are kept as height_m and not drawn."""
+    got = by_id(predictions)
+    checks = {tree: got[tree]["height_check"] for tree in ("t-acer-30", "t-palm", "t-new", "t-unknown", "t-conifer", "t-aged")}
+    assert checks == {
+        "t-acer-30": "accepted",
+        "t-palm": "unchecked",
+        "t-new": "shaded",
+        "t-unknown": "out_of_band",
+        "t-conifer": "out_of_band",
+        "t-aged": "unchecked",
+    }
+    for tree, check in checks.items():
+        accepted = got[tree]["accepted_height_m"]
+        if check in ("accepted", "unchecked"):
+            assert accepted == pytest.approx(got[tree]["height_m"]), tree
+        else:
+            assert accepted is None and got[tree]["height_m"] is not None, tree
+    assert got["t-acer-nodbh"]["height_check"] is None and got["t-acer-nodbh"]["accepted_height_m"] is None
+
+
+def test_the_shading_ratio_is_the_fits():
+    """The fit leaves out the trees the model calls shaded, by the same ratio."""
+    consts = dict(re.findall(r"^const (\w+) <- ([-\d.]+);", MODEL.read_text(encoding="utf-8"), re.M))
+    assert float(consts["shaded_crown_ratio"]) == height_fit.SHADED_CROWN_RATIO
+
+
+def test_the_height_band_brackets_the_prediction(height_rows):
+    for r in height_rows:
+        sigma = float(r["sigma"])
+        assert float(r["gate_low"]) == pytest.approx(math.exp(-height_fit.BAND_SIGMAS * sigma - sigma ** 2 / 2), rel=1e-4), r
+        assert float(r["gate_high"]) == pytest.approx(math.exp(height_fit.BAND_SIGMAS * sigma - sigma ** 2 / 2), rel=1e-4), r
+        assert float(r["gate_low"]) < 1 < float(r["gate_high"]), r

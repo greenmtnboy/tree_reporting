@@ -92,9 +92,10 @@ export type CityTableOptions = {
   hasCultivar: boolean
   hasCrownWidth: boolean
   /**
-   * The rows' source carries `height_m` and `predicted_height_m`: the
-   * projection, or on the assembled path the predictions file, built after
-   * November 2026. Older files read null heights and size sprites as before.
+   * The rows' source carries its heights: the projection's `height_m` and
+   * `predicted_height_m`, or on the assembled path the predictions file's
+   * `accepted_height_m` and `predicted_height_m`, built after November 2026.
+   * Older files read null heights and size sprites as before.
    */
   hasHeight: boolean
 }
@@ -261,13 +262,17 @@ function cityShape(options: CityTableOptions): { types: string[]; rows: (where: 
     const dedupFilter = hasDedupFlag ? 'AND NOT COALESCE(is_duplicate, false)' : ''
     const cultivarColumn = hasCultivar ? 'cultivar' : 'CAST(NULL AS VARCHAR) AS cultivar'
     const crownWidthColumn = hasCrownWidth ? 'crown_width_m' : 'CAST(NULL AS DOUBLE) AS crown_width_m'
-    const heights = hasHeight ? ['height_m', 'predicted_height_m'] : []
+    // The predictions file's `height_m` is what the survey said; the map
+    // draws `accepted_height_m`, the survey's height where it passed the
+    // gates in tree_predictions.preql (the projection already carries it as
+    // its `height_m`).
+    const heights: [string, string][] = hasHeight ? [['accepted_height_m', 'height_m'], ['predicted_height_m', 'predicted_height_m']] : []
     const predictionRows = predictionsUrl
       ? predictionsAreUnique
-        ? `SELECT tree_id, predicted_crown_width_m AS width${heights.map((c) => `, ${c}`).join('')}
+        ? `SELECT tree_id, predicted_crown_width_m AS width${heights.map(([column, as]) => `, ${column} AS ${as}`).join('')}
           FROM read_parquet(${sqlString(predictionsUrl)})
           WHERE city = ${sqlString(city)}`
-        : `SELECT tree_id, max(predicted_crown_width_m) AS width${heights.map((c) => `, max(${c}) AS ${c}`).join('')}
+        : `SELECT tree_id, max(predicted_crown_width_m) AS width${heights.map(([column, as]) => `, max(${column}) AS ${as}`).join('')}
           FROM read_parquet(${sqlString(predictionsUrl)})
           WHERE city = ${sqlString(city)}
           GROUP BY tree_id`
