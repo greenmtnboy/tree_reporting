@@ -4,6 +4,9 @@ import TREE_COMMON_MODEL from '../../data/raw/tree_common.preql?raw'
 import CORE_MODEL from '../../data/raw/core.preql?raw'
 import ECOREGION_COMMON_MODEL from '../../data/raw/ecoregion_common.preql?raw'
 import ECOREGION_INFO_MODEL from '../../data/raw/ecoregion_info.preql?raw'
+// Each city's own ecoregion, the dimension's second role; see
+// data/raw/city_ecoregion.preql.
+import CITY_ECOREGION_MODEL from '../../data/raw/city_ecoregion.preql?raw'
 import LANDMARK_COMMON_MODEL from '../../data/raw/landmark_common.preql?raw'
 import LANDMARK_INFO_MODEL from '../../data/raw/landmark_info.preql?raw'
 // Imported by every city tree model, so the resolver needs it even though it
@@ -42,6 +45,7 @@ export const ALL_MODEL_SOURCES = [
   { alias: 'core', contents: CORE_MODEL },
   { alias: 'ecoregion_common', contents: ECOREGION_COMMON_MODEL },
   { alias: 'ecoregion_info', contents: ECOREGION_INFO_MODEL },
+  { alias: 'city_ecoregion', contents: CITY_ECOREGION_MODEL },
   { alias: 'landmark_common', contents: LANDMARK_COMMON_MODEL },
   { alias: 'landmark_info', contents: LANDMARK_INFO_MODEL },
   { alias: 'community_tree_info', contents: COMMUNITY_TREE_INFO_MODEL },

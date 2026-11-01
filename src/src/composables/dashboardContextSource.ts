@@ -340,16 +340,16 @@ export function buildDashboardContextSource(city: CityCode | null): DashboardCon
     // re-summed from its ~15k rows instead of reading the city's tree file.
     // A query it cannot answer still plans against the trees.
     //
-    // It is imported before `ecoregion_info`, and the order matters: the
-    // summary re-imports `core`, whose `property city.ecoregion_id` redeclares
-    // the ecoregion key, and arriving after `ecoregion_info` that unbinds
-    // ecoregion_id from it, so every nativeness chart fails to plan. That is a
-    // pytrilogy bug (trilogy-data/pytrilogy#817); keep this order until it is
-    // fixed.
+    // The ecoregion dimension is here in two roles. `ecoregion_info` binds the
+    // plain `ecoregion_id`, `biome` and `realm`, which `tree_enrichment` merges
+    // a species' native ecoregions into. `city_ecoregion` imports it again as
+    // `home`, the city's own ecoregion. The buckets below compare the first to
+    // the `active_city_*` constants, which hold the second.
     contents: `import tree_enrichment;
 import tree_info;
 import tree_rollup_source;
 import ecoregion_info;
+import city_ecoregion;
 import std.display;
 
 constant active_city <- '${escapedCity}';

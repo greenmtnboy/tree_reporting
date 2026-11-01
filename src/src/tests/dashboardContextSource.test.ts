@@ -8,12 +8,12 @@ import {
   getCityEcoregionId,
 } from '../composables/dashboardContextSource'
 
-// The city ecoregions the data model assigns, from `city.ecoregion_id` in
-// data/raw/core.preql.
+// The city ecoregions the data model assigns: the rows of the
+// `city_home_ecoregion` datasource in data/raw/city_ecoregion.preql.
 const CORE_ECOREGIONS = Object.fromEntries(
   [
-    ...readFileSync(new URL('../../../data/raw/core.preql', import.meta.url), 'utf-8').matchAll(
-      /when city = '(\w+)' then (\d+)/g,
+    ...readFileSync(new URL('../../../data/raw/city_ecoregion.preql', import.meta.url), 'utf-8').matchAll(
+      /\('(\w+)', (\d+)\)/g,
     ),
   ].map(([, city, id]) => [city, Number(id)]),
 )

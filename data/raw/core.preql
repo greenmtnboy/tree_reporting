@@ -1,5 +1,3 @@
-import ecoregion_common;
-
 key city enum<string>['USSFO', 'USNYC', 'USBOS', 'FRPAR', 'USBTV', 'CAVAN', 'DEBER', 'NLAMS', 'GBLON', 'AUMEL', 'ARBUE', 'USLAX', 'USWAS', 'USTEM', 'GRATH', 'GRMLO', 'GRSAN', 'USDEN', 'CACAL', 'CAEDM', 'CAWPG', 'CATOR', 'CAMTL', 'CAQUE', 'CALON', 'CAHFX', 'CAKGN', 'CALET', 'CAVIC', 'CAKEL', 'CANWE', 'CAMIS', 'CAOTT', 'CABUR', 'CAAJX', 'CAMON', 'JPTYO', 'COBOG', 'TWTPE', 'DKCPH', 'FIHEL', 'USSTO']; # UN/LOCODE-style code for the source city
 
 # The dataset each tree row came from is modelled as a *per-city* enum key
@@ -12,50 +10,6 @@ key city enum<string>['USSFO', 'USNYC', 'USBOS', 'FRPAR', 'USBTV', 'CAVAN', 'DEB
 # Parquet still exposes one uniformly named column. The full value list lives in
 # DATA_SOURCES in data/raw/shared/ingest.py; data/raw/tests/test_data_sources.py
 # asserts the two stay in sync.
-property city.ecoregion_id <- case
-    when city = 'USSFO' then 423
-    when city = 'USNYC' then 339
-    when city = 'USBOS' then 339
-    when city = 'FRPAR' then 664
-    when city = 'USBTV' then 334
-    when city = 'CAVAN' then 364
-    when city = 'DEBER' then 654
-    when city = 'NLAMS' then 664
-    when city = 'GBLON' then 663
-    when city = 'AUMEL' then 176
-    when city = 'ARBUE' then 576
-    when city = 'USLAX' then 422
-    when city = 'USWAS' then 399
-    when city = 'USTEM' then 435
-    when city = 'GRATH' then 785
-    when city = 'GRMLO' then 785
-    when city = 'GRSAN' then 785
-    when city = 'USDEN' then 402
-    when city = 'CACAL' then 394
-    when city = 'CAEDM' then 386
-    when city = 'CAWPG' then 397
-    when city = 'CATOR' then 342
-    when city = 'CAMTL' then 334
-    when city = 'CAQUE' then 334
-    when city = 'CALON' then 334
-    when city = 'CAHFX' then 338
-    when city = 'CAKGN' then 334
-    when city = 'CALET' then 396
-    when city = 'CAVIC' then 364
-    when city = 'CAKEL' then 362
-    when city = 'CANWE' then 364
-    when city = 'CAMIS' then 342
-    when city = 'CAOTT' then 334
-    when city = 'CABUR' then 342
-    when city = 'CAAJX' then 342
-    when city = 'CAMON' then 335
-    when city = 'JPTYO' then 682
-    when city = 'COBOG' then 477
-    when city = 'TWTPE' then 283
-    when city = 'DKCPH' then 647
-    when city = 'FIHEL' then 717
-    when city = 'USSTO' then 387
-end; # mapped from RESOLVE ecoregion at each city centroid
 
 # The data_source / submission_photo_url additions did not need a bump: the
 # deployed app selects a strict subset of the new columns, so an old app reading
