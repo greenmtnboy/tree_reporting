@@ -1,0 +1,14 @@
+{
+  "projection": {
+    "name": "local equirectangular",
+    "central_longitude": -71.12645079968507,
+    "central_latitude": 42.31351868848043,
+    "units": "km"
+  },
+  "projected_bounds_km": [
+    -9.782205602487348,
+    13.764492379718629,
+    -9.259757627626568,
+    15.082294650838831
+  ]
+}

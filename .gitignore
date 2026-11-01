@@ -42,6 +42,12 @@ data/raw/tools/species_audit_cache.json
 .vscode/settings.json
 
 scripts/*.png
+# Treelines poster exports and their machine-local provenance sidecars.
+scripts/archive/
+scripts/boston_followups/
+scripts/*_renders/
+scripts/boston_treelines_*.json
+scripts/usbos_*.json
 
 # Generated imagery/model artifacts. The training scaffold and its configs are
 # committed; downloaded rasters, materialized chips, checkpoints, and run logs
