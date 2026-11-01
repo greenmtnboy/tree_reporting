@@ -354,16 +354,18 @@ schedule = "0 0 6 * * *"
 timeout_seconds = 900
 memory_mb = 2048
 
-# Tree-level predictions: crown width today (from a measured diameter, or
-# from one predicted from the tree's age), height and age reserved.
+# Tree-level predictions: crown width (from a measured diameter, or from one
+# predicted from the tree's age) and height; age reserved. Also publishes
+# the age and height fits it makes on every build (allometry_genus_fits,
+# allometry_fallback_fits).
 # Consumes the rollup AND the enrichment table, both reached through their
 # `_source.preql` root views (the same name trick as above, twice), so the
-# platform orders this job after both in the same tick. It reads two
-# published parquets and two committed CSVs of coefficients, runs no script
-# but its freshness probe, and cannot reach a portal or the LLM.
+# platform orders this job after both in the same tick. It reads the
+# published parquets and Tallo's committed crown CSV, runs no script but its
+# freshness probe, and cannot reach a portal or the LLM.
 #
-# 4 GiB because the whole rollup (10.5M rows) is read twice -- once for the
-# rows, once for the density grid -- and grouped in memory.
+# 4 GiB because the whole rollup (10.5M rows) is read several times -- the
+# rows, the density grid, the fits -- and grouped in memory.
 [[cloud.job]]
 key = "refresh-predictions"
 name = "urban-tree-data-predictions"

@@ -392,14 +392,16 @@ Publishes `tree_predictions_v{n}.parquet`, one row per rollup tree: a
 predicted crown width (a genus-level power law fitted on Tallo, committed as
 `crown_width_coefficients.csv`, refit with `tools/crown_allometry_fit.py
 --write --coverage`), a diameter predicted from planting age where the tree
-has a date and no diameter (`dbh_age_coefficients.csv`, refit with
-`tools/dbh_age_fit.py --write`), a predicted height (a genus-level power
-law fitted on the map's own LIDAR-heighted trees, `tree_height_coefficients.csv`,
-refit with `tools/height_allometry_fit.py --write`), the observed LIDAR
+has a date and no diameter, a predicted height (a genus-level power law
+fitted on the map's own LIDAR-heighted trees), the observed LIDAR
 `height_m` carried beside it (`tree_height_source.preql`, because the rollup
 cannot carry a column only some cities have), a stand-density covariate, and
 a null placeholder for age. Each crown and diameter prediction records the
-model level (genus, family, division, global) and sample size. The crown
+model level (genus, family, division, global) and sample size. The age and
+height models are fitted in the model itself, on every build, on the trees
+it reads, and the fits are published beside the predictions as
+`allometry_genus_fits_v{n}.parquet` (one row per genus) and
+`allometry_fallback_fits_v{n}.parquet` (one per fallback class). The crown
 model is not urban-calibrated and not density-adjusted; both are left to
 curation. The height model is one metro's street trees until a second LIDAR
 city is added. The map reads the crown width and both heights from the
