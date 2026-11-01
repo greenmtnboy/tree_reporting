@@ -24,6 +24,9 @@ import TREE_HEIGHT_MODEL from '../../data/raw/tree_height.preql?raw'
 // planner can answer a per-species count without the city's tree file; see
 // data/raw/tree_rollups.preql.
 import TREE_ROLLUP_SOURCE_MODEL from '../../data/raw/tree_rollup_source.preql?raw'
+// The tree-level buckets the finer summaries are keyed on (plant year, DBH
+// class, dot-map cells); see data/raw/tree_summary_grains.preql.
+import TREE_SUMMARY_GRAINS_MODEL from '../../data/raw/tree_summary_grains.preql?raw'
 
 // Auto-discover all per-city preql files — no changes needed here when adding a city.
 // Matches data/raw/{city}/{city}_tree_info.preql and data/raw/{city}/{city}_landmarks.preql
@@ -56,6 +59,7 @@ export const ALL_MODEL_SOURCES = [
   { alias: 'tree_position', contents: TREE_POSITION_MODEL },
   { alias: 'tree_height', contents: TREE_HEIGHT_MODEL },
   { alias: 'tree_rollup_source', contents: TREE_ROLLUP_SOURCE_MODEL },
+  { alias: 'tree_summary_grains', contents: TREE_SUMMARY_GRAINS_MODEL },
   ...[...Object.entries(cityTreeModels), ...Object.entries(cityLandmarkModels)].map(
     ([path, mod]) => ({ alias: pathToAlias(path), contents: (mod as { default: string }).default })
   ),

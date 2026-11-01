@@ -1,5 +1,5 @@
-# The published dashboard summary, as a *source*: what the browser's
-# dashboard scope imports. `tree_rollups.preql` builds it.
+# The published dashboard summaries, as *sources*: what the browser's
+# dashboard scope imports. `tree_rollups.preql` builds them.
 #
 # Same two rules as full_tree_info_source.preql: the root is named like the
 # managed datasource that writes it, and it is root, so nothing that imports
@@ -7,6 +7,7 @@
 # the producer declares it; that derivation is what lets the planner answer
 # `count(tree_id)` from the summary (test_tree_rollups.py pins both).
 import tree_common;
+import tree_summary_grains;
 
 auto rollup_tree_count <- count(tree_id);
 
@@ -17,3 +18,41 @@ root datasource tree_rollup_species (
 )
 grain (city, species)
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_species_v{data_version}.parquet`;
+
+root datasource tree_rollup_year (
+    city: city,
+    species: species,
+    plant_year: plant_year,
+    rollup_tree_count: rollup_tree_count,
+)
+grain (city, species, plant_year)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_year_v{data_version}.parquet`;
+
+root datasource tree_rollup_dbh (
+    city: city,
+    species: species,
+    dbh_class: dbh_class,
+    rollup_tree_count: rollup_tree_count,
+)
+grain (city, species, dbh_class)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_dbh_v{data_version}.parquet`;
+
+root datasource tree_rollup_cell (
+    city: city,
+    species: species,
+    map_cell_latitude: map_cell_latitude,
+    map_cell_longitude: map_cell_longitude,
+    rollup_tree_count: rollup_tree_count,
+)
+grain (city, species, map_cell_latitude, map_cell_longitude)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_cell_v{data_version}.parquet`;
+
+root datasource tree_rollup_coarse_cell (
+    city: city,
+    species: species,
+    map_coarse_cell_latitude: map_coarse_cell_latitude,
+    map_coarse_cell_longitude: map_coarse_cell_longitude,
+    rollup_tree_count: rollup_tree_count,
+)
+grain (city, species, map_coarse_cell_latitude, map_coarse_cell_longitude)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_coarse_cell_v{data_version}.parquet`;

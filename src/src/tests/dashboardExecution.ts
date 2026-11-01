@@ -5,8 +5,10 @@ import {
   FIXTURE_ECOREGIONS,
   FIXTURE_SPECIES,
   FIXTURE_TREES,
+  dbhClass,
   fixtureFieldValue,
   nativeLocalityBucket,
+  plantYear,
   type FixtureTree,
 } from './dashboardFixtures'
 import { cityContext, type DashboardQueryCase, type QueryState } from './dashboardQueryCatalog'
@@ -29,7 +31,7 @@ const PARQUET_READ = /read_parquet\('([^']+)'\)/g
 
 type SeedKind = 'trees' | 'species' | 'ecoregions' | 'rollup' | 'empty'
 
-type Seed = { kind: SeedKind; city?: string }
+type Seed = { kind: SeedKind; city?: string; grain?: string }
 
 /**
  * Which fixture rows belong in the table standing in for this Parquet.
@@ -43,7 +45,8 @@ function seedFor(url: string): Seed {
   const name = url.split('/').pop() ?? url
   if (name.includes('tree_enrichment')) return { kind: 'species' }
   if (name.includes('ecoregion_info')) return { kind: 'ecoregions' }
-  if (name.includes('tree_rollup_species')) return { kind: 'rollup' }
+  const summary = /^tree_rollup_([a-z_]+)_v\d+/.exec(name)
+  if (summary) return { kind: 'rollup', grain: summary[1] }
   if (name.includes('full_tree_info')) return { kind: 'trees' }
   const perCity = /^([a-z]{5})_tree_info/.exec(name)
   if (perCity) return { kind: 'trees', city: perCity[1].toUpperCase() }
@@ -81,20 +84,46 @@ function rowsForSeed(seed: Seed): Array<Record<string, unknown>> {
     case 'ecoregions':
       return FIXTURE_ECOREGIONS as unknown as Array<Record<string, unknown>>
     case 'rollup':
-      // The (city, species) summary is the published trees grouped
-      // (data/raw/tree_rollups.preql), so it is the fixture trees grouped: a
-      // chart the planner answers from it must agree with one that counts.
-      return rollupRows()
+      // Each summary is the published trees grouped (data/raw/tree_rollups.preql),
+      // so it is the fixture trees grouped: a chart the planner answers from it
+      // must agree with one that counts.
+      return rollupRows(seed.grain ?? 'species')
     case 'empty':
       return []
   }
 }
 
-function rollupRows(): Array<Record<string, unknown>> {
-  const counts = new Map<string, { city: string; species: string; rollup_tree_count: number }>()
+/** DuckDB's round(x, digits): half away from zero. */
+function roundTo(value: number | null, digits: number): number | null {
+  if (value == null) return null
+  const scale = 10 ** digits
+  return (Math.sign(value) * Math.round(Math.abs(value) * scale)) / scale
+}
+
+/** The tree-level bucket columns each summary adds to (city, species); data/raw/tree_summary_grains.preql. */
+function summaryGrain(grain: string, tree: FixtureTree): Record<string, unknown> {
+  switch (grain) {
+    case 'species':
+      return {}
+    case 'year':
+      return { plant_year: plantYear(tree) }
+    case 'dbh':
+      return { dbh_class: dbhClass(tree) }
+    case 'cell':
+      return { map_cell_latitude: roundTo(tree.latitude, 3), map_cell_longitude: roundTo(tree.longitude, 3) }
+    case 'coarse_cell':
+      return { map_coarse_cell_latitude: roundTo(tree.latitude, 2), map_coarse_cell_longitude: roundTo(tree.longitude, 2) }
+    default:
+      throw new Error(`No fixture rows for summary grain ${grain}`)
+  }
+}
+
+function rollupRows(grain: string): Array<Record<string, unknown>> {
+  const counts = new Map<string, Record<string, unknown> & { rollup_tree_count: number }>()
   for (const tree of FIXTURE_TREES) {
-    const key = `${tree.city}|${tree.species}`
-    const row = counts.get(key) ?? { city: tree.city, species: tree.species, rollup_tree_count: 0 }
+    const bucket = summaryGrain(grain, tree)
+    const key = JSON.stringify([tree.city, tree.species, bucket])
+    const row = counts.get(key) ?? { city: tree.city, species: tree.species, ...bucket, rollup_tree_count: 0 }
     row.rollup_tree_count += 1
     counts.set(key, row)
   }
@@ -257,10 +286,17 @@ export function checkResult(
     }
   }
 
+  // One row per map cell, and every positioned tree in exactly one of them.
   if (id === 'summary:tree-dot-map' || id === 'species:tree-dot-map') {
-    const coordinates = new Set(expected.map((tree) => `${tree.latitude},${tree.longitude}`))
-    if (rows.length !== coordinates.size) {
-      return `dot map returned ${rows.length} points, fixtures say ${coordinates.size}`
+    const digits = queryCase.state.city ? 3 : 2
+    const positioned = expected.filter((tree) => tree.latitude != null && tree.longitude != null)
+    const cells = new Set(positioned.map((tree) => `${roundTo(tree.latitude, digits)},${roundTo(tree.longitude, digits)}`))
+    if (rows.length !== cells.size) {
+      return `dot map returned ${rows.length} cells, fixtures say ${cells.size}`
+    }
+    const counted = rows.reduce((sum, row) => sum + (numeric(row.tree_count) ?? 0), 0)
+    if (counted !== positioned.length) {
+      return `dot map cells hold ${counted} trees, fixtures say ${positioned.length}`
     }
   }
 
@@ -333,4 +369,7 @@ const BUCKET_CHART_FIELDS: Record<string, string> = {
   'species:sp-wildlife-value': 'wildlife_value',
   'species:sp-growth-rate': 'growth_rate',
   'species:sp-fire-risk': 'fire_risk',
+  'summary:plant-year': 'plant_year',
+  'species:sp-age-distribution': 'planted_year',
+  'species:sp-size-distribution': 'dbh_class_label',
 }

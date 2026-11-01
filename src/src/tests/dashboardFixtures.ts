@@ -331,6 +331,24 @@ export function sunExposureLabel(tree: FixtureTree): string | null {
   return null
 }
 
+/** `plant_year` in data/raw/tree_summary_grains.preql. */
+export function plantYear(tree: FixtureTree): number | null {
+  return tree.plant_date ? Number(tree.plant_date.slice(0, 4)) : null
+}
+
+/** `dbh_class` in data/raw/tree_summary_grains.preql. */
+export function dbhClass(tree: FixtureTree): number | null {
+  const dbh = tree.diameter_at_breast_height
+  if (dbh == null) return null
+  if (dbh < 6) return 1
+  if (dbh < 12) return 2
+  if (dbh < 24) return 3
+  if (dbh < 36) return 4
+  return 5
+}
+
+const DBH_CLASS_LABELS = ['Under 6"', '6–12"', '12–24"', '24–36"', 'Over 36"']
+
 function speciesField(tree: FixtureTree, field: keyof FixtureSpecies): string | null {
   const species = SPECIES_BY_NAME.get(tree.species)
   if (!species) return null
@@ -365,6 +383,15 @@ export function fixtureFieldValue(
       return lifespanBucket(tree)
     case 'sun_exposure_label':
       return sunExposureLabel(tree)
+    case 'plant_year':
+    case 'planted_year': {
+      const year = plantYear(tree)
+      return year == null ? null : String(year)
+    }
+    case 'dbh_class_label': {
+      const dbh = dbhClass(tree)
+      return dbh == null ? null : DBH_CLASS_LABELS[dbh - 1]
+    }
     default:
       throw new Error(`No fixture reference for cross-filter field ${field}`)
   }
