@@ -178,14 +178,14 @@ ORDER BY tree_count DESC;`,
     id: 'sp-city-presence-map',
     title: 'Global City Footprint',
     subtitle: 'Cities containing this taxon, sized by tree count',
+    // Each city sits at the mean position of all its trees (`tree_rollup_city`),
+    // so the map is a count by city the (city, species) summary serves.
     query: `SELECT
 city,
-avg(longitude) as city_longitude,
-avg(latitude) as city_latitude,
+city_longitude,
+city_latitude,
 count(tree_id) as tree_count
 WHERE city IS NOT NULL
-and latitude IS NOT NULL
-and longitude IS NOT NULL
 ORDER BY tree_count DESC;`,
     chartConfig: {
       chartType: 'geo-map',

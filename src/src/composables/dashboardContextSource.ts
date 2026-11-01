@@ -343,8 +343,14 @@ export function buildDashboardContextSource(city: CityCode | null): DashboardCon
     // The ecoregion dimension is here in two roles. `ecoregion_info` binds the
     // plain `ecoregion_id`, `biome` and `realm`, which `tree_enrichment` merges
     // a species' native ecoregions into. `city_ecoregion` imports it again as
-    // `home`, the city's own ecoregion. The buckets below compare the first to
-    // the `active_city_*` constants, which hold the second.
+    // `home`, the city's own ecoregion.
+    //
+    // `native_locality_bucket` tests the active city's ecoregion, biome and
+    // realm (the `active_city_*` constants) against the species' native range
+    // as lists (`species_native_range` in tree_rollup_source), not against one
+    // row per native ecoregion: a species native to two ecoregions is one
+    // bucket, its best match, so its trees are counted once, and the bucket
+    // is a species property the (city, species) summary re-sums.
     contents: `import tree_enrichment;
 import tree_info;
 import tree_rollup_source;
@@ -363,10 +369,15 @@ def is_partial_shade(x) -> x = 'partial_shade';
 def is_shade(x) -> x = 'shade';
 
 
-property native_locality_bucket <- CASE
-    WHEN ecoregion_id=active_city_ecoregion THEN 'Native'
-    WHEN biome = active_city_biome THEN 'Same biome, non-native'
-    WHEN realm = active_city_realm THEN 'Native Region, Different Biome'
+def is_active_ecoregion(x) -> x = active_city_ecoregion;
+def is_active_biome(x) -> x = active_city_biome;
+def is_active_realm(x) -> x = active_city_realm;
+
+# One bucket per species, its best match against the active city.
+property species.native_locality_bucket <- CASE
+    WHEN len(array_filter(native_ecoregions, @is_active_ecoregion)) > 0 THEN 'Native'
+    WHEN len(array_filter(native_biomes, @is_active_biome)) > 0 THEN 'Same biome, non-native'
+    WHEN len(array_filter(native_realms, @is_active_realm)) > 0 THEN 'Native Region, Different Biome'
   else 'Non-Native, Different Biome'
 end::string;
 
