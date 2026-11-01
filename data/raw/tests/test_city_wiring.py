@@ -2,7 +2,7 @@
 
 Adding a city means editing roughly twenty files across four languages, and
 the failure mode for almost every one of them is *silence*: a city missing from
-`core.preql`'s ecoregion case gets a null ecoregion, one missing from
+`city_ecoregion.preql` gets a null home ecoregion, one missing from
 `tree_info.preql`'s `latest_update_through` never marks the rollup stale, one
 missing from `cityConfig.json` simply never appears in the UI.  None of those
 raise.
@@ -117,12 +117,12 @@ def test_city_is_in_the_core_enum(code: str):
 
 @pytest.mark.parametrize("code", CITY_CODES)
 def test_city_has_an_ecoregion(code: str):
-    text = read(RAW_DIR / "core.preql")
-    assert re.search(rf"when city = '{code}' then \d+", text), (
-        f"{code} has no `ecoregion_id` branch in core.preql. Without one the "
-        f"city's trees resolve to a null ecoregion and drop out of every "
-        f"nativeness chart, silently. Look the code up at the city centroid: "
-        f"RESOLVE_Ecoregions FeatureServer, ECO_ID at that point."
+    text = read(RAW_DIR / "city_ecoregion.preql")
+    assert re.search(rf"\('{code}', \d+\)", text), (
+        f"{code} has no row in city_ecoregion.preql, so `home.biome` and "
+        f"the rest of the city's own ecoregion are null for it. Look the code "
+        f"up at the city centroid: RESOLVE_Ecoregions FeatureServer, ECO_ID at "
+        f"that point. dashboardContextSource.ts needs the same id."
     )
 
 

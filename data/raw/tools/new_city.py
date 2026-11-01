@@ -610,10 +610,12 @@ def build(args) -> Edits:
         rf"\1, '{code}']",
         what="city enum", marker=f"'{code}'",
     )
+
+    # --- city_ecoregion.preql ---------------------------------------------
     e.sub_once(
-        core, r"(\n)(end; # mapped from RESOLVE)",
-        rf"\1    when city = '{code}' then {args.ecoregion}\n\2",
-        what="ecoregion_id", marker=f"when city = '{code}' then",
+        RAW / "city_ecoregion.preql", r"(\))(\n\) as t\(city, ecoregion_id\))",
+        rf"\1,\n    ('{code}', {args.ecoregion})\2",
+        what="city ecoregion row", marker=f"('{code}', ",
     )
 
     # --- freshness properties --------------------------------------------
