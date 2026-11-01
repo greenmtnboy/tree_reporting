@@ -85,10 +85,11 @@ def write_rows(conn, path: Path, rows, *, rename: dict[str, str] | None = None) 
         )
         """
     )
-    conn.executemany(
-        "INSERT INTO src VALUES (?, 'USSFO', ?, ?, NULL, NULL, ?, ?, ?, NULL, NULL, NULL)",
-        [(tree_id, source, species, dbh, *point) for tree_id, source, species, dbh, point in rows],
-    )
+    if rows:
+        conn.executemany(
+            "INSERT INTO src VALUES (?, 'USSFO', ?, ?, NULL, NULL, ?, ?, ?, NULL, NULL, NULL)",
+            [(tree_id, source, species, dbh, *point) for tree_id, source, species, dbh, point in rows],
+        )
     select = ", ".join(
         f"{col} AS {(rename or {}).get(col, col)}" for col in ROW_COLUMNS.split(", ")
     )
@@ -119,6 +120,7 @@ def published(tmp_path_factory) -> dict[str, dict]:
         "sf_tree_info.py": tmp / "municipal.parquet",
         "community_tree_info.py": tmp / "community.parquet",
         "satellite_tree_info.py": tmp / "satellite.parquet",
+        "predicted_tree_info.py": tmp / "predicted.parquet",
         "ussfo_osm_staging.parquet": tmp / "osm.parquet",
         "tree_modification_info.py": tmp / "modifications.parquet",
     }
@@ -131,6 +133,8 @@ def published(tmp_path_factory) -> dict[str, dict]:
     write_rows(conn, fixtures["sf_tree_info.py"], MUNICIPAL)
     write_rows(conn, fixtures["community_tree_info.py"], COMMUNITY)
     write_rows(conn, fixtures["satellite_tree_info.py"], SATELLITE)
+    # No bulk predictions: test_predicted_reconciliation.py covers what the merge does with them.
+    write_rows(conn, fixtures["predicted_tree_info.py"], [])
     write_rows(conn, fixtures["ussfo_osm_staging.parquet"], OSM)
     # No approved tree reports: the merge must publish exactly what it did before.
     write_modifications(conn, fixtures["tree_modification_info.py"], [])
@@ -154,7 +158,8 @@ def published(tmp_path_factory) -> dict[str, dict]:
     probe = (
         "(SELECT TIMESTAMPTZ '2026-01-01 00:00:00+00' AS data_updated_through, "
         "TIMESTAMPTZ '2026-01-01 00:00:00+00' AS ussfo_community_data_updated_through, "
-        "TIMESTAMPTZ '2026-01-01 00:00:00+00' AS ussfo_satellite_data_updated_through)"
+        "TIMESTAMPTZ '2026-01-01 00:00:00+00' AS ussfo_satellite_data_updated_through, "
+        "TIMESTAMPTZ '2026-01-01 00:00:00+00' AS ussfo_predicted_data_updated_through)"
     )
 
     def repoint(match: re.Match) -> str:
