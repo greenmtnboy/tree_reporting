@@ -49,8 +49,21 @@ export const SUMMARY_DASHBOARD_IMPORTS: DashboardImport[] = [
 // native ones. That was an upstream planner bug, handed off with a repro rather
 // than worked around here, and the deployed resolver has since fixed it —
 // dashboard-queries.test.ts is what would notice it coming back.
+// The dot map counts trees per map cell rather than reading every tree: about
+// 110 m for one city (a pixel or so of the card) and about 1.1 km across all
+// cities. Both are summary grains (data/raw/tree_rollups.preql), so the map is
+// a re-sum of the cell summary under any species-level filter instead of a
+// scan of the tree file.
 export const TREE_DOT_MAP_QUERY =
-  'SELECT latitude, longitude WHERE latitude IS NOT NULL AND longitude IS NOT NULL;'
+  'SELECT map_cell_latitude, map_cell_longitude, count(tree_id) as tree_count WHERE map_cell_latitude IS NOT NULL AND map_cell_longitude IS NOT NULL;'
+
+export const TREE_DOT_MAP_ALL_CITIES_QUERY =
+  'SELECT map_coarse_cell_latitude, map_coarse_cell_longitude, count(tree_id) as tree_count WHERE map_coarse_cell_latitude IS NOT NULL AND map_coarse_cell_longitude IS NOT NULL;'
+
+/** The dot map's query for a page: the fine cells for one city, coarse for all. */
+export function treeDotMapQuery(city: string | null | undefined): string {
+  return city && city !== 'ALL' ? TREE_DOT_MAP_QUERY : TREE_DOT_MAP_ALL_CITIES_QUERY
+}
 
 export const SUMMARY_KPI_CHARTS: SummaryDashboardKpi[] = [
   {
@@ -157,25 +170,25 @@ ORDER BY rank_by_count ASC;`,
     subtitle: 'Years with planting data',
     query: `import std.color;
 SELECT
-plant_date.year as plant_year,
+plant_year,
 count(tree_id) as tree_count,
 case
-when 2026 - plant_date.year < 10 then '0-9 years ago'
-when 2026 - plant_date.year < 20 then '10-19 years ago'
-when 2026 - plant_date.year < 30 then '20-29 years ago'
-when 2026 - plant_date.year < 40 then '30-39 years ago'
-when 2026 - plant_date.year < 50 then '40-49 years ago'
+when 2026 - plant_year < 10 then '0-9 years ago'
+when 2026 - plant_year < 20 then '10-19 years ago'
+when 2026 - plant_year < 30 then '20-29 years ago'
+when 2026 - plant_year < 40 then '30-39 years ago'
+when 2026 - plant_year < 50 then '40-49 years ago'
 else '50+ years ago'
 end as planting_window,
 case
-when 2026 - plant_date.year < 10 then '#A7E3B2'
-when 2026 - plant_date.year < 20 then '#8DCEA3'
-when 2026 - plant_date.year < 30 then '#6BAF92'
-when 2026 - plant_date.year < 40 then '#4E9872'
-when 2026 - plant_date.year < 50 then '#2F7D4F'
+when 2026 - plant_year < 10 then '#A7E3B2'
+when 2026 - plant_year < 20 then '#8DCEA3'
+when 2026 - plant_year < 30 then '#6BAF92'
+when 2026 - plant_year < 40 then '#4E9872'
+when 2026 - plant_year < 50 then '#2F7D4F'
 else '#1F5A34'
 end::string::hex as color
-WHERE plant_date IS NOT NULL and plant_year>1800 and plant_year<2030
+WHERE plant_year > 1800 and plant_year < 2030
 ORDER BY plant_year ASC;`,
     chartConfig: {
       chartType: 'bar',

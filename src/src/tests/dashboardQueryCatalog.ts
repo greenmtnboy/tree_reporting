@@ -9,7 +9,7 @@ import {
   SUMMARY_CHARTS,
   SUMMARY_DASHBOARD_IMPORTS,
   SUMMARY_KPI_CHARTS,
-  TREE_DOT_MAP_QUERY,
+  treeDotMapQuery,
   getSummaryBaseFilters,
 } from '../composables/summaryDashboardConfig'
 import {
@@ -92,7 +92,7 @@ export function summaryQueryCases(city: CityCode | null): DashboardQueryCase[] {
   const state = baseState(city)
 
   const cases: DashboardQueryCase[] = [
-    { id: 'summary:tree-dot-map', surface: 'summary', query: TREE_DOT_MAP_QUERY, imports, filters, state },
+    { id: 'summary:tree-dot-map', surface: 'summary', query: treeDotMapQuery(city), imports, filters, state },
   ]
 
   for (const kpi of SUMMARY_KPI_CHARTS) {
@@ -144,7 +144,7 @@ export function speciesQueryCases(
       state: genusState,
     },
     { id: 'species:context', surface: 'species', query: SPECIES_CONTEXT_QUERY, imports, filters, state },
-    { id: 'species:tree-dot-map', surface: 'species', query: TREE_DOT_MAP_QUERY, imports, filters, state },
+    { id: 'species:tree-dot-map', surface: 'species', query: treeDotMapQuery(city), imports, filters, state },
   ]
 
   for (const kpi of SPECIES_KPI_CHARTS) {

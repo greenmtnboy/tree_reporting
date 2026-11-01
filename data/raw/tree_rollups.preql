@@ -14,11 +14,16 @@
 # browser reads the parquet through tree_rollup_source.preql, whose root
 # carries the same datasource name and the same `rollup_tree_count`.
 #
-# One grain for now. A (city, species, plant year) summary was tried and no
-# query reads it: a summary whose grain holds a derived concept is never
-# used (pytrilogy #803, E). The shapes the species summary could serve but
-# does not yet are listed in the same issue.
+# Five grains. Each finer one adds a tree-level bucket from
+# tree_summary_grains.preql to (city, species): plant year, DBH class and the
+# dot map's cells. Species stays in every grain because every page filter is
+# a species property, so a filtered chart is still a re-sum. A chart is served
+# only when it groups by the bucket concept itself, under its own name
+# (pytrilogy #827); the dashboard queries are written that way. They are
+# written in city order, so a phone's range reads fetch only its city's row
+# groups of the one cross-city file.
 import tree_common;
+import tree_summary_grains;
 import full_tree_info_source;
 
 property <*>.rollup_inputs_published_through datetime;
@@ -43,4 +48,62 @@ file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_ro
 freshness by rollup_inputs_published_through
 # A city that lost a quarter of its species, or had its parquet missing from
 # the rollup's scan, is refused and the published summary kept.
+assert @kept_by(species, city, 0.75);
+
+datasource tree_rollup_year (
+    city,
+    species,
+    plant_year,
+    rollup_tree_count,
+    rollup_inputs_published_through,
+)
+grain (city, species, plant_year)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_year_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_rollup_year_v{data_version}.parquet`
+freshness by rollup_inputs_published_through
+order by city asc, species asc
+assert @kept_by(species, city, 0.75);
+
+datasource tree_rollup_dbh (
+    city,
+    species,
+    dbh_class,
+    rollup_tree_count,
+    rollup_inputs_published_through,
+)
+grain (city, species, dbh_class)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_dbh_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_rollup_dbh_v{data_version}.parquet`
+freshness by rollup_inputs_published_through
+order by city asc, species asc
+assert @kept_by(species, city, 0.75);
+
+# About 4M rows across every city, 170k for Boston: the per-city dot map.
+datasource tree_rollup_cell (
+    city,
+    species,
+    map_cell_latitude,
+    map_cell_longitude,
+    rollup_tree_count,
+    rollup_inputs_published_through,
+)
+grain (city, species, map_cell_latitude, map_cell_longitude)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_cell_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_rollup_cell_v{data_version}.parquet`
+freshness by rollup_inputs_published_through
+order by city asc, species asc
+storage (row_group_size = 20480)
+assert @kept_by(species, city, 0.75);
+
+# About 0.75M rows: the all-cities dot map.
+datasource tree_rollup_coarse_cell (
+    city,
+    species,
+    map_coarse_cell_latitude,
+    map_coarse_cell_longitude,
+    rollup_tree_count,
+    rollup_inputs_published_through,
+)
+grain (city, species, map_coarse_cell_latitude, map_coarse_cell_longitude)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_coarse_cell_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_rollup_coarse_cell_v{data_version}.parquet`
+freshness by rollup_inputs_published_through
+order by city asc, species asc
+storage (row_group_size = 20480)
 assert @kept_by(species, city, 0.75);

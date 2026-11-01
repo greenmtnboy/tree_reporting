@@ -203,14 +203,12 @@ ORDER BY tree_count DESC;`,
     id: 'sp-age-distribution',
     title: 'Planting by Year',
     subtitle: 'When trees in this taxon were planted',
-    query: 
-    
-    `import std.date;
-  SELECT
-year(plant_date)::int::year as planted_year,
+    query: `import std.date;
+SELECT
+plant_year::int::year as planted_year,
 count(tree_id) as tree_count
-WHERE plant_date IS NOT NULL AND year(plant_date) > 1700
-and year(plant_date) <= year(current_date())
+WHERE plant_year > 1700
+and plant_year <= year(current_date())
 ORDER BY planted_year ASC;`,
     chartConfig: {
       chartType: 'bar',
@@ -226,27 +224,18 @@ ORDER BY planted_year ASC;`,
     id: 'sp-size-distribution',
     title: 'Trunk Size Distribution',
     subtitle: 'Diameter at breast height (inches)',
+    // The DBH class and its label are model concepts (tree_summary_grains),
+    // selected under their own names, so the (city, species, DBH class)
+    // summary answers this chart.
     query: `SELECT
-case
-when diameter_at_breast_height < 6 then 1
-when diameter_at_breast_height < 12 then 2
-when diameter_at_breast_height < 24 then 3
-when diameter_at_breast_height < 36 then 4
-else 5
-end as dbh_order,
-case
-when diameter_at_breast_height < 6 then 'Under 6"'
-when diameter_at_breast_height < 12 then '6–12"'
-when diameter_at_breast_height < 24 then '12–24"'
-when diameter_at_breast_height < 36 then '24–36"'
-else 'Over 36"'
-end as dbh_bucket,
+dbh_class,
+dbh_class_label,
 count(tree_id) as tree_count
-WHERE diameter_at_breast_height IS NOT NULL
-ORDER BY dbh_order ASC;`,
+WHERE dbh_class IS NOT NULL
+ORDER BY dbh_class ASC;`,
     chartConfig: {
       chartType: 'bar',
-      xField: 'dbh_bucket',
+      xField: 'dbh_class_label',
       yField: 'tree_count',
       showTitle: false,
       hideLegend: true,
