@@ -22,9 +22,14 @@
 # (pytrilogy #827); the dashboard queries are written that way. They are
 # written in city order, so a phone's range reads fetch only its city's row
 # groups of the one cross-city file.
+#
+# Two lookups sit beside them, for the charts a count summary cannot serve on
+# its own: each city's tree centroid, and each species' native range as lists.
 import tree_common;
 import tree_summary_grains;
 import full_tree_info_source;
+import tree_enrichment_source;
+import ecoregion_info_source;
 
 property <*>.rollup_inputs_published_through datetime;
 
@@ -107,3 +112,52 @@ freshness by rollup_inputs_published_through
 order by city asc, species asc
 storage (row_group_size = 20480)
 assert @kept_by(species, city, 0.75);
+
+# The mean position of each city's trees: where the Species page's world map
+# puts the city. A city property, so the map is a count by city plus this
+# lookup instead of an average over the city's tree file.
+auto city_latitude <- avg(latitude) by city;
+auto city_longitude <- avg(longitude) by city;
+
+datasource tree_rollup_city (
+    city,
+    city_latitude,
+    city_longitude,
+    rollup_inputs_published_through,
+)
+grain (city)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_city_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_rollup_city_v{data_version}.parquet`
+freshness by rollup_inputs_published_through
+assert @kept(city, 0.75);
+
+# Each species' native range as three lists: its ecoregions (copied from the
+# enrichment table), and the distinct biomes and realms those ecoregions
+# fall in. The dashboards' nativeness bucket is a test of the active city's
+# ecoregion, biome and realm against these lists, one answer per species, so
+# a species native to several ecoregions is counted once (the per-ecoregion
+# bucket it replaces counted its trees once per match) and the bucket is a
+# species property the (city, species) summary re-sums.
+#
+# The ecoregions are copied here rather than read from the enrichment table
+# beside the other two lists: a species property built from two species-grain
+# tables is not served from the summary (pytrilogy #827), one built from one
+# table is.
+#
+# The build also writes one row with a null species, holding the biomes and
+# realms of every ecoregion no species is native to (pytrilogy #835).
+auto native_ecoregion <- unnest(native_ecoregions);
+merge native_ecoregion into ecoregion_id;
+auto native_biomes <- array_sort(array_distinct(array_agg(biome) by species));
+auto native_realms <- array_sort(array_distinct(array_agg(realm) by species));
+
+datasource species_native_range (
+    species,
+    ?native_ecoregions,
+    ?native_biomes,
+    ?native_realms,
+    rollup_inputs_published_through,
+)
+grain (species)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/species_native_range_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/species_native_range_v{data_version}.parquet`
+freshness by rollup_inputs_published_through
+assert @kept(species, 0.75);

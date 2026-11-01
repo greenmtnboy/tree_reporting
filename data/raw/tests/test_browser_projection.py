@@ -67,10 +67,13 @@ def test_the_projection_consumes_its_inputs_by_name():
 
 def test_the_ecoregion_projection_consumes_the_dimension_by_name():
     model = statements(ECOREGION_MODEL)
-    assert re.search(r"^root datasource ecoregion_info \(", model, re.M)
+    source = statements(RAW_DIR / "ecoregion_info_source.preql")
+    assert "import ecoregion_info_source;" in model
+    assert re.search(r"^root datasource ecoregion_info \(", source, re.M)
     assert re.search(r"^datasource ecoregion_browser \(", model, re.M)
-    assert "geometry_geojson" not in model, "the geometry is the 5 MB the browser does not want"
-    assert "import ecoregion_info;" not in model
+    for text in (model, source):
+        assert "geometry_geojson" not in text, "the geometry is the 5 MB the browser does not want"
+        assert "import ecoregion_info;" not in text
 
 
 def test_the_projections_have_jobs_and_the_slices_are_gone():
