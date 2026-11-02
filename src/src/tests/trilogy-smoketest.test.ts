@@ -177,7 +177,9 @@ ORDER BY tree_count desc
   it('compiles summary dashboard context queries for Boston', () => {
     expect(bostonContextSql).toBeTruthy()
     expect(bostonContextSql.toLowerCase()).toContain('native_locality_bucket')
-    expect(bostonContextSql.toLowerCase()).toContain(`tree_enrichment_v${TREE_DATA_VERSION}.parquet`)
+    // The bucket is a test against the species' native range as lists, one
+    // table (tree_rollup_source.preql), not a row per native ecoregion.
+    expect(bostonContextSql.toLowerCase()).toContain(`species_native_range_v${TREE_DATA_VERSION}.parquet`)
   })
 
   it('checks whether resolver returns parameters for dashboard context constants', () => {

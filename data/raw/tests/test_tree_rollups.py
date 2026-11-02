@@ -1,5 +1,7 @@
 """The dashboard summaries: tree counts at (city, species), and at (city,
-species) plus one tree-level bucket (plant year, DBH class, dot-map cell).
+species) plus one tree-level bucket (plant year, DBH class, dot-map cell);
+and two lookups beside them, each city's tree centroid and each species'
+native range as lists.
 
 `tree_rollups.preql` builds them from the published rollup; the browser reads
 them through `tree_rollup_source.preql` and the planner answers a dashboard's
@@ -53,7 +55,11 @@ SUMMARIES = {
 }
 
 
-@pytest.mark.parametrize("name", SUMMARIES)
+# The lookups and their grain.
+LOOKUPS = {"tree_rollup_city": "city", "species_native_range": "species"}
+
+
+@pytest.mark.parametrize("name", [*SUMMARIES, *LOOKUPS])
 def test_every_summary_has_a_browser_root(name: str):
     source, model = statements(SOURCE), statements(MODEL)
     assert re.search(rf"^datasource {name} \(", model, re.M)
@@ -96,7 +102,7 @@ def test_the_models_parse():
 
     env = Environment(working_path=RAW_DIR)
     env.parse(SOURCE.read_text(encoding="utf-8"))
-    assert set(SUMMARIES) <= {d.name for d in env.datasources.values()}
+    assert set(SUMMARIES) | set(LOOKUPS) <= {d.name for d in env.datasources.values()}
 
 
 # --- The rows ----------------------------------------------------------------
@@ -185,3 +191,80 @@ def test_one_row_per_grain(summary):
     _, rows = summary
     keys = [tuple(row[:-1]) for row in rows]
     assert len(keys) == len(set(keys))
+
+
+# --- The lookups ---------------------------------------------------------------
+
+# (species, native_ecoregions). "Platanus x acerifolia" has trees but no
+# enrichment row, so no range row either: its bucket is the fall-through.
+FIXTURE_ENRICHMENT = [
+    ("Acer platanoides", [1, 2]),
+    ("Newtaxon alba", None),
+    ("Unknown", None),
+]
+# (ecoregion_id, biome, realm); 3 is native to no species, as most are.
+FIXTURE_ECOREGIONS = [
+    (1, "Temperate Broadleaf", "palearctic"),
+    (2, "Temperate Broadleaf", "nearctic"),
+    (3, "Tundra", "nearctic"),
+]
+
+
+@pytest.fixture(scope="module")
+def lookup_inputs(tmp_path_factory, rollup_parquet) -> dict[str, Path]:
+    import duckdb
+
+    folder = tmp_path_factory.mktemp("lookups")
+    conn = duckdb.connect()
+    conn.execute("CREATE TABLE e (species VARCHAR, genus VARCHAR, tree_form VARCHAR, common_names VARCHAR[], native_ecoregions INTEGER[])")
+    conn.executemany("INSERT INTO e VALUES (?, NULL, NULL, NULL, ?)", FIXTURE_ENRICHMENT)
+    conn.execute("CREATE TABLE r (ecoregion_id INTEGER, biome VARCHAR, realm VARCHAR, data_updated_through TIMESTAMPTZ)")
+    conn.executemany("INSERT INTO r VALUES (?, ?, ?, NULL)", FIXTURE_ECOREGIONS)
+    paths = {"full_tree_info": rollup_parquet, "tree_enrichment": folder / "e.parquet", "ecoregion_info": folder / "r.parquet"}
+    conn.execute(f"COPY e TO '{paths['tree_enrichment'].as_posix()}' (FORMAT PARQUET)")
+    conn.execute(f"COPY r TO '{paths['ecoregion_info'].as_posix()}' (FORMAT PARQUET)")
+    return paths
+
+
+def lookup_rows(name: str, columns: list[str], inputs: dict[str, Path]) -> list[tuple]:
+    """The model's own SQL for one lookup, run over the fixture inputs."""
+    import duckdb
+    from trilogy import Dialects, Environment
+
+    env = Environment(working_path=RAW_DIR)
+    env.parse(MODEL.read_text(encoding="utf-8"))
+    for key in [k for k, d in env.datasources.items() if d.name == name]:
+        del env.datasources[key]
+    executor = Dialects.DUCK_DB.default_executor(environment=env)
+    (sql,) = executor.generate_sql(f"select {', '.join(columns)};")
+    for source, path in inputs.items():
+        sql = re.sub(rf"read_parquet\('[^']*{source}_v[^']*'\)", f"read_parquet('{path.as_posix()}')", sql)
+    assert "read_parquet('https" not in sql
+    return duckdb.connect().execute(sql).fetchall()
+
+
+def test_the_city_centroid_is_the_mean_tree_position(lookup_inputs):
+    rows = lookup_rows("tree_rollup_city", ["city", "city_latitude", "city_longitude"], lookup_inputs)
+    expected = {}
+    for city in {tree[1] for tree in FIXTURE_TREES}:
+        placed = [tree for tree in FIXTURE_TREES if tree[1] == city and tree[5] is not None]
+        expected[city] = (
+            pytest.approx(sum(tree[5] for tree in placed) / len(placed)),
+            pytest.approx(sum(tree[6] for tree in placed) / len(placed)),
+        )
+    assert {row[0]: (row[1], row[2]) for row in rows} == expected
+
+
+def test_the_native_range_is_the_ecoregions_and_their_biomes_and_realms(lookup_inputs):
+    """One row per enriched species, and none for an ecoregion no species is native to.
+
+    The planner FULL JOINs the merged ecoregion dimension onto the unnested
+    lists, and the ecoregions nobody references come back as one null-species
+    row (pytrilogy #835).
+    """
+    rows = lookup_rows("species_native_range", ["species", "native_ecoregions", "native_biomes", "native_realms"], lookup_inputs)
+    assert {row[0]: tuple(row[1:]) for row in rows} == {
+        "Acer platanoides": ([1, 2], ["Temperate Broadleaf"], ["nearctic", "palearctic"]),
+        "Newtaxon alba": (None, None, None),
+        "Unknown": (None, None, None),
+    }

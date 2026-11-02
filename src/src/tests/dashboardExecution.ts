@@ -29,7 +29,7 @@ import { cityContext, type DashboardQueryCase, type QueryState } from './dashboa
 
 const PARQUET_READ = /read_parquet\('([^']+)'\)/g
 
-type SeedKind = 'trees' | 'species' | 'ecoregions' | 'rollup' | 'empty'
+type SeedKind = 'trees' | 'species' | 'ecoregions' | 'rollup' | 'city' | 'native_range' | 'empty'
 
 type Seed = { kind: SeedKind; city?: string; grain?: string }
 
@@ -45,6 +45,8 @@ function seedFor(url: string): Seed {
   const name = url.split('/').pop() ?? url
   if (name.includes('tree_enrichment')) return { kind: 'species' }
   if (name.includes('ecoregion_info')) return { kind: 'ecoregions' }
+  if (name.includes('species_native_range')) return { kind: 'native_range' }
+  if (name.includes('tree_rollup_city')) return { kind: 'city' }
   const summary = /^tree_rollup_([a-z_]+)_v\d+/.exec(name)
   if (summary) return { kind: 'rollup', grain: summary[1] }
   if (name.includes('full_tree_info')) return { kind: 'trees' }
@@ -88,6 +90,10 @@ function rowsForSeed(seed: Seed): Array<Record<string, unknown>> {
       // so it is the fixture trees grouped: a chart the planner answers from it
       // must agree with one that counts.
       return rollupRows(seed.grain ?? 'species')
+    case 'city':
+      return cityRows()
+    case 'native_range':
+      return nativeRangeRows()
     case 'empty':
       return []
   }
@@ -128,6 +134,41 @@ function rollupRows(grain: string): Array<Record<string, unknown>> {
     counts.set(key, row)
   }
   return [...counts.values()]
+}
+
+/** `tree_rollup_city`: the mean position of each city's trees. */
+function cityRows(): Array<Record<string, unknown>> {
+  const sums = new Map<string, { lat: number; lon: number; n: number }>()
+  for (const tree of FIXTURE_TREES) {
+    if (tree.latitude == null || tree.longitude == null) continue
+    const sum = sums.get(tree.city) ?? { lat: 0, lon: 0, n: 0 }
+    sum.lat += tree.latitude
+    sum.lon += tree.longitude
+    sum.n += 1
+    sums.set(tree.city, sum)
+  }
+  return [...sums].map(([city, sum]) => ({
+    city,
+    city_latitude: sum.lat / sum.n,
+    city_longitude: sum.lon / sum.n,
+  }))
+}
+
+/** `species_native_range`: each species' native ecoregions, and their distinct biomes and realms. */
+function nativeRangeRows(): Array<Record<string, unknown>> {
+  const ecoregions = new Map(FIXTURE_ECOREGIONS.map((entry) => [entry.ecoregion_id, entry]))
+  const distinct = (values: Array<string | null | undefined>) =>
+    [...new Set(values.filter((value): value is string => value != null))].sort()
+  return FIXTURE_SPECIES.map((species) => {
+    const native = species.native_ecoregions ?? null
+    const matched = (native ?? []).map((id) => ecoregions.get(id)).filter((entry) => entry != null)
+    return {
+      species: species.species,
+      native_ecoregions: native,
+      native_biomes: native ? distinct(matched.map((entry) => entry.biome)) : null,
+      native_realms: native ? distinct(matched.map((entry) => entry.realm)) : null,
+    }
+  })
 }
 
 export class FixtureDatabase {

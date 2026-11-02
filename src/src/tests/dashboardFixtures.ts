@@ -246,6 +246,13 @@ export const FIXTURE_TREES: FixtureTree[] = [
   { tree_id: 'fx-5', city: 'USSFO', species: 'Tilia cordata', data_source: 'SF_OPENDATA', plant_date: '1975-04-15', diameter_at_breast_height: 40, latitude: 37.775, longitude: -122.415 },
   { tree_id: 'fx-6', city: 'USSFO', species: 'Tilia cordata', data_source: 'COMMUNITY_USSFO', plant_date: '2021-09-09', diameter_at_breast_height: 4, latitude: 37.776, longitude: -122.416 },
   { tree_id: 'fx-7', city: 'USSFO', species: UNENRICHED_SPECIES, data_source: 'SF_OPENDATA', plant_date: null, diameter_at_breast_height: null, latitude: 37.777, longitude: -122.417 },
+  // Three trees of one species planted in one year, two of them in one map
+  // cell. A summary group of one tree reads the same counted once or n² times;
+  // a group of three does not. Planting by Year shipped re-summing
+  // tree_rollup_year joined back to the trees and passed this suite while
+  // every group here held one tree.
+  { tree_id: 'fx-10', city: 'USSFO', species: 'Quercus agrifolia', data_source: 'SF_OPENDATA', plant_date: '1998-07-21', diameter_at_breast_height: 28, latitude: 37.771, longitude: -122.411 },
+  { tree_id: 'fx-11', city: 'USSFO', species: 'Quercus agrifolia', data_source: 'SF_OPENDATA', plant_date: '1998-10-02', diameter_at_breast_height: 33, latitude: 37.778, longitude: -122.418 },
   // A second city, so the all-cities view has something to aggregate across and
   // a `city = 'USSFO'` filter has something to exclude.
   { tree_id: 'fx-8', city: 'USNYC', species: 'Acer rubrum', data_source: 'NYC_OPENDATA', plant_date: '2010-05-05', diameter_at_breast_height: 18, latitude: 40.712, longitude: -74.006 },
