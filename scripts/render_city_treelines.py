@@ -170,7 +170,7 @@ def main():
     fig = plt.figure(figsize=(args.width,args.width*.86), facecolor=palette["bg"])
     plt.rcParams["font.family"] = "DejaVu Sans"
     fig.text(.5,.962,"\u2009".join(config["title"]),ha="center",va="top",color=palette["text"],fontsize=24*scale)
-    tree_phrase = "street trees" if args.source_mode == "inventory" else "mapped trees"
+    tree_phrase = "trees"
     runs = [("A city revealed by its ",palette["muted"],12*scale,"normal"),
             (tree_phrase,palette.get("subtitle_trees",palette["aerial"]),12*scale,"normal")]
     if water_paths:
