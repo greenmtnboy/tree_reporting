@@ -8,6 +8,7 @@
 uv run scripts/render_city_treelines.py --city USSFO
 uv run scripts/render_city_treelines.py --city USSFO --palette forest
 uv run scripts/render_city_treelines.py --city USSFO --insets hayes_valley mission --dpi 600
+uv run scripts/render_city_treelines.py --city USSFO --source-mode all --color-by source --insets alamo_square
 
 City geometry, credits, data sources and inset locations live in
 scripts/treelines_cities/<city>.json. The established Boston entry point retains
@@ -26,10 +27,19 @@ from matplotlib.patches import Rectangle, ConnectionPatch
 import numpy as np
 
 from treelines_core import PALETTES, draw_map, draw_cartographic_details, draw_centered_text_runs
-from treelines_data import load_city_points, load_city_water, project_lonlat
+from treelines_data import load_city_points, load_city_water, project_lonlat, source_groups
 
 
-def draw_city_inset(fig, main_ax, points, x, y, projection, water_paths, palette, specification, index, scale, source_mode):
+def tree_layers(sources, inventory_sources, palette, color_by, inset=False):
+    if color_by == "uniform":
+        return [(tuple(np.unique(sources)), palette["aerial"], .9 if inset else .8)]
+    inventory, aerial, other = source_groups(sources, inventory_sources)
+    return [(aerial, palette["aerial"], .70 if inset else .47),
+            (other, palette["muted"] if inset else palette["records"], .8),
+            (inventory, palette["records"], .95 if inset else .88)]
+
+
+def draw_city_inset(fig, main_ax, points, x, y, projection, water_paths, palette, specification, index, scale, source_mode, color_by, inventory_sources, show_summary=False):
     cx, cy = project_lonlat(*specification["center_lonlat"], projection)
     size = specification["size_km"]
     bounds = (cx-size/2, cx+size/2, cy-size/2, cy+size/2)
@@ -41,9 +51,10 @@ def draw_city_inset(fig, main_ax, points, x, y, projection, water_paths, palette
     height = width*fig.get_figwidth()/fig.get_figheight()
     ax = fig.add_axes((left, bottom, width, height))
     sources = points["data_source"][mask]
-    draw_map(ax, x[mask], y[mask], sources, bounds, [(tuple(np.unique(sources)), palette["aerial"], .9)],
+    draw_map(ax, x[mask], y[mask], sources, bounds, tree_layers(sources, inventory_sources, palette, color_by, inset=True),
              .65, .10, water_paths, None, palette)
-    outline = dict(fill=False, edgecolor=palette["aerial"], linewidth=.75)
+    locator_color = palette["records"] if color_by == "source" else palette["aerial"]
+    outline = dict(fill=False, edgecolor=locator_color, linewidth=.75)
     for target in (ax, main_ax):
         target.add_patch(Rectangle((bounds[0], bounds[2]), size, size, zorder=8, **outline))
     label = main_ax.text(cx, bounds[3]+.20, specification["label"].upper(), ha="center",
@@ -52,15 +63,39 @@ def draw_city_inset(fig, main_ax, points, x, y, projection, water_paths, palette
     for source_y, target_y in ((bounds[2], 0), (bounds[3], 1)):
         fig.add_artist(ConnectionPatch(xyA=(bounds[1], source_y), coordsA=main_ax.transData,
             xyB=(0, target_y), coordsB=ax.transAxes, arrowstyle="-", lw=.6,
-            color=palette["aerial"], alpha=.55))
+            color=locator_color, alpha=.55))
     fig.text(left, bottom+height+.025, specification["label"].upper(), color=palette["text"], fontsize=16*scale)
     units = "inventoried trees" if source_mode == "inventory" else "mapped trees"
     fig.text(left, bottom-.019, f"{count:,} {units} · {size:g} × {size:g} km", color=palette["muted"], fontsize=8*scale)
     bx, by, distance = bounds[0]+.06*size, bounds[2]+.06*size, size/4
     ax.plot([bx,bx+distance], [by,by], color=palette["text"], lw=1.3, zorder=9)
     ax.text(bx, by+.035*size, f"{distance*1000:g} m", color=palette["text"], fontsize=7*scale, zorder=9)
+    counts = {str(s): int(np.sum(sources == s)) for s in np.unique(sources)}
+    inventory, aerial, other = source_groups(sources, inventory_sources)
+    inventory_count = sum(counts[s] for s in inventory)
+    aerial_count = sum(counts[s] for s in aerial)
+    other_count = sum(counts[s] for s in other)
+    if show_summary:
+        fig.text(left,.443,"City inventories and the aerial view",color=palette["text"],fontsize=12*scale)
+        fig.text(left,.378,f"{100*inventory_count/count:.1f}%",color=palette["records"],fontsize=40*scale)
+        fig.text(left,.354,"of mapped trees in this inset are\nrecorded in the city inventory.",
+                 va="top",linespacing=1.5,color=palette["text"],fontsize=10*scale)
+        bar = fig.add_axes((left,.285,width,.012))
+        bar.axis("off")
+        start = 0
+        other_label = "OpenStreetMap" if other and all(s.startswith("OSM_") for s in other) else "Other mapped records"
+        for row, (n, label, color) in enumerate(((inventory_count,"City inventory",palette["records"]),
+                                               (aerial_count,"Aerial detections",palette["aerial"]),
+                                               (other_count,other_label,palette["muted"]))):
+            bar.add_patch(Rectangle((start/count,0),n/count,1,facecolor=color,linewidth=0))
+            start += n
+            fig.text(left,.258-row*.025,"●  "+label,color=color,fontsize=9*scale)
+            fig.text(left+width,.258-row*.025,f"{n:,}",ha="right",color=color,fontsize=9*scale)
+        fig.text(left,.16,"Share of mapped records, not a measure\nof inventory completeness.",
+                 va="top",linespacing=1.5,color=palette["muted"],fontsize=8*scale)
     return {**specification, "projected_bounds_km": [float(v) for v in bounds], "count": count,
-            "counts_by_source": {str(s): int(np.sum(sources == s)) for s in np.unique(sources)}}
+            "counts_by_source": counts,"inventory_count":inventory_count,"aerial_count":aerial_count,
+            "other_count":other_count,"inventory_share_percent":100*inventory_count/count}
 
 
 def main():
@@ -69,6 +104,8 @@ def main():
     parser.add_argument("--config", type=Path, help="Override the city's JSON rendering configuration")
     parser.add_argument("--input", help="Published parquet URL or local snapshot")
     parser.add_argument("--source-mode", choices=("inventory", "non-aerial", "all"), default="inventory")
+    parser.add_argument("--color-by", choices=("uniform", "source"), default="uniform", help="Color city inventory/other records versus aerial detections")
+    parser.add_argument("--coverage-note", help="Override the short coverage caveat below the map counts")
     parser.add_argument("--palette", choices=tuple(PALETTES), default="light")
     parser.add_argument("--insets", nargs="*", help="Zero, one or two configured inset names; defaults to city preset")
     parser.add_argument("--width", type=float, default=18)
@@ -80,6 +117,8 @@ def main():
     args = parser.parse_args()
     if args.width <= 0 or args.dpi <= 0 or args.dot_size <= 0:
         parser.error("Width, dpi and dot size must be positive.")
+    if args.color_by == "source" and args.source_mode != "all":
+        parser.error("--color-by source requires --source-mode all.")
     config_path = args.config or Path(__file__).with_name("treelines_cities") / f"{args.city.lower()}.json"
     config = json.loads(config_path.read_text(encoding="utf-8"))
     if config["city"] != args.city.upper():
@@ -112,6 +151,9 @@ def main():
     if not len(x):
         parser.error("No selected trees in this viewport.")
     counts = {str(s): int(np.sum(points["data_source"] == s)) for s in np.unique(points["data_source"])}
+    inventory_sources, aerial_sources, other_sources = source_groups(points["data_source"], config["inventory_sources"])
+    if args.color_by == "source" and (not inventory_sources or not aerial_sources):
+        parser.error("Source comparison requires both inventory and aerial records within the viewport.")
     print(f"{config['city']} in frame: {len(x):,} records; sources: {counts}", flush=True)
     water_paths, water_meta = ([], []) if args.no_water else load_city_water(config, projection)
     circle = None
@@ -136,24 +178,38 @@ def main():
                  ("water",palette.get("subtitle_water","#7eaec3"),12*scale,"normal")]
     draw_centered_text_runs(fig,.5,.928,runs)
     ax = fig.add_axes((-.056362,.08783,.842724,.88434) if inset_names else (.045,.15,.91,.74))
-    draw_map(ax,x,y,points["data_source"],bounds,[(tuple(counts),palette["aerial"],.8)],
+    draw_map(ax,x,y,points["data_source"],bounds,tree_layers(points["data_source"],config["inventory_sources"],palette,args.color_by),
              args.dot_size,.12,water_paths,circle,palette)
-    inset_metadata = [draw_city_inset(fig,ax,points,x,y,projection,water_paths,palette,config["insets"][name],index,scale,args.source_mode)
+    inset_metadata = [draw_city_inset(fig,ax,points,x,y,projection,water_paths,palette,config["insets"][name],index,scale,args.source_mode,
+                                    args.color_by,config["inventory_sources"],show_summary=args.color_by == "source" and len(inset_names) == 1)
                       for index,name in enumerate(inset_names)]
     draw_cartographic_details(fig,ax,bounds,palette,scale)
     count_x = .365 if inset_names else .5
     units = "inventoried trees" if args.source_mode == "inventory" else "mapped trees"
-    draw_centered_text_runs(fig,count_x,.106,[(f"{len(x):,}",palette["aerial"],24*scale,"normal"),
-                                            (f"  {units}",palette["aerial"],9*scale,"normal")])
+    if args.color_by == "source":
+        for xpos,n,color,label in ((.19,sum(counts[s] for s in inventory_sources+other_sources),palette["records"],"CITY + COMMUNITY RECORDS"),
+                                   (.53,sum(counts[s] for s in aerial_sources),palette["aerial"],"AERIAL DETECTIONS")):
+            draw_centered_text_runs(fig,xpos,.106,[(f"{n:,}",color,24*scale,"normal"),("  trees",color,9*scale,"normal")])
+            fig.text(xpos,.082,label,ha="center",color=color,fontsize=9*scale)
+    else:
+        draw_centered_text_runs(fig,count_x,.106,[(f"{len(x):,}",palette["aerial"],24*scale,"normal"),
+                                                (f"  {units}",palette["aerial"],9*scale,"normal")])
     caveat = ("Street-tree inventory only; parks and private trees are not comprehensively mapped."
               if args.source_mode == "inventory" else "coverage varies by source; incomplete")
-    fig.text(count_x,.061,caveat,ha="center",va="bottom",color=palette["muted"],fontsize=7*scale)
-    credit = config["tree_credit"] if args.source_mode == "inventory" else config["tree_credit"] + " / © OpenStreetMap contributors (ODbL) / community"
+    fig.text(count_x,.061,args.coverage_note or caveat,ha="center",va="bottom",color=palette["muted"],fontsize=7*scale)
+    credit = config["tree_credit"]
+    if any(s.startswith("OSM_") for s in other_sources):
+        credit += " / © OpenStreetMap contributors (ODbL)"
+    if any(not s.startswith("OSM_") for s in other_sources):
+        credit += " / community"
+    if aerial_sources:
+        credit += "  |  " + config.get("imagery_credit","Aerial imagery detections")
     if water_paths:
         credit += "  |  " + config["water_credit"]
     fig.text(.475,.025,credit,ha="center",va="bottom",color=palette["muted"],fontsize=6.8*scale)
     fig.text(.98,.025,"arborary.world",ha="right",va="bottom",color=palette["muted"],fontsize=8*scale)
-    output = args.output or Path(__file__).with_name(config.get("output_folder",config["slug"]+"_renders")) / f"{config['slug']}_treelines_{args.source_mode}_{args.palette}.png"
+    suffix = "_by_source" if args.color_by == "source" else ""
+    output = args.output or Path(__file__).with_name(config.get("output_folder",config["slug"]+"_renders")) / f"{config['slug']}_treelines_{args.source_mode}_{args.palette}{suffix}.png"
     output = output.resolve()
     output.parent.mkdir(parents=True,exist_ok=True)
     fig.savefig(output,dpi=args.dpi,facecolor=palette["bg"])

@@ -19,6 +19,15 @@ def project_lonlat(lon, lat, projection):
             (np.asarray(lat)-projection["central_latitude"])*111.195)
 
 
+def source_groups(sources, inventory_sources):
+    """Partition surviving source names; imagery merged into an inventory stays inventory."""
+    names = sorted(set(str(s) for s in sources))
+    inventory = tuple(s for s in names if s in inventory_sources)
+    aerial = tuple(s for s in names if s not in inventory and s.startswith(("PREDICTED_", "SATELLITE_")))
+    other = tuple(s for s in names if s not in inventory + aerial)
+    return inventory, aerial, other
+
+
 def load_city_points(location, city, inventory_sources, source_mode):
     with duckdb.connect() as con:
         con.execute("SET TimeZone='UTC'")

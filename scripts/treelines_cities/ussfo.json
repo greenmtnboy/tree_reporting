@@ -7,6 +7,7 @@
   "inventory_sources": ["SF_OPENDATA"],
   "tree_credit": "Trees: San Francisco Public Works / DataSF Street Tree Inventory",
   "tree_source_page": "https://data.sf.gov/d/tkzw-k3nq",
+  "imagery_credit": "Imagery: USDA National Agriculture Imagery Program (NAIP)",
   "projection_center_lonlat": [-122.44, 37.768],
   "viewport_lonlat": [-122.55376650182961, 37.67806789873646, -122.32623349817038, 37.85793210126354],
   "circle_center_lonlat": [-122.44, 37.768],
@@ -27,6 +28,7 @@
   ],
   "default_insets": ["hayes_valley", "mission"],
   "insets": {
+    "alamo_square": {"label": "Alamo Square & Painted Ladies", "center_lonlat": [-122.4347, 37.7763], "size_km": 2},
     "hayes_valley": {"label": "Hayes Valley & Civic Center", "center_lonlat": [-122.4215, 37.7765], "size_km": 2},
     "mission": {"label": "Mission District", "center_lonlat": [-122.4194, 37.7545], "size_km": 2},
     "golden_gate_park": {"label": "Golden Gate Park", "center_lonlat": [-122.473, 37.7694], "size_km": 2},

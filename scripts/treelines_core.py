@@ -72,6 +72,8 @@ def draw_map(ax, x, y, sources, bounds, layers, dot_size, glow, water_paths=(), 
     for names, color, alpha in layers:
         mask = np.isin(sources, names)
         px, py = x[mask], y[mask]
+        if not len(px):
+            continue
         if glow:
             w = 1300
             h = max(1, round(w * (ymax - ymin) / (xmax - xmin)))

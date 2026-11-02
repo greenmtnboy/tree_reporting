@@ -12,22 +12,30 @@ uv run scripts/render_city_treelines.py --city USSFO
 uv run scripts/render_city_treelines.py --city USSFO --palette forest
 uv run scripts/render_city_treelines.py --city USSFO --palette night
 uv run scripts/render_city_treelines.py --city USSFO --insets hayes_valley mission --dpi 600
+uv run scripts/render_city_treelines.py --city USSFO --source-mode all --color-by source --insets alamo_square --coverage-note "Test aerial coverage is partial; detections undercount trees, especially beneath the canopy."
 ```
 
 The default is a light poster using **only `SF_OPENDATA` municipal street-tree
 records**, with Hayes Valley/Civic Center and Mission District insets. No imagery
 predictions or OSM records are needed. `--source-mode non-aerial` explicitly adds
 other mapped sources; `--source-mode all` includes all surviving sources. These
-modes still use one tree color, not a completeness comparison. The source mode
+modes use one tree color by default. `--color-by source` requires `--source-mode
+all` and both inventory and aerial records in the viewport. It draws inventory
+and other mapped records in ochre on the main map, with aerial detections in
+green; the inset separates OSM/other records in gray. With one inset, it adds
+source counts and the inventory share of that inset's mapped records. This share
+is not inventory completeness against ground truth. `--coverage-note` supplies a
+short export-specific caveat, useful for partial prediction runs. The source mode
 and selected/excluded source counts are recorded in the JSON output.
 
 `treelines_cities/ussfo.json` holds the input URL, inventory source names, credits,
 projection center, viewport, circular fade, water providers, and named insets.
 Use `--config` for another rendering preset with the same schema, and a matching
 `--city`. Adding a rendering preset does not add a city to the ingestion pipeline.
-The city renderer currently supports unified dots, zero to two insets, water,
-three palettes, a north marker, and metric scales. Boston's source comparisons,
-canopy circles, and municipal overlays remain in its specialized entry point.
+The city renderer supports unified or source-colored dots, zero to two insets,
+water, three palettes, a north marker, and metric scales. Boston's side-by-side
+comparison layout, canopy circles, and municipal overlays remain in its
+specialized entry point.
 
 The SF main viewport is **20 × 20 km**. Its 9 km-radius artistic circle fades out
 at 9.27 km, completely inside that frame. Boston's frozen main viewport is about
@@ -99,10 +107,10 @@ machine-local metadata are ignored by Git; presets such as
 ## Offline checks
 
 ```powershell
-uv run --with duckdb --with matplotlib --with numpy --with shapely python -m unittest discover -s scripts/tests -p test_treelines_data.py
+uv run --with duckdb --with matplotlib --with numpy --with scipy --with shapely python -m unittest discover -s scripts/tests -p test_treelines_data.py
 ```
 
-These checks cover inventory-only selection, source opt-ins, visibility and
+These checks cover inventory-only selection, source opt-ins and color grouping, visibility and
 cluster filtering, empty selections, coastline removal, and the SF circle's fit
 within the viewport. Rendering smoke checks additionally require network access
 or local input/cache files.
