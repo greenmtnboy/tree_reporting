@@ -1,7 +1,7 @@
 # Tree-level predictions: one row per published tree, carrying what a model
 # says about the tree rather than what a source recorded. Built by the
 # `refresh-predictions` [[cloud.job]] in ../trilogy.toml, daily, in the same
-# tick as the rest of the core and ordered after the two jobs it consumes.
+# tick as the rest of the core and ordered after the jobs it consumes.
 #
 # It predicts crown width and height, from a measured diameter where the
 # source recorded one and otherwise from a diameter predicted from the tree's
@@ -9,52 +9,31 @@
 # exists. The map reads both predictions, through the browser projection, as
 # the size of a tree's sprite.
 #
-# The age and height models are fitted here, on every build, from the
-# published trees (see "The fits" below), and the fits are published beside
-# the predictions. The crown model is fitted offline on Tallo, a static
-# reference dataset, and read from a CSV.
-#
 # ---------------------------------------------------------------------------
-# The crown model, and where it comes from
+# The models, and the stages they are built in
 # ---------------------------------------------------------------------------
 #
-#     crown_width_m = 2 * scale * dbh_cm ** b        (dbh clamped to the fitted range)
+# The crown model is fitted offline on Tallo, a static reference dataset, and
+# read from a CSV (tree_allometry_inputs.preql). The age and height models
+# are fitted on every build, on the published trees, in two jobs before this
+# one, and applied here from the tables they publish:
 #
-# A genus-level power law fitted on Tallo (Jucker et al. 2022, CC-BY 4.0;
-# 312,829 trees with a measured crown radius across 1,453 genera), which is
-# the only open dataset that supports a fit at genus rank -- the published
-# urban crown models are species-level and cover a few dozen species between
-# them. `crown_allometry_fit.py` does the fit and writes
-# `crown_width_coefficients.csv`; its docstring carries the method, the
-# quality gate, the fallback order (genus -> family -> division) and the two
-# things the model deliberately is not: calibrated to open-grown urban trees
-# (Tallo is forest plots, and runs 15-30% low against the one urban reference
-# we have), and adjusted for stand density (Bechtold 2003 tried a basal-area
-# term over 87 species and dropped it as unstable). Both are curation
-# questions this dataset exists to put numbers in front of.
+#     refresh-allometry-fits  allometry_fits.preql  the age fits; the height fit's sample
+#     refresh-height-fits     height_fits.preql     the height fits, trimmed by their own band
+#     refresh-predictions     this file             every tree, with the fits applied
 #
-# The coefficient table is a CSV `file` datasource, joined on `genus`. The
-# genus comes from the enrichment table rather than from the first word of
-# `species`, because the enrichment table has already corrected the
-# misspellings a city publishes (`Petula pendula` -> Betula) and it is also
-# what supplies `tree_form`, which decides the fallback for a genus the table
-# does not carry: a conifer takes the gymnosperm fit, a palm takes none (a
-# palm's crown does not scale with its stem, and Tallo has no palm crowns),
-# anything else the angiosperm fit. The sentinels -- `Unknown`, `Dead`,
-# `Shrub` -- take the all-Tallo fit, since their division is unknown too.
-#
-# The CSV's division and global rows are the fallbacks, read as data and
-# keyed by the tree's fallback class. `crown_model_level` says which of those
-# a row got, and `crown_model_n` how many Tallo trees stood behind it, so a
-# curator can filter to the rows a real genus fit produced.
+# Each stage reads the one before it as stored columns. Fitted in one model,
+# the height fit's band -- a per-tree test on the round before it -- nested
+# every round's fit, and with it the shading test and the age model, inside
+# every moment of the next round's: one column's SQL ran to 1.2 MB and took
+# minutes to plan. allometry_common.preql has the arithmetic and the gates.
 #
 # ---------------------------------------------------------------------------
 # The age fallback: a diameter for a tree that has a planting date and no DBH
 # ---------------------------------------------------------------------------
 #
 # For a tree with a planting date and no diameter, `predicted_dbh_cm` stands
-# in as the crown model's input, and `crown_dbh_source` says so. The fit is
-# below, under "Diameter from age".
+# in as the crown model's input, and `crown_dbh_source` says so.
 #
 # `predicted_dbh_cm` is published for every tree with an age, not only the
 # ones that need it, so the trees with a measured diameter are the check on
@@ -75,251 +54,39 @@
 # not enter the prediction; see the fit script for why no sourced model has
 # a usable density term.
 #
-# ---------------------------------------------------------------------------
-# Why this job reads sources and never models
-# ---------------------------------------------------------------------------
-#
-# The two inputs are reached through `full_tree_info_source.preql` and
-# `tree_enrichment_source.preql`: root datasources over the published
-# parquets, named the same as the managed datasources that write them, which
-# is what lets trilogy-cloud order this job after `publish-full` and
-# `refresh-enrichment` in one tick. Importing the models themselves would make
-# this job adopt their targets -- rebuild the rollup, and run the enrichment
-# LLM -- inside its own container. `test_the_core_reads_only_published_parquets`
-# and `test_the_prediction_job_consumes_its_inputs_by_name` pin both.
-#
-# Neither this file nor the two source files is in the frontend's model
-# bundle, and this one must not be: it declares `genus` as a key where the
-# enrichment model the browser plans against has it as a property.
+# Neither this file nor the files it imports is in the frontend's model
+# bundle, and none may be: see tree_allometry_inputs.preql.
 
-import full_tree_info_source;
-import tree_enrichment_source;
-import tree_height_source;
-
-# --- Inputs' publication time ---------------------------------------------
-
-property <*>.prediction_inputs_published_through datetime; # newer of the rollup's and the enrichment table's Last-Modified
-
-root datasource prediction_inputs_publication (
-    data_updated_through: prediction_inputs_published_through
-)
-file `./prediction_inputs_probe.py`;
-
-# --- Crown coefficients, one row per genus Tallo knows --------------------
-
-property genus.crown_coefficient_level string; # the CSV holds family / division / global rows too, for the record; only genus rows are read
-property genus.crown_fit_level string; # genus | family | division: which fit this genus's row carries
-property genus.crown_fit_taxon string; # the taxon that fit was made on
-property genus.crown_fit_n int; # Tallo trees behind the fit
-property genus.crown_fit_b float; # exponent on dbh_cm
-property genus.crown_fit_scale float; # exp(ln_a + sigma^2/2): crown_radius_m = scale * dbh_cm ** b
-property genus.crown_fit_dbh_max_cm float; # largest stem the fit saw; predictions clamp to it
-
-root datasource crown_width_coefficients (
-    level: crown_coefficient_level,
-    taxon: genus,
-    fit_level: crown_fit_level,
-    fit_taxon: crown_fit_taxon,
-    n: crown_fit_n,
-    b: crown_fit_b,
-    scale: crown_fit_scale,
-    dbh_max_cm: crown_fit_dbh_max_cm,
-)
-grain (genus)
-file `./crown_width_coefficients.csv`
-where crown_coefficient_level = 'genus';
-
-# The class a tree falls back to when its genus has no fit, decided by the
-# enrichment table's growth form, and named as the fallback rows name it.
-# Shared by every model: a palm's crown does not scale with its stem, its
-# stem does not thicken with age, and its height does neither.
-auto crown_fallback_class <- case
-    when species = 'Unknown' or species = 'Dead' or species = 'Shrub' then 'all'
-    when tree_form = 'palm' or species = 'Palm' or species = 'Cactus' then 'none'
-    when tree_form = 'conifer' then 'Gymnosperm'
-    else 'Angiosperm'
-end;
-
-# The same CSV's division and global rows: the fit a tree whose genus has no
-# row falls back to, picked by the tree's fallback class.
-key crown_fallback_taxon string; # Angiosperm | Gymnosperm | all
-property crown_fallback_taxon.crown_fallback_row_level string; # division | global
-property crown_fallback_taxon.crown_fallback_row_n int;
-property crown_fallback_taxon.crown_fallback_row_b float;
-property crown_fallback_taxon.crown_fallback_row_scale float;
-property crown_fallback_taxon.crown_fallback_row_dbh_max_cm float;
-
-root datasource crown_width_fallbacks (
-    level: crown_fallback_row_level,
-    taxon: crown_fallback_taxon,
-    n: crown_fallback_row_n,
-    b: crown_fallback_row_b,
-    scale: crown_fallback_row_scale,
-    dbh_max_cm: crown_fallback_row_dbh_max_cm,
-)
-grain (crown_fallback_taxon)
-file `./crown_width_coefficients.csv`
-where crown_fallback_row_level = 'division' or crown_fallback_row_level = 'global';
-
-def crown_fallback_row(value, taxon) -> max(value ? crown_fallback_taxon = taxon) by *;
-def crown_fallback(value) -> case
-    when crown_fallback_class = 'Angiosperm' then @crown_fallback_row(value, 'Angiosperm')
-    when crown_fallback_class = 'Gymnosperm' then @crown_fallback_row(value, 'Gymnosperm')
-    when crown_fallback_class = 'all' then @crown_fallback_row(value, 'all')
-    else null
-end;
-auto crown_fallback_level <- @crown_fallback(crown_fallback_row_level);
-auto crown_fallback_n <- @crown_fallback(crown_fallback_row_n);
-auto crown_fallback_b <- @crown_fallback(crown_fallback_row_b);
-auto crown_fallback_scale <- @crown_fallback(crown_fallback_row_scale);
-auto crown_fallback_dbh_max_cm <- @crown_fallback(crown_fallback_row_dbh_max_cm);
-
-# --- The tree's own measurements ------------------------------------------
-
-const dbh_cm_per_inch <- 2.54;
-const days_per_year <- 365.25;
-
-# A non-positive diameter is a placeholder, not a stem.
-auto dbh_cm <- case when diameter_at_breast_height > 0 then diameter_at_breast_height * dbh_cm_per_inch else null end;
-
-# Planting date to the day the parquet is built. The ingest publishes a
-# planting date only when it is one -- `enforce_tree_schema` nulls a date in
-# the future or before 1500, and a city's own ingest nulls the default its
-# portal stamps (Edmonton's 1990-06-01, Melbourne's 1900-01-01) -- so there is
-# nothing to second-guess here.
-auto age_years <- case when plant_date is null then null else date_diff(plant_date, current_date(), day) / days_per_year end;
-
-
-# ---------------------------------------------------------------------------
-# The fits
-# ---------------------------------------------------------------------------
-#
-# The diameter-from-age and height models are fitted here, on every build,
-# on the published trees this job reads, rather than offline into a CSV:
-#
-#     log10(y) = a + b * log10(x)
-#
-# ordinary least squares from the group's moments, once per genus, once per
-# fallback class and once over every usable tree. The predictions apply the
-# power law the fit implies, back-transform bias corrected (Baskerville 1972):
-#
-#     y = scale * x ** b,    scale = 10 ** (a + sigma^2 * ln(10) / 2)
-#
-# with sigma the residual standard deviation in log10 units. (`log` takes an
-# integer base, so the fit is in log10; the slope is the same in any base.)
-#
-# A genus's own fit is applied when it passes its model's gate; otherwise
-# the tree's fallback class's fit, when that passes; otherwise the fit over
-# every usable tree. The fits are published (`allometry_genus_fits`,
-# `allometry_fallback_fits`, at the end of this file) for curation.
-
-const ln_10 <- 2.302585092994046;
-const fit_max_dbh_cm <- 508.0; # 200 inches, shared.ingest.DBH_MAX_INCHES: past it a diameter is a typo
-
-def fit_n(x, grp) -> count(x) by grp;
-def fit_b(x, y, grp) -> ((avg(x * y) by grp) - (avg(x) by grp) * (avg(y) by grp)) / ((avg(x * x) by grp) - (avg(x) by grp) ** 2);
-def fit_a(x, y, b, grp) -> (avg(y) by grp) - b * (avg(x) by grp);
-def fit_s(x, y, b, n, grp) -> case when n > 2 then sqrt(greatest(n / (n - 2) * ((avg(y * y) by grp) - (avg(y) by grp) ** 2 - b * ((avg(x * y) by grp) - (avg(x) by grp) * (avg(y) by grp))), 0.0)) else null end;
-def fit_r2(x, y, b, grp) -> b * ((avg(x * y) by grp) - (avg(x) by grp) * (avg(y) by grp)) / ((avg(y * y) by grp) - (avg(y) by grp) ** 2);
-def fit_xmax(x, grp) -> max(x) by grp;
-# The same over every usable tree: `by *` cannot be passed as an argument.
-def fit_n_all(x) -> count(x) by *;
-def fit_b_all(x, y) -> ((avg(x * y) by *) - (avg(x) by *) * (avg(y) by *)) / ((avg(x * x) by *) - (avg(x) by *) ** 2);
-def fit_a_all(x, y, b) -> (avg(y) by *) - b * (avg(x) by *);
-def fit_s_all(x, y, b, n) -> case when n > 2 then sqrt(greatest(n / (n - 2) * ((avg(y * y) by *) - (avg(y) by *) ** 2 - b * ((avg(x * y) by *) - (avg(x) by *) * (avg(y) by *))), 0.0)) else null end;
-def fit_r2_all(x, y, b) -> b * ((avg(x * y) by *) - (avg(x) by *) * (avg(y) by *)) / ((avg(y * y) by *) - (avg(y) by *) ** 2);
-def fit_xmax_all(x) -> max(x) by *;
-
-def fit_scale(a, s) -> 10 ** (a + s ** 2 * ln_10 / 2);
-
-# A fallback class takes its own fit when that passes the gate, else the fit
-# over every tree; a palm takes none.
-def fallback_level(passes) -> case
-    when crown_fallback_class = 'none' then null
-    when crown_fallback_class != 'all' and passes then 'division'
-    else 'global'
-end;
-def pick_fallback(level, division, everything) -> case when level = 'division' then division when level = 'global' then everything else null end;
+import tree_allometry_inputs;
+import allometry_fits_source;
 
 # --- Diameter from age --------------------------------------------------------
 #
 #     dbh_cm = scale * age_years ** b        (age clamped to [1, the fit's oldest tree])
-#
-# For a tree with a planting date and no diameter (303,612 in September 2026,
-# most of them Amsterdam's), so the crown and height models have a stem to
-# apply to. Fitted on every published tree carrying both a planting date and
-# a measured diameter (1.9M in 23 cities in September 2026). No open
-# reference records age and diameter for urban trees at genus rank -- Tallo
-# has no ages, and the Urban Tree Database is ~170 US species by climate zone
-# -- and the population this serves is the rollup's own.
-#
-# The window is 1-200 years: under a year the power law heads for zero, and
-# past 200 the rollup holds a few dozen estimated ages on monumental Berlin
-# and Paris trees, which should not set a street tree's clamp. The ingests
-# null the planting dates that are not ages (a portal's stamped default,
-# dates before 1500 or in the future), so nothing here second-guesses them.
-#
-# The gate: n >= 100, r2 >= 0.2 (Lagerstroemia's r2 is 0.00), 0.3 <= b <= 1.3,
-# and an oldest fitted tree of 20 years, since a fit on saplings alone would
-# clamp every mature tree to a sapling's stem.
 
-const dbh_fit_min_n <- 100;
-const dbh_fit_min_r2 <- 0.2;
-const dbh_fit_min_b <- 0.3;
-const dbh_fit_max_b <- 1.3;
-const dbh_fit_min_age_years <- 1.0;
-const dbh_fit_max_age_years <- 200.0;
-const dbh_fit_min_oldest_years <- 20.0;
+# The tree's class's fit, and the fit over every tree, as read from the
+# class table; then the one the tree takes.
+auto dbh_class_passes <- @for_class(age_division_passes, age_fit_class);
+auto dbh_class_n <- @for_class(age_division_n, age_fit_class);
+auto dbh_class_a <- @for_class(age_division_a, age_fit_class);
+auto dbh_class_b <- @for_class(age_division_b, age_fit_class);
+auto dbh_class_sigma <- @for_class(age_division_sigma, age_fit_class);
+auto dbh_class_xmax <- @for_class(age_division_xmax, age_fit_class);
+auto dbh_all_n <- max(age_global_n) by *;
+auto dbh_all_a <- max(age_global_a) by *;
+auto dbh_all_b <- max(age_global_b) by *;
+auto dbh_all_sigma <- max(age_global_sigma) by *;
+auto dbh_all_xmax <- max(age_global_xmax) by *;
 
-def dbh_fit_passes(n, b, r2, xmax) -> case
-    when n >= dbh_fit_min_n and r2 >= dbh_fit_min_r2 and b >= dbh_fit_min_b and b <= dbh_fit_max_b
-        and xmax >= log(dbh_fit_min_oldest_years, 10) then true
-    else false
-end;
-
-auto dbh_fit_tree <- case
-    when age_years >= dbh_fit_min_age_years and age_years <= dbh_fit_max_age_years
-        and dbh_cm <= fit_max_dbh_cm and crown_fallback_class != 'none' then true
-    else false
-end;
-auto dbh_fit_x <- case when dbh_fit_tree then log(age_years, 10) else null end;
-auto dbh_fit_y <- case when dbh_fit_tree then log(dbh_cm, 10) else null end;
-
-auto dbh_genus_fit_n <- @fit_n(dbh_fit_x, genus);
-auto dbh_genus_fit_b <- @fit_b(dbh_fit_x, dbh_fit_y, genus);
-auto dbh_genus_fit_a <- @fit_a(dbh_fit_x, dbh_fit_y, dbh_genus_fit_b, genus);
-auto dbh_genus_fit_sigma <- @fit_s(dbh_fit_x, dbh_fit_y, dbh_genus_fit_b, dbh_genus_fit_n, genus);
-auto dbh_genus_fit_r2 <- @fit_r2(dbh_fit_x, dbh_fit_y, dbh_genus_fit_b, genus);
-auto dbh_genus_fit_age_max_years <- 10 ** @fit_xmax(dbh_fit_x, genus);
-auto dbh_genus_fit_scale <- @fit_scale(dbh_genus_fit_a, dbh_genus_fit_sigma);
-auto dbh_genus_fit_passes <- case when genus is null then false else @dbh_fit_passes(dbh_genus_fit_n, dbh_genus_fit_b, dbh_genus_fit_r2, @fit_xmax(dbh_fit_x, genus)) end;
-
-auto dbh_division_fit_n <- @fit_n(dbh_fit_x, crown_fallback_class);
-auto dbh_division_fit_b <- @fit_b(dbh_fit_x, dbh_fit_y, crown_fallback_class);
-auto dbh_division_fit_a <- @fit_a(dbh_fit_x, dbh_fit_y, dbh_division_fit_b, crown_fallback_class);
-auto dbh_division_fit_sigma <- @fit_s(dbh_fit_x, dbh_fit_y, dbh_division_fit_b, dbh_division_fit_n, crown_fallback_class);
-auto dbh_division_fit_r2 <- @fit_r2(dbh_fit_x, dbh_fit_y, dbh_division_fit_b, crown_fallback_class);
-auto dbh_division_fit_passes <- @dbh_fit_passes(dbh_division_fit_n, dbh_division_fit_b, dbh_division_fit_r2, @fit_xmax(dbh_fit_x, crown_fallback_class));
-
-auto dbh_global_fit_n <- @fit_n_all(dbh_fit_x);
-auto dbh_global_fit_b <- @fit_b_all(dbh_fit_x, dbh_fit_y);
-auto dbh_global_fit_a <- @fit_a_all(dbh_fit_x, dbh_fit_y, dbh_global_fit_b);
-auto dbh_global_fit_sigma <- @fit_s_all(dbh_fit_x, dbh_fit_y, dbh_global_fit_b, dbh_global_fit_n);
-auto dbh_global_fit_r2 <- @fit_r2_all(dbh_fit_x, dbh_fit_y, dbh_global_fit_b);
-auto dbh_global_fit_passes <- @dbh_fit_passes(dbh_global_fit_n, dbh_global_fit_b, dbh_global_fit_r2, @fit_xmax_all(dbh_fit_x));
-
-auto dbh_fallback_level <- @fallback_level(dbh_division_fit_passes);
-auto dbh_fallback_n <- @pick_fallback(dbh_fallback_level, dbh_division_fit_n, dbh_global_fit_n);
-auto dbh_fallback_b <- @pick_fallback(dbh_fallback_level, dbh_division_fit_b, dbh_global_fit_b);
-auto dbh_fallback_r2 <- @pick_fallback(dbh_fallback_level, dbh_division_fit_r2, dbh_global_fit_r2);
-auto dbh_fallback_scale <- @pick_fallback(dbh_fallback_level,
-    @fit_scale(dbh_division_fit_a, dbh_division_fit_sigma), @fit_scale(dbh_global_fit_a, dbh_global_fit_sigma));
-auto dbh_fallback_age_max_years <- @pick_fallback(dbh_fallback_level,
-    10 ** @fit_xmax(dbh_fit_x, crown_fallback_class), 10 ** @fit_xmax_all(dbh_fit_x));
-
-auto dbh_scale <- case when dbh_genus_fit_passes then dbh_genus_fit_scale else dbh_fallback_scale end;
-auto dbh_b <- case when dbh_genus_fit_passes then dbh_genus_fit_b else dbh_fallback_b end;
-auto dbh_age_max_years <- case when dbh_genus_fit_passes then dbh_genus_fit_age_max_years else dbh_fallback_age_max_years end;
+auto dbh_uses_genus <- case when genus is null then false else coalesce(age_genus_passes, false) end;
+auto dbh_fallback_level <- @fallback_level(crown_fallback_class, coalesce(dbh_class_passes, false));
+auto dbh_n <- @pick_fit(dbh_uses_genus, dbh_fallback_level, age_genus_n, dbh_class_n, dbh_all_n);
+auto dbh_a <- @pick_fit(dbh_uses_genus, dbh_fallback_level, age_genus_a, dbh_class_a, dbh_all_a);
+auto dbh_b <- @pick_fit(dbh_uses_genus, dbh_fallback_level, age_genus_b, dbh_class_b, dbh_all_b);
+auto dbh_sigma <- @pick_fit(dbh_uses_genus, dbh_fallback_level, age_genus_sigma, dbh_class_sigma, dbh_all_sigma);
+auto dbh_xmax <- @pick_fit(dbh_uses_genus, dbh_fallback_level, age_genus_xmax, dbh_class_xmax, dbh_all_xmax);
+auto dbh_scale <- @fit_scale(dbh_a, dbh_sigma);
+auto dbh_age_max_years <- 10 ** dbh_xmax;
 
 # Clamped to [1 year, the fit's oldest tree], with the null case spelled out
 # for the reason the crown clamp spells it out.
@@ -332,7 +99,7 @@ auto predicted_dbh_cm <- dbh_scale * (dbh_age_years ** dbh_b);
 
 auto dbh_model_level <- case
     when age_years is null then 'none'
-    when dbh_genus_fit_passes then 'genus'
+    when dbh_uses_genus then 'genus'
     when dbh_fallback_level is null then 'none'
     else dbh_fallback_level
 end;
@@ -342,11 +109,7 @@ auto dbh_model_taxon <- case
     when dbh_model_level = 'global' then 'all'
     else crown_fallback_class
 end;
-auto dbh_model_n <- case
-    when dbh_model_level = 'none' then null
-    when dbh_model_level = 'genus' then dbh_genus_fit_n
-    else dbh_fallback_n
-end;
+auto dbh_model_n <- case when dbh_model_level = 'none' then null else dbh_n end;
 
 # --- Crown width -----------------------------------------------------------
 
@@ -359,24 +122,7 @@ auto crown_dbh_source <- case
     else null
 end;
 
-auto crown_scale <- coalesce(crown_fit_scale, crown_fallback_scale);
-auto crown_b <- coalesce(crown_fit_b, crown_fallback_b);
-auto crown_dbh_max_cm <- coalesce(crown_fit_dbh_max_cm, crown_fallback_dbh_max_cm);
-
-# Clamped to [1 cm, the fit's largest stem]: an exponent below one keeps a
-# power law tame, but a data-entry DBH of 400 inches should predict the crown
-# of the largest tree the genus was fitted on, not extrapolate past it. The
-# null case is spelled out because DuckDB's greatest() skips nulls -- without
-# it a tree with no diameter is a 1 cm stem with a 70 cm crown.
-def crown_width_at(dbh) -> case
-    when dbh is null then null
-    else 2 * crown_scale * (least(greatest(dbh, 1.0), crown_dbh_max_cm) ** crown_b)
-end;
-
 auto predicted_crown_width_m <- @crown_width_at(crown_input_dbh_cm);
-# The crown the measured stem alone predicts: what the height gates compare a
-# survey's crown with, independent of the age model.
-auto measured_stem_crown_width_m <- @crown_width_at(dbh_cm);
 
 # The observed crown, where a source recorded one (tree_common's crown_width_m:
 # Tokyo's survey, an OSM diameter_crown tag, a reviewed satellite crown), is
@@ -400,202 +146,33 @@ auto crown_model_n <- case
     else crown_fallback_n
 end;
 
-# ---------------------------------------------------------------------------
-# The height model
-# ---------------------------------------------------------------------------
+# --- Height ------------------------------------------------------------------
 #
 #     height_m = scale * dbh_cm ** b        (dbh clamped to [1, the fit's largest stem])
 #
-# Fitted on the map's own trees that carry a LIDAR height (tree_height.preql;
-# Boston, Cambridge and the Arnold Arboretum today), not on Tallo: Tallo's
-# forest-grown heights missed Cambridge's street trees by a median 6.2 m
-# where a LIDAR fit missed by 2.8 m (docs/TREE_HEIGHT.md). It is one metro's
-# street trees until another city's survey is added to tree_height_source.
-#
 # Same input diameter as the crown, same fallbacks by growth form, same
 # clamp. The observed height, where a city published one, is carried beside
-# the prediction as `height_m` (tree_height_source.preql) and checked
-# against it below.
-#
-# The gate: n >= 100, 0.01 <= b <= 1.0, and a largest fitted stem of at
-# least 30 cm. No r2 floor, unlike the age fit: a flat fit is a true answer
-# for a genus that stays small whatever its stem (Malus: 9-11 m from 10 to
-# 60 cm), and an r2 floor sent it to the angiosperm fit, which calls a 30 cm
-# crabapple 13 m.
-#
-# --- The gates on an observed height ---------------------------------------
-#
-# A LIDAR height is the height of the crown over the tree's point, and two
-# things put the wrong crown there (docs/TREE_HEIGHT.md, "The gates"):
-#
-#   shaded       the crown is far wider than the tree's own stem could carry:
-#                a sapling or an understorey tree under a neighbour's canopy,
-#                lent the neighbour's height. Wider than `shaded_crown_ratio`
-#                times the radius the crown model predicts from the stem.
-#                Inventory trees past that ratio read 40% tall on average;
-#                below twice it, not at all.
-#   out_of_band  the height is outside `height_band_sigmas` standard
-#                deviations of the height fit's residual for the tree's
-#                genus, either way: a geocode on a building edge, or on a
-#                shrub beside a mature tree. The band is the fit's own
-#                spread, so a genus that varies more is given more room.
-#
-# Both compare the survey with a prediction from the stem, so both need a
-# stem someone measured. Imagery predictions and reviewed satellite
-# detections carry a diameter a model supplied from the same crown, and a
-# tree with no diameter has only its genus median to be compared with: those
-# keep their survey height, `unchecked`. A shaded or out-of-band tree falls
-# back to its predicted height on the map; `height_m` keeps what the survey
-# said, for curation.
-#
-# The fit leaves out the trees the gates refuse, so a neighbour's crown does
-# not teach a sapling a mature height: shaded trees before fitting, then the
-# out-of-band ones, refitting twice (rounds 0, 1, 2 below) so the outliers do
-# not widen the band that judges them. Fitting to convergence took nine
-# rounds on Boston in November 2026 and moved the band 1% past round 2.
+# the prediction as `height_m` (tree_height_source.preql) and checked against
+# it below.
 
-const shaded_crown_ratio <- 3.0;
-const height_band_sigmas <- 3.0;
-const height_fit_min_n <- 100;
-const height_fit_min_b <- 0.01;
-const height_fit_max_b <- 1.0;
-const height_fit_min_dbh_cm <- 2.5; # one inch: below it a "diameter" is a placeholder
-const height_fit_min_largest_dbh_cm <- 30.0;
+auto height_class_passes <- @for_class(height_division_passes, height_fit_class);
+auto height_class_a <- @for_class(height_division_a, height_fit_class);
+auto height_class_b <- @for_class(height_division_b, height_fit_class);
+auto height_class_sigma <- @for_class(height_division_sigma, height_fit_class);
+auto height_class_xmax <- @for_class(height_division_xmax, height_fit_class);
+auto height_all_a <- max(height_global_a) by *;
+auto height_all_b <- max(height_global_b) by *;
+auto height_all_sigma <- max(height_global_sigma) by *;
+auto height_all_xmax <- max(height_global_xmax) by *;
 
-def height_fit_passes(n, b, xmax) -> case
-    when n >= height_fit_min_n and b >= height_fit_min_b and b <= height_fit_max_b
-        and xmax >= log(height_fit_min_largest_dbh_cm, 10) then true
-    else false
-end;
-
-# Within the band of a round's fit: the residual, with the diameter clamped
-# as the predictions clamp it, inside height_band_sigmas sigma.
-def height_in_band(x, y, a, b, s, xmax) -> case
-    when abs(y - a - b * least(greatest(x, 0.0), xmax)) <= height_band_sigmas * s then true
-    else false
-end;
-
-auto height_stem_measured <- case
-    when crown_dbh_source != 'measured' or crown_dbh_source is null then false
-    when data_source like 'PREDICTED_%' or data_source like 'SATELLITE_%' then false
-    else true
-end;
-
-auto height_shaded <- case
-    when height_crown_radius_m > shaded_crown_ratio * measured_stem_crown_width_m / 2 then true
-    else false
-end;
-
-auto height_fit_tree <- case
-    when height_m > 0 and height_stem_measured and not height_shaded
-        and dbh_cm >= height_fit_min_dbh_cm and dbh_cm <= fit_max_dbh_cm
-        and crown_fallback_class != 'none' then true
-    else false
-end;
-
-# Round 0: every unshaded tree.
-auto height_r0_x <- case when height_fit_tree then log(dbh_cm, 10) else null end;
-auto height_r0_y <- case when height_fit_tree then log(height_m, 10) else null end;
-
-auto height_r0_genus_n <- @fit_n(height_r0_x, genus);
-auto height_r0_genus_b <- @fit_b(height_r0_x, height_r0_y, genus);
-auto height_r0_genus_a <- @fit_a(height_r0_x, height_r0_y, height_r0_genus_b, genus);
-auto height_r0_genus_s <- @fit_s(height_r0_x, height_r0_y, height_r0_genus_b, height_r0_genus_n, genus);
-auto height_r0_genus_xmax <- @fit_xmax(height_r0_x, genus);
-auto height_r0_genus_passes <- case when genus is null then false else @height_fit_passes(height_r0_genus_n, height_r0_genus_b, height_r0_genus_xmax) end;
-auto height_r0_division_n <- @fit_n(height_r0_x, crown_fallback_class);
-auto height_r0_division_b <- @fit_b(height_r0_x, height_r0_y, crown_fallback_class);
-auto height_r0_division_a <- @fit_a(height_r0_x, height_r0_y, height_r0_division_b, crown_fallback_class);
-auto height_r0_division_s <- @fit_s(height_r0_x, height_r0_y, height_r0_division_b, height_r0_division_n, crown_fallback_class);
-auto height_r0_division_xmax <- @fit_xmax(height_r0_x, crown_fallback_class);
-auto height_r0_global_n <- @fit_n_all(height_r0_x);
-auto height_r0_global_b <- @fit_b_all(height_r0_x, height_r0_y);
-auto height_r0_global_a <- @fit_a_all(height_r0_x, height_r0_y, height_r0_global_b);
-auto height_r0_global_s <- @fit_s_all(height_r0_x, height_r0_y, height_r0_global_b, height_r0_global_n);
-auto height_r0_global_xmax <- @fit_xmax_all(height_r0_x);
-auto height_r0_fallback_level <- @fallback_level(@height_fit_passes(height_r0_division_n, height_r0_division_b, height_r0_division_xmax));
-auto height_r0_a <- case when height_r0_genus_passes then height_r0_genus_a
-    else @pick_fallback(height_r0_fallback_level, height_r0_division_a, height_r0_global_a) end;
-auto height_r0_b <- case when height_r0_genus_passes then height_r0_genus_b
-    else @pick_fallback(height_r0_fallback_level, height_r0_division_b, height_r0_global_b) end;
-auto height_r0_s <- case when height_r0_genus_passes then height_r0_genus_s
-    else @pick_fallback(height_r0_fallback_level, height_r0_division_s, height_r0_global_s) end;
-auto height_r0_xmax <- case when height_r0_genus_passes then height_r0_genus_xmax
-    else @pick_fallback(height_r0_fallback_level, height_r0_division_xmax, height_r0_global_xmax) end;
-auto height_r0_in_band <- @height_in_band(height_r0_x, height_r0_y, height_r0_a, height_r0_b, height_r0_s, height_r0_xmax);
-
-# Round 1: the trees inside round 0's band.
-auto height_r1_x <- case when height_r0_in_band then height_r0_x else null end;
-auto height_r1_y <- case when height_r0_in_band then height_r0_y else null end;
-
-auto height_r1_genus_n <- @fit_n(height_r1_x, genus);
-auto height_r1_genus_b <- @fit_b(height_r1_x, height_r1_y, genus);
-auto height_r1_genus_a <- @fit_a(height_r1_x, height_r1_y, height_r1_genus_b, genus);
-auto height_r1_genus_s <- @fit_s(height_r1_x, height_r1_y, height_r1_genus_b, height_r1_genus_n, genus);
-auto height_r1_genus_xmax <- @fit_xmax(height_r1_x, genus);
-auto height_r1_genus_passes <- case when genus is null then false else @height_fit_passes(height_r1_genus_n, height_r1_genus_b, height_r1_genus_xmax) end;
-auto height_r1_division_n <- @fit_n(height_r1_x, crown_fallback_class);
-auto height_r1_division_b <- @fit_b(height_r1_x, height_r1_y, crown_fallback_class);
-auto height_r1_division_a <- @fit_a(height_r1_x, height_r1_y, height_r1_division_b, crown_fallback_class);
-auto height_r1_division_s <- @fit_s(height_r1_x, height_r1_y, height_r1_division_b, height_r1_division_n, crown_fallback_class);
-auto height_r1_division_xmax <- @fit_xmax(height_r1_x, crown_fallback_class);
-auto height_r1_global_n <- @fit_n_all(height_r1_x);
-auto height_r1_global_b <- @fit_b_all(height_r1_x, height_r1_y);
-auto height_r1_global_a <- @fit_a_all(height_r1_x, height_r1_y, height_r1_global_b);
-auto height_r1_global_s <- @fit_s_all(height_r1_x, height_r1_y, height_r1_global_b, height_r1_global_n);
-auto height_r1_global_xmax <- @fit_xmax_all(height_r1_x);
-auto height_r1_fallback_level <- @fallback_level(@height_fit_passes(height_r1_division_n, height_r1_division_b, height_r1_division_xmax));
-auto height_r1_a <- case when height_r1_genus_passes then height_r1_genus_a
-    else @pick_fallback(height_r1_fallback_level, height_r1_division_a, height_r1_global_a) end;
-auto height_r1_b <- case when height_r1_genus_passes then height_r1_genus_b
-    else @pick_fallback(height_r1_fallback_level, height_r1_division_b, height_r1_global_b) end;
-auto height_r1_s <- case when height_r1_genus_passes then height_r1_genus_s
-    else @pick_fallback(height_r1_fallback_level, height_r1_division_s, height_r1_global_s) end;
-auto height_r1_xmax <- case when height_r1_genus_passes then height_r1_genus_xmax
-    else @pick_fallback(height_r1_fallback_level, height_r1_division_xmax, height_r1_global_xmax) end;
-auto height_r1_in_band <- @height_in_band(height_r1_x, height_r1_y, height_r1_a, height_r1_b, height_r1_s, height_r1_xmax);
-
-# Round 2, the fit the predictions apply: the trees inside round 1's band.
-auto height_fit_x <- case when height_r1_in_band then height_r1_x else null end;
-auto height_fit_y <- case when height_r1_in_band then height_r1_y else null end;
-
-auto height_genus_fit_n <- @fit_n(height_fit_x, genus);
-auto height_genus_fit_b <- @fit_b(height_fit_x, height_fit_y, genus);
-auto height_genus_fit_a <- @fit_a(height_fit_x, height_fit_y, height_genus_fit_b, genus);
-auto height_genus_fit_sigma <- @fit_s(height_fit_x, height_fit_y, height_genus_fit_b, height_genus_fit_n, genus);
-auto height_genus_fit_r2 <- @fit_r2(height_fit_x, height_fit_y, height_genus_fit_b, genus);
-auto height_genus_fit_dbh_max_cm <- 10 ** @fit_xmax(height_fit_x, genus);
-auto height_genus_fit_scale <- @fit_scale(height_genus_fit_a, height_genus_fit_sigma);
-auto height_genus_fit_passes <- case when genus is null then false else @height_fit_passes(height_genus_fit_n, height_genus_fit_b, @fit_xmax(height_fit_x, genus)) end;
-
-auto height_division_fit_n <- @fit_n(height_fit_x, crown_fallback_class);
-auto height_division_fit_b <- @fit_b(height_fit_x, height_fit_y, crown_fallback_class);
-auto height_division_fit_a <- @fit_a(height_fit_x, height_fit_y, height_division_fit_b, crown_fallback_class);
-auto height_division_fit_sigma <- @fit_s(height_fit_x, height_fit_y, height_division_fit_b, height_division_fit_n, crown_fallback_class);
-auto height_division_fit_r2 <- @fit_r2(height_fit_x, height_fit_y, height_division_fit_b, crown_fallback_class);
-auto height_division_fit_passes <- @height_fit_passes(height_division_fit_n, height_division_fit_b, @fit_xmax(height_fit_x, crown_fallback_class));
-
-auto height_global_fit_n <- @fit_n_all(height_fit_x);
-auto height_global_fit_b <- @fit_b_all(height_fit_x, height_fit_y);
-auto height_global_fit_a <- @fit_a_all(height_fit_x, height_fit_y, height_global_fit_b);
-auto height_global_fit_sigma <- @fit_s_all(height_fit_x, height_fit_y, height_global_fit_b, height_global_fit_n);
-auto height_global_fit_r2 <- @fit_r2_all(height_fit_x, height_fit_y, height_global_fit_b);
-auto height_global_fit_passes <- @height_fit_passes(height_global_fit_n, height_global_fit_b, @fit_xmax_all(height_fit_x));
-
-auto height_fallback_level <- @fallback_level(height_division_fit_passes);
-auto height_fallback_n <- @pick_fallback(height_fallback_level, height_division_fit_n, height_global_fit_n);
-auto height_fallback_b <- @pick_fallback(height_fallback_level, height_division_fit_b, height_global_fit_b);
-auto height_fallback_r2 <- @pick_fallback(height_fallback_level, height_division_fit_r2, height_global_fit_r2);
-auto height_fallback_sigma <- @pick_fallback(height_fallback_level, height_division_fit_sigma, height_global_fit_sigma);
-auto height_fallback_scale <- @pick_fallback(height_fallback_level,
-    @fit_scale(height_division_fit_a, height_division_fit_sigma), @fit_scale(height_global_fit_a, height_global_fit_sigma));
-auto height_fallback_dbh_max_cm <- @pick_fallback(height_fallback_level,
-    10 ** @fit_xmax(height_fit_x, crown_fallback_class), 10 ** @fit_xmax_all(height_fit_x));
-
-auto height_scale <- case when height_genus_fit_passes then height_genus_fit_scale else height_fallback_scale end;
-auto height_b <- case when height_genus_fit_passes then height_genus_fit_b else height_fallback_b end;
-auto height_sigma <- case when height_genus_fit_passes then height_genus_fit_sigma else height_fallback_sigma end;
-auto height_dbh_max_cm <- case when height_genus_fit_passes then height_genus_fit_dbh_max_cm else height_fallback_dbh_max_cm end;
+auto height_uses_genus <- case when genus is null then false else coalesce(height_genus_passes, false) end;
+auto height_fallback_level <- @fallback_level(crown_fallback_class, coalesce(height_class_passes, false));
+auto height_a <- @pick_fit(height_uses_genus, height_fallback_level, height_genus_a, height_class_a, height_all_a);
+auto height_b <- @pick_fit(height_uses_genus, height_fallback_level, height_genus_b, height_class_b, height_all_b);
+auto height_sigma <- @pick_fit(height_uses_genus, height_fallback_level, height_genus_sigma, height_class_sigma, height_all_sigma);
+auto height_xmax <- @pick_fit(height_uses_genus, height_fallback_level, height_genus_xmax, height_class_xmax, height_all_xmax);
+auto height_scale <- @fit_scale(height_a, height_sigma);
+auto height_dbh_max_cm <- 10 ** height_xmax;
 
 # The null case spelled out for the reason the crown clamp spells it out.
 auto height_dbh_cm <- case
@@ -606,6 +183,18 @@ end;
 # A palm gets no height, as it gets no crown: its trunk does not thicken with
 # its height, and no palm stands under a Boston crown to fit.
 auto predicted_height_m <- cast(height_scale * (height_dbh_cm ** height_b) as float);
+
+# --- The gates on an observed height ---------------------------------------
+#
+# `shaded` is tree_allometry_inputs' test. `out_of_band`: the height is
+# outside `height_band_sigmas` standard deviations of the height fit's log
+# residual for the tree's fit, either way -- a geocode on a building edge, or
+# on a shrub beside a mature tree. The band is the fit's own spread, so a
+# genus that varies more is given more room.
+#
+# A tree whose stem nobody measured keeps its survey height, `unchecked`. A
+# shaded or out-of-band tree falls back to its predicted height on the map;
+# `height_m` keeps what the survey said, for curation.
 
 # The band, as multiples of the bias-corrected prediction: the residual's
 # bounds, less the correction the prediction already carries.
@@ -704,58 +293,3 @@ freshness by prediction_inputs_published_through
 # fails it; see `kept_by` in core.preql.  Dropping a city on purpose takes
 # one local `trilogy refresh --skip-validation tree_predictions` build.
 assert @kept_by(tree_id, city, 0.75);
-
-# --- The published fits -------------------------------------------------------
-#
-# What the age and height models were fitted to on this build, for curation:
-# one row per genus that had any usable tree, with its own fit and whether it
-# passed the gate (a genus that did not is predicted on its fallback), and
-# one row per fallback class with the fit that class falls back to. The
-# predictions publish which of these each tree got (`dbh_model_*`).
-
-datasource allometry_genus_fits (
-    genus,
-    ?dbh_genus_fit_n,
-    ?dbh_genus_fit_b,
-    ?dbh_genus_fit_scale,
-    ?dbh_genus_fit_sigma,
-    ?dbh_genus_fit_r2,
-    ?dbh_genus_fit_age_max_years,
-    ?dbh_genus_fit_passes,
-    ?height_genus_fit_n,
-    ?height_genus_fit_b,
-    ?height_genus_fit_scale,
-    ?height_genus_fit_sigma,
-    ?height_genus_fit_r2,
-    ?height_genus_fit_dbh_max_cm,
-    ?height_genus_fit_passes,
-    prediction_inputs_published_through,
-)
-grain (genus)
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/allometry_genus_fits_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/allometry_genus_fits_v{data_version}.parquet`
-where genus is not null and (dbh_genus_fit_n > 0 or height_genus_fit_n > 0)
-freshness by prediction_inputs_published_through
-assert @kept(genus, 0.75);
-
-datasource allometry_fallback_fits (
-    crown_fallback_class,
-    ?dbh_fallback_level,
-    ?dbh_fallback_n,
-    ?dbh_fallback_b,
-    ?dbh_fallback_scale,
-    ?dbh_fallback_r2,
-    ?dbh_fallback_age_max_years,
-    ?height_fallback_level,
-    ?height_fallback_n,
-    ?height_fallback_b,
-    ?height_fallback_scale,
-    ?height_fallback_sigma,
-    ?height_fallback_r2,
-    ?height_fallback_dbh_max_cm,
-    prediction_inputs_published_through,
-)
-grain (crown_fallback_class)
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/allometry_fallback_fits_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/allometry_fallback_fits_v{data_version}.parquet`
-where crown_fallback_class is not null and crown_fallback_class != 'none'
-freshness by prediction_inputs_published_through
-assert @kept(crown_fallback_class, 0.75);

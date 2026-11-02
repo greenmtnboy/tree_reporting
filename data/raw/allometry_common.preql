@@ -1,0 +1,103 @@
+# The fit arithmetic the allometry stages share: the constants of each
+# model's gate and the least-squares macros. No datasource and no import, so
+# every stage can take it without taking another stage's inputs.
+#
+#     log10(y) = a + b * log10(x)
+#
+# ordinary least squares from a group's moments, once per genus, once per
+# fallback class and once over every usable tree. A prediction applies the
+# power law the fit implies, back-transformed bias corrected (Baskerville
+# 1972):
+#
+#     y = scale * x ** b,    scale = 10 ** (a + sigma^2 * ln(10) / 2)
+#
+# with sigma the residual standard deviation in log10 units. (`log` takes an
+# integer base, so the fits are in log10; the slope is the same in any base.)
+#
+# A genus's own fit is applied when it passes its model's gate; otherwise the
+# tree's fallback class's fit, when that passes; otherwise the fit over every
+# usable tree. See tree_predictions.preql for the stages and why they are
+# separate builds.
+
+const ln_10 <- 2.302585092994046;
+const fit_max_dbh_cm <- 508.0; # 200 inches, shared.ingest.DBH_MAX_INCHES: past it a diameter is a typo
+
+# --- Diameter from age: the gate (allometry_fits.preql) --------------------
+#
+# n >= 100, r2 >= 0.2 (Lagerstroemia's r2 is 0.00), 0.3 <= b <= 1.3, and an
+# oldest fitted tree of 20 years, since a fit on saplings alone would clamp
+# every mature tree to a sapling's stem. The window is 1-200 years: under a
+# year the power law heads for zero, and past 200 the rollup holds a few
+# dozen estimated ages on monumental Berlin and Paris trees, which should not
+# set a street tree's clamp.
+
+const dbh_fit_min_n <- 100;
+const dbh_fit_min_r2 <- 0.2;
+const dbh_fit_min_b <- 0.3;
+const dbh_fit_max_b <- 1.3;
+const dbh_fit_min_age_years <- 1.0;
+const dbh_fit_max_age_years <- 200.0;
+const dbh_fit_min_oldest_years <- 20.0;
+
+def dbh_fit_passes(n, b, r2, xmax) -> case
+    when n >= dbh_fit_min_n and r2 >= dbh_fit_min_r2 and b >= dbh_fit_min_b and b <= dbh_fit_max_b
+        and xmax >= log(dbh_fit_min_oldest_years, 10) then true
+    else false
+end;
+
+# --- Height from diameter: the gate and the band (height_fits.preql) -------
+#
+# n >= 100, 0.01 <= b <= 1.0, and a largest fitted stem of at least 30 cm. No
+# r2 floor, unlike the age fit: a flat fit is a true answer for a genus that
+# stays small whatever its stem (Malus: 9-11 m from 10 to 60 cm), and an r2
+# floor sent it to the angiosperm fit, which calls a 30 cm crabapple 13 m.
+
+const shaded_crown_ratio <- 3.0;
+const height_band_sigmas <- 3.0;
+const height_fit_min_n <- 100;
+const height_fit_min_b <- 0.01;
+const height_fit_max_b <- 1.0;
+const height_fit_min_dbh_cm <- 2.5; # one inch: below it a "diameter" is a placeholder
+const height_fit_min_largest_dbh_cm <- 30.0;
+
+def height_fit_passes(n, b, xmax) -> case
+    when n >= height_fit_min_n and b >= height_fit_min_b and b <= height_fit_max_b
+        and xmax >= log(height_fit_min_largest_dbh_cm, 10) then true
+    else false
+end;
+
+# --- Least squares -------------------------------------------------------------
+
+def fit_n(x, grp) -> count(x) by grp;
+def fit_b(x, y, grp) -> ((avg(x * y) by grp) - (avg(x) by grp) * (avg(y) by grp)) / ((avg(x * x) by grp) - (avg(x) by grp) ** 2);
+def fit_a(x, y, b, grp) -> (avg(y) by grp) - b * (avg(x) by grp);
+def fit_s(x, y, b, n, grp) -> case when n > 2 then sqrt(greatest(n / (n - 2) * ((avg(y * y) by grp) - (avg(y) by grp) ** 2 - b * ((avg(x * y) by grp) - (avg(x) by grp) * (avg(y) by grp))), 0.0)) else null end;
+def fit_r2(x, y, b, grp) -> b * ((avg(x * y) by grp) - (avg(x) by grp) * (avg(y) by grp)) / ((avg(y * y) by grp) - (avg(y) by grp) ** 2);
+def fit_xmax(x, grp) -> max(x) by grp;
+# The same over every usable tree: `by *` cannot be passed as an argument.
+def fit_n_all(x) -> count(x) by *;
+def fit_b_all(x, y) -> ((avg(x * y) by *) - (avg(x) by *) * (avg(y) by *)) / ((avg(x * x) by *) - (avg(x) by *) ** 2);
+def fit_a_all(x, y, b) -> (avg(y) by *) - b * (avg(x) by *);
+def fit_s_all(x, y, b, n) -> case when n > 2 then sqrt(greatest(n / (n - 2) * ((avg(y * y) by *) - (avg(y) by *) ** 2 - b * ((avg(x * y) by *) - (avg(x) by *) * (avg(y) by *))), 0.0)) else null end;
+def fit_r2_all(x, y, b) -> b * ((avg(x * y) by *) - (avg(x) by *) * (avg(y) by *)) / ((avg(y * y) by *) - (avg(y) by *) ** 2);
+def fit_xmax_all(x) -> max(x) by *;
+
+def fit_scale(a, s) -> 10 ** (a + s ** 2 * ln_10 / 2);
+
+# --- The fallback --------------------------------------------------------------
+#
+# A fallback class takes its own fit when that passes the gate, else the fit
+# over every tree; the sentinels' class (`all`) always takes the fit over
+# every tree, and a palm (`none`) takes none.
+
+def fallback_level(cls, division_passes) -> case
+    when cls = 'none' then null
+    when cls != 'all' and division_passes then 'division'
+    else 'global'
+end;
+def pick_fit(genus_passes, level, genus, division, everything) -> case
+    when genus_passes then genus
+    when level = 'division' then division
+    when level = 'global' then everything
+    else null
+end;

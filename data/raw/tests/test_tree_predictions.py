@@ -2,10 +2,11 @@
 
 `tree_predictions.preql` applies `crown_width_m = 2 * scale * dbh_cm ** b`
 from a committed CSV that `crown_allometry_fit.py` writes from Tallo. The
-diameter-from-age and height models are fitted inside the model on every
-build, on the trees it reads; the execution tests below run the model's own
-SQL over a generated population and check every fit against a least-squares
-reference computed here.
+diameter-from-age and height models are fitted on every build, in two
+stages ahead of the predictions (`allometry_fits.preql`, `height_fits.preql`);
+the execution tests below run each stage's own SQL over a generated
+population, feed each stage the parquets the one before it wrote, and check
+every fit against a least-squares reference computed here.
 
 The wiring tests are the ones `test_cloud_jobs.py` makes for the rollup and
 enrichment, applied to a job that consumes both.
@@ -33,8 +34,17 @@ sys.path.insert(0, str(RAW_DIR / "tools"))
 import crown_allometry_fit as fit  # noqa: E402
 
 MODEL = RAW_DIR / "tree_predictions.preql"
+INPUTS = RAW_DIR / "tree_allometry_inputs.preql"
+COMMON = RAW_DIR / "allometry_common.preql"
+# The stages in build order, each with the tables it publishes.
+STAGES = {
+    "allometry_fits.preql": ("age_genus_fits", "age_class_fits", "height_fit_sample"),
+    "height_fits.preql": ("height_genus_fits", "height_class_fits"),
+    "tree_predictions.preql": ("tree_predictions",),
+}
+MODEL_FILES = (COMMON, INPUTS, RAW_DIR / "allometry_fits_source.preql", RAW_DIR / "height_fit_sample_source.preql",
+               *(RAW_DIR / stage for stage in STAGES))
 COEFFICIENTS = RAW_DIR / "crown_width_coefficients.csv"
-TARGETS = ("tree_predictions", "allometry_genus_fits", "allometry_fallback_fits")
 
 
 def statements(path: Path) -> str:
@@ -44,7 +54,11 @@ def statements(path: Path) -> str:
 
 
 def model_consts() -> dict[str, float]:
-    return {name: float(value) for name, value in re.findall(r"^const (\w+) <- ([-\d.]+);", MODEL.read_text(encoding="utf-8"), re.M)}
+    return {
+        name: float(value)
+        for path in MODEL_FILES
+        for name, value in re.findall(r"^const (\w+) <- ([-\d.]+);", path.read_text(encoding="utf-8"), re.M)
+    }
 
 
 @pytest.fixture(scope="module")
@@ -56,7 +70,7 @@ def rows() -> list[dict[str, str]]:
 def test_csv_has_the_columns_the_model_reads(rows):
     assert list(rows[0].keys()) == fit.CSV_COLUMNS
     for column in ("level", "taxon", "fit_level", "fit_taxon", "n", "b", "scale", "dbh_max_cm"):
-        assert f"{column}:" in statements(MODEL), f"the model no longer maps {column}"
+        assert f"{column}:" in statements(INPUTS), f"the model no longer maps {column}"
 
 
 def test_every_genus_row_is_a_usable_power_law(rows):
@@ -123,10 +137,11 @@ def test_the_fits_reapply_the_ingest_guard_with_the_same_number():
 
 def test_no_generated_code_in_the_model():
     """The fallbacks are data now: the CSV's rows, or this build's own fits."""
-    text = MODEL.read_text(encoding="utf-8")
-    assert "# BEGIN" not in text and "do not edit" not in text
-    for stale in ("dbh_age_coefficients", "tree_height_coefficients", "angiosperm_", "gymnosperm_"):
-        assert stale not in statements(MODEL), stale
+    for path in MODEL_FILES:
+        text = path.read_text(encoding="utf-8")
+        assert "# BEGIN" not in text and "do not edit" not in text, path.name
+        for stale in ("dbh_age_coefficients", "tree_height_coefficients", "angiosperm_", "gymnosperm_"):
+            assert stale not in statements(path), (path.name, stale)
 
 
 # --- wiring -----------------------------------------------------------------
@@ -139,7 +154,7 @@ def test_the_prediction_job_consumes_its_inputs_by_name():
     named exactly like the managed ones that write them; rename either side
     and the platform stops ordering this job after its producers, silently.
     """
-    model = statements(MODEL)
+    model = statements(INPUTS)
     assert "import full_tree_info_source;" in model
     assert "import tree_enrichment_source;" in model
     enrichment_source = statements(RAW_DIR / "tree_enrichment_source.preql")
@@ -156,9 +171,41 @@ def test_the_prediction_job_consumes_its_inputs_by_name():
         "refuses the prediction columns outright."
     )
     assert re.search(r"^datasource tree_enrichment \(", statements(RAW_DIR / "tree_enrichment.preql"), re.M)
-    # And the model itself must not be a second route to either.
-    assert "import tree_enrichment;" not in model
-    assert "import full_tree_publish;" not in model
+    # And no stage may be a second route to either.
+    for path in MODEL_FILES:
+        assert "import tree_enrichment;" not in statements(path), path.name
+        assert "import full_tree_publish;" not in statements(path), path.name
+
+
+def test_each_stage_reads_the_one_before_it_by_name():
+    """The fits are ordered by the same name trick as the rollup.
+
+    Each stage reads the tables the one before it publishes through a root
+    datasource named like the managed one, so the platform runs the stages
+    in order in one tick. A stage that imported the stage before it instead
+    would adopt its targets and refit in its own container.
+    """
+    from trilogy import Environment
+
+    def declared(path):
+        env = Environment(working_path=RAW_DIR)
+        env.parse(path.read_text(encoding="utf-8"))
+        return {name: ds.is_root for name, ds in env.datasources.items()}
+
+    built: set[str] = set()
+    for stage, targets in STAGES.items():
+        datasources = declared(RAW_DIR / stage)
+        for target in targets:
+            assert datasources.get(target) is False, f"{stage} should build {target}"
+        for earlier in built:
+            if earlier in datasources:
+                assert datasources[earlier] is True, f"{stage} rebuilds {earlier} instead of reading it"
+        built |= set(targets)
+    reads = declared(RAW_DIR / "height_fits.preql")
+    assert reads.get("height_fit_sample") is True
+    reads = declared(MODEL)
+    for table in ("age_genus_fits", "age_class_fits", "height_genus_fits", "height_class_fits"):
+        assert reads.get(table) is True, f"tree_predictions.preql does not read {table}"
 
 
 def test_the_source_views_stay_out_of_the_frontend_bundle():
@@ -180,21 +227,19 @@ def test_the_source_views_stay_out_of_the_frontend_bundle():
         assert name not in bundle, f"{name}.preql is in the frontend model bundle"
 
 
-def test_the_model_parses():
+@pytest.mark.parametrize("stage", list(STAGES))
+def test_the_model_parses(stage):
     """A parse failure is otherwise found on a provisioned VM at 06:00 UTC."""
     from trilogy import Environment
 
     env = Environment(working_path=RAW_DIR)
-    env.parse(MODEL.read_text(encoding="utf-8"))
+    env.parse((RAW_DIR / stage).read_text(encoding="utf-8"))
     names = {d.name for d in env.datasources.values()}
-    assert "tree_predictions" in names
-    assert "full_tree_info" in names
-    assert "tree_enrichment" in names
-    assert "crown_width_coefficients" in names
-    assert "crown_width_fallbacks" in names
-    assert "allometry_genus_fits" in names
-    assert "allometry_fallback_fits" in names
-    assert "published_tree_heights" in names
+    assert set(STAGES[stage]) <= names
+    if stage != "height_fits.preql":
+        for name in ("full_tree_info", "tree_enrichment", "published_tree_heights",
+                     "crown_width_coefficients", "crown_width_fallbacks"):
+            assert name in names, (stage, name)
 
 
 # --- execution ------------------------------------------------------------
@@ -397,6 +442,7 @@ def reference(rows) -> dict:
         if t["height"] and t["dbh_cm"] is not None and not shaded(t)
         and c["height_fit_min_dbh_cm"] <= t["dbh_cm"] <= c["fit_max_dbh_cm"] and t["class"] != "none"
     }
+    height_points = dict(points)
     dropped: set[str] = set()
     for _ in range(2):
         rounds = fit_all(trees, points, height_gate)
@@ -430,7 +476,8 @@ def reference(rows) -> dict:
             row["gate_low"] = 10 ** (-c["height_band_sigmas"] * f["s"] - f["s"] ** 2 * LN_10 / 2)
             row["gate_high"] = 10 ** (c["height_band_sigmas"] * f["s"] - f["s"] ** 2 * LN_10 / 2)
         out[t["tree_id"]] = row
-    return {"trees": out, "age": age, "height": height, "band_dropped": dropped, "by_id": by_id}
+    return {"trees": out, "age": age, "height": height, "band_dropped": dropped, "by_id": by_id,
+            "height_points": height_points}
 
 
 @pytest.fixture(scope="module")
@@ -471,40 +518,95 @@ def fixture_files(tmp_path_factory) -> dict[str, Path]:
     return files
 
 
-def run_model(files: dict[str, Path], query: str) -> list[dict]:
-    """The model's own SQL, run by DuckDB over the fixture files.
+WATERMARK = "prediction_inputs_published_through"
 
-    The planner is asked for the targets' columns, the `read_parquet` URLs it
-    names are pointed at the local parquets, and the const bind parameters are
-    filled from the model text -- the same substitutions a cloud refresh
-    makes, minus the network.
+
+def stage_env(stage: str):
+    """A stage's environment, with its own targets taken out of scope.
+
+    Returns the environment, an executor, and the targets as the model
+    declares them: with the targets in scope the planner would read their
+    published parquets back instead of deriving them.
     """
-    import duckdb
     from trilogy import Dialects, Environment
 
     env = Environment(working_path=RAW_DIR)
-    env.parse(MODEL.read_text(encoding="utf-8"))
-    # Ask for the derivation, not the published parquets: with the targets in
-    # scope the planner would read them back instead.
-    for name in TARGETS:
+    env.parse((RAW_DIR / stage).read_text(encoding="utf-8"))
+    targets = {name: env.datasources[name] for name in STAGES[stage]}
+    for name in targets:
         del env.datasources[name]
-    executor = Dialects.DUCK_DB.default_executor(environment=env)
-    (sql,) = executor.generate_sql(query)
+    return env, Dialects.DUCK_DB.default_executor(environment=env), targets
+
+
+def localize(files: dict[str, Path], sql: str) -> str:
+    """The substitutions a cloud refresh makes, minus the network.
+
+    The `read_parquet` URLs the planner names are pointed at the local
+    parquets, and the const bind parameters are filled from the model text.
+    """
     for pattern, path in files.items():
         sql = re.sub(rf"read_parquet\(\[?'[^']*{pattern}[^']*'\]?\)", f"read_parquet('{path.as_posix()}')", sql)
     for name, value in model_consts().items():
         sql = re.sub(rf":{name}\b", repr(value), sql)
     assert "uv_run" not in sql, "the probe should not be needed for these columns"
     assert ":" not in re.sub(r"'[^']*'", "", sql), "an unbound parameter survived"
+    return sql
+
+
+def fetch(sql: str) -> list[dict]:
+    import duckdb
+
     conn = duckdb.connect()
-    columns = [d[0] for d in conn.execute(sql).description]
-    return [dict(zip(columns, row)) for row in conn.execute(sql).fetchall()]
+    cursor = conn.execute(sql)
+    columns = [d[0] for d in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+def run_model(files: dict[str, Path], query: str, stage: str = "tree_predictions.preql") -> list[dict]:
+    """A select against a stage's model, run by DuckDB over the fixture files."""
+    _, executor, _ = stage_env(stage)
+    (sql,) = executor.generate_sql(query)
+    return fetch(localize(files, sql))
+
+
+def build_stage(files: dict[str, Path], stage: str, tmp: Path) -> dict[str, Path]:
+    """Build a stage's tables the way a refresh does, into local parquets.
+
+    Each target's own update statement -- its columns and its `where` -- less
+    the watermark, which only the freshness probe supplies; the columns are
+    written under the target's column names, as the published file has them.
+    """
+    import duckdb
+
+    env, executor, targets = stage_env(stage)
+    built = dict(files)
+    for name, target in targets.items():
+        columns = [c for c in target.columns if c.alias != WATERMARK]
+        statement = target.model_copy(update={"columns": columns}).create_update_statement(env, None, line_no=None)
+        sql = localize(files, executor.generator.compile_statement(executor.generator.generate_queries(env, [statement])[-1]))
+        renames = ", ".join(f'"{c.concept.address.split(".", 1)[1]}" AS "{c.alias}"' for c in columns)
+        path = tmp / f"{name}.parquet"
+        duckdb.connect().execute(f"COPY (SELECT {renames} FROM ({sql})) TO '{path.as_posix()}' (FORMAT PARQUET)")
+        built[f"{name}_v"] = path
+    return built
 
 
 @pytest.fixture(scope="module")
-def predictions(fixture_files) -> list[dict]:
+def fit_files(fixture_files, tmp_path_factory) -> dict[str, Path]:
+    """The fixture parquets plus every table the fitting stages publish."""
+    tmp = tmp_path_factory.mktemp("stages")
+    files = build_stage(fixture_files, "allometry_fits.preql", tmp)
+    return build_stage(files, "height_fits.preql", tmp)
+
+
+def published(files: dict[str, Path], table: str) -> list[dict]:
+    return fetch(f"SELECT * FROM read_parquet('{files[table + '_v'].as_posix()}')")
+
+
+@pytest.fixture(scope="module")
+def predictions(fit_files) -> list[dict]:
     return run_model(
-        fixture_files,
+        fit_files,
         """
         select
             tree_id, city, genus, dbh_cm, age_years, predicted_dbh_cm,
@@ -719,43 +821,33 @@ def test_every_population_height_is_judged_as_the_reference_judges_it(prediction
 # --- the published fits ------------------------------------------------------------
 
 
-def test_the_genus_fits_are_published(fixture_files, reference):
-    published = {
-        row["genus"]: row
-        for row in run_model(
-            fixture_files,
-            """
-            select genus, dbh_genus_fit_n, dbh_genus_fit_b, dbh_genus_fit_passes,
-                height_genus_fit_n, height_genus_fit_b, height_genus_fit_passes
-            where genus is not null and (dbh_genus_fit_n > 0 or height_genus_fit_n > 0);
-            """,
-        )
-    }
-    assert set(published) == {"Acer", "Pinus", "Quercus", "Newconifer"}, published
+@pytest.mark.parametrize("model", ["age", "height"])
+def test_the_genus_fits_are_published(fit_files, reference, model):
+    got = {row["genus"]: row for row in published(fit_files, f"{model}_genus_fits")}
+    # Newconifer has one dated tree, a row with no fit; its one height is out
+    # of band, so no height row is left for it at all.
+    assert set(got) == ({"Acer", "Pinus", "Quercus", "Newconifer"} if model == "age" else {"Acer", "Pinus", "Quercus"}), got
     for genus in ("Acer", "Pinus"):
-        age, height = reference["age"]["genus"][genus], reference["height"]["genus"][genus]
-        assert published[genus]["dbh_genus_fit_passes"] and published[genus]["height_genus_fit_passes"]
-        assert published[genus]["dbh_genus_fit_n"] == age["n"] and published[genus]["height_genus_fit_n"] == height["n"]
-        assert math.isclose(published[genus]["dbh_genus_fit_b"], age["b"], rel_tol=1e-6)
-        assert math.isclose(published[genus]["height_genus_fit_b"], height["b"], rel_tol=1e-6)
-    assert not published["Quercus"]["dbh_genus_fit_passes"] and not published["Quercus"]["height_genus_fit_passes"]
+        expected = reference[model]["genus"][genus]
+        assert got[genus]["passes"] and got[genus]["n"] == expected["n"], got[genus]
+        for column in ("a", "b", "xmax"):
+            assert math.isclose(got[genus][column], expected[column], rel_tol=1e-6), (genus, column)
+    assert not got["Quercus"]["passes"]
 
 
-def test_the_fallback_fits_are_published(fixture_files, reference):
-    published = {
-        row["crown_fallback_class"]: row
-        for row in run_model(
-            fixture_files,
-            """
-            select crown_fallback_class, dbh_fallback_level, dbh_fallback_n, height_fallback_level, height_fallback_n
-            where crown_fallback_class is not null and crown_fallback_class != 'none';
-            """,
-        )
-    }
-    assert set(published) == {"Angiosperm", "Gymnosperm", "all"}, published
-    assert published["all"]["dbh_fallback_level"] == "global" and published["all"]["height_fallback_level"] == "global"
-    assert published["all"]["dbh_fallback_n"] == reference["age"]["global"]["n"]
+@pytest.mark.parametrize("model", ["age", "height"])
+def test_the_class_fits_are_published(fit_files, reference, model):
+    got = {row["fit_class"]: row for row in published(fit_files, f"{model}_class_fits")}
+    assert set(got) == {"Angiosperm", "Gymnosperm", "all"}, got
+    for row in got.values():
+        assert row["global_n"] == reference[model]["global"]["n"]
+        assert math.isclose(row["global_b"], reference[model]["global"]["b"], rel_tol=1e-6)
     for division in ("Angiosperm", "Gymnosperm"):
-        assert published[division]["dbh_fallback_level"] == "division"
-        assert published[division]["dbh_fallback_n"] == reference["age"]["division"][division]["n"]
-        assert published[division]["height_fallback_n"] == reference["height"]["division"][division]["n"]
+        assert got[division]["division_n"] == reference[model]["division"][division]["n"]
+        assert got[division]["division_passes"], division
+
+
+def test_the_height_sample_is_the_unshaded_measured_trees(fit_files, reference):
+    """Every tree the reference would fit, and none it would not."""
+    sample = {row["tree_id"] for row in published(fit_files, "height_fit_sample")}
+    assert sample == set(reference["height_points"]), sample ^ set(reference["height_points"])

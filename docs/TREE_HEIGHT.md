@@ -180,10 +180,12 @@ from age), with the same fallbacks by growth form and no height for a palm:
 
     height_m = scale * dbh_cm ** b        (dbh clamped to the fitted range)
 
-fitted per genus in `tree_predictions.preql`, on every build, on the
-LIDAR-heighted inventory trees `tree_height_source.preql` reads that pass the
-gates above (about 73k in November 2026, all Boston metro). Each build
-publishes its fits in `allometry_genus_fits` and `allometry_fallback_fits`. Not Tallo: fitted on Boston and the Arboretum and
+fitted per genus on every build, on the LIDAR-heighted inventory trees
+`tree_height_source.preql` reads that pass the gates above (about 73k in
+November 2026, all Boston metro): `allometry_fits.preql` publishes them as
+`height_fit_sample`, `height_fits.preql` fits and trims them and publishes
+`height_genus_fits` and `height_class_fits`, and `tree_predictions.preql`
+applies those. Not Tallo: fitted on Boston and the Arboretum and
 held out on Cambridge's 26.8k matched trees, a Tallo genus fit missed by a
 median 6.2 m and called a 24"+ street tree 29 m against the survey's 19 m;
 the LIDAR fit missed by 2.8 m with no bias in any diameter band (DBH alone,

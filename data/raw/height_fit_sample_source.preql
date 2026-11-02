@@ -1,0 +1,27 @@
+# The height fit's sample, as a *source*: the trees `allometry_fits.preql`
+# found fit to teach the height model, one row each, reduced to what a fit
+# reads. Root, so `height_fits.preql` reads it and never builds it, and named
+# `height_fit_sample` like the managed datasource that writes it, so the
+# platform orders refresh-height-fits after refresh-allometry-fits in one tick.
+#
+# Its own key, not `tree_id`: the height fits never meet a tree row, only
+# these columns, which is the point -- each refit round reads `x` and `y` as
+# stored values rather than re-deriving them from the tree.
+
+import core;
+
+key height_sample_tree_id string;
+property height_sample_tree_id.height_sample_genus string; # the enrichment table's genus; null for a species it does not know
+property height_sample_tree_id.height_sample_class string; # the fallback class: Angiosperm | Gymnosperm | all
+property height_sample_tree_id.height_sample_x float; # log10 of the measured diameter in cm
+property height_sample_tree_id.height_sample_y float; # log10 of the LIDAR height in m
+
+root datasource height_fit_sample (
+    tree_id: height_sample_tree_id,
+    genus: ?height_sample_genus,
+    fit_class: height_sample_class,
+    x: height_sample_x,
+    y: height_sample_y,
+)
+grain (height_sample_tree_id)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/height_fit_sample_v{data_version}.parquet`;

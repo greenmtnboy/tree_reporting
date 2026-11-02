@@ -1,0 +1,165 @@
+# The height model's fits, made on the sample `allometry_fits.preql`
+# published: built by the `refresh-height-fits` [[cloud.job]], after
+# refresh-allometry-fits and before refresh-predictions in the core's tick.
+#
+#     height_m = scale * dbh_cm ** b        (dbh clamped to [1, the fit's largest stem])
+#
+# Fitted on the map's own trees that carry a LIDAR height (tree_height.preql;
+# Boston, Cambridge and the Arnold Arboretum today), not on Tallo: Tallo's
+# forest-grown heights missed Cambridge's street trees by a median 6.2 m
+# where a LIDAR fit missed by 2.8 m (docs/TREE_HEIGHT.md). The gate is in
+# allometry_common.preql.
+#
+# The sample already leaves out the shaded trees and the stems nobody
+# measured. The fit then leaves out the out-of-band ones -- a height outside
+# `height_band_sigmas` residual standard deviations of the tree's fit, a
+# geocode on a building edge or on a shrub beside a mature tree -- refitting
+# twice (rounds 0, 1 and the published one) so the outliers do not widen the
+# band that judges them. Fitting to convergence took nine rounds on Boston in
+# November 2026 and moved the band 1% past the published round.
+#
+# Why a stage of its own: each round's band is a per-tree test on the round
+# before it, so a round's fit nests every round under it. Over the tree rows
+# that nesting carried the whole shading and crown model into every moment
+# of every fit, and the SQL ran to megabytes. Over the sample, `x` and `y`
+# are stored columns.
+
+import allometry_common;
+import prediction_inputs;
+import height_fit_sample_source;
+
+auto height_r0_x <- height_sample_x;
+auto height_r0_y <- height_sample_y;
+
+# A round's fit at the three levels, and the one each sample tree takes.
+auto height_r0_genus_n <- @fit_n(height_r0_x, height_sample_genus);
+auto height_r0_genus_b <- @fit_b(height_r0_x, height_r0_y, height_sample_genus);
+auto height_r0_genus_a <- @fit_a(height_r0_x, height_r0_y, height_r0_genus_b, height_sample_genus);
+auto height_r0_genus_s <- @fit_s(height_r0_x, height_r0_y, height_r0_genus_b, height_r0_genus_n, height_sample_genus);
+auto height_r0_genus_xmax <- @fit_xmax(height_r0_x, height_sample_genus);
+auto height_r0_genus_passes <- case when height_sample_genus is null then false else @height_fit_passes(height_r0_genus_n, height_r0_genus_b, height_r0_genus_xmax) end;
+auto height_r0_division_n <- @fit_n(height_r0_x, height_sample_class);
+auto height_r0_division_b <- @fit_b(height_r0_x, height_r0_y, height_sample_class);
+auto height_r0_division_a <- @fit_a(height_r0_x, height_r0_y, height_r0_division_b, height_sample_class);
+auto height_r0_division_s <- @fit_s(height_r0_x, height_r0_y, height_r0_division_b, height_r0_division_n, height_sample_class);
+auto height_r0_division_xmax <- @fit_xmax(height_r0_x, height_sample_class);
+auto height_r0_global_n <- @fit_n_all(height_r0_x);
+auto height_r0_global_b <- @fit_b_all(height_r0_x, height_r0_y);
+auto height_r0_global_a <- @fit_a_all(height_r0_x, height_r0_y, height_r0_global_b);
+auto height_r0_global_s <- @fit_s_all(height_r0_x, height_r0_y, height_r0_global_b, height_r0_global_n);
+auto height_r0_global_xmax <- @fit_xmax_all(height_r0_x);
+auto height_r0_level <- @fallback_level(height_sample_class, @height_fit_passes(height_r0_division_n, height_r0_division_b, height_r0_division_xmax));
+auto height_r0_a <- @pick_fit(height_r0_genus_passes, height_r0_level, height_r0_genus_a, height_r0_division_a, height_r0_global_a);
+auto height_r0_b <- @pick_fit(height_r0_genus_passes, height_r0_level, height_r0_genus_b, height_r0_division_b, height_r0_global_b);
+auto height_r0_s <- @pick_fit(height_r0_genus_passes, height_r0_level, height_r0_genus_s, height_r0_division_s, height_r0_global_s);
+auto height_r0_xmax <- @pick_fit(height_r0_genus_passes, height_r0_level, height_r0_genus_xmax, height_r0_division_xmax, height_r0_global_xmax);
+
+# Within the band of a round's fit: the residual, with the diameter clamped
+# as the predictions clamp it, inside height_band_sigmas sigma.
+def height_in_band(x, y, a, b, s, xmax) -> case
+    when abs(y - a - b * least(greatest(x, 0.0), xmax)) <= height_band_sigmas * s then true
+    else false
+end;
+auto height_r0_in_band <- @height_in_band(height_r0_x, height_r0_y, height_r0_a, height_r0_b, height_r0_s, height_r0_xmax);
+
+# Round 1: the trees inside round 0's band.
+auto height_r1_x <- case when height_r0_in_band then height_r0_x else null end;
+auto height_r1_y <- case when height_r0_in_band then height_r0_y else null end;
+
+auto height_r1_genus_n <- @fit_n(height_r1_x, height_sample_genus);
+auto height_r1_genus_b <- @fit_b(height_r1_x, height_r1_y, height_sample_genus);
+auto height_r1_genus_a <- @fit_a(height_r1_x, height_r1_y, height_r1_genus_b, height_sample_genus);
+auto height_r1_genus_s <- @fit_s(height_r1_x, height_r1_y, height_r1_genus_b, height_r1_genus_n, height_sample_genus);
+auto height_r1_genus_xmax <- @fit_xmax(height_r1_x, height_sample_genus);
+auto height_r1_genus_passes <- case when height_sample_genus is null then false else @height_fit_passes(height_r1_genus_n, height_r1_genus_b, height_r1_genus_xmax) end;
+auto height_r1_division_n <- @fit_n(height_r1_x, height_sample_class);
+auto height_r1_division_b <- @fit_b(height_r1_x, height_r1_y, height_sample_class);
+auto height_r1_division_a <- @fit_a(height_r1_x, height_r1_y, height_r1_division_b, height_sample_class);
+auto height_r1_division_s <- @fit_s(height_r1_x, height_r1_y, height_r1_division_b, height_r1_division_n, height_sample_class);
+auto height_r1_division_xmax <- @fit_xmax(height_r1_x, height_sample_class);
+auto height_r1_global_n <- @fit_n_all(height_r1_x);
+auto height_r1_global_b <- @fit_b_all(height_r1_x, height_r1_y);
+auto height_r1_global_a <- @fit_a_all(height_r1_x, height_r1_y, height_r1_global_b);
+auto height_r1_global_s <- @fit_s_all(height_r1_x, height_r1_y, height_r1_global_b, height_r1_global_n);
+auto height_r1_global_xmax <- @fit_xmax_all(height_r1_x);
+auto height_r1_level <- @fallback_level(height_sample_class, @height_fit_passes(height_r1_division_n, height_r1_division_b, height_r1_division_xmax));
+auto height_r1_a <- @pick_fit(height_r1_genus_passes, height_r1_level, height_r1_genus_a, height_r1_division_a, height_r1_global_a);
+auto height_r1_b <- @pick_fit(height_r1_genus_passes, height_r1_level, height_r1_genus_b, height_r1_division_b, height_r1_global_b);
+auto height_r1_s <- @pick_fit(height_r1_genus_passes, height_r1_level, height_r1_genus_s, height_r1_division_s, height_r1_global_s);
+auto height_r1_xmax <- @pick_fit(height_r1_genus_passes, height_r1_level, height_r1_genus_xmax, height_r1_division_xmax, height_r1_global_xmax);
+auto height_r1_in_band <- @height_in_band(height_r1_x, height_r1_y, height_r1_a, height_r1_b, height_r1_s, height_r1_xmax);
+
+# The published round: the trees inside round 1's band.
+auto height_fit_x <- case when height_r1_in_band then height_r1_x else null end;
+auto height_fit_y <- case when height_r1_in_band then height_r1_y else null end;
+
+auto height_genus_fit_n <- @fit_n(height_fit_x, height_sample_genus);
+auto height_genus_fit_b <- @fit_b(height_fit_x, height_fit_y, height_sample_genus);
+auto height_genus_fit_a <- @fit_a(height_fit_x, height_fit_y, height_genus_fit_b, height_sample_genus);
+auto height_genus_fit_sigma <- @fit_s(height_fit_x, height_fit_y, height_genus_fit_b, height_genus_fit_n, height_sample_genus);
+auto height_genus_fit_r2 <- @fit_r2(height_fit_x, height_fit_y, height_genus_fit_b, height_sample_genus);
+auto height_genus_fit_xmax <- @fit_xmax(height_fit_x, height_sample_genus);
+auto height_genus_fit_passes <- @height_fit_passes(height_genus_fit_n, height_genus_fit_b, height_genus_fit_xmax);
+
+auto height_division_fit_n <- @fit_n(height_fit_x, height_sample_class);
+auto height_division_fit_b <- @fit_b(height_fit_x, height_fit_y, height_sample_class);
+auto height_division_fit_a <- @fit_a(height_fit_x, height_fit_y, height_division_fit_b, height_sample_class);
+auto height_division_fit_sigma <- @fit_s(height_fit_x, height_fit_y, height_division_fit_b, height_division_fit_n, height_sample_class);
+auto height_division_fit_r2 <- @fit_r2(height_fit_x, height_fit_y, height_division_fit_b, height_sample_class);
+auto height_division_fit_xmax <- @fit_xmax(height_fit_x, height_sample_class);
+auto height_division_fit_passes <- @height_fit_passes(height_division_fit_n, height_division_fit_b, height_division_fit_xmax);
+
+auto height_global_fit_n <- @fit_n_all(height_fit_x);
+auto height_global_fit_b <- @fit_b_all(height_fit_x, height_fit_y);
+auto height_global_fit_a <- @fit_a_all(height_fit_x, height_fit_y, height_global_fit_b);
+auto height_global_fit_sigma <- @fit_s_all(height_fit_x, height_fit_y, height_global_fit_b, height_global_fit_n);
+auto height_global_fit_r2 <- @fit_r2_all(height_fit_x, height_fit_y, height_global_fit_b);
+auto height_global_fit_xmax <- @fit_xmax_all(height_fit_x);
+
+# --- The published fits ----------------------------------------------------------
+#
+# One row per genus with any sample tree, with its fit and whether it passed
+# the gate (a genus that did not is predicted on its fallback); one row per
+# fallback class, with that class's own fit and the fit over every tree, so
+# the predictions can pick between them without another pass over the trees.
+# Parameters in log10 units; `xmax` is the log10 of the largest fitted stem.
+
+datasource height_genus_fits (
+    genus: height_sample_genus,
+    n: ?height_genus_fit_n,
+    a: ?height_genus_fit_a,
+    b: ?height_genus_fit_b,
+    sigma: ?height_genus_fit_sigma,
+    r2: ?height_genus_fit_r2,
+    xmax: ?height_genus_fit_xmax,
+    passes: ?height_genus_fit_passes,
+    prediction_inputs_published_through: prediction_inputs_published_through,
+)
+grain (height_sample_genus)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/height_genus_fits_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/height_genus_fits_v{data_version}.parquet`
+where height_sample_genus is not null and height_genus_fit_n > 0
+freshness by prediction_inputs_published_through
+assert @kept(height_sample_genus, 0.75);
+
+datasource height_class_fits (
+    fit_class: height_sample_class,
+    division_n: ?height_division_fit_n,
+    division_a: ?height_division_fit_a,
+    division_b: ?height_division_fit_b,
+    division_sigma: ?height_division_fit_sigma,
+    division_r2: ?height_division_fit_r2,
+    division_xmax: ?height_division_fit_xmax,
+    division_passes: ?height_division_fit_passes,
+    global_n: ?height_global_fit_n,
+    global_a: ?height_global_fit_a,
+    global_b: ?height_global_fit_b,
+    global_sigma: ?height_global_fit_sigma,
+    global_r2: ?height_global_fit_r2,
+    global_xmax: ?height_global_fit_xmax,
+    prediction_inputs_published_through: prediction_inputs_published_through,
+)
+grain (height_sample_class)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/height_class_fits_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/height_class_fits_v{data_version}.parquet`
+where height_sample_class is not null
+freshness by prediction_inputs_published_through
+assert @kept(height_sample_class, 0.75);

@@ -1,0 +1,136 @@
+# The first allometry stage: built by the `refresh-allometry-fits`
+# [[cloud.job]] after the rollup and the enrichment table, and before
+# refresh-height-fits and refresh-predictions, in the core's tick.
+#
+# It publishes the diameter-from-age fits, and the sample the height fits
+# are made on. See tree_predictions.preql for why the models are fitted in
+# stages, and allometry_common.preql for the arithmetic and the gates.
+#
+# --- Diameter from age --------------------------------------------------------
+#
+#     dbh_cm = scale * age_years ** b        (age clamped to [1, the fit's oldest tree])
+#
+# For a tree with a planting date and no diameter (303,612 in September 2026,
+# most of them Amsterdam's), so the crown and height models have a stem to
+# apply to. Fitted on every published tree carrying both a planting date and
+# a measured diameter (1.9M in 23 cities in September 2026). No open
+# reference records age and diameter for urban trees at genus rank -- Tallo
+# has no ages, and the Urban Tree Database is ~170 US species by climate zone
+# -- and the population this serves is the rollup's own. The ingests null the
+# planting dates that are not ages (a portal's stamped default, dates before
+# 1500 or in the future), so nothing here second-guesses them.
+
+import tree_allometry_inputs;
+
+auto dbh_fit_tree <- case
+    when age_years >= dbh_fit_min_age_years and age_years <= dbh_fit_max_age_years
+        and dbh_cm <= fit_max_dbh_cm and crown_fallback_class != 'none' then true
+    else false
+end;
+auto dbh_fit_x <- case when dbh_fit_tree then log(age_years, 10) else null end;
+auto dbh_fit_y <- case when dbh_fit_tree then log(dbh_cm, 10) else null end;
+
+auto dbh_genus_fit_n <- @fit_n(dbh_fit_x, genus);
+auto dbh_genus_fit_b <- @fit_b(dbh_fit_x, dbh_fit_y, genus);
+auto dbh_genus_fit_a <- @fit_a(dbh_fit_x, dbh_fit_y, dbh_genus_fit_b, genus);
+auto dbh_genus_fit_sigma <- @fit_s(dbh_fit_x, dbh_fit_y, dbh_genus_fit_b, dbh_genus_fit_n, genus);
+auto dbh_genus_fit_r2 <- @fit_r2(dbh_fit_x, dbh_fit_y, dbh_genus_fit_b, genus);
+auto dbh_genus_fit_xmax <- @fit_xmax(dbh_fit_x, genus);
+auto dbh_genus_fit_passes <- @dbh_fit_passes(dbh_genus_fit_n, dbh_genus_fit_b, dbh_genus_fit_r2, dbh_genus_fit_xmax);
+
+auto dbh_division_fit_n <- @fit_n(dbh_fit_x, crown_fallback_class);
+auto dbh_division_fit_b <- @fit_b(dbh_fit_x, dbh_fit_y, crown_fallback_class);
+auto dbh_division_fit_a <- @fit_a(dbh_fit_x, dbh_fit_y, dbh_division_fit_b, crown_fallback_class);
+auto dbh_division_fit_sigma <- @fit_s(dbh_fit_x, dbh_fit_y, dbh_division_fit_b, dbh_division_fit_n, crown_fallback_class);
+auto dbh_division_fit_r2 <- @fit_r2(dbh_fit_x, dbh_fit_y, dbh_division_fit_b, crown_fallback_class);
+auto dbh_division_fit_xmax <- @fit_xmax(dbh_fit_x, crown_fallback_class);
+auto dbh_division_fit_passes <- @dbh_fit_passes(dbh_division_fit_n, dbh_division_fit_b, dbh_division_fit_r2, dbh_division_fit_xmax);
+
+auto dbh_global_fit_n <- @fit_n_all(dbh_fit_x);
+auto dbh_global_fit_b <- @fit_b_all(dbh_fit_x, dbh_fit_y);
+auto dbh_global_fit_a <- @fit_a_all(dbh_fit_x, dbh_fit_y, dbh_global_fit_b);
+auto dbh_global_fit_sigma <- @fit_s_all(dbh_fit_x, dbh_fit_y, dbh_global_fit_b, dbh_global_fit_n);
+auto dbh_global_fit_r2 <- @fit_r2_all(dbh_fit_x, dbh_fit_y, dbh_global_fit_b);
+auto dbh_global_fit_xmax <- @fit_xmax_all(dbh_fit_x);
+
+# --- The height fit's sample -------------------------------------------------
+#
+# The trees the height model may learn from: a LIDAR height, a stem someone
+# measured, in the diameter range, not shaded, and not a palm. One row each,
+# reduced to the genus, the class and the two logs, which is all a fit reads;
+# height_fits.preql trims and fits them.
+
+auto height_fit_tree <- case
+    when height_m > 0 and height_stem_measured and not height_shaded
+        and dbh_cm >= height_fit_min_dbh_cm and dbh_cm <= fit_max_dbh_cm
+        and crown_fallback_class != 'none' then true
+    else false
+end;
+auto height_fit_log_dbh <- case when height_fit_tree then log(dbh_cm, 10) else null end;
+auto height_fit_log_height <- case when height_fit_tree then log(height_m, 10) else null end;
+
+# --- The published tables ---------------------------------------------------------
+#
+# The age fits as height_fits.preql publishes the height fits: one row per
+# genus with any usable tree, with its fit and whether it passed the gate; one
+# row per fallback class, with that class's own fit and the fit over every
+# tree. Parameters in log10 units; `xmax` is the log10 of the oldest fitted
+# age.
+#
+# `where tree_id is not null` on the sample: the enrichment source is
+# partial, so the planner joins it with a FULL join, which also emits a row
+# for every enrichment species no published tree carries.
+
+datasource age_genus_fits (
+    genus: genus,
+    n: ?dbh_genus_fit_n,
+    a: ?dbh_genus_fit_a,
+    b: ?dbh_genus_fit_b,
+    sigma: ?dbh_genus_fit_sigma,
+    r2: ?dbh_genus_fit_r2,
+    xmax: ?dbh_genus_fit_xmax,
+    passes: ?dbh_genus_fit_passes,
+    prediction_inputs_published_through: prediction_inputs_published_through,
+)
+grain (genus)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/age_genus_fits_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/age_genus_fits_v{data_version}.parquet`
+where genus is not null and dbh_genus_fit_n > 0
+freshness by prediction_inputs_published_through
+assert @kept(genus, 0.75);
+
+datasource age_class_fits (
+    fit_class: crown_fallback_class,
+    division_n: ?dbh_division_fit_n,
+    division_a: ?dbh_division_fit_a,
+    division_b: ?dbh_division_fit_b,
+    division_sigma: ?dbh_division_fit_sigma,
+    division_r2: ?dbh_division_fit_r2,
+    division_xmax: ?dbh_division_fit_xmax,
+    division_passes: ?dbh_division_fit_passes,
+    global_n: ?dbh_global_fit_n,
+    global_a: ?dbh_global_fit_a,
+    global_b: ?dbh_global_fit_b,
+    global_sigma: ?dbh_global_fit_sigma,
+    global_r2: ?dbh_global_fit_r2,
+    global_xmax: ?dbh_global_fit_xmax,
+    prediction_inputs_published_through: prediction_inputs_published_through,
+)
+grain (crown_fallback_class)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/age_class_fits_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/age_class_fits_v{data_version}.parquet`
+where crown_fallback_class is not null and crown_fallback_class != 'none'
+freshness by prediction_inputs_published_through
+assert @kept(crown_fallback_class, 0.75);
+
+datasource height_fit_sample (
+    tree_id: tree_id,
+    genus: ?genus,
+    fit_class: crown_fallback_class,
+    x: height_fit_log_dbh,
+    y: height_fit_log_height,
+    prediction_inputs_published_through: prediction_inputs_published_through,
+)
+grain (tree_id)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/height_fit_sample_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/height_fit_sample_v{data_version}.parquet`
+where tree_id is not null and height_fit_log_dbh is not null
+freshness by prediction_inputs_published_through
+assert @kept(tree_id, 0.75);

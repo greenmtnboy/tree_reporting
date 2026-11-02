@@ -398,10 +398,17 @@ fitted on the map's own LIDAR-heighted trees), the observed LIDAR
 cannot carry a column only some cities have), a stand-density covariate, and
 a null placeholder for age. Each crown and diameter prediction records the
 model level (genus, family, division, global) and sample size. The age and
-height models are fitted in the model itself, on every build, on the trees
-it reads, and the fits are published beside the predictions as
-`allometry_genus_fits_v{n}.parquet` (one row per genus) and
-`allometry_fallback_fits_v{n}.parquet` (one per fallback class). The crown
+height models are fitted on every build, on the published trees, by two jobs
+that run before the predictions in the same tick: `refresh-allometry-fits`
+(`allometry_fits.preql`) publishes the age fits and the height fit's sample,
+and `refresh-height-fits` (`height_fits.preql`) fits and trims the height
+model on that sample. Each publishes a table with one row per genus and one
+with one row per fallback class (`age_genus_fits_v{n}.parquet`,
+`age_class_fits_v{n}.parquet`, `height_genus_fits_v{n}.parquet`,
+`height_class_fits_v{n}.parquet`), which the predictions read. They are
+separate builds because the height fit's band nests each refit round inside
+the next, and over the tree rows that nesting made the SQL megabytes long;
+over the sample each round reads stored columns. The crown
 model is not urban-calibrated and not density-adjusted; both are left to
 curation. The height model is one metro's street trees until a second LIDAR
 city is added. The map reads the crown width and both heights from the
