@@ -28,7 +28,7 @@
   ],
   "default_insets": ["hayes_valley", "mission"],
   "insets": {
-    "alamo_square": {"label": "Alamo Square & Painted Ladies", "center_lonlat": [-122.4347, 37.7763], "size_km": 2},
+    "alamo_square": {"label": "Alamo Square & Buena Vista Park", "center_lonlat": [-122.4387, 37.7733], "size_km": 2},
     "hayes_valley": {"label": "Hayes Valley & Civic Center", "center_lonlat": [-122.4215, 37.7765], "size_km": 2},
     "mission": {"label": "Mission District", "center_lonlat": [-122.4194, 37.7545], "size_km": 2},
     "golden_gate_park": {"label": "Golden Gate Park", "center_lonlat": [-122.473, 37.7694], "size_km": 2},
