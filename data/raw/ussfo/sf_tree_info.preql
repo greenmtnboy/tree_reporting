@@ -3,14 +3,14 @@ import ..community_tree_info;
 import ..satellite_tree_info;
 import ..tree_dedup;
 
-key ussfo_source enum<string>['SF_OPENDATA', 'COMMUNITY_USSFO', 'OSM_USSFO', 'SATELLITE_USSFO'];
+key ussfo_source enum<string>['SF_OPENDATA', 'COMMUNITY_USSFO', 'OSM_USSFO', 'SATELLITE_USSFO', 'PREDICTED_USSFO'];
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
 auto ussfo_source_label <- concat(ussfo_source, '');
 merge ussfo_source_label into source_label;
 
-auto ussfo_published_data_updated_through <- greatest(ussfo_data_updated_through, ussfo_community_data_updated_through, ussfo_osm_data_updated_through, ussfo_satellite_data_updated_through);
+auto ussfo_published_data_updated_through <- greatest(ussfo_data_updated_through, ussfo_community_data_updated_through, ussfo_osm_data_updated_through, ussfo_satellite_data_updated_through, ussfo_predicted_data_updated_through);
 
 root datasource sf_update_time (
     data_updated_through: ussfo_data_updated_through
@@ -30,6 +30,12 @@ root datasource ussfo_satellite_update_time (
 )
 file `../satellite_update_time.py`;
 
+# Bulk imagery predictions: the staged file's publication time, so a new
+# prediction run rebuilds this city and nothing else does.
+root datasource ussfo_predicted_update_time (
+    ussfo_predicted_data_updated_through: ussfo_predicted_data_updated_through
+)
+file `../predicted_update_time.py`;
 
 
 
@@ -84,6 +90,18 @@ root partial datasource ussfo_satellite_tree_info extends tree_partition (
 )
 complete where city = 'USSFO' and ussfo_source = 'SATELLITE_USSFO'
 file `../satellite_tree_info.py`
+where city = 'USSFO';
+
+# Bulk aerial-imagery predictions, published without per-tree review (see
+# ../predicted_tree_info.py).  The weakest class in the shared merge: any tree
+# another source has absorbs the prediction and takes none of its values, so
+# these rows only show where nothing else has a tree.  No `source_kept` guard:
+# a new run at a stricter threshold may rightly shed a quarter of them.
+root partial datasource ussfo_predicted_tree_info extends tree_partition (
+    data_source: ussfo_source,
+)
+complete where city = 'USSFO' and ussfo_source = 'PREDICTED_USSFO'
+file `../predicted_tree_info.py`
 where city = 'USSFO';
 
 

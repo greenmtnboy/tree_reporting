@@ -887,6 +887,8 @@ memory_mb = 2048
 
 # --- daily: the portal itself moves on a scale of days ---------------------
 
+# Memory is for PREDICTED_USSFO, the bulk imagery predictions over the 10 km
+# poster circle; sized like Boston's until a forced build measures it.
 [[cloud.job]]
 key = "city-ussfo"
 name = "urban-tree-city-ussfo"
@@ -894,7 +896,7 @@ entrypoint = "raw/ussfo/sf_tree_info.preql"
 operation = "refresh"
 schedule = "0 0 10 * * *"
 timeout_seconds = 1800
-memory_mb = 2048
+memory_mb = 6144
 
 [[cloud.job]]
 key = "city-usnyc"
