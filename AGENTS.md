@@ -41,7 +41,7 @@ pnpm bench:tiles     # time to settle after each zoom and pan, and how long tile
 pnpm bench:dashboard # the summary dashboard's first open on a phone: bytes per file, renderer memory, time until its queries stop
 
 # data, from data/raw
-uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.439" --with "duckdb<2" --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
+uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.445" --with "duckdb<2" --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql   # must report exactly one asset
 ```
 
