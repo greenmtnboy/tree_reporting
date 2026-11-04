@@ -1469,6 +1469,7 @@ def predicted_source_for(city_code: str) -> str:
 # only when it is alone (see tree_dedup.preql).  A person confirming one in the
 # reviewer publishes a `SATELLITE_{code}` row, which then owns the cluster.
 PREDICTED_DATA_SOURCES: dict[str, str] = {
+    "USSFO": predicted_source_for("USSFO"),
     "USBOS": predicted_source_for("USBOS"),
 }
 

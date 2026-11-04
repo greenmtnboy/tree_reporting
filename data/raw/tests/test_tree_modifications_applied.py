@@ -91,12 +91,14 @@ def published(tmp_path_factory) -> dict[str, dict]:
         "sf_tree_info.py": tmp / "municipal.parquet",
         "community_tree_info.py": tmp / "community.parquet",
         "satellite_tree_info.py": tmp / "satellite.parquet",
+        "predicted_tree_info.py": tmp / "predicted.parquet",
         "ussfo_osm_staging.parquet": tmp / "osm.parquet",
         "tree_modification_info.py": tmp / "reports.parquet",
     }
     write_rows(conn, fixtures["sf_tree_info.py"], MUNICIPAL)
     write_rows(conn, fixtures["community_tree_info.py"], COMMUNITY)
     write_rows(conn, fixtures["satellite_tree_info.py"], [])
+    write_rows(conn, fixtures["predicted_tree_info.py"], [])
     write_rows(conn, fixtures["ussfo_osm_staging.parquet"], OSM)
     write_reports(conn, fixtures["tree_modification_info.py"], REPORTS)
 
@@ -111,7 +113,8 @@ def published(tmp_path_factory) -> dict[str, dict]:
     probe = (
         "(SELECT TIMESTAMPTZ '2026-01-01 00:00:00+00' AS data_updated_through, "
         "TIMESTAMPTZ '2026-01-01 00:00:00+00' AS ussfo_community_data_updated_through, "
-        "TIMESTAMPTZ '2026-01-01 00:00:00+00' AS ussfo_satellite_data_updated_through)"
+        "TIMESTAMPTZ '2026-01-01 00:00:00+00' AS ussfo_satellite_data_updated_through, "
+        "TIMESTAMPTZ '2026-01-01 00:00:00+00' AS ussfo_predicted_data_updated_through)"
     )
 
     def repoint(match: re.Match) -> str:

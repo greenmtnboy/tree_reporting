@@ -1,0 +1,37 @@
+{
+  "city": "USSFO",
+  "slug": "san_francisco",
+  "output_folder": "sf_renders",
+  "title": "Treelines of San Francisco, CA, USA",
+  "input": "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_info_v2.parquet",
+  "inventory_sources": ["SF_OPENDATA"],
+  "tree_credit": "Trees: San Francisco Public Works / DataSF Street Tree Inventory",
+  "tree_source_page": "https://data.sf.gov/d/tkzw-k3nq",
+  "imagery_credit": "Imagery: USDA National Agriculture Imagery Program (NAIP)",
+  "projection_center_lonlat": [-122.44, 37.768],
+  "viewport_lonlat": [-122.55376650182961, 37.67806789873646, -122.32623349817038, 37.85793210126354],
+  "circle_center_lonlat": [-122.44, 37.768],
+  "circle_radius_km": 9.0,
+  "water_credit": "Water: DataSF / California Department of Technology / NOAA CUSP",
+  "water_sources": [
+    {
+      "kind": "socrata",
+      "url": "https://data.sf.gov/resource/xgse-mjer.geojson",
+      "documentation": "https://data.sf.gov/d/xgse-mjer"
+    },
+    {
+      "kind": "arcgis",
+      "url": "https://services3.arcgis.com/uknczv4rpevve42E/ArcGIS/rest/services/California_Cartographic_Coastal_Polygons/FeatureServer/31",
+      "documentation": "https://services3.arcgis.com/uknczv4rpevve42E/ArcGIS/rest/services/California_Cartographic_Coastal_Polygons/FeatureServer",
+      "where": "1=1"
+    }
+  ],
+  "default_insets": ["hayes_valley", "mission"],
+  "insets": {
+    "alamo_square": {"label": "Alamo Square & Buena Vista Park", "center_lonlat": [-122.4387, 37.7733], "size_km": 2},
+    "hayes_valley": {"label": "Hayes Valley & Civic Center", "center_lonlat": [-122.4215, 37.7765], "size_km": 2},
+    "mission": {"label": "Mission District", "center_lonlat": [-122.4194, 37.7545], "size_km": 2},
+    "golden_gate_park": {"label": "Golden Gate Park", "center_lonlat": [-122.473, 37.7694], "size_km": 2},
+    "richmond": {"label": "Richmond District", "center_lonlat": [-122.474, 37.7805], "size_km": 2}
+  }
+}
