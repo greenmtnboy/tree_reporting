@@ -4,11 +4,21 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { streetViewEmbedUrl, streetViewExternalUrl } from '../lib/streetView'
 import StreetViewDialog from '../components/StreetViewDialog.vue'
 
-const state = vi.hoisted(() => ({ map: vi.fn(), markerPosition: vi.fn(), removeMap: vi.fn(), removeMarker: vi.fn(), unbind: vi.fn() }))
+const state = vi.hoisted(() => ({ listeners: {} as Record<string, () => void>, camera: { lat: () => 42.002, lng: () => -71.001 }, heading: 90, status: 'OK', rotation: vi.fn(), bounds: vi.fn(), dispose: vi.fn(), map: vi.fn(), markerPosition: vi.fn(), removeMap: vi.fn(), removeMarker: vi.fn(), unbind: vi.fn() }))
 vi.mock('maplibre-gl', () => ({ default: {
-  Map: class { constructor(options: unknown) { state.map(options) } remove = state.removeMap },
-  Marker: class { setLngLat(position: unknown) { state.markerPosition(position); return this } addTo() { return this } remove = state.removeMarker },
+  Map: class { constructor(options: unknown) { state.map(options) } fitBounds = state.bounds; resize() {} remove = state.removeMap },
+  Marker: class { setLngLat(position: unknown) { state.markerPosition(position); return this } setRotation(value: number) { state.rotation(value); return this } addTo() { return this } remove = state.removeMarker },
 } }))
+vi.mock('../lib/streetViewRuntime', () => ({ loadStreetView: vi.fn(async () => ({
+  StreetViewPanorama: class {
+    getPosition() { return state.camera }
+    getPov() { return { heading: state.heading, pitch: 0 } }
+    getStatus() { return state.status }
+    setVisible = state.dispose
+    addListener(event: string, cb: () => void) { state.listeners[event] = cb; return { remove() {} } }
+  },
+  event: { trigger: vi.fn(), clearInstanceListeners: vi.fn() },
+})) }))
 vi.mock('../composables/mapTheme', () => ({ basemapStyleUrl: () => 'https://basemaps.cartocdn.com/test/style.json', bindMapTheme: () => state.unbind }))
 vi.mock('../composables/useTheme', () => ({ useTheme: () => ({ resolvedTheme: { value: 'light' } }) }))
 const position = { lat: 42.001, lng: -71 }
@@ -38,24 +48,39 @@ it.each([undefined, '', '  '])('does not create an embed URL with missing key %s
 it('keeps the external fallback key-free', () => {
   expect(streetViewExternalUrl(position)).toBe('https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=42.001,-71')
 })
-it('renders an accessible iframe and a separate tree-location map without loading the Google JS SDK', async () => {
+it('tracks the actual camera position and heading, independently of the tree', async () => {
   await mount()
-  const frame = document.querySelector('iframe')!
-  expect(frame.title).toBe('Google Street View near this tree')
-  expect(frame.getAttribute('referrerpolicy')).toBe('strict-origin-when-cross-origin')
-  expect(frame.hasAttribute('allowfullscreen')).toBe(true)
-  expect(new URL(frame.src).pathname).toBe('/maps/embed/v1/streetview')
-  expect(document.querySelector('script[src*="maps.googleapis.com"]')).toBeNull()
-  expect(document.querySelector('dialog')?.textContent).toContain('does not track Street View')
-  expect(document.querySelector('dialog')?.textContent).not.toContain('Face tree')
-  expect(state.map).toHaveBeenCalledWith(expect.objectContaining({ center: [-71, 42.001], interactive: false }))
   expect(state.markerPosition).toHaveBeenCalledWith([-71, 42.001])
+  expect(state.markerPosition).toHaveBeenCalledWith([-71.001, 42.002])
+  expect(state.rotation).toHaveBeenCalledWith(90)
+  state.heading = 180
+  state.listeners.pov_changed!()
+  expect(state.rotation).toHaveBeenLastCalledWith(180)
+  state.camera = { lat: () => 42.003, lng: () => -71.002 }
+  state.listeners.position_changed!()
+  expect(state.markerPosition).toHaveBeenLastCalledWith([-71.002, 42.003])
+  state.status = 'ZERO_RESULTS'
+  state.listeners.status_changed!()
+  await nextTick()
+  expect(document.querySelector('[role=status]')?.textContent).toContain('unavailable')
+  expect(state.removeMarker).toHaveBeenCalled()
+  state.status = 'OK'
+})
+it('expands the entire workspace and restores it', async () => {
+  await mount()
+  const button = document.querySelector<HTMLButtonElement>('button[aria-pressed]')!
+  button.click()
+  await nextTick()
+  expect(document.querySelector('dialog')?.classList.contains('expanded')).toBe(true)
+  button.click()
+  await nextTick()
+  expect(document.querySelector('dialog')?.classList.contains('expanded')).toBe(false)
 })
 it('shows missing configuration and the external fallback without creating a map', async () => {
   await mount('')
   expect(document.querySelector('[role=status]')?.textContent).toContain('not configured')
   expect(document.querySelector('iframe')).toBeNull()
-  expect(state.map).not.toHaveBeenCalled()
+  expect(state.map).toHaveBeenCalled()
   expect(document.querySelector('dialog a')?.getAttribute('href')).toBe(streetViewExternalUrl(position))
 })
 it('closes from the button and releases the inset, iframe, and focus on unmount', async () => {
@@ -63,12 +88,12 @@ it('closes from the button and releases the inset, iframe, and focus on unmount'
   document.body.append(opener)
   opener.focus()
   await mount()
-  document.querySelector<HTMLButtonElement>('dialog header button')!.click()
+  document.querySelector<HTMLButtonElement>('button[aria-label="Close Street View"]')!.click()
   expect(closed).toHaveBeenCalledOnce()
   unmount!(); unmount = undefined
   expect(state.unbind).toHaveBeenCalledOnce()
   expect(state.removeMap).toHaveBeenCalledOnce()
-  expect(state.removeMarker).toHaveBeenCalledOnce()
+  expect(state.removeMarker).toHaveBeenCalledTimes(2)
   expect(document.querySelector('iframe')).toBeNull()
   expect(document.activeElement).toBe(opener)
   opener.remove()

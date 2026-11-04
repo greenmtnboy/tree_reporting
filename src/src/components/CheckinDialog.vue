@@ -1,9 +1,9 @@
 <template>
-  <Teleport to="body">
-  <div class="checkin-dialog" :class="{ 'checkin-dialog--remote': remoteCorrection }" role="dialog" aria-modal="true" aria-labelledby="checkin-title" @click.self="handleDismiss">
+  <Teleport to="body" :disabled="inline">
+  <div class="checkin-dialog" :class="{ 'checkin-dialog--remote': remoteCorrection, 'checkin-dialog--inline': inline }" :role="inline ? 'region' : 'dialog'" :aria-modal="inline ? undefined : true" aria-labelledby="checkin-title" @click.self="handleDismiss">
     <div class="checkin-dialog__panel">
       <header class="checkin-dialog__header">
-        <h2 id="checkin-title" class="checkin-dialog__title">{{ remoteCorrection ? 'Suggest a correction' : MODE_TITLES[mode] }}</h2>
+        <h2 id="checkin-title" class="checkin-dialog__title">{{ remoteCorrection && mode === 'update' ? 'Suggest a correction' : MODE_TITLES[mode] }}</h2>
         <button
           type="button"
           class="checkin-dialog__close"
@@ -252,6 +252,7 @@ const props = defineProps<{
   dbhInches?: number | null
   plantYear?: number | null
   initialMode?: 'checkin' | 'update' | 'missing'
+  inline?: boolean
   remoteCorrection?: boolean
 }>()
 
@@ -320,7 +321,7 @@ const photoInputRef = ref<HTMLInputElement | null>(null)
 const progress = ref(0)
 const submitError = ref<string>('')
 
-const mode = ref<Mode>(props.remoteCorrection ? 'update' : (props.initialMode ?? 'checkin'))
+const mode = ref<Mode>(props.initialMode ?? (props.remoteCorrection ? 'update' : 'checkin'))
 const proposedLat = ref(props.treeLat)
 const proposedLng = ref(props.treeLng)
 const proposedSpecies = ref('')
@@ -838,4 +839,6 @@ onBeforeUnmount(() => {
   background: var(--color-leaf);
   transition: width 0.18s ease-out;
 }
+.checkin-dialog--inline { position: static; padding: 0; background: none; display: block; }
+.checkin-dialog--inline .checkin-dialog__panel { width: 100%; max-height: none; box-shadow: none; }
 </style>
