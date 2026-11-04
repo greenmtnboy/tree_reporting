@@ -65,6 +65,7 @@ select * from (values
     ('TWTPE', 283),
     ('DKCPH', 647),
     ('FIHEL', 717),
-    ('USSTO', 387)
+    ('USSTO', 387),
+    ('CZPRG', 654)
 ) as t(city, ecoregion_id)
 ''';

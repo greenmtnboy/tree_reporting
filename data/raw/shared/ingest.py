@@ -1311,6 +1311,7 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "CZPRG": ("PRAGUE_OPENDATA",),
     "USSTO": ("STOUGHTON_OPENDATA",),
     "FIHEL": ("HELSINKI_OPENDATA",),
     "DKCPH": ("COPENHAGEN_OPENDATA",),
@@ -1385,6 +1386,7 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "CZPRG": "OSM_CZPRG",
     "USSTO": "OSM_USSTO",
     "FIHEL": "OSM_FIHEL",
     "DKCPH": "OSM_DKCPH",
@@ -1950,6 +1952,7 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "CZPRG": (49.93, 50.19, 14.21, 14.72),
     "USSTO": (42.85, 42.97, -89.3, -89.11),
     "FIHEL": (60.05, 60.35, 24.75, 25.3),
     "DKCPH": (55.58, 55.76, 12.4, 12.7),
@@ -2049,6 +2052,13 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Calibrated 2026-11-04 against a local Overpass extract (19,501 OSM nodes)
+    # and the ingest's 142,097 rows, before the first build.  5-10 m band 56.7%
+    # mutual-NN over n=2,283: a coin flip, so the band rule says a 5 m guarantee
+    # and a 10 m cell.  The marginal table agrees for once: 8->10 removes 482
+    # duplicates for 371 hidden trees (1.30), 10->14 removes 431 for 543 (0.79).
+    # Prague plants at a 5.0 m median and OSM's tracing error reaches past it.
+    "CZPRG": 10,
     # Uncalibratable for now, so the default: OSM had no tree node in
     # Stoughton when it was wired (OSM_UNMAPPED_CITIES), and the cell only
     # decides which OSM or community rows fold into an inventory tree.
@@ -2281,6 +2291,7 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'CZPRG': ((49.93, 50.19, 14.21, 14.72),),
     'USSTO': ((42.85, 42.97, -89.3, -89.11),),
     'FIHEL': ((60.05, 60.35, 24.75, 25.3),),
     'DKCPH': ((55.58, 55.76, 12.4, 12.7),),
