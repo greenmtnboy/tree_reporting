@@ -130,6 +130,7 @@ header { justify-content: space-between; }
 h2 { font-size: 18px; margin: 0; }
 button, a { cursor: pointer; }
 footer a { color: var(--color-leaf); }
+:slotted(button) { min-height: 44px; padding: 8px 12px; margin: 4px 4px 4px 0; border: 1px solid rgba(var(--ink-rgb), .3); border-radius: 6px; background: rgb(var(--surface-raised-rgb)); color: inherit; cursor: pointer; }
 header button { font-size: 14px; min-height: 44px; background: none; border: none; color: inherit; }
 p { padding: 20px; }
 .street-content { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 12px; padding: 0 12px; }

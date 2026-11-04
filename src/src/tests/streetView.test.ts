@@ -76,7 +76,7 @@ it('expands the entire workspace and restores it', async () => {
   await nextTick()
   expect(document.querySelector('dialog')?.classList.contains('expanded')).toBe(false)
 })
-it('shows missing configuration and the external fallback without creating a map', async () => {
+it('keeps the tree map and external fallback available with missing configuration', async () => {
   await mount('')
   expect(document.querySelector('[role=status]')?.textContent).toContain('not configured')
   expect(document.querySelector('iframe')).toBeNull()
