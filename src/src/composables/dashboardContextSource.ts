@@ -272,6 +272,12 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'nearctic',
   },
+  CZPRG: {
+    ecoregionId: 654, // Central European mixed forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

@@ -1,0 +1,26 @@
+import ..landmark_common;
+
+root datasource prague_landmarks_update_time (
+    data_updated_through: czprg_landmark_data_updated_through
+)
+file `./prague_landmarks_probe.py`;
+
+# Prague's listed monuments come from the national cultural-heritage register
+# (NPÚ's `Kulturní památky`, CC-BY 4.0), filtered to the city's territory box;
+# see prague_landmarks.py.  The register's own attributes ride along: the ÚSKP
+# register number and the protection type.
+root partial datasource raw_prague_landmark_info extends landmark_partition (
+    register_number: ?register_number,
+    protection_type: ?protection_type,
+)
+complete where city = 'CZPRG'
+file `./prague_landmarks.py`;
+
+partial datasource prague_landmark_info extends published_landmark_info (
+    ?register_number,
+    ?protection_type,
+    czprg_landmark_data_updated_through,
+)
+complete where city = 'CZPRG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/czprg_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/czprg_landmark_info_v{data_version}.parquet`
+freshness by czprg_landmark_data_updated_through;

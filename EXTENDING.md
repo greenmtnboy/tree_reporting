@@ -162,8 +162,8 @@ columns={...})` last, and writes an Arrow IPC stream to stdout.
 - **`species` is the scientific name only.** Strip a `:: common name`
   suffix; concatenate genus and epithet; leave a quoted cultivar in (the
   schema moves it to `cultivar`). A portal that publishes common names gets a
-  `shared/species/{language}.py` table (English, Japanese, Spanish and
-  Chinese exist); curate it against POWO, never derive it from the
+  `shared/species/{language}.py` table (English, Japanese, Spanish,
+  Chinese and Czech exist); curate it against POWO, never derive it from the
   enrichment parquet.
 - **Null a portal's stamped default planting date** in the ingest
   (`PLACEHOLDER_PLANT_DATE`). `enforce_tree_schema` already nulls dates

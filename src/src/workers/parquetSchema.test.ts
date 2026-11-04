@@ -93,14 +93,22 @@ describe('parquet schema', () => {
           'deploying this city; asserting its model prunes instead',
       )
       // The prune is the shared derivation in data/raw/tree_dedup.preql; a city
-      // takes part by importing it and gating its published target.
+      // takes part by importing it and gating its published target -- either
+      // with its own `where tree_id = cluster_id` line or by extending
+      // `published_tree_info`, the template that carries that gate for every
+      // city scaffolded since it was written.
       const model = ALL_MODEL_SOURCES.find(
         (m) => m.alias.startsWith(`${city.toLowerCase()}.`) && m.alias.endsWith('_tree_info'),
       )
+      const dedup = ALL_MODEL_SOURCES.find((m) => m.alias === 'tree_dedup')
+      const templatePrunes =
+        !!dedup &&
+        dedup.contents.split(/\r?\n/).some((line) => line.startsWith('where tree_id = cluster_id'))
       const prunes =
         !!model &&
         model.contents.includes('import ..tree_dedup;') &&
-        model.contents.split(/\r?\n/).includes('where tree_id = cluster_id') &&
+        (model.contents.split(/\r?\n/).includes('where tree_id = cluster_id') ||
+          (templatePrunes && model.contents.includes('extends published_tree_info'))) &&
         !model.contents.includes('is_duplicate')
       expect(
         prunes,
