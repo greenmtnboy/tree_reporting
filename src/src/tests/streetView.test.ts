@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { streetViewEmbedUrl, streetViewExternalUrl } from '../lib/streetView'
 import StreetViewDialog from '../components/StreetViewDialog.vue'
 
-const state = vi.hoisted(() => ({ listeners: {} as Record<string, () => void>, camera: { lat: () => 42.002, lng: () => -71.001 }, heading: 90, status: 'OK', rotation: vi.fn(), bounds: vi.fn(), dispose: vi.fn(), map: vi.fn(), markerPosition: vi.fn(), removeMap: vi.fn(), removeMarker: vi.fn(), unbind: vi.fn() }))
+const state = vi.hoisted(() => ({ listeners: {} as Record<string, () => void>, camera: { lat: (): number => 42.002, lng: (): number => -71.001 }, heading: 90, status: 'OK', rotation: vi.fn(), bounds: vi.fn(), dispose: vi.fn(), map: vi.fn(), markerPosition: vi.fn(), removeMap: vi.fn(), removeMarker: vi.fn(), unbind: vi.fn() }))
 vi.mock('maplibre-gl', () => ({ default: {
   Map: class { constructor(options: unknown) { state.map(options) } fitBounds = state.bounds; resize() {} remove = state.removeMap },
   Marker: class { setLngLat(position: unknown) { state.markerPosition(position); return this } setRotation(value: number) { state.rotation(value); return this } addTo() { return this } remove = state.removeMarker },
