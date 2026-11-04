@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
 /**
  * `#/?city=USSFO&tree=sf-1` must open that tree's card without a click, and
@@ -15,6 +15,32 @@ const TREE_ID = 'sf-1'
 // Matched case-insensitively: the card shows the enrichment common name.
 const TREE_NAME = /monterey pine/i
 
+type ZoomRange = { min: number; current: number; steps: number }
+
+/** Count the camera's zoom changes from the moment the map exists. */
+async function recordZoomRange(page: Page): Promise<void> {
+  await page.waitForFunction(() => (window as unknown as { __treeMap?: unknown }).__treeMap, null, { timeout: 60_000 })
+  await page.evaluate(() => {
+    const map = (window as unknown as { __treeMap: { getZoom(): number; on(type: string, fn: () => void): void } }).__treeMap
+    const range = { min: map.getZoom(), current: map.getZoom(), steps: 0, last: map.getZoom() }
+    ;(window as unknown as { __zoomRange: typeof range }).__zoomRange = range
+    map.on('zoom', () => {
+      const z = map.getZoom()
+      if (Math.abs(z - range.last) > 0.01) range.steps += 1
+      range.last = z
+      range.current = z
+      range.min = Math.min(range.min, z)
+    })
+  })
+}
+
+async function zoomRange(page: Page): Promise<ZoomRange> {
+  return page.evaluate(() => {
+    const { min, current, steps } = (window as unknown as { __zoomRange: ZoomRange }).__zoomRange
+    return { min, current, steps }
+  })
+}
+
 for (const [label, viewport] of [
   ['desktop', { width: 1280, height: 800 }],
   ['mobile', { width: 390, height: 844 }],
@@ -30,14 +56,19 @@ for (const [label, viewport] of [
     test('opens the linked tree and clears ?tree= when the card closes', async ({ page }) => {
       test.setTimeout(180_000)
       await page.goto(`/#/?city=${CITY}&tree=${TREE_ID}`)
+      await recordZoomRange(page)
 
-      // The card waits for the city load and, on desktop, the intro animation,
-      // then a 1.5 s flight to the tree.
+      // The card waits for the city load, then the camera jumps to the tree:
+      // no intro fly-out on desktop and no flight on either layout.
       const card = page.locator('.tree-card')
       await expect(card).toBeVisible({ timeout: 120_000 })
       await expect(card).toContainText(TREE_ID)
       await expect(card).toContainText(TREE_NAME)
       expect(page.url()).toContain(`tree=${TREE_ID}`)
+      const zoom = await zoomRange(page)
+      expect(zoom.current).toBeCloseTo(17, 1)
+      expect(zoom.min, 'the camera never zoomed out on its way to the tree').toBeGreaterThanOrEqual(13)
+      expect(zoom.steps, 'one jump, not an animated flight').toBeLessThan(5)
 
       await card.locator('.tree-card-close').click()
       await expect(card).toHaveCount(0)

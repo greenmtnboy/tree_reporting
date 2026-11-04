@@ -675,7 +675,7 @@ async function loadCityTrees(city?: string): Promise<void> {
   // in the predictions file. Either may predate them until its next build;
   // probe like `cultivar` and read null heights, sizing sprites as before.
   const heightSource = projectionUrl ?? predictionsUrl
-  const hasHeight = heightSource !== null && await parquetHasColumn(heightSource, 'height_m')
+  const hasHeight = heightSource !== null && await parquetHasColumn(heightSource, projectionUrl ? 'height_m' : 'accepted_height_m')
 
   // A window load still running holds a staging table over the city's types.
   await windowLoadsSettled()

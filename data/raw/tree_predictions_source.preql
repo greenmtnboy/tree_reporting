@@ -26,7 +26,7 @@ import tree_common;
 
 property tree_id.predicted_crown_width_m float; # the allometric crown width, as tree_predictions.preql published it; null where the model had nothing to size from
 property tree_id.predicted_height_m float; # the allometric height, as tree_predictions.preql published it; null where the model had nothing to size from
-property tree_id.height_m float; # the tree's LIDAR height, carried through the predictions from the city parquet; null where it has none (tree_height_source.preql)
+property tree_id.accepted_height_m float; # the tree's LIDAR height where it passed tree_predictions.preql's gates (or could not be checked); null where it has none or failed them
 # A tree-grain property, although every row carries the same value: declared
 # model-wide (`<*>`) the planner fetches it through a second scan of the
 # predictions parquet joined back by tree_id, once per city.
@@ -37,7 +37,7 @@ root datasource tree_predictions (
     city: city,
     predicted_crown_width_m: ?predicted_crown_width_m,
     predicted_height_m: ?predicted_height_m,
-    height_m: ?height_m,
+    accepted_height_m: ?accepted_height_m,
     prediction_inputs_published_through: prediction_inputs_published_through,
 )
 grain (tree_id)

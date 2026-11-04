@@ -324,7 +324,7 @@ import { useMapLifecycle } from '../composables/useMapLifecycle'
 import { useMapLayers, TREES_SOURCE_MAXZOOM, addLandmarkLayer, removeLandmarkLayer, registerLandmarkEyeIcon } from '../composables/useMapLayers'
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { addCityMarkers, updateCityMarkersSelected, removeCityMarkers, bindCityMarkerInteractions } from '../composables/useGlobeCityMarkers'
-import { useMapIntroAnimation, INTRO_START_ZOOM, INTRO_START_BEARING, INTRO_END_BEARING } from '../composables/useMapIntroAnimation'
+import { useMapIntroAnimation, INTRO_START_ZOOM, INTRO_START_BEARING, INTRO_END_BEARING, INTRO_END_ZOOM } from '../composables/useMapIntroAnimation'
 import { resolveBootstrapCity } from '../composables/bootstrapCity'
 import { useIsMobile } from '../composables/useIsMobile'
 import { chooseFullDetail, markMapLoadSettled, markMapLoadStarted, resolveMapWindow } from '../composables/useMapWindow'
@@ -501,6 +501,12 @@ const { landmarks } = useLandmarkData()
 const { target: flyToTarget, flyTo } = useFlyTo()
 const route = useRoute()
 const router = useRouter()
+
+// A URL that arrives with `?tree=` opens on that tree: the desktop skips its
+// intro, and both layouts jump to the tree instead of flying (see the tree
+// deep links below). Consumed by the first landing.
+let pendingInstantDeepLink: string | null = readRouteTreeId(route.query.tree)
+if (pendingInstantDeepLink) introActive.value = false
 const {
   selectedCity,
   currentMapQuery,
@@ -759,7 +765,7 @@ function updateZoomLevel() {
 
     // Expanding range during intro can create excessive tile churn.
     // Only apply wide prefetch once intro ends.
-    if (isInitialLoading.value && !introActive.value && !props.nearbyLocation) {
+    if (isInitialLoading.value && !introActive.value && !props.nearbyLocation && !pendingInstantDeepLink) {
       const width = Math.max(1, maxX - minX + 1)
       const height = Math.max(1, maxY - minY + 1)
       const extraX = Math.ceil((width * (INITIAL_TILE_PREFETCH_SCALE - 1)) / 2)
@@ -1200,27 +1206,52 @@ async function openTreeFromRoute(): Promise<void> {
     if (!row) {
       console.warn(`[TreeDeepLink] no tree "${treeId}" in ${selectedCity.value}; dropping ?tree`)
       deepLinkInFlight = null
+      // A desktop that skipped its intro for this link is still at the intro's
+      // start pose; put it where the intro would have landed.
+      if (pendingInstantDeepLink === treeId && !props.simplified) {
+        mapRef.value.jumpTo({ center: CITY_CONFIG[mapDisplayCity.value].center, zoom: INTRO_END_ZOOM, bearing: INTRO_END_BEARING })
+      }
       syncTreeRoute(null)
       return
     }
     const coords: [number, number] = [Number(row.longitude), Number(row.latitude)]
     const map = mapRef.value
-    map.once('moveend', async () => {
-      if (deepLinkInFlight !== treeId) return
-      deepLinkInFlight = null
-      if (readRouteTreeId(route.query.tree) !== treeId) return
-      await ensureWindowAt(coords[0], coords[1])
-      if (readRouteTreeId(route.query.tree) !== treeId) return
-      void showTreeCard(
-        { type: 'Feature', properties: { id: treeId }, geometry: { type: 'Point', coordinates: coords } },
-        coords,
-      )
-    })
-    map.flyTo({ center: coords, zoom: 17, pitch: props.simplified ? 0 : 50, duration: 1500, essential: true })
+    const landed = new Promise<void>((resolve) => { map.once('moveend', () => resolve()) })
+    const pose = { center: coords, zoom: 17, pitch: props.simplified ? 0 : 50 }
+    // The link the page opened with lands at once; a later ?tree= flies.
+    if (pendingInstantDeepLink === treeId) map.jumpTo({ ...pose, bearing: INTRO_END_BEARING })
+    else map.flyTo({ ...pose, duration: 1500, essential: true })
+    pendingInstantDeepLink = null
+    await landed
+    if (deepLinkInFlight !== treeId) return
+    deepLinkInFlight = null
+    if (readRouteTreeId(route.query.tree) !== treeId) return
+    await ensureWindowAt(coords[0], coords[1])
+    if (readRouteTreeId(route.query.tree) !== treeId) return
+    await showTreeCard(
+      { type: 'Feature', properties: { id: treeId }, geometry: { type: 'Point', coordinates: coords } },
+      coords,
+    )
   } catch (e) {
     deepLinkInFlight = null
     console.error('[TreeDeepLink] failed', e)
+  } finally {
+    if (pendingInstantDeepLink === treeId) pendingInstantDeepLink = null
   }
+}
+
+/**
+ * The desktop's stand-in for the intro when the page opened on a tree: the
+ * city has loaded, so unlock the camera, mark the intro done and land on the
+ * tree. Resolves once its card is open (or the link was dropped), so the LOD
+ * prewarm queues behind the lookup instead of beside it.
+ */
+async function landOnDeepLink(): Promise<void> {
+  introActive.value = false
+  setMapInteractions(true)
+  setIntroComplete()
+  lifecycleIntroFinished()
+  await openTreeFromRoute()
 }
 
 watch(lifecyclePhase, (phase) => {
@@ -2052,8 +2083,10 @@ onMounted(async () => {
         // it for the same reason. On the desktop it waits for the intro to land:
         // the worker has one connection, and a prewarm beside the fly-out held
         // the camera at the start pose for over a minute on Boston. A city
-        // switch has no intro, so runIntroZoomOut resolves at once.
-        const intro = props.simplified ? Promise.resolve() : runIntroZoomOut()
+        // switch has no intro, so runIntroZoomOut resolves at once. A page
+        // opened on a tree lands there instead of flying out.
+        const intro = props.simplified ? Promise.resolve()
+          : pendingInstantDeepLink ? landOnDeepLink() : runIntroZoomOut()
         if (!props.nearbyLocation && !props.simplified) {
           void intro.then(() => {
             // A city switch that cancelled the intro starts its own prewarm.

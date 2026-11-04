@@ -101,7 +101,9 @@ Sanity checks:
 
 - **Merged crowns.** A segment can cover several trees, and its height is
   the 98th percentile of the whole segment, so a short tree under a tall
-  neighbour's merged crown gets the tall one's height.
+  neighbour's merged crown gets the tall one's height. The shading gate
+  below catches the trees far smaller than their crown; a tree a few metres
+  short of a crown it shares keeps the crown's height.
   The staging table's `canopy_crown_id` shows the sharing when re-derived
   from a tree's position. If it matters for analysis, publish it as a
   derived "shares its crown" flag, not the raw id.
@@ -112,6 +114,40 @@ Sanity checks:
   Cambridge's at its own. They overlap in a thin seam along the Charles
   (12 of the 100 m bins hold crowns from both). Where they do, the
   relatively nearer crown wins.
+
+## The gates
+
+A LIDAR height is the height of whatever crown is over the tree's point, and
+on review (November 2026) the trees whose survey height disagreed most with
+their trunk were mostly reading somebody else's crown: 1-2" saplings at
+22-27 m, crabapples at 26 m, and street elms and lindens at 41-43 m.
+`tree_predictions.preql` checks every survey height against the tree's own
+stem before the map draws it, and publishes the verdict as `height_check`:
+
+| `height_check` | Rule | Map draws |
+|---|---|---|
+| `shaded` | the matched crown's radius (`height_crown_radius_m`, published by the city model) is more than `shaded_crown_ratio` (3) times the radius the crown model predicts from the stem | `predicted_height_m` |
+| `out_of_band` | the height is outside 3 standard deviations of the height fit's log residual for the tree's genus, either way (`gate_low` / `gate_high` in `tree_height_coefficients.csv`, multipliers on the prediction) | `predicted_height_m` |
+| `accepted` | neither | `height_m` |
+| `unchecked` | no stem someone measured: imagery predictions and reviewed satellite detections (their diameter is a model's, read off the same crown), and trees whose diameter comes from their age | `height_m` |
+
+`height_m` stays what the survey said, for curation; `accepted_height_m` is
+what passed, and is what the browser projection publishes as its `height_m`.
+
+Both thresholds are relative, never a fixed height. The ratio is where the
+bias starts: among inventory trees with a measured DBH, those whose crown is
+under twice their predicted crown read no taller than predicted, from three
+times up the survey reads 1.3x the prediction, and past eight times 2.2x
+(inventory trees past the ratio read 40% tall on average). The band is the
+fit's own spread, so a genus that varies more is given more room: about
+x0.3 to x2.7 for the angiosperm fallback.
+
+The fit (`tools/height_allometry_fit.py`) leaves the same trees out:
+shaded rows before fitting (9,172 of 84,074 in November 2026), then
+out-of-band rows, refitting until a round drops nothing (2,079 more), so the
+outliers do not widen the band that judges them. Taking them out steepened
+the fits (Acer r2 0.30 -> 0.55, Quercus -> 0.79): saplings stopped borrowing
+mature heights, so a small stem now predicts shorter.
 
 ## What it opens up
 
@@ -145,8 +181,8 @@ from age), with the same fallbacks by growth form and no height for a palm:
     height_m = scale * dbh_cm ** b        (dbh clamped to the fitted range)
 
 fitted per genus by `tools/height_allometry_fit.py` on the LIDAR-heighted
-inventory trees of every city in its `HEIGHT_CITIES` (84,063 in October
-2026, all Boston metro). Not Tallo: fitted on Boston and the Arboretum and
+inventory trees of every city in its `HEIGHT_CITIES` that pass the gates
+above (72,823 in November 2026, all Boston metro). Not Tallo: fitted on Boston and the Arboretum and
 held out on Cambridge's 26.8k matched trees, a Tallo genus fit missed by a
 median 6.2 m and called a 24"+ street tree 29 m against the survey's 19 m;
 the LIDAR fit missed by 2.8 m with no bias in any diameter band (DBH alone,
@@ -154,19 +190,21 @@ the LIDAR fit missed by 2.8 m with no bias in any diameter band (DBH alone,
 is applied until another city's survey is added, so the map labels every
 predicted height an estimate.
 
-The predictions also carry the observed `height_m`, read from the height
-cities' parquets by `tree_height_source.preql`, so the browser projection
-gets both from one input. The worker probes the projection (or, on the
-assembled path, the predictions file) for `height_m` and reads null heights
-from a file built before them.
+The predictions also carry the observed `height_m` and its crown's radius,
+read from the height cities' parquets by `tree_height_source.preql`, and the
+gated `accepted_height_m`, so the browser projection gets both heights from
+one input. The worker probes the projection for `height_m` (or, on the
+assembled path, the predictions file for `accepted_height_m`) and reads null
+heights from a file built before them.
 
 On the map: the tree card shows "Height 12.3 m (40 ft) aerial LIDAR, 2024"
-for a measured height and "~12 m (39 ft) est. from trunk diameter" for a
+for an accepted measured height and "~12 m (39 ft) est. from trunk diameter" for a
 predicted one; the sprite is drawn to that height (MAP_CROWNS.md).
 
 Adding a LIDAR city to the map, beyond the steps below: its parquet to
 `tree_height_source.preql`'s file list, its code to `HEIGHT_CITIES`, a
-refit, and a forced `refresh-predictions` after its first build.
+refit once its first build publishes `height_crown_radius_m`, and a forced
+`refresh-predictions` after it.
 `test_tree_height.py` checks both lists against the importers.
 
 ## Rolling it out

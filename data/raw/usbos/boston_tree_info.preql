@@ -328,6 +328,7 @@ partial datasource boston_tree_info extends published_tree_info (
     ?species,
     usbos_border_duplicate,
     ?height_m,
+    ?height_crown_radius_m,
     usbos_published_data_updated_through
 )
 complete where city = 'USBOS'

@@ -163,7 +163,7 @@ def fixture_files(tmp_path_factory):
         """
         CREATE TABLE predictions (
             tree_id VARCHAR, city VARCHAR, predicted_crown_width_m DOUBLE,
-            predicted_height_m FLOAT, height_m FLOAT,
+            predicted_height_m FLOAT, accepted_height_m FLOAT,
             prediction_inputs_published_through TIMESTAMPTZ
         )
         """
@@ -218,7 +218,7 @@ def rows(fixture_files) -> list[dict]:
         select
             tree_id, city, data_source, species, cultivar, tree_name, display_name,
             browser_tree_form, plant_date, diameter_at_breast_height, crown_width_m,
-            predicted_crown_width_m, height_m, predicted_height_m, latitude, longitude,
+            predicted_crown_width_m, accepted_height_m -> height_m, predicted_height_m, latitude, longitude,
             submission_photo_url, prediction_inputs_published_through
         where city = 'USSFO';
         """,

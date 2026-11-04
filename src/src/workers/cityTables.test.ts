@@ -73,9 +73,12 @@ describe('city tables', () => {
     ) TO '${trees}' (FORMAT PARQUET)`)
     await conn.run(`COPY (
       SELECT tree_id, city, CAST(predicted_crown_width_m AS DOUBLE) AS predicted_crown_width_m,
-        CAST(height_m AS FLOAT) AS height_m, CAST(predicted_height_m AS FLOAT) AS predicted_height_m FROM (VALUES
-        ('sf-1', 'USSFO', 7.0, 14.5, 11.0), ('sf-2', 'USSFO', 5.0, NULL, 9.0), ('sf-2', 'USSFO', 6.0, NULL, 10.0), ('sf-3', 'USBOS', 40.0, 30.0, 30.0)
-      ) v(tree_id, city, predicted_crown_width_m, height_m, predicted_height_m)
+        CAST(height_m AS FLOAT) AS height_m, CAST(accepted_height_m AS FLOAT) AS accepted_height_m,
+        CAST(predicted_height_m AS FLOAT) AS predicted_height_m FROM (VALUES
+        -- sf-2's survey height failed the gates: the map draws its prediction
+        ('sf-1', 'USSFO', 7.0, 14.5, 14.5, 11.0), ('sf-2', 'USSFO', 5.0, 40.0, NULL, 9.0), ('sf-2', 'USSFO', 6.0, 40.0, NULL, 10.0),
+        ('sf-3', 'USBOS', 40.0, 30.0, 30.0, 30.0)
+      ) v(tree_id, city, predicted_crown_width_m, height_m, accepted_height_m, predicted_height_m)
     ) TO '${predictions}' (FORMAT PARQUET)`)
     await load()
   })
@@ -142,7 +145,7 @@ describe('city tables', () => {
     await load()
   })
 
-  test('heights ride in with the prediction, measured and predicted side by side', async () => {
+  test('heights ride in with the prediction: the accepted survey height and the predicted one side by side', async () => {
     const columns = await describeTable(TREES_TABLE)
     expect(columns.height_m).toBe('FLOAT')
     expect(columns.predicted_height_m).toBe('FLOAT')

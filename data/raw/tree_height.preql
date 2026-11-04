@@ -70,8 +70,12 @@ property canopy_cell.canopy_crown_id string; # the crown object, '{SURVEY}-{obje
 property canopy_cell.canopy_crown_radius_m float; # that crown's radius, metres, as the survey gives it (clamped)
 property canopy_cell.canopy_source string; # the survey, e.g. BOSTON_LIDAR_2024
 
-# What the published parquet carries: the height alone.  Which survey and
-# which crown stay in the staging table.  No other attribute publishes its
+# What the published parquet carries: the height, and the radius of the
+# crown it came from.  The radius is what lets tree_predictions.preql tell a
+# tree's own crown from a neighbour's it stands under: a crown far wider than
+# the tree's stem could carry is somebody else's, and its height is too
+# (docs/TREE_HEIGHT.md, "The gates").  Which survey and which crown stay in
+# the staging table.  No other attribute publishes its
 # own provenance (the row's merged_sources is the convention), and both
 # surveys here are 2024 LIDAR made the same way, so a label would restate the
 # tree's city; a per-crown id is not stable across surveys and would invite
@@ -88,6 +92,13 @@ def by_survey(value) -> coalesce(
     (max(value ? source_class = 'predicted') by cluster_id)
 );
 
+property tree_id.height_crown_radius_m float; # radius in metres of the LIDAR crown height_m came from, as the survey gives it (clamped to 1.5-15 m); null where height_m is
+
 auto merged_height_m <- @by_survey(canopy_height_m);
+# The same precedence picks the same row's crown, except where two rows of
+# one class in a cluster found different crowns; then each is the class's
+# largest, which errs toward calling the tree shaded.
+auto merged_height_crown_radius_m <- @by_survey(canopy_crown_radius_m);
 
 merge merged_height_m into height_m;
+merge merged_height_crown_radius_m into height_crown_radius_m;
