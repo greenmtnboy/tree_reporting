@@ -814,6 +814,7 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Cephalotaxus harringtonii": "Cephalotaxus harringtonia",
     "Cercidiphyllym japonicum": "Cercidiphyllum japonicum",
     "Cercidiphylum japonicum": "Cercidiphyllum japonicum",
+    "Ceridiphyllum japonicum": "Cercidiphyllum japonicum",
     "Chionanthus retusa": "Chionanthus retusus",
     "Chiranthodendron pentadactyl": "Chiranthodendron pentadactylon",
     "Clerodendron trichotomum": "Clerodendrum trichotomum",
