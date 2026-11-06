@@ -2055,7 +2055,9 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
+    # Calibrated 2026-11-06 on the first build (31,351 staged OSM nodes against
+    # 37,828 Arlington and Falls Church anchors).  Mutual-NN 92.1% in the 2-5 m
+    # band (n=581) collapsing to 31.8% in 5-10 m (n=264): guarantee 5 m.
     "USNVA": 10,
     # Calibrated 2026-11-04 against a local Overpass extract (19,501 OSM nodes)
     # and the ingest's 142,097 rows, before the first build.  5-10 m band 56.7%
