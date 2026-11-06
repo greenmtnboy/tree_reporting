@@ -23,7 +23,7 @@
       "kind": "arcgis",
       "url": "https://services3.arcgis.com/uknczv4rpevve42E/ArcGIS/rest/services/California_Cartographic_Coastal_Polygons/FeatureServer/31",
       "documentation": "https://services3.arcgis.com/uknczv4rpevve42E/ArcGIS/rest/services/California_Cartographic_Coastal_Polygons/FeatureServer",
-      "where": "1=1"
+      "where": "OFFSHORE IN ('bay', 'ocean')"
     }
   ],
   "default_insets": ["hayes_valley", "mission"],
