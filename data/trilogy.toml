@@ -1941,6 +1941,41 @@ schedule = "0 24 4 * * SUN"
 timeout_seconds = 900
 memory_mb = 2048
 
+[[cloud.job]]
+key = "city-usnva"
+name = "urban-tree-city-usnva"
+entrypoint = "raw/usnva/nova_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city USNVA`.
+schedule = "0 20 16 * * TUE,FRI"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-usnva"
+name = "urban-tree-osm-usnva"
+entrypoint = "osm_staging/usnva_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 0 5 * * MON"
+timeout_seconds = 1800
+# Fairfax County is ~1,000 km2; 1 GiB OOM-killed the bootstrap extract.
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-usnva"
+name = "urban-tree-landmarks-refresh-usnva"
+entrypoint = "raw/usnva/nova_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 26 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
 # ===========================================================================
 # Ad-hoc landmark staging publish — one job per curated-CSV city
 # ===========================================================================

@@ -1,0 +1,113 @@
+import ..tree_common;
+import ..community_tree_info;
+import ..tree_dedup;
+
+property <*>.arlington_data_updated_through datetime; # when Arlington County's DPR Trees layer is through
+property <*>.falls_church_data_updated_through datetime; # when Falls Church's Public_Trees layer is through
+
+auto usnva_published_data_updated_through <- greatest(usnva_data_updated_through, usnva_community_data_updated_through, usnva_osm_data_updated_through);
+auto usnva_data_updated_through <- greatest(arlington_data_updated_through, falls_church_data_updated_through);
+
+key usnva_source enum<string>['ARLINGTON', 'FALLS_CHURCH', 'COMMUNITY_USNVA', 'OSM_USNVA']; # originating dataset within Northern Virginia
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto usnva_source_label <- concat(usnva_source, '');
+merge usnva_source_label into source_label;
+
+root datasource arlington_update_time (
+    data_updated_through: arlington_data_updated_through
+)
+file `./arlington_update_time.py`;
+
+root datasource falls_church_update_time (
+    data_updated_through: falls_church_data_updated_through
+)
+file `./falls_church_update_time.py`;
+
+# Only this city's column, so an approval elsewhere does not mark USNVA's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource usnva_community_update_time (
+    usnva_community_data_updated_through: usnva_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# GCS publication time of the staged OSM parquet; it only moves when an
+# extraction is re-run and uploaded. Not a local mtime -- git does not preserve
+# it, so a committed staging file makes every fresh clone look like new data.
+root datasource usnva_osm_update_time (
+    data_updated_through: usnva_osm_data_updated_through
+)
+file `./nova_osm_probe.py`;
+
+# Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
+# the shared raw_* columns; a source that names a column differently re-binds
+# it here (`dbh: ?raw_dbh`).
+# Fairfax County publishes no tree inventory (only canopy and heat polygons),
+# so its trees come from OSM and, once imagery has been reviewed, satellite
+# detections.  The two municipal inventories are its calibration ground.
+root partial datasource arlington_raw_tree_info extends tree_partition (
+    data_source: usnva_source,
+    species: ?raw_species,
+)
+complete where city = 'USNVA' and usnva_source = 'ARLINGTON'
+file `./arlington_tree_info.py`;
+
+root partial datasource falls_church_raw_tree_info extends tree_partition (
+    data_source: usnva_source,
+    species: ?raw_species,
+)
+complete where city = 'USNVA' and usnva_source = 'FALLS_CHURCH'
+file `./falls_church_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to USNVA and makes
+# it a disjoint partition, and the `where` clause is what actually filters --
+# `complete where` asserts, it does not promise a predicate.
+root partial datasource usnva_community_tree_info extends tree_partition (
+    data_source: usnva_source,
+)
+complete where city = 'USNVA' and usnva_source = 'COMMUNITY_USNVA'
+file `../community_tree_info.py`
+where city = 'USNVA';
+
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
+# -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
+# by construction; the overlap is resolved by ../tree_dedup.preql.
+root partial datasource usnva_osm_tree_info extends tree_partition (
+    data_source: usnva_source,
+)
+complete where city = 'USNVA' and usnva_source = 'OSM_USNVA'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usnva_osm_staging.parquet`;
+
+
+# --- Cross-source dedup and attribute merge --------------------------------
+#
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
+# The per-city lines are the dbh merge, because Boston imputes it, and the
+# position policy: a city with an Overture lookup imports ../tree_position.preql
+# instead of the two position merges (see that file).
+merge merged_dbh into diameter_at_breast_height;
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
+
+
+# The published target extends ../tree_dedup.preql's `published_tree_info`:
+# the canonical columns, the prune, and the guard that refuses a build which
+# lost a quarter of the city.  The two `@source_kept` lines are the same guard
+# per bulk source; add one for every municipal or OSM label in the enum
+# (`test_every_city_refuses_a_collapsed_build`).
+partial datasource nova_tree_info extends published_tree_info (
+    data_source: usnva_source,
+    usnva_published_data_updated_through,
+)
+complete where city = 'USNVA'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnva_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnva_tree_info_v{data_version}.parquet`
+freshness by usnva_published_data_updated_through
+assert @source_kept(tree_id, usnva_source, 'ARLINGTON', 0.75)
+assert @source_kept(tree_id, usnva_source, 'FALLS_CHURCH', 0.75)
+assert @source_kept(tree_id, usnva_source, 'OSM_USNVA', 0.75);

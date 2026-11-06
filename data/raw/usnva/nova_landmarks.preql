@@ -1,0 +1,24 @@
+import ..landmark_common;
+
+root datasource nova_landmarks_update_time (
+    data_updated_through: usnva_landmark_data_updated_through
+)
+file `./nova_landmarks_probe.py`;
+
+# Fairfax County's historic-sites register; Arlington and Falls Church have none
+# on their portals.  See nova_landmarks.py.
+root partial datasource raw_nova_landmark_info extends landmark_partition (
+    property_type: ?property_type,
+    year_built: ?year_built,
+)
+complete where city = 'USNVA'
+file `./nova_landmarks.py`;
+
+partial datasource nova_landmark_info extends published_landmark_info (
+    ?property_type,
+    ?year_built,
+    usnva_landmark_data_updated_through,
+)
+complete where city = 'USNVA'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usnva_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usnva_landmark_info_v{data_version}.parquet`
+freshness by usnva_landmark_data_updated_through;
