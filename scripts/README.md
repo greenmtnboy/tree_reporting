@@ -48,6 +48,18 @@ default 18-inch width, 300 dpi produces 5400 × 4644 pixels and 600 dpi produces
 10800 × 9288 pixels. `--insets` with no values removes the sidebar insets.
 `--no-water` and `--no-circle-fade` are available for diagnostic exports.
 
+The four SF source-comparison sharing insets are:
+
+| `--insets` value | Highlight |
+| --- | --- |
+| `alamo_square` | Alamo Square & Buena Vista Park |
+| `golden_gate_inner_sunset` | Golden Gate Park & Inner Sunset |
+| `presidio_marina` | Presidio & Marina |
+| `bernal_mission` | Bernal Heights & the Mission |
+
+Render each with `--source-mode all --color-by source`. Use the same local
+parquet snapshot via `--input` for all four when producing a consistent set.
+
 ## Boston presets
 
 ```powershell
