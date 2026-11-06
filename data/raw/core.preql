@@ -1,4 +1,4 @@
-key city enum<string>['USSFO', 'USNYC', 'USBOS', 'FRPAR', 'USBTV', 'CAVAN', 'DEBER', 'NLAMS', 'GBLON', 'AUMEL', 'ARBUE', 'USLAX', 'USWAS', 'USTEM', 'GRATH', 'GRMLO', 'GRSAN', 'USDEN', 'CACAL', 'CAEDM', 'CAWPG', 'CATOR', 'CAMTL', 'CAQUE', 'CALON', 'CAHFX', 'CAKGN', 'CALET', 'CAVIC', 'CAKEL', 'CANWE', 'CAMIS', 'CAOTT', 'CABUR', 'CAAJX', 'CAMON', 'JPTYO', 'COBOG', 'TWTPE', 'DKCPH', 'FIHEL', 'USSTO', 'CZPRG']; # UN/LOCODE-style code for the source city
+key city enum<string>['USSFO', 'USNYC', 'USBOS', 'FRPAR', 'USBTV', 'CAVAN', 'DEBER', 'NLAMS', 'GBLON', 'AUMEL', 'ARBUE', 'USLAX', 'USWAS', 'USTEM', 'GRATH', 'GRMLO', 'GRSAN', 'USDEN', 'CACAL', 'CAEDM', 'CAWPG', 'CATOR', 'CAMTL', 'CAQUE', 'CALON', 'CAHFX', 'CAKGN', 'CALET', 'CAVIC', 'CAKEL', 'CANWE', 'CAMIS', 'CAOTT', 'CABUR', 'CAAJX', 'CAMON', 'JPTYO', 'COBOG', 'TWTPE', 'DKCPH', 'FIHEL', 'USSTO', 'CZPRG', 'USNVA']; # UN/LOCODE-style code for the source city
 
 # The dataset each tree row came from is modelled as a *per-city* enum key
 # (`ussfo_source`, `usbos_source`, …) declared in each city's tree model, not as

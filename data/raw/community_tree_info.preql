@@ -53,6 +53,7 @@ property <*>.dkcph_community_data_updated_through datetime; # when approved comm
 property <*>.fihel_community_data_updated_through datetime; # when approved community submissions for FIHEL are through
 property <*>.ussto_community_data_updated_through datetime; # when approved community submissions for USSTO are through
 property <*>.czprg_community_data_updated_through datetime; # when approved community submissions for CZPRG are through
+property <*>.usnva_community_data_updated_through datetime; # when approved community submissions for USNVA are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

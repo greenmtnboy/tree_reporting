@@ -1311,6 +1311,7 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USNVA": ("ARLINGTON", "FALLS_CHURCH"),
     "CZPRG": ("PRAGUE_OPENDATA",),
     "USSTO": ("STOUGHTON_OPENDATA",),
     "FIHEL": ("HELSINKI_OPENDATA",),
@@ -1386,6 +1387,7 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USNVA": "OSM_USNVA",
     "CZPRG": "OSM_CZPRG",
     "USSTO": "OSM_USSTO",
     "FIHEL": "OSM_FIHEL",
@@ -1952,6 +1954,7 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USNVA": (38.59, 39.07, -77.55, -77.03),
     "CZPRG": (49.93, 50.19, 14.21, 14.72),
     "USSTO": (42.85, 42.97, -89.3, -89.11),
     "FIHEL": (60.05, 60.35, 24.75, 25.3),
@@ -2052,6 +2055,8 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USNVA": 10,
     # Calibrated 2026-11-04 against a local Overpass extract (19,501 OSM nodes)
     # and the ingest's 142,097 rows, before the first build.  5-10 m band 56.7%
     # mutual-NN over n=2,283: a coin flip, so the band rule says a 5 m guarantee
@@ -2291,6 +2296,25 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    # The Potomac's Virginia shore, carved against USWAS; north of DC the
+    # river bends west and the land east of it is Maryland, which is nobody's.
+    'USNVA': (
+        (38.59, 38.78, -77.55, -77.03),
+        (38.78, 38.8, -77.55, -77.04),
+        (38.8, 38.82, -77.55, -77.039),
+        (38.82, 38.84, -77.55, -77.043),
+        (38.84, 38.86, -77.55, -77.031),
+        (38.86, 38.875, -77.55, -77.052),
+        (38.875, 38.89, -77.55, -77.058),
+        (38.89, 38.9, -77.55, -77.068),
+        (38.9, 38.91, -77.55, -77.075),
+        (38.91, 38.92, -77.55, -77.09),
+        (38.92, 38.94, -77.55, -77.115),
+        (38.94, 38.96, -77.55, -77.14),
+        (38.96, 38.99, -77.55, -77.18),
+        (38.99, 39.03, -77.55, -77.24),
+        (39.03, 39.07, -77.55, -77.3),
+    ),
     'CZPRG': ((49.93, 50.19, 14.21, 14.72),),
     'USSTO': ((42.85, 42.97, -89.3, -89.11),),
     'FIHEL': ((60.05, 60.35, 24.75, 25.3),),
@@ -2356,7 +2380,20 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'AUMEL': ((-38.1, -37.55, 144.55, 145.4),),
     'ARBUE': ((-34.8, -34.45, -58.55, -58.3),),
     'USLAX': ((33.7, 34.35, -118.7, -118.1),),
-    'USWAS': ((38.78, 39.01, -77.15, -76.88),),
+    # The District ends at the Potomac's Virginia shore; see USNVA.
+    'USWAS': (
+        (38.78, 38.8, -77.04, -76.88),
+        (38.8, 38.82, -77.039, -76.88),
+        (38.82, 38.84, -77.043, -76.88),
+        (38.84, 38.86, -77.031, -76.88),
+        (38.86, 38.875, -77.052, -76.88),
+        (38.875, 38.89, -77.058, -76.88),
+        (38.89, 38.9, -77.068, -76.88),
+        (38.9, 38.91, -77.075, -76.88),
+        (38.91, 38.92, -77.09, -76.88),
+        (38.92, 38.94, -77.115, -76.88),
+        (38.94, 39.01, -77.12, -76.88),
+    ),
     'USTEM': ((33.3, 33.48, -112.05, -111.8),),
     'GRATH': ((37.85, 38.1, 23.6, 23.9),),
     'USDEN': ((39.45, 39.95, -105.65, -104.55),),
