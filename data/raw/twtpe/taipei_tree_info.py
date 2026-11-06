@@ -158,10 +158,33 @@ def transform(rows: list[dict], label: str) -> pa.Table:
     )
 
 
+def drop_repeated_ids(table: pa.Table) -> pa.Table:
+    """Keep the first row of each `tree_id`.
+
+    The two files overlap: in November 2026 seven trees were in both the
+    street and the park file under the same TreeID, with the same position,
+    species and diameter.  `tree_id` is the declared grain, so the second copy
+    is dropped (the street row, read first, survives) and counted in the log.
+    """
+    seen: set[str] = set()
+    keep: list[bool] = []
+    for tree_id in table.column("tree_id").to_pylist():
+        keep.append(tree_id not in seen)
+        seen.add(tree_id)
+    dropped = keep.count(False)
+    if dropped:
+        print(
+            f"Taipei ingest: dropped {dropped} row(s) repeating a tree_id "
+            "already read (a tree listed in both the street and park files)",
+            file=sys.stderr,
+        )
+    return table.filter(pa.array(keep, type=pa.bool_()))
+
+
 def main() -> None:
     street = transform(read_csv(STREET_TREES, "Taipei OpenData (street trees)"), "Taipei street trees")
     park = transform(read_csv(PARK_TREES, "Taipei OpenData (park trees)"), "Taipei park trees")
-    table = pa.concat_tables([street, park])
+    table = drop_repeated_ids(pa.concat_tables([street, park]))
     table = validate_coordinates(table, city="Taipei", city_code="TWTPE")
     table = enforce_tree_schema(table, city="Taipei", data_source="TAIPEI_OPENDATA")
     emit(table)

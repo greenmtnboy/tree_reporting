@@ -9,7 +9,9 @@ Rarity is species frequency among identified trees, not conservation status.
 Size ranks use recorded measurements only; ties share a rank. Null, zero,
 negative and non-finite measurements never receive a rank.
 """
+import os
 import sys
+import tempfile
 
 import duckdb
 import pyarrow as pa
@@ -17,13 +19,20 @@ import pyarrow as pa
 from shared.ingest import SPECIES_SENTINELS
 
 
-def build_rankings(con: duckdb.DuckDBPyConnection) -> pa.Table:
-    """Read `trees` and species-keyed `enrichment` relations on this connection."""
+# Rows per Arrow batch written to stdout: the whole ranked rollup (12M+ rows)
+# never sits in Python at once.
+BATCH_ROWS = 256_000
+
+
+def build_rankings(con: duckdb.DuckDBPyConnection) -> duckdb.DuckDBPyRelation:
+    """Read `trees` and species-keyed `enrichment` relations on this connection.
+
+    Lazy: nothing runs until the caller fetches, so the job can stream it."""
     sentinels = ",".join("'" + s.lower().replace("'", "''") + "'" for s in SPECIES_SENTINELS)
     # The crown-width rollout is incremental. An older published rollup can
     # still support trunk/rarity missions without claiming any canopy winners.
     crown = 'crown_width_m' if 'crown_width_m' in con.table('trees').columns else 'NULL::DOUBLE'
-    return con.execute(f"""
+    return con.sql(f"""
         WITH clean AS (
             SELECT tree_id, city, species, latitude, longitude,
                 nullif(trim(species), '') IS NOT NULL
@@ -54,15 +63,23 @@ def build_rankings(con: duckdb.DuckDBPyConnection) -> pa.Table:
             CASE WHEN crown IS NOT NULL THEN rank() OVER (PARTITION BY city ORDER BY crown DESC NULLS LAST) END AS canopy_rank
         FROM counted LEFT JOIN enrichment e USING (species)
         ORDER BY city, tree_id
-    """).to_arrow_table()
+    """)
 
 
 if __name__ == '__main__':
     from enrichment._tree_shared import TREE_INFO_PARQUET, ENRICHMENT_PARQUET
 
-    with duckdb.connect() as con:
+    # The job was OOM-killed at its container limit (exit 137) holding the
+    # whole result as one Arrow table plus a copy. Stream it in batches, and
+    # give DuckDB a cap below the container's and a disk to spill the windows
+    # and the sort to, so it pages instead of being killed. RANKINGS_MEMORY_LIMIT
+    # overrides the cap.
+    with duckdb.connect() as con, tempfile.TemporaryDirectory(prefix='tree_rankings_') as spill:
+        con.execute(f"SET temp_directory = '{spill}'")
+        con.execute(f"SET memory_limit = '{os.environ.get('RANKINGS_MEMORY_LIMIT', '2GB')}'")
         con.from_parquet(TREE_INFO_PARQUET).create_view('trees')
         con.from_parquet(ENRICHMENT_PARQUET).create_view('enrichment')
-        table = build_rankings(con)
-        with pa.ipc.new_stream(sys.stdout.buffer, table.schema) as writer:
-            writer.write_table(table)
+        reader = build_rankings(con).to_arrow_reader(BATCH_ROWS)
+        with pa.ipc.new_stream(sys.stdout.buffer, reader.schema) as writer:
+            for batch in reader:
+                writer.write_batch(batch)
