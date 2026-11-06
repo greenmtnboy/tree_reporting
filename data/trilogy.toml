@@ -1962,7 +1962,8 @@ operation = "refresh"
 # no trees in OSM. This minute must be used by no other extract job.
 schedule = "0 0 5 * * MON"
 timeout_seconds = 1800
-memory_mb = 1024
+# Fairfax County is ~1,000 km2; 1 GiB OOM-killed the bootstrap extract.
+memory_mb = 2048
 
 [[cloud.job]]
 key = "refresh-landmarks-usnva"
