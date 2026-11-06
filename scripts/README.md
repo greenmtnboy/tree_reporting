@@ -53,8 +53,8 @@ The four SF source-comparison sharing insets are:
 | `--insets` value | Highlight |
 | --- | --- |
 | `alamo_square` | Alamo Square & Buena Vista Park |
-| `golden_gate_inner_sunset` | Golden Gate Park & Inner Sunset |
-| `presidio_marina` | Presidio & Marina |
+| `golden_gate_inner_sunset` | Golden Gate Park Lakes (centered on Blue Heron Lake) |
+| `presidio_marina` | Palace of Fine Arts & Marina |
 | `bernal_mission` | Bernal Heights & the Mission |
 
 Render each with `--source-mode all --color-by source`. Use the same local
