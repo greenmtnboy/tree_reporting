@@ -383,13 +383,15 @@ memory_mb = 4096
 #
 # 4 GiB: each city filters the rollup (10.5M rows) and the predictions file
 # once, and the join holds one city at a time.
+# An hour: rebuilding every city's projection in one firing (a new city, or
+# a day the tick skipped) ran past 30 minutes on 2026-11-06.
 [[cloud.job]]
 key = "refresh-browser-city"
 name = "urban-tree-data-browser-city"
 entrypoint = "raw/tree_browser_city.preql"
 operation = "refresh"
 schedule = "0 0 6 * * *"
-timeout_seconds = 1800
+timeout_seconds = 3600
 memory_mb = 4096
 
 # The dashboard summary: tree counts at (city, species), the grain most of
