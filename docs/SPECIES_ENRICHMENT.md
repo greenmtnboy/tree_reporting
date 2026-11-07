@@ -101,7 +101,9 @@ cities publish.
   `TREE_ENRICHMENT_MODEL`.
 - The model reads four sources per species (`_tree_enrichment_sources.py`):
   Wikipedia (the intro plus the Description, Distribution, Ecology and
-  Cultivation sections), Kew's WCVP, GBIF and SelecTree. WCVP is read from
+  Cultivation sections; for a species with no English article, its article
+  in Spanish, Portuguese, French, German and so on, found through Wikidata),
+  Kew's WCVP, GBIF and SelecTree. WCVP is read from
   the parquets `refresh-wcvp` publishes, prefetched once for the whole queue
   (`WCVP_ZIP` reads a local zip); it gives the status, accepted name, any
   homonym or misapplication, lifeform, climate and every TDWG level-3 area,

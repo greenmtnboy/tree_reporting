@@ -227,3 +227,14 @@ def test_wikipedia_keeps_the_intro_and_the_descriptive_sections():
         ("Description", "Grows to 8 m.\nFlowers:\nWhite bells."),
         ("Distribution and habitat", "Southeastern U.S.A."),
     ]
+
+
+def test_wikipedia_reads_the_same_sections_in_a_fallback_language():
+    from enrichment._tree_enrichment_sources import wikipedia_article_parts
+
+    extract = (
+        "Myrcianthes leucoxyla es una especie.\n\n\n== Descripción ==\nÁrbol de 15 m.\n\n\n"
+        "== Taxonomía ==\nx\n\n\n== Distribución y hábitat ==\nAndes de Colombia."
+    )
+    _, sections = wikipedia_article_parts(extract)
+    assert [title for title, _ in sections] == ["Descripción", "Distribución y hábitat"]

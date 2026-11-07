@@ -83,9 +83,19 @@ def _wikipedia_get(url: str, **kwargs) -> requests.Response:
 # intro alone is a sentence or two for most species.
 WIKIPEDIA_SECTIONS = re.compile(
     r"^(description|morphology|characteristics|botany|appearance|identification|"
-    r"distribution|range|habitat|ecology|cultivation|uses|horticulture)",
+    r"distribution|range|habitat|ecology|cultivation|uses|horticulture|"
+    # The same headings in the fallback languages below.
+    r"descripci[oó]n|descri[cç][aã]o|beschreibung|merkmale|distribuci[oó]n|"
+    r"distribui[cç][aã]o|r[eé]partition|verbreitung|vorkommen|h[aá]bitat|"
+    r"ecolog[ií]a|[eé]cologie|[oö]kologie|cultivo|culture|usos|utilisation|nutzung)",
     re.IGNORECASE,
 )
+# When English Wikipedia has no article, the taxon's other articles are found
+# through Wikidata (its taxon-name property, P225) and read in this order.
+# Bogota's Andean species are mostly on Spanish Wikipedia, the hybrid limes on
+# German and French.  The Cebuano, Waray, Swedish and Vietnamese wikis carry
+# far more taxa, but those are bot-made stubs of a sentence, so are not listed.
+WIKIPEDIA_FALLBACK_LANGUAGES = ("en", "es", "pt", "fr", "de", "it", "nl", "ca", "pl", "cs", "ja", "zh")
 WIKIPEDIA_SECTION_CHARS = 2500
 WIKIPEDIA_SECTIONS_CHARS = 6000
 _HEADING = re.compile(r"^(={2,6})\s*(.+?)\s*\1\s*$", re.MULTILINE)
@@ -155,6 +165,70 @@ def fetch_wikipedia_text(scientific_name: str) -> str | None:
                 return f"Wikipedia search query normalized to: {query_name}\n{summary_extract}"
             return summary_extract
 
+    return fetch_wikidata_linked_article(scientific_name)
+
+
+def _wikipedia_article(language: str, title: str) -> tuple[str, list[tuple[str, str]]] | None:
+    response = _wikipedia_get(
+        f"https://{language}.wikipedia.org/w/api.php",
+        params={
+            "action": "query", "prop": "extracts", "explaintext": True, "exsectionformat": "wiki",
+            "titles": title, "format": "json", "redirects": 1,
+        },
+    )
+    if response.status_code != 200:
+        return None
+    for page in response.json().get("query", {}).get("pages", {}).values():
+        if page.get("pageid", -1) != -1 and page.get("extract"):
+            return wikipedia_article_parts(page["extract"])
+    return None
+
+
+def fetch_wikidata_linked_article(scientific_name: str) -> str | None:
+    """The taxon's article in another title or language, for an English miss.
+
+    Wikidata holds the taxon under its exact name (with `×` for a hybrid) and
+    lists every article written about it: an English one under a title the
+    name does not redirect from, or one in another language.
+    """
+    for query_name in enrichment_query_candidates(scientific_name):
+        taxon = query_name.replace(" x ", " × ")
+        if taxon != query_name:
+            article = _wikipedia_article("en", taxon)
+            if article and (article[0] or article[1]):
+                intro, sections = article
+                text = "\n\n".join([intro, *(f"Wikipedia section {title}:\n{body}" for title, body in sections)])
+                return f"Wikipedia article {taxon!r}:\n{text}"
+        response = _wikipedia_get(
+            "https://www.wikidata.org/w/api.php",
+            params={
+                "action": "query", "list": "search", "srsearch": f'haswbstatement:"P225={taxon}"',
+                "srlimit": 1, "format": "json",
+            },
+        )
+        if response.status_code != 200:
+            continue
+        hits = response.json().get("query", {}).get("search", [])
+        if not hits:
+            continue
+        item = hits[0]["title"]
+        response = _wikipedia_get(
+            "https://www.wikidata.org/w/api.php",
+            params={"action": "wbgetentities", "ids": item, "props": "sitelinks", "format": "json"},
+        )
+        if response.status_code != 200:
+            continue
+        sitelinks = response.json().get("entities", {}).get(item, {}).get("sitelinks", {})
+        for language in WIKIPEDIA_FALLBACK_LANGUAGES:
+            link = sitelinks.get(f"{language}wiki")
+            if not link:
+                continue
+            article = _wikipedia_article(language, link["title"])
+            if not article or not (article[0] or article[1]):
+                continue
+            intro, sections = article
+            text = "\n\n".join([intro, *(f"Wikipedia section {title}:\n{body}" for title, body in sections)])
+            return f"Wikipedia ({language}) article {link['title']!r}, via Wikidata {item}:\n{text}"
     return None
 
 
