@@ -20,6 +20,7 @@ invocation assume:
 | `published_columns.py` | lists the cities whose published tree parquet does not carry a column yet. A target may gate on a new stored column only when this reports all of them (a target's `where` runs on every read). |
 | `dbh_age_fit.py` | the same for the age-to-diameter fallback, fitted on the rollup's own dated, measured trees. |
 | `height_allometry_fit.py` | the same for the height model, fitted on the LIDAR heights of the cities in `HEIGHT_CITIES`; rewrites `tree_height_coefficients.csv` and the `height_fallbacks` block. Rerun after adding a LIDAR city. |
+| `fairfax_source_bundle.py` | builds the Fairfax County source bundle the imagery pilot reads (`docs/FAIRFAX_TREE_DATA_HANDOFF.md`): the county boundary, and Arlington / Falls Church through their USNVA ingests plus Alexandria's notable trees as calibration, with raw snapshots, a manifest and `source-audit.md`. `--out` must be a new directory. |
 
 The enrichment table's two hand tools are not here -- they live beside the
 package they edit, as `enrichment/admin/server.py` and

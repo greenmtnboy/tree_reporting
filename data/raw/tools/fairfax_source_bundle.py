@@ -42,7 +42,8 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 import requests
-from shapely.geometry import Point, shape
+from shapely.geometry import Point, mapping, shape
+from shapely.validation import explain_validity, make_valid
 from shapely.prepared import prep
 
 RAW = Path(__file__).resolve().parent.parent
@@ -74,10 +75,10 @@ ALEXANDRIA_LAYER = (
     "https://maps.alexandriava.gov/arcgis/rest/services/alxPublicParksWm/MapServer/0"
 )
 
-# Points the boundary must and must not cover: Fairfax City is an independent
-# city enclaved by the county, Falls Church borders it, Vienna is a town and
-# so county territory.
-MUST_EXCLUDE = {"Fairfax City": (38.8462, -77.3064), "Falls Church": (38.8823, -77.1711)}
+# Independent cities the county must not overlap (VGIN FIPS; Fairfax City is
+# enclaved by the county, Falls Church borders it) and towns, which are county
+# territory, it must cover.
+MUST_EXCLUDE = {"51600": "Fairfax City", "51610": "Falls Church City", "51013": "Arlington County"}
 MUST_INCLUDE = {"Vienna (town)": (38.9012, -77.2653), "Herndon (town)": (38.9696, -77.3861)}
 
 INVENTORY_COLUMNS = [
@@ -86,7 +87,7 @@ INVENTORY_COLUMNS = [
 ]
 PROVENANCE_COLUMNS = [
     "pipeline_city", "jurisdiction", "jurisdiction_fips", "selection",
-    "tree_name", "cultivar", "source_species_name", "source_common_name",
+    "tree_name", "cultivar", "source_species_name", "source_common_name", "source_cultivar",
     "source_dbh", "source_dbh_unit", "source_record_date", "source_record_date_kind",
     "source_status", "source_object_id",
 ]
@@ -162,7 +163,7 @@ def fetch_geojson(layer: str) -> dict:
 # Boundary
 # ---------------------------------------------------------------------------
 
-def build_boundary(out: Path, report: dict) -> tuple[object, dict]:
+def build_boundary(out: Path, report: dict, jurisdictions: dict) -> tuple[object, dict]:
     retrieved = now()
     raw = fetch_geojson(BOUNDARY_LAYER)
     snap = snapshot(out, "fairfax-county-boundary", raw)
@@ -170,11 +171,29 @@ def build_boundary(out: Path, report: dict) -> tuple[object, dict]:
     if len(features) != 1:
         raise ValueError(f"expected one county feature, got {len(features)}")
     geometry = shape(features[0]["geometry"])
+    repair = None
+    if not geometry.is_valid:
+        # The county owns an enclave inside Fairfax City (the Judicial Center
+        # complex), so the published polygon is county / city hole / county
+        # island.  Esri's ring list says that; GeoJSON's one-exterior polygon
+        # reads it as a hole nested in a hole.  make_valid splits the island
+        # into its own part, which is the actual territory.
+        reason = explain_validity(geometry)
+        repaired = make_valid(geometry)
+        if repaired.geom_type != "MultiPolygon" or abs(repaired.area / geometry.area - 1) > 0.01:
+            raise ValueError(f"county boundary invalid ({reason}) and not repairable as a MultiPolygon")
+        repair = {"reason": reason, "parts_after": len(repaired.geoms),
+                  "area_ratio": repaired.area / geometry.area}
+        geometry = repaired
     if geometry.geom_type not in {"Polygon", "MultiPolygon"} or not geometry.is_valid:
         raise ValueError(f"county boundary is {geometry.geom_type}, valid={geometry.is_valid}")
-    for name, (lat, lon) in MUST_EXCLUDE.items():
-        if geometry.covers(Point(lon, lat)):
-            raise ValueError(f"county boundary covers {name}")
+    overlaps = {}
+    for fips, name in MUST_EXCLUDE.items():
+        other = jurisdictions[fips][1]
+        share = geometry.intersection(other).area / other.area
+        overlaps[name] = round(share, 5)
+        if share > 0.01:
+            raise ValueError(f"county boundary covers {share:.1%} of {name}")
     for name, (lat, lon) in MUST_INCLUDE.items():
         if not geometry.covers(Point(lon, lat)):
             raise ValueError(f"county boundary misses {name}")
@@ -190,13 +209,15 @@ def build_boundary(out: Path, report: dict) -> tuple[object, dict]:
         "retrieved_at": retrieved,
         "source_last_edited": esri_ms_to_iso((info.get("editingInfo") or {}).get("dataLastEditDate")),
     }
+    if repair:
+        properties["repair"] = "nested hole split into its own part by shapely make_valid; see source-audit.md"
     collection = {"type": "FeatureCollection",
-                  "features": [{"type": "Feature", "properties": properties, "geometry": raw["features"][0]["geometry"]}]}
+                  "features": [{"type": "Feature", "properties": properties, "geometry": mapping(geometry)}]}
     (out / "boundary.geojson").write_text(json.dumps(collection), encoding="utf-8")
     report["boundary"] = {
         "geometry_type": geometry.geom_type, "parts": len(parts), "holes_per_part": holes,
-        "bounds": list(geometry.bounds), "snapshot": snap,
-        "excluded_checks": list(MUST_EXCLUDE), "included_checks": list(MUST_INCLUDE),
+        "bounds": list(geometry.bounds), "snapshot": snap, "repair": repair,
+        "excluded_overlap_share": overlaps, "included_checks": list(MUST_INCLUDE),
         "source_last_edited": properties["source_last_edited"],
     }
     source = {
@@ -231,11 +252,12 @@ def finish(table: pa.Table, *, code: str, fips: str, jurisdiction: str, selectio
     table = validate_coordinates(table, city=jurisdiction, city_code="USNVA")
     stages["dropped_coordinates"] = before - table.num_rows
     before = table.num_rows
+    if data_source is None:
+        # Not a pipeline source, so not a registered label `enforce_tree_schema` may stamp.
+        table = table.append_column("data_source", pa.array([pipeline_label] * table.num_rows))
     table = enforce_tree_schema(table, city=jurisdiction, data_source=data_source)
     stages["dropped_not_a_tree"] = before - table.num_rows
     stages["delivered"] = table.num_rows
-    if "data_source" not in table.schema.names:
-        table = table.append_column("data_source", pa.array([pipeline_label] * table.num_rows))
     n = table.num_rows
     table = table.set_column(table.schema.get_field_index("city"), "city", pa.array([code] * n))
     for name, value in (("pipeline_city", "USNVA" if data_source else None), ("jurisdiction", jurisdiction),
@@ -276,6 +298,7 @@ def arlington(out: Path) -> tuple[pa.Table, dict, dict]:
     table = with_extras(table, {
         "source_species_name": [None] * len(attrs),
         "source_common_name": [a.get("CommonName") for a in attrs],
+        "source_cultivar": [(a.get("CultivarVariety") or "").strip() or None for a in attrs],
         "source_dbh": [None if a.get("DBHIn") is None else repr(a["DBHIn"]) for a in attrs],
         "source_dbh_unit": ["in"] * len(attrs),
         "source_record_date": [iso_date(esri_ms_to_date(a.get("cgLastModified"))) for a in attrs],
@@ -321,6 +344,7 @@ def falls_church(out: Path) -> tuple[pa.Table, dict, dict]:
     table = with_extras(table, {
         "source_species_name": [a.get("SPECIES") for a in attrs],
         "source_common_name": [a.get("COMMON_NAM") for a in attrs],
+        "source_cultivar": [None] * len(attrs),
         "source_dbh": [None if a.get("DBH") is None else repr(a["DBH"]) for a in attrs],
         "source_dbh_unit": ["in"] * len(attrs),
         "source_record_date": [(a.get("INV_DATE") or "").strip() or None for a in attrs],
@@ -373,6 +397,7 @@ def alexandria(out: Path) -> tuple[pa.Table, dict, dict]:
     table = with_extras(table, {
         "source_species_name": [a.get("SpeciesName") for a in attrs],
         "source_common_name": [a.get("CommonName") for a in attrs],
+        "source_cultivar": [None] * len(attrs),
         "source_dbh": [None if a.get("CBHinInches") is None else repr(a["CBHinInches"]) for a in attrs],
         "source_dbh_unit": ["in circumference (DBH = CBH / pi)"] * len(attrs),
         "source_record_date": [None] * len(attrs),
@@ -515,9 +540,15 @@ def write_audit(out: Path, report: dict, manifest: dict) -> None:
     lines += [
         f"- Source: Fairfax County GIS `Fairfax County Boundary`, last edited {b['source_last_edited']}.",
         f"- {b['geometry_type']}, {b['parts']} part(s), holes per part {b['holes_per_part']}; bounds {b['bounds']}.",
-        f"- Checked to exclude {', '.join(b['excluded_checks'])} and include {', '.join(b['included_checks'])}.",
-        "- Fairfax City (independent, enclaved) and Falls Church (independent, on the eastern edge) are outside it; "
-        "the towns of Vienna, Herndon and Clifton are inside it, being county territory.", "",
+        f"- Share of each neighbour's VGIN polygon the boundary overlaps (edge slivers between two surveys): "
+        f"{b['excluded_overlap_share']}; covers {', '.join(b['included_checks'])}.",
+        (f"- Repaired: the published polygon is invalid ({b['repair']['reason']}). The county owns an enclave "
+         "inside Fairfax City (the Judicial Center complex), which GeoJSON's single-exterior polygon reads as a "
+         f"hole nested in the city's hole; `make_valid` splits it into its own part ({b['repair']['parts_after']} "
+         f"parts, area ratio {b['repair']['area_ratio']:.5f}). The raw snapshot is kept unrepaired."
+         if b["repair"] else "- The published polygon is valid as delivered."),
+        "- Fairfax City (independent, enclaved) and Falls Church (independent, on the eastern edge) are outside it, "
+        "except the county's own enclave inside Fairfax City; the towns of Vienna, Herndon and Clifton are inside it, being county territory.", "",
         "## County inventory", "",
         "`inventory` is `null`. Fairfax County publishes no tree inventory: its open data carries canopy polygons "
         "(`Tree Canopy 2021`) only, and the `Trees2` feature service holds two test records. Tree presence on "
@@ -571,6 +602,11 @@ LIMITATIONS = [
     "Calibration inventories cover public trees only (streets, parks, schools, rights-of-way); private and residential trees are absent, so they calibrate species mix of managed trees, not of the whole canopy.",
     "Falls Church's inventory is a 2004 survey last edited in 2015; species mix and sizes are 20+ years old and planting dates are not published.",
     "Arlington publishes common names only; species come from shared/species/english.py, and the names it cannot resolve are listed per source above as Unknown.",
+    "Arlington's `CultivarVariety` (1,660 rows) is not read by the pipeline adapter, so `cultivar` comes only from the common name; the raw value is kept as `source_cultivar`.",
+    "About 300 Falls Church rows (2004 survey) and a dozen Arlington rows lie inside the current Fairfax County boundary, clustered just west of the Falls Church line; the survey predates the 2014 Falls Church / Fairfax County boundary adjustment. They stay calibration rows under their publisher's identity and are not county inventory.",
+    "Alexandria's notable-tree layer has 12 records without a location, dropped.",
+    "Species spellings were checked against GBIF's backbone (`species/match?strict=true`) because POWO answered 403 on 2026-11-06; seven typos were folded centrally in SPECIES_MISSPELLINGS. `Halesia caroliniana` (Falls Church, 35) and `Rhus copallinum` (Arlington, 8) are spelling variants of accepted names and are kept as published; `tools/species_audit.py` should re-adjudicate them once Kew answers.",
+    "Unresolved mappings: Arlington common names that resolve to no taxon (listed above, about 120 rows, mostly `Other Species`) and the ambiguous hybrid `Oak, Hybrid Black/Red` publish as Unknown; Alexandria's varieties (`Fraxinus americana var biltmoreana`, `Crataegus intricata var. Bilt.`, `Cedrus atlantica glauca`) are reduced to the species by the central rule.",
     "Arlington's planting dates (`Installed`) start in 2012 and exist only for trees the county planted since; older trees have none.",
     "Alexandria's layer is notable/champion trees only (large specimens, public and private); it is a heavily size-biased selection, its DBH is derived from girth, and it should not be used to estimate species frequency.",
     "Calibration jurisdiction codes USARL, USFCH and USALX are bundle-local; the public pipeline carries Arlington and Falls Church as city USNVA with data_source ARLINGTON / FALLS_CHURCH and does not publish Alexandria.",
@@ -586,8 +622,8 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=False)
 
     report: dict = {"sources": {}}
-    county, boundary_source = build_boundary(out, report)
     jurisdictions = load_jurisdictions(out)
+    county, boundary_source = build_boundary(out, report, jurisdictions)
     tables: dict[str, pa.Table] = {}
     sources = [boundary_source]
     for name, build in (("Arlington DPR Trees", arlington), ("Falls Church Public_Trees", falls_church),

@@ -1044,6 +1044,18 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Quercus meuhlengergil": "Quercus muehlenbergii",
     "Quercus robar": "Quercus robur",
     "Syriga reticulata": "Syringa reticulata",
+    # Northern Virginia (2026-11-06): Falls Church's inventory and Alexandria's
+    # notable trees, read for the Fairfax imagery bundle.  POWO still answered
+    # 403, so the same GBIF check as Stoughton's.  `Halesia caroliniana` and
+    # `Rhus copallinum` also miss an exact match but are spelling variants of
+    # a real name, not typos, and are left for Kew.
+    "Chamaecyparis lawsonia": "Chamaecyparis lawsoniana",
+    "Fraxinus veluntina": "Fraxinus velutina",
+    "Ginko biloba": "Ginkgo biloba",
+    "Magnolia gradiflora": "Magnolia grandiflora",
+    "Plantanus occidentalis": "Platanus occidentalis",
+    "Quercus x willendowiana": "Quercus x willdenowiana",
+    "Vitus vulpina": "Vitis vulpina",
 }
 
 
