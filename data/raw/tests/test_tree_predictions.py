@@ -14,6 +14,7 @@ enrichment, applied to a job that consumes both.
 
 from __future__ import annotations
 
+import copy
 import csv
 import math
 import re
@@ -582,7 +583,9 @@ def build_stage(files: dict[str, Path], stage: str, tmp: Path) -> dict[str, Path
     built = dict(files)
     for name, target in targets.items():
         columns = [c for c in target.columns if c.alias != WATERMARK]
-        statement = target.model_copy(update={"columns": columns}).create_update_statement(env, None, line_no=None)
+        # pytrilogy 0.3.462 made Datasource a dataclass; older releases are pydantic.
+        trimmed = copy.replace(target, columns=columns) if hasattr(target, "__replace__") else target.model_copy(update={"columns": columns})
+        statement = trimmed.create_update_statement(env, None, line_no=None)
         sql = localize(files, executor.generator.compile_statement(executor.generator.generate_queries(env, [statement])[-1]))
         renames = ", ".join(f'"{c.concept.address.split(".", 1)[1]}" AS "{c.alias}"' for c in columns)
         path = tmp / f"{name}.parquet"
@@ -597,6 +600,35 @@ def fit_files(fixture_files, tmp_path_factory) -> dict[str, Path]:
     tmp = tmp_path_factory.mktemp("stages")
     files = build_stage(fixture_files, "allometry_fits.preql", tmp)
     return build_stage(files, "height_fits.preql", tmp)
+
+
+@pytest.mark.parametrize("stage", [s for s in STAGES if len(STAGES[s]) > 1])
+def test_each_stage_plans_the_way_a_refresh_runs_it(stage):
+    """Plan every target of a stage in the order `trilogy refresh` takes them.
+
+    `build_stage` takes all of a stage's targets out of scope and drops the
+    watermark, so it can execute offline. A refresh does neither: it keeps
+    each target already refreshed in scope, hides only the ones still to
+    come, and writes the watermark column. This plans (dry-run, no I/O) under
+    those conditions, which is where a stage's second target has failed.
+    """
+    from trilogy import Dialects, Environment
+    from trilogy.dialect.config import DuckDBConfig
+    from trilogy.execution.state.isolation import hidden_datasources
+
+    env = Environment(working_path=RAW_DIR)
+    env.parse((RAW_DIR / stage).read_text(encoding="utf-8"))
+    executor = Dialects.DUCK_DB.default_executor(environment=env, conf=DuckDBConfig(enable_python_datasources=True))
+    pending = list(STAGES[stage])
+    failures = {}
+    while pending:
+        name = pending.pop(0)
+        with hidden_datasources(env, set(pending)):
+            try:
+                executor.update_datasource(env.datasources[name], dry_run=True)
+            except Exception as exc:  # noqa: BLE001 -- report every target, not the first
+                failures[name] = str(exc).splitlines()[0][:300]
+    assert not failures, failures
 
 
 def published(files: dict[str, Path], table: str) -> list[dict]:
