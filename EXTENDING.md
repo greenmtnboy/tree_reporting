@@ -295,7 +295,7 @@ cd data && trilogy refresh raw/{code}/{slug}_landmarks.preql -f {slug}_landmark_
   non-taxa into sentinels (`Unknown`, `Palm`, `Shrub`, `Cactus`, `Dead`),
   never null.
 - Never curate the synonym or misspelling maps by eye or by tree count:
-  `tools/species_audit.py` asks POWO about every near pair. A name merely
+  `tools/species_audit.py` checks every near pair against Kew's WCVP. A name merely
   misapplied in the trade is not a synonym. Audit a new city **before** its
   first publish: write the ingest's stream to a local parquet and pass it with
   `--parquet`, so its spellings are paired against every published city's.

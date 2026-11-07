@@ -447,6 +447,23 @@ schedule = "0 0 6 * * *"
 timeout_seconds = 1800
 memory_mb = 2048
 
+# Kew's World Checklist of Vascular Plants as two reference parquets
+# (raw/wcvp_info.preql, shared/wcvp.py): the names and synonymy the species
+# audit reads now that POWO's API refuses scripted requests, and the TDWG
+# distributions. It reads Kew's server, so it is not in the core tick, and it
+# feeds nothing on the map. Weekly on Monday, the day POWO picks up WCVP
+# changes; the probe is one HEAD, and Kew replaces the zip a few times a year.
+# Measured locally on the v16 release: names 1.45M rows, peak 534 MiB;
+# distribution 2.0M rows, peak 321 MiB.
+[[cloud.job]]
+key = "refresh-wcvp"
+name = "urban-tree-data-wcvp"
+entrypoint = "raw/wcvp_info.preql"
+operation = "refresh"
+schedule = "0 30 5 * * MON"
+timeout_seconds = 1800
+memory_mb = 2048
+
 # Landmarks: one refresh job per city's landmark model, then the cross-city
 # union as its own job.
 #

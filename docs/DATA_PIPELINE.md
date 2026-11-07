@@ -62,6 +62,10 @@ the core, daily, reading only published parquets
   validate-core         raw/core_validate.preql
   publish-website       website_homepage.preql          -> arborary/website/v1/homepage.json
   publish-landmarks     raw/full_landmark_publish.preql (weekly, Sun 05:00)
+
+reference data, weekly, outside the core
+  refresh-wcvp          raw/wcvp_info.preql (Mon 05:30) -> wcvp_names_v{n}.parquet
+                                                        wcvp_distribution_v{n}.parquet
 ```
 
 Rules:

@@ -596,9 +596,9 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 #
 # Keys and values are written the way `sanitize_species` emits them -- ASCII
 # hybrid mark, genus capitalised, binomial rank -- and a value is never a key,
-# so one lookup is enough.  `test_ingest_shared.py` checks both.  POWO
-# (https://powo.science.kew.org) is the authority; add a pair only when it
-# lists one name as a synonym of the other.  A name that is merely
+# so one lookup is enough.  `test_ingest_shared.py` checks both.  Kew's
+# checklist (WCVP, the names behind https://powo.science.kew.org) is the
+# authority; add a pair only when it lists one name as a synonym of the other.  A name that is merely
 # *misapplied* in the trade for a different species (`Ficus nitida` for
 # F. microcarpa, `Jacaranda acutifolia` for J. mimosifolia) is not a synonym
 # and is deliberately not here.
@@ -769,8 +769,8 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # resolving it to the name it meant, not for leaving it fragmented.
 #
 # Every key was observed in a published city parquet and adjudicated against
-# POWO by `species_audit.py`: a key is a name POWO cannot match at all, and a
-# value is one it returns as accepted.  That is what keeps a real taxon out of
+# Kew by `species_audit.py` (POWO's API until late 2026, WCVP since): a key is
+# a name Kew has no record of, and a value is one it lists as accepted.  That is what keeps a real taxon out of
 # here -- `Acer saccharum` and `Acer saccharinum` are two edits apart and both
 # accepted, so the pair is refused rather than merged, and so are
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
@@ -1029,8 +1029,9 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     # POWO sat behind a Cloudflare challenge that day, so each pair was put to
     # GBIF's backbone instead (`/v1/species/match?strict=true`): the key has
     # no exact match, the value is an exact accepted name.  `Ginkgo bicolor`
-    # is the epithet column's slip in a monotypic genus.  Re-run
-    # `species_audit.py` once Kew answers again.
+    # is the epithet column's slip in a monotypic genus.  Re-checked against
+    # WCVP v16 (2026-06-04) on 2026-11-07: every key unknown, every value
+    # accepted.
     "Acer platiniodes": "Acer platanoides",
     "Acer rubra": "Acer rubrum",
     "Aesculus hippacastanum": "Aesculus hippocastanum",
