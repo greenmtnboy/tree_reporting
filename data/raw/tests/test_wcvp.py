@@ -167,3 +167,63 @@ def test_classify_maps_a_typo_and_refuses_two_real_names(kew):
     verdicts = classify(pairs, kew)
     assert [v[:2] for v in verdicts["MISSPELLING"]] == [("Acer rubrumm", "Acer rubrum")]
     assert [v[:2] for v in verdicts["REFUSED"]] == [("Quercus lobata", "Quercus lyrata")]
+
+
+@pytest.fixture()
+def enrichment_kew(wcvp_zip, monkeypatch):
+    from enrichment import _tree_enrichment_sources as sources
+
+    monkeypatch.setattr(sources, "_WCVP", wcvp.Checklist(str(wcvp_zip)))
+    monkeypatch.setattr(sources, "_WCVP_DISABLED", False)
+    return sources
+
+
+def test_enrichment_reads_the_accepted_taxon_and_its_areas(enrichment_kew):
+    text = enrichment_kew.fetch_wcvp_text("Acer sanguineum")
+    assert "WCVP accepted name via synonym: Acer rubrum" in text
+    # The areas are the accepted taxon's, in the lines the ecoregion matcher reads.
+    assert "Distribution natives: Virginia" in text
+    assert "path=Northern America > Southeastern U.S.A. > Virginia" in text
+    assert "Lifeform: tree" in text
+
+
+def test_enrichment_reports_a_homonym_and_a_misapplication_without_following_them(enrichment_kew):
+    lyrata = enrichment_kew.fetch_wcvp_text("Quercus lyrata")
+    assert "Taxonomic status: Accepted" in lyrata
+    assert "as a synonym of Quercus lobata" in lyrata
+    platanus = enrichment_kew.fetch_wcvp_text("Platanus occidentalis")
+    assert "Taxonomic status: Accepted" in platanus
+    assert "misapplied (auct.) to: Platanus × hispanica" in platanus
+
+
+def test_enrichment_falls_back_to_the_binomial_and_marks_introduced_areas(enrichment_kew):
+    text = enrichment_kew.fetch_wcvp_text("Platanus x hispanica 'Bloodgood'")
+    assert text.startswith("WCVP query normalized to: Platanus x hispanica")
+    assert "Distribution introduced: Great Britain" in text
+    assert "Distribution natives" not in text
+
+
+def test_enrichment_carries_on_without_kew_when_the_parquets_are_missing(monkeypatch, tmp_path, capsys):
+    from enrichment import _tree_enrichment_sources as sources
+
+    monkeypatch.setattr(sources, "_WCVP", wcvp.Checklist(str(tmp_path / "absent.zip")))
+    monkeypatch.setattr(sources, "_WCVP_DISABLED", False)
+    assert sources.fetch_wcvp_text("Acer rubrum") is None
+    assert "WCVP unavailable" in capsys.readouterr().err
+    assert sources.wcvp_checklist() is None
+
+
+def test_wikipedia_keeps_the_intro_and_the_descriptive_sections():
+    from enrichment._tree_enrichment_sources import wikipedia_article_parts
+
+    extract = (
+        "Halesia carolina is a tree.\n\n\n== Description ==\nGrows to 8 m.\n\n"
+        "=== Flowers ===\nWhite bells.\n\n\n== Taxonomy ==\nNamed by Linnaeus.\n\n\n"
+        "== Distribution and habitat ==\nSoutheastern U.S.A.\n\n\n== References ==\nx"
+    )
+    intro, sections = wikipedia_article_parts(extract)
+    assert intro == "Halesia carolina is a tree."
+    assert sections == [
+        ("Description", "Grows to 8 m.\nFlowers:\nWhite bells."),
+        ("Distribution and habitat", "Southeastern U.S.A."),
+    ]

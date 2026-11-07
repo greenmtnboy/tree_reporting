@@ -99,6 +99,15 @@ cities publish.
   once when the name comes back empty; a species that returns empty twice is
   taken at its word. Model: `google/gemini-2.5-flash`, overridable with
   `TREE_ENRICHMENT_MODEL`.
+- The model reads four sources per species (`_tree_enrichment_sources.py`):
+  Wikipedia (the intro plus the Description, Distribution, Ecology and
+  Cultivation sections), Kew's WCVP, GBIF and SelecTree. WCVP is read from
+  the parquets `refresh-wcvp` publishes, prefetched once for the whole queue
+  (`WCVP_ZIP` reads a local zip); it gives the status, accepted name, any
+  homonym or misapplication, lifeform, climate and every TDWG level-3 area,
+  native or introduced, which is what the ecoregion shortlist is matched
+  from. It has no prose descriptions; those come from Wikipedia. If the
+  parquets can't be read, the run warns once and carries on without Kew.
 - `assert_checkpoint_is_not_stale` refuses to resume from a local `--output`
   checkpoint holding fewer rows than the published table;
   `MAX_SPECIES_PER_RUN` caps a run and reports what it left;

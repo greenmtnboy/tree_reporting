@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import html
+import os
 import re
+import sys
+import time
 
 import requests
+
+from shared.wcvp import Checklist, ChecklistUnavailable
 
 
 HEADERS = {"User-Agent": "sf-tree-enrichment/1.0 (github.com/greenmtnboy/tree_reporting)"}
@@ -13,7 +18,7 @@ HEADERS = {"User-Agent": "sf-tree-enrichment/1.0 (github.com/greenmtnboy/tree_re
 @dataclass
 class SourceTexts:
     wikipedia: str | None
-    powo: str | None
+    wcvp: str | None
     gbif: str | None
     selectree: str | None
 
@@ -25,6 +30,10 @@ def normalize_enrichment_search_name(scientific_name: str) -> str:
     genus, species_epithet = tokens[0], tokens[1]
     if not re.fullmatch(r"[A-Z][A-Za-z.-]*", genus):
         return scientific_name
+    # A hybrid binomial keeps its mark: `Platanus x hispanica 'Bloodgood'`
+    # is searched as `Platanus x hispanica`.
+    if species_epithet == "x" and len(tokens) >= 3 and re.fullmatch(r"[a-z-]+", tokens[2]):
+        return f"{genus} x {tokens[2]}"
     if not re.fullmatch(r"[a-z-]+", species_epithet):
         return scientific_name
     if species_epithet in {"sp", "sp.", "spp", "spp.", "x", "cf", "aff", "other"}:
@@ -56,48 +65,90 @@ def is_clean_taxon_match(scientific_name: str, candidate_name: str | None) -> bo
     return bool(candidate_name) and normalize_taxon_match_name(candidate_name) == normalize_taxon_match_name(scientific_name)
 
 
+def _wikipedia_get(url: str, **kwargs) -> requests.Response:
+    """A Wikipedia request that waits out a 429 instead of reading it as
+    "no article": Wikimedia rate-limits bursts, and a silent miss here is a
+    species enriched from Kew's names alone."""
+    for attempt in range(3):
+        response = requests.get(url, headers=HEADERS, timeout=10, **kwargs)
+        if response.status_code != 429:
+            return response
+        wait = int(response.headers.get("Retry-After") or 0) or 5 * (attempt + 1)
+        time.sleep(min(wait, 60))
+    return response
+
+
+# The article sections that carry what POWO's descriptions did -- the plant's
+# form, leaves, flowers and fruit, where it grows and how it is planted.  The
+# intro alone is a sentence or two for most species.
+WIKIPEDIA_SECTIONS = re.compile(
+    r"^(description|morphology|characteristics|botany|appearance|identification|"
+    r"distribution|range|habitat|ecology|cultivation|uses|horticulture)",
+    re.IGNORECASE,
+)
+WIKIPEDIA_SECTION_CHARS = 2500
+WIKIPEDIA_SECTIONS_CHARS = 6000
+_HEADING = re.compile(r"^(={2,6})\s*(.+?)\s*\1\s*$", re.MULTILINE)
+
+
+def wikipedia_article_parts(extract: str) -> tuple[str, list[tuple[str, str]]]:
+    """An article's plain-text extract, split into its intro and the wanted
+    top-level sections (each with its subsections), in article order."""
+    headings = list(_HEADING.finditer(extract))
+    intro = extract[: headings[0].start()].strip() if headings else extract.strip()
+    sections: list[tuple[str, str]] = []
+    total = 0
+    for i, heading in enumerate(headings):
+        if len(heading.group(1)) != 2 or not WIKIPEDIA_SECTIONS.match(heading.group(2)):
+            continue
+        end = next((h.start() for h in headings[i + 1 :] if len(h.group(1)) == 2), len(extract))
+        body = _HEADING.sub(lambda m: m.group(2) + ":", extract[heading.end() : end]).strip()
+        body = re.sub(r"\n{2,}", "\n", body)[:WIKIPEDIA_SECTION_CHARS]
+        if not body or total >= WIKIPEDIA_SECTIONS_CHARS:
+            continue
+        body = body[: WIKIPEDIA_SECTIONS_CHARS - total]
+        total += len(body)
+        sections.append((heading.group(2), body))
+    return intro, sections
+
+
 def fetch_wikipedia_text(scientific_name: str) -> str | None:
     for query_name in enrichment_query_candidates(scientific_name):
         slug = query_name.replace(" ", "_")
         summary_extract: str | None = None
 
-        response = requests.get(
-            f"https://en.wikipedia.org/api/rest_v1/page/summary/{slug}",
-            headers=HEADERS,
-            timeout=10,
-        )
+        response = _wikipedia_get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{slug}")
         if response.status_code == 200:
             data = response.json()
             extract = data.get("extract", "")
             if extract:
                 summary_extract = extract
 
-        response = requests.get(
+        response = _wikipedia_get(
             "https://en.wikipedia.org/w/api.php",
             params={
                 "action": "query",
                 "prop": "extracts",
-                "exintro": True,
                 "explaintext": True,
+                "exsectionformat": "wiki",
                 "titles": query_name,
                 "format": "json",
                 "redirects": 1,
             },
-            headers=HEADERS,
-            timeout=10,
         )
         if response.status_code == 200:
             pages = response.json().get("query", {}).get("pages", {})
             for page in pages.values():
                 if page.get("pageid", -1) == -1:
                     continue
-                extract = page.get("extract", "")
-                if not extract:
+                intro, sections = wikipedia_article_parts(page.get("extract", ""))
+                if not intro and not sections:
                     continue
-                best = summary_extract if summary_extract and len(summary_extract) > len(extract) else extract
+                best = summary_extract if summary_extract and len(summary_extract) > len(intro) else intro
+                text = "\n\n".join([best, *(f"Wikipedia section {title}:\n{body}" for title, body in sections)])
                 if query_name != scientific_name:
-                    return f"Wikipedia search query normalized to: {query_name}\n{best}"
-                return best
+                    return f"Wikipedia search query normalized to: {query_name}\n{text}"
+                return text
 
         if summary_extract:
             if query_name != scientific_name:
@@ -107,184 +158,162 @@ def fetch_wikipedia_text(scientific_name: str) -> str | None:
     return None
 
 
-def fetch_powo_taxon_text(
-    result: dict,
-    scientific_name: str,
-    query_name: str,
-    include_query_note: bool = True,
-) -> str | None:
-    matched_fq_id = result.get("fqId")
-    if not matched_fq_id:
+# Kew's checklist (WCVP), the names and distributions POWO served.  POWO's API
+# refuses scripted requests since late 2026; `refresh-wcvp` publishes the
+# checklist as parquets, read here through `shared.wcvp.Checklist`.  It
+# carries status, accepted name, family, lifeform, climate, a one-line range
+# and every TDWG level-3 area native or introduced -- what the native-range
+# evidence and the ecoregion shortlist were built from -- but none of POWO's
+# prose descriptions; those come from Wikipedia's article sections.
+#
+# One reader per process.  `prefetch_wcvp` loads every name a run will ask
+# about before the loop, so the parquets are scanned a few times per run,
+# not once per species.  `WCVP_ZIP` reads a local copy of Kew's zip instead.
+_WCVP: Checklist | None = None
+_WCVP_DISABLED = False
+WCVP_AREA_NAMES = 60
+WCVP_AREA_DETAILS = 12
+
+
+def wcvp_checklist() -> Checklist | None:
+    global _WCVP
+    if _WCVP_DISABLED:
         return None
-    accepted_ref = result.get("synonymOf") if not result.get("accepted", True) else None
-    fq_id = accepted_ref.get("fqId") if isinstance(accepted_ref, dict) and accepted_ref.get("fqId") else matched_fq_id
-
-    parts: list[str] = []
-    if include_query_note and query_name != scientific_name:
-        parts.append(f"POWO search query normalized to: {query_name}")
-    if result.get("name"):
-        parts.append(f"POWO matched name: {result['name']}")
-    if result.get("author"):
-        parts.append(f"POWO author: {result['author']}")
-    if result.get("family"):
-        parts.append(f"POWO family: {result['family']}")
-    if accepted_ref:
-        if accepted_ref.get("name"):
-            parts.append(f"POWO accepted name via synonym: {accepted_ref['name']}")
-        if accepted_ref.get("author"):
-            parts.append(f"POWO accepted author via synonym: {accepted_ref['author']}")
-    snippet = result.get("snippet")
-    if isinstance(snippet, str) and snippet.strip():
-        parts.append(f"POWO snippet: {snippet.replace('<b>', '').replace('</b>', '')}")
-
-    response = requests.get(
-        f"https://powo.science.kew.org/api/2/taxon/{fq_id}",
-        params={"fields": "descriptions,distribution"},
-        headers=HEADERS,
-        timeout=10,
-    )
-    if response.status_code != 200:
-        return None
-    data = response.json()
-    accepted_data = data.get("accepted")
-    if (
-        data.get("taxonomicStatus")
-        and "synonym" in str(data.get("taxonomicStatus")).lower()
-        and isinstance(accepted_data, dict)
-        and accepted_data.get("fqId")
-        and accepted_data.get("fqId") != fq_id
-    ):
-        accepted_response = requests.get(
-            f"https://powo.science.kew.org/api/2/taxon/{accepted_data['fqId']}",
-            params={"fields": "descriptions,distribution"},
-            headers=HEADERS,
-            timeout=10,
-        )
-        if accepted_response.status_code == 200:
-            data = accepted_response.json()
-            if accepted_data.get("name"):
-                parts.append(f"POWO accepted name from taxon record: {accepted_data['name']}")
-            if accepted_data.get("author"):
-                parts.append(f"POWO accepted author from taxon record: {accepted_data['author']}")
-
-    descriptions = data.get("descriptions", {})
-    if isinstance(descriptions, dict):
-        for source_name, source_payload in descriptions.items():
-            if not isinstance(source_payload, dict):
-                continue
-            source_descriptions = source_payload.get("descriptions", {})
-            if not isinstance(source_descriptions, dict):
-                continue
-            for characteristic, items in source_descriptions.items():
-                if not isinstance(items, list):
-                    continue
-                for item in items:
-                    if not isinstance(item, dict):
-                        continue
-                    text = item.get("description", "")
-                    if text:
-                        parts.append(f"{source_name}/{characteristic}: {text}")
-
-    if data.get("lifeform"):
-        parts.append(f"Lifeform: {data['lifeform']}")
-    if data.get("climate"):
-        parts.append(f"Climate: {data['climate']}")
-    if data.get("species"):
-        parts.append(f"Species epithet: {data['species']}")
-    if data.get("taxonomicStatus"):
-        parts.append(f"Taxonomic status: {data['taxonomicStatus']}")
-    if data.get("taxonRemarks"):
-        parts.append(f"Taxon remarks: {data['taxonRemarks']}")
-    locations = data.get("locations")
-    if isinstance(locations, list) and locations:
-        parts.append(f"POWO location codes: {', '.join(str(code) for code in locations[:20])}")
-    classification = data.get("classification")
-    if isinstance(classification, list) and classification:
-        labels = [
-            f"{entry.get('rank')}: {entry.get('name')}"
-            for entry in classification
-            if isinstance(entry, dict) and entry.get("rank") and entry.get("name")
-        ]
-        if labels:
-            parts.append(f"Classification: {' | '.join(labels[:8])}")
-
-    distribution = data.get("distribution", {})
-    if isinstance(distribution, dict):
-        for bucket in ("natives", "introduced", "extinct", "uncertain"):
-            entries = distribution.get(bucket, [])
-            if not isinstance(entries, list) or not entries:
-                continue
-            names = [entry.get("name") for entry in entries if isinstance(entry, dict) and entry.get("name")]
-            if names:
-                parts.append(f"Distribution {bucket}: {', '.join(names[:20])}")
-            detailed_entries = []
-            for entry in entries[:12]:
-                if not isinstance(entry, dict):
-                    continue
-                detail_bits = []
-                if entry.get("name"):
-                    detail_bits.append(f"name={entry['name']}")
-                if entry.get("tdwgCode"):
-                    detail_bits.append(f"tdwg={entry['tdwgCode']}")
-                if entry.get("locationTree"):
-                    detail_bits.append("path=" + " > ".join(str(node) for node in entry["locationTree"][:10]))
-                if entry.get("establishment"):
-                    detail_bits.append(f"establishment={entry['establishment']}")
-                if detail_bits:
-                    detailed_entries.append("; ".join(detail_bits))
-            if detailed_entries:
-                parts.append(f"Distribution {bucket} detail: {' | '.join(detailed_entries)}")
-
-    return "\n".join(parts) if parts else None
+    if _WCVP is None:
+        _WCVP = Checklist(os.environ.get("WCVP_ZIP"))
+    return _WCVP
 
 
-def fetch_powo_text(scientific_name: str) -> str | None:
+def _disable_wcvp(error: Exception) -> None:
+    """Carry on without Kew, loudly: the other three sources still answer,
+    but every row enriched now has no structured range behind its nativeness."""
+    global _WCVP_DISABLED
+    _WCVP_DISABLED = True
+    print(f"[warn] WCVP unavailable, enriching without it: {error}", file=sys.stderr)
+
+
+def _taxon_ids(kew: Checklist, query_name: str) -> list[int]:
+    return [
+        r["accepted_plant_name_id"] if r["accepted_plant_name_id"] is not None else r["plant_name_id"]
+        for r in kew.records(query_name)
+    ]
+
+
+def prefetch_wcvp(scientific_names) -> None:
+    kew = wcvp_checklist()
+    if kew is None:
+        return
+    queries = [q for name in scientific_names for q in enrichment_query_candidates(name)]
     try:
-        fallback_results: list[tuple[str, dict]] = []
-        for query_name in enrichment_query_candidates(scientific_name):
-            response = requests.get(
-                "https://powo.science.kew.org/api/2/search",
-                params={"q": query_name, "f": "species_f"},
-                headers=HEADERS,
-                timeout=10,
-            )
-            if response.status_code != 200:
-                continue
-            results = response.json().get("results", [])
-            if not results:
-                continue
+        kew.prefetch(queries)
+        kew.prefetch_taxa(i for q in queries for i in _taxon_ids(kew, q))
+    except ChecklistUnavailable as e:
+        _disable_wcvp(e)
 
-            clean_match = next(
-                (
-                    result
-                    for result in results
-                    if is_clean_taxon_match(scientific_name, result.get("name"))
-                    or is_clean_taxon_match(
-                        scientific_name,
-                        result.get("synonymOf", {}).get("name") if isinstance(result.get("synonymOf"), dict) else None,
-                    )
-                ),
-                None,
-            )
-            if clean_match:
-                return fetch_powo_taxon_text(clean_match, scientific_name, query_name)
 
-            if not fallback_results:
-                fallback_results = [(query_name, result) for result in results[:2] if isinstance(result, dict)]
+def _wcvp_name(record: dict) -> str:
+    return " ".join(p for p in (record["taxon_name"], record["taxon_authors"]) if p)
 
-        fallback_texts = []
-        for idx, (query_name, result) in enumerate(fallback_results, start=1):
-            text = fetch_powo_taxon_text(
-                result,
-                scientific_name,
-                query_name,
-                include_query_note=(idx == 1),
-            )
-            if text:
-                fallback_texts.append(f"POWO fallback candidate {idx}:\n{text}")
-        return "\n\n".join(fallback_texts) if fallback_texts else None
-    except Exception:
+
+def _wcvp_area_lines(areas: list[dict]) -> list[str]:
+    buckets = {
+        "natives": [a for a in areas if not a["introduced"] and not a["extinct"] and not a["location_doubtful"]],
+        "introduced": [a for a in areas if a["introduced"] and not a["extinct"]],
+        "extinct": [a for a in areas if a["extinct"]],
+        "uncertain": [a for a in areas if a["location_doubtful"] and not a["introduced"] and not a["extinct"]],
+    }
+    parts: list[str] = []
+    for bucket, entries in buckets.items():
+        if not entries:
+            continue
+        entries = sorted(entries, key=lambda a: (a["continent"] or "", a["region"] or "", a["area"] or ""))
+        names = [a["area"] for a in entries if a["area"]]
+        more = f" (+{len(names) - WCVP_AREA_NAMES} more)" if len(names) > WCVP_AREA_NAMES else ""
+        parts.append(f"Distribution {bucket}: {', '.join(names[:WCVP_AREA_NAMES])}{more}")
+        establishment = "Introduced" if bucket == "introduced" else "Native"
+        details = [
+            f"name={a['area']}; tdwg={a['area_code_l3']}; "
+            f"path={(a['continent'] or '').title()} > {a['region']} > {a['area']}; "
+            f"establishment={establishment}"
+            for a in entries[:WCVP_AREA_DETAILS]
+        ]
+        parts.append(f"Distribution {bucket} detail: {' | '.join(details)}")
+    return parts
+
+
+def _wcvp_taxon_lines(kew: Checklist, taxon: dict) -> list[str]:
+    parts = [f"WCVP family: {taxon['family']}"] if taxon["family"] else []
+    if taxon["taxon_rank"]:
+        parts.append(f"WCVP rank: {taxon['taxon_rank']}")
+    if taxon["lifeform_description"]:
+        parts.append(f"Lifeform: {taxon['lifeform_description']}")
+    if taxon["climate_description"]:
+        parts.append(f"Climate: {taxon['climate_description']}")
+    if taxon["geographic_area"]:
+        parts.append(f"WCVP native range: {taxon['geographic_area']}")
+    return parts + _wcvp_area_lines(kew.areas.get(taxon["plant_name_id"], []))
+
+
+def _wcvp_text(kew: Checklist, scientific_name: str, query_name: str) -> str | None:
+    records = kew.records(query_name)
+    if not records:
         return None
+    kew.prefetch_taxa(_taxon_ids(kew, query_name))
+    parts: list[str] = []
+    if query_name != scientific_name:
+        parts.append(f"WCVP query normalized to: {query_name}")
+    accepted = [r for r in records if r["accepted_plant_name_id"] == r["plant_name_id"]]
+    synonyms = [r for r in records if r not in accepted and r["accepted_plant_name_id"] is not None]
+    taxon: dict | None = None
+    if accepted:
+        taxon = accepted[0]
+        parts.append(f"WCVP matched name: {_wcvp_name(taxon)}")
+        parts.append("Taxonomic status: Accepted")
+        # A homonym is reported, never followed: `Quercus lyrata` Walter is
+        # the overcup oak whatever Spreng. meant by the same name.
+        for r in synonyms:
+            parts.append(
+                f"WCVP also lists {_wcvp_name(r)} (a different author) as a synonym of {r['accepted_taxon_name']}"
+            )
+    else:
+        targets = {r["accepted_plant_name_id"]: r for r in synonyms}
+        if len(targets) == 1:
+            record = next(iter(targets.values()))
+            parts.append(f"WCVP matched name: {_wcvp_name(record)}")
+            parts.append(f"Taxonomic status: {record['taxon_status']}")
+            parts.append(f"WCVP accepted name via synonym: {record['accepted_taxon_name']}")
+            taxon = kew.by_id.get(record["accepted_plant_name_id"])
+        elif targets:
+            parts.append(
+                f"WCVP lists {query_name} under {len(targets)} different accepted taxa: "
+                + ", ".join(sorted(r["accepted_taxon_name"] for r in targets.values()))
+                + "; the name is ambiguous"
+            )
+        else:
+            parts.append(f"WCVP matched name: {_wcvp_name(records[0])}")
+            parts.append(f"Taxonomic status: {records[0]['taxon_status']} (not placed in an accepted taxon)")
+    # The trade's usage, which is often what the trees are: nurseries sold
+    # C. laevigata as `Crataegus oxyacantha` long after the name was sunk.
+    misapplied = sorted({r["accepted_taxon_name"] for r in kew.misapplied(query_name) if r["accepted_taxon_name"]})
+    if misapplied:
+        parts.append(f"WCVP notes the name has also been misapplied (auct.) to: {', '.join(misapplied)}")
+    if taxon:
+        parts.extend(_wcvp_taxon_lines(kew, taxon))
+    return "\n".join(parts)
+
+
+def fetch_wcvp_text(scientific_name: str) -> str | None:
+    kew = wcvp_checklist()
+    if kew is None:
+        return None
+    try:
+        for query_name in enrichment_query_candidates(scientific_name):
+            text = _wcvp_text(kew, scientific_name, query_name)
+            if text:
+                return text
+    except ChecklistUnavailable as e:
+        _disable_wcvp(e)
+    return None
 
 
 def fetch_gbif_text(scientific_name: str) -> str | None:
@@ -511,7 +540,7 @@ def fetch_selectree_text(scientific_name: str) -> str | None:
 def gather_source_texts(scientific_name: str, wiki_name: str) -> SourceTexts:
     return SourceTexts(
         wikipedia=fetch_wikipedia_text(wiki_name),
-        powo=fetch_powo_text(scientific_name),
+        wcvp=fetch_wcvp_text(scientific_name),
         gbif=fetch_gbif_text(scientific_name),
         selectree=fetch_selectree_text(scientific_name),
     )
@@ -521,8 +550,8 @@ def source_labels(texts: SourceTexts) -> list[str]:
     labels = []
     if texts.wikipedia:
         labels.append("Wikipedia")
-    if texts.powo:
-        labels.append("POWO")
+    if texts.wcvp:
+        labels.append("WCVP")
     if texts.gbif:
         labels.append("GBIF")
     if texts.selectree:
@@ -534,8 +563,8 @@ def build_reference_text(texts: SourceTexts) -> str:
     context_parts = []
     if texts.wikipedia:
         context_parts.append(f"Wikipedia:\n{texts.wikipedia}")
-    if texts.powo:
-        context_parts.append(f"Plants of the World Online (POWO / Kew):\n{texts.powo}")
+    if texts.wcvp:
+        context_parts.append(f"World Checklist of Vascular Plants (WCVP / Kew):\n{texts.wcvp}")
     if texts.gbif:
         context_parts.append(f"GBIF Species Match:\n{texts.gbif}")
     if texts.selectree:
