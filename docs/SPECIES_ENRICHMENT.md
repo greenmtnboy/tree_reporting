@@ -46,12 +46,17 @@ edit.
 ## Synonyms and misspellings
 
 Run `tools/species_audit.py` (`--map` prints entries to paste). It finds
-every pair of published names within two edits and asks POWO to adjudicate
-each one; it refuses a pair when both names are accepted, when a name is a
-homonym (POWO has more than one record), when a misspelling has two
+every pair of published names within two edits and adjudicates each one
+against Kew's World Checklist of Vascular Plants (WCVP, the names POWO
+serves), read from `wcvp_names_v{n}.parquet`, which the weekly `refresh-wcvp`
+job publishes from Kew's bulk download (`raw/wcvp_info.preql`,
+`shared/wcvp.py`). POWO's API has refused scripted requests since late 2026,
+and Kew asks bulk consumers to use WCVP. `--wcvp` reads a local `wcvp.zip`
+instead. The audit refuses a pair when both names are accepted, when a name
+is a homonym (Kew has more than one record), when a misspelling has two
 candidates, or when the edit distance is large for a short word. Tree counts
 are printed but are not evidence. A name merely misapplied in the trade is
-not a synonym and does not go in the map. When POWO and the published table
+not a synonym and does not go in the map. When Kew and the published table
 disagree on which of two names is accepted, the published table wins, so one
 taxon stays one row.
 

@@ -1,0 +1,111 @@
+# The WCVP release as two published parquets, rebuilt when Kew replaces its
+# zip.  Read by tools/species_audit.py (name status and synonymy) in place of
+# POWO's search API.
+
+import core;
+import wcvp_common;
+
+root datasource wcvp_update_time (
+    data_updated_through: wcvp_data_updated_through
+)
+file `./wcvp_update_time.py`;
+
+root datasource raw_wcvp_names (
+    plant_name_id: wcvp_plant_name_id,
+    ipni_id: ?wcvp_ipni_id,
+    powo_id: ?wcvp_powo_id,
+    taxon_rank: ?wcvp_taxon_rank,
+    taxon_status: ?wcvp_taxon_status,
+    family: ?wcvp_family,
+    genus_hybrid: ?wcvp_genus_hybrid,
+    genus: ?wcvp_genus,
+    species_hybrid: ?wcvp_species_hybrid,
+    species: ?wcvp_species,
+    infraspecific_rank: ?wcvp_infraspecific_rank,
+    infraspecies: ?wcvp_infraspecies,
+    taxon_name: ?wcvp_taxon_name,
+    taxon_authors: ?wcvp_taxon_authors,
+    accepted_plant_name_id: ?wcvp_accepted_plant_name_id,
+    accepted_taxon_name: ?wcvp_accepted_taxon_name,
+    parent_plant_name_id: ?wcvp_parent_plant_name_id,
+    hybrid_formula: ?wcvp_hybrid_formula,
+    first_published: ?wcvp_first_published,
+    geographic_area: ?wcvp_geographic_area,
+    lifeform_description: ?wcvp_lifeform_description,
+    climate_description: ?wcvp_climate_description,
+    reviewed: ?wcvp_reviewed,
+    name_key: ?wcvp_name_key,
+    source_version: ?wcvp_source_version,
+)
+grain (wcvp_plant_name_id)
+file `./wcvp_names.py`;
+
+root datasource raw_wcvp_distribution (
+    plant_locality_id: wcvp_plant_locality_id,
+    plant_name_id: wcvp_plant_name_id,
+    continent_code_l1: ?wcvp_continent_code_l1,
+    continent: ?wcvp_continent,
+    region_code_l2: ?wcvp_region_code_l2,
+    region: ?wcvp_region,
+    area_code_l3: ?wcvp_area_code_l3,
+    area: ?wcvp_area,
+    introduced: ?wcvp_introduced,
+    extinct: ?wcvp_extinct,
+    location_doubtful: ?wcvp_location_doubtful,
+    source_version: ?wcvp_distribution_source_version,
+)
+grain (wcvp_plant_locality_id)
+file `./wcvp_distribution.py`;
+
+datasource wcvp_names (
+    plant_name_id: wcvp_plant_name_id,
+    ipni_id: ?wcvp_ipni_id,
+    powo_id: ?wcvp_powo_id,
+    taxon_rank: ?wcvp_taxon_rank,
+    taxon_status: ?wcvp_taxon_status,
+    family: ?wcvp_family,
+    genus_hybrid: ?wcvp_genus_hybrid,
+    genus: ?wcvp_genus,
+    species_hybrid: ?wcvp_species_hybrid,
+    species: ?wcvp_species,
+    infraspecific_rank: ?wcvp_infraspecific_rank,
+    infraspecies: ?wcvp_infraspecies,
+    taxon_name: ?wcvp_taxon_name,
+    taxon_authors: ?wcvp_taxon_authors,
+    accepted_plant_name_id: ?wcvp_accepted_plant_name_id,
+    accepted_taxon_name: ?wcvp_accepted_taxon_name,
+    parent_plant_name_id: ?wcvp_parent_plant_name_id,
+    hybrid_formula: ?wcvp_hybrid_formula,
+    first_published: ?wcvp_first_published,
+    geographic_area: ?wcvp_geographic_area,
+    lifeform_description: ?wcvp_lifeform_description,
+    climate_description: ?wcvp_climate_description,
+    reviewed: ?wcvp_reviewed,
+    name_key: ?wcvp_name_key,
+    source_version: ?wcvp_source_version,
+    wcvp_data_updated_through,
+)
+grain (wcvp_plant_name_id)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/wcvp_names_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/wcvp_names_v{data_version}.parquet`
+freshness by wcvp_data_updated_through
+assert @kept(wcvp_plant_name_id, 0.75);
+
+datasource wcvp_distribution (
+    plant_locality_id: wcvp_plant_locality_id,
+    plant_name_id: wcvp_plant_name_id,
+    continent_code_l1: ?wcvp_continent_code_l1,
+    continent: ?wcvp_continent,
+    region_code_l2: ?wcvp_region_code_l2,
+    region: ?wcvp_region,
+    area_code_l3: ?wcvp_area_code_l3,
+    area: ?wcvp_area,
+    introduced: ?wcvp_introduced,
+    extinct: ?wcvp_extinct,
+    location_doubtful: ?wcvp_location_doubtful,
+    source_version: ?wcvp_distribution_source_version,
+    wcvp_data_updated_through,
+)
+grain (wcvp_plant_locality_id)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/wcvp_distribution_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/wcvp_distribution_v{data_version}.parquet`
+freshness by wcvp_data_updated_through
+assert @kept(wcvp_plant_locality_id, 0.75);
