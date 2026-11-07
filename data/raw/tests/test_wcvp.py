@@ -238,3 +238,15 @@ def test_wikipedia_reads_the_same_sections_in_a_fallback_language():
     )
     _, sections = wikipedia_article_parts(extract)
     assert [title for title, _ in sections] == ["Descripción", "Distribución y hábitat"]
+
+
+def test_ingest_tables_have_no_dictionary_columns(wcvp_zip, monkeypatch):
+    """The cloud worker's DuckDB reads a script's Arrow stream and refuses a
+    dictionary-encoded field; the first refresh-wcvp run failed on one."""
+    monkeypatch.setenv("WCVP_ZIP", str(wcvp_zip))
+    import wcvp_distribution
+    import wcvp_names
+
+    for table in (wcvp_names.build(), wcvp_distribution.build()):
+        encoded = [f.name for f in table.schema if pa.types.is_dictionary(f.type)]
+        assert encoded == []

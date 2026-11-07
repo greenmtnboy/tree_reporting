@@ -483,8 +483,8 @@ memory_mb = 2048
 # distributions. It reads Kew's server, so it is not in the core tick, and it
 # feeds nothing on the map. Weekly on Monday, the day POWO picks up WCVP
 # changes; the probe is one HEAD, and Kew replaces the zip a few times a year.
-# Measured locally on the v16 release: names 1.45M rows, peak 534 MiB;
-# distribution 2.0M rows, peak 321 MiB.
+# Measured locally on the v16 release: names 1.45M rows, peak 739 MiB;
+# distribution 2.0M rows, peak 396 MiB.
 [[cloud.job]]
 key = "refresh-wcvp"
 name = "urban-tree-data-wcvp"
