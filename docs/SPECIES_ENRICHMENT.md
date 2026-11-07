@@ -97,8 +97,9 @@ cities publish.
   than refusing, because `species` is the grain.
 - The prompt asks for `common_names` and `tree_form` explicitly and re-asks
   once when the name comes back empty; a species that returns empty twice is
-  taken at its word. Model: `google/gemini-2.5-flash`, overridable with
-  `TREE_ENRICHMENT_MODEL`.
+  taken at its word. Model: `google/gemini-3.5-flash`, overridable with
+  `TREE_ENRICHMENT_MODEL` (2.5 Flash is past its Vertex retirement date;
+  3.1 Flash-Lite is faster but invented a cultivar name in the comparison).
 - The model reads four sources per species (`_tree_enrichment_sources.py`):
   Wikipedia (the intro plus the Description, Distribution, Ecology and
   Cultivation sections; for a species with no English article, its article
@@ -110,6 +111,19 @@ cities publish.
   native or introduced, which is what the ecoregion shortlist is matched
   from. It has no prose descriptions; those come from Wikipedia. If the
   parquets can't be read, the run warns once and carries on without Kew.
+- Credential: Vertex, project `preqldata`, location `global`. The cloud job
+  runs as the trilogy-cloud tenant SA
+  `t-0a01c13d3f3f-prod@trilogy-data-prod.iam.gserviceaccount.com` (metadata
+  server, `cloud-platform` scope), which needs `roles/aiplatform.user` on
+  `preqldata`; a workstation uses `gcloud auth application-default login`.
+  With no credential at all the script aborts before sourcing anything.
+- Five LLM failures in a row abort the run non-zero. The platform shows only a
+  failed run's stderr, and per-species errors used to be swallowed: the job ran
+  green from Oct 16 to Nov 7 2026, every call 403ing, and enriched nothing.
+- `--time-budget` (default 2700 s, `TREE_ENRICHMENT_TIME_BUDGET_S`) stops
+  starting species and publishes what is done. The table is emitted only at
+  the end, so a run killed at the job's 3600 s timeout would publish nothing.
+  At ~13 s a species that is about 200 per run.
 - `assert_checkpoint_is_not_stale` refuses to resume from a local `--output`
   checkpoint holding fewer rows than the published table;
   `MAX_SPECIES_PER_RUN` caps a run and reports what it left;

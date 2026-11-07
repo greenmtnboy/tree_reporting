@@ -23,7 +23,7 @@ from enrichment._tree_enrichment_helpers import (
 
 class TreeEnrichmentTests(unittest.TestCase):
     def test_default_instructor_model_is_flash(self) -> None:
-        self.assertEqual("google/gemini-2.5-flash", llm.DEFAULT_INSTRUCTOR_MODEL)
+        self.assertEqual("google/gemini-3.5-flash", llm.DEFAULT_INSTRUCTOR_MODEL)
 
     def test_normalize_enrichment_search_name_trims_after_species(self) -> None:
         self.assertEqual(
@@ -99,7 +99,7 @@ class TreeEnrichmentTests(unittest.TestCase):
             llm,
             "instructor",
             types.SimpleNamespace(from_provider=mock_from_provider),
-        ):
+        ), patch.object(llm, "require_vertex_credentials"):
             client = llm.create_instructor_client(
                 "gemini-2.5-flash",
                 "demo-project",
@@ -113,6 +113,47 @@ class TreeEnrichmentTests(unittest.TestCase):
             project="demo-project",
             location="us-central1",
         )
+
+
+class LLMCredentialAndFailureTests(unittest.TestCase):
+    def setUp(self) -> None:
+        patcher = patch.object(llm, "build_reference_text", return_value="Some tree.")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_vertex_without_credentials_fails_before_any_call(self) -> None:
+        from google.auth.exceptions import DefaultCredentialsError
+
+        with patch("google.auth.default", side_effect=DefaultCredentialsError("none")):
+            with self.assertRaises(llm.LLMUnavailable):
+                llm.create_instructor_client("gemini-3.5-flash", "p", "global")
+
+    def test_consecutive_failures_stop_the_run(self) -> None:
+        """A dead credential used to fail every species quietly and exit 0."""
+        client = Mock()
+        client.chat.completions.create.side_effect = RuntimeError("401")
+        texts = Mock()
+        llm._consecutive_failures = 0
+        for _ in range(llm.MAX_CONSECUTIVE_LLM_FAILURES - 1):
+            self.assertIsNone(
+                llm.parse_enrichment_from_text_v2("Acer x", "Acer x", texts, client, "", [])
+            )
+        with self.assertRaises(llm.LLMUnavailable):
+            llm.parse_enrichment_from_text_v2("Acer x", "Acer x", texts, client, "", [])
+        llm._consecutive_failures = 0
+
+    def test_a_success_resets_the_failure_count(self) -> None:
+        answer = Mock(common_names=["Field maple"])
+        client = Mock()
+        client.chat.completions.create.side_effect = (
+            [RuntimeError("blip")] * (llm.MAX_CONSECUTIVE_LLM_FAILURES - 1) + [answer]
+        )
+        texts = Mock()
+        llm._consecutive_failures = 0
+        for _ in range(llm.MAX_CONSECUTIVE_LLM_FAILURES - 1):
+            llm.parse_enrichment_from_text_v2("Acer x", "Acer x", texts, client, "", [])
+        self.assertIs(answer, llm.parse_enrichment_from_text_v2("Acer x", "Acer x", texts, client, "", []))
+        self.assertEqual(0, llm._consecutive_failures)
 
 
 if __name__ == "__main__":
