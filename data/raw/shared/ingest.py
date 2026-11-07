@@ -995,6 +995,10 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Larix occidenatlis": "Larix occidentalis",
     "Liguidambar styraciflua": "Liquidambar styraciflua",
     "Liquidamber styraciflua": "Liquidambar styraciflua",
+    # San Francisco's portal: two Brisbane box records with another entry's
+    # tail spliced on ("...ersica", "...ting Site"). Both are planted trees.
+    "Lophostemon confertusersica": "Lophostemon confertus",
+    "Lophostemon confertusting": "Lophostemon confertus",
     "Magnolia accuminata": "Magnolia acuminata",
     "Metasequoia glyptostroboid": "Metasequoia glyptostroboides",
     "Metasequoia glytostroboides": "Metasequoia glyptostroboides",
