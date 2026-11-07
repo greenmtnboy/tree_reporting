@@ -19,7 +19,8 @@
  *   The old table stored eight pairs.
  * - The published crown prediction is a column, not a second table, so the
  *   crown query has no join and the city switch has one fewer table to drop.
- * - No per-tree colour table: the default colour is a CASE over `tree_form`
+ * - No per-tree colour table: the base colour is a CASE over `tree_form`, or
+ *   a lookup in a per-species shade table of a few thousand rows
  *   (`colorSql`); a chat override is a sparse table that exists only while
  *   it is active.
  *
@@ -35,6 +36,10 @@ import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 export const TREES_TABLE = 'trees_fast'
 export const TREES_VIEW = 'trees'
 export const COLOR_OVERRIDE_TABLE = '__tree_color_override'
+/** (species VARCHAR, shades VARCHAR[]): the leaf-shade scheme's colours, one row per species that has any. */
+export const SPECIES_SHADE_TABLE = '__species_shade'
+/** The leaf-shade scheme's colour for a tree whose species has no recorded shade. */
+export const UNKNOWN_SHADE_COLOR = '#9e9e9e'
 export const AGG_CACHE_TABLE = 'agg_z14_cache'
 export const AGG_CACHE_ZOOM = 14
 export const TILE_INDEX_ZOOM = 20
@@ -442,22 +447,27 @@ export function treeKeySql(expr: string): string {
 }
 
 /**
- * How a query reads a tree's display colour. With no override active there is
- * no join at all; with one, the override table is joined and wins where it
+ * How a query reads a tree's display colour. The base colour is the tree-form
+ * CASE, or, with the leaf-shade scheme on, one of the species' shades picked
+ * by tree id (a two-shade species renders mixed) and grey where the species
+ * has none. With a chat override active its table is joined and wins where it
  * has a row. `join` goes after the `trees_fast` alias in the FROM clause.
  */
-export function colorSql(alias: string, overrideActive: boolean): { join: string; expr: string } {
-  const fallback = defaultColorSql(`${alias}.tree_form`)
-  if (!overrideActive) return { join: '', expr: fallback }
-  return {
-    join: `LEFT JOIN ${COLOR_OVERRIDE_TABLE} __co ON ${treeKeySql(`${alias}.tree_id`)} = __co.tree_key`,
-    expr: `COALESCE(__co.display_color, ${fallback})`,
+export function colorSql(alias: string, overrideActive: boolean, shadeActive = false): { join: string; expr: string } {
+  const joins: string[] = []
+  let base = defaultColorSql(`${alias}.tree_form`)
+  if (shadeActive) {
+    joins.push(`LEFT JOIN ${SPECIES_SHADE_TABLE} __ss ON CAST(${alias}.species AS VARCHAR) = __ss.species`)
+    base = `COALESCE(list_extract(__ss.shades, 1 + CAST(hash(${alias}.tree_id) % len(__ss.shades) AS INTEGER)), '${UNKNOWN_SHADE_COLOR}')`
   }
+  if (!overrideActive) return { join: joins.join('\n  '), expr: base }
+  joins.push(`LEFT JOIN ${COLOR_OVERRIDE_TABLE} __co ON ${treeKeySql(`${alias}.tree_id`)} = __co.tree_key`)
+  return { join: joins.join('\n  '), expr: `COALESCE(__co.display_color, ${base})` }
 }
 
 /** The z14 aggregate the overview zooms read when no filter is active. */
-export function aggCacheSql(gridM: number, overrideActive: boolean): string {
-  const color = colorSql('tf', overrideActive)
+export function aggCacheSql(gridM: number, overrideActive: boolean, shadeActive = false): string {
+  const color = colorSql('tf', overrideActive, shadeActive)
   const z = AGG_CACHE_ZOOM
   return `CREATE OR REPLACE TABLE ${AGG_CACHE_TABLE} AS
     SELECT

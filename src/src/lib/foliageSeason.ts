@@ -4,11 +4,11 @@
  * The enrichment table carries three CSS hex columns per species
  * (data/raw/tree_enrichment.preql): `foliage_colors`, the growing-season leaf;
  * `fall_foliage_colors`, the autumn leaf, empty for an evergreen; and
- * `trunk_color`, the bark. The map's "Leaf shade" colour mode reads them
- * through the colour-override path the DBH mode already uses: a query over
- * the `trees` view returning (tree_id, override_color), and a tree the query
- * gives no colour keeps its tree-form colour. Coverage is sparse to start,
- * so that fallback is most of the map for now.
+ * `trunk_color`, the bark. The map's default "Leaf shade" colour scheme
+ * reads them as a per-species table the worker joins on every colour read
+ * (`colorSql` in workers/cityTables.ts), not as a per-tree override: a few
+ * thousand rows rather than one per tree in the city. A species with no
+ * shade is grey (`UNKNOWN_SHADE_COLOR`).
  *
  * The phase is decided here, from the calendar and the city's hemisphere,
  * not per species: the table has no leaf-out or leaf-drop dates yet. A list
@@ -39,29 +39,26 @@ export const FOLIAGE_PHASE_LABEL: Record<FoliagePhase, string> = {
   bare: 'Leaf shade by species · winter, deciduous trees shown by bark',
 }
 
-export const FOLIAGE_LEGEND_NOTE = 'Species with no recorded shade keep their tree-form colour.'
+export const FOLIAGE_LEGEND_NOTE = 'No recorded shade yet'
 
 /** A deciduous tree with no bark shade recorded, in winter: bare branches. */
 export const BARE_BRANCH_COLOR = '#8a7f73'
 
-/** One shade of a list, chosen by the tree's id so a two-shade species renders mixed. */
-function pickShade(listExpr: string): string {
-  return `list_extract(${listExpr}, 1 + CAST(hash(t.tree_id) % len(${listExpr}) AS INTEGER))`
-}
-
 /**
- * The override query for a phase. `is_evergreen` decides whether autumn and
- * winter apply; a species whose evergreen-ness is unknown is treated as
- * deciduous in autumn only when it has an autumn shade, and is never bared.
+ * The species shade table for a phase: (species, shades), only species with
+ * at least one shade. `is_evergreen` decides whether autumn and winter apply;
+ * a species whose evergreen-ness is unknown takes its autumn shade when it
+ * has one, and is never bared.
  */
-export function foliageColorSql(phase: FoliagePhase): string {
-  const growing = pickShade('se.foliage_colors')
-  const shade = phase === 'autumn'
-    ? `CASE WHEN se.is_evergreen THEN ${growing} ELSE COALESCE(${pickShade('se.fall_foliage_colors')}, ${growing}) END`
+export function speciesShadeSql(phase: FoliagePhase): string {
+  const shades = phase === 'autumn'
+    ? `CASE WHEN se.is_evergreen OR len(COALESCE(se.fall_foliage_colors, [])) = 0 THEN se.foliage_colors ELSE se.fall_foliage_colors END`
     : phase === 'bare'
-      ? `CASE WHEN se.is_evergreen = false THEN COALESCE(se.trunk_color, '${BARE_BRANCH_COLOR}') ELSE ${growing} END`
-      : growing
-  return `SELECT t.tree_id, ${shade} AS override_color
-FROM trees t
-JOIN species_enrichment se ON t.species = se.species`
+      ? `CASE WHEN se.is_evergreen = false THEN [COALESCE(se.trunk_color, '${BARE_BRANCH_COLOR}')] ELSE se.foliage_colors END`
+      : 'se.foliage_colors'
+  // One row a species, so the join never multiplies a tree.
+  return `SELECT species, any_value(shades) AS shades FROM (
+  SELECT se.species, ${shades} AS shades FROM species_enrichment se
+) WHERE len(COALESCE(shades, [])) > 0
+GROUP BY species`
 }

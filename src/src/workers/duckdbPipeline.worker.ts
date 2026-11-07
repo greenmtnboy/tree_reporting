@@ -34,6 +34,8 @@ import {
 import { normalizeValue } from './normalizeValue'
 import {
   COLOR_OVERRIDE_TABLE,
+  SPECIES_SHADE_TABLE,
+  UNKNOWN_SHADE_COLOR,
   treeKeySql,
   WEB_MERCATOR_MAX,
   WEB_MERCATOR_WORLD,
@@ -115,6 +117,9 @@ let publishedTreeIdFilterSignature = 'all'
 let colorMapSignature = 'default'
 /** True while `__tree_color_override` exists; every colour read joins it then. */
 let colorOverrideActive = false
+/** True while `__species_shade` exists: the leaf-shade scheme is the base colour. */
+let speciesShadeActive = false
+let speciesShadeSignature = 'none'
 let activeDistinctColors: string[] = Object.values(DEFAULT_CATEGORY_COLORS)
 let activeColorLabelMap: Record<string, string> = { ...DEFAULT_CATEGORY_LABELS }
 let activeViewportZoom = 13
@@ -197,7 +202,7 @@ function hashText(text: string): string {
 }
 
 function treeFilterSignature(): string {
-  return `${publishedTreeIdFilterSignature}|${colorMapSignature}`
+  return `${publishedTreeIdFilterSignature}|${colorMapSignature}|${speciesShadeSignature}`
 }
 
 function applyTreeFilterToBaseQuery(baseQuery: string): string {
@@ -1023,14 +1028,52 @@ function postColorMapUpdate() {
   })
 }
 
-/** Drop any chat colour override; every colour read falls back to the tree-form CASE. */
+/** The colours the base scheme can draw: every species shade and grey, or the tree-form categories. */
+async function baseDistinctColors(): Promise<string[]> {
+  if (!conn || !speciesShadeActive) return Object.values(DEFAULT_CATEGORY_COLORS)
+  const result = await conn.query(`SELECT DISTINCT unnest(shades) AS display_color FROM ${SPECIES_SHADE_TABLE}`)
+  return [...new Set([...result.toArray().map((r: Record<string, unknown>) => String(r.display_color)), UNKNOWN_SHADE_COLOR])]
+}
+
+/** Drop any chat colour override; every colour read falls back to the base scheme. */
 async function clearColorOverride() {
   if (!conn) return
   await conn.query(`DROP TABLE IF EXISTS ${COLOR_OVERRIDE_TABLE}`)
   colorOverrideActive = false
-  activeDistinctColors = Object.values(DEFAULT_CATEGORY_COLORS)
-  activeColorLabelMap = { ...DEFAULT_CATEGORY_LABELS }
+  activeDistinctColors = await baseDistinctColors()
+  activeColorLabelMap = speciesShadeActive ? {} : { ...DEFAULT_CATEGORY_LABELS }
   colorMapSignature = 'default'
+}
+
+/**
+ * The base colour scheme: a query returning (species, shades) turns the
+ * leaf-shade scheme on, null returns to the tree-form colours. The table is
+ * per species, so it survives a city switch.
+ */
+async function setSpeciesShadeSql(sql: string | null) {
+  await ensureInit()
+  if (!conn) return
+  const normalized = sql?.trim() || null
+  const signature = normalized ? `shade-${hashText(normalizeSql(normalized))}` : 'none'
+  if (signature === speciesShadeSignature) return
+  await conn.query(`DROP TABLE IF EXISTS ${SPECIES_SHADE_TABLE}`)
+  if (normalized) {
+    await conn.query(`CREATE TEMP TABLE ${SPECIES_SHADE_TABLE} AS SELECT species, shades FROM (
+${normalized}
+) __shades`)
+  }
+  speciesShadeActive = normalized !== null
+  speciesShadeSignature = signature
+  if (colorOverrideActive) {
+    const result = await conn.query(`SELECT DISTINCT display_color FROM ${COLOR_OVERRIDE_TABLE}`)
+    const overrides = result.toArray().map((r: Record<string, unknown>) => String(r.display_color))
+    activeDistinctColors = [...new Set([...overrides, ...await baseDistinctColors()])]
+  } else {
+    activeDistinctColors = await baseDistinctColors()
+    activeColorLabelMap = speciesShadeActive ? {} : { ...DEFAULT_CATEGORY_LABELS }
+  }
+  invalidateTileCaches('color-scheme')
+  postColorMapUpdate()
 }
 
 async function ensureInit(city?: string): Promise<void> {
@@ -1061,7 +1104,7 @@ async function ensurePreparedFeatureTableForZoom(z: number, baseQuery: string): 
   const xExpr = tileXExpr('tf', z)
   const yExpr = tileYExpr('tf', z)
   const table = featureTableName(z)
-  const color = colorSql('tf', colorOverrideActive)
+  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
   const src = tileRowSource(baseQuery, color)
 
   const request = (async () => {
@@ -1138,7 +1181,7 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
     }
   }
 
-  const color = colorSql('tf', colorOverrideActive)
+  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
   const src = tileRowSource(baseQuery, color)
   // The z15 feature table is a whole-city materialisation (one MVT geometry
   // per tree) that the desktop's LOD prewarm builds after the intro lands. A
@@ -1369,7 +1412,7 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
   const baseQuery = effectiveBaseQuery(tileQuerySql)
   const { simplifyGridMeters } = adaptiveLodForTile(z, x, y)
   const bounds = tileBounds3857(z, x, y)
-  const color = colorSql('tf', colorOverrideActive)
+  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
   const src = tileRowSource(baseQuery, color)
 
   // An overview tile (z11 to z14) is served from an aggregate over the
@@ -1568,12 +1611,12 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
       // them off its rows. A window holds only the ground near the camera,
       // and a colour first met in a cell loaded later would have no layer, so
       // it lists every override colour and every category default instead.
-      const color = colorSql('tf', true)
+      const color = colorSql('tf', true, speciesShadeActive)
       const distinctResult = await conn.query(cityWindow
         ? `SELECT DISTINCT display_color FROM ${COLOR_OVERRIDE_TABLE}`
         : `SELECT DISTINCT ${color.expr} AS display_color FROM trees_fast tf ${color.join}`)
       const colors = distinctResult.toArray().map((r: Record<string, unknown>) => String(r.display_color))
-      activeDistinctColors = cityWindow ? [...new Set([...colors, ...Object.values(DEFAULT_CATEGORY_COLORS)])] : colors
+      activeDistinctColors = cityWindow ? [...new Set([...colors, ...await baseDistinctColors()])] : colors
       colorMapSignature = `color-${hashText(normalizeSql(normalized))}`
     } else {
       // No valid override rows — reset to defaults
@@ -1844,7 +1887,7 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrown[]> {
   const signature = treeFilterSignature()
   const current = () => cityContextReady && loadedCity === city && tileQueryRevision === revision && treeFilterSignature() === signature
   if (!current()) return []
-  const result = await conn.query(crownQuery(camera, effectiveBaseQuery(tileQuerySql), colorSql('tf', colorOverrideActive)))
+  const result = await conn.query(crownQuery(camera, effectiveBaseQuery(tileQuerySql), colorSql('tf', colorOverrideActive, speciesShadeActive)))
   if (!current()) return []
   return result.toArray().map(row => ({
     id: String(row.id), lng: Number(row.lng), lat: Number(row.lat),
@@ -1881,6 +1924,7 @@ type WorkerMethodMap = {
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
   setColorOverrideSql: { params: { sql: string | null }; result: void }
+  setSpeciesShadeSql: { params: { sql: string | null }; result: void }
   setCityContext: { params: { city: string; window?: WindowPolicy | null }; result: void }
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
@@ -1960,6 +2004,12 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'setColorOverrideSql': {
         const { sql } = msg.params as WorkerMethodMap['setColorOverrideSql']['params']
         await setColorOverrideSql(sql)
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
+        break
+      }
+      case 'setSpeciesShadeSql': {
+        const { sql } = msg.params as WorkerMethodMap['setSpeciesShadeSql']['params']
+        await setSpeciesShadeSql(sql)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }
