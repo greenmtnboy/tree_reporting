@@ -153,7 +153,7 @@ def parse_enrichment_from_text_v2(
 def debug_print_source_details(texts: SourceTexts, preview_chars: int = 500) -> None:
     entries = [
         ("Wikipedia", texts.wikipedia),
-        ("POWO", texts.powo),
+        ("WCVP", texts.wcvp),
         ("GBIF", texts.gbif),
         ("SelecTree", texts.selectree),
     ]

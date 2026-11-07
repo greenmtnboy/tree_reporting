@@ -297,7 +297,7 @@ CZECH_SPECIES: dict[str, str] = {
     "vrba bila": "Salix alba",
     "vrba pokroucena": "Salix matsudana",
     "vrba matsudova": "Salix matsudana",
-    "vrba krehka": "Salix fragilis",
+    "vrba krehka": "Salix x fragilis",
     "vrba babylonska": "Salix babylonica",
     "vrba neurcena": "Salix",
     # --- Populus ---

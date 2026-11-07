@@ -97,16 +97,12 @@ from shared.ingest import (  # noqa: E402
     SPECIES_SYNONYMS,
     sanitize_species,
 )
-from shared.wcvp import WCVP_ZIP_URL, name_key  # noqa: E402
+from shared.wcvp import Checklist, ChecklistUnavailable  # noqa: E402
 
 DATA_VERSION = "2"
 TREES_URL = (
     "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/"
     "{code}_tree_info_v" + DATA_VERSION + ".parquet"
-)
-WCVP_NAMES_URL = (
-    "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/"
-    "wcvp_names_v" + DATA_VERSION + ".parquet"
 )
 
 # Two edits apart is where real pairs start crowding in (`Acer saccharum` and
@@ -130,107 +126,22 @@ def _norm(name: str | None) -> str:
     return " ".join(ascii_mark.lower().split())
 
 
-class Wcvp:
+class Wcvp(Checklist):
     """Kew's checklist, read locally: the names POWO's search answered from.
 
     POWO's API refuses scripted requests since late 2026, and Kew asks bulk
-    consumers to read WCVP instead (shared/wcvp.py).  `refresh-wcvp`
-    publishes the names as a parquet; `--wcvp` points at a local copy
-    instead (Kew's `wcvp.zip` or that parquet), for a workstation that has
-    one or a release the job has not published yet.
-
-    Only the names the sweep asks about are loaded, in one query, so the
-    1.45M-row table is never held.  The interface is the old POWO client's:
-    `lookup(name)` answers from the loaded rows.
+    consumers to read WCVP instead.  This is `shared.wcvp.Checklist` (the
+    enrichment job reads the same one) over the names `refresh-wcvp`
+    publishes; `--wcvp` points at a local copy instead (Kew's `wcvp.zip` or a
+    names parquet), for a workstation ahead of the job.  `lookup(name)` keeps
+    the interface of the old POWO client.
     """
 
-    def __init__(self, source: str | None = None) -> None:
-        self.source = source
-        self.rows: dict[str, list[tuple]] = {}
-        self.loaded: set[str] = set()
-
-    def prefetch(self, names: list[str]) -> None:
-        keys = sorted({k for k in (name_key(n) for n in names) if k} - self.loaded)
-        if not keys:
-            return
-        import duckdb
-
-        con = duckdb.connect()
-        con.execute("install httpfs; load httpfs;")
-        con.execute("create table wanted (k varchar)")
-        con.executemany("insert into wanted values (?)", [(k,) for k in keys])
-        relation = self._relation(con)
-        for key, own, accepted_id, accepted_name, status, family, matched in con.execute(
-            f"""
-            select n.name_key, n.plant_name_id, n.accepted_plant_name_id,
-                   n.accepted_taxon_name, n.taxon_status, n.family, n.taxon_name
-            from {relation} n join wanted w on n.name_key = w.k
-            """
-        ).fetchall():
-            self.rows.setdefault(key, []).append(
-                (own, accepted_id, accepted_name, status, family, matched)
-            )
-        self.loaded.update(keys)
-
-    def _relation(self, con) -> str:
-        source = self.source or WCVP_NAMES_URL
-        if source.endswith(".zip"):
-            import pyarrow.compute as pc
-
-            from shared.wcvp import NAME_COLUMNS, NAMES_MEMBER, name_key_array, read_member
-
-            table = read_member(Path(source), NAMES_MEMBER, NAME_COLUMNS)
-            names = table.column("taxon_name")
-            index = pc.index_in(table.column("accepted_plant_name_id"), value_set=table.column("plant_name_id"))
-            table = table.append_column("name_key", name_key_array(names))
-            table = table.append_column("accepted_taxon_name", pc.take(names, index))
-            con.register("wcvp_names", table)
-            return "wcvp_names"
+    def prefetch(self, names) -> None:
         try:
-            con.execute(f"select 1 from read_parquet('{source}') limit 1")
-        except Exception as e:
-            raise SystemExit(
-                f"cannot read WCVP names from {source} ({e}); run the refresh-wcvp job, "
-                f"or pass --wcvp with Kew's wcvp.zip ({WCVP_ZIP_URL})"
-            ) from e
-        return f"read_parquet('{source}')"
-
-    def lookup(self, name: str) -> dict:
-        """`{'status': accepted|synonym|unplaced|not_found|ambiguous}`.
-
-        `not_found` means no WCVP record *is* this name.  Misapplied records
-        are skipped: "sensu auct." says a name was used wrongly, not what it
-        means, and `Platanus occidentalis` carries one beside its accepted
-        record.
-
-        A record whose accepted id is itself is accepted; one pointing at
-        another record is a synonym of that name (Kew's Synonym, Orthographic,
-        Illegitimate and Invalid all point that way); one pointing nowhere is
-        unplaced.  **Every** exact record is read: `Quercus lyrata` is
-        Walter's accepted overcup oak and Spreng.'s synonym of `Quercus
-        lobata`, and taking whichever came first would have relabelled 2,773
-        trees.  Disagreement is `ambiguous`, never resolved by picking one.
-        """
-        self.prefetch([name])
-        records = [r for r in self.rows.get(name_key(name), []) if r[3] != "Misapplied"]
-        if not records:
-            return {"status": "not_found", "accepted": None, "matched": None, "family": None}
-        readings = set()
-        for own, accepted_id, accepted_name, _status, _family, _matched in records:
-            if accepted_id == own:
-                readings.add(("accepted", None))
-            elif accepted_id is not None and accepted_name:
-                readings.add(("synonym", accepted_name))
-            else:
-                readings.add(("unplaced", None))
-        matched, family = records[0][5], records[0][4]
-        if len(readings) > 1:
-            return {
-                "status": "ambiguous", "accepted": None, "matched": matched, "family": family,
-                "readings": sorted(f"{s}:{a or '-'}" for s, a in readings),
-            }
-        status, accepted = readings.pop()
-        return {"status": status, "accepted": accepted, "matched": matched, "family": family}
+            super().prefetch(names)
+        except ChecklistUnavailable as e:
+            raise SystemExit(f"{e}; or pass --wcvp") from e
 
 
 # ---------------------------------------------------------------------------

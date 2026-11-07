@@ -212,7 +212,7 @@ Every tree row carries a `data_source` column identifying which of the above it 
 Per-species attributes (native status, evergreen, mature height, canopy spread, growth rate, lifespan, drought tolerance, bloom season, wildlife value, fire risk, tree category, map icon) are pulled in from a combination of the following services:
 
 - Wikipedia REST API and MediaWiki API
-- Plants of the World Online (POWO / Kew) - powo.science.kew.org
+- Kew's World Checklist of Vascular Plants (WCVP, the names and distributions behind POWO; Govaerts R (ed.), Royal Botanic Gardens, Kew, CC BY) - sftp.kew.org/pub/data-repositories/WCVP/
 - GBIF species APIs - api.gbif.org
 - SelecTree (Cal Poly UFEI) APIs - selectree.calpoly.edu
 

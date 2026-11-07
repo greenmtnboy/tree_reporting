@@ -73,6 +73,7 @@ from enrichment._tree_enrichment_sources import (
     SourceTexts,
     build_reference_text,
     gather_source_texts,
+    prefetch_wcvp,
     source_labels,
 )
 
@@ -251,7 +252,7 @@ def build_native_range_evidence(texts: SourceTexts, reference_text: str) -> str:
     return build_native_range_evidence_for_entries(
         [
             ("Wikipedia", texts.wikipedia),
-            ("POWO", texts.powo),
+            ("WCVP", texts.wcvp),
             ("GBIF", texts.gbif),
             ("SelecTree", texts.selectree),
         ],
@@ -840,6 +841,8 @@ if __name__ == "__main__":
     ]
     if local_mode:
         to_process = to_process[:args.limit]
+    # Kew's checklist for the whole queue in a few scans, not one per species.
+    prefetch_wcvp(parse_scientific_name(s) for s in to_process if s)
 
     print(
         f"[info] {len(all_species)} total species | "

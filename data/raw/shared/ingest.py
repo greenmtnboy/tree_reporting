@@ -751,6 +751,16 @@ SPECIES_SYNONYMS: dict[str, str] = {
     "Abelia grandiflora": "Abelia x grandiflora",
     "Eucryphia intermedia": "Eucryphia x intermedia",
     "Magnolia kewensis": "Magnolia x kewensis",
+    # The same, from the first WCVP run (2026-11-07, v16).  `Salix fragilis` is
+    # the crack willow (4,063 trees, most of them London, Helsinki and Denver),
+    # which Kew treats as the hybrid.
+    "Abies borisii-regis": "Abies x borisii-regis",
+    "Aronia prunifolia": "Aronia x prunifolia",
+    "Crataegus x persimilis": "Crataegus persimilis",
+    "Populus acuminata": "Populus x acuminata",
+    "Prunus eminens": "Prunus x eminens",
+    "Prunus x cerasifera": "Prunus cerasifera",
+    "Salix fragilis": "Salix x fragilis",
 }
 
 
@@ -1047,9 +1057,9 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Syriga reticulata": "Syringa reticulata",
     # Northern Virginia (2026-11-06): Falls Church's inventory and Alexandria's
     # notable trees, read for the Fairfax imagery bundle.  POWO still answered
-    # 403, so the same GBIF check as Stoughton's.  `Halesia caroliniana` and
-    # `Rhus copallinum` also miss an exact match but are spelling variants of
-    # a real name, not typos, and are left for Kew.
+    # 403, so the same GBIF check as Stoughton's.  `Rhus copallinum` also
+    # misses an exact match but is a spelling variant of a real name, not a
+    # typo, and is left for Kew; `Halesia caroliniana` is mapped below.
     "Chamaecyparis lawsonia": "Chamaecyparis lawsoniana",
     "Fraxinus veluntina": "Fraxinus velutina",
     "Ginko biloba": "Ginkgo biloba",
@@ -1057,6 +1067,72 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Plantanus occidentalis": "Platanus occidentalis",
     "Quercus x willendowiana": "Quercus x willdenowiana",
     "Vitus vulpina": "Vitis vulpina",
+    # The first `species_audit.py` run against WCVP v16 (2026-06-04), on
+    # 2026-11-07: the backlog that built up while POWO's API refused the audit.
+    # A target Kew records twice (`Juniperus chinensis` L. and a later
+    # homonym) counts as accepted when one of its records is.
+    "Abies pinsabo": "Abies pinsapo",
+    "Acer buergeranium": "Acer buergerianum",
+    "Acer cappadonicum": "Acer cappadocicum",
+    "Acer cissifolia": "Acer cissifolium",
+    "Acer hycarnum": "Acer hyrcanum",
+    "Acer japonica": "Acer japonicum",
+    "Aesculus x hybrid": "Aesculus x hybrida",
+    "Almus inceana": "Alnus incana",
+    "Alnus acumnata": "Alnus acuminata",
+    "Aloysia citriadora": "Aloysia citrodora",
+    "Amelachier": "Amelanchier",
+    "Amelachier canadensis": "Amelanchier canadensis",
+    "Amelacnhier": "Amelanchier",
+    "Angohpora": "Angophora",
+    "Buddleia": "Buddleja",
+    "Cassia fistulosa": "Cassia fistula",
+    "Celtis sinesis": "Celtis sinensis",
+    "Chamacyparis": "Chamaecyparis",
+    "Chameacyparis": "Chamaecyparis",
+    "Chionantbus retusus": "Chionanthus retusus",
+    "Cornus contreversa": "Cornus controversa",
+    "Cotoneaster multiflora": "Cotoneaster multiflorus",
+    "Craetagus crus-galli": "Crataegus crus-galli",
+    "Crataegus x lavellei": "Crataegus x lavalleei",
+    "Crateagus": "Crataegus",
+    "Crytomeria japonica": "Cryptomeria japonica",
+    "Cupresses": "Cupressus",
+    "Cytharexylum subflavencens": "Citharexylum subflavescens",
+    "Davidia involuncrata": "Davidia involucrata",
+    "Descaisnea fargesii": "Decaisnea fargesii",
+    "Eryobotria japonica": "Eriobotrya japonica",
+    "Euonomys": "Euonymus",
+    "Fraxinus pensylvanica": "Fraxinus pennsylvanica",
+    "Gymnocladus diocus": "Gymnocladus dioicus",
+    "Hamamalis": "Hamamelis",
+    "Hhippophae rhamnoides": "Hippophae rhamnoides",
+    "Lagerstroemia subcosata": "Lagerstroemia subcostata",
+    "Liquidamber": "Liquidambar",
+    "Melaleuca leucadendron": "Melaleuca leucadendra",
+    "Paraserianthes lophanta": "Paraserianthes lophantha",
+    "Phoenix loureiri": "Phoenix loureiroi",
+    "Physocarbus opulifolius": "Physocarpus opulifolius",
+    "Pistacie chinensis": "Pistacia chinensis",
+    "Prunus ceracifera": "Prunus cerasifera",
+    "Prunus mackii": "Prunus maackii",
+    "Prunus serralata": "Prunus serrulata",
+    "Pseudostuga": "Pseudotsuga",
+    "Pseudotsuga menziezii": "Pseudotsuga menziesii",
+    "Quercus x kewrnsis": "Quercus x kewensis",
+    "Ruglans regia": "Juglans regia",
+    "Sambuscus": "Sambucus",
+    "Sambuscus nigra": "Sambucus nigra",
+    "Symphoricapos albus": "Symphoricarpos albus",
+    "Tilia plathyphyllos": "Tilia platyphyllos",
+    "Trochodendron araliodes": "Trochodendron aralioides",
+    "Uniperus chinensis": "Juniperus chinensis",
+    "Xylosma spiculiferum": "Xylosma spiculifera",
+    "Zanthozylum piperitum": "Zanthoxylum piperitum",
+    # By hand: the 40 `Halesia caroliniana` (Falls Church 35, Boston 5) are the
+    # Carolina silverbell.  Kew has no such name, and lists `H. carolina` as accepted
+    # with `H. tetraptera` under it; three edits is past what the audit folds.
+    "Halesia caroliniana": "Halesia carolina",
 }
 
 
