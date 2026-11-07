@@ -42,6 +42,21 @@ and `iter_tree_tiles` are the whole of it, and the paged `query` path in
 `shared.platforms.arcgis` is still what the freshness probe and every
 statistic use.
 
+**The walk starts with a plain count** (`count_trees`), because identify
+is a poor witness to an outage.  In November 2026 the MapServer lost its
+data source after the server moved to ArcGIS 11.5: every `query` came back
+`Unable to complete operation.` (extendedCode -2147467261), the map export
+drew blank, and identify answered `Invalid 'layerDefs' is specified` --
+for `1=1` as readily as for `KOD_VP = 71` -- or, without a `layerDefs`,
+an empty result.  The sibling `opk/smz_technicke_prvky` service on the
+same server took the identical request and answered it, so nothing about
+the request had changed, but the message pointed straight at it.  A count
+that fails first names the outage for what it is; the error is
+`UpstreamUnavailable`, and the freshness probe on the same layer degrades
+to "no new data" on it, so a scheduled run sits Prague out and only a
+forced rebuild reaches this.  The count is also logged beside the walk's
+own tree total.
+
 **The id is `ID_CENTRAL`**, the register's own asset id, prefixed `prg-`.
 It is a string in each supplier's format (`PRAHA4|BIO|57089`,
 `3673/GEPRO/5/drev`, a signed hash on TSK's rows) and is set on 177,416 of
@@ -97,13 +112,14 @@ from shared.ingest import (  # noqa: E402
     emit,
     enforce_tree_schema,
     extract_cultivar,
+    UpstreamUnavailable,
     get_json_with_retry,
     normalize_species,
     normalize_tree_name,
     parse_plant_date_year,
     validate_coordinates,
 )
-from shared.platforms.arcgis import FeatureLayer, max_record_count  # noqa: E402
+from shared.platforms.arcgis import FeatureLayer, feature_count, max_record_count  # noqa: E402
 from shared.species.czech import UNRESOLVED, czech_name_key, species_from_czech_name  # noqa: E402
 
 # Kept in step with `prague_update_time.py`.
@@ -131,6 +147,25 @@ def clean(value) -> str | None:
         return None
     text = " ".join(str(value).split())
     return text or None
+
+
+def count_trees() -> int:
+    """The layer's own tree count, asked before the walk; raises if the layer cannot answer.
+
+    A MapServer that has lost its data source fails every operation, but
+    identify reports it as a bad `layerDefs` or as an empty city.  A failed
+    count is unambiguous, so it goes first.
+    """
+    try:
+        return feature_count(LAYER, where=TREE_DEFINITION)
+    except UpstreamUnavailable as e:
+        raise UpstreamUnavailable(
+            f"Prague OpenData: {LAYER.base} cannot answer a plain count query, so the "
+            f"MapServer is not serving the layer at all; identify's errors (a rejected "
+            f"layerDefs, an empty tile) are the same outage, not a change in the "
+            f"request.  Check the service's map export and the sibling "
+            f"opk/smz_technicke_prvky service before touching the ingest.  ({e})"
+        ) from e
 
 
 def _identify(box: Box) -> list[dict]:
@@ -256,6 +291,7 @@ def newest_per_asset(tiles: Iterator[list[dict]], counts: dict[str, int]) -> lis
             if oid in seen_objects:
                 continue
             seen_objects.add(oid)
+            counts["objects"] += 1
             asset = clean(attrs.get("ID_CENTRAL"))
             if asset is None:
                 counts["no_id"] += 1
@@ -322,13 +358,15 @@ def transform(results: list[dict], counts: dict[str, int], unresolved: Counter) 
 def main() -> None:
     counts: dict[str, int] = Counter()
     unresolved: Counter = Counter()
+    expected = count_trees()
     tiles = iter_tree_tiles(CITY_BOUNDS["CZPRG"], max_record_count(LAYER), counts)
     results = newest_per_asset(tiles, counts)
     if not results:
         raise RuntimeError("Prague OpenData: the identify walk produced no trees")
     table = transform(results, counts, unresolved)
     print(
-        f"Prague OpenData: {counts['requests']} identify tiles; dropped "
+        f"Prague OpenData: {counts['requests']} identify tiles returned "
+        f"{counts['objects']} of the layer's {expected} trees; dropped "
         f"{counts['no_id']} tree(s) with no ID_CENTRAL, {counts['repeated_id']} "
         f"earlier export(s) of one, {counts['stump']} stump(s) and {counts['no_point']} "
         f"without a point, leaving {table.num_rows}",
