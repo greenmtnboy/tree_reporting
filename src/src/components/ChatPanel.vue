@@ -55,6 +55,8 @@
         <li><code>wildlife_value</code> - low | moderate | high</li>
         <li><code>fire_risk</code> - low | moderate | high</li>
         <li><code>tree_form</code> - broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default</li>
+        <li><code>foliage_colors</code> / <code>fall_foliage_colors</code> - arrays of CSS hex leaf shades, growing season and autumn</li>
+        <li><code>trunk_color</code> - bark shade as CSS hex</li>
         <li><code>description</code> - short ecology and urban planting note</li>
       </ul>
     </div>

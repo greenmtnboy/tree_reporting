@@ -91,6 +91,11 @@ property species.trunk_photo_url string; # legacy field name: optional full-tree
 property species.trunk_photo_license string; # license identifier for the full-tree photo
 property species.trunk_photo_attribution string; # attribution text for the full-tree photo
 
+# Shades the map paints a tree with for the season (src/src/lib/foliageSeason.ts). CSS hex `#rrggbb`.
+property species.foliage_colors list<string>; # growing-season leaf shade(s), most common first; usually one green, a second for a purple-leaved or blue-green species
+property species.fall_foliage_colors list<string>; # autumn leaf shade(s) before drop; empty for an evergreen
+property species.trunk_color string; # mature bark shade
+
 auto tree_eco_region<- unnest(native_ecoregions);
 
 merge tree_eco_region into ecoregion_id;
@@ -135,6 +140,9 @@ root datasource raw_tree_enrichment (
     ?trunk_photo_url,
     ?trunk_photo_license,
     ?trunk_photo_attribution,
+    ?foliage_colors,
+    ?fall_foliage_colors,
+    ?trunk_color,
     enriched_at,
 )
 grain (species)
@@ -179,6 +187,9 @@ datasource tree_enrichment (
     ?trunk_photo_url,
     ?trunk_photo_license,
     ?trunk_photo_attribution,
+    ?foliage_colors,
+    ?fall_foliage_colors,
+    ?trunk_color,
     enriched_at,
 )
 grain (species)

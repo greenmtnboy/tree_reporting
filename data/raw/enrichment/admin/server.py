@@ -96,6 +96,11 @@ from shared.ingest import (  # noqa: E402
     _sanitize_taxon,
     synonyms_of,
 )
+from enrichment._foliage_colors import FOLIAGE_COLUMNS  # noqa: E402
+from enrichment._tree_enrichment_helpers import (  # noqa: E402
+    normalize_hex_color,
+    normalize_hex_colors,
+)
 from enrichment._tree_shared import (  # noqa: E402
     DATA_VERSION,
     ENRICHMENT_GCS_URI,
@@ -196,6 +201,7 @@ GROUPS: list[tuple[str, list[str]]] = [
     ("Ecology", ["bloom_months", "wildlife_value", "fire_risk", "native_ecoregions"]),
     ("Full tree photo", ["trunk_photo_url", "trunk_photo_license", "trunk_photo_attribution"]),
     ("Leaf photo", ["photo_url", "photo_license", "photo_attribution"]),
+    ("Shades", list(FOLIAGE_COLUMNS)),
 ]
 
 
@@ -321,6 +327,18 @@ def coerce_row(species: str, payload: dict) -> dict:
             problems.append(f"{prefix}_url must be an http(s) URL")
         if row[f"{prefix}_url"] and not row[f"{prefix}_license"]:
             problems.append(f"a {prefix.replace('_', ' ')} needs a licence")
+    # Shades are stored as the map reads them, `#rrggbb` lowercase; `#abc` and
+    # a missing `#` are accepted and rewritten, anything else refused.
+    for name in ("foliage_colors", "fall_foliage_colors"):
+        bad = [c for c in row[name] or [] if normalize_hex_color(c) is None]
+        if bad:
+            problems.append(f"{name}: not CSS hex colours (#rrggbb): {', '.join(bad)}")
+        elif row[name]:
+            row[name] = normalize_hex_colors(row[name])
+    if row["trunk_color"] and normalize_hex_color(row["trunk_color"]) is None:
+        problems.append(f"trunk_color: {row['trunk_color']!r} is not a CSS hex colour (#rrggbb)")
+    elif row["trunk_color"]:
+        row["trunk_color"] = normalize_hex_color(row["trunk_color"])
     for name in row["synonyms"] or []:
         # Written the way the ingest emits a species, so the alias row it
         # produces is a key a tree row can actually carry.

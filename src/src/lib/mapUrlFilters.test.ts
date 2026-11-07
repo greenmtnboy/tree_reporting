@@ -46,6 +46,7 @@ describe('public map URL filters', () => {
     expect(readMapColorBy({}, species)).toBe('dbh')
     expect(readMapColorBy({ colorBy: 'tree_form' }, species)).toBe('tree_form')
     expect(readMapColorBy({ colorBy: 'invalid' }, species)).toBe('dbh')
+    expect(readMapColorBy({ colorBy: 'foliage' }, empty)).toBe('foliage')
   })
 
   test('DBH colors use real measurements, with explicit unknowns and consistent boundaries', async () => {

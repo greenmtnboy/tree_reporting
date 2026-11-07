@@ -186,7 +186,10 @@ const ENRICHMENT_CONCEPTS = `- genus (string) / family (string)
 - fire_risk (string) - low | moderate | high
 - tree_form (string) - broadleaf | conifer | palm | columnar | ornamental | spreading | weeping | multi_trunk | default
 - usda_zone_min / usda_zone_max (int)
-- native_ecoregions (list of ecoregion ids where the species is native)`
+- native_ecoregions (list of ecoregion ids where the species is native)
+- foliage_colors (list of CSS hex strings) - the species' growing-season leaf shade(s), most common first; sparse coverage
+- fall_foliage_colors (list of CSS hex strings) - autumn leaf shade(s); empty for an evergreen
+- trunk_color (string) - mature bark shade as CSS hex`
 
 function buildSystemPromptForCity(city: CityCode, userLoc?: { lat: number; lng: number } | null): string {
   const cityName = CITY_CONFIG[city].name
