@@ -480,3 +480,25 @@ def test_no_staging_parquet_is_committed():
         f"{committed} are in the working tree; publish them with "
         "shared.ingest.upload_staging and let .gitignore keep them out"
     )
+
+
+def test_hardcoded_and_scripted_datasources_are_roots():
+    """A table written inline (`query '''select * from (values ...)'''`) or
+    produced by a Python script is a source, not something refresh builds.
+
+    Left unmarked, it reads as a managed datasource: a forced rebuild of every
+    non-root datasource tries to plan `city_home_ecoregion` from the model and
+    fails, since nothing else relates `city` to `home.ecoregion_id`.
+    """
+    from trilogy import Environment
+
+    unmarked = []
+    for path in sorted(RAW_DIR.parent.rglob("*.preql")):
+        env = Environment(working_path=path.parent)
+        env.parse(path.read_text(encoding="utf-8"))
+        for name, ds in env.datasources.items():
+            address = ds.address
+            scripted = address.is_file and str(address.location).endswith(".py")
+            if (address.is_query or scripted) and not ds.is_root:
+                unmarked.append(f"{path.relative_to(RAW_DIR.parent)}: {name}")
+    assert not unmarked, f"mark these `root datasource`: {sorted(set(unmarked))}"

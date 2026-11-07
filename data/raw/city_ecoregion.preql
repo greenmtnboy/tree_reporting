@@ -17,7 +17,7 @@
 import core;
 import ecoregion_info as home;
 
-datasource city_home_ecoregion (
+root datasource city_home_ecoregion (
     city,
     ecoregion_id: home.ecoregion_id,
 )
