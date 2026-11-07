@@ -1,0 +1,12 @@
+# When the predictions' inputs last published: the newer of the rollup's and
+# the enrichment table's Last-Modified (prediction_inputs_probe.py). Every
+# allometry stage and the predictions themselves rebuild on it, so a tick
+# that changes either input rebuilds the chain in order, and a tick that
+# changes neither rebuilds nothing.
+
+property <*>.prediction_inputs_published_through datetime; # newer of the rollup's and the enrichment table's Last-Modified
+
+root datasource prediction_inputs_publication (
+    data_updated_through: prediction_inputs_published_through
+)
+file `./prediction_inputs_probe.py`;

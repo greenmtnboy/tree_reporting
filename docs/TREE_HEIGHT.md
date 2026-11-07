@@ -127,7 +127,7 @@ stem before the map draws it, and publishes the verdict as `height_check`:
 | `height_check` | Rule | Map draws |
 |---|---|---|
 | `shaded` | the matched crown's radius (`height_crown_radius_m`, published by the city model) is more than `shaded_crown_ratio` (3) times the radius the crown model predicts from the stem | `predicted_height_m` |
-| `out_of_band` | the height is outside 3 standard deviations of the height fit's log residual for the tree's genus, either way (`gate_low` / `gate_high` in `tree_height_coefficients.csv`, multipliers on the prediction) | `predicted_height_m` |
+| `out_of_band` | the height is outside 3 standard deviations of the height fit's log residual for the tree's genus, either way (`height_gate_low` / `height_gate_high`, multipliers on the prediction) | `predicted_height_m` |
 | `accepted` | neither | `height_m` |
 | `unchecked` | no stem someone measured: imagery predictions and reviewed satellite detections (their diameter is a model's, read off the same crown), and trees whose diameter comes from their age | `height_m` |
 
@@ -142,12 +142,12 @@ times up the survey reads 1.3x the prediction, and past eight times 2.2x
 fit's own spread, so a genus that varies more is given more room: about
 x0.3 to x2.7 for the angiosperm fallback.
 
-The fit (`tools/height_allometry_fit.py`) leaves the same trees out:
-shaded rows before fitting (9,172 of 84,074 in November 2026), then
-out-of-band rows, refitting until a round drops nothing (2,079 more), so the
-outliers do not widen the band that judges them. Taking them out steepened
-the fits (Acer r2 0.30 -> 0.55, Quercus -> 0.79): saplings stopped borrowing
-mature heights, so a small stem now predicts shorter.
+The fit leaves the same trees out: shaded rows before fitting (9,172 of
+84,074 in November 2026), then out-of-band rows, refitting twice so the
+outliers do not widen the band that judges them (fitting to convergence took
+nine rounds and moved the band 1% past the second). Taking them out
+steepened the fits (Acer r2 0.30 -> 0.55, Quercus -> 0.79): saplings stopped
+borrowing mature heights, so a small stem now predicts shorter.
 
 ## What it opens up
 
@@ -180,9 +180,12 @@ from age), with the same fallbacks by growth form and no height for a palm:
 
     height_m = scale * dbh_cm ** b        (dbh clamped to the fitted range)
 
-fitted per genus by `tools/height_allometry_fit.py` on the LIDAR-heighted
-inventory trees of every city in its `HEIGHT_CITIES` that pass the gates
-above (72,823 in November 2026, all Boston metro). Not Tallo: fitted on Boston and the Arboretum and
+fitted per genus on every build, on the LIDAR-heighted inventory trees
+`tree_height_source.preql` reads that pass the gates above (about 73k in
+November 2026, all Boston metro): `allometry_fits.preql` publishes them as
+`height_fit_sample`, `height_fits.preql` fits and trims them and publishes
+`height_genus_fits` and `height_class_fits`, and `tree_predictions.preql`
+applies those. Not Tallo: fitted on Boston and the Arboretum and
 held out on Cambridge's 26.8k matched trees, a Tallo genus fit missed by a
 median 6.2 m and called a 24"+ street tree 29 m against the survey's 19 m;
 the LIDAR fit missed by 2.8 m with no bias in any diameter band (DBH alone,
@@ -202,10 +205,9 @@ for an accepted measured height and "~12 m (39 ft) est. from trunk diameter" for
 predicted one; the sprite is drawn to that height (MAP_CROWNS.md).
 
 Adding a LIDAR city to the map, beyond the steps below: its parquet to
-`tree_height_source.preql`'s file list, its code to `HEIGHT_CITIES`, a
-refit once its first build publishes `height_crown_radius_m`, and a forced
-`refresh-predictions` after it.
-`test_tree_height.py` checks both lists against the importers.
+`tree_height_source.preql`'s file list (`test_tree_height.py` checks the list
+against the importers), and a forced `refresh-predictions` after its first
+build publishes `height_crown_radius_m`; that build refits the model.
 
 ## Rolling it out
 

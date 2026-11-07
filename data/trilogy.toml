@@ -250,9 +250,9 @@ exclude = [
 # what the platform fires as one tick and orders by dependency — so this is
 # not three jobs that happen to start together, it is one ordered firing:
 #
-#     publish-full ──▶ refresh-enrichment ──▶ refresh-predictions ──▶ refresh-browser-city   (derived edges)
-#              │                          └─▶ validate-core            ▲
-#              └──────────────────────────────▶ refresh-predictions, validate-core, refresh-browser-city
+#     publish-full ──▶ refresh-enrichment ──▶ refresh-allometry-fits ──▶ refresh-height-fits ──▶ refresh-predictions ──▶ refresh-browser-city   (derived edges)
+#              │                          └─▶ validate-core                                                         ▲
+#              └──────────────────────────────▶ refresh-allometry-fits, refresh-predictions, validate-core, refresh-browser-city
 #     refresh-ecoregions ──▶ refresh-ecoregions-browser   (independent of the rest, runs alongside)
 #
 # The edge is derived, not declared, and it exists because of how the two
@@ -354,16 +354,46 @@ schedule = "0 0 6 * * *"
 timeout_seconds = 900
 memory_mb = 2048
 
-# Tree-level predictions: crown width today (from a measured diameter, or
-# from one predicted from the tree's age), height and age reserved.
-# Consumes the rollup AND the enrichment table, both reached through their
-# `_source.preql` root views (the same name trick as above, twice), so the
-# platform orders this job after both in the same tick. It reads two
-# published parquets and two committed CSVs of coefficients, runs no script
-# but its freshness probe, and cannot reach a portal or the LLM.
+# The allometry fits, in two stages ahead of the predictions
+# (raw/tree_predictions.preql says why they are stages): the age fits and the
+# height fit's sample from the published trees, then the height fits from the
+# sample. Each reads its inputs through `_source.preql` root views named like
+# the managed datasources that write them, so the platform orders
+#     publish-full, refresh-enrichment -> refresh-allometry-fits
+#         -> refresh-height-fits -> refresh-predictions
+# in the same tick. No portal, no LLM; the probe is the predictions' own.
 #
-# 4 GiB because the whole rollup (10.5M rows) is read twice -- once for the
-# rows, once for the density grid -- and grouped in memory.
+# 4 GiB for the first: the age fits group the whole rollup (10.5M rows). The
+# second reads a sample of ~73k rows.
+[[cloud.job]]
+key = "refresh-allometry-fits"
+name = "urban-tree-data-allometry-fits"
+entrypoint = "raw/allometry_fits.preql"
+operation = "refresh"
+schedule = "0 0 6 * * *"
+timeout_seconds = 1800
+memory_mb = 4096
+
+[[cloud.job]]
+key = "refresh-height-fits"
+name = "urban-tree-data-height-fits"
+entrypoint = "raw/height_fits.preql"
+operation = "refresh"
+schedule = "0 0 6 * * *"
+timeout_seconds = 900
+memory_mb = 1024
+
+# Tree-level predictions: crown width (from a measured diameter, or from one
+# predicted from the tree's age) and height; age reserved. Applies the fits
+# the two jobs above published.
+# Consumes the rollup, the enrichment table and the fits, all reached through
+# their `_source.preql` root views (the same name trick as above), so the
+# platform orders this job after each in the same tick. It reads the
+# published parquets and Tallo's committed crown CSV, runs no script but its
+# freshness probe, and cannot reach a portal or the LLM.
+#
+# 4 GiB because the whole rollup (10.5M rows) is read twice -- the rows and
+# the density grid -- and grouped in memory.
 [[cloud.job]]
 key = "refresh-predictions"
 name = "urban-tree-data-predictions"

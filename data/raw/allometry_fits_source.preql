@@ -1,0 +1,114 @@
+# The published age and height fits, as *sources*: what tree_predictions.preql
+# applies. Root, so the predictions read the fits and never refit them, and
+# each named like the managed datasource that writes it (allometry_fits.preql,
+# height_fits.preql), so the platform orders refresh-predictions after both
+# fitting jobs in one tick.
+#
+# A genus table joins on `genus`. A class table keys its rows by its own
+# taxon column (`age_fit_class`, `height_fit_class`), because the tree's
+# fallback class is derived and cannot be a join key; tree_allometry_inputs'
+# `for_class` reads the tree's row. Every class row carries the fit over
+# every tree as well, read as one scalar.
+#
+# A genus or class with no row is one the fit had no usable tree for, and it
+# falls back like one whose fit failed the gate.
+
+import tree_enrichment_source;
+
+property genus.age_genus_n int;
+property genus.age_genus_a float;
+property genus.age_genus_b float;
+property genus.age_genus_sigma float;
+property genus.age_genus_xmax float;
+property genus.age_genus_passes bool;
+
+root datasource age_genus_fits (
+    genus: genus,
+    n: age_genus_n,
+    a: ?age_genus_a,
+    b: ?age_genus_b,
+    sigma: ?age_genus_sigma,
+    xmax: ?age_genus_xmax,
+    passes: ?age_genus_passes,
+)
+grain (genus)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/age_genus_fits_v{data_version}.parquet`;
+
+key age_fit_class string; # Angiosperm | Gymnosperm | all
+property age_fit_class.age_division_n int;
+property age_fit_class.age_division_a float;
+property age_fit_class.age_division_b float;
+property age_fit_class.age_division_sigma float;
+property age_fit_class.age_division_xmax float;
+property age_fit_class.age_division_passes bool;
+property age_fit_class.age_global_n int;
+property age_fit_class.age_global_a float;
+property age_fit_class.age_global_b float;
+property age_fit_class.age_global_sigma float;
+property age_fit_class.age_global_xmax float;
+
+root datasource age_class_fits (
+    fit_class: age_fit_class,
+    division_n: age_division_n,
+    division_a: ?age_division_a,
+    division_b: ?age_division_b,
+    division_sigma: ?age_division_sigma,
+    division_xmax: ?age_division_xmax,
+    division_passes: ?age_division_passes,
+    global_n: age_global_n,
+    global_a: ?age_global_a,
+    global_b: ?age_global_b,
+    global_sigma: ?age_global_sigma,
+    global_xmax: ?age_global_xmax,
+)
+grain (age_fit_class)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/age_class_fits_v{data_version}.parquet`;
+
+property genus.height_genus_n int;
+property genus.height_genus_a float;
+property genus.height_genus_b float;
+property genus.height_genus_sigma float;
+property genus.height_genus_xmax float;
+property genus.height_genus_passes bool;
+
+root datasource height_genus_fits (
+    genus: genus,
+    n: height_genus_n,
+    a: ?height_genus_a,
+    b: ?height_genus_b,
+    sigma: ?height_genus_sigma,
+    xmax: ?height_genus_xmax,
+    passes: ?height_genus_passes,
+)
+grain (genus)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/height_genus_fits_v{data_version}.parquet`;
+
+key height_fit_class string; # Angiosperm | Gymnosperm | all
+property height_fit_class.height_division_n int;
+property height_fit_class.height_division_a float;
+property height_fit_class.height_division_b float;
+property height_fit_class.height_division_sigma float;
+property height_fit_class.height_division_xmax float;
+property height_fit_class.height_division_passes bool;
+property height_fit_class.height_global_n int;
+property height_fit_class.height_global_a float;
+property height_fit_class.height_global_b float;
+property height_fit_class.height_global_sigma float;
+property height_fit_class.height_global_xmax float;
+
+root datasource height_class_fits (
+    fit_class: height_fit_class,
+    division_n: height_division_n,
+    division_a: ?height_division_a,
+    division_b: ?height_division_b,
+    division_sigma: ?height_division_sigma,
+    division_xmax: ?height_division_xmax,
+    division_passes: ?height_division_passes,
+    global_n: height_global_n,
+    global_a: ?height_global_a,
+    global_b: ?height_global_b,
+    global_sigma: ?height_global_sigma,
+    global_xmax: ?height_global_xmax,
+)
+grain (height_fit_class)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/height_class_fits_v{data_version}.parquet`;
