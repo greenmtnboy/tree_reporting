@@ -63,6 +63,7 @@ from enrichment._tree_enrichment_llm import (
     DEFAULT_INSTRUCTOR_MODEL,
     DEFAULT_VERTEX_LOCATION,
     DEFAULT_VERTEX_PROJECT,
+    LLMUnavailable,
     create_instructor_client,
     debug_print_source_details,
     normalize_instructor_model_name,
@@ -420,6 +421,13 @@ def get_already_enriched(source: str = ENRICHMENT_PARQUET) -> set[str]:
 # which is a silent cap: the run exits 0 having quietly done a fraction of the
 # work, and nothing says so.  It now says so.
 MAX_SPECIES_PER_RUN = 250
+
+# The run emits its table only at the end, so a run the platform kills at the
+# job's timeout (3600 s, data/trilogy.toml) publishes nothing. A species takes
+# ~15 s with a working model -- sources, the call, a retry, the photo -- so the
+# 250 cap alone would overrun it. Stop sourcing new species past this many
+# seconds and publish what is done; the rest stays queued for the next tick.
+DEFAULT_TIME_BUDGET_S = int(os.getenv("TREE_ENRICHMENT_TIME_BUDGET_S", "2700"))
 
 
 def assert_checkpoint_is_not_stale(path: str) -> None:
@@ -799,7 +807,19 @@ if __name__ == "__main__":
         default=DEFAULT_VERTEX_LOCATION,
         help=f"Vertex AI location for instructor provider calls (default: {DEFAULT_VERTEX_LOCATION}).",
     )
+    parser.add_argument(
+        "--time-budget",
+        dest="time_budget",
+        type=int,
+        default=DEFAULT_TIME_BUDGET_S,
+        metavar="SECONDS",
+        help=(
+            "Stop starting new species after this many seconds and publish what is "
+            f"done (default: {DEFAULT_TIME_BUDGET_S}, TREE_ENRICHMENT_TIME_BUDGET_S)."
+        ),
+    )
     args = parser.parse_args()
+    started = _time.monotonic()
 
     normalized_model = normalize_instructor_model_name(args.model)
     print(
@@ -807,11 +827,14 @@ if __name__ == "__main__":
         f"vertex_project={args.vertex_project} | vertex_location={args.vertex_location}",
         file=sys.stderr,
     )
-    client = create_instructor_client(
-        normalized_model,
-        args.vertex_project,
-        args.vertex_location,
-    )
+    try:
+        client = create_instructor_client(
+            normalized_model,
+            args.vertex_project,
+            args.vertex_location,
+        )
+    except LLMUnavailable as exc:
+        raise SystemExit(f"[abort] {exc}")
 
     if args.debug_species:
         raise SystemExit(run_standalone_debug(args.debug_species, client))
@@ -863,22 +886,35 @@ if __name__ == "__main__":
     
     new_rows: list[dict] = []
     counter = 0
-    for q_species in to_process:
+    for position, q_species in enumerate(to_process):
         if not q_species:
             continue
-        status = "re-enrich" if parse_scientific_name(q_species) in already_enriched else "new"
-        print(f"{counter:03d}/{len(to_process):03d}  [{status}] {q_species}", file=sys.stderr)
-        enrichment = enrich_species(q_species, client, print_full_context=args.print_llm_context)
-        if enrichment is None:
-            continue
-        counter += 1
-        if counter > MAX_SPECIES_PER_RUN:
+        if counter >= MAX_SPECIES_PER_RUN:
             print(
                 f"[cap] stopping at {MAX_SPECIES_PER_RUN} species; "
-                f"{len(to_process) - counter + 1} left in the queue for the next run",
+                f"{len(to_process) - position} left in the queue for the next run",
                 file=sys.stderr,
             )
             break
+        elapsed = _time.monotonic() - started
+        if elapsed > args.time_budget:
+            print(
+                f"[budget] stopping after {elapsed:.0f}s with {counter} species enriched; "
+                f"{len(to_process) - position} left in the queue for the next run",
+                file=sys.stderr,
+            )
+            break
+        status = "re-enrich" if parse_scientific_name(q_species) in already_enriched else "new"
+        print(f"{counter:03d}/{len(to_process):03d}  [{status}] {q_species}", file=sys.stderr)
+        try:
+            enrichment = enrich_species(q_species, client, print_full_context=args.print_llm_context)
+        except LLMUnavailable as exc:
+            # Exit non-zero: the platform shows a failed run's stderr and
+            # drops a successful one's, so this is the only way it is seen.
+            raise SystemExit(f"[abort] {exc}")
+        if enrichment is None:
+            continue
+        counter += 1
         is_complete, missing = compute_is_complete(enrichment)
         if missing:
             print(f"    [incomplete] missing: {', '.join(missing)}", file=sys.stderr)
