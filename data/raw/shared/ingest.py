@@ -947,6 +947,10 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Trachycarpus fortuneii": "Trachycarpus fortunei",
     "Trachycarpus fortuneis": "Trachycarpus fortunei",
     "Tsuga candensis": "Tsuga canadensis",
+    # Betula utilis var. jacquemontii with the genus lost: the epithet "utilis"
+    # took the genus slot. No tree carries it any more, but it looks like a
+    # binomial, so purge_unreachable_keys would keep its row for ever.
+    "Utilis jacquemontii": "Betula jacquemontii",
     "Wisteria sinesis": "Wisteria sinensis",
     "Xylosma congestum": "Xylosma congesta",
     "Zanthoxylum piperetum": "Zanthoxylum piperitum",
@@ -995,6 +999,10 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Larix occidenatlis": "Larix occidentalis",
     "Liguidambar styraciflua": "Liquidambar styraciflua",
     "Liquidamber styraciflua": "Liquidambar styraciflua",
+    # San Francisco's portal: two Brisbane box records with another entry's
+    # tail spliced on ("...ersica", "...ting Site"). Both are planted trees.
+    "Lophostemon confertusersica": "Lophostemon confertus",
+    "Lophostemon confertusting": "Lophostemon confertus",
     "Magnolia accuminata": "Magnolia acuminata",
     "Metasequoia glyptostroboid": "Metasequoia glyptostroboides",
     "Metasequoia glytostroboides": "Metasequoia glyptostroboides",

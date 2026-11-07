@@ -485,6 +485,20 @@ def _clean_selectree_value(value) -> str | None:
     return text.strip()
 
 
+def selectree_memo_names_taxon(memo: str, scientific_name: str) -> bool:
+    """Whether a SelecTree memo is about the tree it is filed under.
+
+    Some memos are generic prose that never names the plant, and some of those
+    describe a different one: Acer campestre's says "striking white bark that
+    peels away in strips" beside its own bark fields, Furrowed and Dark Brown
+    or Dark Gray; Abies amabilis's gives a fir oval leaves. The model repeats
+    them. The memos that are right name the taxon, so a memo that does not
+    name the genus is dropped; the structured fields stay.
+    """
+    genus = scientific_name.split()[0].lower() if scientific_name.strip() else ""
+    return bool(genus) and genus in memo.lower()
+
+
 def _build_selectree_entry(row: dict, scientific_name: str, query_name: str, include_query_note: bool = True) -> str | None:
     tree_id = row.get("tree_id")
     if not tree_id:
@@ -512,8 +526,9 @@ def _build_selectree_entry(row: dict, scientific_name: str, query_name: str, inc
     if detail_response.status_code == 200:
         detail = detail_response.json()
         if isinstance(detail, dict):
-            if detail.get("memo"):
-                parts.append(f"SelecTree memo: {_clean_selectree_value(detail['memo'])}")
+            memo = _clean_selectree_value(detail.get("memo"))
+            if memo and selectree_memo_names_taxon(memo, scientific_name):
+                parts.append(f"SelecTree memo: {memo}")
             if detail.get("native_range"):
                 parts.append(f"SelecTree native range: {_clean_selectree_value(detail['native_range'])}")
             if detail.get("foliage_type"):

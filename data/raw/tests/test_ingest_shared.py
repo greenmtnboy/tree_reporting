@@ -1344,6 +1344,13 @@ class TestSpeciesMisspellings:
         assert sanitize_species("Liquidambar stryaciflua") == "Liquidambar styraciflua"
         assert sanitize_species("Sorbus aucaparia") == "Sorbus aucuparia"
 
+    def test_a_spliced_portal_value_folds_onto_its_species(self):
+        from shared.ingest import sanitize_species
+
+        assert sanitize_species("Lophostemon confertusersica") == "Lophostemon confertus"
+        assert sanitize_species("Lophostemon confertusting Site") == "Lophostemon confertus"
+        assert sanitize_species("Utilis jacquemontii") == "Betula jacquemontii"
+
     def test_the_cultivar_does_not_block_the_fold(self):
         from shared.ingest import extract_cultivar, sanitize_species
 

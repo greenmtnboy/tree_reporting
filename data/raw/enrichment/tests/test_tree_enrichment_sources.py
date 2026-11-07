@@ -50,5 +50,19 @@ class TreeEnrichmentSourceTests(unittest.TestCase):
         )
 
 
+class SelecTreeMemoTests(unittest.TestCase):
+    def test_a_memo_that_names_the_taxon_is_kept(self) -> None:
+        memo = "Acer rubrum, commonly known as red maple, is a species native to eastern North America."
+        self.assertTrue(sources.selectree_memo_names_taxon(memo, "Acer rubrum"))
+
+    def test_a_generic_memo_about_another_tree_is_dropped(self) -> None:
+        # SelecTree tree 40, filed under Acer campestre.
+        memo = (
+            "This tree is known for its striking white bark that peels away in strips, "
+            "revealing a smooth, pale surface underneath."
+        )
+        self.assertFalse(sources.selectree_memo_names_taxon(memo, "Acer campestre"))
+
+
 if __name__ == "__main__":
     unittest.main()
