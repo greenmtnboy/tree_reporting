@@ -147,6 +147,34 @@ def normalize_growth_rate(
     return None
 
 
+_HEX6 = re.compile(r"^#?([0-9a-fA-F]{6})$")
+_HEX3 = re.compile(r"^#?([0-9a-fA-F]{3})$")
+
+
+def normalize_hex_color(value: str | None) -> str | None:
+    """One CSS colour as the table stores it, `#rrggbb` lowercase; None for anything else."""
+    if not value or not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    match = _HEX6.match(cleaned)
+    if match:
+        return f"#{match.group(1).lower()}"
+    match = _HEX3.match(cleaned)
+    if match:
+        return "#" + "".join(c * 2 for c in match.group(1)).lower()
+    return None
+
+
+def normalize_hex_colors(values: list[str] | None) -> list[str] | None:
+    """The colours the model named, normalised, deduplicated, in order; None when none survive."""
+    out: list[str] = []
+    for value in values or []:
+        color = normalize_hex_color(value)
+        if color and color not in out:
+            out.append(color)
+    return out or None
+
+
 def map_wikipedia_lookup(scientific_name: str) -> str:
     return SYNONYMS.get(scientific_name.lower(), scientific_name)
 

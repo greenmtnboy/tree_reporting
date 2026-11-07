@@ -19,8 +19,10 @@ export function hasMapUrlFilters(filters: MapUrlFilters): boolean {
   return MAP_FILTER_FIELDS.some(field => filters[field].length > 0)
 }
 
-export function readMapColorBy(query: LocationQuery, filters: MapUrlFilters): 'dbh' | 'tree_form' {
-  if (query.colorBy === 'dbh' || query.colorBy === 'tree_form') return query.colorBy
+export type MapColorBy = 'dbh' | 'tree_form' | 'foliage'
+
+export function readMapColorBy(query: LocationQuery, filters: MapUrlFilters): MapColorBy {
+  if (query.colorBy === 'dbh' || query.colorBy === 'tree_form' || query.colorBy === 'foliage') return query.colorBy
   return hasMapUrlFilters(filters) ? 'dbh' : 'tree_form'
 }
 

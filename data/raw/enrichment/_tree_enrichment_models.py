@@ -105,6 +105,31 @@ class TreeEnrichment(BaseModel):
     fire_risk: Optional[Literal["low", "moderate", "high"]] = Field(
         None, description="Fire risk / flammability rating relevant to urban California"
     )
+    foliage_colors: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Growing-season leaf colour(s) as CSS hex strings '#rrggbb', the most common first: a mid-tone a map "
+            "could paint the tree's crown with. Usually one green. Add a second only when the species is commonly "
+            "grown in another colour (purple-leaved, blue-green, silver, variegated). Nearly every tree's leaf "
+            "colour is well known, so estimate it from the sources and from the genus rather than leaving this empty; "
+            "return [] only for a taxon you cannot place at all."
+        ),
+    )
+    fall_foliage_colors: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Autumn leaf colour(s) before leaf drop as CSS hex strings '#rrggbb', the most common first; list each "
+            "distinct shade the species reliably shows (a red maple is red and orange, a ginkgo one clear yellow). "
+            "Return [] for an evergreen, for a tree whose leaves drop brown without colouring, and when unknown."
+        ),
+    )
+    trunk_color: Optional[str] = Field(
+        None,
+        description=(
+            "Mature bark colour as one CSS hex string '#rrggbb': grey-brown for most trees, white for a paper "
+            "birch, cinnamon for a madrone, mottled cream-olive for a plane. None if unknown."
+        ),
+    )
     tree_form: Literal["broadleaf", "conifer", "palm", "columnar", "ornamental", "spreading", "weeping", "multi_trunk", "default"] = Field(
         description=(
             "Visual silhouette tree form for map icon rendering. "

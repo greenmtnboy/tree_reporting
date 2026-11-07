@@ -86,6 +86,45 @@ cities publish.
   lists; a name that comes out wrong is fixed by one list entry. It runs on
   load, on each LLM row, and on each admin save.
 
+## Leaf and bark shades
+
+Three CSS hex columns, `#rrggbb` lowercase: `foliage_colors` (the
+growing-season leaf, most common shade first; usually one green, a second for a
+purple-leaved or blue-green species), `fall_foliage_colors` (the autumn leaf,
+empty for an evergreen) and `trunk_color` (the mature bark). The map's
+**Leaf shade (seasonal)** colour mode (`?colorBy=foliage`,
+`src/src/lib/foliageSeason.ts`) paints each tree with the shade for the season,
+decided from the calendar and the city's hemisphere: autumn is
+September to November north of the tropics and March to May south of them;
+December to March a deciduous tree is shown by its bark, or a bare-branch
+grey when none is recorded; inside the tropics it is always the growing season.
+A list with two shades is spread across the species' trees by tree id. A
+species with no shade keeps its tree-form colour, which is most of the map
+until coverage grows. Coverage is sparse on purpose; the fields are not part
+of `ENRICHMENT_COMPLETE_SQL`.
+
+Where a shade comes from, most trusted first (`enrichment/_foliage_colors.py`):
+
+1. the admin form, which accepts `#abc` and a missing `#` and refuses
+   anything that is not a colour;
+2. the LLM run, which is asked for all three alongside the other fields and
+   told to estimate leaf colour from the genus rather than leave it empty
+   (`normalize_hex_colors` drops anything that is not hex);
+3. `HERO_FOLIAGE`, hand-authored shades for about twenty-five of the most
+   planted street trees, applied on every load wherever a row still has none
+   (`with_hero_foliage`). A floor, never an override: a value the model or a
+   reviewer wrote is kept;
+4. the leaf photo: `backfill.py --fields foliage_colors` reads each species'
+   iNaturalist leaf close-up and keeps the dominant greens
+   (`leaf_colors_from_pixels`: pixels gated to leaf hues, binned, the biggest
+   bins' means; a second shade only when it holds 15% of the leaf and sits
+   apart from the first). It fills `foliage_colors` only. A purple-leaved
+   cultivar fails the green gate on purpose, and a full-tree photo is too
+   much sky and lawn to read bark from. With `--model` the LLM answers
+   instead.
+
+The sentinels have no shades. The website catalogue does not carry them yet.
+
 ## How the job behaves
 
 - `refresh-enrichment` ticks daily and **runs `main`**, so a change to the

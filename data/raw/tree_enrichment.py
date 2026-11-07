@@ -54,11 +54,14 @@ from enrichment._tree_enrichment_helpers import (
     map_tree_form,
     map_wikipedia_lookup,
     normalize_bloom_months,
+    normalize_hex_color,
+    normalize_hex_colors,
     normalize_growth_rate,
     parse_lifespan_range,
     parse_scientific_name,
     split_scientific_parts,
 )
+from enrichment._foliage_colors import with_hero_foliage
 from enrichment._tree_enrichment_llm import (
     DEFAULT_INSTRUCTOR_MODEL,
     DEFAULT_VERTEX_LOCATION,
@@ -587,13 +590,17 @@ def load_existing_table(source: str) -> pa.Table | None:
     # carry them. On a first run there is no parquet to load and they arrive on
     # the run after — there is nothing to join to yet either.
     #
+    # with_hero_foliage goes before the alias step so an alias row inherits
+    # the accepted row's shades; it fills only what is null, so a value the
+    # model or the form wrote is kept.
+    #
     # purge_unreachable_keys runs *after* with_species_aliases and not before:
     # the alias step is what decides which old spellings are still joined to,
     # and one of its branches re-keys a row rather than dropping it. Ordered
     # the other way it would delete enrichment the table already has.
     return with_sentinel_rows(
         purge_unreachable_keys(
-            with_species_aliases(with_normalized_common_names(purge_non_taxa(table))),
+            with_species_aliases(with_hero_foliage(with_normalized_common_names(purge_non_taxa(table)))),
             published=published_species_keys(),
         )
     )
@@ -735,6 +742,9 @@ SCHEMA = pa.schema([
     ("trunk_photo_url",       pa.string()),
     ("trunk_photo_license",   pa.string()),
     ("trunk_photo_attribution", pa.string()),
+    ("foliage_colors",        pa.list_(pa.string())),
+    ("fall_foliage_colors",   pa.list_(pa.string())),
+    ("trunk_color",           pa.string()),
     ("is_complete",           pa.bool_()),
     ("enriched_at",           pa.timestamp("us", tz="UTC")),
 ])
@@ -983,6 +993,11 @@ if __name__ == "__main__":
             "trunk_photo_url":      None,
             "trunk_photo_license":  None,
             "trunk_photo_attribution": None,
+            # CSS hex, normalised; HERO_FOLIAGE fills any the model left empty on
+            # the next load (with_hero_foliage), the leaf photo via backfill.py.
+            "foliage_colors":       normalize_hex_colors(enrichment.foliage_colors),
+            "fall_foliage_colors":  normalize_hex_colors(enrichment.fall_foliage_colors),
+            "trunk_color":          normalize_hex_color(enrichment.trunk_color),
             "is_complete":          is_complete,
             "enriched_at":          datetime.now(tz=timezone.utc),
         })

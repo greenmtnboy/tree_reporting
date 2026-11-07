@@ -15,6 +15,11 @@ Providers
     inat_photos — fills: photo_url, photo_license, photo_attribution
                 source: iNaturalist API (no credentials needed)
 
+  photo_colors — fills: foliage_colors
+                source: the row's own leaf photo (photo_url); the dominant greens
+                (enrichment/_foliage_colors.py). A row with no photo, or a photo
+                with no leaf in it, is left alone.
+
   llm         — fills: all LLM-derived fields (description, common_names, tree_form, …)
                 source: Instructor LLM (requires --model, optionally --vertex-*)
 
@@ -25,6 +30,9 @@ Usage
 
   # Preview which species need backfill without running
   uv run enrichment/backfill.py --fields photo_url --dry-run
+
+  # Read leaf shades off the leaf photos that have none yet (no LLM needed)
+  uv run enrichment/backfill.py --fields foliage_colors --limit 200
 
   # Backfill description for species missing it
   uv run enrichment/backfill.py --fields description --model gemini-2.0-flash
@@ -67,10 +75,13 @@ from enrichment._tree_shared import (
 
 # Local filename derived from the GCS URI, e.g. "tree_enrichment_v2.parquet"
 _DEFAULT_OUTPUT = os.path.basename(ENRICHMENT_GCS_URI)
+from enrichment._foliage_colors import fetch_leaf_colors
 from enrichment._tree_enrichment_helpers import (
     convert_length_range_to_feet,
     map_tree_form,
     normalize_bloom_months,
+    normalize_hex_color,
+    normalize_hex_colors,
     normalize_growth_rate,
     parse_scientific_name,
     parse_lifespan_range,
@@ -97,6 +108,7 @@ PROVIDER_FIELDS: dict[str, frozenset[str]] = {
     "inat_photos": frozenset({
         "photo_url", "photo_license", "photo_attribution",
     }),
+    "photo_colors": frozenset({"foliage_colors"}),
     "llm": frozenset({
         "common_names", "description", "is_evergreen",
         "mature_height_min_ft", "mature_height_max_ft",
@@ -107,14 +119,18 @@ PROVIDER_FIELDS: dict[str, frozenset[str]] = {
         "salt_tolerance", "pollution_tolerance",
         "bloom_months", "wildlife_value", "fire_risk", "tree_form",
         "usda_zone_min", "usda_zone_max", "native_ecoregions",
+        "foliage_colors", "fall_foliage_colors", "trunk_color",
     }),
 }
 
-# Reverse map: field → provider name
+# Reverse map: field → provider name. `foliage_colors` is fillable two ways;
+# the photo wins because it costs no model call, and `--model` is the way to
+# ask the LLM for it instead.
 FIELD_TO_PROVIDER: dict[str, str] = {
     field: provider
     for provider, fields in PROVIDER_FIELDS.items()
     for field in fields
+    if not (provider == "llm" and field in PROVIDER_FIELDS["photo_colors"])
 }
 
 ALL_FILLABLE_FIELDS: frozenset[str] = frozenset().union(*PROVIDER_FIELDS.values())
@@ -179,6 +195,16 @@ def run_inat_provider(species: str) -> dict:
     }
 
 
+def run_photo_colors_provider(row: dict) -> dict:
+    """Read the leaf shades off the row's own leaf photo; nothing when it has none."""
+    try:
+        colors = fetch_leaf_colors(row.get("photo_url"))
+    except Exception as exc:
+        print(f"    [photo_colors] {row.get('species')!r}: {exc}", file=sys.stderr)
+        return {}
+    return {"foliage_colors": colors}
+
+
 def run_llm_provider(species: str, client, print_llm_context: bool = False) -> dict:
     """Run LLM enrichment and return a partial row dict for all LLM-derived fields."""
     enrichment = enrich_species(species, client, print_full_context=print_llm_context)
@@ -231,6 +257,9 @@ def run_llm_provider(species: str, client, print_llm_context: bool = False) -> d
         "usda_zone_min":       enrichment.usda_zone_min,
         "usda_zone_max":       enrichment.usda_zone_max,
         "native_ecoregions":   sorted(set(enrichment.native_ecoregions)) or None,
+        "foliage_colors":      normalize_hex_colors(enrichment.foliage_colors),
+        "fall_foliage_colors": normalize_hex_colors(enrichment.fall_foliage_colors),
+        "trunk_color":         normalize_hex_color(enrichment.trunk_color),
     }
 
 
@@ -346,8 +375,11 @@ def main() -> None:
         print(f"[info]  fillable fields: {', '.join(sorted(ALL_FILLABLE_FIELDS))}", file=sys.stderr)
         raise SystemExit(1)
 
-    # Resolve which providers are needed
+    # Resolve which providers are needed. With --model, the LLM answers for
+    # every field it can, the leaf photo only for what it cannot.
     providers_needed: set[str] = {FIELD_TO_PROVIDER[f] for f in target_fields}
+    if args.model and providers_needed == {"photo_colors"}:
+        providers_needed = {"llm"}
     print(f"[info] target fields : {', '.join(target_fields)}", file=sys.stderr)
     print(f"[info] providers     : {', '.join(sorted(providers_needed))}", file=sys.stderr)
     if args.species:
@@ -451,6 +483,9 @@ def main() -> None:
         if "llm" in providers_needed and llm_client is not None:
             updates = run_llm_provider(species, llm_client, print_llm_context=args.print_llm_context)
             merged_updates.update(updates)
+
+        if "photo_colors" in providers_needed and merged_updates.get("foliage_colors") is None:
+            merged_updates.update(run_photo_colors_provider(rows_by_species[species]))
 
         updated_row, changed = apply_provider_updates(
             rows_by_species[species],

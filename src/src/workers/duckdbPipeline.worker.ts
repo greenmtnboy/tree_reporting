@@ -928,6 +928,13 @@ async function doInit(city?: string) {
   const trunkPhotoColumns = hasTrunkPhoto
     ? 'trunk_photo_url, trunk_photo_license, trunk_photo_attribution'
     : 'CAST(NULL AS VARCHAR) AS trunk_photo_url, CAST(NULL AS VARCHAR) AS trunk_photo_license, CAST(NULL AS VARCHAR) AS trunk_photo_attribution'
+  // The seasonal shades (November 2026), read the same way until the job
+  // republishes with them; the "Leaf shade" colour mode and the tree card
+  // read nulls and fall back to the tree-form colour meanwhile.
+  const hasShades = await parquetHasColumn(REMOTE_SPECIES_PARQUET_URL, 'foliage_colors')
+  const shadeColumns = hasShades
+    ? 'foliage_colors, fall_foliage_colors, trunk_color'
+    : 'CAST(NULL AS VARCHAR[]) AS foliage_colors, CAST(NULL AS VARCHAR[]) AS fall_foliage_colors, CAST(NULL AS VARCHAR) AS trunk_color'
   try {
     await conn.query(`
       CREATE TABLE species_enrichment AS
@@ -956,7 +963,8 @@ async function doInit(city?: string) {
         photo_url,
         photo_license,
         photo_attribution,
-        ${trunkPhotoColumns}
+        ${trunkPhotoColumns},
+        ${shadeColumns}
       FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
     `)
   } catch (e) {

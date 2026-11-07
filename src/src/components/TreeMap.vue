@@ -35,9 +35,14 @@
         <option v-if="colorOverrideSql" value="custom" disabled>Custom colors</option>
         <option value="dbh">Trunk diameter (DBH)</option>
         <option value="tree_form">Tree form</option>
+        <option value="foliage">Leaf shade (seasonal)</option>
       </select>
     </label>
     <strong v-if="mapColorBy === 'dbh' && !colorOverrideSql" class="legend-heading">Trunk diameter · inches (approx. cm)</strong>
+    <template v-if="mapColorBy === 'foliage' && !colorOverrideSql">
+      <strong class="legend-heading" data-testid="foliage-legend-heading">{{ FOLIAGE_PHASE_LABEL[foliagePhaseNow] }}</strong>
+      <span class="legend-note">{{ FOLIAGE_LEGEND_NOTE }}</span>
+    </template>
     <div v-for="entry in legendEntries" :key="entry.color" class="legend-entry">
       <span class="legend-swatch" :style="{ background: entry.color }"></span>
       <span class="legend-label">{{ entry.label }}</span>
@@ -211,6 +216,12 @@
           <template v-if="selectedTree.fire_risk != null">
             <span class="tc-label">Fire risk</span><span class="tc-value">{{ formatTitleCase(selectedTree.fire_risk) }}</span>
           </template>
+          <template v-if="speciesShades.length">
+            <span class="tc-label">Shades</span>
+            <span class="tc-value tc-shades" data-testid="tree-shades">
+              <span v-for="shade in speciesShades" :key="shade.label + shade.color" class="tc-swatch" :style="{ background: shade.color }" :title="shade.label" :aria-label="shade.label"></span>
+            </span>
+          </template>
         </div>
       </div>
 
@@ -352,6 +363,7 @@ import {
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
 import { CROWN_ZOOM_START, validTreeHeight } from '../lib/treeCrowns'
 import { applyMapUrlFilters, DBH_COLOR_SQL, DBH_LEGEND, hasMapUrlFilters, MAP_FILTER_FIELDS, readMapColorBy, readMapUrlFilters } from '../lib/mapUrlFilters'
+import { FOLIAGE_LEGEND_NOTE, FOLIAGE_PHASE_LABEL, foliageColorSql, foliagePhase } from '../lib/foliageSeason'
 
 const { resolvedTheme } = useTheme()
 let releaseMapTheme: (() => void) | undefined
@@ -529,7 +541,11 @@ const activeUrlFilters = computed(() => MAP_FILTER_FIELDS
   .map(field => ({ name: field === 'species' ? 'Species' : 'Genus', values: urlFilters.value[field] })))
 const mapColorBy = computed(() => readMapColorBy(route.query, urlFilters.value))
 const effectiveMapQuery = computed(() => applyMapUrlFilters(currentMapQuery.value, urlFilters.value))
-const effectiveColorSql = computed(() => colorOverrideSql.value ?? (mapColorBy.value === 'dbh' ? DBH_COLOR_SQL : null))
+// The season the leaf-shade mode paints, from the calendar and the city's
+// hemisphere (cityConfig centres are [lng, lat]).
+const foliagePhaseNow = computed(() => foliagePhase(new Date(), CITY_CONFIG[mapDisplayCity.value].center[1]))
+const effectiveColorSql = computed(() => colorOverrideSql.value
+  ?? (mapColorBy.value === 'dbh' ? DBH_COLOR_SQL : mapColorBy.value === 'foliage' ? foliageColorSql(foliagePhaseNow.value) : null))
 
 // Worker configuration mutates shared SQL tables. Serialize changes and skip
 // superseded requests so rapid Back/Forward cannot restore an older scope.
@@ -595,9 +611,10 @@ const activeHeatmapColors = computed(() => {
 // Color keys may be SQL-escaped by the agent (e.g. _RRGGBB, char_43_RRGGBB, u_0023RRGGBB).
 // Normalize by extracting the trailing 6 hex digits; drop entries with no valid hex tail.
 const legendEntries = computed(() => {
+  // Leaf shades are one hex per species, not categories: no swatch list.
   const labelMap = colorOverrideSql.value
     ? colorLabelMap.value ?? workerColorLabelMap.value
-    : mapColorBy.value === 'dbh' ? DBH_LEGEND : workerColorLabelMap.value
+    : mapColorBy.value === 'dbh' ? DBH_LEGEND : mapColorBy.value === 'foliage' ? {} : workerColorLabelMap.value
   if (!labelMap || Object.keys(labelMap).length === 0) return []
   return Object.entries(labelMap).flatMap(([rawColor, label]) => {
     const m = rawColor.match(/([0-9a-fA-F]{6})$/i)
@@ -879,6 +896,9 @@ interface PopupTreeRow {
   trunk_photo_url: string | null
   trunk_photo_license: string | null
   trunk_photo_attribution: string | null
+  foliage_colors: string[] | null
+  fall_foliage_colors: string[] | null
+  trunk_color: string | null
   data_source: string | null
   submission_photo_url: string | null
 }
@@ -1321,6 +1341,18 @@ function formatBloomMonths(months: number[] | null) {
   return normalized.map((value) => MONTH_LABELS[value - 1]).join(', ')
 }
 
+/** The species' recorded shades as swatches: leaf, autumn leaf, bark. */
+const speciesShades = computed(() => {
+  const tree = selectedTree.value
+  if (!tree) return []
+  const list = (values: string[] | null | undefined) => Array.isArray(values) ? values : values ? Array.from(values as Iterable<string>) : []
+  return [
+    ...list(tree.foliage_colors).map((color) => ({ label: `Leaf ${color}`, color })),
+    ...list(tree.fall_foliage_colors).map((color) => ({ label: `Autumn leaf ${color}`, color })),
+    ...(tree.trunk_color ? [{ label: `Bark ${tree.trunk_color}`, color: tree.trunk_color }] : []),
+  ]
+})
+
 function formatSunExposure(values: string[] | null) {
   if (!Array.isArray(values) || values.length === 0) return null
   return values
@@ -1413,7 +1445,10 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
         se.photo_attribution,
         se.trunk_photo_url,
         se.trunk_photo_license,
-        se.trunk_photo_attribution
+        se.trunk_photo_attribution,
+        se.foliage_colors,
+        se.fall_foliage_colors,
+        se.trunk_color
       FROM trees_fast tf
       LEFT JOIN species_enrichment se ON tf.species = se.species
       WHERE tf.tree_id = '${safeId}'
@@ -2562,6 +2597,15 @@ onUnmounted(() => {
 .legend-color-control { display: grid; gap: 4px; font-size: .72rem; margin: 4px 0; }
 .legend-color-control select { min-width: 0; max-width: 100%; color: var(--color-ink); background: var(--color-surface); border: 1px solid var(--color-muted); border-radius: 4px; padding: 5px; }
 .legend-heading { font-size: .72rem; }
+.legend-note { font-size: .66rem; color: rgba(var(--muted-rgb), 0.8); }
+.tc-shades { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tc-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(var(--ink-rgb), 0.2);
+}
 
 .crown-legend-start {
   border-top: 1px solid rgba(var(--ink-rgb), 0.15);

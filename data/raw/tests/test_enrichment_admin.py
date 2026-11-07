@@ -113,6 +113,18 @@ def test_lists_accept_comma_text_and_are_deduped_and_trimmed():
     assert row["soil_preferences"] == ["well-drained"]
 
 
+def test_shades_are_stored_as_the_map_reads_them_or_refused():
+    """`#rrggbb` lowercase, the one spelling foliageSeason.ts paints with."""
+    row = admin.coerce_row("Acer rubrum", _payload(foliage_colors="#3E7A3A, 3e7a3a", fall_foliage_colors=["#C62828", "#e65100"], trunk_color="#abc"))
+    assert row["foliage_colors"] == ["#3e7a3a"]
+    assert row["fall_foliage_colors"] == ["#c62828", "#e65100"]
+    assert row["trunk_color"] == "#aabbcc"
+    with pytest.raises(admin.ValidationError) as exc:
+        admin.coerce_row("Acer rubrum", _payload(foliage_colors="dark green", trunk_color="brown"))
+    assert any("foliage_colors" in p for p in exc.value.problems)
+    assert any("trunk_color" in p for p in exc.value.problems)
+
+
 def test_bloom_months_and_ecoregions_are_sorted_ints():
     row = admin.coerce_row("Acer rubrum", _payload(bloom_months=["4", 3, 3], native_ecoregions=[402, 7, 402]))
     assert row["bloom_months"] == [3, 4]
