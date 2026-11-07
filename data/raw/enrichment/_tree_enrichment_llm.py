@@ -11,9 +11,33 @@ from ._tree_enrichment_models import TreeEnrichment
 from ._tree_enrichment_sources import SourceTexts, build_reference_text
 
 
-DEFAULT_INSTRUCTOR_MODEL = os.getenv("TREE_ENRICHMENT_MODEL", "google/gemini-2.5-flash")
+# gemini-2.5-flash passed its Vertex discontinuation date in 2026. 3.5 Flash is
+# its replacement, and on a sample of the unenriched backlog it named the
+# cultivars 2.5 left as "Hybrid prunus" and filled tree_form where 2.5 said
+# "default". 3.1 Flash-Lite is five times faster and cheaper but invented a
+# cultivar name, which is the one mistake this table cannot afford. Both are
+# served from the `global` location only.
+DEFAULT_INSTRUCTOR_MODEL = os.getenv("TREE_ENRICHMENT_MODEL", "google/gemini-3.5-flash")
 DEFAULT_VERTEX_PROJECT = os.getenv("TREE_ENRICHMENT_VERTEX_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT") or "preqldata"
-DEFAULT_VERTEX_LOCATION = os.getenv("TREE_ENRICHMENT_VERTEX_LOCATION", "us-central1")
+DEFAULT_VERTEX_LOCATION = os.getenv("TREE_ENRICHMENT_VERTEX_LOCATION", "global")
+
+# The cloud job authenticates as the trilogy-cloud tenant service account
+# (t-0a01c13d3f3f-prod@trilogy-data-prod), through the worker's metadata
+# server; a workstation uses its ADC login. Either needs roles/aiplatform.user
+# on the Vertex project -- the tenant SA held only BigQuery roles there, and
+# every call 403'd.
+# Consecutive failed LLM calls before the run gives up. Every species used to
+# swallow its own error and the run exited 0 with the table unchanged: for
+# three weeks the scheduled job spent forty minutes a day sourcing ~960
+# species, sent every one to a model its identity could not call, and
+# published the same 4,574 rows. Nothing was red. A missing grant or a retired
+# model fails every call, so a handful in a row is a broken run, not a hard
+# species.
+MAX_CONSECUTIVE_LLM_FAILURES = 5
+
+
+class LLMUnavailable(RuntimeError):
+    """The model has failed often enough in a row that the run should stop."""
 
 
 def normalize_instructor_model_name(model_name: str) -> str:
@@ -25,8 +49,24 @@ def normalize_instructor_model_name(model_name: str) -> str:
     return f"google/{cleaned}"
 
 
+def require_vertex_credentials() -> None:
+    """Fail before the queue is sourced, not after, when Vertex has no login."""
+    import google.auth
+    from google.auth.exceptions import DefaultCredentialsError
+
+    try:
+        google.auth.default()
+    except DefaultCredentialsError as exc:
+        raise LLMUnavailable(
+            "no Google credential for Vertex: run `gcloud auth application-default "
+            f"login` ({exc})"
+        ) from exc
+
+
 def create_instructor_client(model_name: str, project: str, location: str):
     normalized_model = normalize_instructor_model_name(model_name)
+    if normalized_model.startswith("google/"):
+        require_vertex_credentials()
     return instructor.from_provider(
         normalized_model,
         vertexai=True,
@@ -94,6 +134,8 @@ COMMON_NAME_RETRY_NOTE = (
 )
 
 
+_consecutive_failures = 0
+
 
 def parse_enrichment_from_text_v2(
     scientific_name: str,
@@ -126,14 +168,22 @@ def parse_enrichment_from_text_v2(
     )
 
     def ask(content: str) -> TreeEnrichment | None:
+        global _consecutive_failures
         try:
-            return client.chat.completions.create(
+            answer = client.chat.completions.create(
                 response_model=TreeEnrichment,
                 messages=[{"role": "user", "content": content}],
             )
         except Exception as exc:
             print(f"  [error] instructor failed for {scientific_name!r}: {exc}", file=sys.stderr)
+            _consecutive_failures += 1
+            if _consecutive_failures >= MAX_CONSECUTIVE_LLM_FAILURES:
+                raise LLMUnavailable(
+                    f"{_consecutive_failures} LLM calls failed in a row; last error: {exc}"
+                ) from exc
             return None
+        _consecutive_failures = 0
+        return answer
 
     enrichment = ask(prompt)
     if enrichment is None or enrichment.common_names:
