@@ -10,29 +10,16 @@ booleans.  A row without `introduced` is native there.
 """
 
 import pyarrow as pa
-import pyarrow.compute as pc
 
 from shared.ingest import emit
-from shared.wcvp import (
-    DISTRIBUTION_COLUMNS,
-    DISTRIBUTION_FLAGS,
-    DISTRIBUTION_MEMBER,
-    SOURCE_CITATION,
-    constant_column,
-    fetch_zip,
-    read_member,
-)
+from shared.wcvp import SOURCE_CITATION, constant_column, distribution_table, fetch_zip
 
 
 def build() -> pa.Table:
-    table = read_member(fetch_zip(), DISTRIBUTION_MEMBER, DISTRIBUTION_COLUMNS)
-    for flag in DISTRIBUTION_FLAGS:
-        idx = table.schema.get_field_index(flag)
-        table = table.set_column(idx, flag, pc.equal(table.column(flag), 1))
+    table = distribution_table(fetch_zip())
     return table.append_column(
         "source_version", constant_column(SOURCE_CITATION, table.num_rows)
     )
-
 
 if __name__ == "__main__":
     emit(build())
