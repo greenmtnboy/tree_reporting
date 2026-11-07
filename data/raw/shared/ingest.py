@@ -947,6 +947,10 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Trachycarpus fortuneii": "Trachycarpus fortunei",
     "Trachycarpus fortuneis": "Trachycarpus fortunei",
     "Tsuga candensis": "Tsuga canadensis",
+    # Betula utilis var. jacquemontii with the genus lost: the epithet "utilis"
+    # took the genus slot. No tree carries it any more, but it looks like a
+    # binomial, so purge_unreachable_keys would keep its row for ever.
+    "Utilis jacquemontii": "Betula jacquemontii",
     "Wisteria sinesis": "Wisteria sinensis",
     "Xylosma congestum": "Xylosma congesta",
     "Zanthoxylum piperetum": "Zanthoxylum piperitum",
