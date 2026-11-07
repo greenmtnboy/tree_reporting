@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test'
 
+// Landmarks are queried once the DuckDB worker has finished loading the city
+// (enrichment, tree and vocab parquets, extensions), which takes 10-15 s on a
+// CI runner depending on GCS; 10 s left these specs racing that load.
+const LANDMARKS_TIMEOUT = 30_000
+
 test.describe('Desktop layout', () => {
   test.beforeEach(async ({ page }) => {
     // Use a desktop viewport (well above the 768px mobile breakpoint)
@@ -28,7 +33,7 @@ test.describe('Desktop layout', () => {
 
     // Wait for landmark buttons to populate (loaded from JSON)
     const firstLandmark = page.locator('.landmark-item').first()
-    await expect(firstLandmark).toBeVisible({ timeout: 10_000 })
+    await expect(firstLandmark).toBeVisible({ timeout: LANDMARKS_TIMEOUT })
   })
 
   test('renders the map container', async ({ page }) => {
@@ -41,7 +46,7 @@ test.describe('Desktop layout', () => {
   test('landmark search filters the list', async ({ page }) => {
     // Wait for landmarks to load
     const landmarks = page.locator('.landmark-item')
-    await expect(landmarks.first()).toBeVisible({ timeout: 10_000 })
+    await expect(landmarks.first()).toBeVisible({ timeout: LANDMARKS_TIMEOUT })
 
     const countBefore = await landmarks.count()
     expect(countBefore).toBeGreaterThan(1)
@@ -58,7 +63,7 @@ test.describe('Desktop layout', () => {
   test('clicking a landmark triggers map movement', async ({ page }) => {
     // Wait for landmarks and map canvas
     const firstLandmark = page.locator('.landmark-item').first()
-    await expect(firstLandmark).toBeVisible({ timeout: 10_000 })
+    await expect(firstLandmark).toBeVisible({ timeout: LANDMARKS_TIMEOUT })
     await expect(page.locator('.tree-map canvas')).toBeAttached({
       timeout: 15_000,
     })
