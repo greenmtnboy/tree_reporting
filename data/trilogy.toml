@@ -413,13 +413,15 @@ memory_mb = 4096
 #
 # 4 GiB: each city filters the rollup (10.5M rows) and the predictions file
 # once, and the join holds one city at a time.
+# An hour: rebuilding every city's projection in one firing (a new city, or
+# a day the tick skipped) ran past 30 minutes on 2026-11-06.
 [[cloud.job]]
 key = "refresh-browser-city"
 name = "urban-tree-data-browser-city"
 entrypoint = "raw/tree_browser_city.preql"
 operation = "refresh"
 schedule = "0 0 6 * * *"
-timeout_seconds = 1800
+timeout_seconds = 3600
 memory_mb = 4096
 
 # The dashboard summary: tree counts at (city, species), the grain most of
@@ -472,6 +474,23 @@ name = "urban-tree-website-species"
 entrypoint = "website_species.preql"
 operation = "run"
 schedule = "0 0 6 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
+
+# Kew's World Checklist of Vascular Plants as two reference parquets
+# (raw/wcvp_info.preql, shared/wcvp.py): the names and synonymy the species
+# audit reads now that POWO's API refuses scripted requests, and the TDWG
+# distributions. It reads Kew's server, so it is not in the core tick, and it
+# feeds nothing on the map. Weekly on Monday, the day POWO picks up WCVP
+# changes; the probe is one HEAD, and Kew replaces the zip a few times a year.
+# Measured locally on the v16 release: names 1.45M rows, peak 534 MiB;
+# distribution 2.0M rows, peak 321 MiB.
+[[cloud.job]]
+key = "refresh-wcvp"
+name = "urban-tree-data-wcvp"
+entrypoint = "raw/wcvp_info.preql"
+operation = "refresh"
+schedule = "0 30 5 * * MON"
 timeout_seconds = 1800
 memory_mb = 2048
 
@@ -1931,6 +1950,78 @@ operation = "refresh"
 # The next free two-minute Sunday slot; every one must land before the 05:00
 # union (tests/test_cloud_jobs.py).
 schedule = "0 22 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-czprg"
+name = "urban-tree-city-czprg"
+entrypoint = "raw/czprg/prague_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city CZPRG`.
+schedule = "0 40 23 * * FRI,MON"
+# The ingest walks the city's MapServer with ~700 identify calls (see
+# raw/czprg/prague_tree_info.py), about ten minutes four at a time; the
+# budget leaves room for a slow portal day.
+timeout_seconds = 2700
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-czprg"
+name = "urban-tree-osm-czprg"
+entrypoint = "osm_staging/czprg_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 0 5 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-czprg"
+name = "urban-tree-landmarks-refresh-czprg"
+entrypoint = "raw/czprg/prague_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 24 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-usnva"
+name = "urban-tree-city-usnva"
+entrypoint = "raw/usnva/nova_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city USNVA`.
+schedule = "0 20 16 * * TUE,FRI"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-usnva"
+name = "urban-tree-osm-usnva"
+entrypoint = "osm_staging/usnva_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 0 5 * * MON"
+timeout_seconds = 1800
+# Fairfax County is ~1,000 km2; 1 GiB OOM-killed the bootstrap extract.
+memory_mb = 2048
+
+[[cloud.job]]
+key = "refresh-landmarks-usnva"
+name = "urban-tree-landmarks-refresh-usnva"
+entrypoint = "raw/usnva/nova_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 26 4 * * SUN"
 timeout_seconds = 900
 memory_mb = 2048
 

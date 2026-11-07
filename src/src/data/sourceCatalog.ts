@@ -11,6 +11,9 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Northern Virginia', label: 'Arlington County GIS - DPR Trees (ArcGIS Hub)', url: 'https://gisdata-arlgis.opendata.arcgis.com/' },
+  { city: 'Northern Virginia', label: 'City of Falls Church GIS - Public Trees (2004 inventory)', url: 'https://services1.arcgis.com/2hmXRAz4ofcdQP6p/arcgis/rest/services/Public_Trees/FeatureServer/0' },
+  { city: 'Prague', label: 'Geoportál Praha / IPR Praha - Sdílená data o zeleni, vegetační prvky (CC BY, datový podklad © IPR Praha)', url: 'https://opendata-iprpraha.hub.arcgis.com/datasets/iprpraha::sdílená-data-o-zeleni-vegetační-prvky-body-1' },
   { city: 'Stoughton, WI', label: 'City of Stoughton - Public Tree Inventory (ArcGIS)', url: 'https://experience.arcgis.com/experience/f9b95eddac104c708619ccaf4c2c9de0' },
   { city: 'Helsinki', label: 'Helsinki Region Infoshare - City of Helsinki Tree Register (Puurekisteri, CC BY 4.0)', url: 'https://hri.fi/data/en_GB/dataset/helsingin-kaupungin-puurekisteri' },
   { city: 'Copenhagen', label: 'City of Copenhagen Open Data - Tree Register (trae_basis, CC BY 4.0)', url: 'https://www.opendata.dk/city-of-copenhagen/trae_basis' },
@@ -74,6 +77,8 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Northern Virginia', label: 'Fairfax County GIS - Inventory of Historic Sites', url: 'https://services1.arcgis.com/ioennV6PpG5Xodq0/arcgis/rest/services/Historic_Sites_Inventory/FeatureServer/0' },
+  { city: 'Prague', label: 'Národní památkový ústav (NPÚ) - Kulturní památky, Ústřední seznam kulturních památek (CC BY 4.0)', url: 'https://geoportal.npu.cz/arcgis/rest/services/Tematicke/CP_UAP_PVO/MapServer/1' },
   { city: 'Stoughton, WI', label: 'City of Stoughton - Historical Landmarks (Stoughton Landmarks Commission)', url: 'https://stoughtonwi.maps.arcgis.com/home/item.html?id=0ac41bae1fac4f4abdb873deed6f8d75' },
   { city: 'Helsinki', label: 'City of Helsinki WFS - Buildings Protected by Detailed Plans, Protected Natural Monuments (CC BY 4.0)', url: 'https://hri.fi/data/en_GB/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa' },
   { city: 'Copenhagen', label: 'City of Copenhagen WFS - Monuments (monumenter, CC BY 4.0)', url: 'https://wfs-kbhkort.kk.dk/k101/ows?service=WFS&request=GetCapabilities' },

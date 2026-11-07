@@ -23,7 +23,7 @@ def test_city_frequency_boundaries_sentinels_and_tied_measurements():
     with duckdb.connect() as con:
         con.register('trees', pa.Table.from_pylist(rows))
         con.register('enrichment', pa.table({'species': ['Rare species'], 'tree_form': ['conifer']}))
-        result = {r['ranking_tree_id']: r for r in build_rankings(con).to_pylist()}
+        result = {r['ranking_tree_id']: r for r in build_rankings(con).to_arrow_table().to_pylist()}
     assert result['a-0']['rarity_tier'] == 'rare'
     assert result['a-0']['species_city_share'] == .01
     assert result['a-1']['rarity_tier'] == 'unusual'
@@ -56,7 +56,7 @@ def test_older_rollup_without_crown_width_still_produces_trunk_and_rarity():
             'Quercus rubra' AS species, 42.0 AS latitude, -71.0 AS longitude,
             20.0 AS diameter_at_breast_height""")
         con.register('enrichment', pa.table({'species': ['Quercus rubra'], 'tree_form': ['broadleaf']}))
-        row = build_rankings(con).to_pylist()[0]
+        row = build_rankings(con).to_arrow_table().to_pylist()[0]
     assert row['canopy_rank'] is None
     assert row['trunk_rank'] == 1
     assert row['rarity_tier'] == 'common'

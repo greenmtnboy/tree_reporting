@@ -3,7 +3,7 @@
 # requires-python = ">=3.13"
 # dependencies = ["duckdb", "pyarrow", "pytrilogy", "requests"]
 # ///
-"""Find species names two cities spell differently, and ask POWO which is right.
+"""Find species names two cities spell differently, and ask Kew which is right.
 
     cd data/raw && uv run tools/species_audit.py                 # report, all cities
     cd data/raw && uv run tools/species_audit.py --city USDEN    # one city's names
@@ -43,13 +43,14 @@ the published data include `Celtis`/`Cercis occidentalis`,
 every one a genuine pair of species, and every one indistinguishable by shape
 from a typo.
 
-So each name is resolved against POWO's search API (the same service
-`enrichment/_tree_enrichment_sources.py` reads for enrichment context) and the
-pair is classified by what comes back, never by tree counts:
+So each name is resolved against Kew's World Checklist of Vascular Plants,
+the names POWO serves, read from the parquet `refresh-wcvp` publishes (POWO's
+search API, which this used to call, refuses scripted requests since late
+2026), and the pair is classified by what comes back, never by tree counts:
 
     both names known to Kew   two real taxa          -> refuse, never map
     one a synonym of other    nomenclature           -> SPECIES_SYNONYMS
-    one unknown to POWO,      a name that does not   -> SPECIES_MISSPELLINGS
+    one unknown to Kew,       a name that does not   -> SPECIES_MISSPELLINGS
       the other accepted        exist                     (or SPECIES_SYNONYMS
                                                            when only the hybrid
                                                            mark differs)
@@ -62,28 +63,29 @@ settles nothing about nomenclature while settling everything about spelling.
 Such a name refuses a *synonym* verdict and still serves as the target of a
 misspelling, which is what keeps `Crataegus crusgalli` (1,529 trees) mappable.
 
-An exact match is required: POWO's search is fuzzy and answers
-`Acer platenoides` with *Acer platanoides*, so "did it return a result" is not
-the question -- "did it return **this name**" is.  A name it cannot match at
-all is not a taxon, which is the evidence a misspelling entry rests on.
+An exact match is required -- POWO's search was fuzzy and answered
+`Acer platenoides` with *Acer platanoides*, so the question was never "is
+there a near name" but "is there **this name**".  WCVP is matched on
+`shared.wcvp.name_key` (case, whitespace, diacritics and the hybrid sign
+folded) and nothing else.  A name with no record at all is not a taxon, which
+is the evidence a misspelling entry rests on.
 
 Tree counts are deliberately not evidence.  They look like they should be --
 the wrong spelling is usually the rarer one -- but `Larix siberica` has 8,431
 trees against 7,661 for the correct `Larix sibirica`, and `Tilia europaea`
 outnumbers `Tilia x europaea` 55,002 to 3,137.  Whichever city is bigger wins
 a vote like that, which is not the same as being right.  Counts are printed
-because they size the fix, and are used only to break a tie POWO could not.
+because they size the fix, and are used only to break a tie Kew could not.
 
-Responses are cached in `species_audit_cache.json` (gitignored) so a re-run
-costs nothing and the sweep is resumable; delete it to re-ask Kew.
+Only the names in candidate pairs are read from the checklist, in one query;
+`--wcvp` reads a local `wcvp.zip` or names parquet instead of the published
+one.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
-import time
 import unicodedata
 from pathlib import Path
 
@@ -95,18 +97,20 @@ from shared.ingest import (  # noqa: E402
     SPECIES_SYNONYMS,
     sanitize_species,
 )
+from shared.wcvp import WCVP_ZIP_URL, name_key  # noqa: E402
 
 DATA_VERSION = "2"
 TREES_URL = (
     "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/"
     "{code}_tree_info_v" + DATA_VERSION + ".parquet"
 )
-POWO_SEARCH = "https://powo.science.kew.org/api/2/search"
-HEADERS = {"User-Agent": "arborary-species-audit/1.0 (+https://arborary.world)"}
-CACHE_PATH = Path(__file__).parent / "species_audit_cache.json"
+WCVP_NAMES_URL = (
+    "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/"
+    "wcvp_names_v" + DATA_VERSION + ".parquet"
+)
 
 # Two edits apart is where real pairs start crowding in (`Acer saccharum` and
-# `Acer saccharinum` are two), so the join casts wide and POWO does the
+# `Acer saccharinum` are two), so the join casts wide and Kew does the
 # filtering.  Below eight characters an edit is too large a fraction of the
 # name for the comparison to mean anything.
 MAX_EDITS = 2
@@ -114,7 +118,7 @@ MIN_LENGTH = 8
 
 
 # ---------------------------------------------------------------------------
-# POWO
+# Kew
 # ---------------------------------------------------------------------------
 
 
@@ -126,105 +130,107 @@ def _norm(name: str | None) -> str:
     return " ".join(ascii_mark.lower().split())
 
 
-class Powo:
-    """POWO search, exact-match only, cached on disk."""
+class Wcvp:
+    """Kew's checklist, read locally: the names POWO's search answered from.
 
-    def __init__(self, path: Path = CACHE_PATH) -> None:
-        self.path = path
-        self.cache: dict[str, dict] = (
-            json.loads(path.read_text("utf8")) if path.exists() else {}
-        )
+    POWO's API refuses scripted requests since late 2026, and Kew asks bulk
+    consumers to read WCVP instead (shared/wcvp.py).  `refresh-wcvp`
+    publishes the names as a parquet; `--wcvp` points at a local copy
+    instead (Kew's `wcvp.zip` or that parquet), for a workstation that has
+    one or a release the job has not published yet.
 
-    def save(self) -> None:
-        self.path.write_text(json.dumps(self.cache, indent=0, sort_keys=True), "utf8")
+    Only the names the sweep asks about are loaded, in one query, so the
+    1.45M-row table is never held.  The interface is the old POWO client's:
+    `lookup(name)` answers from the loaded rows.
+    """
 
-    def cached(self, name: str) -> bool:
-        """True for an answer worth keeping; a cached `error` is asked again,
-        or one bad minute at Kew would freeze those names out of every re-run."""
-        return self.cache.get(name, {}).get("status", "error") != "error"
+    def __init__(self, source: str | None = None) -> None:
+        self.source = source
+        self.rows: dict[str, list[tuple]] = {}
+        self.loaded: set[str] = set()
+
+    def prefetch(self, names: list[str]) -> None:
+        keys = sorted({k for k in (name_key(n) for n in names) if k} - self.loaded)
+        if not keys:
+            return
+        import duckdb
+
+        con = duckdb.connect()
+        con.execute("install httpfs; load httpfs;")
+        con.execute("create table wanted (k varchar)")
+        con.executemany("insert into wanted values (?)", [(k,) for k in keys])
+        relation = self._relation(con)
+        for key, own, accepted_id, accepted_name, status, family, matched in con.execute(
+            f"""
+            select n.name_key, n.plant_name_id, n.accepted_plant_name_id,
+                   n.accepted_taxon_name, n.taxon_status, n.family, n.taxon_name
+            from {relation} n join wanted w on n.name_key = w.k
+            """
+        ).fetchall():
+            self.rows.setdefault(key, []).append(
+                (own, accepted_id, accepted_name, status, family, matched)
+            )
+        self.loaded.update(keys)
+
+    def _relation(self, con) -> str:
+        source = self.source or WCVP_NAMES_URL
+        if source.endswith(".zip"):
+            import pyarrow.compute as pc
+
+            from shared.wcvp import NAME_COLUMNS, NAMES_MEMBER, name_key_array, read_member
+
+            table = read_member(Path(source), NAMES_MEMBER, NAME_COLUMNS)
+            names = table.column("taxon_name")
+            index = pc.index_in(table.column("accepted_plant_name_id"), value_set=table.column("plant_name_id"))
+            table = table.append_column("name_key", name_key_array(names))
+            table = table.append_column("accepted_taxon_name", pc.take(names, index))
+            con.register("wcvp_names", table)
+            return "wcvp_names"
+        try:
+            con.execute(f"select 1 from read_parquet('{source}') limit 1")
+        except Exception as e:
+            raise SystemExit(
+                f"cannot read WCVP names from {source} ({e}); run the refresh-wcvp job, "
+                f"or pass --wcvp with Kew's wcvp.zip ({WCVP_ZIP_URL})"
+            ) from e
+        return f"read_parquet('{source}')"
 
     def lookup(self, name: str) -> dict:
-        """`{'status': accepted|synonym|unplaced|not_found|ambiguous|error}`.
+        """`{'status': accepted|synonym|unplaced|not_found|ambiguous}`.
 
-        `not_found` means POWO returned nothing whose name *is* this name --
-        the fuzzy hit on the correctly spelled neighbour is discarded on
-        purpose, since it is the reason a misspelling looks resolvable.
+        `not_found` means no WCVP record *is* this name.  Misapplied records
+        are skipped: "sensu auct." says a name was used wrongly, not what it
+        means, and `Platanus occidentalis` carries one beside its accepted
+        record.
 
-        **Every** exact match is read, not the first, because a binomial can be
-        published more than once by different authors and the records need not
-        agree.  `Quercus lyrata` is the one that proves it: Walter's is the
-        accepted overcup oak and Spreng.'s is a synonym of `Quercus lobata`,
-        POWO returns both, and taking whichever came back first said the
-        overcup oak was really the valley oak -- which would have relabelled
-        2,773 trees.  Disagreement is reported as `ambiguous`, never resolved
-        by picking one.
-
-        A transport failure is retried, then recorded as `error` rather than
-        as `not_found`: an unreachable Kew must never read as evidence that a
-        name does not exist.
+        A record whose accepted id is itself is accepted; one pointing at
+        another record is a synonym of that name (Kew's Synonym, Orthographic,
+        Illegitimate and Invalid all point that way); one pointing nowhere is
+        unplaced.  **Every** exact record is read: `Quercus lyrata` is
+        Walter's accepted overcup oak and Spreng.'s synonym of `Quercus
+        lobata`, and taking whichever came first would have relabelled 2,773
+        trees.  Disagreement is `ambiguous`, never resolved by picking one.
         """
-        if self.cached(name):
-            return self.cache[name]
-        import requests
-
-        result = {"status": "error", "accepted": None, "matched": None, "family": None}
-        for attempt in range(3):
-            try:
-                response = requests.get(
-                    POWO_SEARCH,
-                    params={"q": name, "f": "species_f"},
-                    headers=HEADERS,
-                    timeout=20,
-                )
-                if response.status_code != 200:
-                    time.sleep(2 * (attempt + 1))
-                    continue
-                hits = response.json().get("results") or []
-                exact = [h for h in hits if _norm(h.get("name")) == _norm(name)]
-                if not exact:
-                    result = {
-                        "status": "not_found",
-                        "accepted": None,
-                        "matched": None,
-                        "family": None,
-                    }
-                else:
-                    readings = set()
-                    for hit in exact:
-                        synonym_of = (
-                            hit.get("synonymOf") if not hit.get("accepted", True) else None
-                        )
-                        readings.add(
-                            (
-                                "synonym"
-                                if synonym_of
-                                else ("accepted" if hit.get("accepted") else "unplaced"),
-                                (synonym_of or {}).get("name"),
-                            )
-                        )
-                    if len(readings) > 1:
-                        result = {
-                            "status": "ambiguous",
-                            "accepted": None,
-                            "matched": exact[0].get("name"),
-                            "family": exact[0].get("family"),
-                            "readings": sorted(
-                                f"{s}:{a or '-'}" for s, a in readings
-                            ),
-                        }
-                    else:
-                        status, accepted = readings.pop()
-                        result = {
-                            "status": status,
-                            "accepted": accepted,
-                            "matched": exact[0].get("name"),
-                            "family": exact[0].get("family"),
-                        }
-                break
-            except Exception:
-                time.sleep(2 * (attempt + 1))
-        self.cache[name] = result
-        return result
+        self.prefetch([name])
+        records = [r for r in self.rows.get(name_key(name), []) if r[3] != "Misapplied"]
+        if not records:
+            return {"status": "not_found", "accepted": None, "matched": None, "family": None}
+        readings = set()
+        for own, accepted_id, accepted_name, _status, _family, _matched in records:
+            if accepted_id == own:
+                readings.add(("accepted", None))
+            elif accepted_id is not None and accepted_name:
+                readings.add(("synonym", accepted_name))
+            else:
+                readings.add(("unplaced", None))
+        matched, family = records[0][5], records[0][4]
+        if len(readings) > 1:
+            return {
+                "status": "ambiguous", "accepted": None, "matched": matched, "family": family,
+                "readings": sorted(f"{s}:{a or '-'}" for s, a in readings),
+            }
+        status, accepted = readings.pop()
+        return {"status": status, "accepted": accepted, "matched": matched, "family": family}
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +334,7 @@ def _too_close_to_call(wrong: str, right_name: str) -> bool:
     `soulangiana` is a slip, and two edits in `mazei` is a different word.
     That matters most for hybrids, whose epithets are people's surnames --
     `Quercus x mazei` and `Quercus x warei` are two edits apart and two
-    different named hybrids, and POWO cannot rule on it because it has no
+    different named hybrids, and Kew cannot rule on it because it has no
     record of the first.  So the tool declines instead of guessing.
     """
     left, right = wrong.split(), right_name.split()
@@ -342,7 +348,7 @@ def _too_close_to_call(wrong: str, right_name: str) -> bool:
 
 
 def _is_real_name(reading: dict) -> bool:
-    """POWO has *some* exact record for it, so it is not a typo.
+    """WCVP has *some* exact record for it, so it is not a typo.
 
     `ambiguous` counts here.  It means two records share the name -- which
     settles nothing about nomenclature, and everything about spelling: a name
@@ -365,7 +371,7 @@ def _is_accepted_target(reading: dict) -> bool:
     )
 
 
-def _ambiguous_keys(pairs: list[tuple], powo: Powo) -> set[str]:
+def _ambiguous_keys(pairs: list[tuple], kew: Wcvp) -> set[str]:
     """Names that are within MAX_EDITS of more than one real name.
 
     A misspelling is only resolvable when there is one thing it could have
@@ -375,17 +381,17 @@ def _ambiguous_keys(pairs: list[tuple], powo: Powo) -> set[str]:
     """
     targets: dict[str, set[str]] = {}
     for a, _at, _ac, b, _bt, _bc in pairs:
-        left, right = powo.lookup(a), powo.lookup(b)
+        left, right = kew.lookup(a), kew.lookup(b)
         for name, other, other_reading in ((a, b, right), (b, a, left)):
-            if powo.lookup(name)["status"] == "not_found" and _is_real_name(
+            if kew.lookup(name)["status"] == "not_found" and _is_real_name(
                 other_reading
             ):
                 targets.setdefault(name, set()).add(other)
     return {name for name, seen in targets.items() if len(seen) > 1}
 
 
-def classify(pairs: list[tuple], powo: Powo) -> dict[str, list]:
-    """Sort each pair into a verdict.  POWO decides; counts only break ties."""
+def classify(pairs: list[tuple], kew: Wcvp) -> dict[str, list]:
+    """Sort each pair into a verdict.  WCVP decides; counts only break ties."""
     verdicts: dict[str, list] = {
         "MISSPELLING": [],
         "HYBRID_MARK": [],
@@ -393,23 +399,23 @@ def classify(pairs: list[tuple], powo: Powo) -> dict[str, list]:
         "REFUSED": [],
         "UNRESOLVED": [],
     }
-    ambiguous = _ambiguous_keys(pairs, powo)
+    ambiguous = _ambiguous_keys(pairs, kew)
     for a, a_trees, a_cities, b, b_trees, b_cities in pairs:
-        left, right = powo.lookup(a), powo.lookup(b)
+        left, right = kew.lookup(a), kew.lookup(b)
         trees = {a: a_trees, b: b_trees}
 
         if "error" in (left["status"], right["status"]):
-            verdicts["UNRESOLVED"].append((a, b, "POWO unreachable", 0))
+            verdicts["UNRESOLVED"].append((a, b, "WCVP unreadable", 0))
             continue
 
         # A synonym claim needs one unambiguous record on each side: this is
         # the verdict that asserts nomenclature rather than spelling.
         if "ambiguous" not in (left["status"], right["status"]):
             if _norm(left.get("accepted")) == _norm(b):
-                verdicts["SYNONYM"].append((a, b, "POWO: synonym", trees[a]))
+                verdicts["SYNONYM"].append((a, b, "WCVP: synonym", trees[a]))
                 continue
             if _norm(right.get("accepted")) == _norm(a):
-                verdicts["SYNONYM"].append((b, a, "POWO: synonym", trees[b]))
+                verdicts["SYNONYM"].append((b, a, "WCVP: synonym", trees[b]))
                 continue
 
         # Two names Kew has both heard of are two names, whatever their shapes.
@@ -440,13 +446,13 @@ def classify(pairs: list[tuple], powo: Powo) -> dict[str, list]:
                 (wrong, right_name, "two edits in a short word: a different name", trees[wrong])
             )
             continue
-        if not _is_accepted_target(powo.lookup(right_name)):
+        if not _is_accepted_target(kew.lookup(right_name)):
             verdicts["UNRESOLVED"].append(
                 (wrong, right_name, "target is itself a synonym", trees[wrong])
             )
             continue
         bucket = "HYBRID_MARK" if _bare(wrong) == _bare(right_name) else "MISSPELLING"
-        verdicts[bucket].append((wrong, right_name, "POWO: no such name", trees[wrong]))
+        verdicts[bucket].append((wrong, right_name, "WCVP: no such name", trees[wrong]))
     return verdicts
 
 
@@ -458,9 +464,9 @@ def classify(pairs: list[tuple], powo: Powo) -> dict[str, list]:
 def report(verdicts: dict[str, list]) -> None:
     order = ["MISSPELLING", "HYBRID_MARK", "SYNONYM", "REFUSED", "UNRESOLVED"]
     blurb = {
-        "MISSPELLING": "-> SPECIES_MISSPELLINGS  (POWO cannot match the key)",
+        "MISSPELLING": "-> SPECIES_MISSPELLINGS  (WCVP cannot match the key)",
         "HYBRID_MARK": "-> SPECIES_SYNONYMS      (same taxon, mark omitted or added)",
-        "SYNONYM": "-> SPECIES_SYNONYMS      (POWO lists the key under the value)",
+        "SYNONYM": "-> SPECIES_SYNONYMS      (WCVP lists the key under the value)",
         "REFUSED": "   never map              (two real taxa, a near miss by shape)",
         "UNRESOLVED": "   read these by hand",
     }
@@ -493,6 +499,9 @@ def main() -> None:
     parser.add_argument(
         "--parquet", action="append", help="also read this local parquet (an unpublished city)"
     )
+    parser.add_argument(
+        "--wcvp", help="Kew's wcvp.zip or a wcvp_names parquet, instead of the published one"
+    )
     args = parser.parse_args()
 
     cities = args.city or sorted(MUNICIPAL_DATA_SOURCES)
@@ -501,22 +510,13 @@ def main() -> None:
     pairs = candidate_pairs(rows)
     print(
         f"{len(rows):,} distinct species, {len(pairs)} pairs within {MAX_EDITS} edits;"
-        f" asking POWO...",
+        f" reading WCVP...",
         file=sys.stderr,
     )
 
-    powo = Powo()
-    names = sorted({p[0] for p in pairs} | {p[3] for p in pairs})
-    todo = [n for n in names if not powo.cached(n)]
-    for i, name in enumerate(todo, 1):
-        powo.lookup(name)
-        time.sleep(0.35)
-        if i % 25 == 0:
-            powo.save()
-            print(f"  {i}/{len(todo)}", file=sys.stderr)
-    powo.save()
-
-    verdicts = classify(pairs, powo)
+    kew = Wcvp(args.wcvp)
+    kew.prefetch(sorted({p[0] for p in pairs} | {p[3] for p in pairs}))
+    verdicts = classify(pairs, kew)
     emit_map(verdicts) if args.map else report(verdicts)
 
 

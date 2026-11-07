@@ -596,9 +596,9 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 #
 # Keys and values are written the way `sanitize_species` emits them -- ASCII
 # hybrid mark, genus capitalised, binomial rank -- and a value is never a key,
-# so one lookup is enough.  `test_ingest_shared.py` checks both.  POWO
-# (https://powo.science.kew.org) is the authority; add a pair only when it
-# lists one name as a synonym of the other.  A name that is merely
+# so one lookup is enough.  `test_ingest_shared.py` checks both.  Kew's
+# checklist (WCVP, the names behind https://powo.science.kew.org) is the
+# authority; add a pair only when it lists one name as a synonym of the other.  A name that is merely
 # *misapplied* in the trade for a different species (`Ficus nitida` for
 # F. microcarpa, `Jacaranda acutifolia` for J. mimosifolia) is not a synonym
 # and is deliberately not here.
@@ -769,8 +769,8 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # resolving it to the name it meant, not for leaving it fragmented.
 #
 # Every key was observed in a published city parquet and adjudicated against
-# POWO by `species_audit.py`: a key is a name POWO cannot match at all, and a
-# value is one it returns as accepted.  That is what keeps a real taxon out of
+# Kew by `species_audit.py` (POWO's API until late 2026, WCVP since): a key is
+# a name Kew has no record of, and a value is one it lists as accepted.  That is what keeps a real taxon out of
 # here -- `Acer saccharum` and `Acer saccharinum` are two edits apart and both
 # accepted, so the pair is refused rather than merged, and so are
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
@@ -814,6 +814,7 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Cephalotaxus harringtonii": "Cephalotaxus harringtonia",
     "Cercidiphyllym japonicum": "Cercidiphyllum japonicum",
     "Cercidiphylum japonicum": "Cercidiphyllum japonicum",
+    "Ceridiphyllum japonicum": "Cercidiphyllum japonicum",
     "Chionanthus retusa": "Chionanthus retusus",
     "Chiranthodendron pentadactyl": "Chiranthodendron pentadactylon",
     "Clerodendron trichotomum": "Clerodendrum trichotomum",
@@ -1028,8 +1029,9 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     # POWO sat behind a Cloudflare challenge that day, so each pair was put to
     # GBIF's backbone instead (`/v1/species/match?strict=true`): the key has
     # no exact match, the value is an exact accepted name.  `Ginkgo bicolor`
-    # is the epithet column's slip in a monotypic genus.  Re-run
-    # `species_audit.py` once Kew answers again.
+    # is the epithet column's slip in a monotypic genus.  Re-checked against
+    # WCVP v16 (2026-06-04) on 2026-11-07: every key unknown, every value
+    # accepted.
     "Acer platiniodes": "Acer platanoides",
     "Acer rubra": "Acer rubrum",
     "Aesculus hippacastanum": "Aesculus hippocastanum",
@@ -1043,6 +1045,18 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Quercus meuhlengergil": "Quercus muehlenbergii",
     "Quercus robar": "Quercus robur",
     "Syriga reticulata": "Syringa reticulata",
+    # Northern Virginia (2026-11-06): Falls Church's inventory and Alexandria's
+    # notable trees, read for the Fairfax imagery bundle.  POWO still answered
+    # 403, so the same GBIF check as Stoughton's.  `Halesia caroliniana` and
+    # `Rhus copallinum` also miss an exact match but are spelling variants of
+    # a real name, not typos, and are left for Kew.
+    "Chamaecyparis lawsonia": "Chamaecyparis lawsoniana",
+    "Fraxinus veluntina": "Fraxinus velutina",
+    "Ginko biloba": "Ginkgo biloba",
+    "Magnolia gradiflora": "Magnolia grandiflora",
+    "Plantanus occidentalis": "Platanus occidentalis",
+    "Quercus x willendowiana": "Quercus x willdenowiana",
+    "Vitus vulpina": "Vitis vulpina",
 }
 
 
@@ -1311,6 +1325,8 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USNVA": ("ARLINGTON", "FALLS_CHURCH"),
+    "CZPRG": ("PRAGUE_OPENDATA",),
     "USSTO": ("STOUGHTON_OPENDATA",),
     "FIHEL": ("HELSINKI_OPENDATA",),
     "DKCPH": ("COPENHAGEN_OPENDATA",),
@@ -1385,6 +1401,8 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USNVA": "OSM_USNVA",
+    "CZPRG": "OSM_CZPRG",
     "USSTO": "OSM_USSTO",
     "FIHEL": "OSM_FIHEL",
     "DKCPH": "OSM_DKCPH",
@@ -1950,6 +1968,8 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USNVA": (38.59, 39.07, -77.55, -77.03),
+    "CZPRG": (49.93, 50.19, 14.21, 14.72),
     "USSTO": (42.85, 42.97, -89.3, -89.11),
     "FIHEL": (60.05, 60.35, 24.75, 25.3),
     "DKCPH": (55.58, 55.76, 12.4, 12.7),
@@ -2049,6 +2069,17 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Calibrated 2026-11-06 on the first build (31,351 staged OSM nodes against
+    # 37,828 Arlington and Falls Church anchors).  Mutual-NN 92.1% in the 2-5 m
+    # band (n=581) collapsing to 31.8% in 5-10 m (n=264): guarantee 5 m.
+    "USNVA": 10,
+    # Calibrated 2026-11-04 against a local Overpass extract (19,501 OSM nodes)
+    # and the ingest's 142,097 rows, before the first build.  5-10 m band 56.7%
+    # mutual-NN over n=2,283: a coin flip, so the band rule says a 5 m guarantee
+    # and a 10 m cell.  The marginal table agrees for once: 8->10 removes 482
+    # duplicates for 371 hidden trees (1.30), 10->14 removes 431 for 543 (0.79).
+    # Prague plants at a 5.0 m median and OSM's tracing error reaches past it.
+    "CZPRG": 10,
     # Uncalibratable for now, so the default: OSM had no tree node in
     # Stoughton when it was wired (OSM_UNMAPPED_CITIES), and the cell only
     # decides which OSM or community rows fold into an inventory tree.
@@ -2281,6 +2312,26 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    # The Potomac's Virginia shore, carved against USWAS; north of DC the
+    # river bends west and the land east of it is Maryland, which is nobody's.
+    'USNVA': (
+        (38.59, 38.78, -77.55, -77.03),
+        (38.78, 38.8, -77.55, -77.04),
+        (38.8, 38.82, -77.55, -77.039),
+        (38.82, 38.84, -77.55, -77.043),
+        (38.84, 38.86, -77.55, -77.031),
+        (38.86, 38.875, -77.55, -77.052),
+        (38.875, 38.89, -77.55, -77.058),
+        (38.89, 38.9, -77.55, -77.068),
+        (38.9, 38.91, -77.55, -77.075),
+        (38.91, 38.92, -77.55, -77.09),
+        (38.92, 38.94, -77.55, -77.115),
+        (38.94, 38.96, -77.55, -77.14),
+        (38.96, 38.99, -77.55, -77.18),
+        (38.99, 39.03, -77.55, -77.24),
+        (39.03, 39.07, -77.55, -77.3),
+    ),
+    'CZPRG': ((49.93, 50.19, 14.21, 14.72),),
     'USSTO': ((42.85, 42.97, -89.3, -89.11),),
     'FIHEL': ((60.05, 60.35, 24.75, 25.3),),
     'DKCPH': ((55.58, 55.76, 12.4, 12.7),),
@@ -2345,7 +2396,20 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'AUMEL': ((-38.1, -37.55, 144.55, 145.4),),
     'ARBUE': ((-34.8, -34.45, -58.55, -58.3),),
     'USLAX': ((33.7, 34.35, -118.7, -118.1),),
-    'USWAS': ((38.78, 39.01, -77.15, -76.88),),
+    # The District ends at the Potomac's Virginia shore; see USNVA.
+    'USWAS': (
+        (38.78, 38.8, -77.04, -76.88),
+        (38.8, 38.82, -77.039, -76.88),
+        (38.82, 38.84, -77.043, -76.88),
+        (38.84, 38.86, -77.031, -76.88),
+        (38.86, 38.875, -77.052, -76.88),
+        (38.875, 38.89, -77.058, -76.88),
+        (38.89, 38.9, -77.068, -76.88),
+        (38.9, 38.91, -77.075, -76.88),
+        (38.91, 38.92, -77.09, -76.88),
+        (38.92, 38.94, -77.115, -76.88),
+        (38.94, 39.01, -77.12, -76.88),
+    ),
     'USTEM': ((33.3, 33.48, -112.05, -111.8),),
     'GRATH': ((37.85, 38.1, 23.6, 23.9),),
     'USDEN': ((39.45, 39.95, -105.65, -104.55),),

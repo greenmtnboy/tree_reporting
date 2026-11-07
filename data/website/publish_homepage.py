@@ -119,6 +119,7 @@ COUNTRIES = {
     "CA": "Canada",
     "CO": "Colombia",
     "DE": "Germany",
+    "CZ": "Czechia",
     "DK": "Denmark",
     "FI": "Finland",
     "FR": "France",

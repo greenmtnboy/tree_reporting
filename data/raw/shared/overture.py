@@ -429,11 +429,11 @@ nearest AS (
     {union}
 )
 SELECT '{city_code}' AS city,
-       i * {SNAP_CELL_LON_MULTIPLIER} + j AS snap_cell,
-       (fj + 0.5) * {lat_deg} AS snap_latitude,
-       (fi + 0.5) * {lon_deg} AS snap_longitude,
+       CAST(i * {SNAP_CELL_LON_MULTIPLIER} + j AS BIGINT) AS snap_cell,
+       CAST((fj + 0.5) * {lat_deg} AS DOUBLE) AS snap_latitude,
+       CAST((fi + 0.5) * {lon_deg} AS DOUBLE) AS snap_longitude,
        CASE kind WHEN 1 THEN 'building' ELSE 'road' END AS snap_reason,
-       dist AS snap_distance_m,
+       CAST(dist AS DOUBLE) AS snap_distance_m,
        '{release}' AS overture_release
 FROM nearest
 WHERE i BETWEEN {i_min} AND {i_max} AND j BETWEEN {j_min} AND {j_max}
@@ -441,13 +441,24 @@ ORDER BY snap_cell
 """
 
 
+# DuckDB's own budget for the snap query, below the job's 3 GB container: left
+# to itself DuckDB sizes from the host's memory, not the container's, and is
+# killed (exit 137) before it thinks to spill.  Burlington peaked at 2.19 GiB
+# process-wide under this cap (2026-11-06).  OVERTURE_MEMORY_LIMIT overrides it.
+OVERTURE_MEMORY_LIMIT = "2GB"
+
+
 def connect():
-    """A DuckDB connection with the spatial and S3 extensions loaded."""
+    """A DuckDB connection with the spatial and S3 extensions loaded, capped
+    at OVERTURE_MEMORY_LIMIT and spilling to a temporary directory."""
     import duckdb
 
     con = duckdb.connect()
     con.execute("INSTALL httpfs; LOAD httpfs; INSTALL spatial; LOAD spatial;")
     con.execute(f"SET s3_region = '{OVERTURE_S3_REGION}';")
+    limit = os.environ.get("OVERTURE_MEMORY_LIMIT", OVERTURE_MEMORY_LIMIT)
+    spill = tempfile.mkdtemp(prefix="overture_snap_").replace("\\", "/")
+    con.execute(f"SET memory_limit = '{limit}'; SET temp_directory = '{spill}';")
     return con
 
 
@@ -480,8 +491,14 @@ def build_snap_table(
     )
     con = connection or connect()
     print(f"{city_code}: building the Overture {release} position lookup", file=sys.stderr)
-    result = con.execute(sql)
-    table = (result.to_arrow_table() if hasattr(result, "to_arrow_table") else result.arrow()).cast(SNAP_SCHEMA)
+    # A relation, not `execute()`: fetching Arrow from an executed result
+    # materialises it once more on the way out, and that copy is what pushed
+    # Burlington's 3 GB job over its limit (exit 137).  The SELECT already
+    # casts to SNAP_SCHEMA's types, so the cast below is only a rename check.
+    result = con.sql(sql)
+    table = result.to_arrow_table() if hasattr(result, "to_arrow_table") else result.arrow()
+    if table.schema != SNAP_SCHEMA:
+        table = table.cast(SNAP_SCHEMA)
     if connection is None:
         con.close()
     _check_cell_grain(table, city_code)

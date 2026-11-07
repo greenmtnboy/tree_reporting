@@ -457,3 +457,19 @@ file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussto_t
 partial datasource ussto_tree_vocab extends city_tree_vocab ()
 complete where city = 'USSTO'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussto_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ussto_tree_vocab_v{data_version}.parquet`;
+
+partial datasource czprg_tree_browser extends city_tree_browser ()
+complete where city = 'CZPRG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/czprg_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/czprg_tree_browser_v{data_version}.parquet`;
+
+partial datasource czprg_tree_vocab extends city_tree_vocab ()
+complete where city = 'CZPRG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/czprg_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/czprg_tree_vocab_v{data_version}.parquet`;
+
+partial datasource usnva_tree_browser extends city_tree_browser ()
+complete where city = 'USNVA'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnva_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnva_tree_browser_v{data_version}.parquet`;
+
+partial datasource usnva_tree_vocab extends city_tree_vocab ()
+complete where city = 'USNVA'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnva_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnva_tree_vocab_v{data_version}.parquet`;

@@ -1,0 +1,46 @@
+# Kew's World Checklist of Vascular Plants (WCVP), the taxonomy behind POWO.
+# See shared/wcvp.py for the source, the licence and why it is read in bulk.
+#
+# Nothing in the app's model bundle imports this: it is a reference table for
+# the workstation species audit and the enrichment job, not a dimension any
+# chart joins to.
+
+key wcvp_plant_name_id int; # Kew's plant_name_id, one per published name
+property wcvp_plant_name_id.wcvp_ipni_id string;
+property wcvp_plant_name_id.wcvp_powo_id string; # urn:lsid:ipni.org:names:<id> on POWO
+property wcvp_plant_name_id.wcvp_taxon_rank string; # Species | Variety | Subspecies | Form | Genus | ...
+property wcvp_plant_name_id.wcvp_taxon_status string; # Accepted | Synonym | Unplaced | Orthographic | Misapplied | Illegitimate | Invalid | Artificial Hybrid | Local Biotype
+property wcvp_plant_name_id.wcvp_family string;
+property wcvp_plant_name_id.wcvp_genus_hybrid string; # × when the genus is a nothogenus
+property wcvp_plant_name_id.wcvp_genus string;
+property wcvp_plant_name_id.wcvp_species_hybrid string; # × when the species is a nothospecies
+property wcvp_plant_name_id.wcvp_species string; # the epithet
+property wcvp_plant_name_id.wcvp_infraspecific_rank string; # var. | subsp. | f. | ...
+property wcvp_plant_name_id.wcvp_infraspecies string;
+property wcvp_plant_name_id.wcvp_taxon_name string; # e.g. Platanus × hispanica
+property wcvp_plant_name_id.wcvp_taxon_authors string;
+property wcvp_plant_name_id.wcvp_accepted_plant_name_id int; # the accepted record this name resolves to
+property wcvp_plant_name_id.wcvp_accepted_taxon_name string; # that record's taxon_name
+property wcvp_plant_name_id.wcvp_parent_plant_name_id int;
+property wcvp_plant_name_id.wcvp_hybrid_formula string;
+property wcvp_plant_name_id.wcvp_first_published string;
+property wcvp_plant_name_id.wcvp_geographic_area string; # Kew's prose range, e.g. SE. Canada to C. & E. U.S.A.
+property wcvp_plant_name_id.wcvp_lifeform_description string; # e.g. tree | shrub or tree
+property wcvp_plant_name_id.wcvp_climate_description string; # e.g. temperate
+property wcvp_plant_name_id.wcvp_reviewed string;
+property wcvp_plant_name_id.wcvp_name_key string; # taxon_name folded like shared.wcvp.name_key, for exact lookups
+property wcvp_plant_name_id.wcvp_source_version string;
+
+key wcvp_plant_locality_id int; # one taxon in one TDWG level-3 area
+property wcvp_plant_locality_id.wcvp_continent_code_l1 int;
+property wcvp_plant_locality_id.wcvp_continent string;
+property wcvp_plant_locality_id.wcvp_region_code_l2 int;
+property wcvp_plant_locality_id.wcvp_region string;
+property wcvp_plant_locality_id.wcvp_area_code_l3 string; # TDWG level-3 code, e.g. VRG
+property wcvp_plant_locality_id.wcvp_area string;
+property wcvp_plant_locality_id.wcvp_introduced bool; # false = native there
+property wcvp_plant_locality_id.wcvp_extinct bool;
+property wcvp_plant_locality_id.wcvp_location_doubtful bool;
+property wcvp_plant_locality_id.wcvp_distribution_source_version string;
+
+property <*>.wcvp_data_updated_through datetime; # Last-Modified of Kew's wcvp.zip

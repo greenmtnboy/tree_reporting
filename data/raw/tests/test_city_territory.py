@@ -99,6 +99,12 @@ def test_the_neighbours_are_carved_where_the_rollup_showed_duplicates():
         (49.25, -123.10): ("CAVAN", "CANWE"),
         (43.85, -79.05): ("CAAJX", "CATOR"),
         (43.40, -79.80): ("CABUR", "CAMIS"),
+        (38.896, -77.072): ("USNVA", "USWAS"),  # Rosslyn
+        (38.905, -77.065): ("USWAS", "USNVA"),  # Georgetown
+        (38.871, -77.056): ("USNVA", "USWAS"),  # the Pentagon
+        (38.889, -77.050): ("USWAS", "USNVA"),  # Lincoln Memorial
+        (38.851, -77.040): ("USNVA", "USWAS"),  # Reagan National
+        (38.805, -77.045): ("USNVA", "USWAS"),  # Old Town Alexandria
     }
     for (lat, lon), (owner, other) in cases.items():
         assert in_city_territory(owner, lat, lon), (lat, lon, owner)

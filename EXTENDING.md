@@ -162,8 +162,8 @@ columns={...})` last, and writes an Arrow IPC stream to stdout.
 - **`species` is the scientific name only.** Strip a `:: common name`
   suffix; concatenate genus and epithet; leave a quoted cultivar in (the
   schema moves it to `cultivar`). A portal that publishes common names gets a
-  `shared/species/{language}.py` table (English, Japanese, Spanish and
-  Chinese exist); curate it against POWO, never derive it from the
+  `shared/species/{language}.py` table (English, Japanese, Spanish,
+  Chinese and Czech exist); curate it against POWO, never derive it from the
   enrichment parquet.
 - **Null a portal's stamped default planting date** in the ingest
   (`PLACEHOLDER_PLANT_DATE`). `enforce_tree_schema` already nulls dates
@@ -295,7 +295,7 @@ cd data && trilogy refresh raw/{code}/{slug}_landmarks.preql -f {slug}_landmark_
   non-taxa into sentinels (`Unknown`, `Palm`, `Shrub`, `Cactus`, `Dead`),
   never null.
 - Never curate the synonym or misspelling maps by eye or by tree count:
-  `tools/species_audit.py` asks POWO about every near pair. A name merely
+  `tools/species_audit.py` checks every near pair against Kew's WCVP. A name merely
   misapplied in the trade is not a synonym. Audit a new city **before** its
   first publish: write the ingest's stream to a local parquet and pass it with
   `--parquet`, so its spellings are paired against every published city's.
