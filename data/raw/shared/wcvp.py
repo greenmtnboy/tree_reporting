@@ -133,10 +133,15 @@ def column_types(columns: tuple[str, ...]) -> dict[str, pa.DataType]:
     return {c: pa.int64() if c in INT_COLUMNS else pa.string() for c in columns}
 
 
-def constant_column(value: str, rows: int) -> pa.DictionaryArray:
-    """One string on every row, stored once: the citation is 170 bytes, and
-    as a plain string column over 1.4M names it was a quarter of a gigabyte."""
-    return pa.DictionaryArray.from_arrays(pa.array([0] * rows, type=pa.int8()), pa.array([value]))
+def constant_column(value: str, rows: int) -> pa.Array:
+    """One string on every row, as a plain string column.
+
+    Not a dictionary array, though that would store the 170-byte citation
+    once: the cloud worker reads a script's Arrow stream with DuckDB's IPC
+    decoder, which refuses a dictionary-encoded field ("Schema message field
+    with DictionaryEncoding not supported").  The parquet write
+    dictionary-encodes it anyway; it costs ~250 MB in memory on the names table."""
+    return pa.repeat(pa.scalar(value, pa.string()), rows)
 
 
 def name_key_array(names: pa.ChunkedArray) -> pa.ChunkedArray:
