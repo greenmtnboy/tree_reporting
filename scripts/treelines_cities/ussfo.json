@@ -2,7 +2,7 @@
   "city": "USSFO",
   "slug": "san_francisco",
   "output_folder": "sf_renders",
-  "title": "Treelines of San Francisco, CA, USA",
+  "title": "Trees of San Francisco, CA, USA",
   "input": "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_info_v2.parquet",
   "inventory_sources": ["SF_OPENDATA"],
   "tree_credit": "Trees: San Francisco Public Works / DataSF Street Tree Inventory",
