@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api'
-import { BARE_BRANCH_COLOR, foliagePhase, speciesShadeSql } from './foliageSeason'
+import { BARE_BRANCH_COLOR, foliagePhase, SHADE_PALETTE, snapShade, speciesShadeSql } from './foliageSeason'
 import { colorSql, SPECIES_SHADE_TABLE, UNKNOWN_SHADE_COLOR } from '../workers/cityTables'
 
 describe('foliage phase', () => {
@@ -89,5 +89,28 @@ describe('leaf-shade colour scheme', () => {
     const first = await colors('autumn')
     const second = await colors('autumn')
     expect(second).toEqual(first)
+  })
+})
+
+describe('shade palette', () => {
+  test('snaps every recorded shade to a handful of paint colours', () => {
+    const palette = new Set<string>(SHADE_PALETTE)
+    for (const hex of ['#4b732f', '#a8d572', '#2b330c', '#8e924c', '#C62828', '#e65100', '#f4d03f', '7d7367']) {
+      expect(palette.has(snapShade(hex)!)).toBe(true)
+    }
+    expect(SHADE_PALETTE.length).toBeLessThanOrEqual(20)
+  })
+
+  test('keeps a shade in its family', () => {
+    expect(snapShade('#c62828')).toBe('#c0392b')
+    expect(snapShade('#f4d03f')).toBe('#e8c547')
+    expect(snapShade('#e65100')).toBe('#d9661f')
+    expect(snapShade(BARE_BRANCH_COLOR)).toBe(BARE_BRANCH_COLOR)
+    expect(['#3f7034', '#5a8a3c']).toContain(snapShade('#4b732f'))
+  })
+
+  test('refuses what is not a colour', () => {
+    expect(snapShade('red')).toBeNull()
+    expect(snapShade("#abc'); DROP TABLE x; --")).toBeNull()
   })
 })

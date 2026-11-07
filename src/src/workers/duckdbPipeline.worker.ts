@@ -70,6 +70,7 @@ const PREPARED_FEATURE_TABLE_ZOOM = 15
 const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
 
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
+import { snapShade } from '../lib/foliageSeason'
 
 const DEFAULT_CATEGORY_LABELS: Record<string, string> = {
   '#e6a835': 'Palm',
@@ -1058,9 +1059,28 @@ async function setSpeciesShadeSql(sql: string | null) {
   if (signature === speciesShadeSignature) return
   await conn.query(`DROP TABLE IF EXISTS ${SPECIES_SHADE_TABLE}`)
   if (normalized) {
-    await conn.query(`CREATE TEMP TABLE ${SPECIES_SHADE_TABLE} AS SELECT species, shades FROM (
+    // Exact hexes first, then each snapped to the paint palette (snapShade):
+    // a few thousand distinct shades would be as many heatmap layers.
+    await conn.query(`CREATE OR REPLACE TEMP TABLE __species_shade_exact AS SELECT species, shades FROM (
 ${normalized}
 ) __shades`)
+    const exact = await conn.query(`SELECT DISTINCT unnest(shades) AS shade FROM __species_shade_exact`)
+    const pairs = exact.toArray().flatMap((r: Record<string, unknown>) => {
+      const shade = String(r.shade)
+      const snapped = snapShade(shade)
+      // snapShade answers only for a bare #rrggbb, so the literal needs no escaping.
+      return snapped ? [`('${shade}', '${snapped}')`] : []
+    })
+    await conn.query(`CREATE OR REPLACE TEMP TABLE __shade_snap (shade VARCHAR, snapped VARCHAR)`)
+    if (pairs.length) await conn.query(`INSERT INTO __shade_snap VALUES ${pairs.join(', ')}`)
+    await conn.query(`CREATE TEMP TABLE ${SPECIES_SHADE_TABLE} AS
+SELECT species, list(snapped ORDER BY i) AS shades
+FROM (
+  SELECT species, unnest(shades) AS shade, generate_subscripts(shades, 1) AS i FROM __species_shade_exact
+) JOIN __shade_snap USING (shade)
+GROUP BY species`)
+    await conn.query('DROP TABLE __species_shade_exact')
+    await conn.query('DROP TABLE __shade_snap')
   }
   speciesShadeActive = normalized !== null
   speciesShadeSignature = signature
