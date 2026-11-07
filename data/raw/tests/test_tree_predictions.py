@@ -14,7 +14,7 @@ enrichment, applied to a job that consumes both.
 
 from __future__ import annotations
 
-import copy
+import dataclasses
 import csv
 import math
 import re
@@ -584,7 +584,11 @@ def build_stage(files: dict[str, Path], stage: str, tmp: Path) -> dict[str, Path
     for name, target in targets.items():
         columns = [c for c in target.columns if c.alias != WATERMARK]
         # pytrilogy 0.3.462 made Datasource a dataclass; older releases are pydantic.
-        trimmed = copy.replace(target, columns=columns) if hasattr(target, "__replace__") else target.model_copy(update={"columns": columns})
+        # dataclasses.replace works on every Python; copy.replace needs 3.13.
+        if dataclasses.is_dataclass(target):
+            trimmed = dataclasses.replace(target, columns=columns)
+        else:
+            trimmed = target.model_copy(update={"columns": columns})
         statement = trimmed.create_update_statement(env, None, line_no=None)
         sql = localize(files, executor.generator.compile_statement(executor.generator.generate_queries(env, [statement])[-1]))
         renames = ", ".join(f'"{c.concept.address.split(".", 1)[1]}" AS "{c.alias}"' for c in columns)
