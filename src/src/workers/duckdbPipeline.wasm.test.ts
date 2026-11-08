@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { rmSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { executedSql } from './wasm/nodeDuckDB'
 import { FIXTURE_DIR, writeCityProjection } from './wasm/fixtures'
 import { startWorker, type WorkerHarness } from './wasm/workerHarness'
@@ -35,6 +36,20 @@ function lngLatToTile(lng: number, lat: number, z: number) {
 function rangeAround(z: number, radius: number): TileRange {
   const c = lngLatToTile(CENTER[0], CENTER[1], z)
   return { minX: c.x - radius, maxX: c.x + radius, minY: c.y - radius, maxY: c.y + radius }
+}
+
+const requireFromMaplibre = createRequire(createRequire(import.meta.url).resolve('maplibre-gl'))
+const { VectorTile } = requireFromMaplibre('@mapbox/vector-tile')
+const Pbf = requireFromMaplibre('pbf')
+
+/** A tile's source layers, each with the property names its features carry. */
+function tileLayers(buf: ArrayBuffer): Record<string, { features: number; properties: string[] }> {
+  const tile = new VectorTile(new Pbf(new Uint8Array(buf)))
+  return Object.fromEntries(Object.entries(tile.layers).map(([name, layer]: [string, any]) => {
+    const properties = new Set<string>()
+    for (let i = 0; i < layer.length; i++) Object.keys(layer.feature(i).properties).forEach((k) => properties.add(k))
+    return [name, { features: layer.length, properties: [...properties].sort() }]
+  }))
 }
 
 type PlanNode = { name: string; children: PlanNode[]; extra_info?: Record<string, unknown> }
@@ -100,6 +115,29 @@ describe('tile worker on DuckDB-WASM', () => {
     walkTileSql = [...new Set(executedSql.filter(sql => /ST_AsMVT\(/.test(sql)))]
   })
 
+  it('every tile holds one source layer per colour, named by the colour (mvtLayers.ts)', async () => {
+    // What each zoom's features carry: the heatmaps read point_count and
+    // grid_m, the circles (tiles z12 and up) dbh, a tap the tree id.
+    const expected: Record<number, string[]> = {
+      11: ['grid_m', 'point_count'],
+      13: ['dbh', 'grid_m', 'point_count'],
+      16: ['dbh', 'id'],
+    }
+    for (const [z, properties] of Object.entries(expected).map(([z, p]) => [Number(z), p] as const)) {
+      await worker.call('setViewportZoom', { zoom: z + 0.5 })
+      await worker.call('setViewportCenter', { lng: CENTER[0], lat: CENTER[1] })
+      await worker.call('setVisibleTileRange', { z, ...rangeAround(z, 1) })
+      const c = lngLatToTile(CENTER[0], CENTER[1], z)
+      const layers = tileLayers((await worker.call<TileResult>('getTile', { z, x: c.x, y: c.y })).tileBuffer)
+      const names = Object.keys(layers)
+      expect(names.length, `z${z} has no layers`).toBeGreaterThan(0)
+      for (const name of names) {
+        expect(name, `z${z}`).toMatch(/^#[0-9a-fA-F]{6}$/)
+        expect(layers[name].properties, `z${z} ${name}`).toEqual(properties)
+      }
+    }
+  })
+
   it('the plan check catches the geometry guard pushed into the scan (#144)', async () => {
     // The points batch as it was before #144: the guard as a WHERE over the
     // feature, which DuckDB-WASM evaluates in the scan, on every tree.
@@ -146,7 +184,7 @@ describe('tile worker on DuckDB-WASM', () => {
     expect(tile.tileBuffer.byteLength).toBeGreaterThan(0)
     const served = worker.perf.filter(p => p.label.includes('neighborhood-batch') && p.detail.z === 15).slice(-1)[0]
     expect(served?.detail.mode).toBe('feature-table')
-    expect(new TextDecoder().decode(tile.tileBuffer)).toContain('#123456')
+    expect(Object.keys(tileLayers(tile.tileBuffer))).toEqual(['#123456'])
     await worker.call('setColorOverrideSql', { sql: null })
     expect(builds()).toBe(before)
   })

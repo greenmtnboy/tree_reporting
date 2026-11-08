@@ -71,6 +71,29 @@ const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
 
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 import { snapShade } from '../lib/foliageSeason'
+import { assembleLayeredTiles } from './mvtLayers'
+
+/** The source layer a tree with no colour lands in: the style's own fallback colour. */
+const MVT_FALLBACK_LAYER = '#66BB6A'
+
+/**
+ * The lowest tile zoom whose features the circle layer draws (useMapLayers'
+ * CIRCLE_ZOOM_MIN is 12.8, and MapLibre buckets a layer only on tiles at or
+ * above its floored minzoom). Below it only the heatmaps read a cell, and
+ * they read its count, not its size.
+ */
+const CIRCLE_TILE_MIN_ZOOM = 12
+
+/**
+ * An overview cell's dbh: none where no circle reads it, and a whole inch
+ * where one does, so the tile's value table holds a few dozen sizes rather
+ * than one float per cell.
+ */
+function aggregatedDbhSql(z: number): { agg: string; property: string } {
+  return z < CIRCLE_TILE_MIN_ZOOM
+    ? { agg: 'NULL', property: '' }
+    : { agg: 'round(AVG(dbh))', property: "\n      'dbh': TRY_CAST(dbh AS INTEGER)," }
+}
 
 const DEFAULT_CATEGORY_LABELS: Record<string, string> = {
   '#e6a835': 'Palm',
@@ -1150,11 +1173,7 @@ ${src.prelude} rows AS (
         64,
         true
       ),
-      'dbh': TRY_CAST(${src.dbh} AS DOUBLE),
-      'category': COALESCE(tf.tree_form, 'default'),
-      'rotation': 0,
-      'point_count': 1,
-      'grid_m': 32
+      'dbh': TRY_CAST(${src.dbh} AS DOUBLE)
     } AS feature
   FROM ${src.from}
 )
@@ -1212,6 +1231,7 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   // Overview cells group by colour only (see aggCacheSql in cityTables.ts).
   const aggColor = colorSql('tf', colorOverrideActive, speciesShadeActive, { aggregated: true })
   const aggSrc = tileRowSource(baseQuery, aggColor)
+  const aggDbh = aggregatedDbhSql(z)
   // The z15 feature table is a whole-city materialisation (one MVT geometry
   // per tree) that the desktop's LOD prewarm builds after the intro lands. A
   // tile request reads it when it is there and runs the direct join
@@ -1272,7 +1292,8 @@ WITH rows AS (
   SELECT
     f.xtile,
     f.ytile,
-    struct_insert(f.feature, id := f.tree_id, display_color := ${tableColor.expr}) AS feature
+    ${tableColor.expr} AS display_color,
+    struct_insert(f.feature, id := f.tree_id) AS feature
   FROM ${featureTableName(PREPARED_FEATURE_TABLE_ZOOM)} f
   ${tableColor.join}
   WHERE f.xtile BETWEEN ${minX} AND ${maxX}
@@ -1281,9 +1302,10 @@ WITH rows AS (
 SELECT
   xtile,
   ytile,
+  display_color AS layer,
   ST_AsMVT(feature, 'trees', 4096, 'geom') FILTER (WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)) AS mvt
 FROM rows
-GROUP BY xtile, ytile
+GROUP BY xtile, ytile, display_color
 ` : simplifyGridMeters > 0 ? `
 ${aggSrc.prelude} pts AS (
   SELECT
@@ -1303,7 +1325,7 @@ ${aggSrc.prelude} pts AS (
     floor(x_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gx,
     floor(y_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gy,
     display_color,
-    AVG(dbh) AS dbh,
+    ${aggDbh.agg} AS dbh,
     COUNT(*) AS point_count
   FROM pts
   GROUP BY 1, 2, 3, 4, 5
@@ -1311,6 +1333,7 @@ ${aggSrc.prelude} pts AS (
   SELECT
     xtile,
     ytile,
+    display_color,
     {
       'geometry': ST_AsMVTGeom(
         ST_Point(gx, gy),
@@ -1318,12 +1341,7 @@ ${aggSrc.prelude} pts AS (
         4096,
         64,
         true
-      ),
-      'id': -1,
-      'dbh': TRY_CAST(dbh AS DOUBLE),
-      'category': 'default',
-      'display_color': display_color,
-      'rotation': 0,
+      ),${aggDbh.property}
       'point_count': TRY_CAST(point_count AS INTEGER),
       'grid_m': ${simplifyGridMeters}
     } AS feature
@@ -1332,10 +1350,11 @@ ${aggSrc.prelude} pts AS (
 SELECT
   xtile,
   ytile,
+  display_color AS layer,
   ST_AsMVT(feature, 'trees', 4096, 'geometry') AS mvt
 FROM rows
 WHERE feature.geometry IS NOT NULL AND NOT ST_IsEmpty(feature.geometry)
-GROUP BY xtile, ytile
+GROUP BY xtile, ytile, display_color
 ` : `
 ${src.prelude} pts AS (
   SELECT
@@ -1343,9 +1362,7 @@ ${src.prelude} pts AS (
     tf.y_3857,
     ${src.id} AS id,
     ${src.dbh} AS dbh,
-    COALESCE(tf.tree_form, 'default') AS category,
     ${color.expr} AS display_color,
-    0 AS rotation,
     ${tileXExpr('tf', z)} AS xtile,
     ${tileYExpr('tf', z)} AS ytile
   FROM ${src.from}
@@ -1355,6 +1372,7 @@ ${src.prelude} pts AS (
   SELECT
     xtile,
     ytile,
+    display_color,
     {
       'geom': ST_AsMVTGeom(
         ST_Point(x_3857, y_3857),
@@ -1364,35 +1382,32 @@ ${src.prelude} pts AS (
         true
       ),
       'id': id,
-      'dbh': TRY_CAST(dbh AS DOUBLE),
-      'category': category,
-      'display_color': display_color,
-      'rotation': rotation,
-      'point_count': 1,
-      'grid_m': 32
+      'dbh': TRY_CAST(dbh AS DOUBLE)
     } AS feature
   FROM pts
 )
 SELECT
   xtile,
   ytile,
+  display_color AS layer,
   -- The geometry guard is the aggregate's FILTER, not a WHERE: DuckDB-WASM
   -- pushes a WHERE on feature.geom into the scan ahead of the tile range and
   -- runs ST_AsMVTGeom on every tree in the city (8.3 s against 32 ms for a
   -- four-tile z16 batch on Boston).
   ST_AsMVT(feature, 'trees', 4096, 'geom') FILTER (WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)) AS mvt
 FROM rows
-GROUP BY xtile, ytile
+GROUP BY xtile, ytile, display_color
 `
 
     const t0 = nowMs()
     const result = await conn.query(sql)
-    const rows = result.toArray()
+    // One row per tile and colour; each colour becomes its own source layer.
+    const tiles = assembleLayeredTiles(result.toArray(), MVT_FALLBACK_LAYER)
     console.info('[Perf] duckdb-worker:neighborhood-batch', {
       z,
       mode: useFeatureTable ? 'feature-table' : simplifyGridMeters > 0 ? `agg${simplifyGridMeters}` : 'points',
       tiles: (maxX - minX + 1) * (maxY - minY + 1),
-      nonEmpty: rows.length,
+      nonEmpty: tiles.size,
       ms: Math.round(nowMs() - t0),
     })
 
@@ -1404,15 +1419,9 @@ GROUP BY xtile, ytile
           if (windowCoversTile(z, tx, ty)) setCachedTile(tileCacheKeyForRevision(rev, z, tx, ty), new Uint8Array())
         }
       }
-      for (const row of rows) {
-        const xtile = Number(row.xtile)
-        const ytile = Number(row.ytile)
+      for (const { xtile, ytile, mvt } of tiles.values()) {
         if (!windowCoversTile(z, xtile, ytile)) continue
-        const raw = row.mvt as Uint8Array | undefined
-        const tile = !raw || raw.length === 0
-          ? new Uint8Array()
-          : new Uint8Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength))
-        setCachedTile(tileCacheKeyForRevision(rev, z, xtile, ytile), tile)
+        setCachedTile(tileCacheKeyForRevision(rev, z, xtile, ytile), mvt)
       }
     }
   })()
@@ -1447,6 +1456,7 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
   const src = tileRowSource(baseQuery, color)
   const aggColor = colorSql('tf', colorOverrideActive, speciesShadeActive, { aggregated: true })
   const aggSrc = tileRowSource(baseQuery, aggColor)
+  const aggDbh = aggregatedDbhSql(z)
 
   // An overview tile (z11 to z14) is served from an aggregate over the
   // visible neighbourhood, never the whole city: the transient is
@@ -1473,42 +1483,34 @@ ${aggSrc.prelude} pts AS (
     floor(x_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gx,
     floor(y_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gy,
     display_color,
-    AVG(dbh) AS dbh,
+    ${aggDbh.agg} AS dbh,
     COUNT(*) AS point_count
   FROM pts
   GROUP BY 1, 2, 3
 ), tiles AS (
-  SELECT {
+  SELECT display_color, {
     'geometry': ST_AsMVTGeom(
       ST_Point(gx, gy),
       ST_Extent(ST_TileEnvelope(${z}, ${x}, ${y})),
       4096,
       64,
       true
-    ),
-    'id': -1,
-    'dbh': TRY_CAST(dbh AS DOUBLE),
-    'category': 'default',
-    'display_color': display_color,
-    'rotation': 0,
+    ),${aggDbh.property}
     'point_count': TRY_CAST(point_count AS INTEGER),
     'grid_m': ${simplifyGridMeters}
   } AS feature
   FROM agg
 )
-SELECT ST_AsMVT(feature, 'trees', 4096, 'geometry') AS mvt
+SELECT ${x} AS xtile, ${y} AS ytile, display_color AS layer, ST_AsMVT(feature, 'trees', 4096, 'geometry') AS mvt
 FROM tiles
 WHERE feature.geometry IS NOT NULL AND NOT ST_IsEmpty(feature.geometry)
+GROUP BY display_color
 ` : `
 ${src.prelude} points AS (
   SELECT
     ${src.id} AS id,
     ${src.dbh} AS dbh,
-    COALESCE(tf.tree_form, 'default') AS category,
     ${color.expr} AS display_color,
-    0 AS rotation,
-    1 AS point_count,
-    32 AS grid_m,
     ST_AsMVTGeom(
       ST_Point(tf.x_3857, tf.y_3857),
       ST_Extent(ST_TileEnvelope(${z}, ${x}, ${y})),
@@ -1521,16 +1523,14 @@ ${src.prelude} points AS (
     AND tf.y_3857 BETWEEN ${bounds.minY} AND ${bounds.maxY}
   LIMIT 50000
 )
-SELECT ST_AsMVT(points, 'trees', 4096, 'geom') AS mvt
+SELECT ${x} AS xtile, ${y} AS ytile, display_color AS layer, ST_AsMVT({'geom': geom, 'id': id, 'dbh': TRY_CAST(dbh AS DOUBLE)}, 'trees', 4096, 'geom') AS mvt
 FROM points
 WHERE geom IS NOT NULL
+GROUP BY display_color
 `
 
     const result = await conn.query(sql)
-    const raw = result.get(0)?.mvt as Uint8Array | undefined
-    const tile = !raw || raw.length === 0
-      ? new Uint8Array()
-      : new Uint8Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength))
+    const tile = assembleLayeredTiles(result.toArray(), MVT_FALLBACK_LAYER).get(`${x}/${y}`)?.mvt ?? new Uint8Array()
     if (windowCoversTile(z, x, y)) setCachedTile(key, tile)
     return new Uint8Array(tile)
   })()

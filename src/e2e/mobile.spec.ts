@@ -205,8 +205,11 @@ test.describe('Mobile map window', () => {
     expect(await page.evaluate(() => (window as any).__treeMap.dragRotate.isEnabled())).toBe(false)
     await page.evaluate(() => { (window as any).__treeMap.jumpTo({ zoom: 10 }) })
     expect(await page.evaluate(() => (window as any).__treeMap.getZoom())).toBeGreaterThanOrEqual(13)
-    await expect.poll(() => page.evaluate(() =>
-      (window as any).__treeMap.queryRenderedFeatures(undefined, { layers: ['trees-circle'] }).length), { timeout: 30_000 })
+    await expect.poll(() => page.evaluate(() => {
+      const map = (window as any).__treeMap
+      const layers = map.getStyle().layers.filter((l: { id: string }) => l.id.startsWith('trees-circle-')).map((l: { id: string }) => l.id)
+      return layers.length ? map.queryRenderedFeatures(undefined, { layers }).length : 0
+    }), { timeout: 30_000 })
       .toBeGreaterThan(0)
     await expect(page.locator('.map-window-notice')).toHaveCount(0)
   })

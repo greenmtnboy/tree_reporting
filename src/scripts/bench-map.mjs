@@ -27,7 +27,8 @@ try {
         await page.waitForFunction(mode => performance.getEntriesByName(`trees:${mode}:load`).length > 0, mode, { timeout: 120_000 })
         await page.waitForFunction(() => {
           const map = window.__treeMap
-          return map?.queryRenderedFeatures({ layers: ['trees-circle', 'trees-heat'].filter(id => map.getLayer(id)) }).length > 0
+          const layers = map?.getStyle().layers.filter((l) => l.id.startsWith('trees-circle-') || l.id.startsWith('trees-heat-')).map((l) => l.id) ?? []
+          return layers.length > 0 && map.queryRenderedFeatures({ layers }).length > 0
         }, null, { timeout: 30_000 })
         const result = await page.evaluate(() => ({
           navigationToVisibleTreesMs: Math.round(performance.now()),

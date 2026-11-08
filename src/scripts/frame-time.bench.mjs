@@ -48,7 +48,12 @@ try {
       return Math.round(performance.now() - t0)
     }, [lat, lng, z])
     const after = await metrics()
-    const features = await page.evaluate(() => window.__treeMap.querySourceFeatures('trees', { sourceLayer: 'trees' }).length)
+    // One source layer per colour (workers/mvtLayers.ts).
+    const features = await page.evaluate(() => {
+      const map = window.__treeMap
+      const sourceLayers = new Set(map.getStyle().layers.flatMap((l) => (l.source === 'trees' && l['source-layer'] ? [l['source-layer']] : [])))
+      return [...sourceLayers].reduce((n, sourceLayer) => n + map.querySourceFeatures('trees', { sourceLayer }).length, 0)
+    })
     const frames = await page.evaluate(async (ms) => {
       const map = window.__treeMap
       let n = 0

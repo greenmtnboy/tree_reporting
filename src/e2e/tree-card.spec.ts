@@ -63,8 +63,8 @@ async function findClickableTree(page: Page, mobile: boolean): Promise<Hit> {
         return null
       }
 
-      const layerIds = ['trees-circle']
-        .filter((id) => map.getLayer(id))
+      // One circle layer per colour (useMapLayers.ts).
+      const layerIds = map.getStyle().layers.filter((l) => l.id.startsWith('trees-circle-')).map((l) => l.id)
       if (!layerIds.length) return null
 
       const container = map.getContainer().getBoundingClientRect()
@@ -341,7 +341,8 @@ test.describe('Tree taps — mobile', () => {
       if (!map.loaded() || !map.areTilesLoaded()) return null
       const held = window as unknown as { __nearCandidate?: { id: string; x: number; y: number; since: number } }
       const box = map.getContainer().getBoundingClientRect()
-      const trees = map.queryRenderedFeatures(undefined, { layers: ['trees-circle'] })
+      const circles = map.getStyle().layers.filter((l) => l.id.startsWith('trees-circle-')).map((l) => l.id)
+      const trees = map.queryRenderedFeatures(undefined, { layers: circles })
         .filter(f => f.geometry.type === 'Point' && f.properties?.id && f.properties.id !== 'unkwn')
         .map(f => ({ id: String(f.properties!.id), p: map.project((f.geometry as GeoJSON.Point).coordinates as [number, number]) }))
       for (const t of trees) {
@@ -351,7 +352,7 @@ test.describe('Tree taps — mobile', () => {
         if (document.elementFromPoint(box.left + tap.x, box.top + tap.y) !== map.getCanvas()) continue
         if (trees.some(o => o.id !== t.id && Math.hypot(o.p.x - tap.x, o.p.y - tap.y) < 30)) continue
         // The exact pixel misses: this tap only lands with the tolerance.
-        if (map.queryRenderedFeatures([tap.x, tap.y], { layers: ['trees-circle'] }).length) continue
+        if (map.queryRenderedFeatures([tap.x, tap.y], { layers: circles }).length) continue
         const found = { id: t.id, x: box.left + tap.x, y: box.top + tap.y }
         const last = held.__nearCandidate
         if (!last || last.id !== found.id || Math.hypot(last.x - found.x, last.y - found.y) > 1) {
@@ -384,10 +385,11 @@ test.describe('Tree taps — mobile', () => {
     const empty = await page.evaluate(() => {
       const map = window.__treeMap!
       const box = map.getContainer().getBoundingClientRect()
+      const circles = map.getStyle().layers.filter((l) => l.id.startsWith('trees-circle-')).map((l) => l.id)
       for (let y = 200; y < box.height - 240; y += 20) {
         for (let x = 80; x < box.width - 80; x += 20) {
           if (document.elementFromPoint(box.left + x, box.top + y) !== map.getCanvas()) continue
-          if (!map.queryRenderedFeatures([[x - 40, y - 40], [x + 40, y + 40]], { layers: ['trees-circle'] }).length) {
+          if (!map.queryRenderedFeatures([[x - 40, y - 40], [x + 40, y + 40]], { layers: circles }).length) {
             return { x: box.left + x, y: box.top + y }
           }
         }
