@@ -83,23 +83,24 @@ Chromium, 1400x900, Boston served from localhost (`pnpm bench:tiles`,
 
 | Step | Tree form (run 1) | Leaf shade (run 1) | Tree form (run 2) | Leaf shade (run 2) |
 |---|---:|---:|---:|---:|
-| Trees on screen after navigation | 9.6 s | 9.6 s | TF2_LOAD | LS2_LOAD |
-| z11 settles (tiles trickle) | 8.3 s (0.85 s) | 9.9 s (0.63 s) | TF2_Z11 | LS2_Z11 |
-| pan at z11 | 0.66, 0.77 s | 0.90, 0.91 s | TF2_PAN11 | LS2_PAN11 |
-| z12 | 3.5 s (0.71 s) | 6.1 s (2.0 s) | TF2_Z12 | LS2_Z12 |
-| pan at z12 | 0.55 s | 1.05 s | TF2_PAN12 | LS2_PAN12 |
-| z13 | 2.0 s (0.42 s) | 2.0 s (0.64 s) | TF2_Z13 | LS2_Z13 |
-| pan at z13 | 1.04 s | 1.09 s | TF2_PAN13 | LS2_PAN13 |
-| z14 | 1.5 s | 1.5 s | TF2_Z14 | LS2_Z14 |
-| z15 | 1.0 s | 0.65 s | TF2_Z15 | LS2_Z15 |
-| z16 to z18 (four steps) | 0.65, 0.26, 0.29, 0.17 s | 0.59, 0.52, 0.20, 0.21 s | TF2_Z16 | LS2_Z16 |
-| Whole walk (14 steps) | 21.3 s | 26.3 s | TF2_TOTAL | LS2_TOTAL |
-| Renderer peak | 1,885 MB | 1,907 MB | TF2_PEAK | LS2_PEAK |
+| Trees on screen after navigation | 9.6 s | 9.6 s | 9.3 s | 9.7 s |
+| z11 settles (tiles trickle) | 8.3 s (0.85 s) | 9.9 s (0.63 s) | 8.0 s (0.51 s) | 10.2 s (0.58 s) |
+| pan at z11 | 0.66, 0.77 s | 0.90, 0.91 s | 0.58, 0.62 s | 1.54, 1.14 s |
+| z12 | 3.5 s (0.71 s) | 6.1 s (2.0 s) | 3.6 s (0.77 s) | 6.0 s (1.6 s) |
+| pan at z12 | 0.55 s | 1.05 s | 0.72 s | 0.91 s |
+| z13 | 2.0 s (0.42 s) | 2.0 s (0.64 s) | 1.8 s (0.85 s) | 3.4 s (0.67 s) |
+| pan at z13 | 1.04 s | 1.09 s | 0.94 s | 1.78 s |
+| z14 | 1.5 s | 1.5 s | 1.9 s | 2.2 s |
+| z15 | 1.0 s | 0.65 s | 0.54 s | 1.16 s |
+| z16 to z18 (four steps) | 0.65, 0.26, 0.29, 0.17 s | 0.59, 0.52, 0.20, 0.21 s | 0.62, 0.32, 0.41, 0.22 s | 0.56, 0.61, 0.20, 0.21 s |
+| Whole walk (14 steps) | 21.3 s | 26.3 s | 20.8 s | 30.5 s |
+| Renderer peak | 1,885 MB | 1,907 MB | 1,843 MB | 1,897 MB |
 
-The worker's own lines inside those walks: the z11 blocks 6.5 to 6.6 s
-against 7.7 to 7.8 s (two 4x4 blocks run back to back, each waiting on the
+The whole walk is 21 s against 26 to 30 s: a quarter to a half slower.
+The worker's own lines inside those walks: the z11 blocks 6.4 to 6.6 s
+against 7.7 to 8.6 s (two 4x4 blocks run back to back, each waiting on the
 other, right after the 6.9 to 7.4 s feature-table build), the z12 blocks
-2.3 to 2.4 s against 3.3 to 3.6 s, z13 0.27 to 0.58 s against 0.35 to 0.75 s.
+2.3 to 2.5 s against 3.3 to 3.7 s, z13 0.28 to 0.58 s against 0.35 to 0.75 s.
 So of the 2.7 s the z12 step lost, about 1.1 s is the worker and the rest
 is MapLibre parsing 18 buckets a tile instead of 9: the span from the first
 tile to the last went from 0.7 s to 2.0 s, and the pans at z11 and z12,
