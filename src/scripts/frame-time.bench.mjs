@@ -43,7 +43,8 @@ try {
         if (!map.isMoving() && map.areTilesLoaded() && map.isSourceLoaded('trees')) break
         await new Promise((r) => setTimeout(r, 50))
       }
-      await new Promise((r) => map.once('idle', r))
+      // A late idle, if one comes; the map may already be idle.
+      await new Promise((r) => { const t = setTimeout(r, 3000); map.once('idle', () => { clearTimeout(t); r() }) })
       return Math.round(performance.now() - t0)
     }, [lat, lng, z])
     const after = await metrics()
