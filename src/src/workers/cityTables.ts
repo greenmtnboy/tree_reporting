@@ -452,22 +452,32 @@ export function treeKeySql(expr: string): string {
  * by tree id (a two-shade species renders mixed) and grey where the species
  * has none. With a chat override active its table is joined and wins where it
  * has a row. `join` goes after the `trees_fast` alias in the FROM clause.
+ *
+ * `aggregated` is for the overview zooms, where rows are grid cells grouped
+ * by colour: the species' first shade for every tree, so a two-shade species
+ * does not split each cell in two (the hash split is a point-zoom effect).
  */
-export function colorSql(alias: string, overrideActive: boolean, shadeActive = false): { join: string; expr: string } {
+export function colorSql(alias: string, overrideActive: boolean, shadeActive = false, { aggregated = false } = {}): { join: string; expr: string } {
   const joins: string[] = []
   let base = defaultColorSql(`${alias}.tree_form`)
   if (shadeActive) {
     joins.push(`LEFT JOIN ${SPECIES_SHADE_TABLE} __ss ON CAST(${alias}.species AS VARCHAR) = __ss.species`)
-    base = `COALESCE(list_extract(__ss.shades, 1 + CAST(hash(${alias}.tree_id) % len(__ss.shades) AS INTEGER)), '${UNKNOWN_SHADE_COLOR}')`
+    const pick = aggregated ? '1' : `1 + CAST(hash(${alias}.tree_id) % len(__ss.shades) AS INTEGER)`
+    base = `COALESCE(list_extract(__ss.shades, ${pick}), '${UNKNOWN_SHADE_COLOR}')`
   }
   if (!overrideActive) return { join: joins.join('\n  '), expr: base }
   joins.push(`LEFT JOIN ${COLOR_OVERRIDE_TABLE} __co ON ${treeKeySql(`${alias}.tree_id`)} = __co.tree_key`)
   return { join: joins.join('\n  '), expr: `COALESCE(__co.display_color, ${base})` }
 }
 
-/** The z14 aggregate the overview zooms read when no filter is active. */
+/**
+ * The z14 aggregate the overview zooms read when no filter is active. Cells
+ * are grouped by colour only: no layer reads a cell's `category` (the
+ * heatmap filters on `display_color`, the circle layer reads it and `dbh`),
+ * and grouping by form as well split every cell once per (form, colour).
+ */
 export function aggCacheSql(gridM: number, overrideActive: boolean, shadeActive = false): string {
-  const color = colorSql('tf', overrideActive, shadeActive)
+  const color = colorSql('tf', overrideActive, shadeActive, { aggregated: true })
   const z = AGG_CACHE_ZOOM
   return `CREATE OR REPLACE TABLE ${AGG_CACHE_TABLE} AS
     SELECT
@@ -475,11 +485,11 @@ export function aggCacheSql(gridM: number, overrideActive: boolean, shadeActive 
       ${tileIndexSql('tf', 'y', z)} AS ytile,
       floor(tf.x_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gx,
       floor(tf.y_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gy,
-      tf.tree_form AS category,
+      'default' AS category,
       ${color.expr} AS display_color,
       AVG(tf.dbh) AS dbh,
       COUNT(*) AS point_count
     FROM ${TREES_TABLE} tf
     ${color.join}
-    GROUP BY 1, 2, 3, 4, 5, 6`
+    GROUP BY 1, 2, 3, 4, 6`
 }

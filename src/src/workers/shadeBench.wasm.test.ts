@@ -160,9 +160,18 @@ describe.skipIf(!DATA)('leaf-shade tile cost on the real Boston projection', () 
 
     // --- Alternatives, timed on the worker's own SQL with the colour read swapped ---
     log('\n=== alternatives (worker SQL, colour read swapped) ===')
-    const batchZ11 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 9\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5, 6/.test(s))
-    const batchZ14 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 6\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5, 6/.test(s))
-    const batchZ13 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 7\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5, 6/.test(s))
+    const batchZ11 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 9\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
+    const batchZ14 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 6\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
+    const batchZ13 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 7\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
+    const batchZ12 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 8\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
+    // The same aggregate handed back as columns instead of MVT: what an Arrow-fed layer would ask for.
+    const asColumns = (sql: string) => sql.slice(0, sql.indexOf('), rows AS (')) + ') SELECT xtile, ytile, gx, gy, display_color, point_count FROM agg'
+    for (const [name, sql] of [['z11 block', batchZ11], ['z12 block', batchZ12], ['z13 block', batchZ13]] as const) {
+      if (!sql) continue
+      const t = now()
+      const r = await worker.call<QueryResult>('query', { sql: asColumns(sql) })
+      log(`${name} as columns, no MVT: ${Math.round(now() - t)} ms, ${r.rows.length} cells`)
+    }
     const featureTable = foliageSql.find((s) => /CREATE OR REPLACE TEMP TABLE tile_features_z15/.test(s))
     const batchZ16 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 4\)/.test(s) && !/tile_features/.test(s))
     const time = async (name: string, sql: string | undefined) => {
@@ -179,7 +188,6 @@ describe.skipIf(!DATA)('leaf-shade tile cost on the real Boston projection', () 
     for (const [name, sql] of [['z11 block', batchZ11], ['z13 block', batchZ13], ['z14 block', batchZ14], ['z16 batch', batchZ16]] as const) {
       if (!sql) continue
       await time(`${name} as shipped`, sql)
-      await time(`${name} no category in GROUP BY`, sql.replace("COALESCE(tf.tree_form, 'default') AS category,", "'default' AS category,"))
       await time(`${name} one shade per species (no hash)`, sql.replace(expr, "COALESCE(list_extract(__ss.shades, 1), '#9e9e9e')"))
     }
     // ENUM-keyed shade table: join on the enum, no per-row cast.
@@ -198,10 +206,10 @@ describe.skipIf(!DATA)('leaf-shade tile cost on the real Boston projection', () 
     await worker.call('query', { sql: `UPDATE trees_fast SET shade = '#9e9e9e' WHERE shade IS NULL` })
     log(`materialise shade column (ADD COLUMN + UPDATE, 1.7M rows): ${Math.round(now() - t)} ms`)
     const colExpr = 'CAST(tf.shade AS VARCHAR)'
-    const materialised = (sql: string) => sql.replace(join, '').replace(expr, colExpr)
+    const exprAgg = "COALESCE(list_extract(__ss.shades, 1), '#9e9e9e')"
+    const materialised = (sql: string) => sql.replace(join, '').replace(expr, colExpr).replace(exprAgg, colExpr)
     for (const [name, sql] of [['z11 block', batchZ11], ['z13 block', batchZ13], ['z14 block', batchZ14], ['z16 batch', batchZ16]] as const) {
       if (sql) await time(`${name} materialised shade column`, materialised(sql))
-      if (sql) await time(`${name} materialised column + no category`, materialised(sql).replace("COALESCE(tf.tree_form, 'default') AS category,", "'default' AS category,"))
     }
     if (featureTable) {
       await time('z15 feature table as shipped', featureTable.replace('tile_features_z15', 'tile_features_bench'))

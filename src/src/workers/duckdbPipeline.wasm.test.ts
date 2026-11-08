@@ -129,6 +129,28 @@ describe('tile worker on DuckDB-WASM', () => {
     expect(offenders, offenders.join('\n\n')).toEqual([])
   })
 
+  it('a colour change keeps the z15 feature table and recolours its tiles at read time', async () => {
+    await worker.call('setViewportZoom', { zoom: 15.5 })
+    await worker.call('setViewportCenter', { lng: CENTER[0], lat: CENTER[1] })
+    await worker.call('prewarmLodCaches', {})
+    const builds = () => worker.perf.filter(p => p.label.includes('feature-table')).length
+    const before = builds()
+    expect(before).toBeGreaterThanOrEqual(1)
+    // A per-tree override, as the DBH scheme or a chat publish installs one.
+    await worker.call('setColorOverrideSql', { sql: "SELECT tree_id, '#123456' AS override_color FROM trees" })
+    await worker.call('prewarmLodCaches', {})
+    expect(builds(), 'the colour change rebuilt the feature table').toBe(before)
+    const c = lngLatToTile(CENTER[0], CENTER[1], 15)
+    await worker.call('setVisibleTileRange', { z: 15, ...rangeAround(15, 1) })
+    const tile = await worker.call<TileResult>('getTile', { z: 15, x: c.x, y: c.y })
+    expect(tile.tileBuffer.byteLength).toBeGreaterThan(0)
+    const served = worker.perf.filter(p => p.label.includes('neighborhood-batch') && p.detail.z === 15).at(-1)
+    expect(served?.detail.mode).toBe('feature-table')
+    expect(new TextDecoder().decode(tile.tileBuffer)).toContain('#123456')
+    await worker.call('setColorOverrideSql', { sql: null })
+    expect(builds()).toBe(before)
+  })
+
   it('an intro prefetch of an overview range is one aggregate and serves the range with fetching paused (#146)', async () => {
     await worker.call('invalidateTileCaches', {})
     const range = rangeAround(14, 2)

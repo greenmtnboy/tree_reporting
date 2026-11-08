@@ -306,14 +306,17 @@ function neighborhoodBatchKey(rev: number, z: number, minX: number, maxX: number
 }
 
 /**
- * What a feature table's rows depend on: the query, the published filter and
- * the colours baked into it. Not the query revision: a republish of the same
- * SQL must find the table it already has, and a build that started a moment
- * before the first publish must still count.
+ * What a feature table's rows depend on: the query and the published filter.
+ * Not the colours: the table holds each tree's species, form and id and the
+ * read resolves the colour (`colorSql`), so a colour scheme or chat override
+ * change keeps the table (7 s to build on Boston). Not the query revision
+ * either: a republish of the same SQL must find the table it already has,
+ * and a build that started a moment before the first publish must still
+ * count.
  */
 function featureTableBuildKey(baseQuery: string, z: number): string {
   const query = isDefaultBaseQuery(baseQuery) ? 'default' : hashText(normalizeSql(baseQuery))
-  return `${query}:${treeFilterSignature()}:${z}`
+  return `${query}:${publishedTreeIdFilterSignature}:${z}`
 }
 
 function featureTableName(z: number): string {
@@ -1124,16 +1127,21 @@ async function ensurePreparedFeatureTableForZoom(z: number, baseQuery: string): 
   const xExpr = tileXExpr('tf', z)
   const yExpr = tileYExpr('tf', z)
   const table = featureTableName(z)
-  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
-  const src = tileRowSource(baseQuery, color)
+  const src = tileRowSource(baseQuery, { join: '' })
 
   const request = (async () => {
+    // The colour is not stored: the read joins it (featureTableBuildKey).
+    // The id is a column too, so it is held once, and goes back into the
+    // struct at read time.
     const sql = `
 CREATE OR REPLACE TEMP TABLE ${table} AS
 ${src.prelude} rows AS (
   SELECT
     ${xExpr} AS xtile,
     ${yExpr} AS ytile,
+    ${src.id} AS tree_id,
+    tf.species,
+    tf.tree_form,
     {
       'geom': ST_AsMVTGeom(
         ST_Point(tf.x_3857, tf.y_3857),
@@ -1142,17 +1150,15 @@ ${src.prelude} rows AS (
         64,
         true
       ),
-      'id': ${src.id},
       'dbh': TRY_CAST(${src.dbh} AS DOUBLE),
       'category': COALESCE(tf.tree_form, 'default'),
-      'display_color': ${color.expr},
       'rotation': 0,
       'point_count': 1,
       'grid_m': 32
     } AS feature
   FROM ${src.from}
 )
-SELECT xtile, ytile, feature
+SELECT xtile, ytile, tree_id, species, tree_form, feature
 FROM rows
 WHERE xtile >= 0
   AND ytile >= 0
@@ -1203,6 +1209,9 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
 
   const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
   const src = tileRowSource(baseQuery, color)
+  // Overview cells group by colour only (see aggCacheSql in cityTables.ts).
+  const aggColor = colorSql('tf', colorOverrideActive, speciesShadeActive, { aggregated: true })
+  const aggSrc = tileRowSource(baseQuery, aggColor)
   // The z15 feature table is a whole-city materialisation (one MVT geometry
   // per tree) that the desktop's LOD prewarm builds after the intro lands. A
   // tile request reads it when it is there and runs the direct join
@@ -1255,15 +1264,19 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   }
 
   const request = (async () => {
+    // The feature table has no colour: it is resolved here over the range's
+    // rows (a few tens of thousands), so a colour change never rebuilds it.
+    const tableColor = colorSql('f', colorOverrideActive, speciesShadeActive)
     const sql = useFeatureTable ? `
 WITH rows AS (
   SELECT
-    xtile,
-    ytile,
-    feature
-  FROM ${featureTableName(PREPARED_FEATURE_TABLE_ZOOM)}
-  WHERE xtile BETWEEN ${minX} AND ${maxX}
-    AND ytile BETWEEN ${minY} AND ${maxY}
+    f.xtile,
+    f.ytile,
+    struct_insert(f.feature, id := f.tree_id, display_color := ${tableColor.expr}) AS feature
+  FROM ${featureTableName(PREPARED_FEATURE_TABLE_ZOOM)} f
+  ${tableColor.join}
+  WHERE f.xtile BETWEEN ${minX} AND ${maxX}
+    AND f.ytile BETWEEN ${minY} AND ${maxY}
 )
 SELECT
   xtile,
@@ -1272,17 +1285,16 @@ SELECT
 FROM rows
 GROUP BY xtile, ytile
 ` : simplifyGridMeters > 0 ? `
-${src.prelude} pts AS (
+${aggSrc.prelude} pts AS (
   SELECT
     tf.x_3857,
     tf.y_3857,
-    COALESCE(tf.tree_form, 'default') AS category,
-    ${color.expr} AS display_color,
-    ${src.dbh} AS dbh,
+    ${aggColor.expr} AS display_color,
+    ${aggSrc.dbh} AS dbh,
     ${tileXExpr('tf', z)} AS xtile,
     ${tileYExpr('tf', z)} AS ytile
-  FROM ${src.from}
-  WHERE ${src.where}${tileXExpr('tf', z)} BETWEEN ${minX} AND ${maxX}
+  FROM ${aggSrc.from}
+  WHERE ${aggSrc.where}${tileXExpr('tf', z)} BETWEEN ${minX} AND ${maxX}
     AND ${tileYExpr('tf', z)} BETWEEN ${minY} AND ${maxY}
 ), agg AS (
   SELECT
@@ -1290,12 +1302,11 @@ ${src.prelude} pts AS (
     ytile,
     floor(x_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gx,
     floor(y_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gy,
-    category,
     display_color,
     AVG(dbh) AS dbh,
     COUNT(*) AS point_count
   FROM pts
-  GROUP BY 1, 2, 3, 4, 5, 6
+  GROUP BY 1, 2, 3, 4, 5
 ), rows AS (
   SELECT
     xtile,
@@ -1310,7 +1321,7 @@ ${src.prelude} pts AS (
       ),
       'id': -1,
       'dbh': TRY_CAST(dbh AS DOUBLE),
-      'category': COALESCE(category, 'default'),
+      'category': 'default',
       'display_color': display_color,
       'rotation': 0,
       'point_count': TRY_CAST(point_count AS INTEGER),
@@ -1434,6 +1445,8 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
   const bounds = tileBounds3857(z, x, y)
   const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
   const src = tileRowSource(baseQuery, color)
+  const aggColor = colorSql('tf', colorOverrideActive, speciesShadeActive, { aggregated: true })
+  const aggSrc = tileRowSource(baseQuery, aggColor)
 
   // An overview tile (z11 to z14) is served from an aggregate over the
   // visible neighbourhood, never the whole city: the transient is
@@ -1446,26 +1459,24 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
 
   const request = (async () => {
     const sql = simplifyGridMeters > 0 ? `
-${src.prelude} pts AS (
+${aggSrc.prelude} pts AS (
   SELECT
     tf.x_3857,
     tf.y_3857,
-    COALESCE(tf.tree_form, 'default') AS category,
-    ${color.expr} AS display_color,
-    ${src.dbh} AS dbh
-  FROM ${src.from}
-  WHERE ${src.where}tf.x_3857 BETWEEN ${bounds.minX} AND ${bounds.maxX}
+    ${aggColor.expr} AS display_color,
+    ${aggSrc.dbh} AS dbh
+  FROM ${aggSrc.from}
+  WHERE ${aggSrc.where}tf.x_3857 BETWEEN ${bounds.minX} AND ${bounds.maxX}
     AND tf.y_3857 BETWEEN ${bounds.minY} AND ${bounds.maxY}
 ), agg AS (
   SELECT
     floor(x_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gx,
     floor(y_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gy,
-    category,
     display_color,
     AVG(dbh) AS dbh,
     COUNT(*) AS point_count
   FROM pts
-  GROUP BY 1, 2, 3, 4
+  GROUP BY 1, 2, 3
 ), tiles AS (
   SELECT {
     'geometry': ST_AsMVTGeom(
@@ -1477,7 +1488,7 @@ ${src.prelude} pts AS (
     ),
     'id': -1,
     'dbh': TRY_CAST(dbh AS DOUBLE),
-    'category': COALESCE(category, 'default'),
+    'category': 'default',
     'display_color': display_color,
     'rotation': 0,
     'point_count': TRY_CAST(point_count AS INTEGER),

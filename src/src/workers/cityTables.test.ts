@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   AGG_CACHE_TABLE,
+  SPECIES_SHADE_TABLE,
+  UNKNOWN_SHADE_COLOR,
   CITY_ENUM_TYPES,
   COLOR_OVERRIDE_TABLE,
   treeKeySql,
@@ -213,14 +215,28 @@ describe('city tables', () => {
     expect(colours.map((r) => r.c)).toEqual([
       '#ff0000', CATEGORY_COLORS.palm, CATEGORY_COLORS.default, CATEGORY_COLORS.palm, CATEGORY_COLORS.default,
     ])
+    // Overview cells group by colour, never by form: a cell holds one row per colour.
     await conn.run(aggCacheSql(32, true))
-    const agg = (await conn.runAndReadAll(`SELECT category, display_color, point_count FROM ${AGG_CACHE_TABLE} ORDER BY display_color, category`)).getRowObjects()
-    expect(agg.map((r) => [String(r.category), r.display_color, Number(r.point_count)])).toEqual([
-      ['default', CATEGORY_COLORS.default, 1], ['default', CATEGORY_COLORS.default, 1],
-      ['palm', CATEGORY_COLORS.palm, 1], ['palm', CATEGORY_COLORS.palm, 1], ['spreading', '#ff0000', 1],
+    const agg = (await conn.runAndReadAll(`SELECT category, display_color, sum(point_count) AS n, count(*) AS cells FROM ${AGG_CACHE_TABLE} GROUP BY 1, 2 ORDER BY display_color`)).getRowObjects()
+    expect(agg.map((r) => [String(r.category), r.display_color, Number(r.n)])).toEqual([
+      ['default', CATEGORY_COLORS.default, 2], ['default', CATEGORY_COLORS.palm, 2], ['default', '#ff0000', 1],
     ])
     await conn.run(`DROP TABLE ${COLOR_OVERRIDE_TABLE}`)
     await conn.run(aggCacheSql(32, false))
+  })
+
+  test('the leaf-shade scheme picks a shade by tree id per point and the first shade per overview cell', async () => {
+    await conn.run(`CREATE TEMP TABLE ${SPECIES_SHADE_TABLE} AS SELECT 'Washingtonia robusta' AS species, ['#e8c547', '#c0392b'] AS shades`)
+    const points = colorSql('tf', false, true)
+    expect(points.join).toContain(SPECIES_SHADE_TABLE)
+    const perTree = (await conn.runAndReadAll(`SELECT tf.tree_id, ${points.expr} AS c FROM ${TREES_TABLE} tf ${points.join} ORDER BY 1`)).getRowObjects()
+    // The one Washingtonia takes one of its two shades; every other tree is grey.
+    expect(perTree.filter((r) => ['#e8c547', '#c0392b'].includes(String(r.c)))).toHaveLength(1)
+    expect(perTree.filter((r) => r.c === UNKNOWN_SHADE_COLOR)).toHaveLength(4)
+    const cells = colorSql('tf', false, true, { aggregated: true })
+    const perCell = (await conn.runAndReadAll(`SELECT DISTINCT ${cells.expr} AS c FROM ${TREES_TABLE} tf ${cells.join} ORDER BY 1`)).getRowObjects()
+    expect(perCell.map((r) => r.c)).toEqual([UNKNOWN_SHADE_COLOR, '#e8c547'])
+    await conn.run(`DROP TABLE ${SPECIES_SHADE_TABLE}`)
   })
 
   test('chat SQL over the view and literal comparisons on the table behave as with VARCHAR', async () => {
