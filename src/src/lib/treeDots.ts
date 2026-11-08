@@ -237,8 +237,12 @@ export function buildPickGrid(x: Float32Array, y: Float32Array, count: number, m
   return { cell, cols, rows, order, start }
 }
 
-/** Every point within `radius` metres of (qx, qy) in the grid's cells; the caller tests them exactly. */
-export function pointsNear(grid: PickGrid, qx: number, qy: number, radius: number, visit: (i: number) => void): void {
+/**
+ * Every point within `radius` metres of (qx, qy) in the grid's cells; the
+ * caller tests them exactly. Without `order` the points are stored in the
+ * grid's cell order, and a slot is the point's own index.
+ */
+export function pointsNear(grid: Pick<PickGrid, 'cell' | 'cols' | 'rows' | 'start'> & { order?: Uint32Array }, qx: number, qy: number, radius: number, visit: (i: number) => void): void {
   const c0 = Math.max(0, Math.floor((qx - radius) / grid.cell))
   const c1 = Math.min(grid.cols - 1, Math.floor((qx + radius) / grid.cell))
   const r0 = Math.max(0, Math.floor((qy - radius) / grid.cell))
@@ -246,7 +250,7 @@ export function pointsNear(grid: PickGrid, qx: number, qy: number, radius: numbe
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
       const cell = r * grid.cols + c
-      for (let k = grid.start[cell]; k < grid.start[cell + 1]; k++) visit(grid.order[k])
+      for (let k = grid.start[cell]; k < grid.start[cell + 1]; k++) visit(grid.order ? grid.order[k] : k)
     }
   }
 }

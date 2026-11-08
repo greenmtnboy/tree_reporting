@@ -291,6 +291,9 @@ renderable half-float target, which `TreeDotsLayer.supported` checks.
 
 How it is built:
 
+(The fourth round below replaced the whole-city read with chunks; the
+renderer is unchanged.)
+
 - **The data.** `getCityPoints` (`workers/cityPoints.ts`) reads every drawn
   tree's rowid, position (float32 metres from the city's corner), trunk size
   and colour as a one-byte index into the scheme's palette; 0.8 to 1.2 s on
@@ -338,6 +341,67 @@ the resident layer's is two plus one point draw.
 Measured with `scripts/color-switch.bench.mjs` (new),
 `scripts/frame-time.bench.mjs` and `pnpm bench:tiles`, all of which read the
 resident layer where it is drawn.
+
+## Fourth round: chunks of one global grid
+
+The third round read a city whole. Toward seamless cross-city navigation,
+where a city is a bookmark to a place rather than a unit of loading, the
+desktop now reads its trees in chunks of one global grid and holds no notion
+of a city in the renderer.
+
+**The grid** (`workers/cityPoints.ts`): Web Mercator tiles at z12, keyed
+`x * 4096 + y` from each row's stored z20 tile index. One grid for every
+latitude and longitude. A chunk is the same size on screen anywhere, which is
+what bounds the chunks a view draws; its ground size follows cos(latitude)
+(7.2 km across in Boston, 9.8 km at the equator, 4.9 km at 60 degrees). An
+equal-ground grid (degrees, H3) would not line up with the camera or with
+the phone's window. A chunk is exactly 4 x 4 of the phone's z14 window cells
+(`workers/cityWindow.ts`), so both layouts share one grid, and a
+Hilbert-sorted projection keeps a chunk's rows in few row groups. Positions
+are float32 metres from the chunk's south-west corner; the heat pyramid's
+cells are the chunk halved nine times (19 m) up to the chunk, so no cell
+straddles two chunks; each chunk's rows are stored in a 512 m draw grid's
+order (sorted in the DuckDB worker, `gridOrderChunks`).
+
+**The reads** (the worker): `getPointKeys` (which rows and colours a read
+would answer with, no query), `getPointChunkDirectory` (the non-empty chunks
+of the current rows with their counts, one GROUP BY; Boston has 33, 125 ms),
+`getPointChunks(keys)` and `getPointChunkColors(keys)` (rowid and colour
+only). The chunk filter carries the chunks' bounding box, so the table's zone
+maps prune row groups.
+
+**The order the layer loads in** (`composables/treeDotsLayer.ts`): new rows'
+directory, then the chunks in view (padded a quarter), swapped in together
+with the old rows dropped; then any chunk a move brings into view; then
+colours, chunks in view first; then the nearest other chunks in 400k-tree
+background reads, up to 6M trees held, farthest dropped past that. A sync
+(query, filter or colour change) resolves when the view is current.
+
+Boston, Chromium (SwiftShader), the whole-city build of the third round
+against the chunked one:
+
+| | Whole city | Chunks |
+|---|---:|---:|
+| First trees drawn after the city's tables load | 2.6 to 2.8 s | 2.1 to 2.2 s (directory, then the 2 chunks in view) |
+| Main-thread work per read | 80 ms (once) | 3 to 14 ms (per read of 2 to 19 chunks) |
+| Whole city resident | at first draw | 3 to 4 s after it, in 6 reads, before the intro lands |
+| `pnpm bench:tiles` walk, 14 steps | 9.4 s | 8.1 s |
+| ms/frame z10 / z11 / z12 / z13 (two runs) | 272 to 300 / 231 to 250 / 188 to 200 / 300 | 300 to 333 / 273 / 167 to 177 / 273 to 300 |
+| settle after a jump, 10 jumps z10 to z14 | 0.83 to 1.13 s | 0.57 to 1.33 s |
+| "Color by": new colours in view | 0.84 / 1.50 / 1.28 s | 0.82 / 1.56 / 1.03 s (tree form / DBH / leaf shade) |
+| A jump to an unloaded chunk three chunks away | | 0.23 to 0.57 s to trees in view |
+
+Frame times under SwiftShader move by a frame either way between runs; the
+two builds draw the same work. Two settle outliers of 4 to 5 s in single
+frame-bench runs of the chunked build did not recur in 20 timed jumps on
+either build (all 0.6 to 1.3 s, the basemap's tiles).
+
+What cross-city still needs, none of it in the renderer: the rows of more
+than one city in the worker at once (the phone's window loader, by cell,
+with the desktop's larger budget), a row key that survives that (the rowid
+is the current table's; a colour refresh and the tree card use it), and a
+published overview for the zooms where the view spans more than the budget
+(z6 to z9 across a region).
 
 ## Is this the right stack?
 

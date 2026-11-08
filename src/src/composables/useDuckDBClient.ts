@@ -3,15 +3,17 @@ import maplibregl from 'maplibre-gl'
 import DuckDBPipelineWorker from '../workers/duckdbPipeline.worker?worker'
 import type { TreeRenderView, TreeCrown } from '../lib/treeCrowns'
 import type { WindowPolicy } from '../workers/cityWindow'
-import type { CityPointColors, CityPoints } from '../workers/cityPoints'
+import type { PointChunkBatch, PointChunkColors, PointChunkDirectory, PointKeys } from '../workers/cityPoints'
 
 type PrefetchStatus = 'executed' | 'deduped' | 'skipped'
 type TileRangeParams = { minX: number; maxX: number; minY: number; maxY: number }
 
 type WorkerMethodMap = {
   getMapTrees: { params: TreeRenderView; result: TreeCrown[] }
-  getCityPoints: { params: Record<string, never>; result: CityPoints | null }
-  getCityPointColors: { params: { rowsKey: string }; result: CityPointColors | null }
+  getPointKeys: { params: Record<string, never>; result: PointKeys | null }
+  getPointChunkDirectory: { params: Record<string, never>; result: PointChunkDirectory | null }
+  getPointChunks: { params: { rowsKey: string; keys: number[] }; result: PointChunkBatch | null }
+  getPointChunkColors: { params: { rowsKey: string; keys: number[] }; result: PointChunkColors | null }
   ensureInit: { params: { city?: string; window?: WindowPolicy | null }; result: { ready: boolean; initError: string | null } }
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
@@ -273,8 +275,10 @@ async function query(sql: string, options: { maxRows?: number } = {}): Promise<{
 export function useDuckDB() {
   return {
     getMapTrees: (camera: TreeRenderView) => rpc('getMapTrees', camera),
-    getCityPoints: () => rpc('getCityPoints', {}),
-    getCityPointColors: (rowsKey: string) => rpc('getCityPointColors', { rowsKey }),
+    getPointKeys: () => rpc('getPointKeys', {}),
+    getPointChunkDirectory: () => rpc('getPointChunkDirectory', {}),
+    getPointChunks: (rowsKey: string, keys: number[]) => rpc('getPointChunks', { rowsKey, keys }),
+    getPointChunkColors: (rowsKey: string, keys: number[]) => rpc('getPointChunkColors', { rowsKey, keys }),
     ready,
     initError,
     query,

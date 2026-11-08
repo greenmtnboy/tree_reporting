@@ -79,7 +79,10 @@ const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 import { snapShade } from '../lib/foliageSeason'
 import { assembleLayeredTiles } from './mvtLayers'
-import { cityPointColorsSql, cityPointsSql, pointPalette, type CityPointColors, type CityPoints } from './cityPoints'
+import {
+  bucketByChunk, gridOrderChunks, pointChunkColorsSql, pointChunkDirectorySql, pointChunksSql, pointPalette,
+  type PointChunkBatch, type PointChunkColors, type PointChunkDirectory, type PointKeys,
+} from './cityPoints'
 
 /** The source layer a tree with no colour lands in: the style's own fallback colour. */
 const MVT_FALLBACK_LAYER = '#66BB6A'
@@ -1971,9 +1974,7 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrown[]> {
   }))
 }
 
-// --- Resident points (the desktop's TreeDotsLayer) ---
-
-let pointOrigin: { city: string; x: number; y: number } | null = null
+// --- Point chunks (the desktop's TreeDotsLayer) ---
 
 function pointRowsKey(): string {
   return `${loadedCity}|${tileQueryRevision}|${publishedTreeIdFilterSignature}`
@@ -1989,57 +1990,76 @@ function columnArray<T extends Float32Array | Uint8Array | Uint32Array>(table: {
   return new Ctor((column ? column.toArray() : []) as ArrayLike<number>)
 }
 
-/** The current query's trees as typed arrays. A windowed city has no resident set. */
-async function getCityPoints(): Promise<CityPoints | null> {
+/** The current rows' rows source and colour, as every point read uses them. */
+function pointSource() {
+  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
+  return { src: tileRowSource(effectiveBaseQuery(tileQuerySql), color), color, palette: pointPalette(activeDistinctColors) }
+}
+
+/** Which rows and colours a point read would answer with now, without reading: null while no city's rows can be read. */
+async function getPointKeys(): Promise<PointKeys | null> {
   await ensureInit()
   await waitForCityContext()
   if (!conn || !loadedCity || cityWindow) return null
-  const city = loadedCity
+  return { rowsKey: pointRowsKey(), colorKey: pointColorKey() }
+}
+
+/** The current rows' non-empty chunks. A windowed city has no point chunks (yet): it draws tiles. */
+async function getPointChunkDirectory(): Promise<PointChunkDirectory | null> {
+  await ensureInit()
+  await waitForCityContext()
+  if (!conn || !loadedCity || cityWindow) return null
   const rowsKey = pointRowsKey()
   const colorKey = pointColorKey()
   const t0 = nowMs()
-  if (pointOrigin?.city !== city) {
-    const r = await conn.query(`SELECT min(x_3857) AS x, min(y_3857) AS y FROM trees_fast`)
-    const row = r.get(0)
-    pointOrigin = { city, x: Math.floor(Number(row?.x ?? 0)), y: Math.floor(Number(row?.y ?? 0)) }
-  }
-  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
-  const palette = pointPalette(activeDistinctColors)
-  const sql = cityPointsSql(tileRowSource(effectiveBaseQuery(tileQuerySql), color), color.expr, palette, pointOrigin.x, pointOrigin.y)
-  const table = await conn.query(sql)
-  if (loadedCity !== city || pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
-  const points: CityPoints = {
-    rowsKey, colorKey, count: table.numRows,
-    originX: pointOrigin.x, originY: pointOrigin.y,
+  const table = await conn.query(pointChunkDirectorySql(pointSource().src))
+  if (pointRowsKey() !== rowsKey) return null
+  const numbers = (name: string) => Array.from((table.getChild(name)?.toArray() ?? []) as ArrayLike<number | bigint>, Number)
+  const keys = numbers('chunk')
+  const counts = numbers('n')
+  const maxRowid = numbers('max_rowid').reduce((a, b) => Math.max(a, b), 0)
+  console.info('[Perf] duckdb-worker:point-chunks:directory', { chunks: keys.length, ms: Math.round(nowMs() - t0) })
+  return { rowsKey, colorKey, keys, counts, maxRowid }
+}
+
+/** The rows of `keys`, grouped by chunk; null when `rowsKey` is no longer the current rows. */
+async function getPointChunks(rowsKey: string, keys: number[]): Promise<PointChunkBatch | null> {
+  await ensureInit()
+  await waitForCityContext()
+  if (!conn || !loadedCity || cityWindow || pointRowsKey() !== rowsKey || !keys.length) return null
+  const colorKey = pointColorKey()
+  const t0 = nowMs()
+  const { src, color, palette } = pointSource()
+  const table = await conn.query(pointChunksSql(src, keys, color.expr, palette))
+  if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
+  const { offsets, columns } = bucketByChunk(columnArray(table, 'chunk', Uint32Array), keys, {
     x: columnArray(table, 'x', Float32Array),
     y: columnArray(table, 'y', Float32Array),
     dbh: columnArray(table, 'dbh', Uint8Array),
     color: columnArray(table, 'color', Uint8Array),
     rowid: columnArray(table, 'rowid', Uint32Array),
-    palette,
-  }
-  console.info('[Perf] duckdb-worker:city-points', { rows: points.count, ms: Math.round(nowMs() - t0) })
-  return points
+  })
+  const grids = gridOrderChunks(offsets, columns.x, columns.y, { dbh: columns.dbh, color: columns.color, rowid: columns.rowid })
+  console.info('[Perf] duckdb-worker:point-chunks', { chunks: keys.length, rows: table.numRows, ms: Math.round(nowMs() - t0) })
+  return { rowsKey, colorKey, palette, keys, offsets, ...columns, grids }
 }
 
-/** The current colour of the rows `rowsKey` names; null when those rows are no longer current. */
-async function getCityPointColors(rowsKey: string): Promise<CityPointColors | null> {
+/** The current colour of the rows of `keys`, grouped by chunk; null when `rowsKey` is no longer current. */
+async function getPointChunkColors(rowsKey: string, keys: number[]): Promise<PointChunkColors | null> {
   await ensureInit()
   await waitForCityContext()
-  if (!conn || !loadedCity || cityWindow || pointRowsKey() !== rowsKey) return null
+  if (!conn || !loadedCity || cityWindow || pointRowsKey() !== rowsKey || !keys.length) return null
   const colorKey = pointColorKey()
   const t0 = nowMs()
-  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
-  const palette = pointPalette(activeDistinctColors)
-  const table = await conn.query(cityPointColorsSql(tileRowSource(effectiveBaseQuery(tileQuerySql), color), color.expr, palette))
+  const { src, color, palette } = pointSource()
+  const table = await conn.query(pointChunkColorsSql(src, keys, color.expr, palette))
   if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
-  const result: CityPointColors = {
-    rowsKey, colorKey, palette,
+  const { offsets, columns } = bucketByChunk(columnArray(table, 'chunk', Uint32Array), keys, {
     color: columnArray(table, 'color', Uint8Array),
     rowid: columnArray(table, 'rowid', Uint32Array),
-  }
-  console.info('[Perf] duckdb-worker:city-point-colors', { rows: table.numRows, ms: Math.round(nowMs() - t0) })
-  return result
+  })
+  console.info('[Perf] duckdb-worker:point-chunk-colors', { chunks: keys.length, rows: table.numRows, ms: Math.round(nowMs() - t0) })
+  return { rowsKey, colorKey, palette, keys, offsets, ...columns }
 }
 
 async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Array; transient: boolean }> {
@@ -2065,8 +2085,10 @@ async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Ar
 
 type WorkerMethodMap = {
   getMapTrees: { params: TreeRenderView; result: TreeCrown[] }
-  getCityPoints: { params: Record<string, never>; result: CityPoints | null }
-  getCityPointColors: { params: { rowsKey: string }; result: CityPointColors | null }
+  getPointKeys: { params: Record<string, never>; result: PointKeys | null }
+  getPointChunkDirectory: { params: Record<string, never>; result: PointChunkDirectory | null }
+  getPointChunks: { params: { rowsKey: string; keys: number[] }; result: PointChunkBatch | null }
+  getPointChunkColors: { params: { rowsKey: string; keys: number[] }; result: PointChunkColors | null }
   ensureInit: { params: { city?: string; window?: WindowPolicy | null }; result: { ready: boolean; initError: string | null } }
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
@@ -2129,16 +2151,27 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         send({ type: 'response', requestId: msg.requestId, ok: true, result })
         break
       }
-      case 'getCityPoints': {
-        const result = await getCityPoints()
-        send({ type: 'response', requestId: msg.requestId, ok: true, result },
-          result ? [result.x.buffer, result.y.buffer, result.dbh.buffer, result.color.buffer, result.rowid.buffer] : undefined)
+      case 'getPointKeys': {
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: await getPointKeys() })
         break
       }
-      case 'getCityPointColors': {
-        const result = await getCityPointColors((msg.params as { rowsKey: string }).rowsKey)
+      case 'getPointChunkDirectory': {
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: await getPointChunkDirectory() })
+        break
+      }
+      case 'getPointChunks': {
+        const { rowsKey, keys } = msg.params as WorkerMethodMap['getPointChunks']['params']
+        const result = await getPointChunks(rowsKey, keys)
         send({ type: 'response', requestId: msg.requestId, ok: true, result },
-          result ? [result.color.buffer, result.rowid.buffer] : undefined)
+          result ? [result.offsets.buffer, result.x.buffer, result.y.buffer, result.dbh.buffer, result.color.buffer, result.rowid.buffer,
+            ...result.grids.map((g) => g.start.buffer)] : undefined)
+        break
+      }
+      case 'getPointChunkColors': {
+        const { rowsKey, keys } = msg.params as WorkerMethodMap['getPointChunkColors']['params']
+        const result = await getPointChunkColors(rowsKey, keys)
+        send({ type: 'response', requestId: msg.requestId, ok: true, result },
+          result ? [result.offsets.buffer, result.color.buffer, result.rowid.buffer] : undefined)
         break
       }
       case 'ensureInit': {

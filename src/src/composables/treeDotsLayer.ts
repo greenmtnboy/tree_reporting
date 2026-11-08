@@ -1,27 +1,37 @@
 import type { CustomLayerInterface, Map as MapLibreMap } from 'maplibre-gl'
-import type { CityPointColors, CityPoints } from '../workers/cityPoints'
+import {
+  CHUNK_SIZE_M, chunkOrigin, chunksInBox,
+  type ChunkGrid, type PointChunkBatch, type PointChunkColors, type PointChunkDirectory, type PointKeys,
+} from '../workers/cityPoints'
 import {
   CIRCLE_MAX_ZOOM, CIRCLE_MIN_ZOOM, HEAT_MAX_ZOOM, HEAT_MIN_ZOOM,
-  DRAW_CHUNK_MAX_CELLS, DRAW_CHUNK_MIN_M, buildPickGrid, circleOpacity, visibleRanges, circleRadius, circleRadiusRange, heatIntensity, heatOpacity,
-  heatRadius, hexRgb, levelForKernel, lngLatFrom3857, lngLatTo3857, metresPerPixel, pointsNear,
-  relativeMatrix, type PickGrid,
+  circleOpacity, visibleRanges, circleRadius, circleRadiusRange,
+  heatIntensity, heatOpacity, heatRadius, hexRgb, levelForKernel, lngLatFrom3857, lngLatTo3857, metresPerPixel,
+  pointsNear, relativeMatrix,
 } from '../lib/treeDots'
 import TreeDotsIndexWorker from '../workers/treeDotsIndex.worker?worker'
 import type { DotsIndexRequest, DotsIndexResult } from '../workers/treeDotsIndex.worker'
 
 /**
  * The desktop map's trees below the sprites: a density heat (z6 to z15) and
- * trunk-sized circles (z12.8 to z15.5), drawn from the whole city's points
- * held on the GPU. It replaces the vector-tile source and its per-colour
- * heatmap and circle layers on the desktop (docs/MAP_COLOR_PERF_AUDIT.md):
+ * trunk-sized circles (z12.8 to z15.5), drawn from typed arrays on the GPU.
+ * It replaces the vector-tile source and its per-colour heatmap and circle
+ * layers on the desktop (docs/MAP_COLOR_PERF_AUDIT.md):
  *
- * - Panning and zooming never wait on tiles: every tree is resident.
+ * - The trees arrive in chunks of one global grid (workers/cityPoints.ts:
+ *   Web Mercator tiles at z12), never as a city: the chunks in view first,
+ *   then the nearest others in the background up to a point budget, the
+ *   farthest dropped past it. Each chunk carries its own origin, buffers,
+ *   heat pyramid and pick grid, so nothing here knows which city it is in.
+ * - Panning and zooming within what is loaded never waits: a frame draws
+ *   only the ranges of the chunks in view.
  * - The heat is two passes whatever the palette: trees add their colour and
  *   weight into a quarter-resolution float target, and a resolve pass draws
- *   the weighted mean colour with an alpha from the density. The pyramid in
- *   lib/treeDots.ts keeps the far zooms to a few tens of thousands of cells.
- * - A colour change re-reads one byte per tree and swaps it in; the old
- *   colours stay drawn until then.
+ *   the weighted mean colour with an alpha from the density. It is summed on
+ *   screen, so chunks meet without seams.
+ * - A colour change re-reads one byte per tree, chunks in view first, and
+ *   swaps it in; the old colours stay drawn until then. A query or filter
+ *   change keeps the old trees drawn until the new rows in view arrive.
  *
  * Needs WebGL2 with a renderable float target; `TreeDotsLayer.supported`
  * says so before the map adds it, and the vector tiles remain otherwise.
@@ -30,8 +40,10 @@ import type { DotsIndexRequest, DotsIndexResult } from '../workers/treeDotsIndex
 type GL2 = WebGL2RenderingContext
 
 export interface TreeDotsSource {
-  getCityPoints: () => Promise<CityPoints | null>
-  getCityPointColors: (rowsKey: string) => Promise<CityPointColors | null>
+  getPointKeys: () => Promise<PointKeys | null>
+  getPointChunkDirectory: () => Promise<PointChunkDirectory | null>
+  getPointChunks: (rowsKey: string, keys: number[]) => Promise<PointChunkBatch | null>
+  getPointChunkColors: (rowsKey: string, keys: number[]) => Promise<PointChunkColors | null>
 }
 
 export interface TreeDotsPick {
@@ -50,6 +62,16 @@ const HEAT_ALPHA_LOG2: [number, number] = [3, 7]
 /** A mean of shades drifts toward grey; the resolve lifts saturation by this. */
 const HEAT_SATURATION = 1.2
 const HEAT_SCALE = 4
+
+/** Trees held at most; past it the chunks farthest from the camera are dropped. */
+const MAX_RESIDENT_POINTS = 6_000_000
+/**
+ * Trees one background read may bring in. DuckDB answers one statement at
+ * a time, so this bounds how long a pan's own read can wait behind one.
+ */
+const PREFETCH_BATCH_POINTS = 400_000
+/** The view's box is padded by this share of its size for what counts as in view. */
+const VIEW_PAD = 0.25
 
 function compile(gl: GL2, vertex: string, fragment: string, name: string): WebGLProgram {
   const program = gl.createProgram()!
@@ -178,6 +200,51 @@ void main() {
   o = vec4(v_color * a, a);
 }`
 
+
+interface ChunkGpu {
+  pos: WebGLBuffer
+  attr: WebGLBuffer
+  levelPos: WebGLBuffer
+  levelColor: WebGLBuffer
+  pointVao: WebGLVertexArrayObject
+  levelVao: WebGLVertexArrayObject
+}
+
+/** One chunk of trees, positions in metres from its south-west corner and stored in draw-grid order. */
+interface Chunk {
+  key: number
+  originX: number
+  originY: number
+  count: number
+  x: Float32Array
+  y: Float32Array
+  dbh: Uint8Array
+  color: Uint8Array
+  rowid: Uint32Array
+  palette: string[]
+  colorKey: string
+  /** 512 m cells over the points: the draw ranges and the pick index. */
+  grid: ChunkGrid
+  /** The heat pyramid, from the indexer; empty until it arrives. */
+  levels: { cell: number; count: number; grid: ChunkGrid }[]
+  levelOffsets: number[]
+  levelPositions?: Float32Array
+  levelColors?: Uint8Array
+  buildId: number
+  colorId: number
+  gpu?: ChunkGpu
+  uploadPoints: boolean
+  uploadColors: boolean
+  uploadLevels: boolean
+  uploadLevelColors: boolean
+}
+
+type Box = [number, number, number, number]
+
+function intersects(a: Box, b: Box): boolean {
+  return a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
+}
+
 export class TreeDotsLayer implements CustomLayerInterface {
   readonly id = 'trees-dots'
   readonly type = 'custom' as const
@@ -191,45 +258,41 @@ export class TreeDotsLayer implements CustomLayerInterface {
   private heatU: Record<string, WebGLUniformLocation | null> = {}
   private resolveU: Record<string, WebGLUniformLocation | null> = {}
   private circleU: Record<string, WebGLUniformLocation | null> = {}
-  private pointVao?: WebGLVertexArrayObject
-  private levelVao?: WebGLVertexArrayObject
   private resolveVao?: WebGLVertexArrayObject
-  private pointPos?: WebGLBuffer
-  private pointAttr?: WebGLBuffer
-  private levelPos?: WebGLBuffer
-  private levelColor?: WebGLBuffer
-  private palette?: WebGLTexture
+  private palettes = new Map<string, WebGLTexture>()
   private fbo?: WebGLFramebuffer
   private colorSum?: WebGLTexture
   private density?: WebGLTexture
   private fboSize: [number, number] = [0, 0]
   private heatDrawn = false
+  private dropped: ChunkGpu[] = []
 
-  private points?: CityPoints
-  /** The heat pyramid, built off the main thread (workers/treeDotsIndex.worker.ts); empty until it arrives. */
-  private levels: { cell: number; count: number; chunks: Pick<PickGrid, 'cell' | 'cols' | 'rows' | 'start'> }[] = []
-  /** The points' draw chunks: the points are stored in chunk order. */
-  private pointChunks?: PickGrid
-  /** First item of each level in the level buffers. */
-  private levelOffsets: number[] = []
-  private levelPositions?: Float32Array
-  private levelColorBytes?: Uint8Array
-  private uploadLevels = false
-  private uploadLevelColors = false
+  // --- What is drawn ---
+  private chunks = new Map<number, Chunk>()
+  /** The installed rows: their identity, non-empty chunks and tree count. */
+  private rowsKey?: string
+  private directory = new Map<number, number>()
+  private total = 0
+  private installed = false
+  /** rowid to its index within its chunk, for the installed rows. */
+  private indexByRowid = new Int32Array()
+  /** The colouring every chunk should have. */
+  private colorKey?: string
+
+  // --- Loading ---
+  private generation = 0
+  private checkKeys = false
+  private wantRows?: string
+  private pendingDirectory?: PointChunkDirectory
+  private busy = false
+  private wake = false
+  private waiters: (() => void)[] = []
+  private moveTimer?: ReturnType<typeof setTimeout>
   private indexer?: Worker
   private indexSeq = 0
-  private lastBuildId = 0
-  private lastColorId = 0
-  private grid?: PickGrid
-  private indexByRowid = new Int32Array()
-  private uploadPoints = false
-  private uploadColors = false
 
-  private generation = 0
-  private syncing: Promise<void> | null = null
-  private syncAgain = false
   /** Last frame's camera, for picking exactly what was drawn. */
-  private frame?: { matrix: Float64Array; cx: number; cy: number; width: number; height: number; camdist: number; radius: [number, number] }
+  private frame?: { matrix: Float64Array; width: number; height: number; camdist: number; radius: [number, number] }
 
   constructor(private source: TreeDotsSource, private onLoaded?: (count: number) => void) {}
 
@@ -240,47 +303,76 @@ export class TreeDotsLayer implements CustomLayerInterface {
     return !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'))
   }
 
-  /** Trees in the drawn set; 0 until the first set arrives. */
-  get count(): number { return this.points?.count ?? 0 }
-  get loaded(): boolean { return !!this.points }
-  get rowsKey(): string | undefined { return this.points?.rowsKey }
+  /** Trees in the current rows, loaded or not; 0 until the rows are known. */
+  get count(): number { return this.total }
+  /** Trees held in memory. */
+  get residentCount(): number { let n = 0; for (const c of this.chunks.values()) n += c.count; return n }
+  get chunkCount(): number { return this.chunks.size }
+  get loaded(): boolean { return this.installed }
 
   onAdd(map: MapLibreMap, gl: WebGLRenderingContext | WebGL2RenderingContext) {
     this.map = map
     this.gl = gl as GL2
     this.initialize()
     map.on('webglcontextrestored', this.restore)
-    if (this.points) { this.uploadPoints = true; this.uploadColors = true }
-    if (this.levelPositions) { this.uploadLevels = true; this.uploadLevelColors = true }
+    map.on('moveend', this.schedule)
+    map.on('move', this.onMove)
+    for (const chunk of this.chunks.values()) this.markUpload(chunk)
+    this.schedule()
   }
 
   onRemove(_map: MapLibreMap, gl: WebGLRenderingContext | WebGL2RenderingContext) {
     this.map?.off('webglcontextrestored', this.restore)
+    this.map?.off('moveend', this.schedule)
+    this.map?.off('move', this.onMove)
+    clearTimeout(this.moveTimer)
     this.indexer?.terminate()
     this.indexer = undefined
-    this.release(gl as GL2)
+    const g = gl as GL2
+    for (const chunk of this.chunks.values()) if (chunk.gpu) { this.dropped.push(chunk.gpu); chunk.gpu = undefined }
+    this.release(g)
     this.map = undefined
     this.gl = undefined
   }
 
+  private onMove = () => {
+    if (this.moveTimer) return
+    this.moveTimer = setTimeout(() => { this.moveTimer = undefined; this.schedule() }, 150)
+  }
+
+  private markUpload(chunk: Chunk) {
+    chunk.gpu = undefined
+    chunk.uploadPoints = chunk.uploadColors = true
+    chunk.uploadLevels = !!chunk.levelPositions
+    chunk.uploadLevelColors = !!chunk.levelColors
+  }
+
   private restore = () => {
     if (!this.gl) return
+    this.palettes.clear()
     this.initialize()
-    this.uploadPoints = true
-    this.uploadColors = true
-    this.uploadLevels = !!this.levelPositions
-    this.uploadLevelColors = !!this.levelColorBytes
+    for (const chunk of this.chunks.values()) this.markUpload(chunk)
     this.map?.triggerRepaint()
   }
 
   private release(gl: GL2) {
+    this.freeDropped(gl)
     for (const p of [this.heatProgram, this.resolveProgram, this.circleProgram]) if (p) gl.deleteProgram(p)
-    for (const v of [this.pointVao, this.levelVao, this.resolveVao]) if (v) gl.deleteVertexArray(v)
-    for (const b of [this.pointPos, this.pointAttr, this.levelPos, this.levelColor]) if (b) gl.deleteBuffer(b)
-    for (const t of [this.palette, this.colorSum, this.density]) if (t) gl.deleteTexture(t)
+    if (this.resolveVao) gl.deleteVertexArray(this.resolveVao)
+    for (const t of [...this.palettes.values(), this.colorSum, this.density]) if (t) gl.deleteTexture(t)
+    this.palettes.clear()
     if (this.fbo) gl.deleteFramebuffer(this.fbo)
     this.fbo = this.colorSum = this.density = undefined
     this.fboSize = [0, 0]
+  }
+
+  private freeDropped(gl: GL2) {
+    for (const gpu of this.dropped) {
+      for (const b of [gpu.pos, gpu.attr, gpu.levelPos, gpu.levelColor]) gl.deleteBuffer(b)
+      gl.deleteVertexArray(gpu.pointVao)
+      gl.deleteVertexArray(gpu.levelVao)
+    }
+    this.dropped = []
   }
 
   private initialize() {
@@ -292,98 +384,293 @@ export class TreeDotsLayer implements CustomLayerInterface {
     this.heatU = uniforms(gl, this.heatProgram, ['u_matrix', 'u_center', 'u_size', 'u_camdist', 'u_intensity'])
     this.resolveU = uniforms(gl, this.resolveProgram, ['u_color', 'u_density', 'u_opacity', 'u_alpha', 'u_saturation'])
     this.circleU = uniforms(gl, this.circleProgram, ['u_matrix', 'u_center', 'u_radius', 'u_dpr', 'u_camdist', 'u_palette', 'u_opacity'])
+    this.resolveVao = gl.createVertexArray()!
+  }
 
-    this.pointPos = gl.createBuffer()!
-    this.pointAttr = gl.createBuffer()!
-    this.levelPos = gl.createBuffer()!
-    this.levelColor = gl.createBuffer()!
-
-    this.pointVao = gl.createVertexArray()!
-    gl.bindVertexArray(this.pointVao)
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.pointPos)
+  private createGpu(gl: GL2): ChunkGpu {
+    const gpu: ChunkGpu = {
+      pos: gl.createBuffer()!, attr: gl.createBuffer()!, levelPos: gl.createBuffer()!, levelColor: gl.createBuffer()!,
+      pointVao: gl.createVertexArray()!, levelVao: gl.createVertexArray()!,
+    }
+    gl.bindVertexArray(gpu.pointVao)
+    gl.bindBuffer(gl.ARRAY_BUFFER, gpu.pos)
     gl.enableVertexAttribArray(0)
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0)
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.pointAttr)
+    gl.bindBuffer(gl.ARRAY_BUFFER, gpu.attr)
     gl.enableVertexAttribArray(1)
     gl.vertexAttribPointer(1, 2, gl.UNSIGNED_BYTE, false, 2, 0)
-
-    this.levelVao = gl.createVertexArray()!
-    gl.bindVertexArray(this.levelVao)
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.levelPos)
+    gl.bindVertexArray(gpu.levelVao)
+    gl.bindBuffer(gl.ARRAY_BUFFER, gpu.levelPos)
     gl.enableVertexAttribArray(0)
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 12, 0)
     gl.enableVertexAttribArray(1)
     gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 12, 8)
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.levelColor)
+    gl.bindBuffer(gl.ARRAY_BUFFER, gpu.levelColor)
     gl.enableVertexAttribArray(2)
     gl.vertexAttribPointer(2, 4, gl.UNSIGNED_BYTE, true, 4, 0)
-
-    this.resolveVao = gl.createVertexArray()!
     gl.bindVertexArray(null)
     gl.bindBuffer(gl.ARRAY_BUFFER, null)
+    return gpu
+  }
 
-    this.palette = gl.createTexture()!
-    gl.bindTexture(gl.TEXTURE_2D, this.palette)
+  private paletteTexture(gl: GL2, palette: string[]): WebGLTexture {
+    const key = palette.join(',')
+    const cached = this.palettes.get(key)
+    if (cached) return cached
+    // A recolour leaves the old palette unused; a few are kept for the chunks still on it.
+    if (this.palettes.size >= 4) {
+      const used = new Set([...this.chunks.values()].map((c) => c.palette.join(',')))
+      for (const [k, t] of this.palettes) if (!used.has(k)) { gl.deleteTexture(t); this.palettes.delete(k) }
+    }
+    const texture = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, texture)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    const pal = new Uint8Array(256 * 4)
+    palette.forEach((hex, i) => { const [r, g, b] = hexRgb(hex); pal.set([r, g, b, 255], i * 4) })
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, pal)
     gl.bindTexture(gl.TEXTURE_2D, null)
+    this.palettes.set(key, texture)
+    return texture
   }
 
-  // --- Data ---
+  // --- Loading ---
 
-  /** Drop the drawn set at once (a city switch): nothing of the old city may stay on screen. */
+  /** Drop everything drawn at once: nothing of the old rows may stay on screen. */
   clear() {
     this.generation++
-    this.points = undefined
-    this.levels = []
-    this.levelPositions = this.levelColorBytes = undefined
-    this.lastBuildId = this.lastColorId = ++this.indexSeq
-    this.grid = undefined
+    this.dropAll()
+    this.rowsKey = undefined
+    this.installed = false
+    this.directory = new Map()
+    this.total = 0
     this.frame = undefined
     this.map?.triggerRepaint()
   }
 
   /**
-   * Bring the drawn set up to the worker's query and colours. With the same
-   * rows only the colours are read and swapped in; anything else re-reads
-   * the points. The current set stays drawn until its replacement is ready.
+   * Bring what is drawn up to the worker's query and colours. Resolves once
+   * the chunks in view are current; the rest keep loading behind it.
    */
   sync(): Promise<void> {
-    if (this.syncing) { this.syncAgain = true; return this.syncing }
-    this.syncing = (async () => {
-      try {
-        do {
-          this.syncAgain = false
-          await this.syncOnce()
-        } while (this.syncAgain)
-      } catch (error) {
-        // The drawn set stays; the next query or colour change retries.
-        console.warn('[TreeDots] refresh failed', error)
-      } finally {
-        this.syncing = null
-      }
-    })()
-    return this.syncing
+    this.checkKeys = true
+    const settled = new Promise<void>((resolve) => this.waiters.push(resolve))
+    this.schedule()
+    return settled
   }
 
-  private async syncOnce() {
+  private settle() {
+    const waiters = this.waiters
+    this.waiters = []
+    for (const resolve of waiters) resolve()
+  }
+
+  private schedule = () => {
+    this.wake = true
+    if (!this.busy) void this.pump()
+  }
+
+  private async pump() {
+    this.busy = true
+    try {
+      while (this.wake) {
+        this.wake = false
+        if (await this.step()) this.wake = true
+      }
+    } catch (error) {
+      // What is drawn stays; the next query, colour change or move retries.
+      console.warn('[TreeDots] load failed', error)
+    } finally {
+      this.busy = false
+      if (!this.checkKeys && !this.wantRows) this.settle()
+    }
+  }
+
+  /** One read, the most urgent first. True when it did one and another may be due. */
+  private async step(): Promise<boolean> {
+    const generation = this.generation
+    const stale = () => generation !== this.generation
+    if (this.checkKeys) {
+      this.checkKeys = false
+      const keys = await this.source.getPointKeys()
+      if (stale()) return true
+      if (!keys) return false
+      this.colorKey = keys.colorKey
+      if (keys.rowsKey !== this.rowsKey) this.wantRows = keys.rowsKey
+      return true
+    }
+    if (this.wantRows) {
+      if (this.pendingDirectory?.rowsKey !== this.wantRows) {
+        const directory = await this.source.getPointChunkDirectory()
+        if (stale()) return true
+        if (!directory) { this.wantRows = undefined; return false }
+        this.wantRows = directory.rowsKey
+        this.colorKey = directory.colorKey
+        this.pendingDirectory = directory
+        return true
+      }
+      const directory = this.pendingDirectory
+      const known = new Map(directory.keys.map((k, i) => [k, directory.counts[i]]))
+      const visible = this.inView(known)
+      const batch = visible.length ? await this.source.getPointChunks(directory.rowsKey, visible) : null
+      if (stale()) return true
+      if (visible.length && !batch) { this.checkKeys = true; return true }
+      this.install(directory, known, batch)
+      return true
+    }
+    if (!this.installed || !this.rowsKey || !this.map) return false
+    const visible = this.inView(this.directory)
+    const missing = visible.filter((k) => !this.chunks.has(k))
+    if (missing.length) {
+      this.evict(missing.reduce((n, k) => n + (this.directory.get(k) ?? 0), 0), new Set(visible))
+      return this.load(missing)
+    }
+    const inView = new Set(visible)
+    const offColor = [...this.chunks.values()].filter((c) => c.colorKey !== this.colorKey)
+    const offInView = offColor.filter((c) => inView.has(c.key))
+    if (offColor.length) return this.recolor((offInView.length ? offInView : offColor).map((c) => c.key))
+    // The view is current: what a sync waits on.
+    this.settle()
+    const resident = this.residentCount
+    const rest: number[] = []
+    let batch = 0
+    for (const key of this.byDistance([...this.directory.keys()].filter((k) => !this.chunks.has(k)))) {
+      const n = this.directory.get(key) ?? 0
+      if (resident + batch + n > MAX_RESIDENT_POINTS) break
+      if (batch && batch + n > PREFETCH_BATCH_POINTS) break
+      rest.push(key)
+      batch += n
+    }
+    return rest.length ? this.load(rest) : false
+  }
+
+  /** The keys of `known` chunks in the padded view, nearest the centre first. */
+  private inView(known: Map<number, number>): number[] {
+    const [x0, y0, x1, y1] = this.viewBox3857(VIEW_PAD)
+    return chunksInBox(x0, y0, x1, y1).filter((k) => known.has(k))
+  }
+
+  private byDistance(keys: number[]): number[] {
+    const c = this.map!.getCenter()
+    const [cx, cy] = lngLatTo3857(c.lng, c.lat)
+    const d = (k: number) => { const [ox, oy] = chunkOrigin(k); return (ox + CHUNK_SIZE_M / 2 - cx) ** 2 + (oy + CHUNK_SIZE_M / 2 - cy) ** 2 }
+    return keys.map((k) => ({ k, d: d(k) })).sort((a, b) => a.d - b.d).map((e) => e.k)
+  }
+
+  /** Make room for `incoming` trees by dropping the farthest chunks out of view. */
+  private evict(incoming: number, keep: Set<number>) {
+    let resident = this.residentCount
+    if (resident + incoming <= MAX_RESIDENT_POINTS) return
+    for (const key of this.byDistance([...this.chunks.keys()]).reverse()) {
+      if (resident + incoming <= MAX_RESIDENT_POINTS) break
+      if (keep.has(key)) continue
+      resident -= this.chunks.get(key)!.count
+      this.drop(key)
+    }
+  }
+
+  private async load(keys: number[]): Promise<boolean> {
+    const rowsKey = this.rowsKey!
+    const generation = this.generation
+    const batch = await this.source.getPointChunks(rowsKey, keys)
+    if (generation !== this.generation) return true
+    if (!batch || batch.rowsKey !== this.rowsKey) { this.checkKeys = true; return true }
+    this.addBatch(batch)
+    return true
+  }
+
+  private async recolor(keys: number[]): Promise<boolean> {
     const generation = this.generation
     const t0 = performance.now()
-    if (this.points) {
-      const colors = await this.source.getCityPointColors(this.points.rowsKey)
-      if (generation !== this.generation) return
-      if (colors) {
-        if (colors.colorKey !== this.points.colorKey) this.applyColors(colors)
-        console.info('[Perf] map:dots:recolor', { ms: Math.round(performance.now() - t0) })
-        return
+    const colors = await this.source.getPointChunkColors(this.rowsKey!, keys)
+    if (generation !== this.generation) return true
+    if (!colors || colors.rowsKey !== this.rowsKey) { this.checkKeys = true; return true }
+    if (colors.colorKey !== this.colorKey) this.colorKey = colors.colorKey
+    colors.keys.forEach((key, s) => {
+      const chunk = this.chunks.get(key)
+      if (!chunk) return
+      const next = new Uint8Array(chunk.count)
+      for (let k = colors.offsets[s]; k < colors.offsets[s + 1]; k++) {
+        const i = this.indexByRowid[colors.rowid[k]]
+        if (i >= 0 && i < chunk.count && chunk.rowid[i] === colors.rowid[k]) next[i] = colors.color[k]
       }
-    }
-    const points = await this.source.getCityPoints()
-    if (generation !== this.generation || !points) return
-    this.setPoints(points)
-    console.info('[Perf] map:dots:points', { rows: points.count, ms: Math.round(performance.now() - t0) })
+      chunk.color = next
+      chunk.palette = colors.palette
+      chunk.colorKey = colors.colorKey
+      chunk.uploadColors = true
+      chunk.colorId = ++this.indexSeq
+      const copy = next.slice()
+      this.index({ kind: 'recolor', id: chunk.colorId, key, color: copy, palette: colors.palette }, [copy.buffer])
+    })
+    console.info('[Perf] map:dots:recolor', { chunks: colors.keys.length, ms: Math.round(performance.now() - t0) })
+    this.map?.triggerRepaint()
+    return true
+  }
+
+  /** Swap to new rows: the old chunks go, the new rows' chunks in view arrive together. */
+  private install(directory: PointChunkDirectory, known: Map<number, number>, batch: PointChunkBatch | null) {
+    this.dropAll()
+    this.rowsKey = directory.rowsKey
+    this.directory = known
+    this.total = directory.counts.reduce((a, b) => a + b, 0)
+    this.indexByRowid = new Int32Array(directory.maxRowid + 1).fill(-1)
+    this.wantRows = undefined
+    this.pendingDirectory = undefined
+    if (batch) this.addBatch(batch)
+    this.installed = true
+    this.map?.triggerRepaint()
+    console.info('[Perf] map:dots:rows', { trees: this.total, chunks: known.size, inView: batch?.keys.length ?? 0 })
+    this.onLoaded?.(this.total)
+  }
+
+  private dropAll() {
+    for (const chunk of this.chunks.values()) if (chunk.gpu) this.dropped.push(chunk.gpu)
+    this.chunks.clear()
+    this.indexer?.postMessage({ kind: 'clear' } satisfies DotsIndexRequest)
+  }
+
+  private drop(key: number) {
+    const chunk = this.chunks.get(key)
+    if (!chunk) return
+    if (chunk.gpu) this.dropped.push(chunk.gpu)
+    this.chunks.delete(key)
+    this.indexer?.postMessage({ kind: 'drop', key } satisfies DotsIndexRequest)
+  }
+
+  private addBatch(batch: PointChunkBatch) {
+    const t0 = performance.now()
+    batch.keys.forEach((key, s) => {
+      const from = batch.offsets[s], to = batch.offsets[s + 1]
+      const n = to - from
+      if (!n) return
+      this.drop(key)
+      // The worker stored the rows in their draw grid's order; these are views, not copies.
+      const [originX, originY] = chunkOrigin(key)
+      const chunk: Chunk = {
+        key, originX, originY, count: n,
+        x: batch.x.subarray(from, to),
+        y: batch.y.subarray(from, to),
+        dbh: batch.dbh.subarray(from, to),
+        color: batch.color.subarray(from, to),
+        rowid: batch.rowid.subarray(from, to),
+        palette: batch.palette, colorKey: batch.colorKey, grid: batch.grids[s],
+        levels: [], levelOffsets: [],
+        buildId: 0, colorId: 0,
+        uploadPoints: true, uploadColors: true, uploadLevels: false, uploadLevelColors: false,
+      }
+      for (let i = 0; i < n; i++) if (chunk.rowid[i] < this.indexByRowid.length) this.indexByRowid[chunk.rowid[i]] = i
+      chunk.buildId = chunk.colorId = ++this.indexSeq
+      const x = chunk.x.slice(), y = chunk.y.slice(), color = chunk.color.slice()
+      this.index({ kind: 'build', id: chunk.buildId, key, x, y, count: n, color, palette: chunk.palette }, [x.buffer, y.buffer, color.buffer])
+      this.chunks.set(key, chunk)
+    })
+    console.info('[Perf] map:dots:chunks', { chunks: batch.keys.length, rows: batch.x.length, ms: Math.round(performance.now() - t0) })
+    this.map?.triggerRepaint()
   }
 
   private index(request: DotsIndexRequest, transfer: Transferable[]) {
@@ -395,143 +682,93 @@ export class TreeDotsLayer implements CustomLayerInterface {
   }
 
   private onIndexed(result: DotsIndexResult) {
-    if (result.positions && result.counts && result.cells) {
-      if (result.id !== this.lastBuildId) return
-      this.levels = result.cells.map((cell, i) => ({ cell, count: result.counts![i], chunks: result.chunks![i] }))
-      this.levelOffsets = []
+    const chunk = this.chunks.get(result.key)
+    if (!chunk) return
+    if (result.positions && result.counts && result.cells && result.grids) {
+      if (result.id !== chunk.buildId) return
+      chunk.levels = result.cells.map((cell, i) => ({ cell, count: result.counts![i], grid: result.grids![i] }))
+      chunk.levelOffsets = []
       let offset = 0
-      for (const level of this.levels) { this.levelOffsets.push(offset); offset += level.count }
-      this.levelPositions = result.positions
-      this.uploadLevels = true
+      for (const level of chunk.levels) { chunk.levelOffsets.push(offset); offset += level.count }
+      chunk.levelPositions = result.positions
+      chunk.uploadLevels = true
     }
-    if (result.id !== this.lastColorId) return
-    this.levelColorBytes = result.colors
-    this.uploadLevelColors = true
+    if (result.id !== chunk.colorId) return
+    chunk.levelColors = result.colors
+    chunk.uploadLevelColors = true
     this.map?.triggerRepaint()
-  }
-
-  private setPoints(unordered: CityPoints) {
-    const t0 = performance.now()
-    // Store the points in coarse-cell order, so a frame draws only the
-    // ranges of the cells in view (visibleRanges).
-    const chunks = buildPickGrid(unordered.x, unordered.y, unordered.count, DRAW_CHUNK_MAX_CELLS, DRAW_CHUNK_MIN_M)
-    const order = chunks.order
-    const points: CityPoints = {
-      ...unordered,
-      x: Float32Array.from(order, (i) => unordered.x[i]),
-      y: Float32Array.from(order, (i) => unordered.y[i]),
-      dbh: Uint8Array.from(order, (i) => unordered.dbh[i]),
-      color: Uint8Array.from(order, (i) => unordered.color[i]),
-      rowid: Uint32Array.from(order, (i) => unordered.rowid[i]),
-    }
-    this.pointChunks = chunks
-    this.points = points
-    // The heat waits for its pyramid; the circles and picking need only the points.
-    this.levels = []
-    this.levelPositions = this.levelColorBytes = undefined
-    this.lastBuildId = this.lastColorId = ++this.indexSeq
-    const x = points.x.slice(), y = points.y.slice(), color = points.color.slice()
-    this.index({ kind: 'build', id: this.lastBuildId, x, y, count: points.count, color, palette: points.palette }, [x.buffer, y.buffer, color.buffer])
-    this.grid = buildPickGrid(points.x, points.y, points.count)
-    let maxRowid = 0
-    for (let i = 0; i < points.count; i++) if (points.rowid[i] > maxRowid) maxRowid = points.rowid[i]
-    this.indexByRowid = new Int32Array(points.count ? maxRowid + 1 : 0).fill(-1)
-    for (let i = 0; i < points.count; i++) this.indexByRowid[points.rowid[i]] = i
-    this.uploadPoints = true
-    this.uploadColors = true
-    console.info('[Perf] map:dots:index', { rows: points.count, ms: Math.round(performance.now() - t0) })
-    this.map?.triggerRepaint()
-    this.onLoaded?.(points.count)
-  }
-
-  private applyColors(colors: CityPointColors) {
-    const points = this.points!
-    const next = new Uint8Array(points.count)
-    for (let k = 0; k < colors.rowid.length; k++) {
-      const i = this.indexByRowid[colors.rowid[k]]
-      if (i !== undefined && i >= 0) next[i] = colors.color[k]
-    }
-    this.points = { ...points, color: next, palette: colors.palette, colorKey: colors.colorKey }
-    this.uploadColors = true
-    this.lastColorId = ++this.indexSeq
-    const color = next.slice()
-    this.index({ kind: 'recolor', id: this.lastColorId, color, palette: colors.palette }, [color.buffer])
-    this.map?.triggerRepaint()
-  }
-
-  private upload(gl: GL2) {
-    const points = this.points!
-    if (this.uploadPoints) {
-      const pos = new Float32Array(points.count * 2)
-      for (let i = 0; i < points.count; i++) { pos[i * 2] = points.x[i]; pos[i * 2 + 1] = points.y[i] }
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.pointPos!)
-      gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW)
-      this.uploadPoints = false
-    }
-    if (this.uploadColors) {
-      const attr = new Uint8Array(points.count * 2)
-      for (let i = 0; i < points.count; i++) { attr[i * 2] = points.color[i]; attr[i * 2 + 1] = points.dbh[i] }
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.pointAttr!)
-      gl.bufferData(gl.ARRAY_BUFFER, attr, gl.STATIC_DRAW)
-      const pal = new Uint8Array(256 * 4)
-      points.palette.forEach((hex, i) => { const [r, g, b] = hexRgb(hex); pal.set([r, g, b, 255], i * 4) })
-      gl.bindTexture(gl.TEXTURE_2D, this.palette!)
-      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
-      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, pal)
-      gl.bindTexture(gl.TEXTURE_2D, null)
-      this.uploadColors = false
-    }
-    if (this.uploadLevels && this.levelPositions) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.levelPos!)
-      gl.bufferData(gl.ARRAY_BUFFER, this.levelPositions, gl.STATIC_DRAW)
-      this.uploadLevels = false
-    }
-    if (this.uploadLevelColors && this.levelColorBytes) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.levelColor!)
-      gl.bufferData(gl.ARRAY_BUFFER, this.levelColorBytes, gl.STATIC_DRAW)
-      this.uploadLevelColors = false
-    }
-    gl.bindBuffer(gl.ARRAY_BUFFER, null)
-  }
-
-  private needsUpload(): boolean {
-    return this.uploadPoints || this.uploadColors || this.uploadLevels || this.uploadLevelColors
   }
 
   // --- Drawing ---
 
-  /**
-   * The view's bounding box in local metres, padded by `padPx` CSS pixels:
-   * what a draw needs to cover. A pitched view's box reaches the horizon.
-   */
-  private viewBox(padPx: number): [number, number, number, number] {
+  private upload(gl: GL2, chunk: Chunk) {
+    if (!chunk.gpu) {
+      chunk.gpu = this.createGpu(gl)
+      chunk.uploadPoints = chunk.uploadColors = true
+      chunk.uploadLevels = !!chunk.levelPositions
+      chunk.uploadLevelColors = !!chunk.levelColors
+    }
+    const gpu = chunk.gpu
+    if (chunk.uploadPoints) {
+      const pos = new Float32Array(chunk.count * 2)
+      for (let i = 0; i < chunk.count; i++) { pos[i * 2] = chunk.x[i]; pos[i * 2 + 1] = chunk.y[i] }
+      gl.bindBuffer(gl.ARRAY_BUFFER, gpu.pos)
+      gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW)
+      chunk.uploadPoints = false
+    }
+    if (chunk.uploadColors) {
+      const attr = new Uint8Array(chunk.count * 2)
+      for (let i = 0; i < chunk.count; i++) { attr[i * 2] = chunk.color[i]; attr[i * 2 + 1] = chunk.dbh[i] }
+      gl.bindBuffer(gl.ARRAY_BUFFER, gpu.attr)
+      gl.bufferData(gl.ARRAY_BUFFER, attr, gl.STATIC_DRAW)
+      chunk.uploadColors = false
+    }
+    if (chunk.uploadLevels && chunk.levelPositions) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, gpu.levelPos)
+      gl.bufferData(gl.ARRAY_BUFFER, chunk.levelPositions, gl.STATIC_DRAW)
+      chunk.uploadLevels = false
+    }
+    if (chunk.uploadLevelColors && chunk.levelColors) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, gpu.levelColor)
+      gl.bufferData(gl.ARRAY_BUFFER, chunk.levelColors, gl.STATIC_DRAW)
+      chunk.uploadLevelColors = false
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, null)
+  }
+
+  /** The view's bounding box in EPSG:3857 metres, padded by `pad` of its size. A pitched view's box reaches the horizon. */
+  private viewBox3857(pad = 0, padPx = 0): Box {
     const map = this.map!
-    const points = this.points!
     const b = map.getBounds()
     const [x0, y0] = lngLatTo3857(b.getWest(), b.getSouth())
     const [x1, y1] = lngLatTo3857(b.getEast(), b.getNorth())
-    const pad = padPx * metresPerPixel(map.getZoom())
-    return [x0 - points.originX - pad, y0 - points.originY - pad, x1 - points.originX + pad, y1 - points.originY + pad]
+    const px = (x1 - x0) * pad + padPx * metresPerPixel(map.getZoom())
+    const py = (y1 - y0) * pad + padPx * metresPerPixel(map.getZoom())
+    return [x0 - px, y0 - py, x1 + px, y1 + py]
+  }
+
+  private chunkBox(chunk: Chunk): Box {
+    return [chunk.originX, chunk.originY, chunk.originX + CHUNK_SIZE_M, chunk.originY + CHUNK_SIZE_M]
   }
 
   private drawRanges(gl: GL2, ranges: number[], offset = 0) {
     for (let k = 0; k < ranges.length; k += 2) gl.drawArrays(gl.POINTS, offset + ranges[k], ranges[k + 1] - ranges[k])
   }
 
-  private camera(matrix: ArrayLike<number>) {
+  /** The camera relative to a chunk: the matrix and centre its float32 positions are drawn with. */
+  private chunkCamera(matrix: ArrayLike<number>, chunk: Chunk, camX: number, camY: number) {
+    const cx = Math.fround(camX - chunk.originX)
+    const cy = Math.fround(camY - chunk.originY)
+    return { matrix: new Float32Array(relativeMatrix(matrix, chunk.originX + cx, chunk.originY + cy)), cx, cy }
+  }
+
+  private camera() {
     const map = this.map!
-    const points = this.points!
     const centre = map.getCenter()
-    const [cx3857, cy3857] = lngLatTo3857(centre.lng, centre.lat)
-    // The centre as the shader sees it: float32 metres from the origin.
-    const cx = Math.fround(cx3857 - points.originX)
-    const cy = Math.fround(cy3857 - points.originY)
-    const rel = relativeMatrix(matrix, points.originX + cx, points.originY + cy)
+    const [camX, camY] = lngLatTo3857(centre.lng, centre.lat)
     const canvas = map.getCanvas()
     return {
-      rel, cx, cy,
+      camX, camY,
       zoom: map.getZoom(),
       camdist: map.transform.cameraToCenterDistance,
       width: canvas.clientWidth,
@@ -542,20 +779,20 @@ export class TreeDotsLayer implements CustomLayerInterface {
 
   prerender(gl: WebGLRenderingContext | WebGL2RenderingContext, matrix: Parameters<CustomLayerInterface['render']>[1]) {
     this.heatDrawn = false
-    if (!this.map || !this.points?.count || !this.heatProgram) return
     const g = gl as GL2
-    if (this.needsUpload()) this.upload(g)
+    this.freeDropped(g)
+    if (!this.map || !this.chunks.size || !this.heatProgram) return
+    for (const chunk of this.chunks.values()) this.upload(g, chunk)
     const zoom = this.map.getZoom()
     if (zoom < HEAT_MIN_ZOOM || zoom >= HEAT_MAX_ZOOM || heatOpacity(zoom) <= 0) return
-    // The pyramid and its colours arrive from the indexer; until both have, there is no heat.
-    if (!this.levels.length || !this.levelColorBytes || this.uploadLevels) return
-    const cam = this.camera(matrix as ArrayLike<number>)
+    const cam = this.camera()
     const w = Math.max(1, Math.ceil(g.drawingBufferWidth / HEAT_SCALE))
     const h = Math.max(1, Math.ceil(g.drawingBufferHeight / HEAT_SCALE))
     this.ensureTarget(g, w, h)
 
     const radiusPx = heatRadius(zoom)
-    const levelIndex = levelForKernel(this.levels, radiusPx * metresPerPixel(zoom))
+    const kernelM = radiusPx * metresPerPixel(zoom)
+    const view = this.viewBox3857(0, radiusPx * 1.5)
 
     g.bindFramebuffer(g.FRAMEBUFFER, this.fbo!)
     g.viewport(0, 0, w, h)
@@ -569,14 +806,22 @@ export class TreeDotsLayer implements CustomLayerInterface {
     g.enable(g.BLEND)
     g.blendFunc(g.ONE, g.ONE)
     g.useProgram(this.heatProgram)
-    g.uniformMatrix4fv(this.heatU.u_matrix, false, new Float32Array(cam.rel))
-    g.uniform2f(this.heatU.u_center, cam.cx, cam.cy)
     g.uniform1f(this.heatU.u_size, (2 * radiusPx * cam.dpr) / HEAT_SCALE)
     g.uniform1f(this.heatU.u_camdist, cam.camdist)
     g.uniform1f(this.heatU.u_intensity, heatIntensity(zoom))
-    g.bindVertexArray(this.levelVao!)
-    const box = this.viewBox(radiusPx * 1.5)
-    this.drawRanges(g, visibleRanges(this.levels[levelIndex].chunks, ...box), this.levelOffsets[levelIndex])
+    for (const chunk of this.chunks.values()) {
+      // The pyramid and its colours arrive from the indexer; until both have, the chunk adds no heat.
+      if (!chunk.levels.length || !chunk.levelColors || chunk.uploadLevels || !chunk.gpu) continue
+      if (!intersects(this.chunkBox(chunk), view)) continue
+      const level = levelForKernel(chunk.levels, kernelM)
+      const local = this.chunkCamera(matrix as ArrayLike<number>, chunk, cam.camX, cam.camY)
+      g.uniformMatrix4fv(this.heatU.u_matrix, false, local.matrix)
+      g.uniform2f(this.heatU.u_center, local.cx, local.cy)
+      g.bindVertexArray(chunk.gpu.levelVao)
+      const ranges = visibleRanges(chunk.levels[level].grid,
+        view[0] - chunk.originX, view[1] - chunk.originY, view[2] - chunk.originX, view[3] - chunk.originY)
+      this.drawRanges(g, ranges, chunk.levelOffsets[level])
+    }
     g.bindVertexArray(null)
     g.bindFramebuffer(g.FRAMEBUFFER, null)
     g.viewport(0, 0, g.drawingBufferWidth, g.drawingBufferHeight)
@@ -609,10 +854,13 @@ export class TreeDotsLayer implements CustomLayerInterface {
   }
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, matrix: Parameters<CustomLayerInterface['render']>[1]) {
-    if (!this.map || !this.points?.count || !this.circleProgram) return
+    if (!this.map || !this.circleProgram) return
     const g = gl as GL2
-    if (this.needsUpload()) this.upload(g)
     const zoom = this.map.getZoom()
+    const cam = this.camera()
+    const radius = circleRadiusRange(zoom)
+    this.frame = { matrix: Float64Array.from(matrix as ArrayLike<number>), width: cam.width, height: cam.height, camdist: cam.camdist, radius }
+    if (!this.chunks.size) return
     g.disable(g.DEPTH_TEST)
     g.disable(g.STENCIL_TEST)
     g.enable(g.BLEND)
@@ -637,22 +885,25 @@ export class TreeDotsLayer implements CustomLayerInterface {
     }
 
     const opacity = circleOpacity(zoom)
-    const cam = this.camera(matrix as ArrayLike<number>)
-    const radius = circleRadiusRange(zoom)
-    this.frame = { matrix: cam.rel, cx: cam.cx, cy: cam.cy, width: cam.width, height: cam.height, camdist: cam.camdist, radius }
     if (opacity > 0) {
       g.useProgram(this.circleProgram)
-      g.uniformMatrix4fv(this.circleU.u_matrix, false, new Float32Array(cam.rel))
-      g.uniform2f(this.circleU.u_center, cam.cx, cam.cy)
       g.uniform2f(this.circleU.u_radius, radius[0], radius[1])
       g.uniform1f(this.circleU.u_dpr, cam.dpr)
       g.uniform1f(this.circleU.u_camdist, cam.camdist)
       g.uniform1f(this.circleU.u_opacity, opacity)
       g.activeTexture(g.TEXTURE0)
-      g.bindTexture(g.TEXTURE_2D, this.palette!)
       g.uniform1i(this.circleU.u_palette, 0)
-      g.bindVertexArray(this.pointVao!)
-      if (this.pointChunks) this.drawRanges(g, visibleRanges(this.pointChunks, ...this.viewBox(radius[1] + 2)))
+      const view = this.viewBox3857(0, radius[1] + 2)
+      for (const chunk of this.chunks.values()) {
+        if (!chunk.gpu || !intersects(this.chunkBox(chunk), view)) continue
+        const local = this.chunkCamera(matrix as ArrayLike<number>, chunk, cam.camX, cam.camY)
+        g.uniformMatrix4fv(this.circleU.u_matrix, false, local.matrix)
+        g.uniform2f(this.circleU.u_center, local.cx, local.cy)
+        g.bindTexture(g.TEXTURE_2D, this.paletteTexture(g, chunk.palette))
+        g.bindVertexArray(chunk.gpu.pointVao)
+        this.drawRanges(g, visibleRanges(chunk.grid,
+          view[0] - chunk.originX, view[1] - chunk.originY, view[2] - chunk.originX, view[3] - chunk.originY))
+      }
       g.bindTexture(g.TEXTURE_2D, null)
     }
     g.bindVertexArray(null)
@@ -663,36 +914,51 @@ export class TreeDotsLayer implements CustomLayerInterface {
   /** True while the circles are drawn, the zooms a tap selects a tree at. */
   pickable(): boolean {
     const zoom = this.map?.getZoom() ?? 0
-    return !!this.points?.count && zoom >= CIRCLE_MIN_ZOOM && zoom < CIRCLE_MAX_ZOOM
+    return this.chunks.size > 0 && zoom >= CIRCLE_MIN_ZOOM && zoom < CIRCLE_MAX_ZOOM
+  }
+
+  /** A chunk's point `i` in CSS pixels as last frame drew it, with its depth (w); null behind the camera. */
+  private project(chunk: Chunk, rel: Float64Array, i: number): { x: number; y: number; w: number } | null {
+    const frame = this.frame!
+    const dx = chunk.x[i], dy = chunk.y[i]
+    const w = rel[3] * dx + rel[7] * dy + rel[15]
+    if (w <= 0) return null
+    return {
+      x: ((rel[0] * dx + rel[4] * dy + rel[12]) / w + 1) * 0.5 * frame.width,
+      y: (1 - (rel[1] * dx + rel[5] * dy + rel[13]) / w) * 0.5 * frame.height,
+      w,
+    }
+  }
+
+  /** Chunks within `reach` metres of an EPSG:3857 point, nearest first. */
+  private chunksNear(x: number, y: number, reach: number): Chunk[] {
+    return chunksInBox(x - reach, y - reach, x + reach, y + reach).flatMap((k) => this.chunks.get(k) ?? [])
   }
 
   /**
    * Up to `max` circles drawn last frame inside the canvas, as CSS-pixel
-   * centres: diagnostics and tests, since a custom layer has no
-   * queryRenderedFeatures.
+   * centres, the middle of the view first: diagnostics and tests, since a
+   * custom layer has no queryRenderedFeatures.
    */
   visibleTrees(max = 200): { x: number; y: number; rowid: number }[] {
+    if (!this.map || !this.frame || !this.pickable()) return []
     const frame = this.frame
-    const points = this.points
-    if (!this.map || !frame || !points || !this.pickable()) return []
     const out: { x: number; y: number; rowid: number }[] = []
-    const seen = new Set<number>()
-    const m = frame.matrix
-    const [x0, y0, x1, y1] = this.viewBox(0)
+    const seen = new Set<string>()
+    const [x0, y0, x1, y1] = this.viewBox3857()
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2
     const reach = Math.max(x1 - x0, y1 - y0) / 2
-    // From the centre outward, so a short list is the middle of the view.
     for (let r = reach / 16; out.length < max; r *= 2) {
-      pointsNear(this.grid!, (x0 + x1) / 2, (y0 + y1) / 2, r, (i) => {
-        if (out.length >= max || seen.has(i)) return
-        seen.add(i)
-        const dx = points.x[i] - frame.cx
-        const dy = points.y[i] - frame.cy
-        const cw = m[3] * dx + m[7] * dy + m[15]
-        if (cw <= 0) return
-        const x = ((m[0] * dx + m[4] * dy + m[12]) / cw + 1) * 0.5 * frame.width
-        const y = (1 - (m[1] * dx + m[5] * dy + m[13]) / cw) * 0.5 * frame.height
-        if (x >= 0 && y >= 0 && x <= frame.width && y <= frame.height) out.push({ x, y, rowid: points.rowid[i] })
-      })
+      for (const chunk of this.chunksNear(mx, my, r)) {
+        const rel = relativeMatrix(frame.matrix, chunk.originX, chunk.originY)
+        pointsNear(chunk.grid, mx - chunk.originX, my - chunk.originY, r, (i) => {
+          const id = `${chunk.key}:${i}`
+          if (out.length >= max || seen.has(id)) return
+          seen.add(id)
+          const p = this.project(chunk, rel, i)
+          if (p && p.x >= 0 && p.y >= 0 && p.x <= frame.width && p.y <= frame.height) out.push({ x: p.x, y: p.y, rowid: chunk.rowid[i] })
+        })
+      }
       if (r >= reach) break
     }
     return out
@@ -701,30 +967,27 @@ export class TreeDotsLayer implements CustomLayerInterface {
   /** The circle drawn under a CSS-pixel point, nearest centre first, as last frame drew it. */
   pick(point: { x: number; y: number }, tolerancePx = 2): TreeDotsPick | undefined {
     const frame = this.frame
-    const points = this.points
-    if (!this.map || !frame || !points || !this.grid || !this.pickable()) return undefined
+    if (!this.map || !frame || !this.pickable()) return undefined
     const at = this.map.unproject([point.x, point.y])
-    const [qx3857, qy3857] = lngLatTo3857(at.lng, at.lat)
-    const qx = qx3857 - points.originX
-    const qy = qy3857 - points.originY
+    const [qx, qy] = lngLatTo3857(at.lng, at.lat)
     // Generous in metres (a pitched view stretches the far side); the test below is in pixels.
     const reach = (frame.radius[1] + tolerancePx) * metresPerPixel(this.map.getZoom()) * 4
-    const m = frame.matrix
-    let best = -1
+    let best: { chunk: Chunk; i: number } | undefined
     let bestDistance = Infinity
-    pointsNear(this.grid, qx, qy, reach, (i) => {
-      const dx = points.x[i] - frame.cx
-      const dy = points.y[i] - frame.cy
-      const cw = m[3] * dx + m[7] * dy + m[15]
-      if (cw <= 0) return
-      const sx = ((m[0] * dx + m[4] * dy + m[12]) / cw + 1) * 0.5 * frame.width
-      const sy = (1 - (m[1] * dx + m[5] * dy + m[13]) / cw) * 0.5 * frame.height
-      const distance = Math.hypot(sx - point.x, sy - point.y)
-      const r = (circleRadius(points.dbh[i], frame.radius) + 0.5) * (frame.camdist / cw)
-      if (distance <= r + tolerancePx && distance < bestDistance) { best = i; bestDistance = distance }
-    })
-    if (best < 0) return undefined
-    const [lng, lat] = lngLatFrom3857(points.x[best] + points.originX, points.y[best] + points.originY)
-    return { rowid: points.rowid[best], lng, lat }
+    for (const chunk of this.chunksNear(qx, qy, reach)) {
+      const rel = relativeMatrix(frame.matrix, chunk.originX, chunk.originY)
+      pointsNear(chunk.grid, qx - chunk.originX, qy - chunk.originY, reach, (i) => {
+        const p = this.project(chunk, rel, i)
+        if (!p) return
+        const distance = Math.hypot(p.x - point.x, p.y - point.y)
+        const r = (circleRadius(chunk.dbh[i], frame.radius) + 0.5) * (frame.camdist / p.w)
+        if (distance <= r + tolerancePx && distance < bestDistance) { best = { chunk, i }; bestDistance = distance }
+      })
+    }
+    if (!best) return undefined
+    const { chunk, i } = best
+    const [lng, lat] = lngLatFrom3857(chunk.x[i] + chunk.originX, chunk.y[i] + chunk.originY)
+    return { rowid: chunk.rowid[i], lng, lat }
   }
 }
+

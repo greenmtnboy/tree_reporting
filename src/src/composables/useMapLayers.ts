@@ -359,8 +359,8 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
       crownLayer.invalidate()
     }
     if (!dotsLayer) {
-      const { getCityPoints, getCityPointColors } = useDuckDB()
-      dotsLayer = new TreeDotsLayer({ getCityPoints, getCityPointColors }, (count) => onResidentTreesLoaded?.(count))
+      const { getPointKeys, getPointChunkDirectory, getPointChunks, getPointChunkColors } = useDuckDB()
+      dotsLayer = new TreeDotsLayer({ getPointKeys, getPointChunkDirectory, getPointChunks, getPointChunkColors }, (count) => onResidentTreesLoaded?.(count))
     }
     if (!mapInstance.getLayer(dotsLayer.id)) mapInstance.addLayer(dotsLayer, crownLayer.id)
     return dotsLayer.sync()
