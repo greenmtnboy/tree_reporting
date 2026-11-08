@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test'
 
+// Landmarks are queried once the DuckDB worker has finished loading the city
+// (enrichment, tree and vocab parquets, extensions), which takes 10-15 s on a
+// CI runner depending on GCS; 10 s left these specs racing that load.
+const LANDMARKS_TIMEOUT = 30_000
+
 async function openMobileMenu(page: import('@playwright/test').Page) {
   await page.getByTestId('mobile-nav-trigger').click()
   await expect(page.locator('.mobile-nav-menu')).toBeVisible()
@@ -38,14 +43,14 @@ test.describe('Mobile layout', () => {
 
     // Landmarks should load
     const firstItem = page.locator('.mobile-landmark-item').first()
-    await expect(firstItem).toBeVisible({ timeout: 10_000 })
+    await expect(firstItem).toBeVisible({ timeout: LANDMARKS_TIMEOUT })
   })
 
   test('landmarks overlay filters results', async ({ page }) => {
     await page.getByTestId('mobile-action-landmarks').click()
 
     const items = page.locator('.mobile-landmark-item')
-    await expect(items.first()).toBeVisible({ timeout: 10_000 })
+    await expect(items.first()).toBeVisible({ timeout: LANDMARKS_TIMEOUT })
     const countBefore = await items.count()
     expect(countBefore).toBeGreaterThan(1)
 
@@ -62,7 +67,7 @@ test.describe('Mobile layout', () => {
     await page.getByTestId('mobile-action-landmarks').click()
 
     const firstItem = page.locator('.mobile-landmark-item').first()
-    await expect(firstItem).toBeVisible({ timeout: 10_000 })
+    await expect(firstItem).toBeVisible({ timeout: LANDMARKS_TIMEOUT })
     await expect(page.locator('.tree-map canvas')).toBeAttached({ timeout: 15_000 })
 
     const centerBefore = await page.evaluate(() => {

@@ -15,7 +15,11 @@ def combined_summary(catalog, run_id, context, contexts=None):
             if record:
                 parts.append(combined_summary(catalog, record['run_id'], owner))
         return {**selected.summary(), 'city': 'all', 'cities': [p['city'].lower() for p in parts],
-                'chips': [c for p in parts for c in p['chips']], 'assignments': {},
+                'chips': [c for p in parts for c in p['chips']],
+                'assignments': {
+                    'snapshots': {p['city'].lower(): p['assignments'].get('snapshot') for p in parts},
+                    'chips': {key: item for p in parts for key, item in p['assignments']['chips'].items()},
+                },
                 'curation_available': True, 'cohort': 'train + validation'}
     selected = catalog.bundle(run_id)
     result = selected.summary()
@@ -55,7 +59,17 @@ def combined_summary(catalog, run_id, context, contexts=None):
                                  missed=None, detection_f1=None, error_score=None,
                                  false_positive=None, ground_truth=None))
     city = selected.config.inventory.city.lower()
-    return {**result, 'chips': [{**c, 'city': city, 'key': city + ':' + c['chip_id']} for c in rows], 'curation_available': True, 'cohort': 'train + validation'}
+    # Assignments share the same city-qualified identity as tiles and navigation.
+    # A chip ID alone can refer to different physical tiles in different cities.
+    assignments = result.get('assignments') or {}
+    visible_ids = {c['chip_id'] for c in rows}
+    assignments = {**assignments, 'chips': {
+        city + ':' + chip: item for chip, item in assignments.get('chips', {}).items()
+        if chip in visible_ids
+    }}
+    return {**result, 'assignments': assignments,
+            'chips': [{**c, 'city': city, 'key': city + ':' + c['chip_id']} for c in rows],
+            'curation_available': True, 'cohort': 'train + validation'}
 
 
 ALL_REVIEW_JS = r'''
@@ -93,6 +107,10 @@ function allReviewSort(a,b,key){
  if(av==null||bv==null)return av==null?(bv==null?a.chip_id.localeCompare(b.chip_id):1):-1;
  return (key==='worst'?av-bv:bv-av)||a.chip_id.localeCompare(b.chip_id);
 }
+function matchesAllReviewAssignment(chip,assignments,tag){
+ const assignment=assignments[chip.key||((chip.city||state.city).toLowerCase()+':'+chip.chip_id)];
+ return tag==='all'||(tag==='assigned'?!!assignment:assignment?.queue===tag);
+}
 async function initAllReview(){
  const response=await fetch('/api/model/all-summary?'+new URLSearchParams({run:requestedRun||'',city:pageParams.get('city')||''}));
  if(!response.ok){$('gallery').textContent='Could not load combined chip review';return}
@@ -124,7 +142,7 @@ async function initAllReview(){
  const queueId=crypto.randomUUID();
  async function renderAll(){
   const gen=++generation,key=$('sort').value,tag=$('assignment').value;
-  const rows=state.chips.filter(c=>(!['training-all','train'].includes(pageParams.get('split'))||c.split==='train')&&(pageParams.get('split')!=='validation'||c.split==='validation')&&(matchesReviewStatus(curationStatus[c.key]))&&(tag==='all'||assignments[c.chip_id]?.queue===tag)).sort((a,b)=>allReviewSort(a,b,key));
+  const rows=state.chips.filter(c=>(!['training-all','train'].includes(pageParams.get('split'))||c.split==='train')&&(pageParams.get('split')!=='validation'||c.split==='validation')&&(matchesReviewStatus(curationStatus[c.key]))&&matchesAllReviewAssignment(c,assignments,tag)).sort((a,b)=>allReviewSort(a,b,key));
   let queueSaved=false;
   try{queueSaved=saveAllReviewQueue(sessionStorage,queueId,rows,state.city.toLowerCase(),location.pathname+location.search)}catch{}
   const id=queueSaved?queueId:'';
