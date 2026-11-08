@@ -18,7 +18,10 @@ for (const [name, viewport] of [
     await expect(page.locator('.map-error')).toHaveCount(0)
     await expect.poll(() => page.evaluate(() => {
       const map = window.__treeMap
-      return map?.getSource('trees') ? map.querySourceFeatures('trees', { sourceLayer: 'trees' }).length : 0
+      if (!map?.getSource('trees')) return 0
+      // One source layer per colour (workers/mvtLayers.ts).
+      const sourceLayers = new Set(map.getStyle().layers.flatMap((l) => ('source-layer' in l && l.source === 'trees' && l['source-layer'] ? [l['source-layer']] : [])))
+      return [...sourceLayers].reduce((n, sourceLayer) => n + map.querySourceFeatures('trees', { sourceLayer }).length, 0)
     }), { timeout: 60_000 }).toBeGreaterThan(0)
     await expect(legend).toContainText('Unknown trunk diameter')
     const box = (await legend.boundingBox())!
@@ -50,7 +53,8 @@ for (const [name, viewport] of [
     await expect.poll(() => page.evaluate(() => {
       const map = window.__treeMap
       if (!map || !map.getSource('trees') || !map.isSourceLoaded('trees')) return -1
-      return map.querySourceFeatures('trees', { sourceLayer: 'trees' }).length
+      const sourceLayers = new Set(map.getStyle().layers.flatMap((l) => ('source-layer' in l && l.source === 'trees' && l['source-layer'] ? [l['source-layer']] : [])))
+      return [...sourceLayers].reduce((n, sourceLayer) => n + map.querySourceFeatures('trees', { sourceLayer }).length, 0)
     }), { timeout: 60_000 }).toBe(0)
     await expect(page.getByRole('status').filter({ hasText: 'No matching trees' })).toBeVisible()
   })

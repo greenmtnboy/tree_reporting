@@ -67,10 +67,40 @@ import {
 const MAX_TILE_CACHE_ENTRIES = 1536
 const MAX_PARALLEL_TILE_WORK = 3
 const PREPARED_FEATURE_TABLE_ZOOM = 15
+/**
+ * Rows per statement of the z15 feature-table build. The build runs right
+ * after the intro lands, and DuckDB answers one statement at a time: as one
+ * statement (6.5 s on Boston's 1.7M rows) every tile the first zoom or pan
+ * asks for waited behind all of it. In slices, a tile query waits for one.
+ */
+const FEATURE_TABLE_SLICE_ROWS = 250_000
 const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
 
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 import { snapShade } from '../lib/foliageSeason'
+import { assembleLayeredTiles } from './mvtLayers'
+
+/** The source layer a tree with no colour lands in: the style's own fallback colour. */
+const MVT_FALLBACK_LAYER = '#66BB6A'
+
+/**
+ * The lowest tile zoom whose features the circle layer draws (useMapLayers'
+ * CIRCLE_ZOOM_MIN is 12.8, and MapLibre buckets a layer only on tiles at or
+ * above its floored minzoom). Below it only the heatmaps read a cell, and
+ * they read its count, not its size.
+ */
+const CIRCLE_TILE_MIN_ZOOM = 12
+
+/**
+ * An overview cell's dbh: none where no circle reads it, and a whole inch
+ * where one does, so the tile's value table holds a few dozen sizes rather
+ * than one float per cell.
+ */
+function aggregatedDbhSql(z: number): { agg: string; property: string } {
+  return z < CIRCLE_TILE_MIN_ZOOM
+    ? { agg: 'NULL', property: '' }
+    : { agg: 'round(AVG(dbh))', property: "\n      'dbh': TRY_CAST(dbh AS INTEGER)," }
+}
 
 const DEFAULT_CATEGORY_LABELS: Record<string, string> = {
   '#e6a835': 'Palm',
@@ -106,6 +136,18 @@ const inflightNeighborhoodRanges = new Map<string, { rev: number; z: number } & 
 /** The content key of the feature table each zoom currently holds. */
 const preparedFeatureTablesReady = new Map<number, string>()
 const inflightFeatureTableBuild = new Map<string, Promise<void>>()
+/**
+ * Bumped whenever the rows under trees_fast change (a city load, a window
+ * move): a feature-table build that started before stops between slices and
+ * is never marked ready. Its key alone cannot tell, since every city's
+ * default query has the same one.
+ */
+let featureTableGeneration = 0
+
+function resetFeatureTables() {
+  preparedFeatureTablesReady.clear()
+  featureTableGeneration += 1
+}
 const dataTileBoundsByZoom = new Map<number, TileBounds>()
 const visibleTileRangeByZoom = new Map<number, TileBounds>()
 const prefetchedVisibleRangeSigByZoom = new Map<number, string>()
@@ -306,14 +348,17 @@ function neighborhoodBatchKey(rev: number, z: number, minX: number, maxX: number
 }
 
 /**
- * What a feature table's rows depend on: the query, the published filter and
- * the colours baked into it. Not the query revision: a republish of the same
- * SQL must find the table it already has, and a build that started a moment
- * before the first publish must still count.
+ * What a feature table's rows depend on: the query and the published filter.
+ * Not the colours: the table holds each tree's species, form and id and the
+ * read resolves the colour (`colorSql`), so a colour scheme or chat override
+ * change keeps the table (7 s to build on Boston). Not the query revision
+ * either: a republish of the same SQL must find the table it already has,
+ * and a build that started a moment before the first publish must still
+ * count.
  */
 function featureTableBuildKey(baseQuery: string, z: number): string {
   const query = isDefaultBaseQuery(baseQuery) ? 'default' : hashText(normalizeSql(baseQuery))
-  return `${query}:${treeFilterSignature()}:${z}`
+  return `${query}:${publishedTreeIdFilterSignature}:${z}`
 }
 
 function featureTableName(z: number): string {
@@ -602,7 +647,7 @@ async function loadCityTrees(city?: string): Promise<void> {
     throw new Error('City must be specified to load trees, to avoid accidentally loading all cities into memory.')
   }
 
-  preparedFeatureTablesReady.clear()
+  resetFeatureTables()
   dataTileBoundsByZoom.clear()
   colorOverrideActive = false
 
@@ -859,7 +904,7 @@ async function loadWindowCells(win: NonNullable<typeof cityWindow>, cells: numbe
     // The view moves off the dropped tables before they go.
     if (added.length > 0 || evict.length > 0) await conn.query(windowViewSql([...win.chunks.keys()]))
     for (const name of evict) await conn.query(`DROP TABLE IF EXISTS ${name}`)
-    if (added.length > 0 || evict.length > 0) preparedFeatureTablesReady.clear()
+    if (added.length > 0 || evict.length > 0) resetFeatureTables()
 
     console.info('[Perf] duckdb-worker:window-load', {
       cells: cells.length,
@@ -1115,7 +1160,9 @@ async function ensurePreparedFeatureTableForZoom(z: number, baseQuery: string): 
   const key = featureTableBuildKey(baseQuery, z)
   if (preparedFeatureTablesReady.get(z) === key) return
 
-  const inflight = inflightFeatureTableBuild.get(key)
+  const generation = featureTableGeneration
+  const inflightKey = `${generation}:${key}`
+  const inflight = inflightFeatureTableBuild.get(inflightKey)
   if (inflight) {
     await inflight
     return
@@ -1124,16 +1171,28 @@ async function ensurePreparedFeatureTableForZoom(z: number, baseQuery: string): 
   const xExpr = tileXExpr('tf', z)
   const yExpr = tileYExpr('tf', z)
   const table = featureTableName(z)
-  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
-  const src = tileRowSource(baseQuery, color)
+  const src = tileRowSource(baseQuery, { join: '' })
 
   const request = (async () => {
-    const sql = `
-CREATE OR REPLACE TEMP TABLE ${table} AS
+    // A whole city is one table and is built in rowid slices; a windowed
+    // city's trees_fast is a view, with no rowid, and is built in one go.
+    const rowCount = cityWindow ? 0 : Number((await conn.query(`SELECT count(*) AS n FROM trees_fast`)).get(0)?.n ?? 0)
+    const slices = Math.max(1, Math.ceil(rowCount / FEATURE_TABLE_SLICE_ROWS))
+    const sliceWhere = (i: number) => slices === 1
+      ? ''
+      : `\n  WHERE tf.rowid >= ${i * FEATURE_TABLE_SLICE_ROWS}${i === slices - 1 ? '' : ` AND tf.rowid < ${(i + 1) * FEATURE_TABLE_SLICE_ROWS}`}`
+    // The colour is not stored: the read joins it (featureTableBuildKey).
+    // The id is a column too, so it is held once, and goes back into the
+    // struct at read time.
+    const sliceSql = (i: number) => `
+${i === 0 ? `CREATE OR REPLACE TEMP TABLE ${table} AS` : `INSERT INTO ${table}`}
 ${src.prelude} rows AS (
   SELECT
     ${xExpr} AS xtile,
     ${yExpr} AS ytile,
+    ${src.id} AS tree_id,
+    tf.species,
+    tf.tree_form,
     {
       'geom': ST_AsMVTGeom(
         ST_Point(tf.x_3857, tf.y_3857),
@@ -1142,17 +1201,11 @@ ${src.prelude} rows AS (
         64,
         true
       ),
-      'id': ${src.id},
-      'dbh': TRY_CAST(${src.dbh} AS DOUBLE),
-      'category': COALESCE(tf.tree_form, 'default'),
-      'display_color': ${color.expr},
-      'rotation': 0,
-      'point_count': 1,
-      'grid_m': 32
+      'dbh': TRY_CAST(${src.dbh} AS DOUBLE)
     } AS feature
-  FROM ${src.from}
+  FROM ${src.from}${sliceWhere(i)}
 )
-SELECT xtile, ytile, feature
+SELECT xtile, ytile, tree_id, species, tree_form, feature
 FROM rows
 WHERE xtile >= 0
   AND ytile >= 0
@@ -1164,17 +1217,31 @@ WHERE xtile >= 0
     // clipped to its own tile is never empty; the readers' ST_AsMVT FILTER
     // keeps the guard.
     const t0 = nowMs()
-    await conn.query(sql)
-    console.info('[Perf] duckdb-worker:feature-table', { z, ms: Math.round(nowMs() - t0) })
+    // Readers check this key; the first slice replaces the table under it.
+    preparedFeatureTablesReady.delete(z)
+    let longestMs = 0
+    const current = () => generation === featureTableGeneration && key === featureTableBuildKey(effectiveBaseQuery(tileQuerySql), z)
+    for (let i = 0; i < slices; i += 1) {
+      // Rows or query changed while an earlier slice ran: this table is for neither.
+      if (!current()) {
+        console.info('[Perf] duckdb-worker:feature-table:abandoned', { z, slice: i, slices })
+        return
+      }
+      const ts = nowMs()
+      await conn!.query(sliceSql(i))
+      longestMs = Math.max(longestMs, nowMs() - ts)
+    }
+    console.info('[Perf] duckdb-worker:feature-table', { z, ms: Math.round(nowMs() - t0), slices, longestSliceMs: Math.round(longestMs) })
+    if (!current()) return
     // CREATE OR REPLACE swapped the table under whatever key was there.
     preparedFeatureTablesReady.set(z, key)
   })()
 
-  inflightFeatureTableBuild.set(key, request)
+  inflightFeatureTableBuild.set(inflightKey, request)
   try {
     await request
   } finally {
-    inflightFeatureTableBuild.delete(key)
+    inflightFeatureTableBuild.delete(inflightKey)
   }
 }
 
@@ -1203,6 +1270,10 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
 
   const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
   const src = tileRowSource(baseQuery, color)
+  // Overview cells group by colour only (see aggCacheSql in cityTables.ts).
+  const aggColor = colorSql('tf', colorOverrideActive, speciesShadeActive, { aggregated: true })
+  const aggSrc = tileRowSource(baseQuery, aggColor)
+  const aggDbh = aggregatedDbhSql(z)
   // The z15 feature table is a whole-city materialisation (one MVT geometry
   // per tree) that the desktop's LOD prewarm builds after the intro lands. A
   // tile request reads it when it is there and runs the direct join
@@ -1255,34 +1326,39 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   }
 
   const request = (async () => {
+    // The feature table has no colour: it is resolved here over the range's
+    // rows (a few tens of thousands), so a colour change never rebuilds it.
+    const tableColor = colorSql('f', colorOverrideActive, speciesShadeActive)
     const sql = useFeatureTable ? `
 WITH rows AS (
   SELECT
-    xtile,
-    ytile,
-    feature
-  FROM ${featureTableName(PREPARED_FEATURE_TABLE_ZOOM)}
-  WHERE xtile BETWEEN ${minX} AND ${maxX}
-    AND ytile BETWEEN ${minY} AND ${maxY}
+    f.xtile,
+    f.ytile,
+    ${tableColor.expr} AS display_color,
+    struct_insert(f.feature, id := f.tree_id) AS feature
+  FROM ${featureTableName(PREPARED_FEATURE_TABLE_ZOOM)} f
+  ${tableColor.join}
+  WHERE f.xtile BETWEEN ${minX} AND ${maxX}
+    AND f.ytile BETWEEN ${minY} AND ${maxY}
 )
 SELECT
   xtile,
   ytile,
+  display_color AS layer,
   ST_AsMVT(feature, 'trees', 4096, 'geom') FILTER (WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)) AS mvt
 FROM rows
-GROUP BY xtile, ytile
+GROUP BY xtile, ytile, display_color
 ` : simplifyGridMeters > 0 ? `
-${src.prelude} pts AS (
+${aggSrc.prelude} pts AS (
   SELECT
     tf.x_3857,
     tf.y_3857,
-    COALESCE(tf.tree_form, 'default') AS category,
-    ${color.expr} AS display_color,
-    ${src.dbh} AS dbh,
+    ${aggColor.expr} AS display_color,
+    ${aggSrc.dbh} AS dbh,
     ${tileXExpr('tf', z)} AS xtile,
     ${tileYExpr('tf', z)} AS ytile
-  FROM ${src.from}
-  WHERE ${src.where}${tileXExpr('tf', z)} BETWEEN ${minX} AND ${maxX}
+  FROM ${aggSrc.from}
+  WHERE ${aggSrc.where}${tileXExpr('tf', z)} BETWEEN ${minX} AND ${maxX}
     AND ${tileYExpr('tf', z)} BETWEEN ${minY} AND ${maxY}
 ), agg AS (
   SELECT
@@ -1290,16 +1366,16 @@ ${src.prelude} pts AS (
     ytile,
     floor(x_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gx,
     floor(y_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gy,
-    category,
     display_color,
-    AVG(dbh) AS dbh,
+    ${aggDbh.agg} AS dbh,
     COUNT(*) AS point_count
   FROM pts
-  GROUP BY 1, 2, 3, 4, 5, 6
+  GROUP BY 1, 2, 3, 4, 5
 ), rows AS (
   SELECT
     xtile,
     ytile,
+    display_color,
     {
       'geometry': ST_AsMVTGeom(
         ST_Point(gx, gy),
@@ -1307,12 +1383,7 @@ ${src.prelude} pts AS (
         4096,
         64,
         true
-      ),
-      'id': -1,
-      'dbh': TRY_CAST(dbh AS DOUBLE),
-      'category': COALESCE(category, 'default'),
-      'display_color': display_color,
-      'rotation': 0,
+      ),${aggDbh.property}
       'point_count': TRY_CAST(point_count AS INTEGER),
       'grid_m': ${simplifyGridMeters}
     } AS feature
@@ -1321,10 +1392,11 @@ ${src.prelude} pts AS (
 SELECT
   xtile,
   ytile,
+  display_color AS layer,
   ST_AsMVT(feature, 'trees', 4096, 'geometry') AS mvt
 FROM rows
 WHERE feature.geometry IS NOT NULL AND NOT ST_IsEmpty(feature.geometry)
-GROUP BY xtile, ytile
+GROUP BY xtile, ytile, display_color
 ` : `
 ${src.prelude} pts AS (
   SELECT
@@ -1332,9 +1404,7 @@ ${src.prelude} pts AS (
     tf.y_3857,
     ${src.id} AS id,
     ${src.dbh} AS dbh,
-    COALESCE(tf.tree_form, 'default') AS category,
     ${color.expr} AS display_color,
-    0 AS rotation,
     ${tileXExpr('tf', z)} AS xtile,
     ${tileYExpr('tf', z)} AS ytile
   FROM ${src.from}
@@ -1344,6 +1414,7 @@ ${src.prelude} pts AS (
   SELECT
     xtile,
     ytile,
+    display_color,
     {
       'geom': ST_AsMVTGeom(
         ST_Point(x_3857, y_3857),
@@ -1353,35 +1424,32 @@ ${src.prelude} pts AS (
         true
       ),
       'id': id,
-      'dbh': TRY_CAST(dbh AS DOUBLE),
-      'category': category,
-      'display_color': display_color,
-      'rotation': rotation,
-      'point_count': 1,
-      'grid_m': 32
+      'dbh': TRY_CAST(dbh AS DOUBLE)
     } AS feature
   FROM pts
 )
 SELECT
   xtile,
   ytile,
+  display_color AS layer,
   -- The geometry guard is the aggregate's FILTER, not a WHERE: DuckDB-WASM
   -- pushes a WHERE on feature.geom into the scan ahead of the tile range and
   -- runs ST_AsMVTGeom on every tree in the city (8.3 s against 32 ms for a
   -- four-tile z16 batch on Boston).
   ST_AsMVT(feature, 'trees', 4096, 'geom') FILTER (WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)) AS mvt
 FROM rows
-GROUP BY xtile, ytile
+GROUP BY xtile, ytile, display_color
 `
 
     const t0 = nowMs()
     const result = await conn.query(sql)
-    const rows = result.toArray()
+    // One row per tile and colour; each colour becomes its own source layer.
+    const tiles = assembleLayeredTiles(result.toArray(), MVT_FALLBACK_LAYER)
     console.info('[Perf] duckdb-worker:neighborhood-batch', {
       z,
       mode: useFeatureTable ? 'feature-table' : simplifyGridMeters > 0 ? `agg${simplifyGridMeters}` : 'points',
       tiles: (maxX - minX + 1) * (maxY - minY + 1),
-      nonEmpty: rows.length,
+      nonEmpty: tiles.size,
       ms: Math.round(nowMs() - t0),
     })
 
@@ -1393,15 +1461,9 @@ GROUP BY xtile, ytile
           if (windowCoversTile(z, tx, ty)) setCachedTile(tileCacheKeyForRevision(rev, z, tx, ty), new Uint8Array())
         }
       }
-      for (const row of rows) {
-        const xtile = Number(row.xtile)
-        const ytile = Number(row.ytile)
+      for (const { xtile, ytile, mvt } of tiles.values()) {
         if (!windowCoversTile(z, xtile, ytile)) continue
-        const raw = row.mvt as Uint8Array | undefined
-        const tile = !raw || raw.length === 0
-          ? new Uint8Array()
-          : new Uint8Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength))
-        setCachedTile(tileCacheKeyForRevision(rev, z, xtile, ytile), tile)
+        setCachedTile(tileCacheKeyForRevision(rev, z, xtile, ytile), mvt)
       }
     }
   })()
@@ -1434,6 +1496,9 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
   const bounds = tileBounds3857(z, x, y)
   const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
   const src = tileRowSource(baseQuery, color)
+  const aggColor = colorSql('tf', colorOverrideActive, speciesShadeActive, { aggregated: true })
+  const aggSrc = tileRowSource(baseQuery, aggColor)
+  const aggDbh = aggregatedDbhSql(z)
 
   // An overview tile (z11 to z14) is served from an aggregate over the
   // visible neighbourhood, never the whole city: the transient is
@@ -1446,58 +1511,48 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
 
   const request = (async () => {
     const sql = simplifyGridMeters > 0 ? `
-${src.prelude} pts AS (
+${aggSrc.prelude} pts AS (
   SELECT
     tf.x_3857,
     tf.y_3857,
-    COALESCE(tf.tree_form, 'default') AS category,
-    ${color.expr} AS display_color,
-    ${src.dbh} AS dbh
-  FROM ${src.from}
-  WHERE ${src.where}tf.x_3857 BETWEEN ${bounds.minX} AND ${bounds.maxX}
+    ${aggColor.expr} AS display_color,
+    ${aggSrc.dbh} AS dbh
+  FROM ${aggSrc.from}
+  WHERE ${aggSrc.where}tf.x_3857 BETWEEN ${bounds.minX} AND ${bounds.maxX}
     AND tf.y_3857 BETWEEN ${bounds.minY} AND ${bounds.maxY}
 ), agg AS (
   SELECT
     floor(x_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gx,
     floor(y_3857 / ${simplifyGridMeters}) * ${simplifyGridMeters} + ${simplifyGridMeters} / 2.0 AS gy,
-    category,
     display_color,
-    AVG(dbh) AS dbh,
+    ${aggDbh.agg} AS dbh,
     COUNT(*) AS point_count
   FROM pts
-  GROUP BY 1, 2, 3, 4
+  GROUP BY 1, 2, 3
 ), tiles AS (
-  SELECT {
+  SELECT display_color, {
     'geometry': ST_AsMVTGeom(
       ST_Point(gx, gy),
       ST_Extent(ST_TileEnvelope(${z}, ${x}, ${y})),
       4096,
       64,
       true
-    ),
-    'id': -1,
-    'dbh': TRY_CAST(dbh AS DOUBLE),
-    'category': COALESCE(category, 'default'),
-    'display_color': display_color,
-    'rotation': 0,
+    ),${aggDbh.property}
     'point_count': TRY_CAST(point_count AS INTEGER),
     'grid_m': ${simplifyGridMeters}
   } AS feature
   FROM agg
 )
-SELECT ST_AsMVT(feature, 'trees', 4096, 'geometry') AS mvt
+SELECT ${x} AS xtile, ${y} AS ytile, display_color AS layer, ST_AsMVT(feature, 'trees', 4096, 'geometry') AS mvt
 FROM tiles
 WHERE feature.geometry IS NOT NULL AND NOT ST_IsEmpty(feature.geometry)
+GROUP BY display_color
 ` : `
 ${src.prelude} points AS (
   SELECT
     ${src.id} AS id,
     ${src.dbh} AS dbh,
-    COALESCE(tf.tree_form, 'default') AS category,
     ${color.expr} AS display_color,
-    0 AS rotation,
-    1 AS point_count,
-    32 AS grid_m,
     ST_AsMVTGeom(
       ST_Point(tf.x_3857, tf.y_3857),
       ST_Extent(ST_TileEnvelope(${z}, ${x}, ${y})),
@@ -1510,16 +1565,14 @@ ${src.prelude} points AS (
     AND tf.y_3857 BETWEEN ${bounds.minY} AND ${bounds.maxY}
   LIMIT 50000
 )
-SELECT ST_AsMVT(points, 'trees', 4096, 'geom') AS mvt
+SELECT ${x} AS xtile, ${y} AS ytile, display_color AS layer, ST_AsMVT({'geom': geom, 'id': id, 'dbh': TRY_CAST(dbh AS DOUBLE)}, 'trees', 4096, 'geom') AS mvt
 FROM points
 WHERE geom IS NOT NULL
+GROUP BY display_color
 `
 
     const result = await conn.query(sql)
-    const raw = result.get(0)?.mvt as Uint8Array | undefined
-    const tile = !raw || raw.length === 0
-      ? new Uint8Array()
-      : new Uint8Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength))
+    const tile = assembleLayeredTiles(result.toArray(), MVT_FALLBACK_LAYER).get(`${x}/${y}`)?.mvt ?? new Uint8Array()
     if (windowCoversTile(z, x, y)) setCachedTile(key, tile)
     return new Uint8Array(tile)
   })()

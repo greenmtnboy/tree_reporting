@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue'
 import maplibregl from 'maplibre-gl'
+import { treeCircleLayerIds } from './useMapLayers'
 
 // --- Exported constants ---
 
@@ -311,8 +312,9 @@ export function useMapIntroAnimation({
           const point = map.value!.project([tree.lng, tree.lat])
           return point.x >= 0 && point.x <= width && point.y >= 0 && point.y <= height
         })
-        const circles = !visibleSprite && map.value.getLayer('trees-circle')
-          ? map.value.queryRenderedFeatures([[0, 0], [width, height]], { layers: ['trees-circle'] }).length
+        const circleLayers = visibleSprite ? [] : treeCircleLayerIds(map.value)
+        const circles = circleLayers.length
+          ? map.value.queryRenderedFeatures([[0, 0], [width, height]], { layers: circleLayers }).length
           : 0
         const frameReady = !!visibleSprite || (map.value.isSourceLoaded('trees') && circles >= VIEWPORT_TREE_MIN_FEATURES)
         if (frameReady) {

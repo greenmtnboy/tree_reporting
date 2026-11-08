@@ -328,7 +328,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useDuckDB } from '../composables/useDuckDB'
 import { useMapIntro } from '../composables/useMapIntro'
 import { useMapLifecycle } from '../composables/useMapLifecycle'
-import { useMapLayers, TREES_SOURCE_MAXZOOM, addLandmarkLayer, removeLandmarkLayer, registerLandmarkEyeIcon } from '../composables/useMapLayers'
+import { useMapLayers, TREES_SOURCE_MAXZOOM, addLandmarkLayer, removeLandmarkLayer, registerLandmarkEyeIcon, treeCircleLayerIds, treeHeatLayerIds, treeSourceFeatureCount } from '../composables/useMapLayers'
 import { useLandmarkData } from '../composables/useLandmarkData'
 import { addCityMarkers, updateCityMarkersSelected, removeCityMarkers, bindCityMarkerInteractions } from '../composables/useGlobeCityMarkers'
 import { useMapIntroAnimation, INTRO_START_ZOOM, INTRO_START_BEARING, INTRO_END_BEARING, INTRO_END_ZOOM } from '../composables/useMapIntroAnimation'
@@ -657,17 +657,19 @@ function logIconLayerSnapshot(reason: string) {
   lastIconDebugAt = now
   const zoom = mapRef.value.getZoom()
   const iconLayerExists = !!mapRef.value.getLayer('trees-icon')
-  const circleLayerExists = !!mapRef.value.getLayer('trees-circle')
-  const heatLayerExists = !!mapRef.value.getLayer('trees-heat')
+  const circleLayers = treeCircleLayerIds(mapRef.value)
+  const heatLayers = treeHeatLayerIds(mapRef.value)
+  const circleLayerExists = circleLayers.length > 0
+  const heatLayerExists = heatLayers.length > 0
   const iconFeatures = iconLayerExists ? ((mapRef.value.getLayer('trees-icon') as unknown as { implementation?: { trees: readonly unknown[] } }).implementation?.trees.length ?? 0) : 0
-  const circleFeatures = circleLayerExists ? mapRef.value.queryRenderedFeatures(undefined, { layers: ['trees-circle'] }).length : 0
-  const heatFeatures = heatLayerExists ? mapRef.value.queryRenderedFeatures(undefined, { layers: ['trees-heat'] }).length : 0
+  const circleFeatures = circleLayerExists ? mapRef.value.queryRenderedFeatures(undefined, { layers: circleLayers }).length : 0
+  const heatFeatures = heatLayerExists ? mapRef.value.queryRenderedFeatures(undefined, { layers: heatLayers }).length : 0
   logIconLayerDebug('snapshot', {
     reason,
     zoom: Number(zoom.toFixed(2)),
     iconLayerExists, circleLayerExists, heatLayerExists,
     iconFeatures, circleFeatures, heatFeatures,
-    circleOpacity: circleLayerExists ? mapRef.value.getPaintProperty('trees-circle', 'circle-opacity') : null,
+    circleOpacity: circleLayerExists ? mapRef.value.getPaintProperty(circleLayers[0], 'circle-opacity') : null,
   })
 }
 
@@ -1473,14 +1475,15 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
 
 function bindTreeInteractions() {
   if (!mapRef.value || treeInteractionsBound) return
-  const interactiveLayers = ['trees-circle']
+  // Per colour, so read at each event: a colour change rebuilds them.
+  const interactiveLayers = () => mapRef.value ? treeCircleLayerIds(mapRef.value) : []
   const updateTreeCursor = (point?: maplibregl.PointLike) => {
     if (!mapRef.value) return
     if (!point) {
       mapRef.value.getCanvas().style.cursor = ''
       return
     }
-    const features = mapRef.value.queryRenderedFeatures(point, { layers: interactiveLayers })
+    const features = mapRef.value.queryRenderedFeatures(point, { layers: interactiveLayers() })
     const screenPoint = maplibregl.Point.convert(point)
     mapRef.value.getCanvas().style.cursor = features.length > 0 || pickCrownSprite(screenPoint) ? 'pointer' : ''
   }
@@ -1488,7 +1491,7 @@ function bindTreeInteractions() {
   mapRef.value.on('click', (e) => {
     if (!mapRef.value) return
     const crown = pickCrownSprite(e.point)
-    const picked = crown ? undefined : pickTappedTree(e.point, interactiveLayers)
+    const picked = crown ? undefined : pickTappedTree(e.point, interactiveLayers())
     if (props.simplified) showMapTapRing(e.point, !!crown || (!!picked && isSelectableTree(picked)))
     if (crown) {
       void showTreeCard({ type: 'Feature', geometry: { type: 'Point', coordinates: [crown.lng, crown.lat] }, properties: { id: crown.id } }, [crown.lng, crown.lat])
@@ -1905,7 +1908,9 @@ watch([effectiveMapQuery, publishedTreeIdFilterSql, mapQueryRevision, effectiveC
 
 // When the worker posts new color info (init or agent override), rebuild layers
 watch(workerDistinctColors, () => {
-  if (!mapRef.value?.loaded()) return
+  // Not map.loaded(): that waits for every tile too, and a colour with no
+  // layer of its own is not drawn at all (each colour is its own source layer).
+  if (!mapRef.value?.isStyleLoaded()) return
   applyColorToLayers()
 })
 
@@ -2142,11 +2147,11 @@ onMounted(async () => {
 
     map.on('idle', () => {
       if ((props.nearbyLocation || hasUrlFilters.value) && map.getSource('trees') && map.isSourceLoaded('trees')) {
-        const layers = ['trees-circle', 'trees-heat'].filter(id => map.getLayer(id))
+        const layers = [...treeCircleLayerIds(map), ...treeHeatLayerIds(map)]
         // The desktop's close-up renderer is a custom layer, so rendered circle
         // features disappear there even while matching trees are on screen.
         nearbyEmpty.value = hasUrlFilters.value
-          ? map.querySourceFeatures('trees', { sourceLayer: 'trees' }).length === 0
+          ? treeSourceFeatureCount(map) === 0
           : layers.length > 0 && map.queryRenderedFeatures(undefined, { layers }).length === 0
       } else {
         nearbyEmpty.value = false

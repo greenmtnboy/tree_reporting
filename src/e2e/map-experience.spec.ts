@@ -153,7 +153,11 @@ for (const [label, viewport] of [
       expect(camera.center.lat).toBeCloseTo(42.3601, 4)
       expect(camera.center.lng).toBeCloseTo(-71.0589, 4)
       expect(camera.zoom).toBe(17)
-      await page.waitForFunction(() => (window as any).__treeMap.queryRenderedFeatures({ layers: ['trees-circle'] }).length > 0)
+      await page.waitForFunction(() => {
+        const map = (window as any).__treeMap
+        const layers = map.getStyle().layers.filter((l: { id: string }) => l.id.startsWith('trees-circle-')).map((l: { id: string }) => l.id)
+        return layers.length > 0 && map.queryRenderedFeatures({ layers }).length > 0
+      })
       const timing = await page.evaluate(() => performance.getEntriesByType('measure').filter(e => e.name.startsWith('trees:')).map(e => e.toJSON()))
       await testInfo.attach('nearby-load-timing', { body: JSON.stringify(timing, null, 2), contentType: 'application/json' })
       expect(timing.some(e => e.name === 'trees:nearby:load')).toBe(true)

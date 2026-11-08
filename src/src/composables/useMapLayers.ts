@@ -62,11 +62,43 @@ const HEATMAP_OPACITY_NORMAL: any[] = [
   HEATMAP_ZOOM_OPACITY_END, 0,
 ]
 
-// --- Expression builders ---
+// --- Per-colour layers ---
 
-function buildCircleColorExpression(): maplibregl.ExpressionSpecification {
-  return ['coalesce', ['get', 'display_color'], '#66BB6A'] as maplibregl.ExpressionSpecification
+// The worker writes one MVT source layer per colour, named by the colour
+// (workers/mvtLayers.ts), and the map draws one heatmap and one circle layer
+// per source layer. Each layer's bucket then reads only its own features:
+// with a single source layer and a colour filter per layer, MapLibre ran
+// every layer's filter over every feature of the tile.
+const HEAT_LAYER_PREFIX = 'trees-heat-'
+const CIRCLE_LAYER_PREFIX = 'trees-circle-'
+
+function styleLayerIds(mapInstance: maplibregl.Map, prefix: string): string[] {
+  return (mapInstance.getStyle()?.layers ?? []).filter((l) => l.id.startsWith(prefix)).map((l) => l.id)
 }
+
+/** The circle layers, one per colour: the tree layers a tap or a feature query reads. */
+export function treeCircleLayerIds(mapInstance: maplibregl.Map): string[] {
+  return styleLayerIds(mapInstance, CIRCLE_LAYER_PREFIX)
+}
+
+/** The heatmap layers, one per colour. */
+export function treeHeatLayerIds(mapInstance: maplibregl.Map): string[] {
+  return styleLayerIds(mapInstance, HEAT_LAYER_PREFIX)
+}
+
+/** Features the `trees` source holds for the view, over every colour's source layer. */
+export function treeSourceFeatureCount(mapInstance: maplibregl.Map): number {
+  if (!mapInstance.getSource('trees')) return 0
+  const layers = new Set<string>()
+  for (const l of mapInstance.getStyle()?.layers ?? []) {
+    if ('source' in l && l.source === 'trees' && 'source-layer' in l && l['source-layer']) layers.add(l['source-layer'])
+  }
+  let n = 0
+  for (const sourceLayer of layers) n += mapInstance.querySourceFeatures('trees', { sourceLayer }).length
+  return n
+}
+
+// --- Expression builders ---
 
 function buildHeatmapColorExpression(hexColor: string): maplibregl.ExpressionSpecification {
   return [
@@ -124,6 +156,47 @@ function buildHeatmapLayerPaint(hexColor: string): any {
     ],
     'heatmap-color': buildHeatmapColorExpression(hexColor),
     'heatmap-opacity': [...HEATMAP_OPACITY_NORMAL],
+  }
+}
+
+function heatLayerSpec(hexColor: string): maplibregl.LayerSpecification {
+  return {
+    id: `${HEAT_LAYER_PREFIX}${hexColor}`,
+    type: 'heatmap',
+    source: 'trees',
+    'source-layer': hexColor,
+    maxzoom: HEATMAP_ZOOM_OPACITY_END,
+    paint: buildHeatmapLayerPaint(hexColor),
+  }
+}
+
+function circleLayerSpec(hexColor: string, simplified: boolean): maplibregl.LayerSpecification {
+  return {
+    id: `${CIRCLE_LAYER_PREFIX}${hexColor}`,
+    type: 'circle',
+    source: 'trees',
+    'source-layer': hexColor,
+    minzoom: CIRCLE_ZOOM_MIN,
+    ...(simplified ? {} : { maxzoom: CIRCLE_ZOOM_MAX }),
+    paint: {
+      'circle-radius': [...buildCircleRadiusExpression()] as maplibregl.ExpressionSpecification,
+      'circle-color': hexColor,
+      'circle-opacity': (simplified
+        ? ['interpolate', ['linear'], ['zoom'],
+          CIRCLE_ZOOM_OPACITY_START, 0,
+          CIRCLE_ZOOM_OPACITY_START + 0.1, 0.85,
+          MAX_ZOOM, 0.92]
+        : ['interpolate', ['linear'], ['zoom'],
+          CIRCLE_ZOOM_OPACITY_START, 0,
+          CIRCLE_ZOOM_OPACITY_START + 0.1, 0.75,
+          CIRCLE_ZOOM_OPACITY_MID, 0.92,
+          CIRCLE_ZOOM_OPACITY_END - 0.1, 0.75,
+          CIRCLE_ZOOM_OPACITY_END, 0]) as maplibregl.ExpressionSpecification,
+      'circle-pitch-alignment': 'map',
+      'circle-pitch-scale': 'map',
+      'circle-stroke-width': 0.65,
+      'circle-stroke-color': 'rgba(255,255,255,0)',
+    },
   }
 }
 
@@ -260,7 +333,7 @@ export interface UseMapLayersOptions {
 }
 
 export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRevision }: UseMapLayersOptions) {
-  let lastBuiltHeatmapColors: string[] = []
+  let lastBuiltColors: string[] = []
   let treesSourceReloadNonce = 0
   let crownLayer: TreeCrownLayer | undefined
 
@@ -268,15 +341,28 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     return typeof performance !== 'undefined' ? performance.now() : Date.now()
   }
 
-  function removeOldHeatmapLayers(mapInstance: maplibregl.Map) {
-    for (const hex of lastBuiltHeatmapColors) {
-      if (mapInstance.getLayer(`trees-heat-${hex}`)) mapInstance.removeLayer(`trees-heat-${hex}`)
+  function removeColorLayers(mapInstance: maplibregl.Map) {
+    for (const id of [...treeHeatLayerIds(mapInstance), ...treeCircleLayerIds(mapInstance)]) mapInstance.removeLayer(id)
+    // Legacy single-source-layer ids.
+    for (const id of ['trees-circle', ...TREE_CATEGORIES.map((cat) => `${HEAT_LAYER_PREFIX}${cat}`)]) {
+      if (mapInstance.getLayer(id)) mapInstance.removeLayer(id)
     }
-    // Remove any legacy category-based layers
-    for (const cat of TREE_CATEGORIES) {
-      if (mapInstance.getLayer(`trees-heat-${cat}`)) mapInstance.removeLayer(`trees-heat-${cat}`)
-    }
-    lastBuiltHeatmapColors = []
+    lastBuiltColors = []
+  }
+
+  /**
+   * One heatmap and one circle layer per colour. The heatmaps sit under the
+   * sprites; the circles sit under them on the desktop (whose sprites take
+   * over from z13) and over them on a phone, as the single circle layer did.
+   */
+  function addColorLayers(mapInstance: maplibregl.Map, colors: string[]) {
+    const crownId = crownLayer && mapInstance.getLayer(crownLayer.id) ? crownLayer.id : undefined
+    for (const hex of colors) mapInstance.addLayer(heatLayerSpec(hex), crownId)
+    const circleBefore = simplified
+      ? (mapInstance.getLayer('landmarks-eye') ? 'landmarks-eye' : undefined)
+      : crownId
+    for (const hex of colors) mapInstance.addLayer(circleLayerSpec(hex, simplified), circleBefore)
+    lastBuiltColors = [...colors]
   }
 
   function addTreeLayers() {
@@ -287,14 +373,13 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     console.info('[Perf] map:layers:add:start')
 
     const treeTiles = [`duckdb://trees/{z}/{x}/{y}.pbf?r=${mapQueryRevision.value}&n=${treesSourceReloadNonce}`]
-    const heatColors = activeHeatmapColors.value
-    const heatLayerIds = heatColors.map((hex) => `trees-heat-${hex}`)
+    const colors = activeHeatmapColors.value
 
     const existingSource = mapInstance.getSource('trees') as any
-    const hasHeatLayers = heatLayerIds.length > 0 && heatLayerIds.every((id) => !!mapInstance.getLayer(id))
-    const hasCircleLayer = !!mapInstance.getLayer('trees-circle')
+    const hasColorLayers = colors.length > 0
+      && colors.every((hex) => !!mapInstance.getLayer(`${HEAT_LAYER_PREFIX}${hex}`) && !!mapInstance.getLayer(`${CIRCLE_LAYER_PREFIX}${hex}`))
     const hasSpriteLayer = !!mapInstance.getLayer(simplified ? 'trees-crown' : 'trees-icon')
-    const hasAllLayers = hasHeatLayers && hasCircleLayer && hasSpriteLayer
+    const hasAllLayers = hasColorLayers && hasSpriteLayer
 
     // Prefer in-place source URL refresh to avoid tearing down layers.
     if (existingSource && hasAllLayers) {
@@ -307,8 +392,7 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
 
     if (mapInstance.getLayer('trees-icon')) mapInstance.removeLayer('trees-icon')
     if (mapInstance.getLayer('trees-crown')) mapInstance.removeLayer('trees-crown')
-    if (mapInstance.getLayer('trees-circle')) mapInstance.removeLayer('trees-circle')
-    removeOldHeatmapLayers(mapInstance)
+    removeColorLayers(mapInstance)
     if (mapInstance.getSource('trees')) mapInstance.removeSource('trees')
 
     mapInstance.addSource('trees', {
@@ -323,54 +407,9 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
       maxzoom: TREES_SOURCE_MAXZOOM,
     })
 
-    // Layer 1: Heatmaps per active display_color
-    for (const hexColor of heatColors) {
-      mapInstance.addLayer({
-        id: `trees-heat-${hexColor}`,
-        type: 'heatmap',
-        source: 'trees',
-        'source-layer': 'trees',
-        maxzoom: HEATMAP_ZOOM_OPACITY_END,
-        filter: ['==', ['coalesce', ['get', 'display_color'], '#66BB6A'], hexColor],
-        paint: buildHeatmapLayerPaint(hexColor),
-      })
-    }
-    lastBuiltHeatmapColors = [...heatColors]
-
     crownLayer = new TreeCrownLayer(useDuckDB().getMapTrees, simplified)
     mapInstance.addLayer(crownLayer)
-
-    // Layer 2: Colored circles at medium zoom
-    mapInstance.addLayer({
-      id: 'trees-circle',
-      type: 'circle',
-      source: 'trees',
-      'source-layer': 'trees',
-      minzoom: CIRCLE_ZOOM_MIN,
-      ...(simplified ? {} : { maxzoom: CIRCLE_ZOOM_MAX }),
-      paint: {
-        'circle-radius': [...buildCircleRadiusExpression()],
-        'circle-color': buildCircleColorExpression(),
-        'circle-opacity': simplified
-          ? ['interpolate', ['linear'], ['zoom'],
-            CIRCLE_ZOOM_OPACITY_START, 0,
-            CIRCLE_ZOOM_OPACITY_START + 0.1, 0.85,
-            MAX_ZOOM, 0.92] as any
-          : ['interpolate', ['linear'], ['zoom'],
-            CIRCLE_ZOOM_OPACITY_START, 0,
-            CIRCLE_ZOOM_OPACITY_START + 0.1, 0.75,
-            CIRCLE_ZOOM_OPACITY_MID, 0.92,
-            CIRCLE_ZOOM_OPACITY_END - 0.1, 0.75,
-            CIRCLE_ZOOM_OPACITY_END, 0],
-        'circle-pitch-alignment': 'map',
-        'circle-pitch-scale': 'map',
-        'circle-stroke-width': 0.65,
-        'circle-stroke-color': 'rgba(255,255,255,0)',
-      },
-    })
-
-    // One desktop sprite layer from its first appearance through close zoom.
-    if (!simplified) mapInstance.moveLayer(crownLayer.id)
+    addColorLayers(mapInstance, colors)
 
     console.info('[Perf] map:layers:add:done', { ms: Math.round(nowMs() - t0) })
   }
@@ -381,44 +420,22 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     map.value?.triggerRepaint()
   }
 
-  // Sync layers to the current color state. Rebuilds heatmap layers when the set
-  // of active colors changes. The sprite shader uses the refreshed color map.
+  // Sync layers to the current colour set: the layers are per colour, so a
+  // new set rebuilds them. The sprite shader uses the refreshed color map.
   function applyColorToLayers() {
     if (!map.value) return
     const mapInstance = map.value
     const colors = activeHeatmapColors.value
 
-    if (mapInstance.getLayer('trees-circle')) {
-      mapInstance.setPaintProperty('trees-circle', 'circle-color', buildCircleColorExpression())
-    }
-
-    const colorsChanged = colors.length !== lastBuiltHeatmapColors.length
-      || colors.some((c, i) => c !== lastBuiltHeatmapColors[i])
+    const colorsChanged = colors.length !== lastBuiltColors.length
+      || colors.some((c, i) => c !== lastBuiltColors[i])
 
     if (colorsChanged && mapInstance.getSource('trees')) {
-      removeOldHeatmapLayers(mapInstance)
-      for (const hexColor of colors) {
-        mapInstance.addLayer({
-          id: `trees-heat-${hexColor}`,
-          type: 'heatmap',
-          source: 'trees',
-          'source-layer': 'trees',
-          maxzoom: HEATMAP_ZOOM_OPACITY_END,
-          filter: ['==', ['coalesce', ['get', 'display_color'], '#66BB6A'], hexColor],
-          paint: buildHeatmapLayerPaint(hexColor),
-        })
-      }
-      lastBuiltHeatmapColors = [...colors]
-      if (mapInstance.getLayer('trees-circle')) {
-        for (const hex of colors) mapInstance.moveLayer(`trees-heat-${hex}`, 'trees-circle')
-      }
+      removeColorLayers(mapInstance)
+      addColorLayers(mapInstance, colors)
     } else {
       // Just refresh heatmap opacity
-      for (const hex of lastBuiltHeatmapColors) {
-        const id = `trees-heat-${hex}`
-        if (!mapInstance.getLayer(id)) continue
-        mapInstance.setPaintProperty(id, 'heatmap-opacity', [...HEATMAP_OPACITY_NORMAL])
-      }
+      for (const id of treeHeatLayerIds(mapInstance)) mapInstance.setPaintProperty(id, 'heatmap-opacity', [...HEATMAP_OPACITY_NORMAL])
     }
   }
 
