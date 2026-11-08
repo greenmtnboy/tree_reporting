@@ -14,6 +14,8 @@
 // timings move by a few hundred ms between identical runs.
 //
 // MAP_BENCH_LAYOUT=desktop (default) waits for the intro to land first.
+// MAP_BENCH_QUERY adds hash-query parameters, e.g. colorBy=tree_form to
+// compare colour schemes on one build.
 import { execFileSync } from 'node:child_process'
 import { chromium, devices } from '@playwright/test'
 import process from 'node:process'
@@ -21,6 +23,8 @@ import process from 'node:process'
 const base = process.env.MAP_BENCH_URL ?? 'http://localhost:6173/'
 const city = process.env.MAP_BENCH_CITY ?? 'USBOS'
 const layout = process.env.MAP_BENCH_LAYOUT ?? 'desktop'
+// Extra hash-query parameters for the page, e.g. MAP_BENCH_QUERY='colorBy=tree_form'.
+const extraQuery = process.env.MAP_BENCH_QUERY ? `&${process.env.MAP_BENCH_QUERY}` : ''
 const latitude = Number(process.env.MAP_BENCH_LAT ?? 42.3601)
 const longitude = Number(process.env.MAP_BENCH_LNG ?? -71.0589)
 const steps = (process.env.MAP_BENCH_STEPS ?? 'z11,pan,pan,z12,pan,z13,pan,z14,z15,pan,z16,z17,pan,z18').split(',').map((s) => s.trim()).filter(Boolean)
@@ -112,7 +116,7 @@ async function runStep(step) {
 
 try {
   const started = Date.now()
-  await page.goto(`${base.replace(/#.*$/, '')}#/?city=${city}&mode=explore`)
+  await page.goto(`${base.replace(/#.*$/, '')}#/?city=${city}&mode=explore${extraQuery}`)
   await page.waitForFunction(
     (code) => document.querySelector('.tree-map')?.getAttribute('data-trees-loaded-for') === code,
     city,
