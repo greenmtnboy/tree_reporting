@@ -81,11 +81,48 @@ and z15.
 Chromium, 1400x900, Boston served from localhost (`pnpm bench:tiles`,
 `MAP_BENCH_QUERY=colorBy=tree_form` against the default):
 
-CHROMIUM_TILES_TABLE
+| Step | Tree form (run 1) | Leaf shade (run 1) | Tree form (run 2) | Leaf shade (run 2) |
+|---|---:|---:|---:|---:|
+| Trees on screen after navigation | 9.6 s | 9.6 s | TF2_LOAD | LS2_LOAD |
+| z11 settles (tiles trickle) | 8.3 s (0.85 s) | 9.9 s (0.63 s) | TF2_Z11 | LS2_Z11 |
+| pan at z11 | 0.66, 0.77 s | 0.90, 0.91 s | TF2_PAN11 | LS2_PAN11 |
+| z12 | 3.5 s (0.71 s) | 6.1 s (2.0 s) | TF2_Z12 | LS2_Z12 |
+| pan at z12 | 0.55 s | 1.05 s | TF2_PAN12 | LS2_PAN12 |
+| z13 | 2.0 s (0.42 s) | 2.0 s (0.64 s) | TF2_Z13 | LS2_Z13 |
+| pan at z13 | 1.04 s | 1.09 s | TF2_PAN13 | LS2_PAN13 |
+| z14 | 1.5 s | 1.5 s | TF2_Z14 | LS2_Z14 |
+| z15 | 1.0 s | 0.65 s | TF2_Z15 | LS2_Z15 |
+| z16 to z18 (four steps) | 0.65, 0.26, 0.29, 0.17 s | 0.59, 0.52, 0.20, 0.21 s | TF2_Z16 | LS2_Z16 |
+| Whole walk (14 steps) | 21.3 s | 26.3 s | TF2_TOTAL | LS2_TOTAL |
+| Renderer peak | 1,885 MB | 1,907 MB | TF2_PEAK | LS2_PEAK |
+
+The worker's own lines inside those walks: the z11 blocks 6.5 to 6.6 s
+against 7.7 to 7.8 s (two 4x4 blocks run back to back, each waiting on the
+other, right after the 6.9 to 7.4 s feature-table build), the z12 blocks
+2.3 to 2.4 s against 3.3 to 3.6 s, z13 0.27 to 0.58 s against 0.35 to 0.75 s.
+So of the 2.7 s the z12 step lost, about 1.1 s is the worker and the rest
+is MapLibre parsing 18 buckets a tile instead of 9: the span from the first
+tile to the last went from 0.7 s to 2.0 s, and the pans at z11 and z12,
+which the worker answers from cache, slowed by 0.2 to 0.5 s.
 
 Per-zoom render cost and main-thread time (`frame-time.bench.mjs`):
 
-CHROMIUM_FRAMES_TABLE
+Features MapLibre holds for the view (`querySourceFeatures`), and frames per
+second under forced repaint. SwiftShader draws at 2 to 9 frames a second
+in either scheme, so only the direction is meaningful:
+
+| Zoom | Features, tree form | Features, leaf shade | ms/frame, tree form | ms/frame, leaf shade |
+|---|---:|---:|---:|---:|
+| z11 | 88,876 | 151,505 (+70%) | 300 | 429 |
+| z12 | 144,024 | 204,267 (+42%) | 300 | 375 |
+| z13 | 146,245 | 162,383 (+11%) | 375 | 375 |
+| z14 | 76,701 | 81,128 (+6%) | 375 | 375 |
+| z15 | 23,436 | 23,436 | 188 | 176 |
+| z16 | sprites, no tiles | sprites, no tiles | 111 | 107 |
+
+Main-thread script time over a step was 10 to 80 ms in both schemes: the
+cost is in MapLibre's workers (bucket parsing) and the GPU passes, not the
+page's own JavaScript.
 
 ### 3. Every colour in the enrichment table gets a layer, whether the city has it or not
 
