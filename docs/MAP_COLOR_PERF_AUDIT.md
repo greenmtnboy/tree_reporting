@@ -153,8 +153,8 @@ tree count, not by zoom") is this.
 
 ## What to do, in order
 
-1. **Drop `category` from the overview GROUP BY and emit one shade per
-   species at the aggregated zooms** (`ensureNeighborhoodBatchTiles`,
+1. **Done on this branch.** Drop `category` from the overview GROUP BY and emit one shade per
+   species at the aggregated zooms (`ensureNeighborhoodBatchTiles`,
    `generatePointTileMvt`'s aggregate branch, `aggCacheSql`). Nothing reads
    it; `COALESCE(tf.tree_form, 'default')` can stay a constant in the
    feature struct. Keep the hash split for the point zooms (z15+), where
@@ -162,15 +162,14 @@ tree count, not by zoom") is this.
    -5% at z13; fewer features for MapLibre to bucket.
 2. **List only the colours the city holds** for the heatmap layers: join
    the city's vocabulary (species, tree_count) to `__species_shade` when
-   the scheme is set or the city switches. Zero cost; smaller cities draw
-   10 layers instead of 18. (A window must keep the full list, as today.)
-3. **Materialise the shade as a column at scheme change**, a one-byte ENUM
-   over the palette plus grey, `ADD COLUMN` + `UPDATE` (467 ms on Boston,
-   1.7 MB), and read it in `colorSql` with no join and no hash. Small per
-   query (a few percent), but it also lets the z15 feature table and the
-   tile caches stop depending on the colour: store the species or shade
-   code in the feature and resolve the colour at read time, so the picker
-   no longer rebuilds a 7 s table.
+   the scheme is set or the city switches. Zero cost, but only smaller
+   cities gain (Boston uses all 17), so low priority. (A window must keep
+   the full list, as today.)
+3. **Done on this branch (the second half).** The z15 feature table stores
+   species, form and id and resolves the colour at read time, so the
+   picker no longer rebuilds a 7 s table. Materialising the shade as a
+   one-byte ENUM column (`ADD COLUMN` + `UPDATE`, 461 ms on Boston) was
+   measured and is not worth it on its own: a few percent per query.
 4. **Reduce the heatmap layer count rather than the per-layer cost.** The
    per-colour-layer design is O(colours) in both parse and render. Options
    in rising effort: cap the palette the overview snaps to (the autumn
@@ -190,7 +189,24 @@ GROUP BYs in the two overview aggregates and `aggCacheSql`, and a z15
 feature table that carries id, species and form as columns and resolves the
 colour at read time (`struct_insert`), keyed without the colour signatures.
 
-AFTER_FIX_TABLE
+Measured the same way after the change (leaf shade, autumn), worker then
+Chromium:
+
+| | Before (leaf shade) | After (leaf shade) | Tree form, for reference |
+|---|---:|---:|---:|
+| z11 view, worker | 2.69 s, 163k features, 4.6 MB | 1.88 to 1.96 s, 136k, 3.9 MB | 1.33 to 1.44 s, 91k |
+| z12 view, worker | 4.6 to 4.7 s, 321k | 3.9 to 4.0 s, 299k | 3.3 to 3.6 s, 242k |
+| z13 view, worker | 5.1 to 5.4 s, 389k | 4.6 s, 378k | 4.3 to 4.7 s, 345k |
+| z14 view, worker | 2.0 s, 148k | 1.8 to 1.9 s, 144k | 1.7 to 1.9 s, 136k |
+| Prewarm after a scheme switch | 7.4 s (feature table rebuilt) | 0.33 s (table kept) | |
+| z11 blocks inside the Chromium walk | 7.7 to 8.6 s | 6.5 to 7.1 s | 6.4 to 6.6 s |
+| z12 blocks | 3.3 to 3.7 s | 2.5 to 2.8 s | 2.3 to 2.5 s |
+| z12 step settles | 6.0 to 6.1 s | 4.0 to 4.1 s | 3.5 to 3.6 s |
+| Whole walk (14 steps) | 26.3, 30.5 s | 23.2, 23.3 s | 20.8, 21.3 s |
+
+About half of the regression is recovered in the worker. What remains is
+mostly MapLibre's side of the 18 layers (the z12 tiles still trickle for
+1.2 s against 0.7 s) and the cells the extra colours genuinely add.
 
 ## Is this the right stack?
 
@@ -216,7 +232,15 @@ How much of the overview cost is the MVT round trip, measured on the
 worker's own z11 to z13 block SQL with the final `ST_AsMVT` stage replaced
 by returning the aggregate's columns:
 
-ARROW_DIRECT_TABLE
+| Block | MVT, as shipped | Columns only | MVT encoding's share |
+|---|---:|---:|---:|
+| z11 (136k cells) | 2.10 s | 1.03 s | 51% |
+| z12 (299k cells) | 3.9 s | 1.68 s | 57% |
+| z13 (378k cells) | 5.54 s | 1.96 s | 65% |
+
+Half to two thirds of every overview batch is turning rows the browser
+already holds into protobuf, before MapLibre spends its own time turning
+them back.
 
 Three ways forward, in rising scope:
 
