@@ -67,6 +67,13 @@ import {
 const MAX_TILE_CACHE_ENTRIES = 1536
 const MAX_PARALLEL_TILE_WORK = 3
 const PREPARED_FEATURE_TABLE_ZOOM = 15
+/**
+ * Rows per statement of the z15 feature-table build. The build runs right
+ * after the intro lands, and DuckDB answers one statement at a time: as one
+ * statement (6.5 s on Boston's 1.7M rows) every tile the first zoom or pan
+ * asks for waited behind all of it. In slices, a tile query waits for one.
+ */
+const FEATURE_TABLE_SLICE_ROWS = 250_000
 const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
 
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
@@ -129,6 +136,18 @@ const inflightNeighborhoodRanges = new Map<string, { rev: number; z: number } & 
 /** The content key of the feature table each zoom currently holds. */
 const preparedFeatureTablesReady = new Map<number, string>()
 const inflightFeatureTableBuild = new Map<string, Promise<void>>()
+/**
+ * Bumped whenever the rows under trees_fast change (a city load, a window
+ * move): a feature-table build that started before stops between slices and
+ * is never marked ready. Its key alone cannot tell, since every city's
+ * default query has the same one.
+ */
+let featureTableGeneration = 0
+
+function resetFeatureTables() {
+  preparedFeatureTablesReady.clear()
+  featureTableGeneration += 1
+}
 const dataTileBoundsByZoom = new Map<number, TileBounds>()
 const visibleTileRangeByZoom = new Map<number, TileBounds>()
 const prefetchedVisibleRangeSigByZoom = new Map<number, string>()
@@ -628,7 +647,7 @@ async function loadCityTrees(city?: string): Promise<void> {
     throw new Error('City must be specified to load trees, to avoid accidentally loading all cities into memory.')
   }
 
-  preparedFeatureTablesReady.clear()
+  resetFeatureTables()
   dataTileBoundsByZoom.clear()
   colorOverrideActive = false
 
@@ -885,7 +904,7 @@ async function loadWindowCells(win: NonNullable<typeof cityWindow>, cells: numbe
     // The view moves off the dropped tables before they go.
     if (added.length > 0 || evict.length > 0) await conn.query(windowViewSql([...win.chunks.keys()]))
     for (const name of evict) await conn.query(`DROP TABLE IF EXISTS ${name}`)
-    if (added.length > 0 || evict.length > 0) preparedFeatureTablesReady.clear()
+    if (added.length > 0 || evict.length > 0) resetFeatureTables()
 
     console.info('[Perf] duckdb-worker:window-load', {
       cells: cells.length,
@@ -1141,7 +1160,9 @@ async function ensurePreparedFeatureTableForZoom(z: number, baseQuery: string): 
   const key = featureTableBuildKey(baseQuery, z)
   if (preparedFeatureTablesReady.get(z) === key) return
 
-  const inflight = inflightFeatureTableBuild.get(key)
+  const generation = featureTableGeneration
+  const inflightKey = `${generation}:${key}`
+  const inflight = inflightFeatureTableBuild.get(inflightKey)
   if (inflight) {
     await inflight
     return
@@ -1153,11 +1174,18 @@ async function ensurePreparedFeatureTableForZoom(z: number, baseQuery: string): 
   const src = tileRowSource(baseQuery, { join: '' })
 
   const request = (async () => {
+    // A whole city is one table and is built in rowid slices; a windowed
+    // city's trees_fast is a view, with no rowid, and is built in one go.
+    const rowCount = cityWindow ? 0 : Number((await conn.query(`SELECT count(*) AS n FROM trees_fast`)).get(0)?.n ?? 0)
+    const slices = Math.max(1, Math.ceil(rowCount / FEATURE_TABLE_SLICE_ROWS))
+    const sliceWhere = (i: number) => slices === 1
+      ? ''
+      : `\n  WHERE tf.rowid >= ${i * FEATURE_TABLE_SLICE_ROWS}${i === slices - 1 ? '' : ` AND tf.rowid < ${(i + 1) * FEATURE_TABLE_SLICE_ROWS}`}`
     // The colour is not stored: the read joins it (featureTableBuildKey).
     // The id is a column too, so it is held once, and goes back into the
     // struct at read time.
-    const sql = `
-CREATE OR REPLACE TEMP TABLE ${table} AS
+    const sliceSql = (i: number) => `
+${i === 0 ? `CREATE OR REPLACE TEMP TABLE ${table} AS` : `INSERT INTO ${table}`}
 ${src.prelude} rows AS (
   SELECT
     ${xExpr} AS xtile,
@@ -1175,7 +1203,7 @@ ${src.prelude} rows AS (
       ),
       'dbh': TRY_CAST(${src.dbh} AS DOUBLE)
     } AS feature
-  FROM ${src.from}
+  FROM ${src.from}${sliceWhere(i)}
 )
 SELECT xtile, ytile, tree_id, species, tree_form, feature
 FROM rows
@@ -1189,17 +1217,31 @@ WHERE xtile >= 0
     // clipped to its own tile is never empty; the readers' ST_AsMVT FILTER
     // keeps the guard.
     const t0 = nowMs()
-    await conn.query(sql)
-    console.info('[Perf] duckdb-worker:feature-table', { z, ms: Math.round(nowMs() - t0) })
+    // Readers check this key; the first slice replaces the table under it.
+    preparedFeatureTablesReady.delete(z)
+    let longestMs = 0
+    const current = () => generation === featureTableGeneration && key === featureTableBuildKey(effectiveBaseQuery(tileQuerySql), z)
+    for (let i = 0; i < slices; i += 1) {
+      // Rows or query changed while an earlier slice ran: this table is for neither.
+      if (!current()) {
+        console.info('[Perf] duckdb-worker:feature-table:abandoned', { z, slice: i, slices })
+        return
+      }
+      const ts = nowMs()
+      await conn!.query(sliceSql(i))
+      longestMs = Math.max(longestMs, nowMs() - ts)
+    }
+    console.info('[Perf] duckdb-worker:feature-table', { z, ms: Math.round(nowMs() - t0), slices, longestSliceMs: Math.round(longestMs) })
+    if (!current()) return
     // CREATE OR REPLACE swapped the table under whatever key was there.
     preparedFeatureTablesReady.set(z, key)
   })()
 
-  inflightFeatureTableBuild.set(key, request)
+  inflightFeatureTableBuild.set(inflightKey, request)
   try {
     await request
   } finally {
-    inflightFeatureTableBuild.delete(key)
+    inflightFeatureTableBuild.delete(inflightKey)
   }
 }
 

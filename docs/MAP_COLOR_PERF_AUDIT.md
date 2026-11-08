@@ -208,6 +208,76 @@ About half of the regression is recovered in the worker. What remains is
 mostly MapLibre's side of the 18 layers (the z12 tiles still trickle for
 1.2 s against 0.7 s) and the cells the extra colours genuinely add.
 
+## Second round: the tile layout and the post-landing build
+
+Two more changes, measured the same way (leaf shade, Boston, three Chromium
+walks per build against the branch as it stood after the first round):
+
+**One MVT source layer per colour** (`workers/mvtLayers.ts`). The first
+round said the rest was MapLibre's 18 buckets and that no SQL change reaches
+it; the tile's layout does. Every tile query now groups by colour, and each
+group becomes its own source layer named by the colour (`ST_AsMVT` takes a
+constant name, so the worker renames each layer and concatenates them: a
+protobuf message's repeated field is the concatenation of its encodings).
+Each heatmap layer and each circle layer reads its own source layer with no
+filter, so MapLibre buckets every feature once per layer kind instead of
+running 18 colour filters over every feature of every tile. The tiles also
+lose what nothing reads: `display_color` (now the layer name), `category`,
+`rotation`, the cell's constant `id` of -1 (a tap on a cell opened and
+closed an empty tree card), `dbh` below z12 (no circle buckets those tiles)
+and the per-cell float `dbh` above it (whole inches now, so the value table
+holds a few dozen sizes, not one per cell).
+
+| | Before | After |
+|---|---:|---:|
+| z11 view, MVT bytes (worker) | 3.9 MB | 2.3 MB |
+| z12 view | 8.2 MB | 5.6 MB |
+| z13 view | 10.3 MB | 7.0 MB |
+| z11 / z12 / z13 view, worker time | 2.1 / 3.9 / 4.8 s | 2.2 / 3.9 / 4.8 s (unchanged) |
+| z12 step settles (Chromium, 3 runs) | 4.30, 4.12, 4.63 s | 3.57, 4.02, 3.57 s |
+| z12 tiles trickle (first to last) | 1.22, 1.23, 1.31 s | 0.82, 0.85, 0.87 s |
+| z13 step | 2.52, 2.56, 2.17 s | 2.05, 2.10, 2.09 s |
+| z14 tiles trickle | 0.44, 0.42, 0.51 s | 0.03, 0.04, 0.03 s |
+| Whole walk | 25.0, 23.4, 23.1 s | 22.6, 22.5, 22.1 s |
+| Renderer peak | 1,853 to 1,913 MB | 1,795 to 1,821 MB |
+
+The worker's time does not move (the encode is per feature, and the
+features are the same); what moves is the bytes and MapLibre's side. Frame
+times under SwiftShader were the same within its resolution, so the 18
+circle layers (one draw call per colour per tile, where there was one) do
+not show as render cost here; that is the thing to watch on a real GPU.
+Callers that named `trees-circle` or the `trees` source layer read the
+per-colour lists (`treeCircleLayerIds`, `treeSourceFeatureCount`).
+
+**The z15 feature table is built in row slices.** The desktop prewarm
+builds it right after the intro lands, and DuckDB answers one statement at a
+time: as one 6.5 s statement, the first zoom or pan after landing waited
+behind all of it (the z11 step's 8 s was 6.5 s of queue and 2 s of its own
+aggregate). Built as `rowid` slices of 250k rows (7 on Boston, the longest
+1.0 s, 6.8 s in all against 6.5 s), a tile query waits for one slice. A
+generation counter stops a build whose rows changed under it between slices
+(a city load, a window move), which the old single statement could not
+need and the old key could not tell: every city's default query has the
+same key.
+
+| | Before | After |
+|---|---:|---:|
+| z11 view asked 0.3 s into the prewarm (worker) | about 8 s (derived: the build's remaining 6.2 s, then its own 1.9 s) | 1.9 s (measured) |
+| z11 step (Chromium, 3 runs) | 8.06, 8.18, 7.83 s | 4.55, 4.84, 4.86 s |
+| The two z11 pans after it | 0.7 to 1.1 s | 0.7 to 1.6 s (the remaining slices run under them) |
+| Whole walk | 22.6, 22.5, 22.1 s | 19.3, 19.6, 20.2 s |
+
+Together: the walk is 19 to 20 s against 23 to 25 s for the branch's first
+round, and below the 21 s tree-form reference measured before either round.
+
+What is left on the list: item 2 (only the colours a city holds) still
+gains only the smaller cities; item 4's single blurred circle layer is
+still the way to drop the per-colour heatmap passes on the GPU; item 5, the
+z12/z13 cell budget, is still the biggest number, and the stack section's
+Arrow-fed layer is still the architectural answer. The per-colour source
+layers are a step towards it: the colour already travels as the layer, not
+as a property.
+
 ## Is this the right stack?
 
 The data layer is right and is the product: DuckDB-WASM over published

@@ -50,10 +50,14 @@ function decode(buf: ArrayBuffer): { features: number; colors: Set<string>; byte
   const colors = new Set<string>()
   if (buf.byteLength === 0) return { features: 0, colors, bytes: 0 }
   const tile = new VectorTile(new Pbf(new Uint8Array(buf)))
-  const layer = tile.layers.trees
-  if (!layer) return { features: 0, colors, bytes: buf.byteLength }
-  for (let i = 0; i < layer.length; i++) colors.add(String(layer.feature(i).properties.display_color))
-  return { features: layer.length, colors, bytes: buf.byteLength }
+  // One source layer per colour (mvtLayers.ts); a tile from before that has one `trees` layer.
+  let features = 0
+  for (const [name, layer] of Object.entries(tile.layers) as [string, { length: number; feature(i: number): { properties: Record<string, unknown> } }][]) {
+    features += layer.length
+    if (name !== 'trees') colors.add(name)
+    else for (let i = 0; i < layer.length; i++) colors.add(String(layer.feature(i).properties.display_color))
+  }
+  return { features, colors, bytes: buf.byteLength }
 }
 
 const lines: string[] = []

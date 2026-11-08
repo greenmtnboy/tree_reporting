@@ -115,6 +115,15 @@ describe('tile worker on DuckDB-WASM', () => {
     walkTileSql = [...new Set(executedSql.filter(sql => /ST_AsMVT\(/.test(sql)))]
   })
 
+  it('builds the z15 feature table in rowid slices that together hold every tree once', async () => {
+    const built = worker.perf.filter(p => /duckdb-worker:feature-table$/.test(p.label)).slice(-1)[0]
+    // 300k rows at 250k a slice.
+    expect(built?.detail.slices).toBe(2)
+    const n = await worker.call<QueryResult>('query', { sql: 'SELECT count(*) AS n, count(DISTINCT tree_id) AS ids FROM tile_features_z15' })
+    expect(Number(n.rows[0].n)).toBe(ROWS)
+    expect(Number(n.rows[0].ids)).toBe(ROWS)
+  })
+
   it('every tile holds one source layer per colour, named by the colour (mvtLayers.ts)', async () => {
     // What each zoom's features carry: the heatmaps read point_count and
     // grid_m, the circles (tiles z12 and up) dbh, a tap the tree id.
