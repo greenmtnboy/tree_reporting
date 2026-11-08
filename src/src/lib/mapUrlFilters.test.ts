@@ -41,7 +41,8 @@ describe('public map URL filters', () => {
   test('empty filters leave the original query and color defaults intact', () => {
     const empty = readMapUrlFilters({ 'filter.species': [null, '', '  '] })
     expect(applyMapUrlFilters(base, empty)).toBe(base)
-    expect(readMapColorBy({}, empty)).toBe('tree_form')
+    expect(readMapColorBy({}, empty)).toBe('foliage')
+    expect(readMapColorBy({ colorBy: 'tree_form' }, empty)).toBe('tree_form')
     const species = readMapUrlFilters({ 'filter.species': 'Quercus' })
     expect(readMapColorBy({}, species)).toBe('dbh')
     expect(readMapColorBy({ colorBy: 'tree_form' }, species)).toBe('tree_form')

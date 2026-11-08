@@ -29,7 +29,7 @@
       <span v-else>Only matching trees are shown.</span>
       <button type="button" class="legend-clear" @click="clearUrlFilters">Show all trees</button>
     </div>
-    <label v-if="hasUrlFilters || route.query.colorBy" class="legend-color-control">
+    <label class="legend-color-control">
       Color by
       <select aria-label="Color trees by" :value="colorOverrideSql ? 'custom' : mapColorBy" @change="changeMapColor">
         <option v-if="colorOverrideSql" value="custom" disabled>Custom colors</option>
@@ -39,10 +39,7 @@
       </select>
     </label>
     <strong v-if="mapColorBy === 'dbh' && !colorOverrideSql" class="legend-heading">Trunk diameter · inches (approx. cm)</strong>
-    <template v-if="mapColorBy === 'foliage' && !colorOverrideSql">
-      <strong class="legend-heading" data-testid="foliage-legend-heading">{{ FOLIAGE_PHASE_LABEL[foliagePhaseNow] }}</strong>
-      <span class="legend-note">{{ FOLIAGE_LEGEND_NOTE }}</span>
-    </template>
+    <strong v-if="mapColorBy === 'foliage' && !colorOverrideSql" class="legend-heading" data-testid="foliage-legend-heading">{{ FOLIAGE_PHASE_LABEL[foliagePhaseNow] }}</strong>
     <div v-for="entry in legendEntries" :key="entry.color" class="legend-entry">
       <span class="legend-swatch" :style="{ background: entry.color }"></span>
       <span class="legend-label">{{ entry.label }}</span>
@@ -112,8 +109,7 @@
     <div class="tree-card-header">
       <div class="tree-card-header-main">
         <div class="tree-card-title-wrap">
-          <div class="tree-card-title">{{ selectedTree.tree_name || 'Unknown tree' }}</div>
-          <div v-if="scientificName" class="tree-card-species">{{ scientificName }}<span v-if="selectedTree.cultivar" class="tree-card-cultivar"> '{{ selectedTree.cultivar }}'</span></div>
+          <div class="tree-card-title">{{ selectedTree.tree_name || 'Unknown tree' }}<span v-if="scientificName && scientificName !== selectedTree.tree_name" class="tree-card-binomial"> (<span class="tree-card-species">{{ scientificName }}</span><span v-if="selectedTree.cultivar"> '{{ selectedTree.cultivar }}'</span>)</span></div>
         </div>
         <div class="tree-card-header-actions">
           <button v-if="!simplified && firebaseAvailable" type="button" class="tree-card-correction"
@@ -363,7 +359,8 @@ import {
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
 import { CROWN_ZOOM_START, validTreeHeight } from '../lib/treeCrowns'
 import { applyMapUrlFilters, DBH_COLOR_SQL, DBH_LEGEND, hasMapUrlFilters, MAP_FILTER_FIELDS, readMapColorBy, readMapUrlFilters } from '../lib/mapUrlFilters'
-import { FOLIAGE_LEGEND_NOTE, FOLIAGE_PHASE_LABEL, foliageColorSql, foliagePhase } from '../lib/foliageSeason'
+import { FOLIAGE_LEGEND_NOTE, FOLIAGE_PHASE_LABEL, foliagePhase, speciesShadeSql } from '../lib/foliageSeason'
+import { UNKNOWN_SHADE_COLOR } from '../workers/cityTables'
 
 const { resolvedTheme } = useTheme()
 let releaseMapTheme: (() => void) | undefined
@@ -475,6 +472,7 @@ const {
   setTileQuery,
   setPublishedTreeIdFilterSql,
   setColorOverrideSql,
+  setSpeciesShadeSql,
   setCityContext,
   setWindowPolicy,
   ensureWindowAt,
@@ -544,8 +542,9 @@ const effectiveMapQuery = computed(() => applyMapUrlFilters(currentMapQuery.valu
 // The season the leaf-shade mode paints, from the calendar and the city's
 // hemisphere (cityConfig centres are [lng, lat]).
 const foliagePhaseNow = computed(() => foliagePhase(new Date(), CITY_CONFIG[mapDisplayCity.value].center[1]))
-const effectiveColorSql = computed(() => colorOverrideSql.value
-  ?? (mapColorBy.value === 'dbh' ? DBH_COLOR_SQL : mapColorBy.value === 'foliage' ? foliageColorSql(foliagePhaseNow.value) : null))
+const effectiveColorSql = computed(() => colorOverrideSql.value ?? (mapColorBy.value === 'dbh' ? DBH_COLOR_SQL : null))
+// The leaf-shade scheme is a per-species table under any override, not a per-tree one.
+const speciesShadeQuery = computed(() => mapColorBy.value === 'foliage' ? speciesShadeSql(foliagePhaseNow.value) : null)
 
 // Worker configuration mutates shared SQL tables. Serialize changes and skip
 // superseded requests so rapid Back/Forward cannot restore an older scope.
@@ -559,6 +558,8 @@ function configureMapQuery(): Promise<boolean> {
     const query = effectiveMapQuery.value
     const filterSql = publishedTreeIdFilterSql.value
     const colorSql = effectiveColorSql.value
+    await setSpeciesShadeSql(speciesShadeQuery.value)
+    if (!current()) return false
     await setColorOverrideSql(colorSql)
     if (!current()) return false
     await setTileQuery(query)
@@ -611,10 +612,11 @@ const activeHeatmapColors = computed(() => {
 // Color keys may be SQL-escaped by the agent (e.g. _RRGGBB, char_43_RRGGBB, u_0023RRGGBB).
 // Normalize by extracting the trailing 6 hex digits; drop entries with no valid hex tail.
 const legendEntries = computed(() => {
-  // Leaf shades are one hex per species, not categories: no swatch list.
+  // Leaf shades are one hex per species, not categories: only the grey gets a swatch.
   const labelMap = colorOverrideSql.value
     ? colorLabelMap.value ?? workerColorLabelMap.value
-    : mapColorBy.value === 'dbh' ? DBH_LEGEND : mapColorBy.value === 'foliage' ? {} : workerColorLabelMap.value
+    : mapColorBy.value === 'dbh' ? DBH_LEGEND
+      : mapColorBy.value === 'foliage' ? { [UNKNOWN_SHADE_COLOR]: FOLIAGE_LEGEND_NOTE } : workerColorLabelMap.value
   if (!labelMap || Object.keys(labelMap).length === 0) return []
   return Object.entries(labelMap).flatMap(([rawColor, label]) => {
     const m = rawColor.match(/([0-9a-fA-F]{6})$/i)
@@ -1869,7 +1871,7 @@ watch(flyToTarget, (t) => {
 // --- Watchers ---
 
 // Reload tiles when query, filter, or revision changes
-watch([effectiveMapQuery, publishedTreeIdFilterSql, mapQueryRevision, effectiveColorSql], async () => {
+watch([effectiveMapQuery, publishedTreeIdFilterSql, mapQueryRevision, effectiveColorSql, speciesShadeQuery], async () => {
   if (!mapRef.value) return
   // City loads have their own overlay; route and chat changes refresh in place.
   if (lifecyclePhase.value === 'ready') {
@@ -2597,7 +2599,6 @@ onUnmounted(() => {
 .legend-color-control { display: grid; gap: 4px; font-size: .72rem; margin: 4px 0; }
 .legend-color-control select { min-width: 0; max-width: 100%; color: var(--color-ink); background: var(--color-surface); border: 1px solid var(--color-muted); border-radius: 4px; padding: 5px; }
 .legend-heading { font-size: .72rem; }
-.legend-note { font-size: .66rem; color: rgba(var(--muted-rgb), 0.8); }
 .tc-shades { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .tc-swatch {
   display: inline-block;
@@ -2784,14 +2785,14 @@ onUnmounted(() => {
 }
 
 .tree-card-header {
-  padding: 14px 16px 10px;
+  padding: 9px 12px 8px 16px;
   border-bottom: 1px solid rgba(var(--accent-rgb), 0.1);
   flex-shrink: 0;
 }
 
 .tree-card-header-main {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -2808,16 +2809,16 @@ onUnmounted(() => {
   line-height: 1.2;
 }
 
-.tree-card-species {
-  margin-top: 3px;
-  font-size: 0.78rem;
-  font-style: italic;
-  color: rgba(var(--ink-rgb), 0.6);
+/* The binomial follows the common name, lighter; only the binomial is
+   italic, never the parentheses or a quoted cultivar, by convention. */
+.tree-card-binomial {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: rgba(var(--ink-rgb), 0.58);
 }
 
-/* A cultivar name is quoted and never italicised, by convention. */
-.tree-card-cultivar {
-  font-style: normal;
+.tree-card-species {
+  font-style: italic;
 }
 
 /* Three-pane body — side by side on desktop, stacked on mobile */
@@ -3103,7 +3104,7 @@ onUnmounted(() => {
   background: rgb(var(--surface-rgb));
 }
 .tree-card--sheet::after { display: none; }
-.tree-card--sheet .tree-card-header { padding: 12px 12px 10px 16px; }
+.tree-card--sheet .tree-card-header { padding: 9px 12px 8px 16px; }
 .tree-card--sheet .tree-card-body { flex: 1 1 auto; min-height: 0; grid-template-columns: 1fr; overflow-y: auto; }
 .tree-card--sheet .tree-card-close { width: 44px; height: 44px; font-size: 1rem; flex: 0 0 auto; }
 .tree-card--sheet.tree-card--loading { justify-content: flex-start; }
