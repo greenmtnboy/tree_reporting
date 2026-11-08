@@ -15,7 +15,7 @@ const lat = 42.3601, lng = -71.0589
 const zooms = (process.env.FRAME_ZOOMS ?? '11,12,13,14,15,16').split(',').map(Number)
 const REPAINT_MS = 3000
 
-const browser = await chromium.launch({ args: ['--no-sandbox', '--no-zygote'] })
+const browser = await chromium.launch({ executablePath: process.env.MAP_BENCH_CHROMIUM, args: ['--no-sandbox', '--no-zygote'] })
 const context = await browser.newContext({ viewport: { width: 1400, height: 900 } })
 await context.addInitScript(() => { localStorage.setItem('sf_trees_welcome_dismissed', '1') })
 const page = await context.newPage()
