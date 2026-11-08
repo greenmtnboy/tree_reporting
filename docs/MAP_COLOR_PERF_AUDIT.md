@@ -278,6 +278,67 @@ Arrow-fed layer is still the architectural answer. The per-colour source
 layers are a step towards it: the colour already travels as the layer, not
 as a property.
 
+## Third round: the desktop draws its trees from memory
+
+The stack section's option 2, done for the desktop. A desktop city is never
+windowed, so every tree is already in DuckDB; the map now takes them once as
+typed arrays and draws them in one custom WebGL layer
+(`composables/treeDotsLayer.ts`). The vector-tile source, its 18 heatmap and
+18 circle layers, the overview batches and the z15 feature-table prewarm are
+gone from the desktop. A phone keeps the tiles (its window is the reason they
+exist; docs/MOBILE_LOAD_BUDGET.md), as does a desktop without WebGL2 and a
+renderable half-float target, which `TreeDotsLayer.supported` checks.
+
+How it is built:
+
+- **The data.** `getCityPoints` (`workers/cityPoints.ts`) reads every drawn
+  tree's rowid, position (float32 metres from the city's corner), trunk size
+  and colour as a one-byte index into the scheme's palette; 0.8 to 1.2 s on
+  Boston's 1.7M rows, 17 bytes a tree. A colour change reads only
+  `getCityPointColors`, rowid and colour (0.2 to 0.4 s), and scatters it by
+  rowid; a query or filter change re-reads the points.
+- **The heat** is two passes for any palette: trees add colour and density
+  into a quarter-resolution pair of half-float targets, and a resolve draws
+  the colour-weighted mean with an alpha from log2 of the density. Grey ("no
+  recorded shade", "unknown trunk") counts fully as density and a sixth as
+  colour, so the 83% of Boston with no shade no longer washes out the rest.
+  A pyramid of 16 m to 8 km cells (`lib/treeDots.ts`) keeps each zoom to a
+  cell per third of a kernel, built in a dedicated worker
+  (`workers/treeDotsIndex.worker.ts`) because it costs most of a second.
+- **The circles** are one point draw from z12.8 to z15.5, coloured from a
+  palette texture. Points and pyramid cells are stored in 512 m chunk order,
+  so a frame draws only the chunk rows in view.
+- **Picking** projects the candidates of a grid index through the last
+  frame's matrix: a click selects exactly the circle drawn under it, and the
+  card is read by rowid.
+
+Boston, Chromium (SwiftShader), the same builds side by side:
+
+| | Tiles (before) | Resident (after) |
+|---|---:|---:|
+| "Color by" change: trees on screen during it | 0 for 3.8 s | all 1,695,264 throughout |
+| layers removed and re-added | 36 | 0 |
+| new colours on screen | ~4.4 s, after a refetch of every tile | 1.3 s (DBH 2.2 s, it builds a per-tree table) |
+| ms/frame under forced repaint, z10 / z11 / z12 | 375 / 300 / 273 | 250 / 200 / 158 |
+| z13 / z14 / z15 | 333 / 300 / 150 | 273 / 214 / 136 |
+| `pnpm bench:tiles` walk, 14 steps | 16.7 s | 8.8 s |
+| z11 / z12 / z13 steps | 3.7 / 3.1 / 2.3 s | 1.1 / 0.9 / 1.2 s (the basemap's tiles) |
+| renderer peak | 1,906 MB | 1,702 MB |
+| first trees drawn after the city's tables load | 1.5 to 1.75 s | 2.6 to 2.8 s |
+| main-thread work to index the points | | 80 ms |
+
+The one number that moves the wrong way is the first draw: about 1.1 s
+later, the points query, where the tile path drew its first z18 tiles
+cheaply. Everything after it is cheaper, and the prewarm the tile path ran
+after landing (7 s of the worker on Boston) is not needed at all.
+SwiftShader runs vertex work on the CPU, so these frame times understate a
+real GPU's gain: the tile path's per-frame cost was 36 offscreen passes,
+the resident layer's is two plus one point draw.
+
+Measured with `scripts/color-switch.bench.mjs` (new),
+`scripts/frame-time.bench.mjs` and `pnpm bench:tiles`, all of which read the
+resident layer where it is drawn.
+
 ## Is this the right stack?
 
 The data layer is right and is the product: DuckDB-WASM over published

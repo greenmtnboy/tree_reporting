@@ -30,7 +30,8 @@ try {
   await page.waitForFunction(() => { const m = window.__treeMap; return m && !m.isMoving() && m.areTilesLoaded() }, null, { timeout: 60_000 }).catch(() => {})
   await page.waitForTimeout(2000)
   const layers = await page.evaluate(() => window.__treeMap.getStyle().layers.filter((l) => l.id.startsWith('trees-heat-')).length)
-  console.log(`${process.env.MAP_BENCH_QUERY ?? 'default'}: ${layers} heatmap layers`)
+  const resident = await page.evaluate(() => !!window.__treeMap.getLayer('trees-dots'))
+  console.log(`${process.env.MAP_BENCH_QUERY ?? 'default'}: ${resident ? 'resident layer' : `${layers} heatmap layers`}`)
   console.log('zoom  settle_ms  main_script_ms  main_task_ms  features  frames/s  ms/frame')
   for (const z of zooms) {
     const before = await metrics()
@@ -40,7 +41,7 @@ try {
       map.jumpTo({ center: [lng, lat], zoom: z })
       await new Promise((r) => map.once('render', r))
       while (performance.now() - t0 < 60_000) {
-        if (!map.isMoving() && map.areTilesLoaded() && map.isSourceLoaded('trees')) break
+        if (!map.isMoving() && map.areTilesLoaded() && (!map.getSource('trees') || map.isSourceLoaded('trees'))) break
         await new Promise((r) => setTimeout(r, 50))
       }
       // A late idle, if one comes; the map may already be idle.
@@ -51,6 +52,9 @@ try {
     // One source layer per colour (workers/mvtLayers.ts).
     const features = await page.evaluate(() => {
       const map = window.__treeMap
+      // The desktop's resident layer holds every tree (composables/treeDotsLayer.ts).
+      const dots = map.getLayer('trees-dots')?.implementation
+      if (dots) return dots.count
       const sourceLayers = new Set(map.getStyle().layers.flatMap((l) => (l.source === 'trees' && l['source-layer'] ? [l['source-layer']] : [])))
       return [...sourceLayers].reduce((n, sourceLayer) => n + map.querySourceFeatures('trees', { sourceLayer }).length, 0)
     })

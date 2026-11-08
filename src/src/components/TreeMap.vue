@@ -804,7 +804,8 @@ function updateZoomLevel() {
   // to the worker must track the tile level actually on screen.
   const z = Math.floor(mapRef.value.getZoom())
   const sourceZ = Math.min(TREES_SOURCE_MAXZOOM, z)
-  if (sourceZ >= 13 && sourceZ <= 20) {
+  // The resident desktop layer has no tiles to range or prefetch.
+  if (sourceZ >= 13 && sourceZ <= 20 && !treesResident()) {
     const candidateZooms = new Set<number>([sourceZ])
     if (introActive.value && sourceZ >= 15) {
       // Intro path is zoom-out: prefetch current + next-coarser LOD only.
@@ -835,11 +836,15 @@ function updateZoomLevel() {
 
 // --- Layer management ---
 
-const { addTreeLayers, applyColorToLayers, forceTreesTileRefetchPass, pickCrownSprite, renderedTreeSprites } = useMapLayers({
+const {
+  addTreeLayers, applyColorToLayers, forceTreesTileRefetchPass, pickCrownSprite, renderedTreeSprites,
+  treesResident, residentTreeCount, pickResidentTree,
+} = useMapLayers({
   map: mapRef,
   simplified: props.simplified ?? false,
   activeHeatmapColors,
   mapQueryRevision,
+  onResidentTreesLoaded: () => onTreesFirstLoaded(),
 })
 
 // --- Intro animation ---
@@ -859,6 +864,7 @@ const { loadingMessage, runIntroZoomOut, cancelIntro, runGlobeSwoopTo, recordInt
   computeVisibleTileRangeForZoom,
   setMapInteractions,
   renderedTreeSprites,
+  treesResident: () => treesResident() && (residentTreeCount() ?? 0) > 0,
 })
 
 // --- Tree popup ---
@@ -1395,7 +1401,10 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
   if (!mapRef.value) return
   const requestToken = ++popupRequestToken
   const id = feature.properties?.id
-  if (!id || id === 'unkwn') return
+  // A resident circle knows its trees_fast row, not its id.
+  const rowid = feature.properties?.rowid
+  const byRowid = typeof rowid === 'number' && Number.isInteger(rowid) && rowid >= 0
+  if (!byRowid && (!id || id === 'unkwn')) return
   const featureCoords = feature.geometry?.type === 'Point'
     ? (feature.geometry.coordinates as [number, number])
     : fallbackCoords
@@ -1455,7 +1464,7 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
         se.trunk_color
       FROM trees_fast tf
       LEFT JOIN species_enrichment se ON tf.species = se.species
-      WHERE tf.tree_id = '${safeId}'
+      WHERE ${byRowid ? `tf.rowid = ${rowid}` : `tf.tree_id = '${safeId}'`}
       LIMIT 1
     `)
     if (requestToken !== popupRequestToken) return
@@ -1483,18 +1492,25 @@ function bindTreeInteractions() {
       mapRef.value.getCanvas().style.cursor = ''
       return
     }
-    const features = mapRef.value.queryRenderedFeatures(point, { layers: interactiveLayers() })
     const screenPoint = maplibregl.Point.convert(point)
-    mapRef.value.getCanvas().style.cursor = features.length > 0 || pickCrownSprite(screenPoint) ? 'pointer' : ''
+    const overTree = treesResident()
+      ? !!pickResidentTree(screenPoint)
+      : mapRef.value.queryRenderedFeatures(point, { layers: interactiveLayers() }).length > 0
+    mapRef.value.getCanvas().style.cursor = overTree || pickCrownSprite(screenPoint) ? 'pointer' : ''
   }
 
   mapRef.value.on('click', (e) => {
     if (!mapRef.value) return
     const crown = pickCrownSprite(e.point)
-    const picked = crown ? undefined : pickTappedTree(e.point, interactiveLayers())
+    const picked = crown || treesResident() ? undefined : pickTappedTree(e.point, interactiveLayers())
     if (props.simplified) showMapTapRing(e.point, !!crown || (!!picked && isSelectableTree(picked)))
     if (crown) {
       void showTreeCard({ type: 'Feature', geometry: { type: 'Point', coordinates: [crown.lng, crown.lat] }, properties: { id: crown.id } }, [crown.lng, crown.lat])
+      return
+    }
+    if (treesResident()) {
+      const dot = pickResidentTree(e.point)
+      if (dot) void showTreeCard({ type: 'Feature', geometry: { type: 'Point', coordinates: [dot.lng, dot.lat] }, properties: { rowid: dot.rowid } }, [dot.lng, dot.lat])
       return
     }
     if (!picked) return
@@ -1877,18 +1893,29 @@ watch(flyToTarget, (t) => {
 watch([effectiveMapQuery, publishedTreeIdFilterSql, mapQueryRevision, effectiveColorSql, speciesShadeQuery], async () => {
   if (!mapRef.value) return
   // City loads have their own overlay; route and chat changes refresh in place.
+  // The resident desktop layer keeps drawing the old set (or the old colours)
+  // until the new one is ready, so it says so only if that takes a while.
+  let refreshMessageTimer: ReturnType<typeof setTimeout> | null = null
   if (lifecyclePhase.value === 'ready') {
-    startTileRefreshMessage()
+    if (treesResident()) refreshMessageTimer = setTimeout(startTileRefreshMessage, 400)
+    else startTileRefreshMessage()
   } else {
     loadingMessage.value = 'Counting our conifers...'
+  }
+  const stopRefreshMessage = () => {
+    if (refreshMessageTimer) clearTimeout(refreshMessageTimer)
+    stopTileRefreshMessage()
   }
   lastVisibleRangeSigByZoom.clear()
   introLockedRangeByZoom.clear()
   try {
-    if (!await configureMapQuery()) return
+    if (!await configureMapQuery()) {
+      if (refreshMessageTimer) clearTimeout(refreshMessageTimer)
+      return
+    }
   } catch (error) {
     mapError.value = (error as Error).message
-    stopTileRefreshMessage()
+    stopRefreshMessage()
     return
   }
   // Re-arm the "trees source loaded" one-shot only once the worker is actually
@@ -1902,8 +1929,18 @@ watch([effectiveMapQuery, publishedTreeIdFilterSql, mapQueryRevision, effectiveC
   // Use forceTreesTileRefetchPass instead of addTreeLayers so the tile URL nonce is always
   // incremented after a publish. setTiles/reload alone can leave MapLibre's internal tile
   // cache serving stale data (old filtered trees popping in); a new nonce forces a clean fetch.
-  forceTreesTileRefetchPass()
+  const refreshed = forceTreesTileRefetchPass()
   applyColorToLayers()
+  if (treesResident()) {
+    // A recolour fires no "first loaded" event; the sync settling is the end of it.
+    try {
+      await refreshed
+    } catch (error) {
+      console.warn('[Map] resident trees refresh failed', error)
+    }
+    if (refreshMessageTimer) clearTimeout(refreshMessageTimer)
+    if (lifecyclePhase.value === 'ready') stopTileRefreshMessage()
+  }
 })
 
 // When the worker posts new color info (init or agent override), rebuild layers
@@ -2099,45 +2136,7 @@ onMounted(async () => {
           tile: (e as any).tile,
         })
       }
-      if (e.sourceId === 'trees' && e.isSourceLoaded && !firstTreesSourceLoadedLogged) {
-        firstTreesSourceLoadedLogged = true
-        const loadedCity = (lifecycleRequestedCity.value ?? selectedCity.value) as CityCode
-        const transition = lifecycleCurrentSnapshot(loadedCity)
-        if (!transition) return
-        // Notify the lifecycle state machine that tiles are loaded.
-        // On initial load: loading → intro (desktop) or loading → ready (mobile).
-        // On city switch: switching → ready.
-        if (lifecyclePhase.value === 'switching') {
-          lifecycleCitySwitchReady(transition)
-        } else {
-          lifecycleTilesLoaded(transition, !!props.simplified)
-        }
-        mapContainer.value?.setAttribute('data-trees-loaded-for', loadedCity)
-        performance.mark(`trees:${loadMode}:ready`)
-        performance.measure(`trees:${loadMode}:load`, `trees:${loadMode}:start`, `trees:${loadMode}:ready`)
-        stopTileRefreshMessage()
-        console.info('[Perf] map:trees-source:loaded', {
-          msSincePublish: Math.round(nowMs() - mapQueryChangedAt),
-          isSourceLoaded: e.isSourceLoaded,
-        })
-        // The LOD prewarm materialises the whole city again (the z15 feature
-        // table) and a phone has no memory to spare for that; nearby mode skips
-        // it for the same reason. On the desktop it waits for the intro to land:
-        // the worker has one connection, and a prewarm beside the fly-out held
-        // the camera at the start pose for over a minute on Boston. A city
-        // switch has no intro, so runIntroZoomOut resolves at once. A page
-        // opened on a tree lands there instead of flying out.
-        const intro = props.simplified ? Promise.resolve()
-          : pendingInstantDeepLink ? landOnDeepLink() : runIntroZoomOut()
-        if (!props.nearbyLocation && !props.simplified) {
-          void intro.then(() => {
-            // A city switch that cancelled the intro starts its own prewarm.
-            if (disposed || lifecyclePhase.value !== 'ready' || prewarmStartedForRevision === mapQueryRevision.value) return
-            prewarmStartedForRevision = mapQueryRevision.value
-            return prewarmLodCaches()
-          }).catch((err) => { console.warn('[Perf] map:prewarm:failed', err) })
-        }
-      }
+      if (e.sourceId === 'trees' && e.isSourceLoaded) onTreesFirstLoaded()
       if (e.sourceId === 'carto-dark' && e.isSourceLoaded) {
         console.info('[Perf] map:basemap-source:loaded', { msSinceMapInit: Math.round(nowMs() - mapInitStartedAt) })
       }
@@ -2146,7 +2145,9 @@ onMounted(async () => {
     map.on('moveend', () => { logIconLayerSnapshot('moveend') })
 
     map.on('idle', () => {
-      if ((props.nearbyLocation || hasUrlFilters.value) && map.getSource('trees') && map.isSourceLoaded('trees')) {
+      if (hasUrlFilters.value && treesResident()) {
+        nearbyEmpty.value = residentTreeCount() === 0
+      } else if ((props.nearbyLocation || hasUrlFilters.value) && map.getSource('trees') && map.isSourceLoaded('trees')) {
         const layers = [...treeCircleLayerIds(map), ...treeHeatLayerIds(map)]
         // The desktop's close-up renderer is a custom layer, so rendered circle
         // features disappear there even while matching trees are on screen.
@@ -2174,6 +2175,53 @@ onMounted(async () => {
       })
   })
 })
+
+/**
+ * The first draw of the trees after a city load or a query change: the tile
+ * source's first loaded event on a phone, the resident layer's first set on
+ * the desktop. Moves the lifecycle on and starts the intro and the prewarm.
+ */
+function onTreesFirstLoaded() {
+  if (!mapQueryChangedAt || firstTreesSourceLoadedLogged) return
+  firstTreesSourceLoadedLogged = true
+  const loadedCity = (lifecycleRequestedCity.value ?? selectedCity.value) as CityCode
+  const transition = lifecycleCurrentSnapshot(loadedCity)
+  if (!transition) return
+  // Notify the lifecycle state machine that the trees are drawn.
+  // On initial load: loading → intro (desktop) or loading → ready (mobile).
+  // On city switch: switching → ready.
+  if (lifecyclePhase.value === 'switching') {
+    lifecycleCitySwitchReady(transition)
+  } else {
+    lifecycleTilesLoaded(transition, !!props.simplified)
+  }
+  mapContainer.value?.setAttribute('data-trees-loaded-for', loadedCity)
+  performance.mark(`trees:${loadMode}:ready`)
+  performance.measure(`trees:${loadMode}:load`, `trees:${loadMode}:start`, `trees:${loadMode}:ready`)
+  stopTileRefreshMessage()
+  console.info('[Perf] map:trees-source:loaded', {
+    msSincePublish: Math.round(nowMs() - mapQueryChangedAt),
+    resident: treesResident(),
+  })
+  // The LOD prewarm materialises the whole city again (the z15 feature
+  // table) and a phone has no memory to spare for that; nearby mode skips
+  // it for the same reason. On the desktop it waits for the intro to land:
+  // the worker has one connection, and a prewarm beside the fly-out held
+  // the camera at the start pose for over a minute on Boston. A city
+  // switch has no intro, so runIntroZoomOut resolves at once. A page
+  // opened on a tree lands there instead of flying out. A desktop drawing
+  // its trees from memory has no tiles to warm.
+  const intro = props.simplified ? Promise.resolve()
+    : pendingInstantDeepLink ? landOnDeepLink() : runIntroZoomOut()
+  if (!props.nearbyLocation && !props.simplified && !treesResident()) {
+    void intro.then(() => {
+      // A city switch that cancelled the intro starts its own prewarm.
+      if (disposed || lifecyclePhase.value !== 'ready' || prewarmStartedForRevision === mapQueryRevision.value) return
+      prewarmStartedForRevision = mapQueryRevision.value
+      return prewarmLodCaches()
+    }).catch((err) => { console.warn('[Perf] map:prewarm:failed', err) })
+  }
+}
 
 // App.vue keeps MapView alive across tabs, so the MapLibre instance, its tiles
 // and the loaded city survive a visit to Summary or Species. Those tabs can

@@ -79,6 +79,7 @@ const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 import { snapShade } from '../lib/foliageSeason'
 import { assembleLayeredTiles } from './mvtLayers'
+import { cityPointColorsSql, cityPointsSql, pointPalette, type CityPointColors, type CityPoints } from './cityPoints'
 
 /** The source layer a tree with no colour lands in: the style's own fallback colour. */
 const MVT_FALLBACK_LAYER = '#66BB6A'
@@ -1970,6 +1971,77 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrown[]> {
   }))
 }
 
+// --- Resident points (the desktop's TreeDotsLayer) ---
+
+let pointOrigin: { city: string; x: number; y: number } | null = null
+
+function pointRowsKey(): string {
+  return `${loadedCity}|${tileQueryRevision}|${publishedTreeIdFilterSignature}`
+}
+
+function pointColorKey(): string {
+  return `${colorMapSignature}|${speciesShadeSignature}|${activeDistinctColors.join(',')}`
+}
+
+/** Copy an Arrow column into its own buffer, so it can be transferred. */
+function columnArray<T extends Float32Array | Uint8Array | Uint32Array>(table: { getChild(name: string): { toArray(): unknown } | null }, name: string, Ctor: { new(source: ArrayLike<number>): T }): T {
+  const column = table.getChild(name)
+  return new Ctor((column ? column.toArray() : []) as ArrayLike<number>)
+}
+
+/** The current query's trees as typed arrays. A windowed city has no resident set. */
+async function getCityPoints(): Promise<CityPoints | null> {
+  await ensureInit()
+  await waitForCityContext()
+  if (!conn || !loadedCity || cityWindow) return null
+  const city = loadedCity
+  const rowsKey = pointRowsKey()
+  const colorKey = pointColorKey()
+  const t0 = nowMs()
+  if (pointOrigin?.city !== city) {
+    const r = await conn.query(`SELECT min(x_3857) AS x, min(y_3857) AS y FROM trees_fast`)
+    const row = r.get(0)
+    pointOrigin = { city, x: Math.floor(Number(row?.x ?? 0)), y: Math.floor(Number(row?.y ?? 0)) }
+  }
+  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
+  const palette = pointPalette(activeDistinctColors)
+  const sql = cityPointsSql(tileRowSource(effectiveBaseQuery(tileQuerySql), color), color.expr, palette, pointOrigin.x, pointOrigin.y)
+  const table = await conn.query(sql)
+  if (loadedCity !== city || pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
+  const points: CityPoints = {
+    rowsKey, colorKey, count: table.numRows,
+    originX: pointOrigin.x, originY: pointOrigin.y,
+    x: columnArray(table, 'x', Float32Array),
+    y: columnArray(table, 'y', Float32Array),
+    dbh: columnArray(table, 'dbh', Uint8Array),
+    color: columnArray(table, 'color', Uint8Array),
+    rowid: columnArray(table, 'rowid', Uint32Array),
+    palette,
+  }
+  console.info('[Perf] duckdb-worker:city-points', { rows: points.count, ms: Math.round(nowMs() - t0) })
+  return points
+}
+
+/** The current colour of the rows `rowsKey` names; null when those rows are no longer current. */
+async function getCityPointColors(rowsKey: string): Promise<CityPointColors | null> {
+  await ensureInit()
+  await waitForCityContext()
+  if (!conn || !loadedCity || cityWindow || pointRowsKey() !== rowsKey) return null
+  const colorKey = pointColorKey()
+  const t0 = nowMs()
+  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
+  const palette = pointPalette(activeDistinctColors)
+  const table = await conn.query(cityPointColorsSql(tileRowSource(effectiveBaseQuery(tileQuerySql), color), color.expr, palette))
+  if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
+  const result: CityPointColors = {
+    rowsKey, colorKey, palette,
+    color: columnArray(table, 'color', Uint8Array),
+    rowid: columnArray(table, 'rowid', Uint32Array),
+  }
+  console.info('[Perf] duckdb-worker:city-point-colors', { rows: table.numRows, ms: Math.round(nowMs() - t0) })
+  return result
+}
+
 async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Array; transient: boolean }> {
   await ensureInit()
   await waitForCityContext()
@@ -1993,6 +2065,8 @@ async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Ar
 
 type WorkerMethodMap = {
   getMapTrees: { params: TreeRenderView; result: TreeCrown[] }
+  getCityPoints: { params: Record<string, never>; result: CityPoints | null }
+  getCityPointColors: { params: { rowsKey: string }; result: CityPointColors | null }
   ensureInit: { params: { city?: string; window?: WindowPolicy | null }; result: { ready: boolean; initError: string | null } }
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
@@ -2053,6 +2127,18 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'getMapTrees': {
         const result = await getMapTrees(msg.params as TreeRenderView)
         send({ type: 'response', requestId: msg.requestId, ok: true, result })
+        break
+      }
+      case 'getCityPoints': {
+        const result = await getCityPoints()
+        send({ type: 'response', requestId: msg.requestId, ok: true, result },
+          result ? [result.x.buffer, result.y.buffer, result.dbh.buffer, result.color.buffer, result.rowid.buffer] : undefined)
+        break
+      }
+      case 'getCityPointColors': {
+        const result = await getCityPointColors((msg.params as { rowsKey: string }).rowsKey)
+        send({ type: 'response', requestId: msg.requestId, ok: true, result },
+          result ? [result.color.buffer, result.rowid.buffer] : undefined)
         break
       }
       case 'ensureInit': {

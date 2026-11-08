@@ -18,6 +18,9 @@ for (const [name, viewport] of [
     await expect(page.locator('.map-error')).toHaveCount(0)
     await expect.poll(() => page.evaluate(() => {
       const map = window.__treeMap
+      // The desktop draws every tree from memory (composables/treeDotsLayer.ts).
+      const dots = (map?.getLayer('trees-dots') as unknown as { implementation?: { count: number } } | undefined)?.implementation
+      if (dots) return dots.count
       if (!map?.getSource('trees')) return 0
       // One source layer per colour (workers/mvtLayers.ts).
       const sourceLayers = new Set(map.getStyle().layers.flatMap((l) => ('source-layer' in l && l.source === 'trees' && l['source-layer'] ? [l['source-layer']] : [])))
@@ -52,6 +55,8 @@ for (const [name, viewport] of [
     await expect(page.locator('.map-loading')).toHaveCount(0, { timeout: 60_000 })
     await expect.poll(() => page.evaluate(() => {
       const map = window.__treeMap
+      const dots = (map?.getLayer('trees-dots') as unknown as { implementation?: { count: number; loaded: boolean } } | undefined)?.implementation
+      if (dots) return dots.loaded ? dots.count : -1
       if (!map || !map.getSource('trees') || !map.isSourceLoaded('trees')) return -1
       const sourceLayers = new Set(map.getStyle().layers.flatMap((l) => ('source-layer' in l && l.source === 'trees' && l['source-layer'] ? [l['source-layer']] : [])))
       return [...sourceLayers].reduce((n, sourceLayer) => n + map.querySourceFeatures('trees', { sourceLayer }).length, 0)
