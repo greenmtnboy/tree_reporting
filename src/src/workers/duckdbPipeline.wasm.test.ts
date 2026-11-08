@@ -144,7 +144,7 @@ describe('tile worker on DuckDB-WASM', () => {
     await worker.call('setVisibleTileRange', { z: 15, ...rangeAround(15, 1) })
     const tile = await worker.call<TileResult>('getTile', { z: 15, x: c.x, y: c.y })
     expect(tile.tileBuffer.byteLength).toBeGreaterThan(0)
-    const served = worker.perf.filter(p => p.label.includes('neighborhood-batch') && p.detail.z === 15).at(-1)
+    const served = worker.perf.filter(p => p.label.includes('neighborhood-batch') && p.detail.z === 15).slice(-1)[0]
     expect(served?.detail.mode).toBe('feature-table')
     expect(new TextDecoder().decode(tile.tileBuffer)).toContain('#123456')
     await worker.call('setColorOverrideSql', { sql: null })

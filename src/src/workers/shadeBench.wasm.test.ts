@@ -164,14 +164,6 @@ describe.skipIf(!DATA)('leaf-shade tile cost on the real Boston projection', () 
     const batchZ14 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 6\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
     const batchZ13 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 7\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
     const batchZ12 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 8\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
-    // The same aggregate handed back as columns instead of MVT: what an Arrow-fed layer would ask for.
-    const asColumns = (sql: string) => sql.slice(0, sql.indexOf('), rows AS (')) + ') SELECT xtile, ytile, gx, gy, display_color, point_count FROM agg'
-    for (const [name, sql] of [['z11 block', batchZ11], ['z12 block', batchZ12], ['z13 block', batchZ13]] as const) {
-      if (!sql) continue
-      const t = now()
-      const r = await worker.call<QueryResult>('query', { sql: asColumns(sql) })
-      log(`${name} as columns, no MVT: ${Math.round(now() - t)} ms, ${r.rows.length} cells`)
-    }
     const featureTable = foliageSql.find((s) => /CREATE OR REPLACE TEMP TABLE tile_features_z15/.test(s))
     const batchZ16 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 4\)/.test(s) && !/tile_features/.test(s))
     const time = async (name: string, sql: string | undefined) => {
@@ -183,6 +175,14 @@ describe.skipIf(!DATA)('leaf-shade tile cost on the real Boston projection', () 
       log(`${name}: ${Math.round(now() - t)} ms${r.rows.length ? `, ${r.rows.length} tiles, ${feats} features` : ''}`)
     }
     await worker.call('setSpeciesShadeSql', { sql: speciesShadeSql('autumn') })
+    // The same aggregate handed back as columns instead of MVT: what an Arrow-fed layer would ask for.
+    const asColumns = (sql: string) => sql.slice(0, sql.indexOf('), rows AS (')) + ') SELECT xtile, ytile, gx, gy, display_color, point_count FROM agg'
+    for (const [name, sql] of [['z11 block', batchZ11], ['z12 block', batchZ12], ['z13 block', batchZ13]] as const) {
+      if (!sql) continue
+      const t = now()
+      const r = await worker.call<QueryResult>('query', { sql: asColumns(sql) })
+      log(`${name} as columns, no MVT: ${Math.round(now() - t)} ms, ${r.rows.length} cells`)
+    }
     const join = "LEFT JOIN __species_shade __ss ON CAST(tf.species AS VARCHAR) = __ss.species"
     const expr = "COALESCE(list_extract(__ss.shades, 1 + CAST(hash(tf.tree_id) % len(__ss.shades) AS INTEGER)), '#9e9e9e')"
     for (const [name, sql] of [['z11 block', batchZ11], ['z13 block', batchZ13], ['z14 block', batchZ14], ['z16 batch', batchZ16]] as const) {
