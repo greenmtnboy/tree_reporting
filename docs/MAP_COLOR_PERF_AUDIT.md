@@ -183,6 +183,82 @@ tree count, not by zoom") is this.
    dwarfs the rest: a tree-count-aware grid (coarser when the view holds
    more than ~100k cells) would cut the 7 to 10 MB views in either scheme.
 
+## What was done (this branch)
+
+Items 1 and 3 above, as `colorSql(..., { aggregated: true })`, colour-only
+GROUP BYs in the two overview aggregates and `aggCacheSql`, and a z15
+feature table that carries id, species and form as columns and resolves the
+colour at read time (`struct_insert`), keyed without the colour signatures.
+
+AFTER_FIX_TABLE
+
+## Is this the right stack?
+
+The data layer is right and is the product: DuckDB-WASM over published
+parquets with no portal, Trilogy building the files, the chat and the URL
+filters compiling to SQL over the same rows the map draws. Nothing in the
+measurements argues for a server or a different engine.
+
+The mismatch is one seam: the map uses MapLibre's vector-tile pipeline, and
+one heatmap layer per colour, as the renderer for data that is already in
+the page's memory. Every overview view takes the rows through four
+representations: DuckDB aggregates them, `ST_AsMVT` encodes them to
+protobuf in wasm (the spatial extension's only job here, a 6 MB download),
+the bytes cross to MapLibre's worker, which decodes the protobuf and builds
+one bucket per layer by filtering every feature once per colour, and then
+each colour is its own offscreen pass per frame. Both halves scale with the
+colour count, which is why a colour scheme change showed up as a
+performance change. The sprite layer already does the other thing:
+`getMapTrees` hands `TreeCrownLayer` typed arrays from Arrow and one
+program draws them, with colour as a vertex attribute.
+
+How much of the overview cost is the MVT round trip, measured on the
+worker's own z11 to z13 block SQL with the final `ST_AsMVT` stage replaced
+by returning the aggregate's columns:
+
+ARROW_DIRECT_TABLE
+
+Three ways forward, in rising scope:
+
+1. **Precompute the default overview in the pipeline.** The default view
+   (no filter, no chat scope) is the same aggregate for everyone: a
+   per-city overview parquet of cells at the four overview grids with one
+   colour column per scheme and phase, built by Trilogy beside the browser
+   projection. The worker then serves default overview tiles from a table
+   of a few hundred thousand cells instead of grouping 1.7M rows per view;
+   filtered views keep the dynamic path, and they are subsets. This is the
+   cheapest change and lives where the project already does its heavy
+   lifting. It still pays the MVT encode and the per-colour buckets.
+
+2. **Feed the overview and mid zooms from Arrow into one custom layer**, the
+   way the sprites already work: the worker returns (x, y, colour, weight)
+   as typed arrays for the view, and one WebGL program draws soft discs
+   with additive blending at z6 to z13 and hard discs at z13 to z15. This
+   removes `ST_AsMVT` and the spatial extension, the protobuf decode, the
+   per-colour buckets and the per-colour passes in one move; colour becomes
+   a per-point attribute and the palette size stops mattering. The costs
+   are the ones `TreeCrownLayer` has already paid once: viewport-driven
+   fetch and coverage, a pick path, and a visual redesign of the heat look
+   (a multi-colour splat in one pass is accumulated premultiplied colour
+   normalised by weight, or simply blurred discs). deck.gl's
+   `MapboxOverlay` with a `ScatterplotLayer` on binary attributes is the
+   off-the-shelf version of this and brings picking and culling, at the
+   price of a second render framework beside MapLibre and about half a
+   megabyte more script; the in-house layer is the smaller change given
+   what exists.
+
+3. **Prebuilt static tiles per city (PMTiles on GCS)** for the default view,
+   with the DuckDB path kept for filtered views only. Zero browser compute
+   for the common case and MapLibre's pipeline used as designed; still one
+   tileset per colour scheme and phase, and still N heatmap layers unless
+   combined with 2.
+
+Recommended: 1 now (it is pipeline work in Trilogy and reuses the dedup
+and projection machinery), 2 as the architectural simplification for the
+big cities, starting with the heatmap zooms where the per-colour design
+costs most and the look is a splat anyway. Not recommended: a server, a
+different engine, or deck.gl adopted only for this.
+
 ## Not a problem
 
 - The per-species join and the `hash(tree_id)` pick: a few percent at the
