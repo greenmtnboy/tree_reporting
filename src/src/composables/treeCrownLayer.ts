@@ -86,8 +86,11 @@ export class TreeCrownLayer implements CustomLayerInterface {
   /** The padded view footprint the installed batch was fetched for (EPSG:3857 metres). */
   private loadedFootprint?: Point[]
   private pendingFootprint?: Point[]
-  /** A fixed desktop sprite budget from localStorage (SPRITE_LIMIT_KEY), for sweeps; otherwise it adjusts itself (lib/spriteBudget). */
-  private readonly fixedLimit = spriteLimitOverride()
+  /**
+   * A fixed desktop sprite budget, from the map's debug panel or localStorage (SPRITE_LIMIT_KEY);
+   * otherwise it adjusts itself (lib/spriteBudget).
+   */
+  private fixedLimit = spriteLimitOverride()
   private budget: SpriteBudget = initialSpriteBudget(false)
   private get spriteLimit() { return this.fixedLimit ?? this.budget.limit }
   /** The installed batch, waiting for its upload time before it adjusts the budget. */
@@ -283,6 +286,20 @@ export class TreeCrownLayer implements CustomLayerInterface {
     this.upload = true
     if (wasEmpty) this.appearedAt = performance.now()
     this.map?.triggerRepaint()
+  }
+
+  /**
+   * Fix the sprite cap at `limit`, or hand it back to the self-adjusting budget with null. The
+   * choice is kept for this browser, and the view is fetched again at the new cap.
+   */
+  setSpriteLimit(limit: number | null) {
+    try {
+      if (limit) localStorage.setItem(SPRITE_LIMIT_KEY, String(limit))
+      else localStorage.removeItem(SPRITE_LIMIT_KEY)
+    } catch { /* private mode: the choice lasts for this page */ }
+    this.fixedLimit = limit ?? undefined
+    this.coverage = undefined
+    this.schedule()
   }
 
   /**

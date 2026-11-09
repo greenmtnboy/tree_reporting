@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildDotLevels, buildPickGrid, CIRCLE_RADIUS_SCALE, circleOpacity, circleRadius, circleRadiusRange, heatOpacity, interpolateStops,
-  levelColors, levelForKernel, visibleRanges, lngLatFrom3857, lngLatTo3857, MERCATOR_WORLD_M, pointsNear, relativeMatrix,
+  buildPickGrid, CIRCLE_RADIUS_SCALE, circleOpacity, circleRadius, circleRadiusRange, interpolateStops,
+  visibleRanges, lngLatFrom3857, lngLatTo3857, MERCATOR_WORLD_M, pointsNear, relativeMatrix,
 } from './treeDots'
 import { SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM } from './treeCrowns'
 
@@ -20,10 +20,7 @@ describe('zoom curves', () => {
     expect(interpolateStops(stops, 11)).toBe(2)
     expect(interpolateStops(stops, 13)).toBe(3)
   })
-  it('crossfades the heat out by z15 and the circles out as the sprites take over', () => {
-    expect(heatOpacity(5)).toBe(0)
-    expect(heatOpacity(9)).toBeGreaterThan(0)
-    expect(heatOpacity(15)).toBe(0)
+  it('fades the circles in from z6 and out as the sprites take over', () => {
     expect(circleOpacity(5.9)).toBe(0)
     expect(circleOpacity(9)).toBeGreaterThan(0.7)
     expect(circleOpacity(SPRITE_CROWN_ZOOM_START)).toBeGreaterThan(0.75)
@@ -36,54 +33,6 @@ describe('zoom curves', () => {
     expect(circleRadius(0, range)).toBe(range[0])
     expect(circleRadius(42, range)).toBeCloseTo(range[1])
     expect(circleRadius(200, range)).toBeCloseTo(range[1])
-  })
-})
-
-describe('buildDotLevels', () => {
-  it('keeps every tree in every level and puts each cell at its trees’ centroid', () => {
-    const { x, y } = seeded(5000, 3000)
-    const levels = buildDotLevels(x, y, 5000, [8, 64, 512])
-    for (const level of levels) {
-      expect(level.weight.reduce((a, b) => a + b, 0)).toBe(5000)
-      for (let c = 0; c < level.count; c++) {
-        // A centroid lies inside its own cell.
-        expect(Math.floor(level.x[c] / level.cell)).toBeGreaterThanOrEqual(0)
-      }
-    }
-    expect(levels[0].count).toBeGreaterThan(levels[1].count)
-    expect(levels[1].count).toBeGreaterThan(levels[2].count)
-    // Three trees in one 8 m cell merge into one weight-3 cell at their mean.
-    const merged = buildDotLevels(new Float32Array([1, 2, 3, 100]), new Float32Array([1, 2, 3, 100]), 4, [8])[0]
-    expect(merged.count).toBe(2)
-    const c = merged.parent[0]
-    expect(merged.weight[c]).toBe(3)
-    expect(merged.x[c]).toBeCloseTo(2)
-  })
-
-  it('averages colours up the pyramid', () => {
-    const x = new Float32Array([1, 2, 300])
-    const y = new Float32Array([1, 2, 300])
-    const levels = buildDotLevels(x, y, 3, [8, 1024])
-    const colors = levelColors(levels, new Uint8Array([1, 2, 1]), ['#000000', '#ff0000', '#0000ff'], 3)
-    const first = levels[0].parent[0] * 4
-    expect([...colors[0].slice(first, first + 4)]).toEqual([128, 0, 128, 255])
-    expect([...colors[1].slice(0, 3)]).toEqual([170, 0, 85])
-  })
-
-  it('lets a grey count as trees but barely as colour', () => {
-    const levels = buildDotLevels(new Float32Array([1, 2]), new Float32Array([1, 2]), 2, [8])
-    const [bytes] = levelColors(levels, new Uint8Array([1, 2]), ['#000000', '#ff0000', '#9a9a9a'], 2)
-    // Red outweighs the grey six to one, and the cell's colour weight is (1 + 1/6) / 2 per tree.
-    expect(bytes[0]).toBe(Math.round((255 + 154 / 6) / (7 / 6)))
-    expect(bytes[3]).toBe(Math.round(255 * (7 / 6) / 2))
-  })
-
-  it('picks the coarsest level whose cells are under a third of the kernel', () => {
-    const { x, y } = seeded(100, 100)
-    const levels = buildDotLevels(x, y, 100, [8, 16, 32])
-    expect(levelForKernel(levels, 100)).toBe(2)
-    expect(levelForKernel(levels, 50)).toBe(1)
-    expect(levelForKernel(levels, 5)).toBe(0)
   })
 })
 

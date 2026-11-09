@@ -342,7 +342,7 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
   let crownLayer: TreeCrownLayer | undefined
   // The desktop draws every tree from memory (TreeDotsLayer) where WebGL2
   // allows, and so has no vector tile source; a phone, or a desktop without
-  // a float render target, keeps the tiles. Decided once, at the first add.
+  // WebGL2, keeps the tiles. Decided once, at the first add.
   let residentMode: boolean | undefined
   let dotsLayer: TreeDotsLayer | undefined
 
@@ -502,6 +502,8 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     /** Trees the sprite layer drew last frame; custom layers have no queryRenderedFeatures. */
     renderedTreeSprites: (): readonly { lng: number; lat: number }[] => crownLayer?.trees ?? [],
     spriteStats: () => crownLayer?.stats() ?? null,
+    /** Fix the sprite cap, or null for the self-adjusting budget (the debug panel's control). */
+    setSpriteLimit: (limit: number | null) => crownLayer?.setSpriteLimit(limit),
     spriteRadar: () => crownLayer?.radar() ?? null,
     addTreeLayers,
     applyColorToLayers,

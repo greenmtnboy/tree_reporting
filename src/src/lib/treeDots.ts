@@ -28,10 +28,8 @@ export function interpolateStops(stops: readonly (readonly [number, number])[], 
   return stops[stops.length - 1][1]
 }
 
-// --- Zoom curves (formerly useMapLayers' heatmap and circle paint) ---
+// --- Zoom curves (formerly useMapLayers' circle paint) ---
 
-export const HEAT_MIN_ZOOM = 6
-export const HEAT_MAX_ZOOM = 15
 export const CIRCLE_MIN_ZOOM = 6
 /** The dots are gone (bar the ground past the sprites' reach) once the sprites are opaque. */
 export const CIRCLE_MAX_ZOOM = SPRITE_OPAQUE_ZOOM
@@ -41,17 +39,6 @@ export const CIRCLE_PEAK_OPACITY = 0.92
 export const CIRCLE_FAR_OPACITY = 0.85
 /** Below this a tap does not select a dot. */
 export const CIRCLE_PICK_MIN_ZOOM = 12.8
-/** The heat is off: the dots carry every zoom below the sprites. */
-export const HEAT_ENABLED = false
-
-/**
- * One heat layer stands where eighteen stacked ones (one per colour, 0.48
- * each) did, so it is drawn more opaque than any one of them was.
- * The heat fades in from z6 to z8 as the city markers fade out, and out by z15 as the circles and sprites take over. */
-export const heatOpacity = (zoom: number) => interpolateStops([[6, 0], [8, 0.72], [10, 0.72], [13, 0.45], [15, 0]], zoom)
-/** Kernel radius in CSS pixels. */
-export const heatRadius = (zoom: number) => interpolateStops([[10, 10], [13, 14], [15, 22]], zoom)
-export const heatIntensity = (zoom: number) => interpolateStops([[10, 0.85], [13, 1.2], [15, 1.9]], zoom)
 export const circleOpacity = (zoom: number) => zoom < CIRCLE_MIN_ZOOM || zoom >= CIRCLE_MAX_ZOOM ? 0
   : interpolateStops([[6, 0], [8, 0.75], [SPRITE_CROWN_ZOOM_START, CIRCLE_PEAK_OPACITY], [SPRITE_OPAQUE_ZOOM, 0]], zoom)
 
@@ -72,147 +59,12 @@ export function circleRadius(dbh: number, [min, max]: readonly [number, number])
   return min + (max - min) * s
 }
 
-// --- Level of detail ---
-
-/**
- * Cell sizes of the heat pyramid, metres; each level merges the one before
- * it. The finest is a third of the smallest kernel the heat draws (22 px at
- * z15 is 52 m); an 8 m level would hold nearly a cell per tree for nothing.
- */
-export const DOT_LOD_CELLS = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192] as const
-
-export interface DotLevel {
-  cell: number
-  count: number
-  /** Weighted centroid of the cell's trees, metres from the origin. */
-  x: Float32Array
-  y: Float32Array
-  /** Trees in the cell. */
-  weight: Float32Array
-  /** For each item of the level below (raw points for the first), its cell here. */
-  parent: Uint32Array
-}
-
-/** Group items into square cells by their position; returns the cell of every item and per-cell sums. */
-function groupCells(xs: Float32Array, ys: Float32Array, ws: Float32Array | null, n: number, cell: number): DotLevel {
-  let cap = 16
-  while (cap < n * 2) cap <<= 1
-  const mask = cap - 1
-  const keys = new Float64Array(cap).fill(-1)
-  const slot = new Int32Array(cap)
-  const parent = new Uint32Array(n)
-  const sx = new Float64Array(n)
-  const sy = new Float64Array(n)
-  const sw = new Float64Array(n)
-  let count = 0
-  for (let i = 0; i < n; i++) {
-    const cx = Math.floor(xs[i] / cell)
-    const cy = Math.floor(ys[i] / cell)
-    const key = cx * 4194304 + cy
-    let h = (Math.imul(cx, 0x9E3779B1) ^ Math.imul(cy, 0x85EBCA77)) & mask
-    while (keys[h] !== -1 && keys[h] !== key) h = (h + 1) & mask
-    let c: number
-    if (keys[h] === -1) { keys[h] = key; c = slot[h] = count++ } else c = slot[h]
-    const w = ws ? ws[i] : 1
-    parent[i] = c
-    sx[c] += xs[i] * w
-    sy[c] += ys[i] * w
-    sw[c] += w
-  }
-  const x = new Float32Array(count)
-  const y = new Float32Array(count)
-  const weight = new Float32Array(count)
-  for (let c = 0; c < count; c++) {
-    x[c] = sx[c] / sw[c]
-    y[c] = sy[c] / sw[c]
-    weight[c] = sw[c]
-  }
-  return { cell, count, x, y, weight, parent }
-}
-
-/**
- * The heat pyramid: level 0 groups the raw points, each later level groups
- * the one before. A cell carries its trees' centroid and count, so a kernel
- * drawn at the cell sums to about what its trees' kernels would.
- */
-export function buildDotLevels(x: Float32Array, y: Float32Array, count: number, cells: readonly number[] = DOT_LOD_CELLS): DotLevel[] {
-  const levels: DotLevel[] = []
-  let xs = x, ys = y, ws: Float32Array | null = null, n = count
-  for (const cell of cells) {
-    const level = groupCells(xs, ys, ws, n, cell)
-    levels.push(level)
-    xs = level.x; ys = level.y; ws = level.weight; n = level.count
-  }
-  return levels
-}
-
-/** The coarsest level whose cells are at most a third of the kernel radius (the finest when none is). */
-export function levelForKernel(levels: readonly { cell: number }[], kernelMetres: number): number {
-  let chosen = 0
-  for (let i = 0; i < levels.length; i++) if (levels[i].cell <= kernelMetres / 3) chosen = i
-  return chosen
-}
-
 /** Parse '#rrggbb' to [r, g, b] bytes; anything else is mid grey. */
 export function hexRgb(hex: string): [number, number, number] {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
   if (!m) return [128, 128, 128]
   const v = parseInt(m[1], 16)
   return [(v >> 16) & 255, (v >> 8) & 255, v & 255]
-}
-
-/**
- * How much a colour counts in a cell's mean. A grey is "no recorded shade"
- * or "unknown trunk" in every scheme the map paints: it still counts as
- * trees (the density), but it should not wash out the recorded colours
- * beside it, so it carries a sixth of a colour's weight.
- */
-export function colorWeight([r, g, b]: readonly [number, number, number]): number {
-  return Math.max(r, g, b) - Math.min(r, g, b) < 16 ? 1 / 6 : 1
-}
-
-/**
- * Each level's colour per cell as RGBA bytes, from the points' palette
- * indices: RGB is the colour-weighted mean (colorWeight), A the cell's
- * colour weight per tree, so the heat can weigh cells against each other
- * the same way. Sums run up the pyramid, so a recolour is one pass over the
- * points and one over each level.
- */
-export function levelColors(levels: readonly DotLevel[], color: Uint8Array, palette: readonly string[], count: number): Uint8Array[] {
-  const rgb = palette.map(hexRgb)
-  const cw = rgb.map(colorWeight)
-  const out: Uint8Array[] = []
-  let prev: Float64Array | null = null
-  let prevCount = count
-  for (const level of levels) {
-    // Per cell: r·w, g·w, b·w, w.
-    const sums = new Float64Array(level.count * 4)
-    if (!prev) {
-      for (let i = 0; i < count; i++) {
-        const k = color[i] < rgb.length ? color[i] : 0
-        const c = rgb[k], w = cw[k]
-        const p = level.parent[i] * 4
-        sums[p] += c[0] * w; sums[p + 1] += c[1] * w; sums[p + 2] += c[2] * w; sums[p + 3] += w
-      }
-    } else {
-      for (let i = 0; i < prevCount; i++) {
-        const p = level.parent[i] * 4
-        sums[p] += prev[i * 4]; sums[p + 1] += prev[i * 4 + 1]; sums[p + 2] += prev[i * 4 + 2]; sums[p + 3] += prev[i * 4 + 3]
-      }
-    }
-    const bytes = new Uint8Array(level.count * 4)
-    for (let c = 0; c < level.count; c++) {
-      const w = sums[c * 4 + 3]
-      bytes[c * 4] = Math.round(sums[c * 4] / w)
-      bytes[c * 4 + 1] = Math.round(sums[c * 4 + 1] / w)
-      bytes[c * 4 + 2] = Math.round(sums[c * 4 + 2] / w)
-      bytes[c * 4 + 3] = Math.round((255 * w) / level.weight[c])
-    }
-    out.push(bytes)
-    prev = sums
-    prevCount = level.count
-  }
-  return out
 }
 
 // --- Picking ---

@@ -10,9 +10,16 @@
   <div v-if="isInitialLoading" class="map-loading" role="status">{{ nearbyLocation ? 'Loading trees around you…' : loadingMessage }}</div>
   <div v-else-if="tileRefreshing" class="map-loading map-refreshing">{{ tileRefreshMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
-  <div v-if="spriteDebug" class="sprite-debug" aria-hidden="true">
-    <div>{{ spriteDebug }}</div>
-    <canvas ref="radarCanvas" class="sprite-radar" />
+  <div v-if="spriteDebug" class="sprite-debug">
+    <div aria-hidden="true">{{ spriteDebug }}</div>
+    <label class="sprite-debug-control">
+      Max sprites
+      <select :value="spriteLimitChoice" aria-label="Maximum tree sprites" @change="chooseSpriteLimit">
+        <option value="auto">Auto (adjusts itself)</option>
+        <option v-for="n in SPRITE_LIMIT_CHOICES" :key="n" :value="n">{{ n.toLocaleString() }}</option>
+      </select>
+    </label>
+    <canvas ref="radarCanvas" class="sprite-radar" aria-hidden="true" />
   </div>
   <div v-if="mapWindow?.reason && !windowNoticeDismissed && !isInitialLoading" class="map-window-notice" role="status">
     <span>{{ mapWindow.reason === 'reloaded'
@@ -863,7 +870,7 @@ function updateZoomLevel() {
 
 const {
   addTreeLayers, applyColorToLayers, forceTreesTileRefetchPass, pickCrownSprite, renderedTreeSprites,
-  treesResident, residentTreeCount, residentViewSettled, pickResidentTree, spriteStats, spriteRadar,
+  treesResident, residentTreeCount, residentViewSettled, pickResidentTree, spriteStats, spriteRadar, setSpriteLimit,
 } = useMapLayers({
   map: mapRef,
   simplified: props.simplified ?? false,
@@ -889,6 +896,18 @@ function readMapDebug(): boolean {
 
 const radarCanvas = ref<HTMLCanvasElement | null>(null)
 
+// The sprite cap, from the debug panel: left alone it adjusts itself to the reach a crown is
+// worth drawing at (lib/spriteBudget.ts), which on a dense city settles well under its start.
+// A fixed cap holds until Auto is chosen again, and is kept for this browser.
+const SPRITE_LIMIT_CHOICES = [4096, 8192, 16384, 32768, 65536, 131072]
+const spriteLimitChoice = ref<string>('auto')
+
+function chooseSpriteLimit(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  spriteLimitChoice.value = value
+  setSpriteLimit(value === 'auto' ? null : Number(value))
+}
+
 function frame(now: number, last = now) {
   frameTimes.push(now - last)
   if (frameTimes.length > 120) frameTimes.shift()
@@ -905,6 +924,8 @@ function updateSpriteDebug() {
   const dots = `dots ${(residentTreeCount() ?? 0).toLocaleString()}`
   const s = spriteStats()
   if (!s) { spriteDebug.value = `${frames} · ${dots}`; return }
+  // The layer read a fixed cap from this browser's storage, or the panel set one.
+  spriteLimitChoice.value = s.auto ? 'auto' : String(s.cap)
   const reach = Number.isFinite(s.reach) ? `${Math.round(s.reach)} m` : 'all'
   const cap = `${s.cap.toLocaleString()}${s.auto ? ` auto, ceiling ${s.ceiling.toLocaleString()}` : ' fixed'}`
   spriteDebug.value = `${frames} · ${dots} · sprites ${s.drawn.toLocaleString()} / ${cap}${s.drawn >= s.cap ? ' CAPPED' : ''}`
@@ -3430,5 +3451,23 @@ onUnmounted(() => {
   max-width: calc(100% - 140px);
   text-align: center;
   pointer-events: none;
+}
+.sprite-debug-control {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin: 3px 0;
+  pointer-events: auto;
+}
+.sprite-debug-control select {
+  font: inherit;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+.sprite-debug-control option {
+  color: #000;
 }
 </style>

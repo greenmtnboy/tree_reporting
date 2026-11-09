@@ -21,13 +21,6 @@ const CHUNKS_PER_AXIS = 2 ** CHUNK_ZOOM
 /** A chunk's side in EPSG:3857 metres. */
 export const CHUNK_SIZE_M = WEB_MERCATOR_WORLD / CHUNKS_PER_AXIS
 
-/**
- * The heat pyramid's cell sizes within a chunk, finest first: the chunk's
- * side halved nine times (19 m) up to the chunk itself, so every level's
- * cells tile the chunk exactly and never straddle two.
- */
-export const CHUNK_LOD_CELLS: readonly number[] = Array.from({ length: 10 }, (_, k) => CHUNK_SIZE_M / 2 ** (9 - k))
-
 /** Index 0 of every palette: a colour the palette does not list. */
 export const POINT_FALLBACK_COLOR = '#66BB6A'
 /** Palette entries a one-byte index can address after the fallback. */
