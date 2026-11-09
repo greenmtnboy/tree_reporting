@@ -17,6 +17,24 @@ export const SPRITE_FULL_OPACITY_ZOOM = 21
 export const MIN_SPRITE_PX = 4
 /** Metres; the crown a desktop sprite is drawn with when the tree has no measured or predicted width. */
 export const DEFAULT_CROWN_WIDTH = 6
+/**
+ * Desktop sprites seen from above. An upright sprite shortens with the angle the camera looks
+ * down at it (by the cosine of that elevation), and between these two elevations it turns into
+ * a disc of its crown: the tree as seen from overhead, foreshortened to sin(elevation) as tall as
+ * it is wide, so round only from straight above. Per tree, so in a pitched view the trees
+ * under the camera are seen from above and the distant ones from the side.
+ */
+export const SPRITE_TOPDOWN_START_DEG = 55
+export const SPRITE_TOPDOWN_FULL_DEG = 75
+
+/** How a sprite looks from `sinElevation` (camera height over distance): its height scale and how far it has become a crown disc. */
+export function spriteViewShape(sinElevation: number): { squash: number; top: number } {
+  const s = Math.min(1, Math.max(0, sinElevation))
+  const a = Math.sin(SPRITE_TOPDOWN_START_DEG * Math.PI / 180), b = Math.sin(SPRITE_TOPDOWN_FULL_DEG * Math.PI / 180)
+  const t = Math.min(1, Math.max(0, (s - a) / (b - a)))
+  return { squash: Math.sqrt(1 - s * s), top: t * t * (3 - 2 * t) }
+}
+
 /** A capped sprite batch fades out over the last tenth of its reach, where the dots take over. */
 export const REACH_FADE = 0.9
 export const CROWN_DISTANCE_FULL = 700

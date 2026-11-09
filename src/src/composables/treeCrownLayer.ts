@@ -4,6 +4,7 @@ import {
   CROWN_DISTANCE_FULL, CROWN_DISTANCE_MAX, SPRITE_LIMIT_KEY, CROWN_ZOOM_START,
   crownZoomOpacity, mercatorPoint, metersPerMercatorUnit,
   spriteOpacity, SPRITE_CROWN_ZOOM_START, MIN_SPRITE_PX, REACH_FADE,
+  SPRITE_TOPDOWN_START_DEG, SPRITE_TOPDOWN_FULL_DEG, spriteViewShape,
   type CrownCamera, type TreeRenderView,
 } from '../lib/treeCrowns'
 import { CROWN_STRIDE as STRIDE, emptyCrownBatch, type CrownBatch, type CrownBatchOptions, type SpriteCellGeometry } from '../lib/crownBatch'
@@ -92,6 +93,8 @@ export class TreeCrownLayer implements CustomLayerInterface {
   /** The installed batch, waiting for its upload time before it adjusts the budget. */
   private sample?: Omit<BatchSample, 'uploadMs'>
   private uploadedAt?: number
+  /** Shape sprites by the angle each is seen at (spriteViewShape); off draws every one upright, as the renderer tests measure. */
+  viewAngle = true
   private debug = { queries: 0, discarded: 0, lastQueryMs: 0, lastSqlMs: 0, lastBuildMs: 0, lastBatch: 0, lastUploadMs: 0 }
   private sprites?: ReturnType<typeof createTreeSpriteAtlas>
   private textures: WebGLTexture[] = []
@@ -308,6 +311,10 @@ export class TreeCrownLayer implements CustomLayerInterface {
     const width = map.getCanvas().clientWidth, height = map.getCanvas().clientHeight
     // Reach is measured from the query camera, as the shader does.
     const meters = metersPerMercatorUnit(this.queryCamera?.lat ?? 0)
+    // The camera now, for the angle each tree is seen at (as the shader's u_camera).
+    const now = this.camera()
+    const [nowX, nowY] = mercatorPoint(now.lng, now.lat)
+    const nowMeters = metersPerMercatorUnit(now.lat)
     const bearing = map.getBearing() * Math.PI / 180
     const rightClip = matrix[0] * Math.cos(bearing) + matrix[4] * Math.sin(bearing)
     const { id, lng, lat, width: widths, category } = this.drawn
@@ -321,8 +328,17 @@ export class TreeCrownLayer implements CustomLayerInterface {
       const sy = (1 - (matrix[1] * x + matrix[5] * y + matrix[13]) / w) * height / 2
       const distance = Math.hypot(this.data[offset], this.data[offset + 1], this.budgetCamera[2]) * meters
       if (distance >= this.reach) continue
+      const seen = Math.hypot(x - nowX, y - nowY, now.altitude / nowMeters) * nowMeters
+      const sinE = this.viewAngle ? Math.min(1, now.altitude / Math.max(seen, 0.001)) : 0
+      const { squash, top } = spriteViewShape(sinE)
+      if (top >= 0.5) {
+        // Overhead: the crown disc around the trunk, sin(elevation) as tall as it is wide.
+        const disc = Math.max(Math.abs(rightClip * this.data[offset + 4]) / w * width, MIN_SPRITE_PX)
+        if (Math.hypot(point.x - sx, (point.y - sy) / Math.max(sinE, 0.01)) <= disc / 2) return { id: id[i], lng: lng[i], lat: lat[i], width: widths[i] }
+        continue
+      }
       const size = Math.max(Math.abs(rightClip * this.data[offset + 4] / cell.crownFraction) / w * width, MIN_SPRITE_PX)
-      const tall = size * this.data[offset + 14]
+      const tall = size * this.data[offset + 14] * squash
       const u = (point.x - sx) / size + 0.5, v = (point.y - sy) / tall + cell.base
       if (u < 0 || u >= 1 || v < 0 || v >= 1) continue
       if (cell.alpha[Math.floor(v * cell.size) * cell.size + Math.floor(u * cell.size)] > 32) return { id: id[i], lng: lng[i], lat: lat[i], width: widths[i] }
@@ -368,7 +384,9 @@ export class TreeCrownLayer implements CustomLayerInterface {
       ${attribute} vec4 a_shape;
       uniform vec2 u_viewport;
       uniform vec2 u_right;
-      ${webgl2 ? 'out' : 'varying'} vec2 v_uv;` : ''}
+      uniform float u_view_angle;
+      ${webgl2 ? 'out' : 'varying'} vec2 v_uv;
+      ${webgl2 ? 'out' : 'varying'} float v_top;` : ''}
       uniform mat4 u_matrix;
       uniform vec3 u_camera;
       uniform vec3 u_budget_camera;
@@ -395,11 +413,22 @@ export class TreeCrownLayer implements CustomLayerInterface {
           : vec4(2.0, 2.0, 2.0, 1.0);` : `
         vec4 anchor = u_matrix * vec4(a_center, 0.0, 1.0);
         vec4 crownRight = u_matrix * vec4(u_right * a_radius / a_shape.x, 0.0, 0.0);
+        float minHalf = ${MIN_SPRITE_PX.toFixed(1)} / u_viewport.x * anchor.w;
+        // How steeply the camera looks down at this tree (lib/treeCrowns spriteViewShape).
+        float sinE = clamp(u_camera.z * u_meters / max(distance, 0.001), 0.0, 1.0) * u_view_angle;
+        float t = clamp((sinE - ${Math.sin(SPRITE_TOPDOWN_START_DEG * Math.PI / 180).toFixed(6)})
+          / ${(Math.sin(SPRITE_TOPDOWN_FULL_DEG * Math.PI / 180) - Math.sin(SPRITE_TOPDOWN_START_DEG * Math.PI / 180)).toFixed(6)}, 0.0, 1.0);
+        v_top = t * t * (3.0 - 2.0 * t);
         // Always metre scale, never narrower than MIN_SPRITE_PX on screen.
-        float halfWidth = max(abs(crownRight.x), ${MIN_SPRITE_PX.toFixed(1)} / u_viewport.x * anchor.w);
-        // As tall as its measured or predicted height (a_shape.w, clamped on the CPU).
-        float halfHeight = halfWidth * u_viewport.x / u_viewport.y * a_shape.w;
-        anchor.xy += vec2(a_corner.x * halfWidth, (a_corner.y + 2.0 * a_shape.z - 1.0) * halfHeight);
+        float halfWidth = max(abs(crownRight.x), minHalf);
+        // As tall as its measured or predicted height (a_shape.w, clamped on the CPU), shortened
+        // by the cosine of the elevation, as an upright tree is seen from above.
+        float halfHeight = halfWidth * u_viewport.x / u_viewport.y * a_shape.w * sqrt(1.0 - sinE * sinE);
+        // From overhead: a disc the crown's own width, centred on the trunk. A disc on the ground
+        // seen at elevation e is sin(e) as tall as it is wide; round only from straight above.
+        float discHalf = max(abs(crownRight.x) * a_shape.x, minHalf);
+        anchor.xy += vec2(a_corner.x * mix(halfWidth, discHalf, v_top),
+          mix((a_corner.y + 2.0 * a_shape.z - 1.0) * halfHeight, a_corner.y * discHalf * u_viewport.x / u_viewport.y * sinE, v_top));
         gl_Position = anchor.w > 0.0 ? anchor : vec4(2.0, 2.0, 2.0, 1.0);
         v_uv = a_uv;`}
       }`
@@ -411,7 +440,8 @@ export class TreeCrownLayer implements CustomLayerInterface {
       ${webgl2 ? 'in' : 'varying'} float v_reach;
       uniform float u_opacity;
       ${!this.simplified ? `uniform sampler2D u_distance;
-      ${webgl2 ? 'in' : 'varying'} vec2 v_uv;` : ''}
+      ${webgl2 ? 'in' : 'varying'} vec2 v_uv;
+      ${webgl2 ? 'in' : 'varying'} float v_top;` : ''}
       ${webgl2 ? 'out vec4 fragColor;' : ''}
       void main() {
         ${this.simplified ? `
@@ -433,7 +463,15 @@ export class TreeCrownLayer implements CustomLayerInterface {
         vec4 foliage = vec4(v_color.rgb * coverage.g, coverage.g);
         vec4 blooms = vec4(vec3(248.0, 187.0, 208.0) / 255.0 * coverage.b, coverage.b);
         vec4 tree = foliage + trunk * (1.0 - foliage.a);
-        ${webgl2 ? 'fragColor' : 'gl_FragColor'} = (blooms + tree * (1.0 - blooms.a)) * u_opacity * v_reach;
+        vec4 side = blooms + tree * (1.0 - blooms.a);
+        // Overhead: a soft-edged crown disc, lighter at its middle like a lit canopy.
+        float r = length(v_corner);
+        float raa = ${derivatives ? 'max(fwidth(r), 0.002)' : '0.03'};
+        float disc = 1.0 - smoothstep(1.0 - raa, 1.0, r);
+        vec4 canopy = vec4(min(v_color.rgb * mix(1.1, 0.8, r), vec3(1.0)) * disc, disc);
+        // The shape morphs over the whole band, the look switches in its middle: blending the two
+        // across it shows a see-through disc over the sprite.
+        ${webgl2 ? 'fragColor' : 'gl_FragColor'} = mix(side, canopy, smoothstep(0.35, 0.65, v_top)) * u_opacity * v_reach;
         `}
       }`
     const program = gl.createProgram()!
@@ -458,7 +496,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
     this.program = program
     this.buffer = gl.createBuffer()!
     this.attributes = ['a_center', 'a_corner', 'a_radius', 'a_color', 'a_uv', 'a_shape'].map(name => gl.getAttribLocation(program, name))
-    this.uniforms = Object.fromEntries(['u_matrix', 'u_camera', 'u_budget_camera', 'u_meters', 'u_budget_distance', 'u_opacity', 'u_distance', 'u_viewport', 'u_right', 'u_reach']
+    this.uniforms = Object.fromEntries(['u_matrix', 'u_camera', 'u_budget_camera', 'u_meters', 'u_budget_distance', 'u_opacity', 'u_distance', 'u_viewport', 'u_right', 'u_view_angle', 'u_reach']
       .map(name => [name, gl.getUniformLocation(program, name)]))
     this.textures = []
     if (this.sprites) {
@@ -525,6 +563,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
       gl.uniform2f(this.uniforms.u_viewport, this.map.getCanvas().clientWidth, this.map.getCanvas().clientHeight)
       const bearing = this.map.getBearing() * Math.PI / 180
       gl.uniform2f(this.uniforms.u_right, Math.cos(bearing), Math.sin(bearing))
+      gl.uniform1f(this.uniforms.u_view_angle, this.viewAngle ? 1 : 0)
     }
     gl.drawArrays(gl.TRIANGLES, 0, this.count)
     // MapLibre unbinds its VAO before custom drawing. Leave that default VAO

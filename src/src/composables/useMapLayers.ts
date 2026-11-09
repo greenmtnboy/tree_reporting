@@ -351,9 +351,16 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     return !!residentMode
   }
 
-  /** The first label layer in the style: trees draw under the basemap's place and street names. */
+  /**
+   * The first of the style's closing run of label layers: trees draw under the basemap's place and
+   * street names but over its roads and buildings. Not simply the first label: CARTO's styles put
+   * one (waterway_label) before every road, bridge and building.
+   */
   function firstLabelLayer(mapInstance: maplibregl.Map): string | undefined {
-    return mapInstance.getStyle().layers.find(layer => layer.type === 'symbol')?.id
+    const layers = mapInstance.getStyle().layers
+    let first: string | undefined
+    for (let i = layers.length - 1; i >= 0 && layers[i].type === 'symbol'; i--) first = layers[i].id
+    return first
   }
 
   /** Add the sprite and resident layers if missing, and bring the resident set up to the worker's query and colours. */

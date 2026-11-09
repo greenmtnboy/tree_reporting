@@ -60,8 +60,8 @@
       <span class="legend-label">Sized by recorded / predicted crown</span>
     </div>
   </div>
-  <div v-if="!props.simplified && !isInitialLoading" class="cache-refresh-wrap">
-    <div class="cache-refresh-btn-wrap">
+  <div v-if="!props.simplified" class="cache-refresh-wrap">
+    <div v-if="!isInitialLoading" class="cache-refresh-btn-wrap">
       <button class="cache-refresh-btn" :disabled="cacheRefreshing" @click="void purgeAndRefresh()">&#x21BA;</button>
       <span class="cache-refresh-tooltip">Refresh map cache</span>
     </div>
@@ -69,7 +69,7 @@
       <button class="cache-refresh-btn" :class="{ 'cache-refresh-btn--on': mapDebugOn }" :aria-pressed="mapDebugOn" @click="mapDebugOn = !mapDebugOn">&#x2699;</button>
       <span class="cache-refresh-tooltip">{{ mapDebugOn ? 'Hide' : 'Show' }} map debug info</span>
     </div>
-    <div v-if="dbPopulatedMs != null" class="db-status-wrap">
+    <div v-if="dbPopulatedMs != null && !isInitialLoading" class="db-status-wrap">
       <span class="db-status-dot">&#x25CF;</span>
       <span class="db-status-tooltip">City DB populated; {{ dbPopulatedMs }}ms · {{ dbTreeCount?.toLocaleString() }} trees</span>
     </div>
@@ -858,6 +858,8 @@ const {
 
 // Desktop debug readout, off unless toggled from the map's lower-left controls: frame rate,
 // resident dots, and the sprite layer (drawn against its cap, reach against its target, query and upload time).
+// The choice persists per browser; the toggle shows even during the loading overlay, so a readout
+// left on can always be switched off.
 const MAP_DEBUG_KEY = 'sf_trees_map_debug'
 const mapDebugOn = ref(readMapDebug())
 const spriteDebug = ref('')
