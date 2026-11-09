@@ -54,6 +54,10 @@ param data_version string default '2';
 # file at import, so every uv script that imports it pins
 # `pytrilogy>=0.3.391`: an unpinned one reuses whatever uv has cached.
 def kept(key, pct) -> count(key) >= pct * prior(count(key));
+# A table keyed by a derived column (`grain (crown_fallback_class)`) holds its
+# values, not the trees they were computed from: `count(class)` counts trees,
+# which an assertion cannot read from the asset. Keep the values instead.
+def kept_values(column, pct) -> count_distinct(column) >= pct * prior(count_distinct(column));
 # The cross-city rollups compare city by city, so one city's parquet missing
 # from the scan fails the build rather than quietly emptying that city.
 def kept_by(key, dim, pct) -> count(key) by dim >= pct * prior(count(key) by dim);

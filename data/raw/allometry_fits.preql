@@ -119,7 +119,7 @@ grain (crown_fallback_class)
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/age_class_fits_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/age_class_fits_v{data_version}.parquet`
 where crown_fallback_class is not null and crown_fallback_class != 'none'
 freshness by prediction_inputs_published_through
-assert @kept(crown_fallback_class, 0.75);
+assert @kept_values(crown_fallback_class, 0.75);
 
 datasource height_fit_sample (
     tree_id: tree_id,

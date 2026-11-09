@@ -139,7 +139,7 @@ grain (height_sample_genus)
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/height_genus_fits_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/height_genus_fits_v{data_version}.parquet`
 where height_sample_genus is not null and height_genus_fit_n > 0
 freshness by prediction_inputs_published_through
-assert @kept(height_sample_genus, 0.75);
+assert @kept_values(height_sample_genus, 0.75);
 
 datasource height_class_fits (
     fit_class: height_sample_class,
@@ -162,4 +162,4 @@ grain (height_sample_class)
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/height_class_fits_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/height_class_fits_v{data_version}.parquet`
 where height_sample_class is not null
 freshness by prediction_inputs_published_through
-assert @kept(height_sample_class, 0.75);
+assert @kept_values(height_sample_class, 0.75);
