@@ -34,6 +34,8 @@ export interface CrownBatch {
   id: string[]
   lng: Float64Array
   lat: Float64Array
+  /** Metres: the crown width drawn, DEFAULT_CROWN_WIDTH where the tree has none. */
+  width: Float64Array
   category: string[]
   /** Mercator position of the query camera; vertices are relative to it. */
   origin: [number, number]
@@ -49,13 +51,13 @@ export interface CrownBatch {
 
 export function emptyCrownBatch(): CrownBatch {
   return {
-    vertices: new Float32Array(), id: [], lng: new Float64Array(), lat: new Float64Array(), category: [],
+    vertices: new Float32Array(), id: [], lng: new Float64Array(), lat: new Float64Array(), width: new Float64Array(), category: [],
     origin: [0, 0], budgetDistance: CROWN_DISTANCE_MAX, reach: Infinity, rows: 0, timing: { sqlMs: 0, buildMs: 0 },
   }
 }
 
 export function crownBatchBuffers(b: CrownBatch): ArrayBuffer[] {
-  return [b.vertices, b.lng, b.lat].map(a => a.buffer as ArrayBuffer)
+  return [b.vertices, b.lng, b.lat, b.width].map(a => a.buffer as ArrayBuffer)
 }
 
 function rgb(hex: string, cache: Map<string, number[]>): number[] {
@@ -99,7 +101,7 @@ export function buildCrownBatch(c: TreeCrownColumns, camera: TreeRenderView, opt
 
   const vertices = new Float32Array(n * 6 * CROWN_STRIDE)
   const id: string[] = [], category: string[] = []
-  const lng = new Float64Array(n), lat = new Float64Array(n)
+  const lng = new Float64Array(n), lat = new Float64Array(n), widths = new Float64Array(n)
   const nearbyDistances: number[] = []
   const colors = new Map<string, number[]>()
   let cursor = 0, drawn = 0, farthest = 0
@@ -142,6 +144,7 @@ export function buildCrownBatch(c: TreeCrownColumns, camera: TreeRenderView, opt
     category.push(c.category[i])
     lng[drawn] = c.lng[i]
     lat[drawn] = c.lat[i]
+    widths[drawn] = drawnWidth
     drawn++
   }
   // If density exhausts the phone's budget, fade the outer band instead of
@@ -154,7 +157,7 @@ export function buildCrownBatch(c: TreeCrownColumns, camera: TreeRenderView, opt
   return {
     // Copy the used part so the transfer sends only what is drawn.
     vertices: vertices.slice(0, cursor), id, category,
-    lng: lng.slice(0, drawn), lat: lat.slice(0, drawn),
+    lng: lng.slice(0, drawn), lat: lat.slice(0, drawn), width: widths.slice(0, drawn),
     origin, budgetDistance, reach: !simplified && rows >= limit ? farthest : Infinity, rows, timing: { sqlMs: 0, buildMs: 0 },
   }
 }

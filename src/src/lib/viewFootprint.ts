@@ -1,13 +1,13 @@
 /**
  * The ground a pitched, rotated camera sees, as a convex polygon in EPSG:3857
- * metres, padded behind the camera and out to the sides so a reverse or a
- * spin starts from trees already loaded. An axis-aligned lng/lat box around
+ * metres, padded on every side and behind the camera itself, so a pan, a
+ * reverse or a spin starts from trees already loaded. An axis-aligned lng/lat box around
  * the same view holds large off-screen corners at any bearing but the four
  * cardinal ones, and spends the sprite budget there.
  */
 export type Point = [number, number]
 
-/** Of the view's depth, how far the fetch area reaches past each side and behind the camera (or the near edge, if that is further back). */
+/** Of the view's depth, how far the fetch area reaches past each edge, and behind the camera (or the near edge, if that is further back). */
 export const FOOTPRINT_PAD = 0.25
 /** Real metres; the most that padding adds, so a long pitched view does not load a deep strip behind the camera. */
 export const FOOTPRINT_PAD_MAX_M = 500
@@ -51,8 +51,9 @@ export function viewFootprint(eye: Point, bearing: number, ground: Point[], pad 
   const p = Math.min(pad * depth, FOOTPRINT_PAD_MAX_M * metres)
   const [bl, br, tr, tl] = uv
   const padded: Point[] = p > 0
-    // A pitched view's near edge is ahead of the camera: reach behind the camera itself.
-    ? [[Math.min(bl[0] - p, -p), bl[1] - p], [Math.min(br[0] - p, -p), br[1] + p], [tr[0], tr[1] + p], [tl[0], tl[1] - p]]
+    // A pitched view's near edge is ahead of the camera: reach behind the camera itself. Its far
+    // edge is at the horizon, where nearest-first never spends the budget, but a flat view's is not.
+    ? [[Math.min(bl[0] - p, -p), bl[1] - p], [Math.min(br[0] - p, -p), br[1] + p], [tr[0] + p, tr[1] + p], [tl[0] + p, tl[1] - p]]
     : uv
   return convexHull(padded.map(([u, v]): Point => [eye[0] + u * f[0] + v * r[0], eye[1] + u * f[1] + v * r[1]]))
 }

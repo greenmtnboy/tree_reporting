@@ -14,12 +14,15 @@ describe('viewFootprint', () => {
     expect(insidePolygon(polygon, [0, 50])).toBe(false)
   })
 
-  it('pads behind the camera and past each side, capped in real metres', () => {
+  it('pads behind the camera and past each edge, capped in real metres', () => {
     const polygon = viewFootprint([0, 0], 0, ground, 0.25)
+    expect(insidePolygon(polygon, [0, 1200])).toBe(true)
+    expect(insidePolygon(polygon, [0, 1250])).toBe(false)
     // 0.25 of a 900 m depth is 225 m, measured behind the camera: the near edge is 100 m ahead of it.
     expect(insidePolygon(polygon, [0, -200])).toBe(true)
     expect(insidePolygon(polygon, [0, -250])).toBe(false)
-    expect(insidePolygon(polygon, [800, 1000])).toBe(true)
+    expect(insidePolygon(polygon, [700, 1000])).toBe(true)
+    expect(insidePolygon(polygon, [900, 1000])).toBe(false)
     const deep: Point[] = [[-50, 100], [50, 100], [6000, 10000], [-6000, 10000]]
     const capped = viewFootprint([0, 0], 0, deep, 0.25)
     expect(insidePolygon(capped, [0, -FOOTPRINT_PAD_MAX_M + 1])).toBe(true)

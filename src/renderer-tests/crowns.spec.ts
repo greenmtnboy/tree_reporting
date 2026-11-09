@@ -32,9 +32,9 @@ test('small pans reuse buffered coverage, including trees whose anchors just lef
   await page.evaluate(() => {
     const state = (window as any).crownTest
     state.requests = []
-    state.layer.load = async (view: any) => {
+    state.layer.load = async (view: any, options: any) => {
       state.requests.push(view)
-      return state.crowns
+      return state.batch(state.crowns, view, options)
     }
     state.layer.invalidate()
   })
@@ -58,7 +58,7 @@ test('a slow query for a departed viewport cannot replace the displayed batch', 
   await settle(page)
   await page.evaluate(() => {
     const state = (window as any).crownTest
-    state.layer.load = () => new Promise(resolve => { state.finish = resolve })
+    state.layer.load = (view: any, options: any) => new Promise(resolve => { state.finish = (list: any[]) => resolve(state.batch(list, view, options)) })
     state.layer.schedule()
   })
   // Move far enough to require a new coverage query.
@@ -253,7 +253,7 @@ test('late responses cannot restore filtered crowns or allocate resources after 
   await settle(page)
   await page.evaluate(() => {
     const state = (window as any).crownTest
-    state.layer.load = () => new Promise(resolve => { state.finish = resolve })
+    state.layer.load = (view: any, options: any) => new Promise(resolve => { state.finish = (list: any[]) => resolve(state.batch(list, view, options)) })
     state.layer.invalidate()
   })
   await page.waitForFunction(() => !!(window as any).crownTest.finish)
@@ -278,7 +278,7 @@ test('zooming out while loading cannot restore out-of-range sprites', async ({ p
   await settle(page)
   await page.evaluate(() => {
     const state = (window as any).crownTest
-    state.layer.load = () => new Promise(resolve => { state.finish = resolve })
+    state.layer.load = (view: any, options: any) => new Promise(resolve => { state.finish = (list: any[]) => resolve(state.batch(list, view, options)) })
     state.layer.invalidate()
   })
   await page.waitForFunction(() => !!(window as any).crownTest.finish)
@@ -298,14 +298,15 @@ test('sprite depth order follows the projected ground plane through rotation and
   await page.goto('/renderer-tests/crowns.html')
   await settle(page)
   const results = await page.evaluate(() => {
-    const { map, layer, crowns } = (window as any).crownTest
+    const { map, layer, crowns, batch } = (window as any).crownTest
     const grid = Array.from({ length: 25 }, (_, i) => ({ ...crowns[0], id: `sort-${i}`,
       lng: crowns[0].lng + (i % 5) * 0.0001, lat: crowns[0].lat + Math.floor(i / 5) * 0.0001 }))
     const results: boolean[] = []
     for (const pitch of [0, 60, 80]) {
       for (const bearing of [0, 45, 90, -90, 180]) {
         map.jumpTo({ pitch, bearing })
-        layer.setCrowns(grid, layer.camera())
+        const camera = layer.camera()
+        layer.setBatch(batch(grid, camera, { simplified: false, bearing: map.getBearing(), cells: layer.cellGeometry() }), camera)
         const y = layer.trees.map((tree: any) => map.project([tree.lng, tree.lat]).y)
         results.push(y.every((value: number, i: number) => !i || value >= y[i - 1] - 0.001))
       }

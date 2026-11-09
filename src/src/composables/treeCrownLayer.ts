@@ -16,7 +16,7 @@ type GL = WebGLRenderingContext | WebGL2RenderingContext
 const FRAME_MS = 1000 / 60
 type LoadCrowns = (camera: TreeRenderView, options: CrownBatchOptions) => Promise<CrownBatch>
 /** What a pick or the intro's readiness check learns about a drawn tree. */
-export interface DrawnTree { id: string; lng: number; lat: number }
+export interface DrawnTree { id: string; lng: number; lat: number; width: number }
 type ViewBounds = NonNullable<TreeRenderView['bounds']>
 
 /** The lng/lat box around an EPSG:3857 polygon: the query's coarse prefilter. */
@@ -310,7 +310,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
     const meters = metersPerMercatorUnit(this.queryCamera?.lat ?? 0)
     const bearing = map.getBearing() * Math.PI / 180
     const rightClip = matrix[0] * Math.cos(bearing) + matrix[4] * Math.sin(bearing)
-    const { id, lng, lat, category } = this.drawn
+    const { id, lng, lat, width: widths, category } = this.drawn
     for (let i = id.length - 1; i >= 0; i--) {
       const cell = this.sprites!.cells.get(category[i]) ?? this.sprites!.cells.get('default')!
       const offset = i * STRIDE * 6
@@ -325,15 +325,15 @@ export class TreeCrownLayer implements CustomLayerInterface {
       const tall = size * this.data[offset + 14]
       const u = (point.x - sx) / size + 0.5, v = (point.y - sy) / tall + cell.base
       if (u < 0 || u >= 1 || v < 0 || v >= 1) continue
-      if (cell.alpha[Math.floor(v * cell.size) * cell.size + Math.floor(u * cell.size)] > 32) return { id: id[i], lng: lng[i], lat: lat[i] }
+      if (cell.alpha[Math.floor(v * cell.size) * cell.size + Math.floor(u * cell.size)] > 32) return { id: id[i], lng: lng[i], lat: lat[i], width: widths[i] }
     }
   }
 
   /** Read-only diagnostics/click candidates; custom layers have no MapLibre hit index. */
   get trees(): readonly DrawnTree[] {
     if (!this.count) return []
-    const { id, lng, lat } = this.drawn
-    return this.drawnTrees ??= id.map((treeId, i) => ({ id: treeId, lng: lng[i], lat: lat[i] }))
+    const { id, lng, lat, width } = this.drawn
+    return this.drawnTrees ??= id.map((treeId, i) => ({ id: treeId, lng: lng[i], lat: lat[i], width: width[i] }))
   }
 
   onAdd(map: TreeMap, gl: GL) {
