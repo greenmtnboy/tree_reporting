@@ -96,7 +96,7 @@ async function runStep(step) {
     await new Promise((resolve) => map.once('render', resolve))
     let settledAt = null
     while (performance.now() - t0 < timeoutMs) {
-      if (!map.isMoving() && map.areTilesLoaded() && map.isSourceLoaded('trees')) { settledAt = performance.now(); break }
+      if (!map.isMoving() && map.areTilesLoaded() && (!map.getSource('trees') || map.isSourceLoaded('trees'))) { settledAt = performance.now(); break }
       await new Promise((r) => setTimeout(r, 50))
     }
     // Let a late idle land, then stop listening.

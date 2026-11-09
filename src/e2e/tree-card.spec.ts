@@ -63,9 +63,10 @@ async function findClickableTree(page: Page, mobile: boolean): Promise<Hit> {
         return null
       }
 
-      // One circle layer per colour (useMapLayers.ts).
+      // One circle layer per colour on a phone (useMapLayers.ts); the desktop
+      // picks its sprites at this zoom and has no circle layers at all.
       const layerIds = map.getStyle().layers.filter((l) => l.id.startsWith('trees-circle-')).map((l) => l.id)
-      if (!layerIds.length) return null
+      if (isMobile && !layerIds.length) return null
 
       const container = map.getContainer().getBoundingClientRect()
       // Stay clear of the overlay chrome (legend, compass, buttons) hugging the

@@ -2,6 +2,8 @@ import type { Ref, ComputedRef } from 'vue'
 import maplibregl from 'maplibre-gl'
 import type { Landmark, TreeForm } from '../types'
 import { TreeCrownLayer } from './treeCrownLayer'
+import { SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM } from '../lib/treeCrowns'
+import { TreeDotsLayer, type TreeDotsPick } from './treeDotsLayer'
 import { useDuckDB } from './useDuckDB'
 
 // --- Exported constants ---
@@ -43,9 +45,9 @@ const CIRCLE_ZOOM_MIN = 12.8
 const CIRCLE_ZOOM_RADIUS_MID = 15
 const CIRCLE_ZOOM_RADIUS_HIGH = 18
 const CIRCLE_ZOOM_RADIUS_MAX = 21
-const CIRCLE_ZOOM_MAX = 15.5
+const CIRCLE_ZOOM_MAX = SPRITE_OPAQUE_ZOOM
 const CIRCLE_ZOOM_OPACITY_START = CIRCLE_ZOOM_MIN
-const CIRCLE_ZOOM_OPACITY_MID = CIRCLE_ZOOM_RADIUS_MID
+const CIRCLE_ZOOM_OPACITY_MID = SPRITE_CROWN_ZOOM_START
 const CIRCLE_ZOOM_OPACITY_END = CIRCLE_ZOOM_MAX
 
 // Holds full strength down to z8 — a city's urban outline is still legible on
@@ -330,12 +332,46 @@ export interface UseMapLayersOptions {
   simplified: boolean
   activeHeatmapColors: ComputedRef<string[]>
   mapQueryRevision: Ref<number>
+  /** The resident layer drew a new set of trees (a city, a query or a filter; not a recolour). */
+  onResidentTreesLoaded?: (count: number) => void
 }
 
-export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRevision }: UseMapLayersOptions) {
+export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRevision, onResidentTreesLoaded }: UseMapLayersOptions) {
   let lastBuiltColors: string[] = []
   let treesSourceReloadNonce = 0
   let crownLayer: TreeCrownLayer | undefined
+  // The desktop draws every tree from memory (TreeDotsLayer) where WebGL2
+  // allows, and so has no vector tile source; a phone, or a desktop without
+  // a float render target, keeps the tiles. Decided once, at the first add.
+  let residentMode: boolean | undefined
+  let dotsLayer: TreeDotsLayer | undefined
+
+  function isResident(): boolean {
+    if (residentMode === undefined && map.value) residentMode = !simplified && TreeDotsLayer.supported(map.value)
+    return !!residentMode
+  }
+
+  /** The first label layer in the style: trees draw under the basemap's place and street names. */
+  function firstLabelLayer(mapInstance: maplibregl.Map): string | undefined {
+    return mapInstance.getStyle().layers.find(layer => layer.type === 'symbol')?.id
+  }
+
+  /** Add the sprite and resident layers if missing, and bring the resident set up to the worker's query and colours. */
+  function syncResidentLayers(mapInstance: maplibregl.Map): Promise<void> {
+    if (!crownLayer || !mapInstance.getLayer(crownLayer.id)) {
+      crownLayer = new TreeCrownLayer(useDuckDB().getCrownBatch, simplified)
+      mapInstance.addLayer(crownLayer, firstLabelLayer(mapInstance))
+    } else {
+      crownLayer.invalidate()
+    }
+    if (!dotsLayer) {
+      const { getPointKeys, getPointChunkDirectory, getPointChunks, getPointChunkColors } = useDuckDB()
+      dotsLayer = new TreeDotsLayer({ getPointKeys, getPointChunkDirectory, getPointChunks, getPointChunkColors }, (count) => onResidentTreesLoaded?.(count),
+        () => crownLayer?.spriteCoverage() ?? null, () => crownLayer?.busy() ?? false)
+    }
+    if (!mapInstance.getLayer(dotsLayer.id)) mapInstance.addLayer(dotsLayer, crownLayer.id)
+    return dotsLayer.sync()
+  }
 
   function nowMs(): number {
     return typeof performance !== 'undefined' ? performance.now() : Date.now()
@@ -365,9 +401,10 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     lastBuiltColors = [...colors]
   }
 
-  function addTreeLayers() {
-    if (!map.value) return
+  function addTreeLayers(): Promise<void> {
+    if (!map.value) return Promise.resolve()
     const mapInstance = map.value
+    if (isResident()) return syncResidentLayers(mapInstance)
     crownLayer?.invalidate()
     const t0 = nowMs()
     console.info('[Perf] map:layers:add:start')
@@ -386,7 +423,7 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
       if (typeof existingSource.setTiles === 'function') {
         existingSource.setTiles(treeTiles)
         console.info('[Perf] map:layers:source-refresh', { ms: Math.round(nowMs() - t0), revision: mapQueryRevision.value })
-        return
+        return Promise.resolve()
       }
     }
 
@@ -407,23 +444,29 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
       maxzoom: TREES_SOURCE_MAXZOOM,
     })
 
-    crownLayer = new TreeCrownLayer(useDuckDB().getMapTrees, simplified)
-    mapInstance.addLayer(crownLayer)
+    crownLayer = new TreeCrownLayer(useDuckDB().getCrownBatch, simplified)
+    mapInstance.addLayer(crownLayer, firstLabelLayer(mapInstance))
     addColorLayers(mapInstance, colors)
 
     console.info('[Perf] map:layers:add:done', { ms: Math.round(nowMs() - t0) })
+    return Promise.resolve()
   }
 
-  function forceTreesTileRefetchPass() {
+  /**
+   * Redraw for a new query, filter or colour. Tiles take a new URL nonce;
+   * the resident layer re-reads what changed and keeps drawing meanwhile.
+   */
+  function forceTreesTileRefetchPass(): Promise<void> {
     treesSourceReloadNonce += 1
-    addTreeLayers()
+    const done = addTreeLayers()
     map.value?.triggerRepaint()
+    return done
   }
 
   // Sync layers to the current colour set: the layers are per colour, so a
   // new set rebuilds them. The sprite shader uses the refreshed color map.
   function applyColorToLayers() {
-    if (!map.value) return
+    if (!map.value || isResident()) return
     const mapInstance = map.value
     const colors = activeHeatmapColors.value
 
@@ -441,8 +484,16 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
 
   return {
     pickCrownSprite: (point: { x: number; y: number }) => crownLayer?.pick(point),
+    /** True when the desktop draws every tree from memory and the tile source does not exist. */
+    treesResident: () => isResident(),
+    /** Trees the resident layer holds; null before its first set arrives. */
+    residentTreeCount: (): number | null => (dotsLayer?.loaded ? dotsLayer.count : null),
+    /** The resident circle under a point, while circles are drawn. */
+    pickResidentTree: (point: { x: number; y: number }): TreeDotsPick | undefined => dotsLayer?.pick(point),
     /** Trees the sprite layer drew last frame; custom layers have no queryRenderedFeatures. */
     renderedTreeSprites: (): readonly { lng: number; lat: number }[] => crownLayer?.trees ?? [],
+    spriteStats: () => crownLayer?.stats() ?? null,
+    spriteRadar: () => crownLayer?.radar() ?? null,
     addTreeLayers,
     applyColorToLayers,
     forceTreesTileRefetchPass,

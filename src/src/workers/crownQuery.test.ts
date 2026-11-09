@@ -5,7 +5,7 @@ import { colorSql } from './cityTables'
 import { CATEGORY_COLORS } from '../treeFormColors'
 import {
   CROWN_DISTANCE_MAX, MAX_CROWNS, MAX_SPRITE_ASPECT, MAX_TREE_SPRITES, MIN_SPRITE_ASPECT,
-  crownZoomOpacity, spriteAspect, spriteCrownBlend, spriteOpacity, validCrownWidth, validTreeHeight,
+  crownZoomOpacity, spriteAspect, spriteOpacity, SPRITE_BASE_OPACITY, SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM, SPRITE_FULL_OPACITY_ZOOM, validCrownWidth, validTreeHeight,
 } from '../lib/treeCrowns'
 
 const BROADLEAF = CATEGORY_COLORS.broadleaf
@@ -90,6 +90,15 @@ describe('nearby crown query', () => {
     }
   })
 
+  test('the unfiltered query skips the filter and returns what a filter over every tree does', async () => {
+    const view = { ...camera, altitude: 3000, bounds: { west: -1, east: 1, south: -1, north: 1 } }
+    const ids = async (base: string | null) => (await conn.runAndReadAll(crownQuery(view, base, color))).getRowObjects().map(row => row.id)
+    const sql = crownQuery(view, null, color)
+    expect(sql).not.toMatch(/\bbase\b/)
+    expect(await ids(null)).toEqual(await ids('SELECT tree_id FROM trees_fast'))
+    expect(await ids("SELECT tree_id FROM trees_fast WHERE tree_id = 'measured'")).toEqual(['measured'])
+  })
+
   test('desktop first batches include missing widths and distant markers with sizing already resolved', async () => {
     const rows = (await conn.runAndReadAll(crownQuery({ ...camera, altitude: 3000,
       bounds: { west: -1, east: 1, south: -1, north: 1 } }, 'SELECT tree_id FROM trees_fast', color))).getRowObjects()
@@ -111,15 +120,15 @@ describe('nearby crown query', () => {
     expect(rows[rows.length - 1]?.id).toBe(`view-${MAX_TREE_SPRITES - 1}`)
   })
 
-  test('buffered desktop queries spend the budget on visible trees first', async () => {
+  test('desktop queries spend the budget only inside the view footprint', async () => {
     await conn.run(`INSERT INTO trees_fast VALUES
       ('visible-far', 'USSFO', 0.5, 0, 55659, 0, 12, NULL, 'broadleaf', 18, NULL, NULL)`)
+    // The bounds hold every view- tree too; the footprint polygon holds only visible-far.
     const rows = (await conn.runAndReadAll(crownQuery({ ...camera,
       bounds: { west: -1, east: 1, south: -1, north: 1 },
-      visibleBounds: { west: 0.4, east: 0.6, south: -0.1, north: 0.1 },
+      footprint: [[50000, -1000], [60000, -1000], [60000, 1000], [50000, 1000]],
     }, "SELECT tree_id FROM trees_fast WHERE tree_id LIKE 'view-%' OR tree_id = 'visible-far'", color))).getRowObjects()
-    expect(rows).toHaveLength(MAX_TREE_SPRITES)
-    expect(rows[0].id).toBe('visible-far')
+    expect(rows.map(row => row.id)).toEqual(['visible-far'])
   })
 
   test('dense neighborhoods return only the nearest bounded batch', async () => {
@@ -157,11 +166,15 @@ test('zoom fades and invalid widths are bounded', () => {
   for (const width of [null, undefined, 0, -1, NaN, Infinity, 1000, '5']) expect(validCrownWidth(width)).toBe(false)
   expect(validCrownWidth(0.5)).toBe(true)
   expect(validCrownWidth(60)).toBe(true)
-  expect(spriteCrownBlend(14.4)).toBe(0)
-  expect(spriteCrownBlend(19.5)).toBe(1)
-  expect(spriteCrownBlend(16)).toBeGreaterThan(0)
-  expect(spriteCrownBlend(18)).toBeGreaterThan(0.5)
-  expect(spriteOpacity(14.4)).toBe(0)
-  expect(spriteOpacity(15)).toBe(0.72)
+  expect(spriteOpacity(SPRITE_CROWN_ZOOM_START)).toBe(0)
+  expect(spriteOpacity(SPRITE_OPAQUE_ZOOM)).toBeCloseTo(SPRITE_BASE_OPACITY)
+  expect(spriteOpacity(SPRITE_FULL_OPACITY_ZOOM)).toBe(1)
   expect(() => crownQuery({ lng: NaN, lat: 0, altitude: 0 }, '', colorSql('tf', false))).toThrow('Invalid crown camera')
+})
+
+test('a desktop query takes its sprite budget from the camera', () => {
+  const view = { lng: 0, lat: 0, altitude: 600, bounds: { west: -1, east: 1, south: -1, north: 1 } }
+  expect(crownQuery(view, null, colorSql('tf', false))).toMatch(new RegExp(`LIMIT ${MAX_TREE_SPRITES}$`))
+  expect(crownQuery({ ...view, spriteLimit: 5000 }, null, colorSql('tf', false))).toMatch(/LIMIT 5000$/)
+  expect(() => crownQuery({ ...view, spriteLimit: 0 }, null, colorSql('tf', false))).toThrow('Invalid sprite limit')
 })

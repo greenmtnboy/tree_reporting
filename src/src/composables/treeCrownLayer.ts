@@ -1,32 +1,62 @@
 import type { CustomLayerInterface, Map as TreeMap } from 'maplibre-gl'
 import { createTreeSpriteAtlas } from './treeSpriteAtlas'
 import {
-  CROWN_DISTANCE_FULL, CROWN_DISTANCE_MAX, MAX_CROWNS, MAX_TREE_SPRITES, CROWN_ZOOM_START,
-  crownZoomOpacity, mercatorPoint, metersPerMercatorUnit, validCrownWidth, spriteAspect,
-  spriteCrownBlend, spriteBaseScale, spriteOpacity, SPRITE_CROWN_ZOOM_START,
-  type CrownCamera, type TreeRenderView, type TreeCrown,
+  CROWN_DISTANCE_FULL, CROWN_DISTANCE_MAX, SPRITE_LIMIT_KEY, CROWN_ZOOM_START,
+  crownZoomOpacity, mercatorPoint, metersPerMercatorUnit,
+  spriteOpacity, SPRITE_CROWN_ZOOM_START, MIN_SPRITE_PX, REACH_FADE,
+  type CrownCamera, type TreeRenderView,
 } from '../lib/treeCrowns'
+import { CROWN_STRIDE as STRIDE, emptyCrownBatch, type CrownBatch, type CrownBatchOptions, type SpriteCellGeometry } from '../lib/crownBatch'
+import { FOOTPRINT_PAD, insidePolygon, viewFootprint, type Point } from '../lib/viewFootprint'
+import { lngLatFrom3857, lngLatTo3857, MERCATOR_WORLD_M } from '../lib/treeDots'
+import { crownVisibleDistance, initialSpriteBudget, isSoftwareRenderer, nextSpriteBudget, type BatchSample, type SpriteBudget } from '../lib/spriteBudget'
 
 type GL = WebGLRenderingContext | WebGL2RenderingContext
-type LoadCrowns = (camera: TreeRenderView) => Promise<TreeCrown[]>
-const STRIDE = 15
-const CORNERS = [-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]
+/** A 60 Hz frame; what an upload's frame takes beyond it is the upload's cost. */
+const FRAME_MS = 1000 / 60
+type LoadCrowns = (camera: TreeRenderView, options: CrownBatchOptions) => Promise<CrownBatch>
+/** What a pick or the intro's readiness check learns about a drawn tree. */
+export interface DrawnTree { id: string; lng: number; lat: number; width: number }
 type ViewBounds = NonNullable<TreeRenderView['bounds']>
 
-function padBounds(bounds: ViewBounds, fraction: number): ViewBounds {
-  const x = (bounds.east - bounds.west) * fraction
-  const y = (bounds.north - bounds.south) * fraction
-  return { west: bounds.west - x, east: bounds.east + x, south: Math.max(-85.05112878, bounds.south - y), north: Math.min(85.05112878, bounds.north + y) }
+/** The lng/lat box around an EPSG:3857 polygon: the query's coarse prefilter. */
+function polygonBounds(polygon: Point[]): ViewBounds {
+  const corners = polygon.map(([x, y]) => lngLatFrom3857(x, y))
+  const lngs = corners.map(c => c[0]), lats = corners.map(c => c[1])
+  return { west: Math.min(...lngs), east: Math.max(...lngs), south: Math.max(-85.05112878, Math.min(...lats)), north: Math.min(85.05112878, Math.max(...lats)) }
 }
 
-function contains(outer: ViewBounds, inner: ViewBounds): boolean {
-  return outer.west <= inner.west && outer.east >= inner.east && outer.south <= inner.south && outer.north >= inner.north
+function spriteLimitOverride(): number | undefined {
+  try {
+    const value = Number(localStorage.getItem(SPRITE_LIMIT_KEY))
+    return Number.isInteger(value) && value > 0 ? value : undefined
+  } catch { return undefined }
+}
+
+/** For the debug radar: the camera, the view, and what is fetched around them, in EPSG:3857 metres. */
+export interface SpriteRadar {
+  eye: Point
+  bearing: number
+  /** The ground the screen shows now. */
+  view: Point[]
+  /** The installed batch's fetch polygon, and the camera it was queried from. */
+  fetched: Point[] | null
+  queryEye: Point | null
+  /** EPSG:3857 metres; Infinity when the batch was not cut by the cap. */
+  reach: number
+  /** EPSG:3857 metres; how far a typical crown stays MIN_SPRITE_PX wide, the reach the budget aims for. */
+  target: number
+  /** The fetch polygon of the query in flight. */
+  pending: Point[] | null
+  /** A sample of the drawn trees, x/y interleaved. */
+  trees: Float64Array
 }
 
 /** One bounded batch of upright sprites or ground-plane rings. Camera changes only uniforms;
  * no sprite regeneration, symbol placement, tile rebuilds or per-frame SQL.
  * Uses the typed camera accessor in our pinned MapLibre 4.x transform.
  */
+
 export class TreeCrownLayer implements CustomLayerInterface {
   get id() { return this.simplified ? 'trees-crown' : 'trees-icon' }
   readonly type = 'custom' as const
@@ -48,14 +78,83 @@ export class TreeCrownLayer implements CustomLayerInterface {
   private appearedAt = 0
   private budgetCamera = [0, 0, 0]
   private budgetDistance = CROWN_DISTANCE_MAX
+  /** Metres from the query camera of the farthest sprite loaded when the batch hit its cap; Infinity when nothing was cut. */
+  private reach = Infinity
+  /** Where the camera stood when the installed batch was queried; a capped batch is a disc around it. */
+  private queryCamera?: CrownCamera
+  /** The padded view footprint the installed batch was fetched for (EPSG:3857 metres). */
+  private loadedFootprint?: Point[]
+  private pendingFootprint?: Point[]
+  /** A fixed desktop sprite budget from localStorage (SPRITE_LIMIT_KEY), for sweeps; otherwise it adjusts itself (lib/spriteBudget). */
+  private readonly fixedLimit = spriteLimitOverride()
+  private budget: SpriteBudget = initialSpriteBudget(false)
+  private get spriteLimit() { return this.fixedLimit ?? this.budget.limit }
+  /** The installed batch, waiting for its upload time before it adjusts the budget. */
+  private sample?: Omit<BatchSample, 'uploadMs'>
+  private uploadedAt?: number
+  private debug = { queries: 0, discarded: 0, lastQueryMs: 0, lastSqlMs: 0, lastBuildMs: 0, lastBatch: 0, lastUploadMs: 0 }
   private sprites?: ReturnType<typeof createTreeSpriteAtlas>
   private textures: WebGLTexture[] = []
-  private drawnCrowns: TreeCrown[] = []
-  private coverage?: ViewBounds
+  /** The installed batch's drawn trees, in draw order; `data` holds their vertices. */
+  private drawn: CrownBatch = emptyCrownBatch()
+  private drawnTrees?: DrawnTree[]
+  /** The footprint of an uncapped batch: every tree in it is loaded, so views inside it need no query. */
+  private coverage?: Point[]
   private coverageBearing = 0
   private get minZoom() { return this.simplified ? CROWN_ZOOM_START : SPRITE_CROWN_ZOOM_START }
 
   constructor(private load: LoadCrowns, private simplified: boolean) {}
+
+  /**
+   * Where the desktop sprites stand in for the dots: inside `polygon` (the fetched footprint in
+   * EPSG:3857 metres; null when no batch is installed) and within `reach` metres of `eye`, the camera
+   * the batch was queried from (not the camera now: a moving camera would carry the disc past the
+   * trees loaded). Null below the sprite zooms.
+   */
+  spriteCoverage(): { polygon: Point[] | null; reach: number; eye: CrownCamera | null } | null {
+    if (this.simplified || !this.map || this.map.getZoom() <= this.minZoom) return null
+    const installed = this.count > 0 && !!this.loadedFootprint
+    return { polygon: installed ? this.loadedFootprint! : null, reach: this.reach, eye: installed ? this.queryCamera ?? null : null }
+  }
+
+  radar(): SpriteRadar | null {
+    if (this.simplified || !this.map) return null
+    const { lngLat } = this.map.transform.getCameraPosition()
+    const toPoint = (c?: CrownCamera): Point | null => c ? lngLatTo3857(c.lng, c.lat) as Point : null
+    const scale = 1 / Math.cos(lngLat.lat * Math.PI / 180)
+    const trees = this.count ? this.drawn.id.length : 0
+    const step = Math.max(1, Math.ceil(trees / 3000))
+    const sample = new Float64Array(Math.ceil(trees / step) * 2)
+    for (let i = 0, k = 0; i < trees; i += step) {
+      const offset = i * STRIDE * 6
+      sample[k++] = (this.origin[0] + this.data[offset] - 0.5) * MERCATOR_WORLD_M
+      sample[k++] = (0.5 - this.origin[1] - this.data[offset + 1]) * MERCATOR_WORLD_M
+    }
+    return {
+      eye: lngLatTo3857(lngLat.lng, lngLat.lat) as Point, bearing: this.map.getBearing(),
+      view: this.footprint(0), fetched: this.count ? this.loadedFootprint ?? null : null,
+      queryEye: this.count ? toPoint(this.queryCamera) : null, reach: this.reach * scale, target: this.target() * scale,
+      pending: this.inFlight ? this.pendingFootprint ?? null : null, trees: sample,
+    }
+  }
+
+  /** A query is waiting on its timer or running. */
+  busy(): boolean {
+    return !!this.timer || this.inFlight
+  }
+
+  /** For the debug readout. */
+  stats() {
+    return {
+      drawn: this.drawn.id.length, cap: this.spriteLimit, auto: this.fixedLimit === undefined, ceiling: this.budget.ceiling,
+      reach: this.reach, target: this.map ? this.target() : 0, inFlight: this.inFlight, ...this.debug,
+    }
+  }
+
+  /** Metres at which a typical crown is MIN_SPRITE_PX wide in this view. */
+  private target(): number {
+    return crownVisibleDistance(this.map!.transform.cameraToCenterDistance)
+  }
 
   private camera(): CrownCamera {
     const { lngLat, altitude } = this.map!.transform.getCameraPosition()
@@ -71,9 +170,20 @@ export class TreeCrownLayer implements CustomLayerInterface {
     this.map?.triggerRepaint()
   }
 
-  private viewport(): ViewBounds {
-    const bounds = this.map!.getBounds()
-    return { west: bounds.getWest(), south: bounds.getSouth(), east: bounds.getEast(), north: bounds.getNorth() }
+  /**
+   * The ground the screen shows, as an EPSG:3857 polygon, padded by `pad` of its depth behind and to
+   * the sides. The top corners stop just under the horizon, as MapLibre's own getBounds does.
+   */
+  private footprint(pad: number): Point[] {
+    const map = this.map!, transform = map.transform
+    const width = transform.width, height = transform.height
+    const top = Math.max(0, height / 2 - transform.getHorizon())
+    const ground = ([[0, height], [width, height], [width, top], [0, top]] as Point[]).map(([x, y]) => {
+      const { lng, lat } = map.unproject([x, y])
+      return lngLatTo3857(lng, lat) as Point
+    })
+    const { lngLat } = transform.getCameraPosition()
+    return viewFootprint(lngLatTo3857(lngLat.lng, lngLat.lat) as Point, map.getBearing(), ground, pad, 1 / Math.cos(lngLat.lat * Math.PI / 180))
   }
 
   private schedule = () => {
@@ -94,29 +204,45 @@ export class TreeCrownLayer implements CustomLayerInterface {
     if (this.simplified && camera.altitude >= CROWN_DISTANCE_MAX) return
     this.dirty = false
     if (!this.simplified) {
-      const bounds = this.viewport()
-      // Keep a margin for silhouettes anchored offscreen and start fetching
-      // before panning consumes it. Reuse only complete (uncapped) batches.
-      if (this.coverage && this.coverageBearing === this.map.getBearing()
-        && contains(this.coverage, padBounds(bounds, 0.1))) return
-      camera.bounds = padBounds(bounds, 0.3)
-      camera.visibleBounds = bounds
+      // Reuse only complete (uncapped) batches whose footprint still holds the whole view, at the
+      // bearing they were sorted for.
+      const coverage = this.coverage
+      if (coverage && this.coverageBearing === this.map.getBearing() && this.footprint(0).every(p => insidePolygon(coverage, p))) return
+      // Fetch the view's own footprint, padded behind and to the sides so a reverse or a spin
+      // starts from trees already loaded; nearest first, up to the budget.
+      camera.footprint = this.footprint(FOOTPRINT_PAD)
+      camera.bounds = polygonBounds(camera.footprint)
+      camera.spriteLimit = this.spriteLimit
+      this.pendingFootprint = camera.footprint
     }
     this.inFlight = true
     const generation = this.generation
     try {
-      const crowns = await this.load(camera)
+      const started = performance.now()
+      // The batch is sorted back to front for this bearing; a view at another needs a new batch.
+      const bearing = this.map.getBearing()
+      const batch = await this.load(camera, { simplified: this.simplified, bearing, cells: this.cellGeometry() })
+      this.debug.queries++
+      this.debug.lastQueryMs = performance.now() - started
+      this.debug.lastBatch = batch.rows
+      this.debug.lastSqlMs = batch.timing.sqlMs
+      this.debug.lastBuildMs = batch.timing.buildMs
       if (!this.map || generation !== this.generation) return
       if (this.map.getZoom() <= this.minZoom || (this.simplified && this.camera().altitude >= CROWN_DISTANCE_MAX)) return
-      if (camera.bounds && !contains(camera.bounds, this.viewport())) {
+      const center = this.map.getCenter()
+      if (camera.footprint && !insidePolygon(camera.footprint, lngLatTo3857(center.lng, center.lat) as Point)) {
         // Keep the last useful batch while catching up; never replace it with
-        // a late snapshot of a viewport the user has already left.
+        // a late snapshot of a view the user has already turned or moved away from.
+        this.debug.discarded++
         this.dirty = true
         return
       }
-      this.setCrowns(crowns, camera)
-      this.coverage = camera.bounds && crowns.length < MAX_TREE_SPRITES ? camera.bounds : undefined
-      this.coverageBearing = this.map.getBearing()
+      this.setBatch(batch, camera)
+      this.loadedFootprint = camera.footprint
+      const limit = camera.spriteLimit ?? this.spriteLimit, capped = batch.rows >= limit
+      this.coverage = camera.footprint && !capped ? camera.footprint : undefined
+      if (!this.simplified) this.sample = { limit, capped, reach: batch.reach, target: this.target(), buildMs: batch.timing.buildMs }
+      this.coverageBearing = bearing
     } catch (error) {
       if (this.map && generation === this.generation) {
         // A transient query error must not blank an otherwise usable batch.
@@ -124,121 +250,91 @@ export class TreeCrownLayer implements CustomLayerInterface {
       }
     } finally {
       this.inFlight = false
+      this.pendingFootprint = undefined
       if (this.dirty) this.schedule()
     }
   }
 
-  private setCrowns(crowns: TreeCrown[], camera: CrownCamera) {
+  /** The atlas cells' geometry, for the worker's vertex fill. */
+  private cellGeometry(): Record<string, SpriteCellGeometry> | undefined {
+    if (!this.sprites) return undefined
+    const cells: Record<string, SpriteCellGeometry> = {}
+    for (const [form, { left, right, top, bottom, crownFraction, heightFraction, base }] of this.sprites.cells) {
+      cells[form] = { left, right, top, bottom, crownFraction, heightFraction, base }
+    }
+    return cells
+  }
+
+  /** Install a batch the worker sorted and filled: one buffer upload on the next frame. */
+  private setBatch(batch: CrownBatch, camera: CrownCamera) {
     const wasEmpty = this.count === 0
-    this.origin = mercatorPoint(camera.lng, camera.lat)
-    const meters = metersPerMercatorUnit(camera.lat)
-    this.budgetCamera = [0, 0, camera.altitude / meters]
-    this.budgetDistance = CROWN_DISTANCE_MAX
-    this.drawnCrowns = []
-    const nearbyDistances: number[] = []
-    // Back-to-front for overlapping upright sprites. This is bounded work at
-    // data refresh time, never a feature scan on the animation frame.
-    const ordered = crowns.slice(0, this.simplified ? MAX_CROWNS : MAX_TREE_SPRITES)
-    if (!this.simplified) {
-      // Ground-plane depth order depends on bearing, not perspective divide.
-      // Sorting on this axis avoids projecting every tree and allocating a Map.
-      const bearing = this.map!.getBearing() * Math.PI / 180
-      const sin = Math.sin(bearing), cos = Math.cos(bearing)
-      const depths = ordered.map(crown => {
-        const [x, y] = mercatorPoint(crown.lng, crown.lat)
-        return { crown, depth: -x * sin + y * cos }
-      }).sort((a, b) => a.depth - b.depth)
-      for (let i = 0; i < ordered.length; i++) ordered[i] = depths[i].crown
-    }
-    const vertices = new Float32Array(ordered.length * 6 * STRIDE)
-    let cursor = 0
-    for (const crown of ordered) {
-      if ((this.simplified && !validCrownWidth(crown.width)) || ![crown.lng, crown.lat].every(Number.isFinite)) continue
-      const [x, y] = mercatorPoint(crown.lng, crown.lat)
-      // Keep positions local to avoid float32 jitter at street-level zoom.
-      const dx = x - this.origin[0], dy = y - this.origin[1]
-      const distance = Math.hypot(dx * meters, dy * meters, camera.altitude)
-      if (this.simplified && distance >= CROWN_DISTANCE_MAX) continue
-      if (validCrownWidth(crown.width) && distance < CROWN_DISTANCE_MAX) nearbyDistances.push(distance)
-      const radius = validCrownWidth(crown.width) ? crown.width / 2 / metersPerMercatorUnit(crown.lat) : 0
-      const hex = /^#[0-9a-f]{6}$/i.test(crown.color) ? crown.color : '#66BB6A'
-      const rgb = [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16) / 255)
-      const cell = this.sprites?.cells.get(crown.category ?? 'default') ?? this.sprites?.cells.get('default')
-      const dbh = Number.isFinite(crown.dbh) && crown.dbh! > 0 ? crown.dbh! : 3
-      for (let i = 0; i < CORNERS.length; i += 2) {
-        const cx = CORNERS[i], cy = CORNERS[i + 1]
-        vertices[cursor++] = dx
-        vertices[cursor++] = dy
-        vertices[cursor++] = cx
-        vertices[cursor++] = cy
-        vertices[cursor++] = radius
-        vertices[cursor++] = rgb[0]
-        vertices[cursor++] = rgb[1]
-        vertices[cursor++] = rgb[2]
-        vertices[cursor++] = crown.measured ? 1 : 0
-        vertices[cursor++] = cell ? (cx < 0 ? cell.left : cell.right) : 0
-        vertices[cursor++] = cell ? (cy > 0 ? cell.top : cell.bottom) : 0
-        vertices[cursor++] = cell?.crownFraction ?? 1
-        vertices[cursor++] = Math.min(1, Math.sqrt(dbh / 42))
-        vertices[cursor++] = cell?.base ?? 0.95
-        vertices[cursor++] = cell ? spriteAspect(crown.width, crown.height, cell.crownFraction, cell.heightFraction) : 1
-      }
-      this.drawnCrowns.push(crown)
-    }
-    // If density exhausts the budget, fade the outer band instead of showing
-    // an arbitrary hard edge through a dense park.
-    if (nearbyDistances.length >= MAX_CROWNS) {
-      nearbyDistances.sort((a, b) => a - b)
-      this.budgetDistance = nearbyDistances[MAX_CROWNS - 1]
-    }
-    this.data = vertices.subarray(0, cursor)
-    this.count = cursor / STRIDE
+    this.origin = batch.origin
+    this.budgetCamera = [0, 0, camera.altitude / metersPerMercatorUnit(camera.lat)]
+    this.budgetDistance = batch.budgetDistance
+    this.reach = batch.reach
+    this.queryCamera = { lng: camera.lng, lat: camera.lat, altitude: camera.altitude }
+    this.drawn = batch
+    this.drawnTrees = undefined
+    this.data = batch.vertices
+    this.count = batch.vertices.length / STRIDE
     this.upload = true
     if (wasEmpty) this.appearedAt = performance.now()
     this.map?.triggerRepaint()
   }
 
+  /**
+   * After a batch's upload, step the sprite budget toward the reach a typical crown is worth drawing
+   * at, within what the upload and the worker's build cost. A capped batch that fell short is
+   * fetched again at the new limit.
+   */
+  private adjustBudget(uploadMs: number) {
+    const sample = this.sample
+    this.sample = undefined
+    if (!sample || this.fixedLimit !== undefined) return
+    const before = this.budget.limit
+    this.budget = nextSpriteBudget(this.budget, { ...sample, uploadMs })
+    if (this.budget.limit > before && sample.capped) {
+      this.coverage = undefined
+      this.schedule()
+    }
+  }
+
   /** Match the visible, scaled silhouette rather than the old marker bounds. */
-  pick(point: { x: number; y: number }): TreeCrown | undefined {
+  pick(point: { x: number; y: number }): DrawnTree | undefined {
     if (this.simplified || !this.map || !this.count) return
-    const map = this.map, camera = this.camera(), zoom = map.getZoom()
+    const map = this.map, zoom = map.getZoom()
     if (zoom <= this.minZoom) return
     const matrix = map.transform.customLayerMatrix()
     const width = map.getCanvas().clientWidth, height = map.getCanvas().clientHeight
-    const [cameraX, cameraY] = mercatorPoint(camera.lng, camera.lat)
-    const meters = metersPerMercatorUnit(camera.lat)
+    // Reach is measured from the query camera, as the shader does.
+    const meters = metersPerMercatorUnit(this.queryCamera?.lat ?? 0)
     const bearing = map.getBearing() * Math.PI / 180
     const rightClip = matrix[0] * Math.cos(bearing) + matrix[4] * Math.sin(bearing)
-    const [low, high] = spriteBaseScale(zoom)
-    const smooth = (lo: number, hi: number, value: number) => {
-      const x = Math.max(0, Math.min(1, (value - lo) / (hi - lo)))
-      return x * x * (3 - 2 * x)
-    }
-    const zoomFade = spriteCrownBlend(zoom)
-    for (let i = this.drawnCrowns.length - 1; i >= 0; i--) {
-      const crown = this.drawnCrowns[i]
-      const cell = this.sprites!.cells.get(crown.category ?? 'default') ?? this.sprites!.cells.get('default')!
+    const { id, lng, lat, width: widths, category } = this.drawn
+    for (let i = id.length - 1; i >= 0; i--) {
+      const cell = this.sprites!.cells.get(category[i]) ?? this.sprites!.cells.get('default')!
       const offset = i * STRIDE * 6
       const x = this.data[offset] + this.origin[0], y = this.data[offset + 1] + this.origin[1]
       const w = matrix[3] * x + matrix[7] * y + matrix[15]
       if (w <= 0) continue
       const sx = ((matrix[0] * x + matrix[4] * y + matrix[12]) / w + 1) * width / 2
       const sy = (1 - (matrix[1] * x + matrix[5] * y + matrix[13]) / w) * height / 2
-      const distance = Math.hypot(x - cameraX, y - cameraY, camera.altitude / meters) * meters
-      const budget = Math.hypot(x - this.origin[0], y - this.origin[1], this.budgetCamera[2]) * meters
-      const fade = (validCrownWidth(crown.width) ? zoomFade : 0) * (1 - smooth(CROWN_DISTANCE_FULL, CROWN_DISTANCE_MAX, distance)) * (1 - smooth(this.budgetDistance * 0.85, this.budgetDistance, budget))
-      const base = 48 * (low + (high - low) * this.data[offset + 12]) * Math.max(0, Math.min(4, 0.5 + 0.5 * map.transform.cameraToCenterDistance / w))
-      const target = Math.abs(rightClip * this.data[offset + 4] / cell.crownFraction) / w * width
-      const size = base * Math.pow(Math.max(0.01, target) / base, fade)
-      const tall = size * Math.pow(this.data[offset + 14], fade)
+      const distance = Math.hypot(this.data[offset], this.data[offset + 1], this.budgetCamera[2]) * meters
+      if (distance >= this.reach) continue
+      const size = Math.max(Math.abs(rightClip * this.data[offset + 4] / cell.crownFraction) / w * width, MIN_SPRITE_PX)
+      const tall = size * this.data[offset + 14]
       const u = (point.x - sx) / size + 0.5, v = (point.y - sy) / tall + cell.base
       if (u < 0 || u >= 1 || v < 0 || v >= 1) continue
-      if (cell.alpha[Math.floor(v * cell.size) * cell.size + Math.floor(u * cell.size)] > 32) return crown
+      if (cell.alpha[Math.floor(v * cell.size) * cell.size + Math.floor(u * cell.size)] > 32) return { id: id[i], lng: lng[i], lat: lat[i], width: widths[i] }
     }
   }
 
   /** Read-only diagnostics/click candidates; custom layers have no MapLibre hit index. */
-  get trees(): readonly TreeCrown[] { return this.count ? this.drawnCrowns : [] }
+  get trees(): readonly DrawnTree[] {
+    if (!this.count) return []
+    const { id, lng, lat, width } = this.drawn
+    return this.drawnTrees ??= id.map((treeId, i) => ({ id: treeId, lng: lng[i], lat: lat[i], width: width[i] }))
+  }
 
   onAdd(map: TreeMap, gl: GL) {
     this.map = map
@@ -255,6 +351,10 @@ export class TreeCrownLayer implements CustomLayerInterface {
 
   private initialize(gl: GL) {
     if (!this.simplified) this.sprites ??= createTreeSpriteAtlas()
+    if (!this.simplified && this.debug.queries === 0) {
+      const info = gl.getExtension('WEBGL_debug_renderer_info')
+      this.budget = initialSpriteBudget(isSoftwareRenderer(info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : ''))
+    }
     const webgl2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext
     const derivatives = webgl2 || !!gl.getExtension('OES_standard_derivatives')
     const header = webgl2 ? '#version 300 es\n' : ''
@@ -268,9 +368,6 @@ export class TreeCrownLayer implements CustomLayerInterface {
       ${attribute} vec4 a_shape;
       uniform vec2 u_viewport;
       uniform vec2 u_right;
-      uniform vec2 u_base_scale;
-      uniform float u_center_distance;
-      uniform float u_opacity;
       ${webgl2 ? 'out' : 'varying'} vec2 v_uv;` : ''}
       uniform mat4 u_matrix;
       uniform vec3 u_camera;
@@ -280,29 +377,28 @@ export class TreeCrownLayer implements CustomLayerInterface {
       ${webgl2 ? 'out' : 'varying'} vec2 v_corner;
       ${webgl2 ? 'out' : 'varying'} vec4 v_color;
       ${webgl2 ? 'out' : 'varying'} float v_fade;
+      ${webgl2 ? 'out' : 'varying'} float v_reach;
+      uniform float u_reach;
       void main() {
         float distance = length(vec3(a_center, 0.0) - u_camera) * u_meters;
         float budget = length(vec3(a_center, 0.0) - u_budget_camera) * u_meters;
         v_fade = (1.0 - smoothstep(${CROWN_DISTANCE_FULL}.0, ${CROWN_DISTANCE_MAX}.0, distance))
           * (1.0 - smoothstep(u_budget_distance * 0.85, u_budget_distance, budget));
         if (a_radius <= 0.0) v_fade = 0.0;
+        // Past the farthest sprite of a capped batch the dots carry the trees. Measured from
+        // the query camera (u_budget_camera), so the fade stays on the trees actually loaded.
+        v_reach = 1.0 - smoothstep(u_reach * ${REACH_FADE}, u_reach, budget);
         v_corner = a_corner;
         v_color = a_color;
         ${this.simplified ? `gl_Position = v_fade > 0.0
           ? u_matrix * vec4(a_center + a_corner * a_radius, 0.0, 1.0)
           : vec4(2.0, 2.0, 2.0, 1.0);` : `
         vec4 anchor = u_matrix * vec4(a_center, 0.0, 1.0);
-        float perspective = clamp(0.5 + 0.5 * u_center_distance / anchor.w, 0.0, 4.0);
-        float basePixels = 48.0 * mix(u_base_scale.x, u_base_scale.y, a_shape.y) * perspective;
-        float baseHalfWidth = basePixels / u_viewport.x * anchor.w;
         vec4 crownRight = u_matrix * vec4(u_right * a_radius / a_shape.x, 0.0, 0.0);
-        // Geometric interpolation makes each increment a proportional size
-        // change rather than a sudden jump toward a much larger crown.
-        float halfWidth = baseHalfWidth * pow(max(0.000001, abs(crownRight.x)) / baseHalfWidth, v_fade * u_opacity);
-        // Height scales with the same blend as width: a marker keeps the
-        // artwork's proportions, and a tree at metre scale is as tall as its
-        // measured or predicted height (a_shape.w, clamped on the CPU).
-        float halfHeight = halfWidth * u_viewport.x / u_viewport.y * pow(a_shape.w, v_fade * u_opacity);
+        // Always metre scale, never narrower than MIN_SPRITE_PX on screen.
+        float halfWidth = max(abs(crownRight.x), ${MIN_SPRITE_PX.toFixed(1)} / u_viewport.x * anchor.w);
+        // As tall as its measured or predicted height (a_shape.w, clamped on the CPU).
+        float halfHeight = halfWidth * u_viewport.x / u_viewport.y * a_shape.w;
         anchor.xy += vec2(a_corner.x * halfWidth, (a_corner.y + 2.0 * a_shape.z - 1.0) * halfHeight);
         gl_Position = anchor.w > 0.0 ? anchor : vec4(2.0, 2.0, 2.0, 1.0);
         v_uv = a_uv;`}
@@ -312,9 +408,9 @@ export class TreeCrownLayer implements CustomLayerInterface {
       ${webgl2 ? 'in' : 'varying'} vec2 v_corner;
       ${webgl2 ? 'in' : 'varying'} vec4 v_color;
       ${webgl2 ? 'in' : 'varying'} float v_fade;
+      ${webgl2 ? 'in' : 'varying'} float v_reach;
       uniform float u_opacity;
       ${!this.simplified ? `uniform sampler2D u_distance;
-      uniform float u_sprite_opacity;
       ${webgl2 ? 'in' : 'varying'} vec2 v_uv;` : ''}
       ${webgl2 ? 'out vec4 fragColor;' : ''}
       void main() {
@@ -337,7 +433,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
         vec4 foliage = vec4(v_color.rgb * coverage.g, coverage.g);
         vec4 blooms = vec4(vec3(248.0, 187.0, 208.0) / 255.0 * coverage.b, coverage.b);
         vec4 tree = foliage + trunk * (1.0 - foliage.a);
-        ${webgl2 ? 'fragColor' : 'gl_FragColor'} = (blooms + tree * (1.0 - blooms.a)) * u_sprite_opacity;
+        ${webgl2 ? 'fragColor' : 'gl_FragColor'} = (blooms + tree * (1.0 - blooms.a)) * u_opacity * v_reach;
         `}
       }`
     const program = gl.createProgram()!
@@ -362,7 +458,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
     this.program = program
     this.buffer = gl.createBuffer()!
     this.attributes = ['a_center', 'a_corner', 'a_radius', 'a_color', 'a_uv', 'a_shape'].map(name => gl.getAttribLocation(program, name))
-    this.uniforms = Object.fromEntries(['u_matrix', 'u_camera', 'u_budget_camera', 'u_meters', 'u_budget_distance', 'u_opacity', 'u_distance', 'u_viewport', 'u_right', 'u_base_scale', 'u_center_distance', 'u_sprite_opacity']
+    this.uniforms = Object.fromEntries(['u_matrix', 'u_camera', 'u_budget_camera', 'u_meters', 'u_budget_distance', 'u_opacity', 'u_distance', 'u_viewport', 'u_right', 'u_reach']
       .map(name => [name, gl.getUniformLocation(program, name)]))
     this.textures = []
     if (this.sprites) {
@@ -384,8 +480,8 @@ export class TreeCrownLayer implements CustomLayerInterface {
 
   render(gl: GL, matrix: Parameters<CustomLayerInterface['render']>[1]) {
     if (!this.map || !this.program || !this.count) return
-    const opacity = this.simplified ? crownZoomOpacity(this.map.getZoom()) : spriteCrownBlend(this.map.getZoom())
-    if (this.simplified ? !opacity : !spriteOpacity(this.map.getZoom())) return
+    const opacity = this.simplified ? crownZoomOpacity(this.map.getZoom()) : spriteOpacity(this.map.getZoom())
+    if (!opacity) return
     const camera = this.camera()
     if (this.simplified && camera.altitude >= CROWN_DISTANCE_MAX) return
     const [cx, cy] = mercatorPoint(camera.lng, camera.lat)
@@ -397,7 +493,19 @@ export class TreeCrownLayer implements CustomLayerInterface {
     }
     gl.useProgram(this.program)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer!)
-    if (this.upload) { gl.bufferData(gl.ARRAY_BUFFER, this.data, gl.DYNAMIC_DRAW); this.upload = false }
+    if (this.uploadedAt !== undefined) {
+      // The frame that carried the last upload: the driver defers the copy, so bufferData's own
+      // time says little, but a large one stretches that frame.
+      this.debug.lastUploadMs = Math.max(0, performance.now() - this.uploadedAt - FRAME_MS)
+      this.uploadedAt = undefined
+      this.adjustBudget(this.debug.lastUploadMs)
+    }
+    if (this.upload) {
+      gl.bufferData(gl.ARRAY_BUFFER, this.data, gl.DYNAMIC_DRAW)
+      this.upload = false
+      this.uploadedAt = performance.now()
+      this.map.triggerRepaint()
+    }
     for (const [i, size, offset] of [[0, 2, 0], [1, 2, 2], [2, 1, 4], [3, 4, 5], [4, 2, 9], [5, 4, 11]]) {
       if (this.attributes[i] < 0) continue
       gl.enableVertexAttribArray(this.attributes[i])
@@ -408,6 +516,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
     gl.uniform3fv(this.uniforms.u_budget_camera, this.budgetCamera)
     gl.uniform1f(this.uniforms.u_budget_distance, this.budgetDistance)
     gl.uniform1f(this.uniforms.u_meters, meters)
+    gl.uniform1f(this.uniforms.u_reach, Number.isFinite(this.reach) ? this.reach : 1e9)
     const arrival = Math.min(1, (performance.now() - this.appearedAt) / 300)
     gl.uniform1f(this.uniforms.u_opacity, opacity * (this.simplified ? arrival : 1))
     if (!this.simplified) {
@@ -416,11 +525,6 @@ export class TreeCrownLayer implements CustomLayerInterface {
       gl.uniform2f(this.uniforms.u_viewport, this.map.getCanvas().clientWidth, this.map.getCanvas().clientHeight)
       const bearing = this.map.getBearing() * Math.PI / 180
       gl.uniform2f(this.uniforms.u_right, Math.cos(bearing), Math.sin(bearing))
-      const zoom = this.map.getZoom()
-      const [low, high] = spriteBaseScale(zoom)
-      gl.uniform2f(this.uniforms.u_base_scale, low, high)
-      gl.uniform1f(this.uniforms.u_center_distance, this.map.transform.cameraToCenterDistance)
-      gl.uniform1f(this.uniforms.u_sprite_opacity, spriteOpacity(zoom))
     }
     gl.drawArrays(gl.TRIANGLES, 0, this.count)
     // MapLibre unbinds its VAO before custom drawing. Leave that default VAO
@@ -442,8 +546,11 @@ export class TreeCrownLayer implements CustomLayerInterface {
     this.map = undefined
     this.gl = undefined
     this.data = new Float32Array()
-    this.drawnCrowns = []
+    this.drawn = emptyCrownBatch()
+    this.drawnTrees = undefined
     this.count = 0
     this.coverage = undefined
+    this.loadedFootprint = undefined
+    this.queryCamera = undefined
   }
 }

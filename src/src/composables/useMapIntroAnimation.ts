@@ -202,6 +202,11 @@ export interface UseMapIntroAnimationOptions {
   setMapInteractions: (enabled: boolean) => void
   /** Custom sprites have no MapLibre feature index. */
   renderedTreeSprites: () => readonly { lng: number; lat: number }[]
+  /**
+   * True once the desktop holds every tree in memory (TreeDotsLayer): there
+   * are no tiles to warm, so no level gates the fly-out.
+   */
+  treesResident?: () => boolean
 }
 
 export function useMapIntroAnimation({
@@ -218,6 +223,7 @@ export function useMapIntroAnimation({
   computeVisibleTileRangeForZoom,
   setMapInteractions,
   renderedTreeSprites,
+  treesResident = () => false,
 }: UseMapIntroAnimationOptions) {
   const loadingMessage = ref('Counting our conifers...')
 
@@ -275,7 +281,7 @@ export function useMapIntroAnimation({
   }
 
   async function waitForTreesMilestone(timeoutMs = 2500): Promise<void> {
-    if (!map.value) return
+    if (!map.value || treesResident()) return
     if (map.value.isSourceLoaded('trees')) return
     await new Promise<void>((resolve) => {
       if (!map.value) return resolve()
@@ -316,7 +322,8 @@ export function useMapIntroAnimation({
         const circles = circleLayers.length
           ? map.value.queryRenderedFeatures([[0, 0], [width, height]], { layers: circleLayers }).length
           : 0
-        const frameReady = !!visibleSprite || (map.value.isSourceLoaded('trees') && circles >= VIEWPORT_TREE_MIN_FEATURES)
+        const frameReady = !!visibleSprite || treesResident()
+          || (!!map.value.getSource('trees') && map.value.isSourceLoaded('trees') && circles >= VIEWPORT_TREE_MIN_FEATURES)
         if (frameReady) {
           stableFrames += 1
           if (stableFrames >= VIEWPORT_TREE_STABLE_FRAMES) return resolve(true)
@@ -397,6 +404,10 @@ export function useMapIntroAnimation({
         ready: false,
       })
     }
+    if (treesResident()) {
+      for (const gate of gates) gate.ready = true
+      return gates
+    }
     void (async () => {
       for (const gate of gates) {
         const startedAt = nowMs()
@@ -448,7 +459,7 @@ export function useMapIntroAnimation({
         introLockedRangeByZoom.set(sourceStartZoom, startRange)
         setVisibleTileRange(sourceStartZoom, startRange.minX, startRange.maxX, startRange.minY, startRange.maxY)
       }
-      recordIntroPrefetchStatus(sourceStartZoom, await prefetchVisibleTilesAtZoom(sourceStartZoom, startRange ?? undefined))
+      if (!treesResident()) recordIntroPrefetchStatus(sourceStartZoom, await prefetchVisibleTilesAtZoom(sourceStartZoom, startRange ?? undefined))
       // The levels below are warmed behind it while the start pose settles,
       // and the fly-out waits above any that are not ready.
       const gates = warmIntroLevels(startBearing, introCenterSnapshot, introRotationDeg)

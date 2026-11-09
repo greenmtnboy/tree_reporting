@@ -1,12 +1,31 @@
 /** Shared limits for the worker query and the GPU layer. Distances are metres. */
 export const CROWN_ZOOM_START = 16.5
 export const CROWN_ZOOM_FULL = 18
-export const SPRITE_CROWN_ZOOM_START = 14.4
-export const SPRITE_CROWN_ZOOM_FULL = 19.5
+/**
+ * The desktop's dot-to-sprite handoff. Sprites fade in from SPRITE_CROWN_ZOOM_START to
+ * SPRITE_BASE_OPACITY at SPRITE_OPAQUE_ZOOM while the dots under them fade out over the same
+ * span (treeDots' circleOpacity and useMapLayers' fallback read these), then climb to fully
+ * opaque by SPRITE_FULL_OPACITY_ZOOM. Above SPRITE_OPAQUE_ZOOM dots show only past the sprites' reach.
+ */
+export const SPRITE_OPAQUE_ZOOM = 14
+/** Zooms over which the dots hand over to the sprites. */
+export const SPRITE_HANDOFF_ZOOMS = 0.6
+export const SPRITE_CROWN_ZOOM_START = SPRITE_OPAQUE_ZOOM - SPRITE_HANDOFF_ZOOMS
+export const SPRITE_BASE_OPACITY = 0.72
+export const SPRITE_FULL_OPACITY_ZOOM = 21
+/** Desktop sprites are drawn at metre scale but never narrower than this many CSS pixels. */
+export const MIN_SPRITE_PX = 4
+/** Metres; the crown a desktop sprite is drawn with when the tree has no measured or predicted width. */
+export const DEFAULT_CROWN_WIDTH = 6
+/** A capped sprite batch fades out over the last tenth of its reach, where the dots take over. */
+export const REACH_FADE = 0.9
 export const CROWN_DISTANCE_FULL = 700
 export const CROWN_DISTANCE_MAX = 1800
 export const MAX_CROWNS = 4096
+/** The desktop's default sprite budget; the layer may run with another (TreeRenderView.spriteLimit). */
 export const MAX_TREE_SPRITES = 32768
+/** localStorage key that overrides the desktop sprite budget, for sweeps and debugging. */
+export const SPRITE_LIMIT_KEY = 'sf_trees_sprite_limit'
 export const MAX_CROWN_WIDTH = 60
 /** Above the tallest living trees (~116 m); the LIDAR staging already drops crowns over 60 m. */
 export const MAX_TREE_HEIGHT = 120
@@ -16,47 +35,42 @@ export interface CrownCamera { lng: number; lat: number; altitude: number }
 export interface TreeRenderView extends CrownCamera {
   /** Desktop markers cover the viewport; only nearby ones acquire metre scale. */
   bounds?: { west: number; south: number; east: number; north: number }
-  /** Unpadded viewport, preferred over the buffer when the sprite budget fills. */
-  visibleBounds?: { west: number; south: number; east: number; north: number }
+  /** The padded view footprint inside `bounds`: a convex polygon in EPSG:3857 metres (lib/viewFootprint). */
+  footprint?: [number, number][]
+  /** Desktop sprite budget for this query; MAX_TREE_SPRITES when absent. */
+  spriteLimit?: number
 }
-export interface TreeCrown {
-  id: string
-  lng: number
-  lat: number
-  width: number | null
-  measured: boolean
-  color: string
-  category?: string
-  dbh?: number
-  /** Metres: a measured height where valid, else the published prediction; null keeps the artwork's proportions. */
-  height?: number | null
+/**
+ * A sprite query's rows as columns: numbers in typed arrays, NaN for a
+ * missing value. One object per tree cost more to build from the Arrow
+ * result than the query took.
+ */
+export interface TreeCrownColumns {
+  id: string[]
+  lng: Float64Array
+  lat: Float64Array
+  width: Float64Array
+  measured: Uint8Array
+  color: string[]
+  category: string[]
+  dbh: Float64Array
+  height: Float64Array
+}
+
+export function crownColumnBuffers(c: TreeCrownColumns): ArrayBuffer[] {
+  return [c.lng, c.lat, c.width, c.measured, c.dbh, c.height].map(a => a.buffer as ArrayBuffer)
 }
 
 export function crownZoomOpacity(zoom: number): number {
   return Math.max(0, Math.min(1, (zoom - CROWN_ZOOM_START) / (CROWN_ZOOM_FULL - CROWN_ZOOM_START)))
 }
 
-export function spriteCrownBlend(zoom: number): number {
-  const t = Math.max(0, Math.min(1, (zoom - SPRITE_CROWN_ZOOM_START) / (SPRITE_CROWN_ZOOM_FULL - SPRITE_CROWN_ZOOM_START)))
-  return t * t * (3 - 2 * t)
-}
-
 export function spriteOpacity(zoom: number): number {
-  if (zoom < 15) return 0.72 * Math.max(0, (zoom - SPRITE_CROWN_ZOOM_START) / (15 - SPRITE_CROWN_ZOOM_START))
-  return Math.min(1, 0.72 + (zoom - 15) / 6 * 0.28)
-}
-
-/** The same continuous marker baseline for rendering and hit testing. */
-export function spriteBaseScale(zoom: number): [number, number] {
-  const stops = [[14.4, 0.04, 0.1], [15, 0.055, 0.15], [18, 0.2, 0.72], [21, 0.28, 1]]
-  for (let i = 1; i < stops.length; i++) {
-    if (zoom <= stops[i][0]) {
-      const a = stops[i - 1], b = stops[i]
-      const t = Math.max(0, Math.min(1, (zoom - a[0]) / (b[0] - a[0])))
-      return [a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2])]
-    }
+  if (zoom < SPRITE_OPAQUE_ZOOM) {
+    return SPRITE_BASE_OPACITY * Math.max(0, (zoom - SPRITE_CROWN_ZOOM_START) / (SPRITE_OPAQUE_ZOOM - SPRITE_CROWN_ZOOM_START))
   }
-  return [0.28, 1]
+  const t = (zoom - SPRITE_OPAQUE_ZOOM) / (SPRITE_FULL_OPACITY_ZOOM - SPRITE_OPAQUE_ZOOM)
+  return Math.min(1, SPRITE_BASE_OPACITY + t * (1 - SPRITE_BASE_OPACITY))
 }
 
 /** Reject corrupt sizes instead of rendering a plausible-looking clipped measurement. */

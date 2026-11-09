@@ -112,7 +112,7 @@ test('changing map theme preserves tree layers and camera', async ({ page }) => 
   await expect.poll(() => page.evaluate(() => (window as any).__treeMap.getPaintProperty('water', 'fill-color'))).not.toEqual(before.water)
   const after = await page.evaluate(() => {
     const map = (window as any).__treeMap
-    return { center: map.getCenter(), zoom: map.getZoom(), bearing: map.getBearing(), layers: map.getStyle().layers.map((l: { id: string }) => l.id), trees: !!map.getSource('trees') }
+    return { center: map.getCenter(), zoom: map.getZoom(), bearing: map.getBearing(), layers: map.getStyle().layers.map((l: { id: string }) => l.id), trees: !!map.getSource('trees') || !!map.getLayer('trees-dots') }
   })
   expect(after.trees).toBe(true)
   expect(after.center).toEqual(before.center)

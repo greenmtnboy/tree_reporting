@@ -1,7 +1,8 @@
 import * as duckdb from '@duckdb/duckdb-wasm'
 import { DUCKDB_ASSET_URLS } from '../duckdbAssetUrls'
 import { crownQuery } from './crownQuery'
-import { CROWN_DISTANCE_MAX, type TreeRenderView, type TreeCrown } from '../lib/treeCrowns'
+import { CROWN_DISTANCE_MAX, crownColumnBuffers, type TreeRenderView, type TreeCrownColumns } from '../lib/treeCrowns'
+import { buildCrownBatch, crownBatchBuffers, type CrownBatch, type CrownBatchOptions } from '../lib/crownBatch'
 
 let db: duckdb.AsyncDuckDB | null = null
 let conn: duckdb.AsyncDuckDBConnection | null = null
@@ -79,6 +80,10 @@ const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 import { snapShade } from '../lib/foliageSeason'
 import { assembleLayeredTiles } from './mvtLayers'
+import {
+  bucketByChunk, gridOrderChunks, pointChunkColorsSql, pointChunkDirectorySql, pointChunksSql, pointPalette,
+  type PointChunkBatch, type PointChunkColors, type PointChunkDirectory, type PointKeys,
+} from './cityPoints'
 
 /** The source layer a tree with no colour lands in: the style's own fallback colour. */
 const MVT_FALLBACK_LAYER = '#66BB6A'
@@ -963,7 +968,6 @@ async function doInit(city?: string) {
   })
 
   conn = await db.connect()
-
   // Nothing here depends on row order, and keeping it makes every CREATE
   // TABLE AS buffer its whole input before writing. The wasm heap never
   // shrinks, so the peak during the city load is what the tab keeps.
@@ -1949,25 +1953,132 @@ async function runQuery(sql: string, maxRows?: number): Promise<QueryResult> {
   return { columns, rows: rowObjects(columns, kept), totalRows }
 }
 
-async function getMapTrees(camera: TreeRenderView): Promise<TreeCrown[]> {
+async function getMapTrees(camera: TreeRenderView): Promise<TreeCrownColumns> {
+  const empty: TreeCrownColumns = {
+    id: [], lng: new Float64Array(), lat: new Float64Array(), width: new Float64Array(), measured: new Uint8Array(),
+    color: [], category: [], dbh: new Float64Array(), height: new Float64Array(),
+  }
   await ensureInit()
   await waitForCityContext()
   // The intro pauses vector-tile work, but still needs the independent sprite
   // renderer to draw and satisfy its readiness gate. This reads local tables.
-  if (!conn || !loadedCity || (!camera.bounds && camera.altitude >= CROWN_DISTANCE_MAX)) return []
+  if (!conn || !loadedCity || (!camera.bounds && camera.altitude >= CROWN_DISTANCE_MAX)) return empty
   const city = loadedCity
   const revision = tileQueryRevision
   const signature = treeFilterSignature()
   const current = () => cityContextReady && loadedCity === city && tileQueryRevision === revision && treeFilterSignature() === signature
-  if (!current()) return []
-  const result = await conn.query(crownQuery(camera, effectiveBaseQuery(tileQuerySql), colorSql('tf', colorOverrideActive, speciesShadeActive)))
-  if (!current()) return []
-  return result.toArray().map(row => ({
-    id: String(row.id), lng: Number(row.lng), lat: Number(row.lat),
-    width: row.width == null ? null : Number(row.width), measured: Boolean(row.measured), color: String(row.color),
-    category: String(row.category), dbh: Number(row.dbh),
-    height: row.height == null ? null : Number(row.height),
-  }))
+  if (!current()) return empty
+  const baseQuery = effectiveBaseQuery(tileQuerySql)
+  const result = await conn.query(crownQuery(camera, isDefaultBaseQuery(baseQuery) ? null : baseQuery, colorSql('tf', colorOverrideActive, speciesShadeActive)))
+  if (!current()) return empty
+  // Read column by column: no per-row proxy objects.
+  const n = result.numRows
+  const numbers = (name: string) => {
+    const col = result.getChild(name)!, out = new Float64Array(n)
+    for (let i = 0; i < n; i++) { const v = col.get(i); out[i] = v == null ? NaN : Number(v) }
+    return out
+  }
+  const strings = (name: string) => {
+    const col = result.getChild(name)!, out: string[] = new Array(n)
+    for (let i = 0; i < n; i++) out[i] = String(col.get(i))
+    return out
+  }
+  const measuredCol = result.getChild('measured')!
+  const measured = new Uint8Array(n)
+  for (let i = 0; i < n; i++) measured[i] = measuredCol.get(i) ? 1 : 0
+  const columns: TreeCrownColumns = {
+    id: strings('id'), lng: numbers('lng'), lat: numbers('lat'), width: numbers('width'), measured,
+    color: strings('color'), category: strings('category'), dbh: numbers('dbh'), height: numbers('height'),
+  }
+  return columns
+}
+
+// --- Point chunks (the desktop's TreeDotsLayer) ---
+
+function pointRowsKey(): string {
+  return `${loadedCity}|${tileQueryRevision}|${publishedTreeIdFilterSignature}`
+}
+
+function pointColorKey(): string {
+  return `${colorMapSignature}|${speciesShadeSignature}|${activeDistinctColors.join(',')}`
+}
+
+/** Copy an Arrow column into its own buffer, so it can be transferred. */
+function columnArray<T extends Float32Array | Uint8Array | Uint32Array>(table: { getChild(name: string): { toArray(): unknown } | null }, name: string, Ctor: { new(source: ArrayLike<number>): T }): T {
+  const column = table.getChild(name)
+  return new Ctor((column ? column.toArray() : []) as ArrayLike<number>)
+}
+
+/** The current rows' rows source and colour, as every point read uses them. */
+function pointSource() {
+  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
+  return { src: tileRowSource(effectiveBaseQuery(tileQuerySql), color), color, palette: pointPalette(activeDistinctColors) }
+}
+
+/** Which rows and colours a point read would answer with now, without reading: null while no city's rows can be read. */
+async function getPointKeys(): Promise<PointKeys | null> {
+  await ensureInit()
+  await waitForCityContext()
+  if (!conn || !loadedCity || cityWindow) return null
+  return { rowsKey: pointRowsKey(), colorKey: pointColorKey() }
+}
+
+/** The current rows' non-empty chunks. A windowed city has no point chunks (yet): it draws tiles. */
+async function getPointChunkDirectory(): Promise<PointChunkDirectory | null> {
+  await ensureInit()
+  await waitForCityContext()
+  if (!conn || !loadedCity || cityWindow) return null
+  const rowsKey = pointRowsKey()
+  const colorKey = pointColorKey()
+  const t0 = nowMs()
+  const table = await conn.query(pointChunkDirectorySql(pointSource().src))
+  if (pointRowsKey() !== rowsKey) return null
+  const numbers = (name: string) => Array.from((table.getChild(name)?.toArray() ?? []) as ArrayLike<number | bigint>, Number)
+  const keys = numbers('chunk')
+  const counts = numbers('n')
+  const maxRowid = numbers('max_rowid').reduce((a, b) => Math.max(a, b), 0)
+  console.info('[Perf] duckdb-worker:point-chunks:directory', { chunks: keys.length, ms: Math.round(nowMs() - t0) })
+  return { rowsKey, colorKey, keys, counts, maxRowid }
+}
+
+/** The rows of `keys`, grouped by chunk; null when `rowsKey` is no longer the current rows. */
+async function getPointChunks(rowsKey: string, keys: number[]): Promise<PointChunkBatch | null> {
+  await ensureInit()
+  await waitForCityContext()
+  if (!conn || !loadedCity || cityWindow || pointRowsKey() !== rowsKey || !keys.length) return null
+  const colorKey = pointColorKey()
+  const t0 = nowMs()
+  const { src, color, palette } = pointSource()
+  const table = await conn.query(pointChunksSql(src, keys, color.expr, palette))
+  if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
+  const { offsets, columns } = bucketByChunk(columnArray(table, 'chunk', Uint32Array), keys, {
+    x: columnArray(table, 'x', Float32Array),
+    y: columnArray(table, 'y', Float32Array),
+    dbh: columnArray(table, 'dbh', Uint8Array),
+    color: columnArray(table, 'color', Uint8Array),
+    rowid: columnArray(table, 'rowid', Uint32Array),
+  })
+  const grids = gridOrderChunks(offsets, columns.x, columns.y, { dbh: columns.dbh, color: columns.color, rowid: columns.rowid })
+  console.info('[Perf] duckdb-worker:point-chunks', { chunks: keys.length, rows: table.numRows, ms: Math.round(nowMs() - t0) })
+  return { rowsKey, colorKey, palette, keys, offsets, ...columns, grids }
+}
+
+/** The current colour of the rows of `keys`, grouped by chunk; null when `rowsKey` is no longer current. */
+async function getPointChunkColors(rowsKey: string, keys: number[]): Promise<PointChunkColors | null> {
+  await ensureInit()
+  await waitForCityContext()
+  if (!conn || !loadedCity || cityWindow || pointRowsKey() !== rowsKey || !keys.length) return null
+  const colorKey = pointColorKey()
+  const t0 = nowMs()
+  const { src, color, palette } = pointSource()
+  const table = await conn.query(pointChunkColorsSql(src, keys, color.expr, palette))
+  if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
+  const { offsets, columns } = bucketByChunk(columnArray(table, 'chunk', Uint32Array), keys, {
+    color: columnArray(table, 'color', Uint8Array),
+    rowid: columnArray(table, 'rowid', Uint32Array),
+  })
+  console.info('[Perf] duckdb-worker:point-chunk-colors', { chunks: keys.length, rows: table.numRows, ms: Math.round(nowMs() - t0) })
+  return { rowsKey, colorKey, palette, keys, offsets, ...columns }
 }
 
 async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Array; transient: boolean }> {
@@ -1992,7 +2103,12 @@ async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Ar
 }
 
 type WorkerMethodMap = {
-  getMapTrees: { params: TreeRenderView; result: TreeCrown[] }
+  getMapTrees: { params: TreeRenderView; result: TreeCrownColumns }
+  getCrownBatch: { params: { camera: TreeRenderView; options: CrownBatchOptions }; result: CrownBatch }
+  getPointKeys: { params: Record<string, never>; result: PointKeys | null }
+  getPointChunkDirectory: { params: Record<string, never>; result: PointChunkDirectory | null }
+  getPointChunks: { params: { rowsKey: string; keys: number[] }; result: PointChunkBatch | null }
+  getPointChunkColors: { params: { rowsKey: string; keys: number[] }; result: PointChunkColors | null }
   ensureInit: { params: { city?: string; window?: WindowPolicy | null }; result: { ready: boolean; initError: string | null } }
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
@@ -2052,7 +2168,41 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     switch (msg.method) {
       case 'getMapTrees': {
         const result = await getMapTrees(msg.params as TreeRenderView)
-        send({ type: 'response', requestId: msg.requestId, ok: true, result })
+        send({ type: 'response', requestId: msg.requestId, ok: true, result }, crownColumnBuffers(result))
+        break
+      }
+      case 'getCrownBatch': {
+        // The sort and vertex fill run here, off the main thread; the GPU buffer is transferred.
+        const { camera, options } = msg.params as { camera: TreeRenderView; options: CrownBatchOptions }
+        const started = performance.now()
+        const columns = await getMapTrees(camera)
+        const built = performance.now()
+        const result = buildCrownBatch(columns, camera, options)
+        result.timing = { sqlMs: built - started, buildMs: performance.now() - built }
+        send({ type: 'response', requestId: msg.requestId, ok: true, result }, crownBatchBuffers(result))
+        break
+      }
+      case 'getPointKeys': {
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: await getPointKeys() })
+        break
+      }
+      case 'getPointChunkDirectory': {
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: await getPointChunkDirectory() })
+        break
+      }
+      case 'getPointChunks': {
+        const { rowsKey, keys } = msg.params as WorkerMethodMap['getPointChunks']['params']
+        const result = await getPointChunks(rowsKey, keys)
+        send({ type: 'response', requestId: msg.requestId, ok: true, result },
+          result ? [result.offsets.buffer, result.x.buffer, result.y.buffer, result.dbh.buffer, result.color.buffer, result.rowid.buffer,
+            ...result.grids.map((g) => g.start.buffer)] : undefined)
+        break
+      }
+      case 'getPointChunkColors': {
+        const { rowsKey, keys } = msg.params as WorkerMethodMap['getPointChunkColors']['params']
+        const result = await getPointChunkColors(rowsKey, keys)
+        send({ type: 'response', requestId: msg.requestId, ok: true, result },
+          result ? [result.offsets.buffer, result.color.buffer, result.rowid.buffer] : undefined)
         break
       }
       case 'ensureInit': {

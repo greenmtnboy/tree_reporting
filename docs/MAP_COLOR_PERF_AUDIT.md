@@ -278,6 +278,225 @@ Arrow-fed layer is still the architectural answer. The per-colour source
 layers are a step towards it: the colour already travels as the layer, not
 as a property.
 
+## Third round: the desktop draws its trees from memory
+
+The stack section's option 2, done for the desktop. A desktop city is never
+windowed, so every tree is already in DuckDB; the map now takes them once as
+typed arrays and draws them in one custom WebGL layer
+(`composables/treeDotsLayer.ts`). The vector-tile source, its 18 heatmap and
+18 circle layers, the overview batches and the z15 feature-table prewarm are
+gone from the desktop. A phone keeps the tiles (its window is the reason they
+exist; docs/MOBILE_LOAD_BUDGET.md), as does a desktop without WebGL2 and a
+renderable half-float target, which `TreeDotsLayer.supported` checks.
+
+How it is built:
+
+(The fourth round below replaced the whole-city read with chunks; the
+renderer is unchanged.)
+
+- **The data.** `getCityPoints` (`workers/cityPoints.ts`) reads every drawn
+  tree's rowid, position (float32 metres from the city's corner), trunk size
+  and colour as a one-byte index into the scheme's palette; 0.8 to 1.2 s on
+  Boston's 1.7M rows, 17 bytes a tree. A colour change reads only
+  `getCityPointColors`, rowid and colour (0.2 to 0.4 s), and scatters it by
+  rowid; a query or filter change re-reads the points.
+- **The heat** is two passes for any palette: trees add colour and density
+  into a quarter-resolution pair of half-float targets, and a resolve draws
+  the colour-weighted mean with an alpha from log2 of the density. Grey ("no
+  recorded shade", "unknown trunk") counts fully as density and a sixth as
+  colour, so the 83% of Boston with no shade no longer washes out the rest.
+  A pyramid of 16 m to 8 km cells (`lib/treeDots.ts`) keeps each zoom to a
+  cell per third of a kernel, built in a dedicated worker
+  (`workers/treeDotsIndex.worker.ts`) because it costs most of a second.
+- **The circles** are one point draw from z12.8 to z15.5 (z14 since the fifth
+  round), coloured from a palette texture. Points and pyramid cells are stored in 512 m chunk order,
+  so a frame draws only the chunk rows in view.
+- **Picking** projects the candidates of a grid index through the last
+  frame's matrix: a click selects exactly the circle drawn under it, and the
+  card is read by rowid.
+
+Boston, Chromium (SwiftShader), the same builds side by side:
+
+| | Tiles (before) | Resident (after) |
+|---|---:|---:|
+| "Color by" change: trees on screen during it | 0 for 3.8 s | all 1,695,264 throughout |
+| layers removed and re-added | 36 | 0 |
+| new colours on screen | ~4.4 s, after a refetch of every tile | 1.3 s (DBH 2.2 s, it builds a per-tree table) |
+| ms/frame under forced repaint, z10 / z11 / z12 | 375 / 300 / 273 | 250 / 200 / 158 |
+| z13 / z14 / z15 | 333 / 300 / 150 | 273 / 214 / 136 |
+| `pnpm bench:tiles` walk, 14 steps | 16.7 s | 8.8 s |
+| z11 / z12 / z13 steps | 3.7 / 3.1 / 2.3 s | 1.1 / 0.9 / 1.2 s (the basemap's tiles) |
+| renderer peak | 1,906 MB | 1,702 MB |
+| first trees drawn after the city's tables load | 1.5 to 1.75 s | 2.6 to 2.8 s |
+| main-thread work to index the points | | 80 ms |
+
+The one number that moves the wrong way is the first draw: about 1.1 s
+later, the points query, where the tile path drew its first z18 tiles
+cheaply. Everything after it is cheaper, and the prewarm the tile path ran
+after landing (7 s of the worker on Boston) is not needed at all.
+SwiftShader runs vertex work on the CPU, so these frame times understate a
+real GPU's gain: the tile path's per-frame cost was 36 offscreen passes,
+the resident layer's is two plus one point draw.
+
+Measured with `scripts/color-switch.bench.mjs` (new),
+`scripts/frame-time.bench.mjs` and `pnpm bench:tiles`, all of which read the
+resident layer where it is drawn.
+
+## Fourth round: chunks of one global grid
+
+The third round read a city whole. Toward seamless cross-city navigation,
+where a city is a bookmark to a place rather than a unit of loading, the
+desktop now reads its trees in chunks of one global grid and holds no notion
+of a city in the renderer.
+
+**The grid** (`workers/cityPoints.ts`): Web Mercator tiles at z12, keyed
+`x * 4096 + y` from each row's stored z20 tile index. One grid for every
+latitude and longitude. A chunk is the same size on screen anywhere, which is
+what bounds the chunks a view draws; its ground size follows cos(latitude)
+(7.2 km across in Boston, 9.8 km at the equator, 4.9 km at 60 degrees). An
+equal-ground grid (degrees, H3) would not line up with the camera or with
+the phone's window. A chunk is exactly 4 x 4 of the phone's z14 window cells
+(`workers/cityWindow.ts`), so both layouts share one grid, and a
+Hilbert-sorted projection keeps a chunk's rows in few row groups. Positions
+are float32 metres from the chunk's south-west corner; the heat pyramid's
+cells are the chunk halved nine times (19 m) up to the chunk, so no cell
+straddles two chunks; each chunk's rows are stored in a 512 m draw grid's
+order (sorted in the DuckDB worker, `gridOrderChunks`).
+
+**The reads** (the worker): `getPointKeys` (which rows and colours a read
+would answer with, no query), `getPointChunkDirectory` (the non-empty chunks
+of the current rows with their counts, one GROUP BY; Boston has 33, 125 ms),
+`getPointChunks(keys)` and `getPointChunkColors(keys)` (rowid and colour
+only). The chunk filter carries the chunks' bounding box, so the table's zone
+maps prune row groups.
+
+**The order the layer loads in** (`composables/treeDotsLayer.ts`): new rows'
+directory, then the chunks in view (padded a quarter), swapped in together
+with the old rows dropped; then any chunk a move brings into view; then
+colours, chunks in view first; then the nearest other chunks in 400k-tree
+background reads, up to 6M trees held, farthest dropped past that. A sync
+(query, filter or colour change) resolves when the view is current.
+
+Boston, Chromium (SwiftShader), the whole-city build of the third round
+against the chunked one:
+
+| | Whole city | Chunks |
+|---|---:|---:|
+| First trees drawn after the city's tables load | 2.6 to 2.8 s | 2.1 to 2.2 s (directory, then the 2 chunks in view) |
+| Main-thread work per read | 80 ms (once) | 3 to 14 ms (per read of 2 to 19 chunks) |
+| Whole city resident | at first draw | 3 to 4 s after it, in 6 reads, before the intro lands |
+| `pnpm bench:tiles` walk, 14 steps | 9.4 s | 8.1 s |
+| ms/frame z10 / z11 / z12 / z13 (two runs) | 272 to 300 / 231 to 250 / 188 to 200 / 300 | 300 to 333 / 273 / 167 to 177 / 273 to 300 |
+| settle after a jump, 10 jumps z10 to z14 | 0.83 to 1.13 s | 0.57 to 1.33 s |
+| "Color by": new colours in view | 0.84 / 1.50 / 1.28 s | 0.82 / 1.56 / 1.03 s (tree form / DBH / leaf shade) |
+| A jump to an unloaded chunk three chunks away | | 0.23 to 0.57 s to trees in view |
+
+Frame times under SwiftShader move by a frame either way between runs; the
+two builds draw the same work. Two settle outliers of 4 to 5 s in single
+frame-bench runs of the chunked build did not recur in 20 timed jumps on
+either build (all 0.6 to 1.3 s, the basemap's tiles).
+
+What cross-city still needs, none of it in the renderer: the rows of more
+than one city in the worker at once (the phone's window loader, by cell,
+with the desktop's larger budget), a row key that survives that (the rowid
+is the current table's; a colour refresh and the tree card use it), and a
+published overview for the zooms where the view spans more than the budget
+(z6 to z9 across a region).
+
+## Fifth round: one handoff from dots to sprites
+
+The resident dots made the desktop fast but left three looks on screen at
+once: a blended heat, dots, and sprites that changed size on the way in.
+This round leaves dots and sprites, with one handoff between them, and makes
+the sprites keep up with the camera.
+
+**The look** (`lib/treeCrowns.ts`, `lib/treeDots.ts`):
+
+- The heat is off (`HEAT_ENABLED = false`; its pyramid worker still runs and
+  can go if it stays off). Dots carry every zoom below the sprites.
+- One constant places the handoff: `SPRITE_OPAQUE_ZOOM` (z14). The dots fade
+  out and the sprites fade in over `SPRITE_HANDOFF_ZOOMS` (0.6) below it, and
+  the MapLibre fallback reads the same pair. Above it dots show only where no
+  sprite stands: past a capped batch's reach, or outside what was fetched.
+- Sprites are always drawn at metre scale, never under `MIN_SPRITE_PX` (4 px);
+  a tree with no crown width gets `DEFAULT_CROWN_WIDTH` (6 m). There is no
+  marker-size transition left to cross.
+- Dots are 30% smaller (`CIRCLE_RADIUS_SCALE`), and both tree layers draw
+  under the basemap's labels.
+
+**The sprite query** (`workers/crownQuery.ts`):
+
+- The default view (no filter, no chat scope) skips the filter; a filter is an
+  `EXISTS` semi join. The `DISTINCT` join it replaced built the whole city's id
+  set every query, ~170 of ~190 ms on San Francisco.
+- It fetches the view's ground footprint (`lib/viewFootprint.ts`): the screen
+  corners on the ground, stopped under the horizon as MapLibre's `getBounds`
+  is, padded a quarter of the view's depth (at most 500 m) out to each side and
+  behind the camera itself. Nearest first, up to the budget. The axis-aligned
+  lng/lat box it replaced had large off-screen corners at any bearing but the
+  four cardinal ones; they spent the budget, and after a spin the old view's
+  direction stayed loaded further than the new one, an uneven horizon until
+  the next batch.
+- A capped batch is the footprint within `reach` of the camera it was queried
+  from. Both layers measure reach from that camera, not the camera now; from
+  the moving camera the disc slid ahead of the trees loaded and the dots hid an
+  empty band in front of a pan.
+
+**The batch** (`lib/crownBatch.ts`): the worker sorts it back to front for
+the query's bearing and fills the vertex buffer, and transfers it; the main
+thread only uploads it. Results cross the worker boundary as typed columns,
+not row objects (32k trees: 5.3 s to ~0.26 s round trip before the move). A
+batch is stamped with the bearing it was sorted for, so a spin that ends while
+a query is in flight still fetches again.
+
+**The connection.** Every query shares one DuckDB connection, so a sprite
+query waited behind background chunk reads (10.6 s behind a 393k-row read in
+one trace). Background reads now go in 100k-tree batches and stand aside while
+the camera moves or a sprite query is due, for at most a second at a time;
+longer starved them and left an empty band where neither dots nor sprites had
+loaded.
+
+**The budget** (`lib/spriteBudget.ts`) adjusts itself after every batch.
+Its target is reach: past the distance where a 6 m crown is 4 px wide
+(`crownVisibleDistance`, 1.6 km on a 1280x800 window at any zoom) a sprite is a
+dot-sized blob and the dots carry it. A capped batch that falls short grows the
+limit a step (x1.25) and refetches; one reaching more than twice the target
+shrinks it. Its limits are cost: the frame after an upload may run 12 ms long,
+and the worker's build may take 150 ms; a batch over either lowers a ceiling
+that lifts again after 20 good batches. Between 8k and 131k sprites; a software
+renderer starts at 8k and stops at 16k. `localStorage.sf_trees_sprite_limit`
+fixes it, for sweeps.
+
+Boston, RX 6800 XT (Direct3D), 1280x800, dense Back Bay and Jamaica Plain, a
+4 s pan per view, fixed caps before the batch moved to the worker:
+
+| Cap | Main-thread install | Query | Worst frame | Reach when capped |
+|---:|---:|---:|---:|---:|
+| 16k | 10-18 ms | 45-235 ms | 16.8 ms | 2.4-4.1 km |
+| 32k | 22-65 ms | 50-260 ms | 33-50 ms | 3.6-4.8 km |
+| 64k | 51-89 ms | 140-345 ms | 83-100 ms | 4.3-6.6 km |
+| 128k | 115-147 ms | 385-490 ms | 200-233 ms | 7.4-9.7 km |
+
+The GPU was never the limit (p95 16.7 ms at every cap); every hitch was the
+install. After the move, at 32k: install 0 ms, worst frame 16.8 ms in every
+view; the build costs 22-27 ms per 32k batch in the worker. With the
+self-adjusting budget the same views settle at 8k to 13k sprites, reaching
+2.0 to 3.9 km against the 1.6 km target. A z16 view holds 2k to 29k trees and
+rarely needs the cap; z14 always does.
+
+**Debugging.** The ⚙ beside the map's refresh button (lower left) shows a
+readout: frame rate, resident dots, sprites against the budget, reach against
+its target, query time split into SQL and build, upload, and a heading-up radar
+of the view (white), the fetched area (green), a capped batch's reach (orange),
+the target (dotted), the query in flight (blue) and a sample of the trees. Off
+by default, remembered per browser.
+
+Still open: wide pans show an occasional 200 ms frame that is neither the
+sprites (upload and build are small then) nor the GPU; the dots' chunk reads
+or the basemap are the next suspects. A frame stretched by something else can
+lower the budget's ceiling for 20 batches. The sprite atlas, picking and the
+phone's crowns are unchanged.
+
 ## Is this the right stack?
 
 The data layer is right and is the product: DuckDB-WASM over published
