@@ -20,10 +20,16 @@ import type { DotsIndexRequest, DotsIndexResult } from '../workers/treeDotsIndex
  * layers on the desktop (docs/MAP_COLOR_PERF_AUDIT.md):
  *
  * - The trees arrive in chunks of one global grid (workers/cityPoints.ts:
- *   Web Mercator tiles at z12), never as a city: the chunks in view first,
- *   then the nearest others in the background up to a point budget, the
- *   farthest dropped past it. Each chunk carries its own origin, buffers,
- *   heat pyramid and pick grid, so nothing here knows which city it is in.
+ *   Web Mercator tiles at z12, each one block file of the published world),
+ *   never as a city: the chunks in view first, then the nearest others in
+ *   the background out to a radius and up to a point budget, the farthest
+ *   dropped past it. Which chunks exist is the world's manifest, so the
+ *   camera can leave one inventory and arrive in another and the layer only
+ *   ever asks for the ground it is looking at. Each chunk carries its own
+ *   origin, buffers, heat pyramid and pick grid.
+ * - Below LOAD_MIN_ZOOM a view spans several metros, so nothing new is
+ *   loaded there: what is held stays drawn, and the map's overview layer
+ *   (useWorldOverview.ts) says where the rest is.
  * - Panning and zooming within what is loaded never waits: a frame draws
  *   only the ranges of the chunks in view.
  * - The heat is two passes whatever the palette: trees add their colour and
@@ -48,6 +54,8 @@ export interface TreeDotsSource {
 }
 
 export interface TreeDotsPick {
+  /** The tree's chunk and its row in that chunk's block file: what names it to the worker. */
+  key: number
   rowid: number
   lng: number
   lat: number
@@ -83,6 +91,25 @@ const PREFETCH_RETRY_MS = 300
 const PREFETCH_MAX_DEFER_MS = 1000
 /** The view's box is padded by this share of its size for what counts as in view. */
 const VIEW_PAD = 0.25
+/**
+ * Below this zoom no chunk is loaded. A 1280 px view at z9 is about 200 km
+ * across at 45 degrees: one metro, or two small neighbours. A zoom lower
+ * and it is the north-east corridor, several million trees for dots a
+ * fraction of a pixel wide.
+ */
+export const LOAD_MIN_ZOOM = 9
+/**
+ * Trees one read of the view may bring in. A metro seen whole is a couple of
+ * hundred chunks; in batches the nearest draw while the rest download.
+ */
+const VIEW_BATCH_POINTS = 300_000
+/** Chunks one read may span, whatever their size: each is a file to fetch. */
+const VIEW_BATCH_CHUNKS = 24
+/**
+ * How far past the view the background reads reach, in metres on the
+ * ground: the rest of the metro the camera is in, not the next one.
+ */
+const PREFETCH_RADIUS_M = 45_000
 
 function compile(gl: GL2, vertex: string, fragment: string, name: string): WebGLProgram {
   const program = gl.createProgram()!
@@ -259,6 +286,8 @@ interface Chunk {
   dbh: Uint8Array
   color: Uint8Array
   rowid: Uint32Array
+  /** A row's index here by its rowid; -1 for a row the current filter leaves out. */
+  indexByRowid: Int32Array
   palette: string[]
   colorKey: string
   /** 512 m cells over the points: the draw ranges and the pick index. */
@@ -307,13 +336,16 @@ export class TreeDotsLayer implements CustomLayerInterface {
 
   // --- What is drawn ---
   private chunks = new Map<number, Chunk>()
-  /** The installed rows: their identity, non-empty chunks and tree count. */
+  /** The installed rows: their identity, the chunks that may hold any, and the world's tree count. */
   private rowsKey?: string
   private directory = new Map<number, number>()
   private total = 0
+  /** False while a query or filter narrows the rows: the directory's counts are then upper bounds. */
+  private exact = true
   private installed = false
-  /** rowid to its index within its chunk, for the installed rows. */
-  private indexByRowid = new Int32Array()
+  private settledView = false
+  /** Chunks read and found to hold none of the current rows. */
+  private empty = new Set<number>()
   /** The colouring every chunk should have. */
   private colorKey?: string
 
@@ -355,11 +387,17 @@ export class TreeDotsLayer implements CustomLayerInterface {
     return !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'))
   }
 
-  /** Trees in the current rows, loaded or not; 0 until the rows are known. */
-  get count(): number { return this.total }
+  /**
+   * Trees in the current rows: the world's, loaded or not, or under a query
+   * or filter the matching trees held, since no one has counted the rest.
+   * 0 until the rows are known.
+   */
+  get count(): number { return this.exact ? this.total : this.residentCount }
   /** Trees held in memory. */
   get residentCount(): number { let n = 0; for (const c of this.chunks.values()) n += c.count; return n }
   get chunkCount(): number { return this.chunks.size }
+  /** True while every chunk in view holds the current rows and colours. */
+  get viewSettled(): boolean { return this.settledView }
   get loaded(): boolean { return this.installed }
 
   onAdd(map: MapLibreMap, gl: WebGLRenderingContext | WebGL2RenderingContext) {
@@ -501,6 +539,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
     this.rowsKey = undefined
     this.installed = false
     this.directory = new Map()
+    this.empty.clear()
     this.total = 0
     this.frame = undefined
     this.map?.triggerRepaint()
@@ -520,6 +559,8 @@ export class TreeDotsLayer implements CustomLayerInterface {
   private settle() {
     const waiters = this.waiters
     this.waiters = []
+    // A sync that settled is a view drawn from the current rows: the map's cue that its trees are up.
+    if (waiters.length && this.installed) this.onLoaded?.(this.count)
     for (const resolve of waiters) resolve()
   }
 
@@ -548,6 +589,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
   private async step(): Promise<boolean> {
     const generation = this.generation
     const stale = () => generation !== this.generation
+    this.settledView = false
     if (this.checkKeys) {
       this.checkKeys = false
       const keys = await this.source.getPointKeys()
@@ -569,7 +611,8 @@ export class TreeDotsLayer implements CustomLayerInterface {
       }
       const directory = this.pendingDirectory
       const known = new Map(directory.keys.map((k, i) => [k, directory.counts[i]]))
-      const visible = this.inView(known)
+      // The nearest of the view with the swap; the rest of it follows in the reads below.
+      const visible = this.batchOf(this.inView(known), known)
       const batch = visible.length ? await this.source.getPointChunks(directory.rowsKey, visible) : null
       if (stale()) return true
       if (visible.length && !batch) { this.checkKeys = true; return true }
@@ -578,7 +621,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
     }
     if (!this.installed || !this.rowsKey || !this.map) return false
     const visible = this.inView(this.directory)
-    const missing = visible.filter((k) => !this.chunks.has(k))
+    const missing = this.batchOf(visible.filter((k) => !this.chunks.has(k) && !this.empty.has(k)), this.directory)
     if (missing.length) {
       this.evict(missing.reduce((n, k) => n + (this.directory.get(k) ?? 0), 0), new Set(visible))
       return this.load(missing)
@@ -587,7 +630,9 @@ export class TreeDotsLayer implements CustomLayerInterface {
     const offColor = [...this.chunks.values()].filter((c) => c.colorKey !== this.colorKey)
     const offInView = offColor.filter((c) => inView.has(c.key))
     if (offColor.length) return this.recolor((offInView.length ? offInView : offColor).map((c) => c.key))
-    // The view is current: what a sync waits on.
+    // The view is current: what a sync waits on. A frame says so to whoever reads the map on idle.
+    if (!this.settledView) this.map.triggerRepaint()
+    this.settledView = true
     this.settle()
     // The rest of the city is background work: it yields to a moving camera and to sprite queries.
     const now = performance.now()
@@ -597,10 +642,11 @@ export class TreeDotsLayer implements CustomLayerInterface {
       return false
     }
     this.deferredSince = undefined
+    if (this.map.getZoom() < LOAD_MIN_ZOOM) return false
     const resident = this.residentCount
     const rest: number[] = []
     let batch = 0
-    for (const key of this.byDistance([...this.directory.keys()].filter((k) => !this.chunks.has(k)))) {
+    for (const key of this.byDistance(this.around(PREFETCH_RADIUS_M).filter((k) => !this.chunks.has(k) && !this.empty.has(k)))) {
       const n = this.directory.get(key) ?? 0
       if (resident + batch + n > MAX_RESIDENT_POINTS) break
       if (batch && batch + n > PREFETCH_BATCH_POINTS) break
@@ -610,10 +656,49 @@ export class TreeDotsLayer implements CustomLayerInterface {
     return rest.length ? this.load(rest) : false
   }
 
-  /** The keys of `known` chunks in the padded view, nearest the centre first. */
+  /**
+   * The keys of `known` chunks in the padded view, nearest the centre first;
+   * none below LOAD_MIN_ZOOM, where a view is too much of the world to load.
+   */
   private inView(known: Map<number, number>): number[] {
+    if (!this.map || this.map.getZoom() < LOAD_MIN_ZOOM) return []
     const [x0, y0, x1, y1] = this.viewBox3857(VIEW_PAD)
-    return chunksInBox(x0, y0, x1, y1).filter((k) => known.has(k))
+    return this.inBox(x0, y0, x1, y1, known)
+  }
+
+  /** The keys of `known` chunks a box touches, nearest its centre first. */
+  private inBox(x0: number, y0: number, x1: number, y1: number, known: Map<number, number>): number[] {
+    // A box wider than the directory is long is walked from the directory's side.
+    const span = Math.max(1, Math.ceil((x1 - x0) / CHUNK_SIZE_M)) * Math.max(1, Math.ceil((y1 - y0) / CHUNK_SIZE_M))
+    if (span <= known.size * 4) return chunksInBox(x0, y0, x1, y1).filter((k) => known.has(k))
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
+    const hits: { k: number; d: number }[] = []
+    for (const k of known.keys()) {
+      const [ox, oy] = chunkOrigin(k)
+      if (ox > x1 || ox + CHUNK_SIZE_M < x0 || oy > y1 || oy + CHUNK_SIZE_M < y0) continue
+      hits.push({ k, d: (ox + CHUNK_SIZE_M / 2 - cx) ** 2 + (oy + CHUNK_SIZE_M / 2 - cy) ** 2 })
+    }
+    return hits.sort((a, b) => a.d - b.d).map((h) => h.k)
+  }
+
+  /** The directory's chunks within `metres` on the ground of the view's box. */
+  private around(metres: number): number[] {
+    const [x0, y0, x1, y1] = this.viewBox3857()
+    const reach = metres / Math.max(0.05, Math.cos((this.map!.getCenter().lat * Math.PI) / 180))
+    return this.inBox(x0 - reach, y0 - reach, x1 + reach, y1 + reach, this.directory)
+  }
+
+  /** The head of `keys` one read brings in: a bounded number of trees and of files. */
+  private batchOf(keys: number[], counts: Map<number, number>): number[] {
+    const batch: number[] = []
+    let points = 0
+    for (const key of keys) {
+      const n = counts.get(key) ?? 0
+      if (batch.length && (points + n > VIEW_BATCH_POINTS || batch.length >= VIEW_BATCH_CHUNKS)) break
+      batch.push(key)
+      points += n
+    }
+    return batch
   }
 
   private byDistance(keys: number[]): number[] {
@@ -657,7 +742,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
       if (!chunk) return
       const next = new Uint8Array(chunk.count)
       for (let k = colors.offsets[s]; k < colors.offsets[s + 1]; k++) {
-        const i = this.indexByRowid[colors.rowid[k]]
+        const i = chunk.indexByRowid[colors.rowid[k]] ?? -1
         if (i >= 0 && i < chunk.count && chunk.rowid[i] === colors.rowid[k]) next[i] = colors.color[k]
       }
       chunk.color = next
@@ -678,20 +763,20 @@ export class TreeDotsLayer implements CustomLayerInterface {
     this.dropAll()
     this.rowsKey = directory.rowsKey
     this.directory = known
+    this.exact = directory.exact
     this.total = directory.counts.reduce((a, b) => a + b, 0)
-    this.indexByRowid = new Int32Array(directory.maxRowid + 1).fill(-1)
     this.wantRows = undefined
     this.pendingDirectory = undefined
     if (batch) this.addBatch(batch)
     this.installed = true
     this.map?.triggerRepaint()
     console.info('[Perf] map:dots:rows', { trees: this.total, chunks: known.size, inView: batch?.keys.length ?? 0 })
-    this.onLoaded?.(this.total)
   }
 
   private dropAll() {
     for (const chunk of this.chunks.values()) if (chunk.gpu) this.dropped.push(chunk.gpu)
     this.chunks.clear()
+    this.empty.clear()
     this.indexer?.postMessage({ kind: 'clear' } satisfies DotsIndexRequest)
   }
 
@@ -708,8 +793,10 @@ export class TreeDotsLayer implements CustomLayerInterface {
     batch.keys.forEach((key, s) => {
       const from = batch.offsets[s], to = batch.offsets[s + 1]
       const n = to - from
-      if (!n) return
       this.drop(key)
+      // None of the current rows here: remembered, or the view would ask again every pass.
+      if (!n) { this.empty.add(key); return }
+      this.empty.delete(key)
       // The worker stored the rows in their draw grid's order; these are views, not copies.
       const [originX, originY] = chunkOrigin(key)
       const chunk: Chunk = {
@@ -719,12 +806,16 @@ export class TreeDotsLayer implements CustomLayerInterface {
         dbh: batch.dbh.subarray(from, to),
         color: batch.color.subarray(from, to),
         rowid: batch.rowid.subarray(from, to),
+        indexByRowid: new Int32Array(),
         palette: batch.palette, colorKey: batch.colorKey, grid: batch.grids[s],
         levels: [], levelOffsets: [],
         buildId: 0, colorId: 0,
         uploadPoints: true, uploadColors: true, uploadLevels: false, uploadLevelColors: false,
       }
-      for (let i = 0; i < n; i++) if (chunk.rowid[i] < this.indexByRowid.length) this.indexByRowid[chunk.rowid[i]] = i
+      let last = 0
+      for (let i = 0; i < n; i++) if (chunk.rowid[i] > last) last = chunk.rowid[i]
+      chunk.indexByRowid = new Int32Array(last + 1).fill(-1)
+      for (let i = 0; i < n; i++) chunk.indexByRowid[chunk.rowid[i]] = i
       chunk.buildId = chunk.colorId = ++this.indexSeq
       const x = chunk.x.slice(), y = chunk.y.slice(), color = chunk.color.slice()
       this.index({ kind: 'build', id: chunk.buildId, key, x, y, count: n, color, palette: chunk.palette }, [x.buffer, y.buffer, color.buffer])
@@ -1062,7 +1153,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
     if (!best) return undefined
     const { chunk, i } = best
     const [lng, lat] = lngLatFrom3857(chunk.x[i] + chunk.originX, chunk.y[i] + chunk.originY)
-    return { rowid: chunk.rowid[i], lng, lat }
+    return { key: chunk.key, rowid: chunk.rowid[i], lng, lat }
   }
 }
 

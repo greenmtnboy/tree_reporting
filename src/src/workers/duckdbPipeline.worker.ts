@@ -20,37 +20,41 @@ WHERE latitude IS NOT NULL AND longitude IS NOT NULL
 `
 
 import {
-  REMOTE_TREES_PARQUET_URL,
   REMOTE_SPECIES_PARQUET_URL,
-  REMOTE_PREDICTIONS_PARQUET_URL,
   REMOTE_ECOREGION_PARQUET_URL,
   REMOTE_ECOREGION_BROWSER_PARQUET_URL,
   REMOTE_LANDMARKS_PARQUET_URL,
-  cityTreeParquetUrl,
   cityBrowserParquetUrl,
-  cityVocabParquetUrl,
   cityLandmarkParquetUrl,
-  cityPredictionsParquetUrl,
+  WorldFileError,
+  fetchWorldFile,
+  fetchWorldManifest,
+  worldFileUrl,
 } from './parquetUrls'
 import { normalizeValue } from './normalizeValue'
 import {
   COLOR_OVERRIDE_TABLE,
+  DBH_COLORS,
   SPECIES_SHADE_TABLE,
+  TREES_AT_TOKEN,
   UNKNOWN_SHADE_COLOR,
+  WINDOW_SHAPE_TABLE,
   treeKeySql,
   WEB_MERCATOR_MAX,
   WEB_MERCATOR_WORLD,
-  cityTileBoundsSql,
+  blockCellSql,
   colorSql,
-  dropCityTablesSql,
-  loadCityTablesSql,
+  dropWorldTablesSql,
+  publishedTreesViewSql,
+  scopeSql,
   tileIndexSql,
+  treesSelectSql,
   windowCellSplitSql,
   windowCellTable,
   windowStagingSql,
   windowViewSql,
-  windowedCityTablesSql,
-  type CityTableOptions,
+  worldTablesSql,
+  type BaseColorScheme,
 } from './cityTables'
 import {
   CELL_ZOOM,
@@ -60,28 +64,26 @@ import {
   cellKey,
   cellsBounds,
   cellsForTile,
+  cellsInBox,
   chunksToEvict,
   type Chunk,
   type WindowPolicy,
 } from './cityWindow'
+import {
+  BLOCK_ZOOM, blockFile, blockOfCell, parseWorldManifest, tileHasBlocks, worldDirectory,
+  type WorldDirectory, type WorldManifest,
+} from './worldBlocks'
 
 const MAX_TILE_CACHE_ENTRIES = 1536
 const MAX_PARALLEL_TILE_WORK = 3
 const PREPARED_FEATURE_TABLE_ZOOM = 15
-/**
- * Rows per statement of the z15 feature-table build. The build runs right
- * after the intro lands, and DuckDB answers one statement at a time: as one
- * statement (6.5 s on Boston's 1.7M rows) every tile the first zoom or pan
- * asks for waited behind all of it. In slices, a tile query waits for one.
- */
-const FEATURE_TABLE_SLICE_ROWS = 250_000
 const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
 
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 import { snapShade } from '../lib/foliageSeason'
 import { assembleLayeredTiles } from './mvtLayers'
 import {
-  bucketByChunk, gridOrderChunks, pointChunkColorsSql, pointChunkDirectorySql, pointChunksSql, pointPalette,
+  CHUNK_ZOOM, bucketByChunk, gridOrderChunks, pointChunkColorsSql, pointChunksSql, pointPalette,
   type PointChunkBatch, type PointChunkColors, type PointChunkDirectory, type PointKeys,
 } from './cityPoints'
 
@@ -153,7 +155,6 @@ function resetFeatureTables() {
   preparedFeatureTablesReady.clear()
   featureTableGeneration += 1
 }
-const dataTileBoundsByZoom = new Map<number, TileBounds>()
 const visibleTileRangeByZoom = new Map<number, TileBounds>()
 const prefetchedVisibleRangeSigByZoom = new Map<number, string>()
 const pendingTileQueue: QueuedTileRequest[] = []
@@ -168,6 +169,8 @@ let colorOverrideActive = false
 /** True while `__species_shade` exists: the leaf-shade scheme is the base colour. */
 let speciesShadeActive = false
 let speciesShadeSignature = 'none'
+/** True while the base colour is the trunk diameter's band (`dbhColorSql`). */
+let dbhColorsActive = false
 let activeDistinctColors: string[] = Object.values(DEFAULT_CATEGORY_COLORS)
 let activeColorLabelMap: Record<string, string> = { ...DEFAULT_CATEGORY_LABELS }
 let activeViewportZoom = 13
@@ -177,21 +180,36 @@ let prewarmDoneRevision = -1
 let prewarmPromise: Promise<void> | null = null
 let autoTileFetchEnabled = true
 let activeQueuedWorkers = 0
-let activeCityDefaultQuery: string = DEFAULT_BASE_QUERY_SQL
-/** The city code whose rows are currently loaded in the `trees` table (null = all cities). */
-let loadedCity: string | null = null
+/**
+ * The bookmark: the city whose projection (`trees_published`), landmarks and
+ * default query are in context. It decides nothing about which trees are
+ * held; the camera does.
+ */
+let contextCity: string | null = null
 
-// The phone's window (cityWindow.ts). `windowPolicy` is what the main thread
-// asked for; `cityWindow` is set while the loaded city is held in windows,
-// and is null for a city held whole (desktop, or a city with no projection).
-let windowPolicy: WindowPolicy | null = null
-let cityWindow: {
-  options: CityTableOptions
-  /** Bumped on every city load, so a load that lands after a switch is dropped. */
+/**
+ * A desktop's window: whole blocks, a budget its heap can carry (about
+ * 125 bytes a row), and the blocks around the camera never dropped. The
+ * resident layer keeps its own, wider set as typed arrays; what is held here
+ * is what the sprites, the tree card and a filter read.
+ */
+const DESKTOP_POLICY: WindowPolicy = { cellZoom: BLOCK_ZOOM, floorZoom: 9, budgetRows: 3_000_000, radiusCells: 2 }
+/** What the main thread asked for (cityWindow.ts): a phone's tight window, or the desktop's. */
+let windowPolicy: WindowPolicy = DESKTOP_POLICY
+
+/** The zoom of the cells the window holds. */
+function cellZoom(): number {
+  return Math.max(BLOCK_ZOOM, windowPolicy.cellZoom ?? CELL_ZOOM)
+}
+
+// The world: the manifest, and the cells of it held (cityWindow.ts). Set once
+// the manifest and the vocabulary are read; reset only when the manifest
+// turns out to be stale or the cell zoom changes.
+type World = {
+  manifest: WorldManifest
+  cellZoom: number
+  /** Bumped on every reset, so a load that lands after one is dropped. */
   generation: number
-  /** The city's extent from the parquet footer, since no table holds all of it. */
-  bounds: { west: number; east: number; south: number; north: number } | null
-  treeCount: number
   chunks: Map<string, Chunk>
   /** Every loaded cell, with the table holding it ('' for a cell with no trees). */
   cellTable: Map<number, string>
@@ -199,17 +217,26 @@ let cityWindow: {
   cellLoads: Map<number, Promise<void>>
   pending: Set<number>
   flush: Promise<void> | null
-} | null = null
+  /** Cells a read is using right now, by how many reads; never dropped. */
+  pins: Map<number, number>
+  /** False once cells were added or dropped and `trees_fast` has not been redefined over them. */
+  viewCurrent: boolean
+}
+let world: World | null = null
 let windowGeneration = 0
-/** Whether the loaded city was loaded with a window policy (it may still be whole: no projection). */
-let loadedWithWindowPolicy = false
 let windowChunkSeq = 0
+/** Block files fetched at once: enough to fill a connection, few enough to hold in memory. */
+const BLOCK_FETCH_PARALLEL = 6
+/** The most cells an intro's prefetch of a tile range loads ahead of its aggregate. */
+const MAX_PREFETCH_CELLS = 400
+/** The widest scoped read: past this many cells a read uses the whole view. */
+const MAX_SCOPE_CELLS = 64
 /** How long tile requests are gathered before their cells are loaded in one scan. */
 const WINDOW_GATHER_MS = 40
 
-// City-context gate: tile generation and city-table queries must not run until
-// setCityContext has fully completed (color map, agg caches, bounds all built).
-// Uses a resolver array so that resetCityReadyGate() never orphans existing waiters.
+// Context gate: tile generation and queries must not run until the first
+// setCityContext has completed (the world's tables and a bookmark exist).
+// It opens once and stays open: a later bookmark changes no table a read uses.
 let cityContextReady = false
 const cityContextPendingResolvers: Array<() => void> = []
 
@@ -221,11 +248,6 @@ function nowMs(): number {
 async function waitForCityContext(): Promise<void> {
   if (cityContextReady) return
   await new Promise<void>((r) => { cityContextPendingResolvers.push(r) })
-}
-
-/** Mark city as not-ready during a city switch; existing waiters stay in the queue. */
-function resetCityReadyGate(): void {
-  cityContextReady = false
 }
 
 /** Open the gate and unblock all current waiters. */
@@ -249,8 +271,17 @@ function hashText(text: string): string {
   return (hash >>> 0).toString(16)
 }
 
+/** The base colour rule every colour read uses (`colorSql`). */
+function baseScheme(): BaseColorScheme {
+  return dbhColorsActive ? 'dbh' : speciesShadeActive ? 'shade' : 'form'
+}
+
+function colorSchemeSignature(): string {
+  return dbhColorsActive ? 'dbh' : speciesShadeSignature
+}
+
 function treeFilterSignature(): string {
-  return `${publishedTreeIdFilterSignature}|${colorMapSignature}|${speciesShadeSignature}`
+  return `${publishedTreeIdFilterSignature}|${colorMapSignature}|${colorSchemeSignature()}`
 }
 
 function applyTreeFilterToBaseQuery(baseQuery: string): string {
@@ -271,25 +302,30 @@ function effectiveBaseQuery(sql: string | null): string {
 }
 
 /**
- * The rows a tile query reads. When the published query is the city default
- * (no chat scope, no URL filter) the city table is read as it stands; the
- * join back through the `trees` view cost a third to a half of every
- * overview batch for nothing. Any other query is joined to the table by id,
- * as before.
+ * The rows a tile query reads. When the published query is the default (no
+ * chat scope, no URL filter) the held rows are read as they stand; the join
+ * back through the `trees` view cost a third to a half of every overview
+ * batch for nothing. Any other query is joined to the rows by id.
+ *
+ * `scope` is the relation the rows come from: `trees_fast`, or the held
+ * cells a read is about (`scopeSql`). With a scope the query's own
+ * `FROM trees` is pointed at the same cells, so a filter runs over the
+ * ground being read and not over everything held.
  */
-function tileRowSource(baseQuery: string, color: { join: string }): { prelude: string; from: string; where: string; dbh: string; id: string } {
+function tileRowSource(baseQuery: string, color: { join: string }, scope = 'trees_fast'): { prelude: string; from: string; where: string; dbh: string; id: string } {
   if (isDefaultBaseQuery(baseQuery)) {
     return {
       prelude: 'WITH',
-      from: `trees_fast tf\n  ${color.join}`,
+      from: `${scope} tf\n  ${color.join}`,
       where: 'tf.latitude IS NOT NULL AND tf.longitude IS NOT NULL\n    AND ',
       dbh: 'COALESCE(tf.dbh, 3)',
       id: 'tf.tree_id',
     }
   }
+  const trees = scope === 'trees_fast' ? '' : ` trees AS (${treesSelectSql(scope)}\n),`
   return {
-    prelude: `WITH base AS (\n  ${baseQuery}\n),`,
-    from: `base\n  INNER JOIN trees_fast tf\n    ON base.tree_id = tf.tree_id\n  ${color.join}`,
+    prelude: `WITH${trees} base AS (\n  ${baseQuery}\n),`,
+    from: `base\n  INNER JOIN ${scope} tf\n    ON base.tree_id = tf.tree_id\n  ${color.join}`,
     where: '',
     dbh: 'COALESCE(base.diameter_at_breast_height, tf.dbh, 3)',
     id: "COALESCE(base.tree_id, tf.tree_id, 'unkwn')",
@@ -300,10 +336,21 @@ function normalizeSql(sql: string): string {
   return sql.replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
-/** True for the city's default query, with or without its city clause: one city is loaded, so both read every row. */
+/**
+ * True for the default query, with or without a city clause, whichever city
+ * it names: the map draws every tree held, so a bookmark's default and the
+ * next bookmark's are the same rows.
+ */
 function isDefaultBaseQuery(sql: string): boolean {
   const normalized = normalizeSql(sql)
-  return normalized === normalizeSql(activeCityDefaultQuery) || normalized === normalizeSql(DEFAULT_BASE_QUERY_SQL)
+  const plain = normalizeSql(DEFAULT_BASE_QUERY_SQL)
+  return normalized === plain || normalized.replace(/ and city = '[a-z0-9]+'$/, '') === plain
+}
+
+/** What a published query is, for telling a change from a republish. */
+function queryIdentity(sql: string | null): string {
+  const text = sql?.trim() ? sql : DEFAULT_BASE_QUERY_SQL
+  return isDefaultBaseQuery(text) ? 'default' : normalizeSql(text)
 }
 
 function tileCacheKey(z: number, x: number, y: number): string {
@@ -340,12 +387,7 @@ function shouldPersistLowZoomSfTile(key: string): boolean {
   if (parsed.rev !== tileQueryRevision) return false
   if (parsed.filterSig !== treeFilterSignature()) return false
   if (parsed.z > 14) return false
-  const bounds = getDataTileBounds(parsed.z)
-  if (!bounds) return false
-  return parsed.x >= bounds.minX
-    && parsed.x <= bounds.maxX
-    && parsed.y >= bounds.minY
-    && parsed.y <= bounds.maxY
+  return !isTileOutsideData(parsed.z, parsed.x, parsed.y)
 }
 
 function neighborhoodBatchKey(rev: number, z: number, minX: number, maxX: number, minY: number, maxY: number): string {
@@ -393,18 +435,13 @@ function tileYExpr(alias: string, z: number): string {
   return tileIndexSql(alias, 'y', z)
 }
 
-function getDataTileBounds(z: number): TileBounds | null {
-  return dataTileBoundsByZoom.get(z) ?? null
-}
-
 function getVisibleTileRange(z: number): TileBounds | null {
   return visibleTileRangeByZoom.get(z) ?? null
 }
 
-function isTileOutsideDataBounds(z: number, x: number, y: number): boolean {
-  const b = getDataTileBounds(z)
-  if (!b) return false
-  return x < b.minX || x > b.maxX || y < b.minY || y > b.maxY
+/** True for a tile no block of the world reaches: it is empty without a read. */
+function isTileOutsideData(z: number, x: number, y: number): boolean {
+  return world ? !tileHasBlocks(world.manifest, z, x, y) : false
 }
 
 /**
@@ -583,34 +620,6 @@ function setCachedTile(key: string, tile: Uint8Array): void {
 }
 
 /**
- * The projection's vocabulary file, if it is published and describes the
- * projection being loaded: its tree counts must sum to the projection's row
- * count, read from the footer. The two are written by the same job, but a
- * run that failed between them, or a cached copy of either, would leave a
- * value out of an ENUM, and a cast to an ENUM of a value it lacks fails the
- * window load. Anything else (missing, unreadable, a count that disagrees)
- * returns null and the vocabularies are scanned from the projection.
- */
-async function verifiedVocabUrl(city: string, projectionUrl: string): Promise<string | null> {
-  const vocabUrl = cityVocabParquetUrl(city)
-  if (!vocabUrl || !conn) return null
-  try {
-    const result = await conn.query(`
-      SELECT
-        (SELECT sum(tree_count) FROM read_parquet('${vocabUrl}')) AS vocab_trees,
-        (SELECT sum(num_rows) FROM parquet_file_metadata('${projectionUrl}')) AS projection_rows`)
-    const row = result.toArray()[0]
-    const vocabTrees = Number(row?.vocab_trees)
-    const projectionRows = Number(row?.projection_rows)
-    if (Number.isFinite(vocabTrees) && vocabTrees > 0 && vocabTrees === projectionRows) return vocabUrl
-    console.info('[duckdb-worker] vocabulary file does not match the projection; scanning it', { vocabTrees, projectionRows })
-  } catch (error) {
-    console.info('[duckdb-worker] vocabulary file unavailable; scanning the projection', vocabUrl, error)
-  }
-  return null
-}
-
-/**
  * True when `url`'s parquet has `column`. Reads only the file footer, so this
  * is a metadata round trip rather than a scan. Returns false on any error: the
  * caller uses it to decide whether to add an optional predicate, and guessing
@@ -630,197 +639,110 @@ async function parquetHasColumn(url: string, column: string): Promise<boolean> {
   }
 }
 
-/**
- * Load (or reload) `trees_fast`, and the `trees` view over it, for `city`
- * from the per-city parquet. Pass undefined to load all cities from the full
- * file (only as a last-resort fallback when city is genuinely unknown).
- *
- * Memory is the constraint. The DuckDB-wasm heap only ever grows, and on an
- * iPhone it sits in the same process budget as the map. Desktop materialises
- * the whole city; a phone (`windowPolicy`) loads only the vocabularies here
- * and its rows cell by cell as tiles ask (cityWindow.ts). The row shape lives
- * in cityTables.ts, with the numbers; what this function decides is which
- * files to read.
- */
-async function loadCityTrees(city?: string): Promise<void> {
-  if (!conn) return
-  // Already loaded, in the shape asked for: a phone that turns its window off
-  // (or on) reloads the same city.
-  if (city && loadedCity === city && loadedWithWindowPolicy === (windowPolicy !== null)) return
-
-  if (!city) {
-    throw new Error('City must be specified to load trees, to avoid accidentally loading all cities into memory.')
-  }
-
-  resetFeatureTables()
-  dataTileBoundsByZoom.clear()
-  colorOverrideActive = false
-
-  const cityUrl = city ? cityTreeParquetUrl(city) : null
-  const parquetUrl = cityUrl ?? REMOTE_TREES_PARQUET_URL
-
-  // Cross-source duplicates are dropped at the source now -- every city's
-  // published target carries `where tree_id = cluster_id`, so the parquet holds
-  // one row per tree (see data/raw/tree_dedup.preql, "The prune").
-  //
-  // This filter is what that replaced, and it is kept only for parquets built
-  // before it. The probe is what makes the two safe to mix: a pruned parquet has
-  // no `is_duplicate` column, the probe returns false, no filter is applied, and
-  // "everything" already is the survivors; a parquet still awaiting its rebuild
-  // has the column and gets filtered exactly as before. So cities can be
-  // refreshed one at a time, in any order, with no window where the map is
-  // wrong -- which is the whole reason the column was not simply dropped in the
-  // same change.
-  //
-  // It also still covers two cases that are not transitional: the cross-city
-  // full_tree_info fallback cannot carry the column at all (merging the
-  // per-city keys makes the planner resolve a city's grid aggregate over every
-  // city, and it fails to plan), and a brand-new city has no parquet until its
-  // first credentialed build.
-  //
-  // Delete this once every city has been rebuilt past the prune.
-  // The browser projection, when the pipeline has published it: the display
-  // name, the growth form and the crown prediction are columns, so the load
-  // is one scan and none of the probes or joins below run. A city whose
-  // projection is not out yet (a new city before the next core tick) takes
-  // the assembled path, as every city did before the projection existed.
-  const projectionCandidate = cityBrowserParquetUrl(city)
-  const projectionUrl = projectionCandidate && await parquetHasColumn(projectionCandidate, 'display_name')
-    ? projectionCandidate
-    : null
-  if (!projectionUrl) console.info('[duckdb-worker] browser projection unavailable; assembling the city from its published files', projectionCandidate)
-  const vocabUrl = projectionUrl ? await verifiedVocabUrl(city, projectionUrl) : null
-
-  const hasDedupFlag = !projectionUrl && await parquetHasColumn(parquetUrl, 'is_duplicate')
-
-  // `cultivar` is the tree's cultivated selection ('Tina' in Malus sargentii
-  // 'Tina'), kept on the tree row by the ingest since September 2026. A
-  // parquet built before that has no such column, and selecting a missing
-  // column fails the whole load -- so probe for it the same way, and read a
-  // null until the city is rebuilt. Fold this into the plain select once every
-  // city has been refreshed past the change.
-  const hasCultivar = !projectionUrl && await parquetHasColumn(parquetUrl, 'cultivar')
-  // `crown_width_m`, the observed crown spread in metres (null for most
-  // trees), arrived the same way in September 2026; probe it likewise.
-  const hasCrownWidth = !projectionUrl && await parquetHasColumn(parquetUrl, 'crown_width_m')
-
-  // The assembled path folds the published crown prediction in at load, so
-  // the first sprite batch is sized correctly and the city switch has no
-  // second table. The per-city slices the retired slice job left are a few
-  // MB; the all-city file is ~170 MB and DuckDB-wasm downloads a whole
-  // object on first read, so it is only the fallback for a city with no
-  // slice. A city with neither reachable keeps recorded crowns only; reload
-  // to retry.
-  let predictionsUrl: string | null = null
-  const citySliceUrl = cityPredictionsParquetUrl(city)
-  if (!projectionUrl) {
-    for (const url of [citySliceUrl, REMOTE_PREDICTIONS_PARQUET_URL]) {
-      if (url && await parquetHasColumn(url, 'predicted_crown_width_m')) {
-        predictionsUrl = url
-        break
-      }
-      console.info('[TreeCrowns] predictions source unavailable', url)
-    }
-    if (!predictionsUrl) console.warn('[TreeCrowns] predictions unavailable; using recorded crowns')
-  }
-  // The slice is one row per tree by its model's grain; the all-city file is
-  // aggregated to be sure (see CityTableOptions.predictionsAreUnique).
-  const predictionsAreUnique = predictionsUrl !== null && predictionsUrl === citySliceUrl
-  // Tree heights (a LIDAR `height_m` and the allometric `predicted_height_m`)
-  // arrived in November 2026, in the projection and, for the assembled path,
-  // in the predictions file. Either may predate them until its next build;
-  // probe like `cultivar` and read null heights, sizing sprites as before.
-  const heightSource = projectionUrl ?? predictionsUrl
-  const hasHeight = heightSource !== null && await parquetHasColumn(heightSource, projectionUrl ? 'height_m' : 'accepted_height_m')
-
-  // A window load still running holds a staging table over the city's types.
-  await windowLoadsSettled()
-  for (const sql of dropCityTablesSql(cityWindow ? { chunkTables: [...cityWindow.chunks.keys()] } : null)) await conn.query(sql)
-  cityWindow = null
-  windowGeneration += 1
-  loadedWithWindowPolicy = windowPolicy !== null
-
-  const options: CityTableOptions = { projectionUrl, vocabUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth, hasHeight }
-  // A phone holds the city in windows when the projection is published; the
-  // assembled fallback joins three files and is held whole, as before.
-  const windowed = windowPolicy !== null && projectionUrl !== null
-  const timings: Array<[string, number]> = []
-  for (const sql of windowed ? windowedCityTablesSql(options) : loadCityTablesSql(options)) {
-    const started = nowMs()
-    await conn.query(sql)
-    timings.push([sql.trim().slice(0, 48).replace(/\s+/g, ' '), Math.round(nowMs() - started)])
-  }
-  if (windowed && projectionUrl) {
-    cityWindow = {
-      options,
-      generation: windowGeneration,
-      bounds: null,
-      treeCount: 0,
-      chunks: new Map(),
-      cellTable: new Map(),
-      cellLoads: new Map(),
-      pending: new Set(),
-      flush: null,
-    }
-    // The extent and the count come from the footer: no table holds the city.
-    const stats = (await conn.query(`
-      SELECT path_in_schema AS col,
-        min(TRY_CAST(COALESCE(stats_min_value, stats_min) AS DOUBLE)) AS lo,
-        max(TRY_CAST(COALESCE(stats_max_value, stats_max) AS DOUBLE)) AS hi
-      FROM parquet_metadata('${projectionUrl}')
-      WHERE path_in_schema IN ('latitude', 'longitude')
-      GROUP BY 1`)).toArray()
-    const range = (col: string) => stats.find((row) => row.col === col)
-    const lat = range('latitude'), lng = range('longitude')
-    if (lat && lng && [lat.lo, lat.hi, lng.lo, lng.hi].every((v) => Number.isFinite(Number(v)))) {
-      cityWindow.bounds = { south: Number(lat.lo), north: Number(lat.hi), west: Number(lng.lo), east: Number(lng.hi) }
-    }
-    const count = await conn.query(`SELECT sum(num_rows) AS n FROM parquet_file_metadata('${projectionUrl}')`)
-    cityWindow.treeCount = Number(count.toArray()[0]?.n ?? 0)
-  }
-  const memory = await conn.query(`
-    SELECT tag, CAST(round(sum(memory_usage_bytes) / 1048576) AS INTEGER) AS mb
-    FROM duckdb_memory() WHERE memory_usage_bytes > 0 GROUP BY tag ORDER BY mb DESC`)
-  console.info('[Perf] duckdb-worker:city-load', {
-    city,
-    source: projectionUrl ? 'projection' : 'assembled',
-    vocabulary: vocabUrl ? 'vocab-file' : 'scan',
-    windowed,
-    ms: timings.map(([label, ms]) => `${ms} ${label}`).join(' | '),
-    duckdbMb: memory.toArray().map((row) => `${row.tag}=${row.mb}`).join(' '),
-  })
-
-  loadedCity = city ?? null
-
-  const landmarkUrl = cityLandmarkParquetUrl(city) ?? REMOTE_LANDMARKS_PARQUET_URL
+/** A file's bytes under a name DuckDB can read, for as long as `use` runs. */
+async function withRegisteredFile<T>(name: string, bytes: Uint8Array, use: () => Promise<T>): Promise<T> {
+  await db!.registerFileBuffer(name, bytes)
   try {
-    await conn.query(`
-      CREATE OR REPLACE TABLE landmarks AS
-      SELECT landmark_id, city, name, latitude, longitude
-      FROM read_parquet('${landmarkUrl}')
-      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-    `)
-  } catch (e) {
-    console.warn('[duckdb-worker] landmarks-load:failed', e)
+    return await use()
+  } finally {
+    await db!.dropFile(name).catch(() => {})
   }
 }
 
-/** The cells of a tile that hold any of the city, by the footer's extent. */
-function windowCellsForTile(z: number, x: number, y: number): number[] {
-  const keys = cellsForTile(z, x, y)
-  const bounds = getDataTileBounds(CELL_ZOOM)
-  if (!bounds) return keys
-  return keys.filter((key) => {
-    const cell = cellFromKey(key)
-    return cell.x >= bounds.minX && cell.x <= bounds.maxX && cell.y >= bounds.minY && cell.y <= bounds.maxY
+/**
+ * Read the manifest and set the world's tables up: the vocabulary's ENUM
+ * types, an empty `trees_fast` and the `trees` view (cityTables.ts). No tree
+ * is loaded here. Memory is the constraint: the DuckDB-wasm heap only ever
+ * grows, and on an iPhone it sits in the same process budget as the map, so
+ * rows arrive only as cells near the camera are asked for (cityWindow.ts).
+ */
+async function loadWorld(): Promise<void> {
+  if (!conn || !db) return
+  const t0 = nowMs()
+  const manifest = parseWorldManifest(await fetchWorldManifest())
+  const vocab = await fetchWorldFile(manifest.vocab)
+  const vocabKb = Math.round(vocab.byteLength / 1024)
+  const timings: Array<[string, number]> = []
+  await withRegisteredFile('world_vocab.parquet', vocab, async () => {
+    for (const sql of worldTablesSql('world_vocab.parquet')) {
+      const started = nowMs()
+      await conn!.query(sql)
+      timings.push([sql.trim().slice(0, 40).replace(/\s+/g, ' '), Math.round(nowMs() - started)])
+    }
   })
+  windowGeneration += 1
+  world = {
+    manifest,
+    cellZoom: cellZoom(),
+    generation: windowGeneration,
+    chunks: new Map(),
+    cellTable: new Map(),
+    cellLoads: new Map(),
+    pending: new Set(),
+    flush: null,
+    pins: new Map(),
+    viewCurrent: true,
+  }
+  console.info('[Perf] duckdb-worker:world-load', {
+    trees: manifest.trees,
+    blocks: manifest.blocks.size,
+    cities: manifest.cities.length,
+    cellZoom: world.cellZoom,
+    vocabKb,
+    ms: Math.round(nowMs() - t0),
+    steps: timings.map(([label, ms]) => `${ms} ${label}`).join(' | '),
+  })
+}
+
+/**
+ * Drop every held cell and read the manifest again: the one it opened with
+ * named a block that is gone (a build replaced it more than the retention
+ * ago), or the layout asked for a different cell size. Whatever was drawn
+ * from the old world is redrawn; the resident layer sees a new rows key.
+ */
+let worldReset: Promise<void> | null = null
+function resetWorld(reason: string): Promise<void> {
+  worldReset ??= (async () => {
+    console.info('[duckdb-worker] reloading the world:', reason)
+    try {
+      const old = world
+      if (old) {
+        await windowLoadsSettled()
+        world = null
+        for (const sql of dropWorldTablesSql([...old.chunks.keys()])) await conn!.query(sql)
+        colorOverrideActive = false
+      }
+      await loadWorld()
+      if (contextCity) await conn!.query(publishedTreesViewSql(cityBrowserParquetUrl(contextCity)))
+      resetFeatureTables()
+      invalidateTileCaches('world-reset')
+    } finally {
+      worldReset = null
+    }
+  })()
+  return worldReset
+}
+
+/** True for a cell whose rows are held, or that has none: its block is not in the world. */
+function cellHeld(win: World, key: number): boolean {
+  return win.cellTable.has(key) || !win.manifest.blocks.has(blockOfCell(key, win.cellZoom))
+}
+
+/** The cells of a tile that can hold trees: those inside a block the world lists. */
+function windowCellsForTile(z: number, x: number, y: number): number[] {
+  const win = world
+  if (!win) return []
+  // A tile far coarser than a cell spans thousands of them; the caller's floor keeps it from here.
+  if (z < win.cellZoom - 4) return []
+  return cellsForTile(z, x, y, win.cellZoom).filter((key) => win.manifest.blocks.has(blockOfCell(key, win.cellZoom)))
 }
 
 /** True when every row a tile could draw is loaded, so its result may be cached. */
 function windowCoversTile(z: number, x: number, y: number): boolean {
-  if (!cityWindow) return true
-  const held = cityWindow.cellTable
-  return windowCellsForTile(z, x, y).every((key) => held.has(key))
+  const win = world
+  if (!win) return true
+  if (z < win.cellZoom - 4) return !tileHasBlocks(win.manifest, z, x, y)
+  return windowCellsForTile(z, x, y).every((key) => win.cellTable.has(key))
 }
 
 /**
@@ -829,24 +751,26 @@ function windowCoversTile(z: number, x: number, y: number): boolean {
  * or below the floor, is answered empty and transient instead.
  */
 function windowAllowsTile(z: number, x: number, y: number): boolean {
-  if (!cityWindow || !windowPolicy) return true
+  const win = world
+  if (!win) return true
   if (z < Math.floor(windowPolicy.floorZoom)) return false
   if (!activeViewportCenter) return true
-  const camera = cellAt(activeViewportCenter.lng, activeViewportCenter.lat)
-  const span = z >= CELL_ZOOM ? 1 : 2 ** (CELL_ZOOM - z)
-  const middle = z >= CELL_ZOOM
-    ? cellFromKey(cellsForTile(z, x, y)[0])
+  const cz = win.cellZoom
+  const camera = cellAt(activeViewportCenter.lng, activeViewportCenter.lat, cz)
+  const span = z >= cz ? 1 : 2 ** (cz - z)
+  const middle = z >= cz
+    ? cellFromKey(cellsForTile(z, x, y, cz)[0], cz)
     : { x: x * span + span / 2, y: y * span + span / 2 }
   return cellDistance(middle, camera) <= windowPolicy.radiusCells + span / 2
 }
 
-/** Load whichever of `keys` are not held, gathering concurrent requests into one scan. */
+/** Load whichever of `keys` are not held, gathering concurrent requests into one load. */
 async function ensureWindowCells(keys: number[]): Promise<void> {
-  const win = cityWindow
+  const win = world
   if (!win) return
   const waits: Promise<void>[] = []
   for (const key of keys) {
-    if (win.cellTable.has(key)) continue
+    if (cellHeld(win, key)) continue
     const inflight = win.cellLoads.get(key)
     if (inflight) {
       waits.push(inflight)
@@ -867,80 +791,168 @@ async function ensureWindowCells(keys: number[]): Promise<void> {
   await Promise.all(waits)
 }
 
+/** Run `work` over `items`, `parallel` at a time. */
+async function inParallel<T>(items: T[], parallel: number, work: (item: T) => Promise<void>): Promise<void> {
+  let next = 0
+  await Promise.all(Array.from({ length: Math.min(parallel, items.length) }, async () => {
+    while (next < items.length) await work(items[next++])
+  }))
+}
+
 /**
- * One load: the rows of `cells` in one scan, split into a table per cell,
- * `trees_fast` redefined over them, then the farthest cells dropped while the
- * held rows exceed the budget. A load that lands after a city switch is
- * dropped unseen.
+ * One load: the block files that hold `cells`, fetched side by side, their
+ * rows into a table per cell, then the farthest cells dropped while the held
+ * rows exceed the budget. A desktop's cell is a whole block and becomes a
+ * table straight from its file; a phone's finer cells are cut out of their
+ * blocks in one scan. A load that lands after a world reset is dropped unseen.
  */
-async function loadWindowCells(win: NonNullable<typeof cityWindow>, cells: number[]): Promise<void> {
-  if (!conn || cells.length === 0) return
+async function loadWindowCells(win: World, cells: number[]): Promise<void> {
+  if (!conn || !db || cells.length === 0) return
   const t0 = nowMs()
-  const staging = `trees_window_staging_${(windowChunkSeq += 1)}`
+  const cz = win.cellZoom
+  const seq = (windowChunkSeq += 1)
+  const staging = `trees_window_staging_${seq}`
   const added: Chunk[] = []
+  const live = () => world === win && win.generation === windowGeneration
+  const byBlock = new Map<number, number[]>()
+  for (const key of cells) {
+    const block = blockOfCell(key, cz)
+    byBlock.set(block, [...(byBlock.get(block) ?? []), key])
+  }
+  let bytes = 0
+  const counts = new Map<number, number>()
   try {
-    const sql = windowStagingSql(staging, win.options, cells, cellsBounds(cells), CELL_ZOOM)
-    await conn.query(sql.create)
-    const counts = new Map((await conn.query(sql.counts)).toArray().map((row) => [Number(row.cell), Number(row.n)]))
-    if (cityWindow !== win || win.generation !== windowGeneration) return
-    for (const key of cells) {
-      const rows = counts.get(key) ?? 0
-      if (rows > 0) {
-        await conn.query(windowCellSplitSql(staging, key, CELL_ZOOM))
-        added.push({ table: windowCellTable(key), cells: [key], rows })
+    if (cz === BLOCK_ZOOM) {
+      // One file, one table: only a block's bytes are in the heap at a time.
+      await inParallel([...byBlock.keys()], BLOCK_FETCH_PARALLEL, async (key) => {
+        const block = win.manifest.blocks.get(key)!
+        const file = await fetchWorldFile(blockFile(block))
+        bytes += file.byteLength
+        if (!live()) return
+        const name = `world_block_${key}_${seq}.parquet`
+        await withRegisteredFile(name, file, () => conn!.query(blockCellSql(key, name)))
+        added.push({ table: windowCellTable(key), cells: [key], rows: block.rows })
+        counts.set(key, block.rows)
+      })
+    } else {
+      // A phone keeps a sixteenth of a block, so it does not download the
+      // block: DuckDB range-reads the row groups its cells fall in (the rows
+      // are in cell order) straight from the published file, as it read a
+      // window out of a city's projection. San Francisco's first phone view
+      // is 24 cells of four 3.6 MB blocks.
+      const files = [...byBlock.keys()].map((key) => worldFileUrl(blockFile(win.manifest.blocks.get(key)!)))
+      try {
+        const sql = windowStagingSql(staging, files, cells, cellsBounds(cells, cz), cz)
+        await conn.query(sql.create)
+        for (const row of (await conn.query(sql.counts)).toArray()) counts.set(Number(row.cell), Number(row.n))
+        if (!live()) return
+        for (const key of cells) {
+          const rows = counts.get(key) ?? 0
+          if (rows > 0) {
+            await conn.query(windowCellSplitSql(staging, key, cz))
+            added.push({ table: windowCellTable(key), cells: [key], rows })
+          }
+        }
+      } finally {
+        await conn.query(`DROP TABLE IF EXISTS ${staging}`).catch(() => {})
       }
     }
-    await conn.query(`DROP TABLE IF EXISTS ${staging}`)
+    if (!live()) return
     for (const key of cells) win.cellTable.set(key, counts.get(key) ? windowCellTable(key) : '')
     for (const chunk of added) win.chunks.set(chunk.table, chunk)
 
-    // The cells just loaded are what the view is waiting to draw: never the
-    // ones dropped to make room for them.
-    const camera = activeViewportCenter ? cellAt(activeViewportCenter.lng, activeViewportCenter.lat) : null
+    // The cells just loaded are what the view is waiting to draw, and a
+    // pinned cell is being read: never the ones dropped to make room.
+    const camera = activeViewportCenter ? cellAt(activeViewportCenter.lng, activeViewportCenter.lat, cz) : null
     const fresh = new Set(added.map((chunk) => chunk.table))
-    const evict = windowPolicy
-      ? chunksToEvict([...win.chunks.values()].filter((chunk) => !fresh.has(chunk.table)), camera,
-        windowPolicy.budgetRows - added.reduce((sum, chunk) => sum + chunk.rows, 0), windowPolicy.radiusCells)
-      : []
+    const droppable = [...win.chunks.values()].filter((chunk) => !fresh.has(chunk.table) && !chunk.cells.some((key) => win.pins.has(key)))
+    const evict = chunksToEvict(droppable, camera,
+      windowPolicy.budgetRows - [...win.chunks.values()].filter((chunk) => !droppable.includes(chunk)).reduce((sum, chunk) => sum + chunk.rows, 0),
+      windowPolicy.radiusCells, cz)
     for (const name of evict) {
       for (const key of win.chunks.get(name)?.cells ?? []) win.cellTable.delete(key)
       win.chunks.delete(name)
     }
-    // The view moves off the dropped tables before they go.
-    if (added.length > 0 || evict.length > 0) await conn.query(windowViewSql([...win.chunks.keys()]))
-    for (const name of evict) await conn.query(`DROP TABLE IF EXISTS ${name}`)
-    if (added.length > 0 || evict.length > 0) resetFeatureTables()
+    if (added.length > 0 || evict.length > 0) {
+      // `trees_fast` is redefined when something next reads it (viewIsCurrent):
+      // a desktop loading a metro's blocks in twenty batches would otherwise
+      // replan a several-hundred-table union after each one.
+      win.viewCurrent = false
+      for (const name of evict) await conn.query(`DROP TABLE IF EXISTS ${name}`)
+      resetFeatureTables()
+    }
 
     console.info('[Perf] duckdb-worker:window-load', {
       cells: cells.length,
+      blocks: byBlock.size,
+      ...(bytes ? { kb: Math.round(bytes / 1024) } : {}),
       rows: added.reduce((sum, chunk) => sum + chunk.rows, 0),
       held: [...win.chunks.values()].reduce((sum, chunk) => sum + chunk.rows, 0),
       tables: win.chunks.size,
       evicted: evict.length,
       ms: Math.round(nowMs() - t0),
     })
+  } catch (error) {
+    // A block the manifest names is gone: the manifest is from an older build.
+    const gone = error instanceof WorldFileError ? error.status === 404 : /HTTP 404|404 \(Not Found\)|No files found/i.test(String((error as Error)?.message))
+    if (gone && live()) void resetWorld('a block the manifest names is no longer published')
+    throw error
   } finally {
     // A load that failed or was superseded leaves nothing behind.
-    if (cityWindow !== win || win.generation !== windowGeneration) {
-      for (const chunk of added) await conn.query(`DROP TABLE IF EXISTS ${chunk.table}`).catch(() => {})
+    if (!live() || added.some((chunk) => !win.chunks.has(chunk.table))) {
+      for (const chunk of added) {
+        if (!live() || !win.chunks.has(chunk.table)) await conn.query(`DROP TABLE IF EXISTS ${chunk.table}`).catch(() => {})
+      }
     }
-    await conn.query(`DROP TABLE IF EXISTS ${staging}`).catch(() => {})
     for (const key of cells) win.cellLoads.delete(key)
   }
 }
 
+/** Redefine `trees_fast` over the cells now held, if any were added or dropped since it last was. */
+async function viewIsCurrent(): Promise<void> {
+  const win = world
+  if (!win || !conn || win.viewCurrent) return
+  win.viewCurrent = true
+  await conn.query(windowViewSql([...win.chunks.keys()]))
+}
+
 /** Wait for every window load queued or running, so a read sees the ground it asked about. */
 async function windowLoadsSettled(): Promise<void> {
-  const win = cityWindow
+  const win = world
   if (!win) return
   // A failed load has already left cellLoads; the read goes ahead on what is held.
   while (win.cellLoads.size > 0) await Promise.all([...new Set(win.cellLoads.values())].map((load) => load.catch(() => {})))
 }
 
-async function doInit(city?: string) {
+/**
+ * Run a read over the tables of `cells`, loading the ones not held and
+ * keeping all of them from being dropped while it runs. `read` gets the
+ * tables of the cells that hold any trees.
+ */
+async function withCells<T>(cells: number[], read: (tables: string[]) => Promise<T>): Promise<T> {
+  const win = world
+  if (!win) return read([])
+  for (;;) {
+    await ensureWindowCells(cells)
+    if (world !== win) throw new Error('The world was reloaded during a read')
+    if (cells.every((key) => cellHeld(win, key))) break
+  }
+  for (const key of cells) win.pins.set(key, (win.pins.get(key) ?? 0) + 1)
+  try {
+    return await read(cells.flatMap((key) => win.cellTable.get(key) || []))
+  } finally {
+    for (const key of cells) {
+      const n = (win.pins.get(key) ?? 1) - 1
+      if (n > 0) win.pins.set(key, n)
+      else win.pins.delete(key)
+    }
+  }
+}
+
+async function doInit() {
   if (db) return
   const t0 = nowMs()
-  console.info('[Perf] duckdb-worker:init:start', { city: city ?? '(deferred)' })
+  console.info('[Perf] duckdb-worker:init:start')
 
   const bundles: duckdb.DuckDBBundles = {
     mvp: {
@@ -1056,12 +1068,9 @@ async function doInit(city?: string) {
     }
   }
 
-  // Load city-specific tree data. setCityContext will call this if city is not
-  // yet known at init time, so we only do it here when city is already available.
-  if (city) {
-    await loadCityTrees(city)
-    postColorMapUpdate()
-  } 
+  // The world's manifest and vocabulary. No tree is loaded until a view asks.
+  await loadWorld()
+  postColorMapUpdate()
 
   ready = true
   initError = null
@@ -1078,8 +1087,9 @@ function postColorMapUpdate() {
   })
 }
 
-/** The colours the base scheme can draw: every species shade and grey, or the tree-form categories. */
+/** The colours the base scheme can draw: the trunk bands, every species shade and grey, or the tree-form categories. */
 async function baseDistinctColors(): Promise<string[]> {
+  if (dbhColorsActive) return Object.values(DBH_COLORS)
   if (!conn || !speciesShadeActive) return Object.values(DEFAULT_CATEGORY_COLORS)
   const result = await conn.query(`SELECT DISTINCT unnest(shades) AS display_color FROM ${SPECIES_SHADE_TABLE}`)
   return [...new Set([...result.toArray().map((r: Record<string, unknown>) => String(r.display_color)), UNKNOWN_SHADE_COLOR])]
@@ -1091,7 +1101,7 @@ async function clearColorOverride() {
   await conn.query(`DROP TABLE IF EXISTS ${COLOR_OVERRIDE_TABLE}`)
   colorOverrideActive = false
   activeDistinctColors = await baseDistinctColors()
-  activeColorLabelMap = speciesShadeActive ? {} : { ...DEFAULT_CATEGORY_LABELS }
+  activeColorLabelMap = baseScheme() === 'form' ? { ...DEFAULT_CATEGORY_LABELS } : {}
   colorMapSignature = 'default'
 }
 
@@ -1139,16 +1149,16 @@ GROUP BY species`)
     activeDistinctColors = [...new Set([...overrides, ...await baseDistinctColors()])]
   } else {
     activeDistinctColors = await baseDistinctColors()
-    activeColorLabelMap = speciesShadeActive ? {} : { ...DEFAULT_CATEGORY_LABELS }
+    activeColorLabelMap = baseScheme() === 'form' ? { ...DEFAULT_CATEGORY_LABELS } : {}
   }
   invalidateTileCaches('color-scheme')
   postColorMapUpdate()
 }
 
-async function ensureInit(city?: string): Promise<void> {
+async function ensureInit(): Promise<void> {
   if (ready) return
   if (!initPromise) {
-    initPromise = doInit(city).catch((e) => {
+    initPromise = doInit().catch((e) => {
       initError = (e as Error).message
       ready = false
       throw e
@@ -1178,19 +1188,18 @@ async function ensurePreparedFeatureTableForZoom(z: number, baseQuery: string): 
   const src = tileRowSource(baseQuery, { join: '' })
 
   const request = (async () => {
-    // A whole city is one table and is built in rowid slices; a windowed
-    // city's trees_fast is a view, with no rowid, and is built in one go.
-    const rowCount = cityWindow ? 0 : Number((await conn.query(`SELECT count(*) AS n FROM trees_fast`)).get(0)?.n ?? 0)
-    const slices = Math.max(1, Math.ceil(rowCount / FEATURE_TABLE_SLICE_ROWS))
-    const sliceWhere = (i: number) => slices === 1
-      ? ''
-      : `\n  WHERE tf.rowid >= ${i * FEATURE_TABLE_SLICE_ROWS}${i === slices - 1 ? '' : ` AND tf.rowid < ${(i + 1) * FEATURE_TABLE_SLICE_ROWS}`}`
+    // trees_fast is a view over the held cells, with no rowid to slice on:
+    // the table is built a cell table at a time instead, each one a slice.
+    await viewIsCurrent()
+    const tables = world ? [...world.chunks.keys()] : []
+    const slices = Math.max(1, tables.length)
+    const sliceSource = (i: number) => tileRowSource(baseQuery, { join: '' }, tables.length ? tables[i] : WINDOW_SHAPE_TABLE)
     // The colour is not stored: the read joins it (featureTableBuildKey).
     // The id is a column too, so it is held once, and goes back into the
     // struct at read time.
     const sliceSql = (i: number) => `
 ${i === 0 ? `CREATE OR REPLACE TEMP TABLE ${table} AS` : `INSERT INTO ${table}`}
-${src.prelude} rows AS (
+${sliceSource(i).prelude} rows AS (
   SELECT
     ${xExpr} AS xtile,
     ${yExpr} AS ytile,
@@ -1207,7 +1216,7 @@ ${src.prelude} rows AS (
       ),
       'dbh': TRY_CAST(${src.dbh} AS DOUBLE)
     } AS feature
-  FROM ${src.from}${sliceWhere(i)}
+  FROM ${sliceSource(i).from}
 )
 SELECT xtile, ytile, tree_id, species, tree_form, feature
 FROM rows
@@ -1272,10 +1281,10 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
     }
   }
 
-  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
+  const color = colorSql('tf', colorOverrideActive, baseScheme())
   const src = tileRowSource(baseQuery, color)
   // Overview cells group by colour only (see aggCacheSql in cityTables.ts).
-  const aggColor = colorSql('tf', colorOverrideActive, speciesShadeActive, { aggregated: true })
+  const aggColor = colorSql('tf', colorOverrideActive, baseScheme(), { aggregated: true })
   const aggSrc = tileRowSource(baseQuery, aggColor)
   const aggDbh = aggregatedDbhSql(z)
   // The z15 feature table is a whole-city materialisation (one MVT geometry
@@ -1309,14 +1318,6 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
     maxY = visibleRange.maxY
   }
 
-  const dataBounds = getDataTileBounds(z)
-  if (dataBounds) {
-    minX = Math.max(minX, dataBounds.minX)
-    maxX = Math.min(maxX, dataBounds.maxX)
-    minY = Math.max(minY, dataBounds.minY)
-    maxY = Math.min(maxY, dataBounds.maxY)
-  }
-
   if (minX > maxX || minY > maxY) {
     setCachedTile(tileCacheKeyForRevision(rev, z, x, y), new Uint8Array())
     return
@@ -1332,7 +1333,7 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   const request = (async () => {
     // The feature table has no colour: it is resolved here over the range's
     // rows (a few tens of thousands), so a colour change never rebuilds it.
-    const tableColor = colorSql('f', colorOverrideActive, speciesShadeActive)
+    const tableColor = colorSql('f', colorOverrideActive, baseScheme())
     const sql = useFeatureTable ? `
 WITH rows AS (
   SELECT
@@ -1487,7 +1488,8 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
   await waitForCityContext()
 
   const key = tileCacheKey(z, x, y)
-  if (isTileOutsideDataBounds(z, x, y)) return new Uint8Array()
+  if (isTileOutsideData(z, x, y)) return new Uint8Array()
+  await viewIsCurrent()
 
   const cached = getCachedTile(key)
   if (cached) return cached
@@ -1498,9 +1500,9 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
   const baseQuery = effectiveBaseQuery(tileQuerySql)
   const { simplifyGridMeters } = adaptiveLodForTile(z, x, y)
   const bounds = tileBounds3857(z, x, y)
-  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
+  const color = colorSql('tf', colorOverrideActive, baseScheme())
   const src = tileRowSource(baseQuery, color)
-  const aggColor = colorSql('tf', colorOverrideActive, speciesShadeActive, { aggregated: true })
+  const aggColor = colorSql('tf', colorOverrideActive, baseScheme(), { aggregated: true })
   const aggSrc = tileRowSource(baseQuery, aggColor)
   const aggDbh = aggregatedDbhSql(z)
 
@@ -1610,7 +1612,7 @@ function setTileQuery(sql: string | null) {
   // with the same SQL. Bumping the revision then throws away every tile and
   // batch and rebuilds the z15 feature table (20 s for a 1.5M-row city) for
   // rows that did not change.
-  if (normalizeSql(sql ?? '') === normalizeSql(tileQuerySql ?? '')) return
+  if (queryIdentity(sql) === queryIdentity(tileQuerySql)) return
   tileQuerySql = sql
   tileQueryRevision += 1
   invalidateTileCaches('tile-query')
@@ -1619,6 +1621,7 @@ function setTileQuery(sql: string | null) {
 async function setPublishedTreeIdFilterSql(sql: string | null) {
   await ensureInit()
   if (!conn) return
+  await viewIsCurrent()
   const normalized = sql?.trim() || null
   // Every configuration pass republishes the filter, usually unchanged (most
   // often: none, as before). Rebuilding the table then invalidating every
@@ -1659,10 +1662,9 @@ WHERE tree_id IS NOT NULL
 async function setColorOverrideSql(sql: string | null) {
   await ensureInit()
   if (!conn) return
+  await viewIsCurrent()
   const normalized = sql?.trim() || null
-  // City setup already cleared the override and built the aggregate table.
-  // Ordinary filter changes need neither a city-wide rebuild nor another
-  // color push.
+  // No override before and none now: nothing to rebuild, no colours to push.
   if (!normalized && colorMapSignature === 'default') return
 
   if (normalized) {
@@ -1684,16 +1686,13 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
 
     if (Number.isFinite(count) && count > 0) {
       colorOverrideActive = true
-      // The colours the map draws a heatmap layer for. A whole city reads
-      // them off its rows. A window holds only the ground near the camera,
-      // and a colour first met in a cell loaded later would have no layer, so
-      // it lists every override colour and every category default instead.
-      const color = colorSql('tf', true, speciesShadeActive)
-      const distinctResult = await conn.query(cityWindow
-        ? `SELECT DISTINCT display_color FROM ${COLOR_OVERRIDE_TABLE}`
-        : `SELECT DISTINCT ${color.expr} AS display_color FROM trees_fast tf ${color.join}`)
+      // The colours the map draws a layer or a palette entry for. Only the
+      // ground near the camera is held, and a colour first met in a cell
+      // loaded later would have none, so this is every override colour and
+      // every colour the base scheme can draw, not what the held rows show.
+      const distinctResult = await conn.query(`SELECT DISTINCT display_color FROM ${COLOR_OVERRIDE_TABLE}`)
       const colors = distinctResult.toArray().map((r: Record<string, unknown>) => String(r.display_color))
-      activeDistinctColors = cityWindow ? [...new Set([...colors, ...await baseDistinctColors()])] : colors
+      activeDistinctColors = [...new Set([...colors, ...await baseDistinctColors()])]
       colorMapSignature = `color-${hashText(normalizeSql(normalized))}`
     } else {
       // No valid override rows — reset to defaults
@@ -1708,73 +1707,67 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
   postColorMapUpdate()
 }
 
-async function rebuildCityBounds() {
-  if (!conn) return
-  dataTileBoundsByZoom.clear()
-  // A windowed city's extent is the footer's; the table holds only the window.
-  if (cityWindow) {
-    const { bounds } = cityWindow
-    if (!bounds) return
-    for (let z = CELL_ZOOM - 1; z <= 20; z += 1) {
-      const nw = lngLatToTile(bounds.west, bounds.north, z)
-      const se = lngLatToTile(bounds.east, bounds.south, z)
-      dataTileBoundsByZoom.set(z, { minX: nw.x, maxX: se.x, minY: nw.y, maxY: se.y })
-    }
-    return
+/**
+ * The trunk-diameter scheme on or off. An expression over the row, so it
+ * colours a tree paged in later by the same rule (cityTables.ts `dbhColorSql`).
+ */
+async function setDbhColors(enabled: boolean) {
+  await ensureInit()
+  if (dbhColorsActive === enabled) return
+  dbhColorsActive = enabled
+  if (colorOverrideActive && conn) {
+    const result = await conn.query(`SELECT DISTINCT display_color FROM ${COLOR_OVERRIDE_TABLE}`)
+    const overrides = result.toArray().map((r: Record<string, unknown>) => String(r.display_color))
+    activeDistinctColors = [...new Set([...overrides, ...await baseDistinctColors()])]
+  } else {
+    activeDistinctColors = await baseDistinctColors()
+    activeColorLabelMap = baseScheme() === 'form' ? { ...DEFAULT_CATEGORY_LABELS } : {}
   }
-  const zooms = Array.from({ length: 8 }, (_, i) => 13 + i)
-  const boundsResult = await conn.query(cityTileBoundsSql(zooms))
-  const boundsRow = boundsResult.toArray()[0] as Record<string, unknown> | undefined
-  if (boundsRow) {
-    for (let z = 13; z <= 20; z += 1) {
-      const minX = Number(boundsRow[`min_x${z}`])
-      const maxX = Number(boundsRow[`max_x${z}`])
-      const minY = Number(boundsRow[`min_y${z}`])
-      const maxY = Number(boundsRow[`max_y${z}`])
-      if ([minX, maxX, minY, maxY].every((v) => Number.isFinite(v))) {
-        dataTileBoundsByZoom.set(z, { minX, maxX, minY, maxY })
-      }
-    }
-  }
+  invalidateTileCaches('color-scheme')
+  postColorMapUpdate()
 }
 
+/**
+ * Make `city` the bookmark in context: its projection behind
+ * `trees_published`, its landmarks, its default query. It loads no trees and
+ * drops none: what is held follows the camera, so moving the bookmark as the
+ * camera crosses from one inventory into the next costs two small reads and
+ * redraws nothing.
+ */
 async function setCityContext(city: string) {
-  // Pass city to ensureInit so that if init hasn't started yet it loads this
-  // city's data directly (avoids a redundant full-dataset load).
-  await ensureInit(city)
+  await ensureInit()
   if (!conn) return
+  const startedAt = nowMs()
+  // A layout that asks for another cell size (a phone's window turned on or off) starts the world over.
+  if (world && world.cellZoom !== cellZoom()) await resetWorld('the window\'s cell size changed')
 
-  const cityLoadStartAt = nowMs()
-
-  // If trees/trees_fast are loaded for a different city (or not yet loaded),
-  // reload them for the requested city before rebuilding caches.
-  // Reset the gate first so in-flight tile/query requests queue up while we load.
-  if (loadedCity !== city || loadedWithWindowPolicy !== (windowPolicy !== null)) {
-    resetCityReadyGate()
-    await loadCityTrees(city)
-    invalidateTileCaches('city-load')
+  if (contextCity !== city) {
+    try {
+      await conn.query(publishedTreesViewSql(cityBrowserParquetUrl(city)))
+    } catch (e) {
+      // A city whose projection is not out yet: its reads find no rows.
+      console.warn('[duckdb-worker] city projection unavailable', city, e)
+      await conn.query(publishedTreesViewSql(null))
+    }
+    const landmarkUrl = cityLandmarkParquetUrl(city) ?? REMOTE_LANDMARKS_PARQUET_URL
+    try {
+      await conn.query(`
+        CREATE OR REPLACE TABLE landmarks AS
+        SELECT landmark_id, city, name, latitude, longitude
+        FROM read_parquet('${landmarkUrl}')
+        WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+      `)
+    } catch (e) {
+      console.warn('[duckdb-worker] landmarks-load:failed', e)
+    }
+    contextCity = city
   }
 
-  activeCityDefaultQuery = `
-SELECT
-  tree_id,
-  species,
-  latitude,
-  longitude,
-  diameter_at_breast_height
-FROM trees
-WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND city = '${city}'
-`
-  await clearColorOverride()
-  await rebuildCityBounds()
-  invalidateTileCaches('city-context')
   postColorMapUpdate()
-  // All city tables are ready — unblock tile generation and queries.
+  // The world's tables exist: unblock tile generation and queries.
   signalCityReady()
-  const treeCount = cityWindow
-    ? cityWindow.treeCount
-    : Number((await conn.query(`SELECT COUNT(*) AS cnt FROM trees WHERE city = '${city}'`)).toArray()[0]?.cnt ?? 0)
-  ctx.postMessage({ type: 'cityContextReady', loadMs: Math.round(nowMs() - cityLoadStartAt), treeCount })
+  const treeCount = world?.manifest.cities.find((c) => c.code === city)?.trees ?? 0
+  ctx.postMessage({ type: 'cityContextReady', loadMs: Math.round(nowMs() - startedAt), treeCount })
 }
 
 function setViewportZoom(zoom: number) {
@@ -1809,6 +1802,13 @@ async function prefetchVisibleTilesAtZoom(z: number, rangeOverride?: TileBounds)
   // these zooms drive nothing else. The intro holds its camera on this.
   if (z < PREPARED_FEATURE_TABLE_ZOOM) {
     if (!rangeOverride) return 'skipped'
+    // The range's trees have to be held to be aggregated: nothing loaded the city ahead of this.
+    const cells = new Set<number>()
+    for (let x = rangeOverride.minX; x <= rangeOverride.maxX && cells.size <= MAX_PREFETCH_CELLS; x += 1) {
+      for (let y = rangeOverride.minY; y <= rangeOverride.maxY; y += 1) for (const key of windowCellsForTile(z, x, y)) cells.add(key)
+    }
+    if (cells.size > 0 && cells.size <= MAX_PREFETCH_CELLS) await ensureWindowCells([...cells])
+    await viewIsCurrent()
     const sig = `${tileQueryRevision}:${treeFilterSignature()}:${z}:${rangeOverride.minX}-${rangeOverride.maxX}:${rangeOverride.minY}-${rangeOverride.maxY}`
     if (prefetchedVisibleRangeSigByZoom.get(z) === sig) return 'deduped'
     const { simplifyGridMeters } = adaptiveLodForTile(z, rangeOverride.minX, rangeOverride.minY)
@@ -1915,18 +1915,37 @@ function rowObjects(columns: string[], rows: Iterable<Record<string, unknown>>):
 
 /**
  * Run `sql`; with `maxRows`, return at most that many rows and count the
- * rest. A chat query reads the published files, not the phone's window, and
+ * rest. A chat query reads the published files, not the cells held, and
  * one that lists a city's rows would otherwise build the whole result here
  * and again on the main thread: Boston's 1.4M rows took a phone tab from
  * 0.8 to 2.4 GB (docs/MOBILE_LOAD_BUDGET.md). Streamed, only one batch is
  * held at a time, in the query's own order. The stream runs on its own
  * connection: a tile query on the shared one would close it mid-read.
+ *
+ * With `at`, the read is about one tree: the cell under that point is loaded
+ * if it is not held, and TREES_AT_TOKEN in the SQL becomes its table, so the
+ * read plans one table and not the union of every cell held.
  */
-async function runQuery(sql: string, maxRows?: number): Promise<QueryResult> {
+async function runQuery(sql: string, maxRows?: number, at?: { lng: number; lat: number }): Promise<QueryResult> {
   await ensureInit()
   await waitForCityContext()
   if (!conn || !db) throw new Error('DuckDB not initialized')
-  await windowLoadsSettled()
+
+  if (at) {
+    const cz = cellZoom()
+    const cell = cellAt(at.lng, at.lat, cz)
+    return withCells([cellKey(cell.x, cell.y, cz)], async (tables) => {
+      const result = await conn!.query(sql.split(TREES_AT_TOKEN).join(tables[0] ?? WINDOW_SHAPE_TABLE))
+      const columns = result.schema.fields.map((f) => f.name)
+      const rows = rowObjects(columns, result.toArray())
+      return { columns, rows, totalRows: rows.length }
+    })
+  }
+
+  // A read sees the cells held when it runs. It does not wait for loads in
+  // flight: a desktop is fetching the rest of a metro in the background for
+  // a minute after it opens, and the landmarks list is not waiting for that.
+  await viewIsCurrent()
 
   if (maxRows === undefined) {
     const result = await conn.query(sql)
@@ -1953,6 +1972,14 @@ async function runQuery(sql: string, maxRows?: number): Promise<QueryResult> {
   return { columns, rows: rowObjects(columns, kept), totalRows }
 }
 
+/** The longitude and latitude box a sprite query reads: the view's, or a square around the camera. */
+function crownBox(camera: TreeRenderView): { west: number; east: number; south: number; north: number } {
+  if (camera.bounds) return camera.bounds
+  const dLat = CROWN_DISTANCE_MAX / 111_320
+  const dLng = dLat / Math.max(0.01, Math.cos((camera.lat * Math.PI) / 180))
+  return { west: camera.lng - dLng, east: camera.lng + dLng, south: camera.lat - dLat, north: camera.lat + dLat }
+}
+
 async function getMapTrees(camera: TreeRenderView): Promise<TreeCrownColumns> {
   const empty: TreeCrownColumns = {
     id: [], lng: new Float64Array(), lat: new Float64Array(), width: new Float64Array(), measured: new Uint8Array(),
@@ -1962,14 +1989,33 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrownColumns> {
   await waitForCityContext()
   // The intro pauses vector-tile work, but still needs the independent sprite
   // renderer to draw and satisfy its readiness gate. This reads local tables.
-  if (!conn || !loadedCity || (!camera.bounds && camera.altitude >= CROWN_DISTANCE_MAX)) return empty
-  const city = loadedCity
+  const win = world
+  if (!conn || !win || (!camera.bounds && camera.altitude >= CROWN_DISTANCE_MAX)) return empty
   const revision = tileQueryRevision
   const signature = treeFilterSignature()
-  const current = () => cityContextReady && loadedCity === city && tileQueryRevision === revision && treeFilterSignature() === signature
+  const current = () => cityContextReady && world === win && tileQueryRevision === revision && treeFilterSignature() === signature
   if (!current()) return empty
   const baseQuery = effectiveBaseQuery(tileQuerySql)
-  const result = await conn.query(crownQuery(camera, isDefaultBaseQuery(baseQuery) ? null : baseQuery, colorSql('tf', colorOverrideActive, speciesShadeActive)))
+  const filter = isDefaultBaseQuery(baseQuery) ? null : baseQuery
+  const color = colorSql('tf', colorOverrideActive, baseScheme())
+  // The cells under the view: the ones near the camera are loaded for the
+  // read, the rest are read if they happen to be held. A view too wide to
+  // list (a pitched horizon) reads the whole view of what is held.
+  const cz = win.cellZoom
+  const cells = cellsInBox(crownBox(camera), cz, MAX_SCOPE_CELLS)?.filter((key) => win.manifest.blocks.has(blockOfCell(key, cz))) ?? null
+  let result
+  if (cells) {
+    const at = cellAt(camera.lng, camera.lat, cz)
+    const near = cells.filter((key) => cellDistance(cellFromKey(key, cz), at) <= windowPolicy.radiusCells)
+    result = await withCells(near, async () => {
+      const tables = cells.flatMap((key) => win.cellTable.get(key) || [])
+      const scope = scopeSql(tables)
+      return conn!.query(crownQuery(camera, filter, color, { from: scope, trees: filter ? treesSelectSql(scope) : null }))
+    })
+  } else {
+    await viewIsCurrent()
+    result = await conn.query(crownQuery(camera, filter, color))
+  }
   if (!current()) return empty
   // Read column by column: no per-row proxy objects.
   const n = result.numRows
@@ -1995,12 +2041,13 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrownColumns> {
 
 // --- Point chunks (the desktop's TreeDotsLayer) ---
 
+/** What the drawn rows are: the world's build, and the query and filter over it. Not the bookmark. */
 function pointRowsKey(): string {
-  return `${loadedCity}|${tileQueryRevision}|${publishedTreeIdFilterSignature}`
+  return `${world?.manifest.id}|${world?.generation}|${tileQueryRevision}|${publishedTreeIdFilterSignature}`
 }
 
 function pointColorKey(): string {
-  return `${colorMapSignature}|${speciesShadeSignature}|${activeDistinctColors.join(',')}`
+  return `${colorMapSignature}|${colorSchemeSignature()}|${activeDistinctColors.join(',')}`
 }
 
 /** Copy an Arrow column into its own buffer, so it can be transferred. */
@@ -2009,76 +2056,89 @@ function columnArray<T extends Float32Array | Uint8Array | Uint32Array>(table: {
   return new Ctor((column ? column.toArray() : []) as ArrayLike<number>)
 }
 
-/** The current rows' rows source and colour, as every point read uses them. */
-function pointSource() {
-  const color = colorSql('tf', colorOverrideActive, speciesShadeActive)
-  return { src: tileRowSource(effectiveBaseQuery(tileQuerySql), color), color, palette: pointPalette(activeDistinctColors) }
+/** The rows source and colour a point read over `tables` uses. */
+function pointSource(tables: string[]) {
+  const color = colorSql('tf', colorOverrideActive, baseScheme())
+  return { src: tileRowSource(effectiveBaseQuery(tileQuerySql), color, scopeSql(tables)), color, palette: pointPalette(activeDistinctColors) }
 }
 
-/** Which rows and colours a point read would answer with now, without reading: null while no city's rows can be read. */
+/** The cells that hold the rows of some chunks: the chunks themselves on a desktop, their sixteenths on a phone. */
+function cellsOfChunks(keys: number[]): number[] {
+  const cz = cellZoom()
+  const span = 2 ** (cz - CHUNK_ZOOM)
+  if (span === 1) return keys
+  const perAxis = 2 ** CHUNK_ZOOM
+  return keys.flatMap((key) => {
+    const x = Math.floor(key / perAxis) * span, y = (key % perAxis) * span
+    return Array.from({ length: span * span }, (_, i) => cellKey(x + Math.floor(i / span), y + (i % span), cz))
+  })
+}
+
+/** Which rows and colours a point read would answer with now, without reading: null while the world is not up. */
 async function getPointKeys(): Promise<PointKeys | null> {
   await ensureInit()
   await waitForCityContext()
-  if (!conn || !loadedCity || cityWindow) return null
+  if (!conn || !world) return null
   return { rowsKey: pointRowsKey(), colorKey: pointColorKey() }
 }
 
-/** The current rows' non-empty chunks. A windowed city has no point chunks (yet): it draws tiles. */
+/** Every chunk that may hold a tree: the manifest's blocks. No read; the world's directory is a file. */
 async function getPointChunkDirectory(): Promise<PointChunkDirectory | null> {
   await ensureInit()
   await waitForCityContext()
-  if (!conn || !loadedCity || cityWindow) return null
-  const rowsKey = pointRowsKey()
-  const colorKey = pointColorKey()
-  const t0 = nowMs()
-  const table = await conn.query(pointChunkDirectorySql(pointSource().src))
-  if (pointRowsKey() !== rowsKey) return null
-  const numbers = (name: string) => Array.from((table.getChild(name)?.toArray() ?? []) as ArrayLike<number | bigint>, Number)
-  const keys = numbers('chunk')
-  const counts = numbers('n')
-  const maxRowid = numbers('max_rowid').reduce((a, b) => Math.max(a, b), 0)
-  console.info('[Perf] duckdb-worker:point-chunks:directory', { chunks: keys.length, ms: Math.round(nowMs() - t0) })
-  return { rowsKey, colorKey, keys, counts, maxRowid }
+  if (!conn || !world) return null
+  const keys: number[] = [], counts: number[] = []
+  for (const block of world.manifest.blocks.values()) { keys.push(block.key); counts.push(block.rows) }
+  return {
+    rowsKey: pointRowsKey(), colorKey: pointColorKey(), keys, counts,
+    exact: isDefaultBaseQuery(effectiveBaseQuery(tileQuerySql)),
+  }
 }
 
-/** The rows of `keys`, grouped by chunk; null when `rowsKey` is no longer the current rows. */
+/** The rows of `keys`, grouped by chunk, their blocks loaded for the read; null when `rowsKey` is no longer the current rows. */
 async function getPointChunks(rowsKey: string, keys: number[]): Promise<PointChunkBatch | null> {
   await ensureInit()
   await waitForCityContext()
-  if (!conn || !loadedCity || cityWindow || pointRowsKey() !== rowsKey || !keys.length) return null
+  if (!conn || !world || pointRowsKey() !== rowsKey || !keys.length) return null
   const colorKey = pointColorKey()
   const t0 = nowMs()
-  const { src, color, palette } = pointSource()
-  const table = await conn.query(pointChunksSql(src, keys, color.expr, palette))
-  if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
-  const { offsets, columns } = bucketByChunk(columnArray(table, 'chunk', Uint32Array), keys, {
-    x: columnArray(table, 'x', Float32Array),
-    y: columnArray(table, 'y', Float32Array),
-    dbh: columnArray(table, 'dbh', Uint8Array),
-    color: columnArray(table, 'color', Uint8Array),
-    rowid: columnArray(table, 'rowid', Uint32Array),
+  return withCells(cellsOfChunks(keys), async (tables) => {
+    if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
+    const { src, color, palette } = pointSource(tables)
+    const table = await conn!.query(pointChunksSql(src, keys, color.expr, palette))
+    if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
+    const { offsets, columns } = bucketByChunk(columnArray(table, 'chunk', Uint32Array), keys, {
+      x: columnArray(table, 'x', Float32Array),
+      y: columnArray(table, 'y', Float32Array),
+      dbh: columnArray(table, 'dbh', Uint8Array),
+      color: columnArray(table, 'color', Uint8Array),
+      rowid: columnArray(table, 'rowid', Uint32Array),
+    })
+    const grids = gridOrderChunks(offsets, columns.x, columns.y, { dbh: columns.dbh, color: columns.color, rowid: columns.rowid })
+    console.info('[Perf] duckdb-worker:point-chunks', { chunks: keys.length, rows: table.numRows, ms: Math.round(nowMs() - t0) })
+    return { rowsKey, colorKey, palette, keys, offsets, ...columns, grids }
   })
-  const grids = gridOrderChunks(offsets, columns.x, columns.y, { dbh: columns.dbh, color: columns.color, rowid: columns.rowid })
-  console.info('[Perf] duckdb-worker:point-chunks', { chunks: keys.length, rows: table.numRows, ms: Math.round(nowMs() - t0) })
-  return { rowsKey, colorKey, palette, keys, offsets, ...columns, grids }
 }
 
 /** The current colour of the rows of `keys`, grouped by chunk; null when `rowsKey` is no longer current. */
 async function getPointChunkColors(rowsKey: string, keys: number[]): Promise<PointChunkColors | null> {
   await ensureInit()
   await waitForCityContext()
-  if (!conn || !loadedCity || cityWindow || pointRowsKey() !== rowsKey || !keys.length) return null
+  if (!conn || !world || pointRowsKey() !== rowsKey || !keys.length) return null
   const colorKey = pointColorKey()
   const t0 = nowMs()
-  const { src, color, palette } = pointSource()
-  const table = await conn.query(pointChunkColorsSql(src, keys, color.expr, palette))
-  if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
-  const { offsets, columns } = bucketByChunk(columnArray(table, 'chunk', Uint32Array), keys, {
-    color: columnArray(table, 'color', Uint8Array),
-    rowid: columnArray(table, 'rowid', Uint32Array),
+  return withCells(cellsOfChunks(keys), async (tables) => {
+    if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
+    const { src, color, palette } = pointSource(tables)
+    const table = await conn!.query(pointChunkColorsSql(src, keys, color.expr, palette))
+    if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
+    const { offsets, columns } = bucketByChunk(columnArray(table, 'chunk', Uint32Array), keys, {
+      color: columnArray(table, 'color', Uint8Array),
+      rowid: columnArray(table, 'rowid', Uint32Array),
+    })
+    console.info('[Perf] duckdb-worker:point-chunk-colors', { chunks: keys.length, rows: table.numRows, ms: Math.round(nowMs() - t0) })
+    return { rowsKey, colorKey, palette, keys, offsets, ...columns }
   })
-  console.info('[Perf] duckdb-worker:point-chunk-colors', { chunks: keys.length, rows: table.numRows, ms: Math.round(nowMs() - t0) })
-  return { rowsKey, colorKey, palette, keys, offsets, ...columns }
 }
 
 async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Array; transient: boolean }> {
@@ -2092,14 +2152,19 @@ async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Ar
     const cached = getCachedTile(tileCacheKey(z, x, y))
     return { tile: cached ?? new Uint8Array(), transient: cached == null }
   }
-  // A windowed city draws a tile only from loaded cells. The cells are loaded
+  // A tile is drawn only from loaded cells. The cells are loaded
   // here, before the tile queue, so every tile of a view asks at once and the
   // gather in ensureWindowCells makes one scan of them.
-  if (cityWindow && !getCachedTile(tileCacheKey(z, x, y)) && !windowCoversTile(z, x, y)) {
+  if (world && !getCachedTile(tileCacheKey(z, x, y)) && !windowCoversTile(z, x, y)) {
     if (!windowAllowsTile(z, x, y)) return { tile: new Uint8Array(), transient: true }
     await ensureWindowCells(windowCellsForTile(z, x, y))
   }
   return { tile: await queueTileRequest(z, x, y), transient: false }
+}
+
+async function getWorldDirectory(): Promise<WorldDirectory | null> {
+  await ensureInit()
+  return world ? worldDirectory(world.manifest) : null
 }
 
 type WorkerMethodMap = {
@@ -2109,11 +2174,13 @@ type WorkerMethodMap = {
   getPointChunkDirectory: { params: Record<string, never>; result: PointChunkDirectory | null }
   getPointChunks: { params: { rowsKey: string; keys: number[] }; result: PointChunkBatch | null }
   getPointChunkColors: { params: { rowsKey: string; keys: number[] }; result: PointChunkColors | null }
+  getWorldDirectory: { params: Record<string, never>; result: WorldDirectory | null }
   ensureInit: { params: { city?: string; window?: WindowPolicy | null }; result: { ready: boolean; initError: string | null } }
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
   setColorOverrideSql: { params: { sql: string | null }; result: void }
   setSpeciesShadeSql: { params: { sql: string | null }; result: void }
+  setDbhColors: { params: { enabled: boolean }; result: void }
   setCityContext: { params: { city: string; window?: WindowPolicy | null }; result: void }
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
@@ -2126,7 +2193,7 @@ type WorkerMethodMap = {
   prewarmLodCaches: { params: Record<string, never>; result: void }
   setAutoTileFetchEnabled: { params: { enabled: boolean }; result: void }
   invalidateTileCaches: { params: Record<string, never>; result: void }
-  query: { params: { sql: string; maxRows?: number }; result: QueryResult }
+  query: { params: { sql: string; maxRows?: number; at?: { lng: number; lat: number } }; result: QueryResult }
   getTile: { params: { z: number; x: number; y: number }; result: { tileBuffer: ArrayBuffer; transient: boolean } }
 }
 
@@ -2205,10 +2272,14 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
           result ? [result.offsets.buffer, result.color.buffer, result.rowid.buffer] : undefined)
         break
       }
+      case 'getWorldDirectory': {
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: await getWorldDirectory() })
+        break
+      }
       case 'ensureInit': {
-        const { city, window } = msg.params as WorkerMethodMap['ensureInit']['params']
-        if (window !== undefined) windowPolicy = window
-        await ensureInit(city)
+        const { window } = msg.params as WorkerMethodMap['ensureInit']['params']
+        if (window !== undefined) windowPolicy = window ?? DESKTOP_POLICY
+        await ensureInit()
         send({ type: 'response', requestId: msg.requestId, ok: true, result: { ready, initError } })
         break
       }
@@ -2236,9 +2307,15 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }
+      case 'setDbhColors': {
+        const { enabled } = msg.params as WorkerMethodMap['setDbhColors']['params']
+        await setDbhColors(enabled)
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
+        break
+      }
       case 'setCityContext': {
         const { city, window } = msg.params as WorkerMethodMap['setCityContext']['params']
-        if (window !== undefined) windowPolicy = window
+        if (window !== undefined) windowPolicy = window ?? DESKTOP_POLICY
         await setCityContext(city)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
@@ -2259,8 +2336,8 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         // A read about one tree (a deep link's card) before its tile is asked for.
         const { lng, lat } = msg.params as WorkerMethodMap['ensureWindowAt']['params']
         await waitForCityContext()
-        const cell = cellAt(lng, lat)
-        await ensureWindowCells([cellKey(cell.x, cell.y)])
+        const cell = cellAt(lng, lat, cellZoom())
+        await ensureWindowCells([cellKey(cell.x, cell.y, cellZoom())])
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }
@@ -2293,8 +2370,8 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       }
       case 'query': {
-        const { sql, maxRows } = msg.params as WorkerMethodMap['query']['params']
-        const result = await runQuery(sql, maxRows)
+        const { sql, maxRows, at } = msg.params as WorkerMethodMap['query']['params']
+        const result = await runQuery(sql, maxRows, at)
         send({ type: 'response', requestId: msg.requestId, ok: true, result })
         break
       }

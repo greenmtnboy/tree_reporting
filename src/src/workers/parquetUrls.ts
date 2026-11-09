@@ -7,10 +7,50 @@ export const REMOTE_TREES_BASE_URL: string =
 export const TREE_DATA_VERSION = 2
 export const REMOTE_TREES_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/full_tree_info_v${TREE_DATA_VERSION}.parquet`
 export const REMOTE_SPECIES_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/tree_enrichment_v${TREE_DATA_VERSION}.parquet`
-export const REMOTE_PREDICTIONS_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/tree_predictions_v${TREE_DATA_VERSION}.parquet`
 export const REMOTE_ECOREGION_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/ecoregion_info_v${TREE_DATA_VERSION}.parquet`
 /** The ecoregion dimension as the worker reads it: id, biome, realm (data/raw/ecoregion_browser.preql). */
 export const REMOTE_ECOREGION_BROWSER_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/ecoregion_browser_v${TREE_DATA_VERSION}.parquet`
+
+/**
+ * The world's trees as geo blocks (worldBlocks.ts, data/world/publish_blocks.py):
+ * the manifest, and the directory its content-addressed block and vocabulary
+ * files sit in. This is what the map draws from; the per-city files below
+ * serve the reads that are about one city (a species count, a deep link).
+ */
+export const WORLD_BASE_URL: string = import.meta.env?.VITE_WORLD_BASE_URL || `${REMOTE_TREES_BASE_URL}/world/v1`
+export const WORLD_MANIFEST_URL = `${WORLD_BASE_URL}/manifest.json`
+
+/** A file under the world's base URL, by the name the manifest gives it. */
+export function worldFileUrl(name: string): string {
+  return `${WORLD_BASE_URL}/${name}`
+}
+
+/**
+ * The manifest, never from the HTTP cache: it is the one mutable object, and
+ * a stale copy can name blocks that have since been deleted.
+ */
+export async function fetchWorldManifest(): Promise<unknown> {
+  const response = await fetch(WORLD_MANIFEST_URL, { cache: 'no-cache' })
+  if (!response.ok) throw new Error(`World manifest: HTTP ${response.status}`)
+  return response.json()
+}
+
+/**
+ * A block or vocabulary file, whole. They are immutable, so the browser's
+ * cache answers a revisit, and fetched here rather than by DuckDB so a view's
+ * blocks download side by side instead of one range request at a time.
+ */
+export async function fetchWorldFile(name: string): Promise<Uint8Array> {
+  const response = await fetch(worldFileUrl(name))
+  if (!response.ok) throw new WorldFileError(name, response.status)
+  return new Uint8Array(await response.arrayBuffer())
+}
+
+export class WorldFileError extends Error {
+  constructor(readonly file: string, readonly status: number) {
+    super(`World file ${file}: HTTP ${status}`)
+  }
+}
 
 /** Per-city optimised parquet (e.g. ussfo_tree_info.parquet). Returns null if city code is unknown. */
 export function cityTreeParquetUrl(city: string): string | null {
@@ -20,37 +60,16 @@ export function cityTreeParquetUrl(city: string): string | null {
 }
 
 /**
- * The city's browser projection (data/raw/tree_browser_city.preql): the
- * rows and columns the worker keeps, display name, growth form and crown
- * prediction resolved by the pipeline. Returns null if city code is unknown.
+ * The city's browser projection (data/raw/tree_browser_city.preql): every
+ * tree of one city in the rows and columns the worker keeps. The map's trees
+ * come from the world's blocks, which are cut from these; this file is what
+ * a bookmark's city-wide reads use (`trees_published`). Returns null if city
+ * code is unknown.
  */
 export function cityBrowserParquetUrl(city: string): string | null {
   const lower = city.toLowerCase()
   if (!lower.match(/^[a-z]{2}[a-z]{3}$/)) return null
   return `${REMOTE_TREES_BASE_URL}/${lower}_tree_browser_v${TREE_DATA_VERSION}.parquet`
-}
-
-/**
- * The projection's vocabularies (data/raw/tree_browser_city.preql,
- * `city_tree_vocab`): one row per distinct string tuple with its tree count,
- * a few thousand rows. Returns null if city code is unknown.
- */
-export function cityVocabParquetUrl(city: string): string | null {
-  const lower = city.toLowerCase()
-  if (!lower.match(/^[a-z]{2}[a-z]{3}$/)) return null
-  return `${REMOTE_TREES_BASE_URL}/${lower}_tree_vocab_v${TREE_DATA_VERSION}.parquet`
-}
-
-/**
- * Per-city crown-predictions slice. The job that wrote these is gone (the
- * browser projection carries the prediction); the files it left stay
- * published and feed the fallback load of a city whose projection is not
- * out yet. Returns null if city code is unknown.
- */
-export function cityPredictionsParquetUrl(city: string): string | null {
-  const lower = city.toLowerCase()
-  if (!lower.match(/^[a-z]{2}[a-z]{3}$/)) return null
-  return `${REMOTE_TREES_BASE_URL}/${lower}_tree_predictions_v${TREE_DATA_VERSION}.parquet`
 }
 
 // Multi-city landmark data

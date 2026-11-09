@@ -162,6 +162,19 @@ export function useMapLifecycle() {
     return true
   }
 
+  /**
+   * The camera wandered into another bookmark: it becomes the requested,
+   * committed and rendered city at once, with no phase change. Its trees are
+   * already on screen (they follow the camera, not the bookmark), so there is
+   * nothing to load, no overlay and no intro.
+   */
+  function adoptCity(city: string): MapTransitionSnapshot {
+    const snapshot = requestCity(city)
+    contextCity.value = city
+    renderedCity.value = city
+    return snapshot
+  }
+
   /** Force transition to ready from any state (error recovery). */
   function forceReady(snapshot?: MapTransitionSnapshot | null) {
     if (snapshot && matches(snapshot)) {
@@ -195,6 +208,7 @@ export function useMapLifecycle() {
     introFinished,
     startCitySwitch,
     citySwitchReady,
+    adoptCity,
     forceReady,
   }
 }

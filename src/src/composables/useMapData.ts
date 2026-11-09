@@ -83,6 +83,28 @@ WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND city = '${city}'
 
 export const DEFAULT_MAP_QUERY = buildDefaultQueryForCity('USSFO')
 
+/**
+ * What the map draws when nothing narrows it: every tree, whichever
+ * inventory published it. A bookmark's default (`buildDefaultQueryForCity`)
+ * is the question the chat and the dashboards scope to a city; the map shows
+ * the ground under the camera, and the next city's trees are on it too.
+ */
+export const WORLD_MAP_QUERY = `
+SELECT
+  tree_id,
+  species,
+  latitude,
+  longitude,
+  diameter_at_breast_height
+FROM trees
+WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+`
+
+/** A city's default query as the map draws it: the world's. Any other query is drawn as written. */
+export function mapQueryFor(query: string, city: CityCode): string {
+  return query.trim() === buildDefaultQueryForCity(city).trim() ? WORLD_MAP_QUERY : query
+}
+
 const selectedCity = ref<CityCode>('USSFO')
 const currentMapQuery = ref<string>(DEFAULT_MAP_QUERY)
 const publishedTreeIdFilterSql = ref<string | null>(null)

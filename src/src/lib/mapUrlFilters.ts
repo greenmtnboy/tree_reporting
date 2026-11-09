@@ -1,4 +1,5 @@
 import type { LocationQuery } from 'vue-router'
+import { DBH_COLORS } from '../workers/cityTables'
 
 // Public hash-query contract. Only these fields become SQL identifiers.
 export const MAP_FILTER_FIELDS = ['species', 'genus'] as const
@@ -43,20 +44,14 @@ export function applyMapUrlFilters(query: string, filters: MapUrlFilters): strin
 WHERE map_scope.tree_id IN (SELECT tree_id FROM trees WHERE ${predicates.join(' AND ')})`
 }
 
-// Published diameter_at_breast_height is in inches. Read it before the renderer
-// substitutes a default size, so missing measurements remain visibly unknown.
+// The trunk-diameter colours are a rule the worker applies to every row
+// (cityTables.ts `dbhColorSql`); this is their legend. Published
+// diameter_at_breast_height is in inches, and a missing measurement stays
+// visibly unknown rather than taking a default size's colour.
 export const DBH_LEGEND = {
-  '#c7e9b4': 'Under 6 in (15 cm)',
-  '#7fcdbb': '6–<12 in (15–<30 cm)',
-  '#41b6c4': '12–<24 in (30–<61 cm)',
-  '#225ea8': '24 in or more (61 cm)',
-  '#9a9a9a': 'Unknown trunk diameter',
+  [DBH_COLORS.under6]: 'Under 6 in (15 cm)',
+  [DBH_COLORS.under12]: '6–<12 in (15–<30 cm)',
+  [DBH_COLORS.under24]: '12–<24 in (30–<61 cm)',
+  [DBH_COLORS.over24]: '24 in or more (61 cm)',
+  [DBH_COLORS.unknown]: 'Unknown trunk diameter',
 }
-
-export const DBH_COLOR_SQL = `SELECT tree_id, CASE
-  WHEN diameter_at_breast_height IS NULL OR NOT isfinite(diameter_at_breast_height)
-    OR diameter_at_breast_height <= 0 THEN '#9a9a9a'
-  WHEN diameter_at_breast_height < 6 THEN '#c7e9b4'
-  WHEN diameter_at_breast_height < 12 THEN '#7fcdbb'
-  WHEN diameter_at_breast_height < 24 THEN '#41b6c4'
-  ELSE '#225ea8' END AS override_color FROM trees`

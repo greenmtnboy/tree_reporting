@@ -1,6 +1,8 @@
 import { describe, test, expect } from 'vitest'
 import { DuckDBInstance } from '@duckdb/node-api'
-import { REMOTE_TREES_PARQUET_URL, REMOTE_SPECIES_PARQUET_URL, cityTreeParquetUrl } from './parquetUrls'
+import { REMOTE_TREES_PARQUET_URL, REMOTE_SPECIES_PARQUET_URL, WORLD_MANIFEST_URL, cityTreeParquetUrl, worldFileUrl } from './parquetUrls'
+import { VOCAB_KINDS, WORLD_BLOCK_COLUMNS } from './cityTables'
+import { blockAt, blockFile, blockKey, parseWorldManifest } from './worldBlocks'
 import { formatDataSource } from '../data/dataSources'
 import { CITY_CONFIG } from '../composables/useMapData'
 import { SPECIES_SENTINELS } from '../data/species'
@@ -202,6 +204,39 @@ describe('parquet schema', () => {
       const countResult = await conn.runAndReadAll(`SELECT COUNT(*) AS n FROM enrichment`)
       const n = Number(countResult.getRowObjects()[0].n)
       expect(n, 'enrichment table should have rows').toBeGreaterThan(0)
+    })
+  }, 60_000)
+
+  // What the map draws from (docs/SEAMLESS_WORLD.md). The manifest is the
+  // commit point of the block job, so if it parses and one block and the
+  // vocabulary read as the worker reads them, the published world is usable.
+  // Only footers and one small block are read.
+  test('the world manifest names blocks and a vocabulary the worker can read', async () => {
+    const response = await fetch(WORLD_MANIFEST_URL)
+    expect(response.ok, `world manifest: HTTP ${response.status}`).toBe(true)
+    const manifest = parseWorldManifest(await response.json())
+    expect(manifest.blocks.size).toBeGreaterThan(100)
+    expect([...manifest.blocks.values()].reduce((n, b) => n + b.rows, 0)).toBe(manifest.trees)
+    // Every bookmark the manifest lists is a city the app knows, and holds trees.
+    for (const city of manifest.cities) {
+      expect(CITY_CONFIG[city.code], `${city.code} is in the manifest but not in cityConfig.json`).toBeTruthy()
+      expect(city.trees).toBeGreaterThan(0)
+    }
+    // Burlington's centre is a block of the world: the litmus city for a map opened elsewhere.
+    const [lng, lat] = CITY_CONFIG.USBTV.center
+    const at = blockAt(lng, lat)
+    const block = manifest.blocks.get(blockKey(at.x, at.y))
+    expect(block, 'no block under Burlington').toBeTruthy()
+    await withDuckDB(async (conn) => {
+      const url = worldFileUrl(blockFile(block!))
+      const columns = (await conn.runAndReadAll(`SELECT column_name FROM (DESCRIBE SELECT * FROM read_parquet('${url}'))`))
+        .getRowObjects().map((r) => String(r.column_name))
+      expect(columns).toEqual([...WORLD_BLOCK_COLUMNS])
+      const rows = (await conn.runAndReadAll(`SELECT count(*) AS n, count(DISTINCT tree_id) AS ids FROM read_parquet('${url}')`)).getRowObjects()[0]
+      expect([Number(rows.n), Number(rows.ids)]).toEqual([block!.rows, block!.rows])
+      const kinds = (await conn.runAndReadAll(`SELECT DISTINCT kind FROM read_parquet('${worldFileUrl(manifest.vocab)}') ORDER BY 1`))
+        .getRowObjects().map((r) => String(r.kind))
+      expect(kinds).toEqual(Object.values(VOCAB_KINDS).sort())
     })
   }, 60_000)
 })

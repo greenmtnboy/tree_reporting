@@ -1,5 +1,12 @@
 # Map Loading State — Current Flow & Simplification
 
+> Since the seamless world (`docs/SEAMLESS_WORLD.md`) a "city load" loads no
+> trees: `setCityContext` puts a bookmark in context and the trees follow
+> the camera. The phases below still describe a page opening and a city
+> picked from the selector. A bookmark that changes because the camera
+> wandered into another city is `adoptCity`: requested, committed and
+> rendered at once, with no phase change.
+
 ## Problem
 
 When a user switches cities during the initial intro animation, the map

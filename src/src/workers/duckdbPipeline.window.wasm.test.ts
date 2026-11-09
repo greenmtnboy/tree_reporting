@@ -1,18 +1,20 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { rmSync } from 'node:fs'
-import { FIXTURE_DIR, writeCityProjection } from './wasm/fixtures'
+import { FIXTURE_DIR, fetchedWorldFiles, writeCityProjection, writeWorld } from './wasm/fixtures'
+import { executedSql } from './wasm/nodeDuckDB'
 import { startWorker, type WorkerHarness } from './wasm/workerHarness'
 import { CELL_ZOOM, cellAt, cellsBounds, cellKey, type WindowPolicy } from './cityWindow'
+import { blockAt, blockKey } from './worldBlocks'
 
 vi.mock('@duckdb/duckdb-wasm', () => import('./wasm/nodeDuckDB'))
 vi.mock('../duckdbAssetUrls', () => ({ DUCKDB_ASSET_URLS: { mvp: { mainModule: '', mainWorker: '' }, eh: { mainModule: '', mainWorker: '' } } }))
 vi.mock('./parquetUrls', async () => (await import('./wasm/fixtures')).fixtureParquetUrls)
 
 /**
- * The phone's window (cityWindow.ts) on the real worker and DuckDB-WASM: a
- * city held as the cells its tiles ask for, never more than the budget.
- * The city is 300k synthetic trees over central Boston, about 13 by 10
- * cells, so one cell holds a couple of thousand.
+ * The phone's window (cityWindow.ts) on the real worker and DuckDB-WASM: the
+ * world held as the cells its tiles ask for, cut out of their block files,
+ * never more than the budget. The world is 300k synthetic trees over central
+ * Boston, about 13 by 10 cells, so one cell holds a couple of thousand.
  */
 const CITY = 'USBOS'
 const ROWS = 300_000
@@ -46,6 +48,7 @@ describe('a phone holds the city in windows', () => {
 
   beforeAll(async () => {
     await writeCityProjection({ city: CITY, rows: ROWS, bbox: BBOX })
+    await writeWorld([CITY])
     worker = await startWorker()
     await worker.call('ensureInit', { city: CITY, window: POLICY })
     await worker.call('setCityContext', { city: CITY, window: POLICY })
@@ -82,6 +85,12 @@ describe('a phone holds the city in windows', () => {
     expect(inCell).toBeGreaterThan(1000)
     expect(await count('SELECT count(*) AS n FROM trees_fast')).toBe(inCell)
     expect(loads()).toHaveLength(1)
+    // The cell came out of the one block file that holds it, read in place by its row groups:
+    // a phone never downloads a block whole.
+    const block = blockAt(CENTER[0], CENTER[1])
+    const read = executedSql.filter((sql) => /CREATE TABLE trees_window_staging/.test(sql)).flatMap((sql) => [...sql.matchAll(/blocks\/(\d+)-/g)].map((m) => Number(m[1])))
+    expect(read).toEqual([blockKey(block.x, block.y)])
+    expect(fetchedWorldFiles.filter((name) => name.startsWith('blocks/'))).toEqual([])
   })
 
   it('gathers the tiles of one view into a single load', async () => {
@@ -164,8 +173,18 @@ describe('a phone holds the city in windows', () => {
     await worker.call('setColorOverrideSql', { sql: null })
   })
 
-  it('holds the whole city again when the window is turned off', async () => {
+  it('starts over with whole blocks when the window is turned off', async () => {
     await worker.call('setCityContext', { city: CITY, window: null })
-    expect(await count('SELECT count(*) AS n FROM trees_fast')).toBe(ROWS)
+    // A desktop's hold: nothing until asked, then a block at a time.
+    expect(await count('SELECT count(*) AS n FROM trees_fast')).toBe(0)
+    await lookAt(CENTER, 16.5)
+    const t = lngLatToTile(CENTER[0], CENTER[1], 16)
+    expect((await worker.call<TileResult>('getTile', { z: 16, ...t })).tileBuffer.byteLength).toBeGreaterThan(0)
+    const block = blockAt(CENTER[0], CENTER[1])
+    expect(await count(`SELECT count(*) AS n FROM trees_fast
+      WHERE (xtile_z20 >> 8) <> ${block.x} OR (ytile_z20 >> 8) <> ${block.y}`)).toBe(0)
+    const cell = cellAt(CENTER[0], CENTER[1])
+    expect(await count(`SELECT count(*) AS n FROM trees_fast
+      WHERE (xtile_z20 >> ${20 - CELL_ZOOM}) <> ${cell.x} OR (ytile_z20 >> ${20 - CELL_ZOOM}) <> ${cell.y}`)).toBeGreaterThan(0)
   })
 })

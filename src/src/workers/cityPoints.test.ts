@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { DuckDBInstance } from '@duckdb/node-api'
 import {
   CHUNK_SIZE_M, CHUNK_ZOOM, MAX_POINT_PALETTE, POINT_FALLBACK_COLOR, bucketByChunk, gridOrderChunks, chunkFromKey, chunkKey, chunkOrigin,
-  chunksInBox, paletteIndexSql, pointChunkColorsSql, pointChunkDirectorySql, pointChunksSql, pointPalette,
+  chunksInBox, paletteIndexSql, pointChunkColorsSql, pointChunksSql, pointPalette,
 } from './cityPoints'
 import { CELL_ZOOM } from './cityWindow'
 import { WEB_MERCATOR_MAX, WEB_MERCATOR_WORLD } from './cityTables'
@@ -86,7 +86,7 @@ describe('gridOrderChunks', () => {
 })
 
 describe('point chunk SQL', () => {
-  it('reads the directory, the chunks’ points from their origins, and their colours', async () => {
+  it('reads the chunks’ points from their origins, and their colours, by their place in the block file', async () => {
     const db = await DuckDBInstance.create(':memory:')
     const conn = await db.connect()
     // Two trees in one Boston chunk, one in the chunk east of it, one in Sydney.
@@ -98,14 +98,11 @@ describe('point chunk SQL', () => {
       const [x20, y20] = tile(lng, lat, 20)
       return `('${id}', ${toX(lng)}, ${toY(lat)}, ${x20}, ${y20}, ${dbh ?? 'NULL'}, '${c}')`
     })
-    await conn.run(`CREATE TABLE trees_fast (tree_id VARCHAR, x_3857 DOUBLE, y_3857 DOUBLE, xtile_z20 INTEGER, ytile_z20 INTEGER, dbh DOUBLE, c VARCHAR)`)
-    await conn.run(`INSERT INTO trees_fast VALUES ${values.join(', ')}`)
+    await conn.run(`CREATE TABLE trees_fast (tree_id VARCHAR, x_3857 DOUBLE, y_3857 DOUBLE, xtile_z20 INTEGER, ytile_z20 INTEGER, dbh DOUBLE, c VARCHAR, rn UINTEGER)`)
+    await conn.run(`INSERT INTO trees_fast SELECT v.*, row_number() OVER () - 1 FROM (VALUES ${values.join(', ')}) v`)
     const src = { prelude: 'WITH', from: 'trees_fast tf', where: '', dbh: 'COALESCE(tf.dbh, 3)' }
     const keyOf = (lng: number, lat: number) => { const [x, y] = tile(lng, lat, CHUNK_ZOOM); return chunkKey(x, y) }
     const boston = keyOf(-71.06, 42.36), east = keyOf(-71.06 + 360 / 4096, 42.36), sydney = keyOf(151.2, -33.87)
-
-    const dir = (await conn.runAndReadAll(pointChunkDirectorySql(src))).getRowObjectsJS()
-    expect(Object.fromEntries(dir.map((r) => [Number(r.chunk), Number(r.n)]))).toEqual({ [boston]: 2, [east]: 1, [sydney]: 1 })
 
     const palette = pointPalette(['#111111', '#222222'])
     const rows = (await conn.runAndReadAll(pointChunksSql(src, [boston, east], 'tf.c', palette))).getRowObjectsJS()
