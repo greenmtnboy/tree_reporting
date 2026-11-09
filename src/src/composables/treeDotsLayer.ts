@@ -4,11 +4,12 @@ import {
   type ChunkGrid, type PointChunkBatch, type PointChunkColors, type PointChunkDirectory, type PointKeys,
 } from '../workers/cityPoints'
 import {
-  CIRCLE_MAX_ZOOM, CIRCLE_MIN_ZOOM, HEAT_MAX_ZOOM, HEAT_MIN_ZOOM,
-  circleOpacity, visibleRanges, circleRadius, circleRadiusRange,
+  CIRCLE_MAX_ZOOM, CIRCLE_PICK_MIN_ZOOM, HEAT_ENABLED, HEAT_MAX_ZOOM, HEAT_MIN_ZOOM,
+  CIRCLE_FAR_OPACITY, circleOpacity, visibleRanges, circleRadius, circleRadiusRange,
   heatIntensity, heatOpacity, heatRadius, hexRgb, levelForKernel, lngLatFrom3857, lngLatTo3857, metresPerPixel,
   pointsNear, relativeMatrix,
 } from '../lib/treeDots'
+import { REACH_FADE } from '../lib/treeCrowns'
 import TreeDotsIndexWorker from '../workers/treeDotsIndex.worker?worker'
 import type { DotsIndexRequest, DotsIndexResult } from '../workers/treeDotsIndex.worker'
 
@@ -69,7 +70,17 @@ const MAX_RESIDENT_POINTS = 6_000_000
  * Trees one background read may bring in. DuckDB answers one statement at
  * a time, so this bounds how long a pan's own read can wait behind one.
  */
-const PREFETCH_BATCH_POINTS = 400_000
+// Small enough that a sprite query arriving mid-batch is not held long: every
+// query in the worker shares one DuckDB connection, which runs them in turn.
+const PREFETCH_BATCH_POINTS = 100_000
+/** How long a deferred prefetch waits before asking again. */
+const PREFETCH_RETRY_MS = 300
+/**
+ * The longest the prefetch defers in a row. Sprite queries are due almost
+ * continuously while the camera moves; deferring every time starved the
+ * prefetch, and chunks entering the view then had no trees of either kind.
+ */
+const PREFETCH_MAX_DEFER_MS = 1000
 /** The view's box is padded by this share of its size for what counts as in view. */
 const VIEW_PAD = 0.25
 
@@ -176,10 +187,30 @@ uniform vec2 u_radius;
 uniform float u_dpr;
 uniform float u_camdist;
 uniform sampler2D u_palette;
+uniform float u_opacity;
+// Metres the sprites reach; < 0 below the sprite zooms.
+uniform float u_reach;
+// The sprite batch's box in chunk coordinates (x0, y0, x1, y1); empty (x0 > x1) when none is installed.
+uniform vec4 u_box;
+uniform float u_far_opacity;
+// Camera height in metres, and real metres per EPSG:3857 metre at the camera.
+uniform float u_altitude;
+uniform float u_scale;
+// The sprite batch's query camera, on the ground in chunk coordinates (off the centre when pitched).
+uniform vec2 u_eye;
 out vec3 v_color;
 out float v_radius;
+out float v_opacity;
 void main() {
   gl_Position = u_matrix * vec4(a_pos - u_center, 0.0, 1.0);
+  v_opacity = u_opacity;
+  if (u_reach >= 0.0) {
+    // Fill in past the sprites: a dot shows as much as the sprite over it has faded.
+    float dist = length(vec3((a_pos - u_eye) * u_scale, u_altitude));
+    float inBox = step(u_box.x, a_pos.x) * step(a_pos.x, u_box.z) * step(u_box.y, a_pos.y) * step(a_pos.y, u_box.w);
+    float sprite = inBox * (1.0 - smoothstep(u_reach * ${REACH_FADE}, u_reach, dist));
+    v_opacity = max(u_opacity, u_far_opacity * (1.0 - sprite));
+  }
   float s = clamp(sqrt(a_attr.y) / ${Math.sqrt(42).toFixed(6)}, 0.0, 1.0);
   float radius = mix(u_radius.x, u_radius.y, s) * u_dpr * (gl_Position.w > 0.0 ? u_camdist / gl_Position.w : 0.0);
   v_radius = radius;
@@ -191,11 +222,11 @@ const CIRCLE_FS = `#version 300 es
 precision highp float;
 in vec3 v_color;
 in float v_radius;
-uniform float u_opacity;
+in float v_opacity;
 out vec4 o;
 void main() {
   float d = length(gl_PointCoord - 0.5) * (2.0 * v_radius + 2.0);
-  float a = clamp(v_radius - d + 0.5, 0.0, 1.0) * u_opacity;
+  float a = clamp(v_radius - d + 0.5, 0.0, 1.0) * v_opacity;
   if (a <= 0.0) discard;
   o = vec4(v_color * a, a);
 }`
@@ -288,13 +319,26 @@ export class TreeDotsLayer implements CustomLayerInterface {
   private wake = false
   private waiters: (() => void)[] = []
   private moveTimer?: ReturnType<typeof setTimeout>
+  private prefetchTimer?: ReturnType<typeof setTimeout>
+  private deferredSince?: number
   private indexer?: Worker
   private indexSeq = 0
 
   /** Last frame's camera, for picking exactly what was drawn. */
   private frame?: { matrix: Float64Array; width: number; height: number; camdist: number; radius: [number, number] }
 
-  constructor(private source: TreeDotsSource, private onLoaded?: (count: number) => void) {}
+  constructor(
+    private source: TreeDotsSource,
+    private onLoaded?: (count: number) => void,
+    /** Where the sprites stand in for the dots (see TreeCrownLayer.spriteCoverage); elsewhere the dots stay drawn at any zoom. */
+    private spriteCoverage: () => {
+      box: { west: number; south: number; east: number; north: number } | null
+      reach: number
+      eye: { lng: number; lat: number; altitude: number } | null
+    } | null = () => null,
+    /** True while a sprite query is due or running; the background prefetch waits behind it. */
+    private spritesBusy: () => boolean = () => false,
+  ) {}
 
   /** WebGL2 with a renderable half-float target: the heat accumulates in one. */
   static supported(map: MapLibreMap): boolean {
@@ -326,6 +370,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
     this.map?.off('moveend', this.schedule)
     this.map?.off('move', this.onMove)
     clearTimeout(this.moveTimer)
+    clearTimeout(this.prefetchTimer)
     this.indexer?.terminate()
     this.indexer = undefined
     const g = gl as GL2
@@ -383,7 +428,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
     this.circleProgram = compile(gl, CIRCLE_VS, CIRCLE_FS, 'Circle')
     this.heatU = uniforms(gl, this.heatProgram, ['u_matrix', 'u_center', 'u_size', 'u_camdist', 'u_intensity'])
     this.resolveU = uniforms(gl, this.resolveProgram, ['u_color', 'u_density', 'u_opacity', 'u_alpha', 'u_saturation'])
-    this.circleU = uniforms(gl, this.circleProgram, ['u_matrix', 'u_center', 'u_radius', 'u_dpr', 'u_camdist', 'u_palette', 'u_opacity'])
+    this.circleU = uniforms(gl, this.circleProgram, ['u_matrix', 'u_center', 'u_radius', 'u_dpr', 'u_camdist', 'u_palette', 'u_opacity', 'u_reach', 'u_far_opacity', 'u_altitude', 'u_scale', 'u_eye', 'u_box'])
     this.resolveVao = gl.createVertexArray()!
   }
 
@@ -536,6 +581,14 @@ export class TreeDotsLayer implements CustomLayerInterface {
     if (offColor.length) return this.recolor((offInView.length ? offInView : offColor).map((c) => c.key))
     // The view is current: what a sync waits on.
     this.settle()
+    // The rest of the city is background work: it yields to a moving camera and to sprite queries.
+    const now = performance.now()
+    if ((this.map.isMoving() || this.spritesBusy()) && now - (this.deferredSince ??= now) < PREFETCH_MAX_DEFER_MS) {
+      clearTimeout(this.prefetchTimer)
+      this.prefetchTimer = setTimeout(this.schedule, PREFETCH_RETRY_MS)
+      return false
+    }
+    this.deferredSince = undefined
     const resident = this.residentCount
     const rest: number[] = []
     let batch = 0
@@ -784,7 +837,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
     if (!this.map || !this.chunks.size || !this.heatProgram) return
     for (const chunk of this.chunks.values()) this.upload(g, chunk)
     const zoom = this.map.getZoom()
-    if (zoom < HEAT_MIN_ZOOM || zoom >= HEAT_MAX_ZOOM || heatOpacity(zoom) <= 0) return
+    if (!HEAT_ENABLED || zoom < HEAT_MIN_ZOOM || zoom >= HEAT_MAX_ZOOM || heatOpacity(zoom) <= 0) return
     const cam = this.camera()
     const w = Math.max(1, Math.ceil(g.drawingBufferWidth / HEAT_SCALE))
     const h = Math.max(1, Math.ceil(g.drawingBufferHeight / HEAT_SCALE))
@@ -885,12 +938,23 @@ export class TreeDotsLayer implements CustomLayerInterface {
     }
 
     const opacity = circleOpacity(zoom)
-    if (opacity > 0) {
+    const coverage = this.spriteCoverage()
+    if (opacity > 0 || coverage) {
       g.useProgram(this.circleProgram)
       g.uniform2f(this.circleU.u_radius, radius[0], radius[1])
       g.uniform1f(this.circleU.u_dpr, cam.dpr)
       g.uniform1f(this.circleU.u_camdist, cam.camdist)
       g.uniform1f(this.circleU.u_opacity, opacity)
+      g.uniform1f(this.circleU.u_reach, coverage === null ? -1 : Number.isFinite(coverage.reach) ? coverage.reach : 1e9)
+      const box = coverage?.box
+      const [bx0, by0] = box ? lngLatTo3857(box.west, box.south) : [1, 1]
+      const [bx1, by1] = box ? lngLatTo3857(box.east, box.north) : [0, 0]
+      g.uniform1f(this.circleU.u_far_opacity, CIRCLE_FAR_OPACITY)
+      // Reach is a disc around where the batch was queried, not around the camera now.
+      const eye = coverage?.eye ?? { lng: 0, lat: 0, altitude: 0 }
+      const [eyeX, eyeY] = lngLatTo3857(eye.lng, eye.lat)
+      g.uniform1f(this.circleU.u_altitude, eye.altitude)
+      g.uniform1f(this.circleU.u_scale, Math.cos(this.map.getCenter().lat * Math.PI / 180))
       g.activeTexture(g.TEXTURE0)
       g.uniform1i(this.circleU.u_palette, 0)
       const view = this.viewBox3857(0, radius[1] + 2)
@@ -899,6 +963,8 @@ export class TreeDotsLayer implements CustomLayerInterface {
         const local = this.chunkCamera(matrix as ArrayLike<number>, chunk, cam.camX, cam.camY)
         g.uniformMatrix4fv(this.circleU.u_matrix, false, local.matrix)
         g.uniform2f(this.circleU.u_center, local.cx, local.cy)
+        g.uniform2f(this.circleU.u_eye, eyeX - chunk.originX, eyeY - chunk.originY)
+        g.uniform4f(this.circleU.u_box, bx0 - chunk.originX, by0 - chunk.originY, bx1 - chunk.originX, by1 - chunk.originY)
         g.bindTexture(g.TEXTURE_2D, this.paletteTexture(g, chunk.palette))
         g.bindVertexArray(chunk.gpu.pointVao)
         this.drawRanges(g, visibleRanges(chunk.grid,
@@ -914,7 +980,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
   /** True while the circles are drawn, the zooms a tap selects a tree at. */
   pickable(): boolean {
     const zoom = this.map?.getZoom() ?? 0
-    return this.chunks.size > 0 && zoom >= CIRCLE_MIN_ZOOM && zoom < CIRCLE_MAX_ZOOM
+    return this.chunks.size > 0 && zoom >= CIRCLE_PICK_MIN_ZOOM && zoom < CIRCLE_MAX_ZOOM
   }
 
   /** A chunk's point `i` in CSS pixels as last frame drew it, with its depth (w); null behind the camera. */

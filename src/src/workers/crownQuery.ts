@@ -18,8 +18,13 @@ export type CrownColor = { join: string; expr: string }
  * published crown and height predictions are columns of `trees_fast`
  * (`predicted_crown_width_m`, `predicted_height_m`), folded in at city load;
  * a valid measurement wins over either.
+ *
+ * `baseQuery` null means the city default: every row of `trees_fast` is in
+ * scope, and the filter is skipped. A filter is a semi join on the tree id;
+ * the DISTINCT join it replaced built the whole city's id set every query
+ * (~170 of ~190 ms on San Francisco).
  */
-export function crownQuery(camera: TreeRenderView, baseQuery: string, color: CrownColor): string {
+export function crownQuery(camera: TreeRenderView, baseQuery: string | null, color: CrownColor): string {
   if (![camera.lng, camera.lat, camera.altitude].every(Number.isFinite) || Math.abs(camera.lat) > 85.05112878 || camera.altitude < 0) {
     throw new Error('Invalid crown camera')
   }
@@ -34,7 +39,7 @@ export function crownQuery(camera: TreeRenderView, baseQuery: string, color: Cro
   }
   const valid = (col: string, max = MAX_CROWN_WIDTH) => `isfinite(${col}) AND ${col} > 0 AND ${col} <= ${max}`
   return `
-WITH base AS (${baseQuery}), nearby AS (
+WITH ${baseQuery === null ? '' : `base AS (${baseQuery}), `}nearby AS (
   SELECT tf.tree_id AS id, tf.longitude AS lng, tf.latitude AS lat,
     CASE WHEN ${valid('tf.crown_width_m')} THEN tf.crown_width_m
       WHEN ${valid('tf.predicted_crown_width_m')} THEN tf.predicted_crown_width_m END AS width,
@@ -47,9 +52,9 @@ WITH base AS (${baseQuery}), nearby AS (
     ((tf.x_3857 - ${x}) * ${cosLat}) ** 2 +
     ((tf.y_3857 - ${y}) * ${cosLat}) ** 2 + ${camera.altitude ** 2} AS distance_squared
   FROM trees_fast tf
-  INNER JOIN (SELECT DISTINCT tree_id FROM base) visible ON tf.tree_id = visible.tree_id
   ${color.join}
-  WHERE ${extent}
+  WHERE ${extent}${baseQuery === null ? '' : `
+    AND EXISTS (SELECT 1 FROM base WHERE base.tree_id = tf.tree_id)`}
 )
 SELECT id, lng, lat, width, measured, color, category, dbh, height FROM nearby
 ${camera.bounds ? '' : `WHERE width IS NOT NULL AND distance_squared < ${CROWN_DISTANCE_MAX ** 2}`}

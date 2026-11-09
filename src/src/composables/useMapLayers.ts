@@ -2,6 +2,7 @@ import type { Ref, ComputedRef } from 'vue'
 import maplibregl from 'maplibre-gl'
 import type { Landmark, TreeForm } from '../types'
 import { TreeCrownLayer } from './treeCrownLayer'
+import { SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM } from '../lib/treeCrowns'
 import { TreeDotsLayer, type TreeDotsPick } from './treeDotsLayer'
 import { useDuckDB } from './useDuckDB'
 
@@ -44,9 +45,9 @@ const CIRCLE_ZOOM_MIN = 12.8
 const CIRCLE_ZOOM_RADIUS_MID = 15
 const CIRCLE_ZOOM_RADIUS_HIGH = 18
 const CIRCLE_ZOOM_RADIUS_MAX = 21
-const CIRCLE_ZOOM_MAX = 15.5
+const CIRCLE_ZOOM_MAX = SPRITE_OPAQUE_ZOOM
 const CIRCLE_ZOOM_OPACITY_START = CIRCLE_ZOOM_MIN
-const CIRCLE_ZOOM_OPACITY_MID = CIRCLE_ZOOM_RADIUS_MID
+const CIRCLE_ZOOM_OPACITY_MID = SPRITE_CROWN_ZOOM_START
 const CIRCLE_ZOOM_OPACITY_END = CIRCLE_ZOOM_MAX
 
 // Holds full strength down to z8 — a city's urban outline is still legible on
@@ -360,7 +361,8 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     }
     if (!dotsLayer) {
       const { getPointKeys, getPointChunkDirectory, getPointChunks, getPointChunkColors } = useDuckDB()
-      dotsLayer = new TreeDotsLayer({ getPointKeys, getPointChunkDirectory, getPointChunks, getPointChunkColors }, (count) => onResidentTreesLoaded?.(count))
+      dotsLayer = new TreeDotsLayer({ getPointKeys, getPointChunkDirectory, getPointChunks, getPointChunkColors }, (count) => onResidentTreesLoaded?.(count),
+        () => crownLayer?.spriteCoverage() ?? null, () => crownLayer?.busy() ?? false)
     }
     if (!mapInstance.getLayer(dotsLayer.id)) mapInstance.addLayer(dotsLayer, crownLayer.id)
     return dotsLayer.sync()
@@ -485,6 +487,7 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     pickResidentTree: (point: { x: number; y: number }): TreeDotsPick | undefined => dotsLayer?.pick(point),
     /** Trees the sprite layer drew last frame; custom layers have no queryRenderedFeatures. */
     renderedTreeSprites: (): readonly { lng: number; lat: number }[] => crownLayer?.trees ?? [],
+    spriteStats: () => crownLayer?.stats() ?? null,
     addTreeLayers,
     applyColorToLayers,
     forceTreesTileRefetchPass,

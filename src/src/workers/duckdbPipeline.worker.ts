@@ -1,7 +1,7 @@
 import * as duckdb from '@duckdb/duckdb-wasm'
 import { DUCKDB_ASSET_URLS } from '../duckdbAssetUrls'
 import { crownQuery } from './crownQuery'
-import { CROWN_DISTANCE_MAX, type TreeRenderView, type TreeCrown } from '../lib/treeCrowns'
+import { CROWN_DISTANCE_MAX, crownColumnBuffers, type TreeRenderView, type TreeCrownColumns } from '../lib/treeCrowns'
 
 let db: duckdb.AsyncDuckDB | null = null
 let conn: duckdb.AsyncDuckDBConnection | null = null
@@ -967,7 +967,6 @@ async function doInit(city?: string) {
   })
 
   conn = await db.connect()
-
   // Nothing here depends on row order, and keeping it makes every CREATE
   // TABLE AS buffer its whole input before writing. The wasm heap never
   // shrinks, so the peak during the city load is what the tab keeps.
@@ -1953,25 +1952,44 @@ async function runQuery(sql: string, maxRows?: number): Promise<QueryResult> {
   return { columns, rows: rowObjects(columns, kept), totalRows }
 }
 
-async function getMapTrees(camera: TreeRenderView): Promise<TreeCrown[]> {
+async function getMapTrees(camera: TreeRenderView): Promise<TreeCrownColumns> {
+  const empty: TreeCrownColumns = {
+    id: [], lng: new Float64Array(), lat: new Float64Array(), width: new Float64Array(), measured: new Uint8Array(),
+    color: [], category: [], dbh: new Float64Array(), height: new Float64Array(),
+  }
   await ensureInit()
   await waitForCityContext()
   // The intro pauses vector-tile work, but still needs the independent sprite
   // renderer to draw and satisfy its readiness gate. This reads local tables.
-  if (!conn || !loadedCity || (!camera.bounds && camera.altitude >= CROWN_DISTANCE_MAX)) return []
+  if (!conn || !loadedCity || (!camera.bounds && camera.altitude >= CROWN_DISTANCE_MAX)) return empty
   const city = loadedCity
   const revision = tileQueryRevision
   const signature = treeFilterSignature()
   const current = () => cityContextReady && loadedCity === city && tileQueryRevision === revision && treeFilterSignature() === signature
-  if (!current()) return []
-  const result = await conn.query(crownQuery(camera, effectiveBaseQuery(tileQuerySql), colorSql('tf', colorOverrideActive, speciesShadeActive)))
-  if (!current()) return []
-  return result.toArray().map(row => ({
-    id: String(row.id), lng: Number(row.lng), lat: Number(row.lat),
-    width: row.width == null ? null : Number(row.width), measured: Boolean(row.measured), color: String(row.color),
-    category: String(row.category), dbh: Number(row.dbh),
-    height: row.height == null ? null : Number(row.height),
-  }))
+  if (!current()) return empty
+  const baseQuery = effectiveBaseQuery(tileQuerySql)
+  const result = await conn.query(crownQuery(camera, isDefaultBaseQuery(baseQuery) ? null : baseQuery, colorSql('tf', colorOverrideActive, speciesShadeActive)))
+  if (!current()) return empty
+  // Read column by column: no per-row proxy objects.
+  const n = result.numRows
+  const numbers = (name: string) => {
+    const col = result.getChild(name)!, out = new Float64Array(n)
+    for (let i = 0; i < n; i++) { const v = col.get(i); out[i] = v == null ? NaN : Number(v) }
+    return out
+  }
+  const strings = (name: string) => {
+    const col = result.getChild(name)!, out: string[] = new Array(n)
+    for (let i = 0; i < n; i++) out[i] = String(col.get(i))
+    return out
+  }
+  const measuredCol = result.getChild('measured')!
+  const measured = new Uint8Array(n)
+  for (let i = 0; i < n; i++) measured[i] = measuredCol.get(i) ? 1 : 0
+  const columns: TreeCrownColumns = {
+    id: strings('id'), lng: numbers('lng'), lat: numbers('lat'), width: numbers('width'), measured,
+    color: strings('color'), category: strings('category'), dbh: numbers('dbh'), height: numbers('height'),
+  }
+  return columns
 }
 
 // --- Point chunks (the desktop's TreeDotsLayer) ---
@@ -2084,7 +2102,7 @@ async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Ar
 }
 
 type WorkerMethodMap = {
-  getMapTrees: { params: TreeRenderView; result: TreeCrown[] }
+  getMapTrees: { params: TreeRenderView; result: TreeCrownColumns }
   getPointKeys: { params: Record<string, never>; result: PointKeys | null }
   getPointChunkDirectory: { params: Record<string, never>; result: PointChunkDirectory | null }
   getPointChunks: { params: { rowsKey: string; keys: number[] }; result: PointChunkBatch | null }
@@ -2148,7 +2166,7 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     switch (msg.method) {
       case 'getMapTrees': {
         const result = await getMapTrees(msg.params as TreeRenderView)
-        send({ type: 'response', requestId: msg.requestId, ok: true, result })
+        send({ type: 'response', requestId: msg.requestId, ok: true, result }, crownColumnBuffers(result))
         break
       }
       case 'getPointKeys': {

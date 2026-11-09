@@ -1,3 +1,4 @@
+import { SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM } from './treeCrowns'
 // Geometry for the desktop's resident tree layer (composables/treeDotsLayer.ts):
 // the zoom curves the old per-colour heatmap and circle layers drew with, a
 // level-of-detail pyramid for the heat, colour sums per level, a grid index
@@ -31,8 +32,17 @@ export function interpolateStops(stops: readonly (readonly [number, number])[], 
 
 export const HEAT_MIN_ZOOM = 6
 export const HEAT_MAX_ZOOM = 15
-export const CIRCLE_MIN_ZOOM = 12.8
-export const CIRCLE_MAX_ZOOM = 15.5
+export const CIRCLE_MIN_ZOOM = 6
+/** The dots are gone (bar the ground past the sprites' reach) once the sprites are opaque. */
+export const CIRCLE_MAX_ZOOM = SPRITE_OPAQUE_ZOOM
+/** The dots' opacity just before the sprites start to take over. */
+export const CIRCLE_PEAK_OPACITY = 0.92
+/** Dots past the sprites' reach, at zooms the sprites own. */
+export const CIRCLE_FAR_OPACITY = 0.85
+/** Below this a tap does not select a dot. */
+export const CIRCLE_PICK_MIN_ZOOM = 12.8
+/** The heat is off: the dots carry every zoom below the sprites. */
+export const HEAT_ENABLED = false
 
 /**
  * One heat layer stands where eighteen stacked ones (one per colour, 0.48
@@ -43,13 +53,13 @@ export const heatOpacity = (zoom: number) => interpolateStops([[6, 0], [8, 0.72]
 export const heatRadius = (zoom: number) => interpolateStops([[10, 10], [13, 14], [15, 22]], zoom)
 export const heatIntensity = (zoom: number) => interpolateStops([[10, 0.85], [13, 1.2], [15, 1.9]], zoom)
 export const circleOpacity = (zoom: number) => zoom < CIRCLE_MIN_ZOOM || zoom >= CIRCLE_MAX_ZOOM ? 0
-  : interpolateStops([[12.8, 0], [12.9, 0.75], [15, 0.92], [15.4, 0.75], [15.5, 0]], zoom)
+  : interpolateStops([[6, 0], [8, 0.75], [SPRITE_CROWN_ZOOM_START, CIRCLE_PEAK_OPACITY], [SPRITE_OPAQUE_ZOOM, 0]], zoom)
 
 /** A circle's radius in CSS pixels runs from `min` (thin trunk) to `max` (42 in and over) at `zoom`. */
 export function circleRadiusRange(zoom: number): [number, number] {
   return [
-    interpolateStops([[12.8, 0.65], [15, 2.1], [18, 3.1], [21, 3.7]], zoom),
-    interpolateStops([[12.8, 1], [15, 5.6], [18, 9.5], [21, 11.6]], zoom),
+    interpolateStops([[8, 0.4], [12.8, 0.5], [15, 1.5], [18, 2.2], [21, 2.6]], zoom),
+    interpolateStops([[8, 0.5], [12.8, 0.8], [15, 4], [18, 6.7], [21, 8.2]], zoom),
   ]
 }
 

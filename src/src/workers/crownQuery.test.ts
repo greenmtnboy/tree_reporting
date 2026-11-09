@@ -5,7 +5,7 @@ import { colorSql } from './cityTables'
 import { CATEGORY_COLORS } from '../treeFormColors'
 import {
   CROWN_DISTANCE_MAX, MAX_CROWNS, MAX_SPRITE_ASPECT, MAX_TREE_SPRITES, MIN_SPRITE_ASPECT,
-  crownZoomOpacity, spriteAspect, spriteCrownBlend, spriteOpacity, validCrownWidth, validTreeHeight,
+  crownZoomOpacity, spriteAspect, spriteOpacity, SPRITE_BASE_OPACITY, validCrownWidth, validTreeHeight,
 } from '../lib/treeCrowns'
 
 const BROADLEAF = CATEGORY_COLORS.broadleaf
@@ -90,6 +90,15 @@ describe('nearby crown query', () => {
     }
   })
 
+  test('the unfiltered query skips the filter and returns what a filter over every tree does', async () => {
+    const view = { ...camera, altitude: 3000, bounds: { west: -1, east: 1, south: -1, north: 1 } }
+    const ids = async (base: string | null) => (await conn.runAndReadAll(crownQuery(view, base, color))).getRowObjects().map(row => row.id)
+    const sql = crownQuery(view, null, color)
+    expect(sql).not.toMatch(/\bbase\b/)
+    expect(await ids(null)).toEqual(await ids('SELECT tree_id FROM trees_fast'))
+    expect(await ids("SELECT tree_id FROM trees_fast WHERE tree_id = 'measured'")).toEqual(['measured'])
+  })
+
   test('desktop first batches include missing widths and distant markers with sizing already resolved', async () => {
     const rows = (await conn.runAndReadAll(crownQuery({ ...camera, altitude: 3000,
       bounds: { west: -1, east: 1, south: -1, north: 1 } }, 'SELECT tree_id FROM trees_fast', color))).getRowObjects()
@@ -157,11 +166,8 @@ test('zoom fades and invalid widths are bounded', () => {
   for (const width of [null, undefined, 0, -1, NaN, Infinity, 1000, '5']) expect(validCrownWidth(width)).toBe(false)
   expect(validCrownWidth(0.5)).toBe(true)
   expect(validCrownWidth(60)).toBe(true)
-  expect(spriteCrownBlend(14.4)).toBe(0)
-  expect(spriteCrownBlend(19.5)).toBe(1)
-  expect(spriteCrownBlend(16)).toBeGreaterThan(0)
-  expect(spriteCrownBlend(18)).toBeGreaterThan(0.5)
   expect(spriteOpacity(14.4)).toBe(0)
-  expect(spriteOpacity(15)).toBe(0.72)
+  expect(spriteOpacity(15)).toBeCloseTo(SPRITE_BASE_OPACITY)
+  expect(spriteOpacity(21)).toBe(1)
   expect(() => crownQuery({ lng: NaN, lat: 0, altitude: 0 }, '', colorSql('tf', false))).toThrow('Invalid crown camera')
 })

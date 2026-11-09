@@ -1,8 +1,22 @@
 /** Shared limits for the worker query and the GPU layer. Distances are metres. */
 export const CROWN_ZOOM_START = 16.5
 export const CROWN_ZOOM_FULL = 18
+/**
+ * The desktop's dot-to-sprite handoff. Sprites fade in from SPRITE_CROWN_ZOOM_START to
+ * SPRITE_BASE_OPACITY at SPRITE_OPAQUE_ZOOM while the dots under them fade out over the same
+ * span (treeDots' circleOpacity and useMapLayers' fallback read these), then climb to fully
+ * opaque by SPRITE_FULL_OPACITY_ZOOM. Above SPRITE_OPAQUE_ZOOM dots show only past the sprites' reach.
+ */
 export const SPRITE_CROWN_ZOOM_START = 14.4
-export const SPRITE_CROWN_ZOOM_FULL = 19.5
+export const SPRITE_OPAQUE_ZOOM = 15
+export const SPRITE_BASE_OPACITY = 0.72
+export const SPRITE_FULL_OPACITY_ZOOM = 21
+/** Desktop sprites are drawn at metre scale but never narrower than this many CSS pixels. */
+export const MIN_SPRITE_PX = 4
+/** Metres; the crown a desktop sprite is drawn with when the tree has no measured or predicted width. */
+export const DEFAULT_CROWN_WIDTH = 6
+/** A capped sprite batch fades out over the last tenth of its reach, where the dots take over. */
+export const REACH_FADE = 0.9
 export const CROWN_DISTANCE_FULL = 700
 export const CROWN_DISTANCE_MAX = 1800
 export const MAX_CROWNS = 4096
@@ -32,31 +46,50 @@ export interface TreeCrown {
   height?: number | null
 }
 
+/**
+ * A sprite batch as columns, the shape the worker sends: numbers in typed
+ * arrays it transfers rather than copies, NaN for a missing value. One
+ * object per tree cost more to build from the Arrow result and to clone
+ * across the worker boundary than the query took.
+ */
+export interface TreeCrownColumns {
+  id: string[]
+  lng: Float64Array
+  lat: Float64Array
+  width: Float64Array
+  measured: Uint8Array
+  color: string[]
+  category: string[]
+  dbh: Float64Array
+  height: Float64Array
+}
+
+export function crownColumnBuffers(c: TreeCrownColumns): ArrayBuffer[] {
+  return [c.lng, c.lat, c.width, c.measured, c.dbh, c.height].map(a => a.buffer as ArrayBuffer)
+}
+
+export function crownsFromColumns(c: TreeCrownColumns): TreeCrown[] {
+  const out: TreeCrown[] = new Array(c.id.length)
+  const orNull = (v: number) => Number.isNaN(v) ? null : v
+  for (let i = 0; i < out.length; i++) {
+    out[i] = {
+      id: c.id[i], lng: c.lng[i], lat: c.lat[i], width: orNull(c.width[i]), measured: c.measured[i] === 1,
+      color: c.color[i], category: c.category[i], dbh: c.dbh[i], height: orNull(c.height[i]),
+    }
+  }
+  return out
+}
+
 export function crownZoomOpacity(zoom: number): number {
   return Math.max(0, Math.min(1, (zoom - CROWN_ZOOM_START) / (CROWN_ZOOM_FULL - CROWN_ZOOM_START)))
 }
 
-export function spriteCrownBlend(zoom: number): number {
-  const t = Math.max(0, Math.min(1, (zoom - SPRITE_CROWN_ZOOM_START) / (SPRITE_CROWN_ZOOM_FULL - SPRITE_CROWN_ZOOM_START)))
-  return t * t * (3 - 2 * t)
-}
-
 export function spriteOpacity(zoom: number): number {
-  if (zoom < 15) return 0.72 * Math.max(0, (zoom - SPRITE_CROWN_ZOOM_START) / (15 - SPRITE_CROWN_ZOOM_START))
-  return Math.min(1, 0.72 + (zoom - 15) / 6 * 0.28)
-}
-
-/** The same continuous marker baseline for rendering and hit testing. */
-export function spriteBaseScale(zoom: number): [number, number] {
-  const stops = [[14.4, 0.04, 0.1], [15, 0.055, 0.15], [18, 0.2, 0.72], [21, 0.28, 1]]
-  for (let i = 1; i < stops.length; i++) {
-    if (zoom <= stops[i][0]) {
-      const a = stops[i - 1], b = stops[i]
-      const t = Math.max(0, Math.min(1, (zoom - a[0]) / (b[0] - a[0])))
-      return [a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2])]
-    }
+  if (zoom < SPRITE_OPAQUE_ZOOM) {
+    return SPRITE_BASE_OPACITY * Math.max(0, (zoom - SPRITE_CROWN_ZOOM_START) / (SPRITE_OPAQUE_ZOOM - SPRITE_CROWN_ZOOM_START))
   }
-  return [0.28, 1]
+  const t = (zoom - SPRITE_OPAQUE_ZOOM) / (SPRITE_FULL_OPACITY_ZOOM - SPRITE_OPAQUE_ZOOM)
+  return Math.min(1, SPRITE_BASE_OPACITY + t * (1 - SPRITE_BASE_OPACITY))
 }
 
 /** Reject corrupt sizes instead of rendering a plausible-looking clipped measurement. */

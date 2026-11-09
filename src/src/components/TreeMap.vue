@@ -10,6 +10,7 @@
   <div v-if="isInitialLoading" class="map-loading" role="status">{{ nearbyLocation ? 'Loading trees around you…' : loadingMessage }}</div>
   <div v-else-if="tileRefreshing" class="map-loading map-refreshing">{{ tileRefreshMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
+  <div v-if="spriteDebug" class="sprite-debug" aria-hidden="true">{{ spriteDebug }}</div>
   <div v-if="mapWindow?.reason && !windowNoticeDismissed && !isInitialLoading" class="map-window-notice" role="status">
     <span>{{ mapWindow.reason === 'reloaded'
       ? 'The map reloaded last time, so it is holding a smaller area to stay within this phone’s memory.'
@@ -838,7 +839,7 @@ function updateZoomLevel() {
 
 const {
   addTreeLayers, applyColorToLayers, forceTreesTileRefetchPass, pickCrownSprite, renderedTreeSprites,
-  treesResident, residentTreeCount, pickResidentTree,
+  treesResident, residentTreeCount, pickResidentTree, spriteStats,
 } = useMapLayers({
   map: mapRef,
   simplified: props.simplified ?? false,
@@ -846,6 +847,17 @@ const {
   mapQueryRevision,
   onResidentTreesLoaded: () => onTreesFirstLoaded(),
 })
+
+// Dev-only readout of the sprite layer: how many it drew against the cap, how far they reach, query time.
+const spriteDebug = ref('')
+const spriteDebugTimer = import.meta.env.DEV && !props.simplified ? setInterval(() => {
+  const s = spriteStats()
+  if (!s) { spriteDebug.value = ''; return }
+  const reach = Number.isFinite(s.reach) ? `${Math.round(s.reach)} m` : 'all'
+  spriteDebug.value = `sprites ${s.drawn.toLocaleString()} / ${s.cap.toLocaleString()}${s.drawn >= s.cap ? ' CAPPED' : ''}`
+    + ` · reach ${reach} · query ${s.lastQueryMs.toFixed(0)} ms${s.inFlight ? ' …' : ''}`
+    + ` · ${s.queries} queries, ${s.discarded} discarded`
+}, 250) : undefined
 
 // --- Intro animation ---
 
@@ -2257,6 +2269,7 @@ onDeactivated(() => {
 })
 
 onUnmounted(() => {
+  clearInterval(spriteDebugTimer)
   disposed = true
   if (floorHintTimer) clearTimeout(floorHintTimer)
   if (loadSettleTimer) clearTimeout(loadSettleTimer)
@@ -3246,4 +3259,18 @@ onUnmounted(() => {
 .tc-prediction-note { font-size: 12px; line-height: 1.5; color: rgba(var(--ink-rgb), .65); margin: 0 0 12px; }
 .tc-unknown-tree { display: flex; flex-direction: column; align-items: center; color: rgba(var(--ink-rgb), .65); font-size: 11px; }
 .tc-unknown-tree-symbol { display: grid; place-items: center; font-size: 120px; font-weight: 300; line-height: 1; color: rgba(var(--ink-rgb), .32); }
+.sprite-debug {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font: 11px/1.4 ui-monospace, monospace;
+  white-space: nowrap;
+  pointer-events: none;
+}
 </style>
