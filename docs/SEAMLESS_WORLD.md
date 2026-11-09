@@ -240,10 +240,9 @@ row (`dbhColorSql`), like the tree-form colours.
 ## Not done
 
 - **Low zooms draw only what is held.** Below z9 a metro that was never
-  visited is its city marker, and between z8 (where the markers end) and z9
-  it is nothing at all. A first cut drew a dot per block from the manifest
-  to fill that; it read as green smudges beside the real trees and was
-  taken out. A sampled or aggregated
+  visited is its city marker (the markers run to z9 for that reason). A
+  first cut drew a dot per block from the manifest instead; it read as
+  green smudges beside the real trees and was taken out. A sampled or aggregated
   level per coarse tile would let the real colours reach z6 everywhere.
 - **A desktop's first view of a dense block is the whole block.** Bogotá's
   densest is 322k rows, about 8 MB, and nothing draws there until it has

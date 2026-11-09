@@ -1,12 +1,13 @@
 import maplibregl from 'maplibre-gl'
 import { CITY_CONFIG, type CityCode } from './useMapData'
 
-// City markers appear below this zoom; fully hidden at or above it.
-// Markers fade in over the same 6-8 band the tree heatmap fades out across
-// (from TREES_SOURCE_MINZOOM in useMapLayers), so zooming out crossfades from
-// heat to city dots with no blank stretch. The dot is fully in by z6, where a
-// city's footprint is too small on the basemap for the heat to say anything.
-export const GLOBE_MARKERS_MAX_ZOOM = 8
+// City markers appear below this zoom; fully hidden at or above it. It is the
+// zoom the map starts loading trees at (LOAD_MIN_ZOOM in treeDotsLayer.ts):
+// below it a city the camera has not been to has no trees to draw, and the
+// marker is all that says it is there. The markers fade over the last two
+// zooms, across the band a held city's dots come up in, so zooming out
+// crossfades from trees to city dots with no blank stretch.
+export const GLOBE_MARKERS_MAX_ZOOM = 9
 
 function cityMarkersGeoJSON(selectedCity?: CityCode): GeoJSON.FeatureCollection {
   return {
