@@ -488,6 +488,7 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     /** Trees the sprite layer drew last frame; custom layers have no queryRenderedFeatures. */
     renderedTreeSprites: (): readonly { lng: number; lat: number }[] => crownLayer?.trees ?? [],
     spriteStats: () => crownLayer?.stats() ?? null,
+    spriteRadar: () => crownLayer?.radar() ?? null,
     addTreeLayers,
     applyColorToLayers,
     forceTreesTileRefetchPass,

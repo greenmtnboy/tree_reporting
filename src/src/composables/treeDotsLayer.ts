@@ -190,8 +190,9 @@ uniform sampler2D u_palette;
 uniform float u_opacity;
 // Metres the sprites reach; < 0 below the sprite zooms.
 uniform float u_reach;
-// The sprite batch's box in chunk coordinates (x0, y0, x1, y1); empty (x0 > x1) when none is installed.
-uniform vec4 u_box;
+// The sprite batch's fetch footprint in chunk coordinates: a convex polygon, counter-clockwise,
+// its last corner repeated when it has three. All zero (nothing inside) when no batch is installed.
+uniform vec2 u_poly[4];
 uniform float u_far_opacity;
 // Camera height in metres, and real metres per EPSG:3857 metre at the camera.
 uniform float u_altitude;
@@ -207,7 +208,13 @@ void main() {
   if (u_reach >= 0.0) {
     // Fill in past the sprites: a dot shows as much as the sprite over it has faded.
     float dist = length(vec3((a_pos - u_eye) * u_scale, u_altitude));
-    float inBox = step(u_box.x, a_pos.x) * step(a_pos.x, u_box.z) * step(u_box.y, a_pos.y) * step(a_pos.y, u_box.w);
+    float inBox = 1.0;
+    for (int i = 0; i < 4; i++) {
+      vec2 a = u_poly[i], b = u_poly[(i + 1) % 4], e = b - a, d = a_pos - a;
+      // A repeated corner is a zero-length edge, which passes.
+      inBox *= step(0.0, e.x * d.y - e.y * d.x);
+    }
+    inBox *= step(1e-6, length(u_poly[1] - u_poly[0]) + length(u_poly[2] - u_poly[1]));
     float sprite = inBox * (1.0 - smoothstep(u_reach * ${REACH_FADE}, u_reach, dist));
     v_opacity = max(u_opacity, u_far_opacity * (1.0 - sprite));
   }
@@ -332,7 +339,8 @@ export class TreeDotsLayer implements CustomLayerInterface {
     private onLoaded?: (count: number) => void,
     /** Where the sprites stand in for the dots (see TreeCrownLayer.spriteCoverage); elsewhere the dots stay drawn at any zoom. */
     private spriteCoverage: () => {
-      box: { west: number; south: number; east: number; north: number } | null
+      /** EPSG:3857 metres, counter-clockwise (lib/viewFootprint). */
+      polygon: [number, number][] | null
       reach: number
       eye: { lng: number; lat: number; altitude: number } | null
     } | null = () => null,
@@ -428,7 +436,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
     this.circleProgram = compile(gl, CIRCLE_VS, CIRCLE_FS, 'Circle')
     this.heatU = uniforms(gl, this.heatProgram, ['u_matrix', 'u_center', 'u_size', 'u_camdist', 'u_intensity'])
     this.resolveU = uniforms(gl, this.resolveProgram, ['u_color', 'u_density', 'u_opacity', 'u_alpha', 'u_saturation'])
-    this.circleU = uniforms(gl, this.circleProgram, ['u_matrix', 'u_center', 'u_radius', 'u_dpr', 'u_camdist', 'u_palette', 'u_opacity', 'u_reach', 'u_far_opacity', 'u_altitude', 'u_scale', 'u_eye', 'u_box'])
+    this.circleU = uniforms(gl, this.circleProgram, ['u_matrix', 'u_center', 'u_radius', 'u_dpr', 'u_camdist', 'u_palette', 'u_opacity', 'u_reach', 'u_far_opacity', 'u_altitude', 'u_scale', 'u_eye', 'u_poly'])
     this.resolveVao = gl.createVertexArray()!
   }
 
@@ -946,9 +954,9 @@ export class TreeDotsLayer implements CustomLayerInterface {
       g.uniform1f(this.circleU.u_camdist, cam.camdist)
       g.uniform1f(this.circleU.u_opacity, opacity)
       g.uniform1f(this.circleU.u_reach, coverage === null ? -1 : Number.isFinite(coverage.reach) ? coverage.reach : 1e9)
-      const box = coverage?.box
-      const [bx0, by0] = box ? lngLatTo3857(box.west, box.south) : [1, 1]
-      const [bx1, by1] = box ? lngLatTo3857(box.east, box.north) : [0, 0]
+      const polygon = coverage?.polygon ?? []
+      const corners = polygon.length >= 3 ? [0, 1, 2, 3].map(i => polygon[Math.min(i, polygon.length - 1)]) : []
+      const poly = new Float32Array(8)
       g.uniform1f(this.circleU.u_far_opacity, CIRCLE_FAR_OPACITY)
       // Reach is a disc around where the batch was queried, not around the camera now.
       const eye = coverage?.eye ?? { lng: 0, lat: 0, altitude: 0 }
@@ -964,7 +972,8 @@ export class TreeDotsLayer implements CustomLayerInterface {
         g.uniformMatrix4fv(this.circleU.u_matrix, false, local.matrix)
         g.uniform2f(this.circleU.u_center, local.cx, local.cy)
         g.uniform2f(this.circleU.u_eye, eyeX - chunk.originX, eyeY - chunk.originY)
-        g.uniform4f(this.circleU.u_box, bx0 - chunk.originX, by0 - chunk.originY, bx1 - chunk.originX, by1 - chunk.originY)
+        corners.forEach(([x, y], i) => { poly[i * 2] = x - chunk.originX; poly[i * 2 + 1] = y - chunk.originY })
+        g.uniform2fv(this.circleU.u_poly, poly)
         g.bindTexture(g.TEXTURE_2D, this.paletteTexture(g, chunk.palette))
         g.bindVertexArray(chunk.gpu.pointVao)
         this.drawRanges(g, visibleRanges(chunk.grid,

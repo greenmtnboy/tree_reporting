@@ -1,3 +1,4 @@
+import { polygonPredicate } from '../lib/viewFootprint'
 import { CROWN_DISTANCE_MAX, MAX_CROWNS, MAX_TREE_SPRITES, MAX_CROWN_WIDTH, MAX_TREE_HEIGHT, MERCATOR_WORLD_METERS, mercatorPoint, metersPerMercatorUnit, type TreeRenderView } from '../lib/treeCrowns'
 
 function boundsPredicate({ west, east, north, south }: NonNullable<TreeRenderView['bounds']>): string {
@@ -13,6 +14,12 @@ function boundsPredicate({ west, east, north, south }: NonNullable<TreeRenderVie
 /** How the query reads a tree's colour; see `colorSql` in cityTables.ts. */
 export type CrownColor = { join: string; expr: string }
 
+function spriteLimit(camera: TreeRenderView): number {
+  const limit = camera.spriteLimit ?? MAX_TREE_SPRITES
+  if (!Number.isInteger(limit) || limit < 1) throw new Error('Invalid sprite limit')
+  return limit
+}
+
 /**
  * The base query already includes the current chat/species filters. The
  * published crown and height predictions are columns of `trees_fast`
@@ -24,12 +31,6 @@ export type CrownColor = { join: string; expr: string }
  * the DISTINCT join it replaced built the whole city's id set every query
  * (~170 of ~190 ms on San Francisco).
  */
-function spriteLimit(camera: TreeRenderView): number {
-  const limit = camera.spriteLimit ?? MAX_TREE_SPRITES
-  if (!Number.isInteger(limit) || limit < 1) throw new Error('Invalid sprite limit')
-  return limit
-}
-
 export function crownQuery(camera: TreeRenderView, baseQuery: string | null, color: CrownColor): string {
   if (![camera.lng, camera.lat, camera.altitude].every(Number.isFinite) || Math.abs(camera.lat) > 85.05112878 || camera.altitude < 0) {
     throw new Error('Invalid crown camera')
@@ -42,6 +43,7 @@ export function crownQuery(camera: TreeRenderView, baseQuery: string | null, col
   let extent = `tf.x_3857 BETWEEN ${x - range} AND ${x + range} AND tf.y_3857 BETWEEN ${y - range} AND ${y + range}`
   if (camera.bounds) {
     extent = boundsPredicate(camera.bounds)
+    if (camera.footprint) extent += ` AND ${polygonPredicate(camera.footprint, 'tf.x_3857', 'tf.y_3857')}`
   }
   const valid = (col: string, max = MAX_CROWN_WIDTH) => `isfinite(${col}) AND ${col} > 0 AND ${col} <= ${max}`
   return `
@@ -54,7 +56,6 @@ WITH ${baseQuery === null ? '' : `base AS (${baseQuery}), `}nearby AS (
     CASE WHEN ${valid('tf.height_m', MAX_TREE_HEIGHT)} THEN tf.height_m
       WHEN ${valid('tf.predicted_height_m', MAX_TREE_HEIGHT)} THEN tf.predicted_height_m END AS height,
     CAST(tf.tree_form AS VARCHAR) AS category, tf.dbh,
-    ${camera.visibleBounds ? `(${boundsPredicate(camera.visibleBounds)})` : 'true'} AS in_viewport,
     ((tf.x_3857 - ${x}) * ${cosLat}) ** 2 +
     ((tf.y_3857 - ${y}) * ${cosLat}) ** 2 + ${camera.altitude ** 2} AS distance_squared
   FROM trees_fast tf
@@ -64,5 +65,5 @@ WITH ${baseQuery === null ? '' : `base AS (${baseQuery}), `}nearby AS (
 )
 SELECT id, lng, lat, width, measured, color, category, dbh, height FROM nearby
 ${camera.bounds ? '' : `WHERE width IS NOT NULL AND distance_squared < ${CROWN_DISTANCE_MAX ** 2}`}
-ORDER BY in_viewport DESC, distance_squared, id LIMIT ${camera.bounds ? spriteLimit(camera) : MAX_CROWNS}`
+ORDER BY distance_squared, id LIMIT ${camera.bounds ? spriteLimit(camera) : MAX_CROWNS}`
 }

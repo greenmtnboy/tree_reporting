@@ -7,6 +7,8 @@ import {
   type CrownCamera, type TreeRenderView,
 } from '../lib/treeCrowns'
 import { CROWN_STRIDE as STRIDE, emptyCrownBatch, type CrownBatch, type CrownBatchOptions, type SpriteCellGeometry } from '../lib/crownBatch'
+import { FOOTPRINT_PAD, insidePolygon, viewFootprint, type Point } from '../lib/viewFootprint'
+import { lngLatFrom3857, lngLatTo3857, MERCATOR_WORLD_M } from '../lib/treeDots'
 
 type GL = WebGLRenderingContext | WebGL2RenderingContext
 type LoadCrowns = (camera: TreeRenderView, options: CrownBatchOptions) => Promise<CrownBatch>
@@ -14,26 +16,41 @@ type LoadCrowns = (camera: TreeRenderView, options: CrownBatchOptions) => Promis
 export interface DrawnTree { id: string; lng: number; lat: number }
 type ViewBounds = NonNullable<TreeRenderView['bounds']>
 
-function padBounds(bounds: ViewBounds, fraction: number): ViewBounds {
-  const x = (bounds.east - bounds.west) * fraction
-  const y = (bounds.north - bounds.south) * fraction
-  return { west: bounds.west - x, east: bounds.east + x, south: Math.max(-85.05112878, bounds.south - y), north: Math.min(85.05112878, bounds.north + y) }
+/** The lng/lat box around an EPSG:3857 polygon: the query's coarse prefilter. */
+function polygonBounds(polygon: Point[]): ViewBounds {
+  const corners = polygon.map(([x, y]) => lngLatFrom3857(x, y))
+  const lngs = corners.map(c => c[0]), lats = corners.map(c => c[1])
+  return { west: Math.min(...lngs), east: Math.max(...lngs), south: Math.max(-85.05112878, Math.min(...lats)), north: Math.min(85.05112878, Math.max(...lats)) }
 }
 
-function contains(outer: ViewBounds, inner: ViewBounds): boolean {
-  return outer.west <= inner.west && outer.east >= inner.east && outer.south <= inner.south && outer.north >= inner.north
-}
-
-/** One bounded batch of upright sprites or ground-plane rings. Camera changes only uniforms;
- * no sprite regeneration, symbol placement, tile rebuilds or per-frame SQL.
- * Uses the typed camera accessor in our pinned MapLibre 4.x transform.
- */
 function spriteLimitOverride(): number | undefined {
   try {
     const value = Number(localStorage.getItem(SPRITE_LIMIT_KEY))
     return Number.isInteger(value) && value > 0 ? value : undefined
   } catch { return undefined }
 }
+
+/** For the debug radar: the camera, the view, and what is fetched around them, in EPSG:3857 metres. */
+export interface SpriteRadar {
+  eye: Point
+  bearing: number
+  /** The ground the screen shows now. */
+  view: Point[]
+  /** The installed batch's fetch polygon, and the camera it was queried from. */
+  fetched: Point[] | null
+  queryEye: Point | null
+  /** EPSG:3857 metres; Infinity when the batch was not cut by the cap. */
+  reach: number
+  /** The fetch polygon of the query in flight. */
+  pending: Point[] | null
+  /** A sample of the drawn trees, x/y interleaved. */
+  trees: Float64Array
+}
+
+/** One bounded batch of upright sprites or ground-plane rings. Camera changes only uniforms;
+ * no sprite regeneration, symbol placement, tile rebuilds or per-frame SQL.
+ * Uses the typed camera accessor in our pinned MapLibre 4.x transform.
+ */
 
 export class TreeCrownLayer implements CustomLayerInterface {
   get id() { return this.simplified ? 'trees-crown' : 'trees-icon' }
@@ -60,8 +77,9 @@ export class TreeCrownLayer implements CustomLayerInterface {
   private reach = Infinity
   /** Where the camera stood when the installed batch was queried; a capped batch is a disc around it. */
   private queryCamera?: CrownCamera
-  /** Lng/lat box the installed batch was fetched for: the padded view, or only the view when the cap cut it. */
-  private loadedBox?: ViewBounds
+  /** The padded view footprint the installed batch was fetched for (EPSG:3857 metres). */
+  private loadedFootprint?: Point[]
+  private pendingFootprint?: Point[]
   /** The desktop sprite budget: MAX_TREE_SPRITES unless overridden in localStorage (SPRITE_LIMIT_KEY). */
   private spriteLimit = spriteLimitOverride() ?? MAX_TREE_SPRITES
   private debug = { queries: 0, discarded: 0, lastQueryMs: 0, lastSqlMs: 0, lastBuildMs: 0, lastBatch: 0, lastInstallMs: 0 }
@@ -70,21 +88,44 @@ export class TreeCrownLayer implements CustomLayerInterface {
   /** The installed batch's drawn trees, in draw order; `data` holds their vertices. */
   private drawn: CrownBatch = emptyCrownBatch()
   private drawnTrees?: DrawnTree[]
-  private coverage?: ViewBounds
+  /** The footprint of an uncapped batch: every tree in it is loaded, so views inside it need no query. */
+  private coverage?: Point[]
   private coverageBearing = 0
   private get minZoom() { return this.simplified ? CROWN_ZOOM_START : SPRITE_CROWN_ZOOM_START }
 
   constructor(private load: LoadCrowns, private simplified: boolean) {}
 
   /**
-   * Where the desktop sprites stand in for the dots: inside `box` (null when no batch is installed)
-   * and within `reach` metres of `eye`, the camera the batch was queried from (not the camera now:
-   * a moving camera would carry the disc past the trees loaded). Null below the sprite zooms.
+   * Where the desktop sprites stand in for the dots: inside `polygon` (the fetched footprint in
+   * EPSG:3857 metres; null when no batch is installed) and within `reach` metres of `eye`, the camera
+   * the batch was queried from (not the camera now: a moving camera would carry the disc past the
+   * trees loaded). Null below the sprite zooms.
    */
-  spriteCoverage(): { box: ViewBounds | null; reach: number; eye: CrownCamera | null } | null {
+  spriteCoverage(): { polygon: Point[] | null; reach: number; eye: CrownCamera | null } | null {
     if (this.simplified || !this.map || this.map.getZoom() <= this.minZoom) return null
-    const installed = this.count > 0 && !!this.loadedBox
-    return { box: installed ? this.loadedBox! : null, reach: this.reach, eye: installed ? this.queryCamera ?? null : null }
+    const installed = this.count > 0 && !!this.loadedFootprint
+    return { polygon: installed ? this.loadedFootprint! : null, reach: this.reach, eye: installed ? this.queryCamera ?? null : null }
+  }
+
+  radar(): SpriteRadar | null {
+    if (this.simplified || !this.map) return null
+    const { lngLat } = this.map.transform.getCameraPosition()
+    const toPoint = (c?: CrownCamera): Point | null => c ? lngLatTo3857(c.lng, c.lat) as Point : null
+    const scale = 1 / Math.cos(lngLat.lat * Math.PI / 180)
+    const trees = this.count ? this.drawn.id.length : 0
+    const step = Math.max(1, Math.ceil(trees / 3000))
+    const sample = new Float64Array(Math.ceil(trees / step) * 2)
+    for (let i = 0, k = 0; i < trees; i += step) {
+      const offset = i * STRIDE * 6
+      sample[k++] = (this.origin[0] + this.data[offset] - 0.5) * MERCATOR_WORLD_M
+      sample[k++] = (0.5 - this.origin[1] - this.data[offset + 1]) * MERCATOR_WORLD_M
+    }
+    return {
+      eye: lngLatTo3857(lngLat.lng, lngLat.lat) as Point, bearing: this.map.getBearing(),
+      view: this.footprint(0), fetched: this.count ? this.loadedFootprint ?? null : null,
+      queryEye: this.count ? toPoint(this.queryCamera) : null, reach: this.reach * scale,
+      pending: this.inFlight ? this.pendingFootprint ?? null : null, trees: sample,
+    }
   }
 
   /** A query is waiting on its timer or running. */
@@ -111,9 +152,20 @@ export class TreeCrownLayer implements CustomLayerInterface {
     this.map?.triggerRepaint()
   }
 
-  private viewport(): ViewBounds {
-    const bounds = this.map!.getBounds()
-    return { west: bounds.getWest(), south: bounds.getSouth(), east: bounds.getEast(), north: bounds.getNorth() }
+  /**
+   * The ground the screen shows, as an EPSG:3857 polygon, padded by `pad` of its depth behind and to
+   * the sides. The top corners stop just under the horizon, as MapLibre's own getBounds does.
+   */
+  private footprint(pad: number): Point[] {
+    const map = this.map!, transform = map.transform
+    const width = transform.width, height = transform.height
+    const top = Math.max(0, height / 2 - transform.getHorizon())
+    const ground = ([[0, height], [width, height], [width, top], [0, top]] as Point[]).map(([x, y]) => {
+      const { lng, lat } = map.unproject([x, y])
+      return lngLatTo3857(lng, lat) as Point
+    })
+    const { lngLat } = transform.getCameraPosition()
+    return viewFootprint(lngLatTo3857(lngLat.lng, lngLat.lat) as Point, map.getBearing(), ground, pad, 1 / Math.cos(lngLat.lat * Math.PI / 180))
   }
 
   private schedule = () => {
@@ -134,20 +186,24 @@ export class TreeCrownLayer implements CustomLayerInterface {
     if (this.simplified && camera.altitude >= CROWN_DISTANCE_MAX) return
     this.dirty = false
     if (!this.simplified) {
-      const bounds = this.viewport()
-      // Keep a margin for silhouettes anchored offscreen and start fetching
-      // before panning consumes it. Reuse only complete (uncapped) batches.
-      if (this.coverage && this.coverageBearing === this.map.getBearing()
-        && contains(this.coverage, padBounds(bounds, 0.1))) return
-      camera.bounds = padBounds(bounds, 0.3)
-      camera.visibleBounds = bounds
+      // Reuse only complete (uncapped) batches whose footprint still holds the whole view, at the
+      // bearing they were sorted for.
+      const coverage = this.coverage
+      if (coverage && this.coverageBearing === this.map.getBearing() && this.footprint(0).every(p => insidePolygon(coverage, p))) return
+      // Fetch the view's own footprint, padded behind and to the sides so a reverse or a spin
+      // starts from trees already loaded; nearest first, up to the budget.
+      camera.footprint = this.footprint(FOOTPRINT_PAD)
+      camera.bounds = polygonBounds(camera.footprint)
       camera.spriteLimit = this.spriteLimit
+      this.pendingFootprint = camera.footprint
     }
     this.inFlight = true
     const generation = this.generation
     try {
       const started = performance.now()
-      const batch = await this.load(camera, { simplified: this.simplified, bearing: this.map.getBearing(), cells: this.cellGeometry() })
+      // The batch is sorted back to front for this bearing; a view at another needs a new batch.
+      const bearing = this.map.getBearing()
+      const batch = await this.load(camera, { simplified: this.simplified, bearing, cells: this.cellGeometry() })
       this.debug.queries++
       this.debug.lastQueryMs = performance.now() - started
       this.debug.lastBatch = batch.rows
@@ -155,9 +211,10 @@ export class TreeCrownLayer implements CustomLayerInterface {
       this.debug.lastBuildMs = batch.timing.buildMs
       if (!this.map || generation !== this.generation) return
       if (this.map.getZoom() <= this.minZoom || (this.simplified && this.camera().altitude >= CROWN_DISTANCE_MAX)) return
-      if (camera.bounds && !contains(camera.bounds, this.viewport())) {
+      const center = this.map.getCenter()
+      if (camera.footprint && !insidePolygon(camera.footprint, lngLatTo3857(center.lng, center.lat) as Point)) {
         // Keep the last useful batch while catching up; never replace it with
-        // a late snapshot of a viewport the user has already left.
+        // a late snapshot of a view the user has already turned or moved away from.
         this.debug.discarded++
         this.dirty = true
         return
@@ -165,9 +222,9 @@ export class TreeCrownLayer implements CustomLayerInterface {
       const installing = performance.now()
       this.setBatch(batch, camera)
       this.debug.lastInstallMs = performance.now() - installing
-      this.loadedBox = batch.rows >= this.spriteLimit ? camera.visibleBounds : camera.bounds
-      this.coverage = camera.bounds && batch.rows < this.spriteLimit ? camera.bounds : undefined
-      this.coverageBearing = this.map.getBearing()
+      this.loadedFootprint = camera.footprint
+      this.coverage = camera.footprint && batch.rows < this.spriteLimit ? camera.footprint : undefined
+      this.coverageBearing = bearing
     } catch (error) {
       if (this.map && generation === this.generation) {
         // A transient query error must not blank an otherwise usable batch.
@@ -175,6 +232,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
       }
     } finally {
       this.inFlight = false
+      this.pendingFootprint = undefined
       if (this.dirty) this.schedule()
     }
   }
@@ -441,7 +499,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
     this.drawnTrees = undefined
     this.count = 0
     this.coverage = undefined
-    this.loadedBox = undefined
+    this.loadedFootprint = undefined
     this.queryCamera = undefined
   }
 }

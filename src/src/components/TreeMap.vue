@@ -10,7 +10,10 @@
   <div v-if="isInitialLoading" class="map-loading" role="status">{{ nearbyLocation ? 'Loading trees around you…' : loadingMessage }}</div>
   <div v-else-if="tileRefreshing" class="map-loading map-refreshing">{{ tileRefreshMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
-  <div v-if="spriteDebug" class="sprite-debug" aria-hidden="true">{{ spriteDebug }}</div>
+  <div v-if="spriteDebug" class="sprite-debug" aria-hidden="true">
+    <div>{{ spriteDebug }}</div>
+    <canvas ref="radarCanvas" class="sprite-radar" />
+  </div>
   <div v-if="mapWindow?.reason && !windowNoticeDismissed && !isInitialLoading" class="map-window-notice" role="status">
     <span>{{ mapWindow.reason === 'reloaded'
       ? 'The map reloaded last time, so it is holding a smaller area to stay within this phone’s memory.'
@@ -356,6 +359,7 @@ import { formatDataSource } from '../data/dataSources'
 import { speciesSentinel } from '../data/species'
 import { plantYearFrom } from '../lib/badges'
 import { formatPlantDate, formatTreeAge } from '../lib/plantDate'
+import { drawSpriteRadar } from '../lib/spriteRadar'
 import {
   acquireSharedPositionWatch,
   getGeolocationPermissionState,
@@ -843,7 +847,7 @@ function updateZoomLevel() {
 
 const {
   addTreeLayers, applyColorToLayers, forceTreesTileRefetchPass, pickCrownSprite, renderedTreeSprites,
-  treesResident, residentTreeCount, pickResidentTree, spriteStats,
+  treesResident, residentTreeCount, pickResidentTree, spriteStats, spriteRadar,
 } = useMapLayers({
   map: mapRef,
   simplified: props.simplified ?? false,
@@ -865,9 +869,13 @@ function readMapDebug(): boolean {
   try { return localStorage.getItem(MAP_DEBUG_KEY) === '1' } catch { return false }
 }
 
+const radarCanvas = ref<HTMLCanvasElement | null>(null)
+
 function frame(now: number, last = now) {
   frameTimes.push(now - last)
   if (frameTimes.length > 120) frameTimes.shift()
+  const radar = radarCanvas.value ? spriteRadar() : null
+  if (radar) drawSpriteRadar(radarCanvas.value!, radar)
   fpsRafId = requestAnimationFrame((next) => frame(next, now))
 }
 
@@ -3306,6 +3314,13 @@ onUnmounted(() => {
 .tc-prediction-note { font-size: 12px; line-height: 1.5; color: rgba(var(--ink-rgb), .65); margin: 0 0 12px; }
 .tc-unknown-tree { display: flex; flex-direction: column; align-items: center; color: rgba(var(--ink-rgb), .65); font-size: 11px; }
 .tc-unknown-tree-symbol { display: grid; place-items: center; font-size: 120px; font-weight: 300; line-height: 1; color: rgba(var(--ink-rgb), .32); }
+.sprite-radar {
+  display: block;
+  width: 160px;
+  height: 160px;
+  margin: 4px auto 0;
+  border-radius: 4px;
+}
 .sprite-debug {
   position: absolute;
   left: 50%;

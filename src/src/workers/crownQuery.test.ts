@@ -120,15 +120,15 @@ describe('nearby crown query', () => {
     expect(rows[rows.length - 1]?.id).toBe(`view-${MAX_TREE_SPRITES - 1}`)
   })
 
-  test('buffered desktop queries spend the budget on visible trees first', async () => {
+  test('desktop queries spend the budget only inside the view footprint', async () => {
     await conn.run(`INSERT INTO trees_fast VALUES
       ('visible-far', 'USSFO', 0.5, 0, 55659, 0, 12, NULL, 'broadleaf', 18, NULL, NULL)`)
+    // The bounds hold every view- tree too; the footprint polygon holds only visible-far.
     const rows = (await conn.runAndReadAll(crownQuery({ ...camera,
       bounds: { west: -1, east: 1, south: -1, north: 1 },
-      visibleBounds: { west: 0.4, east: 0.6, south: -0.1, north: 0.1 },
+      footprint: [[50000, -1000], [60000, -1000], [60000, 1000], [50000, 1000]],
     }, "SELECT tree_id FROM trees_fast WHERE tree_id LIKE 'view-%' OR tree_id = 'visible-far'", color))).getRowObjects()
-    expect(rows).toHaveLength(MAX_TREE_SPRITES)
-    expect(rows[0].id).toBe('visible-far')
+    expect(rows.map(row => row.id)).toEqual(['visible-far'])
   })
 
   test('dense neighborhoods return only the nearest bounded batch', async () => {
