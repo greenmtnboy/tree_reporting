@@ -2,6 +2,7 @@ import * as duckdb from '@duckdb/duckdb-wasm'
 import { DUCKDB_ASSET_URLS } from '../duckdbAssetUrls'
 import { crownQuery } from './crownQuery'
 import { CROWN_DISTANCE_MAX, crownColumnBuffers, type TreeRenderView, type TreeCrownColumns } from '../lib/treeCrowns'
+import { buildCrownBatch, crownBatchBuffers, type CrownBatch, type CrownBatchOptions } from '../lib/crownBatch'
 
 let db: duckdb.AsyncDuckDB | null = null
 let conn: duckdb.AsyncDuckDBConnection | null = null
@@ -2103,6 +2104,7 @@ async function getTile(z: number, x: number, y: number): Promise<{ tile: Uint8Ar
 
 type WorkerMethodMap = {
   getMapTrees: { params: TreeRenderView; result: TreeCrownColumns }
+  getCrownBatch: { params: { camera: TreeRenderView; options: CrownBatchOptions }; result: CrownBatch }
   getPointKeys: { params: Record<string, never>; result: PointKeys | null }
   getPointChunkDirectory: { params: Record<string, never>; result: PointChunkDirectory | null }
   getPointChunks: { params: { rowsKey: string; keys: number[] }; result: PointChunkBatch | null }
@@ -2167,6 +2169,17 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'getMapTrees': {
         const result = await getMapTrees(msg.params as TreeRenderView)
         send({ type: 'response', requestId: msg.requestId, ok: true, result }, crownColumnBuffers(result))
+        break
+      }
+      case 'getCrownBatch': {
+        // The sort and vertex fill run here, off the main thread; the GPU buffer is transferred.
+        const { camera, options } = msg.params as { camera: TreeRenderView; options: CrownBatchOptions }
+        const started = performance.now()
+        const columns = await getMapTrees(camera)
+        const built = performance.now()
+        const result = buildCrownBatch(columns, camera, options)
+        result.timing = { sqlMs: built - started, buildMs: performance.now() - built }
+        send({ type: 'response', requestId: msg.requestId, ok: true, result }, crownBatchBuffers(result))
         break
       }
       case 'getPointKeys': {

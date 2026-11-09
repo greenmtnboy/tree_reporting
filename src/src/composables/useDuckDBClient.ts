@@ -1,7 +1,8 @@
 import { ref } from 'vue'
 import maplibregl from 'maplibre-gl'
 import DuckDBPipelineWorker from '../workers/duckdbPipeline.worker?worker'
-import { crownsFromColumns, type TreeRenderView, type TreeCrownColumns } from '../lib/treeCrowns'
+import type { TreeRenderView } from '../lib/treeCrowns'
+import type { CrownBatch, CrownBatchOptions } from '../lib/crownBatch'
 import type { WindowPolicy } from '../workers/cityWindow'
 import type { PointChunkBatch, PointChunkColors, PointChunkDirectory, PointKeys } from '../workers/cityPoints'
 
@@ -9,7 +10,7 @@ type PrefetchStatus = 'executed' | 'deduped' | 'skipped'
 type TileRangeParams = { minX: number; maxX: number; minY: number; maxY: number }
 
 type WorkerMethodMap = {
-  getMapTrees: { params: TreeRenderView; result: TreeCrownColumns }
+  getCrownBatch: { params: { camera: TreeRenderView; options: CrownBatchOptions }; result: CrownBatch }
   getPointKeys: { params: Record<string, never>; result: PointKeys | null }
   getPointChunkDirectory: { params: Record<string, never>; result: PointChunkDirectory | null }
   getPointChunks: { params: { rowsKey: string; keys: number[] }; result: PointChunkBatch | null }
@@ -274,7 +275,7 @@ async function query(sql: string, options: { maxRows?: number } = {}): Promise<{
 
 export function useDuckDB() {
   return {
-    getMapTrees: async (camera: TreeRenderView) => crownsFromColumns(await rpc('getMapTrees', camera)),
+    getCrownBatch: (camera: TreeRenderView, options: CrownBatchOptions) => rpc('getCrownBatch', { camera, options }),
     getPointKeys: () => rpc('getPointKeys', {}),
     getPointChunkDirectory: () => rpc('getPointChunkDirectory', {}),
     getPointChunks: (rowsKey: string, keys: number[]) => rpc('getPointChunks', { rowsKey, keys }),

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildDotLevels, buildPickGrid, circleOpacity, circleRadius, circleRadiusRange, heatOpacity, interpolateStops,
+  buildDotLevels, buildPickGrid, CIRCLE_RADIUS_SCALE, circleOpacity, circleRadius, circleRadiusRange, heatOpacity, interpolateStops,
   levelColors, levelForKernel, visibleRanges, lngLatFrom3857, lngLatTo3857, MERCATOR_WORLD_M, pointsNear, relativeMatrix,
 } from './treeDots'
+import { SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM } from './treeCrowns'
 
 function seeded(n: number, span: number) {
   let s = 12345
@@ -19,21 +20,22 @@ describe('zoom curves', () => {
     expect(interpolateStops(stops, 11)).toBe(2)
     expect(interpolateStops(stops, 13)).toBe(3)
   })
-  it('crossfades the heat out by z15 and the circles in from z12.8 to z15.5', () => {
+  it('crossfades the heat out by z15 and the circles out as the sprites take over', () => {
     expect(heatOpacity(5)).toBe(0)
     expect(heatOpacity(9)).toBeGreaterThan(0)
     expect(heatOpacity(15)).toBe(0)
     expect(circleOpacity(5.9)).toBe(0)
     expect(circleOpacity(9)).toBeGreaterThan(0.7)
-    expect(circleOpacity(14)).toBeGreaterThan(0.75)
-    expect(circleOpacity(15)).toBe(0)
+    expect(circleOpacity(SPRITE_CROWN_ZOOM_START)).toBeGreaterThan(0.75)
+    expect(circleOpacity(SPRITE_OPAQUE_ZOOM)).toBe(0)
   })
   it('sizes a circle by the square root of its trunk', () => {
     const range = circleRadiusRange(15)
-    expect(range).toEqual([1.5, 4])
-    expect(circleRadius(0, range)).toBe(1.5)
-    expect(circleRadius(42, range)).toBeCloseTo(4)
-    expect(circleRadius(200, range)).toBeCloseTo(4)
+    expect(range[0]).toBeCloseTo(1.5 * CIRCLE_RADIUS_SCALE)
+    expect(range[1]).toBeCloseTo(4 * CIRCLE_RADIUS_SCALE)
+    expect(circleRadius(0, range)).toBe(range[0])
+    expect(circleRadius(42, range)).toBeCloseTo(range[1])
+    expect(circleRadius(200, range)).toBeCloseTo(range[1])
   })
 })
 

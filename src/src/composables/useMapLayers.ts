@@ -354,7 +354,7 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
   /** Add the sprite and resident layers if missing, and bring the resident set up to the worker's query and colours. */
   function syncResidentLayers(mapInstance: maplibregl.Map): Promise<void> {
     if (!crownLayer || !mapInstance.getLayer(crownLayer.id)) {
-      crownLayer = new TreeCrownLayer(useDuckDB().getMapTrees, simplified)
+      crownLayer = new TreeCrownLayer(useDuckDB().getCrownBatch, simplified)
       mapInstance.addLayer(crownLayer)
     } else {
       crownLayer.invalidate()
@@ -439,7 +439,7 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
       maxzoom: TREES_SOURCE_MAXZOOM,
     })
 
-    crownLayer = new TreeCrownLayer(useDuckDB().getMapTrees, simplified)
+    crownLayer = new TreeCrownLayer(useDuckDB().getCrownBatch, simplified)
     mapInstance.addLayer(crownLayer)
     addColorLayers(mapInstance, colors)
 

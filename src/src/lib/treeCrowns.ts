@@ -7,8 +7,10 @@ export const CROWN_ZOOM_FULL = 18
  * span (treeDots' circleOpacity and useMapLayers' fallback read these), then climb to fully
  * opaque by SPRITE_FULL_OPACITY_ZOOM. Above SPRITE_OPAQUE_ZOOM dots show only past the sprites' reach.
  */
-export const SPRITE_CROWN_ZOOM_START = 14.4
-export const SPRITE_OPAQUE_ZOOM = 15
+export const SPRITE_OPAQUE_ZOOM = 14
+/** Zooms over which the dots hand over to the sprites. */
+export const SPRITE_HANDOFF_ZOOMS = 0.6
+export const SPRITE_CROWN_ZOOM_START = SPRITE_OPAQUE_ZOOM - SPRITE_HANDOFF_ZOOMS
 export const SPRITE_BASE_OPACITY = 0.72
 export const SPRITE_FULL_OPACITY_ZOOM = 21
 /** Desktop sprites are drawn at metre scale but never narrower than this many CSS pixels. */
@@ -20,7 +22,10 @@ export const REACH_FADE = 0.9
 export const CROWN_DISTANCE_FULL = 700
 export const CROWN_DISTANCE_MAX = 1800
 export const MAX_CROWNS = 4096
+/** The desktop's default sprite budget; the layer may run with another (TreeRenderView.spriteLimit). */
 export const MAX_TREE_SPRITES = 32768
+/** localStorage key that overrides the desktop sprite budget, for sweeps and debugging. */
+export const SPRITE_LIMIT_KEY = 'sf_trees_sprite_limit'
 export const MAX_CROWN_WIDTH = 60
 /** Above the tallest living trees (~116 m); the LIDAR staging already drops crowns over 60 m. */
 export const MAX_TREE_HEIGHT = 120
@@ -32,25 +37,13 @@ export interface TreeRenderView extends CrownCamera {
   bounds?: { west: number; south: number; east: number; north: number }
   /** Unpadded viewport, preferred over the buffer when the sprite budget fills. */
   visibleBounds?: { west: number; south: number; east: number; north: number }
+  /** Desktop sprite budget for this query; MAX_TREE_SPRITES when absent. */
+  spriteLimit?: number
 }
-export interface TreeCrown {
-  id: string
-  lng: number
-  lat: number
-  width: number | null
-  measured: boolean
-  color: string
-  category?: string
-  dbh?: number
-  /** Metres: a measured height where valid, else the published prediction; null keeps the artwork's proportions. */
-  height?: number | null
-}
-
 /**
- * A sprite batch as columns, the shape the worker sends: numbers in typed
- * arrays it transfers rather than copies, NaN for a missing value. One
- * object per tree cost more to build from the Arrow result and to clone
- * across the worker boundary than the query took.
+ * A sprite query's rows as columns: numbers in typed arrays, NaN for a
+ * missing value. One object per tree cost more to build from the Arrow
+ * result than the query took.
  */
 export interface TreeCrownColumns {
   id: string[]
@@ -66,18 +59,6 @@ export interface TreeCrownColumns {
 
 export function crownColumnBuffers(c: TreeCrownColumns): ArrayBuffer[] {
   return [c.lng, c.lat, c.width, c.measured, c.dbh, c.height].map(a => a.buffer as ArrayBuffer)
-}
-
-export function crownsFromColumns(c: TreeCrownColumns): TreeCrown[] {
-  const out: TreeCrown[] = new Array(c.id.length)
-  const orNull = (v: number) => Number.isNaN(v) ? null : v
-  for (let i = 0; i < out.length; i++) {
-    out[i] = {
-      id: c.id[i], lng: c.lng[i], lat: c.lat[i], width: orNull(c.width[i]), measured: c.measured[i] === 1,
-      color: c.color[i], category: c.category[i], dbh: c.dbh[i], height: orNull(c.height[i]),
-    }
-  }
-  return out
 }
 
 export function crownZoomOpacity(zoom: number): number {

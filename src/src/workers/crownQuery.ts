@@ -24,6 +24,12 @@ export type CrownColor = { join: string; expr: string }
  * the DISTINCT join it replaced built the whole city's id set every query
  * (~170 of ~190 ms on San Francisco).
  */
+function spriteLimit(camera: TreeRenderView): number {
+  const limit = camera.spriteLimit ?? MAX_TREE_SPRITES
+  if (!Number.isInteger(limit) || limit < 1) throw new Error('Invalid sprite limit')
+  return limit
+}
+
 export function crownQuery(camera: TreeRenderView, baseQuery: string | null, color: CrownColor): string {
   if (![camera.lng, camera.lat, camera.altitude].every(Number.isFinite) || Math.abs(camera.lat) > 85.05112878 || camera.altitude < 0) {
     throw new Error('Invalid crown camera')
@@ -58,5 +64,5 @@ WITH ${baseQuery === null ? '' : `base AS (${baseQuery}), `}nearby AS (
 )
 SELECT id, lng, lat, width, measured, color, category, dbh, height FROM nearby
 ${camera.bounds ? '' : `WHERE width IS NOT NULL AND distance_squared < ${CROWN_DISTANCE_MAX ** 2}`}
-ORDER BY in_viewport DESC, distance_squared, id LIMIT ${camera.bounds ? MAX_TREE_SPRITES : MAX_CROWNS}`
+ORDER BY in_viewport DESC, distance_squared, id LIMIT ${camera.bounds ? spriteLimit(camera) : MAX_CROWNS}`
 }

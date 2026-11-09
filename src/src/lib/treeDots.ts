@@ -55,11 +55,14 @@ export const heatIntensity = (zoom: number) => interpolateStops([[10, 0.85], [13
 export const circleOpacity = (zoom: number) => zoom < CIRCLE_MIN_ZOOM || zoom >= CIRCLE_MAX_ZOOM ? 0
   : interpolateStops([[6, 0], [8, 0.75], [SPRITE_CROWN_ZOOM_START, CIRCLE_PEAK_OPACITY], [SPRITE_OPAQUE_ZOOM, 0]], zoom)
 
+/** Scales every dot radius below; the stops keep the shape of the curve. */
+export const CIRCLE_RADIUS_SCALE = 0.7
+
 /** A circle's radius in CSS pixels runs from `min` (thin trunk) to `max` (42 in and over) at `zoom`. */
 export function circleRadiusRange(zoom: number): [number, number] {
   return [
-    interpolateStops([[8, 0.4], [12.8, 0.5], [15, 1.5], [18, 2.2], [21, 2.6]], zoom),
-    interpolateStops([[8, 0.5], [12.8, 0.8], [15, 4], [18, 6.7], [21, 8.2]], zoom),
+    CIRCLE_RADIUS_SCALE * interpolateStops([[8, 0.4], [12.8, 0.5], [15, 1.5], [18, 2.2], [21, 2.6]], zoom),
+    CIRCLE_RADIUS_SCALE * interpolateStops([[8, 0.5], [12.8, 0.8], [15, 4], [18, 6.7], [21, 8.2]], zoom),
   ]
 }
 

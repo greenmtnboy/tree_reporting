@@ -5,7 +5,7 @@ import { colorSql } from './cityTables'
 import { CATEGORY_COLORS } from '../treeFormColors'
 import {
   CROWN_DISTANCE_MAX, MAX_CROWNS, MAX_SPRITE_ASPECT, MAX_TREE_SPRITES, MIN_SPRITE_ASPECT,
-  crownZoomOpacity, spriteAspect, spriteOpacity, SPRITE_BASE_OPACITY, validCrownWidth, validTreeHeight,
+  crownZoomOpacity, spriteAspect, spriteOpacity, SPRITE_BASE_OPACITY, SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM, SPRITE_FULL_OPACITY_ZOOM, validCrownWidth, validTreeHeight,
 } from '../lib/treeCrowns'
 
 const BROADLEAF = CATEGORY_COLORS.broadleaf
@@ -166,8 +166,15 @@ test('zoom fades and invalid widths are bounded', () => {
   for (const width of [null, undefined, 0, -1, NaN, Infinity, 1000, '5']) expect(validCrownWidth(width)).toBe(false)
   expect(validCrownWidth(0.5)).toBe(true)
   expect(validCrownWidth(60)).toBe(true)
-  expect(spriteOpacity(14.4)).toBe(0)
-  expect(spriteOpacity(15)).toBeCloseTo(SPRITE_BASE_OPACITY)
-  expect(spriteOpacity(21)).toBe(1)
+  expect(spriteOpacity(SPRITE_CROWN_ZOOM_START)).toBe(0)
+  expect(spriteOpacity(SPRITE_OPAQUE_ZOOM)).toBeCloseTo(SPRITE_BASE_OPACITY)
+  expect(spriteOpacity(SPRITE_FULL_OPACITY_ZOOM)).toBe(1)
   expect(() => crownQuery({ lng: NaN, lat: 0, altitude: 0 }, '', colorSql('tf', false))).toThrow('Invalid crown camera')
+})
+
+test('a desktop query takes its sprite budget from the camera', () => {
+  const view = { lng: 0, lat: 0, altitude: 600, bounds: { west: -1, east: 1, south: -1, north: 1 } }
+  expect(crownQuery(view, null, colorSql('tf', false))).toMatch(new RegExp(`LIMIT ${MAX_TREE_SPRITES}$`))
+  expect(crownQuery({ ...view, spriteLimit: 5000 }, null, colorSql('tf', false))).toMatch(/LIMIT 5000$/)
+  expect(() => crownQuery({ ...view, spriteLimit: 0 }, null, colorSql('tf', false))).toThrow('Invalid sprite limit')
 })

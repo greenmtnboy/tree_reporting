@@ -62,6 +62,10 @@
       <button class="cache-refresh-btn" :disabled="cacheRefreshing" @click="void purgeAndRefresh()">&#x21BA;</button>
       <span class="cache-refresh-tooltip">Refresh map cache</span>
     </div>
+    <div class="cache-refresh-btn-wrap">
+      <button class="cache-refresh-btn" :class="{ 'cache-refresh-btn--on': mapDebugOn }" :aria-pressed="mapDebugOn" @click="mapDebugOn = !mapDebugOn">&#x2699;</button>
+      <span class="cache-refresh-tooltip">{{ mapDebugOn ? 'Hide' : 'Show' }} map debug info</span>
+    </div>
     <div v-if="dbPopulatedMs != null" class="db-status-wrap">
       <span class="db-status-dot">&#x25CF;</span>
       <span class="db-status-tooltip">City DB populated; {{ dbPopulatedMs }}ms · {{ dbTreeCount?.toLocaleString() }} trees</span>
@@ -848,16 +852,54 @@ const {
   onResidentTreesLoaded: () => onTreesFirstLoaded(),
 })
 
-// Dev-only readout of the sprite layer: how many it drew against the cap, how far they reach, query time.
+// Desktop debug readout, off unless toggled from the map's lower-left controls: frame rate,
+// resident dots, and the sprite layer (drawn against its cap, reach, query and install time).
+const MAP_DEBUG_KEY = 'sf_trees_map_debug'
+const mapDebugOn = ref(readMapDebug())
 const spriteDebug = ref('')
-const spriteDebugTimer = import.meta.env.DEV && !props.simplified ? setInterval(() => {
+let spriteDebugTimer: ReturnType<typeof setInterval> | undefined
+let fpsRafId: number | null = null
+let frameTimes: number[] = []
+
+function readMapDebug(): boolean {
+  try { return localStorage.getItem(MAP_DEBUG_KEY) === '1' } catch { return false }
+}
+
+function frame(now: number, last = now) {
+  frameTimes.push(now - last)
+  if (frameTimes.length > 120) frameTimes.shift()
+  fpsRafId = requestAnimationFrame((next) => frame(next, now))
+}
+
+function updateSpriteDebug() {
+  const sorted = frameTimes.slice(1).sort((a, b) => a - b)
+  const p95 = sorted.length ? sorted[Math.floor(sorted.length * 0.95)] : 0
+  const avg = sorted.length ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0
+  const frames = avg ? `${Math.round(1000 / avg)} fps · p95 ${p95.toFixed(0)} ms` : ''
+  const dots = `dots ${(residentTreeCount() ?? 0).toLocaleString()}`
   const s = spriteStats()
-  if (!s) { spriteDebug.value = ''; return }
+  if (!s) { spriteDebug.value = `${frames} · ${dots}`; return }
   const reach = Number.isFinite(s.reach) ? `${Math.round(s.reach)} m` : 'all'
-  spriteDebug.value = `sprites ${s.drawn.toLocaleString()} / ${s.cap.toLocaleString()}${s.drawn >= s.cap ? ' CAPPED' : ''}`
-    + ` · reach ${reach} · query ${s.lastQueryMs.toFixed(0)} ms${s.inFlight ? ' …' : ''}`
+  spriteDebug.value = `${frames} · ${dots} · sprites ${s.drawn.toLocaleString()} / ${s.cap.toLocaleString()}${s.drawn >= s.cap ? ' CAPPED' : ''}`
+    + ` · reach ${reach} · query ${s.lastQueryMs.toFixed(0)} ms (sql ${s.lastSqlMs.toFixed(0)}, build ${s.lastBuildMs.toFixed(0)}) · install ${s.lastInstallMs.toFixed(0)} ms${s.inFlight ? ' …' : ''}`
     + ` · ${s.queries} queries, ${s.discarded} discarded`
-}, 250) : undefined
+}
+
+function stopMapDebug() {
+  clearInterval(spriteDebugTimer)
+  spriteDebugTimer = undefined
+  if (fpsRafId !== null) { cancelAnimationFrame(fpsRafId); fpsRafId = null }
+  frameTimes = []
+  spriteDebug.value = ''
+}
+
+watch(mapDebugOn, (on) => {
+  try { localStorage.setItem(MAP_DEBUG_KEY, on ? '1' : '0') } catch { /* private mode */ }
+  stopMapDebug()
+  if (!on || props.simplified) return
+  fpsRafId = requestAnimationFrame((now) => frame(now))
+  spriteDebugTimer = setInterval(updateSpriteDebug, 250)
+}, { immediate: true })
 
 // --- Intro animation ---
 
@@ -2269,7 +2311,7 @@ onDeactivated(() => {
 })
 
 onUnmounted(() => {
-  clearInterval(spriteDebugTimer)
+  stopMapDebug()
   disposed = true
   if (floorHintTimer) clearTimeout(floorHintTimer)
   if (loadSettleTimer) clearTimeout(loadSettleTimer)
@@ -2551,6 +2593,11 @@ onUnmounted(() => {
   background: rgba(var(--accent-rgb), 0.16);
   color: var(--color-ink);
   border-color: rgba(var(--accent-rgb), 0.28);
+}
+
+.cache-refresh-btn--on {
+  background: rgba(var(--accent-rgb), 0.16);
+  color: var(--color-ink);
 }
 
 .cache-refresh-btn:disabled {
@@ -3270,7 +3317,10 @@ onUnmounted(() => {
   background: rgba(0, 0, 0, 0.7);
   color: #fff;
   font: 11px/1.4 ui-monospace, monospace;
-  white-space: nowrap;
+  /* Wraps on a narrow map rather than running under the controls. */
+  width: max-content;
+  max-width: calc(100% - 140px);
+  text-align: center;
   pointer-events: none;
 }
 </style>
