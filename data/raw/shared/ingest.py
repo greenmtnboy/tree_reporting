@@ -2840,6 +2840,15 @@ def _send(method: str, url: str, **kwargs) -> requests.Response:
 
     try:
         kwargs["headers"] = _with_default_headers(kwargs.get("headers"))
+        if "verify" not in kwargs:
+            # A few hosts serve an incomplete TLS chain (leaf only); add their
+            # missing intermediate to certifi's roots so verification stays ON.
+            # None for every other host. See shared/tls_intermediates.py.
+            from shared.tls_intermediates import verify_bundle_for
+
+            bundle = verify_bundle_for(url)
+            if bundle:
+                kwargs["verify"] = bundle
         r = requests.request(method, url, **kwargs)
     except requests.exceptions.RequestException as e:
         raise UpstreamUnavailable(str(e)) from e

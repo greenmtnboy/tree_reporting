@@ -749,6 +749,45 @@ class TestGetJsonWithRetry:
         assert get_json_with_retry("http://portal/api") == {"ok": True}
 
 
+class TestIncompleteChainHosts:
+    """maps.burlingtonvt.gov omits its intermediate; verification stays on."""
+
+    def _capture(self, monkeypatch):
+        seen = {}
+
+        def fake_request(method, url, **kwargs):
+            seen.update(kwargs)
+            return _FakeResponse('{"ok": true}')
+
+        import requests
+
+        monkeypatch.setattr(requests, "request", fake_request)
+        return seen
+
+    def test_burlington_gets_certifi_plus_intermediate(self, monkeypatch):
+        import certifi
+
+        from shared.tls_intermediates import SSL2BUY_EMEA_RSA_DV_CA
+
+        seen = self._capture(monkeypatch)
+        get_json_with_retry("https://maps.burlingtonvt.gov/arcgis/rest/x?f=json")
+        bundle = Path(seen["verify"]).read_text()
+        assert SSL2BUY_EMEA_RSA_DV_CA.strip() in bundle
+        assert Path(certifi.where()).read_text().strip() in bundle
+
+    def test_other_hosts_use_requests_default(self, monkeypatch):
+        seen = self._capture(monkeypatch)
+        get_json_with_retry("https://services.arcgis.com/x?f=json")
+        assert "verify" not in seen
+
+    def test_explicit_verify_is_respected(self, monkeypatch):
+        from shared.ingest import _send
+
+        seen = self._capture(monkeypatch)
+        _send("GET", "https://maps.burlingtonvt.gov/x", verify="/custom/ca.pem")
+        assert seen["verify"] == "/custom/ca.pem"
+
+
 class TestEmitFreshness:
     def _read(self, buf: io.BytesIO) -> pa.Table:
         buf.seek(0)
