@@ -37,6 +37,8 @@ export async function createNodeDuckDB(): Promise<BlockingDb> {
 
 /** Every statement the worker ran, in order, for tests that check its SQL. */
 export const executedSql: string[] = []
+/** The file buffers the worker has registered and not yet dropped: it must not leave any behind. */
+export const registeredFiles = new Set<string>()
 
 export class AsyncDuckDBConnection {
   constructor(private readonly conn: BlockingConnection) {}
@@ -71,6 +73,19 @@ export class AsyncDuckDB {
   async connect(): Promise<AsyncDuckDBConnection> {
     if (!this.db) throw new Error('instantiate() first')
     return new AsyncDuckDBConnection(this.db.connect())
+  }
+
+  /** A fetched file's bytes under a name SQL can read, as the worker registers a world block. */
+  async registerFileBuffer(name: string, buffer: Uint8Array): Promise<void> {
+    if (!this.db) throw new Error('instantiate() first')
+    registeredFiles.add(name)
+    this.db.registerFileBuffer(name, buffer)
+  }
+
+  async dropFile(name: string): Promise<void> {
+    if (!this.db) throw new Error('instantiate() first')
+    registeredFiles.delete(name)
+    this.db.dropFile(name)
   }
 }
 

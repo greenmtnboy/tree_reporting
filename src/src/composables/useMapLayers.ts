@@ -332,7 +332,7 @@ export interface UseMapLayersOptions {
   simplified: boolean
   activeHeatmapColors: ComputedRef<string[]>
   mapQueryRevision: Ref<number>
-  /** The resident layer drew a new set of trees (a city, a query or a filter; not a recolour). */
+  /** The resident layer's view is drawn from the current rows: after the first load, a bookmark, a query, a filter or a recolour. */
   onResidentTreesLoaded?: (count: number) => void
 }
 
@@ -342,7 +342,7 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
   let crownLayer: TreeCrownLayer | undefined
   // The desktop draws every tree from memory (TreeDotsLayer) where WebGL2
   // allows, and so has no vector tile source; a phone, or a desktop without
-  // a float render target, keeps the tiles. Decided once, at the first add.
+  // WebGL2, keeps the tiles. Decided once, at the first add.
   let residentMode: boolean | undefined
   let dotsLayer: TreeDotsLayer | undefined
 
@@ -495,11 +495,15 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     treesResident: () => isResident(),
     /** Trees the resident layer holds; null before its first set arrives. */
     residentTreeCount: (): number | null => (dotsLayer?.loaded ? dotsLayer.count : null),
+    /** True once every chunk in view holds the current rows: what is drawn is all there is to draw here. */
+    residentViewSettled: (): boolean => !!dotsLayer?.viewSettled,
     /** The resident circle under a point, while circles are drawn. */
     pickResidentTree: (point: { x: number; y: number }): TreeDotsPick | undefined => dotsLayer?.pick(point),
     /** Trees the sprite layer drew last frame; custom layers have no queryRenderedFeatures. */
     renderedTreeSprites: (): readonly { lng: number; lat: number }[] => crownLayer?.trees ?? [],
     spriteStats: () => crownLayer?.stats() ?? null,
+    /** Fix the sprite cap, or null for the self-adjusting budget (the debug panel's control). */
+    setSpriteLimit: (limit: number | null) => crownLayer?.setSpriteLimit(limit),
     spriteRadar: () => crownLayer?.radar() ?? null,
     addTreeLayers,
     applyColorToLayers,

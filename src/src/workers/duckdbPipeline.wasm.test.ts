@@ -1,9 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { executedSql } from './wasm/nodeDuckDB'
-import { FIXTURE_DIR, writeCityProjection } from './wasm/fixtures'
+import { executedSql, registeredFiles } from './wasm/nodeDuckDB'
+import { FIXTURE_DIR, fetchedWorldFiles, writeCityProjection, writeWorld } from './wasm/fixtures'
 import { startWorker, type WorkerHarness } from './wasm/workerHarness'
+import { TREES_AT_TOKEN } from './cityTables'
+import type { PointChunkBatch, PointChunkColors, PointChunkDirectory, PointKeys } from './cityPoints'
+import { blockAt, blockKey, type WorldDirectory } from './worldBlocks'
 
 vi.mock('@duckdb/duckdb-wasm', () => import('./wasm/nodeDuckDB'))
 vi.mock('../duckdbAssetUrls', () => ({ DUCKDB_ASSET_URLS: { mvp: { mainModule: '', mainWorker: '' }, eh: { mainModule: '', mainWorker: '' } } }))
@@ -12,13 +15,21 @@ vi.mock('./parquetUrls', async () => (await import('./wasm/fixtures')).fixturePa
 /**
  * The tile worker, unmodified, on DuckDB-WASM under Node: the engine the
  * browser runs, whose planner differs from native DuckDB's (see
- * wasm/nodeDuckDB.ts). The city is a synthetic browser projection, 300k
- * trees over central Boston.
+ * wasm/nodeDuckDB.ts). The world is two synthetic cities cut into blocks as
+ * the pipeline cuts them: 300k trees over central Boston and 20k over
+ * Burlington, 290 km away, with species of its own. The worker runs as a
+ * desktop does: whole blocks, held near the camera.
  */
 const CITY = 'USBOS'
 const ROWS = 300_000
 const BBOX: [number, number, number, number] = [-71.20, 42.28, -70.92, 42.44]
 const CENTER: [number, number] = [-71.06, 42.36]
+const OTHER = 'USBTV'
+const OTHER_ROWS = 20_000
+const OTHER_BBOX: [number, number, number, number] = [-73.26, 44.44, -73.17, 44.50]
+const OTHER_CENTER: [number, number] = [-73.2121, 44.4759]
+const OTHER_SPECIES: [string, string, string, string] = ['Ulmus americana', 'Acer saccharum', 'Betula papyrifera', 'Tilia americana']
+const blockOf = ([lng, lat]: [number, number]) => { const b = blockAt(lng, lat); return blockKey(b.x, b.y) }
 
 type TileResult = { tileBuffer: ArrayBuffer; transient: boolean }
 type QueryResult = { columns: string[]; rows: Record<string, unknown>[] }
@@ -83,8 +94,13 @@ describe('tile worker on DuckDB-WASM', () => {
   const geometryInScan = async (sql: string) =>
     scanFilterExpressions(await plan(sql)).filter(e => /ST_AsMVTGeom|ST_IsEmpty/i.test(e))
 
+  let world: { blocks: number; trees: number }
+  const count = async (sql: string) => Number((await worker.call<QueryResult>('query', { sql })).rows[0].n)
+
   beforeAll(async () => {
     await writeCityProjection({ city: CITY, rows: ROWS, bbox: BBOX })
+    await writeCityProjection({ city: OTHER, rows: OTHER_ROWS, bbox: OTHER_BBOX, species: OTHER_SPECIES })
+    world = await writeWorld([CITY, OTHER])
     worker = await startWorker()
     await worker.call('ensureInit', { city: CITY })
     await worker.call('setCityContext', { city: CITY })
@@ -93,9 +109,18 @@ describe('tile worker on DuckDB-WASM', () => {
     rmSync(FIXTURE_DIR, { recursive: true, force: true })
   })
 
-  it('loads the city projection and the spatial extension', async () => {
-    const count = await worker.call<QueryResult>('query', { sql: 'SELECT count(*) AS n FROM trees_fast' })
-    expect(Number(count.rows[0].n)).toBe(ROWS)
+  it('reads the manifest and the vocabulary, loads the spatial extension, and holds no tree yet', async () => {
+    expect(await count('SELECT count(*) AS n FROM trees_fast')).toBe(0)
+    // The bookmark's city-wide reads come from its projection, in place.
+    expect(await count('SELECT count(*) AS n FROM trees_published')).toBe(ROWS)
+    expect(fetchedWorldFiles.filter((name) => name.startsWith('blocks/'))).toEqual([])
+    const directory = await worker.call<WorldDirectory>('getWorldDirectory')
+    expect(directory.trees).toBe(ROWS + OTHER_ROWS)
+    expect(directory.blocks.length / 3).toBe(world.blocks)
+    expect(directory.cities.map((c) => [c.code, c.trees])).toEqual([[CITY, ROWS], [OTHER, OTHER_ROWS]])
+    // One vocabulary for the world: a species only the far city has is already a value of the type.
+    const species = await worker.call<QueryResult>('query', { sql: 'SELECT unnest(enum_range(NULL::tree_species_t)) AS v' })
+    expect(species.rows.map((r) => r.v)).toEqual(expect.arrayContaining(['Acer rubrum', ...OTHER_SPECIES]))
     const spatial = await worker.call<QueryResult>('query', { sql: "SELECT loaded FROM duckdb_extensions() WHERE extension_name = 'spatial'" })
     expect(spatial.rows[0].loaded).toBe(true)
   })
@@ -115,13 +140,27 @@ describe('tile worker on DuckDB-WASM', () => {
     walkTileSql = [...new Set(executedSql.filter(sql => /ST_AsMVT\(/.test(sql)))]
   })
 
-  it('builds the z15 feature table in rowid slices that together hold every tree once', async () => {
+  it('the walk loaded the blocks around the camera whole, each fetched once, and left no file registered', async () => {
+    const held = await count('SELECT count(*) AS n FROM trees_fast')
+    expect(held).toBeGreaterThan(50_000)
+    expect(held).toBeLessThanOrEqual(ROWS)
+    expect(await count('SELECT count(*) - count(DISTINCT tree_id) AS n FROM trees_fast')).toBe(0)
+    const blocks = fetchedWorldFiles.filter((name) => name.startsWith('blocks/'))
+    expect(blocks.length).toBeGreaterThan(0)
+    expect(new Set(blocks).size).toBe(blocks.length)
+    // Nothing of the far city: the camera has not been there.
+    expect(await count(`SELECT count(*) AS n FROM trees_fast WHERE city = '${OTHER}'`)).toBe(0)
+    expect([...registeredFiles]).toEqual([])
+  })
+
+  it('builds the z15 feature table a held block at a time, holding every held tree once', async () => {
     const built = worker.perf.filter(p => /duckdb-worker:feature-table$/.test(p.label)).slice(-1)[0]
-    // 300k rows at 250k a slice.
-    expect(built?.detail.slices).toBe(2)
+    const tables = await count("SELECT count(*) AS n FROM duckdb_tables() WHERE table_name LIKE 'trees_cell_%'")
+    expect(built?.detail.slices).toBe(tables)
+    const held = await count('SELECT count(*) AS n FROM trees_fast')
     const n = await worker.call<QueryResult>('query', { sql: 'SELECT count(*) AS n, count(DISTINCT tree_id) AS ids FROM tile_features_z15' })
-    expect(Number(n.rows[0].n)).toBe(ROWS)
-    expect(Number(n.rows[0].ids)).toBe(ROWS)
+    expect(Number(n.rows[0].n)).toBe(held)
+    expect(Number(n.rows[0].ids)).toBe(held)
   })
 
   it('every tile holds one source layer per colour, named by the colour (mvtLayers.ts)', async () => {
@@ -183,7 +222,7 @@ describe('tile worker on DuckDB-WASM', () => {
     const builds = () => worker.perf.filter(p => p.label.includes('feature-table')).length
     const before = builds()
     expect(before).toBeGreaterThanOrEqual(1)
-    // A per-tree override, as the DBH scheme or a chat publish installs one.
+    // A per-tree override, as a chat publish installs one.
     await worker.call('setColorOverrideSql', { sql: "SELECT tree_id, '#123456' AS override_color FROM trees" })
     await worker.call('prewarmLodCaches', {})
     expect(builds(), 'the colour change rebuilt the feature table').toBe(before)
@@ -224,5 +263,94 @@ describe('tile worker on DuckDB-WASM', () => {
     } finally {
       await worker.call('setAutoTileFetchEnabled', { enabled: true })
     }
+  })
+
+  // --- The seamless world: the desktop's resident layer and the bookmark ---
+
+  it('the chunk directory is the manifest: every block of the world, read from no table', async () => {
+    const before = executedSql.length
+    const directory = await worker.call<PointChunkDirectory>('getPointChunkDirectory')
+    expect(executedSql.length).toBe(before)
+    expect(directory.keys).toHaveLength(world.blocks)
+    expect(directory.counts.reduce((a, b) => a + b, 0)).toBe(ROWS + OTHER_ROWS)
+    expect(directory.exact).toBe(true)
+    expect(directory.keys).toEqual(expect.arrayContaining([blockOf(CENTER), blockOf(OTHER_CENTER)]))
+  })
+
+  it('moving the camera to another city loads its blocks on demand, beside the first city\'s', async () => {
+    const { rowsKey } = await worker.call<PointKeys>('getPointKeys')
+    const far = blockOf(OTHER_CENTER)
+    await worker.call('setViewportZoom', { zoom: 13.5 })
+    await worker.call('setViewportCenter', { lng: OTHER_CENTER[0], lat: OTHER_CENTER[1] })
+    const batch = await worker.call<PointChunkBatch>('getPointChunks', { rowsKey, keys: [far] })
+    expect(batch.keys).toEqual([far])
+    expect(batch.x.length).toBeGreaterThan(1000)
+    expect(await count(`SELECT count(*) AS n FROM trees_fast WHERE city = '${OTHER}'`)).toBe(batch.x.length)
+    // Boston is still held: nothing was switched, only added.
+    expect(await count(`SELECT count(*) AS n FROM trees_fast WHERE city = '${CITY}'`)).toBeGreaterThan(50_000)
+    // Each point's rowid is its place in the block file, dense and unique within the chunk.
+    expect(new Set(batch.rowid).size).toBe(batch.rowid.length)
+    expect(Math.max(...batch.rowid)).toBe(batch.rowid.length - 1)
+  })
+
+  it('a tree is read by its block and row, from that block\'s table alone', async () => {
+    const { rowsKey } = await worker.call<PointKeys>('getPointKeys')
+    const far = blockOf(OTHER_CENTER)
+    const batch = await worker.call<PointChunkBatch>('getPointChunks', { rowsKey, keys: [far] })
+    const rn = batch.rowid[7]
+    const before = executedSql.length
+    const card = await worker.call<QueryResult>('query', {
+      sql: `SELECT tf.tree_id, CAST(tf.species AS VARCHAR) AS species FROM ${TREES_AT_TOKEN} tf WHERE tf.rn = ${rn}`,
+      at: { lng: OTHER_CENTER[0], lat: OTHER_CENTER[1] },
+    })
+    expect(card.rows).toHaveLength(1)
+    expect(OTHER_SPECIES).toContain(card.rows[0].species)
+    const ran = executedSql.slice(before).join('\n')
+    expect(ran).toContain(`trees_cell_${far} tf`)
+    expect(ran).not.toMatch(/UNION ALL/)
+  })
+
+  it('the bookmark moves without touching the trees: same rows, same blocks, new city-wide reads', async () => {
+    const before = await worker.call<PointKeys>('getPointKeys')
+    const held = await count('SELECT count(*) AS n FROM trees_fast')
+    const fetched = fetchedWorldFiles.length
+    const messages = worker.messages.length
+    await worker.call('setCityContext', { city: OTHER })
+    // The map republishes the new bookmark's default query: the same rows as the last one's.
+    await worker.call('setTileQuery', { sql: `SELECT tree_id, species, latitude, longitude, diameter_at_breast_height
+      FROM trees WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND city = '${OTHER}'` })
+    expect(await worker.call<PointKeys>('getPointKeys')).toEqual(before)
+    expect(await count('SELECT count(*) AS n FROM trees_fast')).toBe(held)
+    expect(fetchedWorldFiles.length).toBe(fetched)
+    expect(await count('SELECT count(*) AS n FROM trees_published')).toBe(OTHER_ROWS)
+    const ready = worker.messages.slice(messages).filter((m) => m.type === 'cityContextReady').pop()
+    expect(ready?.treeCount).toBe(OTHER_ROWS)
+    await worker.call('setCityContext', { city: CITY })
+  })
+
+  it('the trunk scheme colours a block loaded after it was turned on', async () => {
+    await worker.call('setDbhColors', { enabled: true })
+    const keys = await worker.call<PointKeys>('getPointKeys')
+    const far = blockOf(OTHER_CENTER)
+    const colors = await worker.call<PointChunkColors>('getPointChunkColors', { rowsKey: keys.rowsKey, keys: [far] })
+    // The fixture's diameters run 5 to 34 inches: all four bands, never the fallback or the unknown grey.
+    expect(new Set(colors.color).has(0)).toBe(false)
+    expect(new Set(colors.color).size).toBe(4)
+    expect(colors.palette.slice(1).sort()).toEqual(['#225ea8', '#41b6c4', '#7fcdbb', '#9a9a9a', '#c7e9b4'])
+    await worker.call('setDbhColors', { enabled: false })
+  })
+
+  it('a filter written against the published schema is read over the blocks asked for, and an empty chunk is empty', async () => {
+    await worker.call('setTileQuery', { sql: `SELECT map_scope.* FROM (SELECT tree_id, species, latitude, longitude, diameter_at_breast_height FROM trees) map_scope
+      WHERE map_scope.tree_id IN (SELECT tree_id FROM trees WHERE species IN ('${OTHER_SPECIES[0]}'))` })
+    const { rowsKey } = await worker.call<PointKeys>('getPointKeys')
+    const directory = await worker.call<PointChunkDirectory>('getPointChunkDirectory')
+    expect(directory.exact).toBe(false)
+    const batch = await worker.call<PointChunkBatch>('getPointChunks', { rowsKey, keys: [blockOf(OTHER_CENTER), blockOf(CENTER)] })
+    const [far, near] = [batch.offsets[1] - batch.offsets[0], batch.offsets[2] - batch.offsets[1]]
+    // A quarter of the far city's trees in that block; none of Boston's are that species.
+    expect(far).toBeGreaterThan(100)
+    expect(near).toBe(0)
+    await worker.call('setTileQuery', { sql: null })
   })
 })

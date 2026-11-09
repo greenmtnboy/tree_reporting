@@ -329,6 +329,11 @@ memory_mb = 1024
 # was skipped behind it. It reads whatever is published when they finish.
 "website_homepage.preql" = { after = ["raw/full_tree_publish.preql", "raw/tree_enrichment.preql", "raw/ecoregion_info.preql"], when = "always" }
 "website_species.preql" = { after = ["raw/full_tree_publish.preql", "raw/tree_enrichment.preql", "raw/ecoregion_info.preql"], when = "always" }
+# The world's geo blocks are cut from the browser projections, which the
+# script reads by URL. `always` for the homepage feed's reason: on a day the
+# projections were up to date the job still has to run, to find that out and
+# to delete the block files no manifest has named for a few days.
+"world_tree_blocks.preql" = { after = ["raw/tree_browser_city.preql"], when = "always" }
 
 [[cloud.job]]
 key = "refresh-enrichment"
@@ -422,6 +427,34 @@ entrypoint = "raw/tree_browser_city.preql"
 operation = "refresh"
 schedule = "0 0 6 * * *"
 timeout_seconds = 3600
+memory_mb = 4096
+
+# The world as geo blocks: what the map draws from. One parquet per Web
+# Mercator z12 tile holding every tree in it whichever city published it,
+# a vocabulary of the string columns, and a manifest that names them
+# (gs://trilogy_public_models/duckdb/trees/world/v1/; world/publish_blocks.py,
+# docs/SEAMLESS_WORLD.md). The map loads the blocks under the camera, so a
+# city is a bookmark and the trees of the next one are a pan away.
+#
+# `run`, not `refresh`, for the homepage feed's reason: the output is a
+# manifest and a thousand content-addressed files, not a datasource, and the
+# script builds, validates and uploads them itself, manifest last, refusing a
+# candidate that loses a quarter of the published trees or a published city.
+# Trilogy has no partitioned file target yet; docs/TRILOGY_BUCKETED_OUTPUT_SPEC.md
+# is the ask that would make this a declaration.
+#
+# Same cron as the core, ordered after the projections by the `[dependencies]`
+# entry above. 4 GiB: the build holds 14.5M rows in an on-disk DuckDB with a
+# 2.5 GB memory limit (WORLD_BLOCKS_MEMORY_LIMIT) and spills the rest. Two
+# minutes on a workstation; the first run uploads every block (350 MB), a
+# later one only the blocks whose trees changed.
+[[cloud.job]]
+key = "publish-world-blocks"
+name = "urban-tree-world-blocks"
+entrypoint = "world_tree_blocks.preql"
+operation = "run"
+schedule = "0 0 6 * * *"
+timeout_seconds = 1800
 memory_mb = 4096
 
 # The dashboard summary: tree counts at (city, species), the grain most of

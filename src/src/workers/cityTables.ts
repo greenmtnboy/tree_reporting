@@ -1,28 +1,32 @@
 /**
- * The SQL that builds a city's in-browser tables.
+ * The SQL that builds the in-browser tree tables.
  *
  * Kept out of the worker so it can run under native DuckDB in tests. The
- * shapes here are the memory budget: a city's rows are the largest allocation
- * in the browser, DuckDB-wasm never returns heap to the OS, and iOS Safari
+ * shapes here are the memory budget: the rows are the largest allocation in
+ * the browser, DuckDB-wasm never returns heap to the OS, and iOS Safari
  * reloads a tab that outgrows its process budget (roughly 1 GB on a first
  * visit, a few hundred MB after reloads). Measured 2026-10-23, NYC's 1.16M
  * rows cost 393 MB as a 33-column table and 145 MB in this shape; see
  * docs/MOBILE_LOAD_BUDGET.md.
  *
+ * The rows come from the world's block files (worldBlocks.ts), never from a
+ * city: `trees_fast` is a view over one table per held cell, and a cell is
+ * loaded when the camera nears it and dropped when it is far and the budget
+ * is spent (cityWindow.ts). A desktop's cell is a whole block; a phone's is a
+ * sixteenth of one.
+ *
  * What makes the row narrow:
  * - Low-cardinality strings (species, names, cultivar, source, city) are ENUM
  *   columns: two bytes a row instead of a sixteen-byte string slot plus heap.
- *   A city has a few hundred to a few thousand distinct species and names.
- *   The ENUM vocabularies are built from the loaded rows, so they are per city
- *   and are dropped with the table on a city switch.
+ *   The vocabularies are the world's, read once from the manifest's
+ *   vocabulary file (a few hundred KB), so every cell shares one set of types
+ *   and a value first met in the fiftieth cell is already in its ENUM.
  * - One tile index pair, at z20; coarser zooms shift it (`tileIndexSql`).
- *   The old table stored eight pairs.
- * - The published crown prediction is a column, not a second table, so the
- *   crown query has no join and the city switch has one fewer table to drop.
- * - No per-tree colour table: the base colour is a CASE over `tree_form`, or
- *   a lookup in a per-species shade table of a few thousand rows
- *   (`colorSql`); a chat override is a sparse table that exists only while
- *   it is active.
+ * - The published crown prediction is a column, not a second table.
+ * - No per-tree colour table: the base colour is a CASE over `tree_form`, a
+ *   lookup in a per-species shade table of a few thousand rows, or a CASE
+ *   over the trunk diameter (`colorSql`); a chat override is a sparse table
+ *   that exists only while it is active.
  *
  * The `trees` view presents the published schema with ENUMs cast back to
  * VARCHAR, so chat SQL and the URL filters see exactly the types the parquet
@@ -30,7 +34,6 @@
  * string literal directly: a value outside the vocabulary compares unequal
  * rather than erroring (DuckDB 1.4.3, checked).
  */
-import { sentinelLabelSql, sentinelTreeFormSql } from '../data/species'
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 
 export const TREES_TABLE = 'trees_fast'
@@ -40,8 +43,6 @@ export const COLOR_OVERRIDE_TABLE = '__tree_color_override'
 export const SPECIES_SHADE_TABLE = '__species_shade'
 /** The leaf-shade scheme's colour for a tree whose species has no recorded shade. */
 export const UNKNOWN_SHADE_COLOR = '#9e9e9e'
-export const AGG_CACHE_TABLE = 'agg_z14_cache'
-export const AGG_CACHE_ZOOM = 14
 export const TILE_INDEX_ZOOM = 20
 
 export const WEB_MERCATOR_MAX = 20037508.342789244
@@ -50,7 +51,7 @@ export const WEB_MERCATOR_WORLD = WEB_MERCATOR_MAX * 2
 /** The icon categories; `default` is every form the atlas has no icon for. */
 export const TREE_FORMS = ['default', 'palm', 'broadleaf', 'conifer', 'spreading', 'columnar', 'ornamental', 'weeping', 'multi_trunk'] as const
 
-/** ENUM types the city tables declare, in creation order; dropped in reverse. */
+/** ENUM types the tree tables declare, in creation order; dropped in reverse. */
 export const CITY_ENUM_TYPES = {
   form: 'tree_form_t',
   city: 'tree_city_t',
@@ -61,114 +62,81 @@ export const CITY_ENUM_TYPES = {
   cultivar: 'tree_cultivar_t',
 } as const
 
-export type CityTableOptions = {
-  /**
-   * The city's browser projection (data/raw/tree_browser_city.preql), when
-   * it is published: the pipeline has already resolved the display name, the
-   * growth form and the crown prediction, so the load is one scan of this
-   * file and nothing below is read. Null falls back to assembling the same
-   * shape here from the published inventory.
-   */
-  projectionUrl: string | null
-  /**
-   * The projection's vocabulary file, when it is published and its tree
-   * counts sum to the projection's row count: the ENUMs are built from it
-   * instead of a SELECT DISTINCT per column over the projection, which in
-   * DuckDB-wasm reads most of the file. Null scans the projection (or the
-   * assembled source) as before. Only read with `projectionUrl`.
-   */
-  vocabUrl?: string | null
-  /** The city's published parquet (or the cross-city rollup as a last resort). */
-  parquetUrl: string
-  /** The crown predictions parquet to fold in, or null when none is reachable. */
-  predictionsUrl: string | null
-  /**
-   * True when `predictionsUrl` holds one row per tree (a per-city slice,
-   * `grain (tree_id)`). The all-city file is not guaranteed that, so it is
-   * aggregated first; the aggregate's hash table is the single largest
-   * transient of the fallback load, and the wasm heap keeps whatever it
-   * grows to.
-   */
-  predictionsAreUnique: boolean
-  city: string
-  /** Parquet built before the prune still carries `is_duplicate`. */
-  hasDedupFlag: boolean
-  /** Parquet built before September 2026 lacks these columns. */
-  hasCultivar: boolean
-  hasCrownWidth: boolean
-  /**
-   * The rows' source carries its heights: the projection's `height_m` and
-   * `predicted_height_m`, or on the assembled path the predictions file's
-   * `accepted_height_m` and `predicted_height_m`, built after November 2026.
-   * Older files read null heights and size sprites as before.
-   */
-  hasHeight: boolean
+/** Each ENUM's `kind` in the world's vocabulary file (VOCAB_COLUMNS in data/world/publish_blocks.py). */
+export const VOCAB_KINDS: Record<Exclude<keyof typeof CITY_ENUM_TYPES, 'form'>, string> = {
+  city: 'city',
+  source: 'data_source',
+  species: 'species',
+  name: 'display_name',
+  sourceName: 'tree_name',
+  cultivar: 'cultivar',
 }
+
+/**
+ * The columns of a block file, in order (COLUMNS in
+ * data/world/publish_blocks.py; data/raw/tests/test_publish_world_blocks.py
+ * holds the two lists together).
+ */
+export const WORLD_BLOCK_COLUMNS = [
+  'tree_id', 'city', 'data_source', 'species', 'cultivar', 'tree_name', 'display_name', 'tree_form', 'plant_date',
+  'diameter_at_breast_height', 'crown_width_m', 'predicted_crown_width_m', 'height_m', 'predicted_height_m',
+  'latitude', 'longitude', 'submission_photo_url',
+] as const
 
 const sqlString = (value: string) => `'${value.replace(/'/g, "''")}'`
 
-/** The empty table a windowed city's `trees_fast` view always unions in, for its shape. */
+/** The empty table `trees_fast` always unions in, for its shape. */
 export const WINDOW_SHAPE_TABLE = 'trees_window_shape'
 /**
- * Every tree of the city, for the few reads a phone's window cannot answer (a
- * deep-linked tree, a species count). A whole city is `trees_fast` itself; a
- * windowed one reads the projection file. Readers use only the columns both
- * share: tree_id, species, latitude, longitude.
+ * Every tree of the bookmarked city, for the few reads that are about a city
+ * and not the ground in view (a deep-linked tree, a species count): the
+ * city's projection file, read in place. Readers use tree_id, species,
+ * latitude and longitude.
  */
 export const PUBLISHED_TREES_VIEW = 'trees_published'
-
 /**
- * Statements that remove a loaded city, in dependency order. A windowed city
- * has `trees_fast` as a view over its chunk tables; a whole city has it as
- * one table.
+ * In a `query` sent with a point (`at`), the table of the cell under that
+ * point: a read about one tree names this instead of `trees_fast`, and the
+ * worker loads the cell and puts its table here.
  */
-export function dropCityTablesSql(windowed: { chunkTables: string[] } | null = null): string[] {
+export const TREES_AT_TOKEN = '__trees_at__'
+
+/** Statements that remove the world's tables, in dependency order. */
+export function dropWorldTablesSql(cellTables: string[]): string[] {
   return [
     `DROP VIEW IF EXISTS ${TREES_VIEW}`,
     `DROP VIEW IF EXISTS ${PUBLISHED_TREES_VIEW}`,
-    `DROP TABLE IF EXISTS ${AGG_CACHE_TABLE}`,
     `DROP TABLE IF EXISTS ${COLOR_OVERRIDE_TABLE}`,
-    ...windowed
-      ? [`DROP VIEW IF EXISTS ${TREES_TABLE}`, ...windowed.chunkTables.map((table) => `DROP TABLE IF EXISTS ${table}`), `DROP TABLE IF EXISTS ${WINDOW_SHAPE_TABLE}`]
-      : [`DROP TABLE IF EXISTS ${TREES_TABLE}`],
+    `DROP VIEW IF EXISTS ${TREES_TABLE}`,
+    ...cellTables.map((table) => `DROP TABLE IF EXISTS ${table}`),
+    `DROP TABLE IF EXISTS ${WINDOW_SHAPE_TABLE}`,
     ...Object.values(CITY_ENUM_TYPES).reverse().map((type) => `DROP TYPE IF EXISTS ${type}`),
   ]
 }
 
 /**
- * Statements that load a city into `trees_fast` and define the `trees` view,
- * to run in order after `dropCityTablesSql()`. The ENUM vocabularies are
- * read first, as projections of the parquet's string columns, and the one
- * row scan casts into them, so the wide VARCHAR table never exists.
+ * Statements that set the world up, to run once the vocabulary file is
+ * readable at `vocabFile`: the ENUM types over the world's vocabulary, an
+ * empty `trees_fast` of the right shape, and the `trees` view over it. Rows
+ * arrive later, a cell at a time.
  */
-export function loadCityTablesSql(options: CityTableOptions): string[] {
-  const shape = cityShape(options)
+export function worldTablesSql(vocabFile: string): string[] {
+  const kinds = Object.entries(VOCAB_KINDS) as [keyof typeof VOCAB_KINDS, string][]
   return [
-    ...shape.types,
-    `CREATE TABLE ${TREES_TABLE} AS ${shape.rows('')}`,
+    `CREATE TYPE ${CITY_ENUM_TYPES.form} AS ENUM (${TREE_FORMS.map(sqlString).join(', ')})`,
+    ...kinds.map(([key, kind]) => `CREATE TYPE ${CITY_ENUM_TYPES[key]} AS ENUM (
+      SELECT value FROM read_parquet(${sqlString(vocabFile)}) WHERE kind = ${sqlString(kind)} AND value IS NOT NULL ORDER BY value)`),
+    `CREATE TABLE ${WINDOW_SHAPE_TABLE} AS ${worldRowsSql(null, '')} LIMIT 0`,
+    windowViewSql([]),
     treesViewSql(),
-    `CREATE VIEW ${PUBLISHED_TREES_VIEW} AS SELECT * FROM ${TREES_TABLE}`,
   ]
 }
 
-/**
- * Statements that set up a windowed city: the vocabularies over the whole
- * file (a phone pans into ground it has not loaded, and a value first met in
- * the fifth cell must already be in the ENUM), an empty `trees_fast` view of
- * the right shape, the `trees` view over it, and `trees_published` over the
- * file. Rows arrive later, one `windowChunkSql` at a time. Only the browser
- * projection is windowed; the assembled fallback holds the whole city.
- */
-export function windowedCityTablesSql(options: CityTableOptions): string[] {
-  if (!options.projectionUrl) throw new Error('Only the browser projection can be loaded in windows')
-  const shape = cityShape(options)
-  return [
-    ...shape.types,
-    `CREATE TABLE ${WINDOW_SHAPE_TABLE} AS ${shape.rows('')} LIMIT 0`,
-    windowViewSql([]),
-    treesViewSql(),
-    `CREATE VIEW ${PUBLISHED_TREES_VIEW} AS SELECT * FROM read_parquet(${sqlString(options.projectionUrl)})`,
-  ]
+/** `trees_published` over a city's projection file; with no city it reads no rows. */
+export function publishedTreesViewSql(projectionUrl: string | null): string {
+  return `CREATE OR REPLACE VIEW ${PUBLISHED_TREES_VIEW} AS ${projectionUrl
+    ? `SELECT * FROM read_parquet(${sqlString(projectionUrl)})`
+    : `SELECT * FROM ${TREES_TABLE} LIMIT 0`}`
 }
 
 /** A row's cell at `cellZoom` as one integer (cityWindow.ts `cellKey`), from its stored z20 index. */
@@ -182,17 +150,23 @@ export function windowCellTable(cellKey: number): string {
   return `trees_cell_${cellKey}`
 }
 
+/** A cell that is a whole block: its table straight from the block's file. */
+export function blockCellSql(cellKey: number, file: string): string {
+  return `CREATE TABLE ${windowCellTable(cellKey)} AS ${worldRowsSql([file], '')}`
+}
+
 /**
- * One load of a windowed city, as three steps: the rows of `cellKeys`
- * (see cityWindow.ts) into `staging` in one scan, a count per cell, and
- * then `windowCellSplitSql` per cell with rows. The box is what the parquet
- * reader prunes row groups on; the cell list is what makes the load exact,
- * so a tree on a box edge is never loaded twice. Each cell gets its own
- * table because a cell is what the window drops.
+ * One load of cells finer than a block, as three steps: the rows of
+ * `cellKeys` out of the block `files` that hold them into `staging` in one
+ * scan, a count per cell, and then `windowCellSplitSql` per cell with rows.
+ * The box is what the parquet reader prunes row groups on (a block's rows
+ * are in Morton order, so a cell is a few adjacent groups); the cell list is
+ * what makes the load exact. Each cell gets its own table because a cell is
+ * what the window drops.
  */
 export function windowStagingSql(
   staging: string,
-  options: CityTableOptions,
+  files: string[],
   cellKeys: number[],
   box: { west: number; east: number; south: number; north: number },
   cellZoom: number,
@@ -200,7 +174,7 @@ export function windowStagingSql(
   const where = `AND latitude BETWEEN ${box.south} AND ${box.north} AND longitude BETWEEN ${box.west} AND ${box.east}`
   return {
     create: `CREATE TABLE ${staging} AS
-    SELECT * FROM (${cityShape(options).rows(where)}) chunk
+    SELECT * FROM (${worldRowsSql(files, where)}) chunk
     WHERE ${windowCellSql('chunk', cellZoom)} IN (${cellKeys.join(', ')})`,
     counts: `SELECT ${windowCellSql('s', cellZoom)} AS cell, count(*) AS n FROM ${staging} s GROUP BY 1`,
   }
@@ -210,177 +184,78 @@ export function windowCellSplitSql(staging: string, cellKey: number, cellZoom: n
   return `CREATE TABLE ${windowCellTable(cellKey)} AS SELECT * FROM ${staging} s WHERE ${windowCellSql('s', cellZoom)} = ${cellKey}`
 }
 
-/** `trees_fast` for a windowed city: the empty shape and every chunk held. */
-export function windowViewSql(chunkTables: string[]): string {
-  return `CREATE OR REPLACE VIEW ${TREES_TABLE} AS
-    ${[WINDOW_SHAPE_TABLE, ...chunkTables].map((table) => `SELECT * FROM ${table}`).join('\n    UNION ALL ')}`
+/** `trees_fast`: the empty shape and every cell held. */
+export function windowViewSql(cellTables: string[]): string {
+  return `CREATE OR REPLACE VIEW ${TREES_TABLE} AS ${scopeSelectSql(cellTables)}`
+}
+
+function scopeSelectSql(cellTables: string[]): string {
+  return [WINDOW_SHAPE_TABLE, ...cellTables].map((table) => `SELECT * FROM ${table}`).join('\n    UNION ALL ')
 }
 
 /**
- * The ENUM types a city declares and its row select. `rows(where)` is the
- * select that produces `trees_fast`'s rows; `where` is appended to the
- * source scan's own filter (the window's box), so it reaches the parquet
- * reader.
+ * `trees_fast` narrowed to some held cells, as a relation to put in a FROM
+ * clause. DuckDB plans a union one branch at a time, about a third of a
+ * millisecond each, so a read over the whole view costs a desktop holding
+ * four hundred blocks over a hundred milliseconds before it touches a row; a
+ * read that knows the ground it is about names only those cells.
  */
-function cityShape(options: CityTableOptions): { types: string[]; rows: (where: string) => string } {
-  const { projectionUrl, vocabUrl, parquetUrl, predictionsUrl, predictionsAreUnique, city, hasDedupFlag, hasCultivar, hasCrownWidth, hasHeight } = options
-  const clampedLat = 'LEAST(GREATEST(t.latitude, -85.05112878), 85.05112878)'
+export function scopeSql(cellTables: string[]): string {
+  if (cellTables.length === 0) return WINDOW_SHAPE_TABLE
+  return cellTables.length === 1 ? cellTables[0] : `(${cellTables.map((table) => `SELECT * FROM ${table}`).join(' UNION ALL ')})`
+}
+
+/**
+ * The rows of block files in `trees_fast`'s shape; `files` null is the shape
+ * alone, cast from nulls. `where` is appended to the scan's own filter, so it
+ * reaches the parquet reader. `rn` is the row's position in its block file:
+ * with the block's key it names a tree for as long as the manifest lasts,
+ * whether or not the cell is still held, which is what the resident layer
+ * keeps instead of a tree id.
+ */
+function worldRowsSql(files: string[] | null, where: string): string {
+  const clampedLat = 'LEAST(GREATEST(CAST(t.latitude AS DOUBLE), -85.05112878), 85.05112878)'
+  const lng = 'CAST(t.longitude AS DOUBLE)'
   const n = 2 ** TILE_INDEX_ZOOM
-
-  // The rows, the display name, the growth form and the predicted width: from
-  // the projection as columns, or assembled here from the published inventory,
-  // the enrichment table and the predictions.
-  let source: (where: string) => string
-  let displayName: string
-  let formExpr: string
-  let predictedWidth: string
-  let height: string
-  let predictedHeight: string
-  let joins: string
-  if (projectionUrl) {
-    source = (where) => `SELECT
-        tree_id,
-        city,
-        data_source,
-        tree_name,
-        display_name,
-        tree_form,
-        plant_date,
-        species,
-        cultivar,
-        crown_width_m,
-        predicted_crown_width_m,
-        ${hasHeight ? 'height_m, predicted_height_m,' : ''}
-        latitude,
-        longitude,
-        diameter_at_breast_height,
-        submission_photo_url
-      FROM read_parquet(${sqlString(projectionUrl)})
+  const source = files === null
+    ? `SELECT ${WORLD_BLOCK_COLUMNS.map((column) => `NULL AS ${column}`).join(', ')}, CAST(0 AS BIGINT) AS file_row_number`
+    : `SELECT ${WORLD_BLOCK_COLUMNS.join(', ')}, file_row_number
+      FROM read_parquet([${files.map(sqlString).join(', ')}], file_row_number = true)
       WHERE latitude IS NOT NULL AND longitude IS NOT NULL ${where}`
-    displayName = 't.display_name'
-    formExpr = 't.tree_form'
-    predictedWidth = 'CAST(t.predicted_crown_width_m AS FLOAT)'
-    height = hasHeight ? 'CAST(t.height_m AS FLOAT)' : 'CAST(NULL AS FLOAT)'
-    predictedHeight = hasHeight ? 'CAST(t.predicted_height_m AS FLOAT)' : 'CAST(NULL AS FLOAT)'
-    joins = ''
-  } else {
-    const dedupFilter = hasDedupFlag ? 'AND NOT COALESCE(is_duplicate, false)' : ''
-    const cultivarColumn = hasCultivar ? 'cultivar' : 'CAST(NULL AS VARCHAR) AS cultivar'
-    const crownWidthColumn = hasCrownWidth ? 'crown_width_m' : 'CAST(NULL AS DOUBLE) AS crown_width_m'
-    // The predictions file's `height_m` is what the survey said; the map
-    // draws `accepted_height_m`, the survey's height where it passed the
-    // gates in tree_predictions.preql (the projection already carries it as
-    // its `height_m`).
-    const heights: [string, string][] = hasHeight ? [['accepted_height_m', 'height_m'], ['predicted_height_m', 'predicted_height_m']] : []
-    const predictionRows = predictionsUrl
-      ? predictionsAreUnique
-        ? `SELECT tree_id, predicted_crown_width_m AS width${heights.map(([column, as]) => `, ${column} AS ${as}`).join('')}
-          FROM read_parquet(${sqlString(predictionsUrl)})
-          WHERE city = ${sqlString(city)}`
-        : `SELECT tree_id, max(predicted_crown_width_m) AS width${heights.map(([column, as]) => `, max(${column}) AS ${as}`).join('')}
-          FROM read_parquet(${sqlString(predictionsUrl)})
-          WHERE city = ${sqlString(city)}
-          GROUP BY tree_id`
-      : null
-    source = (where) => `SELECT
-        tree_id,
-        city,
-        data_source,
-        tree_name,
-        plant_date,
-        species,
-        ${cultivarColumn},
-        ${crownWidthColumn},
-        latitude,
-        longitude,
-        diameter_at_breast_height,
-        submission_photo_url
-      FROM read_parquet(${sqlString(parquetUrl)})
-      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-        ${dedupFilter} ${where}`
-    // The display name: enrichment's first common name, else the source's own
-    // name, else the sentinel's label, else the scientific name. A placeholder
-    // species has no enrichment row by design, so it is named here rather
-    // than falling through to the bare sentinel string.
-    displayName = `COALESCE(
-        NULLIF(TRIM(CAST(list_extract(se.common_names, 1) AS VARCHAR)), ''),
-        t.tree_name,
-        ${sentinelLabelSql('t.species')},
-        t.species
-      )`
-    // "Palm"/"Shrub"/"Cactus" name a growth form the source recorded without
-    // a species; that is worth an icon even with no enrichment row.
-    formExpr = `COALESCE(se.tree_form, ${sentinelTreeFormSql('t.species')}, 'default')`
-    predictedWidth = predictionsUrl ? 'CAST(p.width AS FLOAT)' : 'CAST(NULL AS FLOAT)'
-    height = predictionsUrl && hasHeight ? 'CAST(p.height_m AS FLOAT)' : 'CAST(NULL AS FLOAT)'
-    predictedHeight = predictionsUrl && hasHeight ? 'CAST(p.predicted_height_m AS FLOAT)' : 'CAST(NULL AS FLOAT)'
-    joins = `LEFT JOIN species_enrichment se
-      ON t.species = se.species
-    ${predictionRows ? `LEFT JOIN (${predictionRows}) p ON t.tree_id = p.tree_id` : ''}`
-  }
-
-  // Each vocabulary is a projection of the parquet's string columns, read
-  // before the rows so the one row scan can cast straight into the ENUMs.
-  // The alternative, loading VARCHAR columns and retyping them in place,
-  // materialises the wide table first, and that peak is what the wasm heap
-  // keeps for the life of the tab.
-  const vocabulary = (expr: string, join = '') =>
-    `SELECT DISTINCT ${expr} AS value FROM (${source('')}) t ${join} WHERE ${expr} IS NOT NULL ORDER BY 1`
-  // From the pipeline's vocabulary file when there is one: the same values,
-  // a superset in fact (it also counts trees with no position, which the
-  // scan above filters out), for a few KB instead of the projection.
-  const fromVocab = (column: string) =>
-    `SELECT DISTINCT ${column} AS value FROM read_parquet(${sqlString(vocabUrl!)}) WHERE ${column} IS NOT NULL ORDER BY 1`
-  const nameJoin = projectionUrl ? '' : 'LEFT JOIN species_enrichment se ON t.species = se.species'
-  const useVocab = Boolean(projectionUrl && vocabUrl)
-  const enumSources: Array<[keyof typeof CITY_ENUM_TYPES, string]> = [
-    ['city', useVocab ? fromVocab('city') : vocabulary('t.city')],
-    ['source', useVocab ? fromVocab('data_source') : vocabulary('t.data_source')],
-    ['species', useVocab ? fromVocab('species') : vocabulary('t.species')],
-    ['name', useVocab ? fromVocab('display_name') : vocabulary(displayName, nameJoin)],
-    ['sourceName', useVocab ? fromVocab('tree_name') : vocabulary('t.tree_name')],
-    ['cultivar', useVocab ? fromVocab('cultivar') : vocabulary('t.cultivar')],
-  ]
-  return {
-    types: [
-      `CREATE TYPE ${CITY_ENUM_TYPES.form} AS ENUM (${TREE_FORMS.map(sqlString).join(', ')})`,
-      ...enumSources.map(([key, query]) => `CREATE TYPE ${CITY_ENUM_TYPES[key]} AS ENUM (${query})`),
-    ],
-    rows: (where) => `
+  return `
     WITH source AS (
-      ${source(where)}
+      ${source}
     )
     SELECT
-      t.tree_id,
+      CAST(t.tree_id AS VARCHAR) AS tree_id,
       CAST(t.city AS ${CITY_ENUM_TYPES.city}) AS city,
       CAST(t.data_source AS ${CITY_ENUM_TYPES.source}) AS data_source,
-      t.submission_photo_url,
-      CAST(${displayName} AS ${CITY_ENUM_TYPES.name}) AS tree_name,
+      CAST(t.submission_photo_url AS VARCHAR) AS submission_photo_url,
+      CAST(t.display_name AS ${CITY_ENUM_TYPES.name}) AS tree_name,
       CAST(t.tree_name AS ${CITY_ENUM_TYPES.sourceName}) AS source_tree_name,
-      t.plant_date,
+      CAST(t.plant_date AS DATE) AS plant_date,
       CAST(t.species AS ${CITY_ENUM_TYPES.species}) AS species,
       CAST(t.cultivar AS ${CITY_ENUM_TYPES.cultivar}) AS cultivar,
-      t.crown_width_m,
-      ${predictedWidth} AS predicted_crown_width_m,
-      ${height} AS height_m,
-      ${predictedHeight} AS predicted_height_m,
-      t.latitude,
-      t.longitude,
-      t.diameter_at_breast_height,
-      COALESCE(t.diameter_at_breast_height, 3) AS dbh,
+      CAST(t.crown_width_m AS DOUBLE) AS crown_width_m,
+      CAST(t.predicted_crown_width_m AS FLOAT) AS predicted_crown_width_m,
+      CAST(t.height_m AS FLOAT) AS height_m,
+      CAST(t.predicted_height_m AS FLOAT) AS predicted_height_m,
+      CAST(t.latitude AS DOUBLE) AS latitude,
+      ${lng} AS longitude,
+      CAST(t.diameter_at_breast_height AS DOUBLE) AS diameter_at_breast_height,
+      COALESCE(CAST(t.diameter_at_breast_height AS DOUBLE), 3) AS dbh,
       -- A form outside the vocabulary (a drifted enrichment value) is 'default'
       -- rather than a cast error that fails the whole load.
-      CAST(CASE lower(trim(${formExpr}))
+      CAST(CASE lower(trim(CAST(t.tree_form AS VARCHAR)))
         ${TREE_FORMS.filter((form) => form !== 'default').map((form) => `WHEN '${form}' THEN '${form}'`).join('\n        ')}
         ELSE 'default'
       END AS ${CITY_ENUM_TYPES.form}) AS tree_form,
-      ((t.longitude * ${WEB_MERCATOR_MAX}) / 180.0) AS x_3857,
+      ((${lng} * ${WEB_MERCATOR_MAX}) / 180.0) AS x_3857,
       (6378137.0 * ln(tan(pi() / 4.0 + radians(${clampedLat}) / 2.0))) AS y_3857,
-      CAST(floor(((t.longitude + 180.0) / 360.0) * ${n}) AS INTEGER) AS xtile_z${TILE_INDEX_ZOOM},
-      CAST(floor((1.0 - ln(tan(radians(${clampedLat})) + 1.0 / cos(radians(${clampedLat}))) / pi()) / 2.0 * ${n}) AS INTEGER) AS ytile_z${TILE_INDEX_ZOOM}
-    FROM source t
-    ${joins}`,
-  }
+      CAST(floor(((${lng} + 180.0) / 360.0) * ${n}) AS INTEGER) AS xtile_z${TILE_INDEX_ZOOM},
+      CAST(floor((1.0 - ln(tan(radians(${clampedLat})) + 1.0 / cos(radians(${clampedLat}))) / pi()) / 2.0 * ${n}) AS INTEGER) AS ytile_z${TILE_INDEX_ZOOM},
+      CAST(t.file_row_number AS UINTEGER) AS rn
+    FROM source t`
 }
 
 /**
@@ -389,7 +264,17 @@ function cityShape(options: CityTableOptions): { types: string[]; rows: (where: 
  * the columns a query actually reads.
  */
 function treesViewSql(): string {
-  return `CREATE VIEW ${TREES_VIEW} AS
+  return `CREATE VIEW ${TREES_VIEW} AS ${treesSelectSql(TREES_TABLE)}`
+}
+
+/**
+ * The published schema over any relation of `trees_fast`'s shape. A read
+ * scoped to the ground it is about (`scopeSql`) names this as a CTE called
+ * `trees`, which a query's own `FROM trees` then resolves to: a filter
+ * written against the published schema runs over a few blocks, not the world.
+ */
+export function treesSelectSql(from: string): string {
+  return `
   SELECT
     tree_id,
     CAST(city AS VARCHAR) AS city,
@@ -403,7 +288,7 @@ function treesViewSql(): string {
     longitude,
     diameter_at_breast_height,
     submission_photo_url
-  FROM ${TREES_TABLE}`
+  FROM ${from}`
 }
 
 /**
@@ -419,15 +304,6 @@ export function tileIndexSql(alias: string, axis: 'x' | 'y', z: number): string 
     : `CAST(floor((${WEB_MERCATOR_MAX} - (${alias}.y_3857)) / ${span}) AS INTEGER)`
 }
 
-/** The city's tile extent at every zoom the tile indices cover, one row. */
-export function cityTileBoundsSql(zooms: number[]): string {
-  const columns = zooms.flatMap((z) => [
-    `MIN(${tileIndexSql('tf', 'x', z)}) AS min_x${z}`, `MAX(${tileIndexSql('tf', 'x', z)}) AS max_x${z}`,
-    `MIN(${tileIndexSql('tf', 'y', z)}) AS min_y${z}`, `MAX(${tileIndexSql('tf', 'y', z)}) AS max_y${z}`,
-  ])
-  return `SELECT ${columns.join(', ')} FROM ${TREES_TABLE} tf`
-}
-
 /** The category colour of a tree form, as SQL over a `tree_form` expression. */
 export function defaultColorSql(formExpr: string, colors: Record<string, string> = DEFAULT_CATEGORY_COLORS): string {
   const branches = TREE_FORMS.filter((form) => form !== 'default' && colors[form])
@@ -436,60 +312,68 @@ export function defaultColorSql(formExpr: string, colors: Record<string, string>
 }
 
 /**
+ * The trunk-diameter scheme: a colour per size band, grey where the diameter
+ * is not recorded. Published diameters are inches. An expression over the
+ * row, like the tree-form colours, so a tree paged in a minute from now is
+ * coloured by the same rule; as a per-tree table it covered only the trees
+ * held when it was built.
+ */
+export const DBH_COLORS = {
+  unknown: '#9a9a9a',
+  under6: '#c7e9b4',
+  under12: '#7fcdbb',
+  under24: '#41b6c4',
+  over24: '#225ea8',
+} as const
+
+export function dbhColorSql(dbhExpr: string): string {
+  return `CASE
+    WHEN ${dbhExpr} IS NULL OR NOT isfinite(${dbhExpr}) OR ${dbhExpr} <= 0 THEN '${DBH_COLORS.unknown}'
+    WHEN ${dbhExpr} < 6 THEN '${DBH_COLORS.under6}'
+    WHEN ${dbhExpr} < 12 THEN '${DBH_COLORS.under12}'
+    WHEN ${dbhExpr} < 24 THEN '${DBH_COLORS.under24}'
+    ELSE '${DBH_COLORS.over24}' END`
+}
+
+/**
  * A tree id as the chat's published tables hold it: a 64-bit hash, not the
- * string. The chat's ids come from the whole city's file, not the phone's
- * window, so a publish can hold every tree in the city: 11 MB for Boston's
- * 1.4M as hashes. Two ids sharing a hash among a city's 1.6M has odds near
- * 1 in 10^7, and would mark one extra tree.
+ * string. The chat's ids come from a whole city's file, not the cells held,
+ * so a publish can hold every tree in the city: 11 MB for Boston's 1.4M as
+ * hashes. Two ids sharing a hash among a city's 1.6M has odds near 1 in
+ * 10^7, and would mark one extra tree.
  */
 export function treeKeySql(expr: string): string {
   return `hash(CAST(${expr} AS VARCHAR))`
 }
 
+/** Which rule gives a tree its colour before any chat override. */
+export type BaseColorScheme = 'form' | 'shade' | 'dbh'
+
 /**
  * How a query reads a tree's display colour. The base colour is the tree-form
- * CASE, or, with the leaf-shade scheme on, one of the species' shades picked
- * by tree id (a two-shade species renders mixed) and grey where the species
- * has none. With a chat override active its table is joined and wins where it
- * has a row. `join` goes after the `trees_fast` alias in the FROM clause.
+ * CASE; with the leaf-shade scheme on, one of the species' shades picked by
+ * tree id (a two-shade species renders mixed) and grey where the species has
+ * none; with the trunk scheme on, the diameter's band. With a chat override
+ * active its table is joined and wins where it has a row. `join` goes after
+ * the `trees_fast` alias in the FROM clause.
  *
  * `aggregated` is for the overview zooms, where rows are grid cells grouped
  * by colour: the species' first shade for every tree, so a two-shade species
  * does not split each cell in two (the hash split is a point-zoom effect).
  */
-export function colorSql(alias: string, overrideActive: boolean, shadeActive = false, { aggregated = false } = {}): { join: string; expr: string } {
+export function colorSql(alias: string, overrideActive: boolean, scheme: BaseColorScheme | boolean = 'form', { aggregated = false } = {}): { join: string; expr: string } {
   const joins: string[] = []
+  // The scheme was a `shadeActive` flag before the trunk scheme became one.
+  const baseScheme: BaseColorScheme = scheme === true ? 'shade' : scheme === false ? 'form' : scheme
   let base = defaultColorSql(`${alias}.tree_form`)
-  if (shadeActive) {
+  if (baseScheme === 'shade') {
     joins.push(`LEFT JOIN ${SPECIES_SHADE_TABLE} __ss ON CAST(${alias}.species AS VARCHAR) = __ss.species`)
     const pick = aggregated ? '1' : `1 + CAST(hash(${alias}.tree_id) % len(__ss.shades) AS INTEGER)`
     base = `COALESCE(list_extract(__ss.shades, ${pick}), '${UNKNOWN_SHADE_COLOR}')`
+  } else if (baseScheme === 'dbh') {
+    base = dbhColorSql(`${alias}.diameter_at_breast_height`)
   }
   if (!overrideActive) return { join: joins.join('\n  '), expr: base }
   joins.push(`LEFT JOIN ${COLOR_OVERRIDE_TABLE} __co ON ${treeKeySql(`${alias}.tree_id`)} = __co.tree_key`)
   return { join: joins.join('\n  '), expr: `COALESCE(__co.display_color, ${base})` }
-}
-
-/**
- * The z14 aggregate the overview zooms read when no filter is active. Cells
- * are grouped by colour only: no layer reads a cell's `category` (the
- * heatmap filters on `display_color`, the circle layer reads it and `dbh`),
- * and grouping by form as well split every cell once per (form, colour).
- */
-export function aggCacheSql(gridM: number, overrideActive: boolean, shadeActive = false): string {
-  const color = colorSql('tf', overrideActive, shadeActive, { aggregated: true })
-  const z = AGG_CACHE_ZOOM
-  return `CREATE OR REPLACE TABLE ${AGG_CACHE_TABLE} AS
-    SELECT
-      ${tileIndexSql('tf', 'x', z)} AS xtile,
-      ${tileIndexSql('tf', 'y', z)} AS ytile,
-      floor(tf.x_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gx,
-      floor(tf.y_3857 / ${gridM}) * ${gridM} + ${gridM} / 2.0 AS gy,
-      'default' AS category,
-      ${color.expr} AS display_color,
-      AVG(tf.dbh) AS dbh,
-      COUNT(*) AS point_count
-    FROM ${TREES_TABLE} tf
-    ${color.join}
-    GROUP BY 1, 2, 3, 4, 6`
 }

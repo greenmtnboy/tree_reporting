@@ -73,4 +73,13 @@ test('clicking a resident circle opens that tree’s card', async ({ page }) => 
   await page.mouse.click(target.x, target.y)
   await expect(page.locator('.tree-card')).toBeVisible({ timeout: 15_000 })
   await expect(page).toHaveURL(/tree=/)
+
+  // The debug panel fixes the sprite cap, which otherwise adjusts itself, and hands it back.
+  await page.locator('.cache-refresh-btn[aria-pressed]').click()
+  const readout = page.locator('.sprite-debug')
+  await expect(readout).toContainText('auto', { timeout: 15_000 })
+  await page.getByLabel('Maximum tree sprites').selectOption('16384')
+  await expect(readout).toContainText('/ 16,384 fixed')
+  await page.getByLabel('Maximum tree sprites').selectOption('auto')
+  await expect(readout).toContainText('auto')
 })

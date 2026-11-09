@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const PORT = 6173
+// E2E_PORT moves the preview off the default, for a second checkout whose
+// suite would otherwise be handed the first one's server (reuseExistingServer).
+const PORT = Number(process.env.E2E_PORT ?? 6173)
 
 export default defineConfig({
   testDir: './e2e',

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, it, vi } from 'vitest'
 import { copyFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { executedSql } from './wasm/nodeDuckDB'
-import { FIXTURE_DIR, fixtureParquetUrls } from './wasm/fixtures'
+import { FIXTURE_DIR, fixtureParquetUrls, writeWorld } from './wasm/fixtures'
 import { startWorker, type WorkerHarness } from './wasm/workerHarness'
 import { speciesShadeSql } from '../lib/foliageSeason'
 
@@ -12,9 +12,10 @@ vi.mock('./parquetUrls', async () => (await import('./wasm/fixtures')).fixturePa
 
 /**
  * Leaf-shade audit bench: the real tile worker on DuckDB-WASM against the
- * real Boston projection, enrichment and vocabulary (SHADE_BENCH_DATA=dir),
- * walked once with the tree-form colours and once with the leaf-shade table.
- * Not a test: it prints a timing table and the feature counts per tile.
+ * real Boston projection and enrichment (SHADE_BENCH_DATA=dir), cut into
+ * world blocks as the pipeline cuts them and walked once with the tree-form
+ * colours and once with the leaf-shade table. Not a test: it prints a timing
+ * table and the feature counts per tile.
  */
 
 const DATA = process.env.SHADE_BENCH_DATA
@@ -70,15 +71,14 @@ describe.skipIf(!DATA)('leaf-shade tile cost on the real Boston projection', () 
 
   beforeAll(async () => {
     copyFileSync(`${DATA}/usbos_tree_browser_v2.parquet`, fixtureParquetUrls.cityBrowserParquetUrl(CITY))
-    copyFileSync(`${DATA}/usbos_tree_vocab_v2.parquet`, fixtureParquetUrls.cityVocabParquetUrl(CITY))
     copyFileSync(`${DATA}/tree_enrichment_v2.parquet`, fixtureParquetUrls.REMOTE_SPECIES_PARQUET_URL)
+    const world = await writeWorld([CITY])
+    log(`world: ${world.trees} trees in ${world.blocks} blocks`)
     worker = await startWorker()
     const t0 = now()
     await worker.call('ensureInit', { city: CITY })
     await worker.call('setCityContext', { city: CITY })
-    log(`city load: ${Math.round(now() - t0)} ms`)
-    const n = await worker.call<QueryResult>('query', { sql: 'SELECT count(*) AS n FROM trees_fast' })
-    log(`rows: ${n.rows[0].n}`)
+    log(`world load: ${Math.round(now() - t0)} ms`)
   })
   afterAll(() => {
     if (OUT) writeFileSync(OUT, lines.join('\n') + '\n')
@@ -168,7 +168,6 @@ describe.skipIf(!DATA)('leaf-shade tile cost on the real Boston projection', () 
     const batchZ14 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 6\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
     const batchZ13 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 7\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
     const batchZ12 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 8\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
-    const featureTable = foliageSql.find((s) => /CREATE OR REPLACE TEMP TABLE tile_features_z15/.test(s))
     const batchZ16 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 4\)/.test(s) && !/tile_features/.test(s))
     const time = async (name: string, sql: string | undefined) => {
       if (!sql) { log(`${name}: (sql not captured)`); return }
@@ -200,31 +199,11 @@ describe.skipIf(!DATA)('leaf-shade tile cost on the real Boston projection', () 
     for (const [name, sql] of [['z11 block', batchZ11], ['z13 block', batchZ13], ['z14 block', batchZ14], ['z16 batch', batchZ16]] as const) {
       if (sql) await time(`${name} enum-keyed shade table`, enumJoin(sql))
     }
-    // Materialised shade column: one UPDATE at scheme change, then no join and no hash per read.
-    const pal = await worker.call<QueryResult>('query', { sql: 'SELECT DISTINCT unnest(shades) AS c FROM __species_shade ORDER BY 1' })
-    const palette = [...pal.rows.map((r) => String(r.c)), '#9e9e9e']
-    let t = now()
-    await worker.call('query', { sql: `CREATE TYPE shade_t AS ENUM (${palette.map((c) => `'${c}'`).join(', ')})` })
-    await worker.call('query', { sql: 'ALTER TABLE trees_fast ADD COLUMN shade shade_t' })
-    await worker.call('query', { sql: `UPDATE trees_fast SET shade = CAST(${expr.replace(/tf\./g, 'trees_fast.')} AS shade_t) FROM __species_shade __ss WHERE CAST(trees_fast.species AS VARCHAR) = __ss.species` })
-    await worker.call('query', { sql: `UPDATE trees_fast SET shade = '#9e9e9e' WHERE shade IS NULL` })
-    log(`materialise shade column (ADD COLUMN + UPDATE, 1.7M rows): ${Math.round(now() - t)} ms`)
-    const colExpr = 'CAST(tf.shade AS VARCHAR)'
-    const exprAgg = "COALESCE(list_extract(__ss.shades, 1), '#9e9e9e')"
-    const materialised = (sql: string) => sql.replace(join, '').replace(expr, colExpr).replace(exprAgg, colExpr)
-    for (const [name, sql] of [['z11 block', batchZ11], ['z13 block', batchZ13], ['z14 block', batchZ14], ['z16 batch', batchZ16]] as const) {
-      if (sql) await time(`${name} materialised shade column`, materialised(sql))
-    }
-    if (featureTable) {
-      await time('z15 feature table as shipped', featureTable.replace('tile_features_z15', 'tile_features_bench'))
-      await time('z15 feature table materialised column', materialised(featureTable).replace('tile_features_z15', 'tile_features_bench2'))
-      await time('z15 feature table tree form', featureTable.replace(join, '').replace(expr, "CASE tf.tree_form WHEN 'palm' THEN '#F9A825' ELSE '#81C784' END").replace('tile_features_z15', 'tile_features_bench3'))
-    }
-    // Which colours does the city actually hold? (the heatmap layer list)
-    t = now()
-    const present = await worker.call<QueryResult>('query', { sql: 'SELECT count(DISTINCT shade) AS n FROM trees_fast' })
-    log(`distinct shades held by the city: ${present.rows[0].n} (${Math.round(now() - t)} ms to count)`)
-    const grey = await worker.call<QueryResult>('query', { sql: "SELECT count(*) FILTER (WHERE shade = '#9e9e9e') AS grey, count(*) AS n FROM trees_fast" })
-    log(`grey trees: ${grey.rows[0].grey} of ${grey.rows[0].n}`)
+    // The materialised shade column this bench once timed (an UPDATE over the
+    // city's table at each scheme change) is not an option any more: the rows
+    // are a table per block that come and go with the camera. Its numbers are
+    // in docs/MAP_COLOR_PERF_AUDIT.md.
+    const held = await worker.call<QueryResult>('query', { sql: 'SELECT count(*) AS n FROM trees_fast' })
+    log(`rows held after the walk: ${held.rows[0].n}`)
   }, 1_800_000)
 })

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api'
-import { applyMapUrlFilters, DBH_COLOR_SQL, readMapColorBy, readMapUrlFilters } from './mapUrlFilters'
+import { applyMapUrlFilters, DBH_LEGEND, readMapColorBy, readMapUrlFilters } from './mapUrlFilters'
+import { DBH_COLORS, dbhColorSql } from '../workers/cityTables'
 
 describe('public map URL filters', () => {
   let conn: DuckDBConnection
@@ -51,7 +52,10 @@ describe('public map URL filters', () => {
   })
 
   test('DBH colors use real measurements, with explicit unknowns and consistent boundaries', async () => {
-    const colors = Object.fromEntries((await conn.runAndReadAll(DBH_COLOR_SQL)).getRowObjects().map(row => [row.tree_id, row.override_color]))
+    // The worker's rule over a row (cityTables.ts), and the legend that names its bands.
+    const sql = `SELECT tree_id, ${dbhColorSql('diameter_at_breast_height')} AS color FROM trees`
+    const colors = Object.fromEntries((await conn.runAndReadAll(sql)).getRowObjects().map(row => [row.tree_id, row.color]))
     expect(colors).toMatchObject({ small: '#c7e9b4', cultivar: '#7fcdbb', oak: '#41b6c4', plane: '#225ea8', 'genus-only': '#9a9a9a', invalid: '#9a9a9a' })
+    expect(Object.keys(DBH_LEGEND).sort()).toEqual(Object.values(DBH_COLORS).sort())
   })
 })

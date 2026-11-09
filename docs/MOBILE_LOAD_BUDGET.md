@@ -331,6 +331,21 @@ table may no longer earn its 360 MB.
 
 ## Stage 2: the phone's window
 
+> **Since 2026-11-09 the window's source is the world's block files, not a
+> city's projection** (`docs/SEAMLESS_WORLD.md`). The rules below are
+> unchanged: z14 cells, the row budget, the zoom floor, eviction by distance.
+> What changed is where a cell's rows come from (a range read of its z12
+> block's file, whose rows are in cell order, in place of a range read of
+> the city file),
+> that the vocabulary is the world's (186 KB, one file) and needs no
+> verification against a projection, and that the window is no longer
+> bounded by a city: a phone panned over a border loads the next
+> inventory's cells. A desktop now runs the same window with a block as its
+> cell and a 3M-row budget; "Desktop holds the whole city" below is history.
+> None of this has been re-measured on a phone: the peaks in this document
+> are the city load's. A view now reads from up to four block files where it
+> read from one city file, so it makes more requests for about the same rows.
+
 The premise is that what the map shows is arbitrary (linked-in filters, chat
 publishes, colour overrides), so there is one rendering path, DuckDB over
 whatever rows are resident, and the question is which rows are resident. On

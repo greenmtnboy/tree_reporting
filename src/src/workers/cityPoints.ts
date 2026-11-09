@@ -2,13 +2,13 @@
 // (composables/treeDotsLayer.ts draws them).
 //
 // The chunk grid is global: Web Mercator tiles at CHUNK_ZOOM, the same
-// grid at every latitude and longitude, so nothing about it depends on
-// which city's rows happen to be loaded. A chunk is the same size on screen
-// anywhere (its ground size scales with cos(latitude): 7.2 km across in
-// Boston, 9.8 km at the equator), which is what bounds the chunks a view
-// draws. Each row's chunk is its stored z20 tile index shifted, so a chunk
-// is exactly 4 x 4 of the phone's window cells (workers/cityWindow.ts) and
-// a Hilbert-sorted projection keeps a chunk's rows in few row groups.
+// grid at every latitude and longitude, and the grid the pipeline publishes
+// the world in: a chunk is one block file (workers/worldBlocks.ts), so the
+// manifest's block list is the directory of every chunk on the planet and a
+// chunk's rows are one table. A chunk is the same size on screen anywhere
+// (its ground size scales with cos(latitude): 7.2 km across in Boston, 9.8 km
+// at the equator), which is what bounds the chunks a view draws, and is
+// exactly 4 x 4 of the phone's window cells (workers/cityWindow.ts).
 
 import { tileIndexSql, WEB_MERCATOR_MAX, WEB_MERCATOR_WORLD } from './cityTables'
 import { DRAW_CHUNK_MAX_CELLS, DRAW_CHUNK_MIN_M, buildPickGrid, type PickGrid } from '../lib/treeDots'
@@ -20,13 +20,6 @@ export const CHUNK_ZOOM = 12
 const CHUNKS_PER_AXIS = 2 ** CHUNK_ZOOM
 /** A chunk's side in EPSG:3857 metres. */
 export const CHUNK_SIZE_M = WEB_MERCATOR_WORLD / CHUNKS_PER_AXIS
-
-/**
- * The heat pyramid's cell sizes within a chunk, finest first: the chunk's
- * side halved nine times (19 m) up to the chunk itself, so every level's
- * cells tile the chunk exactly and never straddle two.
- */
-export const CHUNK_LOD_CELLS: readonly number[] = Array.from({ length: 10 }, (_, k) => CHUNK_SIZE_M / 2 ** (9 - k))
 
 /** Index 0 of every palette: a colour the palette does not list. */
 export const POINT_FALLBACK_COLOR = '#66BB6A'
@@ -61,19 +54,23 @@ export function chunksInBox(minX: number, minY: number, maxX: number, maxY: numb
   return keys.sort((a, b) => a.d - b.d).map((k) => k.key)
 }
 
-/** The non-empty chunks of the current rows, with their tree counts. */
+/** Which rows and colours a point read answers with. */
 export interface PointKeys {
-  /** The row set's identity: a colour change keeps it, a query, filter or city change does not. */
+  /** The row set's identity: a colour change or a new bookmark keeps it, a query or filter change does not. */
   rowsKey: string
   /** The colouring's identity: scheme, override and palette. */
   colorKey: string
 }
 
+/**
+ * Every chunk that can hold any of the current rows: the world's blocks.
+ * `counts` are the blocks' trees, which is the rows' own count per chunk
+ * only while no query or filter narrows them (`exact`).
+ */
 export interface PointChunkDirectory extends PointKeys {
   keys: number[]
   counts: number[]
-  /** The largest rowid in the rows, to size the rowid index a colour refresh scatters by. */
-  maxRowid: number
+  exact: boolean
 }
 
 /**
@@ -92,7 +89,7 @@ export interface PointChunkBatch {
   dbh: Uint8Array
   /** Index into `palette`. */
   color: Uint8Array
-  /** trees_fast rowid: the tree card's lookup, and how a colour refresh finds its tree. */
+  /** The row's place in its block file (`rn`): with the chunk, the tree card's lookup and how a colour refresh finds its tree. */
   rowid: Uint32Array
   /**
    * Each chunk's 512 m draw grid. A chunk's rows are stored in its grid's
@@ -157,15 +154,6 @@ function chunkFilterSql(keys: readonly number[]): string {
   return `${chunkBoxSql(keys)} AND ${chunkKeySql()} IN (${keys.join(', ')})`
 }
 
-/** Tree counts per non-empty chunk of the current rows. */
-export function pointChunkDirectorySql(src: PointRowSource): string {
-  return `${src.prelude} __unused AS (SELECT 1)
-SELECT ${chunkKeySql()} AS chunk, COUNT(*) AS n, MAX(tf.rowid) AS max_rowid
-FROM ${src.from}
-WHERE ${src.where}TRUE
-GROUP BY 1`
-}
-
 /** Every drawn tree of the chunks: its chunk, rowid, position from the chunk's origin, size and colour. */
 export function pointChunksSql(src: PointRowSource, keys: readonly number[], colorExpr: string, palette: readonly string[]): string {
   const chunk = chunkKeySql()
@@ -174,7 +162,7 @@ export function pointChunksSql(src: PointRowSource, keys: readonly number[], col
   return `${src.prelude} __unused AS (SELECT 1)
 SELECT
   ${chunk} AS chunk,
-  CAST(tf.rowid AS UINTEGER) AS rowid,
+  tf.rn AS rowid,
   CAST(tf.x_3857 - (${cx} * ${sqlDouble(CHUNK_SIZE_M)} - ${sqlDouble(WEB_MERCATOR_MAX)}) AS FLOAT) AS x,
   CAST(tf.y_3857 - (${sqlDouble(WEB_MERCATOR_MAX)} - (${cy} + 1) * ${sqlDouble(CHUNK_SIZE_M)}) AS FLOAT) AS y,
   CAST(LEAST(255, GREATEST(1, round(${src.dbh}))) AS UTINYINT) AS dbh,
@@ -186,7 +174,7 @@ WHERE ${src.where}${chunkFilterSql(keys)}`
 /** The same chunks' colours alone. */
 export function pointChunkColorsSql(src: PointRowSource, keys: readonly number[], colorExpr: string, palette: readonly string[]): string {
   return `${src.prelude} __unused AS (SELECT 1)
-SELECT ${chunkKeySql()} AS chunk, CAST(tf.rowid AS UINTEGER) AS rowid, ${paletteIndexSql(colorExpr, palette)} AS color
+SELECT ${chunkKeySql()} AS chunk, tf.rn AS rowid, ${paletteIndexSql(colorExpr, palette)} AS color
 FROM ${src.from}
 WHERE ${src.where}${chunkFilterSql(keys)}`
 }

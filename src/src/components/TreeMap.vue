@@ -10,9 +10,16 @@
   <div v-if="isInitialLoading" class="map-loading" role="status">{{ nearbyLocation ? 'Loading trees around you…' : loadingMessage }}</div>
   <div v-else-if="tileRefreshing" class="map-loading map-refreshing">{{ tileRefreshMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
-  <div v-if="spriteDebug" class="sprite-debug" aria-hidden="true">
-    <div>{{ spriteDebug }}</div>
-    <canvas ref="radarCanvas" class="sprite-radar" />
+  <div v-if="spriteDebug" class="sprite-debug">
+    <div aria-hidden="true">{{ spriteDebug }}</div>
+    <label class="sprite-debug-control">
+      Max sprites
+      <select :value="spriteLimitChoice" aria-label="Maximum tree sprites" @change="chooseSpriteLimit">
+        <option value="auto">Auto (adjusts itself)</option>
+        <option v-for="n in SPRITE_LIMIT_CHOICES" :key="n" :value="n">{{ n.toLocaleString() }}</option>
+      </select>
+    </label>
+    <canvas ref="radarCanvas" class="sprite-radar" aria-hidden="true" />
   </div>
   <div v-if="mapWindow?.reason && !windowNoticeDismissed && !isInitialLoading" class="map-window-notice" role="status">
     <span>{{ mapWindow.reason === 'reloaded'
@@ -330,7 +337,7 @@ import { basemapStyleUrl, bindMapTheme } from '../composables/mapTheme'
 import { ref, shallowRef, onMounted, onUnmounted, onActivated, onDeactivated, watch, computed, nextTick } from 'vue'
 import maplibregl from 'maplibre-gl'
 import { useFlyTo } from '../composables/useFlyTo'
-import { useMapData, CITY_CONFIG, closestCityTo, haversineKm, type CityCode } from '../composables/useMapData'
+import { useMapData, CITY_CONFIG, closestCityTo, haversineKm, mapQueryFor, type CityCode } from '../composables/useMapData'
 import { getCityBiome, getCityEcoregionId } from '../composables/dashboardContextSource'
 import { useRoute, useRouter } from 'vue-router'
 import { useDuckDB } from '../composables/useDuckDB'
@@ -367,9 +374,10 @@ import {
 } from '../lib/geo'
 import { THINKING_PHRASES } from '../constants/loadingPhrases'
 import { CROWN_ZOOM_START, validTreeHeight } from '../lib/treeCrowns'
-import { applyMapUrlFilters, DBH_COLOR_SQL, DBH_LEGEND, hasMapUrlFilters, MAP_FILTER_FIELDS, readMapColorBy, readMapUrlFilters } from '../lib/mapUrlFilters'
+import { applyMapUrlFilters, DBH_LEGEND, hasMapUrlFilters, MAP_FILTER_FIELDS, readMapColorBy, readMapUrlFilters } from '../lib/mapUrlFilters'
 import { FOLIAGE_LEGEND_NOTE, FOLIAGE_PHASE_LABEL, foliagePhase, speciesShadeSql } from '../lib/foliageSeason'
-import { UNKNOWN_SHADE_COLOR } from '../workers/cityTables'
+import { TREES_AT_TOKEN, UNKNOWN_SHADE_COLOR } from '../workers/cityTables'
+import { bookmarkAt, directoryIndex, type WorldDirectory } from '../workers/worldBlocks'
 
 const { resolvedTheme } = useTheme()
 let releaseMapTheme: (() => void) | undefined
@@ -407,6 +415,7 @@ const {
   introFinished: lifecycleIntroFinished,
   startCitySwitch: lifecycleStartCitySwitch,
   citySwitchReady: lifecycleCitySwitchReady,
+  adoptCity: lifecycleAdoptCity,
   matches: lifecycleMatches,
   forceReady: lifecycleForceReady,
 } = useMapLifecycle()
@@ -482,6 +491,8 @@ const {
   setPublishedTreeIdFilterSql,
   setColorOverrideSql,
   setSpeciesShadeSql,
+  setDbhColors,
+  getWorldDirectory,
   setCityContext,
   setWindowPolicy,
   ensureWindowAt,
@@ -498,9 +509,10 @@ const {
   dbTreeCount,
 } = useDuckDB()
 
-// A phone holds only the ground near the camera and cannot zoom out past a
-// floor (useMapWindow.ts). Decided once, before the first city load, so the
-// worker never loads a whole city it would then have to drop.
+// Every layout holds only the ground near the camera (the worker reads the
+// world's blocks as the camera reaches them). A phone's hold is tight and
+// its map cannot zoom out past a floor (useMapWindow.ts); null leaves the
+// worker its desktop budget. Decided once, before the first load.
 const mapWindow = resolveMapWindow(!!props.simplified && useIsMobile().isMobile.value)
 setWindowPolicy(mapWindow?.policy ?? null)
 const windowNoticeDismissed = ref(false)
@@ -547,13 +559,20 @@ const activeUrlFilters = computed(() => MAP_FILTER_FIELDS
   .filter(field => urlFilters.value[field].length)
   .map(field => ({ name: field === 'species' ? 'Species' : 'Genus', values: urlFilters.value[field] })))
 const mapColorBy = computed(() => readMapColorBy(route.query, urlFilters.value))
-const effectiveMapQuery = computed(() => applyMapUrlFilters(currentMapQuery.value, urlFilters.value))
+const effectiveMapQuery = computed(() => applyMapUrlFilters(mapQueryFor(currentMapQuery.value, selectedCity.value), urlFilters.value))
 // The season the leaf-shade mode paints, from the calendar and the city's
 // hemisphere (cityConfig centres are [lng, lat]).
 const foliagePhaseNow = computed(() => foliagePhase(new Date(), CITY_CONFIG[mapDisplayCity.value].center[1]))
-const effectiveColorSql = computed(() => colorOverrideSql.value ?? (mapColorBy.value === 'dbh' ? DBH_COLOR_SQL : null))
+// The trunk scheme is a rule over the row, so it colours trees paged in later; a chat override wins outright.
+const dbhColors = computed(() => !colorOverrideSql.value && mapColorBy.value === 'dbh')
 // The leaf-shade scheme is a per-species table under any override, not a per-tree one.
 const speciesShadeQuery = computed(() => mapColorBy.value === 'foliage' ? speciesShadeSql(foliagePhaseNow.value) : null)
+
+/** Everything the worker is configured with: what a change in must redraw the trees. */
+function mapConfigSignature(): string {
+  return JSON.stringify([effectiveMapQuery.value, publishedTreeIdFilterSql.value, colorOverrideSql.value, dbhColors.value, speciesShadeQuery.value])
+}
+let configuredSignature: string | null = null
 
 // Worker configuration mutates shared SQL tables. Serialize changes and skip
 // superseded requests so rapid Back/Forward cannot restore an older scope.
@@ -566,8 +585,12 @@ function configureMapQuery(): Promise<boolean> {
     if (!current()) return false
     const query = effectiveMapQuery.value
     const filterSql = publishedTreeIdFilterSql.value
-    const colorSql = effectiveColorSql.value
+    const colorSql = colorOverrideSql.value
+    const dbh = dbhColors.value
+    configuredSignature = mapConfigSignature()
     await setSpeciesShadeSql(speciesShadeQuery.value)
+    if (!current()) return false
+    await setDbhColors(dbh)
     if (!current()) return false
     await setColorOverrideSql(colorSql)
     if (!current()) return false
@@ -847,7 +870,7 @@ function updateZoomLevel() {
 
 const {
   addTreeLayers, applyColorToLayers, forceTreesTileRefetchPass, pickCrownSprite, renderedTreeSprites,
-  treesResident, residentTreeCount, pickResidentTree, spriteStats, spriteRadar,
+  treesResident, residentTreeCount, residentViewSettled, pickResidentTree, spriteStats, spriteRadar, setSpriteLimit,
 } = useMapLayers({
   map: mapRef,
   simplified: props.simplified ?? false,
@@ -873,6 +896,18 @@ function readMapDebug(): boolean {
 
 const radarCanvas = ref<HTMLCanvasElement | null>(null)
 
+// The sprite cap, from the debug panel: left alone it adjusts itself to the reach a crown is
+// worth drawing at (lib/spriteBudget.ts), which on a dense city settles well under its start.
+// A fixed cap holds until Auto is chosen again, and is kept for this browser.
+const SPRITE_LIMIT_CHOICES = [4096, 8192, 16384, 32768, 65536, 131072]
+const spriteLimitChoice = ref<string>('auto')
+
+function chooseSpriteLimit(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  spriteLimitChoice.value = value
+  setSpriteLimit(value === 'auto' ? null : Number(value))
+}
+
 function frame(now: number, last = now) {
   frameTimes.push(now - last)
   if (frameTimes.length > 120) frameTimes.shift()
@@ -889,6 +924,8 @@ function updateSpriteDebug() {
   const dots = `dots ${(residentTreeCount() ?? 0).toLocaleString()}`
   const s = spriteStats()
   if (!s) { spriteDebug.value = `${frames} · ${dots}`; return }
+  // The layer read a fixed cap from this browser's storage, or the panel set one.
+  spriteLimitChoice.value = s.auto ? 'auto' : String(s.cap)
   const reach = Number.isFinite(s.reach) ? `${Math.round(s.reach)} m` : 'all'
   const cap = `${s.cap.toLocaleString()}${s.auto ? ` auto, ceiling ${s.ceiling.toLocaleString()}` : ' fixed'}`
   spriteDebug.value = `${frames} · ${dots} · sprites ${s.drawn.toLocaleString()} / ${cap}${s.drawn >= s.cap ? ' CAPPED' : ''}`
@@ -1467,7 +1504,7 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
   if (!mapRef.value) return
   const requestToken = ++popupRequestToken
   const id = feature.properties?.id
-  // A resident circle knows its trees_fast row, not its id.
+  // A resident circle knows its row in its block, not its id.
   const rowid = feature.properties?.rowid
   const byRowid = typeof rowid === 'number' && Number.isInteger(rowid) && rowid >= 0
   if (!byRowid && (!id || id === 'unkwn')) return
@@ -1478,8 +1515,9 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
   const safeId = String(id).replace(/'/g, "''")
   const cityBiome = getCityBiome(selectedCity.value).replace(/'/g, "''")
   const cityEcoregionId = getCityEcoregionId(selectedCity.value)
-  try {
-    const { rows } = await duckQuery(`
+  // The read names the table of the cell the tree stands in (the worker
+  // loads it if it has been dropped), not the union of every cell held.
+  const cardQuery = (from: string) => `
       SELECT
         tf.tree_id,
         tf.tree_name,
@@ -1528,11 +1566,15 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
         se.foliage_colors,
         se.fall_foliage_colors,
         se.trunk_color
-      FROM trees_fast tf
+      FROM ${from} tf
       LEFT JOIN species_enrichment se ON tf.species = se.species
-      WHERE ${byRowid ? `tf.rowid = ${rowid}` : `tf.tree_id = '${safeId}'`}
+      WHERE ${byRowid ? `tf.rn = ${rowid}` : `tf.tree_id = '${safeId}'`}
       LIMIT 1
-    `)
+    `
+  try {
+    let { rows } = await duckQuery(cardQuery(TREES_AT_TOKEN), { at: { lng: featureCoords[0], lat: featureCoords[1] } })
+    // A tile's point is quantised: a tree on a cell's edge can read as its neighbour's.
+    if (!rows.length && !byRowid) ({ rows } = await duckQuery(cardQuery('trees_fast')))
     if (requestToken !== popupRequestToken) return
     const row = rows[0] as unknown as PopupTreeRow | undefined
     if (!row) {
@@ -1746,7 +1788,7 @@ async function switchCity(city: CityCode, landingCoords?: [number, number], anim
 
     if (!lifecycleMatches(transition)) return
 
-    // Load the new city's parquet before accepting the transition so stale
+    // Put the new bookmark in context before accepting the transition so stale
     // switch completions cannot overwrite the lifecycle's current request.
     markWindowLoadStarted()
     await setCityContext(city)
@@ -1764,6 +1806,70 @@ async function switchCity(city: CityCode, landingCoords?: [number, number], anim
   // NOTE: we don't transition to ready here — the sourcedata handler does
   // that when tiles actually render (via lifecycleTilesLoaded / lifecycleCitySwitchReady).
 }
+
+// --- The bookmark follows the camera ---
+//
+// The trees on screen are whatever is under the camera, so a pan or a flight
+// from one inventory into the next needs no city switch. What a city still
+// scopes is everything said about it: the URL, the selector, the landmarks,
+// the chat and the dashboards. When the camera settles over another city's
+// trees that city becomes the bookmark, quietly.
+
+/** Below this the camera is passing over a region, not looking at a place. */
+const BOOKMARK_MIN_ZOOM = 10
+let worldDirectoryIndex: { directory: WorldDirectory; index: Map<number, number> } | null = null
+let bookmarkFollowing = false
+
+async function worldIndex() {
+  if (!worldDirectoryIndex) {
+    const directory = await getWorldDirectory()
+    if (directory) worldDirectoryIndex = { directory, index: directoryIndex(directory) }
+  }
+  return worldDirectoryIndex
+}
+
+/** The city whose trees the map's centre is over, if the camera is close enough to be looking at one. */
+function bookmarkUnderCamera(world: NonNullable<typeof worldDirectoryIndex>): CityCode | null {
+  const map = mapRef.value
+  if (!map || map.getZoom() < BOOKMARK_MIN_ZOOM) return null
+  const centre = map.getCenter()
+  const city = bookmarkAt(world.directory, world.index, centre.lng, centre.lat)
+  return city && city in CITY_CONFIG ? city : null
+}
+
+async function followBookmark() {
+  // Not mid-load, mid-intro or mid-flight to a city someone picked; not while a
+  // chat answer about this city is painted on the map; not in the nearby picker.
+  if (bookmarkFollowing || disposed || !mapActive || !mapRef.value) return
+  if (lifecyclePhase.value !== 'ready' || introActive.value || props.nearbyLocation) return
+  if (publishedTreeIdFilterSql.value || colorOverrideSql.value) return
+  bookmarkFollowing = true
+  try {
+    const world = await worldIndex()
+    if (!world) return
+    const city = bookmarkUnderCamera(world)
+    if (!city || city === selectedCity.value || lifecyclePhase.value !== 'ready') return
+    const transition = lifecycleRequestCity(city)
+    await setCityContext(city)
+    // A city picked meanwhile, or a camera that has moved on, wins.
+    if (!lifecycleMatches(transition) || lifecyclePhase.value !== 'ready' || bookmarkUnderCamera(world) !== city) {
+      if (lifecycleMatches(transition)) lifecycleRequestCity(selectedCity.value)
+      return
+    }
+    lifecycleAdoptCity(city)
+    commitResolvedCity(city)
+    mapContainer.value?.setAttribute('data-trees-loaded-for', city)
+    console.info('[Map] bookmark follows the camera', { city })
+    if (readRouteCity(route.query.city) !== city) void router.replace({ query: { ...route.query, city } })
+  } catch (e) {
+    console.warn('[Map] bookmark follow failed', e)
+  } finally {
+    bookmarkFollowing = false
+  }
+}
+
+// A move that ended while the map was not ready (mid-intro, mid-load) gets its bookmark once it is.
+watch([lifecyclePhase, introActive], () => { void followBookmark() })
 
 // React to URL city changes driven by the sidebar CitySelector.
 // During initialization there is no meaningful in-flight city to preserve, so
@@ -1956,8 +2062,11 @@ watch(flyToTarget, (t) => {
 // --- Watchers ---
 
 // Reload tiles when query, filter, or revision changes
-watch([effectiveMapQuery, publishedTreeIdFilterSql, mapQueryRevision, effectiveColorSql, speciesShadeQuery], async () => {
+watch([effectiveMapQuery, publishedTreeIdFilterSql, mapQueryRevision, dbhColors, colorOverrideSql, speciesShadeQuery], async () => {
   if (!mapRef.value) return
+  // The bookmark moved and nothing the map draws did (the trees follow the
+  // camera): no refetch, no message, and the trees on screen stay as they are.
+  if (lifecyclePhase.value === 'ready' && configuredSignature !== null && mapConfigSignature() === configuredSignature) return
   // City loads have their own overlay; route and chat changes refresh in place.
   // The resident desktop layer keeps drawing the old set (or the old colours)
   // until the new one is ready, so it says so only if that takes a while.
@@ -2208,11 +2317,12 @@ onMounted(async () => {
       }
     })
 
-    map.on('moveend', () => { logIconLayerSnapshot('moveend') })
+    map.on('moveend', () => { logIconLayerSnapshot('moveend'); void followBookmark() })
 
     map.on('idle', () => {
       if (hasUrlFilters.value && treesResident()) {
-        nearbyEmpty.value = residentTreeCount() === 0
+        // Under a filter the count is the matching trees held: only a settled view can say there are none.
+        nearbyEmpty.value = residentViewSettled() && residentTreeCount() === 0
       } else if ((props.nearbyLocation || hasUrlFilters.value) && map.getSource('trees') && map.isSourceLoaded('trees')) {
         const layers = [...treeCircleLayerIds(map), ...treeHeatLayerIds(map)]
         // The desktop's close-up renderer is a custom layer, so rendered circle
@@ -3341,5 +3451,23 @@ onUnmounted(() => {
   max-width: calc(100% - 140px);
   text-align: center;
   pointer-events: none;
+}
+.sprite-debug-control {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin: 3px 0;
+  pointer-events: auto;
+}
+.sprite-debug-control select {
+  font: inherit;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+.sprite-debug-control option {
+  color: #000;
 }
 </style>
