@@ -78,6 +78,12 @@ test('crowns render at metre scale, respect zoom/distance, and release their res
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
   await page.goto('/renderer-tests/crowns.html')
   await settle(page)
+  // The upright sprite; from overhead it is a crown disc (tested below).
+  await page.evaluate(async () => {
+    const { map, layer } = (window as any).crownTest
+    layer.viewAngle = false
+    await new Promise(resolve => { map.once('render', resolve); map.triggerRepaint() })
+  })
   const sprite = await page.evaluate(() => {
     const { map, crowns, layer } = (window as any).crownTest
     const canvas = map.getCanvas()
@@ -189,7 +195,8 @@ test('enlarged sprite edges stay sharp and all materials share one draw and text
   await page.goto('/renderer-tests/crowns.html')
   await settle(page)
   await page.evaluate(() => {
-    const { map, crowns } = (window as any).crownTest
+    const { map, crowns, layer } = (window as any).crownTest
+    layer.viewAngle = false
     map.jumpTo({ center: [crowns[0].lng, crowns[0].lat + 0.000075], zoom: 21 })
   })
   await settle(page)
@@ -246,6 +253,37 @@ test('enlarged sprite edges stay sharp and all materials share one draw and text
     if (sample.bloom) expect(sample.bloom.slice(0, 3)).toEqual([248, 187, 208])
   }
   await page.screenshot({ path: testInfo.outputPath('all-shapes.png') })
+})
+
+test('from overhead a sprite is its crown: a disc the crown wide, centred on the trunk', async ({ page }) => {
+  await page.goto('/renderer-tests/crowns.html')
+  await settle(page)
+  // Straight above the tree, so it is seen from 90 degrees (past SPRITE_TOPDOWN_FULL_DEG).
+  await page.evaluate(() => {
+    const { map, crowns } = (window as any).crownTest
+    map.jumpTo({ center: [crowns[0].lng, crowns[0].lat], pitch: 0 })
+  })
+  await settle(page)
+  const disc = await page.evaluate(() => {
+    const { map, crowns, layer } = (window as any).crownTest
+    const canvas = map.getCanvas()
+    const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
+    const point = map.project([crowns[0].lng, crowns[0].lat])
+    const ratio = canvas.width / canvas.clientWidth
+    const expected = 12 / (40075016.68557849 * Math.cos(crowns[0].lat * Math.PI / 180) / (512 * 2 ** map.getZoom())) * ratio
+    // The green extent along a row (dx) or a column (dy) through the trunk.
+    const extent = (dx: number, dy: number, n: number) => {
+      const pixels = new Uint8Array(n * 4)
+      gl.readPixels(Math.round(point.x * ratio) + dx, canvas.height - Math.round(point.y * ratio) + dy, dx === 0 ? 1 : n, dx === 0 ? n : 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+      const green = Array.from({ length: n }, (_, i) => i).filter(i => pixels[i * 4 + 1] - pixels[i * 4] > 20)
+      return Math.max(...green) - Math.min(...green)
+    }
+    return { width: extent(-100, 0, 200), height: extent(0, -100, 200), expected, picked: layer.pick({ x: point.x, y: point.y })?.id, error: gl.getError() }
+  })
+  expect(disc.error).toBe(0)
+  expect(Math.abs(disc.width - disc.expected)).toBeLessThan(5)
+  expect(Math.abs(disc.height - disc.expected)).toBeLessThan(5)
+  expect(disc.picked).toBe('measured')
 })
 
 test('late responses cannot restore filtered crowns or allocate resources after removal', async ({ page }) => {

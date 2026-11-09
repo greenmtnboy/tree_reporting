@@ -5,7 +5,7 @@ import { colorSql } from './cityTables'
 import { CATEGORY_COLORS } from '../treeFormColors'
 import {
   CROWN_DISTANCE_MAX, MAX_CROWNS, MAX_SPRITE_ASPECT, MAX_TREE_SPRITES, MIN_SPRITE_ASPECT,
-  crownZoomOpacity, spriteAspect, spriteOpacity, SPRITE_BASE_OPACITY, SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM, SPRITE_FULL_OPACITY_ZOOM, validCrownWidth, validTreeHeight,
+  crownZoomOpacity, spriteAspect, spriteOpacity, spriteViewShape, SPRITE_BASE_OPACITY, SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM, SPRITE_FULL_OPACITY_ZOOM, validCrownWidth, validTreeHeight,
 } from '../lib/treeCrowns'
 
 const BROADLEAF = CATEGORY_COLORS.broadleaf
@@ -169,6 +169,12 @@ test('zoom fades and invalid widths are bounded', () => {
   expect(spriteOpacity(SPRITE_CROWN_ZOOM_START)).toBe(0)
   expect(spriteOpacity(SPRITE_OPAQUE_ZOOM)).toBeCloseTo(SPRITE_BASE_OPACITY)
   expect(spriteOpacity(SPRITE_FULL_OPACITY_ZOOM)).toBe(1)
+  // Seen level a sprite is upright and full height; from 75 degrees up it is a crown disc.
+  expect(spriteViewShape(0)).toEqual({ squash: 1, top: 0 })
+  expect(spriteViewShape(Math.sin(Math.PI / 6)).squash).toBeCloseTo(Math.cos(Math.PI / 6))
+  expect(spriteViewShape(Math.sin(Math.PI / 6)).top).toBe(0)
+  expect(spriteViewShape(Math.sin(75 * Math.PI / 180)).top).toBeCloseTo(1)
+  expect(spriteViewShape(1).top).toBe(1)
   expect(() => crownQuery({ lng: NaN, lat: 0, altitude: 0 }, '', colorSql('tf', false))).toThrow('Invalid crown camera')
 })
 
