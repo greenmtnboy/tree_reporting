@@ -10,8 +10,14 @@ public pipeline has no USFFX: Fairfax County sits inside USNVA's territory,
 whose two municipal sources are the Arlington and Falls Church ingests this
 script reuses, so a calibration row's `species` is exactly what USNVA
 publishes.  Calibration rows carry their own jurisdiction's code (USARL,
-USFCH, USALX: bundle-local, chosen not to collide with the city registry)
-plus `pipeline_city` and the pipeline's `data_source` label.
+USFCH, USALX, USFXC: bundle-local, chosen not to collide with the city
+registry) plus `pipeline_city` and the pipeline's `data_source` label.
+
+Fairfax City's inventory (USFXC) comes from a copy a George Mason University
+account published on ArcGIS Online, not from the City, and the item states no
+licence.  Its rows carry `source_license_status = 'unclear_pending_official_source'`
+so a consumer can drop them; replace the source once the City publishes an
+export or answers the data request.
 
 Run from `data/raw`:
 
@@ -36,14 +42,15 @@ import subprocess
 import sys
 from collections import Counter, defaultdict
 from datetime import UTC, date, datetime
+from functools import reduce
 from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 import requests
-from shapely.geometry import Point, mapping, shape
-from shapely.validation import explain_validity, make_valid
+from shapely.geometry import Point, Polygon, mapping, shape
+from shapely.validation import explain_validity
 from shapely.prepared import prep
 
 RAW = Path(__file__).resolve().parent.parent
@@ -71,6 +78,15 @@ JURISDICTIONS_LAYER = (
     "https://services5.arcgis.com/6MUPhDX27Ne3DNOw/arcgis/rest/services/"
     "County_Boundaries_Northern_Virginia/FeatureServer/0"
 )
+# A third-party copy of the City's TreePlotter inventory (item
+# 76badca59bdf43a0996c000ecc42df84, owner sedlich@gmu.edu_mygmu, last edited
+# 2025-12-11).  Layer 9 holds the same points plus ~200 more; layer 0 is
+# proposed planting sites.
+FAIRFAX_CITY_LAYER = (
+    "https://services5.arcgis.com/fxnFqGOVRzV4g6ac/arcgis/rest/services/"
+    "FairfaxTrees_WFL1/FeatureServer/10"
+)
+UNCLEAR_LICENSE = "unclear_pending_official_source"
 ALEXANDRIA_LAYER = (
     "https://maps.alexandriava.gov/arcgis/rest/services/alxPublicParksWm/MapServer/0"
 )
@@ -89,7 +105,7 @@ PROVENANCE_COLUMNS = [
     "pipeline_city", "jurisdiction", "jurisdiction_fips", "selection",
     "tree_name", "cultivar", "source_species_name", "source_common_name", "source_cultivar",
     "source_dbh", "source_dbh_unit", "source_record_date", "source_record_date_kind",
-    "source_status", "source_object_id",
+    "source_status", "source_object_id", "source_native_status", "source_license_status",
 ]
 
 
@@ -174,16 +190,21 @@ def build_boundary(out: Path, report: dict, jurisdictions: dict) -> tuple[object
     repair = None
     if not geometry.is_valid:
         # The county owns an enclave inside Fairfax City (the Judicial Center
-        # complex), so the published polygon is county / city hole / county
-        # island.  Esri's ring list says that; GeoJSON's one-exterior polygon
-        # reads it as a hole nested in a hole.  make_valid splits the island
-        # into its own part, which is the actual territory.
+        # complex), so the published rings are county / city hole / county
+        # island.  Esri means them even-odd; the GeoJSON encoding of the same
+        # rings has changed (one polygon with a hole nested in a hole until
+        # November 2026, then three overlapping shells), and make_valid reads
+        # the second as a union that fills the city.  Rebuilding even-odd
+        # from the rings is right for either encoding.
         reason = explain_validity(geometry)
-        repaired = make_valid(geometry)
-        if repaired.geom_type != "MultiPolygon" or abs(repaired.area / geometry.area - 1) > 0.01:
-            raise ValueError(f"county boundary invalid ({reason}) and not repairable as a MultiPolygon")
-        repair = {"reason": reason, "parts_after": len(repaired.geoms),
-                  "area_ratio": repaired.area / geometry.area}
+        raw_geometry = features[0]["geometry"]
+        polygons = raw_geometry["coordinates"] if raw_geometry["type"] == "MultiPolygon" else [raw_geometry["coordinates"]]
+        rings = [Polygon(ring) for polygon in polygons for ring in polygon]
+        repaired = reduce(lambda a, b: a.symmetric_difference(b), rings)
+        if repaired.geom_type not in {"Polygon", "MultiPolygon"} or not repaired.is_valid:
+            raise ValueError(f"county boundary invalid ({reason}) and not repairable from its rings")
+        repair = {"reason": reason, "encoding": raw_geometry["type"], "rings": len(rings),
+                  "parts_after": len(getattr(repaired, "geoms", [repaired]))}
         geometry = repaired
     if geometry.geom_type not in {"Polygon", "MultiPolygon"} or not geometry.is_valid:
         raise ValueError(f"county boundary is {geometry.geom_type}, valid={geometry.is_valid}")
@@ -210,7 +231,7 @@ def build_boundary(out: Path, report: dict, jurisdictions: dict) -> tuple[object
         "source_last_edited": esri_ms_to_iso((info.get("editingInfo") or {}).get("dataLastEditDate")),
     }
     if repair:
-        properties["repair"] = "nested hole split into its own part by shapely make_valid; see source-audit.md"
+        properties["repair"] = "rebuilt even-odd from the published rings; see source-audit.md"
     collection = {"type": "FeatureCollection",
                   "features": [{"type": "Feature", "properties": properties, "geometry": mapping(geometry)}]}
     (out / "boundary.geojson").write_text(json.dumps(collection), encoding="utf-8")
@@ -305,6 +326,8 @@ def arlington(out: Path) -> tuple[pa.Table, dict, dict]:
         "source_record_date_kind": ["cartegraph_last_modified"] * len(attrs),
         "source_status": [a.get("SpecialCategory") or None for a in attrs],
         "source_object_id": [str(a.get("OBJECTID")) for a in attrs],
+        "source_native_status": [None] * len(attrs),
+        "source_license_status": ["publisher_layer"] * len(attrs),
     })
     table = finish(table, code="USARL", fips="51013", jurisdiction="Arlington County, Virginia",
                    selection="municipal asset inventory (street, park, school, VDOT right-of-way)",
@@ -351,6 +374,8 @@ def falls_church(out: Path) -> tuple[pa.Table, dict, dict]:
         "source_record_date_kind": ["inventory_survey_date"] * len(attrs),
         "source_status": [(a.get("CONDITION") or "").strip() or None for a in attrs],
         "source_object_id": [str(a.get("FID")) for a in attrs],
+        "source_native_status": [None] * len(attrs),
+        "source_license_status": ["publisher_layer"] * len(attrs),
     })
     table = finish(table, code="USFCH", fips="51610", jurisdiction="City of Falls Church, Virginia",
                    selection="municipal inventory, 2004 survey (street, park, school, facility)",
@@ -404,6 +429,8 @@ def alexandria(out: Path) -> tuple[pa.Table, dict, dict]:
         "source_record_date_kind": [None] * len(attrs),
         "source_status": [a.get("Status") for a in attrs],
         "source_object_id": [str(a.get("OBJECTID")) for a in attrs],
+        "source_native_status": [None] * len(attrs),
+        "source_license_status": ["publisher_layer"] * len(attrs),
     })
     table = finish(table, code="USALX", fips="51510", jurisdiction="City of Alexandria, Virginia",
                    selection="NOTABLE TREES ONLY: champion, significant and notable nominations, public and private",
@@ -419,6 +446,65 @@ def alexandria(out: Path) -> tuple[pa.Table, dict, dict]:
         "bundle_city": "USALX", "pipeline_city": None, "data_source": "ALEXANDRIA_NOTABLE",
         "snapshot": snap,
         "extraction": "data/raw/tools/fairfax_source_bundle.py alexandria(): shared.ingest normalize_species, validate_coordinates, enforce_tree_schema",
+    }
+    return table, stages, source
+
+
+def fairfax_city(out: Path) -> tuple[pa.Table, dict, dict]:
+    retrieved = now()
+    features = fetch_features(FAIRFAX_CITY_LAYER, order_by="OBJECTID")
+    snap = snapshot(out, "fairfax-city-trees-gmu-copy", features)
+    stages = {"raw": len(features)}
+    # `Status = 'Dead'` rows are standing trees and stay, as Falls Church's do.
+    stages["raw_status_dead"] = sum(1 for f in features if f["attributes"].get("Status") == "Dead")
+    features = [f for f in features if f["attributes"].get("Primary_ID") is not None]
+    stages["after_id_filter"] = len(features)
+    attrs = [f["attributes"] for f in features]
+    points = [esri_point(f.get("geometry")) for f in features]
+    table = pa.table({
+        "tree_id": [f"ffxc-{a['Primary_ID']}" for a in attrs],
+        "city": ["USFXC"] * len(attrs),
+        "species": [normalize_species(a.get("Scientific")) for a in attrs],
+        "tree_name": [normalize_tree_name(a.get("Common_Nam")) for a in attrs],
+        "plant_date": pa.nulls(len(attrs), type=pa.date32()),
+        "latitude": pa.array([p[0] for p in points], type=pa.float64()),
+        "longitude": pa.array([p[1] for p in points], type=pa.float64()),
+        # Whole inches; 0 means not measured.
+        "diameter_at_breast_height": pa.array([a.get("DBH") or None for a in attrs], type=pa.float64()),
+    })
+    table = with_extras(table, {
+        "source_species_name": [a.get("Scientific") for a in attrs],
+        "source_common_name": [a.get("Common_Nam") for a in attrs],
+        "source_cultivar": [None] * len(attrs),
+        "source_dbh": [None if a.get("DBH") is None else repr(a["DBH"]) for a in attrs],
+        "source_dbh_unit": ["in"] * len(attrs),
+        "source_record_date": [None] * len(attrs),
+        "source_record_date_kind": [None] * len(attrs),
+        "source_status": [a.get("Status") for a in attrs],
+        "source_object_id": [str(a.get("OBJECTID")) for a in attrs],
+        "source_native_status": [a.get("Native_Status") for a in attrs],
+        "source_license_status": [UNCLEAR_LICENSE] * len(attrs),
+    })
+    table = finish(table, code="USFXC", fips="51600", jurisdiction="City of Fairfax, Virginia",
+                   selection="municipal inventory (2023 survey) via an unofficial third-party copy; licence unclear",
+                   data_source=None, pipeline_label="FAIRFAX_CITY_GMU_COPY", stages=stages)
+    info = layer_info(FAIRFAX_CITY_LAYER)
+    source = {
+        "name": "City of Fairfax tree inventory, third-party copy (FairfaxTrees_WFL1, Fairfax City Trees)",
+        "url": FAIRFAX_CITY_LAYER,
+        "retrieved_at": retrieved,
+        "jurisdiction": "City of Fairfax, Virginia",
+        "license": ("UNCLEAR: republished by a George Mason University ArcGIS Online account, not the City; "
+                    "the item states no licence, terms or attribution. Calibration only, pending an official "
+                    "City export or data request; do not publish."),
+        "license_status": UNCLEAR_LICENSE,
+        "coverage": "City-managed trees from the 2023 inventory (street, park, facility); private land absent",
+        "role": "calibration_inventory",
+        "bundle_city": "USFXC", "pipeline_city": None, "data_source": "FAIRFAX_CITY_GMU_COPY",
+        "source_last_edited": esri_ms_to_iso((info.get("editingInfo") or {}).get("dataLastEditDate")),
+        "item": item_metadata(FAIRFAX_CITY_LAYER),
+        "snapshot": snap,
+        "extraction": "data/raw/tools/fairfax_source_bundle.py fairfax_city(): shared.ingest normalize_species, validate_coordinates, enforce_tree_schema",
     }
     return table, stages, source
 
@@ -543,9 +629,9 @@ def write_audit(out: Path, report: dict, manifest: dict) -> None:
         f"- Share of each neighbour's VGIN polygon the boundary overlaps (edge slivers between two surveys): "
         f"{b['excluded_overlap_share']}; covers {', '.join(b['included_checks'])}.",
         (f"- Repaired: the published polygon is invalid ({b['repair']['reason']}). The county owns an enclave "
-         "inside Fairfax City (the Judicial Center complex), which GeoJSON's single-exterior polygon reads as a "
-         f"hole nested in the city's hole; `make_valid` splits it into its own part ({b['repair']['parts_after']} "
-         f"parts, area ratio {b['repair']['area_ratio']:.5f}). The raw snapshot is kept unrepaired."
+         f"inside Fairfax City (the Judicial Center complex), so the {b['repair']['rings']} published rings are "
+         f"county / city hole / county island, here encoded as a GeoJSON {b['repair']['encoding']}. The territory is "
+         f"rebuilt even-odd from the rings ({b['repair']['parts_after']} parts). The raw snapshot is kept unrepaired."
          if b["repair"] else "- The published polygon is valid as delivered."),
         "- Fairfax City (independent, enclaved) and Falls Church (independent, on the eastern edge) are outside it, "
         "except the county's own enclave inside Fairfax City; the towns of Vienna, Herndon and Clifton are inside it, being county territory.", "",
@@ -591,14 +677,16 @@ def write_audit(out: Path, report: dict, manifest: dict) -> None:
         "## Acquisition terms", "",
     ]
     for src in manifest["sources"]:
-        lines.append(f"- {src['name']}: {src['license']} ({src['url']}).")
+        flag = " **Licence unclear: calibration only, do not publish.**" if src.get("license_status") == UNCLEAR_LICENSE else ""
+        lines.append(f"- {src['name']}: {src['license']} ({src['url']}).{flag}")
     lines += ["", "## Limitations", ""] + [f"- {item}" for item in manifest["limitations"]] + [""]
     (out / "source-audit.md").write_text("\n".join(lines), encoding="utf-8")
 
 
 LIMITATIONS = [
     "No Fairfax County tree inventory exists in public data (canopy polygons only; the Trees2 service has two test records), so `inventory` is null and county tree presence is unknown outside curated tiles.",
-    "Fairfax City's 2023 inventory (11,487 trees, 146 classifications per the city's summary PDF) is held in a PlanIT Geo TreePlotter viewer (pg-cloud.com/FairfaxVA) with no published export or terms; it is not included and needs a data request to the City.",
+    "Fairfax City's 2023 inventory (11,487 trees, 146 classifications per the city's summary PDF) is held in a PlanIT Geo TreePlotter viewer (pg-cloud.com/FairfaxVA) with no published export or terms. The USFXC rows come instead from a copy a George Mason University ArcGIS Online account published (FairfaxTrees_WFL1, last edited 2025-12-11). Its licence is UNCLEAR, so its rows carry `source_license_status = 'unclear_pending_official_source'`: use them for calibration only, never publish them, and replace them once the City supplies an official export (the data request still stands).",
+    "The Fairfax City copy is a frozen snapshot with no survey or planting dates. Its 13,155 rows exceed the 2023 summary's 11,487, so it likely includes later TreePlotter records. Fairfax City is an independent city enclaved by the county, so its rows lie outside the county boundary.",
     "Calibration inventories cover public trees only (streets, parks, schools, rights-of-way); private and residential trees are absent, so they calibrate species mix of managed trees, not of the whole canopy.",
     "Falls Church's inventory is a 2004 survey last edited in 2015; species mix and sizes are 20+ years old and planting dates are not published.",
     "Arlington publishes common names only; species come from shared/species/english.py, and the names it cannot resolve are listed per source above as Unknown.",
@@ -609,7 +697,7 @@ LIMITATIONS = [
     "Unresolved mappings: Arlington common names that resolve to no taxon (listed above, about 120 rows, mostly `Other Species`) and the ambiguous hybrid `Oak, Hybrid Black/Red` publish as Unknown; Alexandria's varieties (`Fraxinus americana var biltmoreana`, `Crataegus intricata var. Bilt.`, `Cedrus atlantica glauca`) are reduced to the species by the central rule.",
     "Arlington's planting dates (`Installed`) start in 2012 and exist only for trees the county planted since; older trees have none.",
     "Alexandria's layer is notable/champion trees only (large specimens, public and private); it is a heavily size-biased selection, its DBH is derived from girth, and it should not be used to estimate species frequency.",
-    "Calibration jurisdiction codes USARL, USFCH and USALX are bundle-local; the public pipeline carries Arlington and Falls Church as city USNVA with data_source ARLINGTON / FALLS_CHURCH and does not publish Alexandria.",
+    "Calibration jurisdiction codes USARL, USFCH, USALX and USFXC are bundle-local; the public pipeline carries Arlington and Falls Church as city USNVA with data_source ARLINGTON / FALLS_CHURCH and publishes neither Alexandria nor Fairfax City.",
 ]
 
 
@@ -627,7 +715,8 @@ def main() -> None:
     tables: dict[str, pa.Table] = {}
     sources = [boundary_source]
     for name, build in (("Arlington DPR Trees", arlington), ("Falls Church Public_Trees", falls_church),
-                        ("Alexandria Notable Trees", alexandria)):
+                        ("Alexandria Notable Trees", alexandria),
+                        ("Fairfax City Trees (third-party copy)", fairfax_city)):
         table, stages, source = build(out)
         tables[name] = table
         sources.append(source)
@@ -672,6 +761,8 @@ def main() -> None:
             "USARL": {"jurisdiction": "Arlington County, Virginia", "fips": "51013", "pipeline_city": "USNVA", "data_source": "ARLINGTON"},
             "USFCH": {"jurisdiction": "City of Falls Church, Virginia", "fips": "51610", "pipeline_city": "USNVA", "data_source": "FALLS_CHURCH"},
             "USALX": {"jurisdiction": "City of Alexandria, Virginia", "fips": "51510", "pipeline_city": None, "data_source": "ALEXANDRIA_NOTABLE"},
+            "USFXC": {"jurisdiction": "City of Fairfax, Virginia", "fips": "51600", "pipeline_city": None,
+                      "data_source": "FAIRFAX_CITY_GMU_COPY", "license_status": UNCLEAR_LICENSE},
         },
         "extraction": {"script": "data/raw/tools/fairfax_source_bundle.py", "repo_commit": commit,
                        "repo_dirty": bool(dirty), "copies": "extraction/"},
