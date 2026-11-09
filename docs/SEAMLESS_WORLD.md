@@ -181,14 +181,7 @@ which is stable for as long as the manifest is.
 **Below z9 nothing new is loaded** (`LOAD_MIN_ZOOM`). A 1280 px view at z9 is
 about 200 km across; a zoom lower is several metros and millions of trees
 for dots a fraction of a pixel wide. What is held stays drawn, and the
-overview says where the rest is.
-
-### The overview
-
-`src/src/composables/useWorldOverview.ts`. One soft dot per block, weighted
-by its tree count, from the manifest alone, fading out between z9 and z10.5
-as the trees take over. Every inventory shows at any zoom, so a flight from
-one city to the next does not cross a blank map. The city markers stay.
+city markers say where the rest is.
 
 ### The bookmark follows the camera
 
@@ -247,7 +240,10 @@ row (`dbhColorSql`), like the tree-form colours.
 ## Not done
 
 - **Low zooms draw only what is held.** Below z9 a metro that was never
-  visited shows as overview dots, not as its trees. A sampled or aggregated
+  visited is its city marker, and between z8 (where the markers end) and z9
+  it is nothing at all. A first cut drew a dot per block from the manifest
+  to fill that; it read as green smudges beside the real trees and was
+  taken out. A sampled or aggregated
   level per coarse tile would let the real colours reach z6 everywhere.
 - **A desktop's first view of a dense block is the whole block.** Bogotá's
   densest is 322k rows, about 8 MB, and nothing draws there until it has

@@ -371,7 +371,6 @@ import { applyMapUrlFilters, DBH_LEGEND, hasMapUrlFilters, MAP_FILTER_FIELDS, re
 import { FOLIAGE_LEGEND_NOTE, FOLIAGE_PHASE_LABEL, foliagePhase, speciesShadeSql } from '../lib/foliageSeason'
 import { TREES_AT_TOKEN, UNKNOWN_SHADE_COLOR } from '../workers/cityTables'
 import { bookmarkAt, directoryIndex, type WorldDirectory } from '../workers/worldBlocks'
-import { addWorldOverview, removeWorldOverview } from '../composables/useWorldOverview'
 
 const { resolvedTheme } = useTheme()
 let releaseMapTheme: (() => void) | undefined
@@ -1808,16 +1807,6 @@ async function worldIndex() {
   return worldDirectoryIndex
 }
 
-async function showWorldOverview(map: maplibregl.Map) {
-  try {
-    const world = await worldIndex()
-    if (!world || disposed || mapRef.value !== map) return
-    addWorldOverview(map, world.directory, map.getLayer('trees-dots') ? 'trees-dots' : map.getLayer('trees-icon') ? 'trees-icon' : undefined)
-  } catch (e) {
-    console.warn('[WorldOverview] unavailable', e)
-  }
-}
-
 /** The city whose trees the map's centre is over, if the camera is close enough to be looking at one. */
 function bookmarkUnderCamera(world: NonNullable<typeof worldDirectoryIndex>): CityCode | null {
   const map = mapRef.value
@@ -2159,7 +2148,6 @@ async function initializeRequestedCity(map: maplibregl.Map): Promise<void> {
     // city markers are the only thing left to render — without them the mobile
     // map went completely blank when zoomed out past the heatmap.
     addCityMarkers(map, city)
-    void showWorldOverview(map)
     if (!globeMarkersBound) {
       globeMarkersBound = true
       bindCityMarkerInteractions(map, (code) => { void switchCity(code) })
@@ -2449,7 +2437,6 @@ onUnmounted(() => {
   if (mapRef.value) {
     removeLandmarkLayer(mapRef.value)
     removeCityMarkers(mapRef.value)
-    removeWorldOverview(mapRef.value)
   }
   zoomControlLabelEl = null
   landmarkInteractionsBound = false

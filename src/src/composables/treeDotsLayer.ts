@@ -28,8 +28,8 @@ import type { DotsIndexRequest, DotsIndexResult } from '../workers/treeDotsIndex
  *   ever asks for the ground it is looking at. Each chunk carries its own
  *   origin, buffers, heat pyramid and pick grid.
  * - Below LOAD_MIN_ZOOM a view spans several metros, so nothing new is
- *   loaded there: what is held stays drawn, and the map's overview layer
- *   (useWorldOverview.ts) says where the rest is.
+ *   loaded there: what is held stays drawn, and the city markers
+ *   (useGlobeCityMarkers.ts) say where the rest is.
  * - Panning and zooming within what is loaded never waits: a frame draws
  *   only the ranges of the chunks in view.
  * - The heat is two passes whatever the palette: trees add their colour and

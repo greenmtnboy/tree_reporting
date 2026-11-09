@@ -58,14 +58,12 @@ test('a desktop opened on Boston flies to Burlington and to San Francisco, and t
     const map = window.__treeMap!
     const layer = (map.getLayer('trees-dots') as unknown as { implementation?: DotsLayer }).implementation!
     ;(window as unknown as { __dots?: DotsLayer }).__dots = layer
-    return { resident: layer.residentCount, world: layer.count, tiles: !!map.getSource('trees'), overview: !!map.getLayer('world-blocks-glow') }
+    return { resident: layer.residentCount, world: layer.count, tiles: !!map.getSource('trees') }
   })
   expect(boston.resident).toBeGreaterThan(0)
   // The rows are the world's, not a city's: far more than is held.
   expect(boston.world).toBeGreaterThan(boston.resident)
   expect(boston.tiles).toBe(false)
-  // Where the trees are, at any zoom, from the manifest alone.
-  expect(boston.overview).toBe(true)
 
   for (const city of ['USBTV', 'USSFO']) {
     await flyCamera(page, CENTERS[city], 13)
