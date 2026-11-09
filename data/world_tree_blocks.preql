@@ -1,0 +1,18 @@
+# Publishes the world's trees as geo blocks, run by the `publish-world-blocks`
+# [[cloud.job]] in trilogy.toml after the browser projections.
+#
+# The map draws from these and from nothing city-shaped: one parquet per Web
+# Mercator z12 tile, a vocabulary and a manifest that names them
+# (docs/SEAMLESS_WORLD.md). There is nothing to model yet: Trilogy writes a
+# target as one file, and a target written as a set of files keyed by an
+# expression is still a proposal (docs/TRILOGY_BUCKETED_OUTPUT_SPEC.md).
+# world/publish_blocks.py reads the published projections, builds the blocks,
+# validates the candidate against the live manifest and uploads it, manifest
+# last. A `call` is how a job runs a program; the script prints the
+# manifest's URL as the run's output.
+#
+# This file sits at the root of data/ for the reason website_homepage.preql
+# does: a `call` target resolves against the entry file's directory and then
+# runs from it, so from raw/ the path doubles.
+
+call `./world/publish_blocks.py`;

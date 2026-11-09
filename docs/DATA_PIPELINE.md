@@ -58,6 +58,9 @@ the core, daily, reading only published parquets
   refresh-predictions   raw/tree_predictions.preql      -> tree_predictions_v{n}.parquet
   refresh-browser-city  raw/tree_browser_city.preql     -> {code}_tree_browser_v{n}.parquet
                                                         {code}_tree_vocab_v{n}.parquet
+  publish-world-blocks  world_tree_blocks.preql         -> world/v1/manifest.json
+                                                        world/v1/blocks/{key}-{hash}.parquet
+                                                        world/v1/vocab-{hash}.parquet
   refresh-ecoregions-browser  raw/ecoregion_browser.preql -> ecoregion_browser_v{n}.parquet
   validate-core         raw/core_validate.preql
   publish-website       website_homepage.preql          -> arborary/website/v1/homepage.json
@@ -421,7 +424,38 @@ them in; recorded values take precedence.
 Predictions stay outside the frontend Trilogy model bundle. See
 `MAP_CROWNS.md` for rendering and limits.
 
+## The world's geo blocks (`world_tree_blocks.preql`, `world/publish_blocks.py`)
+
+What the map draws from. `publish-world-blocks` reads every city's browser
+projection (below) and writes the same rows cut along a different line: one
+parquet per Web Mercator z12 tile, holding every tree in it whichever city
+published it, plus one vocabulary file for the world and a manifest that
+names them all. The map fetches the manifest and then the blocks under the
+camera, so nothing it loads is a city. `SEAMLESS_WORLD.md` is the reference:
+the layout, the manifest, why the files are named by content, the guards,
+and how the worker reads them.
+
+It is a `run` job with a `call`, like the homepage feed, because Trilogy
+writes a target as one file (`TRILOGY_BUCKETED_OUTPUT_SPEC.md` is the ask).
+Three things follow from that and are the script's job instead of the
+planner's:
+
+- **Ordering.** The script reads the projections by URL, so the edge after
+  `refresh-browser-city` is declared in `[dependencies]`, on `always`.
+- **The guard.** A candidate under 75% of the live manifest's trees, or
+  missing a published city, is refused; the live manifest keeps serving.
+- **Clean-up.** Blocks no manifest names are deleted after three days.
+
+A new city needs nothing here: it joins the world on the tick after its
+projection is first published, and until then the map shows no trees for it.
+
 ## The browser projections (`raw/tree_browser_city.preql`, `raw/ecoregion_browser.preql`)
+
+Since the world's blocks (above) the map no longer loads these: they are the
+block job's input and the file behind a bookmarked city's city-wide reads
+(`trees_published`: a species count, a deep-linked tree). The assembled
+fallback this section mentions, and the worker's use of the vocabulary file,
+are gone with the city load.
 
 Publishes `{code}_tree_browser_v{n}.parquet`, one per city: the rows and
 columns the map's worker keeps resident, with the display name (the

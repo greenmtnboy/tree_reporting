@@ -7,7 +7,13 @@ second stage needs (`docs/MOBILE_LOAD_BUDGET.md`), and it is a general shape:
 "bucket this output by a scheme" comes up for anything a browser reads by
 viewport, period or tenant.
 
-Status: draft, 2026-10-23. Nothing here is implemented.
+Status: draft, 2026-10-23. Nothing here is implemented upstream. The repo
+publishes the layout this describes by script meanwhile, for the whole world
+rather than per city (`data/world/publish_blocks.py`, `docs/SEAMLESS_WORLD.md`,
+2026-11-09): z12 blocks, a manifest as the commit point, a vocabulary file.
+What that script does by hand is what the clauses below would declare, and
+its content-addressed file names are an addition this spec should take up
+(see "What the script taught" at the end).
 
 ## Why the model, not a script
 
@@ -165,6 +171,25 @@ the first version; a city rebuild rewrites every cell.
    shape it uses today (`src/src/workers/cityTables.ts`). A query the
    resolver reports as not row-local (an aggregate, a window, a limit) loads
    every cell first.
+
+## What the script taught
+
+Three things the first cut of this proposal did not have, found by building
+the layout for real:
+
+- **Name partition files by content.** `{cell}-{hash}.parquet`, not
+  `{cell}.parquet`. A manifest then never mixes builds (the `etag` per file
+  above becomes the name), an unchanged partition is not rewritten, and a
+  browser can cache a file forever. It needs a deterministic write: one
+  thread per file, a total order (`order by` with a unique tiebreak).
+- **One dictionary for the target, not one per partition.** A reader that
+  holds partitions from different places at once needs one set of
+  enumerations; the `dictionaries` entry above is right, and it has to be
+  content-addressed with the rest.
+- **Retention is part of the write.** Files no manifest names have to be
+  deleted by something, and not before readers holding the previous
+  manifest are done: the script keeps the replaced manifest's files and
+  anything younger than three days.
 
 Open questions for upstream: whether `partition by` belongs on the
 datasource or on a separate `target` statement; how a manifest is versioned
