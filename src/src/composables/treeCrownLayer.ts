@@ -329,11 +329,12 @@ export class TreeCrownLayer implements CustomLayerInterface {
       const distance = Math.hypot(this.data[offset], this.data[offset + 1], this.budgetCamera[2]) * meters
       if (distance >= this.reach) continue
       const seen = Math.hypot(x - nowX, y - nowY, now.altitude / nowMeters) * nowMeters
-      const { squash, top } = spriteViewShape(this.viewAngle ? now.altitude / Math.max(seen, 0.001) : 0)
+      const sinE = this.viewAngle ? Math.min(1, now.altitude / Math.max(seen, 0.001)) : 0
+      const { squash, top } = spriteViewShape(sinE)
       if (top >= 0.5) {
-        // Overhead: the crown disc around the trunk.
+        // Overhead: the crown disc around the trunk, sin(elevation) as tall as it is wide.
         const disc = Math.max(Math.abs(rightClip * this.data[offset + 4]) / w * width, MIN_SPRITE_PX)
-        if (Math.hypot(point.x - sx, point.y - sy) <= disc / 2) return { id: id[i], lng: lng[i], lat: lat[i], width: widths[i] }
+        if (Math.hypot(point.x - sx, (point.y - sy) / Math.max(sinE, 0.01)) <= disc / 2) return { id: id[i], lng: lng[i], lat: lat[i], width: widths[i] }
         continue
       }
       const size = Math.max(Math.abs(rightClip * this.data[offset + 4] / cell.crownFraction) / w * width, MIN_SPRITE_PX)
@@ -423,10 +424,11 @@ export class TreeCrownLayer implements CustomLayerInterface {
         // As tall as its measured or predicted height (a_shape.w, clamped on the CPU), shortened
         // by the cosine of the elevation, as an upright tree is seen from above.
         float halfHeight = halfWidth * u_viewport.x / u_viewport.y * a_shape.w * sqrt(1.0 - sinE * sinE);
-        // From overhead: a disc the crown's own width, round on screen, centred on the trunk.
+        // From overhead: a disc the crown's own width, centred on the trunk. A disc on the ground
+        // seen at elevation e is sin(e) as tall as it is wide; round only from straight above.
         float discHalf = max(abs(crownRight.x) * a_shape.x, minHalf);
         anchor.xy += vec2(a_corner.x * mix(halfWidth, discHalf, v_top),
-          mix((a_corner.y + 2.0 * a_shape.z - 1.0) * halfHeight, a_corner.y * discHalf * u_viewport.x / u_viewport.y, v_top));
+          mix((a_corner.y + 2.0 * a_shape.z - 1.0) * halfHeight, a_corner.y * discHalf * u_viewport.x / u_viewport.y * sinE, v_top));
         gl_Position = anchor.w > 0.0 ? anchor : vec4(2.0, 2.0, 2.0, 1.0);
         v_uv = a_uv;`}
       }`

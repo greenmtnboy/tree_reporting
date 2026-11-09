@@ -20,7 +20,8 @@ export const DEFAULT_CROWN_WIDTH = 6
 /**
  * Desktop sprites seen from above. An upright sprite shortens with the angle the camera looks
  * down at it (by the cosine of that elevation), and between these two elevations it turns into
- * a disc of its crown: the tree as seen from overhead. Per tree, so in a pitched view the trees
+ * a disc of its crown: the tree as seen from overhead, foreshortened to sin(elevation) as tall as
+ * it is wide, so round only from straight above. Per tree, so in a pitched view the trees
  * under the camera are seen from above and the distant ones from the side.
  */
 export const SPRITE_TOPDOWN_START_DEG = 55
