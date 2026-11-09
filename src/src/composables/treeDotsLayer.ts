@@ -750,8 +750,10 @@ export class TreeDotsLayer implements CustomLayerInterface {
       chunk.colorKey = colors.colorKey
       chunk.uploadColors = true
       chunk.colorId = ++this.indexSeq
-      const copy = next.slice()
-      this.index({ kind: 'recolor', id: chunk.colorId, key, color: copy, palette: colors.palette }, [copy.buffer])
+      if (HEAT_ENABLED) {
+        const copy = next.slice()
+        this.index({ kind: 'recolor', id: chunk.colorId, key, color: copy, palette: colors.palette }, [copy.buffer])
+      }
     })
     console.info('[Perf] map:dots:recolor', { chunks: colors.keys.length, ms: Math.round(performance.now() - t0) })
     this.map?.triggerRepaint()
@@ -817,8 +819,12 @@ export class TreeDotsLayer implements CustomLayerInterface {
       chunk.indexByRowid = new Int32Array(last + 1).fill(-1)
       for (let i = 0; i < n; i++) chunk.indexByRowid[chunk.rowid[i]] = i
       chunk.buildId = chunk.colorId = ++this.indexSeq
-      const x = chunk.x.slice(), y = chunk.y.slice(), color = chunk.color.slice()
-      this.index({ kind: 'build', id: chunk.buildId, key, x, y, count: n, color, palette: chunk.palette }, [x.buffer, y.buffer, color.buffer])
+      // The heat pyramid is only built while the heat is drawn. It is ten levels of cells per
+      // chunk, held here, in the index worker and on the GPU, and nothing reads it with the heat off.
+      if (HEAT_ENABLED) {
+        const x = chunk.x.slice(), y = chunk.y.slice(), color = chunk.color.slice()
+        this.index({ kind: 'build', id: chunk.buildId, key, x, y, count: n, color, palette: chunk.palette }, [x.buffer, y.buffer, color.buffer])
+      }
       this.chunks.set(key, chunk)
     })
     console.info('[Perf] map:dots:chunks', { chunks: batch.keys.length, rows: batch.x.length, ms: Math.round(performance.now() - t0) })
