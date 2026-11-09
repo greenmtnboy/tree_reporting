@@ -41,9 +41,11 @@ curation limitations; these are not urban-calibrated or density-adjusted.
 ## Query and rendering bounds
 
 `crownQuery.ts` joins the effective map query, published ID filter and display
-color map. Desktop queries the geographic viewport, keeping at most 32,768
-nearest markers including distant trees and trees without crown widths. Wrapped
-longitude bounds are supported. Mobile queries only the camera neighborhood and
+color map. Desktop queries the view's ground footprint, padded behind the
+camera and to the sides (`lib/viewFootprint.ts`), keeping the nearest trees up
+to a budget that adjusts itself (`lib/spriteBudget.ts`, 8k to 131k; see the
+fifth round of docs/MAP_COLOR_PERF_AUDIT.md), including trees without crown
+widths. Wrapped longitude bounds are supported. Mobile queries only the camera neighborhood and
 returns at most 4,096 valid crowns.
 
 Physical crown sizing is limited independently of viewport depth: it is fully

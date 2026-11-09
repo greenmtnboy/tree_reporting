@@ -308,8 +308,8 @@ renderer is unchanged.)
   A pyramid of 16 m to 8 km cells (`lib/treeDots.ts`) keeps each zoom to a
   cell per third of a kernel, built in a dedicated worker
   (`workers/treeDotsIndex.worker.ts`) because it costs most of a second.
-- **The circles** are one point draw from z12.8 to z15.5, coloured from a
-  palette texture. Points and pyramid cells are stored in 512 m chunk order,
+- **The circles** are one point draw from z12.8 to z15.5 (z14 since the fifth
+  round), coloured from a palette texture. Points and pyramid cells are stored in 512 m chunk order,
   so a frame draws only the chunk rows in view.
 - **Picking** projects the candidates of a grid index through the last
   frame's matrix: a click selects exactly the circle drawn under it, and the
@@ -402,6 +402,100 @@ with the desktop's larger budget), a row key that survives that (the rowid
 is the current table's; a colour refresh and the tree card use it), and a
 published overview for the zooms where the view spans more than the budget
 (z6 to z9 across a region).
+
+## Fifth round: one handoff from dots to sprites
+
+The resident dots made the desktop fast but left three looks on screen at
+once: a blended heat, dots, and sprites that changed size on the way in.
+This round leaves dots and sprites, with one handoff between them, and makes
+the sprites keep up with the camera.
+
+**The look** (`lib/treeCrowns.ts`, `lib/treeDots.ts`):
+
+- The heat is off (`HEAT_ENABLED = false`; its pyramid worker still runs and
+  can go if it stays off). Dots carry every zoom below the sprites.
+- One constant places the handoff: `SPRITE_OPAQUE_ZOOM` (z14). The dots fade
+  out and the sprites fade in over `SPRITE_HANDOFF_ZOOMS` (0.6) below it, and
+  the MapLibre fallback reads the same pair. Above it dots show only where no
+  sprite stands: past a capped batch's reach, or outside what was fetched.
+- Sprites are always drawn at metre scale, never under `MIN_SPRITE_PX` (4 px);
+  a tree with no crown width gets `DEFAULT_CROWN_WIDTH` (6 m). There is no
+  marker-size transition left to cross.
+- Dots are 30% smaller (`CIRCLE_RADIUS_SCALE`), and both tree layers draw
+  under the basemap's labels.
+
+**The sprite query** (`workers/crownQuery.ts`):
+
+- The default view (no filter, no chat scope) skips the filter; a filter is an
+  `EXISTS` semi join. The `DISTINCT` join it replaced built the whole city's id
+  set every query, ~170 of ~190 ms on San Francisco.
+- It fetches the view's ground footprint (`lib/viewFootprint.ts`): the screen
+  corners on the ground, stopped under the horizon as MapLibre's `getBounds`
+  is, padded a quarter of the view's depth (at most 500 m) out to each side and
+  behind the camera itself. Nearest first, up to the budget. The axis-aligned
+  lng/lat box it replaced had large off-screen corners at any bearing but the
+  four cardinal ones; they spent the budget, and after a spin the old view's
+  direction stayed loaded further than the new one, an uneven horizon until
+  the next batch.
+- A capped batch is the footprint within `reach` of the camera it was queried
+  from. Both layers measure reach from that camera, not the camera now; from
+  the moving camera the disc slid ahead of the trees loaded and the dots hid an
+  empty band in front of a pan.
+
+**The batch** (`lib/crownBatch.ts`): the worker sorts it back to front for
+the query's bearing and fills the vertex buffer, and transfers it; the main
+thread only uploads it. Results cross the worker boundary as typed columns,
+not row objects (32k trees: 5.3 s to ~0.26 s round trip before the move). A
+batch is stamped with the bearing it was sorted for, so a spin that ends while
+a query is in flight still fetches again.
+
+**The connection.** Every query shares one DuckDB connection, so a sprite
+query waited behind background chunk reads (10.6 s behind a 393k-row read in
+one trace). Background reads now go in 100k-tree batches and stand aside while
+the camera moves or a sprite query is due, for at most a second at a time;
+longer starved them and left an empty band where neither dots nor sprites had
+loaded.
+
+**The budget** (`lib/spriteBudget.ts`) adjusts itself after every batch.
+Its target is reach: past the distance where a 6 m crown is 4 px wide
+(`crownVisibleDistance`, 1.6 km on a 1280x800 window at any zoom) a sprite is a
+dot-sized blob and the dots carry it. A capped batch that falls short grows the
+limit a step (x1.25) and refetches; one reaching more than twice the target
+shrinks it. Its limits are cost: the frame after an upload may run 12 ms long,
+and the worker's build may take 150 ms; a batch over either lowers a ceiling
+that lifts again after 20 good batches. Between 8k and 131k sprites; a software
+renderer starts at 8k and stops at 16k. `localStorage.sf_trees_sprite_limit`
+fixes it, for sweeps.
+
+Boston, RX 6800 XT (Direct3D), 1280x800, dense Back Bay and Jamaica Plain, a
+4 s pan per view, fixed caps before the batch moved to the worker:
+
+| Cap | Main-thread install | Query | Worst frame | Reach when capped |
+|---:|---:|---:|---:|---:|
+| 16k | 10-18 ms | 45-235 ms | 16.8 ms | 2.4-4.1 km |
+| 32k | 22-65 ms | 50-260 ms | 33-50 ms | 3.6-4.8 km |
+| 64k | 51-89 ms | 140-345 ms | 83-100 ms | 4.3-6.6 km |
+| 128k | 115-147 ms | 385-490 ms | 200-233 ms | 7.4-9.7 km |
+
+The GPU was never the limit (p95 16.7 ms at every cap); every hitch was the
+install. After the move, at 32k: install 0 ms, worst frame 16.8 ms in every
+view; the build costs 22-27 ms per 32k batch in the worker. With the
+self-adjusting budget the same views settle at 8k to 13k sprites, reaching
+2.0 to 3.9 km against the 1.6 km target. A z16 view holds 2k to 29k trees and
+rarely needs the cap; z14 always does.
+
+**Debugging.** The ⚙ beside the map's refresh button (lower left) shows a
+readout: frame rate, resident dots, sprites against the budget, reach against
+its target, query time split into SQL and build, upload, and a heading-up radar
+of the view (white), the fetched area (green), a capped batch's reach (orange),
+the target (dotted), the query in flight (blue) and a sample of the trees. Off
+by default, remembered per browser.
+
+Still open: wide pans show an occasional 200 ms frame that is neither the
+sprites (upload and build are small then) nor the GPU; the dots' chunk reads
+or the basemap are the next suspects. A frame stretched by something else can
+lower the budget's ceiling for 20 batches. The sprite atlas, picking and the
+phone's crowns are unchanged.
 
 ## Is this the right stack?
 

@@ -857,7 +857,7 @@ const {
 })
 
 // Desktop debug readout, off unless toggled from the map's lower-left controls: frame rate,
-// resident dots, and the sprite layer (drawn against its cap, reach, query and install time).
+// resident dots, and the sprite layer (drawn against its cap, reach against its target, query and upload time).
 const MAP_DEBUG_KEY = 'sf_trees_map_debug'
 const mapDebugOn = ref(readMapDebug())
 const spriteDebug = ref('')
@@ -888,8 +888,10 @@ function updateSpriteDebug() {
   const s = spriteStats()
   if (!s) { spriteDebug.value = `${frames} · ${dots}`; return }
   const reach = Number.isFinite(s.reach) ? `${Math.round(s.reach)} m` : 'all'
-  spriteDebug.value = `${frames} · ${dots} · sprites ${s.drawn.toLocaleString()} / ${s.cap.toLocaleString()}${s.drawn >= s.cap ? ' CAPPED' : ''}`
-    + ` · reach ${reach} · query ${s.lastQueryMs.toFixed(0)} ms (sql ${s.lastSqlMs.toFixed(0)}, build ${s.lastBuildMs.toFixed(0)}) · install ${s.lastInstallMs.toFixed(0)} ms${s.inFlight ? ' …' : ''}`
+  const cap = `${s.cap.toLocaleString()}${s.auto ? ` auto, ceiling ${s.ceiling.toLocaleString()}` : ' fixed'}`
+  spriteDebug.value = `${frames} · ${dots} · sprites ${s.drawn.toLocaleString()} / ${cap}${s.drawn >= s.cap ? ' CAPPED' : ''}`
+    + ` · reach ${reach} (target ${Math.round(s.target)} m) · query ${s.lastQueryMs.toFixed(0)} ms (sql ${s.lastSqlMs.toFixed(0)}, build ${s.lastBuildMs.toFixed(0)})`
+    + ` · upload ${s.lastUploadMs.toFixed(1)} ms${s.inFlight ? ' …' : ''}`
     + ` · ${s.queries} queries, ${s.discarded} discarded`
 }
 

@@ -5,8 +5,9 @@ import { lngLatFrom3857 } from './treeDots'
 /**
  * Draws the debug radar: a top-down plot centred on the camera with its heading up. It shows
  * the ground on screen (white), the installed sprite batch's fetch area (green) and how far a
- * capped batch reached (orange ring around the camera it was queried from), the query in
- * flight (blue, dashed), and a sample of the drawn trees.
+ * capped batch reached (orange ring around the camera it was queried from), the reach the
+ * budget aims for (white dotted ring), the query in flight (blue, dashed), and a sample of the
+ * drawn trees.
  */
 export function drawSpriteRadar(canvas: HTMLCanvasElement, radar: SpriteRadar) {
   const ctx = canvas.getContext('2d')
@@ -58,6 +59,15 @@ export function drawSpriteRadar(canvas: HTMLCanvasElement, radar: SpriteRadar) {
     ctx.arc(x, y, radar.reach * scale, 0, Math.PI * 2)
     ctx.strokeStyle = 'rgba(255, 167, 38, 0.9)'
     ctx.stroke()
+  }
+  // The reach the budget aims for: where a typical crown shrinks to MIN_SPRITE_PX.
+  {
+    ctx.beginPath()
+    ctx.arc(cx, cy, radar.target * scale, 0, Math.PI * 2)
+    ctx.setLineDash([2, 4])
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)'
+    ctx.stroke()
+    ctx.setLineDash([])
   }
   if (radar.pending) {
     path(radar.pending)

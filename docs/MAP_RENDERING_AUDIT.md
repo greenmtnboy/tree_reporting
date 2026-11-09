@@ -82,15 +82,14 @@ retry in 1.83 seconds. No timeout or test expectation was changed.
 
 ## Remaining limits and follow-up priorities
 
-1. **Dense-view selection can still pop.** The desktop limit is 32,768 sprites;
-   mobile crowns stop at 4,096. Nearest-tree selection changes as the camera
-   moves. Desktop marker opacity does not fade individual arrivals/departures,
-   and circles disappear at zoom 15.5 regardless of sprite readiness. Buffer
-   reuse is deliberately disabled when the result hits its limit, since a
-   truncated batch cannot promise full coverage. Stable spatial selection or
-   a tile-based custom renderer with a readiness-aware circle handoff is the
-   next substantial rendering change. A 25 ms dense rebuild still exceeds a
-   60 Hz frame budget.
+1. **Dense-view selection can still pop.** The desktop budget now adjusts
+   itself (8k to 131k sprites) and mobile crowns stop at 4,096. Nearest-tree
+   selection changes as the camera moves, and desktop sprites do not fade
+   individual arrivals/departures. The dots now stay drawn wherever no sprite
+   is loaded, and the dense rebuild runs in the worker; see the fifth round of
+   docs/MAP_COLOR_PERF_AUDIT.md. Buffer reuse is still disabled when the
+   result hits its limit, since a truncated batch cannot promise full
+   coverage.
 2. **Tile cancellation and refresh state need a coordinated worker change.**
    The protocol ignores MapLibre's abort controller, so obsolete requests can
    remain in the three-worker queue. Tile/batch requests are deduplicated and

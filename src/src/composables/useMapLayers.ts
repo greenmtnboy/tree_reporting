@@ -351,11 +351,16 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     return !!residentMode
   }
 
+  /** The first label layer in the style: trees draw under the basemap's place and street names. */
+  function firstLabelLayer(mapInstance: maplibregl.Map): string | undefined {
+    return mapInstance.getStyle().layers.find(layer => layer.type === 'symbol')?.id
+  }
+
   /** Add the sprite and resident layers if missing, and bring the resident set up to the worker's query and colours. */
   function syncResidentLayers(mapInstance: maplibregl.Map): Promise<void> {
     if (!crownLayer || !mapInstance.getLayer(crownLayer.id)) {
       crownLayer = new TreeCrownLayer(useDuckDB().getCrownBatch, simplified)
-      mapInstance.addLayer(crownLayer)
+      mapInstance.addLayer(crownLayer, firstLabelLayer(mapInstance))
     } else {
       crownLayer.invalidate()
     }
@@ -440,7 +445,7 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     })
 
     crownLayer = new TreeCrownLayer(useDuckDB().getCrownBatch, simplified)
-    mapInstance.addLayer(crownLayer)
+    mapInstance.addLayer(crownLayer, firstLabelLayer(mapInstance))
     addColorLayers(mapInstance, colors)
 
     console.info('[Perf] map:layers:add:done', { ms: Math.round(nowMs() - t0) })
