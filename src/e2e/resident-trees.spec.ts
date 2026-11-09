@@ -58,7 +58,8 @@ test('clicking a resident circle opens that tree’s card', async ({ page }) => 
   const handle = await page.waitForFunction(() => {
     const map = window.__treeMap!
     if (map.isMoving()) return null
-    if (Math.abs(map.getZoom() - 14) > 0.01) { map.jumpTo({ zoom: 14, pitch: 0, bearing: 0 }); return null }
+    // Dots are clickable from z12.8 (CIRCLE_PICK_MIN_ZOOM) until the sprites take over (z13.4 to z14).
+    if (Math.abs(map.getZoom() - 13) > 0.01) { map.jumpTo({ zoom: 13, pitch: 0, bearing: 0 }); return null }
     const layer = (map.getLayer('trees-dots') as unknown as { implementation?: DotsLayer }).implementation!
     const box = map.getContainer().getBoundingClientRect()
     for (const t of layer.visibleTrees(500)) {
