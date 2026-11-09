@@ -60,12 +60,12 @@
       <span class="legend-label">Sized by recorded / predicted crown</span>
     </div>
   </div>
-  <div v-if="!props.simplified && (!isInitialLoading || mapDebugAvailable)" class="cache-refresh-wrap">
+  <div v-if="!props.simplified" class="cache-refresh-wrap">
     <div v-if="!isInitialLoading" class="cache-refresh-btn-wrap">
       <button class="cache-refresh-btn" :disabled="cacheRefreshing" @click="void purgeAndRefresh()">&#x21BA;</button>
       <span class="cache-refresh-tooltip">Refresh map cache</span>
     </div>
-    <div v-if="mapDebugAvailable" class="cache-refresh-btn-wrap">
+    <div class="cache-refresh-btn-wrap">
       <button class="cache-refresh-btn" :class="{ 'cache-refresh-btn--on': mapDebugOn }" :aria-pressed="mapDebugOn" @click="mapDebugOn = !mapDebugOn">&#x2699;</button>
       <span class="cache-refresh-tooltip">{{ mapDebugOn ? 'Hide' : 'Show' }} map debug info</span>
     </div>
@@ -858,10 +858,10 @@ const {
 
 // Desktop debug readout, off unless toggled from the map's lower-left controls: frame rate,
 // resident dots, and the sprite layer (drawn against its cap, reach against its target, query and upload time).
-// The toggle exists on the dev server, and in production only with debug=1 in the URL.
+// The choice persists per browser; the toggle shows even during the loading overlay, so a readout
+// left on can always be switched off.
 const MAP_DEBUG_KEY = 'sf_trees_map_debug'
-const mapDebugAvailable = import.meta.env.DEV || /[?&]debug=1\b/.test(window.location.search + window.location.hash)
-const mapDebugOn = ref(mapDebugAvailable && readMapDebug())
+const mapDebugOn = ref(readMapDebug())
 const spriteDebug = ref('')
 let spriteDebugTimer: ReturnType<typeof setInterval> | undefined
 let fpsRafId: number | null = null
