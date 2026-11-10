@@ -57,6 +57,13 @@ The four SF source-comparison sharing insets are:
 | `presidio_marina` | Palace of Fine Arts & Marina |
 | `bernal_mission` | Bernal Heights & the Mission |
 
+For the three-color SF land-setting poster, run
+`uv run scripts/render_sf_tree_settings.py` (optionally `--input SNAPSHOT.parquet`).
+It uses public CPAD park units, SF Public Works rights-of-way, and active parcels
+matched to the 2025 assessor roll. Park locations take precedence at overlaps.
+The map caption reports how many trees fall on other or unresolved land.
+The accompanying JSON includes all park counts, source splits, and layer provenance.
+
 Render each with `--source-mode all --color-by source`. Use the same local
 parquet snapshot via `--input` for all four when producing a consistent set.
 
