@@ -42,7 +42,12 @@ import {
   buildDashboardContextSource,
 } from '../composables/dashboardContextSource'
 import { MAP_CHAT_IMPORTS } from '../composables/chatModelImports'
-import { summaryQueryCases, speciesQueryCases, type DashboardQueryCase } from './dashboardQueryCatalog'
+import {
+  cityQueryCases,
+  summaryQueryCases,
+  speciesQueryCases,
+  type DashboardQueryCase,
+} from './dashboardQueryCatalog'
 import { postToResolver } from './resolverFetch'
 import { CITY_CONFIG, type CityCode } from '../composables/useMapData'
 
@@ -352,7 +357,33 @@ const MAP_CHAT_GROUP: PushdownGroup = {
 
 const ALL_GROUP: PushdownGroup = { key: 'all-cities', city: null, cases: sampleCases(null) }
 
-const GROUPS: PushdownGroup[] = [...CITY_GROUPS, CHAT_GROUP, MAP_CHAT_GROUP, ALL_GROUP]
+// Every query a city's two pages issue in their default state, not a sample:
+// the city view is answered from the summaries alone, so opening it never
+// downloads the city's tree file (110 MB for Boston). pytrilogy holds the
+// planner to the same expectation over this catalog
+// (tests/modeling/tree_reporting) and to the rule behind it, that under the
+// city filter the (city, species) summary reads no more rows than the city's
+// own `complete where` tree table (formal/Trilogy/Cost.lean,
+// `Cost.filtered_dominated_le`).
+const CITY_VIEW_CITY: CityCode = 'USBOS'
+const CITY_VIEW_GROUP: PushdownGroup = {
+  key: 'city-view',
+  city: CITY_VIEW_CITY,
+  cases: cityQueryCases(CITY_VIEW_CITY),
+}
+
+// The species page's taxonomy card: enrichment properties of the species the
+// city holds. Planners before pytrilogy 0.3.485 read the city's tree file for
+// it; drop this once the hosted resolver runs 0.3.485 or later.
+const CITY_VIEW_PENDING_RESOLVER = new Set(['species:context'])
+
+const GROUPS: PushdownGroup[] = [
+  ...CITY_GROUPS,
+  CHAT_GROUP,
+  MAP_CHAT_GROUP,
+  ALL_GROUP,
+  CITY_VIEW_GROUP,
+]
 
 // Every compile happens in beforeAll, so that is where the budget lives; the
 // it() blocks below only read parquet names out of what came back. A throttled
@@ -446,6 +477,17 @@ describe('dashboard parquet pushdown', () => {
       })
     }
   }
+
+  it(`answers every ${CITY_VIEW_CITY} chart from the summaries, never a tree file`, () => {
+    const treeReads = CITY_VIEW_GROUP.cases
+      .filter((queryCase) => !CITY_VIEW_PENDING_RESOLVER.has(queryCase.id))
+      .map((queryCase) => ({
+        id: queryCase.id,
+        trees: parquetsFor(CITY_VIEW_GROUP, queryCase.id).filter((p) => p.endsWith('_tree_info')),
+      }))
+      .filter((read) => read.trees.length > 0)
+    expect(treeReads, 'city-view charts that download tree rows instead of a summary').toEqual([])
+  })
 
   it('plans the all-cities view against every city, or the rollup', () => {
     // The other half of the contract: with no city there is no partition to
