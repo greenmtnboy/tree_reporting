@@ -107,6 +107,7 @@ WORLD_TREE_SOURCE = {
 # city normaliser.
 SENTINELS = (
     "Cactus", "Dead", "Palm", "Shrub", "Unknown",
+    "Unknown deciduous", "Unknown conifer", "Unknown evergreen",
     "Mistaken", "New", "Non specifie", "Planting site", "Scheduled planting", "Unplantable",
 )
 

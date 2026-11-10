@@ -118,6 +118,29 @@ def test_ingest_names_only_what_the_model_is_sure_of():
     assert [r["species"] for r in rows] == ["Acer rubrum", "Acer", "Unknown", "Acer", "Unknown", "Unknown"]
 
 
+def test_an_unnamed_prediction_keeps_its_leaf_habit():
+    """An unsure name with a leaf habit publishes the habit's sentinel, which
+    survives the species hygiene; a confident name still wins, and no habit
+    (or one nobody wrote) is plain Unknown."""
+    from predicted_tree_info import records_to_table
+
+    unsure = {"species_confidence": 0.3, "genus_confidence": 0.3}
+    rows = records_to_table(
+        [
+            record(tree_id="pred-1", leaf_habit="deciduous", **unsure),
+            record(tree_id="pred-2", leaf_habit="conifer", **unsure),
+            record(tree_id="pred-3", leaf_habit="evergreen", **unsure),
+            record(tree_id="pred-4", leaf_habit=None, **unsure),
+            record(tree_id="pred-5", leaf_habit="palm", **unsure),
+            record(tree_id="pred-6", leaf_habit="conifer"),
+        ],
+        "USBOS",
+    ).to_pylist()
+    assert [r["species"] for r in rows] == [
+        "Unknown deciduous", "Unknown conifer", "Unknown evergreen", "Unknown", "Unknown", "Acer rubrum",
+    ]
+
+
 def test_ingest_skips_rows_it_cannot_trust():
     from predicted_tree_info import records_to_table
 

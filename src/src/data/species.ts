@@ -40,6 +40,11 @@ export const PALM_SPECIES = 'Palm'
 export const SHRUB_SPECIES = 'Shrub'
 export const CACTUS_SPECIES = 'Cactus'
 export const DEAD_SPECIES = 'Dead'
+// Bulk imagery predictions the model could not name, but whose top species
+// candidates all share one leaf habit (data/raw/predicted_tree_info.py).
+export const UNKNOWN_DECIDUOUS_SPECIES = 'Unknown deciduous'
+export const UNKNOWN_CONIFER_SPECIES = 'Unknown conifer'
+export const UNKNOWN_EVERGREEN_SPECIES = 'Unknown evergreen'
 
 export const SPECIES_SENTINELS: readonly SpeciesSentinel[] = [
   {
@@ -71,6 +76,24 @@ export const SPECIES_SENTINELS: readonly SpeciesSentinel[] = [
     label: 'Dead tree',
     treeForm: 'default',
     note: 'The source recorded this tree as dead, without identifying the species.',
+  },
+  {
+    species: UNKNOWN_DECIDUOUS_SPECIES,
+    label: 'Deciduous tree (species not identified)',
+    treeForm: 'broadleaf',
+    note: 'Detected from aerial imagery. The model could not name the species, but every species it considered drops its leaves in winter.',
+  },
+  {
+    species: UNKNOWN_CONIFER_SPECIES,
+    label: 'Conifer (species not identified)',
+    treeForm: 'conifer',
+    note: 'Detected from aerial imagery. The model could not name the species, but every species it considered is an evergreen conifer.',
+  },
+  {
+    species: UNKNOWN_EVERGREEN_SPECIES,
+    label: 'Evergreen tree (species not identified)',
+    treeForm: 'broadleaf',
+    note: 'Detected from aerial imagery. The model could not name the species, but every species it considered keeps its leaves all year.',
   },
 ]
 

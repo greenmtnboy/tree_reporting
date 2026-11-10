@@ -340,3 +340,165 @@ def test_upload_refuses_when_the_reviewer_cannot_freeze(tmp_path, monkeypatch):
 
     assert bulk_predict.main(["upload", "--out", str(tmp_path), "--no-freeze"]) == 0
     assert len(uploads) == 1
+
+
+# ---------------------------------------------------------------------------
+# Leaf habit
+# ---------------------------------------------------------------------------
+
+HABIT_ROWS = [
+    ("Acer rubrum", False, "broadleaf"), ("Acer platanoides", False, "broadleaf"),
+    ("Tilia cordata", False, "broadleaf"), ("Larix decidua", False, "conifer"),
+    ("Pinus strobus", True, "conifer"), ("Picea abies", True, "conifer"),
+    ("Quercus rubra", False, "broadleaf"), ("Quercus agrifolia", True, "broadleaf"),
+    ("Magnolia grandiflora", True, "broadleaf"), ("Malus domestica", False, "broadleaf"),
+    ("Unknown", None, "default"),
+]
+
+
+def habits():
+    return bulk_predict.habit_lookup(HABIT_ROWS)
+
+
+def test_a_genus_has_a_habit_only_when_its_species_agree():
+    species, genera = habits()
+    assert species["Larix decidua"] == "deciduous"  # a conifer that drops its needles
+    assert species["Pinus strobus"] == "conifer" and species["Magnolia grandiflora"] == "evergreen"
+    assert genera["Acer"] == "deciduous" and genera["Pinus"] == "conifer"
+    assert "Quercus" not in genera and "Unknown" not in genera
+
+
+@pytest.mark.parametrize("candidates, genus, expected", [
+    (["Acer rubrum", "Tilia cordata", "Malus genus", "Larix decidua", "Acer platanoides"], "Acer", "deciduous"),
+    (["Pinus strobus", "Picea abies"], "Pinus", "conifer"),
+    (["Pinus strobus", "Magnolia grandiflora"], "Pinus", "evergreen"),  # evergreen, not all conifers
+    (["Acer rubrum", "Pinus strobus"], "Acer", None),  # the candidates disagree
+    (["Acer rubrum", "Tilia cordata"], "Pinus", None),  # the genus head disagrees
+    (["Quercus rubra", "Acer rubrum"], "Quercus", "deciduous"),  # a mixed genus is no vote
+    (["Acer rubrum", "__vegetation_copse__"], "Acer", None),  # a candidate without a habit
+    (["Acer rubrum", "Zelkova serrata"], "Acer", None),  # one the table does not know
+    ([], "Acer", None),  # a tile predicted before candidates were recorded
+])
+def test_leaf_habit_is_what_every_candidate_shares(candidates, genus, expected):
+    assert bulk_predict.leaf_habit(candidates, genus, *habits()) == expected
+
+
+def test_assemble_stages_the_leaf_habit(tmp_path, monkeypatch):
+    monkeypatch.setattr(bulk_predict, "load_habits", lambda source: habits())
+    tiles = tmp_path / "tiles"
+    tiles.mkdir()
+    deciduous = {**prediction("d", 42.33, -71.08, 0.5), "speciesTop": ["Acer rubrum", "Tilia cordata", None]}
+    mixed = {**prediction("m", 42.34, -71.08, 0.5), "speciesTop": ["Acer rubrum", "Pinus strobus"]}
+    (tiles / "a.json").write_text(json.dumps(bundle(predictions=[deciduous, mixed, prediction("old", 42.35, -71.08, 0.5)])))
+    out = tmp_path / "out"
+    assert bulk_predict.main(["assemble", "--out", str(out), "--threshold", "0.35", "--from-bundles", str(tiles)]) == 0
+    rows = pq.read_table(out / "usbos_predicted_staging.parquet").to_pylist()
+    assert sorted((r["latitude"], r["leaf_habit"]) for r in rows) == [
+        (42.33, "deciduous"), (42.34, None), (42.35, None),
+    ]
+
+
+def test_a_tile_record_keeps_the_species_candidates():
+    pred = {**prediction("p", 42.33, -71.08, 0.5), "speciesTop": ["Acer rubrum"], "speciesTopConfidence": [0.4]}
+    record = bulk_predict.tile_record({"bundle": bundle(predictions=[pred])}, context=True)
+    kept = record["predictionLayer"]["predictions"][0]
+    assert kept["speciesTop"] == ["Acer rubrum"] and kept["speciesTopConfidence"] == [0.4]
+
+
+# ---------------------------------------------------------------------------
+# Patching
+# ---------------------------------------------------------------------------
+
+TILE_M = 153.6
+EPSG = 26919
+
+
+def tile_lonlat(i, j, fx=0.5, fy=0.5):
+    """A point inside tile (i, j) of the patch grid, fx/fy of the way across."""
+    from pyproj import Transformer
+
+    back = Transformer.from_crs(f"EPSG:{EPSG}", "EPSG:4326", always_xy=True)
+    lon, lat = back.transform((i + fx) * TILE_M, (j + fy) * TILE_M)
+    return lat, lon
+
+
+def base_row(tree_id, lat, lon, score=0.5, **extra):
+    return {"tree_id": tree_id, "city": "USBOS", "latitude": lat, "longitude": lon, "genus": "Acer",
+            "species": "Acer rubrum", "score": score, "crown_width_m": None, "run_id": "old",
+            "imagery_version": "v", "species_confidence": 0.5, "genus_confidence": 0.5, **extra}
+
+
+def base_table(rows, *, with_habit=False):
+    """An older staged file: without the leaf_habit column unless asked."""
+    import pyarrow as pa
+
+    table = bulk_predict.staged_table(rows)
+    return table if with_habit else table.drop_columns(["leaf_habit"])
+
+
+I0, J0 = 2140, 30560  # a tile in Boston's UTM grid
+
+
+def test_a_patch_replaces_only_rows_inside_its_tiles():
+    inside = base_row("pred-in", *tile_lonlat(I0, J0))
+    beside = base_row("pred-beside", *tile_lonlat(I0 + 1, J0))  # the ring, far from any new row
+    far = base_row("pred-far", *tile_lonlat(I0 + 5, J0))
+    new = {**base_row("pred-new", *tile_lonlat(I0, J0, 0.3, 0.3)), "run_id": "new", "leaf_habit": "conifer",
+           "_tile": "t"}
+    table, stats = bulk_predict.patch_onto(base_table([inside, beside, far]), [new], {(I0, J0)}, EPSG, TILE_M, 2.0)
+    rows = {r["tree_id"]: r for r in table.to_pylist()}
+    assert set(rows) == {"pred-beside", "pred-far", "pred-new"}
+    assert rows["pred-far"]["run_id"] == "old" and rows["pred-far"]["leaf_habit"] is None
+    assert rows["pred-new"]["leaf_habit"] == "conifer"
+    assert tuple(table.column_names) == STAGED_COLUMNS
+    assert stats == {"base": 3, "replaced": 1, "edgeBaseDropped": 0, "newDroppedAtEdge": 0, "new": 1, "rows": 3}
+
+
+def test_a_crown_on_the_patch_edge_is_kept_once_with_the_higher_score():
+    # Two detections of one crown, 0.6 m apart either side of the tile edge.
+    old = base_row("pred-old", *tile_lonlat(I0 + 1, J0, 0.002, 0.5), score=0.6)
+    new = {**base_row("pred-new", *tile_lonlat(I0, J0, 0.998, 0.5), score=0.3), "_tile": "t"}
+    table, stats = bulk_predict.patch_onto(base_table([old]), [new], {(I0, J0)}, EPSG, TILE_M, 2.0)
+    assert [r["tree_id"] for r in table.to_pylist()] == ["pred-old"]
+    assert stats["newDroppedAtEdge"] == 1
+
+    better = {**new, "score": 0.9}
+    table, stats = bulk_predict.patch_onto(base_table([old]), [better], {(I0, J0)}, EPSG, TILE_M, 2.0)
+    assert [r["tree_id"] for r in table.to_pylist()] == ["pred-new"]
+    assert stats["edgeBaseDropped"] == 1
+
+
+def test_assemble_patches_onto_a_base_file(tmp_path):
+    out = tmp_path / "out"
+    (out / "tiles").mkdir(parents=True)
+    (out / "plan.json").write_text(json.dumps({"city": "USBOS", "run": "run-v19", "epsg": EPSG, "tileM": TILE_M}))
+    lat, lon = tile_lonlat(I0, J0)
+    record = {"status": "ok", "context": True, **bundle(predictions=[prediction("n", lat, lon, 0.5)], run="run-v19")}
+    (out / "tiles" / f"{I0}_{J0}.json").write_text(json.dumps(record))
+    base = tmp_path / "base.parquet"
+    pq.write_table(base_table([base_row("pred-in", *tile_lonlat(I0, J0, 0.2, 0.2)),
+                               base_row("pred-far", *tile_lonlat(I0 + 9, J0))]), base)
+    assert bulk_predict.main(["assemble", "--out", str(out), "--threshold", "0.35", "--patch-onto", str(base)]) == 0
+    rows = pq.read_table(out / "usbos_predicted_staging.parquet").to_pylist()
+    assert sorted(r["run_id"] for r in rows) == ["old", "run-v19"]
+    assert (out / "patch-base.parquet").exists()
+    assert json.loads((out / "patch.json").read_text())["replaced"] == 1
+
+
+def test_a_fine_tune_predicts_with_its_own_checkpoint_not_its_parents(tmp_path):
+    """v19 evaluates its parent too (parent-validation-usbos names v17's
+    checkpoint) and that cohort sorts first; neither predict nor the run bundle
+    may pick it."""
+    from urban_tree_ml.point_predict import own_cohorts
+
+    run = tmp_path / "runs" / "r19"
+    for cohort, owner, ckpt in (("parent-validation-usbos", "r17", "000-0000282.ckpt"),
+                                ("validation-usbos", "r19", "002-0001701.ckpt")):
+        (run / "evaluation" / cohort).mkdir(parents=True)
+        (run / "evaluation" / cohort / "evaluation-metadata.json").write_text(json.dumps(
+            {"checkpoint": f"/remote/runs/{owner}/checkpoints/{ckpt}", "config": {"dataset": "d"}}))
+        (run / "evaluation" / cohort / "taxonomy.json").write_text("{}")
+    assert [p.parent.name for p in own_cohorts(run)] == ["validation-usbos"]
+    files = bulk_predict.run_bundle_files(tmp_path, "r19")
+    assert "runs/r19/checkpoints/002-0001701.ckpt" in files
+    assert not any("000-0000282" in f or "parent-validation" in f for f in files)

@@ -317,6 +317,9 @@ def build_prediction(
     top = row.get("species_top_ids")
     if top is not None:
         prediction["speciesTop"] = [taxon(i, species_names) for i in list(top)][:5]
+        confidences = row.get("species_top_confidences")
+        if confidences is not None:
+            prediction["speciesTopConfidence"] = [_float_or_none(v) for v in list(confidences)][:5]
     return prediction
 
 

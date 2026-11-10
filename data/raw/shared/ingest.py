@@ -446,6 +446,23 @@ CACTUS_SPECIES = "Cactus"
 # "Unknown", so the condition is not lost.  An empty site or stump is a
 # different thing and is dropped; see is_not_a_tree.
 DEAD_SPECIES = "Dead"
+# The leaf habit of a tree nobody named.  Only the bulk imagery predictions
+# write these (predicted_tree_info.py): a detection whose species and genus are
+# both too unsure to publish, but whose top species candidates all share one
+# habit, is still a deciduous tree or a conifer at that spot -- which is what
+# the map's icon and season colour need.  A detection whose candidates
+# disagree stays plain "Unknown".  "Unknown evergreen" is the broadleaf
+# evergreen (live oak, eucalyptus, magnolia), kept apart from the conifers so
+# San Francisco's predictions do not all draw as pines.
+UNKNOWN_DECIDUOUS_SPECIES = "Unknown deciduous"
+UNKNOWN_CONIFER_SPECIES = "Unknown conifer"
+UNKNOWN_EVERGREEN_SPECIES = "Unknown evergreen"
+# The habit names the staged prediction file's `leaf_habit` column carries.
+LEAF_HABIT_SENTINELS: dict[str, str] = {
+    "deciduous": UNKNOWN_DECIDUOUS_SPECIES,
+    "conifer": UNKNOWN_CONIFER_SPECIES,
+    "evergreen": UNKNOWN_EVERGREEN_SPECIES,
+}
 
 # Values that name a growth form rather than a taxon, in the languages the
 # wired cities publish in.  Anything not listed here that fails
@@ -506,13 +523,19 @@ _FORM_SENTINEL_ALIASES: dict[str, str] = {
     # unresolved value straight to `form_sentinel_for`.
     "枯木": DEAD_SPECIES,
     "ヤシ科sp.": PALM_SPECIES,
+    # The habit sentinels, so a row that already carries one survives the
+    # species hygiene in enforce_tree_schema unchanged.
+    **{s.lower(): s for s in LEAF_HABIT_SENTINELS.values()},
 }
 
 # Every value the `species` key can hold that is not a scientific name.  The
 # enrichment scripts and the frontend both key off this set, so a new sentinel
 # is added here and picked up in both places.
 SPECIES_SENTINELS: frozenset[str] = frozenset(
-    {UNKNOWN_SPECIES, PALM_SPECIES, SHRUB_SPECIES, CACTUS_SPECIES, DEAD_SPECIES}
+    {
+        UNKNOWN_SPECIES, PALM_SPECIES, SHRUB_SPECIES, CACTUS_SPECIES, DEAD_SPECIES,
+        *LEAF_HABIT_SENTINELS.values(),
+    }
 )
 
 
@@ -567,6 +590,41 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
             "The source recorded this tree as dead, without identifying the species."
         ),
         "tree_form": "default",
+    },
+    # The habit sentinels carry the habit and a generic colour for it -- the
+    # one fact the prediction established -- so the map draws the form and
+    # its season (bare in winter, autumn colour) rather than a grey dot.
+    UNKNOWN_DECIDUOUS_SPECIES: {
+        "common_names": ["Deciduous tree (species not identified)"],
+        "description": (
+            "Detected from aerial imagery. The model could not name the species, "
+            "but every species it considered drops its leaves in winter."
+        ),
+        "tree_form": "broadleaf",
+        "is_evergreen": False,
+        "foliage_colors": ["#4a7c3a"],
+        "fall_foliage_colors": ["#c8892a"],
+        "trunk_color": "#7a6e62",
+    },
+    UNKNOWN_CONIFER_SPECIES: {
+        "common_names": ["Conifer (species not identified)"],
+        "description": (
+            "Detected from aerial imagery. The model could not name the species, "
+            "but every species it considered is an evergreen conifer."
+        ),
+        "tree_form": "conifer",
+        "is_evergreen": True,
+        "foliage_colors": ["#2f5a3e"],
+    },
+    UNKNOWN_EVERGREEN_SPECIES: {
+        "common_names": ["Evergreen tree (species not identified)"],
+        "description": (
+            "Detected from aerial imagery. The model could not name the species, "
+            "but every species it considered keeps its leaves all year."
+        ),
+        "tree_form": "broadleaf",
+        "is_evergreen": True,
+        "foliage_colors": ["#36583a"],
     },
 }
 
