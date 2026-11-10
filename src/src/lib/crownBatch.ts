@@ -1,6 +1,6 @@
 import {
   CROWN_DISTANCE_MAX, DEFAULT_CROWN_WIDTH, MAX_CROWNS, MAX_TREE_SPRITES,
-  mercatorPoint, metersPerMercatorUnit, spriteAspect, validCrownWidth,
+  mercatorPoint, metersPerMercatorUnit, spriteAspect, spriteReach, validCrownWidth,
   type TreeCrownColumns, type TreeRenderView,
 } from './treeCrowns'
 
@@ -41,7 +41,7 @@ export interface CrownBatch {
   origin: [number, number]
   /** Metres from the query camera within which the phone's crown budget holds. */
   budgetDistance: number
-  /** Metres from the query camera of the farthest sprite when the batch hit its cap; Infinity when nothing was cut. */
+  /** Metres from the query camera where the sprites end (lib/treeCrowns spriteReach); Infinity when nothing was cut. */
   reach: number
   /** Rows the query returned, drawn or not. */
   rows: number
@@ -158,6 +158,6 @@ export function buildCrownBatch(c: TreeCrownColumns, camera: TreeRenderView, opt
     // Copy the used part so the transfer sends only what is drawn.
     vertices: vertices.slice(0, cursor), id, category,
     lng: lng.slice(0, drawn), lat: lat.slice(0, drawn), width: widths.slice(0, drawn),
-    origin, budgetDistance, reach: !simplified && rows >= limit ? farthest : Infinity, rows, timing: { sqlMs: 0, buildMs: 0 },
+    origin, budgetDistance, reach: simplified ? Infinity : spriteReach(rows >= limit, farthest, camera.altitude, camera.spriteDistance), rows, timing: { sqlMs: 0, buildMs: 0 },
   }
 }

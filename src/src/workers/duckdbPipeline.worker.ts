@@ -2111,10 +2111,11 @@ async function getPointChunks(rowsKey: string, keys: number[]): Promise<PointChu
       x: columnArray(table, 'x', Float32Array),
       y: columnArray(table, 'y', Float32Array),
       dbh: columnArray(table, 'dbh', Uint8Array),
+      crown: columnArray(table, 'crown', Uint8Array),
       color: columnArray(table, 'color', Uint8Array),
       rowid: columnArray(table, 'rowid', Uint32Array),
     })
-    const grids = gridOrderChunks(offsets, columns.x, columns.y, { dbh: columns.dbh, color: columns.color, rowid: columns.rowid })
+    const grids = gridOrderChunks(offsets, columns.x, columns.y, { dbh: columns.dbh, crown: columns.crown, color: columns.color, rowid: columns.rowid })
     console.info('[Perf] duckdb-worker:point-chunks', { chunks: keys.length, rows: table.numRows, ms: Math.round(nowMs() - t0) })
     return { rowsKey, colorKey, palette, keys, offsets, ...columns, grids }
   })
@@ -2261,7 +2262,7 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         const { rowsKey, keys } = msg.params as WorkerMethodMap['getPointChunks']['params']
         const result = await getPointChunks(rowsKey, keys)
         send({ type: 'response', requestId: msg.requestId, ok: true, result },
-          result ? [result.offsets.buffer, result.x.buffer, result.y.buffer, result.dbh.buffer, result.color.buffer, result.rowid.buffer,
+          result ? [result.offsets.buffer, result.x.buffer, result.y.buffer, result.dbh.buffer, result.crown.buffer, result.color.buffer, result.rowid.buffer,
             ...result.grids.map((g) => g.start.buffer)] : undefined)
         break
       }

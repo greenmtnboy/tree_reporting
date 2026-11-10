@@ -100,6 +100,11 @@ describe('point chunk SQL', () => {
     })
     await conn.run(`CREATE TABLE trees_fast (tree_id VARCHAR, x_3857 DOUBLE, y_3857 DOUBLE, xtile_z20 INTEGER, ytile_z20 INTEGER, dbh DOUBLE, c VARCHAR, rn UINTEGER)`)
     await conn.run(`INSERT INTO trees_fast SELECT v.*, row_number() OVER () - 1 FROM (VALUES ${values.join(', ')}) v`)
+    // Crowns as the sprites take them: a measured one, a predicted one under an invalid measurement, and none valid.
+    await conn.run(`ALTER TABLE trees_fast ADD COLUMN crown_width_m DOUBLE; ALTER TABLE trees_fast ADD COLUMN predicted_crown_width_m FLOAT;
+      UPDATE trees_fast SET crown_width_m = 12.3 WHERE tree_id = 'a';
+      UPDATE trees_fast SET crown_width_m = 'NaN', predicted_crown_width_m = 7 WHERE tree_id = 'b';
+      UPDATE trees_fast SET crown_width_m = 90 WHERE tree_id = 'c';`)
     const src = { prelude: 'WITH', from: 'trees_fast tf', where: '', dbh: 'COALESCE(tf.dbh, 3)' }
     const keyOf = (lng: number, lat: number) => { const [x, y] = tile(lng, lat, CHUNK_ZOOM); return chunkKey(x, y) }
     const boston = keyOf(-71.06, 42.36), east = keyOf(-71.06 + 360 / 4096, 42.36), sydney = keyOf(151.2, -33.87)
@@ -114,6 +119,7 @@ describe('point chunk SQL', () => {
       expect(Number(r.y)).toBeCloseTo(toY(tree[2]) - oy, 1)
     }
     expect(rows.map((r) => [r.rowid, r.dbh, r.color]).sort()).toEqual([[0, 3, 1], [1, 255, 2], [2, 3, 0]])
+    expect(rows.map((r) => [r.rowid, r.crown]).sort()).toEqual([[0, 49], [1, 28], [2, 0]])
 
     const colors = (await conn.runAndReadAll(pointChunkColorsSql(src, [sydney], 'tf.c', palette))).getRowObjectsJS()
     expect(colors.map((r) => [Number(r.chunk), r.rowid, r.color])).toEqual([[sydney, 3, 1]])

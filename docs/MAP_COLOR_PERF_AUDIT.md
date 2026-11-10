@@ -423,6 +423,13 @@ the sprites keep up with the camera.
   marker-size transition left to cross.
 - Dots are 30% smaller (`CIRCLE_RADIUS_SCALE`), and both tree layers draw
   under the basemap's labels.
+- A dot is as wide as its tree's crown renders at that depth (`dotRadius`:
+  the crown's disc at metre scale, measured else predicted else 6 m, as the
+  sprite takes it), with the trunk-sized circle as its floor. A big tree past
+  the sprites' reach hands over to a dot its own size rather than a trunk dot;
+  only big crowns from about z12 up clear the floor. The crown travels to the
+  dots as one byte a tree (quarter metres, 0 unknown) and four bytes of GPU
+  attribute where it was two.
 
 **The sprite query** (`workers/crownQuery.ts`):
 
@@ -456,13 +463,26 @@ the camera moves or a sprite query is due, for at most a second at a time;
 longer starved them and left an empty band where neither dots nor sprites had
 loaded.
 
-**The budget** (`lib/spriteBudget.ts`) adjusts itself after every batch.
-Its target is reach: past the distance where a 6 m crown is 4 px wide
-(`crownVisibleDistance`, 1.6 km on a 1280x800 window at any zoom) a sprite is a
-dot-sized blob and the dots carry it. A capped batch that falls short grows the
-limit a step (x1.25) and refetches; one reaching more than twice the target
-shrinks it. Its limits are cost: the frame after an upload may run 12 ms long,
-and the worker's build may take 150 ms; a batch over either lowers a ceiling
+**The budget** (`lib/spriteBudget.ts`) adjusts itself after every batch, by
+rendering cost alone. The desktop has no distance cull of its own: the query
+reads the view nearest first up to the cap, so the cap is where the sprites
+end, and a cap aimed at a distance breaks wherever density changes. It used to
+aim at one, where a 6 m crown is 4 px wide (1.6 km on a 1280x800 window), on
+the claim that past that a sprite and a dot are interchangeable. They are not:
+a sprite never draws under 4 px, bigger crowns are wider still, and thousands
+of small sprites read as canopy where the dots read as points. On San Francisco
+a fixed 131k cap against the ~21k it settled at looked clearly better at 50+
+fps. Now a capped batch within cost grows the limit a step (x1.25) and
+refetches, and only cost stops or shrinks it. A batch over cost holds its
+limit as the ceiling at once but steps down a notch only later: stepping down at
+once took away the band of sprites it had just painted. The step waits for the
+next fetch after the view turns 45 degrees (a reverse, a look left or right) or
+travels the ~11% of the reach a limit 1.25x smaller gives up, after which the
+shorter reach still covers everything the old one painted ahead. An optional ground-distance cull
+(`TreeRenderView.spriteDistance`, the debug panel's *Sprite distance*,
+`localStorage.sf_trees_sprite_distance`) ends the sprites where we judge they
+blend into the dots; it is off by default. Its limits are cost: the frame after an upload may run 12 ms long,
+and the worker's build may take 150 ms; a batch over either sets a ceiling
 that lifts again after 20 good batches. Between 8k and 131k sprites; a software
 renderer starts at 8k and stops at 16k. `localStorage.sf_trees_sprite_limit`
 fixes it, for sweeps.

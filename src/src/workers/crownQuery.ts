@@ -52,6 +52,14 @@ export function crownQuery(camera: TreeRenderView, baseQuery: string | null, col
   if (camera.bounds) {
     extent = boundsPredicate(camera.bounds)
     if (camera.footprint) extent += ` AND ${polygonPredicate(camera.footprint, 'tf.x_3857', 'tf.y_3857')}`
+    // The optional ground cull; without it the sprite budget alone decides how far sprites go.
+    const d = camera.spriteDistance
+    if (d !== undefined) {
+      if (!Number.isFinite(d) || d <= 0) throw new Error('Invalid sprite distance')
+      const r = d / cosLat
+      extent += ` AND tf.x_3857 BETWEEN ${x - r} AND ${x + r} AND tf.y_3857 BETWEEN ${y - r} AND ${y + r}`
+        + ` AND (tf.x_3857 - ${x}) ** 2 + (tf.y_3857 - ${y}) ** 2 < ${r ** 2}`
+    }
   }
   const valid = (col: string, max = MAX_CROWN_WIDTH) => `isfinite(${col}) AND ${col} > 0 AND ${col} <= ${max}`
   return `

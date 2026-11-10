@@ -60,10 +60,10 @@ export function drawSpriteRadar(canvas: HTMLCanvasElement, radar: SpriteRadar) {
     ctx.strokeStyle = 'rgba(255, 167, 38, 0.9)'
     ctx.stroke()
   }
-  // The reach the budget aims for: where a typical crown shrinks to MIN_SPRITE_PX.
-  {
+  // The optional distance cull, around the camera on the ground.
+  if (radar.distance !== null) {
     ctx.beginPath()
-    ctx.arc(cx, cy, radar.target * scale, 0, Math.PI * 2)
+    ctx.arc(cx, cy, radar.distance * scale, 0, Math.PI * 2)
     ctx.setLineDash([2, 4])
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)'
     ctx.stroke()

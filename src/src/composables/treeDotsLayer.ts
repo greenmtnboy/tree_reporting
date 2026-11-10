@@ -5,11 +5,11 @@ import {
 } from '../workers/cityPoints'
 import {
   CIRCLE_MAX_ZOOM, CIRCLE_PICK_MIN_ZOOM,
-  CIRCLE_FAR_OPACITY, circleOpacity, visibleRanges, circleRadius, circleRadiusRange,
+  CIRCLE_FAR_OPACITY, circleOpacity, visibleRanges, circleRadiusRange, dotRadius, pixelsPerMetre, CROWN_BYTE_PER_M,
   hexRgb, lngLatFrom3857, lngLatTo3857, metresPerPixel,
   pointsNear, relativeMatrix,
 } from '../lib/treeDots'
-import { REACH_FADE } from '../lib/treeCrowns'
+import { DEFAULT_CROWN_WIDTH, MAX_CROWN_WIDTH, REACH_FADE } from '../lib/treeCrowns'
 
 /**
  * The desktop map's trees below the sprites: trunk-sized circles from z6
@@ -117,6 +117,11 @@ function compile(gl: GL2, vertex: string, fragment: string, name: string): WebGL
   return program
 }
 
+/** The widest dot's radius at the view's centre, CSS pixels: what drawing and picking pad by. Capped, as the widest crowns near the camera sit under their sprites. */
+function maxDotRadius(range: readonly [number, number], pxPerMetre: number): number {
+  return Math.max(range[1], Math.min(256, (MAX_CROWN_WIDTH / 2) * pxPerMetre))
+}
+
 function uniforms(gl: GL2, program: WebGLProgram, names: string[]): Record<string, WebGLUniformLocation | null> {
   return Object.fromEntries(names.map((n) => [n, gl.getUniformLocation(program, n)]))
 }
@@ -124,12 +129,15 @@ function uniforms(gl: GL2, program: WebGLProgram, names: string[]): Record<strin
 const CIRCLE_VS = `#version 300 es
 precision highp float;
 layout(location = 0) in vec2 a_pos;
-layout(location = 1) in vec2 a_attr;
+// Palette index, dbh (inches), crown width (CROWN_BYTE_PER_M; 0 unknown).
+layout(location = 1) in vec4 a_attr;
 uniform mat4 u_matrix;
 uniform vec2 u_center;
 uniform vec2 u_radius;
 uniform float u_dpr;
 uniform float u_camdist;
+// CSS pixels per real metre at the view's centre (lib/treeDots pixelsPerMetre).
+uniform float u_px_per_m;
 uniform sampler2D u_palette;
 uniform float u_opacity;
 // Metres the sprites reach; < 0 below the sprite zooms.
@@ -162,8 +170,19 @@ void main() {
     float sprite = inBox * (1.0 - smoothstep(u_reach * ${REACH_FADE}, u_reach, dist));
     v_opacity = max(u_opacity, u_far_opacity * (1.0 - sprite));
   }
-  float s = clamp(sqrt(a_attr.y) / ${Math.sqrt(42).toFixed(6)}, 0.0, 1.0);
-  float radius = mix(u_radius.x, u_radius.y, s) * u_dpr * (gl_Position.w > 0.0 ? u_camdist / gl_Position.w : 0.0);
+  // A dot nothing shows (under an opaque sprite, or at a zoom without dots) is never rasterised:
+  // the fragment shader would discard every pixel of it, and a crown-sized point is many pixels.
+  if (v_opacity <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    v_radius = 0.0;
+    v_color = vec3(0.0);
+    return;
+  }
+  float s =clamp(sqrt(a_attr.y) / ${Math.sqrt(42).toFixed(6)}, 0.0, 1.0);
+  // lib/treeDots dotRadius: the crown's disc at metre scale, the trunk circle its floor.
+  float crown = a_attr.z > 0.0 ? a_attr.z / ${CROWN_BYTE_PER_M.toFixed(1)} : ${DEFAULT_CROWN_WIDTH.toFixed(1)};
+  float radius = max(mix(u_radius.x, u_radius.y, s), crown * 0.5 * u_px_per_m) * u_dpr * (gl_Position.w > 0.0 ? u_camdist / gl_Position.w : 0.0);
   v_radius = radius;
   gl_PointSize = 2.0 * radius + 2.0;
   v_color = texelFetch(u_palette, ivec2(int(a_attr.x), 0), 0).rgb;
@@ -198,6 +217,7 @@ interface Chunk {
   x: Float32Array
   y: Float32Array
   dbh: Uint8Array
+  crown: Uint8Array
   color: Uint8Array
   rowid: Uint32Array
   /** A row's index here by its rowid; -1 for a row the current filter leaves out. */
@@ -257,7 +277,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
   private deferredSince?: number
 
   /** Last frame's camera, for picking exactly what was drawn. */
-  private frame?: { matrix: Float64Array; width: number; height: number; camdist: number; radius: [number, number] }
+  private frame?: { matrix: Float64Array; width: number; height: number; camdist: number; radius: [number, number]; pxPerMetre: number }
 
   constructor(
     private source: TreeDotsSource,
@@ -352,7 +372,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
   private initialize() {
     const gl = this.gl!
     this.circleProgram = compile(gl, CIRCLE_VS, CIRCLE_FS, 'Circle')
-    this.circleU = uniforms(gl, this.circleProgram, ['u_matrix', 'u_center', 'u_radius', 'u_dpr', 'u_camdist', 'u_palette', 'u_opacity', 'u_reach', 'u_far_opacity', 'u_altitude', 'u_scale', 'u_eye', 'u_poly'])
+    this.circleU = uniforms(gl, this.circleProgram, ['u_matrix', 'u_center', 'u_radius', 'u_dpr', 'u_camdist', 'u_px_per_m', 'u_palette', 'u_opacity', 'u_reach', 'u_far_opacity', 'u_altitude', 'u_scale', 'u_eye', 'u_poly'])
   }
 
   private createGpu(gl: GL2): ChunkGpu {
@@ -365,7 +385,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0)
     gl.bindBuffer(gl.ARRAY_BUFFER, gpu.attr)
     gl.enableVertexAttribArray(1)
-    gl.vertexAttribPointer(1, 2, gl.UNSIGNED_BYTE, false, 2, 0)
+    gl.vertexAttribPointer(1, 4, gl.UNSIGNED_BYTE, false, 4, 0)
     gl.bindVertexArray(null)
     gl.bindBuffer(gl.ARRAY_BUFFER, null)
     return gpu
@@ -666,6 +686,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
         x: batch.x.subarray(from, to),
         y: batch.y.subarray(from, to),
         dbh: batch.dbh.subarray(from, to),
+        crown: batch.crown.subarray(from, to),
         color: batch.color.subarray(from, to),
         rowid: batch.rowid.subarray(from, to),
         indexByRowid: new Int32Array(),
@@ -698,8 +719,8 @@ export class TreeDotsLayer implements CustomLayerInterface {
       chunk.uploadPoints = false
     }
     if (chunk.uploadColors) {
-      const attr = new Uint8Array(chunk.count * 2)
-      for (let i = 0; i < chunk.count; i++) { attr[i * 2] = chunk.color[i]; attr[i * 2 + 1] = chunk.dbh[i] }
+      const attr = new Uint8Array(chunk.count * 4)
+      for (let i = 0; i < chunk.count; i++) { attr[i * 4] = chunk.color[i]; attr[i * 4 + 1] = chunk.dbh[i]; attr[i * 4 + 2] = chunk.crown[i] }
       gl.bindBuffer(gl.ARRAY_BUFFER, gpu.attr)
       gl.bufferData(gl.ARRAY_BUFFER, attr, gl.STATIC_DRAW)
       chunk.uploadColors = false
@@ -761,7 +782,8 @@ export class TreeDotsLayer implements CustomLayerInterface {
     const zoom = this.map.getZoom()
     const cam = this.camera()
     const radius = circleRadiusRange(zoom)
-    this.frame = { matrix: Float64Array.from(matrix as ArrayLike<number>), width: cam.width, height: cam.height, camdist: cam.camdist, radius }
+    const pxPerMetre = pixelsPerMetre(zoom, this.map.getCenter().lat)
+    this.frame = { matrix: Float64Array.from(matrix as ArrayLike<number>), width: cam.width, height: cam.height, camdist: cam.camdist, radius, pxPerMetre }
     if (!this.chunks.size) return
     g.disable(g.DEPTH_TEST)
     g.disable(g.STENCIL_TEST)
@@ -775,6 +797,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
       g.uniform2f(this.circleU.u_radius, radius[0], radius[1])
       g.uniform1f(this.circleU.u_dpr, cam.dpr)
       g.uniform1f(this.circleU.u_camdist, cam.camdist)
+      g.uniform1f(this.circleU.u_px_per_m, pxPerMetre)
       g.uniform1f(this.circleU.u_opacity, opacity)
       g.uniform1f(this.circleU.u_reach, coverage === null ? -1 : Number.isFinite(coverage.reach) ? coverage.reach : 1e9)
       const polygon = coverage?.polygon ?? []
@@ -788,7 +811,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
       g.uniform1f(this.circleU.u_scale, Math.cos(this.map.getCenter().lat * Math.PI / 180))
       g.activeTexture(g.TEXTURE0)
       g.uniform1i(this.circleU.u_palette, 0)
-      const view = this.viewBox3857(0, radius[1] + 2)
+      const view = this.viewBox3857(0, maxDotRadius(radius, pxPerMetre) + 2)
       for (const chunk of this.chunks.values()) {
         if (!chunk.gpu || !intersects(this.chunkBox(chunk), view)) continue
         const local = this.chunkCamera(matrix as ArrayLike<number>, chunk, cam.camX, cam.camY)
@@ -869,7 +892,9 @@ export class TreeDotsLayer implements CustomLayerInterface {
     const at = this.map.unproject([point.x, point.y])
     const [qx, qy] = lngLatTo3857(at.lng, at.lat)
     // Generous in metres (a pitched view stretches the far side); the test below is in pixels.
-    const reach = (frame.radius[1] + tolerancePx) * metresPerPixel(this.map.getZoom()) * 4
+    // A crown's disc is metre scale, so its reach on the ground is its radius at any pitch; only the pixel-sized trunk circle needs the margin.
+    const mpp = metresPerPixel(this.map.getZoom())
+    const reach = Math.max((frame.radius[1] + tolerancePx) * mpp * 4, MAX_CROWN_WIDTH / 2 / Math.cos((at.lat * Math.PI) / 180) + tolerancePx * mpp * 4)
     let best: { chunk: Chunk; i: number } | undefined
     let bestDistance = Infinity
     for (const chunk of this.chunksNear(qx, qy, reach)) {
@@ -878,7 +903,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
         const p = this.project(chunk, rel, i)
         if (!p) return
         const distance = Math.hypot(p.x - point.x, p.y - point.y)
-        const r = (circleRadius(chunk.dbh[i], frame.radius) + 0.5) * (frame.camdist / p.w)
+        const r = (dotRadius(chunk.dbh[i], chunk.crown[i], frame.radius, frame.pxPerMetre) + 0.5) * (frame.camdist / p.w)
         if (distance <= r + tolerancePx && distance < bestDistance) { best = { chunk, i }; bestDistance = distance }
       })
     }
