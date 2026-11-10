@@ -368,19 +368,32 @@ def test_a_genus_has_a_habit_only_when_its_species_agree():
     assert "Quercus" not in genera and "Unknown" not in genera
 
 
-@pytest.mark.parametrize("candidates, genus, expected", [
-    (["Acer rubrum", "Tilia cordata", "Malus genus", "Larix decidua", "Acer platanoides"], "Acer", "deciduous"),
-    (["Pinus strobus", "Picea abies"], "Pinus", "conifer"),
-    (["Pinus strobus", "Magnolia grandiflora"], "Pinus", "evergreen"),  # evergreen, not all conifers
-    (["Acer rubrum", "Pinus strobus"], "Acer", None),  # the candidates disagree
-    (["Acer rubrum", "Tilia cordata"], "Pinus", None),  # the genus head disagrees
-    (["Quercus rubra", "Acer rubrum"], "Quercus", "deciduous"),  # a mixed genus is no vote
-    (["Acer rubrum", "__vegetation_copse__"], "Acer", None),  # a candidate without a habit
-    (["Acer rubrum", "Zelkova serrata"], "Acer", None),  # one the table does not know
-    ([], "Acer", None),  # a tile predicted before candidates were recorded
+@pytest.mark.parametrize("candidates, expected", [
+    ([("Acer rubrum", .5), ("Tilia cordata", .2), ("Malus genus", .1), ("Larix decidua", .1)], "deciduous"),
+    ([("Pinus strobus", .6), ("Picea abies", .2)], "conifer"),
+    ([("Pinus strobus", .5), ("Acer rubrum", .1), ("Tilia cordata", .1)], "conifer"),  # a broadleaf tail
+    ([("Pinus strobus", .4), ("Magnolia grandiflora", .4)], "evergreen"),  # evergreen, not conifer enough
+    ([("Acer rubrum", .5), ("Pinus strobus", .5)], None),  # an even split
+    ([("Quercus rubra", .5), ("Quercus agrifolia", .5)], None),  # a mixed genus is no vote
+    ([("Acer rubrum", .6), ("__vegetation_copse__", .4)], None),  # a candidate without a habit counts against
+    ([("Acer rubrum", .8), ("Zelkova serrata", .2)], "deciduous"),  # one the table lacks, outweighed
+    ([], None),  # a tile predicted before candidates were recorded
 ])
-def test_leaf_habit_is_what_every_candidate_shares(candidates, genus, expected):
-    assert bulk_predict.leaf_habit(candidates, genus, *habits()) == expected
+def test_leaf_habit_is_the_habit_holding_most_of_the_probability(candidates, expected):
+    assert bulk_predict.leaf_habit(candidates, *habits()) == expected
+
+
+def test_the_habit_share_is_a_threshold():
+    mostly = [("Acer rubrum", .6), ("Pinus strobus", .4)]
+    assert bulk_predict.leaf_habit(mostly, *habits(), min_share=0.6) == "deciduous"
+    assert bulk_predict.leaf_habit(mostly, *habits(), min_share=0.7) is None
+
+
+def test_candidates_pair_names_with_probabilities():
+    assert bulk_predict.candidates({"speciesTop": ["Acer rubrum", None, "Pinus strobus"],
+                                    "speciesTopConfidence": [.5, .2, .1]}) == [("Acer rubrum", .5), ("Pinus strobus", .1)]
+    # an older record without probabilities weighs its candidates equally
+    assert bulk_predict.candidates({"speciesTop": ["Acer rubrum"]}) == [("Acer rubrum", 1.0)]
 
 
 def test_assemble_stages_the_leaf_habit(tmp_path, monkeypatch):
@@ -388,7 +401,8 @@ def test_assemble_stages_the_leaf_habit(tmp_path, monkeypatch):
     tiles = tmp_path / "tiles"
     tiles.mkdir()
     deciduous = {**prediction("d", 42.33, -71.08, 0.5), "speciesTop": ["Acer rubrum", "Tilia cordata", None]}
-    mixed = {**prediction("m", 42.34, -71.08, 0.5), "speciesTop": ["Acer rubrum", "Pinus strobus"]}
+    mixed = {**prediction("m", 42.34, -71.08, 0.5), "speciesTop": ["Acer rubrum", "Pinus strobus"],
+             "speciesTopConfidence": [0.5, 0.5]}
     (tiles / "a.json").write_text(json.dumps(bundle(predictions=[deciduous, mixed, prediction("old", 42.35, -71.08, 0.5)])))
     out = tmp_path / "out"
     assert bulk_predict.main(["assemble", "--out", str(out), "--threshold", "0.35", "--from-bundles", str(tiles)]) == 0
