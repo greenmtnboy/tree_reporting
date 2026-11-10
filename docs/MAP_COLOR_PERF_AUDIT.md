@@ -466,9 +466,12 @@ a sprite never draws under 4 px, bigger crowns are wider still, and thousands
 of small sprites read as canopy where the dots read as points. On San Francisco
 a fixed 131k cap against the ~21k it settled at looked clearly better at 50+
 fps. Now a capped batch within cost grows the limit a step (x1.25) and
-refetches, and only cost stops or shrinks it: a batch over cost holds its
-limit as the ceiling, since stepping down would take away the band of sprites
-it just painted, and only one more than twice over steps back down. An optional ground-distance cull
+refetches, and only cost stops or shrinks it. A batch over cost holds its
+limit as the ceiling at once but steps down a notch only later: stepping down at
+once took away the band of sprites it had just painted. The step waits for the
+next fetch after the view turns 45 degrees (a reverse, a look left or right) or
+travels the ~11% of the reach a limit 1.25x smaller gives up, after which the
+shorter reach still covers everything the old one painted ahead. An optional ground-distance cull
 (`TreeRenderView.spriteDistance`, the debug panel's *Sprite distance*,
 `localStorage.sf_trees_sprite_distance`) ends the sprites where we judge they
 blend into the dots; it is off by default. Its limits are cost: the frame after an upload may run 12 ms long,

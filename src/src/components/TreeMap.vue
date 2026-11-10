@@ -944,7 +944,7 @@ function updateSpriteDebug() {
   spriteLimitChoice.value = s.auto ? 'auto' : String(s.cap)
   spriteDistanceChoice.value = s.distance ? String(s.distance) : 'off'
   const reach = Number.isFinite(s.reach) ? `${Math.round(s.reach)} m` : 'all'
-  const cap = `${s.cap.toLocaleString()}${s.auto ? ` auto, ceiling ${s.ceiling.toLocaleString()}` : ' fixed'}`
+  const cap = `${s.cap.toLocaleString()}${s.auto ? ` auto, ceiling ${s.ceiling.toLocaleString()}${s.stepDown ? `, stepping to ${s.stepDown.toLocaleString()} on turn/travel` : ''}` : ' fixed'}`
   spriteDebug.value = `${frames} · ${dots} · sprites ${s.drawn.toLocaleString()} / ${cap}${s.drawn >= s.cap ? ' CAPPED' : ''}`
     + ` · reach ${reach} (cull ${s.distance ? `${s.distance} m` : 'off'}) · query ${s.lastQueryMs.toFixed(0)} ms (sql ${s.lastSqlMs.toFixed(0)}, build ${s.lastBuildMs.toFixed(0)})`
     + ` · upload ${s.lastUploadMs.toFixed(1)} ms${s.inFlight ? ' …' : ''}`

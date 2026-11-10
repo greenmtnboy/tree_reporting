@@ -10,7 +10,7 @@ import {
 import { CROWN_STRIDE as STRIDE, emptyCrownBatch, type CrownBatch, type CrownBatchOptions, type SpriteCellGeometry } from '../lib/crownBatch'
 import { FOOTPRINT_PAD, insidePolygon, viewFootprint, type Point } from '../lib/viewFootprint'
 import { lngLatFrom3857, lngLatTo3857, MERCATOR_WORLD_M } from '../lib/treeDots'
-import { initialSpriteBudget, isSoftwareRenderer, nextSpriteBudget, type BatchSample, type SpriteBudget } from '../lib/spriteBudget'
+import { initialSpriteBudget, isSoftwareRenderer, nextSpriteBudget, settleStepDown, stepDownUnseen, type BatchSample, type SpriteBudget } from '../lib/spriteBudget'
 
 type GL = WebGLRenderingContext | WebGL2RenderingContext
 /** A 60 Hz frame; what an upload's frame takes beyond it is the upload's cost. */
@@ -116,6 +116,8 @@ export class TreeCrownLayer implements CustomLayerInterface {
   /** The footprint of an uncapped batch: every tree in it is loaded, so views inside it need no query. */
   private coverage?: Point[]
   private coverageBearing = 0
+  /** Where the batch that scheduled a step down was fetched: the camera, its bearing, and the sprites' ground reach. */
+  private stepDownFrom?: { camera: CrownCamera; bearing: number; groundReach: number }
   private get minZoom() { return this.simplified ? CROWN_ZOOM_START : SPRITE_CROWN_ZOOM_START }
 
   constructor(private load: LoadCrowns, private simplified: boolean) {}
@@ -161,7 +163,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
   /** For the debug readout. */
   stats() {
     return {
-      drawn: this.drawn.id.length, cap: this.spriteLimit, auto: this.fixedLimit === undefined, ceiling: this.budget.ceiling,
+      drawn: this.drawn.id.length, cap: this.spriteLimit, auto: this.fixedLimit === undefined, ceiling: this.budget.ceiling, stepDown: this.budget.stepDown ?? null,
       reach: this.reach, distance: this.spriteDistance ?? null, inFlight: this.inFlight, ...this.debug,
     }
   }
@@ -222,6 +224,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
       // starts from trees already loaded; nearest first, up to the budget.
       camera.footprint = this.footprint(FOOTPRINT_PAD)
       camera.bounds = polygonBounds(camera.footprint)
+      this.settleStepDownIfUnseen(camera)
       camera.spriteLimit = this.spriteLimit
       camera.spriteDistance = this.spriteDistance
       this.pendingFootprint = camera.footprint
@@ -265,6 +268,22 @@ export class TreeCrownLayer implements CustomLayerInterface {
       this.pendingFootprint = undefined
       if (this.dirty) this.schedule()
     }
+  }
+
+  /**
+   * Apply the budget's scheduled step down once it will not show: the view has turned away from,
+   * or travelled far enough past, the batch that asked for it (lib/spriteBudget stepDownUnseen).
+   */
+  private settleStepDownIfUnseen(camera: CrownCamera) {
+    const from = this.stepDownFrom
+    if (this.budget.stepDown === undefined) return
+    if (from) {
+      const [ax, ay] = mercatorPoint(from.camera.lng, from.camera.lat), [bx, by] = mercatorPoint(camera.lng, camera.lat)
+      const travel = Math.hypot(bx - ax, by - ay) * metersPerMercatorUnit(camera.lat)
+      if (!stepDownUnseen(this.map!.getBearing() - from.bearing, travel, from.groundReach)) return
+    }
+    this.budget = settleStepDown(this.budget)
+    this.stepDownFrom = undefined
   }
 
   /** Whether every point of `polygon` (EPSG:3857 metres) is inside the distance cull around `camera`, or there is none. */
@@ -332,8 +351,13 @@ export class TreeCrownLayer implements CustomLayerInterface {
     const sample = this.sample
     this.sample = undefined
     if (!sample || this.fixedLimit !== undefined) return
-    const before = this.budget.limit
+    const before = this.budget.limit, pending = this.budget.stepDown !== undefined
     this.budget = nextSpriteBudget(this.budget, { ...sample, uploadMs })
+    if (!pending && this.budget.stepDown !== undefined && this.queryCamera) {
+      const altitude = this.queryCamera.altitude
+      const groundReach = Number.isFinite(this.reach) ? Math.sqrt(Math.max(0, this.reach ** 2 - altitude ** 2)) : this.spriteDistance ?? 0
+      this.stepDownFrom = { camera: this.queryCamera, bearing: this.coverageBearing, groundReach }
+    }
     if (this.budget.limit > before && sample.capped) {
       this.coverage = undefined
       this.schedule()

@@ -3,7 +3,7 @@ import { MAX_TREE_SPRITES } from './treeCrowns'
 /**
  * The desktop sprite budget adjusts itself after every batch, by rendering cost
  * alone: it grows while batches hit their cap and stay within cost, and backs
- * off only when one goes well over. Cost is the main thread's buffer upload (the one
+ * off when one goes over, at a moment the user will not see it. Cost is the main thread's buffer upload (the one
  * hitch left once the worker builds batches) and the worker's build time
  * (which delays every batch). How far the sprites reach is whatever that buys,
  * unless the optional distance cull (TreeRenderView.spriteDistance) stops
@@ -21,11 +21,11 @@ export const UPLOAD_BUDGET_MS = 12
 /** Worker milliseconds a batch's sort and vertex fill may take before it delays sprites noticeably. */
 export const BUILD_BUDGET_MS = 150
 /**
- * How far over either budget a batch must go before the limit steps back down. A batch a little
- * over holds its limit and stops the growth there: stepping down would take away the band of
- * sprites it just painted, which is more jarring than a frame's hitch per batch.
+ * A batch over cost stops the growth at once but steps the limit down only later (`stepDown`):
+ * stepping down at once takes away the band of sprites it just painted. The layer applies it at
+ * the next fetch after the view has turned this many degrees, or has travelled stepDownTravel.
  */
-export const SEVERE_OVERAGE = 2
+export const STEP_DOWN_TURN_DEG = 45
 /** Each adjustment multiplies or divides the limit by this. */
 export const SPRITE_LIMIT_STEP = 1.25
 /** In-budget batches before a ceiling set by an over-budget one lifts a step. */
@@ -41,6 +41,8 @@ export interface SpriteBudget {
   ceiling: number
   max: number
   okStreak: number
+  /** The limit a batch over cost asked to step down to, waiting for a moment it will not show (settleStepDown). */
+  stepDown?: number
 }
 
 export function initialSpriteBudget(software: boolean): SpriteBudget {
@@ -62,21 +64,42 @@ const snap = (n: number) => Math.round(n / 1024) * 1024
 /**
  * The budget after a batch. Steps one SPRITE_LIMIT_STEP at a time: up when a capped batch was
  * within cost (more trees were there to draw). A batch over cost sets the ceiling at its own
- * limit, keeping the sprites it drew, and steps down only when SEVERE_OVERAGE over. An uncapped
+ * limit, keeping the sprites it drew, and schedules one step down (`stepDown`). An uncapped
  * batch drew every tree it was asked for and leaves the limit alone.
  */
 export function nextSpriteBudget(budget: SpriteBudget, s: BatchSample): SpriteBudget {
   const clamp = (n: number, ceiling: number) => Math.max(SPRITE_LIMIT_MIN, Math.min(ceiling, snap(n)))
   if (s.uploadMs > UPLOAD_BUDGET_MS || s.buildMs > BUILD_BUDGET_MS) {
-    const severe = s.uploadMs > UPLOAD_BUDGET_MS * SEVERE_OVERAGE || s.buildMs > BUILD_BUDGET_MS * SEVERE_OVERAGE
-    const limit = clamp(severe ? s.limit / SPRITE_LIMIT_STEP : s.limit, budget.max)
-    return { ...budget, limit, ceiling: limit, okStreak: 0 }
+    const limit = clamp(s.limit, budget.max)
+    return { ...budget, limit, ceiling: limit, okStreak: 0, stepDown: budget.stepDown ?? clamp(s.limit / SPRITE_LIMIT_STEP, budget.max) }
   }
   let ceiling = budget.ceiling, okStreak = budget.okStreak + 1
-  if (okStreak >= CEILING_RECOVERY_BATCHES && ceiling < budget.max) {
+  if (okStreak >= CEILING_RECOVERY_BATCHES && ceiling < budget.max && budget.stepDown === undefined) {
     ceiling = clamp(ceiling * SPRITE_LIMIT_STEP, budget.max)
     okStreak = 0
   }
   const limit = s.capped ? clamp(s.limit * SPRITE_LIMIT_STEP, ceiling) : budget.limit
   return { ...budget, limit, ceiling, okStreak }
+}
+
+/** Apply a scheduled step down: the limit and the ceiling drop to it. */
+export function settleStepDown(budget: SpriteBudget): SpriteBudget {
+  if (budget.stepDown === undefined) return budget
+  const { stepDown, ...rest } = budget
+  return { ...rest, limit: stepDown, ceiling: stepDown }
+}
+
+/**
+ * Ground metres the camera must travel before a step down will not show: at an even density a
+ * limit SPRITE_LIMIT_STEP smaller reaches 1/sqrt(SPRITE_LIMIT_STEP) as far, so after this much
+ * travel forward the shorter reach still covers everything the old one painted ahead.
+ */
+export function stepDownTravel(groundReach: number): number {
+  return groundReach * (1 - 1 / Math.sqrt(SPRITE_LIMIT_STEP))
+}
+
+/** Whether a scheduled step down can apply: the view has turned STEP_DOWN_TURN_DEG, or travelled stepDownTravel, since the batch that asked for it. */
+export function stepDownUnseen(turnDeg: number, travel: number, groundReach: number): boolean {
+  const turn = Math.abs(((turnDeg % 360) + 540) % 360 - 180)
+  return turn >= STEP_DOWN_TURN_DEG || travel >= stepDownTravel(groundReach)
 }
