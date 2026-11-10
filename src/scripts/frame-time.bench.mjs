@@ -13,6 +13,8 @@ const city = process.env.MAP_BENCH_CITY ?? 'USBOS'
 const extraQuery = process.env.MAP_BENCH_QUERY ? `&${process.env.MAP_BENCH_QUERY}` : ''
 const lat = 42.3601, lng = -71.0589
 const zooms = (process.env.FRAME_ZOOMS ?? '11,12,13,14,15,16').split(',').map(Number)
+// FRAME_PITCH tilts the camera (degrees): a pitched view holds the most trees under the sprites.
+const pitch = Number(process.env.FRAME_PITCH ?? 0)
 const REPAINT_MS = 3000
 
 const browser = await chromium.launch({ executablePath: process.env.MAP_BENCH_CHROMIUM, args: ['--no-sandbox', '--no-zygote'] })
@@ -35,10 +37,10 @@ try {
   console.log('zoom  settle_ms  main_script_ms  main_task_ms  features  frames/s  ms/frame')
   for (const z of zooms) {
     const before = await metrics()
-    const settled = await page.evaluate(async ([lat, lng, z]) => {
+    const settled = await page.evaluate(async ([lat, lng, z, pitch]) => {
       const map = window.__treeMap
       const t0 = performance.now()
-      map.jumpTo({ center: [lng, lat], zoom: z })
+      map.jumpTo({ center: [lng, lat], zoom: z, pitch })
       await new Promise((r) => map.once('render', r))
       while (performance.now() - t0 < 60_000) {
         if (!map.isMoving() && map.areTilesLoaded() && (!map.getSource('trees') || map.isSourceLoaded('trees'))) break
@@ -47,7 +49,7 @@ try {
       // A late idle, if one comes; the map may already be idle.
       await new Promise((r) => { const t = setTimeout(r, 3000); map.once('idle', () => { clearTimeout(t); r() }) })
       return Math.round(performance.now() - t0)
-    }, [lat, lng, z])
+    }, [lat, lng, z, pitch])
     const after = await metrics()
     // One source layer per colour (workers/mvtLayers.ts).
     const features = await page.evaluate(() => {

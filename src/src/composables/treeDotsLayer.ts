@@ -170,7 +170,16 @@ void main() {
     float sprite = inBox * (1.0 - smoothstep(u_reach * ${REACH_FADE}, u_reach, dist));
     v_opacity = max(u_opacity, u_far_opacity * (1.0 - sprite));
   }
-  float s = clamp(sqrt(a_attr.y) / ${Math.sqrt(42).toFixed(6)}, 0.0, 1.0);
+  // A dot nothing shows (under an opaque sprite, or at a zoom without dots) is never rasterised:
+  // the fragment shader would discard every pixel of it, and a crown-sized point is many pixels.
+  if (v_opacity <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    v_radius = 0.0;
+    v_color = vec3(0.0);
+    return;
+  }
+  float s =clamp(sqrt(a_attr.y) / ${Math.sqrt(42).toFixed(6)}, 0.0, 1.0);
   // lib/treeDots dotRadius: the crown's disc at metre scale, the trunk circle its floor.
   float crown = a_attr.z > 0.0 ? a_attr.z / ${CROWN_BYTE_PER_M.toFixed(1)} : ${DEFAULT_CROWN_WIDTH.toFixed(1)};
   float radius = max(mix(u_radius.x, u_radius.y, s), crown * 0.5 * u_px_per_m) * u_dpr * (gl_Position.w > 0.0 ? u_camdist / gl_Position.w : 0.0);
@@ -883,7 +892,9 @@ export class TreeDotsLayer implements CustomLayerInterface {
     const at = this.map.unproject([point.x, point.y])
     const [qx, qy] = lngLatTo3857(at.lng, at.lat)
     // Generous in metres (a pitched view stretches the far side); the test below is in pixels.
-    const reach = (maxDotRadius(frame.radius, frame.pxPerMetre) + tolerancePx) * metresPerPixel(this.map.getZoom()) * 4
+    // A crown's disc is metre scale, so its reach on the ground is its radius at any pitch; only the pixel-sized trunk circle needs the margin.
+    const mpp = metresPerPixel(this.map.getZoom())
+    const reach = Math.max((frame.radius[1] + tolerancePx) * mpp * 4, MAX_CROWN_WIDTH / 2 / Math.cos((at.lat * Math.PI) / 180) + tolerancePx * mpp * 4)
     let best: { chunk: Chunk; i: number } | undefined
     let bestDistance = Infinity
     for (const chunk of this.chunksNear(qx, qy, reach)) {
