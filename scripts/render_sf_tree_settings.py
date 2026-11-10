@@ -22,60 +22,57 @@ from treelines_core import PALETTES, draw_cartographic_details, draw_centered_te
 from treelines_data import load_city_points, load_city_water, project_lonlat
 
 HERE = Path(__file__).resolve().parent
-COLORS = {"park": "#216548", "street": "#8B651E", "private": "#775580"}
+COLORS = {"unclassified": "#767B79", "park": "#216548", "street": "#8B651E", "private": "#775580"}
 METHODOLOGY = {
     "scope": "Surviving published tree coordinates on SF shoreline/islands land within the rectangular poster frame, before fading.",
     "precedence": ["public CPAD park or protected open space", "SF Public Works 2014 right of way",
-                   "likely private parcel", "other or unresolved, omitted from map"],
+                   "likely private parcel", "other or unresolved, shown in gray"],
     "parks": "CPAD 2024a city, county, special district, state and federal park units. Smaller unit wins overlaps.",
     "private_proxy": "Active parcel with positive assessed land value in a residential, commercial or industrial assessor class. City Lands, government and possessory-interest matches are excluded. Ownership is inferred.",
-    "residential": "Residential-only qualifying uses on the mapped footprint. Mixed residential/business footprints are separate.",
+    "private_uses": "Golf courses use assessor class GC. Residential, golf and other business counts use single-use matches. Locations with multiple qualifying uses are reported as mixed.",
     "streets": "Right-of-way match outside park polygons. Official means surviving source SF_OPENDATA. Percentages use all mapped street trees.",
 }
 
 
 def sidebar(fig, counts, parks, street_sources, parcels, official):
     palette = PALETTES["light"]
-    left, right = .73, .963
+    left, number, right = .73, .894, .963
 
     def label(x, y, value, size=11, color=None, **style):
-        fig.text(x, y, value, va="center", fontsize=size, color=color or palette["text"], **style)
+        fig.text(x, y, value, va="baseline", fontsize=size, color=color or palette["text"], **style)
 
-    def heading(y, title, key):
-        label(left, y, "●", 14, COLORS[key])
-        label(left+.019, y, title, 13, COLORS[key], weight="bold")
-        label(left, y-.043, f"{counts[key]:,}", 30, COLORS[key])
+    def heading(y, title, key, description):
+        ink = COLORS[key]
+        label(left, y, "\u2009".join(title), 15, ink)
+        label(right, y, f"{counts[key]:,}", 19, ink, ha="right")
+        fig.add_artist(Line2D([left, right], [y-.012, y-.012], transform=fig.transFigure,
+                              color=ink, alpha=.48, linewidth=.65))
+        label(left, y-.035, description, 10, palette["muted"])
 
-    def row(y, title, value):
+    def row(y, title, count, total):
         label(left, y, title, 10.8)
-        label(right, y, value, 11, ha="right")
+        label(number, y, f"{count:,}", 11, ha="right")
+        label(right, y, f"{100*count/total:.1f}%", 10.8, palette["muted"], ha="right")
 
-    def rule(y):
-        fig.add_artist(Line2D([left,right], [y,y], transform=fig.transFigure,
-                              color=palette["muted"], alpha=.32, linewidth=.65))
-
-    heading(.825, "Park trees", "park")
-    label(left, .746, "Public parks and protected open space", 10.4, palette["muted"])
+    heading(.811, "Park trees", "park", "Public parks and protected open space")
     top = parks.most_common(3)
     names = {"Golden Gate National Recreation Area": "Golden Gate NRA"}
     for i, (name, count) in enumerate(top):
-        row(.706-i*.028, names.get(name, name), f"{count:,}")
-    row(.622, "Other park units", f"{counts['park']-sum(n for _,n in top):,}")
-    rule(.588)
+        row(.735-i*.028, names.get(name, name), count, counts["park"])
+    row(.651, "Other park units", counts['park']-sum(n for _,n in top), counts["park"])
 
-    heading(.55, "Street trees", "street")
-    label(left, .471, "Within mapped street rights-of-way", 10.4, palette["muted"])
+    heading(.586, "Street trees", "street", "Within mapped street rights-of-way")
     official_count = sum(street_sources.get(s, 0) for s in official)
-    for y, title, n in [(.43, "City inventory", official_count),
-                        (.398, "Aerial and community", counts["street"]-official_count)]:
-        row(y, title, f"{n:,}   ·   {100*n/counts['street']:.1f}%")
-    rule(.361)
+    row(.51, "City inventory", official_count, counts["street"])
+    row(.482, "Aerial and community", counts["street"]-official_count, counts["street"])
 
-    heading(.322, "Likely private trees", "private")
-    label(left, .243, "On parcels matched to the assessor roll", 10.4, palette["muted"])
-    for i, (key, title) in enumerate([("residential", "Residential"), ("commercial or industrial", "Business / industrial"), ("mixed", "Mixed use")]):
+    heading(.417, "Likely private trees", "private", "On parcels matched to the assessor roll")
+    private_rows = [("residential", "Residential"), ("commercial or industrial", "Business / industrial"),
+                    ("golf courses", "Golf courses"), ("mixed", "Mixed use")]
+    for i, (key, title) in enumerate(private_rows):
         n = parcels[key]
-        row(.203-i*.031, title, f"{n:,}   ·   {100*n/counts['private']:.1f}%")
+        row(.341-i*.028, title, n, counts["private"])
+    heading(.192, "Unclassified trees", "unclassified", "Other public land or unresolved parcel matches")
 
 
 def main():
@@ -100,7 +97,7 @@ def main():
     by_source = {key: dict(Counter(sources[setting==key].tolist())) for key in counts}
     shown = sum(counts[key] for key in COLORS)
     assert sum(park_counts.values()) == counts["park"] and sum(private_counts.values()) == counts["private"]
-    assert all(counts[key] for key in COLORS) and shown+counts["unclassified"] == len(lon)
+    assert all(counts[key] for key in ("park", "street", "private")) and shown == len(lon)
     print(dict(counts), flush=True)
     print(park_counts.most_common(5), by_source["street"], private_counts, flush=True)
 
@@ -119,15 +116,14 @@ def main():
     draw_centered_text_runs(fig,.5,.928,[
         ("Mapped trees in ",palette["muted"],12,"normal"), ("parks",COLORS["park"],12,"normal"),
         (", along ",palette["muted"],12,"normal"), ("streets",COLORS["street"],12,"normal"),
-        (" and on ",palette["muted"],12,"normal"), ("likely private land",COLORS["private"],12,"normal")])
+        (", on ",palette["muted"],12,"normal"), ("likely private land",COLORS["private"],12,"normal"),
+        (" and in ",palette["muted"],12,"normal"), ("unclassified areas",COLORS["unclassified"],12,"normal")])
     ax = fig.add_axes((-.056362,.08783,.842724,.88434))
     draw_map(ax,x,y,setting,bounds,[((k,),c,.80) for k,c in COLORS.items()],.25,.15,water,circle,palette)
     draw_cartographic_details(fig,ax,bounds,palette,1.)
     sidebar(fig,counts,park_counts,by_source["street"],private_counts,config["inventory_sources"])
     draw_centered_text_runs(fig,.365,.109,[(f"{shown:,}",palette["text"],26,"normal"),
-                                          ("  classified trees",palette["text"],11,"normal")])
-    fig.text(.365,.08,f"{counts['unclassified']:,} additional mapped trees on other or unresolved land are omitted.",
-             ha="center",fontsize=9,color=palette["muted"])
+                                          ("  mapped trees",palette["text"],11,"normal")])
     fig.text(.5,.053,"Tree locations determine the category. Parks take priority at overlaps. Private land is inferred from parcel and tax records.",
              ha="center",fontsize=8.4,color=palette["muted"])
     fig.text(.47,.029,"Trees: SF Public Works / © OpenStreetMap contributors / USDA National Agriculture Imagery Program     |     Land: CPAD 2024a / DataSF rights-of-way (2014), parcels, City Lands and 2025 assessor roll",

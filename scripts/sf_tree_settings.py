@@ -131,6 +131,8 @@ def tax_evidence(row):
     if use in {"SRES", "MRES"}:
         return "residential"
     if use in {"COMH", "COMM", "COMO", "COMR", "IND"}:
+        if code == "GC":
+            return "golf"
         return "business"
     return "unknown"
 
@@ -181,14 +183,15 @@ def classify(points, layers, parks):
         qualifying = np.array([use in evidence[key] for key in keys], dtype=bool)
         return candidates[tree_idx[qualifying[poly_idx]]]
 
-    home = np.zeros(len(points), dtype=bool)
-    business = home.copy()
-    home[matched_trees("residential")] = True
-    business[matched_trees("business")] = True
-    veto = matched_trees("excluded")
-    home[veto] = business[veto] = False
-    setting[home | business] = "private"
-    parcel_counts = {"residential": int((home & ~business).sum()),
-                     "commercial or industrial": int((business & ~home).sum()),
-                     "mixed": int((home & business).sum())}
+    private_uses = ("residential", "business", "golf")
+    use_flags = np.zeros((len(points), len(private_uses)), dtype=bool)
+    for column, use in enumerate(private_uses):
+        use_flags[matched_trees(use), column] = True
+    use_flags[matched_trees("excluded")] = False
+    use_count = use_flags.sum(axis=1)
+    setting[use_count > 0] = "private"
+    single_use_counts = use_flags[use_count == 1].sum(axis=0)
+    parcel_counts = dict(zip(("residential", "commercial or industrial", "golf courses"),
+                             map(int, single_use_counts)))
+    parcel_counts["mixed"] = int((use_count > 1).sum())
     return setting, park_counts, parcel_counts, overlap
