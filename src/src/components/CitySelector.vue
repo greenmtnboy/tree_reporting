@@ -17,40 +17,31 @@ import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMapData, CITY_CONFIG, type CityCode } from '../composables/useMapData'
 import { useMapLifecycle } from '../composables/useMapLifecycle'
-
-const COUNTRY_BY_PREFIX: Record<string, string> = {
-  US: 'United States',
-  AR: 'Argentina',
-  FR: 'France',
-  CA: 'Canada',
-  DE: 'Germany',
-  NL: 'Netherlands',
-  GB: 'United Kingdom',
-  AU: 'Australia',
-  GR: 'Greece',
-}
+import { cityOptionLabels } from './cityOptionLabels'
 
 const router = useRouter()
 const route = useRoute()
 const { displayCity, markInitialUserCityDetectionDone } = useMapData()
 const { activateCity } = useMapLifecycle()
 
-function formatCityLabel(code: string, name: string) {
-  const country = COUNTRY_BY_PREFIX[code.slice(0, 2)]
-  return country ? `${name}, ${country}` : name
-}
-
-const sortedCities = computed(() =>
-  Object.entries(CITY_CONFIG)
-    .map(([code, cfg]) => ({ code, label: formatCityLabel(code, cfg.name) }))
+const sortedCities = computed(() => {
+  const labels = cityOptionLabels(CITY_CONFIG)
+  return Object.keys(CITY_CONFIG)
+    .map((code) => ({ code, label: labels[code] }))
     .sort((a, b) => a.label.localeCompare(b.label))
-)
+})
 
 function handleChange(e: Event) {
-  const city = (e.target as HTMLSelectElement).value as CityCode
+  const select = e.target as HTMLSelectElement
+  const city = select.value as CityCode
   // A manual pick settles the initial-city question — IP/geolocation detection
   // still in flight must not override it.
   markInitialUserCityDetectionDone()
+  // Hand the keyboard and wheel back to the map: a select that keeps focus
+  // turns the next arrow key or scroll into another city switch.
+  select.blur()
+  const canvas = document.querySelector<HTMLElement>('.tree-map .maplibregl-canvas')
+  canvas?.focus({ preventScroll: true })
   if (route.name !== 'map') {
     activateCity(city)
   }
