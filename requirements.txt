@@ -36,10 +36,10 @@
 # Raised again to 0.3.419: 0.3.414 cannot plan that sort for a target with
 # stored derived columns (pytrilogy #783, released in 0.3.417), and 0.3.417
 # and 0.3.418 cannot plan any city's tree_info build (#786, fixed in 0.3.419).
-# Raised to 0.3.476: the fit tables keyed by a derived class or a sample
+# Raised to 0.3.477: the fit tables keyed by a derived class or a sample
 # genus assert `@kept_values`, whose `count_distinct` reads the asset's own
-# column; earlier releases cannot plan it against the asset alone (#913).
-pytrilogy>=0.3.476
+# column; earlier releases cannot plan it against the asset alone (pytrilogy #915).
+pytrilogy>=0.3.477
 # DuckDB 1.5.3+ is the first 1.5.x with the `nanoarrow` community extension
 # published for linux_amd64 (1.5.0 ships `arrow` but not `nanoarrow`, so
 # `LOAD arrow` fails with "Nested load of nanoarrow failed" on the runner).
