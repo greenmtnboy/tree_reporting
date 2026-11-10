@@ -23,8 +23,12 @@ from treelines_data import load_city_points, load_city_water, project_lonlat
 
 HERE = Path(__file__).resolve().parent
 COLORS = {"unclassified": "#767B79", "park": "#216548", "street": "#8B651E", "private": "#775580"}
+# This latitude brackets the mainland's southern edge (about 37.708 N).
+# The SF polygon determines membership; the latitude selects the southern context.
+SOUTH_CONTEXT_NORTH = 37.71
 METHODOLOGY = {
     "scope": "Surviving published tree coordinates on SF shoreline/islands land within the rectangular poster frame, before fading.",
+    "context": "Out-of-city records in the southern part of the frame are drawn in gray and excluded from every category, source split and displayed total.",
     "precedence": ["public CPAD park or protected open space", "SF Public Works 2014 right of way",
                    "likely private parcel", "other or unresolved, shown in gray"],
     "parks": "CPAD 2024a city, county, special district, state and federal park units. Smaller unit wins overlaps.",
@@ -90,19 +94,23 @@ def main():
     lon, lat = points["longitude"], points["latitude"]
     west, south, east, north = config["viewport_lonlat"]
     land = shapely.union_all([geometry(r["the_geom"]) for r in rows(layers["land"][0])])
-    inside = (lon>=west) & (lon<=east) & (lat>=south) & (lat<=north) & shapely.intersects_xy(land, lon, lat)
+    in_frame = (lon>=west) & (lon<=east) & (lat>=south) & (lat<=north)
+    inside = in_frame & shapely.intersects_xy(land, lon, lat)
+    context = in_frame & ~inside & (lat <= SOUTH_CONTEXT_NORTH)
+    context_lon, context_lat = lon[context], lat[context]
     lon, lat, sources = lon[inside], lat[inside], points["data_source"][inside]
     setting, park_counts, private_counts, overlap = classify(shapely.points(lon, lat), layers, parks)
     counts = Counter(setting.tolist())
     by_source = {key: dict(Counter(sources[setting==key].tolist())) for key in counts}
-    shown = sum(counts[key] for key in COLORS)
+    city_total = sum(counts[key] for key in COLORS)
     assert sum(park_counts.values()) == counts["park"] and sum(private_counts.values()) == counts["private"]
-    assert all(counts[key] for key in ("park", "street", "private")) and shown == len(lon)
+    assert all(counts[key] for key in ("park", "street", "private")) and city_total == len(lon)
     print(dict(counts), flush=True)
     print(park_counts.most_common(5), by_source["street"], private_counts, flush=True)
 
     projection = dict(zip(("central_longitude", "central_latitude"), config["projection_center_lonlat"]))
-    x, y = project_lonlat(lon, lat, projection)
+    x, y = project_lonlat(np.concatenate((context_lon, lon)), np.concatenate((context_lat, lat)), projection)
+    map_setting = np.concatenate((np.full(len(context_lon), "context"), setting))
     xmin, ymin = project_lonlat(west, south, projection)
     xmax, ymax = project_lonlat(east, north, projection)
     bounds = xmin, xmax, ymin, ymax
@@ -119,11 +127,15 @@ def main():
         (", on ",palette["muted"],12,"normal"), ("likely private land",COLORS["private"],12,"normal"),
         (" and in ",palette["muted"],12,"normal"), ("unclassified areas",COLORS["unclassified"],12,"normal")])
     ax = fig.add_axes((-.056362,.08783,.842724,.88434))
-    draw_map(ax,x,y,setting,bounds,[((k,),c,.80) for k,c in COLORS.items()],.25,.15,water,circle,palette)
+    map_layers = [(("context",), COLORS["unclassified"], .58)]
+    map_layers.extend(((k,), c, .80) for k, c in COLORS.items())
+    draw_map(ax,x,y,map_setting,bounds,map_layers,.25,.15,water,circle,palette)
     draw_cartographic_details(fig,ax,bounds,palette,1.)
     sidebar(fig,counts,park_counts,by_source["street"],private_counts,config["inventory_sources"])
-    draw_centered_text_runs(fig,.365,.109,[(f"{shown:,}",palette["text"],26,"normal"),
-                                          ("  mapped trees",palette["text"],11,"normal")])
+    draw_centered_text_runs(fig,.365,.109,[(f"{city_total:,}",palette["text"],26,"normal"),
+                                          ("  mapped trees in San Francisco",palette["text"],11,"normal")])
+    fig.text(.365,.079,"Gray trees beyond the southern city line are excluded from all counts.",
+             ha="center", fontsize=9, color=palette["muted"])
     fig.text(.5,.053,"Tree locations determine the category. Parks take priority at overlaps. Private land is inferred from parcel and tax records.",
              ha="center",fontsize=8.4,color=palette["muted"])
     fig.text(.47,.029,"Trees: SF Public Works / © OpenStreetMap contributors / USDA National Agriculture Imagery Program     |     Land: CPAD 2024a / DataSF rights-of-way (2014), parcels, City Lands and 2025 assessor roll",
@@ -136,7 +148,9 @@ def main():
     plt.close(fig)
     metadata.update({"rendered_utc": datetime.now(timezone.utc).isoformat(), "methodology": METHODOLOGY,
                      "palette": COLORS, "viewport_lonlat": config["viewport_lonlat"], "trees_on_sf_land_in_frame": len(lon),
-                     "shown": shown, "counts": dict(counts), "counts_by_tree_source": by_source,
+                     "shown": len(map_setting), "sf_counted": city_total,
+                     "southern_context_before_fade": len(context_lon), "context_north_latitude": SOUTH_CONTEXT_NORTH,
+                     "counts": dict(counts), "counts_by_tree_source": by_source,
                      "parks": dict(park_counts.most_common()), "private_parcel_uses": private_counts,
                      "park_street_overlap_assigned_to_park": overlap, "assessor_roll_year": ROLL_YEAR,
                      "land_sources": {k:v[1] for k,v in layers.items()}, "parks_source": CPAD, "water": water_provenance})
