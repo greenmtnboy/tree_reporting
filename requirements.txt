@@ -36,10 +36,11 @@
 # Raised again to 0.3.419: 0.3.414 cannot plan that sort for a target with
 # stored derived columns (pytrilogy #783, released in 0.3.417), and 0.3.417
 # and 0.3.418 cannot plan any city's tree_info build (#786, fixed in 0.3.419).
-# Raised to 0.3.477: age_class_fits asserts `@kept_values`, whose
-# `count_distinct` reads the asset's own column; earlier releases cannot plan
-# it against the asset alone (pytrilogy #915).
-pytrilogy>=0.3.477
+# Raised to 0.3.481: `crown_fallback_class` is a key declared by derivation,
+# its own grain from 0.3.478 (pytrilogy #916), so age_class_fits answers
+# `@kept` from its own rows; tree_predictions returns each tree once only from
+# 0.3.481 (#920, #921, #923).
+pytrilogy>=0.3.481
 # DuckDB 1.5.3+ is the first 1.5.x with the `nanoarrow` community extension
 # published for linux_amd64 (1.5.0 ships `arrow` but not `nanoarrow`, so
 # `LOAD arrow` fails with "Nested load of nanoarrow failed" on the runner).
