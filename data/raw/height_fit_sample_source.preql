@@ -11,8 +11,8 @@
 import core;
 
 key height_sample_tree_id string;
-property height_sample_tree_id.height_sample_genus string; # the enrichment table's genus; null for a species it does not know
-property height_sample_tree_id.height_sample_class string; # the fallback class: Angiosperm | Gymnosperm | all
+key height_sample_genus string; # the enrichment table's genus; null for a species it does not know
+key height_sample_class string; # the fallback class: Angiosperm | Gymnosperm | all
 property height_sample_tree_id.height_sample_x float; # log10 of the measured diameter in cm
 property height_sample_tree_id.height_sample_y float; # log10 of the LIDAR height in m
 

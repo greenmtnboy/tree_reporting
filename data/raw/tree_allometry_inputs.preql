@@ -89,7 +89,7 @@ where crown_coefficient_level = 'genus';
 # enrichment table's growth form, and named as the fallback rows name it.
 # Shared by every model: a palm's crown does not scale with its stem, its
 # stem does not thicken with age, and its height does neither.
-auto crown_fallback_class <- case
+key crown_fallback_class <- case
     when species = 'Unknown' or species = 'Dead' or species = 'Shrub' then 'all'
     when tree_form = 'palm' or species = 'Palm' or species = 'Cactus' then 'none'
     when tree_form = 'conifer' then 'Gymnosperm'
