@@ -37,6 +37,10 @@ describe('buildCrownBatch', () => {
     const capped = buildCrownBatch(c, { ...camera, spriteLimit: 2 }, { simplified: false, bearing: 0 })
     expect(capped.reach).toBeCloseTo(Math.hypot(0.002 * 111_320, 500), -2)
     expect(capped.rows).toBe(2)
+    // The optional distance cull is ground metres; the reach is that, seen from the camera's height.
+    expect(buildCrownBatch(c, { ...camera, spriteDistance: 1200 }, { simplified: false, bearing: 0 }).reach).toBeCloseTo(Math.hypot(1200, 500))
+    // A batch the cap cut short ends at its farthest sprite, inside the cull.
+    expect(buildCrownBatch(c, { ...camera, spriteLimit: 2, spriteDistance: 1200 }, { simplified: false, bearing: 0 }).reach).toBeCloseTo(capped.reach)
   })
 
   it('draws only measured crowns on a phone', () => {

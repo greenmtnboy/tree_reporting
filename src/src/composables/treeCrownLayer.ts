@@ -1,7 +1,7 @@
 import type { CustomLayerInterface, Map as TreeMap } from 'maplibre-gl'
 import { createTreeSpriteAtlas } from './treeSpriteAtlas'
 import {
-  CROWN_DISTANCE_FULL, CROWN_DISTANCE_MAX, SPRITE_LIMIT_KEY, CROWN_ZOOM_START,
+  CROWN_DISTANCE_FULL, CROWN_DISTANCE_MAX, SPRITE_DISTANCE_KEY, SPRITE_LIMIT_KEY, CROWN_ZOOM_START,
   crownZoomOpacity, mercatorPoint, metersPerMercatorUnit,
   spriteOpacity, SPRITE_CROWN_ZOOM_START, MIN_SPRITE_PX, REACH_FADE,
   SPRITE_TOPDOWN_START_DEG, SPRITE_TOPDOWN_FULL_DEG, spriteViewShape,
@@ -10,7 +10,7 @@ import {
 import { CROWN_STRIDE as STRIDE, emptyCrownBatch, type CrownBatch, type CrownBatchOptions, type SpriteCellGeometry } from '../lib/crownBatch'
 import { FOOTPRINT_PAD, insidePolygon, viewFootprint, type Point } from '../lib/viewFootprint'
 import { lngLatFrom3857, lngLatTo3857, MERCATOR_WORLD_M } from '../lib/treeDots'
-import { crownVisibleDistance, initialSpriteBudget, isSoftwareRenderer, nextSpriteBudget, type BatchSample, type SpriteBudget } from '../lib/spriteBudget'
+import { initialSpriteBudget, isSoftwareRenderer, nextSpriteBudget, type BatchSample, type SpriteBudget } from '../lib/spriteBudget'
 
 type GL = WebGLRenderingContext | WebGL2RenderingContext
 /** A 60 Hz frame; what an upload's frame takes beyond it is the upload's cost. */
@@ -27,11 +27,18 @@ function polygonBounds(polygon: Point[]): ViewBounds {
   return { west: Math.min(...lngs), east: Math.max(...lngs), south: Math.max(-85.05112878, Math.min(...lats)), north: Math.min(85.05112878, Math.max(...lats)) }
 }
 
-function spriteLimitOverride(): number | undefined {
+function storedPositive(key: string, integer = false): number | undefined {
   try {
-    const value = Number(localStorage.getItem(SPRITE_LIMIT_KEY))
-    return Number.isInteger(value) && value > 0 ? value : undefined
+    const value = Number(localStorage.getItem(key))
+    return (integer ? Number.isInteger(value) : Number.isFinite(value)) && value > 0 ? value : undefined
   } catch { return undefined }
+}
+
+function storePositive(key: string, value: number | null) {
+  try {
+    if (value) localStorage.setItem(key, String(value))
+    else localStorage.removeItem(key)
+  } catch { /* private mode: the choice lasts for this page */ }
 }
 
 /** For the debug radar: the camera, the view, and what is fetched around them, in EPSG:3857 metres. */
@@ -45,8 +52,8 @@ export interface SpriteRadar {
   queryEye: Point | null
   /** EPSG:3857 metres; Infinity when the batch was not cut by the cap. */
   reach: number
-  /** EPSG:3857 metres; how far a typical crown stays MIN_SPRITE_PX wide, the reach the budget aims for. */
-  target: number
+  /** EPSG:3857 metres along the ground; the optional sprite distance cull, null when off. */
+  distance: number | null
   /** The fetch polygon of the query in flight. */
   pending: Point[] | null
   /** A sample of the drawn trees, x/y interleaved. */
@@ -90,7 +97,9 @@ export class TreeCrownLayer implements CustomLayerInterface {
    * A fixed desktop sprite budget, from the map's debug panel or localStorage (SPRITE_LIMIT_KEY);
    * otherwise it adjusts itself (lib/spriteBudget).
    */
-  private fixedLimit = spriteLimitOverride()
+  private fixedLimit = storedPositive(SPRITE_LIMIT_KEY, true)
+  /** The optional ground cull in metres (SPRITE_DISTANCE_KEY); unset, the budget alone decides how far sprites go. */
+  private spriteDistance = storedPositive(SPRITE_DISTANCE_KEY)
   private budget: SpriteBudget = initialSpriteBudget(false)
   private get spriteLimit() { return this.fixedLimit ?? this.budget.limit }
   /** The installed batch, waiting for its upload time before it adjusts the budget. */
@@ -139,7 +148,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
     return {
       eye: lngLatTo3857(lngLat.lng, lngLat.lat) as Point, bearing: this.map.getBearing(),
       view: this.footprint(0), fetched: this.count ? this.loadedFootprint ?? null : null,
-      queryEye: this.count ? toPoint(this.queryCamera) : null, reach: this.reach * scale, target: this.target() * scale,
+      queryEye: this.count ? toPoint(this.queryCamera) : null, reach: this.reach * scale, distance: this.spriteDistance ? this.spriteDistance * scale : null,
       pending: this.inFlight ? this.pendingFootprint ?? null : null, trees: sample,
     }
   }
@@ -153,13 +162,8 @@ export class TreeCrownLayer implements CustomLayerInterface {
   stats() {
     return {
       drawn: this.drawn.id.length, cap: this.spriteLimit, auto: this.fixedLimit === undefined, ceiling: this.budget.ceiling,
-      reach: this.reach, target: this.map ? this.target() : 0, inFlight: this.inFlight, ...this.debug,
+      reach: this.reach, distance: this.spriteDistance ?? null, inFlight: this.inFlight, ...this.debug,
     }
-  }
-
-  /** Metres at which a typical crown is MIN_SPRITE_PX wide in this view. */
-  private target(): number {
-    return crownVisibleDistance(this.map!.transform.cameraToCenterDistance)
   }
 
   private camera(): CrownCamera {
@@ -219,6 +223,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
       camera.footprint = this.footprint(FOOTPRINT_PAD)
       camera.bounds = polygonBounds(camera.footprint)
       camera.spriteLimit = this.spriteLimit
+      camera.spriteDistance = this.spriteDistance
       this.pendingFootprint = camera.footprint
     }
     this.inFlight = true
@@ -246,8 +251,9 @@ export class TreeCrownLayer implements CustomLayerInterface {
       this.setBatch(batch, camera)
       this.loadedFootprint = camera.footprint
       const limit = camera.spriteLimit ?? this.spriteLimit, capped = batch.rows >= limit
-      this.coverage = camera.footprint && !capped ? camera.footprint : undefined
-      if (!this.simplified) this.sample = { limit, capped, reach: batch.reach, target: this.target(), buildMs: batch.timing.buildMs }
+      // An uncapped batch holds every tree of its footprint, unless the distance cull left some out.
+      this.coverage = camera.footprint && !capped && this.withinDistance(camera, camera.footprint) ? camera.footprint : undefined
+      if (!this.simplified) this.sample = { limit, capped, buildMs: batch.timing.buildMs }
       this.coverageBearing = bearing
     } catch (error) {
       if (this.map && generation === this.generation) {
@@ -259,6 +265,14 @@ export class TreeCrownLayer implements CustomLayerInterface {
       this.pendingFootprint = undefined
       if (this.dirty) this.schedule()
     }
+  }
+
+  /** Whether every point of `polygon` (EPSG:3857 metres) is inside the distance cull around `camera`, or there is none. */
+  private withinDistance(camera: TreeRenderView, polygon: Point[]): boolean {
+    if (!camera.spriteDistance) return true
+    const eye = lngLatTo3857(camera.lng, camera.lat)
+    const r = camera.spriteDistance / Math.cos(camera.lat * Math.PI / 180)
+    return polygon.every(([x, y]) => Math.hypot(x - eye[0], y - eye[1]) < r)
   }
 
   /** The atlas cells' geometry, for the worker's vertex fill. */
@@ -293,19 +307,26 @@ export class TreeCrownLayer implements CustomLayerInterface {
    * choice is kept for this browser, and the view is fetched again at the new cap.
    */
   setSpriteLimit(limit: number | null) {
-    try {
-      if (limit) localStorage.setItem(SPRITE_LIMIT_KEY, String(limit))
-      else localStorage.removeItem(SPRITE_LIMIT_KEY)
-    } catch { /* private mode: the choice lasts for this page */ }
+    storePositive(SPRITE_LIMIT_KEY, limit)
     this.fixedLimit = limit ?? undefined
     this.coverage = undefined
     this.schedule()
   }
 
   /**
-   * After a batch's upload, step the sprite budget toward the reach a typical crown is worth drawing
-   * at, within what the upload and the worker's build cost. A capped batch that fell short is
-   * fetched again at the new limit.
+   * Cull sprites past `metres` along the ground from the camera, or draw as far as the budget
+   * reaches with null. Kept for this browser, like the cap.
+   */
+  setSpriteDistance(metres: number | null) {
+    storePositive(SPRITE_DISTANCE_KEY, metres)
+    this.spriteDistance = metres ?? undefined
+    this.coverage = undefined
+    this.schedule()
+  }
+
+  /**
+   * After a batch's upload, step the sprite budget by what the upload and the worker's build cost
+   * (lib/spriteBudget). A capped batch is fetched again at a raised limit.
    */
   private adjustBudget(uploadMs: number) {
     const sample = this.sample

@@ -504,6 +504,8 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     spriteStats: () => crownLayer?.stats() ?? null,
     /** Fix the sprite cap, or null for the self-adjusting budget (the debug panel's control). */
     setSpriteLimit: (limit: number | null) => crownLayer?.setSpriteLimit(limit),
+    /** Cull desktop sprites past this many metres along the ground, or null for none (the debug panel's control). */
+    setSpriteDistance: (metres: number | null) => crownLayer?.setSpriteDistance(metres),
     spriteRadar: () => crownLayer?.radar() ?? null,
     addTreeLayers,
     applyColorToLayers,

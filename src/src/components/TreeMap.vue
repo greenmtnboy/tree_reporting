@@ -19,6 +19,13 @@
         <option v-for="n in SPRITE_LIMIT_CHOICES" :key="n" :value="n">{{ n.toLocaleString() }}</option>
       </select>
     </label>
+    <label class="sprite-debug-control">
+      Sprite distance
+      <select :value="spriteDistanceChoice" aria-label="Sprite distance" @change="chooseSpriteDistance">
+        <option value="off">Off (as far as the budget reaches)</option>
+        <option v-for="m in SPRITE_DISTANCE_CHOICES" :key="m" :value="m">{{ (m / 1000).toLocaleString() }} km</option>
+      </select>
+    </label>
     <canvas ref="radarCanvas" class="sprite-radar" aria-hidden="true" />
   </div>
   <div v-if="mapWindow?.reason && !windowNoticeDismissed && !isInitialLoading" class="map-window-notice" role="status">
@@ -870,7 +877,7 @@ function updateZoomLevel() {
 
 const {
   addTreeLayers, applyColorToLayers, forceTreesTileRefetchPass, pickCrownSprite, renderedTreeSprites,
-  treesResident, residentTreeCount, residentViewSettled, pickResidentTree, spriteStats, spriteRadar, setSpriteLimit,
+  treesResident, residentTreeCount, residentViewSettled, pickResidentTree, spriteStats, spriteRadar, setSpriteLimit, setSpriteDistance,
 } = useMapLayers({
   map: mapRef,
   simplified: props.simplified ?? false,
@@ -880,7 +887,7 @@ const {
 })
 
 // Desktop debug readout, off unless toggled from the map's lower-left controls: frame rate,
-// resident dots, and the sprite layer (drawn against its cap, reach against its target, query and upload time).
+// resident dots, and the sprite layer (drawn against its cap, reach and the distance cull, query and upload time).
 // The choice persists per browser; the toggle shows even during the loading overlay, so a readout
 // left on can always be switched off.
 const MAP_DEBUG_KEY = 'sf_trees_map_debug'
@@ -896,11 +903,20 @@ function readMapDebug(): boolean {
 
 const radarCanvas = ref<HTMLCanvasElement | null>(null)
 
-// The sprite cap, from the debug panel: left alone it adjusts itself to the reach a crown is
-// worth drawing at (lib/spriteBudget.ts), which on a dense city settles well under its start.
-// A fixed cap holds until Auto is chosen again, and is kept for this browser.
+// The sprite cap, from the debug panel: left alone it adjusts itself to what batches cost
+// (lib/spriteBudget.ts). A fixed cap holds until Auto is chosen again, and is kept for this browser.
+// The distance cull, off by default, ends the sprites that far along the ground whatever the cap.
 const SPRITE_LIMIT_CHOICES = [4096, 8192, 16384, 32768, 65536, 131072]
 const spriteLimitChoice = ref<string>('auto')
+
+const SPRITE_DISTANCE_CHOICES = [1000, 1500, 2000, 3000, 4000, 6000]
+const spriteDistanceChoice = ref<string>('off')
+
+function chooseSpriteDistance(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  spriteDistanceChoice.value = value
+  setSpriteDistance(value === 'off' ? null : Number(value))
+}
 
 function chooseSpriteLimit(event: Event) {
   const value = (event.target as HTMLSelectElement).value
@@ -926,10 +942,11 @@ function updateSpriteDebug() {
   if (!s) { spriteDebug.value = `${frames} · ${dots}`; return }
   // The layer read a fixed cap from this browser's storage, or the panel set one.
   spriteLimitChoice.value = s.auto ? 'auto' : String(s.cap)
+  spriteDistanceChoice.value = s.distance ? String(s.distance) : 'off'
   const reach = Number.isFinite(s.reach) ? `${Math.round(s.reach)} m` : 'all'
   const cap = `${s.cap.toLocaleString()}${s.auto ? ` auto, ceiling ${s.ceiling.toLocaleString()}` : ' fixed'}`
   spriteDebug.value = `${frames} · ${dots} · sprites ${s.drawn.toLocaleString()} / ${cap}${s.drawn >= s.cap ? ' CAPPED' : ''}`
-    + ` · reach ${reach} (target ${Math.round(s.target)} m) · query ${s.lastQueryMs.toFixed(0)} ms (sql ${s.lastSqlMs.toFixed(0)}, build ${s.lastBuildMs.toFixed(0)})`
+    + ` · reach ${reach} (cull ${s.distance ? `${s.distance} m` : 'off'}) · query ${s.lastQueryMs.toFixed(0)} ms (sql ${s.lastSqlMs.toFixed(0)}, build ${s.lastBuildMs.toFixed(0)})`
     + ` · upload ${s.lastUploadMs.toFixed(1)} ms${s.inFlight ? ' …' : ''}`
     + ` · ${s.queries} queries, ${s.discarded} discarded`
 }

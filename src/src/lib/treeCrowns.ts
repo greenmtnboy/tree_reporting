@@ -44,6 +44,19 @@ export const MAX_CROWNS = 4096
 export const MAX_TREE_SPRITES = 32768
 /** localStorage key that overrides the desktop sprite budget, for sweeps and debugging. */
 export const SPRITE_LIMIT_KEY = 'sf_trees_sprite_limit'
+/** localStorage key for the optional desktop sprite distance (TreeRenderView.spriteDistance); unset draws as far as the budget reaches. */
+export const SPRITE_DISTANCE_KEY = 'sf_trees_sprite_distance'
+
+/**
+ * Metres from the query camera at which a desktop batch's sprites hand over to the dots: the
+ * farthest sprite when the budget cut the batch short, otherwise the optional ground cull
+ * (`spriteDistance`, metres along the ground, so as 3D distance from a camera at `altitude`),
+ * otherwise Infinity.
+ */
+export function spriteReach(capped: boolean, farthest: number, altitude: number, spriteDistance?: number): number {
+  if (capped) return farthest
+  return spriteDistance ? Math.hypot(spriteDistance, altitude) : Infinity
+}
 export const MAX_CROWN_WIDTH = 60
 /** Above the tallest living trees (~116 m); the LIDAR staging already drops crowns over 60 m. */
 export const MAX_TREE_HEIGHT = 120
@@ -57,6 +70,8 @@ export interface TreeRenderView extends CrownCamera {
   footprint?: [number, number][]
   /** Desktop sprite budget for this query; MAX_TREE_SPRITES when absent. */
   spriteLimit?: number
+  /** Optional desktop cull: metres along the ground from the camera past which the dots carry the trees. */
+  spriteDistance?: number
 }
 /**
  * A sprite query's rows as columns: numbers in typed arrays, NaN for a

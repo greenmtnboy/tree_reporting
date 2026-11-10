@@ -131,6 +131,20 @@ describe('nearby crown query', () => {
     expect(rows.map(row => row.id)).toEqual(['visible-far'])
   })
 
+  test('the optional distance cull drops desktop sprites past that ground distance', async () => {
+    await conn.run(`INSERT INTO trees_fast VALUES
+      ('cull-near', 'USSFO', 0.005, 0, 556, 0, 12, NULL, 'broadleaf', 18, NULL, NULL),
+      ('cull-far', 'USSFO', 0.02, 0, 2226, 0, 12, NULL, 'broadleaf', 18, NULL, NULL)`)
+    const view = { ...camera, altitude: 3000, bounds: { west: -1, east: 1, south: -1, north: 1 } }
+    const base = "SELECT tree_id FROM trees_fast WHERE tree_id LIKE 'cull-%'"
+    const ids = async (eye: typeof view & { spriteDistance?: number }) =>
+      (await conn.runAndReadAll(crownQuery(eye, base, color))).getRowObjects().map(row => row.id)
+    expect(await ids(view)).toEqual(['cull-near', 'cull-far'])
+    // Ground metres, not 3D: the camera's 3 km of height does not count against it.
+    expect(await ids({ ...view, spriteDistance: 1000 })).toEqual(['cull-near'])
+    expect(() => crownQuery({ ...view, spriteDistance: 0 }, base, color)).toThrow('Invalid sprite distance')
+  })
+
   test('dense neighborhoods return only the nearest bounded batch', async () => {
     await conn.run(`INSERT INTO trees_fast SELECT 'dense-' || i, 'USSFO', 0, 0, i / 10.0, 0, 5, NULL, 'broadleaf', 18, NULL, NULL FROM range(5000) t(i)`)
     const rows = await run("SELECT tree_id FROM trees_fast WHERE tree_id LIKE 'dense-%'")
