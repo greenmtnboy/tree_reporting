@@ -29,6 +29,8 @@ The staged parquet's contract, one row per detection:
     imagery_version  string
     species_confidence double the model's probability for `species`, or null
     genus_confidence double   the model's probability for `genus`, or null
+    leaf_habit       string   deciduous | conifer | evergreen when every top
+                              species candidate shares it, else null (optional)
 
 What reaches the canonical columns, and what deliberately does not:
 
@@ -39,7 +41,11 @@ What reaches the canonical columns, and what deliberately does not:
   validation, names at 0.8 or more were right about 80% of the time, on
   about 30% of matched trees.  `species` is shown as an identification
   everywhere and feeds the species charts, so an unsure name stays out.  A
-  file without the confidence columns names nothing.
+  file without the confidence columns names nothing.  An unnamed row whose
+  `leaf_habit` is set publishes that habit's sentinel (`Unknown deciduous`,
+  `Unknown conifer`, `Unknown evergreen`; shared.ingest.LEAF_HABIT_SENTINELS)
+  instead of `Unknown`, so the map can draw its form and season; plain
+  `Unknown` stays for a detection whose candidates disagree.
 * `diameter_at_breast_height` is always null: the column means a measurement.
 * `crown_width_m` is the crown-head width, an observation of this crown from
   the image, as for reviewed detections.
@@ -66,6 +72,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
 from shared.ingest import (  # noqa: E402
+    LEAF_HABIT_SENTINELS,
     PREDICTED_DATA_SOURCES,
     emit,
     enforce_tree_schema,
@@ -122,13 +129,17 @@ def _confident(record: Mapping[str, Any], label: str) -> str | None:
 
 
 def _name(record: Mapping[str, Any]) -> str | None:
-    """A confident species, else a confident genus, else None (Unknown)."""
+    """A confident species, else a confident genus, else the leaf-habit
+    sentinel, else None (Unknown)."""
     species = _confident(record, "species")
     if species:
         return normalize_species(species)
     genus = _confident(record, "genus")
     # normalize_species capitalises a bare genus like any other name.
-    return normalize_species(genus.split()[0]) if genus else None
+    if genus:
+        return normalize_species(genus.split()[0])
+    habit = str(record.get("leaf_habit") or "").strip().lower()
+    return LEAF_HABIT_SENTINELS.get(habit)
 
 
 def _positive_float_or_none(value: Any) -> float | None:

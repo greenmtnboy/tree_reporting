@@ -316,7 +316,8 @@ def report(conn: duckdb.DuckDBPyConnection, rows: list[dict], coverage: bool) ->
         WITH ours AS (
             SELECT split_part(species, ' ', 1) AS genus, count(*) AS n
             FROM read_parquet('{ROLLUP_URL}')
-            WHERE species NOT IN ('Unknown', 'Palm', 'Shrub', 'Cactus', 'Dead')
+            WHERE species NOT IN ('Unknown', 'Palm', 'Shrub', 'Cactus', 'Dead',
+                                  'Unknown deciduous', 'Unknown conifer', 'Unknown evergreen')
             GROUP BY 1
         )
         SELECT coalesce(g.fit_level, 'not in Tallo') AS level, sum(o.n) AS trees

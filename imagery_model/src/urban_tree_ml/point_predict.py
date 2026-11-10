@@ -415,6 +415,20 @@ def render_png(image) -> bytes:
 # ---------------------------------------------------------------------------
 
 
+def own_cohorts(run_dir: Path) -> list[Path]:
+    """The run's evaluation-metadata files that evaluated *its own* checkpoint.
+
+    A fine-tune also evaluates its parent (``parent-validation*``, whose
+    metadata names the parent run's checkpoint); sorted by name that cohort
+    comes first, and predicting with it would quietly be the parent model.
+    """
+    marker = f"/runs/{run_dir.name}/"
+    return [
+        path for path in sorted((run_dir / "evaluation").glob("*/evaluation-metadata.json"))
+        if marker in str(read_json(path).get("checkpoint", "")).replace("\\", "/")
+    ]
+
+
 class Predictor:
     def __init__(self, artifacts: Path, run: str, city_hint: str | None, device_name: str = "auto"):
         import torch
@@ -422,7 +436,7 @@ class Predictor:
         from urban_tree_ml.evaluation import load_network
 
         self.run_dir = artifacts / "runs" / run
-        cohorts = sorted((self.run_dir / "evaluation").glob("*/evaluation-metadata.json"))
+        cohorts = own_cohorts(self.run_dir)
         if not cohorts:
             raise SystemExit(f"{self.run_dir} has no evaluation to take the config and taxonomy from")
         preferred = [c for c in cohorts if city_hint and c.parent.name.endswith(city_hint.lower())]

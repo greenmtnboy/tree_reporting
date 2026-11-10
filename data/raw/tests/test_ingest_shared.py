@@ -1182,7 +1182,8 @@ class TestFormSentinels:
 
     def test_sentinels_are_the_full_set(self):
         assert SPECIES_SENTINELS == frozenset(
-            {UNKNOWN_SPECIES, PALM_SPECIES, SHRUB_SPECIES, CACTUS_SPECIES, DEAD_SPECIES}
+            {UNKNOWN_SPECIES, PALM_SPECIES, SHRUB_SPECIES, CACTUS_SPECIES, DEAD_SPECIES,
+             "Unknown deciduous", "Unknown conifer", "Unknown evergreen"}
         )
 
     @pytest.mark.parametrize(

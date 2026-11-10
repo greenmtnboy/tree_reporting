@@ -349,6 +349,8 @@ auto cluster_top_rank <- max(source_rank) by cluster_id;
 auto species_specificity <- case
     when raw_species = 'Unknown' then 0
     when raw_species = 'Palm' or raw_species = 'Shrub' or raw_species = 'Cactus' or raw_species = 'Dead' then 1
+    # The leaf-habit sentinels hold a space but name no taxon (shared.ingest.LEAF_HABIT_SENTINELS).
+    when raw_species = 'Unknown deciduous' or raw_species = 'Unknown conifer' or raw_species = 'Unknown evergreen' then 1
     when strpos(raw_species, ' ') = 0 then 2
     else 3
 end;

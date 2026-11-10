@@ -298,6 +298,7 @@ def _decode_batch(
                     "species_id": int(species_ids_cpu[index, 0]),
                     "species_confidence": float(species_values_cpu[index, 0]),
                     "species_top_ids": [int(value) for value in species_ids_cpu[index]],
+                    "species_top_confidences": [float(value) for value in species_values_cpu[index]],
             }
             if target_center_cpu is not None and detection_mask_cpu is not None:
                 record["center_target"] = float(target_center_cpu[y, x])

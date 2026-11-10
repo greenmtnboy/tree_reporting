@@ -55,6 +55,24 @@ dies loses at most the tile it was on:
     the ingest documents.  ``--from-bundles DIR`` assembles reviewer tile
     bundles instead, for a pilot over tiles already exported.
 
+    Each row also gets a ``leaf_habit`` (deciduous, conifer, evergreen or
+    null): the habit every one of the detection's top species candidates
+    shares, looked up in the published enrichment table (``--habits``).  The
+    ingest publishes it as ``Unknown deciduous`` / ``Unknown conifer`` /
+    ``Unknown evergreen`` where the name itself is too unsure to publish, so
+    the map can still draw the tree's form and season.  Tiles predicted
+    before the top-5 candidates were recorded have none and get null.
+
+    ``--patch-onto BASE`` (a parquet path or URL, or ``published`` for the
+    city's current staged file) makes this run a patch: BASE's rows inside
+    any tile this run predicted are replaced by this run's, every other BASE
+    row is kept as it is (ids included), and a detection either side of the
+    patch edge within ``--seam-radius-m`` of one from the other side loses
+    to the higher score.  So a newer model, or a new area, is patched into
+    the published file one region at a time.  The base is copied to
+    ``<out>/patch-base.parquet`` first, for rollback, and the counts go to
+    ``<out>/patch.json``.
+
 ``overview``
     Writes ``<out>/overview.json`` for the reviewer's map: every planned
     tile's footprint and state, every detection (score, genus, and whether a
@@ -126,7 +144,11 @@ MODEL_CROWN_METHOD = "model_crown_head"
 STAGED_COLUMNS = (
     "tree_id", "city", "latitude", "longitude", "genus", "species", "score",
     "crown_width_m", "run_id", "imagery_version", "species_confidence", "genus_confidence",
+    "leaf_habit",
 )
+ENRICHMENT_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_enrichment_v2.parquet"
+PUBLISHED_STAGING_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/staging/{code}_predicted_staging.parquet"
+DECIDUOUS, CONIFER, EVERGREEN = "deciduous", "conifer", "evergreen"
 
 
 # ---------------------------------------------------------------------------
@@ -208,9 +230,82 @@ def rows_from_bundle(bundle: dict[str, Any]) -> list[dict[str, Any]]:
             "genus_confidence": _float_or_none(p.get("genusConfidence")),
             "run_id": run_id,
             "imagery_version": version,
+            "leaf_habit": None,
+            "_candidates": [c for c in (p.get("speciesTop") or []) if c],
             "_tile": str(bundle["tileId"]),
         })
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Leaf habit
+# ---------------------------------------------------------------------------
+
+
+def taxon_habit(is_evergreen: bool | None, tree_form: str | None) -> str | None:
+    """One enrichment row's habit: deciduous, conifer (an evergreen conifer) or
+    evergreen (broadleaf).  A larch is a conifer that drops its needles, so
+    the leaf decides first."""
+    if is_evergreen is None:
+        return None
+    if not is_evergreen:
+        return DECIDUOUS
+    return CONIFER if tree_form == "conifer" else EVERGREEN
+
+
+def habit_lookup(rows: Iterable[tuple[str, bool | None, str | None]]) -> tuple[dict[str, str], dict[str, str]]:
+    """(species -> habit, genus -> habit) from enrichment (species, is_evergreen,
+    tree_form) rows.  A genus has a habit only when every species of it with
+    one agrees: Acer is deciduous, Pinus a conifer, Quercus nothing (live oak
+    and red oak)."""
+    species: dict[str, str] = {}
+    genera: dict[str, set[str]] = {}
+    for name, is_evergreen, tree_form in rows:
+        habit = taxon_habit(is_evergreen, tree_form)
+        if not name or habit is None:
+            continue
+        species[name] = habit
+        genera.setdefault(name.split()[0], set()).add(habit)
+    return species, {g: next(iter(h)) for g, h in genera.items() if len(h) == 1}
+
+
+def load_habits(source: str) -> tuple[dict[str, str], dict[str, str]]:
+    import duckdb
+
+    return habit_lookup(duckdb.execute(
+        f"select species, is_evergreen, tree_form from read_parquet('{source}')"
+    ).fetchall())
+
+
+def name_habit(name: str | None, species: dict[str, str], genera: dict[str, str]) -> str | None:
+    """A model label's habit: the species row, else its genus's (``Malus genus``
+    and species the enrichment table lacks), else None (``__vegetation_...``)."""
+    if not name or name.startswith("_"):
+        return None
+    return species.get(name) or genera.get(name.split()[0])
+
+
+def leaf_habit(candidates: list[str], genus: str | None,
+               species: dict[str, str], genera: dict[str, str]) -> str | None:
+    """The habit every top species candidate shares, else None.
+
+    A candidate with no known habit means no call, and the genus head, when
+    its genus has a habit, must not disagree.  Evergreen candidates that are
+    not all conifers are ``evergreen``; a conifer call needs every one to be.
+    """
+    if not candidates:
+        return None
+    habits = {name_habit(c, species, genera) for c in candidates}
+    genus_habit = genera.get(genus) if genus else None
+    if genus_habit is not None:
+        habits.add(genus_habit)
+    if None in habits:
+        return None
+    if habits == {DECIDUOUS}:
+        return DECIDUOUS
+    if DECIDUOUS in habits:
+        return None
+    return CONIFER if habits == {CONIFER} else EVERGREEN
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -292,17 +387,89 @@ def cell_degrees(city: str, ingest_path: Path = INGEST_PATH) -> tuple[float, flo
     return metres / 111320.0, metres / (111320.0 * math.cos(lat))
 
 
-def staged_table(rows: list[dict[str, Any]]):
+def staged_schema():
     import pyarrow as pa
 
-    schema = pa.schema([
+    return pa.schema([
         ("tree_id", pa.string()), ("city", pa.string()), ("latitude", pa.float64()),
         ("longitude", pa.float64()), ("genus", pa.string()), ("species", pa.string()),
         ("score", pa.float64()), ("crown_width_m", pa.float64()), ("run_id", pa.string()),
         ("imagery_version", pa.string()), ("species_confidence", pa.float64()),
-        ("genus_confidence", pa.float64()),
+        ("genus_confidence", pa.float64()), ("leaf_habit", pa.string()),
     ])
-    return pa.Table.from_pylist([{c: r[c] for c in STAGED_COLUMNS} for r in rows], schema=schema)
+
+
+def staged_table(rows: list[dict[str, Any]]):
+    import pyarrow as pa
+
+    return pa.Table.from_pylist([{c: r.get(c) for c in STAGED_COLUMNS} for r in rows], schema=staged_schema())
+
+
+def conform_staged(table):
+    """*table* in the staged schema: a column an older file lacks (``leaf_habit``)
+    is added as nulls, one this module no longer writes is dropped."""
+    import pyarrow as pa
+
+    schema = staged_schema()
+    columns = [
+        table.column(f.name).cast(f.type) if f.name in table.schema.names else pa.nulls(len(table), f.type)
+        for f in schema
+    ]
+    return pa.Table.from_arrays(columns, schema=schema)
+
+
+# ---------------------------------------------------------------------------
+# Patching
+# ---------------------------------------------------------------------------
+
+
+def tile_codes(i: Any, j: Any):
+    """One int64 per (i, j) tile index, for vectorised membership."""
+    import numpy as np
+
+    return (np.asarray(i, dtype=np.int64) << 32) + (np.asarray(j, dtype=np.int64) & 0xFFFFFFFF)
+
+
+def patch_onto(base, new_rows: list[dict[str, Any]], covered: set[tuple[int, int]],
+               epsg: int, tile_m: float, seam_radius_m: float):
+    """*base* (a staged table) with every row in a *covered* tile replaced by
+    *new_rows* (already thresholded and seam-deduped among themselves).
+
+    Tiles are this run's grid (*epsg*, *tile_m*), so *base* may come from any
+    earlier run or plan.  Base rows in the ring of tiles around the patch are
+    seam-deduped against the new rows (the higher score stays); every other
+    base row is kept untouched.  Returns (table, stats).
+    """
+    import numpy as np
+    import pyarrow as pa
+    from pyproj import Transformer
+
+    base = conform_staged(base)
+    forward = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
+    xs, ys = forward.transform(base.column("longitude").to_numpy(), base.column("latitude").to_numpy())
+    codes = tile_codes(np.floor(np.asarray(xs) / tile_m), np.floor(np.asarray(ys) / tile_m))
+    empty = np.array([], dtype=np.int64)
+    covered_codes = tile_codes(*zip(*covered)) if covered else empty
+    ring = dilate(covered, 1) - covered
+    ring_codes = tile_codes(*zip(*ring)) if ring else empty
+    inside = np.isin(codes, covered_codes)
+    edge = np.isin(codes, ring_codes)
+
+    edge_rows = base.filter(pa.array(edge)).to_pylist()
+    for row in edge_rows:
+        row["_tile"] = "__base__"  # base rows never clash with each other
+    contest = drop_seam_duplicates(list(new_rows) + edge_rows, seam_radius_m)
+    kept_new = [r for r in contest if r["_tile"] != "__base__"]
+    kept_edge = [r for r in contest if r["_tile"] == "__base__"]
+    untouched = base.filter(pa.array(~inside & ~edge))
+    table = pa.concat_tables([untouched, staged_table(kept_edge), staged_table(kept_new)])
+    stats = {
+        "base": len(base), "replaced": int(inside.sum()),
+        "edgeBaseDropped": len(edge_rows) - len(kept_edge),
+        "newDroppedAtEdge": len(new_rows) - len(kept_new),
+        "new": len(kept_new), "rows": len(table),
+    }
+    return table, stats
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +624,7 @@ def tile_record(result: dict[str, Any] | None, *, context: bool) -> dict[str, An
             "predictions": [
                 {k: p.get(k) for k in (
                     "predictionId", "latitude", "longitude", "genus", "species",
-                    "speciesConfidence", "genusConfidence",
+                    "speciesConfidence", "genusConfidence", "speciesTop", "speciesTopConfidence",
                     "centerConfidence", "modelCrownWidthM", "modelCrownWidthMethod",
                 )}
                 for p in bundle["predictionLayer"]["predictions"]
@@ -551,7 +718,9 @@ def assemble(args: argparse.Namespace) -> int:
         for path in sorted((out / "tiles").glob("*.json")):
             record = json.loads(path.read_text(encoding="utf-8"))
             if record.get("status") == "ok":
-                bundles.append(record)
+                # The plan tile the record is, from its name (tile_path), for --patch-onto.
+                i, _, j = path.stem.partition("_")
+                bundles.append({**record, "_tile_index": (int(i), int(j)) if j else None})
     city = (args.city or (bundles[0]["city"] if bundles else "")).upper()
     runs = {b["predictionLayer"]["runId"] for b in bundles}
     if len(runs) > 1:
@@ -565,10 +734,46 @@ def assemble(args: argparse.Namespace) -> int:
     ]
     rows = [r for r in rows if owning_city(r["latitude"], r["longitude"], envelopes, territory) == city]
     kept = drop_seam_duplicates(rows, args.seam_radius_m)
+    if args.habits != "none" and any(row["_candidates"] for row in kept):
+        species_habits, genus_habits = load_habits(args.habits)
+        for row in kept:
+            row["leaf_habit"] = leaf_habit(row["_candidates"], row["genus"], species_habits, genus_habits)
+    habits: dict[str, int] = {}
+    for row in kept:
+        habits[str(row["leaf_habit"])] = habits.get(str(row["leaf_habit"]), 0) + 1
     target = out / f"{city.lower()}_predicted_staging.parquet"
-    pq.write_table(staged_table(kept), target)
     print(f"{city}: {len(bundles)} tiles, {len(rows)} detections >= {args.threshold}, "
-          f"{len(rows) - len(kept)} seam duplicates dropped, {len(kept)} rows -> {target}", file=sys.stderr)
+          f"{len(rows) - len(kept)} seam duplicates dropped, {len(kept)} rows; leaf habit "
+          + ", ".join(f"{k} {v}" for k, v in sorted(habits.items())), file=sys.stderr)
+    if not args.patch_onto:
+        pq.write_table(staged_table(kept), target)
+        print(f"-> {target}", file=sys.stderr)
+        return 0
+
+    if args.from_bundles:
+        raise SystemExit("--patch-onto needs this run's plan.json; it cannot patch from --from-bundles")
+    manifest = json.loads((out / "plan.json").read_text(encoding="utf-8"))
+    covered = {b["_tile_index"] for b in bundles if str(b["city"]).upper() == city}
+    if None in covered:
+        raise SystemExit(f"a tile record under {out / 'tiles'} is not named i_j; cannot tell which tile it covers")
+    base_path = out / "patch-base.parquet"
+    source = PUBLISHED_STAGING_URL.format(code=city.lower()) if args.patch_onto == "published" else args.patch_onto
+    if source.startswith(("http://", "https://")):
+        # The bucket serves max-age=3600: a cache-buster, or the base can be an hour stale.
+        urllib.request.urlretrieve(f"{source}{'&' if '?' in source else '?'}cb={int(time.time())}", base_path)
+    elif Path(source).resolve() != base_path.resolve():
+        base_path.write_bytes(Path(source).read_bytes())
+    table, stats = patch_onto(pq.read_table(base_path), kept, covered, int(manifest["epsg"]),
+                              float(manifest["tileM"]), args.seam_radius_m)
+    pq.write_table(table, target)
+    (out / "patch.json").write_text(json.dumps({
+        "base": source, "run": manifest["run"], "threshold": args.threshold,
+        "tiles": len(covered), **stats,
+    }, indent=1) + "\n", encoding="utf-8")
+    print(f"patched onto {source} ({stats['base']} rows): {stats['replaced']} replaced in "
+          f"{len(covered)} tiles, {stats['edgeBaseDropped']} base and {stats['newDroppedAtEdge']} new "
+          f"dropped at the patch edge, {stats['new']} added -> {stats['rows']} rows -> {target} "
+          f"(base kept at {base_path})", file=sys.stderr)
     return 0
 
 
@@ -672,7 +877,9 @@ def run_bundle_files(artifacts: Path, run: str) -> list[str]:
     files = [f"runs/{run}/{p.name}" for p in sorted(run_dir.iterdir())
              if p.is_file() and (p.suffix == ".json" or p.name == "COMPLETE")]
     checkpoints, datasets = set(), set()
-    for metadata_path in sorted((run_dir / "evaluation").glob("*/evaluation-metadata.json")):
+    from urban_tree_ml.point_predict import own_cohorts
+
+    for metadata_path in own_cohorts(run_dir):
         cohort = metadata_path.parent.name
         files += [f"runs/{run}/evaluation/{cohort}/evaluation-metadata.json",
                   f"runs/{run}/evaluation/{cohort}/taxonomy.json"]
@@ -789,6 +996,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seam-radius-m", type=float, default=2.0)
     p.add_argument("--city", default=None)
     p.add_argument("--from-bundles", default=None, help="assemble reviewer tile bundles under this directory instead")
+    p.add_argument("--habits", default=ENRICHMENT_URL,
+                   help="enrichment parquet the leaf habits are read from ('none' writes no habit)")
+    p.add_argument("--patch-onto", default=None, metavar="BASE",
+                   help="replace only BASE's rows inside this run's predicted tiles: a parquet path, a URL, "
+                        "or 'published' for the city's current staged file")
 
     p = sub.add_parser("overview", help="write overview.json for the reviewer's map")
     p.add_argument("--out", required=True)
