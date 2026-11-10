@@ -80,6 +80,18 @@ test.describe('City navigation — desktop', () => {
     await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
   })
 
+  // A pick hands the keyboard back to the map: a select that kept focus turned
+  // the next arrow key (or wheel, in some browsers) into another city switch.
+  test('picking a city returns keyboard focus to the map', async ({ page }) => {
+    test.setTimeout(120_000)
+    await assertCitySwitch(page, 'Burlington', SWITCH_TIMEOUT)
+    const citySelect = page.getByTestId('city-select')
+    await expect(citySelect).not.toBeFocused()
+    await expect(page.locator('.tree-map .maplibregl-canvas')).toBeFocused()
+    await page.keyboard.press('ArrowDown')
+    await expect(citySelect).toHaveValue('USBTV')
+  })
+
   // App.vue keeps MapView alive: a visit to another tab must not rebuild the
   // MapLibre instance, and a city picked there must be on the map on return.
   test('the map survives a tab visit and follows a city picked there', async ({ page }) => {
