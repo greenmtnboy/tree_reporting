@@ -423,6 +423,13 @@ the sprites keep up with the camera.
   marker-size transition left to cross.
 - Dots are 30% smaller (`CIRCLE_RADIUS_SCALE`), and both tree layers draw
   under the basemap's labels.
+- A dot is as wide as its tree's crown renders at that depth (`dotRadius`:
+  the crown's disc at metre scale, measured else predicted else 6 m, as the
+  sprite takes it), with the trunk-sized circle as its floor. A big tree past
+  the sprites' reach hands over to a dot its own size rather than a trunk dot;
+  only big crowns from about z12 up clear the floor. The crown travels to the
+  dots as one byte a tree (quarter metres, 0 unknown) and four bytes of GPU
+  attribute where it was two.
 
 **The sprite query** (`workers/crownQuery.ts`):
 

@@ -1,4 +1,4 @@
-import { SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM } from './treeCrowns'
+import { DEFAULT_CROWN_WIDTH, SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM } from './treeCrowns'
 // Geometry for the desktop's resident tree layer (composables/treeDotsLayer.ts):
 // the zoom curves the old per-colour heatmap and circle layers drew with, a
 // level-of-detail pyramid for the heat, colour sums per level, a grid index
@@ -57,6 +57,29 @@ const SQRT_MAX_DBH = Math.sqrt(42)
 export function circleRadius(dbh: number, [min, max]: readonly [number, number]): number {
   const s = Math.min(1, Math.max(0, Math.sqrt(dbh) / SQRT_MAX_DBH))
   return min + (max - min) * s
+}
+
+/** A point chunk's crown byte per metre: a quarter metre each, so 60 m fits in a byte. */
+export const CROWN_BYTE_PER_M = 4
+
+/** A crown byte's width in metres; an unknown crown is the sprites' DEFAULT_CROWN_WIDTH. */
+export function crownMetres(crown: number): number {
+  return crown > 0 ? crown / CROWN_BYTE_PER_M : DEFAULT_CROWN_WIDTH
+}
+
+/** CSS pixels per real metre at the view's centre: what a sprite's crown is drawn at there. */
+export function pixelsPerMetre(zoom: number, lat: number): number {
+  return 1 / (metresPerPixel(zoom) * Math.cos((lat * Math.PI) / 180))
+}
+
+/**
+ * A dot's radius in CSS pixels at the view's centre (the caller scales it for depth, as the
+ * sprites shrink): the crown's own disc at metre scale, as the sprite over it draws it, so a big
+ * tree hands over to a dot as wide as its crown; the trunk-sized circle is the floor, which is
+ * all a dot is where crowns are under a pixel.
+ */
+export function dotRadius(dbh: number, crown: number, range: readonly [number, number], pxPerMetre: number): number {
+  return Math.max(circleRadius(dbh, range), (crownMetres(crown) / 2) * pxPerMetre)
 }
 
 /** Parse '#rrggbb' to [r, g, b] bytes; anything else is mid grey. */

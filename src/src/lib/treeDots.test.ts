@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildPickGrid, CIRCLE_RADIUS_SCALE, circleOpacity, circleRadius, circleRadiusRange, interpolateStops,
+  CROWN_BYTE_PER_M, crownMetres, dotRadius, metresPerPixel, pixelsPerMetre,
   visibleRanges, lngLatFrom3857, lngLatTo3857, MERCATOR_WORLD_M, pointsNear, relativeMatrix,
 } from './treeDots'
-import { SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM } from './treeCrowns'
+import { DEFAULT_CROWN_WIDTH, MAX_CROWN_WIDTH, SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM } from './treeCrowns'
 
 function seeded(n: number, span: number) {
   let s = 12345
@@ -33,6 +34,23 @@ describe('zoom curves', () => {
     expect(circleRadius(0, range)).toBe(range[0])
     expect(circleRadius(42, range)).toBeCloseTo(range[1])
     expect(circleRadius(200, range)).toBeCloseTo(range[1])
+  })
+})
+
+describe('dot size', () => {
+  it('draws a dot as wide as its crown renders, the trunk circle as its floor', () => {
+    expect(crownMetres(0)).toBe(DEFAULT_CROWN_WIDTH)
+    expect(crownMetres(12 * CROWN_BYTE_PER_M)).toBe(12)
+    expect(MAX_CROWN_WIDTH * CROWN_BYTE_PER_M).toBeLessThanOrEqual(255)
+    // At the equator a pixel is metresPerPixel real metres.
+    expect(pixelsPerMetre(17, 0)).toBeCloseTo(1 / metresPerPixel(17))
+    const range = circleRadiusRange(17), ppm = pixelsPerMetre(17, 37.8)
+    const big = dotRadius(10, 20 * CROWN_BYTE_PER_M, range, ppm), small = dotRadius(10, 4 * CROWN_BYTE_PER_M, range, ppm)
+    // Area follows the crown's: a 20 m crown's dot has (20/4)^2 the area of a 4 m one's, where both clear the floor.
+    expect(big).toBeCloseTo(10 * ppm)
+    expect((big / small) ** 2).toBeCloseTo(25)
+    // Where crowns are under a pixel the trunk circle is all a dot is.
+    expect(dotRadius(10, 20 * CROWN_BYTE_PER_M, circleRadiusRange(9), pixelsPerMetre(9, 37.8))).toBe(circleRadius(10, circleRadiusRange(9)))
   })
 })
 

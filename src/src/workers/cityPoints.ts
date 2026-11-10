@@ -11,7 +11,8 @@
 // exactly 4 x 4 of the phone's window cells (workers/cityWindow.ts).
 
 import { tileIndexSql, WEB_MERCATOR_MAX, WEB_MERCATOR_WORLD } from './cityTables'
-import { DRAW_CHUNK_MAX_CELLS, DRAW_CHUNK_MIN_M, buildPickGrid, type PickGrid } from '../lib/treeDots'
+import { CROWN_BYTE_PER_M, DRAW_CHUNK_MAX_CELLS, DRAW_CHUNK_MIN_M, buildPickGrid, type PickGrid } from '../lib/treeDots'
+import { MAX_CROWN_WIDTH } from '../lib/treeCrowns'
 
 /** A chunk's draw grid without its order: the points are already stored in it. */
 export type ChunkGrid = Pick<PickGrid, 'cell' | 'cols' | 'rows' | 'start'>
@@ -87,6 +88,8 @@ export interface PointChunkBatch {
   y: Float32Array
   /** Trunk diameter, whole inches, 1 to 255 (3 where unknown). */
   dbh: Uint8Array
+  /** Crown width the sprites draw, in CROWN_BYTE_PER_M units, 1 to 240; 0 where unknown (lib/treeDots crownMetres). */
+  crown: Uint8Array
   /** Index into `palette`. */
   color: Uint8Array
   /** The row's place in its block file (`rn`): with the chunk, the tree card's lookup and how a colour refresh finds its tree. */
@@ -154,6 +157,14 @@ function chunkFilterSql(keys: readonly number[]): string {
   return `${chunkBoxSql(keys)} AND ${chunkKeySql()} IN (${keys.join(', ')})`
 }
 
+/** A row's crown width as one byte: measured, else predicted, as the sprites take it (crownQuery); 0 where neither is valid. */
+export function crownByteSql(alias = 'tf'): string {
+  const valid = (col: string) => `CASE WHEN isfinite(${col}) AND ${col} > 0 AND ${col} <= ${MAX_CROWN_WIDTH} THEN ${col} END`
+  const width = `COALESCE(${valid(`${alias}.crown_width_m`)}, ${valid(`${alias}.predicted_crown_width_m`)})`
+  // GREATEST skips a NULL, so the unknown case is spelled out rather than coalesced afterwards.
+  return `CAST(CASE WHEN ${width} IS NULL THEN 0 ELSE LEAST(255, GREATEST(1, round(${width} * ${CROWN_BYTE_PER_M}))) END AS UTINYINT)`
+}
+
 /** Every drawn tree of the chunks: its chunk, rowid, position from the chunk's origin, size and colour. */
 export function pointChunksSql(src: PointRowSource, keys: readonly number[], colorExpr: string, palette: readonly string[]): string {
   const chunk = chunkKeySql()
@@ -166,6 +177,7 @@ SELECT
   CAST(tf.x_3857 - (${cx} * ${sqlDouble(CHUNK_SIZE_M)} - ${sqlDouble(WEB_MERCATOR_MAX)}) AS FLOAT) AS x,
   CAST(tf.y_3857 - (${sqlDouble(WEB_MERCATOR_MAX)} - (${cy} + 1) * ${sqlDouble(CHUNK_SIZE_M)}) AS FLOAT) AS y,
   CAST(LEAST(255, GREATEST(1, round(${src.dbh}))) AS UTINYINT) AS dbh,
+  ${crownByteSql()} AS crown,
   ${paletteIndexSql(colorExpr, palette)} AS color
 FROM ${src.from}
 WHERE ${src.where}${chunkFilterSql(keys)}`
