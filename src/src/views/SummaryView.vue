@@ -173,7 +173,10 @@
               :title="chartById(card.id).title"
               :query="chartById(card.id).query"
               :chart-config="chartById(card.id).chartConfig"
+              :selection-filters="selectionFiltersForChart(card.id)"
               :allow-cross-filter="chartById(card.id).allowCrossFilter ?? true"
+              @dimension-click="handleChartClick"
+              @background-click="crossFilters.clearSource(card.id)"
               @results-empty="emptyChartIds.add(card.id)"
               @results-present="emptyChartIds.delete(card.id)"
             />
@@ -191,7 +194,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useEmbeddedDashboardGroup, type DashboardImport } from '@trilogy-data/trilogy-studio-components/dashboard'
+import { useEmbeddedDashboardGroup, type DashboardImport, type DimensionClick } from '@trilogy-data/trilogy-studio-components/dashboard'
 import '../assets/dashboard.css'
 import BucketBars from '../components/BucketBars.vue'
 import DiversityRule from '../components/DiversityRule.vue'
@@ -220,7 +223,7 @@ import {
   type SummaryDashboardSection,
 } from '../composables/summaryDashboardConfig'
 import { extractGenusFromSpecies } from '../composables/speciesDashboardConfig'
-import { useSummaryFilters, type SummaryFilterField } from '../composables/useSummaryFilters'
+import { filterSummaryDimensionClick, useSummaryFilters, type SummaryFilterField } from '../composables/useSummaryFilters'
 import { useMapLifecycle } from '../composables/useMapLifecycle'
 import { formatArea, formatCompact, formatCount, formatShare, isGenusOnly } from '../lib/dashboardFormat'
 import cityConfig from '../cityConfig.json'
@@ -544,6 +547,16 @@ const visibleSections = computed(() =>
     cards: section.cards.filter((card) => cityFilter.value || !chartById(card.id).requiresCitySelection),
   })).filter((section) => section.cards.length > 0),
 )
+
+function selectionFiltersForChart(chartId: string) {
+  void crossFilters.version.value
+  return crossFilters.getChartSelectionsFor(chartId).map((value) => ({ source: chartId, value }))
+}
+
+function handleChartClick(info: DimensionClick) {
+  const filtered = filterSummaryDimensionClick(info)
+  if (filtered) crossFilters.applyDimensionClick(filtered)
+}
 
 function selectedBuckets(chartId: string): string[] {
   void crossFilters.version.value

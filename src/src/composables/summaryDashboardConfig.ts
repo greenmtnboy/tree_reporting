@@ -359,7 +359,9 @@ ORDER BY plant_year ASC;`,
       hideXAxisTitle: true,
       yAxisTitle: 'Trees planted',
     } as ChartConfig,
-    allowCrossFilter: false,
+    // A year is a drilldown: no summary but this one is keyed by it, so the
+    // rest of the page answers a year filter from the city's tree file. The
+    // summaries make the default view fast; they do not fence the page in.
   },
   {
     id: 'recent-plantings',
