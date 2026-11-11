@@ -323,6 +323,16 @@ def generated_trees() -> list[tuple]:
 
 ALL_TREES = FIXTURE_TREES + generated_trees()
 
+# Unreviewed imagery detections (`PREDICTED_{code}`): a crown and a point and
+# nothing to predict from. Only one under a surveyed crown is a prediction row,
+# for its height; none is counted in a cell's density.
+# (tree_id, species, point, height_m, height_crown_radius_m)
+DETECTIONS = [
+    ("pred-surveyed", "Unknown deciduous", POINT_A, 14.0, 3.0),
+    ("pred-bare",     "Unknown deciduous", POINT_A, None, None),
+    ("pred-nowhere",  "Unknown",           None,    None, None),
+]
+
 
 # --- the reference fit ------------------------------------------------------
 #
@@ -491,13 +501,18 @@ def fixture_files(tmp_path_factory) -> dict[str, Path]:
         """
         CREATE TABLE rollup (
             tree_id VARCHAR, city VARCHAR, data_source VARCHAR, species VARCHAR,
-            diameter_at_breast_height DOUBLE, plant_date DATE, latitude DOUBLE, longitude DOUBLE
+            diameter_at_breast_height DOUBLE, plant_date DATE, latitude DOUBLE, longitude DOUBLE,
+            crown_width_m DOUBLE
         )
         """
     )
     conn.executemany(
-        "INSERT INTO rollup VALUES (?, 'USSFO', 'SF_OPENDATA', ?, ?, ?, ?, ?)",
+        "INSERT INTO rollup VALUES (?, 'USSFO', 'SF_OPENDATA', ?, ?, ?, ?, ?, NULL)",
         [(tree_id, species, dbh, planted, *(point or (None, None))) for tree_id, species, dbh, planted, point, _, _ in ALL_TREES],
+    )
+    conn.executemany(
+        "INSERT INTO rollup VALUES (?, 'USSFO', 'PREDICTED_USSFO', ?, NULL, NULL, ?, ?, 6.5)",
+        [(tree_id, species, *(point or (None, None))) for tree_id, species, point, _, _ in DETECTIONS],
     )
     conn.execute("CREATE TABLE enrichment (species VARCHAR, genus VARCHAR, tree_form VARCHAR)")
     conn.executemany("INSERT INTO enrichment VALUES (?, ?, ?)", [(s, g, f) for s, (g, f) in ENRICHMENT.items()])
@@ -507,6 +522,7 @@ def fixture_files(tmp_path_factory) -> dict[str, Path]:
     conn.executemany(
         "INSERT INTO heights VALUES (?, ?, ?)",
         [(tree_id, height, radius) for tree_id, _, _, _, _, height, radius in ALL_TREES if height is not None]
+        + [(tree_id, height, radius) for tree_id, _, _, height, radius in DETECTIONS if height is not None]
         + [("t-elsewhere", 20.0, 3.0)],
     )
     files = {
@@ -669,7 +685,7 @@ def crown_from(row: dict[str, str], dbh_cm: float) -> float:
 
 
 def test_every_fixture_tree_comes_back_once(predictions):
-    ids = [row["tree_id"] for row in predictions]
+    ids = [row["tree_id"] for row in predictions if not row["tree_id"].startswith("pred-")]
     assert sorted(ids) == sorted(set(ids)) and len(ids) == len(ALL_TREES), len(ids)
 
 
@@ -744,6 +760,25 @@ def test_density_counts_the_cell_and_tolerates_no_coordinates(predictions):
         else:
             assert got[tree_id]["local_tree_density_per_ha"] == counts[point] / 0.25, got[tree_id]
     assert got["t-nowhere"]["predicted_crown_width_m"] > 0, "a tree with no coordinates still has a crown"
+
+
+def test_imagery_detections_publish_only_a_surveyed_height(fit_files, tmp_path):
+    """The published table: a detection's row is there for its LIDAR height alone."""
+    built = build_stage(fit_files, "tree_predictions.preql", tmp_path)
+    got = by_id(published(built, "tree_predictions"))
+    assert "pred-bare" not in got and "pred-nowhere" not in got
+    row = got["pred-surveyed"]
+    assert row["accepted_height_m"] == pytest.approx(14.0) and row["height_check"] == "unchecked", row
+    assert row["predicted_crown_width_m"] is None and row["predicted_height_m"] is None, row
+    assert row["crown_width_m"] == pytest.approx(6.5), "the detector's own crown is carried"
+    assert len([t for t in got if not t.startswith("pred-")]) == len(ALL_TREES)
+
+
+def test_detections_are_not_counted_in_density(predictions):
+    got = by_id(predictions)
+    inventory_at_a = sum(1 for *_, point, _, _ in [(t[4], t[5], t[6]) for t in ALL_TREES] if point == POINT_A)
+    assert got["pred-surveyed"]["local_tree_density_per_ha"] == inventory_at_a / 0.25
+    assert got["t-acer-30"]["local_tree_density_per_ha"] == inventory_at_a / 0.25
 
 
 def test_the_age_placeholder_is_null(predictions):

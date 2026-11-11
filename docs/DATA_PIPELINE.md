@@ -395,7 +395,10 @@ an existing reader.
 
 ## Tree-level predictions (`raw/tree_predictions.preql`)
 
-Publishes `tree_predictions_v{n}.parquet`, one row per rollup tree: a
+Publishes `tree_predictions_v{n}.parquet`, one row per rollup tree (an
+unreviewed imagery detection, `PREDICTED_{code}`, only where it has a LIDAR
+height, and none counts toward density; its crown reaches the map from the
+rollup): a
 predicted crown width (a genus-level power law fitted on Tallo, committed as
 `crown_width_coefficients.csv`, refit with `tools/crown_allometry_fit.py
 --write --coverage`), a diameter predicted from planting age where the tree
