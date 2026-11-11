@@ -345,12 +345,11 @@ function render() {
   }
   ctx.setLineDash([])
 
-  // Squares of whole cells: the finest that is still 4 px tall on screen, so
-  // a dot has room to differ in size from its neighbour. That is one ~110 m
-  // cell on a large card and two or three on a small one. A cell is narrower
-  // on screen than it is tall away from the equator, so a square takes more of
-  // them across than down.
-  const MIN_PX = 4
+  // Squares of whole cells: one ~110 m cell wherever that is at least 1.8 px
+  // tall on screen (any city on a hero card), more only when the card is too
+  // small to show one. A cell is narrower on screen than it is tall away from
+  // the equator, so a square may take more of them across than down.
+  const MIN_PX = 1.8
   const cellPxY = cellDegrees * pxPerDegree
   const cellPxX = cellPxY * cosLat
   const cellsDown = Math.max(1, Math.ceil(MIN_PX / cellPxY))
@@ -379,8 +378,8 @@ function render() {
   // whole cells rarely make an exact square, and a round dot in an oblong one
   // leaves stripes of paper between columns.
   const paint = (keys: number[], color: string, reach: number) => {
-    const rx = Math.max(0.9, squareW * reach)
-    const ry = Math.max(0.9, squareH * reach)
+    const rx = Math.max(0.6, squareW * reach)
+    const ry = Math.max(0.6, squareH * reach)
     const radius = Math.max(rx, ry)
     ctx.fillStyle = color
     ctx.beginPath()
