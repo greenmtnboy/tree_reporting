@@ -3,26 +3,17 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for New Orleans's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for New Orleans, LA's tree inventory.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+The 311 asset service's Trees layer (`OpenGov/OpenGov311_Assets/MapServer/7`
+on maps.nola.gov) is a MapServer layer and publishes no `editingInfo`, but it
+carries the editor-tracking column `last_edited_date`, so the watermark is
+MAX(last_edited_date): one statistics row, not the table.  It read 2026-09-15
+when the city was wired (2026-11-11); Parks and Parkways crews update
+conditions and diameters through the year.
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
-
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+The open-data "Tree Location" export (data.nola.gov `3tyj-9x33`) is not the
+watermark: its `rowsUpdatedAt` has not moved since 2025-04-17.
 """
 
 import sys
@@ -30,13 +21,17 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.platforms.arcgis import FeatureLayer, field_max
+from shared.ingest import emit_freshness
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+LAYER = FeatureLayer(
+    "https://maps.nola.gov/server/rest/services/OpenGov/OpenGov311_Assets/MapServer/7",
+    timeout=60,
+)
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read New Orleans's published-through timestamp")
+    return field_max(LAYER, "last_edited_date")
 
 
 if __name__ == "__main__":
