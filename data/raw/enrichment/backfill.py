@@ -20,8 +20,14 @@ Providers
                 (enrichment/_foliage_colors.py). A row with no photo, or a photo
                 with no leaf in it, is left alone.
 
+  wcvp_family — fills: family
+                source: Kew's WCVP (shared/wcvp.py): the name's own record, else
+                its genus when Kew has one accepted genus of that name. No LLM.
+
   llm         — fills: all LLM-derived fields (description, common_names, tree_form, …)
                 source: Instructor LLM (requires --model, optionally --vertex-*)
+                One call per species answers every field; `native_ecoregions`
+                keeps only ids from the shortlist matched off the WCVP areas.
 
 Usage
 -----
@@ -51,6 +57,22 @@ Usage
 
   # Use a local checkpoint as the source instead of the remote GCS parquet
   uv run enrichment/backfill.py --fields photo_url --source tree_enrichment.parquet --output tree_enrichment.parquet
+
+  # Name every family Kew can (no LLM)
+  uv run enrichment/backfill.py --fields family --flush-every 1000 --no-upload --output ck.parquet
+
+  # Traits for the species most trees are, most planted first, in resumable
+  # batches: each run reads and writes the checkpoint, the asked log keeps a
+  # species whose answer was empty from being asked again, and only the
+  # requested fields are written.
+  uv run enrichment/backfill.py --fields fire_risk,usda_zone_min,usda_zone_max \
+      --model google/gemini-3.5-flash --order trees --tree-coverage 0.97 --only-requested \
+      --asked-log asked.jsonl --time-budget 780 --source ck.parquet --output ck.parquet --no-upload
+
+  # Publish a finished checkpoint: the published table is re-read and is the
+  # base, the checkpoint only fills what is still empty there, and the upload
+  # is refused if anything published would be lost.
+  uv run enrichment/backfill.py --fields family,fire_risk --publish-checkpoint --source ck.parquet --output final.parquet
 """
 
 import sys
@@ -68,9 +90,32 @@ import pyarrow.parquet as pq
 import duckdb
 
 from enrichment._tree_shared import (
+    DATA_VERSION,
     ENRICHMENT_PARQUET,
     ENRICHMENT_GCS_URI,
+    is_enrichable_species,
     should_skip_species,
+)
+from enrichment._backfill_plan import (
+    already_asked,
+    covering,
+    read_asked,
+    rebase_on_published,
+    record_asked,
+    regressions,
+    tree_ordered,
+)
+from enrichment._tree_enrichment_sources import (
+    family_genus_candidates,
+    prefetch_wcvp,
+    wcvp_checklist,
+    wcvp_family,
+)
+
+# Trees per species, for `--order trees`: the rollup every dashboard reads.
+ROLLUP_PARQUET = (
+    "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/"
+    f"tree_rollup_origin_v{DATA_VERSION}.parquet"
 )
 
 # Local filename derived from the GCS URI, e.g. "tree_enrichment_v2.parquet"
@@ -99,6 +144,7 @@ upload_to_gcs = _te.upload_to_gcs
 parquet_exists = _te.parquet_exists
 fetch_inat_photo = _te.fetch_inat_photo
 enrich_species = _te.enrich_species
+LLMUnavailable = _te.LLMUnavailable
 
 
 # ── Provider registry ──────────────────────────────────────────────────────────
@@ -109,6 +155,7 @@ PROVIDER_FIELDS: dict[str, frozenset[str]] = {
         "photo_url", "photo_license", "photo_attribution",
     }),
     "photo_colors": frozenset({"foliage_colors"}),
+    "wcvp_family": frozenset({"family"}),
     "llm": frozenset({
         "common_names", "description", "is_evergreen",
         "mature_height_min_ft", "mature_height_max_ft",
@@ -205,9 +252,38 @@ def run_photo_colors_provider(row: dict) -> dict:
     return {"foliage_colors": colors}
 
 
+def load_tree_counts(source: str = ROLLUP_PARQUET) -> dict[str, int]:
+    """Trees per species key in the published rollup."""
+    conn = duckdb.connect()
+    try:
+        rows = conn.execute(
+            "SELECT species, sum(rollup_tree_count) FROM read_parquet(?) "
+            "WHERE species IS NOT NULL GROUP BY 1",
+            [source],
+        ).fetchall()
+    finally:
+        conn.close()
+    return {species: int(count) for species, count in rows}
+
+
+def run_family_provider(species: str) -> dict:
+    """Kew's family for the name; nothing when Kew cannot place it."""
+    return {"family": wcvp_family(species)}
+
+
+def prefetch_families(species: list[str]) -> None:
+    """One scan of the checklist for the whole queue and its genera."""
+    kew = wcvp_checklist()
+    if kew is None:
+        raise SystemExit("[abort] WCVP is unavailable; family has no other source")
+    kew.prefetch([*species, *(g for s in species for g in family_genus_candidates(s))])
+
+
 def run_llm_provider(species: str, client, print_llm_context: bool = False) -> dict:
     """Run LLM enrichment and return a partial row dict for all LLM-derived fields."""
-    enrichment = enrich_species(species, client, print_full_context=print_llm_context)
+    enrichment = enrich_species(
+        species, client, print_full_context=print_llm_context, shortlisted_ecoregions_only=True
+    )
     if enrichment is None:
         return {}
 
@@ -361,11 +437,65 @@ def main() -> None:
         action="store_true",
         help="Print the full concatenated source text and native-range evidence sent to the LLM for each targeted species.",
     )
+    parser.add_argument(
+        "--order",
+        choices=("table", "trees"),
+        default="table",
+        help="Queue order: the table's own, or most trees first (from the rollup), so an interrupted run has done the most useful part.",
+    )
+    parser.add_argument(
+        "--tree-coverage",
+        dest="tree_coverage",
+        type=float,
+        default=None,
+        metavar="SHARE",
+        help="With --order trees: stop the queue at the species that bring it to this share of identified trees, e.g. 0.97.",
+    )
+    parser.add_argument(
+        "--rollup",
+        default=ROLLUP_PARQUET,
+        metavar="PATH_OR_URL",
+        help="Rollup parquet read for tree counts (species, rollup_tree_count).",
+    )
+    parser.add_argument(
+        "--asked-log",
+        dest="asked_log",
+        default=None,
+        metavar="PATH",
+        help="JSON-lines log of species already asked. A species in it is skipped, so a null that came back null is not asked again on resume.",
+    )
+    parser.add_argument(
+        "--retry-failed",
+        dest="retry_failed",
+        action="store_true",
+        help="With --asked-log: ask again the species whose LLM call failed (never the ones that answered).",
+    )
+    parser.add_argument(
+        "--only-requested",
+        dest="only_requested",
+        action="store_true",
+        help="Write only the --fields asked for; by default a provider fills every null field it can.",
+    )
+    parser.add_argument(
+        "--time-budget",
+        dest="time_budget",
+        type=int,
+        default=None,
+        metavar="SECONDS",
+        help="Stop starting new species after this many seconds and write the checkpoint.",
+    )
+    parser.add_argument(
+        "--publish-checkpoint",
+        dest="publish_checkpoint",
+        action="store_true",
+        help="Call no provider: rebase --source onto the published table for --fields, verify nothing published is lost, write --output and upload it.",
+    )
     # LLM options — only needed if 'llm' provider is required
     parser.add_argument("--model", default=None)
     parser.add_argument("--vertex-project", dest="vertex_project", default=None)
     parser.add_argument("--vertex-location", dest="vertex_location", default=None)
     args = parser.parse_args()
+    started = _time.monotonic()
 
     # Resolve requested fields
     target_fields = [f.strip() for f in args.fields.split(",") if f.strip()]
@@ -374,6 +504,12 @@ def main() -> None:
         print(f"[error] unknown fields: {', '.join(unknown)}", file=sys.stderr)
         print(f"[info]  fillable fields: {', '.join(sorted(ALL_FILLABLE_FIELDS))}", file=sys.stderr)
         raise SystemExit(1)
+
+    if args.publish_checkpoint:
+        if not parquet_exists(args.source) or args.source.startswith("http"):
+            raise SystemExit("[error] --publish-checkpoint needs a local --source checkpoint")
+        publish(load_full_table(args.source).to_pylist(), target_fields, args.output)
+        return
 
     # Resolve which providers are needed. With --model, the LLM answers for
     # every field it can, the leaf photo only for what it cannot.
@@ -439,10 +575,41 @@ def main() -> None:
         print(f"[error] species not found in source parquet: {args.species}", file=sys.stderr)
         raise SystemExit(1)
 
+    # A sentinel or a chimera is never put to the model (`is_enrichable_species`):
+    # ordered by trees, `Unknown` would otherwise be the first species asked.
+    def askable(row_species: str) -> bool:
+        if should_skip_species(row_species):
+            return False
+        return "llm" not in providers_needed or is_enrichable_species(row_species)
+
+    candidates = [row for row in matching_rows if askable(row.get("species", ""))]
+    if args.order == "trees":
+        tree_counts = load_tree_counts(args.rollup)
+        by_species = {row["species"]: row for row in candidates}
+        ordered = tree_ordered(list(by_species), tree_counts)
+        if args.tree_coverage is not None:
+            in_scope = covering(ordered, tree_counts, args.tree_coverage)
+            print(
+                f"[info] {len(in_scope)} of {len(ordered)} species hold "
+                f"{args.tree_coverage:.0%} of {sum(tree_counts.get(s, 0) for s in ordered):,} identified trees",
+                file=sys.stderr,
+            )
+            ordered = in_scope
+        candidates = [by_species[s] for s in ordered]
+    elif args.tree_coverage is not None:
+        raise SystemExit("[error] --tree-coverage needs --order trees")
+
+    asked = read_asked(args.asked_log)
+    skip_asked = already_asked(asked, args.retry_failed)
     to_backfill = [
-        row for row in matching_rows
-        if not should_skip_species(row.get("species", "")) and needs_backfill(row)
+        row for row in candidates
+        if needs_backfill(row) and row["species"] not in skip_asked
     ]
+    if args.asked_log:
+        print(
+            f"[info] asked log: {len(asked)} species asked so far, {len(to_backfill)} still to ask",
+            file=sys.stderr,
+        )
     if args.limit:
         to_backfill = to_backfill[:args.limit]
 
@@ -468,24 +635,57 @@ def main() -> None:
     # Build a mutable index of all rows by species for fast lookup during merge
     rows_by_species: dict[str, dict] = {row["species"]: row for row in rows}
     update_count = 0
+    llm_failures = 0
+
+    # Kew's checklist for the whole queue in a few scans, not one per species.
+    queue_names = [row["species"] for row in to_backfill]
+    if "wcvp_family" in providers_needed:
+        prefetch_families(queue_names)
+    if "llm" in providers_needed:
+        prefetch_wcvp(parse_scientific_name(name) for name in queue_names)
 
     for i, row in enumerate(to_backfill):
         species = row["species"]
+        if args.time_budget is not None and _time.monotonic() - started > args.time_budget:
+            print(
+                f"[budget] stopping after {_time.monotonic() - started:.0f}s; "
+                f"{len(to_backfill) - i} species left for the next run",
+                file=sys.stderr,
+            )
+            break
         pct = f"{i + 1:03d}/{len(to_backfill):03d}"
         print(f"{pct}  {species}", file=sys.stderr)
 
         merged_updates: dict = {}
+        status = "answered"
 
         if "inat_photos" in providers_needed:
             updates = run_inat_provider(species)
             merged_updates.update(updates)
 
+        if "wcvp_family" in providers_needed:
+            merged_updates.update(run_family_provider(species))
+
         if "llm" in providers_needed and llm_client is not None:
-            updates = run_llm_provider(species, llm_client, print_llm_context=args.print_llm_context)
+            failures_before = _llm_failures()
+            try:
+                updates = run_llm_provider(species, llm_client, print_llm_context=args.print_llm_context)
+            except LLMUnavailable as exc:
+                # What is done is on disk before the run dies; the species the
+                # model could not be reached for is logged as failed, not asked.
+                record_asked(args.asked_log, species, "llm_failed", [])
+                _write_table(list(rows_by_species.values()), args.output)
+                raise SystemExit(f"[abort] {exc} (checkpoint written to {args.output})")
+            if not updates:
+                status = "llm_failed" if _llm_failures() > failures_before else "no_sources"
+                llm_failures += status == "llm_failed"
             merged_updates.update(updates)
 
         if "photo_colors" in providers_needed and merged_updates.get("foliage_colors") is None:
             merged_updates.update(run_photo_colors_provider(rows_by_species[species]))
+
+        if args.only_requested:
+            merged_updates = {f: v for f, v in merged_updates.items() if f in target_fields}
 
         updated_row, changed = apply_provider_updates(
             rows_by_species[species],
@@ -504,6 +704,7 @@ def main() -> None:
                     )
         else:
             print("    [no change]", file=sys.stderr)
+        record_asked(args.asked_log, species, status, changed)
 
         # Periodic checkpoint
         if args.flush_every and (i + 1) % args.flush_every == 0:
@@ -513,9 +714,48 @@ def main() -> None:
     # Final write
     _write_table(list(rows_by_species.values()), args.output)
     print(f"\n[info] wrote {len(rows_by_species)} rows ({update_count} updated) → {args.output}", file=sys.stderr)
+    if llm_failures:
+        print(f"[info] {llm_failures} LLM call(s) failed; --retry-failed asks those again", file=sys.stderr)
 
     if args.upload:
-        upload_to_gcs(args.output, ENRICHMENT_GCS_URI)
+        publish(list(rows_by_species.values()), target_fields, args.output)
+
+
+def _llm_failures() -> int:
+    from enrichment import _tree_enrichment_llm
+
+    return _tree_enrichment_llm._consecutive_failures
+
+
+def publish(rows: list[dict], fields: list[str], output: str) -> None:
+    """Upload *rows* as the published table, adding to it and never taking away.
+
+    The published table is read again here and is the base
+    (`rebase_on_published`): a run takes hours, and whatever the daily job or
+    the admin form published meanwhile is kept, row for row and value for
+    value.  Then the result is checked against that same read
+    (`regressions`), and against the row count the job's own stale-checkpoint
+    guard reads, before `upload_to_gcs` uploads and reads back.  A check that
+    fails leaves the file on disk and uploads nothing.
+    """
+    published = load_full_table(ENRICHMENT_PARQUET).to_pylist()
+    rebased, gained = rebase_on_published(rows, published, fields)
+    for field in fields:
+        print(f"[publish] {field}: +{gained[field]} value(s)", file=sys.stderr)
+    problems = regressions(rebased, published)
+    if problems or len(rebased) < len(published):
+        _write_table(rebased, output)
+        raise SystemExit(
+            f"[abort] {output} would lose published data; nothing uploaded:\n  "
+            + "\n  ".join(problems or [f"{len(rebased)} rows against {len(published)} published"])
+        )
+    if not any(gained.values()):
+        print("[publish] nothing to add to the published table; not uploading", file=sys.stderr)
+        return
+    _write_table(rebased, output)
+    print(f"[publish] wrote {len(rebased)} rows → {output}", file=sys.stderr)
+    _te.assert_checkpoint_is_not_stale(output)
+    upload_to_gcs(output, ENRICHMENT_GCS_URI)
 
 
 def _write_table(rows: list[dict], path: str) -> None:

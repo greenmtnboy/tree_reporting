@@ -174,6 +174,32 @@ cd data/raw && uv run tree_enrichment_probe.py                      # true, or t
 cd data/raw && uv run tree_enrichment.py --limit 50 --output tree_enrichment.parquet
 ```
 
+## Family
+
+`family` is Kew's and never the model's (`family_from_checklist` in
+`_tree_enrichment_sources.py`): the family on the name's own WCVP record, else
+its genus's, when Kew has one accepted genus of that name (`Ilex` L. answers,
+its sunk homonym in Fagaceae does not; two accepted genera, or none and a
+disagreement, answer nothing). A run sets it on each row it writes, and every
+load fills whatever is still null (`with_wcvp_family`, before the alias step),
+so the column heals itself and a value typed in the admin form is kept.
+Sentinels have none. About 250 keys stay null: the sentinels, orders
+(`Pinales`), and genera Kew does not have because they are misspelt.
+
+## Backfilling existing rows
+
+`enrichment/backfill.py` fills null fields on rows the job will not revisit
+(it re-asks only a row with no common name or growth form). `--fields family`
+reads WCVP and needs no model. For the LLM traits, `--order trees
+--tree-coverage 0.97` asks the species most trees are, most planted first;
+`--asked-log` records each species asked so a resumed run does not ask again
+for a null that came back null; `--only-requested` writes only the fields
+named; `--time-budget` ends a batch with its checkpoint written. The backfill
+keeps only ecoregion ids from the shortlist. Any upload goes through
+`publish`: the published table is re-read and is the base, the checkpoint
+fills only what is still empty there, and the upload is refused if a published
+row or value would be lost (`--publish-checkpoint` does only this step).
+
 ## Correcting by hand
 
 `enrichment/admin/server.py` is a localhost form over the table. Edits are
