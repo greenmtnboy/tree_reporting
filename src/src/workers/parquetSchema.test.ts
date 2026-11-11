@@ -148,7 +148,7 @@ describe('parquet schema', () => {
   // branch wrote (see docs/SPECIES_ENRICHMENT.md, "How the job behaves"). Such a
   // sentinel is listed here while its PR is open, and removed once the next
   // enrichment run has published the row; every other sentinel is gated hard.
-  const PENDING_SENTINELS = new Set(['Dead', 'Unknown deciduous', 'Unknown conifer', 'Unknown evergreen'])
+  const PENDING_SENTINELS = new Set<string>()
   test('tree_enrichment holds one authored row per species sentinel', async () => {
     await withDuckDB(async (conn) => {
       const literals = SPECIES_SENTINELS.map((s) => `'${s.species.replace(/'/g, "''")}'`).join(', ')
