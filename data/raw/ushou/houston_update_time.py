@@ -3,40 +3,52 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Houston's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Houston's street-tree inventory.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+The layer is served from an on-prem ArcGIS Server that publishes no
+`editingInfo`, its schema has no edit-date column for `field_max`, and the
+City's Hub site publishes no DCAT feed for `hub_last_modified`.  What it does
+carry is the stamp the City's publishing script appends to the layer
+description, "This layer was last updated: 2022-07-22 13:44:30.782122.",
+which read 2022-07-22 when the city was wired (the survey itself says "Last
+updated May 2019").  That stamp is layer-specific, unlike the map service's
+"Published on" item stamp, which moves whenever any of the service's eighteen
+layers (parcels among them) is republished.
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
-
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+A description without the stamp raises: the publisher changed how it reports
+the layer, and degrading to "no new data" would freeze the city silently.
 """
 
+import re
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.platforms.arcgis import FeatureLayer, layer_metadata
+from shared.ingest import emit_freshness
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+LAYER = FeatureLayer(
+    "https://geohwp.houstontx.gov/arcgis/rest/services/"
+    "03_BaseData_External/Land_Base/FeatureServer/0"
+)
+
+LAST_UPDATED = re.compile(
+    r"This layer was last updated:\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
+)
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Houston's published-through timestamp")
+    description = layer_metadata(LAYER).get("description") or ""
+    match = LAST_UPDATED.search(description)
+    if match is None:
+        raise RuntimeError(
+            f"Houston Trees layer description no longer carries its "
+            f"'last updated' stamp: {LAYER.base}"
+        )
+    return datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S").replace(
+        tzinfo=timezone.utc
+    )
 
 
 if __name__ == "__main__":
