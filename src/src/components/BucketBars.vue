@@ -1,5 +1,5 @@
 <template>
-  <div class="bucket-bars">
+  <div class="bucket-bars" :class="{ 'dash-refreshing': loading && loaded }">
     <div v-if="loading && !loaded" class="dash-state">Counting&hellip;</div>
     <div v-else-if="error" class="dash-state">This breakdown could not be loaded.</div>
     <div v-else-if="!bars.length" class="dash-state">{{ emptyMessage }}</div>

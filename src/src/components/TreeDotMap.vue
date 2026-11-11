@@ -2,7 +2,7 @@
   <div
     ref="wrapperRef"
     class="tree-dot-map"
-    :class="{ 'tree-dot-map--pickable': pickable && hover }"
+    :class="{ 'tree-dot-map--pickable': pickable && hover, 'dash-refreshing': loading && drawn }"
     @mousemove="onMove"
     @mouseleave="hover = null"
     @click="onClick"

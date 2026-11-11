@@ -1,5 +1,5 @@
 <template>
-  <div class="source-split">
+  <div class="source-split" :class="{ 'dash-refreshing': loading && loaded }">
     <div v-if="loading && !loaded" class="dash-state">Counting&hellip;</div>
     <div v-else-if="!sources.length" class="dash-state">No source recorded for these trees.</div>
     <template v-else>

@@ -1,5 +1,5 @@
 <template>
-  <div class="rank-list">
+  <div class="rank-list" :class="{ 'dash-refreshing': loading && entries.length > 0 }">
     <div v-if="loading && !entries.length" class="dash-state">Ranking species&hellip;</div>
     <div v-else-if="!entries.length" class="dash-state">No identified species in this view.</div>
     <template v-else>

@@ -47,7 +47,7 @@
       </div>
 
       <div class="dash-span-side summary-side">
-        <div class="dash-stats">
+        <div class="dash-stats" :class="{ 'dash-refreshing': tilesRefreshing }">
           <div v-for="tile in statTiles" :key="tile.id" class="dash-stat" :title="tile.title">
             <span class="dash-stat-label">{{ tile.label }}</span>
             <span class="dash-stat-value" :class="{ 'dash-stat-value--pending': tile.pending }">{{ tile.value }}</span>
@@ -72,7 +72,12 @@
             <h3>Concentration</h3>
             <span class="dash-card-sub">The largest species and genus, as shares of identified trees</span>
           </div>
-          <DiversityRule :species="topSpecies" :genus="topGenus" :family="topFamily" />
+          <DiversityRule
+            :class="{ 'dash-refreshing': tilesRefreshing }"
+            :species="topSpecies"
+            :genus="topGenus"
+            :family="topFamily"
+          />
         </div>
       </div>
     </div>
@@ -315,6 +320,14 @@ const biomeFitRows = kpiRows('local-native-share', () => Boolean(cityFilter.valu
 const canopyRows = kpiRows('canopy-total')
 const topGenusRows = kpiRows('top-genus')
 const topFamilyRows = kpiRows('top-family')
+// The tiles hold their last numbers while a filter change is fetched.
+const tilesRefreshing = computed(
+  () =>
+    totalTrees.value != null &&
+    [totalTreesRows, identifiedRows, uniqueSpeciesRows, biomeFitRows, canopyRows, topGenusRows, speciesList].some(
+      (rows) => rows.loading.value,
+    ),
+)
 
 const first = (rows: { value: Array<Record<string, unknown>> }, field: string) => rowNumber(rows.value[0]?.[field])
 

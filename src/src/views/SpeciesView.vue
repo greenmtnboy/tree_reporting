@@ -76,7 +76,7 @@
           </div>
         </div>
         <div class="dash-span-side species-side">
-          <div class="dash-stats">
+          <div class="dash-stats" :class="{ 'dash-refreshing': tilesRefreshing }">
             <div v-for="tile in statTiles" :key="tile.id" class="dash-stat" :title="tile.title">
               <span class="dash-stat-label">{{ tile.label }}</span>
               <span class="dash-stat-value" :class="{ 'dash-stat-value--pending': tile.pending }">{{ tile.value }}</span>
@@ -87,7 +87,7 @@
       </div>
 
       <template v-else>
-        <div class="dash-stats">
+        <div class="dash-stats" :class="{ 'dash-refreshing': tilesRefreshing }">
           <div v-for="tile in statTiles" :key="tile.id" class="dash-stat" :title="tile.title">
             <span class="dash-stat-label">{{ tile.label }}</span>
             <span class="dash-stat-value" :class="{ 'dash-stat-value--pending': tile.pending }">{{ tile.value }}</span>
@@ -463,6 +463,12 @@ function kpiRows(id: string) {
 const totalTreesRows = kpiRows('sp-total-trees')
 const cityCountRows = kpiRows('sp-city-count')
 const canopyRows = kpiRows('sp-canopy-total')
+// The tiles hold their last numbers while a filter change is fetched.
+const tilesRefreshing = computed(
+  () =>
+    totalTrees.value != null &&
+    [totalTreesRows, cityCountRows, canopyRows, ranking].some((rows) => rows.loading.value),
+)
 
 const totalTrees = computed(() => rowNumber(totalTreesRows.rows.value[0]?.total_trees))
 const cityCount = computed(() => rowNumber(cityCountRows.rows.value[0]?.city_count))
