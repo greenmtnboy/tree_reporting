@@ -3,26 +3,19 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Austin's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Austin's tree inventory.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+Reads `rowsUpdatedAt` off the Tree Inventory's (`wrik-xasw`) view metadata --
+one small JSON response -- so a refresh only re-downloads the 62k rows when
+the city has actually republished them.  The inventory is a March 2020
+compilation and its rows have not moved since 2020-03-13, so in practice this
+keeps Austin's municipal partition out of every run until the city replaces
+it.
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
-
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+`rows_updated_at` raises rather than degrading when the field is absent: that
+is the portal changing its metadata shape, not the portal being down, and
+`emit_freshness` must not turn it into "no new data".  A genuine outage is
+caught by `get_json_with_retry` inside it and does degrade to the epoch.
 """
 
 import sys
@@ -30,13 +23,14 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.ingest import emit_freshness
+from shared.platforms.socrata import SocrataDataset, rows_updated_at
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+DATASET = SocrataDataset("data.austintexas.gov", "wrik-xasw")
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Austin's published-through timestamp")
+    return rows_updated_at(DATASET)
 
 
 if __name__ == "__main__":
