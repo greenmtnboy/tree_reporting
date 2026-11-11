@@ -42,7 +42,8 @@ root partial datasource nlams_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'NLAMS' and nlams_source = 'OSM_NLAMS'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/nlams_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/nlams_osm_staging.parquet`
+where (raw_latitude >= 52.25 and raw_latitude < 52.45 and raw_longitude >= 4.7 and raw_longitude < 5.1);
 
 root partial datasource amsterdam_raw_tree_info extends tree_partition (
     data_source: nlams_source,

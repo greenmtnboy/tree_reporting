@@ -57,7 +57,14 @@ root partial datasource cator_osm_tree_info extends tree_partition (
     data_source: cator_source,
 )
 complete where city = 'CATOR' and cator_source = 'OSM_CATOR'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cator_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cator_osm_staging.parquet`
+where (raw_latitude >= 43.55 and raw_latitude < 43.62 and raw_longitude >= -79.55 and raw_longitude < -79.1)
+    or (raw_latitude >= 43.62 and raw_latitude < 43.64 and raw_longitude >= -79.575 and raw_longitude < -79.1)
+    or (raw_latitude >= 43.64 and raw_latitude < 43.68 and raw_longitude >= -79.6 and raw_longitude < -79.1)
+    or (raw_latitude >= 43.68 and raw_latitude < 43.7 and raw_longitude >= -79.607 and raw_longitude < -79.1)
+    or (raw_latitude >= 43.7 and raw_latitude < 43.72 and raw_longitude >= -79.617 and raw_longitude < -79.1)
+    or (raw_latitude >= 43.72 and raw_latitude < 43.74 and raw_longitude >= -79.625 and raw_longitude < -79.1)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.9 and raw_longitude >= -79.64 and raw_longitude < -79.1);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

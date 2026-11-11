@@ -48,7 +48,8 @@ root partial datasource grmlo_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'GRMLO' and grmlo_source = 'OSM_GRMLO'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grmlo_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grmlo_osm_staging.parquet`
+where (raw_latitude >= 36.55 and raw_latitude < 36.9 and raw_longitude >= 24.15 and raw_longitude < 24.65);
 
 # Approved community submissions for this city. The shared ingest script
 # emits every city's rows; the `where` clause narrows it to GRMLO and the

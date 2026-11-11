@@ -215,7 +215,8 @@ root partial datasource usbos_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'USBOS' and usbos_source = 'OSM_USBOS'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbos_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbos_osm_staging.parquet`
+where (raw_latitude >= 42.15 and raw_latitude < 42.55 and raw_longitude >= -71.25 and raw_longitude < -70.85);
 
 # --- Cross-source dedup and attribute merge --------------------------------
 #

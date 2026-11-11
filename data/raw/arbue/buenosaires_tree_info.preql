@@ -42,7 +42,8 @@ root partial datasource arbue_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'ARBUE' and arbue_source = 'OSM_ARBUE'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/arbue_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/arbue_osm_staging.parquet`
+where (raw_latitude >= -34.8 and raw_latitude < -34.45 and raw_longitude >= -58.55 and raw_longitude < -58.3);
 
 root partial datasource buenosaires_raw_tree_info extends tree_partition (
     data_source: arbue_source,

@@ -57,7 +57,8 @@ root partial datasource cabur_osm_tree_info extends tree_partition (
     data_source: cabur_source,
 )
 complete where city = 'CABUR' and cabur_source = 'OSM_CABUR'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cabur_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cabur_osm_staging.parquet`
+where (raw_latitude >= 43.25 and raw_latitude < 43.475 and raw_longitude >= -80.0 and raw_longitude < -79.68);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

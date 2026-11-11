@@ -57,7 +57,8 @@ root partial datasource canwe_osm_tree_info extends tree_partition (
     data_source: canwe_source,
 )
 complete where city = 'CANWE' and canwe_source = 'OSM_CANWE'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/canwe_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/canwe_osm_staging.parquet`
+where (raw_latitude >= 49.16 and raw_latitude < 49.26 and raw_longitude >= -122.99 and raw_longitude < -122.85);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

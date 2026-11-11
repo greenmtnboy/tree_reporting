@@ -42,7 +42,18 @@ root partial datasource uswas_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'USWAS' and uswas_source = 'OSM_USWAS'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/uswas_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/uswas_osm_staging.parquet`
+where (raw_latitude >= 38.78 and raw_latitude < 38.8 and raw_longitude >= -77.04 and raw_longitude < -76.88)
+    or (raw_latitude >= 38.8 and raw_latitude < 38.82 and raw_longitude >= -77.039 and raw_longitude < -76.88)
+    or (raw_latitude >= 38.82 and raw_latitude < 38.84 and raw_longitude >= -77.043 and raw_longitude < -76.88)
+    or (raw_latitude >= 38.84 and raw_latitude < 38.86 and raw_longitude >= -77.031 and raw_longitude < -76.88)
+    or (raw_latitude >= 38.86 and raw_latitude < 38.875 and raw_longitude >= -77.052 and raw_longitude < -76.88)
+    or (raw_latitude >= 38.875 and raw_latitude < 38.89 and raw_longitude >= -77.058 and raw_longitude < -76.88)
+    or (raw_latitude >= 38.89 and raw_latitude < 38.9 and raw_longitude >= -77.068 and raw_longitude < -76.88)
+    or (raw_latitude >= 38.9 and raw_latitude < 38.91 and raw_longitude >= -77.075 and raw_longitude < -76.88)
+    or (raw_latitude >= 38.91 and raw_latitude < 38.92 and raw_longitude >= -77.09 and raw_longitude < -76.88)
+    or (raw_latitude >= 38.92 and raw_latitude < 38.94 and raw_longitude >= -77.115 and raw_longitude < -76.88)
+    or (raw_latitude >= 38.94 and raw_latitude < 39.01 and raw_longitude >= -77.12 and raw_longitude < -76.88);
 
 root partial datasource washingtondc_raw_tree_info extends tree_partition (
     data_source: uswas_source,

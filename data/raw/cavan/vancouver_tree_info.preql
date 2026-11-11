@@ -42,7 +42,8 @@ root partial datasource cavan_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'CAVAN' and cavan_source = 'OSM_CAVAN'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cavan_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cavan_osm_staging.parquet`
+where (raw_latitude >= 49.1 and raw_latitude < 49.4 and raw_longitude >= -123.3 and raw_longitude < -122.99);
 
 root partial datasource vancouver_raw_tree_info extends tree_partition (
     data_source: cavan_source,

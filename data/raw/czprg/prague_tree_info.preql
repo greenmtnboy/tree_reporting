@@ -60,7 +60,8 @@ root partial datasource czprg_osm_tree_info extends tree_partition (
     data_source: czprg_source,
 )
 complete where city = 'CZPRG' and czprg_source = 'OSM_CZPRG'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/czprg_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/czprg_osm_staging.parquet`
+where (raw_latitude >= 49.93 and raw_latitude < 50.19 and raw_longitude >= 14.21 and raw_longitude < 14.72);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

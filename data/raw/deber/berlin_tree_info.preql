@@ -70,7 +70,8 @@ root partial datasource deber_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'DEBER' and deber_source = 'OSM_DEBER'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/deber_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/deber_osm_staging.parquet`
+where (raw_latitude >= 52.3 and raw_latitude < 52.7 and raw_longitude >= 13.05 and raw_longitude < 13.8);
 
 root partial datasource berlin_raw_tree_info extends tree_partition (
     data_source: deber_source,
