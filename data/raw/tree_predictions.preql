@@ -1,4 +1,5 @@
-# Tree-level predictions: one row per published tree, carrying what a model
+# Tree-level predictions: one row per published tree (imagery detections:
+# see below), carrying what a model
 # says about the tree rather than what a source recorded. Built by the
 # `refresh-predictions` [[cloud.job]] in ../trilogy.toml, daily, in the same
 # tick as the rest of the core and ordered after the jobs it consumes.
@@ -53,6 +54,20 @@
 # covariate for the curation stage to plot crown width against, and it does
 # not enter the prediction; see the fit script for why no sourced model has
 # a usable density term.
+#
+# ---------------------------------------------------------------------------
+# Imagery detections: only the ones with a surveyed height
+# ---------------------------------------------------------------------------
+#
+# A `PREDICTED_{code}` row is an unreviewed bulk detection: a crown and a
+# point, no diameter, no planting date, a genus at best. Every prediction
+# here comes out null for it, and its crown reaches the map from the rollup
+# (`crown_width_m`), not from this table. What this table does carry for one
+# is a LIDAR height -- the map reads `height_m` only through it -- so a
+# detection under a surveyed crown keeps its row and the rest are left out,
+# as they are of the density count. Boston's 2.4M detections (most of the
+# rollup's growth since the North Shore patch) took this build to its
+# worker's memory ceiling on 2026-11-10.
 #
 # Neither this file nor the files it imports is in the frontend's model
 # bundle, and none may be: see tree_allometry_inputs.preql.
@@ -234,9 +249,11 @@ auto density_lon_index <- floor(longitude * density_cos_lat / density_cell_lat_d
 # the join back from the per-cell count keeps its row; its density is null.
 auto density_cell <- coalesce(cast(density_lat_index as bigint) * 2000000 + cast(density_lon_index as bigint), -1);
 
+# Inventory trees only: an imagery detection is not counted (see the header).
+auto is_imagery_detection <- data_source like 'PREDICTED_%';
 auto local_tree_density_per_ha <- case
     when density_cell = -1 then null
-    else (count(tree_id) by density_cell) / density_cell_area_ha
+    else coalesce(count(tree_id ? not is_imagery_detection) by density_cell, 0) / density_cell_area_ha
 end;
 
 # --- Placeholder -------------------------------------------------------------
@@ -254,6 +271,10 @@ auto predicted_age_years <- case when dbh_cm is null then cast(null as float) el
 
 # --- The published parquet ------------------------------------------------
 #
+# `is_imagery_detection`: a detection publishes a row only for its LIDAR
+# height (see the header). `data_source` is stored because a target's `where`
+# reads only what its columns store or derive row by row.
+#
 # `where tree_id is not null`: the enrichment source is partial, so the
 # planner joins it with a FULL join, which keeps every tree (a species with
 # no enrichment row yet is still predicted, on the angiosperm fallback) but
@@ -263,6 +284,7 @@ auto predicted_age_years <- case when dbh_cm is null then cast(null as float) el
 datasource tree_predictions (
     tree_id,
     city,
+    data_source,
     ?genus,
     ?dbh_cm,
     ?age_years,
@@ -287,7 +309,7 @@ datasource tree_predictions (
 )
 grain (tree_id)
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_predictions_v{data_version}.parquet`
-where tree_id is not null
+where tree_id is not null and (not is_imagery_detection or height_m is not null)
 freshness by prediction_inputs_published_through
 # A city's rows vanishing from this build (its parquet unreadable or shed)
 # fails it; see `kept_by` in core.preql.  Dropping a city on purpose takes
