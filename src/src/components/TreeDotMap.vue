@@ -26,10 +26,11 @@
 
     <div v-if="drawn" class="tree-dot-map__legend">
       <span class="tree-dot-map__legend-title">{{ legendTitle }}</span>
-      <span class="tree-dot-map__ramp">
-        <span>fewer</span>
-        <span class="tree-dot-map__ramp-bar" :style="{ background: rampCss }" />
-        <span>{{ peakText }}</span>
+      <span v-for="step in classes" :key="step.label" class="tree-dot-map__class">
+        <span class="tree-dot-map__class-mark">
+          <span :style="{ width: `${step.size}px`, height: `${step.size}px`, background: step.color }" />
+        </span>
+        <span>{{ step.label }}</span>
       </span>
       <span v-if="hasGhost" class="tree-dot-map__ghost-key">
         <span class="tree-dot-map__ghost-swatch" />every tree in the city
@@ -61,10 +62,16 @@ import { formatCount } from '../lib/dashboardFormat'
  * basemap, so the street grid the trees themselves trace is the map.
  *
  * The query returns tree counts per map cell (about 110 m for one city, 1.1 km
- * across all of them; TREE_DOT_MAP_QUERY). Cells are gathered into screen bins
- * a few pixels wide and shaded by the square root of the count, so a single tree is a visible
- * mark and a dense block is a dark one; one device pixel at 45% alpha, which
- * this replaces, all but vanished on the light theme.
+ * across all of them; TREE_DOT_MAP_QUERY). Cells are gathered into squares of
+ * whole cells, a few pixels wide, and each square is one round dot whose size
+ * and shade both step with its count: a sparse street is a trail of small pale
+ * dots, a dense block a mass of large dark ones that touch.
+ *
+ * The squares are whole cells on the cells' own lattice, never screen pixels:
+ * snapping 110 m cells to a pixel grid puts two cells in some squares and one
+ * in their neighbours, which reads as density that is not there. The steps are
+ * a few classes cut at quantiles of the squares, so each shade covers a real
+ * share of the map and the legend can name its counts.
  *
  * With `ghostFilters` the same cells are also fetched under those (wider)
  * filters and drawn first in a flat grey, and the frame is fitted to them: a
@@ -188,7 +195,8 @@ function trimmedSpan(values: Float64Array, weights: Float64Array, n: number): [n
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const wrapperRef = ref<HTMLDivElement | null>(null)
 const drawn = ref(false)
-const peakText = ref('more')
+const classes = ref<Array<{ label: string; color: string; size: number }>>([])
+const legendTitle = ref('Trees per block')
 const scale = ref<{ px: number; label: string } | null>(null)
 const peak = ref<{ x: number; y: number; size: number; countText: string } | null>(null)
 const hover = ref<{ x: number; y: number; countText: string; place: string; lat: number; lng: number } | null>(null)
@@ -196,8 +204,8 @@ const hover = ref<{ x: number; y: number; countText: string; place: string; lat:
 // Light to dark on paper, dim to bright on the dark theme: more trees is
 // always the mark that stands further from the page.
 const RAMPS: Record<string, Array<[number, number, number]>> = {
-  light: [[176, 202, 158], [84, 122, 80], [24, 58, 38]],
-  dark: [[62, 88, 62], [150, 186, 132], [236, 246, 204]],
+  light: [[190, 211, 168], [136, 174, 118], [84, 136, 82], [40, 94, 56], [14, 48, 32]],
+  dark: [[58, 86, 62], [98, 138, 92], [148, 186, 126], [198, 226, 162], [242, 249, 212]],
 }
 const GHOST: Record<string, string> = { light: 'rgba(48, 59, 45, 0.11)', dark: 'rgba(227, 230, 216, 0.11)' }
 const GRID: Record<string, string> = { light: 'rgba(48, 59, 45, 0.09)', dark: 'rgba(227, 230, 216, 0.09)' }
@@ -212,12 +220,36 @@ function rampColor(theme: string, t: number): string {
   return `rgb(${Math.round(a[0] + (b[0] - a[0]) * f)}, ${Math.round(a[1] + (b[1] - a[1]) * f)}, ${Math.round(a[2] + (b[2] - a[2]) * f)})`
 }
 
-const rampCss = computed(() => {
-  const stops = RAMPS[resolvedTheme.value] ?? RAMPS.light
-  return `linear-gradient(90deg, ${stops.map((s) => `rgb(${s.join(',')})`).join(', ')})`
-})
+/** A round number near the value: a class edge a reader can hold. */
+const EDGE_LEADS = [1, 1.5, 2, 3, 4, 5, 7.5, 10]
+function roundEdge(value: number): number {
+  if (value <= 1) return 1
+  const power = 10 ** Math.floor(Math.log10(value))
+  const lead = value / power
+  const nearest = EDGE_LEADS.reduce((best, step) => (Math.abs(step - lead) < Math.abs(best - lead) ? step : best))
+  return Math.max(2, Math.round(nearest * power))
+}
 
-const legendTitle = computed(() => (activeCity.value ? 'Trees per ~110 m block' : 'Trees per ~1 km block'))
+/**
+ * Lower edges of the classes above the first, from quantiles of the occupied
+ * squares. Uneven on purpose: most squares hold few trees, and the top class
+ * is kept to the densest few percent so it marks places, not regions.
+ */
+const CLASS_QUANTILES = [0.4, 0.7, 0.88, 0.97]
+function classEdges(sorted: number[]): number[] {
+  const edges: number[] = []
+  for (const q of CLASS_QUANTILES) {
+    if (!sorted.length) break
+    const edge = roundEdge(sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))])
+    if (edge > 1 && edge > (edges[edges.length - 1] ?? 1) && edge <= sorted[sorted.length - 1]) edges.push(edge)
+  }
+  return edges
+}
+
+function distanceLabel(metres: number): string {
+  if (metres >= 950) return `${(metres / 1000).toFixed(metres >= 9500 ? 0 : 1).replace(/\.0$/, '')} km`
+  return `${Math.round(metres / 10) * 10} m`
+}
 
 const NICE_DEGREES = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 45]
 const NICE_METRES = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000]
@@ -229,12 +261,10 @@ function degreeLabel(value: number, positive: string, negative: string, step: nu
 
 // What the last frame drew, kept for hover and click.
 type Frame = {
-  bin: number
-  columns: number
+  keyAt: (x: number, y: number) => number
   bins: Map<number, number>
   toLat: (y: number) => number
   toLon: (x: number) => number
-  cellMetres: number
 }
 let frame: Frame | null = null
 
@@ -315,49 +345,90 @@ function render() {
   }
   ctx.setLineDash([])
 
-  // Screen bins: at least as wide as a cell, never under 2.5 px, so every
-  // occupied cell is a mark the eye can find.
-  const cellPx = cellDegrees * pxPerDegree
-  const bin = Math.max(2.5, Math.min(cellPx, 9))
-  const columns = Math.ceil(W / bin) + 1
+  // Squares of whole cells: the finest that is still 4 px tall on screen, so
+  // a dot has room to differ in size from its neighbour. That is one ~110 m
+  // cell on a large card and two or three on a small one. A cell is narrower
+  // on screen than it is tall away from the equator, so a square takes more of
+  // them across than down.
+  const MIN_PX = 4
+  const cellPxY = cellDegrees * pxPerDegree
+  const cellPxX = cellPxY * cosLat
+  const cellsDown = Math.max(1, Math.ceil(MIN_PX / cellPxY))
+  const cellsAcross = Math.max(1, Math.round((cellsDown * cellPxY) / cellPxX))
+  const squareW = cellsAcross * cellPxX
+  const squareH = cellsDown * cellPxY
+  const square = Math.min(squareW, squareH)
+  const KEY_SPAN = 1_000_000
+  const column = (lon: number) => Math.floor(Math.round(lon / cellDegrees) / cellsAcross)
+  const row = (lat: number) => Math.floor(Math.round(lat / cellDegrees) / cellsDown)
+  const keyOf = (lat: number, lon: number) => (row(lat) + KEY_SPAN / 2) * KEY_SPAN + column(lon) + KEY_SPAN / 2
+  // The middle of a square: its first cell's centre plus half the cells after it.
+  const centreX = (key: number) => toX(((key % KEY_SPAN) - KEY_SPAN / 2 + (cellsAcross - 1) / 2 / cellsAcross) * cellsAcross * cellDegrees)
+  const centreY = (key: number) => toY((Math.floor(key / KEY_SPAN) - KEY_SPAN / 2 + (cellsDown - 1) / 2 / cellsDown) * cellsDown * cellDegrees)
+
   const gather = (source: Cells) => {
     const bins = new Map<number, number>()
     for (let i = 0; i < source.n; i += 1) {
-      const x = toX(source.lon[i])
-      const y = toY(source.lat[i])
-      if (x < 0 || y < 0 || x >= W || y >= H) continue
-      const key = Math.floor(y / bin) * columns + Math.floor(x / bin)
+      const key = keyOf(source.lat[i], source.lon[i])
       bins.set(key, (bins.get(key) ?? 0) + source.count[i])
     }
     return bins
   }
-  const paint = (bins: Map<number, number>, colorOf: (count: number) => string, size: number) => {
-    const inset = (bin - size) / 2
-    for (const [key, count] of bins) {
-      ctx.fillStyle = colorOf(count)
-      const x = (key % columns) * bin + inset
-      const y = Math.floor(key / columns) * bin + inset
-      ctx.fillRect(x, y, size, size)
+  // One path per colour: a fill per dot is the slow way to draw ten thousand.
+  // `reach` is the dot's radius as a share of its square, applied to each axis:
+  // whole cells rarely make an exact square, and a round dot in an oblong one
+  // leaves stripes of paper between columns.
+  const paint = (keys: number[], color: string, reach: number) => {
+    const rx = Math.max(0.9, squareW * reach)
+    const ry = Math.max(0.9, squareH * reach)
+    const radius = Math.max(rx, ry)
+    ctx.fillStyle = color
+    ctx.beginPath()
+    for (const key of keys) {
+      const x = centreX(key)
+      const y = centreY(key)
+      if (x < -radius || y < -radius || x > W + radius || y > H + radius) continue
+      ctx.moveTo(x + rx, y)
+      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2)
     }
+    ctx.fill()
   }
 
   if (ghostCells && ghostCells.n > 0) {
-    const ghostColor = GHOST[theme] ?? GHOST.light
-    paint(gather(ghostCells), () => ghostColor, bin)
+    paint([...gather(ghostCells).keys()], GHOST[theme] ?? GHOST.light, 0.42)
   }
 
   const bins = gather(cells)
-  // Shade against the 99th percentile bin, not the single busiest one: one
-  // nursery block otherwise leaves the rest of the city at the pale end.
   const counts = [...bins.values()].sort((a, b) => a - b)
-  const top = counts.length ? counts[Math.min(counts.length - 1, Math.floor(counts.length * 0.99))] : 1
-  // Square root, not log: a log scale puts every block with a dozen trees in
-  // the dark half and a city mapped wall to wall reads as one slab.
-  const ceiling = Math.max(top, 2)
-  paint(bins, (count) => rampColor(theme, Math.sqrt(count / ceiling)), Math.max(1.6, bin - 0.6))
+  const edges = classEdges(counts)
+  const steps = edges.length + 1
+  // Smallest dots leave paper between them; the largest overlap their
+  // neighbours, so the densest ground closes up into a solid mass.
+  const reachOf = (step: number) => (steps === 1 ? 0.42 : 0.26 + (0.32 * step) / (steps - 1))
+  const colorOf = (step: number) => rampColor(theme, steps === 1 ? 0.6 : step / (steps - 1))
+  const byStep: number[][] = Array.from({ length: steps }, () => [])
+  for (const [key, count] of bins) {
+    let step = 0
+    while (step < edges.length && count >= edges[step]) step += 1
+    byStep[step].push(key)
+  }
+  // Palest first, so a dense dot is never hidden under a sparse neighbour.
+  byStep.forEach((keys, step) => paint(keys, colorOf(step), reachOf(step)))
 
   drawn.value = cells.n > 0 || Boolean(ghostCells?.n)
-  peakText.value = top >= 2 ? `${formatCount(top)}+` : 'more'
+  classes.value = counts.length
+    ? byStep.map((_, step) => {
+        const low = step === 0 ? 1 : edges[step - 1]
+        const high = step < edges.length ? edges[step] - 1 : null
+        return {
+          label: high == null ? `${formatCount(low)}+` : high === low ? formatCount(low) : `${formatCount(low)}–${formatCount(high)}`,
+          color: colorOf(step),
+          // Drawn larger than on the map, in the same proportions, to be readable.
+          size: Math.round(22 * reachOf(step)),
+        }
+      })
+    : []
+  legendTitle.value = `Trees per ${distanceLabel(cellsDown * cellDegrees * 111_320)} square`
 
   if (props.markPeak && counts.length > 3) {
     let peakKey = -1
@@ -367,9 +438,9 @@ function render() {
     }
     if (peakKey >= 0) {
       peak.value = {
-        x: (peakKey % columns) * bin + bin / 2,
-        y: Math.floor(peakKey / columns) * bin + bin / 2,
-        size: Math.max(18, bin * 3),
+        x: centreX(peakKey),
+        y: centreY(peakKey),
+        size: Math.max(18, square * 3),
         countText: `${formatCount(peakCount)} trees`,
       }
     }
@@ -383,7 +454,7 @@ function render() {
     label: length >= 1000 ? `${length / 1000} km` : `${length} m`,
   }
 
-  frame = { bin, columns, bins, toLat, toLon, cellMetres: (bin / pxPerDegree) * 111_320 }
+  frame = { keyAt: (x, y) => keyOf(toLat(y), toLon(x)), bins, toLat, toLon }
 }
 
 // --- Hover and click -----------------------------------------------------------
@@ -393,8 +464,7 @@ function onMove(event: MouseEvent) {
   const rect = wrapperRef.value.getBoundingClientRect()
   const x = event.clientX - rect.left
   const y = event.clientY - rect.top
-  const key = Math.floor(y / frame.bin) * frame.columns + Math.floor(x / frame.bin)
-  const count = frame.bins.get(key)
+  const count = frame.bins.get(frame.keyAt(x, y))
   if (!count) {
     hover.value = null
     return
@@ -509,17 +579,24 @@ onBeforeUnmount(() => {
   color: var(--color-moss);
 }
 
-.tree-dot-map__ramp,
+.tree-dot-map__class,
 .tree-dot-map__ghost-key {
   display: flex;
   align-items: center;
   gap: 6px;
+  font-variant-numeric: tabular-nums;
 }
 
-.tree-dot-map__ramp-bar {
-  width: 74px;
-  height: 7px;
-  border-radius: 2px;
+.tree-dot-map__class-mark {
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-dot-map__class-mark > span {
+  border-radius: 50%;
 }
 
 .tree-dot-map__ghost-swatch {

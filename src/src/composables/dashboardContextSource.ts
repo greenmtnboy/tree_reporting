@@ -385,8 +385,11 @@ def is_active_ecoregion(x) -> x = active_city_ecoregion;
 def is_active_biome(x) -> x = active_city_biome;
 def is_active_realm(x) -> x = active_city_realm;
 
-# One bucket per species, its best match against the active city.
+# One bucket per species, its best match against the active city. A species
+# with no recorded range (and every unidentified tree) is Unknown, not foreign:
+# falling through to the last bucket counted missing data as the worst case.
 property species.native_locality_bucket <- CASE
+    WHEN native_ecoregions is null or len(native_ecoregions) = 0 THEN 'Unknown'
     WHEN len(array_filter(native_ecoregions, @is_active_ecoregion)) > 0 THEN 'Native'
     WHEN len(array_filter(native_biomes, @is_active_biome)) > 0 THEN 'Same biome, non-native'
     WHEN len(array_filter(native_realms, @is_active_realm)) > 0 THEN 'Native Region, Different Biome'

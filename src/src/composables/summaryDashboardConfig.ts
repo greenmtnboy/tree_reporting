@@ -422,6 +422,8 @@ ORDER BY crown_class ASC;`,
       labels: NATIVENESS_LABELS,
       colors: NATIVENESS_COLORS,
       filterField: 'native_locality_bucket',
+      // A species with no recorded range is Unknown, reported as coverage.
+      hideWhenThin: true,
     },
     requiresCitySelection: true,
   },

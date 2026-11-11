@@ -284,13 +284,13 @@ export type FixtureCityContext = {
  * bucket is the best match among them, in the CASE's order.
  *
  * An unenriched tree is not an absent row: it joins to nulls and the CASE runs
- * anyway, so each bucket returns whatever its null path yields. That is why
- * `Unknown` lands in "Non-Native, Different Biome" rather than dropping out —
- * verified against the generated SQL, not assumed.
+ * anyway, so each bucket returns whatever its null path yields. The CASE's
+ * first branch names that path: a species with no recorded range, enriched or
+ * not, is `Unknown`, which the page reports as coverage rather than as a bar.
  */
 export function nativeLocalityBucket(tree: FixtureTree, context: FixtureCityContext): string | null {
   const species = SPECIES_BY_NAME.get(tree.species)
-  if (!species) return 'Non-Native, Different Biome'
+  if (!species || !species.native_ecoregions?.length) return 'Unknown'
   const ecoregions = (species.native_ecoregions ?? [])
     .map((id) => ECOREGION_BY_ID.get(id))
     .filter(Boolean) as FixtureEcoregion[]
