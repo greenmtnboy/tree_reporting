@@ -1,138 +1,199 @@
 <template>
-  <div class="summary-page">
-    <div class="summary-header">
-      <div class="summary-title-row">
+  <div class="dash-page summary-page">
+    <header class="dash-header">
+      <div class="dash-title-row">
         <div>
-          <p class="summary-eyebrow">Urban Forest Dashboard</p>
           <h1>{{ summaryTitle }}</h1>
-          <span class="sketch-rule sketch-rule--title" aria-hidden="true"></span>
+          <span class="dash-rule dash-rule--title" aria-hidden="true"></span>
         </div>
-        <div v-if="cityContextPills.length" class="city-context-pills">
-          <span v-for="pill in cityContextPills" :key="pill.label" class="city-context-pill">
-            <span class="city-context-pill-label">{{ pill.label }}</span>
-            <span class="city-context-pill-value">{{ pill.value }}</span>
+        <div v-if="cityContextPills.length" class="dash-pills">
+          <span v-for="pill in cityContextPills" :key="pill.label" class="dash-pill">
+            <span class="dash-pill-label">{{ pill.label }}</span>
+            <span class="dash-pill-value">{{ pill.value }}</span>
           </span>
         </div>
       </div>
-      <p class="summary-intro">
-        Inventory concentration, ecological fit, resilience, and value for the active city.
+      <p v-if="lede" class="dash-lede">
+        <strong>{{ lede.total }}</strong> trees mapped<template v-if="lede.identified">,
+        <strong>{{ lede.identified }}</strong> of them identified to species ({{ lede.identifiedShare }})</template>.
+        <template v-if="lede.mostlyUnidentified">
+          The rest were mapped without a species, most of them from aerial imagery. Species figures on this page count
+          identified trees only.
+        </template>
       </p>
-      <div v-if="activeFilters.length" class="active-filters">
-        <span v-for="filter in activeFilters" :key="filter.key" class="filter-chip">
-          <span class="filter-chip-label">{{ filter.label }}</span>
-          <button class="filter-chip-clear" :title="`Remove ${filter.label}`" @click="clearFilter(filter.key)">
-            x
-          </button>
+      <div v-if="activeFilters.length" class="dash-filters">
+        <span v-for="filter in activeFilters" :key="filter.key" class="dash-chip">
+          <span>{{ filter.label }}</span>
+          <button class="dash-chip-clear" :title="`Remove ${filter.label}`" @click="clearFilter(filter.key)">x</button>
         </span>
-        <button class="clear-all-btn" @click="clearAllFilters">Clear all</button>
+        <button class="dash-link-btn" @click="clearAllFilters">Clear all</button>
       </div>
-    </div>
+    </header>
 
-    <div class="kpi-row">
-      <div
-        v-for="kpi in visibleKpiCharts"
-        :key="kpi.id"
-        class="chart-card chart-card--kpi chart-card--metric"
-      >
-        <div class="metric-label">{{ kpi.label }}</div>
-        <EmbeddedDashboardChart
-          :item-id="kpi.id"
-          v-bind="sharedChartProps"
-          :dashboard-group="embeddedDashboardGroup"
-          :filters="filtersForChart(kpi.id)"
-          :title="kpi.title"
-          :query="kpi.query"
-          :chart-config="{ chartType: 'headline', xField: kpi.xField, showTitle: false }"
-          :allow-cross-filter="false"
+    <!-- The map, with the page's headline numbers beside it. -->
+    <div class="dash-grid summary-hero">
+      <div class="dash-card dash-card--flush dash-span-hero summary-map-card">
+        <div class="dash-card-header summary-map-header">
+          <h3>Where the trees are</h3>
+        </div>
+        <TreeDotMap
+          item-id="tree-dot-map"
+          v-bind="sharedProps"
+          :filters="filtersForChart('tree-dot-map')"
+          :priority="100"
+          :pickable="Boolean(cityFilter)"
+          @pick="openMapAt"
         />
       </div>
+
+      <div class="dash-span-side summary-side">
+        <div class="dash-stats">
+          <div v-for="tile in statTiles" :key="tile.id" class="dash-stat" :title="tile.title">
+            <span class="dash-stat-label">{{ tile.label }}</span>
+            <span class="dash-stat-value" :class="{ 'dash-stat-value--pending': tile.pending }">{{ tile.value }}</span>
+            <span class="dash-stat-note">{{ tile.note }}</span>
+          </div>
+        </div>
+
+        <div class="dash-card">
+          <div class="dash-card-header">
+            <h3>{{ chartById('tree-sources').title }}</h3>
+          </div>
+          <SourceSplit
+            item-id="tree-sources"
+            v-bind="sharedProps"
+            :filters="filtersForChart('tree-sources')"
+            :query="chartById('tree-sources').query"
+          />
+        </div>
+
+        <div class="dash-card">
+          <div class="dash-card-header">
+            <h3>Concentration</h3>
+            <span class="dash-card-sub">The largest species and genus, as shares of identified trees</span>
+          </div>
+          <DiversityRule :species="topSpecies" :genus="topGenus" :family="topFamily" />
+        </div>
+      </div>
     </div>
 
-    <div class="tree-map-card">
-      <TreeDotMap
-        item-id="tree-dot-map"
-        v-bind="sharedChartProps"
-        :dashboard-group="embeddedDashboardGroup"
-        :filters="filtersForChart('tree-dot-map')"
-        :priority="100"
-      />
-    </div>
+    <section class="dash-section">
+      <div class="dash-section-header">
+        <h2>Species</h2>
+        <p>What the identified trees are, and how concentrated the mix is.</p>
+      </div>
+      <div class="dash-grid">
+        <div class="dash-card dash-span-l summary-species-card">
+          <div class="dash-card-header">
+            <h3>{{ chartById('top-tree-spotlight').title }}</h3>
+            <span class="dash-card-sub">{{ speciesListSubtitle }}</span>
+          </div>
+          <SpeciesRankList
+            :rows="speciesList.rows.value"
+            :loading="speciesList.loading.value"
+            :total-trees="identifiedTrees"
+            :canopy-by-species="canopyBySpecies"
+            :total-canopy="identifiedCanopy"
+            :selected="selectedSpecies"
+            @select="selectedSpecies = $event"
+          />
+        </div>
 
-    <section
-      v-for="section in visibleSummarySections"
-      :key="section.id"
-      class="summary-section"
-    >
-      <div class="summary-section-header">
+        <div class="dash-card dash-span-l summary-species-card summary-profile-card">
+          <SpeciesProfile v-if="selectedRow" :row="selectedRow" :count-line="selectedCountLine" compact>
+            <template #actions>
+              <router-link class="dash-link-btn" :to="speciesExplorerRoute">Open in the species explorer</router-link>
+              <button class="dash-link-btn" @click="filterToSelectedSpecies">
+                {{ speciesFilterActive ? 'Stop filtering to this species' : 'Filter this page to it' }}
+              </button>
+            </template>
+          </SpeciesProfile>
+          <div v-else class="dash-state">
+            {{ speciesList.loading.value ? 'Loading species…' : 'No identified species in this view.' }}
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section v-for="section in visibleSections" :key="section.id" class="dash-section">
+      <div class="dash-section-header">
         <h2>{{ section.title }}</h2>
         <p>{{ section.subtitle }}</p>
       </div>
 
-      <div class="chart-row">
+      <div class="dash-grid">
         <div
           v-for="card in section.cards"
+          v-show="!isHidden(card.id)"
           :key="card.id"
           :class="[
-            'chart-card',
-            card.width === 'wide' ? 'chart-card--wide' : null,
-            chartById(card.id).renderMode === 'carousel' ? 'chart-card--carousel' : null,
-            emptyChartIds.has(card.id) ? 'chart-card--empty' : null,
+            'dash-card',
+            `dash-span-${card.span}`,
+            chartById(card.id).kind === 'chart' ? 'dash-card--chart' : null,
           ]"
         >
-          <div class="chart-card-header">
-            <h3>{{ emptyChartIds.has(card.id) ? 'No planting data for this city' : chartById(card.id).title }}</h3>
-            <span v-if="!emptyChartIds.has(card.id) && chartById(card.id).subtitle" class="chart-sub">{{ chartById(card.id).subtitle }}</span>
+          <div class="dash-card-header">
+            <h3>{{ chartById(card.id).title }}</h3>
+            <span v-if="chartById(card.id).subtitle" class="dash-card-sub">{{ chartById(card.id).subtitle }}</span>
           </div>
-          <SpeciesCarousel
-            v-if="chartById(card.id).renderMode === 'carousel'"
+
+          <BucketBars
+            v-if="chartById(card.id).kind === 'buckets'"
             :item-id="card.id"
-            v-bind="sharedChartProps"
-            :dashboard-group="embeddedDashboardGroup"
+            v-bind="sharedProps"
             :filters="filtersForChart(card.id)"
             :query="chartById(card.id).query"
+            :label-field="chartById(card.id).buckets!.labelField"
+            :order="chartById(card.id).buckets!.order"
+            :labels="chartById(card.id).buckets!.labels"
+            :colors="chartById(card.id).buckets!.colors"
+            :unknown="chartById(card.id).buckets!.unknown"
+            :denominator="chartById(card.id).buckets!.hideWhenThin ? identifiedTrees : undefined"
+            denominator-label="identified trees"
+            :min-buckets="chartById(card.id).buckets!.hideWhenThin ? 2 : 1"
+            :clickable="Boolean(chartById(card.id).buckets!.filterField)"
+            :selected="selectedBuckets(card.id)"
+            @select="toggleBucket(card.id, $event)"
+            @coverage="coverage[card.id] = $event"
           />
-          <SummaryMarkdownCard
-            v-else-if="chartById(card.id).renderMode === 'markdown'"
-            :item-id="card.id"
-            v-bind="sharedChartProps"
-            :dashboard-group="embeddedDashboardGroup"
-            :filters="filtersForChart(card.id)"
-            :query="chartById(card.id).query"
-          />
-          <EmbeddedDashboardChart
-            v-else
-            v-show="!emptyChartIds.has(card.id)"
-            :item-id="card.id"
-            v-bind="sharedChartProps"
-            :dashboard-group="embeddedDashboardGroup"
-            :filters="filtersForChart(card.id)"
-            :title="chartById(card.id).title"
-            :query="chartById(card.id).query"
-            :chart-config="chartById(card.id).chartConfig"
-            :selection-filters="selectionFiltersForChart(card.id)"
-            :allow-cross-filter="chartById(card.id).allowCrossFilter ?? true"
-            @dimension-click="handleChartClick"
-            @background-click="clearChartSelection(card.id)"
-            @results-empty="emptyChartIds.add(card.id)"
-            @results-present="emptyChartIds.delete(card.id)"
-          />
+          <template v-else>
+            <div v-if="emptyChartIds.has(card.id)" class="dash-state">No planting dates recorded for this view.</div>
+            <EmbeddedDashboardChart
+              v-show="!emptyChartIds.has(card.id)"
+              :item-id="card.id"
+              v-bind="sharedChartProps"
+              :dashboard-group="embeddedDashboardGroup"
+              :filters="filtersForChart(card.id)"
+              :title="chartById(card.id).title"
+              :query="chartById(card.id).query"
+              :chart-config="chartById(card.id).chartConfig"
+              :allow-cross-filter="chartById(card.id).allowCrossFilter ?? true"
+              @results-empty="emptyChartIds.add(card.id)"
+              @results-present="emptyChartIds.delete(card.id)"
+            />
+          </template>
         </div>
       </div>
+
+      <p v-if="hiddenTitles(section).length" class="dash-footnote">
+        Not shown, because too few species have the data yet: {{ hiddenTitles(section).join(', ') }}.
+      </p>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, reactive } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  useEmbeddedDashboardGroup,
-  type DashboardImport,
-  type DimensionClick,
-} from '@trilogy-data/trilogy-studio-components/dashboard'
+import { useEmbeddedDashboardGroup, type DashboardImport } from '@trilogy-data/trilogy-studio-components/dashboard'
+import '../assets/dashboard.css'
+import BucketBars from '../components/BucketBars.vue'
+import DiversityRule from '../components/DiversityRule.vue'
 import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
-import SummaryMarkdownCard from '../components/SummaryMarkdownCard.vue'
-import SpeciesCarousel from '../components/SpeciesCarousel.vue'
+import SourceSplit from '../components/SourceSplit.vue'
+import SpeciesProfile from '../components/SpeciesProfile.vue'
+import SpeciesRankList from '../components/SpeciesRankList.vue'
 import TreeDotMap from '../components/TreeDotMap.vue'
 import { useMapData, type CityCode } from '../composables/useMapData'
 import {
@@ -140,23 +201,30 @@ import {
   getCityBiome,
   getCityUsdaZone,
 } from '../composables/dashboardContextSource'
+import { rowNumber, rowText, useDashboardRows } from '../composables/useDashboardRows'
+import { useFlyTo } from '../composables/useFlyTo'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
 import {
+  LOW_COVERAGE_THRESHOLD,
   SUMMARY_CHARTS_BY_ID,
   SUMMARY_DASHBOARD_IMPORTS,
-  SUMMARY_KPI_CHARTS,
+  SUMMARY_KPIS_BY_ID,
   SUMMARY_SECTIONS,
   getSummaryBaseFilters,
   readSummaryRouteCity,
+  type SummaryDashboardSection,
 } from '../composables/summaryDashboardConfig'
-import { filterSummaryDimensionClick, useSummaryFilters } from '../composables/useSummaryFilters'
+import { extractGenusFromSpecies } from '../composables/speciesDashboardConfig'
+import { useSummaryFilters, type SummaryFilterField } from '../composables/useSummaryFilters'
 import { useMapLifecycle } from '../composables/useMapLifecycle'
+import { formatArea, formatCompact, formatCount, formatShare, isGenusOnly } from '../lib/dashboardFormat'
 import cityConfig from '../cityConfig.json'
 
 const route = useRoute()
 const router = useRouter()
 const { selectedCity, displayCity } = useMapData()
 const { activateCity } = useMapLifecycle()
+const { flyTo } = useFlyTo()
 const { initialize, connectionId, queryExecutionService, setDashboardContext } = useSummaryDashboardExecution()
 
 const embeddedDashboardGroup = useEmbeddedDashboardGroup({
@@ -167,15 +235,25 @@ const embeddedDashboardGroup = useEmbeddedDashboardGroup({
   // One resolver round trip for the whole page. The executor compiles a batch
   // of at most this many items per request, and each request re-hydrates the
   // full model bundle (~300 KB, 2-3 s); the default of ten split the page's
-  // eighteen charts into two serial requests, the second of which could not
-  // start until every query of the first had returned.
+  // charts into serial requests, each of which could not start until every
+  // query of the one before had returned.
   maxConcurrentQueries: 64,
 })
 
 const cityFilter = ref<CityCode | null>(null)
 const emptyChartIds = reactive(new Set<string>())
+const coverage = reactive<Record<string, number | null>>({})
 const dashboardContextParameters = computed(() => buildDashboardContextParameters(cityFilter.value))
 
+/** What a card the page draws itself takes; see useDashboardRows. */
+const sharedProps = computed(() => ({
+  connectionId,
+  dashboardGroup: embeddedDashboardGroup,
+  imports: SUMMARY_DASHBOARD_IMPORTS as DashboardImport[],
+  parameters: dashboardContextParameters.value,
+}))
+
+/** What an embedded Trilogy chart takes. */
 const sharedChartProps = computed(() => ({
   connectionId,
   queryExecutionService,
@@ -183,10 +261,7 @@ const sharedChartProps = computed(() => ({
   parameters: dashboardContextParameters.value,
 }))
 
-const {
-  crossFilters,
-  activeSummaryFilters,
-} = useSummaryFilters()
+const { crossFilters, activeSummaryFilters, selectionsByField, applyValuesForField, clearFields } = useSummaryFilters()
 
 const cityName = computed(() => {
   if (!cityFilter.value) {
@@ -196,9 +271,7 @@ const cityName = computed(() => {
   return cfg?.name ?? cityFilter.value
 })
 
-const summaryTitle = computed(() =>
-  cityFilter.value ? `${cityName.value} City Summary` : 'City Summary',
-)
+const summaryTitle = computed(() => (cityFilter.value ? `${cityName.value} City Summary` : 'All Cities Summary'))
 
 const baseFilters = computed(() => getSummaryBaseFilters(cityFilter.value))
 
@@ -212,21 +285,283 @@ const cityContextPills = computed(() => {
   ]
 })
 
-const visibleKpiCharts = computed(() =>
-  SUMMARY_KPI_CHARTS.filter((chart) => cityFilter.value || !chart.requiresCitySelection),
+function chartById(chartId: string) {
+  return SUMMARY_CHARTS_BY_ID[chartId]
+}
+
+function filtersForChart(chartId: string) {
+  void crossFilters.version.value
+  return crossFilters.getSqlFilterLikesFor(chartId, baseFilters.value)
+}
+
+// --- Headline numbers ----------------------------------------------------------
+
+function kpiRows(id: string, enabled: () => boolean = () => true) {
+  return useDashboardRows(
+    () => ({
+      ...sharedProps.value,
+      itemId: id,
+      query: SUMMARY_KPIS_BY_ID[id].query,
+      filters: filtersForChart(id),
+    }),
+    { title: SUMMARY_KPIS_BY_ID[id].title, enabled },
+  )
+}
+
+const totalTreesRows = kpiRows('total-trees')
+const identifiedRows = kpiRows('identified-trees')
+const uniqueSpeciesRows = kpiRows('unique-species')
+const biomeFitRows = kpiRows('local-native-share', () => Boolean(cityFilter.value))
+const canopyRows = kpiRows('canopy-total')
+const topGenusRows = kpiRows('top-genus')
+const topFamilyRows = kpiRows('top-family')
+
+const first = (rows: { value: Array<Record<string, unknown>> }, field: string) => rowNumber(rows.value[0]?.[field])
+
+const totalTrees = computed(() => first(totalTreesRows.rows, 'total_trees'))
+const identifiedTrees = computed(() => first(identifiedRows.rows, 'identified_trees'))
+const uniqueSpecies = computed(() => first(uniqueSpeciesRows.rows, 'unique_species'))
+const biomeFit = computed(() => first(biomeFitRows.rows, 'biome_fit_pct'))
+const canopyArea = computed(() => first(canopyRows.rows, 'canopy_area'))
+const sizedTrees = computed(() => first(canopyRows.rows, 'sized_trees'))
+
+const identifiedShare = computed(() =>
+  totalTrees.value && identifiedTrees.value != null ? identifiedTrees.value / totalTrees.value : null,
 )
 
-const visibleSummarySections = computed(() =>
-  SUMMARY_SECTIONS
-    .map((section) => ({
-      ...section,
-      cards: section.cards.filter((card) => {
-        const chart = chartById(card.id)
-        return cityFilter.value || !chart.requiresCitySelection
-      }),
-    }))
-    .filter((section) => section.cards.length > 0),
+const lede = computed(() => {
+  if (totalTrees.value == null) return null
+  const share = identifiedShare.value
+  return {
+    total: formatCount(totalTrees.value),
+    identified: share != null && share < 0.995 ? formatCount(identifiedTrees.value) : null,
+    identifiedShare: formatShare(share),
+    mostlyUnidentified: share != null && share < 0.9,
+  }
+})
+
+// --- Species ---------------------------------------------------------------------
+
+const speciesList = useDashboardRows(
+  () => ({
+    ...sharedProps.value,
+    itemId: 'top-tree-spotlight',
+    query: chartById('top-tree-spotlight').query,
+    filters: filtersForChart('top-tree-spotlight'),
+  }),
+  { title: 'Most common species' },
 )
+
+const canopyList = useDashboardRows(
+  () => ({
+    ...sharedProps.value,
+    itemId: 'canopy-by-species',
+    query: chartById('canopy-by-species').query,
+    filters: filtersForChart('canopy-by-species'),
+  }),
+  { title: 'Crown area by species' },
+)
+
+const canopyBySpecies = computed(() => {
+  const map = new Map<string, number>()
+  for (const row of canopyList.rows.value) {
+    const species = rowText(row.species)
+    const area = rowNumber(row.canopy_area)
+    if (species && area) map.set(species, area)
+  }
+  return map
+})
+
+// The crown area of the identified trees is what a species' share is of. The
+// list is the top 500 species by area, which is all but a sliver of it.
+const identifiedCanopy = computed(() => {
+  let total = 0
+  for (const area of canopyBySpecies.value.values()) total += area
+  return total || null
+})
+
+const selectedSpecies = ref<string | null>(null)
+
+watch(
+  () => speciesList.rows.value,
+  (rows) => {
+    const names = rows.map((row) => rowText(row.species))
+    if (!selectedSpecies.value || !names.includes(selectedSpecies.value)) {
+      selectedSpecies.value = names[0] ?? null
+    }
+  },
+  { immediate: true },
+)
+
+const selectedRow = computed(
+  () => speciesList.rows.value.find((row) => rowText(row.species) === selectedSpecies.value) ?? null,
+)
+
+const selectedCountLine = computed(() => {
+  const row = selectedRow.value
+  if (!row) return null
+  const count = rowNumber(row.tree_count) ?? 0
+  const share = identifiedTrees.value ? count / identifiedTrees.value : null
+  const where = cityFilter.value ? `in ${cityName.value}` : 'across all cities'
+  return `${formatCount(count)} trees ${where}${share != null ? ` · ${formatShare(share)} of identified trees` : ''}`
+})
+
+const speciesListSubtitle = computed(() => {
+  const shown = speciesList.rows.value.length
+  const unique = uniqueSpecies.value
+  const scope = unique != null && unique > shown ? `The top ${shown} of ${formatCount(unique)} species` : 'Every species'
+  return `${scope}, by share of identified trees. Pick one to read about it.`
+})
+
+const speciesExplorerRoute = computed(() => ({
+  path: '/species',
+  query: {
+    ...(cityFilter.value ? { city: cityFilter.value } : {}),
+    ...(selectedSpecies.value
+      ? { genus: extractGenusFromSpecies(selectedSpecies.value) ?? undefined, species: selectedSpecies.value }
+      : {}),
+  },
+}))
+
+const speciesFilterActive = computed(() => {
+  void crossFilters.version.value
+  return Boolean(selectedSpecies.value && (selectionsByField().species ?? []).includes(selectedSpecies.value))
+})
+
+function filterToSelectedSpecies() {
+  if (!selectedSpecies.value) return
+  if (speciesFilterActive.value) {
+    clearFields(['species'])
+  } else {
+    applyValuesForField('species', [selectedSpecies.value])
+  }
+}
+
+// --- Concentration -----------------------------------------------------------------
+
+const shareOfIdentified = (count: number | null) =>
+  count != null && identifiedTrees.value ? count / identifiedTrees.value : null
+
+// The largest species proper: a record identified only to genus ("Fraxinus")
+// is several species, and is the genus bar's business.
+const topSpecies = computed(() => {
+  const row = speciesList.rows.value.find((entry) => !isGenusOnly(rowText(entry.species) ?? ''))
+  return { name: rowText(row?.species), share: shareOfIdentified(rowNumber(row?.tree_count)) }
+})
+const topGenus = computed(() => {
+  const row = topGenusRows.rows.value[0]
+  return { name: rowText(row?.genus_name), share: shareOfIdentified(rowNumber(row?.tree_count)) }
+})
+// Null until the enrichment table records families; the card then gains its third bar.
+const topFamily = computed(() => {
+  const row = topFamilyRows.rows.value[0]
+  const name = rowText(row?.family)
+  return name ? { name, share: shareOfIdentified(rowNumber(row?.tree_count)) } : null
+})
+
+const topFiveShare = computed(() => {
+  const rows = speciesList.rows.value.slice(0, 5)
+  if (!rows.length) return null
+  return shareOfIdentified(rows.reduce((sum, row) => sum + (rowNumber(row.tree_count) ?? 0), 0))
+})
+
+// --- Tiles -----------------------------------------------------------------------
+
+const statTiles = computed(() => {
+  const tiles = [
+    {
+      id: 'total-trees',
+      label: 'Trees mapped',
+      value: formatCompact(totalTrees.value),
+      note: totalTrees.value != null ? `${formatCount(totalTrees.value)} in all` : '',
+      title: 'Every tree in the view, from every source',
+      pending: totalTrees.value == null,
+    },
+    {
+      id: 'identified-trees',
+      label: 'Identified to species',
+      value: formatShare(identifiedShare.value),
+      note: identifiedTrees.value != null ? `${formatCount(identifiedTrees.value)} trees` : '',
+      title: 'Trees whose record names a species or genus, whatever their source',
+      pending: identifiedShare.value == null,
+    },
+    {
+      id: 'unique-species',
+      label: 'Species',
+      value: formatCount(uniqueSpecies.value),
+      note: 'distinct taxa recorded',
+      title: 'Distinct species, hybrids, cultivars and genus-only records',
+      pending: uniqueSpecies.value == null,
+    },
+    {
+      id: 'top-5-share',
+      label: 'Top five species',
+      value: formatShare(topFiveShare.value),
+      note: 'of identified trees',
+      title: 'The share of identified trees held by the five most common species',
+      pending: topFiveShare.value == null,
+    },
+    {
+      id: 'canopy-total',
+      label: 'Crown area',
+      value: formatArea(canopyArea.value),
+      note: sizedTrees.value != null ? `summed over ${formatCompact(sizedTrees.value)} sized trees` : '',
+      title: 'Each tree’s crown as a circle, summed. Crowns overlap, so this is more than the ground they shade.',
+      pending: canopyArea.value == null,
+    },
+  ]
+  if (cityFilter.value) {
+    tiles.splice(4, 0, {
+      id: 'local-native-share',
+      label: 'Biome fit',
+      value: formatShare(biomeFit.value),
+      note: 'native here or to this biome',
+      title: 'Identified trees whose species is native to the city’s ecoregion or to its biome elsewhere',
+      pending: biomeFit.value == null,
+    })
+  }
+  return tiles
+})
+
+// --- Cards -----------------------------------------------------------------------
+
+const visibleSections = computed(() =>
+  SUMMARY_SECTIONS.map((section) => ({
+    ...section,
+    cards: section.cards.filter((card) => cityFilter.value || !chartById(card.id).requiresCitySelection),
+  })).filter((section) => section.cards.length > 0),
+)
+
+function selectedBuckets(chartId: string): string[] {
+  void crossFilters.version.value
+  const field = chartById(chartId).buckets?.filterField
+  return field ? (selectionsByField()[field] ?? []) : []
+}
+
+function toggleBucket(chartId: string, bucket: string) {
+  const field = chartById(chartId).buckets?.filterField as SummaryFilterField | undefined
+  if (!field) return
+  const selected = selectedBuckets(chartId)
+  applyValuesForField(field, selected.includes(bucket) ? [] : [bucket])
+}
+
+/**
+ * A trait card is hidden while too few of the identified trees have the
+ * trait recorded to say anything about the city. It stays mounted, so it
+ * keeps counting and returns when the enrichment table fills in; a card the
+ * page is filtered by is never hidden.
+ */
+function isHidden(chartId: string): boolean {
+  const buckets = chartById(chartId).buckets
+  if (!buckets?.hideWhenThin) return false
+  if (selectedBuckets(chartId).length) return false
+  const known = coverage[chartId]
+  return known != null && known < LOW_COVERAGE_THRESHOLD
+}
+
+function hiddenTitles(section: SummaryDashboardSection): string[] {
+  return section.cards.filter((card) => isHidden(card.id)).map((card) => chartById(card.id).title.toLowerCase())
+}
 
 const activeFilters = computed(() => {
   const filters: Array<{ key: string; label: string }> = []
@@ -238,10 +573,6 @@ const activeFilters = computed(() => {
   }
   return filters
 })
-
-function chartById(chartId: string) {
-  return SUMMARY_CHARTS_BY_ID[chartId]
-}
 
 function clearFilter(key: string) {
   if (key === 'city') {
@@ -256,29 +587,10 @@ function clearAllFilters() {
   crossFilters.clearAll()
 }
 
-function filtersForChart(chartId: string) {
-  void crossFilters.version.value
-  return crossFilters.getSqlFilterLikesFor(chartId, baseFilters.value)
-}
-
-function selectionFiltersForChart(chartId: string) {
-  void crossFilters.version.value
-  return crossFilters.getChartSelectionsFor(chartId).map((value) => ({
-    source: chartId,
-    value,
-  }))
-}
-
-function handleChartClick(info: DimensionClick) {
-  const filtered = filterSummaryDimensionClick(info)
-  if (!filtered) {
-    return
-  }
-  crossFilters.applyDimensionClick(filtered)
-}
-
-function clearChartSelection(chartId: string) {
-  crossFilters.clearSource(chartId)
+/** A click on the dot map opens the full map at that spot. */
+async function openMapAt(location: { lat: number; lng: number }) {
+  await router.push({ path: '/', query: { ...(cityFilter.value ? { city: cityFilter.value } : {}), mode: 'explore' } })
+  flyTo({ lat: location.lat, lng: location.lng, zoom: 16.5 })
 }
 
 const initialRouteCity = readSummaryRouteCity(route.query.city)
@@ -303,6 +615,7 @@ onMounted(() => {
 watch(
   () => route.query.city,
   (routeCity) => {
+    if (route.name !== 'summary') return
     const nextCity = readSummaryRouteCity(routeCity)
     cityFilter.value = nextCity
     if (nextCity && nextCity !== selectedCity.value) {
@@ -323,6 +636,7 @@ watch(
   cityFilter,
   (city) => {
     emptyChartIds.clear()
+    for (const key of Object.keys(coverage)) delete coverage[key]
     crossFilters.clearAll()
     const routeCity = readSummaryRouteCity(route.query.city)
     if (route.name === 'summary' && routeCity !== city) {
@@ -340,338 +654,56 @@ watch(
 </script>
 
 <style scoped>
-/* A page of the field journal: paper cards with a hairline, no drop shadows,
-   serif titles underlined by a pencil stroke, the biome sketch showing faintly
-   through. Charts take their colours from the same tokens (see
-   EmbeddedDashboardChart), so the plot areas are transparent on the paper. */
-.summary-page {
-  --journal-paper: rgba(var(--surface-rgb), 0.78);
-  --journal-rule: color-mix(in srgb, var(--color-border) 80%, transparent);
-  --journal-corners: 18px 14px 20px 15px / 15px 20px 14px 18px;
-  --trilogy-chart-font: var(--font-body);
-  padding: 28px 30px 48px;
-  overflow-y: auto;
-  height: 100%;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 26px;
-  color: var(--color-ink);
-}
-
-/* A short hand-drawn stroke, masked so it takes the ink colour of its owner. */
-.sketch-rule,
-.summary-section-header h2::after,
-.chart-card-header h3::after {
-  content: '';
-  display: block;
-  width: 72px;
-  height: 7px;
-  margin-top: 6px;
-  background: var(--sketch-leaf);
-  opacity: 0.7;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 8' preserveAspectRatio='none'%3E%3Cpath d='M1 5.4C18 2.4 32 6.6 48 4.2S78 1.6 96 4.6s17 1.4 23 .4' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat left center / 100% 100%;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 8' preserveAspectRatio='none'%3E%3Cpath d='M1 5.4C18 2.4 32 6.6 48 4.2S78 1.6 96 4.6s17 1.4 23 .4' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat left center / 100% 100%;
-}
-
-.summary-header {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.summary-title-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.summary-eyebrow {
-  margin: 0 0 6px;
-  font-size: 0.72rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--color-moss);
-}
-
-.summary-title-row h1 {
-  margin: 0;
-  font-size: 2.1rem;
-  font-family: var(--font-display);
-  font-weight: 400;
-  letter-spacing: -.025em;
-  line-height: 1.1;
-}
-
-.sketch-rule--title {
-  width: 132px;
-  height: 9px;
-  margin-top: 10px;
-}
-
-.summary-intro {
-  margin: 0;
-  max-width: 720px;
-  color: rgba(var(--ink-rgb), 0.78);
-  line-height: 1.55;
-}
-
-.city-context-pills {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.city-context-pill {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 7px 12px;
-  border: 1px solid var(--journal-rule);
-  border-radius: 999px;
-  background: var(--journal-paper);
-}
-
-.city-context-pill-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-moss);
-}
-
-.city-context-pill-value {
-  font-size: 0.82rem;
-  color: var(--color-ink);
-}
-
-.active-filters {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.filter-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px 5px 12px;
-  border: 1px solid rgba(var(--accent-rgb), 0.28);
-  background: var(--accent-soft);
-  border-radius: 999px;
-  font-size: 0.78rem;
-  color: var(--color-leaf);
-}
-
-.filter-chip-clear {
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font-size: 0.8rem;
-  line-height: 1;
-}
-
-.filter-chip-clear:hover {
-  background: rgba(var(--accent-rgb), 0.18);
-}
-
-.clear-all-btn {
-  background: none;
-  border: none;
-  color: var(--color-muted);
-  cursor: pointer;
-  font-size: 0.78rem;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  padding: 0;
-}
-
-.clear-all-btn:hover {
-  color: var(--color-ink);
-}
-
-.kpi-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 14px;
-}
-
-/* The paper card. */
-.chart-card,
-.tree-map-card {
-  position: relative;
-  background: var(--journal-paper);
-  border: 1px solid var(--journal-rule);
-  border-radius: var(--journal-corners);
-  box-shadow: none;
-}
-
-.tree-map-card {
-  flex-shrink: 0;
-  width: 100%;
-  height: 380px;
-  overflow: hidden;
-}
-
-.summary-section {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.summary-section-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.summary-section-header h2 {
-  margin: 0;
-  font-size: 1.3rem;
-  font-family: var(--font-display);
-  font-weight: 400;
-  letter-spacing: -.01em;
-}
-
-.summary-section-header p {
-  margin: 0;
-  color: var(--color-muted);
-  font-size: 0.84rem;
-  line-height: 1.45;
-}
-
-.chart-row {
-  display: flex;
-  gap: 14px;
+.summary-hero {
   align-items: stretch;
-  flex-wrap: wrap;
 }
 
-.chart-card {
-  display: flex;
-  flex-direction: column;
-  padding: 18px 20px 16px;
-  flex: 1 1 260px;
-  min-width: 0;
-  height: 380px;
-  min-height: 0;
-  overflow: hidden;
-  isolation: isolate;
+.summary-map-card {
+  min-height: 440px;
 }
 
-.chart-card--kpi {
-  --trilogy-chart-font: var(--font-display);
-  height: 140px;
-  padding: 14px 16px 10px;
-  border-radius: 14px 18px 15px 17px / 17px 14px 18px 15px;
-}
-
-.chart-card--metric {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.metric-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--color-moss);
-}
-
-.chart-card--wide {
-  flex: 2 1 420px;
-}
-
-.chart-card--empty {
-  height: auto;
-  min-height: 0;
-  padding: 14px 20px;
-  background: transparent;
-  border-style: dashed;
-}
-
-.chart-card--empty .chart-card-header {
-  margin-bottom: 0;
-}
-
-.chart-card--empty .chart-card-header h3 {
-  font-size: 0.9rem;
-  font-style: italic;
-  font-weight: 400;
-  color: var(--color-muted);
-}
-
-.chart-card--empty .chart-card-header h3::after {
-  display: none;
-}
-
-.chart-card-header {
-  position: relative;
-  z-index: 1;
-  margin-bottom: 12px;
-  flex: 0 0 auto;
-}
-
-.chart-card-header h3 {
+.summary-map-header {
+  position: absolute;
+  top: 14px;
+  left: 18px;
   margin: 0;
-  font-size: 1.08rem;
-  font-family: var(--font-display);
-  font-weight: 400;
-  letter-spacing: -.005em;
-  line-height: 1.25;
+  pointer-events: none;
 }
 
-.chart-card-header h3::after {
-  width: 56px;
-  height: 6px;
-  margin-top: 5px;
-  opacity: 0.55;
+.summary-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dash-gap);
+  min-width: 0;
 }
 
-.chart-sub {
-  display: block;
-  font-size: 0.78rem;
-  color: var(--color-muted);
-  margin-top: 6px;
-  line-height: 1.45;
+.summary-side .dash-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-@media (max-width: 900px) {
-  .summary-page {
-    padding: 20px 18px 36px;
-  }
-
-  .summary-title-row h1 {
-    font-size: 1.7rem;
-  }
-
-  .city-context-pills {
-    justify-content: flex-start;
-  }
+.summary-side .dash-card {
+  flex: 1 1 auto;
 }
 
-@media (max-width: 560px) {
-  .chart-card,
-  .chart-card--wide {
-    flex-basis: 100%;
+/* The list scrolls inside a fixed box; the profile beside it matches. */
+.summary-species-card {
+  height: 440px;
+}
+
+.summary-profile-card {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+@container dash (max-width: 720px) {
+  .summary-map-card {
+    min-height: 0;
+    height: 340px;
   }
 
-  /* The carousel stacks its photo over its text on a phone; let the card
-     grow with it instead of clipping the species name. */
-  .chart-card--carousel {
+  .summary-species-card {
     height: auto;
-    min-height: 380px;
+    max-height: 520px;
   }
 }
 </style>
