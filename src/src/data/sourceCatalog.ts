@@ -11,13 +11,13 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
-  { city: 'Charlotte', label: 'TODO: Charlotte tree inventory source', url: 'TODO' },
-  { city: 'Naples, FL', label: 'TODO: Naples tree inventory source', url: 'TODO' },
-  { city: 'Atlanta', label: 'TODO: Atlanta tree inventory source', url: 'TODO' },
-  { city: 'New Orleans', label: 'TODO: New Orleans tree inventory source', url: 'TODO' },
-  { city: 'Durham', label: 'TODO: Durham tree inventory source', url: 'TODO' },
-  { city: 'Houston', label: 'TODO: Houston tree inventory source', url: 'TODO' },
-  { city: 'Austin', label: 'TODO: Austin tree inventory source', url: 'TODO' },
+  { city: 'Charlotte', label: 'City of Charlotte - Landscape Management Trees (ArcGIS)', url: 'https://gis.charlottenc.gov/arcgis/rest/services/ENG/LSM_Trees/MapServer/0' },
+  { city: 'Naples, FL', label: 'City of Naples - City Trees (ArcGIS)', url: 'https://g.naplesgov.com/arcgis/rest/services/Community_Services/CityTrees/FeatureServer/0' },
+  { city: 'Atlanta', label: 'Trees Atlanta - Plant Inventory (ArcGIS)', url: 'https://www.arcgis.com/home/item.html?id=9a8404b7b48d499ab76b36c237434542' },
+  { city: 'New Orleans', label: 'City of New Orleans - Parks and Parkways tree assets (311 asset service, ArcGIS)', url: 'https://maps.nola.gov/server/rest/services/OpenGov/OpenGov311_Assets/MapServer/7' },
+  { city: 'Durham', label: 'City of Durham - Trees & Planting Sites (ArcGIS)', url: 'https://webgis2.durhamnc.gov/server/rest/services/PublicServices/Environmental/FeatureServer/11' },
+  { city: 'Houston', label: 'City of Houston Parks & Recreation, Urban Forestry - street-tree inventory (ArcGIS)', url: 'https://geohwp.houstontx.gov/arcgis/rest/services/03_BaseData_External/Land_Base/FeatureServer/0' },
+  { city: 'Austin', label: 'City of Austin - Tree Inventory (Socrata, public domain)', url: 'https://data.austintexas.gov/d/wrik-xasw' },
   { city: 'Northern Virginia', label: 'Arlington County GIS - DPR Trees (ArcGIS Hub)', url: 'https://gisdata-arlgis.opendata.arcgis.com/' },
   { city: 'Northern Virginia', label: 'City of Falls Church GIS - Public Trees (2004 inventory)', url: 'https://services1.arcgis.com/2hmXRAz4ofcdQP6p/arcgis/rest/services/Public_Trees/FeatureServer/0' },
   { city: 'Prague', label: 'Geoportál Praha / IPR Praha - Sdílená data o zeleni, vegetační prvky (CC BY, datový podklad © IPR Praha)', url: 'https://opendata-iprpraha.hub.arcgis.com/datasets/iprpraha::sdílená-data-o-zeleni-vegetační-prvky-body-1' },
@@ -84,13 +84,13 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
-  { city: 'Charlotte', label: 'TODO: Charlotte landmark source' },
-  { city: 'Naples, FL', label: 'TODO: Naples landmark source' },
-  { city: 'Atlanta', label: 'TODO: Atlanta landmark source' },
-  { city: 'New Orleans', label: 'TODO: New Orleans landmark source' },
-  { city: 'Durham', label: 'TODO: Durham landmark source' },
-  { city: 'Houston', label: 'TODO: Houston landmark source' },
-  { city: 'Austin', label: 'TODO: Austin landmark source' },
+  { city: 'Charlotte', label: 'Charlotte-Mecklenburg Historic Landmarks Commission - designated properties (Mecklenburg County GIS)', url: 'https://meckgis.mecklenburgcountync.gov/server/rest/services/LocalHistoricProperty/FeatureServer/0' },
+  { city: 'Naples, FL', label: 'City of Naples - Historic Buildings; National Park Service - National Register of Historic Places', url: 'https://g.naplesgov.com/arcgis/rest/services/Building/HistoricBuildings/MapServer/0' },
+  { city: 'Atlanta', label: 'City of Atlanta - Landmark and Historic Building/Sites (Urban Design Commission)', url: 'https://gis.atlantaga.gov/dpcd/rest/services/OpenDataService1/FeatureServer/16' },
+  { city: 'New Orleans', label: 'City of New Orleans - HDLC Landmarks (Historic District Landmarks Commission)', url: 'https://maps.nola.gov/server/rest/services/Administrative/Historic_Preservation/MapServer/0' },
+  { city: 'Durham', label: 'Durham City-County Planning - Local Historic Landmarks and National Register listings', url: 'https://webgis2.durhamnc.gov/server/rest/services/PublicServices/Planning/MapServer/1' },
+  { city: 'Houston', label: 'City of Houston - Historic Sites and Landmarks (Landmarks and Protected Landmarks)', url: 'https://services.arcgis.com/NummVBqZSIJKUeVR/arcgis/rest/services/COH_Historic_Sites_and_Landmarks_view/FeatureServer/6' },
+  { city: 'Austin', label: 'City of Austin - Historical Landmarks (Socrata)', url: 'https://data.austintexas.gov/d/8k49-bptr' },
   { city: 'Northern Virginia', label: 'Fairfax County GIS - Inventory of Historic Sites', url: 'https://services1.arcgis.com/ioennV6PpG5Xodq0/arcgis/rest/services/Historic_Sites_Inventory/FeatureServer/0' },
   { city: 'Prague', label: 'Národní památkový ústav (NPÚ) - Kulturní památky, Ústřední seznam kulturních památek (CC BY 4.0)', url: 'https://geoportal.npu.cz/arcgis/rest/services/Tematicke/CP_UAP_PVO/MapServer/1' },
   { city: 'Stoughton, WI', label: 'City of Stoughton - Historical Landmarks (Stoughton Landmarks Commission)', url: 'https://stoughtonwi.maps.arcgis.com/home/item.html?id=0ac41bae1fac4f4abdb873deed6f8d75' },

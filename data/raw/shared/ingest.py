@@ -670,6 +670,9 @@ SPECIES_SYNONYMS: dict[str, str] = {
     "Eucalyptus maculata": "Corymbia maculata",
     "Tristania conferta": "Lophostemon confertus",
     "Tristania laurina": "Tristaniopsis laurina",
+    # Hybrid mark: species_audit.py pairs Trees Atlanta's spelling with the
+    # accepted species (Kew lists no hybrid).
+    "Camellia x lutchuensis": "Camellia lutchuensis",
     "Arecastrum romanzoffianum": "Syagrus romanzoffiana",
     "Podocarpus gracilior": "Afrocarpus gracilior",
     "Rhus lancea": "Searsia lancea",
@@ -1199,6 +1202,28 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     # Carolina silverbell.  Kew has no such name, and lists `H. carolina` as accepted
     # with `H. tetraptera` under it; three edits is past what the audit folds.
     "Halesia caroliniana": "Halesia carolina",
+    # Audited with tools/species_audit.py --parquet when Atlanta (Trees Atlanta)
+    # and Naples were wired (2026-11).
+    "Asimina biloba": "Asimina triloba",
+    "Chimonanthus virginicus": "Chionanthus virginicus",
+    "Euonymus americana": "Euonymus americanus",
+    "Ginkgo triloba": "Ginkgo biloba",
+    "Liriodendron tulipfera": "Liriodendron tulipifera",
+    "Magnolia virginiaina": "Magnolia virginiana",
+    "Oxydendrum arborea": "Oxydendrum arboreum",
+    "Quercus illicifolia": "Quercus ilicifolia",
+    "Ulmus americanus": "Ulmus americana",
+    "Vaccinium arborea": "Vaccinium arboreum",
+    "Cananaga odorata": "Cananga odorata",
+    "Aleurites moluccana": "Aleurites moluccanus",
+    "Psidium cattleianum": "Psidium cattleyanum",
+    # By hand, beyond the audit's two-edit reach: Naples and New Orleans.  Each
+    # key is absent from Kew's WCVP and each value accepted there.
+    "Querus virginaina": "Quercus virginiana",
+    "Sereona repens": "Serenoa repens",
+    "Calophyllum brasiliensis": "Calophyllum brasiliense",
+    "Terminalia muellerii": "Terminalia muelleri",
+    "Latania verscheffeltii": "Latania verschaffeltii",
 }
 
 
@@ -2126,7 +2151,7 @@ def _check_tree_id_grain(
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "USCLT": (35.0, 35.45, -81.05, -80.6),
     "USNAP": (26.05, 26.3, -81.85, -81.7),
-    "USATL": (33.6, 33.95, -84.6, -84.25),
+    "USATL": (33.5, 34.1, -84.75, -84.05),
     "USNOL": (29.85, 30.2, -90.15, -89.6),
     "USDUR": (35.85, 36.15, -79.05, -78.7),
     "USHOU": (29.45, 30.15, -95.85, -95.0),
@@ -2491,7 +2516,9 @@ Box = tuple[float, float, float, float]
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'USCLT': ((35.0, 35.45, -81.05, -80.6),),
     'USNAP': ((26.05, 26.3, -81.85, -81.7),),
-    'USATL': ((33.6, 33.95, -84.6, -84.25),),
+    # Trees Atlanta plants across the metro (Sandy Springs, Dunwoody, Clarkston,
+    # South Fulton, Tucker), not only inside the city limits.
+    'USATL': ((33.5, 34.1, -84.75, -84.05),),
     'USNOL': ((29.85, 30.2, -90.15, -89.6),),
     'USDUR': ((35.85, 36.15, -79.05, -78.7),),
     'USHOU': ((29.45, 30.15, -95.85, -95.0),),

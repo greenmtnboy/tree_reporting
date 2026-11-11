@@ -11,7 +11,7 @@
  */
 export const DATA_SOURCE_LABELS: Record<string, string> = {
   CHARLOTTE_OPENDATA: 'Charlotte Open Data',
-  NAPLES_OPENDATA: 'Naples Open Data',
+  NAPLES_OPENDATA: 'City of Naples',
   TREES_ATLANTA: 'Trees Atlanta',
   NEW_ORLEANS_OPENDATA: 'New Orleans Open Data',
   DURHAM_OPENDATA: 'Durham Open Data',

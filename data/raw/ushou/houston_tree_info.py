@@ -87,7 +87,7 @@ import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.platforms.arcgis import FeatureLayer, esri_point, iter_features
-from shared.species.english import species_from_common_name
+from shared.species.english import common_name_key, species_from_common_name
 from shared.ingest import (
     emit,
     enforce_tree_schema,
@@ -124,9 +124,20 @@ SOURCE_SPELLINGS: dict[str, str] = {
     "Pine, Monterrey": "Pine, Monterey",
 }
 
-# Regional readings that override the shared table (see the docstring).
+# Regional readings that override or extend the shared table (see the
+# docstring), keyed by `common_name_key`.  Each is right on the Gulf Coast and
+# wrong somewhere else, which is why they live here: cherry laurel is the
+# Carolina laurel cherry (Prunus laurocerasus in Europe); "Japanese plum" is
+# the loquat (Prunus salicina elsewhere); "orchid" is the orchid tree; mountain
+# laurel is the Texas mountain laurel (Kalmia in the north-east); black pine is
+# the Japanese black pine of the coastal trade (Pinus nigra in Europe).
 REGIONAL_SPECIES: dict[str, str] = {
-    "Cedar": "Juniperus",
+    "cedar": "Juniperus",
+    "cherry laurel": "Prunus caroliniana",
+    "japanese plum": "Eriobotrya japonica",
+    "orchid": "Bauhinia",
+    "mountain laurel": "Dermatophyllum secundiflorum",
+    "black pine": "Pinus thunbergii",
 }
 
 # Values that name no tree; they publish as `Unknown` with no tree_name.
@@ -173,8 +184,9 @@ def species_of(name: str) -> str | None:
     """A cleaned common name as a `species` value; None publishes `Unknown`."""
     if name.lower() in NOT_A_NAME:
         return None
-    if name in REGIONAL_SPECIES:
-        return REGIONAL_SPECIES[name]
+    regional = REGIONAL_SPECIES.get(common_name_key(name))
+    if regional is not None:
+        return regional
     resolved = species_from_common_name(name)
     if resolved is None:
         UNRESOLVED[name] += 1
