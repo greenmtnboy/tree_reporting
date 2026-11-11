@@ -133,7 +133,7 @@ def main():
     draw_cartographic_details(fig,ax,bounds,palette,1.)
     sidebar(fig,counts,park_counts,by_source["street"],private_counts,config["inventory_sources"])
     draw_centered_text_runs(fig,.365,.109,[(f"{city_total:,}",palette["text"],26,"normal"),
-                                          ("  mapped trees in San Francisco",palette["text"],11,"normal")])
+                                          ("  mapped trees",palette["text"],11,"normal")])
     fig.text(.365,.079,"Gray trees beyond the southern city line are excluded from all counts.",
              ha="center", fontsize=9, color=palette["muted"])
     fig.text(.5,.053,"Tree locations determine the category. Parks take priority at overlaps. Private land is inferred from parcel and tax records.",
