@@ -109,3 +109,56 @@ def test_the_neighbours_are_carved_where_the_rollup_showed_duplicates():
     for (lat, lon), (owner, other) in cases.items():
         assert in_city_territory(owner, lat, lon), (lat, lon, owner)
         assert not in_city_territory(other, lat, lon), (lat, lon, other)
+
+
+# ---------------------------------------------------------------------------
+# The city models read their staged OSM extract through the territory
+# ---------------------------------------------------------------------------
+#
+# The extract fetches only the territory, but a staged file keeps the one it
+# was cut with until the city's weekly re-extract: when USNVA carved Arlington
+# out of USWAS (#171), USWAS's staged file still held 7,115 Virginia trees and
+# the rollup carried 5,153 OSM ids under both cities.  Each model filters on
+# read, so a territory change takes effect on the next city build.
+
+
+def _osm_models() -> dict[str, Path]:
+    from test_data_sources import city_models
+
+    return {
+        code: path for code, path in city_models().items()
+        if f"{code.lower()}_osm_staging.parquet" in path.read_text(encoding="utf-8")
+    }
+
+
+def test_every_osm_partition_is_written_with_its_territory():
+    from tools.sync_osm_territory import sync
+
+    stale = [
+        path.relative_to(RAW_DIR).as_posix() for path in _osm_models().values()
+        if sync(path.read_text(encoding="utf-8")) != path.read_text(encoding="utf-8")
+    ]
+    assert not stale, (
+        f"{stale}: the OSM datasource's `where` is not the city's CITY_TERRITORY; "
+        "run `python tools/sync_osm_territory.py` from data/raw"
+    )
+
+
+@pytest.mark.parametrize("code", sorted(_osm_models()))
+def test_the_territory_reaches_the_composed_osm_partition(code):
+    """The `where` the planner sees, not the text: one disjunct per rectangle,
+    on the raw coordinates the partition stores."""
+    from test_data_sources import parsed
+
+    ds = parsed(_osm_models()[code]).datasources[f"{code.lower()}_osm_tree_info"]
+    assert ds.where is not None, f"{code}'s OSM partition reads its staged extract unfiltered"
+    rendered = str(ds.where)
+    for lat_min, lat_max, lon_min, lon_max in city_territory(code):
+        assert (f"ref:local.raw_latitude >= {lat_min} and ref:local.raw_latitude < {lat_max} and "
+                f"ref:local.raw_longitude >= {lon_min} and ref:local.raw_longitude < {lon_max}") in rendered
+    assert rendered.count(" or ") == len(city_territory(code)) - 1
+
+
+def test_osm_cities_are_every_city_with_a_staged_extract():
+    """The parametrized check above covers every city whose model reads one."""
+    assert {"USWAS", "USNVA", "USBOS", "CAMTL", "CALON"} <= set(_osm_models())

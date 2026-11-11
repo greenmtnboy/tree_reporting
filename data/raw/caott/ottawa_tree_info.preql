@@ -57,7 +57,8 @@ root partial datasource caott_osm_tree_info extends tree_partition (
     data_source: caott_source,
 )
 complete where city = 'CAOTT' and caott_source = 'OSM_CAOTT'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/caott_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/caott_osm_staging.parquet`
+where (raw_latitude >= 44.92 and raw_latitude < 45.58 and raw_longitude >= -76.4 and raw_longitude < -75.2);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

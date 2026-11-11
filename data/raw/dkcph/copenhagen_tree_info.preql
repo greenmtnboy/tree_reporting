@@ -60,7 +60,8 @@ root partial datasource dkcph_osm_tree_info extends tree_partition (
     borough: ?borough,
 )
 complete where city = 'DKCPH' and dkcph_source = 'OSM_DKCPH'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/dkcph_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/dkcph_osm_staging.parquet`
+where (raw_latitude >= 55.58 and raw_latitude < 55.76 and raw_longitude >= 12.4 and raw_longitude < 12.7);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

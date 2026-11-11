@@ -57,7 +57,8 @@ root partial datasource cacal_osm_tree_info extends tree_partition (
     data_source: cacal_source,
 )
 complete where city = 'CACAL' and cacal_source = 'OSM_CACAL'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cacal_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cacal_osm_staging.parquet`
+where (raw_latitude >= 50.8 and raw_latitude < 51.25 and raw_longitude >= -114.35 and raw_longitude < -113.83);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

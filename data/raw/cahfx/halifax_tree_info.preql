@@ -57,7 +57,8 @@ root partial datasource cahfx_osm_tree_info extends tree_partition (
     data_source: cahfx_source,
 )
 complete where city = 'CAHFX' and cahfx_source = 'OSM_CAHFX'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cahfx_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cahfx_osm_staging.parquet`
+where (raw_latitude >= 44.4 and raw_latitude < 45.05 and raw_longitude >= -64.05 and raw_longitude < -62.35);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

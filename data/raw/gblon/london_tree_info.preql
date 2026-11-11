@@ -43,7 +43,8 @@ root partial datasource gblon_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'GBLON' and gblon_source = 'OSM_GBLON'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/gblon_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/gblon_osm_staging.parquet`
+where (raw_latitude >= 51.25 and raw_latitude < 51.75 and raw_longitude >= -0.55 and raw_longitude < 0.35);
 
 root partial datasource london_raw_tree_info extends tree_partition (
     data_source: gblon_source,

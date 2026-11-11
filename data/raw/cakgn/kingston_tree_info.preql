@@ -57,7 +57,8 @@ root partial datasource cakgn_osm_tree_info extends tree_partition (
     data_source: cakgn_source,
 )
 complete where city = 'CAKGN' and cakgn_source = 'OSM_CAKGN'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cakgn_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cakgn_osm_staging.parquet`
+where (raw_latitude >= 44.15 and raw_latitude < 44.52 and raw_longitude >= -76.75 and raw_longitude < -76.17);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

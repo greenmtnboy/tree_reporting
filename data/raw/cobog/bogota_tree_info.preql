@@ -60,7 +60,8 @@ root partial datasource cobog_osm_tree_info extends tree_partition (
     borough: ?borough,
 )
 complete where city = 'COBOG' and cobog_source = 'OSM_COBOG'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cobog_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cobog_osm_staging.parquet`
+where (raw_latitude >= 4.4 and raw_latitude < 4.9 and raw_longitude >= -74.3 and raw_longitude < -73.95);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

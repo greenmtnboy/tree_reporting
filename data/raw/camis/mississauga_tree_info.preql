@@ -57,7 +57,15 @@ root partial datasource camis_osm_tree_info extends tree_partition (
     data_source: camis_source,
 )
 complete where city = 'CAMIS' and camis_source = 'OSM_CAMIS'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/camis_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/camis_osm_staging.parquet`
+where (raw_latitude >= 43.475 and raw_latitude < 43.55 and raw_longitude >= -79.88 and raw_longitude < -79.5)
+    or (raw_latitude >= 43.55 and raw_latitude < 43.62 and raw_longitude >= -79.88 and raw_longitude < -79.55)
+    or (raw_latitude >= 43.62 and raw_latitude < 43.64 and raw_longitude >= -79.88 and raw_longitude < -79.575)
+    or (raw_latitude >= 43.64 and raw_latitude < 43.68 and raw_longitude >= -79.88 and raw_longitude < -79.6)
+    or (raw_latitude >= 43.68 and raw_latitude < 43.7 and raw_longitude >= -79.88 and raw_longitude < -79.607)
+    or (raw_latitude >= 43.7 and raw_latitude < 43.72 and raw_longitude >= -79.88 and raw_longitude < -79.617)
+    or (raw_latitude >= 43.72 and raw_latitude < 43.74 and raw_longitude >= -79.88 and raw_longitude < -79.625)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.78 and raw_longitude >= -79.88 and raw_longitude < -79.64);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

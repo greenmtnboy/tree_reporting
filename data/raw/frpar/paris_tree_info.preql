@@ -42,7 +42,8 @@ root partial datasource frpar_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'FRPAR' and frpar_source = 'OSM_FRPAR'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/frpar_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/frpar_osm_staging.parquet`
+where (raw_latitude >= 48.7 and raw_latitude < 49.05 and raw_longitude >= 2.1 and raw_longitude < 2.6);
 
 root partial datasource paris_raw_tree_info extends tree_partition (
     data_source: frpar_source,

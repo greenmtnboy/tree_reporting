@@ -42,7 +42,8 @@ root partial datasource aumel_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'AUMEL' and aumel_source = 'OSM_AUMEL'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/aumel_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/aumel_osm_staging.parquet`
+where (raw_latitude >= -38.1 and raw_latitude < -37.55 and raw_longitude >= 144.55 and raw_longitude < 145.4);
 
 root partial datasource melbourne_raw_tree_info extends tree_partition (
     data_source: aumel_source,

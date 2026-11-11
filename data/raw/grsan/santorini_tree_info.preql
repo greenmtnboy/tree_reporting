@@ -50,7 +50,8 @@ root partial datasource grsan_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'GRSAN' and grsan_source = 'OSM_GRSAN'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grsan_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grsan_osm_staging.parquet`
+where (raw_latitude >= 36.3 and raw_latitude < 36.5 and raw_longitude >= 25.3 and raw_longitude < 25.55);
 
 # Approved community submissions for this city. The shared ingest script
 # emits every city's rows; the `where` clause narrows it to GRSAN and the

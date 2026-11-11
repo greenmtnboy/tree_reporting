@@ -56,7 +56,8 @@ root partial datasource ussfo_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'USSFO' and ussfo_source = 'OSM_USSFO'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ussfo_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ussfo_osm_staging.parquet`
+where (raw_latitude >= 37.6 and raw_latitude < 37.9 and raw_longitude >= -122.6 and raw_longitude < -122.3);
 
 # The ingest emits canonical column names, as the community and satellite
 # partitions below already do and as every city written since Calgary does.

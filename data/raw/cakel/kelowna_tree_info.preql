@@ -57,7 +57,8 @@ root partial datasource cakel_osm_tree_info extends tree_partition (
     data_source: cakel_source,
 )
 complete where city = 'CAKEL' and cakel_source = 'OSM_CAKEL'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cakel_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cakel_osm_staging.parquet`
+where (raw_latitude >= 49.75 and raw_latitude < 50.0 and raw_longitude >= -119.6 and raw_longitude < -119.3);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

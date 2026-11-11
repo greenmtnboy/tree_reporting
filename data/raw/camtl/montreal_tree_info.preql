@@ -57,7 +57,12 @@ root partial datasource camtl_osm_tree_info extends tree_partition (
     data_source: camtl_source,
 )
 complete where city = 'CAMTL' and camtl_source = 'OSM_CAMTL'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/camtl_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/camtl_osm_staging.parquet`
+where (raw_latitude >= 45.38 and raw_latitude < 45.54 and raw_longitude >= -74.0 and raw_longitude < -73.53)
+    or (raw_latitude >= 45.54 and raw_latitude < 45.56 and raw_longitude >= -74.0 and raw_longitude < -73.52)
+    or (raw_latitude >= 45.56 and raw_latitude < 45.58 and raw_longitude >= -74.0 and raw_longitude < -73.5)
+    or (raw_latitude >= 45.58 and raw_latitude < 45.6 and raw_longitude >= -74.0 and raw_longitude < -73.498)
+    or (raw_latitude >= 45.6 and raw_latitude < 45.72 and raw_longitude >= -74.0 and raw_longitude < -73.42);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

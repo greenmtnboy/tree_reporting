@@ -60,7 +60,8 @@ root partial datasource twtpe_osm_tree_info extends tree_partition (
     borough: ?borough,
 )
 complete where city = 'TWTPE' and twtpe_source = 'OSM_TWTPE'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/twtpe_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/twtpe_osm_staging.parquet`
+where (raw_latitude >= 24.95 and raw_latitude < 25.22 and raw_longitude >= 121.45 and raw_longitude < 121.68);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

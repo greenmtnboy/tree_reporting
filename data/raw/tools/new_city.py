@@ -54,6 +54,9 @@ RAW = Path(__file__).resolve().parents[1]
 DATA = RAW.parent
 REPO = DATA.parent
 SRC = REPO / "src" / "src"
+sys.path.insert(0, str(RAW))
+
+from shared.ingest import territory_where  # noqa: E402
 
 RESOLVE_QUERY_URL = (
     "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/"
@@ -246,12 +249,15 @@ where city = '{code}';
 
 # OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
 # -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
-# by construction; the overlap is resolved by ../tree_dedup.preql.
+# by construction; the overlap is resolved by ../tree_dedup.preql. The `where`
+# is the city's CITY_TERRITORY (tools/sync_osm_territory.py keeps it so): a
+# staged extract keeps the territory it was cut with until its next firing.
 root partial datasource {lc}_osm_tree_info extends tree_partition (
     data_source: {lc}_source,
 )
 complete where city = '{code}' and {lc}_source = 'OSM_{code}'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/{lc}_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/{lc}_osm_staging.parquet`
+where {osm_territory};
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
@@ -534,7 +540,9 @@ def build(args) -> Edits:
     code, lc, slug, name = args.code, args.code.lower(), args.slug, args.name
     source = args.source_label
     lat, lon = args.center
-    fields = dict(code=code, lc=lc, slug=slug, name=name, source=source, lat=lat)
+    fields = dict(code=code, lc=lc, slug=slug, name=name, source=source, lat=lat,
+                  # A new city's territory is its envelope (the CITY_TERRITORY edit below).
+                  osm_territory=territory_where((tuple(args.bounds),)))
 
     e = Edits()
     city = RAW / lc

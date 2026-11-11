@@ -57,7 +57,8 @@ root partial datasource fihel_osm_tree_info extends tree_partition (
     data_source: fihel_source,
 )
 complete where city = 'FIHEL' and fihel_source = 'OSM_FIHEL'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/fihel_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/fihel_osm_staging.parquet`
+where (raw_latitude >= 60.05 and raw_latitude < 60.35 and raw_longitude >= 24.75 and raw_longitude < 25.3);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
