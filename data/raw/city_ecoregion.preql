@@ -67,6 +67,13 @@ select * from (values
     ('FIHEL', 717),
     ('USSTO', 387),
     ('CZPRG', 654),
-    ('USNVA', 330)
+    ('USNVA', 330),
+    ('USAUS', 401),
+    ('USHOU', 384),
+    ('USDUR', 330),
+    ('USNOL', 337),
+    ('USATL', 330),
+    ('USNAP', 399),
+    ('USCLT', 330)
 ) as t(city, ecoregion_id)
 ''';

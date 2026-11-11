@@ -473,3 +473,59 @@ file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnva_t
 partial datasource usnva_tree_vocab extends city_tree_vocab ()
 complete where city = 'USNVA'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnva_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnva_tree_vocab_v{data_version}.parquet`;
+
+partial datasource usaus_tree_browser extends city_tree_browser ()
+complete where city = 'USAUS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usaus_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usaus_tree_browser_v{data_version}.parquet`;
+
+partial datasource usaus_tree_vocab extends city_tree_vocab ()
+complete where city = 'USAUS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usaus_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usaus_tree_vocab_v{data_version}.parquet`;
+
+partial datasource ushou_tree_browser extends city_tree_browser ()
+complete where city = 'USHOU'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ushou_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ushou_tree_browser_v{data_version}.parquet`;
+
+partial datasource ushou_tree_vocab extends city_tree_vocab ()
+complete where city = 'USHOU'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ushou_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ushou_tree_vocab_v{data_version}.parquet`;
+
+partial datasource usdur_tree_browser extends city_tree_browser ()
+complete where city = 'USDUR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usdur_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usdur_tree_browser_v{data_version}.parquet`;
+
+partial datasource usdur_tree_vocab extends city_tree_vocab ()
+complete where city = 'USDUR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usdur_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usdur_tree_vocab_v{data_version}.parquet`;
+
+partial datasource usnol_tree_browser extends city_tree_browser ()
+complete where city = 'USNOL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnol_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnol_tree_browser_v{data_version}.parquet`;
+
+partial datasource usnol_tree_vocab extends city_tree_vocab ()
+complete where city = 'USNOL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnol_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnol_tree_vocab_v{data_version}.parquet`;
+
+partial datasource usatl_tree_browser extends city_tree_browser ()
+complete where city = 'USATL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usatl_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usatl_tree_browser_v{data_version}.parquet`;
+
+partial datasource usatl_tree_vocab extends city_tree_vocab ()
+complete where city = 'USATL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usatl_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usatl_tree_vocab_v{data_version}.parquet`;
+
+partial datasource usnap_tree_browser extends city_tree_browser ()
+complete where city = 'USNAP'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnap_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnap_tree_browser_v{data_version}.parquet`;
+
+partial datasource usnap_tree_vocab extends city_tree_vocab ()
+complete where city = 'USNAP'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnap_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnap_tree_vocab_v{data_version}.parquet`;
+
+partial datasource usclt_tree_browser extends city_tree_browser ()
+complete where city = 'USCLT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usclt_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usclt_tree_browser_v{data_version}.parquet`;
+
+partial datasource usclt_tree_vocab extends city_tree_vocab ()
+complete where city = 'USCLT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usclt_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usclt_tree_vocab_v{data_version}.parquet`;

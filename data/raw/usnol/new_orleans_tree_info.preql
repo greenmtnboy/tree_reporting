@@ -1,0 +1,92 @@
+import ..tree_common;
+import ..community_tree_info;
+import ..tree_dedup;
+
+auto usnol_published_data_updated_through <- greatest(usnol_data_updated_through, usnol_community_data_updated_through, usnol_osm_data_updated_through);
+
+key usnol_source enum<string>['NEW_ORLEANS_OPENDATA', 'COMMUNITY_USNOL', 'OSM_USNOL']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto usnol_source_label <- concat(usnol_source, '');
+merge usnol_source_label into source_label;
+
+root datasource new_orleans_update_time (
+    data_updated_through: usnol_data_updated_through
+)
+file `./new_orleans_update_time.py`;
+
+# Only this city's column, so an approval elsewhere does not mark USNOL's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource usnol_community_update_time (
+    usnol_community_data_updated_through: usnol_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# GCS publication time of the staged OSM parquet; it only moves when an
+# extraction is re-run and uploaded. Not a local mtime -- git does not preserve
+# it, so a committed staging file makes every fresh clone look like new data.
+root datasource usnol_osm_update_time (
+    data_updated_through: usnol_osm_data_updated_through
+)
+file `./new_orleans_osm_probe.py`;
+
+# Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
+# the shared raw_* columns; a source that names a column differently re-binds
+# it here (`dbh: ?raw_dbh`).
+root partial datasource new_orleans_raw_tree_info extends tree_partition (
+    data_source: usnol_source,
+)
+complete where city = 'USNOL' and usnol_source = 'NEW_ORLEANS_OPENDATA'
+file `./new_orleans_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to USNOL and makes
+# it a disjoint partition, and the `where` clause is what actually filters --
+# `complete where` asserts, it does not promise a predicate.
+root partial datasource usnol_community_tree_info extends tree_partition (
+    data_source: usnol_source,
+)
+complete where city = 'USNOL' and usnol_source = 'COMMUNITY_USNOL'
+file `../community_tree_info.py`
+where city = 'USNOL';
+
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
+# -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
+# by construction; the overlap is resolved by ../tree_dedup.preql.
+root partial datasource usnol_osm_tree_info extends tree_partition (
+    data_source: usnol_source,
+)
+complete where city = 'USNOL' and usnol_source = 'OSM_USNOL'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usnol_osm_staging.parquet`;
+
+
+# --- Cross-source dedup and attribute merge --------------------------------
+#
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
+# The per-city lines are the dbh merge, because Boston imputes it, and the
+# position policy: a city with an Overture lookup imports ../tree_position.preql
+# instead of the two position merges (see that file).
+merge merged_dbh into diameter_at_breast_height;
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
+
+
+# The published target extends ../tree_dedup.preql's `published_tree_info`:
+# the canonical columns, the prune, and the guard that refuses a build which
+# lost a quarter of the city.  The two `@source_kept` lines are the same guard
+# per bulk source; add one for every municipal or OSM label in the enum
+# (`test_every_city_refuses_a_collapsed_build`).
+partial datasource new_orleans_tree_info extends published_tree_info (
+    data_source: usnol_source,
+    usnol_published_data_updated_through,
+)
+complete where city = 'USNOL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnol_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnol_tree_info_v{data_version}.parquet`
+freshness by usnol_published_data_updated_through
+assert @source_kept(tree_id, usnol_source, 'NEW_ORLEANS_OPENDATA', 0.75)
+assert @source_kept(tree_id, usnol_source, 'OSM_USNOL', 0.75);

@@ -11,6 +11,13 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Charlotte', label: 'TODO: Charlotte tree inventory source', url: 'TODO' },
+  { city: 'Naples, FL', label: 'TODO: Naples tree inventory source', url: 'TODO' },
+  { city: 'Atlanta', label: 'TODO: Atlanta tree inventory source', url: 'TODO' },
+  { city: 'New Orleans', label: 'TODO: New Orleans tree inventory source', url: 'TODO' },
+  { city: 'Durham', label: 'TODO: Durham tree inventory source', url: 'TODO' },
+  { city: 'Houston', label: 'TODO: Houston tree inventory source', url: 'TODO' },
+  { city: 'Austin', label: 'TODO: Austin tree inventory source', url: 'TODO' },
   { city: 'Northern Virginia', label: 'Arlington County GIS - DPR Trees (ArcGIS Hub)', url: 'https://gisdata-arlgis.opendata.arcgis.com/' },
   { city: 'Northern Virginia', label: 'City of Falls Church GIS - Public Trees (2004 inventory)', url: 'https://services1.arcgis.com/2hmXRAz4ofcdQP6p/arcgis/rest/services/Public_Trees/FeatureServer/0' },
   { city: 'Prague', label: 'Geoportál Praha / IPR Praha - Sdílená data o zeleni, vegetační prvky (CC BY, datový podklad © IPR Praha)', url: 'https://opendata-iprpraha.hub.arcgis.com/datasets/iprpraha::sdílená-data-o-zeleni-vegetační-prvky-body-1' },
@@ -77,6 +84,13 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Charlotte', label: 'TODO: Charlotte landmark source' },
+  { city: 'Naples, FL', label: 'TODO: Naples landmark source' },
+  { city: 'Atlanta', label: 'TODO: Atlanta landmark source' },
+  { city: 'New Orleans', label: 'TODO: New Orleans landmark source' },
+  { city: 'Durham', label: 'TODO: Durham landmark source' },
+  { city: 'Houston', label: 'TODO: Houston landmark source' },
+  { city: 'Austin', label: 'TODO: Austin landmark source' },
   { city: 'Northern Virginia', label: 'Fairfax County GIS - Inventory of Historic Sites', url: 'https://services1.arcgis.com/ioennV6PpG5Xodq0/arcgis/rest/services/Historic_Sites_Inventory/FeatureServer/0' },
   { city: 'Prague', label: 'Národní památkový ústav (NPÚ) - Kulturní památky, Ústřední seznam kulturních památek (CC BY 4.0)', url: 'https://geoportal.npu.cz/arcgis/rest/services/Tematicke/CP_UAP_PVO/MapServer/1' },
   { city: 'Stoughton, WI', label: 'City of Stoughton - Historical Landmarks (Stoughton Landmarks Commission)', url: 'https://stoughtonwi.maps.arcgis.com/home/item.html?id=0ac41bae1fac4f4abdb873deed6f8d75' },

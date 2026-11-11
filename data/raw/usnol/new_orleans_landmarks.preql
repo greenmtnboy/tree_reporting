@@ -1,0 +1,29 @@
+import ..landmark_common;
+
+root datasource new_orleans_landmarks_update_time (
+    data_updated_through: usnol_landmark_data_updated_through
+)
+file `./new_orleans_landmarks_probe.py`;
+
+# STUB. Every city needs a landmarks model even if it yields zero rows -- a
+# missing file fails the landmark lane for every city, and the agent has no
+# geographic context for this one.
+#
+# Point the raw datasource at whichever source this city has, in preference
+# order: an official designation registry, the same portal as the trees, an
+# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
+# geocoded via Nominatim (then add a `landmarks-usnol` job with NO cron).
+#
+# Both datasources extend ../landmark_common.preql's templates: add the
+# register's own attributes to both, mapped in one and stored in the other.
+root partial datasource raw_new_orleans_landmark_info extends landmark_partition (
+)
+complete where city = 'USNOL'
+file `./new_orleans_landmarks.py`;
+
+partial datasource new_orleans_landmark_info extends published_landmark_info (
+    usnol_landmark_data_updated_through,
+)
+complete where city = 'USNOL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usnol_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usnol_landmark_info_v{data_version}.parquet`
+freshness by usnol_landmark_data_updated_through;

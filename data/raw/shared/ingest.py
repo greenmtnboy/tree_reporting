@@ -1467,6 +1467,13 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USCLT": ("CHARLOTTE_OPENDATA",),
+    "USNAP": ("NAPLES_OPENDATA",),
+    "USATL": ("TREES_ATLANTA",),
+    "USNOL": ("NEW_ORLEANS_OPENDATA",),
+    "USDUR": ("DURHAM_OPENDATA",),
+    "USHOU": ("HOUSTON_OPENDATA",),
+    "USAUS": ("AUSTIN_OPENDATA",),
     "USNVA": ("ARLINGTON", "FALLS_CHURCH"),
     "CZPRG": ("PRAGUE_OPENDATA",),
     "USSTO": ("STOUGHTON_OPENDATA",),
@@ -1543,6 +1550,13 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USCLT": "OSM_USCLT",
+    "USNAP": "OSM_USNAP",
+    "USATL": "OSM_USATL",
+    "USNOL": "OSM_USNOL",
+    "USDUR": "OSM_USDUR",
+    "USHOU": "OSM_USHOU",
+    "USAUS": "OSM_USAUS",
     "USNVA": "OSM_USNVA",
     "CZPRG": "OSM_CZPRG",
     "USSTO": "OSM_USSTO",
@@ -2110,6 +2124,13 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USCLT": (35.0, 35.45, -81.05, -80.6),
+    "USNAP": (26.05, 26.3, -81.85, -81.7),
+    "USATL": (33.6, 33.95, -84.6, -84.25),
+    "USNOL": (29.85, 30.2, -90.15, -89.6),
+    "USDUR": (35.85, 36.15, -79.05, -78.7),
+    "USHOU": (29.45, 30.15, -95.85, -95.0),
+    "USAUS": (30.05, 30.55, -98.05, -97.45),
     "USNVA": (38.59, 39.07, -77.55, -77.03),
     "CZPRG": (49.93, 50.19, 14.21, 14.72),
     "USSTO": (42.85, 42.97, -89.3, -89.11),
@@ -2211,6 +2232,20 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USCLT": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USNAP": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USATL": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USNOL": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USDUR": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USHOU": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USAUS": 10,
     # Calibrated 2026-11-06 on the first build (31,351 staged OSM nodes against
     # 37,828 Arlington and Falls Church anchors).  Mutual-NN 92.1% in the 2-5 m
     # band (n=581) collapsing to 31.8% in 5-10 m (n=264): guarantee 5 m.
@@ -2454,6 +2489,13 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USCLT': ((35.0, 35.45, -81.05, -80.6),),
+    'USNAP': ((26.05, 26.3, -81.85, -81.7),),
+    'USATL': ((33.6, 33.95, -84.6, -84.25),),
+    'USNOL': ((29.85, 30.2, -90.15, -89.6),),
+    'USDUR': ((35.85, 36.15, -79.05, -78.7),),
+    'USHOU': ((29.45, 30.15, -95.85, -95.0),),
+    'USAUS': ((30.05, 30.55, -98.05, -97.45),),
     # The Potomac's Virginia shore, carved against USWAS; north of DC the
     # river bends west and the land east of it is Maryland, which is nobody's.
     'USNVA': (
