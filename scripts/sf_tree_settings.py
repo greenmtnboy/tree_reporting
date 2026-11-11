@@ -115,7 +115,8 @@ def geometry(data):
 
 def hits(points, polygons):
     # Query with polygons so GEOS can prepare their geometry for many trees.
-    polygon_index, point_index = shapely.STRtree(points).query(polygons, predicate="covers")
+    polygon_index, point_index = shapely.STRtree(points).query(
+        np.asarray(polygons, dtype=object), predicate="covers")
     return point_index, polygon_index
 
 

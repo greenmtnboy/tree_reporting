@@ -57,6 +57,12 @@ The four SF source-comparison sharing insets are:
 | `presidio_marina` | Palace of Fine Arts & Marina |
 | `bernal_mission` | Bernal Heights & the Mission |
 
+Render each with `--source-mode all --color-by source`. Use the same local
+parquet snapshot via `--input` for all four when producing a consistent set.
+Name outputs `san_francisco_treelines_<inset>_city_and_aerial.png`, then run
+`uv run scripts/render_sf_review_grid.py` to make a four-inset comparison grid.
+The grid accepts `--input-dir` and `--output` and supports 300 or 600 dpi posters.
+
 For the three-color SF land-setting poster, run
 `uv run scripts/render_sf_tree_settings.py` (optionally `--input SNAPSHOT.parquet`).
 It uses public CPAD park units, SF Public Works rights-of-way, and active parcels
@@ -64,9 +70,8 @@ matched to the 2025 assessor roll. Park locations take precedence at overlaps.
 Gray dots show trees on other or unresolved land. The likely private subtotal
 separates residential, business/industrial, golf-course and mixed-use footprints.
 The accompanying JSON includes all park counts, source splits, and layer provenance.
-
-Render each with `--source-mode all --color-by source`. Use the same local
-parquet snapshot via `--input` for all four when producing a consistent set.
+Southern out-of-city trees appear in gray for context, excluded from every
+displayed total and category. Unclassified trees within SF remain in the counts.
 
 ## Boston presets
 
@@ -127,10 +132,12 @@ machine-local metadata are ignored by Git; presets such as
 ## Offline checks
 
 ```powershell
-uv run --with duckdb --with matplotlib --with numpy --with scipy --with shapely python -m unittest discover -s scripts/tests -p test_treelines_data.py
+uv run --no-project --with duckdb --with matplotlib --with numpy --with requests --with scipy --with "shapely>=2.1" python -m unittest discover -s scripts/tests
 ```
 
 These checks cover inventory-only selection, source opt-ins and color grouping, visibility and
 cluster filtering, empty selections, coastline removal, and the SF circle's fit
-within the viewport. Rendering smoke checks additionally require network access
+within the viewport, park/street precedence, public-land exclusions, and the
+private golf-course split. These offline checks also run in CI.
+Rendering smoke checks additionally require network access
 or local input/cache files.
