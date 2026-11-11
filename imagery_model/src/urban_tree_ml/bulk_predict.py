@@ -231,10 +231,20 @@ def rows_from_bundle(bundle: dict[str, Any]) -> list[dict[str, Any]]:
             "run_id": run_id,
             "imagery_version": version,
             "leaf_habit": None,
-            "_candidates": [c for c in (p.get("speciesTop") or []) if c],
+            "_candidates": candidates(p),
             "_tile": str(bundle["tileId"]),
         })
     return rows
+
+
+def candidates(prediction: dict[str, Any]) -> list[tuple[str, float]]:
+    """(species, probability) for each top candidate a prediction recorded.  A
+    record without probabilities weighs its candidates equally."""
+    names = prediction.get("speciesTop") or []
+    weights = prediction.get("speciesTopConfidence") or []
+    if len(weights) != len(names):
+        weights = [1.0] * len(names)
+    return [(str(n), float(w)) for n, w in zip(names, weights) if n and w is not None]
 
 
 # ---------------------------------------------------------------------------
@@ -285,27 +295,38 @@ def name_habit(name: str | None, species: dict[str, str], genera: dict[str, str]
     return species.get(name) or genera.get(name.split()[0])
 
 
-def leaf_habit(candidates: list[str], genus: str | None,
-               species: dict[str, str], genera: dict[str, str]) -> str | None:
-    """The habit every top species candidate shares, else None.
+DEFAULT_HABIT_SHARE = 0.7
 
-    A candidate with no known habit means no call, and the genus head, when
-    its genus has a habit, must not disagree.  Evergreen candidates that are
-    not all conifers are ``evergreen``; a conifer call needs every one to be.
+
+def leaf_habit(candidates: list[tuple[str, float]], species: dict[str, str], genera: dict[str, str],
+               min_share: float = DEFAULT_HABIT_SHARE) -> str | None:
+    """The habit holding at least *min_share* of the top candidates'
+    probability, else None.
+
+    A share is over every candidate's probability, so one the table cannot
+    place (a vegetation class, a species it lacks) counts against every habit.
+    Conifers are evergreens too: candidates that are evergreen together but
+    not conifer enough on their own are ``evergreen``.  The North Shore
+    corridor (v19, 2026-11) at 0.7: 92% deciduous, 2.5% conifer, 0.1%
+    evergreen, 6% no call; requiring every candidate to agree called no
+    conifer at all, since a white pine's top five nearly always hold a
+    broadleaf.
     """
-    if not candidates:
+    total = sum(w for _, w in candidates)
+    if total <= 0:
         return None
-    habits = {name_habit(c, species, genera) for c in candidates}
-    genus_habit = genera.get(genus) if genus else None
-    if genus_habit is not None:
-        habits.add(genus_habit)
-    if None in habits:
-        return None
-    if habits == {DECIDUOUS}:
+    mass: dict[str | None, float] = {}
+    for name, weight in candidates:
+        habit = name_habit(name, species, genera)
+        mass[habit] = mass.get(habit, 0.0) + weight
+    floor = min_share * total - 1e-9
+    if mass.get(CONIFER, 0.0) >= floor:
+        return CONIFER
+    if mass.get(DECIDUOUS, 0.0) >= floor:
         return DECIDUOUS
-    if DECIDUOUS in habits:
-        return None
-    return CONIFER if habits == {CONIFER} else EVERGREEN
+    if mass.get(CONIFER, 0.0) + mass.get(EVERGREEN, 0.0) >= floor:
+        return EVERGREEN
+    return None
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -737,7 +758,7 @@ def assemble(args: argparse.Namespace) -> int:
     if args.habits != "none" and any(row["_candidates"] for row in kept):
         species_habits, genus_habits = load_habits(args.habits)
         for row in kept:
-            row["leaf_habit"] = leaf_habit(row["_candidates"], row["genus"], species_habits, genus_habits)
+            row["leaf_habit"] = leaf_habit(row["_candidates"], species_habits, genus_habits, args.habit_share)
     habits: dict[str, int] = {}
     for row in kept:
         habits[str(row["leaf_habit"])] = habits.get(str(row["leaf_habit"]), 0) + 1
@@ -998,6 +1019,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--from-bundles", default=None, help="assemble reviewer tile bundles under this directory instead")
     p.add_argument("--habits", default=ENRICHMENT_URL,
                    help="enrichment parquet the leaf habits are read from ('none' writes no habit)")
+    p.add_argument("--habit-share", type=float, default=DEFAULT_HABIT_SHARE,
+                   help="call a leaf habit when it holds at least this share of the top species "
+                        "candidates' probability")
     p.add_argument("--patch-onto", default=None, metavar="BASE",
                    help="replace only BASE's rows inside this run's predicted tiles: a parquet path, a URL, "
                         "or 'published' for the city's current staged file")
