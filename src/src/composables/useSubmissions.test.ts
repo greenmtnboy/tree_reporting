@@ -243,9 +243,9 @@ describe('submitTreeModification', () => {
     expect(data.photoPath).toBe(`modifications/alice/${path.split('/')[1]}.png`)
   })
 
-  it('turns a rules denial (the 30-second limit) into a message a person can act on', async () => {
+  it('turns a rules denial (the 2-second limit) into a message a person can act on', async () => {
     state.commitErrors = [Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' })]
     await expect(submitTreeModification({ ...REPORT, kind: 'missing', missingReason: 'stump' }))
-      .rejects.toThrow(/wait a minute and try again/)
+      .rejects.toThrow(/wait a moment and try again/)
   })
 })

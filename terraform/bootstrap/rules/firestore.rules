@@ -23,9 +23,11 @@ service cloud.firestore {
       return /databases/$(database)/documents/modificationRateLimits/$(uid);
     }
 
+    // Corrections are text a person reviews; the gap only stops a double-click
+    // sending the same report twice. Photo submissions keep the 30 s limit.
     function modificationRateLimitAllows(uid) {
       return !exists(modificationRateLimitPath(uid))
-        || get(modificationRateLimitPath(uid)).data.submittedAt <= request.time - duration.value(30, 's');
+        || get(modificationRateLimitPath(uid)).data.submittedAt <= request.time - duration.value(2, 's');
     }
 
     function optionalString(value, maxSize) {
