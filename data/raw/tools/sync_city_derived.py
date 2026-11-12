@@ -13,6 +13,9 @@ Each city in MUNICIPAL_DATA_SOURCES gets (city_derived.preql says why):
   raw/{code}/{slug}_derived_probe.py     its watermark (shared/city_derived.py)
   a `derived-{code}` [[cloud.job]]       on its city job's cron and memory
 
+and raw/tree_predictions_source.preql lists every city's predictions file, for
+the consumers that read all of them (the crown rollup).
+
 The jobs sit between the `# >>> sync_city_derived: jobs` markers in
 trilogy.toml and are rewritten whole. A derived model reads its city's parquet
 through a root named like the city job's managed output, which is the edge
@@ -96,6 +99,53 @@ datasource {lc}_tree_vocab extends city_tree_vocab ()
 """
 
 
+PREDICTIONS_SOURCE = RAW / "tree_predictions_source.preql"
+
+
+def predictions_source() -> str:
+    files = ",\n".join(
+        f"    f`https://storage.googleapis.com/{BUCKET}/{code.lower()}_tree_predictions_v{{data_version}}.parquet`"
+        for code in sorted(MUNICIPAL_DATA_SOURCES)
+    )
+    return f"""# Every city's published predictions, as a *source*. Written by
+# tools/sync_city_derived.py: edit that, not this.
+#
+# One root datasource over the per-city files the derived-{{code}} jobs
+# publish (city_derived.preql), read as a single multi-file scan, for a
+# consumer that wants every city's widths at once: the crown rollup
+# (tree_rollups.preql). Root means unmanaged: importing this never builds a
+# prediction.
+#
+#   * `tree_id: ~tree_id`: a predictions file omits imagery detections with no
+#     LIDAR height, so it is a partial key. The planner pads the join and a
+#     tree with no prediction keeps its other columns with a null width.
+#   * Every listed file must exist, or the whole scan fails: a new city's
+#     derived job must publish once before the rollup next runs.
+#   * It must never be in the frontend's model bundle, which carries no
+#     predictions at all (test_tree_predictions.py).
+
+import tree_common;
+
+property tree_id.predicted_crown_width_m float; # the allometric crown width, as the city's derived job published it; null where the model had nothing to size from
+property tree_id.predicted_height_m float; # the allometric height, as published; null where the model had nothing to size from
+property tree_id.accepted_height_m float; # the tree's LIDAR height where it passed the gates (or could not be checked); null where it has none or failed them
+property tree_id.prediction_inputs_published_through datetime; # the newest of the city's inputs, as its file was published with
+
+root datasource tree_predictions (
+    tree_id: ~tree_id,
+    city: city,
+    predicted_crown_width_m: ?predicted_crown_width_m,
+    predicted_height_m: ?predicted_height_m,
+    accepted_height_m: ?accepted_height_m,
+    prediction_inputs_published_through: prediction_inputs_published_through,
+)
+grain (tree_id)
+file [
+{files},
+];
+"""
+
+
 def probe(code: str) -> str:
     return f'''#!/usr/bin/env -S uv run
 # /// script
@@ -151,6 +201,7 @@ def planned() -> dict[Path, str]:
         slug = path.name.removesuffix("_tree_info.preql")
         files[path.with_name(f"{slug}_tree_derived.preql")] = model(code)
         files[path.with_name(f"{slug}_derived_probe.py")] = probe(code)
+    files[PREDICTIONS_SOURCE] = predictions_source()
     toml_text = TOML.read_text(encoding="utf-8")
     files[TOML] = replace_block(toml_text, JOBS_MARKERS, jobs_block(toml_text))
     return files

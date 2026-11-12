@@ -37,11 +37,10 @@ def statements(path: Path) -> str:
 
 
 def test_the_projection_reads_the_predictions_its_own_job_wrote():
-    """No second predictions file, and no import of a model that builds one."""
+    """Not the every-city predictions source, and no import of a model that builds a second file."""
     model = statements(RAW_DIR / "city_derived.preql")
     assert "import tree_predictions;" in model
     assert "import tree_predictions_source;" not in model
-    assert not (RAW_DIR / "tree_predictions_source.preql").exists()
     for managed in ("tree_enrichment", "full_tree_publish"):
         assert f"import {managed};" not in model, managed
 

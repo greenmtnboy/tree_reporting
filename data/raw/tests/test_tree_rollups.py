@@ -211,9 +211,10 @@ def summary(request, rollup_parquet, predictions_parquet) -> tuple[str, list[tup
     (sql,) = executor.generate_sql(f"select {columns};")
     sql, n = re.subn(r"read_parquet\('[^']*full_tree_info_v[^']*'\)", f"read_parquet('{rollup_parquet.as_posix()}')", sql)
     assert n == 1, f"expected one scan of the rollup, found {n}"
-    # Only the crown summary reads a second table: the estimated widths.
+    # Only the crown summary reads a second table: the estimated widths, one
+    # multi-file scan over every city's predictions file.
     sql, n = re.subn(
-        r"read_parquet\('[^']*tree_predictions_v[^']*'\)", f"read_parquet('{predictions_parquet.as_posix()}')", sql
+        r"read_parquet\(\['[^\]]*_tree_predictions_v[^\]]*\]\)", f"read_parquet('{predictions_parquet.as_posix()}')", sql
     )
     assert n == (1 if name == "tree_rollup_crown" else 0)
     assert "read_parquet('https" not in sql

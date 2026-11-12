@@ -1,0 +1,79 @@
+# Every city's published predictions, as a *source*. Written by
+# tools/sync_city_derived.py: edit that, not this.
+#
+# One root datasource over the per-city files the derived-{code} jobs
+# publish (city_derived.preql), read as a single multi-file scan, for a
+# consumer that wants every city's widths at once: the crown rollup
+# (tree_rollups.preql). Root means unmanaged: importing this never builds a
+# prediction.
+#
+#   * `tree_id: ~tree_id`: a predictions file omits imagery detections with no
+#     LIDAR height, so it is a partial key. The planner pads the join and a
+#     tree with no prediction keeps its other columns with a null width.
+#   * Every listed file must exist, or the whole scan fails: a new city's
+#     derived job must publish once before the rollup next runs.
+#   * It must never be in the frontend's model bundle, which carries no
+#     predictions at all (test_tree_predictions.py).
+
+import tree_common;
+
+property tree_id.predicted_crown_width_m float; # the allometric crown width, as the city's derived job published it; null where the model had nothing to size from
+property tree_id.predicted_height_m float; # the allometric height, as published; null where the model had nothing to size from
+property tree_id.accepted_height_m float; # the tree's LIDAR height where it passed the gates (or could not be checked); null where it has none or failed them
+property tree_id.prediction_inputs_published_through datetime; # the newest of the city's inputs, as its file was published with
+
+root datasource tree_predictions (
+    tree_id: ~tree_id,
+    city: city,
+    predicted_crown_width_m: ?predicted_crown_width_m,
+    predicted_height_m: ?predicted_height_m,
+    accepted_height_m: ?accepted_height_m,
+    prediction_inputs_published_through: prediction_inputs_published_through,
+)
+grain (tree_id)
+file [
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/arbue_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aumel_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caajx_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cabur_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cacal_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caedm_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cahfx_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cakel_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cakgn_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/calet_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/calon_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camis_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camon_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camtl_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/canwe_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caott_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caque_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cator_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavan_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavic_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cawpg_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cobog_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/czprg_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/deber_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/dkcph_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/fihel_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frpar_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gblon_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grath_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grsan_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/jptyo_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlams_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/twtpe_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbtv_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usden_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslax_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnva_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussto_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ustem_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uswas_tree_predictions_v{data_version}.parquet`,
+];
