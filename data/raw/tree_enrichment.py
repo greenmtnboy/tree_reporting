@@ -79,6 +79,8 @@ from enrichment._tree_enrichment_sources import (
     gather_source_texts,
     prefetch_wcvp,
     source_labels,
+    wcvp_family,
+    with_wcvp_family,
 )
 
 # ── iNaturalist photo fetching ─────────────────────────────────────────────────
@@ -323,7 +325,33 @@ def run_standalone_debug(q_species: str, client) -> int:
 
 # ── Enrichment ─────────────────────────────────────────────────────────────────
 
-def enrich_species(q_species: str, client, print_full_context: bool = False) -> TreeEnrichment | None:
+def keep_shortlisted_ecoregions(enrichment: TreeEnrichment | None, shortlist: list[EcoregionReference]) -> TreeEnrichment | None:
+    """Drop every ecoregion id the model returned that was not on its shortlist.
+
+    The prompt says to choose only from the shortlist, and with no shortlist
+    lets the model answer when "the evidence is exceptionally clear" -- which
+    is an id recalled from memory, a number nothing checks.  The shortlist is
+    matched from Kew's areas, so an id outside it has no evidence behind it.
+    """
+    if enrichment is None or not enrichment.native_ecoregions:
+        return enrichment
+    allowed = {candidate.ecoregion_id for candidate in shortlist}
+    kept = [i for i in enrichment.native_ecoregions if i in allowed]
+    if len(kept) != len(enrichment.native_ecoregions):
+        print(
+            f"    [ecoregions] dropped {len(enrichment.native_ecoregions) - len(kept)} id(s) not on the shortlist",
+            file=sys.stderr,
+        )
+        enrichment.native_ecoregions = kept
+    return enrichment
+
+
+def enrich_species(
+    q_species: str,
+    client,
+    print_full_context: bool = False,
+    shortlisted_ecoregions_only: bool = False,
+) -> TreeEnrichment | None:
     scientific_name = parse_scientific_name(q_species)
     if not scientific_name:
         return None
@@ -346,7 +374,7 @@ def enrich_species(q_species: str, client, print_full_context: bool = False) -> 
     ecoregion_candidates = select_ecoregion_candidates(native_range_evidence)
     if ecoregion_candidates:
         print(f"    [ecoregions] shortlist={len(ecoregion_candidates)}", file=sys.stderr)
-    return parse_enrichment_from_text_v2(
+    enrichment = parse_enrichment_from_text_v2(
         scientific_name,
         wiki_name,
         texts,
@@ -355,6 +383,9 @@ def enrich_species(q_species: str, client, print_full_context: bool = False) -> 
         ecoregion_candidates,
         print_full_context=print_full_context,
     )
+    if shortlisted_ecoregions_only:
+        return keep_shortlisted_ecoregions(enrichment, ecoregion_candidates)
+    return enrichment
 
 
 # ── Species list ───────────────────────────────────────────────────────────────
@@ -594,13 +625,19 @@ def load_existing_table(source: str) -> pa.Table | None:
     # the accepted row's shades; it fills only what is null, so a value the
     # model or the form wrote is kept.
     #
+    # with_wcvp_family goes before the alias step for the same reason: an
+    # alias row takes its family from the accepted row. It too fills only
+    # what is null, so a family a reviewer typed in the form is kept.
+    #
     # purge_unreachable_keys runs *after* with_species_aliases and not before:
     # the alias step is what decides which old spellings are still joined to,
     # and one of its branches re-keys a row rather than dropping it. Ordered
     # the other way it would delete enrichment the table already has.
     return with_sentinel_rows(
         purge_unreachable_keys(
-            with_species_aliases(with_hero_foliage(with_normalized_common_names(purge_non_taxa(table)))),
+            with_species_aliases(
+                with_wcvp_family(with_hero_foliage(with_normalized_common_names(purge_non_taxa(table))))
+            ),
             published=published_species_keys(),
         )
     )
@@ -956,7 +993,10 @@ if __name__ == "__main__":
             "species":              scientific_name,
             "genus":                genus,
             "species_epithet":      species_epithet,
-            "family":               None,
+            # Kew's, never the model's: the species' own record, else its
+            # genus (wcvp_family). with_wcvp_family names on the next load
+            # whatever is still null here.
+            "family":               wcvp_family(scientific_name),
             # Filled from SPECIES_SYNONYMS on load (with_species_aliases), or
             # by hand in enrichment/admin/server.py; the model is not asked for it.
             "synonyms":             None,

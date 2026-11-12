@@ -9,6 +9,7 @@ import time
 
 import requests
 
+from shared.ingest import SPECIES_SENTINELS
 from shared.wcvp import Checklist, ChecklistUnavailable
 
 
@@ -388,6 +389,115 @@ def fetch_wcvp_text(scientific_name: str) -> str | None:
     except ChecklistUnavailable as e:
         _disable_wcvp(e)
     return None
+
+
+# `family` comes from Kew and from nowhere else: it is a fact about the name,
+# WCVP states it for every record, and a model asked for it would be guessing
+# at something that can be looked up.
+
+
+def _single_family(records: list[dict]) -> str | None:
+    """The one family these records agree on, or None.
+
+    Accepted records are read first and the rest only when there are none:
+    Kew lists `Ilex` Mill. (a synonym in Fagaceae) beside `Ilex` L., and
+    `Syringa`, `Lonicera`, `Phoenix` and `Cedrus` each have a sunk homonym in
+    another family, so asking every record to agree would refuse most of the
+    genera a street is planted with.  Two accepted records in two families,
+    or no accepted record and a disagreement, is ambiguous and answers None.
+    """
+    accepted = {
+        r["family"] for r in records
+        if r["family"] and r["accepted_plant_name_id"] == r["plant_name_id"]
+    }
+    if accepted:
+        return next(iter(accepted)) if len(accepted) == 1 else None
+    every = {r["family"] for r in records if r["family"]}
+    return next(iter(every)) if len(every) == 1 else None
+
+
+def family_genus_candidates(name: str) -> list[str]:
+    """The genus of *name* as Kew may key it: bare, and as a nothogenus."""
+    tokens = name.replace(chr(215), " x ").split()
+    if len(tokens) > 1 and tokens[0].lower() == "x":
+        tokens = tokens[1:]
+    if not tokens or not re.fullmatch(r"[A-Z][A-Za-z-]+", tokens[0]):
+        return []
+    return [tokens[0], f"x {tokens[0]}"]
+
+
+def family_from_checklist(kew: Checklist, name: str | None) -> str | None:
+    """The family Kew places *name* in.
+
+    The name's own records first; failing that its genus, when the genus is
+    unambiguous (`_single_family` over the genus-rank records).  The fallback
+    is what names a cultivar, a `sp.`, a trade name or a misspelt epithet --
+    the family of an `Acer` is not in doubt because its epithet is.  A
+    sentinel is never looked up: `Cactus` is a growth form here and a genus
+    (a synonym of Mammillaria) at Kew.
+    """
+    if not name or name in SPECIES_SENTINELS:
+        return None
+    family = _single_family(kew.records(name))
+    if family:
+        return family
+    for genus in family_genus_candidates(name):
+        family = _single_family([r for r in kew.records(genus) if r["taxon_rank"] == "Genus"])
+        if family:
+            return family
+    return None
+
+
+def wcvp_family(scientific_name: str) -> str | None:
+    """`family_from_checklist` against the run's reader; None without Kew."""
+    kew = wcvp_checklist()
+    if kew is None:
+        return None
+    try:
+        return family_from_checklist(kew, scientific_name)
+    except ChecklistUnavailable as e:
+        _disable_wcvp(e)
+        return None
+
+
+def with_wcvp_family(table):
+    """Fill every null `family` Kew can name; a value already there is kept.
+
+    Run on load, like the other `with_*` steps, so the column heals itself:
+    a row written before the job filled `family`, or on a day the checklist
+    could not be read, is named on the next load, and one lookup covers the
+    whole table (the names still missing and their genera, prefetched
+    together).  Once the table is filled this asks only about the few names
+    Kew does not have.  Without Kew the table is returned as it came.
+    """
+    import pyarrow as pa
+
+    if "family" not in table.schema.names or len(table) == 0:
+        return table
+    species = table.column("species").to_pylist()
+    family = table.column("family").to_pylist()
+    missing = [s for s, f in zip(species, family) if s and not f and s not in SPECIES_SENTINELS]
+    if not missing:
+        return table
+    kew = wcvp_checklist()
+    if kew is None:
+        return table
+    try:
+        kew.prefetch([*missing, *(g for s in missing for g in family_genus_candidates(s))])
+        filled = [f or family_from_checklist(kew, s) for s, f in zip(species, family)]
+    except ChecklistUnavailable as e:
+        _disable_wcvp(e)
+        return table
+    named = sum(1 for before, after in zip(family, filled) if after and not before)
+    if not named:
+        return table
+    print(
+        f"[family] filled family on {named} row(s) from WCVP; "
+        f"{len(missing) - named} name(s) Kew cannot place",
+        file=sys.stderr,
+    )
+    idx = table.schema.get_field_index("family")
+    return table.set_column(idx, "family", pa.array(filled, type=pa.string()))
 
 
 def fetch_gbif_text(scientific_name: str) -> str | None:
