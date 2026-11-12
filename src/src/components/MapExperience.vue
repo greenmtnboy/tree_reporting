@@ -48,15 +48,20 @@ const emit = defineEmits<{ 'entry-change': [visible: boolean] }>()
 const route = useRoute()
 const router = useRouter()
 const { displayCity, setUserLocation } = useMapData()
-// Both choices on the entry screen open the map, and the map's engine is the
-// longest wait before a tree: about 14 MB of DuckDB and its spatial extension,
-// then the species table and the world's manifest. Start it while the viewer
-// reads the screen, answers the location prompt and waits for a fix, not
-// after. The window is the one TreeMap asks for on this layout; if a layout
-// asks for another, the worker reads the manifest again and nothing else.
+// The map's engine is the longest wait before a tree: about 14 MB of DuckDB
+// and its spatial extension, then the species table and the world's manifest.
+// Near Me starts it with the location request, so it downloads while the
+// viewer answers the prompt and the fix arrives, not after. Not before the
+// tap: the entry screen starts nothing (a visitor may be headed for another
+// tab, whose own queries the download would slow). The window is the one
+// TreeMap asks for on this layout; if a layout asks for another, the worker
+// reads the manifest again and nothing else.
 const { setWindowPolicy, preWarmForCity, prefetchWindowAt } = useDuckDB()
-setWindowPolicy(resolveMapWindow(useIsMobile().isMobile.value)?.policy ?? null)
-preWarmForCity(displayCity.value)
+const { isMobile } = useIsMobile()
+function warmMapEngine() {
+  setWindowPolicy(resolveMapWindow(isMobile.value)?.policy ?? null)
+  preWarmForCity(displayCity.value)
+}
 // City is a destination hint, never an implicit experience selection.
 const mode = computed(() => {
   if (route.query.mode === 'nearby') return 'nearby'
@@ -83,6 +88,7 @@ async function locate() {
   locating.value = true
   locationError.value = ''
   performance.mark('trees:location:start')
+  warmMapEngine()
   const deadline = window.setTimeout(() => {
     if (id !== request || !locating.value) return
     locating.value = false
