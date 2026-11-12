@@ -517,7 +517,7 @@ export async function submitTreeModification(input: ModificationInput): Promise<
     lastModificationId: modificationId,
     submittedAt: serverTimestamp(),
   })
-  // A denial is also what the 30-second rate limit looks like, and what every
+  // A denial is also what the 2-second rate limit looks like, and what every
   // report gets before the treeModifications rules are deployed.
   const denied = await batch.commit().then(
     () => false,
@@ -526,7 +526,7 @@ export async function submitTreeModification(input: ModificationInput): Promise<
       throw err
     },
   )
-  if (denied) throw new Error("Couldn't send the report — wait a minute and try again.")
+  if (denied) throw new Error("Couldn't send the report — wait a moment and try again.")
   return modificationId
 }
 
