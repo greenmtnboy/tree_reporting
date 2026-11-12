@@ -1,8 +1,9 @@
 # The published age and height fits, as *sources*: what tree_predictions.preql
 # applies. Root, so the predictions read the fits and never refit them, and
 # each named like the managed datasource that writes it (allometry_fits.preql,
-# height_fits.preql), so the platform orders refresh-predictions after both
-# fitting jobs in one tick.
+# height_fits.preql). Each city's `derived-{code}` job reads them, and its
+# watermark includes their publication (shared/city_derived.py), so a week's
+# new fits rebuild every city.
 #
 # A genus table joins on `genus`. A class table keys its rows by its own
 # taxon column (`age_fit_class`, `height_fit_class`), because the tree's

@@ -1,0 +1,175 @@
+# What a city's `derived-{code}` job builds from that city's own published
+# parquet: its tree-level predictions and the browser projection the map
+# reads. Every city has a file raw/{code}/{slug}_tree_derived.preql that
+# imports this one and declares only what differs by city -- the file names,
+# whether it has LIDAR heights, its probe -- and tools/sync_city_derived.py
+# writes all of them.
+#
+# Why per city, and from the city's file rather than the rollup: the
+# predictions used to be one table over the whole rollup, built in one job
+# after publish-full, and the browser projections one job over the rollup and
+# that table. Each read the world to change one city, rebuilt every city
+# whenever any city published, and outgrew its worker (13M rows, 12.6 GiB,
+# 2026-11-11). A tree's prediction reads only its own row, the enrichment
+# table and the fit tables, and its density only trees in its own 50 m cell,
+# which territories keep inside one city -- so nothing here needs another
+# city's trees, and a job holds one city.
+#
+# The watermark is the city's own (`city_inputs_published_through`): the
+# newest Last-Modified of its parquet, the enrichment table and the fit
+# tables. A city rebuilds when it, the enrichment or the fits move. The fits
+# refit at most weekly (prediction_inputs_probe.py), so a city that has not
+# changed rebuilds about once a week.
+#
+# Every input is a root datasource over a published parquet. The city's own
+# is NOT named like the managed datasource the city job writes: a derived
+# edge is skipped when its producer is up to date, and then a week's new fits
+# would reach no city. The job is ordered after its city by an explicit
+# `when = "always"` entry in trilogy.toml's [dependencies] instead.
+
+import std.geography;
+import tree_common;
+import tree_published_columns;
+import tree_enrichment_source;
+import tree_predictions;
+
+# --- Inputs every city binds to its own files ------------------------------
+
+# The city's published parquet: the rollup's columns (full_tree_info_source),
+# from the one file the rollup takes this city's rows from. A city with LIDAR
+# heights adds `height_m` and `height_crown_radius_m` from the same file;
+# every other city binds both to a typed null.
+template datasource published_city_trees (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: species,
+    cultivar: ?cultivar,
+    crown_width_m: ?crown_width_m,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+)
+grain (tree_id);
+
+# The city's watermark, from its probe (shared/city_derived.py).
+template datasource city_derived_inputs (
+    data_updated_through: city_inputs_published_through,
+);
+
+# The sizes the projection carries, as the city's predictions table published
+# them -- read back from that file, not derived again. With the arithmetic in
+# scope the planner sizes the projection's trees itself, joins them to the
+# predictions file on `genus`, and with a city's heights in its own parquet
+# drops the trees the table holds no row for (an imagery detection without a
+# survey: most of Boston's map). These are their own concepts so the
+# projection has nothing to derive; the key is partial because the table holds
+# only some of the city's trees, so the join pads and every tree keeps its row.
+# The job writes the predictions first: the projection is declared after them.
+property tree_id.published_predicted_crown_width_m float; # predicted_crown_width_m, as the city's predictions table published it
+property tree_id.published_predicted_height_m float; # predicted_height_m, as the city's predictions table published it
+property tree_id.published_accepted_height_m float; # accepted_height_m, as the city's predictions table published it
+
+template datasource published_city_predictions (
+    tree_id: ~tree_id,
+    predicted_crown_width_m: ?published_predicted_crown_width_m,
+    predicted_height_m: ?published_predicted_height_m,
+    accepted_height_m: ?published_accepted_height_m,
+)
+grain (tree_id);
+
+# --- The browser projection -------------------------------------------------
+#
+# The rows and columns the map's worker keeps resident, so a city opens with
+# one scan and no joins. The worker used to assemble this shape itself on
+# every visit: the city's inventory, a LEFT JOIN to the enrichment table for
+# the display name and growth form, a LEFT JOIN to the predictions for the
+# sizes, and a vocabulary pass per string column. In DuckDB-wasm the heap
+# keeps whatever those joins grew it to (docs/MOBILE_LOAD_BUDGET.md).
+#
+# What each column is:
+#   display_name   the enrichment table's first common name, else the name the
+#                  source recorded, else the species. The sentinels (`Unknown`,
+#                  `Palm`, ...) have authored enrichment rows (ingest.py,
+#                  SENTINEL_ENRICHMENT), so they label themselves the same way.
+#   tree_form      the enrichment growth form, `default` where there is none;
+#                  the icon and the default colour are chosen from it.
+#   tree_name      the source's own name field, unchanged.
+#   predicted_crown_width_m  the allometric estimate (tree_predictions.preql);
+#                  null for a tree the model could not size (a palm, or no
+#                  diameter and no planting date).
+#   height_m       the LIDAR height a city published, where it passed the
+#                  shading and band gates in tree_predictions.preql
+#                  (`accepted_height_m`); only the cities with a survey have one.
+#   predicted_height_m  the allometric height, on the same inputs and nulls as
+#                  the crown.
+#
+# Rows are written along a Hilbert curve over (latitude, longitude), in row
+# groups of 10,240. The phone's window filters on a lat/long box
+# (windowStagingSql in src/src/workers/cityTables.ts), and DuckDB skips every
+# row group whose footer min/max falls outside it, so a window load reads the
+# few groups near the camera instead of the whole file. 10,240 rather than
+# 20,480 because it prunes better for a little more footer; the arithmetic is
+# in docs/TRILOGY_ORDER_BY_SPEC.md. The sort key is computed for the write and
+# not stored. Trees with no position sort last (the index is null).
+
+# What the map shows where a common name goes, and the growth form the icon
+# and default colour are chosen from (never null).
+auto display_name <- coalesce(nullif(trim(common_names[1]), ''), nullif(trim(tree_name), ''), species);
+auto browser_tree_form <- coalesce(tree_form, 'default');
+
+# One that would lose a quarter of its city's rows is refused, keeping the
+# published one (`kept`, core.preql).
+template datasource city_tree_browser (
+    tree_id,
+    city,
+    data_source,
+    species,
+    cultivar: ?cultivar,
+    tree_name: ?tree_name,
+    display_name,
+    tree_form: browser_tree_form,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    crown_width_m: ?crown_width_m,
+    predicted_crown_width_m: ?published_predicted_crown_width_m,
+    height_m: ?published_accepted_height_m,
+    predicted_height_m: ?published_predicted_height_m,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    prediction_inputs_published_through: city_inputs_published_through,
+)
+grain (tree_id)
+freshness by city_inputs_published_through
+order by @hilbert_index(latitude, longitude) asc nulls last
+storage (row_group_size = 10240)
+assert @kept(tree_id, 0.75);
+
+# The vocabularies the worker types the projection's string columns with: one
+# row per distinct (data_source, species, cultivar, tree_name, display_name)
+# with its tree count, in a file of a few thousand rows beside the
+# projection. A windowed phone needs every value before its first window
+# (a value first met in the fifth cell must already be in the ENUM), and a
+# SELECT DISTINCT over the projection reads most of the file: DuckDB-wasm
+# fetches 4 and 16 MiB blocks, and a 10,240-row group's string chunk is a few
+# KB, so each block spans every column (71 of Boston's 71 MB). The worker
+# trusts the file only when its tree counts sum to the projection's row count
+# (from the projection's footer) and scans the projection otherwise.
+auto vocab_tree_count <- count(tree_id);
+
+template datasource city_tree_vocab (
+    city,
+    data_source,
+    species,
+    cultivar: ?cultivar,
+    tree_name: ?tree_name,
+    display_name,
+    tree_count: vocab_tree_count,
+    inputs_published_through: city_inputs_published_through,
+)
+grain (city, data_source, species, cultivar, tree_name, display_name)
+freshness by city_inputs_published_through;

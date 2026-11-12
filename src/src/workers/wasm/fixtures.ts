@@ -63,7 +63,7 @@ export type CityFixture = {
 }
 
 /**
- * A city's browser projection (data/raw/tree_browser_city.preql's columns)
+ * A city's browser projection (data/raw/city_derived.preql's `city_tree_browser` columns)
  * with `rows` trees scattered uniformly over `bbox`, the same every run.
  */
 export async function writeCityProjection({ city, rows, bbox, species }: CityFixture): Promise<string> {

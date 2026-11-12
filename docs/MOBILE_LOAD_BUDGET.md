@@ -101,7 +101,7 @@ range-request buffers, which no file shape changes.
 ### The browser projection (stage 1b)
 
 The pipeline now publishes the worker's row shape per city
-(`data/raw/tree_browser_city.preql`, `{code}_tree_browser_v2.parquet`): the
+(`data/raw/city_derived.preql`, `{code}_tree_browser_v2.parquet`): the
 display name, the growth form and the crown prediction are columns, so the
 load is one scan and a cast, with no enrichment join, no predictions join
 and no probes. The worker falls back to assembling the shape itself for a

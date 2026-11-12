@@ -312,38 +312,6 @@ def test_rollup_reads_every_city():
     )
 
 
-@pytest.mark.parametrize("kind", ["tree_browser", "tree_vocab"])
-def test_browser_projections_cover_every_city(kind):
-    """Every city has one browser projection and one vocabulary, and a job builds them.
-
-    The map reads `{city}_tree_browser_v{N}.parquet` and, when it is missing,
-    assembles the same shape itself from the city parquet, the enrichment
-    table and whatever predictions it can reach, so a city left out here still
-    opens -- it just pays the joins on every phone, which nothing else would
-    report. A missing `{city}_tree_vocab_v{N}.parquet` is as quiet: the worker
-    scans its ENUM vocabularies out of the projection instead, which reads
-    most of the file.
-    """
-    text = statements(RAW_DIR / "tree_browser_city.preql")
-    datasources = re.findall(rf"partial datasource ([a-z]{{5}})_{kind}\b", text)
-    files = re.findall(rf"trees/([a-z]{{5}})_{kind}_v\{{data_version\}}\.parquet`:", text)
-    expected = sorted(code.lower() for code in MUNICIPAL_DATA_SOURCES)
-    assert sorted(datasources) == expected, (
-        f"missing {kind}: {sorted(set(expected) - set(datasources))}; "
-        f"extra: {sorted(set(datasources) - set(expected))}"
-    )
-    assert sorted(files) == expected
-    # Each one writes its own city's file and scopes to its own city.
-    for code in expected:
-        block = re.search(
-            rf"partial datasource {code}_{kind}\b.*?;", text, re.S
-        ).group(0)
-        assert f"complete where city = '{code.upper()}'" in block, code
-        assert f"trees/{code}_{kind}_v" in block, code
-    entrypoints = {job["entrypoint"] for job in jobs()}
-    assert "raw/tree_browser_city.preql" in entrypoints
-
-
 def test_the_rollup_producer_and_consumer_share_a_datasource_name():
     """The core's ordering is a derived edge, and a rename would delete it.
 
@@ -495,7 +463,7 @@ def test_the_core_shares_one_cron():
         key: jobs_by_key()[key]["schedule"]
         for key in (
             "publish-full", "refresh-enrichment", "refresh-ecoregions", "refresh-allometry-fits",
-            "refresh-height-fits", "refresh-predictions", "validate-core",
+            "refresh-height-fits", "validate-core",
             "publish-website", "publish-website-species", "refresh-rollups",
         )
     }
@@ -516,7 +484,7 @@ def test_the_core_reads_only_published_parquets():
     have not quietly re-acquired the import.
     """
     for key in ("publish-full", "refresh-enrichment", "refresh-allometry-fits", "refresh-height-fits",
-                "refresh-predictions", "validate-core", "refresh-rollups"):
+                "validate-core", "refresh-rollups"):
         entrypoint = jobs_by_key()[key]["entrypoint"]
         text = statements(DATA_DIR / entrypoint)
         for code in CITY_CODES:

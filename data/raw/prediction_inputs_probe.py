@@ -3,34 +3,31 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy>=0.3.391", "requests"]
 # ///
-"""Freshness probe for tree_predictions: when either of its inputs last published.
+"""Freshness probe for the allometry fits: the newer of their inputs' publication, by week.
 
-`raw/tree_predictions.preql` derives every row from two published objects --
-the cross-city rollup and the species enrichment table -- and this emits the
-newer of their `Last-Modified` times, so the predictions rebuild when a city
-lands in the rollup or a species gains a growth form, and not otherwise.
+The fits (allometry_fits.preql, height_fits.preql) are made on the cross-city
+rollup and the species enrichment table, and this emits the newer of their
+`Last-Modified` times floored to the Monday (UTC) of its week. So the fits
+refit at most once a week, on the first core tick of a week in which either
+input moved, and not on every day some city publishes: a coefficient made on
+ten million trees does not move with one city's daily update, and every city's
+predictions and map projection rebuild when the fit tables republish
+(shared/city_derived.py).
 
 Object publication time rather than a column inside the objects, for the
-reason `city_parquet_probe.py` gives: a rebuild that changes the shape and not
-the watermark still republishes the object, and this notices.
-
-Both HEADs carry a cache-buster (the objects are served with
-`Cache-Control: max-age=3600`). A missing object is not staleness -- the
-predictions cannot be built without either input, so a 404 degrades to the
-epoch through `UpstreamUnavailable` and the job sits the tick out, as does a
-transport failure.
+reason `city_parquet_probe.py` gives. Both HEADs carry a cache-buster. A
+missing object is not staleness -- the fits cannot be built without either
+input, so a 404 degrades to the epoch through `UpstreamUnavailable` and the
+jobs sit the tick out, as does a transport failure.
 """
 
 import sys
-import time
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import requests
-
 sys.path.insert(0, str(Path(__file__).parent))
-from shared.ingest import UpstreamUnavailable, emit_freshness  # noqa: E402
+from shared.city_derived import published_at  # noqa: E402
+from shared.ingest import emit_freshness  # noqa: E402
 from enrichment._tree_shared import DATA_VERSION  # noqa: E402
 
 TREES_BASE_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees"
@@ -41,24 +38,15 @@ INPUTS = {
 }
 
 
-def published_at(label: str, url: str) -> datetime:
-    try:
-        response = requests.head(f"{url}?cb={int(time.time())}", timeout=30, allow_redirects=True)
-    except requests.RequestException as err:
-        raise UpstreamUnavailable(f"Failed to HEAD the {label} parquet: {err}") from err
-    if response.status_code >= 400:
-        raise UpstreamUnavailable(f"HEAD {url} returned HTTP {response.status_code}")
-    header = response.headers.get("Last-Modified")
-    if not header:
-        # Not availability: GCS always sends this, so its absence means the
-        # URL is not the object we think it is.
-        raise RuntimeError(f"the {label} parquet has no Last-Modified")
-    return parsedate_to_datetime(header).astimezone(timezone.utc)
+def week_of(moment: datetime) -> datetime:
+    """Midnight UTC on the Monday of the moment's week."""
+    day = moment.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    return day - timedelta(days=day.weekday())
 
 
 def newest_input_publication() -> datetime:
-    return max(published_at(label, url) for label, url in INPUTS.items())
+    return week_of(max(published_at(label, url) for label, url in INPUTS.items()))
 
 
 if __name__ == "__main__":
-    emit_freshness(None, newest_input_publication, label="prediction inputs")
+    emit_freshness(None, newest_input_publication, label="fit inputs")

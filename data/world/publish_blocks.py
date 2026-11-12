@@ -17,7 +17,7 @@ nothing city-shaped: it fetches the manifest, then the blocks under the camera
 city switch, and a city is a bookmark.
 
 What it reads: **every city's browser projection** (`{code}_tree_browser`,
-data/raw/tree_browser_city.preql), each at the generation a listing returned
+data/raw/city_derived.preql, one `derived-{code}` job each), each at the generation a listing returned
 at the start of the run. No portal, no rollup, no rebuild. The projections
 already carry the display name, the growth form and the predictions, so a
 block is the same row shape cut along a different line.

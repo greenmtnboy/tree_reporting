@@ -716,21 +716,6 @@ def build(args) -> Edits:
         rf"landmarks/{lc}_landmark_info_v{{data_version}}.parquet`\2",
         what="landmark rollup file list", marker=f"landmarks/{lc}_landmark_info_v",
     )
-    e.sub_once(
-        RAW / "tree_browser_city.preql",
-        r"(_tree_vocab_v\{data_version\}\.parquet`;\n)\Z",
-        rf"""\1
-partial datasource {lc}_tree_browser extends city_tree_browser ()
-complete where city = '{code}'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{lc}_tree_browser_v{{data_version}}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{lc}_tree_browser_v{{data_version}}.parquet`;
-
-partial datasource {lc}_tree_vocab extends city_tree_vocab ()
-complete where city = '{code}'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{lc}_tree_vocab_v{{data_version}}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/{lc}_tree_vocab_v{{data_version}}.parquet`;
-""",
-        what="browser projection and vocabulary", marker=f"datasource {lc}_tree_browser",
-    )
-
     # --- trilogy.toml -----------------------------------------------------
     jobs = f'''
 [[cloud.job]]
@@ -914,6 +899,13 @@ def main() -> None:
     # regenerated, so regenerate it here rather than leave a red test.
     subprocess.run(
         [sys.executable, str(Path(__file__).with_name("dedup_cells.py")), "--write"],
+        check=True,
+    )
+    # The city's predictions and browser projection (city_derived.preql): its
+    # derived model, probe, job and [dependencies] entry, written from the
+    # city job the commit just added.
+    subprocess.run(
+        [sys.executable, str(Path(__file__).with_name("sync_city_derived.py"))],
         check=True,
     )
     print(f"""

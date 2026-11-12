@@ -47,6 +47,10 @@ per city, three independent schedules
                      rebuild (opted-in
                      cities only)
   city-{code}        daily or twice weekly  raw/{code}/{slug}_tree_info.preql
+  derived-{code}     the city job's cron     raw/{code}/{slug}_tree_derived.preql, after city-{code}
+                                            -> {code}_tree_predictions_v{n}.parquet
+                                               {code}_tree_browser_v{n}.parquet
+                                               {code}_tree_vocab_v{n}.parquet
   landmarks-{code}   no cron, by hand       landmark_staging/{code}_landmarks_staging.preql
   refresh-landmarks-{code}  weekly, Sun 03:00-04:20, 2 min apart
                                             raw/{code}/{slug}_landmarks.preql
@@ -55,9 +59,8 @@ the core, daily, reading only published parquets
   publish-full          raw/full_tree_publish.preql     -> full_tree_info_v{n}.parquet
   refresh-ecoregions    raw/ecoregion_info.preql
   refresh-enrichment    raw/tree_enrichment.preql       -> tree_enrichment_v{n}.parquet
-  refresh-predictions   raw/tree_predictions.preql      -> tree_predictions_v{n}.parquet
-  refresh-browser-city  raw/tree_browser_city.preql     -> {code}_tree_browser_v{n}.parquet
-                                                        {code}_tree_vocab_v{n}.parquet
+  refresh-allometry-fits, refresh-height-fits (at most weekly)
+                                                        -> {age,height}_{genus,class}_fits_v{n}.parquet
   publish-world-blocks  world_tree_blocks.preql         -> world/v1/manifest.json
                                                         world/v1/blocks/{key}-{hash}.parquet
                                                         world/v1/vocab-{hash}.parquet
@@ -82,14 +85,21 @@ Rules:
   refuses one. Check with `trilogy refresh --dry-run <entrypoint>`: a city job
   must show one asset.
 - **The core never reaches a portal.** `full_tree_publish.preql` reads the
-  city parquets with one `file [...]` multi-file scan; the enrichment,
-  prediction and browser-projection jobs reach published tables through
-  root `_source.preql` views named the same as the managed datasources that
-  write them. That shared name is the edge trilogy-cloud orders a tick by,
-  so `refresh-predictions` runs after its two producers and
-  `refresh-browser-city` after all three of its. `test_cloud_jobs.py` pins
-  that the core imports no city model, and `test_tree_predictions.py` pins
-  that no `_source.preql` or projection model enters the frontend bundle.
+  city parquets with one `file [...]` multi-file scan; the enrichment and
+  fit jobs reach published tables through root `_source.preql` views named
+  the same as the managed datasources that write them. That shared name is
+  the edge trilogy-cloud orders a tick by. `test_cloud_jobs.py` pins that
+  the core imports no city model, and `test_tree_predictions.py` pins that
+  no `_source.preql` or derived model enters the frontend bundle.
+- **A city's predictions and map projection are its own job.**
+  `derived-{code}` reads the city's published parquet, the enrichment table
+  and the fit tables, never the rollup, so it holds one city and rebuilds
+  only when one of those moves (its watermark, `shared/city_derived.py`, is
+  their newest Last-Modified). It runs after its city job on an `always`
+  [dependencies] edge, not a derived one, which would be skipped on a day
+  the city was up to date and so never pass on a week's new fits.
+  `tools/sync_city_derived.py` writes every city's model, probe, job and
+  edge; `test_city_derived.py` fails while it would write anything.
 - **Enrichment is ordered by a declared edge.** The job refreshes
   `raw/tree_enrichment.preql`, which the browser also bundles and which must
   stay species-only: a second tree source in the browser's scope changes join
@@ -369,8 +379,8 @@ The functions are in `core.preql` (`staging_common.preql` has its own `kept`):
 | each city's tree target (its own) | `@source_kept(tree_id, {code}_source, '<label>', 0.75)` per municipal and OSM label |
 | each city's landmark target (template) | `@kept(landmark_id, 0.75)` |
 | each OSM staging target (template) | `@kept(tree_id, 0.75)`: a truncated Overpass answer |
-| each crown-predictions slice (template) | `@kept(tree_id, 0.75)` |
-| `full_tree_info`, `full_landmark_info`, `tree_predictions` | `@kept_by(<key>, city, 0.75)`: no city vanishes from a rollup |
+| each city's predictions, browser projection (templates) | `@kept(tree_id, 0.75)` |
+| `full_tree_info`, `full_landmark_info` | `@kept_by(<key>, city, 0.75)`: no city vanishes from a rollup |
 | `tree_enrichment` | `@kept(species, 0.75)` |
 
 They replace hardcoded floors (Bogotá's 1,000,000-row check after its portal
@@ -393,29 +403,32 @@ Data versioning: `data_version` in `core.preql` and the two constants in
 `src/src/workers/parquetUrls.ts` move together, only for a change that breaks
 an existing reader.
 
-## Tree-level predictions (`raw/tree_predictions.preql`)
+## Tree-level predictions (`raw/tree_predictions.preql`, `raw/city_derived.preql`)
 
-Publishes `tree_predictions_v{n}.parquet`, one row per rollup tree (an
-unreviewed imagery detection, `PREDICTED_{code}`, only where it has a LIDAR
-height, and none counts toward density; its crown reaches the map from the
-rollup): a
+Publishes `{code}_tree_predictions_v{n}.parquet` for each city, built by its
+`derived-{code}` job from its own parquet: one row per tree (an unreviewed
+imagery detection, `PREDICTED_{code}`, only where it has a LIDAR height, and
+none counts toward density; its crown reaches the map from the city's
+parquet), with a
 predicted crown width (a genus-level power law fitted on Tallo, committed as
 `crown_width_coefficients.csv`, refit with `tools/crown_allometry_fit.py
 --write --coverage`), a diameter predicted from planting age where the tree
 has a date and no diameter, a predicted height (a genus-level power law
 fitted on the map's own LIDAR-heighted trees), the observed LIDAR
-`height_m` carried beside it (`tree_height_source.preql`, because the rollup
-cannot carry a column only some cities have), a stand-density covariate, and
+`height_m` carried beside it (read from the city's own parquet; a city with
+no survey binds it to null), a stand-density covariate, and
 a null placeholder for age. Each crown and diameter prediction records the
 model level (genus, family, division, global) and sample size. The age and
-height models are fitted on every build, on the published trees, by two jobs
-that run before the predictions in the same tick: `refresh-allometry-fits`
+height models are fitted on the whole rollup, at most weekly (the fits'
+watermark is floored to its Monday, `prediction_inputs_probe.py`), by two
+core jobs: `refresh-allometry-fits`
 (`allometry_fits.preql`) publishes the age fits and the height fit's sample,
 and `refresh-height-fits` (`height_fits.preql`) fits and trims the height
 model on that sample. Each publishes a table with one row per genus and one
 with one row per fallback class (`age_genus_fits_v{n}.parquet`,
 `age_class_fits_v{n}.parquet`, `height_genus_fits_v{n}.parquet`,
-`height_class_fits_v{n}.parquet`), which the predictions read. They are
+`height_class_fits_v{n}.parquet`), which every city's predictions read; a
+week's new fits rebuild every city. They are
 separate builds because the height fit's band nests each refit round inside
 the next, and over the tree rows that nesting made the SQL megabytes long;
 over the sample each round reads stored columns. The crown
@@ -443,8 +456,9 @@ writes a target as one file (`TRILOGY_BUCKETED_OUTPUT_SPEC.md` is the ask).
 Three things follow from that and are the script's job instead of the
 planner's:
 
-- **Ordering.** The script reads the projections by URL, so the edge after
-  `refresh-browser-city` is declared in `[dependencies]`, on `always`.
+- **Ordering.** The script reads the projections by URL, and each city's
+  `derived-{code}` job publishes its own on that city's cron, so the blocks
+  take whatever is published, once a day after `publish-full` (`always`).
 - **The guard.** A candidate under 75% of the live manifest's trees, or
   missing a published city, is refused; the live manifest keeps serving.
 - **Clean-up.** Blocks no manifest names are deleted after three days.
@@ -452,7 +466,7 @@ planner's:
 A new city needs nothing here: it joins the world on the tick after its
 projection is first published, and until then the map shows no trees for it.
 
-## The browser projections (`raw/tree_browser_city.preql`, `raw/ecoregion_browser.preql`)
+## The browser projections (`raw/city_derived.preql`, `raw/ecoregion_browser.preql`)
 
 Since the world's blocks (above) the map no longer loads these: they are the
 block job's input and the file behind a bookmarked city's city-wide reads
@@ -468,14 +482,11 @@ predicted crown width resolved as columns. The worker used to assemble that
 shape on every visit from the city parquet, the enrichment table and a
 per-city predictions slice, and in DuckDB-wasm the joins' transients are
 kept by the heap for the life of the tab (`MOBILE_LOAD_BUDGET.md`). Each
-projection is a template datasource scoped `complete where city = ...` over
-the rollup, the enrichment table and the predictions, all reached through
-their `_source.preql` roots, so the job is ordered after all three in the
-core tick; `new_city.py` appends one per city, and a new city takes the
-assembled path in the browser until the next tick publishes its file. The
-projections replaced the per-city predictions slices
-(`{code}_tree_predictions_v{n}.parquet`); the slice files stay in the bucket,
-unrefreshed, and feed only that fallback. `ecoregion_browser_v{n}.parquet`
+city's `derived-{code}` job builds its projection right after its
+predictions, from its own parquet and the enrichment table, and takes the
+sizes from the predictions file it just wrote (as their own `published_*`
+concepts, through a partial key, so a tree with no predictions row keeps its
+row and nothing is sized twice). `ecoregion_browser_v{n}.parquet`
 is the same idea for the ecoregion dimension: the three columns the worker
 reads, without the 5 MB geometry column. `test_browser_projection.py` runs
 the model's SQL over fixtures and pins the wiring.
