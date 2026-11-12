@@ -22,10 +22,9 @@
 # changed rebuilds about once a week.
 #
 # Every input is a root datasource over a published parquet. The city's own
-# is NOT named like the managed datasource the city job writes: a derived
-# edge is skipped when its producer is up to date, and then a week's new fits
-# would reach no city. The job is ordered after its city by an explicit
-# `when = "always"` entry in trilogy.toml's [dependencies] instead.
+# is named like the managed datasource the city job writes (`boston_tree_info`),
+# which is the edge trilogy-cloud orders the tick by: the job runs after its
+# city, on the same cron.
 
 import std.geography;
 import tree_common;

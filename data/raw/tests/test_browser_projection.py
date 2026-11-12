@@ -84,7 +84,8 @@ def test_the_models_parse():
         env.parse(city.read_text(encoding="utf-8"))
         names = {d.name for d in env.datasources.values()}
         lc = code.lower()
-        for name in (f"{lc}_published_trees", "tree_enrichment", f"{lc}_tree_predictions",
+        city = re.search(r"^root datasource (\w+) extends published_city_trees", city.read_text(encoding="utf-8"), re.M).group(1)
+        for name in (city, "tree_enrichment", f"{lc}_tree_predictions",
                      f"{lc}_tree_browser", f"{lc}_tree_vocab"):
             assert name in names, (code, name)
 

@@ -78,24 +78,21 @@ def test_every_city_has_a_derived_job_on_its_city_jobs_cron(code: str):
 
 
 @pytest.mark.parametrize("code", CODES)
-def test_the_derived_job_runs_after_its_city_on_always(code: str):
-    """A derived edge is skipped when the city is up to date, and then a
-    week's new fits would reach no city: the order is an explicit `always`."""
-    jobs = jobs_by_key()
-    lc = code.lower()
-    edge = config()["dependencies"][jobs[f"derived-{lc}"]["entrypoint"]]
-    assert edge == {"after": [jobs[f"city-{lc}"]["entrypoint"]], "when": "always"}
-
-
-@pytest.mark.parametrize("code", CODES)
-def test_the_city_parquet_is_not_named_like_the_city_jobs_output(code: str):
-    """The name match is what makes a derived (skippable) edge."""
+def test_the_derived_job_reads_its_city_by_the_city_jobs_output_name(code: str):
+    """The name match is the derived edge: the platform runs the derived job
+    after its city job in the tick they share."""
     text = derived_model(code).read_text(encoding="utf-8")
-    roots = re.findall(r"^root datasource (\w+)", text, re.M)
-    city_targets = re.findall(r"^(?:partial )?datasource (\w+)",
-                              sync_city_derived.city_model(code).read_text(encoding="utf-8"), re.M)
-    assert roots and not set(roots) & set(city_targets), (roots, city_targets)
+    output = sync_city_derived.city_output(code)
+    assert re.search(rf"^root datasource {output} extends published_city_trees", text, re.M), output
     assert f"trees/{code.lower()}_tree_info_v{{data_version}}.parquet`" in text
+    city = sync_city_derived.city_model(code).read_text(encoding="utf-8")
+    assert re.search(rf"^partial datasource {output} extends published_tree_info", city, re.M)
+    assert f"trees/{code.lower()}_tree_info_v{{data_version}}.parquet`" in city
+
+
+def test_no_dependency_entry_stands_in_for_the_edge():
+    entrypoints = {jobs_by_key()[f"derived-{code.lower()}"]["entrypoint"] for code in CODES}
+    assert not entrypoints & set(config().get("dependencies", {}))
 
 
 @pytest.mark.parametrize("code", CODES)

@@ -12,10 +12,11 @@ Each city in MUNICIPAL_DATA_SOURCES gets (city_derived.preql says why):
                                          templates over its own published parquet
   raw/{code}/{slug}_derived_probe.py     its watermark (shared/city_derived.py)
   a `derived-{code}` [[cloud.job]]       on its city job's cron and memory
-  a [dependencies] entry                 after the city job, `when = "always"`
 
-The two trilogy.toml blocks sit between `# >>> sync_city_derived` and
-`# <<< sync_city_derived` markers and are rewritten whole. A city whose model
+The jobs sit between the `# >>> sync_city_derived: jobs` markers in
+trilogy.toml and are rewritten whole. A derived model reads its city's parquet
+through a root named like the city job's managed output, which is the edge
+trilogy-cloud orders the tick by. A city whose model
 imports tree_height.preql reads its LIDAR heights from its own parquet; any
 other binds them to a typed null. Pass --check to only report what would
 change (tests/test_city_derived.py fails while anything would).
@@ -37,7 +38,6 @@ from shared.ingest import MUNICIPAL_DATA_SOURCES  # noqa: E402
 
 BUCKET = "trilogy_public_models/duckdb/trees"
 JOBS_MARKERS = ("# >>> sync_city_derived: jobs\n", "# <<< sync_city_derived: jobs\n")
-DEPS_MARKERS = ("# >>> sync_city_derived: dependencies\n", "# <<< sync_city_derived: dependencies\n")
 
 HEIGHTS = """    height_m: ?height_m,
     height_crown_radius_m: ?height_crown_radius_m,"""
@@ -55,6 +55,13 @@ def city_model(code: str) -> Path:
     return path
 
 
+def city_output(code: str) -> str:
+    """The city job's managed tree datasource: the name the derived edge keys on."""
+    (name,) = re.findall(r"^partial datasource (\w+) extends published_tree_info\b",
+                         city_model(code).read_text(encoding="utf-8"), re.M)
+    return name
+
+
 def has_heights(code: str) -> bool:
     return re.search(r"^import \.\.tree_height;", city_model(code).read_text(encoding="utf-8"), re.M) is not None
 
@@ -67,7 +74,7 @@ def model(code: str) -> str:
 
 import ..city_derived;
 
-root datasource {lc}_published_trees extends published_city_trees (
+root datasource {city_output(code)} extends published_city_trees (
 {HEIGHTS if has_heights(code) else NO_HEIGHTS}
 )
 file f`https://storage.googleapis.com/{BUCKET}/{lc}_tree_info_v{{data_version}}.parquet`;
@@ -131,16 +138,6 @@ memory_mb = {city['memory_mb']}
     return "".join(out)
 
 
-def deps_block() -> str:
-    lines = [DEPS_MARKERS[0]]
-    for code in sorted(MUNICIPAL_DATA_SOURCES):
-        lc, path = code.lower(), city_model(code)
-        derived = path.with_name(path.name.replace("_tree_info.preql", "_tree_derived.preql"))
-        lines.append(f'"raw/{lc}/{derived.name}" = {{ after = ["raw/{lc}/{path.name}"], when = "always" }}\n')
-    lines.append(DEPS_MARKERS[1])
-    return "".join(lines)
-
-
 def replace_block(text: str, markers: tuple[str, str], block: str) -> str:
     start, end = text.index(markers[0]), text.index(markers[1]) + len(markers[1])
     return text[:start] + block + text[end:]
@@ -155,8 +152,7 @@ def planned() -> dict[Path, str]:
         files[path.with_name(f"{slug}_tree_derived.preql")] = model(code)
         files[path.with_name(f"{slug}_derived_probe.py")] = probe(code)
     toml_text = TOML.read_text(encoding="utf-8")
-    toml_text = replace_block(toml_text, JOBS_MARKERS, jobs_block(toml_text))
-    files[TOML] = replace_block(toml_text, DEPS_MARKERS, deps_block())
+    files[TOML] = replace_block(toml_text, JOBS_MARKERS, jobs_block(toml_text))
     return files
 
 

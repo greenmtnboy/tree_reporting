@@ -95,11 +95,10 @@ Rules:
   `derived-{code}` reads the city's published parquet, the enrichment table
   and the fit tables, never the rollup, so it holds one city and rebuilds
   only when one of those moves (its watermark, `shared/city_derived.py`, is
-  their newest Last-Modified). It runs after its city job on an `always`
-  [dependencies] edge, not a derived one, which would be skipped on a day
-  the city was up to date and so never pass on a week's new fits.
-  `tools/sync_city_derived.py` writes every city's model, probe, job and
-  edge; `test_city_derived.py` fails while it would write anything.
+  their newest Last-Modified). It reads the city's parquet through a root
+  named like the city job's output, so it runs after its city job in the
+  same tick. `tools/sync_city_derived.py` writes every city's model, probe
+  and job; `test_city_derived.py` fails while it would write anything.
 - **Enrichment is ordered by a declared edge.** The job refreshes
   `raw/tree_enrichment.preql`, which the browser also bundles and which must
   stay species-only: a second tree source in the browser's scope changes join

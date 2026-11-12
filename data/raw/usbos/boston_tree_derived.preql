@@ -4,7 +4,7 @@
 
 import ..city_derived;
 
-root datasource usbos_published_trees extends published_city_trees (
+root datasource boston_tree_info extends published_city_trees (
     height_m: ?height_m,
     height_crown_radius_m: ?height_crown_radius_m,
 )

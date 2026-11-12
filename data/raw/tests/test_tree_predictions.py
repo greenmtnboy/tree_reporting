@@ -246,7 +246,7 @@ def test_the_model_parses(stage):
     env.parse((RAW_DIR / stage).read_text(encoding="utf-8"))
     names = {d.name for d in env.datasources.values()}
     assert set(STAGES[stage]) <= names
-    trees = ("usbos_published_trees",) if stage == CITY_STAGE else ("full_tree_info", "published_tree_heights")
+    trees = ("boston_tree_info",) if stage == CITY_STAGE else ("full_tree_info", "published_tree_heights")
     if stage != "height_fits.preql":
         for name in (*trees, "tree_enrichment", "crown_width_coefficients", "crown_width_fallbacks"):
             assert name in names, (stage, name)

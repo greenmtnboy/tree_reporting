@@ -4,7 +4,7 @@
 
 import ..city_derived;
 
-root datasource caedm_published_trees extends published_city_trees (
+root datasource edmonton_tree_info extends published_city_trees (
     raw('''cast(null as float)'''): ?height_m,
     raw('''cast(null as float)'''): ?height_crown_radius_m,
 )
