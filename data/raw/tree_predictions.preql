@@ -1,8 +1,10 @@
 # Tree-level predictions: one row per published tree (imagery detections:
-# see below), carrying what a model
-# says about the tree rather than what a source recorded. Built by the
-# `refresh-predictions` [[cloud.job]] in ../trilogy.toml, daily, in the same
-# tick as the rest of the core and ordered after the jobs it consumes.
+# see below), carrying what a model says about the tree rather than what a
+# source recorded. One file per city, `{code}_tree_predictions_v{n}.parquet`,
+# built by that city's `derived-{code}` [[cloud.job]] from the city's own
+# parquet (city_derived.preql, raw/{code}/{slug}_tree_derived.preql). This
+# file is the arithmetic and the template every city's table extends; it
+# binds no tree source.
 #
 # It predicts crown width and height, from a measured diameter where the
 # source recorded one and otherwise from a diameter predicted from the tree's
@@ -15,13 +17,14 @@
 # ---------------------------------------------------------------------------
 #
 # The crown model is fitted offline on Tallo, a static reference dataset, and
-# read from a CSV (tree_allometry_inputs.preql). The age and height models
-# are fitted on every build, on the published trees, in two jobs before this
-# one, and applied here from the tables they publish:
+# read from a CSV (allometry_model.preql). The age and height models are
+# fitted on the whole rollup, at most weekly, in two core jobs, and applied
+# here, one city at a time, from the tables they publish:
 #
 #     refresh-allometry-fits  allometry_fits.preql  the age fits; the height fit's sample
 #     refresh-height-fits     height_fits.preql     the height fits, trimmed by their own band
-#     refresh-predictions     this file             every tree, with the fits applied
+#     derived-{code}          this file, through    one city's trees, with the fits applied
+#                             city_derived.preql
 #
 # Each stage reads the one before it as stored columns. Fitted in one model,
 # the height fit's band -- a per-tree test on the round before it -- nested
@@ -72,8 +75,14 @@
 # Neither this file nor the files it imports is in the frontend's model
 # bundle, and none may be: see tree_allometry_inputs.preql.
 
-import tree_allometry_inputs;
+import allometry_model;
 import allometry_fits_source;
+
+# When a city's predictions' inputs last published: the newest of its own
+# parquet, the enrichment table and the fit tables (shared/city_derived.py).
+# Each city binds it to its own probe, so a city rebuilds when it, the
+# enrichment or the weekly fits move, and not when another city does.
+property <*>.city_inputs_published_through datetime; # newest Last-Modified of the city's parquet, the enrichment table and the fit tables
 
 # --- Diameter from age --------------------------------------------------------
 #
@@ -273,7 +282,10 @@ auto predicted_age_years <- case when dbh_cm is null then cast(null as float) el
 #
 # `is_imagery_detection`: a detection publishes a row only for its LIDAR
 # height (see the header). `data_source` is stored because a target's `where`
-# reads only what its columns store or derive row by row.
+# reads only what its columns store or derive row by row. So the table holds
+# some of the city's trees, and `tree_id: ~tree_id` says so: a reader joining
+# it to the city's trees (the browser projection) pads the join and keeps
+# every tree, where a complete key would make it INNER.
 #
 # `where tree_id is not null`: the enrichment source is partial, so the
 # planner joins it with a FULL join, which keeps every tree (a species with
@@ -281,8 +293,8 @@ auto predicted_age_years <- case when dbh_cm is null then cast(null as float) el
 # also emits a row for every enrichment species and coefficient genus that no
 # published tree carries. Those rows have no tree, and the grain says so.
 
-datasource tree_predictions (
-    tree_id,
+template datasource city_tree_predictions (
+    tree_id: ~tree_id,
     city,
     data_source,
     ?genus,
@@ -305,13 +317,12 @@ datasource tree_predictions (
     ?height_check,
     ?accepted_height_m,
     ?predicted_age_years,
-    prediction_inputs_published_through,
+    prediction_inputs_published_through: city_inputs_published_through,
 )
 grain (tree_id)
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_predictions_v{data_version}.parquet`
 where tree_id is not null and (not is_imagery_detection or height_m is not null)
-freshness by prediction_inputs_published_through
-# A city's rows vanishing from this build (its parquet unreadable or shed)
-# fails it; see `kept_by` in core.preql.  Dropping a city on purpose takes
-# one local `trilogy refresh --skip-validation tree_predictions` build.
-assert @kept_by(tree_id, city, 0.75);
+freshness by city_inputs_published_through
+# A build that would lose a quarter of the city's rows is refused, keeping
+# the published one (`kept`, core.preql). A drop on purpose takes one
+# `--skip-validation {code}_tree_predictions` run.
+assert @kept(tree_id, 0.75);

@@ -658,7 +658,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=None, help="export at most this many chips")
     parser.add_argument("--raster", default=None, help="mosaic VRT; default: artifacts/imagery/<city>/<year>/<city>-<year>-mosaic.vrt")
     parser.add_argument("--city-parquet", default=None, help="published city parquet URL or path (default: the run's inventory parquet_url)")
-    parser.add_argument("--predictions-parquet", default="https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_predictions_v2.parquet")
+    parser.add_argument("--predictions-parquet", default=None,
+                        help="predictions parquet URL or path (default: the city's {code}_tree_predictions_v2.parquet)")
     parser.add_argument("--no-inventory", action="store_true", help="skip the inventory overlay (offline)")
     parser.add_argument("--crown-coefficients", default=None, help="data/raw/crown_width_coefficients.csv")
     parser.add_argument("--out", required=True, help="output directory; one <tileId>.json and <tileId>.png per chip")
@@ -707,7 +708,10 @@ def main(argv: list[str] | None = None) -> int:
     inventory = None
     if not args.no_inventory:
         city_parquet = args.city_parquet or config["inventory"]["parquet_url"]
-        inventory = InventoryReader(city_parquet, args.predictions_parquet, city)
+        predictions_parquet = args.predictions_parquet or (
+            f"https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{city.lower()}_tree_predictions_v2.parquet"
+            if city else None)
+        inventory = InventoryReader(city_parquet, predictions_parquet, city)
 
     chips = load_chips(chips_dir)
     wanted = set(args.chips)

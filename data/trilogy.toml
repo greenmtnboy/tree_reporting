@@ -250,9 +250,9 @@ exclude = [
 # what the platform fires as one tick and orders by dependency — so this is
 # not three jobs that happen to start together, it is one ordered firing:
 #
-#     publish-full ──▶ refresh-enrichment ──▶ refresh-allometry-fits ──▶ refresh-height-fits ──▶ refresh-predictions ──▶ refresh-browser-city   (derived edges)
-#              │                          └─▶ validate-core                                                         ▲
-#              └──────────────────────────────▶ refresh-allometry-fits, refresh-predictions, validate-core, refresh-browser-city
+#     publish-full ──▶ refresh-enrichment ──▶ refresh-allometry-fits ──▶ refresh-height-fits   (derived edges; the fits at most weekly)
+#              │                          └─▶ validate-core
+#              └──────────────────────────────▶ refresh-allometry-fits, validate-core
 #     refresh-ecoregions ──▶ refresh-ecoregions-browser   (independent of the rest, runs alongside)
 #
 # The edge is derived, not declared, and it exists because of how the two
@@ -330,10 +330,12 @@ memory_mb = 1024
 "website_homepage.preql" = { after = ["raw/full_tree_publish.preql", "raw/tree_enrichment.preql", "raw/ecoregion_info.preql"], when = "always" }
 "website_species.preql" = { after = ["raw/full_tree_publish.preql", "raw/tree_enrichment.preql", "raw/ecoregion_info.preql"], when = "always" }
 # The world's geo blocks are cut from the browser projections, which the
-# script reads by URL. `always` for the homepage feed's reason: on a day the
-# projections were up to date the job still has to run, to find that out and
-# to delete the block files no manifest has named for a few days.
-"world_tree_blocks.preql" = { after = ["raw/tree_browser_city.preql"], when = "always" }
+# script reads by URL; each city's `derived-{code}` job publishes its own, on
+# that city's cron, so nothing in the core tick produces them and the blocks
+# take whatever is published. After the rollup on `always`, so the blocks are
+# cut once a day whatever moved, and delete the block files no manifest has
+# named for a few days.
+"world_tree_blocks.preql" = { after = ["raw/full_tree_publish.preql"], when = "always" }
 
 [[cloud.job]]
 key = "refresh-enrichment"
@@ -359,14 +361,15 @@ schedule = "0 0 6 * * *"
 timeout_seconds = 900
 memory_mb = 2048
 
-# The allometry fits, in two stages ahead of the predictions
-# (raw/tree_predictions.preql says why they are stages): the age fits and the
-# height fit's sample from the published trees, then the height fits from the
-# sample. Each reads its inputs through `_source.preql` root views named like
-# the managed datasources that write them, so the platform orders
-#     publish-full, refresh-enrichment -> refresh-allometry-fits
-#         -> refresh-height-fits -> refresh-predictions
-# in the same tick. No portal, no LLM; the probe is the predictions' own.
+# The allometry fits, in two stages (raw/tree_predictions.preql says why they
+# are stages): the age fits and the height fit's sample from the published
+# trees, then the height fits from the sample. Each reads its inputs through
+# `_source.preql` root views named like the managed datasources that write
+# them, so the platform orders
+#     publish-full, refresh-enrichment -> refresh-allometry-fits -> refresh-height-fits
+# in the same tick. No portal, no LLM. Their watermark is floored to the week
+# (raw/prediction_inputs_probe.py): they refit at most weekly, and every
+# city's `derived-{code}` job rebuilds the week they do.
 #
 # 4 GiB for the first: the age fits group the whole rollup (10.5M rows). The
 # second reads a sample of ~73k rows.
@@ -388,47 +391,6 @@ schedule = "0 0 6 * * *"
 timeout_seconds = 900
 memory_mb = 1024
 
-# Tree-level predictions: crown width (from a measured diameter, or from one
-# predicted from the tree's age) and height; age reserved. Applies the fits
-# the two jobs above published.
-# Consumes the rollup, the enrichment table and the fits, all reached through
-# their `_source.preql` root views (the same name trick as above), so the
-# platform orders this job after each in the same tick. It reads the
-# published parquets and Tallo's committed crown CSV, runs no script but its
-# freshness probe, and cannot reach a portal or the LLM.
-#
-# 4 GiB because the whole rollup (10.5M rows) is read twice -- the rows and
-# the density grid -- and grouped in memory.
-[[cloud.job]]
-key = "refresh-predictions"
-name = "urban-tree-data-predictions"
-entrypoint = "raw/tree_predictions.preql"
-operation = "refresh"
-schedule = "0 0 6 * * *"
-timeout_seconds = 1800
-memory_mb = 4096
-
-# The browser projection: one small parquet per city with exactly the rows
-# and columns the map's worker keeps, the display name and growth form
-# resolved from the enrichment table and the crown prediction folded in, so
-# a phone opens a city with one scan and no joins (docs/MOBILE_LOAD_BUDGET.md).
-# Reads the rollup, the enrichment table and the predictions through their
-# `_source.preql` root views, named like the managed datasources that write
-# them, so the platform orders it after all three in the same tick.
-#
-# 4 GiB: each city filters the rollup (10.5M rows) and the predictions file
-# once, and the join holds one city at a time.
-# An hour: rebuilding every city's projection in one firing (a new city, or
-# a day the tick skipped) ran past 30 minutes on 2026-11-06.
-[[cloud.job]]
-key = "refresh-browser-city"
-name = "urban-tree-data-browser-city"
-entrypoint = "raw/tree_browser_city.preql"
-operation = "refresh"
-schedule = "0 0 6 * * *"
-timeout_seconds = 3600
-memory_mb = 4096
-
 # The world as geo blocks: what the map draws from. One parquet per Web
 # Mercator z12 tile holding every tree in it whichever city published it,
 # a vocabulary of the string columns, and a manifest that names them
@@ -443,8 +405,9 @@ memory_mb = 4096
 # Trilogy has no partitioned file target yet; docs/TRILOGY_BUCKETED_OUTPUT_SPEC.md
 # is the ask that would make this a declaration.
 #
-# Same cron as the core, ordered after the projections by the `[dependencies]`
-# entry above. 4 GiB: the build holds 14.5M rows in an on-disk DuckDB with a
+# Same cron as the core. The projections it cuts the blocks from are each
+# city's `derived-{code}` job's, on that city's cron, so it reads whatever they
+# last published, as the rollup reads the cities. 4 GiB: the build holds 14.5M rows in an on-disk DuckDB with a
 # 2.5 GB memory limit (WORLD_BLOCKS_MEMORY_LIMIT) and spills the rest. Two
 # minutes on a workstation; the first run uploads every block (350 MB), a
 # later one only the blocks whose trees changed.
@@ -2057,6 +2020,417 @@ operation = "refresh"
 schedule = "0 26 4 * * SUN"
 timeout_seconds = 900
 memory_mb = 2048
+
+# ===========================================================================
+# Per-city derived tables: predictions and the browser projection
+# ===========================================================================
+#
+# One `derived-{code}` job per city (raw/city_derived.preql): its tree-level
+# predictions, browser projection and vocabulary, from its own published
+# parquet, the enrichment table and the fit tables. On its city job's cron and
+# memory, ordered after it by the derived edge: it reads the city's parquet
+# through a root named like the city job's output. Rebuilt when the city, the
+# enrichment or the weekly fits move. tools/sync_city_derived.py writes these
+# entries and each city's model and probe; edit it, not them.
+
+# >>> sync_city_derived: jobs
+[[cloud.job]]
+key = "derived-arbue"
+name = "urban-tree-derived-arbue"
+entrypoint = "raw/arbue/buenosaires_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 14 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-aumel"
+name = "urban-tree-derived-aumel"
+entrypoint = "raw/aumel/melbourne_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 14 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-caajx"
+name = "urban-tree-derived-caajx"
+entrypoint = "raw/caajx/ajax_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 21 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-cabur"
+name = "urban-tree-derived-cabur"
+entrypoint = "raw/cabur/burlington_on_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 21 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-cacal"
+name = "urban-tree-derived-cacal"
+entrypoint = "raw/cacal/calgary_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 16 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-caedm"
+name = "urban-tree-derived-caedm"
+entrypoint = "raw/caedm/edmonton_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 16 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-cahfx"
+name = "urban-tree-derived-cahfx"
+entrypoint = "raw/cahfx/halifax_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 18 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-cakel"
+name = "urban-tree-derived-cakel"
+entrypoint = "raw/cakel/kelowna_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 19 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-cakgn"
+name = "urban-tree-derived-cakgn"
+entrypoint = "raw/cakgn/kingston_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 18 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-calet"
+name = "urban-tree-derived-calet"
+entrypoint = "raw/calet/lethbridge_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 19 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-calon"
+name = "urban-tree-derived-calon"
+entrypoint = "raw/calon/longueuil_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 18 * * THU,SUN"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-camis"
+name = "urban-tree-derived-camis"
+entrypoint = "raw/camis/mississauga_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 20 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 3072
+
+[[cloud.job]]
+key = "derived-camon"
+name = "urban-tree-derived-camon"
+entrypoint = "raw/camon/moncton_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 21 * * TUE,FRI"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-camtl"
+name = "urban-tree-derived-camtl"
+entrypoint = "raw/camtl/montreal_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 17 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-canwe"
+name = "urban-tree-derived-canwe"
+entrypoint = "raw/canwe/new_westminster_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 20 * * THU,SUN"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-caott"
+name = "urban-tree-derived-caott"
+entrypoint = "raw/caott/ottawa_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 20 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 3072
+
+[[cloud.job]]
+key = "derived-caque"
+name = "urban-tree-derived-caque"
+entrypoint = "raw/caque/quebec_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 17 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-cator"
+name = "urban-tree-derived-cator"
+entrypoint = "raw/cator/toronto_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 17 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-cavan"
+name = "urban-tree-derived-cavan"
+entrypoint = "raw/cavan/vancouver_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 15 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-cavic"
+name = "urban-tree-derived-cavic"
+entrypoint = "raw/cavic/victoria_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 19 * * TUE,FRI"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-cawpg"
+name = "urban-tree-derived-cawpg"
+entrypoint = "raw/cawpg/winnipeg_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 16 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-cobog"
+name = "urban-tree-derived-cobog"
+entrypoint = "raw/cobog/bogota_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 22 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 6144
+
+[[cloud.job]]
+key = "derived-czprg"
+name = "urban-tree-derived-czprg"
+entrypoint = "raw/czprg/prague_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 23 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-deber"
+name = "urban-tree-derived-deber"
+entrypoint = "raw/deber/berlin_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 13 * * THU,SUN"
+timeout_seconds = 1800
+memory_mb = 4096
+
+[[cloud.job]]
+key = "derived-dkcph"
+name = "urban-tree-derived-dkcph"
+entrypoint = "raw/dkcph/copenhagen_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 22 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-fihel"
+name = "urban-tree-derived-fihel"
+entrypoint = "raw/fihel/helsinki_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 23 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-frpar"
+name = "urban-tree-derived-frpar"
+entrypoint = "raw/frpar/paris_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 11 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-gblon"
+name = "urban-tree-derived-gblon"
+entrypoint = "raw/gblon/london_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 13 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 4096
+
+[[cloud.job]]
+key = "derived-grath"
+name = "urban-tree-derived-grath"
+entrypoint = "raw/grath/athens_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 12 * * TUE,FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "derived-grmlo"
+name = "urban-tree-derived-grmlo"
+entrypoint = "raw/grmlo/milos_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 12 * * TUE,FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "derived-grsan"
+name = "urban-tree-derived-grsan"
+entrypoint = "raw/grsan/santorini_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 12 * * TUE,FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "derived-jptyo"
+name = "urban-tree-derived-jptyo"
+entrypoint = "raw/jptyo/tokyo_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 12 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-nlams"
+name = "urban-tree-derived-nlams"
+entrypoint = "raw/nlams/amsterdam_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 11 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-twtpe"
+name = "urban-tree-derived-twtpe"
+entrypoint = "raw/twtpe/taipei_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 22 * * THU,SUN"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-usbos"
+name = "urban-tree-derived-usbos"
+entrypoint = "raw/usbos/boston_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 10 * * *"
+timeout_seconds = 1800
+memory_mb = 6144
+
+[[cloud.job]]
+key = "derived-usbtv"
+name = "urban-tree-derived-usbtv"
+entrypoint = "raw/usbtv/burlington_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 13 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "derived-usden"
+name = "urban-tree-derived-usden"
+entrypoint = "raw/usden/denver_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 15 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 4096
+
+[[cloud.job]]
+key = "derived-uslax"
+name = "urban-tree-derived-uslax"
+entrypoint = "raw/uslax/losangeles_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 14 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-usnva"
+name = "urban-tree-derived-usnva"
+entrypoint = "raw/usnva/nova_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 16 * * TUE,FRI"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-usnyc"
+name = "urban-tree-derived-usnyc"
+entrypoint = "raw/usnyc/nyc_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 10 * * *"
+timeout_seconds = 1800
+memory_mb = 3072
+
+[[cloud.job]]
+key = "derived-ussfo"
+name = "urban-tree-derived-ussfo"
+entrypoint = "raw/ussfo/sf_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 10 * * *"
+timeout_seconds = 1800
+memory_mb = 6144
+
+[[cloud.job]]
+key = "derived-ussto"
+name = "urban-tree-derived-ussto"
+entrypoint = "raw/ussto/stoughton_tree_derived.preql"
+operation = "refresh"
+schedule = "0 20 23 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-ustem"
+name = "urban-tree-derived-ustem"
+entrypoint = "raw/ustem/tempe_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 15 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "derived-uswas"
+name = "urban-tree-derived-uswas"
+entrypoint = "raw/uswas/washingtondc_tree_derived.preql"
+operation = "refresh"
+schedule = "0 40 11 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
+
+# <<< sync_city_derived: jobs
 
 # ===========================================================================
 # Ad-hoc landmark staging publish — one job per curated-CSV city

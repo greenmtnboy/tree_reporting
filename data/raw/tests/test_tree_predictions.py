@@ -2,11 +2,13 @@
 
 `tree_predictions.preql` applies `crown_width_m = 2 * scale * dbh_cm ** b`
 from a committed CSV that `crown_allometry_fit.py` writes from Tallo. The
-diameter-from-age and height models are fitted on every build, in two
-stages ahead of the predictions (`allometry_fits.preql`, `height_fits.preql`);
-the execution tests below run each stage's own SQL over a generated
-population, feed each stage the parquets the one before it wrote, and check
-every fit against a least-squares reference computed here.
+diameter-from-age and height models are fitted on the rollup, in two stages
+(`allometry_fits.preql`, `height_fits.preql`), and applied one city at a time
+by that city's derived model (city_derived.preql; Boston's, which reads
+heights, stands for them all here). The execution tests below run each
+stage's own SQL over a generated population, feed each stage the parquets the
+one before it wrote, and check every fit against a least-squares reference
+computed here.
 
 The wiring tests are the ones `test_cloud_jobs.py` makes for the rollup and
 enrichment, applied to a job that consumes both.
@@ -36,14 +38,18 @@ import crown_allometry_fit as fit  # noqa: E402
 
 MODEL = RAW_DIR / "tree_predictions.preql"
 INPUTS = RAW_DIR / "tree_allometry_inputs.preql"
+ARITHMETIC = RAW_DIR / "allometry_model.preql"
 COMMON = RAW_DIR / "allometry_common.preql"
+# Boston's derived model: the predictions stage, as one city builds it.
+CITY_STAGE = "usbos/boston_tree_derived.preql"
 # The stages in build order, each with the tables it publishes.
 STAGES = {
     "allometry_fits.preql": ("age_genus_fits", "age_class_fits", "height_fit_sample"),
     "height_fits.preql": ("height_genus_fits", "height_class_fits"),
-    "tree_predictions.preql": ("tree_predictions",),
+    CITY_STAGE: ("usbos_tree_predictions",),
 }
-MODEL_FILES = (COMMON, INPUTS, RAW_DIR / "allometry_fits_source.preql", RAW_DIR / "height_fit_sample_source.preql",
+MODEL_FILES = (COMMON, INPUTS, ARITHMETIC, MODEL, RAW_DIR / "city_derived.preql",
+               RAW_DIR / "allometry_fits_source.preql", RAW_DIR / "height_fit_sample_source.preql",
                *(RAW_DIR / stage for stage in STAGES))
 COEFFICIENTS = RAW_DIR / "crown_width_coefficients.csv"
 
@@ -71,7 +77,7 @@ def rows() -> list[dict[str, str]]:
 def test_csv_has_the_columns_the_model_reads(rows):
     assert list(rows[0].keys()) == fit.CSV_COLUMNS
     for column in ("level", "taxon", "fit_level", "fit_taxon", "n", "b", "scale", "dbh_max_cm"):
-        assert f"{column}:" in statements(INPUTS), f"the model no longer maps {column}"
+        assert f"{column}:" in statements(ARITHMETIC), f"the model no longer maps {column}"
 
 
 def test_every_genus_row_is_a_usable_power_law(rows):
@@ -155,9 +161,11 @@ def test_the_prediction_job_consumes_its_inputs_by_name():
     named exactly like the managed ones that write them; rename either side
     and the platform stops ordering this job after its producers, silently.
     """
-    model = statements(INPUTS)
-    assert "import full_tree_info_source;" in model
-    assert "import tree_enrichment_source;" in model
+    assert "import full_tree_info_source;" in statements(INPUTS)
+    assert "import tree_enrichment_source;" in statements(ARITHMETIC)
+    # The predictions read one city's parquet, never the rollup.
+    for path in (ARITHMETIC, MODEL, RAW_DIR / "city_derived.preql"):
+        assert "import full_tree_info_source;" not in statements(path), path.name
     enrichment_source = statements(RAW_DIR / "tree_enrichment_source.preql")
     assert re.search(r"^root datasource tree_enrichment \(", enrichment_source, re.M), (
         "tree_enrichment_source.preql must declare `tree_enrichment` as a root "
@@ -189,7 +197,7 @@ def test_each_stage_reads_the_one_before_it_by_name():
     from trilogy import Environment
 
     def declared(path):
-        env = Environment(working_path=RAW_DIR)
+        env = Environment(working_path=path.parent)
         env.parse(path.read_text(encoding="utf-8"))
         return {name: ds.is_root for name, ds in env.datasources.items()}
 
@@ -222,7 +230,8 @@ def test_the_source_views_stay_out_of_the_frontend_bundle():
         "full_tree_info_source",
         "tree_enrichment_source",
         "tree_predictions",
-        "tree_browser_city",
+        "city_derived",
+        "allometry_model",
         "ecoregion_browser",
     ):
         assert name not in bundle, f"{name}.preql is in the frontend model bundle"
@@ -233,13 +242,13 @@ def test_the_model_parses(stage):
     """A parse failure is otherwise found on a provisioned VM at 06:00 UTC."""
     from trilogy import Environment
 
-    env = Environment(working_path=RAW_DIR)
+    env = Environment(working_path=(RAW_DIR / stage).parent)
     env.parse((RAW_DIR / stage).read_text(encoding="utf-8"))
     names = {d.name for d in env.datasources.values()}
     assert set(STAGES[stage]) <= names
+    trees = ("boston_tree_info",) if stage == CITY_STAGE else ("full_tree_info", "published_tree_heights")
     if stage != "height_fits.preql":
-        for name in ("full_tree_info", "tree_enrichment", "published_tree_heights",
-                     "crown_width_coefficients", "crown_width_fallbacks"):
+        for name in (*trees, "tree_enrichment", "crown_width_coefficients", "crown_width_fallbacks"):
             assert name in names, (stage, name)
 
 
@@ -516,21 +525,23 @@ def fixture_files(tmp_path_factory) -> dict[str, Path]:
     )
     conn.execute("CREATE TABLE enrichment (species VARCHAR, genus VARCHAR, tree_form VARCHAR)")
     conn.executemany("INSERT INTO enrichment VALUES (?, ?, ?)", [(s, g, f) for s, (g, f) in ENRICHMENT.items()])
-    # The published LIDAR heights: a city parquet holds a fraction of the
-    # rollup's trees, and a tree it lacks keeps its row with a null height.
+    # The published LIDAR heights: the city's own parquet carries them beside
+    # its trees, and a tree under no surveyed crown has a null height. The fits
+    # read them from it (tree_height_source.preql), and so does the city's
+    # derived model (city_derived.preql), which reads its trees from it too.
     conn.execute("CREATE TABLE heights (tree_id VARCHAR, height_m FLOAT, height_crown_radius_m FLOAT)")
     conn.executemany(
         "INSERT INTO heights VALUES (?, ?, ?)",
         [(tree_id, height, radius) for tree_id, _, _, _, _, height, radius in ALL_TREES if height is not None]
-        + [(tree_id, height, radius) for tree_id, _, _, height, radius in DETECTIONS if height is not None]
-        + [("t-elsewhere", 20.0, 3.0)],
+        + [(tree_id, height, radius) for tree_id, _, _, height, radius in DETECTIONS if height is not None],
     )
+    conn.execute("CREATE TABLE city AS SELECT * FROM rollup LEFT JOIN heights USING (tree_id)")
     files = {
         "full_tree_info_v": tmp / "full_tree_info.parquet",
         "tree_enrichment_v": tmp / "tree_enrichment.parquet",
         "usbos_tree_info_v": tmp / "usbos_tree_info.parquet",
     }
-    for table, path in zip(("rollup", "enrichment", "heights"), files.values()):
+    for table, path in zip(("rollup", "enrichment", "city"), files.values()):
         conn.execute(f"COPY {table} TO '{path.as_posix()}' (FORMAT PARQUET)")
     return files
 
@@ -547,7 +558,7 @@ def stage_env(stage: str):
     """
     from trilogy import Dialects, Environment
 
-    env = Environment(working_path=RAW_DIR)
+    env = Environment(working_path=(RAW_DIR / stage).parent)
     env.parse((RAW_DIR / stage).read_text(encoding="utf-8"))
     targets = {name: env.datasources[name] for name in STAGES[stage]}
     for name in targets:
@@ -579,7 +590,7 @@ def fetch(sql: str) -> list[dict]:
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
-def run_model(files: dict[str, Path], query: str, stage: str = "tree_predictions.preql") -> list[dict]:
+def run_model(files: dict[str, Path], query: str, stage: str = CITY_STAGE) -> list[dict]:
     """A select against a stage's model, run by DuckDB over the fixture files."""
     _, executor, _ = stage_env(stage)
     (sql,) = executor.generate_sql(query)
@@ -622,7 +633,12 @@ def fit_files(fixture_files, tmp_path_factory) -> dict[str, Path]:
     return build_stage(files, "height_fits.preql", tmp)
 
 
-@pytest.mark.parametrize("stage", [s for s in STAGES if len(STAGES[s]) > 1])
+# What each stage's refresh builds, in order: a city's derived job also writes
+# its browser projection and vocabulary, which read the predictions it wrote.
+REFRESH_TARGETS = {**STAGES, CITY_STAGE: ("usbos_tree_predictions", "usbos_tree_browser", "usbos_tree_vocab")}
+
+
+@pytest.mark.parametrize("stage", [s for s in REFRESH_TARGETS if len(REFRESH_TARGETS[s]) > 1])
 def test_each_stage_plans_the_way_a_refresh_runs_it(stage):
     """Plan every target of a stage in the order `trilogy refresh` takes them.
 
@@ -636,10 +652,10 @@ def test_each_stage_plans_the_way_a_refresh_runs_it(stage):
     from trilogy.dialect.config import DuckDBConfig
     from trilogy.execution.state.isolation import hidden_datasources
 
-    env = Environment(working_path=RAW_DIR)
+    env = Environment(working_path=(RAW_DIR / stage).parent)
     env.parse((RAW_DIR / stage).read_text(encoding="utf-8"))
     executor = Dialects.DUCK_DB.default_executor(environment=env, conf=DuckDBConfig(enable_python_datasources=True))
-    pending = list(STAGES[stage])
+    pending = list(REFRESH_TARGETS[stage])
     failures = {}
     while pending:
         name = pending.pop(0)
@@ -764,8 +780,8 @@ def test_density_counts_the_cell_and_tolerates_no_coordinates(predictions):
 
 def test_imagery_detections_publish_only_a_surveyed_height(fit_files, tmp_path):
     """The published table: a detection's row is there for its LIDAR height alone."""
-    built = build_stage(fit_files, "tree_predictions.preql", tmp_path)
-    got = by_id(published(built, "tree_predictions"))
+    built = build_stage(fit_files, CITY_STAGE, tmp_path)
+    got = by_id(published(built, "usbos_tree_predictions"))
     assert "pred-bare" not in got and "pred-nowhere" not in got
     row = got["pred-surveyed"]
     assert row["accepted_height_m"] == pytest.approx(14.0) and row["height_check"] == "unchecked", row
@@ -851,7 +867,6 @@ def test_an_observed_height_is_carried_beside_the_prediction(predictions):
     assert got["t-acer-30"]["predicted_height_m"] > 0, "the prediction is published even where a height was measured"
     assert got["t-palm"]["height_m"] == pytest.approx(9.0), "a measured palm keeps its measurement"
     assert got["t-acer-nodbh"]["height_m"] is None and got["t-acer-nodbh"]["predicted_height_m"] is None
-    assert "t-elsewhere" not in got, "a height row with no rollup tree is not a prediction row"
 
 
 def test_the_height_gates(predictions, reference):

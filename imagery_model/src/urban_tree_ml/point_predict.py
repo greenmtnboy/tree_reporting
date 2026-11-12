@@ -61,7 +61,8 @@ from urban_tree_ml.tile_bundle_export import (
 REPO_ROOT = Path(__file__).resolve().parents[3]
 INGEST_PATH = REPO_ROOT / "data" / "raw" / "shared" / "ingest.py"
 PARQUET_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{code}_tree_info_v2.parquet"
-PREDICTIONS_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_predictions_v2.parquet"
+# One predictions file per city (data/raw/city_derived.preql).
+PREDICTIONS_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/{code}_tree_predictions_v2.parquet"
 MIN_VALID_FRACTION = 0.9
 IMAGERY_CACHE_VERSION = "coverage-v2"
 # A NAIP search or read that stalls fails instead of hanging a bulk batch
@@ -614,7 +615,7 @@ def predict_tile(
         for code in cities_meeting(bounds, envelopes):
             if code not in readers:
                 try:
-                    readers[code] = InventoryReader(PARQUET_URL.format(code=code.lower()), PREDICTIONS_URL, code)
+                    readers[code] = InventoryReader(PARQUET_URL.format(code=code.lower()), PREDICTIONS_URL.format(code=code.lower()), code)
                 except Exception as error:  # an unbuilt city has no parquet yet
                     print(f"{code}: no current trees ({error.__class__.__name__})", file=sys.stderr)
                     readers[code] = None  # type: ignore[assignment]

@@ -1,6 +1,6 @@
 # The height model's fits, made on the sample `allometry_fits.preql`
 # published: built by the `refresh-height-fits` [[cloud.job]], after
-# refresh-allometry-fits and before refresh-predictions in the core's tick.
+# refresh-allometry-fits in the core's tick; at most weekly, like it.
 #
 #     height_m = scale * dbh_cm ** b        (dbh clamped to [1, the fit's largest stem])
 #

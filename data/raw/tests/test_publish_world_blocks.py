@@ -344,16 +344,18 @@ def test_the_tile_of_a_point_matches_the_maps(con):
             assert con.execute(f"SELECT {x}, {y}").fetchone() == tile(lon, lat, zoom)
 
 
-def test_the_job_runs_in_the_cores_tick_after_the_projections():
+def test_the_job_runs_in_the_cores_tick_every_day():
+    """The projections are each city's own job's, on its own cron; the blocks
+    take whatever is published, once a day after the rollup, whatever moved."""
     config = tomllib.loads((DATA / "trilogy.toml").read_text(encoding="utf-8"))
     jobs = {job["key"]: job for job in config["cloud"]["job"]}
     job = jobs["publish-world-blocks"]
     assert job["operation"] == "run"
     assert job["entrypoint"] == "world_tree_blocks.preql"
-    assert job["schedule"] == jobs["refresh-browser-city"]["schedule"], "one cron, so the platform orders one tick"
+    assert job["schedule"] == jobs["publish-full"]["schedule"], "one cron, so the platform orders one tick"
     edge = config["dependencies"][job["entrypoint"]]
-    assert jobs["refresh-browser-city"]["entrypoint"] in edge["after"]
-    assert edge["when"] == "always", "a day the projections did not move must still run the clean-up"
+    assert jobs["publish-full"]["entrypoint"] in edge["after"]
+    assert edge["when"] == "always", "a day the rollup did not move must still cut the blocks and clean up"
     statements = (DATA / job["entrypoint"]).read_text(encoding="utf-8")
     assert re.search(r"^call `\./world/publish_blocks\.py`;", statements, re.M)
     assert (DATA / "world" / "publish_blocks.py").exists()

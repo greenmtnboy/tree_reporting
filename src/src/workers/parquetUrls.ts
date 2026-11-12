@@ -75,7 +75,7 @@ export function cityTreeParquetUrl(city: string): string | null {
 }
 
 /**
- * The city's browser projection (data/raw/tree_browser_city.preql): every
+ * The city's browser projection (data/raw/city_derived.preql): every
  * tree of one city in the rows and columns the worker keeps. The map's trees
  * come from the world's blocks, which are cut from these; this file is what
  * a bookmark's city-wide reads use (`trees_published`). Returns null if city

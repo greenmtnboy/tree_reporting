@@ -1,10 +1,11 @@
-# When the predictions' inputs last published: the newer of the rollup's and
-# the enrichment table's Last-Modified (prediction_inputs_probe.py). Every
-# allometry stage and the predictions themselves rebuild on it, so a tick
-# that changes either input rebuilds the chain in order, and a tick that
-# changes neither rebuilds nothing.
+# When the fits' inputs last published, by week: the newer of the rollup's and
+# the enrichment table's Last-Modified, floored to its Monday
+# (prediction_inputs_probe.py). Both fit stages rebuild on it, so they refit at
+# most once a week, in order, and a week in which neither input moved refits
+# nothing. Each city's predictions have their own watermark
+# (city_inputs_published_through, tree_predictions.preql).
 
-property <*>.prediction_inputs_published_through datetime; # newer of the rollup's and the enrichment table's Last-Modified
+property <*>.prediction_inputs_published_through datetime; # newer of the rollup's and the enrichment table's Last-Modified, floored to its week (the fits refit at most weekly)
 
 root datasource prediction_inputs_publication (
     data_updated_through: prediction_inputs_published_through
