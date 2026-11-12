@@ -85,12 +85,30 @@ describe('a phone holds the city in windows', () => {
     expect(inCell).toBeGreaterThan(1000)
     expect(await count('SELECT count(*) AS n FROM trees_fast')).toBe(inCell)
     expect(loads()).toHaveLength(1)
-    // The cell came out of the one block file that holds it, read in place by its row groups:
-    // a phone never downloads a block whole.
+    // The cell came out of the one block file that holds it. A street's view is
+    // a cell or two of one block, so the file is fetched whole, once: its range
+    // reads cost more requests and more bytes than the file (WHOLE_BLOCK_LOADS).
     const block = blockAt(CENTER[0], CENTER[1])
     const read = executedSql.filter((sql) => /CREATE TABLE trees_window_staging/.test(sql)).flatMap((sql) => [...sql.matchAll(/blocks\/(\d+)-/g)].map((m) => Number(m[1])))
     expect(read).toEqual([blockKey(block.x, block.y)])
-    expect(fetchedWorldFiles.filter((name) => name.startsWith('blocks/'))).toEqual([])
+    const fetched = fetchedWorldFiles.filter((name) => name.startsWith('blocks/'))
+    expect(fetched).toHaveLength(1)
+    expect(fetched[0]).toMatch(new RegExp(`^blocks/${blockKey(block.x, block.y)}-`))
+  })
+
+  it('reads the next cell of a block it fetched from the bytes it kept', async () => {
+    const before = fetchedWorldFiles.length
+    const cell = cellAt(CENTER[0], CENTER[1])
+    const box = cellsBounds([cellKey(cell.x + 1, cell.y)])
+    const next: [number, number] = [(box.west + box.east) / 2, (box.south + box.north) / 2]
+    const here = blockAt(CENTER[0], CENTER[1]), there = blockAt(next[0], next[1])
+    expect([there.x, there.y]).toEqual([here.x, here.y])
+    await lookAt(next, 16.5)
+    const loaded = loads().length
+    const tile = await worker.call<TileResult>('getTile', { z: 16, ...lngLatToTile(next[0], next[1], 16) })
+    expect(tile.transient).toBe(false)
+    expect(loads().length).toBe(loaded + 1)
+    expect(fetchedWorldFiles.length).toBe(before)
   })
 
   it('gathers the tiles of one view into a single load', async () => {
@@ -101,8 +119,8 @@ describe('a phone holds the city in windows', () => {
       worker.call<TileResult>('getTile', { z: 13, x: c.x + dx, y: c.y + dy }))))
     expect(tiles.every((tile) => !tile.transient)).toBe(true)
     expect(loads().length - before).toBe(1)
-    // A z13 tile spans 2x2 cells; the centre cell was already held.
-    expect(loads()[loads().length - 1].detail.cells).toBe(9 * 4 - 1)
+    // A z13 tile spans 2x2 cells; the centre cell and the one east of it were already held.
+    expect(loads()[loads().length - 1].detail.cells).toBe(9 * 4 - 2)
     expect(await count('SELECT count(*) - count(DISTINCT tree_id) AS n FROM trees_fast')).toBe(0)
   })
 

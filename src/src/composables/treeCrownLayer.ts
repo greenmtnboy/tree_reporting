@@ -215,7 +215,10 @@ export class TreeCrownLayer implements CustomLayerInterface {
     const camera: TreeRenderView = this.camera()
     if (this.simplified && camera.altitude >= CROWN_DISTANCE_MAX) return
     this.dirty = false
-    if (!this.simplified) {
+    if (this.simplified) {
+      const bounds = this.map.getBounds()
+      camera.view = { west: bounds.getWest(), south: bounds.getSouth(), east: bounds.getEast(), north: bounds.getNorth() }
+    } else {
       // Reuse only complete (uncapped) batches whose footprint still holds the whole view, at the
       // bearing they were sorted for.
       const coverage = this.coverage
