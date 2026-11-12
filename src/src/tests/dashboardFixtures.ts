@@ -57,6 +57,8 @@ export type FixtureTree = {
   diameter_at_breast_height: number | null
   latitude: number
   longitude: number
+  /** Crown width in metres, observed or estimated; absent where the tree has neither. */
+  crown_width_m?: number
 }
 
 // San Francisco's own ecoregion is 423 (see dashboardContextSource.ts); 425
@@ -239,23 +241,23 @@ export const FIXTURE_SPECIES: FixtureSpecies[] = [
 export const UNENRICHED_SPECIES = 'Unknown'
 
 export const FIXTURE_TREES: FixtureTree[] = [
-  { tree_id: 'fx-1', city: 'USSFO', species: 'Quercus agrifolia', data_source: 'SF_OPENDATA', plant_date: '1998-03-04', diameter_at_breast_height: 30, latitude: 37.771, longitude: -122.411 },
-  { tree_id: 'fx-2', city: 'USSFO', species: 'Quercus agrifolia', data_source: 'SF_OPENDATA', plant_date: '2015-11-20', diameter_at_breast_height: 8, latitude: 37.772, longitude: -122.412 },
-  { tree_id: 'fx-3', city: 'USSFO', species: 'Platanus x hispanica', data_source: 'SF_OPENDATA', plant_date: '2004-06-01', diameter_at_breast_height: 20, latitude: 37.773, longitude: -122.413 },
+  { tree_id: 'fx-1', city: 'USSFO', species: 'Quercus agrifolia', data_source: 'SF_OPENDATA', plant_date: '1998-03-04', diameter_at_breast_height: 30, latitude: 37.771, longitude: -122.411, crown_width_m: 12.5 },
+  { tree_id: 'fx-2', city: 'USSFO', species: 'Quercus agrifolia', data_source: 'OSM_USSFO', plant_date: '2015-11-20', diameter_at_breast_height: 8, latitude: 37.772, longitude: -122.412, crown_width_m: 4 },
+  { tree_id: 'fx-3', city: 'USSFO', species: 'Platanus x hispanica', data_source: 'SF_OPENDATA', plant_date: '2004-06-01', diameter_at_breast_height: 20, latitude: 37.773, longitude: -122.413, crown_width_m: 9 },
   { tree_id: 'fx-4', city: 'USSFO', species: 'Acer rubrum', data_source: 'SF_OPENDATA', plant_date: null, diameter_at_breast_height: 14, latitude: 37.774, longitude: -122.414 },
   { tree_id: 'fx-5', city: 'USSFO', species: 'Tilia cordata', data_source: 'SF_OPENDATA', plant_date: '1975-04-15', diameter_at_breast_height: 40, latitude: 37.775, longitude: -122.415 },
   { tree_id: 'fx-6', city: 'USSFO', species: 'Tilia cordata', data_source: 'COMMUNITY_USSFO', plant_date: '2021-09-09', diameter_at_breast_height: 4, latitude: 37.776, longitude: -122.416 },
-  { tree_id: 'fx-7', city: 'USSFO', species: UNENRICHED_SPECIES, data_source: 'SF_OPENDATA', plant_date: null, diameter_at_breast_height: null, latitude: 37.777, longitude: -122.417 },
+  { tree_id: 'fx-7', city: 'USSFO', species: UNENRICHED_SPECIES, data_source: 'PREDICTED_USSFO', plant_date: null, diameter_at_breast_height: null, latitude: 37.777, longitude: -122.417, crown_width_m: 6 },
   // Three trees of one species planted in one year, two of them in one map
   // cell. A summary group of one tree reads the same counted once or n² times;
   // a group of three does not. Planting by Year shipped re-summing
   // tree_rollup_year joined back to the trees and passed this suite while
   // every group here held one tree.
-  { tree_id: 'fx-10', city: 'USSFO', species: 'Quercus agrifolia', data_source: 'SF_OPENDATA', plant_date: '1998-07-21', diameter_at_breast_height: 28, latitude: 37.771, longitude: -122.411 },
-  { tree_id: 'fx-11', city: 'USSFO', species: 'Quercus agrifolia', data_source: 'SF_OPENDATA', plant_date: '1998-10-02', diameter_at_breast_height: 33, latitude: 37.778, longitude: -122.418 },
+  { tree_id: 'fx-10', city: 'USSFO', species: 'Quercus agrifolia', data_source: 'SF_OPENDATA', plant_date: '1998-07-21', diameter_at_breast_height: 28, latitude: 37.771, longitude: -122.411, crown_width_m: 12 },
+  { tree_id: 'fx-11', city: 'USSFO', species: 'Quercus agrifolia', data_source: 'SF_OPENDATA', plant_date: '1998-10-02', diameter_at_breast_height: 33, latitude: 37.778, longitude: -122.418, crown_width_m: 12.4 },
   // A second city, so the all-cities view has something to aggregate across and
   // a `city = 'USSFO'` filter has something to exclude.
-  { tree_id: 'fx-8', city: 'USNYC', species: 'Acer rubrum', data_source: 'NYC_OPENDATA', plant_date: '2010-05-05', diameter_at_breast_height: 18, latitude: 40.712, longitude: -74.006 },
+  { tree_id: 'fx-8', city: 'USNYC', species: 'Acer rubrum', data_source: 'NYC_OPENDATA', plant_date: '2010-05-05', diameter_at_breast_height: 18, latitude: 40.712, longitude: -74.006, crown_width_m: 7 },
   { tree_id: 'fx-9', city: 'USNYC', species: 'Tilia cordata', data_source: 'NYC_OPENDATA', plant_date: '1990-01-30', diameter_at_breast_height: 26, latitude: 40.713, longitude: -74.007 },
 ]
 
@@ -282,13 +284,13 @@ export type FixtureCityContext = {
  * bucket is the best match among them, in the CASE's order.
  *
  * An unenriched tree is not an absent row: it joins to nulls and the CASE runs
- * anyway, so each bucket returns whatever its null path yields. That is why
- * `Unknown` lands in "Non-Native, Different Biome" rather than dropping out —
- * verified against the generated SQL, not assumed.
+ * anyway, so each bucket returns whatever its null path yields. The CASE's
+ * first branch names that path: a species with no recorded range, enriched or
+ * not, is `Unknown`, which the page reports as coverage rather than as a bar.
  */
 export function nativeLocalityBucket(tree: FixtureTree, context: FixtureCityContext): string | null {
   const species = SPECIES_BY_NAME.get(tree.species)
-  if (!species) return 'Non-Native, Different Biome'
+  if (!species || !species.native_ecoregions?.length) return 'Unknown'
   const ecoregions = (species.native_ecoregions ?? [])
     .map((id) => ECOREGION_BY_ID.get(id))
     .filter(Boolean) as FixtureEcoregion[]
@@ -356,6 +358,35 @@ export function dbhClass(tree: FixtureTree): number | null {
 
 const DBH_CLASS_LABELS = ['Under 6"', '6–12"', '12–24"', '24–36"', 'Over 36"']
 
+/** `crown_class` in data/raw/tree_rollups.preql. */
+export function crownClass(tree: FixtureTree): number | null {
+  const width = tree.crown_width_m
+  if (width == null) return null
+  if (width < 3) return 1
+  if (width < 5) return 2
+  if (width < 8) return 3
+  if (width < 12) return 4
+  return 5
+}
+
+/** The crown as a circle, in square metres; `canopy_area_m2` in data/raw/tree_rollups.preql. */
+export function canopyArea(tree: FixtureTree): number | null {
+  const width = tree.crown_width_m
+  return width == null ? null : Math.PI * (width / 2) ** 2
+}
+
+const CROWN_CLASS_LABELS = ['Under 3 m', '3–5 m', '5–8 m', '8–12 m', 'Over 12 m']
+
+/** `source_kind` in data/raw/tree_rollups.preql. */
+export function sourceKind(tree: FixtureTree): string {
+  const source = tree.data_source
+  if (source.startsWith('COMMUNITY_')) return 'community'
+  if (source.startsWith('SATELLITE_')) return 'satellite'
+  if (source.startsWith('OSM_')) return 'osm'
+  if (source.startsWith('PREDICTED_')) return 'predicted'
+  return 'municipal'
+}
+
 function speciesField(tree: FixtureTree, field: keyof FixtureSpecies): string | null {
   const species = SPECIES_BY_NAME.get(tree.species)
   if (!species) return null
@@ -399,6 +430,12 @@ export function fixtureFieldValue(
       const dbh = dbhClass(tree)
       return dbh == null ? null : DBH_CLASS_LABELS[dbh - 1]
     }
+    case 'crown_class_label': {
+      const crown = crownClass(tree)
+      return crown == null ? null : CROWN_CLASS_LABELS[crown - 1]
+    }
+    case 'source_kind':
+      return sourceKind(tree)
     default:
       throw new Error(`No fixture reference for cross-filter field ${field}`)
   }

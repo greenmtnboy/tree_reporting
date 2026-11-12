@@ -1,17 +1,33 @@
 import type { ChartConfig, DashboardImport } from '@trilogy-data/trilogy-studio-components/dashboard'
 import { CITY_CONFIG, type CityCode } from './useMapData'
-import { treeFormColorSql } from '../treeFormColors'
 import { REAL_SPECIES_PREDICATE } from '../data/species'
+import {
+  CANOPY_BY_SPECIES_QUERY,
+  SPECIES_PROFILE_FIELDS,
+  SUMMARY_CHARTS_BY_ID,
+  type DashboardBuckets,
+  type DashboardCardKind,
+  type DashboardSpan,
+} from './summaryDashboardConfig'
 
 export type SpeciesDashboardChart = {
   id: string
   title: string
   subtitle?: string
   query: string
+  kind: DashboardCardKind
   chartConfig: ChartConfig
-  renderMode?: 'chart' | 'markdown' | 'carousel' | 'top-chart'
+  buckets?: DashboardBuckets
   allowCrossFilter?: boolean
   requiresCitySelection?: boolean
+  /** Only when no city is selected: a chart across cities is one bar under one. */
+  requiresAllCities?: boolean
+  /**
+   * Only while a whole genus is in view. With one species selected every
+   * tree shares the species' traits, so the trait cards are one bar each;
+   * the species profile states them as facts instead.
+   */
+  genusOnly?: boolean
 }
 
 export type SpeciesDashboardKpi = {
@@ -27,7 +43,7 @@ export type SpeciesDashboardSection = {
   id: string
   title: string
   subtitle: string
-  cards: Array<{ id: string; width?: 'default' | 'wide' | 'full'; height?: 'default' | 'tall' }>
+  cards: Array<{ id: string; span: DashboardSpan }>
 }
 
 export const SPECIES_GENUS_EXPR = "split(species, ' ')[1]"
@@ -60,12 +76,11 @@ export const SPECIES_KPI_CHARTS: SpeciesDashboardKpi[] = [
     xField: 'city_count',
   },
   {
-    id: 'sp-biome-fit',
-    label: 'Ecological Fit',
-    title: 'Biome Fit %',
-    query: "import std.display; SELECT (count_distinct(tree_id ? native_locality_bucket = 'Native' or native_locality_bucket = 'Same biome, non-native') / count_distinct(tree_id))::float::percent as biome_fit_pct;",
-    xField: 'biome_fit_pct',
-    requiresCitySelection: true,
+    id: 'sp-canopy-total',
+    label: 'Crown area',
+    title: 'Crown Area',
+    query: 'SELECT sum(canopy_area_m2) as canopy_area, count(tree_id ? crown_class IS NOT NULL) as sized_trees;',
+    xField: 'canopy_area',
   },
 ]
 
@@ -92,66 +107,65 @@ ORDER BY tree_count DESC;`
 export const TOP_SPECIES_QUERY = `${SPECIES_OPTIONS_QUERY.slice(0, -1)}
 LIMIT 1;`
 
-// Enrichment lookup for the selected species, issued by SpeciesView.
-export const SPECIES_CONTEXT_QUERY = `SELECT common_names[1] as common_name, tree_form, growth_rate WHERE ${REAL_SPECIES_PREDICATE} LIMIT 1;`
+/**
+ * Every identified species in the page's city (or in all of them), counted,
+ * under the city filter alone: what a selected species is ranked against. The
+ * page's other queries carry the genus or species filter and cannot see it.
+ */
+export const SPECIES_RANKING_QUERY = `SELECT
+  species,
+  count(tree_id) as tree_count
+WHERE ${REAL_SPECIES_PREDICATE}
+ORDER BY tree_count DESC;`
+
+function summaryBuckets(id: string, spId: string): SpeciesDashboardChart {
+  const chart = SUMMARY_CHARTS_BY_ID[id]
+  return {
+    id: spId,
+    title: chart.title,
+    subtitle: chart.subtitle,
+    query: chart.query,
+    kind: chart.kind,
+    chartConfig: chart.chartConfig,
+    buckets: chart.buckets,
+    requiresCitySelection: chart.requiresCitySelection,
+    genusOnly: true,
+  }
+}
 
 export const SPECIES_CHARTS: SpeciesDashboardChart[] = [
-  // Top 15 species bar chart with % of total
-  {
-    id: 'sp-top-species',
-    title: 'Top 15 Species',
-    subtitle: 'Most common species by share of the filtered population',
-    query: `import std.display;
-SELECT
-  coalesce(common_names[1], species) as display_name,
-  count(tree_id) as tree_count,
-  (cast(count(tree_id) as float) / cast(count(tree_id) by * as float))::float::percent as pct_of_total
-WHERE ${REAL_SPECIES_PREDICATE}
-ORDER BY tree_count DESC
-LIMIT 15;`,
-    chartConfig: {
-      chartType: 'barh',
-      xField: 'pct_of_total',
-      yField: 'display_name',
-      showTitle: false,
-      hideLegend: true,
-    },
-  },
-
-  // Spotlight — rich markdown fact sheet for the selected species
+  // The species in view, most common first, each with its profile: the list
+  // while a genus is in view, the one profile once a species is selected.
   {
     id: 'sp-spotlight',
-    title: 'Top 100 Species',
-    subtitle: 'Most common species in the current filter, ordered by population',
+    title: 'Species in this genus',
+    subtitle: 'Pick a species to read about it, then focus the page on it.',
+    kind: 'custom',
     query: `SELECT
-species,
-common_names[1] as common_name,
-description,
-tree_form,
-mature_height_min_ft,
-mature_height_max_ft,
-canopy_spread_min_ft,
-canopy_spread_max_ft,
-growth_rate,
-bloom_months,
-wildlife_value,
-drought_tolerance,
-water_needs,
-photo_url,
-photo_attribution,
+${SPECIES_PROFILE_FIELDS},
 count(tree_id) by species as tree_count
+WHERE ${REAL_SPECIES_PREDICATE}
 ORDER BY tree_count DESC, species ASC
 LIMIT 100;`,
     chartConfig: { chartType: 'headline', xField: 'tree_count', showTitle: false },
-    renderMode: 'carousel',
+    allowCrossFilter: false,
+  },
+  {
+    id: 'sp-canopy-by-species',
+    title: 'Crown area by species',
+    kind: 'custom',
+    query: CANOPY_BY_SPECIES_QUERY,
+    chartConfig: { chartType: 'barh', xField: 'canopy_area', yField: 'species', showTitle: false, hideLegend: true },
+    allowCrossFilter: false,
   },
 
-  // City distribution — which cities have this species, colored by nativeness
+  // City distribution — which cities have this taxon, colored by nativeness
   {
     id: 'sp-city-distribution',
-    title: 'City Distribution',
-    subtitle: 'Trees per city, colored by nativeness context',
-    query: `import std.color; 
+    title: 'Trees by city',
+    subtitle: 'Coloured by how native the taxon is to each city',
+    kind: 'chart',
+    query: `import std.color;
 SELECT
 city,
 native_locality_bucket,
@@ -172,12 +186,16 @@ ORDER BY tree_count DESC;`,
       colorField: 'native_locality_bucket',
       showTitle: false,
       hideLegend: false,
-    },
+      hideYAxisTitle: true,
+      xAxisTitle: 'Trees',
+    } as ChartConfig,
+    requiresAllCities: true,
   },
   {
     id: 'sp-city-presence-map',
-    title: 'Global City Footprint',
-    subtitle: 'Cities containing this taxon, sized by tree count',
+    title: 'Where it is planted',
+    subtitle: 'Cities holding this taxon, sized by tree count',
+    kind: 'chart',
     // Each city sits at the mean position of all its trees (`tree_rollup_city`),
     // so the map is a count by city the (city, species) summary serves.
     query: `SELECT
@@ -196,13 +214,14 @@ ORDER BY tree_count DESC;`,
       showTitle: false,
       hideLegend: false,
     },
+    requiresAllCities: true,
   },
 
-  // Age distribution — decade of planting
   {
     id: 'sp-age-distribution',
-    title: 'Planting by Year',
-    subtitle: 'When trees in this taxon were planted',
+    title: 'Planting by year',
+    subtitle: 'Trees with a recorded planting date',
+    kind: 'chart',
     query: `import std.date;
 SELECT
 plant_year::int::year as planted_year,
@@ -216,257 +235,55 @@ ORDER BY planted_year ASC;`,
       yField: 'tree_count',
       showTitle: false,
       hideLegend: true,
-    },
+      hideXAxisTitle: true,
+      yAxisTitle: 'Trees planted',
+    } as ChartConfig,
+  },
+  {
+    ...summaryBuckets('trunk-size', 'sp-size-distribution'),
+    genusOnly: false,
+  },
+  {
+    ...summaryBuckets('crown-size', 'sp-crown-size'),
+    genusOnly: false,
   },
 
-  // Size distribution — DBH buckets
-  {
-    id: 'sp-size-distribution',
-    title: 'Trunk Size Distribution',
-    subtitle: 'Diameter at breast height (inches)',
-    // The DBH class and its label are model concepts (tree_summary_grains),
-    // selected under their own names, so the (city, species, DBH class)
-    // summary answers this chart.
-    query: `SELECT
-dbh_class,
-dbh_class_label,
-count(tree_id) as tree_count
-WHERE dbh_class IS NOT NULL
-ORDER BY dbh_class ASC;`,
-    chartConfig: {
-      chartType: 'bar',
-      xField: 'dbh_class_label',
-      yField: 'tree_count',
-      showTitle: false,
-      hideLegend: true,
-    },
-  },
-
-  // Ecological Fit
-  {
-    id: 'sp-hardiness-fit',
-    title: 'Hardiness Zone Fit',
-    subtitle: 'Compared with the active city zone',
-    query: `import std.color;
-SELECT
-hardiness_fit_bucket,
-count(tree_id) as tree_count,
-case hardiness_fit_bucket
-when 'Well within zone' then '#2F7D4F'
-when 'Edge of tolerance' then '#D4A14A'
-when 'Outside zone' then '#A96F49'
-else '#7E9D86'
-end::string::hex as bucket_color
-WHERE hardiness_fit_bucket IS NOT NULL
-ORDER BY tree_count DESC;`,
-    chartConfig: {
-      chartType: 'barh',
-      xField: 'tree_count',
-      yField: 'hardiness_fit_bucket',
-      colorField: 'hardiness_fit_bucket',
-      showTitle: false,
-      hideLegend: true,
-    },
-    requiresCitySelection: true,
-  },
-  {
-    id: 'sp-water-resilience',
-    title: 'Water vs Drought',
-    subtitle: 'Operational resilience profile',
-    query: `import std.color;
-SELECT
-water_resilience_bucket,
-count(tree_id) as tree_count,
-case water_resilience_bucket
-when 'Low water / high drought tolerance' then '#2F7D4F'
-when 'Moderate / mixed' then '#D4A14A'
-when 'High water / low drought tolerance' then '#A96F49'
-else '#7E9D86'
-end::string::hex as bucket_color
-WHERE water_resilience_bucket IS NOT NULL
-ORDER BY tree_count DESC;`,
-    chartConfig: {
-      chartType: 'barh',
-      xField: 'tree_count',
-      yField: 'water_resilience_bucket',
-      colorField: 'water_resilience_bucket',
-      showTitle: false,
-      hideLegend: true,
-    },
-  },
-
-  // Physical Profile
-  {
-    id: 'sp-tree-form',
-    title: 'Tree Forms',
-    subtitle: 'Structural variety in the filtered set',
-    query: `import std.color;
-SELECT
-tree_form,
-${treeFormColorSql('tree_form', 'cat_color')},
-count(tree_id) as tree_count
-WHERE tree_form IS NOT NULL
-ORDER BY tree_count DESC;`,
-    chartConfig: {
-      chartType: 'donut',
-      xField: 'tree_count',
-      yField: 'tree_form',
-      colorField: 'tree_form',
-      showTitle: false,
-      hideLegend: true,
-    },
-  },
-  {
-    id: 'sp-growth-rate',
-    title: 'Growth Rate',
-    subtitle: 'Maintenance pressure signal',
-    query: `import std.color;
-SELECT
-growth_rate,
-count(tree_id) as tree_count,
-case growth_rate
-when 'slow' then '#1F5A4E'
-when 'moderate' then '#D4A14A'
-when 'fast' then '#A96F49'
-else '#7E9D86'
-end::string::hex as bucket_color
-WHERE growth_rate IS NOT NULL
-ORDER BY tree_count DESC;`,
-    chartConfig: {
-      chartType: 'barh',
-      xField: 'tree_count',
-      yField: 'growth_rate',
-      colorField: 'growth_rate',
-      showTitle: false,
-      hideLegend: true,
-    },
-  },
-  {
-    id: 'sp-lifespan',
-    title: 'Lifespan Profile',
-    subtitle: 'Replacement risk over time',
-    query: `import std.color;
-SELECT
-lifespan_bucket,
-count(tree_id) as tree_count,
-case lifespan_bucket
-when 'Long-lived (150+y)' then '#2F7D4F'
-when 'Medium-lived (50-149y)' then '#D4A14A'
-when 'Short-lived (<50y)' then '#A96F49'
-else '#7E9D86'
-end::string::hex as bucket_color
-WHERE lifespan_bucket IS NOT NULL
-ORDER BY tree_count DESC;`,
-    chartConfig: {
-      chartType: 'barh',
-      xField: 'tree_count',
-      yField: 'lifespan_bucket',
-      colorField: 'lifespan_bucket',
-      showTitle: false,
-      hideLegend: true,
-    },
-  },
-
-  // Impact
-  {
-    id: 'sp-wildlife-value',
-    title: 'Wildlife Value',
-    subtitle: 'Ecological value from enriched species',
-    query: `import std.color;
-SELECT
-wildlife_value,
-count(tree_id) as tree_count,
-case wildlife_value
-when 'high' then '#2F7D4F'
-when 'moderate' then '#D4A14A'
-when 'low' then '#A96F49'
-else '#7E9D86'
-end::string::hex as bucket_color
-WHERE wildlife_value IS NOT NULL
-ORDER BY tree_count DESC;`,
-    chartConfig: {
-      chartType: 'barh',
-      xField: 'tree_count',
-      yField: 'wildlife_value',
-      colorField: 'wildlife_value',
-      showTitle: false,
-      hideLegend: true,
-    },
-  },
-  {
-    id: 'sp-fire-risk',
-    title: 'Fire Risk',
-    subtitle: 'Forward-looking resilience profile',
-    query: `import std.color;
-SELECT
-fire_risk,
-count(tree_id) as tree_count,
-case fire_risk
-when 'low' then '#2F7D4F'
-when 'moderate' then '#D4A14A'
-when 'high' then '#A96F49'
-else '#7E9D86'
-end::string::hex as bucket_color
-WHERE fire_risk IS NOT NULL
-ORDER BY tree_count DESC;`,
-    chartConfig: {
-      chartType: 'barh',
-      xField: 'tree_count',
-      yField: 'fire_risk',
-      colorField: 'fire_risk',
-      showTitle: false,
-      hideLegend: true,
-    },
-  },
+  summaryBuckets('tree-form', 'sp-tree-form'),
+  summaryBuckets('water-resilience', 'sp-water-resilience'),
+  summaryBuckets('hardiness-fit', 'sp-hardiness-fit'),
+  summaryBuckets('wildlife-value', 'sp-wildlife-value'),
+  summaryBuckets('growth-rate', 'sp-growth-rate'),
+  summaryBuckets('lifespan-profile', 'sp-lifespan'),
+  summaryBuckets('fire-risk', 'sp-fire-risk'),
 ]
 
+/**
+ * The card sections under the page's species block and its map, which the
+ * view lays out itself (with the trunk and crown size cards beside the map).
+ */
 export const SPECIES_SECTIONS: SpeciesDashboardSection[] = [
   {
-    id: 'sp-spotlight-section',
-    title: 'Species Profile',
-    subtitle: 'Taxonomy context, dominant species detail, and city presence for the current filter.',
+    id: 'sp-history',
+    title: 'Planting and spread',
+    subtitle: 'When these trees went in, and which cities hold them.',
     cards: [
-      { id: 'sp-spotlight', width: 'wide', height: 'tall' },
-      { id: 'sp-top-species', width: 'full' },
-      { id: 'sp-city-presence-map', width: 'full', height: 'tall' },
-      { id: 'sp-city-distribution' },
+      { id: 'sp-age-distribution', span: 'xl' },
+      { id: 'sp-city-presence-map', span: 'l' },
+      { id: 'sp-city-distribution', span: 'l' },
     ],
   },
   {
-    id: 'sp-distribution',
-    title: 'Population & Distribution',
-    subtitle: 'When these trees were planted and how large they have grown.',
+    id: 'sp-traits',
+    title: 'What the genus is like',
+    subtitle: 'Its trees grouped by what is known about their species. Click a bar to filter the page.',
     cards: [
-      { id: 'sp-age-distribution' },
-      { id: 'sp-size-distribution' },
-    ],
-  },
-  {
-    id: 'sp-ecological',
-    title: 'Ecological Fit',
-    subtitle: 'Nativeness, hardiness, and water resilience against the local context.',
-    cards: [
-      { id: 'sp-hardiness-fit' },
-      { id: 'sp-water-resilience' },
-    ],
-  },
-  {
-    id: 'sp-physical',
-    title: 'Physical Profile',
-    subtitle: 'Structural form, growth pace, and longevity.',
-    cards: [
-      { id: 'sp-tree-form' },
-      { id: 'sp-growth-rate' },
-      { id: 'sp-lifespan' },
-    ],
-  },
-  {
-    id: 'sp-impact',
-    title: 'Impact',
-    subtitle: 'Ecological value and risk profile.',
-    cards: [
-      { id: 'sp-wildlife-value' },
-      { id: 'sp-fire-risk' },
+      { id: 'sp-tree-form', span: 's' },
+      { id: 'sp-water-resilience', span: 's' },
+      { id: 'sp-hardiness-fit', span: 's' },
+      { id: 'sp-wildlife-value', span: 's' },
+      { id: 'sp-growth-rate', span: 's' },
+      { id: 'sp-lifespan', span: 's' },
+      { id: 'sp-fire-risk', span: 's' },
     ],
   },
 ]

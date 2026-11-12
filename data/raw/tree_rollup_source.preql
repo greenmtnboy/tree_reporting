@@ -62,6 +62,56 @@ root datasource tree_rollup_coarse_cell (
 grain (city, species, map_coarse_cell_latitude, map_coarse_cell_longitude)
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_coarse_cell_v{data_version}.parquet`;
 
+# Two buckets the browser reads as stored columns instead of deriving: the
+# kind of source a tree came from (the browser's `data_source` is a per-city
+# enum, not a string to take a prefix of) and its crown width class (built
+# from the predictions table, which is never in the browser's scope). A chart
+# groups by them; nothing can filter another summary by them, because no
+# other summary carries them.
+property tree_id.source_kind string; # 'municipal', 'osm', 'community', 'satellite' (a reviewed imagery detection) or 'predicted' (an unreviewed one)
+property tree_id.crown_class int; # crown width class, 1-5: under 3 m, 3-5, 5-8, 8-12, 12 m and over; null where the tree has no observed or estimated crown
+
+auto source_kind_label <- case source_kind
+    when 'municipal' then 'City inventory'
+    when 'osm' then 'OpenStreetMap'
+    when 'community' then 'Community'
+    when 'satellite' then 'Imagery, reviewed'
+    when 'predicted' then 'Imagery, predicted'
+end;
+auto crown_class_label <- case crown_class
+    when 1 then 'Under 3 m'
+    when 2 then '3–5 m'
+    when 3 then '5–8 m'
+    when 4 then '8–12 m'
+    when 5 then 'Over 12 m'
+end;
+
+root datasource tree_rollup_origin (
+    city: city,
+    species: species,
+    source_kind: source_kind,
+    rollup_tree_count: rollup_tree_count,
+)
+grain (city, species, source_kind)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_origin_v{data_version}.parquet`;
+
+# A tree's crown area in square metres, as a circle of its crown width. No
+# tree file in the browser's scope carries it; it exists here so that
+# `sum(canopy_area_m2)` has the lineage of the stored sum, the way
+# `count(tree_id)` has `rollup_tree_count`'s, and is re-summed from the summary.
+property tree_id.canopy_area_m2 float;
+auto rollup_canopy_area_m2 <- sum(canopy_area_m2);
+
+root datasource tree_rollup_crown (
+    city: city,
+    species: species,
+    crown_class: crown_class,
+    rollup_tree_count: rollup_tree_count,
+    rollup_canopy_area_m2: ?rollup_canopy_area_m2,
+)
+grain (city, species, crown_class)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_crown_v{data_version}.parquet`;
+
 property city.city_latitude float; # mean latitude of the city's trees
 property city.city_longitude float; # mean longitude of the city's trees
 

@@ -1,218 +1,265 @@
 <template>
-  <div class="species-page" :style="speciesAccentStyle">
-    <div class="species-header">
-      <div class="species-title-row">
+  <div class="dash-page species-page">
+    <header class="dash-header">
+      <div class="dash-title-row">
         <div>
-          <p class="species-eyebrow">Urban Forest Dashboard</p>
-          <h1>Tree Species Explorer</h1>
+          <h1>{{ pageTitle }}</h1>
+          <span class="dash-rule dash-rule--title" aria-hidden="true"></span>
         </div>
-        <div v-if="speciesContextPills.length" class="city-context-pills">
-          <span v-for="pill in speciesContextPills" :key="pill.label" class="city-context-pill">
-            <span class="city-context-pill-label">{{ pill.label }}</span>
-            <span class="city-context-pill-value">{{ pill.value }}</span>
-          </span>
-        </div>
-      </div>
-      <p class="species-intro">
-        Select a species to explore its presence across the urban forest — population size, city distribution, planting history, ecological fit, and physical profile.
-      </p>
-
-      <div class="species-filter-bar">
-        <div class="species-filter-group">
-          <span class="species-filter-label">Genus</span>
-          <span class="species-filter-hint">Defaults to the most common genus in the current scope.</span>
-          <SpeciesSearchFilter
-            v-model="genusFilter"
-            :connection-id="connectionId"
-            :query-execution-service="queryExecutionService"
-            :connection-ready="ready"
-            :imports="SPECIES_DASHBOARD_IMPORTS as DashboardImport[]"
-            :base-filters="genusSelectorFilters"
-            :top-query="TOP_GENUS_QUERY"
-            :full-query="GENUS_OPTIONS_QUERY"
-            :include-all-option="true"
-            all-option-label="All genera"
-            placeholder="Search genera"
-            loading-message="Loading genera..."
-            empty-message="No genera match this view."
-            @options-loaded="handleGenusOptionsLoaded"
-          />
-        </div>
-        <div class="species-filter-group">
-          <span class="species-filter-label">Species</span>
-          <span class="species-filter-hint">Optional. Focus a single binomial, hybrid, or varietal within the genus.</span>
-          <SpeciesSearchFilter
-            v-model="speciesFilter"
-            :connection-id="connectionId"
-            :query-execution-service="queryExecutionService"
-            :connection-ready="ready"
-            :imports="SPECIES_DASHBOARD_IMPORTS as DashboardImport[]"
-            :base-filters="speciesSelectorBaseFilters"
-            :top-query="TOP_SPECIES_QUERY"
-            :full-query="SPECIES_OPTIONS_QUERY"
-            :auto-select-top="false"
-            :include-all-option="true"
-            all-option-label="All species"
-            :disabled="!genusFilter"
-            placeholder="Search species in this genus"
-            disabled-placeholder="Select a genus first"
-            loading-message="Loading species..."
-            empty-message="No species match this genus."
-            @options-loaded="handleSpeciesOptionsLoaded"
-          />
+        <div class="species-pickers">
+          <label class="species-picker">
+            <span class="dash-pill-label">Genus</span>
+            <SpeciesSearchFilter
+              v-model="genusFilter"
+              :connection-id="connectionId"
+              :query-execution-service="queryExecutionService"
+              :connection-ready="ready"
+              :imports="SPECIES_DASHBOARD_IMPORTS as DashboardImport[]"
+              :base-filters="genusSelectorFilters"
+              :top-query="TOP_GENUS_QUERY"
+              :full-query="GENUS_OPTIONS_QUERY"
+              :include-all-option="true"
+              all-option-label="All genera"
+              placeholder="Search genera"
+              loading-message="Loading genera..."
+              empty-message="No genera match this view."
+              @options-loaded="handleGenusOptionsLoaded"
+            />
+          </label>
+          <label class="species-picker">
+            <span class="dash-pill-label">Species</span>
+            <SpeciesSearchFilter
+              v-model="speciesFilter"
+              :connection-id="connectionId"
+              :query-execution-service="queryExecutionService"
+              :connection-ready="ready"
+              :imports="SPECIES_DASHBOARD_IMPORTS as DashboardImport[]"
+              :base-filters="speciesSelectorBaseFilters"
+              :top-query="TOP_SPECIES_QUERY"
+              :full-query="SPECIES_OPTIONS_QUERY"
+              :auto-select-top="false"
+              :include-all-option="true"
+              all-option-label="All species"
+              :disabled="!genusFilter"
+              placeholder="All species in the genus"
+              disabled-placeholder="Select a genus first"
+              loading-message="Loading species..."
+              empty-message="No species match this genus."
+              @options-loaded="handleSpeciesOptionsLoaded"
+            />
+          </label>
         </div>
       </div>
 
-      <div v-if="activeFilters.length" class="active-filters">
-        <span v-for="filter in activeFilters" :key="filter.key" class="filter-chip">
-          <span class="filter-chip-label">{{ filter.label }}</span>
-          <button class="filter-chip-clear" :title="`Remove ${filter.label}`" @click="clearFilter(filter.key)">
-            x
-          </button>
+      <div v-if="activeFilters.length" class="dash-filters">
+        <span v-for="filter in activeFilters" :key="filter.key" class="dash-chip">
+          <span>{{ filter.label }}</span>
+          <button class="dash-chip-clear" :title="`Remove ${filter.label}`" @click="clearFilter(filter.key)">x</button>
         </span>
-        <button class="clear-all-btn" @click="clearAllFilters">Clear all</button>
+        <button class="dash-link-btn" @click="clearAllFilters">Clear all</button>
       </div>
+    </header>
 
-      <div v-if="speciesContextPills.length" class="species-pill-grid">
-        <span v-for="pill in speciesContextPills" :key="pill.label" class="city-context-pill">
-          <span class="city-context-pill-label">{{ pill.label }}</span>
-          <span class="city-context-pill-value">{{ pill.value }}</span>
-        </span>
-      </div>
-    </div>
-
-    <div v-if="gateMessage" class="species-gate-state">
-      {{ gateMessage }}
-    </div>
+    <div v-if="gateMessage" class="dash-card dash-state">{{ gateMessage }}</div>
 
     <template v-else>
-    <div class="kpi-row">
-      <div
-        v-for="kpi in visibleKpiCharts"
-        :key="kpi.id"
-        class="chart-card chart-card--kpi chart-card--metric"
-      >
-        <div class="metric-label">{{ kpi.label }}</div>
-        <EmbeddedDashboardChart
-          :item-id="kpi.id"
-          v-bind="sharedChartProps"
-          :dashboard-group="embeddedDashboardGroup"
-          :filters="filtersForChart(kpi.id)"
-          :title="kpi.title"
-          :query="kpi.query"
-          :chart-config="{ chartType: 'headline', xField: kpi.xField, showTitle: false }"
-          :allow-cross-filter="false"
-        />
-      </div>
-    </div>
-
-    <section
-      v-for="section in visibleSections"
-      :key="section.id"
-      :class="[
-        'species-section',
-        section.id !== 'sp-spotlight-section' ? 'species-section--single-column' : null,
-      ]"
-    >
-      <div class="species-section-header">
-        <h2>{{ section.title }}</h2>
-        <p>{{ section.subtitle }}</p>
-      </div>
-
-      <div class="chart-row">
-        <div
-          v-for="card in section.cards"
-          :key="card.id"
-          :class="[
-            'chart-card',
-            card.width === 'full' ? 'chart-card--full' : null,
-            card.width === 'wide' ? 'chart-card--wide' : null,
-            card.height === 'tall' ? 'chart-card--tall' : null,
-            emptyChartIds.has(card.id) ? 'chart-card--empty' : null,
-          ]"
-        >
-          <template v-if="card.id === 'sp-city-presence-map' && cityFilter">
-            <div class="chart-card-header">
-              <h3>City Tree Distribution</h3>
-              <span class="chart-sub">All trees in the filtered set within {{ cityName }}</span>
+      <!-- One species: its field-guide entry. A genus: its species, ranked. -->
+      <div v-if="speciesFilter" class="dash-grid">
+        <div class="dash-card dash-span-hero">
+          <SpeciesProfile v-if="profileRow" :row="profileRow" :count-line="profileCountLine">
+            <template #actions>
+              <button class="dash-link-btn" @click="speciesFilter = null">Back to all {{ genusFilter }} species</button>
+            </template>
+          </SpeciesProfile>
+          <div v-else class="dash-state">
+            {{ speciesList.loading.value ? 'Loading species…' : 'No trees of this species in this view.' }}
+          </div>
+        </div>
+        <div class="dash-span-side species-side">
+          <div class="dash-stats" :class="{ 'dash-refreshing': tilesRefreshing }">
+            <div v-for="tile in statTiles" :key="tile.id" class="dash-stat" :title="tile.title">
+              <span class="dash-stat-label">{{ tile.label }}</span>
+              <span class="dash-stat-value" :class="{ 'dash-stat-value--pending': tile.pending }">{{ tile.value }}</span>
+              <span class="dash-stat-note">{{ tile.note }}</span>
             </div>
-            <TreeDotMap
-              item-id="sp-city-dot-map"
-              v-bind="sharedChartProps"
-              :dashboard-group="embeddedDashboardGroup"
-              :filters="filtersForChart(card.id)"
-              :priority="100"
-            />
-          </template>
-          <template v-else>
-            <div class="chart-card-header">
-              <h3>{{ emptyChartIds.has(card.id) ? 'No data for this filter set' : chartById(card.id).title }}</h3>
-              <span
-                v-if="!emptyChartIds.has(card.id) && chartById(card.id).subtitle"
-                class="chart-sub"
-              >{{ chartById(card.id).subtitle }}</span>
-            </div>
-            <SpeciesCarousel
-              v-if="chartById(card.id).renderMode === 'carousel'"
-              :item-id="card.id"
-              v-bind="sharedChartProps"
-              :dashboard-group="embeddedDashboardGroup"
-              :filters="filtersForChart(card.id)"
-              :query="chartById(card.id).query"
-            />
-            <SummaryMarkdownCard
-              v-else-if="chartById(card.id).renderMode === 'markdown'"
-              :item-id="card.id"
-              v-bind="sharedChartProps"
-              :dashboard-group="embeddedDashboardGroup"
-              :filters="filtersForChart(card.id)"
-              :query="chartById(card.id).query"
-            />
-            <EmbeddedDashboardChart
-              v-else
-              v-show="!emptyChartIds.has(card.id)"
-              :item-id="card.id"
-              v-bind="sharedChartProps"
-              :dashboard-group="embeddedDashboardGroup"
-              :filters="filtersForChart(card.id)"
-              :title="chartById(card.id).title"
-              :query="chartById(card.id).query"
-              :chart-config="chartById(card.id).chartConfig"
-              :selection-filters="selectionFiltersForChart(card.id)"
-              :allow-cross-filter="chartById(card.id).allowCrossFilter ?? true"
-              @dimension-click="handleChartClick"
-              @background-click="clearChartSelection(card.id)"
-              @results-empty="emptyChartIds.add(card.id)"
-              @results-present="emptyChartIds.delete(card.id)"
-            />
-          </template>
+          </div>
         </div>
       </div>
-    </section>
+
+      <template v-else>
+        <div class="dash-stats" :class="{ 'dash-refreshing': tilesRefreshing }">
+          <div v-for="tile in statTiles" :key="tile.id" class="dash-stat" :title="tile.title">
+            <span class="dash-stat-label">{{ tile.label }}</span>
+            <span class="dash-stat-value" :class="{ 'dash-stat-value--pending': tile.pending }">{{ tile.value }}</span>
+            <span class="dash-stat-note">{{ tile.note }}</span>
+          </div>
+        </div>
+
+        <div class="dash-grid">
+          <div class="dash-card dash-span-l species-list-card">
+            <div class="dash-card-header">
+              <h3>{{ genusFilter }} species</h3>
+              <span class="dash-card-sub">By share of the genus. Pick one to read about it.</span>
+            </div>
+            <SpeciesRankList
+              :rows="speciesList.rows.value"
+              :loading="speciesList.loading.value"
+              :total-trees="totalTrees"
+              :canopy-by-species="canopyBySpecies"
+              :total-canopy="canopyOfListed"
+              :selected="highlighted"
+              @select="highlighted = $event"
+            />
+          </div>
+          <div class="dash-card dash-span-l species-list-card species-profile-card">
+            <SpeciesProfile v-if="profileRow" :row="profileRow" :count-line="profileCountLine" compact>
+              <template #actions>
+                <button class="dash-link-btn" @click="speciesFilter = highlighted">Focus the page on this species</button>
+              </template>
+            </SpeciesProfile>
+            <div v-else class="dash-state">
+              {{ speciesList.loading.value ? 'Loading species…' : 'No identified species in this genus here.' }}
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Where it grows, with the two size breakdowns beside the map. -->
+      <div class="dash-grid">
+        <div class="dash-card dash-card--flush dash-span-hero species-map-card">
+          <div class="dash-card-header species-map-header">
+            <h3>{{ mapTitle }}</h3>
+          </div>
+          <TreeDotMap
+            item-id="sp-city-dot-map"
+            v-bind="sharedProps"
+            :filters="filtersForChart('sp-city-dot-map')"
+            :ghost-filters="cityFilter ? cityBaseFilters : null"
+            :priority="100"
+            :mark-peak="Boolean(cityFilter)"
+            :pickable="Boolean(cityFilter)"
+            @pick="openMapAt"
+          />
+        </div>
+        <div class="dash-span-side species-side">
+          <div v-for="id in SIZE_CARD_IDS" :key="id" class="dash-card">
+            <div class="dash-card-header">
+              <h3>{{ chartById(id).title }}</h3>
+              <span v-if="chartById(id).subtitle" class="dash-card-sub">{{ chartById(id).subtitle }}</span>
+            </div>
+            <BucketBars
+              :item-id="id"
+              v-bind="sharedProps"
+              :filters="filtersForChart(id)"
+              :query="chartById(id).query"
+              :label-field="chartById(id).buckets!.labelField"
+              :order="chartById(id).buckets!.order"
+              :colors="chartById(id).buckets!.colors"
+              :unknown="chartById(id).buckets!.unknown"
+              :denominator="totalTrees"
+              denominator-label="these trees"
+              empty-message="Not recorded for these trees."
+            />
+          </div>
+        </div>
+      </div>
+
+      <section v-for="section in visibleSections" :key="section.id" class="dash-section">
+        <div class="dash-section-header">
+          <h2>{{ section.title }}</h2>
+          <p>{{ section.subtitle }}</p>
+        </div>
+
+        <div class="dash-grid">
+          <div
+            v-for="card in section.cards"
+            v-show="!isHidden(card.id)"
+            :key="card.id"
+            :class="[
+              'dash-card',
+              `dash-span-${card.span}`,
+              chartById(card.id).kind === 'chart' ? (card.id === 'sp-city-presence-map' ? 'dash-card--chart-tall' : 'dash-card--chart') : null,
+            ]"
+          >
+            <div class="dash-card-header">
+              <h3>{{ chartById(card.id).title }}</h3>
+              <span v-if="chartById(card.id).subtitle" class="dash-card-sub">{{ chartById(card.id).subtitle }}</span>
+            </div>
+
+            <BucketBars
+              v-if="chartById(card.id).kind === 'buckets'"
+              :item-id="card.id"
+              v-bind="sharedProps"
+              :filters="filtersForChart(card.id)"
+              :query="chartById(card.id).query"
+              :label-field="chartById(card.id).buckets!.labelField"
+              :order="chartById(card.id).buckets!.order"
+              :labels="chartById(card.id).buckets!.labels"
+              :colors="chartById(card.id).buckets!.colors"
+              :unknown="chartById(card.id).buckets!.unknown"
+              :denominator="chartById(card.id).buckets!.hideWhenThin ? totalTrees : undefined"
+              denominator-label="these trees"
+              :min-buckets="chartById(card.id).buckets!.hideWhenThin ? 2 : 1"
+              :clickable="Boolean(chartById(card.id).buckets!.filterField)"
+              :selected="selectedBuckets(card.id)"
+              @select="toggleBucket(card.id, $event)"
+              @coverage="coverage[card.id] = $event"
+            />
+            <template v-else>
+              <div v-if="emptyChartIds.has(card.id)" class="dash-state">Nothing recorded for these trees.</div>
+              <EmbeddedDashboardChart
+                v-show="!emptyChartIds.has(card.id)"
+                :item-id="card.id"
+                v-bind="sharedChartProps"
+                :dashboard-group="embeddedDashboardGroup"
+                :filters="filtersForChart(card.id)"
+                :title="chartById(card.id).title"
+                :query="chartById(card.id).query"
+                :chart-config="chartById(card.id).chartConfig"
+                :selection-filters="selectionFiltersForChart(card.id)"
+                :allow-cross-filter="chartById(card.id).allowCrossFilter ?? true"
+                @dimension-click="handleChartClick"
+                @background-click="clearChartSelection(card.id)"
+                @results-empty="emptyChartIds.add(card.id)"
+                @results-present="emptyChartIds.delete(card.id)"
+              />
+            </template>
+          </div>
+        </div>
+
+        <p v-if="hiddenTitles(section).length" class="dash-footnote">
+          Not shown, because too few species have the data yet: {{ hiddenTitles(section).join(', ') }}.
+        </p>
+      </section>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, reactive } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   useEmbeddedDashboardGroup,
   type DashboardImport,
   type DimensionClick,
 } from '@trilogy-data/trilogy-studio-components/dashboard'
+import '../assets/dashboard.css'
+import BucketBars from '../components/BucketBars.vue'
 import EmbeddedDashboardChart from '../components/EmbeddedDashboardChart.vue'
-import SummaryMarkdownCard from '../components/SummaryMarkdownCard.vue'
-import SpeciesCarousel from '../components/SpeciesCarousel.vue'
+import SpeciesProfile from '../components/SpeciesProfile.vue'
+import SpeciesRankList from '../components/SpeciesRankList.vue'
 import SpeciesSearchFilter from '../components/SpeciesSearchFilter.vue'
 import TreeDotMap from '../components/TreeDotMap.vue'
 import { buildDashboardContextParameters } from '../composables/dashboardContextSource'
+import { rowNumber, rowText, useDashboardRows } from '../composables/useDashboardRows'
+import { useFlyTo } from '../composables/useFlyTo'
 import { useMapData, type CityCode } from '../composables/useMapData'
 import { useSummaryDashboardExecution } from '../composables/useSummaryDashboardExecution'
+import { LOW_COVERAGE_THRESHOLD } from '../composables/summaryDashboardConfig'
 import {
   GENUS_OPTIONS_QUERY,
-  SPECIES_CONTEXT_QUERY,
   SPECIES_OPTIONS_QUERY,
+  SPECIES_RANKING_QUERY,
   TOP_GENUS_QUERY,
   TOP_SPECIES_QUERY,
   SPECIES_CHARTS_BY_ID,
@@ -221,15 +268,14 @@ import {
   SPECIES_SECTIONS,
   extractGenusFromSpecies,
   getGenusSqlFilter,
-  getSpeciesSqlFilter,
   getSpeciesViewBaseFilters,
   parseScientificName,
   readSpeciesRouteCity,
+  type SpeciesDashboardSection,
 } from '../composables/speciesDashboardConfig'
 import { filterSpeciesDimensionClick, useSpeciesFilters } from '../composables/useSpeciesFilters'
 import { useMapLifecycle } from '../composables/useMapLifecycle'
-import { CATEGORY_COLORS } from '../treeFormColors'
-import type { TreeForm } from '../types'
+import { formatArea, formatCompact, formatCount, formatShare, speciesDisplayName } from '../lib/dashboardFormat'
 import cityConfig from '../cityConfig.json'
 
 type FilterOption = {
@@ -238,11 +284,15 @@ type FilterOption = {
   count: number | null
 }
 
+// Drawn beside the map rather than in a section below it.
+const SIZE_CARD_IDS = ['sp-size-distribution', 'sp-crown-size'] as const
+
 const route = useRoute()
 const router = useRouter()
 let syncingRoute = false
 const { selectedCity } = useMapData()
 const { activateCity } = useMapLifecycle()
+const { flyTo } = useFlyTo()
 const { initialize, connectionId, queryExecutionService, setDashboardContext, ready } = useSummaryDashboardExecution()
 
 const embeddedDashboardGroup = useEmbeddedDashboardGroup({
@@ -260,8 +310,18 @@ const speciesFilter = ref<string | null>(null)
 const genusOptions = ref<FilterOption[]>([])
 const speciesOptions = ref<FilterOption[]>([])
 const emptyChartIds = reactive(new Set<string>())
+const coverage = reactive<Record<string, number | null>>({})
 const dashboardContextParameters = computed(() => buildDashboardContextParameters(cityFilter.value))
 
+/** What a card the page draws itself takes; see useDashboardRows. */
+const sharedProps = computed(() => ({
+  connectionId,
+  dashboardGroup: embeddedDashboardGroup,
+  imports: SPECIES_DASHBOARD_IMPORTS as DashboardImport[],
+  parameters: dashboardContextParameters.value,
+}))
+
+/** What an embedded Trilogy chart takes. */
 const sharedChartProps = computed(() => ({
   connectionId,
   queryExecutionService,
@@ -269,7 +329,7 @@ const sharedChartProps = computed(() => ({
   parameters: dashboardContextParameters.value,
 }))
 
-const { crossFilters, activeSpeciesFilters } = useSpeciesFilters()
+const { crossFilters, activeSpeciesFilters, speciesFilterMeta } = useSpeciesFilters()
 
 const cityBaseFilters = computed(() => (cityFilter.value ? [`city = '${cityFilter.value}'`] : []))
 const genusSelectorFilters = computed(() => {
@@ -287,67 +347,22 @@ const baseFilters = computed(() =>
 )
 
 const cityName = computed(() => {
-  if (!cityFilter.value) return 'All Cities'
+  if (!cityFilter.value) return 'all cities'
   const cfg = (cityConfig as Record<string, { name: string }>)[cityFilter.value]
   return cfg?.name ?? cityFilter.value
 })
 
-// Species enrichment context — fetched when selected species changes
-type SpeciesContext = { commonName: string; treeForm: string; growthRate: string }
-const speciesContext = ref<SpeciesContext | null>(null)
-let contextLoadVersion = 0
 const gateMessage = computed(() => {
   if (!ready.value) {
-    return 'Loading species explorer...'
+    return 'Loading the species explorer…'
   }
   if (genusFilter.value) {
     return null
   }
   return cityFilter.value
-    ? 'Finding the top genus for this city...'
-    : 'Finding the top genus across the urban forest...'
+    ? 'Finding the most common genus in this city…'
+    : 'Finding the most common genus across all cities…'
 })
-
-async function loadSpeciesContext(species: string | null) {
-  if (!species) {
-    speciesContext.value = null
-    return
-  }
-  const version = ++contextLoadVersion
-  try {
-    const execution = await queryExecutionService.executeQueriesBatch(
-      connectionId,
-      [{
-        label: 'species-context',
-        query: SPECIES_CONTEXT_QUERY,
-        extra_filters: [getSpeciesSqlFilter(species)],
-      }],
-      'trilogy',
-      SPECIES_DASHBOARD_IMPORTS.map((i) => ({ name: i.name, alias: i.alias })),
-    )
-    const batch = await execution.resultPromise
-    if (version !== contextLoadVersion) return
-    const r = batch.results[0]
-    if (r?.success && r.results) {
-      const payload = r.results.toJSON() as { data?: Array<Record<string, unknown>> }
-      const row = Array.isArray(payload.data) ? payload.data[0] : null
-      if (!row) {
-        speciesContext.value = null
-        return
-      }
-      const get = (field: string) => String(row[field] ?? '')
-      speciesContext.value = {
-        commonName: get('common_name'),
-        treeForm: get('tree_form'),
-        growthRate: get('growth_rate'),
-      }
-    } else {
-      speciesContext.value = null
-    }
-  } catch {
-    if (version === contextLoadVersion) speciesContext.value = null
-  }
-}
 
 function handleGenusOptionsLoaded(options: FilterOption[]) {
   genusOptions.value = options
@@ -357,92 +372,278 @@ function handleSpeciesOptionsLoaded(options: FilterOption[]) {
   speciesOptions.value = options
 }
 
-function classifyTaxonBucket(scientificName: string) {
-  const parts = parseScientificName(scientificName)
-  return parts.taxonType
+function chartById(chartId: string) {
+  return SPECIES_CHARTS_BY_ID[chartId]
 }
 
-const selectedGenusOption = computed(() => (
-  genusOptions.value.find((option) => option.value === genusFilter.value) ?? null
-))
+function filtersForChart(chartId: string) {
+  void crossFilters.version.value
+  return crossFilters.getSqlFilterLikesFor(chartId, baseFilters.value)
+}
 
-const selectedSpeciesNameParts = computed(() => parseScientificName(speciesFilter.value))
+// --- The species in view ---------------------------------------------------------
 
-const genusTaxonomySummary = computed(() => {
-  const summary = {
-    speciesCount: 0,
-    hybridCount: 0,
-    varietalCount: 0,
-    unknownCount: 0,
+const speciesList = useDashboardRows(
+  () => ({
+    ...sharedProps.value,
+    itemId: 'sp-spotlight',
+    query: chartById('sp-spotlight').query,
+    filters: filtersForChart('sp-spotlight'),
+  }),
+  { title: 'Species in view', enabled: () => Boolean(genusFilter.value) },
+)
+
+const canopyList = useDashboardRows(
+  () => ({
+    ...sharedProps.value,
+    itemId: 'sp-canopy-by-species',
+    query: chartById('sp-canopy-by-species').query,
+    filters: filtersForChart('sp-canopy-by-species'),
+  }),
+  { title: 'Crown area by species', enabled: () => Boolean(genusFilter.value) },
+)
+
+// Every identified species in the city, under the city filter alone: what a
+// selected species is ranked against.
+const ranking = useDashboardRows(
+  () => ({
+    ...sharedProps.value,
+    itemId: 'sp-city-ranking',
+    query: SPECIES_RANKING_QUERY,
+    filters: cityBaseFilters.value,
+  }),
+  { title: 'Species ranking', enabled: () => Boolean(speciesFilter.value) },
+)
+
+const canopyBySpecies = computed(() => {
+  const map = new Map<string, number>()
+  for (const row of canopyList.rows.value) {
+    const species = rowText(row.species)
+    const area = rowNumber(row.canopy_area)
+    if (species && area) map.set(species, area)
   }
-  for (const option of speciesOptions.value) {
-    const bucket = classifyTaxonBucket(option.value)
-    if (bucket === 'species') summary.speciesCount += 1
-    else if (bucket === 'hybrid') summary.hybridCount += 1
-    else if (bucket === 'varietal') summary.varietalCount += 1
-    else summary.unknownCount += 1
-  }
-  return {
-    ...summary,
-    totalTaxa: speciesOptions.value.length,
-  }
+  return map
 })
 
-const speciesContextPills = computed(() => {
-  const pills: Array<{ label: string; value: string }> = []
-  if (genusFilter.value) pills.push({ label: 'Genus', value: genusFilter.value })
-  if (selectedGenusOption.value?.count != null) {
-    pills.push({ label: 'Trees in genus', value: selectedGenusOption.value.count.toLocaleString() })
+const canopyOfListed = computed(() => {
+  let total = 0
+  for (const area of canopyBySpecies.value.values()) total += area
+  return total || null
+})
+
+// The species the genus view's profile shows; the page is not filtered by it.
+const highlighted = ref<string | null>(null)
+
+watch(
+  () => speciesList.rows.value,
+  (rows) => {
+    const names = rows.map((row) => rowText(row.species))
+    if (!highlighted.value || !names.includes(highlighted.value)) {
+      highlighted.value = names[0] ?? null
+    }
+  },
+  { immediate: true },
+)
+
+const profileSpecies = computed(() => speciesFilter.value ?? highlighted.value)
+const profileRow = computed(
+  () => speciesList.rows.value.find((row) => rowText(row.species) === profileSpecies.value) ?? null,
+)
+
+// --- Numbers -----------------------------------------------------------------------
+
+function kpiRows(id: string) {
+  const kpi = SPECIES_KPI_CHARTS.find((entry) => entry.id === id)!
+  return useDashboardRows(
+    () => ({ ...sharedProps.value, itemId: id, query: kpi.query, filters: filtersForChart(id) }),
+    { title: kpi.title, enabled: () => Boolean(genusFilter.value) },
+  )
+}
+
+const totalTreesRows = kpiRows('sp-total-trees')
+const cityCountRows = kpiRows('sp-city-count')
+const canopyRows = kpiRows('sp-canopy-total')
+// The tiles hold their last numbers while a filter change is fetched.
+const tilesRefreshing = computed(
+  () =>
+    totalTrees.value != null &&
+    [totalTreesRows, cityCountRows, canopyRows, ranking].some((rows) => rows.loading.value),
+)
+
+const totalTrees = computed(() => rowNumber(totalTreesRows.rows.value[0]?.total_trees))
+const cityCount = computed(() => rowNumber(cityCountRows.rows.value[0]?.city_count))
+const canopyArea = computed(() => rowNumber(canopyRows.rows.value[0]?.canopy_area))
+const sizedTrees = computed(() => rowNumber(canopyRows.rows.value[0]?.sized_trees))
+
+const rankInfo = computed(() => {
+  const rows = ranking.rows.value
+  if (!speciesFilter.value || !rows.length) return null
+  let total = 0
+  let rank = 0
+  let count = 0
+  rows.forEach((row, index) => {
+    const n = rowNumber(row.tree_count) ?? 0
+    total += n
+    if (rowText(row.species) === speciesFilter.value) {
+      rank = index + 1
+      count = n
+    }
+  })
+  if (!rank) return null
+  return { rank, of: rows.length, share: total ? count / total : null }
+})
+
+const genusTaxa = computed(() => {
+  let hybrids = 0
+  let cultivars = 0
+  for (const option of speciesOptions.value) {
+    const type = parseScientificName(option.value).taxonType
+    if (type === 'hybrid') hybrids += 1
+    else if (type === 'varietal') cultivars += 1
   }
-  if (genusTaxonomySummary.value.totalTaxa > 0) {
-    pills.push({ label: 'Taxa', value: genusTaxonomySummary.value.totalTaxa.toLocaleString() })
-  }
-  if (genusTaxonomySummary.value.speciesCount > 0) {
-    pills.push({ label: 'Species', value: genusTaxonomySummary.value.speciesCount.toLocaleString() })
-  }
-  if (genusTaxonomySummary.value.hybridCount > 0) {
-    pills.push({ label: 'Hybrids', value: genusTaxonomySummary.value.hybridCount.toLocaleString() })
-  }
-  if (genusTaxonomySummary.value.varietalCount > 0) {
-    pills.push({ label: 'Varietals', value: genusTaxonomySummary.value.varietalCount.toLocaleString() })
-  }
-  if (speciesFilter.value && selectedSpeciesNameParts.value.specificEpithet) {
-    pills.push({ label: 'Specific epithet', value: selectedSpeciesNameParts.value.specificEpithet })
-  }
-  if (speciesFilter.value && selectedSpeciesNameParts.value.taxonType !== 'unknown') {
-    pills.push({
-      label: 'Taxon type',
-      value: selectedSpeciesNameParts.value.taxonType.replace(/\b\w/g, (letter) => letter.toUpperCase()),
+  return { total: speciesOptions.value.length, hybrids, cultivars }
+})
+
+const profileCountLine = computed(() => {
+  const row = profileRow.value
+  if (!row) return null
+  const count = rowNumber(row.tree_count) ?? 0
+  const where = cityFilter.value ? `in ${cityName.value}` : 'across all cities'
+  const share = !speciesFilter.value && totalTrees.value ? ` · ${formatShare(count / totalTrees.value)} of the genus` : ''
+  return `${formatCount(count)} trees ${where}${share}`
+})
+
+const statTiles = computed(() => {
+  const scope = cityFilter.value ? cityName.value : 'all cities'
+  const tiles = [
+    {
+      id: 'sp-total-trees',
+      label: 'Trees',
+      value: formatCompact(totalTrees.value),
+      note: totalTrees.value != null ? `${formatCount(totalTrees.value)} in ${scope}` : '',
+      title: 'Trees of this taxon in the view',
+      pending: totalTrees.value == null,
+    },
+  ]
+  if (speciesFilter.value) {
+    const info = rankInfo.value
+    tiles.push(
+      {
+        id: 'sp-rank',
+        label: 'Rank',
+        value: info ? `#${formatCount(info.rank)}` : '–',
+        note: info ? `of ${formatCount(info.of)} species in ${scope}` : '',
+        title: 'Where this species stands among the identified species here, by tree count',
+        pending: !info,
+      },
+      {
+        id: 'sp-share',
+        label: 'Share',
+        value: formatShare(info?.share),
+        note: 'of identified trees',
+        title: 'This species as a share of the trees identified to species here',
+        pending: !info,
+      },
+    )
+  } else {
+    const taxa = genusTaxa.value
+    const kinds = [
+      taxa.hybrids ? `${taxa.hybrids} hybrid${taxa.hybrids === 1 ? '' : 's'}` : null,
+      taxa.cultivars ? `${taxa.cultivars} cultivar${taxa.cultivars === 1 ? '' : 's'} or varieties` : null,
+    ].filter(Boolean)
+    tiles.push({
+      id: 'sp-taxa',
+      label: 'Taxa',
+      value: taxa.total ? formatCount(taxa.total) : '–',
+      note: kinds.length ? `including ${kinds.join(', ')}` : 'recorded in this genus',
+      title: 'Distinct species, hybrids, cultivars and genus-only records in this genus here',
+      pending: !taxa.total,
     })
   }
-  const ctx = speciesContext.value
-  if (ctx?.commonName) pills.push({ label: 'Common name', value: ctx.commonName })
-  if (ctx?.treeForm) pills.push({ label: 'Form', value: ctx.treeForm.replace(/_/g, ' ') })
-  if (ctx?.growthRate) pills.push({ label: 'Growth', value: ctx.growthRate })
-  return pills
+  if (!cityFilter.value) {
+    tiles.push({
+      id: 'sp-city-count',
+      label: 'Cities',
+      value: formatCount(cityCount.value),
+      note: 'hold at least one',
+      title: 'Cities whose inventory holds this taxon',
+      pending: cityCount.value == null,
+    })
+  }
+  tiles.push({
+    id: 'sp-canopy-total',
+    label: 'Crown area',
+    value: formatArea(canopyArea.value),
+    note: sizedTrees.value != null ? `summed over ${formatCompact(sizedTrees.value)} sized trees` : '',
+    title: 'Each tree’s crown as a circle, summed. Crowns overlap, so this is more than the ground they shade.',
+    pending: canopyArea.value == null,
+  })
+  return tiles
 })
 
-const speciesAccentStyle = computed(() => {
-  const form = speciesContext.value?.treeForm as TreeForm | undefined
-  const color = form && form in CATEGORY_COLORS ? CATEGORY_COLORS[form] : CATEGORY_COLORS.default
-  return { '--species-accent': color }
+const pageTitle = computed(() => {
+  if (speciesFilter.value) {
+    return speciesDisplayName(speciesFilter.value, profileRow.value?.common_name)
+  }
+  return genusFilter.value ? `${genusFilter.value} in ${cityFilter.value ? cityName.value : 'all cities'}` : 'Species Explorer'
 })
 
-const visibleKpiCharts = computed(() =>
-  SPECIES_KPI_CHARTS.filter((chart) => cityFilter.value || !chart.requiresCitySelection),
-)
+const mapTitle = computed(() => {
+  const subject = speciesFilter.value ? 'it grows' : `${genusFilter.value ?? 'they'} grow${genusFilter.value ? 's' : ''}`
+  return `Where ${subject}`
+})
+
+// --- Cards -------------------------------------------------------------------------
 
 const visibleSections = computed(() =>
-  SPECIES_SECTIONS
-    .map((section) => ({
-      ...section,
-      cards: section.cards.filter((card) => {
-        const chart = chartById(card.id)
-        return cityFilter.value || !chart.requiresCitySelection
-      }),
-    }))
-    .filter((section) => section.cards.length > 0),
+  SPECIES_SECTIONS.map((section) => ({
+    ...section,
+    cards: section.cards.filter((card) => {
+      const chart = chartById(card.id)
+      if (chart.requiresCitySelection && !cityFilter.value) return false
+      if (chart.requiresAllCities && cityFilter.value) return false
+      if (chart.genusOnly && speciesFilter.value) return false
+      return true
+    }),
+  })).filter((section) => section.cards.length > 0),
 )
+
+const fieldByChartId = new Map(speciesFilterMeta.map((meta) => [meta.id, meta.field] as const))
+
+function selectedBuckets(chartId: string): string[] {
+  void crossFilters.version.value
+  const field = fieldByChartId.get(chartId)
+  if (!field) return []
+  const values: string[] = []
+  for (const selection of crossFilters.getSelections()) {
+    const entry = selection.filters[field]
+    if (selection.source === chartId && entry?.op === 'eq' && typeof entry.value === 'string') values.push(entry.value)
+  }
+  return values
+}
+
+function toggleBucket(chartId: string, bucket: string) {
+  const field = fieldByChartId.get(chartId)
+  if (!field) return
+  const wasSelected = selectedBuckets(chartId).includes(bucket)
+  crossFilters.clearSource(chartId)
+  if (!wasSelected) {
+    crossFilters.applyDimensionClick({ source: chartId, filters: { [field]: { op: 'eq' as const, value: bucket } } }, 'add')
+  }
+}
+
+/** See SummaryView: a trait card with too little data is hidden, not removed. */
+function isHidden(chartId: string): boolean {
+  const buckets = chartById(chartId).buckets
+  if (!buckets?.hideWhenThin) return false
+  if (selectedBuckets(chartId).length) return false
+  const known = coverage[chartId]
+  return known != null && known < LOW_COVERAGE_THRESHOLD
+}
+
+function hiddenTitles(section: SpeciesDashboardSection): string[] {
+  return section.cards.filter((card) => isHidden(card.id)).map((card) => chartById(card.id).title.toLowerCase())
+}
 
 const activeFilters = computed(() => {
   const filters: Array<{ key: string; label: string }> = []
@@ -460,10 +661,6 @@ const activeFilters = computed(() => {
   }
   return filters
 })
-
-function chartById(chartId: string) {
-  return SPECIES_CHARTS_BY_ID[chartId]
-}
 
 function clearFilter(key: string) {
   if (key === 'city') {
@@ -489,11 +686,6 @@ function clearAllFilters() {
   crossFilters.clearAll()
 }
 
-function filtersForChart(chartId: string) {
-  void crossFilters.version.value
-  return crossFilters.getSqlFilterLikesFor(chartId, baseFilters.value)
-}
-
 function selectionFiltersForChart(chartId: string) {
   void crossFilters.version.value
   return crossFilters.getChartSelectionsFor(chartId).map((value) => ({
@@ -510,6 +702,12 @@ function handleChartClick(info: DimensionClick) {
 
 function clearChartSelection(chartId: string) {
   crossFilters.clearSource(chartId)
+}
+
+/** A click on the dot map opens the full map at that spot. */
+async function openMapAt(location: { lat: number; lng: number }) {
+  await router.push({ path: '/', query: { ...(cityFilter.value ? { city: cityFilter.value } : {}), mode: 'explore' } })
+  flyTo({ lat: location.lat, lng: location.lng, zoom: 16.5 })
 }
 
 function readRouteText(value: unknown): string | null {
@@ -539,7 +737,7 @@ onMounted(() => {
 watch(
   () => route.query.city,
   (routeCity) => {
-    if (syncingRoute) return
+    if (syncingRoute || route.name !== 'species') return
     const nextCity = readSpeciesRouteCity(routeCity)
     cityFilter.value = nextCity
     if (nextCity && nextCity !== selectedCity.value) {
@@ -551,7 +749,7 @@ watch(
 watch(
   () => route.query.genus,
   (routeGenus) => {
-    if (syncingRoute) return
+    if (syncingRoute || route.name !== 'species') return
     const routeSpecies = readRouteText(route.query.species)
     const next = readRouteText(routeGenus) ?? extractGenusFromSpecies(routeSpecies)
     if (genusFilter.value !== next) {
@@ -563,7 +761,7 @@ watch(
 watch(
   () => route.query.species,
   (routeSpecies) => {
-    if (syncingRoute) return
+    if (syncingRoute || route.name !== 'species') return
     const next = readRouteText(routeSpecies)
     if (speciesFilter.value !== next) {
       speciesFilter.value = next
@@ -581,12 +779,16 @@ watch(
 
 watch(
   cityFilter,
-  (city) => {
+  (city, previousCity) => {
     emptyChartIds.clear()
+    for (const key of Object.keys(coverage)) delete coverage[key]
     crossFilters.clearAll()
-    // Clear species filter when city changes — species counts will be different
-    genusFilter.value = null
-    speciesFilter.value = null
+    // A different city has different species: start again from its top genus.
+    // Not on the first run, which would drop a genus the URL asked for.
+    if (previousCity !== undefined) {
+      genusFilter.value = null
+      speciesFilter.value = null
+    }
     const routeCity = readSpeciesRouteCity(route.query.city)
     if (route.name === 'species' && routeCity !== city) {
       const nextQuery = { ...route.query }
@@ -607,6 +809,7 @@ watch(
 watch(genusFilter, (genus, previousGenus) => {
   if (genus !== previousGenus) {
     emptyChartIds.clear()
+    for (const key of Object.keys(coverage)) delete coverage[key]
     crossFilters.clearAll()
   }
   if (speciesFilter.value && extractGenusFromSpecies(speciesFilter.value) !== genus) {
@@ -619,7 +822,6 @@ watch(speciesFilter, (species) => {
   if (species && derivedGenus && genusFilter.value !== derivedGenus) {
     genusFilter.value = derivedGenus
   }
-  void loadSpeciesContext(species)
 })
 
 watch([genusFilter, speciesFilter], ([genus, species]) => {
@@ -646,344 +848,66 @@ watch([genusFilter, speciesFilter], ([genus, species]) => {
 </script>
 
 <style scoped>
-.species-page {
-  padding: 28px 30px 40px;
-  overflow-y: auto;
-  height: 100%;
-  box-sizing: border-box;
+.species-pickers {
   display: flex;
-  flex-direction: column;
-  gap: 22px;
-  color: var(--color-ink);
-}
-
-.species-header {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.species-title-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-}
-
-.species-eyebrow {
-  margin: 0 0 8px;
-  font-size: 0.72rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--species-accent, var(--color-moss));
-  transition: color 0.4s ease;
-}
-
-.species-title-row h1 {
-  margin: 0;
-  font-size: 2rem;
-  font-family: var(--font-display);
-  font-weight: 400;
-  letter-spacing: -.025em;
-}
-
-.species-intro {
-  margin: 12px 0 0;
-  max-width: 820px;
-  color: rgba(var(--ink-rgb), 0.78);
-  line-height: 1.65;
-}
-
-.city-context-pills {
-  display: none;
-}
-
-.species-pill-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
-  gap: 10px;
-}
-
-.city-context-pill {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-height: 62px;
-  padding: 11px 13px;
-  border: 1px solid rgba(var(--accent-rgb), 0.12);
-  border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.5), rgba(var(--surface-rgb), 0.76)),
-    color-mix(in srgb, var(--species-accent, #2F7D4F) 10%, transparent);
-  transition: background 0.4s ease, border-color 0.2s ease;
-}
-
-.city-context-pill-label {
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(var(--muted-rgb), 0.82);
-}
-
-.city-context-pill-value {
-  font-size: 0.84rem;
-  font-weight: 600;
-  color: var(--color-foam);
-}
-
-.species-filter-bar {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-  padding: 18px;
-  background: linear-gradient(180deg, rgba(var(--surface-rgb), 0.76), rgba(var(--surface-rgb), 0.9));
-  border: 1px solid rgba(var(--accent-rgb), 0.12);
-  border-radius: 18px;
-  box-shadow: 0 18px 42px rgba(5, 8, 10, 0.22);
-}
-
-.species-filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-  padding: 14px;
-  background: rgba(var(--surface-rgb), 0.26);
-  border: 1px solid rgba(var(--accent-rgb), 0.08);
-  border-radius: 14px;
-}
-
-.species-filter-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--species-accent, var(--color-moss));
-  transition: color 0.4s ease;
-}
-
-.species-filter-hint {
-  font-size: 0.77rem;
-  line-height: 1.45;
-  color: rgba(var(--muted-rgb), 0.82);
-}
-
-.active-filters {
-  display: flex;
+  align-items: flex-end;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
 }
 
-.filter-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px 8px 14px;
-  border: 1px solid rgba(var(--accent-rgb), 0.18);
-  background: rgba(var(--accent-rgb), 0.1);
-  border-radius: 999px;
-  font-size: 0.78rem;
-  color: var(--color-leaf);
-}
-
-.filter-chip-clear {
-  width: 20px;
-  height: 20px;
-  border: 1px solid rgba(var(--accent-rgb), 0.18);
-  border-radius: 999px;
-  background: rgba(var(--surface-rgb), 0.28);
-  color: inherit;
-  cursor: pointer;
-  font-size: 0.8rem;
-  line-height: 1;
-}
-
-.clear-all-btn {
-  background: rgba(var(--ink-rgb), 0.02);
-  border: 1px solid rgba(var(--accent-rgb), 0.12);
-  border-radius: 999px;
-  color: rgba(var(--ink-rgb), 0.72);
-  cursor: pointer;
-  font-size: 0.78rem;
-  padding: 8px 12px;
-}
-
-.species-gate-state {
-  padding: 18px 20px;
-  border: 1px solid rgba(var(--accent-rgb), 0.1);
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.52), rgba(var(--surface-rgb), 0.64));
-  color: rgba(var(--ink-rgb), 0.72);
-  font-size: 0.92rem;
-}
-
-.kpi-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 16px;
-}
-
-.kpi-row .chart-card {
-  grid-column: auto;
-}
-
-.species-section {
+.species-picker {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 4px;
+  width: 250px;
+  max-width: 100%;
 }
 
-.species-section-header {
+.species-side {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.species-section-header h2 {
-  margin: 0;
-  font-size: 1.08rem;
-  font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
-
-.species-section-header p {
-  margin: 0;
-  color: rgba(var(--muted-rgb), 0.82);
-  font-size: 0.82rem;
-  line-height: 1.45;
-}
-
-.chart-row {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.chart-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(180deg, rgba(var(--surface-raised-rgb), 0.62), rgba(var(--surface-rgb), 0.72));
-  border: 1px solid rgba(var(--accent-rgb), 0.1);
-  border-radius: 14px;
-  padding: 20px 22px;
-  grid-column: 1 / -1;
+  gap: var(--dash-gap);
   min-width: 0;
-  height: 320px;
-  min-height: 0;
-  overflow: hidden;
-  box-shadow: 0 16px 36px rgba(7, 10, 11, 0.2);
-  isolation: isolate;
 }
 
-.chart-card--kpi {
-  height: 124px;
-  padding: 14px 16px;
+.species-side .dash-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.chart-card--metric {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.species-side .dash-card {
+  flex: 1 1 auto;
 }
 
-.metric-label {
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(var(--muted-rgb), 0.85);
+.species-list-card {
+  height: 440px;
 }
 
-.chart-card--wide {
-  grid-column: 1 / -1;
+.species-profile-card {
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
-.chart-card--full {
-  grid-column: 1 / -1;
+.species-map-card {
+  min-height: 420px;
 }
 
-.chart-card--tall {
-  height: 460px;
-}
-
-.species-section--single-column .chart-card {
-  grid-column: 1 / -1;
-}
-
-.chart-card--empty {
-  height: auto;
-  min-height: 0;
-}
-
-.chart-card--empty .chart-card-header {
-  margin-bottom: 0;
-}
-
-.chart-card-header {
-  position: relative;
-  z-index: 1;
-  margin-bottom: 16px;
-  flex: 0 0 auto;
-}
-
-.chart-card-header h3 {
-  margin: 0;
-  font-size: 1rem;
-  font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
-
-.chart-sub {
-  display: block;
-  font-size: 0.78rem;
-  color: rgba(var(--muted-rgb), 0.82);
-  margin-top: 8px;
-  line-height: 1.45;
-}
-
-.chart-card::after {
-  content: '';
+.species-map-header {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 88px;
-  height: 1px;
-  background: linear-gradient(90deg, var(--species-accent, rgba(var(--accent-rgb), 0.58)), rgba(var(--accent-rgb), 0));
-  opacity: 0.6;
-  transition: background 0.4s ease;
+  top: 14px;
+  left: 18px;
+  margin: 0;
+  pointer-events: none;
 }
 
-@media (max-width: 900px) {
-  .species-page {
-    padding: 20px 18px 30px;
+@container dash (max-width: 720px) {
+  .species-map-card {
+    min-height: 0;
+    height: 340px;
   }
 
-  .species-title-row h1 {
-    font-size: 1.7rem;
-  }
-
-  .chart-card,
-  .chart-card--wide,
-  .chart-card--full {
-    grid-column: 1 / -1;
-  }
-}
-
-@media (max-width: 560px) {
-  .kpi-row {
-    grid-template-columns: 1fr;
-  }
-
-  .species-filter-bar {
-    padding: 14px;
-  }
-
-  .species-filter-group {
-    padding: 12px;
+  .species-list-card {
+    height: auto;
+    max-height: 520px;
   }
 }
 </style>
