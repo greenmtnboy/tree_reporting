@@ -27,6 +27,7 @@ type WorkerMethodMap = {
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
   ensureWindowAt: { params: { lng: number; lat: number }; result: void }
+  prefetchWindowAt: { params: { lng: number; lat: number }; result: void }
   setVisibleTileRange: { params: { z: number; minX: number; maxX: number; minY: number; maxY: number }; result: void }
   prefetchVisibleTilesAtZoom: { params: { z: number; range?: TileRangeParams }; result: PrefetchStatus }
   prewarmLodCaches: { params: Record<string, never>; result: void }
@@ -216,6 +217,14 @@ async function ensureWindowAt(lng: number, lat: number): Promise<void> {
   await rpc('ensureWindowAt', { lng, lat })
 }
 
+/**
+ * Start fetching the trees under a point the map is about to open on (Near
+ * Me's fix), while the engine that will read them is still downloading.
+ */
+function prefetchWindowAt(lng: number, lat: number): void {
+  fireAndForget('prefetchWindowAt', { lng, lat })
+}
+
 /** Set before the first city load; the map's layout decides it. */
 function setWindowPolicy(policy: WindowPolicy | null): void {
   windowPolicy = policy
@@ -321,6 +330,7 @@ export function useDuckDB() {
     setCityContext,
     setWindowPolicy,
     ensureWindowAt,
+    prefetchWindowAt,
     setViewportZoom,
     setViewportCenter,
     setVisibleTileRange,

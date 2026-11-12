@@ -72,6 +72,12 @@ export interface TreeRenderView extends CrownCamera {
   spriteLimit?: number
   /** Optional desktop cull: metres along the ground from the camera past which the dots carry the trees. */
   spriteDistance?: number
+  /**
+   * The ground on screen, for a phone's crowns: the read loads the cells under
+   * it and takes the rest from whatever is held. Without it the read loaded
+   * every cell within CROWN_DISTANCE_MAX, a whole block for a street's view.
+   */
+  view?: { west: number; south: number; east: number; north: number }
 }
 /**
  * A sprite query's rows as columns: numbers in typed arrays, NaN for a

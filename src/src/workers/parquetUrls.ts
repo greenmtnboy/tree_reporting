@@ -46,6 +46,21 @@ export async function fetchWorldFile(name: string): Promise<Uint8Array> {
   return new Uint8Array(await response.arrayBuffer())
 }
 
+/**
+ * A small published file, whole, or null when it cannot be fetched. For the
+ * files the worker's start reads in full anyway: asked for beside the engine's
+ * download instead of after it, and in one request where DuckDB's range reads
+ * of the same file are a dozen in a row.
+ */
+export async function fetchPublishedFile(url: string): Promise<Uint8Array | null> {
+  try {
+    const response = await fetch(url)
+    return response.ok ? new Uint8Array(await response.arrayBuffer()) : null
+  } catch {
+    return null
+  }
+}
+
 export class WorldFileError extends Error {
   constructor(readonly file: string, readonly status: number) {
     super(`World file ${file}: HTTP ${status}`)
