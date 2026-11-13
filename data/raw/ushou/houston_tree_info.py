@@ -138,6 +138,9 @@ REGIONAL_SPECIES: dict[str, str] = {
     "orchid": "Bauhinia",
     "mountain laurel": "Dermatophyllum secundiflorum",
     "black pine": "Pinus thunbergii",
+    # Texas readings: east of Texas, flameleaf sumac is Rhus copallinum.
+    "flame leaf sumac": "Rhus lanceolata",
+    "flameleaf sumac": "Rhus lanceolata",
 }
 
 # Values that name no tree; they publish as `Unknown` with no tree_name.

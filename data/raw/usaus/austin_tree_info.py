@@ -170,6 +170,12 @@ REGIONAL_KEYS: dict[str, str | None] = {
     "mt laurel": "Dermatophyllum secundiflorum",
     "mountain laural": "Dermatophyllum secundiflorum",
     "arborvitae": None,
+    # Texas readings: east of Texas, flameleaf sumac is Rhus copallinum.
+    "flame leaf sumac": "Rhus lanceolata",
+    "flameleaf sumac": "Rhus lanceolata",
+    # Shin oak in central Texas is Q. sinuata var. breviloba; elsewhere in
+    # Texas the name also covers Q. havardii and Q. mohriana.
+    "shin oak": "Quercus sinuata",
 }
 
 # The card's common name for the values `normalize_tree_name` cannot un-invert.
