@@ -1,0 +1,20 @@
+# Independent grains: spatial/temporal matching to trees belongs to the caller.
+key heat_observation_id string;
+property heat_observation_id.heat_cell_id string;
+property heat_observation_id.heat_city string;
+property heat_observation_id.heat_acquired_on date;
+property heat_observation_id.heat_easting_m float;
+property heat_observation_id.heat_northing_m float;
+property heat_observation_id.heat_longitude float;
+property heat_observation_id.heat_latitude float;
+property heat_observation_id.surface_temperature_c float;
+property heat_observation_id.heat_valid_scene_count int;
+property heat_observation_id.heat_source string;
+
+key water_feature_id string;
+property water_feature_id.water_city string;
+property water_feature_id.water_source string;
+property water_feature_id.water_source_feature_id string;
+property water_feature_id.water_name string;
+property water_feature_id.water_class string;
+property water_feature_id.water_geometry_wkt string;

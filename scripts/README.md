@@ -133,10 +133,10 @@ machine-local metadata are ignored by Git; presets such as
 
 `render_boston_canopy_grid.py` preserves the approved twelve-view desktop poster;
 `render_boston_canopy_mobile.py` shares its measurements and selects four larger
-views. Frozen input packaging, download/restore commands, source attribution and
-the heat/water schema are documented in [Context releases](../docs/CONTEXT_RELEASES.md).
-`export_boston_context.py` creates the bundle locally; publication is a separate,
-explicit operation through `data/website/publish_context.py`.
+views. Current city heat/water sources are published independently of these
+posters. See [Context data](../docs/CONTEXT_DATA.md) for the stable GCS paths,
+source adapters, Trilogy models and local seed commands. No frozen tree snapshots
+or poster replay bundles are published.
 
 ## Offline checks
 

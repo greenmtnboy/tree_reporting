@@ -120,10 +120,10 @@ Rules:
 
 ## The species feed (`website/publish_species.py`)
 
-The manually published, immutable heat/water study bundles use the same
-create-only object-storage mechanism. Their schema, reproduction commands and
-source-combination rules are in [Context releases](CONTEXT_RELEASES.md). They
-are separate from daily city/core jobs and never change the tree pipeline.
+Current per-city heat/water observations publish to stable `duckdb/context/`
+paths through independent source-refresh jobs. Schemas, Trilogy source models
+and seed commands are in [Context data](CONTEXT_DATA.md). They do not publish
+tree snapshots or join environmental observations into the daily tree pipeline.
 
 `publish-website-species` runs on the core's daily schedule, after the rollup,
 enrichment and ecoregion producers, with `when = "always"` so independently

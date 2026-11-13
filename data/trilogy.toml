@@ -2482,6 +2482,17 @@ operation = "run"
 timeout_seconds = 600
 memory_mb = 1024
 
+# Current environmental observations: independent of the tree/core lanes.
+# Monthly on day 2; latest completed June-August season and current water source.
+[[cloud.job]]
+key = "context-usbos"
+name = "urban-tree-context-usbos"
+entrypoint = "context_usbos.preql"
+operation = "run"
+schedule = "0 0 5 2 * *"
+timeout_seconds = 7200
+memory_mb = 3072
+
 # City inventory rankings for badges and missions; reads published inputs only.
 [[cloud.job]]
 key = "refresh-rankings"
