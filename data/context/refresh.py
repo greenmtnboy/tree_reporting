@@ -27,6 +27,10 @@ def validate(output, city, metadata):
         raise ValueError('Context metadata schema or city mismatch')
     if set(metadata['assets']) != {heat_name, water_name}:
         raise ValueError('Context publication must contain only the heat and water assets')
+    for name, expected in metadata['assets'].items():
+        path = output/name
+        if path.stat().st_size != expected['bytes'] or digest(path) != expected['sha256']:
+            raise ValueError(f'Asset checksum or length mismatch: {name}')
     import duckdb
     with duckdb.connect() as con:
         for name, key, section in ((heat_name, 'observation_id', 'heat'), (water_name, 'feature_id', 'water')):

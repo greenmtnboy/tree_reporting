@@ -146,5 +146,15 @@ def test_duplicate_observations_fail_validation(tmp_path):
     table = pq.read_table(tmp_path/name)
     pq.write_table(pa.concat_tables([table, table]), tmp_path/name)
     metadata['heat']['rows'] = 2
+    metadata['assets'][name] = {'sha256': digest(tmp_path/name), 'bytes': (tmp_path/name).stat().st_size}
     with pytest.raises(ValueError, match='keys'):
         validate(tmp_path, 'USBOS', metadata)
+
+
+def test_corrupt_second_asset_fails_before_any_upload(tmp_path):
+    metadata = seed(tmp_path)
+    (tmp_path/filenames('USBOS')[1]).write_bytes(b'corrupt water')
+    client = Mock()
+    with pytest.raises(ValueError, match='checksum'):
+        publish(tmp_path, 'USBOS', metadata, client, {})
+    client.put.assert_not_called()
