@@ -249,17 +249,12 @@ async function loadOptions() {
         emit('update:modelValue', topOptions[0].value)
       }
     } else if (props.modelValue) {
-      const escapedValue = props.modelValue.replace(/'/g, "''")
-      const countOptions = await runOptionsQuery(
-        version,
-        'taxonomy-filter-seed-count',
-        props.topQuery,
-        [`option_value = '${escapedValue}'`],
-      )
-      if (version !== loadVersion) return
-      if (countOptions && countOptions.length > 0) {
-        seededOptions = countOptions
-      }
+      // A value the page arrived with (a deep link): show its name now and let
+      // the full list below supply its count. This used to ask for the count
+      // on its own, by filtering the top query on `option_value`; the planner
+      // answers a filter on that output alias from the cross-city tree file
+      // joined to the summary, which is a 300 MB read and the count squared
+      // (upstream_repro/alias_filter_reads_trees).
       options.value = seededOptions
       emit('optionsLoaded', seededOptions)
       syncSearchTermToSelection()

@@ -37,6 +37,9 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TreeMap from './TreeMap.vue'
 import { cityAt, useMapData } from '../composables/useMapData'
+import { useDuckDB } from '../composables/useDuckDBClient'
+import { useIsMobile } from '../composables/useIsMobile'
+import { resolveMapWindow } from '../composables/useMapWindow'
 import { getCurrentPosition } from '../lib/geo'
 import { hasMapUrlFilters, readMapUrlFilters } from '../lib/mapUrlFilters'
 
@@ -45,6 +48,20 @@ const emit = defineEmits<{ 'entry-change': [visible: boolean] }>()
 const route = useRoute()
 const router = useRouter()
 const { displayCity, setUserLocation } = useMapData()
+// The map's engine is the longest wait before a tree: about 14 MB of DuckDB
+// and its spatial extension, then the species table and the world's manifest.
+// Near Me starts it with the location request, so it downloads while the
+// viewer answers the prompt and the fix arrives, not after. Not before the
+// tap: the entry screen starts nothing (a visitor may be headed for another
+// tab, whose own queries the download would slow). The window is the one
+// TreeMap asks for on this layout; if a layout asks for another, the worker
+// reads the manifest again and nothing else.
+const { setWindowPolicy, preWarmForCity, prefetchWindowAt } = useDuckDB()
+const { isMobile } = useIsMobile()
+function warmMapEngine() {
+  setWindowPolicy(resolveMapWindow(isMobile.value)?.policy ?? null)
+  preWarmForCity(displayCity.value)
+}
 // City is a destination hint, never an implicit experience selection.
 const mode = computed(() => {
   if (route.query.mode === 'nearby') return 'nearby'
@@ -71,6 +88,7 @@ async function locate() {
   locating.value = true
   locationError.value = ''
   performance.mark('trees:location:start')
+  warmMapEngine()
   const deadline = window.setTimeout(() => {
     if (id !== request || !locating.value) return
     locating.value = false
@@ -83,6 +101,7 @@ async function locate() {
     const position = { lat: fix.coords.latitude, lng: fix.coords.longitude }
     const city = cityAt(position.lat, position.lng)
     if (!city) throw new Error('We do not have a tree inventory near you yet. Choose Explore City to visit a mapped city.')
+    prefetchWindowAt(position.lng, position.lat)
     await entryNavigation
     if (id !== request) return
     await router.replace({ query: { ...route.query, city, mode: 'nearby', tree: undefined } })

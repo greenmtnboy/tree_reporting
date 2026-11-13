@@ -1,5 +1,6 @@
 """The dashboard summaries: tree counts at (city, species), and at (city,
-species) plus one tree-level bucket (plant year, DBH class, dot-map cell);
+species) plus one tree-level bucket (plant year, DBH class, dot-map cell,
+kind of source, crown width class);
 and two lookups beside them, each city's tree centroid and each species'
 native range as lists.
 
@@ -52,6 +53,8 @@ SUMMARIES = {
     "tree_rollup_dbh": ["dbh_class"],
     "tree_rollup_cell": ["map_cell_latitude", "map_cell_longitude"],
     "tree_rollup_coarse_cell": ["map_coarse_cell_latitude", "map_coarse_cell_longitude"],
+    "tree_rollup_origin": ["source_kind"],
+    "tree_rollup_crown": ["crown_class"],
 }
 
 
@@ -107,20 +110,28 @@ def test_the_models_parse():
 
 # --- The rows ----------------------------------------------------------------
 
-# (tree_id, city, species, plant_date, dbh, latitude, longitude)
+# (tree_id, city, species, plant_date, dbh, latitude, longitude, data_source, observed crown width)
 FIXTURE_TREES = [
-    ("sf-1", "USSFO", "Acer platanoides", "1998-03-04", 4.0, 37.7712, -122.4114),
-    ("sf-2", "USSFO", "Acer platanoides", "1998-07-01", 30.0, 37.7714, -122.4116),
-    ("sf-3", "USSFO", "Newtaxon alba", None, 12.0, 37.7801, -122.4199),  # no enrichment row: still counted
-    ("sf-4", "USSFO", "Unknown", "2015-01-01", None, None, None),        # sentinel, no position: still counted
-    ("nyc-1", "USNYC", "Acer platanoides", "2010-05-05", 36.0, 40.7127, -74.0061),
-    ("nyc-2", "USNYC", "Platanus x acerifolia", None, 5.9, 40.7127, -74.0061),
+    ("sf-1", "USSFO", "Acer platanoides", "1998-03-04", 4.0, 37.7712, -122.4114, "SF_OPENDATA", None),
+    ("sf-2", "USSFO", "Acer platanoides", "1998-07-01", 30.0, 37.7714, -122.4116, "OSM_USSFO", 13.0),  # observed crown wins over the estimate
+    ("sf-3", "USSFO", "Newtaxon alba", None, 12.0, 37.7801, -122.4199, "COMMUNITY_USSFO", None),  # no enrichment row: still counted
+    ("sf-4", "USSFO", "Unknown", "2015-01-01", None, None, None, "PREDICTED_USSFO", 4.0),  # sentinel, no position: still counted
+    ("sf-5", "USSFO", "Acer platanoides", None, None, 37.7712, -122.4114, "SATELLITE_USSFO", None),  # no crown at all
+    ("nyc-1", "USNYC", "Acer platanoides", "2010-05-05", 36.0, 40.7127, -74.0061, "NYC_OPENDATA", None),
+    ("nyc-2", "USNYC", "Platanus x acerifolia", None, 5.9, 40.7127, -74.0061, "PREDICTED_USNYC", 2.9),  # no prediction row: still counted
 ]
+# tree_id -> the allometric crown width the predictions table publishes.
+# sf-4 and sf-5 have a row with a null width; nyc-2 has no row.
+FIXTURE_PREDICTED_CROWN = {"sf-1": 4.9, "sf-2": 6.0, "sf-3": 8.0, "sf-4": None, "sf-5": None, "nyc-1": 12.0}
+
+
+def crown_width(tree: tuple) -> float | None:
+    return tree[8] if tree[8] is not None else FIXTURE_PREDICTED_CROWN.get(tree[0])
 
 
 def bucket(name: str, tree: tuple) -> tuple:
     """The reference for each grain, written out instead of read from the model."""
-    _, _, _, plant_date, dbh, lat, lon = tree
+    _, _, _, plant_date, dbh, lat, lon, data_source, _ = tree
     if name == "tree_rollup_year":
         return (int(plant_date[:4]) if plant_date else None,)
     if name == "tree_rollup_dbh":
@@ -130,6 +141,14 @@ def bucket(name: str, tree: tuple) -> tuple:
     if name in ("tree_rollup_cell", "tree_rollup_coarse_cell"):
         digits = 3 if name == "tree_rollup_cell" else 2
         return (None, None) if lat is None else (round(lat, digits), round(lon, digits))
+    if name == "tree_rollup_origin":
+        prefixes = {"COMMUNITY_": "community", "SATELLITE_": "satellite", "OSM_": "osm", "PREDICTED_": "predicted"}
+        return (next((kind for prefix, kind in prefixes.items() if data_source.startswith(prefix)), "municipal"),)
+    if name == "tree_rollup_crown":
+        width = crown_width(tree)
+        if width is None:
+            return (None,)
+        return (next((i for i, top in enumerate((3, 5, 8, 12), 1) if width < top), 5),)
     return ()
 
 
@@ -148,16 +167,35 @@ def rollup_parquet(tmp_path_factory) -> Path:
         """
     )
     conn.executemany(
-        "INSERT INTO rollup VALUES (?, ?, 'FIXTURE', ?, NULL, NULL, NULL, ?, ?, ?, ?, NULL)",
-        FIXTURE_TREES,
+        "INSERT INTO rollup VALUES (?, ?, ?, ?, NULL, ?, NULL, ?, ?, ?, ?, NULL)",
+        [(t[0], t[1], t[7], t[2], t[8], t[3], t[4], t[5], t[6]) for t in FIXTURE_TREES],
     )
     path = tmp_path_factory.mktemp("rollups") / "rollup.parquet"
     conn.execute(f"COPY rollup TO '{path.as_posix()}' (FORMAT PARQUET)")
     return path
 
 
+@pytest.fixture(scope="module")
+def predictions_parquet(tmp_path_factory) -> Path:
+    import duckdb
+
+    conn = duckdb.connect()
+    conn.execute(
+        "CREATE TABLE p (tree_id VARCHAR, city VARCHAR, predicted_crown_width_m DOUBLE, predicted_height_m DOUBLE,"
+        " accepted_height_m DOUBLE, prediction_inputs_published_through TIMESTAMPTZ)"
+    )
+    conn.executemany("INSERT INTO p VALUES (?, NULL, ?, NULL, NULL, NULL)", list(FIXTURE_PREDICTED_CROWN.items()))
+    path = tmp_path_factory.mktemp("predictions") / "predictions.parquet"
+    conn.execute(f"COPY p TO '{path.as_posix()}' (FORMAT PARQUET)")
+    return path
+
+
+# The measure columns a summary stores after its grain, where not just the count.
+MEASURES = {"tree_rollup_crown": ["rollup_tree_count", "rollup_canopy_area_m2"]}
+
+
 @pytest.fixture(scope="module", params=list(SUMMARIES))
-def summary(request, rollup_parquet) -> tuple[str, list[tuple]]:
+def summary(request, rollup_parquet, predictions_parquet) -> tuple[str, list[tuple]]:
     """The model's own SQL for one target, run over a fixture rollup."""
     import duckdb
     from trilogy import Dialects, Environment
@@ -169,12 +207,22 @@ def summary(request, rollup_parquet) -> tuple[str, list[tuple]]:
     for key in [k for k, d in env.datasources.items() if d.name in SUMMARIES]:
         del env.datasources[key]
     executor = Dialects.DUCK_DB.default_executor(environment=env)
-    columns = ", ".join(["city", "species", *SUMMARIES[name], "rollup_tree_count"])
+    columns = ", ".join(["city", "species", *SUMMARIES[name], *MEASURES.get(name, ["rollup_tree_count"])])
     (sql,) = executor.generate_sql(f"select {columns};")
     sql, n = re.subn(r"read_parquet\('[^']*full_tree_info_v[^']*'\)", f"read_parquet('{rollup_parquet.as_posix()}')", sql)
     assert n == 1, f"expected one scan of the rollup, found {n}"
+    # Only the crown summary reads a second table: the estimated widths, one
+    # multi-file scan over every city's predictions file.
+    sql, n = re.subn(
+        r"read_parquet\(\['[^\]]*_tree_predictions_v[^\]]*\]\)", f"read_parquet('{predictions_parquet.as_posix()}')", sql
+    )
+    assert n == (1 if name == "tree_rollup_crown" else 0)
     assert "read_parquet('https" not in sql
     return name, duckdb.connect().execute(sql).fetchall()
+
+
+def grain_width(name: str) -> int:
+    return 2 + len(SUMMARIES[name])
 
 
 def test_the_summary_is_the_trees_grouped(summary):
@@ -183,14 +231,32 @@ def test_the_summary_is_the_trees_grouped(summary):
     for tree in FIXTURE_TREES:
         key = (tree[1], tree[2], *bucket(name, tree))
         expected[key] = expected.get(key, 0) + 1
-    got = {tuple(row[:-1]): row[-1] for row in rows}
+    width = grain_width(name)
+    got = {tuple(row[:width]): row[width] for row in rows}
     assert got == expected
 
 
 def test_one_row_per_grain(summary):
-    _, rows = summary
-    keys = [tuple(row[:-1]) for row in rows]
+    name, rows = summary
+    keys = [tuple(row[: grain_width(name)]) for row in rows]
     assert len(keys) == len(set(keys))
+
+
+def test_the_crown_summary_sums_each_crown_as_a_circle(summary):
+    """Observed width first, the estimate otherwise; a tree with neither adds no area."""
+    import math
+
+    name, rows = summary
+    if name != "tree_rollup_crown":
+        pytest.skip("only the crown summary stores an area")
+    expected: dict[tuple, float] = {}
+    for tree in FIXTURE_TREES:
+        width = crown_width(tree)
+        if width is not None:
+            key = (tree[1], tree[2], *bucket(name, tree))
+            expected[key] = expected.get(key, 0.0) + math.pi * (width / 2) ** 2
+    got = {tuple(row[:3]): row[4] for row in rows if row[4] is not None}
+    assert got == {key: pytest.approx(area) for key, area in expected.items()}
 
 
 # --- The lookups ---------------------------------------------------------------

@@ -108,16 +108,34 @@ describe('summary cross-filter field gating', () => {
     })
   })
 
-  it('drops clicks that only contain chart-local fields', () => {
+  it('keeps the year from a planting-chart click and drops its helper columns', () => {
     const result = filterSummaryDimensionClick({
       source: 'plant-year',
       filters: {
-        plant_year: { op: 'eq', value: '1984' },
+        plant_year: { op: 'eq', value: 1984 },
         planting_window: { op: 'eq', value: '40-49 years ago' },
         color: { op: 'eq', value: '#2F7D4F' },
       },
       chart: {
-        plant_year: '1984',
+        plant_year: 1984,
+      },
+      append: false,
+    })
+
+    expect(result?.filters).toEqual({
+      plant_year: { op: 'eq', value: 1984 },
+    })
+  })
+
+  it('drops clicks that only contain chart-local fields', () => {
+    const result = filterSummaryDimensionClick({
+      source: 'plant-year',
+      filters: {
+        planting_window: { op: 'eq', value: '40-49 years ago' },
+        color: { op: 'eq', value: '#2F7D4F' },
+      },
+      chart: {
+        planting_window: '40-49 years ago',
       },
       append: false,
     })

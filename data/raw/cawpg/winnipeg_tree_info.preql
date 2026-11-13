@@ -57,7 +57,8 @@ root partial datasource cawpg_osm_tree_info extends tree_partition (
     data_source: cawpg_source,
 )
 complete where city = 'CAWPG' and cawpg_source = 'OSM_CAWPG'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cawpg_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cawpg_osm_staging.parquet`
+where (raw_latitude >= 49.66 and raw_latitude < 50.03 and raw_longitude >= -97.4 and raw_longitude < -96.9);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

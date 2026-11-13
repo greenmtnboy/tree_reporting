@@ -60,7 +60,8 @@ root partial datasource usclt_osm_tree_info extends tree_partition (
     data_source: usclt_source,
 )
 complete where city = 'USCLT' and usclt_source = 'OSM_USCLT'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usclt_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usclt_osm_staging.parquet`
+where (raw_latitude >= 35.0 and raw_latitude < 35.45 and raw_longitude >= -81.05 and raw_longitude < -80.6);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

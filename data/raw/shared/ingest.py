@@ -2509,7 +2509,9 @@ DEDUP_CELL_METRES: dict[str, int] = {
 # envelope and only OSM and community rows are assigned by territory.
 #
 # A new city with no neighbour gets its envelope as its one rectangle;
-# `new_city.py` writes that.  A city that gains a neighbour has to carve both.
+# `new_city.py` writes that.  A city that gains a neighbour has to carve both,
+# then run `tools/sync_osm_territory.py` so both models read their staged OSM
+# extract through the new territory (see territory_where).
 
 Box = tuple[float, float, float, float]
 
@@ -2641,6 +2643,25 @@ def in_city_territory(city_code: str, latitude, longitude) -> bool:
     return any(
         lat_min <= latitude < lat_max and lon_min <= longitude < lon_max
         for lat_min, lat_max, lon_min, lon_max in CITY_TERRITORY[city_code]
+    )
+
+
+def territory_where(boxes: tuple[Box, ...]) -> str:
+    """The `where` a city model's OSM datasource reads its staged extract with.
+
+    The extract (shared/osm.py) already fetches only the territory, but it
+    runs weekly and a staged file keeps the territory it was cut with: when
+    USNVA carved Arlington out of USWAS's box (#171), USWAS's extract from the
+    week before still held 7,115 Virginia trees, and the rollup carried 5,153
+    OSM ids under both cities until the next firing.  Filtering at read time
+    makes a territory change take effect on the next city build.  Written into
+    every model by tools/sync_osm_territory.py; tests/test_city_territory.py
+    keeps the two equal.  Half-open, as in_city_territory.
+    """
+    return "\n    or ".join(
+        f"(raw_latitude >= {lat_min} and raw_latitude < {lat_max} and "
+        f"raw_longitude >= {lon_min} and raw_longitude < {lon_max})"
+        for lat_min, lat_max, lon_min, lon_max in boxes
     )
 
 

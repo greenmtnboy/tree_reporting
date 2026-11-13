@@ -1,0 +1,419 @@
+/* The field-journal dashboard pages (City Summary, Species Explorer).
+
+   Paper cards with a hairline and no drop shadow, serif titles underlined by a
+   pencil stroke. Both pages import this file and nothing here is scoped, so a
+   card looks the same on either; everything is prefixed `dash-`.
+
+   The grid is sized by the page's own width, not the window's: the chat panel
+   and the sidebar take a third of a laptop screen, and a media query would
+   lay the cards out for space the page does not have. */
+
+.dash-page {
+  --journal-paper: rgba(var(--surface-rgb), 0.78);
+  --journal-rule: color-mix(in srgb, var(--color-border) 80%, transparent);
+  --journal-corners: 18px 14px 20px 15px / 15px 20px 14px 18px;
+  --dash-good: #2f7d4f;
+  --dash-mid: #d4a14a;
+  --dash-poor: #a96f49;
+  --dash-neutral: #7e9d86;
+  --dash-gap: 14px;
+  --trilogy-chart-font: var(--font-body);
+  --trilogy-chart-mark: var(--color-canopy);
+  container-type: inline-size;
+  container-name: dash;
+  padding: 26px 30px 48px;
+  overflow-y: auto;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  color: var(--color-ink);
+}
+
+/* A short hand-drawn stroke, masked so it takes the ink colour of its owner. */
+.dash-rule,
+.dash-section-header h2::after,
+.dash-card-header h3::after {
+  content: '';
+  display: block;
+  width: 72px;
+  height: 7px;
+  margin-top: 6px;
+  background: var(--sketch-leaf);
+  opacity: 0.7;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 8' preserveAspectRatio='none'%3E%3Cpath d='M1 5.4C18 2.4 32 6.6 48 4.2S78 1.6 96 4.6s17 1.4 23 .4' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat left center / 100% 100%;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 8' preserveAspectRatio='none'%3E%3Cpath d='M1 5.4C18 2.4 32 6.6 48 4.2S78 1.6 96 4.6s17 1.4 23 .4' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat left center / 100% 100%;
+}
+
+/* --- Header ---------------------------------------------------------------- */
+
+.dash-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dash-title-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.dash-title-row h1 {
+  margin: 0;
+  font-size: 2.1rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+.dash-rule--title {
+  width: 132px;
+  height: 9px;
+  margin-top: 10px;
+}
+
+.dash-lede {
+  margin: 0;
+  max-width: 78ch;
+  color: rgba(var(--ink-rgb), 0.78);
+  line-height: 1.55;
+}
+
+.dash-lede strong {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.dash-pills {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dash-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--journal-rule);
+  border-radius: 999px;
+  background: var(--journal-paper);
+}
+
+.dash-pill-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-moss);
+}
+
+.dash-pill-value {
+  font-size: 0.82rem;
+  color: var(--color-ink);
+}
+
+.dash-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dash-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--color-leaf);
+}
+
+.dash-chip-clear {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.dash-chip-clear:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+}
+
+.dash-link-btn {
+  background: none;
+  border: none;
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: 0.78rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 0;
+}
+
+.dash-link-btn:hover {
+  color: var(--color-ink);
+}
+
+/* --- Sections and the card grid ------------------------------------------- */
+
+.dash-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dash-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dash-section-header h2 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.dash-section-header p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+/* Twelve columns; a card says how many it spans at each page width. The
+   defaults are the narrow layout (everything full width). */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--dash-gap);
+  align-items: stretch;
+}
+
+.dash-grid > * {
+  grid-column: span 12;
+  min-width: 0;
+}
+
+/* `xl` is a full row at every width: a long time series. */
+.dash-grid > .dash-span-xl { grid-column: span 12; }
+
+/* s: a quarter of a wide page, a third of a laptop's. m: a third. l: half.
+   hero and side split a row two to one. */
+@container dash (min-width: 720px) {
+  .dash-grid > .dash-span-s,
+  .dash-grid > .dash-span-m { grid-column: span 6; }
+}
+
+@container dash (min-width: 1080px) {
+  .dash-grid > .dash-span-s,
+  .dash-grid > .dash-span-m { grid-column: span 4; }
+  .dash-grid > .dash-span-l { grid-column: span 6; }
+  .dash-grid > .dash-span-hero { grid-column: span 8; }
+  .dash-grid > .dash-span-side { grid-column: span 4; }
+}
+
+@container dash (min-width: 1560px) {
+  .dash-grid > .dash-span-s { grid-column: span 3; }
+}
+
+@container dash (min-width: 2100px) {
+  .dash-grid > .dash-span-hero { grid-column: span 7; }
+  .dash-grid > .dash-span-side { grid-column: span 5; }
+}
+
+/* --- The paper card -------------------------------------------------------- */
+
+.dash-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px 18px 14px;
+  background: var(--journal-paper);
+  border: 1px solid var(--journal-rule);
+  border-radius: var(--journal-corners);
+  box-shadow: none;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Heights belong to what the card holds: a chart needs a fixed box to draw
+   in, a list of bars is as tall as its rows. */
+.dash-card--chart { height: 320px; }
+.dash-card--chart-tall { height: 420px; }
+.dash-card--flush { padding: 0; }
+
+.dash-card-header {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 10px;
+  flex: 0 0 auto;
+}
+
+.dash-card-header h3 {
+  margin: 0;
+  font-size: 1.04rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1.25;
+}
+
+.dash-card-header h3::after {
+  width: 52px;
+  height: 6px;
+  margin-top: 5px;
+  opacity: 0.55;
+}
+
+.dash-card-sub {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--color-muted);
+  margin-top: 6px;
+  line-height: 1.45;
+}
+
+.dash-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-state {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-style: italic;
+}
+
+.dash-footnote {
+  margin: 0;
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+/* --- Stat tiles ------------------------------------------------------------ */
+
+.dash-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--dash-gap);
+  align-content: start;
+}
+
+.dash-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 13px 16px 12px;
+  background: var(--journal-paper);
+  border: 1px solid var(--journal-rule);
+  border-radius: 14px 18px 15px 17px / 17px 14px 18px 15px;
+  min-width: 0;
+}
+
+.dash-stat-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-moss);
+}
+
+.dash-stat-value {
+  font-family: var(--font-display);
+  font-size: 1.85rem;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Refreshing ----------------------------------------------------------------
+   A card that already shows an answer keeps it while a filter change fetches
+   the next one: blanking every card on each click is worse than a moment of
+   stale numbers. This marks the answer as stale meanwhile: it fades, after a
+   beat so a fast refresh does not flicker, and a line sweeps the top edge. */
+.dash-refreshing {
+  position: relative;
+}
+
+.dash-refreshing > * {
+  opacity: 0.45;
+  transition: opacity 0.2s ease 0.15s;
+}
+
+.dash-refreshing::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-leaf), transparent) no-repeat;
+  background-size: 40% 100%;
+  animation: dash-refresh-sweep 1.1s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes dash-refresh-sweep {
+  from { background-position: -70% 0; }
+  to { background-position: 170% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-refreshing::after {
+    animation: none;
+    background-size: 100% 100%;
+    opacity: 0.6;
+  }
+}
+
+.dash-stat-value--pending {
+  color: rgba(var(--muted-rgb), 0.45);
+}
+
+.dash-stat-note {
+  font-size: 0.76rem;
+  color: var(--color-muted);
+  line-height: 1.4;
+}
+
+@container dash (max-width: 560px) {
+  .dash-page { padding: 18px 16px 36px; }
+  .dash-title-row h1 { font-size: 1.7rem; }
+  .dash-pills { justify-content: flex-start; }
+  .dash-card--chart,
+  .dash-card--chart-tall { height: 300px; }
+}

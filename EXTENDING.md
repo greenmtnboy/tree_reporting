@@ -353,12 +353,16 @@ cd data && trilogy refresh raw/{code}/{slug}_tree_info.preql
 cd data && trilogy refresh raw/{code}/{slug}_landmarks.preql -f {slug}_landmark_info
 ```
 
-**Do not force the browser projection** (`{code}_tree_browser` in
-`tree_browser_city.preql`) before the rollup includes the city. It reads
-`full_tree_info`, so it builds with zero rows and publishes them, and an
-empty projection replaces the map's fallback (assembling the shape from the
-city parquet) with an empty city. The daily core builds it on the first tick
-after `urban-tree-full` has picked the city up.
+Then the city's predictions and browser projection, which read the parquet
+the first command published (`city_derived.preql`; its `derived-{code}` job
+runs after the city job on the same cron):
+
+```bash
+cd data && trilogy refresh raw/{code}/{slug}_tree_derived.preql
+```
+
+`tools/sync_city_derived.py` writes that file, its probe, the job and its
+[dependencies] entry; `new_city.py` runs it.
 
 A new column does not make a parquet stale. Force each city with
 `trilogy refresh raw/{code}/{slug}_tree_info.preql -f {slug}_tree_info`, San

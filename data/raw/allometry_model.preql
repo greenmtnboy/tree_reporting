@@ -1,0 +1,183 @@
+# The allometry arithmetic on one tree: its measurements, its fallback class,
+# the crown model and the shading test. It reads no tree source of its own:
+# tree_allometry_inputs.preql binds it to the rollup for the fits
+# (allometry_fits.preql), and city_derived.preql to one city's parquet for
+# that city's predictions (tree_predictions.preql).
+#
+# ---------------------------------------------------------------------------
+# The crown model, and where it comes from
+# ---------------------------------------------------------------------------
+#
+#     crown_width_m = 2 * scale * dbh_cm ** b        (dbh clamped to the fitted range)
+#
+# A genus-level power law fitted on Tallo (Jucker et al. 2022, CC-BY 4.0;
+# 312,829 trees with a measured crown radius across 1,453 genera), which is
+# the only open dataset that supports a fit at genus rank -- the published
+# urban crown models are species-level and cover a few dozen species between
+# them. `crown_allometry_fit.py` does the fit and writes
+# `crown_width_coefficients.csv`; its docstring carries the method, the
+# quality gate, the fallback order (genus -> family -> division) and the two
+# things the model deliberately is not: calibrated to open-grown urban trees
+# (Tallo is forest plots, and runs 15-30% low against the one urban reference
+# we have), and adjusted for stand density (Bechtold 2003 tried a basal-area
+# term over 87 species and dropped it as unstable). Both are curation
+# questions this dataset exists to put numbers in front of.
+#
+# The coefficient table is a CSV `file` datasource, joined on `genus`. The
+# genus comes from the enrichment table rather than from the first word of
+# `species`, because the enrichment table has already corrected the
+# misspellings a city publishes (`Petula pendula` -> Betula) and it is also
+# what supplies `tree_form`, which decides the fallback for a genus the table
+# does not carry: a conifer takes the gymnosperm fit, a palm takes none (a
+# palm's crown does not scale with its stem, and Tallo has no palm crowns),
+# anything else the angiosperm fit. The sentinels -- `Unknown`, `Dead`,
+# `Shrub` -- take the all-Tallo fit, since their division is unknown too.
+#
+# The CSV's division and global rows are the fallbacks, read as data and
+# keyed by the tree's fallback class. `crown_model_level` says which of those
+# a row got, and `crown_model_n` how many Tallo trees stood behind it, so a
+# curator can filter to the rows a real genus fit produced.
+#
+# Not in the frontend's model bundle, and may not be: `genus` is a key here
+# where the enrichment model the browser plans against has it as a property.
+
+import tree_published_columns;
+import tree_enrichment_source;
+import allometry_common;
+
+# --- Crown coefficients, one row per genus Tallo knows --------------------
+
+property genus.crown_coefficient_level string; # the CSV holds family / division / global rows too, for the record; only genus rows are read
+property genus.crown_fit_level string; # genus | family | division: which fit this genus's row carries
+property genus.crown_fit_taxon string; # the taxon that fit was made on
+property genus.crown_fit_n int; # Tallo trees behind the fit
+property genus.crown_fit_b float; # exponent on dbh_cm
+property genus.crown_fit_scale float; # exp(ln_a + sigma^2/2): crown_radius_m = scale * dbh_cm ** b
+property genus.crown_fit_dbh_max_cm float; # largest stem the fit saw; predictions clamp to it
+
+root datasource crown_width_coefficients (
+    level: crown_coefficient_level,
+    taxon: genus,
+    fit_level: crown_fit_level,
+    fit_taxon: crown_fit_taxon,
+    n: crown_fit_n,
+    b: crown_fit_b,
+    scale: crown_fit_scale,
+    dbh_max_cm: crown_fit_dbh_max_cm,
+)
+grain (genus)
+file `./crown_width_coefficients.csv`
+where crown_coefficient_level = 'genus';
+
+# The class a tree falls back to when its genus has no fit, decided by the
+# enrichment table's growth form, and named as the fallback rows name it.
+# Shared by every model: a palm's crown does not scale with its stem, its
+# stem does not thicken with age, and its height does neither.
+key crown_fallback_class <- case
+    when species = 'Unknown' or species = 'Dead' or species = 'Shrub' then 'all'
+    when tree_form = 'palm' or species = 'Palm' or species = 'Cactus' then 'none'
+    when tree_form = 'conifer' then 'Gymnosperm'
+    else 'Angiosperm'
+end;
+
+# A value from a table with one row per fallback class, for the tree's class.
+# The tables key their rows by their own taxon column rather than by
+# `crown_fallback_class`, which is derived and cannot be a join key, so each
+# class's row is read as a filtered scalar and the tree picks its own.
+def class_row(value, taxon, cls) -> max(value ? taxon = cls) by *;
+def for_class(value, taxon) -> case
+    when crown_fallback_class = 'Angiosperm' then @class_row(value, taxon, 'Angiosperm')
+    when crown_fallback_class = 'Gymnosperm' then @class_row(value, taxon, 'Gymnosperm')
+    when crown_fallback_class = 'all' then @class_row(value, taxon, 'all')
+    else null
+end;
+
+# The same CSV's division and global rows: the fit a tree whose genus has no
+# row falls back to, picked by the tree's fallback class.
+key crown_fallback_taxon string; # Angiosperm | Gymnosperm | all
+property crown_fallback_taxon.crown_fallback_row_level string; # division | global
+property crown_fallback_taxon.crown_fallback_row_n int;
+property crown_fallback_taxon.crown_fallback_row_b float;
+property crown_fallback_taxon.crown_fallback_row_scale float;
+property crown_fallback_taxon.crown_fallback_row_dbh_max_cm float;
+
+root datasource crown_width_fallbacks (
+    level: crown_fallback_row_level,
+    taxon: crown_fallback_taxon,
+    n: crown_fallback_row_n,
+    b: crown_fallback_row_b,
+    scale: crown_fallback_row_scale,
+    dbh_max_cm: crown_fallback_row_dbh_max_cm,
+)
+grain (crown_fallback_taxon)
+file `./crown_width_coefficients.csv`
+where crown_fallback_row_level = 'division' or crown_fallback_row_level = 'global';
+
+auto crown_fallback_level <- @for_class(crown_fallback_row_level, crown_fallback_taxon);
+auto crown_fallback_n <- @for_class(crown_fallback_row_n, crown_fallback_taxon);
+auto crown_fallback_b <- @for_class(crown_fallback_row_b, crown_fallback_taxon);
+auto crown_fallback_scale <- @for_class(crown_fallback_row_scale, crown_fallback_taxon);
+auto crown_fallback_dbh_max_cm <- @for_class(crown_fallback_row_dbh_max_cm, crown_fallback_taxon);
+
+auto crown_scale <- coalesce(crown_fit_scale, crown_fallback_scale);
+auto crown_b <- coalesce(crown_fit_b, crown_fallback_b);
+auto crown_dbh_max_cm <- coalesce(crown_fit_dbh_max_cm, crown_fallback_dbh_max_cm);
+
+# Clamped to [1 cm, the fit's largest stem]: an exponent below one keeps a
+# power law tame, but a data-entry DBH of 400 inches should predict the crown
+# of the largest tree the genus was fitted on, not extrapolate past it. The
+# null case is spelled out because DuckDB's greatest() skips nulls -- without
+# it a tree with no diameter is a 1 cm stem with a 70 cm crown.
+def crown_width_at(dbh) -> case
+    when dbh is null then null
+    else 2 * crown_scale * (least(greatest(dbh, 1.0), crown_dbh_max_cm) ** crown_b)
+end;
+
+# --- The tree's own measurements ------------------------------------------
+
+const dbh_cm_per_inch <- 2.54;
+const days_per_year <- 365.25;
+
+# A non-positive diameter is a placeholder, not a stem.
+auto dbh_cm <- case when diameter_at_breast_height > 0 then diameter_at_breast_height * dbh_cm_per_inch else null end;
+
+# Planting date to the day the parquet is built. The ingest publishes a
+# planting date only when it is one -- `enforce_tree_schema` nulls a date in
+# the future or before 1500, and a city's own ingest nulls the default its
+# portal stamps (Edmonton's 1990-06-01, Melbourne's 1900-01-01) -- so there is
+# nothing to second-guess here.
+auto age_years <- case when plant_date is null then null else date_diff(plant_date, current_date(), day) / days_per_year end;
+
+# --- The checks on an observed height ----------------------------------------
+#
+# A LIDAR height is the height of the crown over the tree's point, and two
+# things put the wrong crown there (docs/TREE_HEIGHT.md, "The gates"). One is
+# here, because the height fit's sample leaves those trees out; the other,
+# the band, is the height fit's own (height_fits.preql).
+#
+#   shaded       the crown is far wider than the tree's own stem could carry:
+#                a sapling or an understorey tree under a neighbour's canopy,
+#                lent the neighbour's height. Wider than `shaded_crown_ratio`
+#                times the radius the crown model predicts from the stem.
+#                Inventory trees past that ratio read 40% tall on average;
+#                below twice it, not at all.
+#
+# Both compare the survey with a prediction from the stem, so both need a
+# stem someone measured. Imagery predictions and reviewed satellite
+# detections carry a diameter a model supplied from the same crown, and a
+# tree with no diameter has only its genus median to be compared with.
+
+# The crown the measured stem alone predicts: what the gates compare a
+# survey's crown with, independent of the age model.
+auto measured_stem_crown_width_m <- @crown_width_at(dbh_cm);
+
+auto height_stem_measured <- case
+    when dbh_cm is null then false
+    when data_source like 'PREDICTED_%' or data_source like 'SATELLITE_%' then false
+    else true
+end;
+
+auto height_shaded <- case
+    when height_crown_radius_m > shaded_crown_ratio * measured_stem_crown_width_m / 2 then true
+    else false
+end;

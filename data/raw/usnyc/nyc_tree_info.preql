@@ -46,7 +46,8 @@ root partial datasource usnyc_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'USNYC' and usnyc_source = 'OSM_USNYC'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usnyc_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usnyc_osm_staging.parquet`
+where (raw_latitude >= 40.45 and raw_latitude < 40.95 and raw_longitude >= -74.3 and raw_longitude < -73.65);
 
 root partial datasource nyc_raw_tree_info extends tree_partition (
     objectid: tree_id,

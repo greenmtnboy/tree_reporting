@@ -23,9 +23,7 @@
 # datasource` (memory: pytrilogy-0401-partial-only-regression).
 
 import tree_common;
-
-property tree_id.height_m float; # tree height in metres from a LIDAR canopy survey, as the city published it; null where the tree is under no surveyed crown
-property tree_id.height_crown_radius_m float; # radius in metres of the crown height_m came from, as the city published it
+import tree_published_columns;
 
 root datasource published_tree_heights (
     tree_id: ~tree_id,

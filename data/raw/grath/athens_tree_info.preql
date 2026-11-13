@@ -39,7 +39,8 @@ root partial datasource grath_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'GRATH' and grath_source = 'OSM_GRATH'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grath_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/grath_osm_staging.parquet`
+where (raw_latitude >= 37.85 and raw_latitude < 38.1 and raw_longitude >= 23.6 and raw_longitude < 23.9);
 
 # The National Garden inventory — the only tree dataset any Greek open data
 # portal publishes (Aug 2026), so the municipal partition covers the garden's

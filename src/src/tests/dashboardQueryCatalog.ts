@@ -15,10 +15,10 @@ import {
 import {
   GENUS_OPTIONS_QUERY,
   SPECIES_CHARTS,
-  SPECIES_CONTEXT_QUERY,
   SPECIES_DASHBOARD_IMPORTS,
   SPECIES_KPI_CHARTS,
   SPECIES_OPTIONS_QUERY,
+  SPECIES_RANKING_QUERY,
   TOP_GENUS_QUERY,
   TOP_SPECIES_QUERY,
   getGenusSqlFilter,
@@ -143,9 +143,18 @@ export function speciesQueryCases(
       filters: [...cityFilters, getGenusSqlFilter(genus)],
       state: genusState,
     },
-    { id: 'species:context', surface: 'species', query: SPECIES_CONTEXT_QUERY, imports, filters, state },
     { id: 'species:tree-dot-map', surface: 'species', query: treeDotMapQuery(city), imports, filters, state },
   ]
+
+  // Under a city the map draws every tree of the city in grey beneath the
+  // taxon, and a selected species is ranked against the city's others: both
+  // run under the city filter alone.
+  if (city) {
+    cases.push({ id: 'species:tree-dot-map-all', surface: 'species', query: treeDotMapQuery(city), imports, filters: cityFilters, state: cityState })
+  }
+  if (species) {
+    cases.push({ id: 'species:sp-city-ranking', surface: 'species', query: SPECIES_RANKING_QUERY, imports, filters: cityFilters, state: cityState })
+  }
 
   for (const kpi of SPECIES_KPI_CHARTS) {
     if (kpi.requiresCitySelection && !city) continue
@@ -154,6 +163,8 @@ export function speciesQueryCases(
 
   for (const chart of SPECIES_CHARTS) {
     if (chart.requiresCitySelection && !city) continue
+    if (chart.requiresAllCities && city) continue
+    if (chart.genusOnly && species) continue
     cases.push({ id: `species:${chart.id}`, surface: 'species', query: chart.query, imports, filters, state })
   }
 

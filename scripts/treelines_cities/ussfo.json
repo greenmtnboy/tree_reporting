@@ -2,7 +2,7 @@
   "city": "USSFO",
   "slug": "san_francisco",
   "output_folder": "sf_renders",
-  "title": "Treelines of San Francisco, CA, USA",
+  "title": "Trees of San Francisco, CA, USA",
   "input": "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_info_v2.parquet",
   "inventory_sources": ["SF_OPENDATA"],
   "tree_credit": "Trees: San Francisco Public Works / DataSF Street Tree Inventory",
@@ -23,12 +23,15 @@
       "kind": "arcgis",
       "url": "https://services3.arcgis.com/uknczv4rpevve42E/ArcGIS/rest/services/California_Cartographic_Coastal_Polygons/FeatureServer/31",
       "documentation": "https://services3.arcgis.com/uknczv4rpevve42E/ArcGIS/rest/services/California_Cartographic_Coastal_Polygons/FeatureServer",
-      "where": "1=1"
+      "where": "OFFSHORE IN ('bay', 'ocean')"
     }
   ],
   "default_insets": ["hayes_valley", "mission"],
   "insets": {
-    "alamo_square": {"label": "Alamo Square & Buena Vista Park", "center_lonlat": [-122.4387, 37.7733], "size_km": 2},
+    "alamo_square": {"label": "Alamo Square & Buena Vista Park", "center_lonlat": [-122.4379, 37.7723], "size_km": 2},
+    "golden_gate_inner_sunset": {"label": "Golden Gate Park Lakes", "center_lonlat": [-122.4749, 37.7694], "size_km": 2},
+    "presidio_marina": {"label": "Palace of Fine Arts & Marina", "center_lonlat": [-122.4476, 37.8015], "size_km": 2},
+    "bernal_mission": {"label": "Bernal Heights & the Mission", "center_lonlat": [-122.4145, 37.7426], "size_km": 2},
     "hayes_valley": {"label": "Hayes Valley & Civic Center", "center_lonlat": [-122.4215, 37.7765], "size_km": 2},
     "mission": {"label": "Mission District", "center_lonlat": [-122.4194, 37.7545], "size_km": 2},
     "golden_gate_park": {"label": "Golden Gate Park", "center_lonlat": [-122.473, 37.7694], "size_km": 2},

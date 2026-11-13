@@ -60,7 +60,8 @@ root partial datasource ushou_osm_tree_info extends tree_partition (
     data_source: ushou_source,
 )
 complete where city = 'USHOU' and ushou_source = 'OSM_USHOU'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ushou_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ushou_osm_staging.parquet`
+where (raw_latitude >= 29.45 and raw_latitude < 30.15 and raw_longitude >= -95.85 and raw_longitude < -95.0);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

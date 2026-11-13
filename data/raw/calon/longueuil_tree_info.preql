@@ -57,7 +57,11 @@ root partial datasource calon_osm_tree_info extends tree_partition (
     data_source: calon_source,
 )
 complete where city = 'CALON' and calon_source = 'OSM_CALON'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/calon_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/calon_osm_staging.parquet`
+where (raw_latitude >= 45.4 and raw_latitude < 45.54 and raw_longitude >= -73.53 and raw_longitude < -73.3)
+    or (raw_latitude >= 45.54 and raw_latitude < 45.56 and raw_longitude >= -73.52 and raw_longitude < -73.3)
+    or (raw_latitude >= 45.56 and raw_latitude < 45.58 and raw_longitude >= -73.5 and raw_longitude < -73.3)
+    or (raw_latitude >= 45.58 and raw_latitude < 45.6 and raw_longitude >= -73.498 and raw_longitude < -73.3);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

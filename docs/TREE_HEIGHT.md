@@ -206,8 +206,10 @@ predicted one; the sprite is drawn to that height (MAP_CROWNS.md).
 
 Adding a LIDAR city to the map, beyond the steps below: its parquet to
 `tree_height_source.preql`'s file list (`test_tree_height.py` checks the list
-against the importers), and a forced `refresh-predictions` after its first
-build publishes `height_crown_radius_m`; that build refits the model.
+against the importers), `tools/sync_city_derived.py` so its derived model
+reads the heights from its own parquet, and a forced `derived-{code}` run
+after its first build publishes `height_crown_radius_m`. The fits pick its
+trees up at their next weekly refit.
 
 ## Rolling it out
 

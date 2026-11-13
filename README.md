@@ -243,7 +243,7 @@ Tree info has been automatically extracted from the available APIs per species l
 
 ### Tree-level predictions
 
-`tree_predictions_v{n}.parquet` carries a predicted crown width per tree, from
+`{code}_tree_predictions_v{n}.parquet` carries a predicted crown width per tree, from
 a genus-level stem-diameter power law fitted on the
 [Tallo](https://doi.org/10.5281/zenodo.6637599) database (Jucker et al. 2022,
 *Global Change Biology*, [doi:10.1111/gcb.16302](https://doi.org/10.1111/gcb.16302);

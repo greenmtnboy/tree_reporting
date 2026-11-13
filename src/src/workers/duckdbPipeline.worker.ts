@@ -27,6 +27,7 @@ import {
   cityBrowserParquetUrl,
   cityLandmarkParquetUrl,
   WorldFileError,
+  fetchPublishedFile,
   fetchWorldFile,
   fetchWorldManifest,
   worldFileUrl,
@@ -70,7 +71,7 @@ import {
   type WindowPolicy,
 } from './cityWindow'
 import {
-  BLOCK_ZOOM, blockFile, blockOfCell, parseWorldManifest, tileHasBlocks, worldDirectory,
+  BLOCK_ZOOM, blockAt, blockFile, blockKey, blockOfCell, parseWorldManifest, tileHasBlocks, worldDirectory,
   type WorldDirectory, type WorldManifest,
 } from './worldBlocks'
 
@@ -227,6 +228,93 @@ let windowGeneration = 0
 let windowChunkSeq = 0
 /** Block files fetched at once: enough to fill a connection, few enough to hold in memory. */
 const BLOCK_FETCH_PARALLEL = 6
+/**
+ * A phone's load that touches this many blocks or fewer fetches them whole
+ * (WHOLE_BLOCK_BYTES). Measured on Boston's South End block (3.6 MB) over a
+ * 9 Mbps link: DuckDB-wasm's range reads of two of its sixteen cells were 22
+ * requests in a row and 4.6 MB, its read-ahead doubling to a megabyte past
+ * every seek, 6.5 s; the file whole is one request. A wider first view (a
+ * city opened at the floor zoom) spans four blocks and a third of their rows,
+ * and keeps the range reads.
+ */
+const WHOLE_BLOCK_LOADS = 2
+/** Whole block files kept as bytes, newest last, so the next cell of a block is no request at all. */
+const WHOLE_BLOCK_BYTES = 16 * 1024 * 1024
+const wholeBlocks = new Map<string, Promise<Uint8Array>>()
+const wholeBlockSizes = new Map<string, number>()
+
+/**
+ * A block file's bytes: the copy kept, or a fetch that is kept. A fetch that
+ * fails is forgotten, so the next ask tries again.
+ */
+function wholeBlock(file: string): Promise<Uint8Array> {
+  const held = wholeBlocks.get(file)
+  if (held) {
+    // Newest last.
+    wholeBlocks.delete(file)
+    wholeBlocks.set(file, held)
+    return held
+  }
+  const fetched = fetchWorldFile(file)
+  wholeBlocks.set(file, fetched)
+  fetched.then((bytes) => {
+    if (wholeBlocks.get(file) !== fetched) return
+    wholeBlockSizes.set(file, bytes.byteLength)
+    let total = 0
+    for (const size of wholeBlockSizes.values()) total += size
+    for (const name of [...wholeBlocks.keys()]) {
+      if (total <= WHOLE_BLOCK_BYTES || name === file) break
+      total -= wholeBlockSizes.get(name) ?? 0
+      wholeBlocks.delete(name)
+      wholeBlockSizes.delete(name)
+    }
+  }, () => {
+    if (wholeBlocks.get(file) === fetched) wholeBlocks.delete(file)
+  })
+  return fetched
+}
+
+/**
+ * What the start reads besides the engine, asked for before the engine is:
+ * the manifest, the vocabulary, the species table and the ecoregions. They
+ * download beside the 8 MB of DuckDB instead of after it, each in one request.
+ */
+type EarlyFiles = {
+  manifest: Promise<unknown>
+  vocab: Promise<Uint8Array>
+  species: Promise<Uint8Array | null>
+  ecoregions: Promise<Uint8Array | null>
+}
+let earlyFiles: EarlyFiles | null = null
+
+function startEarlyFiles(): EarlyFiles {
+  const manifest = fetchWorldManifest()
+  const vocab = manifest.then((json) => fetchWorldFile(parseWorldManifest(json).vocab))
+  // loadWorld reports a failure of either; nothing else may.
+  manifest.catch(() => {})
+  vocab.catch(() => {})
+  return {
+    manifest,
+    vocab,
+    species: fetchPublishedFile(REMOTE_SPECIES_PARQUET_URL),
+    ecoregions: fetchPublishedFile(REMOTE_ECOREGION_BROWSER_PARQUET_URL),
+  }
+}
+
+/**
+ * Fetch the block under a point before anything can read it: Near Me knows
+ * where the camera will open while the engine is still downloading, and the
+ * block's bytes are what the first trees wait for after it.
+ */
+function prefetchBlockAt(lng: number, lat: number): void {
+  void ensureInit().catch(() => {})
+  const manifest = world ? Promise.resolve(world.manifest) : earlyFiles?.manifest.then(parseWorldManifest)
+  manifest?.then((m) => {
+    const at = blockAt(lng, lat)
+    const block = m.blocks.get(blockKey(at.x, at.y))
+    if (block) wholeBlock(blockFile(block)).catch(() => {})
+  }).catch(() => {})
+}
 /** The most cells an intro's prefetch of a tile range loads ahead of its aggregate. */
 const MAX_PREFETCH_CELLS = 400
 /** The widest scoped read: past this many cells a read uses the whole view. */
@@ -656,11 +744,11 @@ async function withRegisteredFile<T>(name: string, bytes: Uint8Array, use: () =>
  * grows, and on an iPhone it sits in the same process budget as the map, so
  * rows arrive only as cells near the camera are asked for (cityWindow.ts).
  */
-async function loadWorld(): Promise<void> {
+async function loadWorld(early?: EarlyFiles): Promise<void> {
   if (!conn || !db) return
   const t0 = nowMs()
-  const manifest = parseWorldManifest(await fetchWorldManifest())
-  const vocab = await fetchWorldFile(manifest.vocab)
+  const manifest = parseWorldManifest(await (early?.manifest ?? fetchWorldManifest()))
+  const vocab = await (early?.vocab ?? fetchWorldFile(manifest.vocab))
   const vocabKb = Math.round(vocab.byteLength / 1024)
   const timings: Array<[string, number]> = []
   await withRegisteredFile('world_vocab.parquet', vocab, async () => {
@@ -840,8 +928,28 @@ async function loadWindowCells(win: World, cells: number[]): Promise<void> {
       // are in cell order) straight from the published file, as it read a
       // window out of a city's projection. San Francisco's first phone view
       // is 24 cells of four 3.6 MB blocks.
-      const files = [...byBlock.keys()].map((key) => worldFileUrl(blockFile(win.manifest.blocks.get(key)!)))
+      //
+      // A street's view is a cell or two of one block, and there the range
+      // reads cost more than the file (WHOLE_BLOCK_LOADS): it is fetched
+      // whole, or was already when Near Me said where it would open.
+      const blockFiles = [...byBlock.keys()].map((key) => blockFile(win.manifest.blocks.get(key)!))
+      const whole = blockFiles.length <= WHOLE_BLOCK_LOADS
+      const registered: string[] = []
+      let files = blockFiles.map(worldFileUrl)
       try {
+        if (whole) {
+          const fetched = await Promise.all(blockFiles.map(wholeBlock))
+          if (!live()) return
+          files = []
+          for (const [i, file] of fetched.entries()) {
+            // The name keeps the block's key where the staging SQL can be read for it.
+            const name = `whole_${seq}/${blockFiles[i]}`
+            await db.registerFileBuffer(name, new Uint8Array(file))
+            registered.push(name)
+            files.push(name)
+            bytes += file.byteLength
+          }
+        }
         const sql = windowStagingSql(staging, files, cells, cellsBounds(cells, cz), cz)
         await conn.query(sql.create)
         for (const row of (await conn.query(sql.counts)).toArray()) counts.set(Number(row.cell), Number(row.n))
@@ -855,6 +963,7 @@ async function loadWindowCells(win: World, cells: number[]): Promise<void> {
         }
       } finally {
         await conn.query(`DROP TABLE IF EXISTS ${staging}`).catch(() => {})
+        for (const name of registered) await db.dropFile(name).catch(() => {})
       }
     }
     if (!live()) return
@@ -953,6 +1062,7 @@ async function doInit() {
   if (db) return
   const t0 = nowMs()
   console.info('[Perf] duckdb-worker:init:start')
+  const early = earlyFiles = startEarlyFiles()
 
   const bundles: duckdb.DuckDBBundles = {
     mvp: {
@@ -991,14 +1101,19 @@ async function doInit() {
   // published table only when it is next republished; naming a column the
   // parquet does not have fails this whole load, and with it the tree card.
   // Probe, and read nulls until then. Fold into the plain select afterwards.
-  const hasTrunkPhoto = await parquetHasColumn(REMOTE_SPECIES_PARQUET_URL, 'trunk_photo_url')
+  // The table is read whole, so its file is fetched whole (startEarlyFiles)
+  // and read from memory; from the bucket only if that fetch failed.
+  const speciesBytes = await early.species
+  const speciesFile = speciesBytes ? 'species_enrichment.parquet' : REMOTE_SPECIES_PARQUET_URL
+  if (speciesBytes) await db.registerFileBuffer(speciesFile, speciesBytes)
+  const hasTrunkPhoto = await parquetHasColumn(speciesFile, 'trunk_photo_url')
   const trunkPhotoColumns = hasTrunkPhoto
     ? 'trunk_photo_url, trunk_photo_license, trunk_photo_attribution'
     : 'CAST(NULL AS VARCHAR) AS trunk_photo_url, CAST(NULL AS VARCHAR) AS trunk_photo_license, CAST(NULL AS VARCHAR) AS trunk_photo_attribution'
   // The seasonal shades (November 2026), read the same way until the job
   // republishes with them; the "Leaf shade" colour mode and the tree card
   // read nulls and fall back to the tree-form colour meanwhile.
-  const hasShades = await parquetHasColumn(REMOTE_SPECIES_PARQUET_URL, 'foliage_colors')
+  const hasShades = await parquetHasColumn(speciesFile, 'foliage_colors')
   const shadeColumns = hasShades
     ? 'foliage_colors, fall_foliage_colors, trunk_color'
     : 'CAST(NULL AS VARCHAR[]) AS foliage_colors, CAST(NULL AS VARCHAR[]) AS fall_foliage_colors, CAST(NULL AS VARCHAR) AS trunk_color'
@@ -1032,16 +1147,20 @@ async function doInit() {
         photo_attribution,
         ${trunkPhotoColumns},
         ${shadeColumns}
-      FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')
+      FROM read_parquet('${speciesFile}')
     `)
   } catch (e) {
     console.error('[duckdb-worker] species-enrichment load failed — parquet schema may be out of date', e)
+  } finally {
+    if (speciesBytes) await db.dropFile(speciesFile).catch(() => {})
   }
 
   // The three columns the worker keeps, from the projection the pipeline
   // publishes for it; the full dimension (5.75 MB, almost all geometry) only
   // while the projection is not out yet.
-  for (const url of [REMOTE_ECOREGION_BROWSER_PARQUET_URL, REMOTE_ECOREGION_PARQUET_URL]) {
+  const ecoregionBytes = await early.ecoregions
+  if (ecoregionBytes) await db.registerFileBuffer('ecoregion_browser.parquet', ecoregionBytes)
+  for (const url of [...(ecoregionBytes ? ['ecoregion_browser.parquet'] : []), REMOTE_ECOREGION_BROWSER_PARQUET_URL, REMOTE_ECOREGION_PARQUET_URL]) {
     try {
       await conn.query(`
         CREATE OR REPLACE TABLE ecoregion_info AS
@@ -1068,8 +1187,10 @@ async function doInit() {
     }
   }
 
+  if (ecoregionBytes) await db.dropFile('ecoregion_browser.parquet').catch(() => {})
+
   // The world's manifest and vocabulary. No tree is loaded until a view asks.
-  await loadWorld()
+  await loadWorld(early)
   postColorMapUpdate()
 
   ready = true
@@ -2006,7 +2127,12 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrownColumns> {
   let result
   if (cells) {
     const at = cellAt(camera.lng, camera.lat, cz)
-    const near = cells.filter((key) => cellDistance(cellFromKey(key, cz), at) <= windowPolicy.radiusCells)
+    // A phone's crowns reach CROWN_DISTANCE_MAX, nine z14 cells and most of a
+    // block; its screen at the zoom they draw is a few hundred metres. Only
+    // the cells on screen are loaded for the read (the tiles ask for the same
+    // ones); a crown past them is drawn if its cell is held.
+    const onScreen = camera.view && !camera.bounds ? new Set(cellsInBox(camera.view, cz, MAX_SCOPE_CELLS) ?? cells) : null
+    const near = cells.filter((key) => (!onScreen || onScreen.has(key)) && cellDistance(cellFromKey(key, cz), at) <= windowPolicy.radiusCells)
     result = await withCells(near, async () => {
       const tables = cells.flatMap((key) => win.cellTable.get(key) || [])
       const scope = scopeSql(tables)
@@ -2186,6 +2312,7 @@ type WorkerMethodMap = {
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
   ensureWindowAt: { params: { lng: number; lat: number }; result: void }
+  prefetchWindowAt: { params: { lng: number; lat: number }; result: void }
   setVisibleTileRange: { params: { z: number; minX: number; maxX: number; minY: number; maxY: number }; result: void }
   prefetchVisibleTilesAtZoom: {
     params: { z: number; range?: { minX: number; maxX: number; minY: number; maxY: number } }
@@ -2339,6 +2466,12 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         await waitForCityContext()
         const cell = cellAt(lng, lat, cellZoom())
         await ensureWindowCells([cellKey(cell.x, cell.y, cellZoom())])
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
+        break
+      }
+      case 'prefetchWindowAt': {
+        const { lng, lat } = msg.params as WorkerMethodMap['prefetchWindowAt']['params']
+        prefetchBlockAt(lng, lat)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }

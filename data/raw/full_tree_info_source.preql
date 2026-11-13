@@ -28,8 +28,7 @@
 # tick, instead of us guessing an hour's gap between two crons.
 
 import tree_common;
-
-property tree_id.data_source string; # originating dataset, as every city materialises it and the rollup carries it
+import tree_published_columns;
 
 root datasource full_tree_info (
     tree_id: tree_id,

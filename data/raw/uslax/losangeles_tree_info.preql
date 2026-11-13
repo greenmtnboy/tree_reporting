@@ -42,7 +42,8 @@ root partial datasource uslax_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'USLAX' and uslax_source = 'OSM_USLAX'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/uslax_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/uslax_osm_staging.parquet`
+where (raw_latitude >= 33.7 and raw_latitude < 34.35 and raw_longitude >= -118.7 and raw_longitude < -118.1);
 
 root partial datasource losangeles_raw_tree_info extends tree_partition (
     data_source: uslax_source,

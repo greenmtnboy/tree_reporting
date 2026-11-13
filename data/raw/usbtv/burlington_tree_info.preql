@@ -71,7 +71,8 @@ root partial datasource usbtv_osm_tree_info extends tree_partition (
     species: ?raw_species,
 )
 complete where city = 'USBTV' and usbtv_source = 'OSM_USBTV'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbtv_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbtv_osm_staging.parquet`
+where (raw_latitude >= 44.35 and raw_latitude < 44.6 and raw_longitude >= -73.35 and raw_longitude < -73.1);
 
 root partial datasource burlington_raw_tree_info extends tree_partition (
     data_source: usbtv_source,

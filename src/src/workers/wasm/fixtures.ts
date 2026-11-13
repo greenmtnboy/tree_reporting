@@ -41,6 +41,8 @@ export const fixtureParquetUrls = {
   WORLD_MANIFEST_URL: `${WORLD_DIR}/manifest.json`,
   worldFileUrl: (name: string) => `${WORLD_DIR}/${name}`,
   WorldFileError,
+  // The start's small files, whole, as the worker fetches them beside the engine.
+  fetchPublishedFile: async (url: string): Promise<Uint8Array | null> => existsSync(url) ? new Uint8Array(readFileSync(url)) : null,
   fetchWorldManifest: async (): Promise<unknown> => JSON.parse(readFileSync(`${WORLD_DIR}/manifest.json`, 'utf-8')),
   fetchWorldFile: async (name: string): Promise<Uint8Array> => {
     const path = `${WORLD_DIR}/${name}`
@@ -63,7 +65,7 @@ export type CityFixture = {
 }
 
 /**
- * A city's browser projection (data/raw/tree_browser_city.preql's columns)
+ * A city's browser projection (data/raw/city_derived.preql's `city_tree_browser` columns)
  * with `rows` trees scattered uniformly over `bbox`, the same every run.
  */
 export async function writeCityProjection({ city, rows, bbox, species }: CityFixture): Promise<string> {

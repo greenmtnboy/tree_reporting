@@ -80,7 +80,22 @@ root partial datasource usnva_osm_tree_info extends tree_partition (
     data_source: usnva_source,
 )
 complete where city = 'USNVA' and usnva_source = 'OSM_USNVA'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usnva_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usnva_osm_staging.parquet`
+where (raw_latitude >= 38.59 and raw_latitude < 38.78 and raw_longitude >= -77.55 and raw_longitude < -77.03)
+    or (raw_latitude >= 38.78 and raw_latitude < 38.8 and raw_longitude >= -77.55 and raw_longitude < -77.04)
+    or (raw_latitude >= 38.8 and raw_latitude < 38.82 and raw_longitude >= -77.55 and raw_longitude < -77.039)
+    or (raw_latitude >= 38.82 and raw_latitude < 38.84 and raw_longitude >= -77.55 and raw_longitude < -77.043)
+    or (raw_latitude >= 38.84 and raw_latitude < 38.86 and raw_longitude >= -77.55 and raw_longitude < -77.031)
+    or (raw_latitude >= 38.86 and raw_latitude < 38.875 and raw_longitude >= -77.55 and raw_longitude < -77.052)
+    or (raw_latitude >= 38.875 and raw_latitude < 38.89 and raw_longitude >= -77.55 and raw_longitude < -77.058)
+    or (raw_latitude >= 38.89 and raw_latitude < 38.9 and raw_longitude >= -77.55 and raw_longitude < -77.068)
+    or (raw_latitude >= 38.9 and raw_latitude < 38.91 and raw_longitude >= -77.55 and raw_longitude < -77.075)
+    or (raw_latitude >= 38.91 and raw_latitude < 38.92 and raw_longitude >= -77.55 and raw_longitude < -77.09)
+    or (raw_latitude >= 38.92 and raw_latitude < 38.94 and raw_longitude >= -77.55 and raw_longitude < -77.115)
+    or (raw_latitude >= 38.94 and raw_latitude < 38.96 and raw_longitude >= -77.55 and raw_longitude < -77.14)
+    or (raw_latitude >= 38.96 and raw_latitude < 38.99 and raw_longitude >= -77.55 and raw_longitude < -77.18)
+    or (raw_latitude >= 38.99 and raw_latitude < 39.03 and raw_longitude >= -77.55 and raw_longitude < -77.24)
+    or (raw_latitude >= 39.03 and raw_latitude < 39.07 and raw_longitude >= -77.55 and raw_longitude < -77.3);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

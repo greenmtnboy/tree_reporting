@@ -1,6 +1,6 @@
 # The first allometry stage: built by the `refresh-allometry-fits`
 # [[cloud.job]] after the rollup and the enrichment table, and before
-# refresh-height-fits and refresh-predictions, in the core's tick.
+# refresh-height-fits, in the core's tick; at most weekly (prediction_inputs.preql).
 #
 # It publishes the diameter-from-age fits, and the sample the height fits
 # are made on. See tree_predictions.preql for why the models are fitted in

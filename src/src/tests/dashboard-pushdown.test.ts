@@ -372,10 +372,10 @@ const CITY_VIEW_GROUP: PushdownGroup = {
   cases: cityQueryCases(CITY_VIEW_CITY),
 }
 
-// The species page's taxonomy card: enrichment properties of the species the
-// city holds. Planners before pytrilogy 0.3.485 read the city's tree file for
-// it; drop this once the hosted resolver runs 0.3.485 or later.
-const CITY_VIEW_PENDING_RESOLVER = new Set(['species:context'])
+// City-view queries the hosted resolver still plans against a tree file,
+// by id. Empty: the species page's taxonomy card, the one entry it held, is
+// now read off the species list the page already has.
+const CITY_VIEW_PENDING_RESOLVER = new Set<string>()
 
 const GROUPS: PushdownGroup[] = [
   ...CITY_GROUPS,

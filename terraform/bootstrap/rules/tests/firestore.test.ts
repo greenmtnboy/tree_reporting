@@ -310,9 +310,16 @@ describe('tree modifications', () => {
     await assertFails(modificationBatch(as('alice'), 'alice', {}, false).commit())
   })
 
-  test('a second report within 30 seconds is refused', async () => {
+  test('a second report within 2 seconds is refused', async () => {
     await assertSucceeds(modificationBatch(as('alice'), 'alice').commit())
     await assertFails(modificationBatch(as('alice'), 'alice').commit())
+  })
+
+  test('a report a few seconds after the last one is accepted', async () => {
+    await seed((db) => setDoc(doc(db, 'modificationRateLimits', 'alice'), {
+      userId: 'alice', lastModificationId: 'm0', submittedAt: Timestamp.fromMillis(Date.now() - 5_000),
+    }))
+    await assertSucceeds(modificationBatch(as('alice'), 'alice').commit())
   })
 
   test('a missing reason outside the fixed set is refused', async () => {

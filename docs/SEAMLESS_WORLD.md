@@ -132,6 +132,18 @@ How a cell's rows arrive depends on how much of its block it is:
   city's projection. San Francisco's first phone view is 24 cells of four
   blocks of 3.6 MB each; fetched whole that was 14.6 MB for a third of the
   rows.
+- **A phone on one street wants a cell or two of one block**, and there the
+  range reads lose: DuckDB-wasm's read-ahead doubles to a megabyte past every
+  seek, so two cells of Boston's 3.6 MB South End block were 22 requests in
+  a row and 4.6 MB (6.5 s at 9 Mbps). A load that touches two blocks or fewer
+  fetches them whole (`WHOLE_BLOCK_LOADS`), keeps the bytes for the block's
+  next cell, and Near Me asks for its block as soon as it has a fix, beside
+  the engine's download (`prefetchWindowAt`).
+
+The phone's crowns load only the cells on screen (`TreeRenderView.view`). They
+reach 1.8 km, nine z14 cells, and asking for all of them made a street's first
+view most of a block. `pnpm bench:nearby` is the measure: every request
+between the Near Me tap and the first trees, under a shaped network.
 
 A generic read (the landmarks list, a chat's SQL) sees the cells held when it
 runs and does not wait for loads in flight: a desktop is fetching the rest

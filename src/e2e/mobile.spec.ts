@@ -148,7 +148,8 @@ test.describe('Mobile layout', () => {
     await page.locator('.mobile-nav-item').filter({ hasText: 'Species' }).click()
 
     await expect(page.locator('.mobile-route-header')).toContainText('Species Explorer')
-    await expect(page.locator('.species-page h1')).toContainText('Tree Species Explorer')
+    // The page opens on the city's commonest genus, so its title names both.
+    await expect(page.locator('.species-page h1')).toContainText('in San Francisco')
     await expect(page.locator('.mobile-bottom-bar')).toContainText('Chat')
 
     await openMobileMenu(page)

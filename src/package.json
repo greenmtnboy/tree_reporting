@@ -16,6 +16,7 @@
     "bench:map": "node scripts/bench-map.mjs",
     "bench:memory": "node scripts/bench-map-memory.mjs",
     "bench:tiles": "node scripts/bench-tile-latency.mjs",
+    "bench:nearby": "node scripts/bench-nearby.mjs",
     "bench:dashboard": "node scripts/bench-dashboard.mjs",
     "test:e2e": "playwright test",
     "test:crowns": "playwright test --config playwright.crowns.config.ts",
@@ -25,7 +26,7 @@
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "1.33.1-dev18.0",
-    "@trilogy-data/trilogy-studio-components": "0.1.31",
+    "@trilogy-data/trilogy-studio-components": "0.1.32",
     "firebase": "^12.11.0",
     "maplibre-gl": "^4.7.1",
     "pinia": "^2.3.1",

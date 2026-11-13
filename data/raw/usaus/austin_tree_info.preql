@@ -60,7 +60,8 @@ root partial datasource usaus_osm_tree_info extends tree_partition (
     data_source: usaus_source,
 )
 complete where city = 'USAUS' and usaus_source = 'OSM_USAUS'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usaus_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usaus_osm_staging.parquet`
+where (raw_latitude >= 30.05 and raw_latitude < 30.55 and raw_longitude >= -98.05 and raw_longitude < -97.45);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

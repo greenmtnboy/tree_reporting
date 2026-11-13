@@ -57,7 +57,8 @@ root partial datasource caque_osm_tree_info extends tree_partition (
     data_source: caque_source,
 )
 complete where city = 'CAQUE' and caque_source = 'OSM_CAQUE'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/caque_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/caque_osm_staging.parquet`
+where (raw_latitude >= 46.68 and raw_latitude < 47.0 and raw_longitude >= -71.6 and raw_longitude < -71.1);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

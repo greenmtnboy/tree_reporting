@@ -1,36 +1,26 @@
-# The published crown predictions, as a *source*.
+# Every city's published predictions, as a *source*. Written by
+# tools/sync_city_derived.py: edit that, not this.
 #
-# One `root datasource` over `tree_predictions_v{n}.parquet`, mapping what a
-# consumer of published data reads -- the crown width and height predictions,
-# the observed LIDAR height carried beside them -- and the file's watermark,
-# and nothing else. Root means unmanaged: a job importing
-# this reads the table and never tries to build it -- the managed declaration
-# in `tree_predictions.preql` is the one whose refresh runs the model.
+# One root datasource over the per-city files the derived-{code} jobs
+# publish (city_derived.preql), read as a single multi-file scan, for a
+# consumer that wants every city's widths at once: the crown rollup
+# (tree_rollups.preql). Root means unmanaged: importing this never builds a
+# prediction.
 #
-# This is `full_tree_info_source.preql` for the predictions, with the same
-# rules:
-#
-#   * The datasource is named `tree_predictions`, the same as the managed one,
-#     on purpose. trilogy-cloud derives a tick's ordering from asset names when
-#     the address is templated, so a job that imports this file is ordered
-#     after `refresh-predictions` in the same schedule tick.
-#   * `tree_id: ~tree_id`: the file holds a row for every tree the rollup had
-#     when the model last ran, which is not every tree a consumer may be
-#     reading now, and that is a partial *key*: the planner pads the join and
-#     a tree with no prediction row keeps its other columns, with a null
-#     width, instead of vanishing from the consumer's output.
+#   * `tree_id: ~tree_id`: a predictions file omits imagery detections with no
+#     LIDAR height, so it is a partial key. The planner pads the join and a
+#     tree with no prediction keeps its other columns with a null width.
+#   * Every listed file must exist, or the whole scan fails: a new city's
+#     derived job must publish once before the rollup next runs.
 #   * It must never be in the frontend's model bundle, which carries no
-#     predictions at all (`test_tree_predictions.py`).
+#     predictions at all (test_tree_predictions.py).
 
 import tree_common;
 
-property tree_id.predicted_crown_width_m float; # the allometric crown width, as tree_predictions.preql published it; null where the model had nothing to size from
-property tree_id.predicted_height_m float; # the allometric height, as tree_predictions.preql published it; null where the model had nothing to size from
-property tree_id.accepted_height_m float; # the tree's LIDAR height where it passed tree_predictions.preql's gates (or could not be checked); null where it has none or failed them
-# A tree-grain property, although every row carries the same value: declared
-# model-wide (`<*>`) the planner fetches it through a second scan of the
-# predictions parquet joined back by tree_id, once per city.
-property tree_id.prediction_inputs_published_through datetime; # the newer of the rollup's and the enrichment table's publication, as published
+property tree_id.predicted_crown_width_m float; # the allometric crown width, as the city's derived job published it; null where the model had nothing to size from
+property tree_id.predicted_height_m float; # the allometric height, as published; null where the model had nothing to size from
+property tree_id.accepted_height_m float; # the tree's LIDAR height where it passed the gates (or could not be checked); null where it has none or failed them
+property tree_id.prediction_inputs_published_through datetime; # the newest of the city's inputs, as its file was published with
 
 root datasource tree_predictions (
     tree_id: ~tree_id,
@@ -41,4 +31,56 @@ root datasource tree_predictions (
     prediction_inputs_published_through: prediction_inputs_published_through,
 )
 grain (tree_id)
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_predictions_v{data_version}.parquet`;
+file [
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/arbue_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aumel_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caajx_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cabur_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cacal_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caedm_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cahfx_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cakel_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cakgn_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/calet_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/calon_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camis_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camon_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camtl_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/canwe_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caott_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caque_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cator_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavan_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavic_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cawpg_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cobog_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/czprg_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/deber_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/dkcph_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/fihel_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frpar_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gblon_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grath_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grsan_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/jptyo_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlams_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/twtpe_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usatl_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usaus_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbtv_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usclt_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usden_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usdur_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ushou_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslax_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnap_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnol_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnva_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussto_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ustem_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uswas_tree_predictions_v{data_version}.parquet`,
+];

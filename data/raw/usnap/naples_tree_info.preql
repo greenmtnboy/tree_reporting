@@ -60,7 +60,8 @@ root partial datasource usnap_osm_tree_info extends tree_partition (
     data_source: usnap_source,
 )
 complete where city = 'USNAP' and usnap_source = 'OSM_USNAP'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usnap_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usnap_osm_staging.parquet`
+where (raw_latitude >= 26.05 and raw_latitude < 26.3 and raw_longitude >= -81.85 and raw_longitude < -81.7);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

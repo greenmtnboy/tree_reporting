@@ -18,6 +18,7 @@ export const SUMMARY_FILTER_FIELDS = [
   'growth_rate',
   'wildlife_value',
   'fire_risk',
+  'plant_year',
 ] as const
 export type SummaryFilterField = (typeof SUMMARY_FILTER_FIELDS)[number]
 
@@ -39,6 +40,7 @@ const SUMMARY_FILTER_META: SummaryFilterMeta[] = [
   { id: 'growth-rate', field: 'growth_rate', label: 'Growth rate', format: formatSummaryFilterValue },
   { id: 'wildlife-value', field: 'wildlife_value', label: 'Wildlife value', format: formatSummaryFilterValue },
   { id: 'fire-risk', field: 'fire_risk', label: 'Fire risk', format: formatSummaryFilterValue },
+  { id: 'plant-year', field: 'plant_year', label: 'Planted' },
 ]
 
 const SOURCE_BY_FIELD: Record<SummaryFilterField, string> = {
@@ -52,6 +54,7 @@ const SOURCE_BY_FIELD: Record<SummaryFilterField, string> = {
   growth_rate: 'growth-rate',
   wildlife_value: 'wildlife-value',
   fire_risk: 'fire-risk',
+  plant_year: 'plant-year',
 }
 
 const SUMMARY_FILTER_META_BY_FIELD = new Map(
@@ -170,8 +173,9 @@ function getActiveFilterSummary() {
   for (const selection of crossFilters.getSelections()) {
     const sourceFilters = grouped.get(selection.source) ?? {}
     for (const [field, entry] of Object.entries(selection.filters)) {
-      if (entry.op !== 'eq' || typeof entry.value !== 'string') continue
-      sourceFilters[field] = normalizeValues([...(sourceFilters[field] ?? []), entry.value])
+      // A year arrives as a number; every other field as text.
+      if (entry.op !== 'eq' || (typeof entry.value !== 'string' && typeof entry.value !== 'number')) continue
+      sourceFilters[field] = normalizeValues([...(sourceFilters[field] ?? []), String(entry.value)])
     }
     grouped.set(selection.source, sourceFilters)
   }

@@ -60,7 +60,8 @@ root partial datasource jptyo_osm_tree_info extends tree_partition (
     borough: ?borough,
 )
 complete where city = 'JPTYO' and jptyo_source = 'OSM_JPTYO'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/jptyo_osm_staging.parquet`;
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/jptyo_osm_staging.parquet`
+where (raw_latitude >= 35.48 and raw_latitude < 35.9 and raw_longitude >= 138.93 and raw_longitude < 139.95);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

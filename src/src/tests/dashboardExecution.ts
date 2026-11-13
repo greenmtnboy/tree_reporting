@@ -5,10 +5,13 @@ import {
   FIXTURE_ECOREGIONS,
   FIXTURE_SPECIES,
   FIXTURE_TREES,
+  canopyArea,
+  crownClass,
   dbhClass,
   fixtureFieldValue,
   nativeLocalityBucket,
   plantYear,
+  sourceKind,
   type FixtureTree,
 } from './dashboardFixtures'
 import { cityContext, type DashboardQueryCase, type QueryState } from './dashboardQueryCatalog'
@@ -119,18 +122,28 @@ function summaryGrain(grain: string, tree: FixtureTree): Record<string, unknown>
       return { map_cell_latitude: roundTo(tree.latitude, 3), map_cell_longitude: roundTo(tree.longitude, 3) }
     case 'coarse_cell':
       return { map_coarse_cell_latitude: roundTo(tree.latitude, 2), map_coarse_cell_longitude: roundTo(tree.longitude, 2) }
+    case 'origin':
+      return { source_kind: sourceKind(tree) }
+    case 'crown':
+      return { crown_class: crownClass(tree) }
     default:
       throw new Error(`No fixture rows for summary grain ${grain}`)
   }
 }
 
 function rollupRows(grain: string): Array<Record<string, unknown>> {
-  const counts = new Map<string, Record<string, unknown> & { rollup_tree_count: number }>()
+  type SummaryRow = Record<string, unknown> & { rollup_tree_count: number; rollup_canopy_area_m2?: number | null }
+  const counts = new Map<string, SummaryRow>()
   for (const tree of FIXTURE_TREES) {
     const bucket = summaryGrain(grain, tree)
     const key = JSON.stringify([tree.city, tree.species, bucket])
     const row = counts.get(key) ?? { city: tree.city, species: tree.species, ...bucket, rollup_tree_count: 0 }
     row.rollup_tree_count += 1
+    // The crown summary stores the crown area summed beside the count.
+    if (grain === 'crown') {
+      const area = canopyArea(tree)
+      if (area != null) row.rollup_canopy_area_m2 = (row.rollup_canopy_area_m2 ?? 0) + area
+    }
     counts.set(key, row)
   }
   return [...counts.values()]
@@ -303,6 +316,39 @@ export function checkResult(
     }
   }
 
+  if (id === 'summary:identified-trees') {
+    const identified = expected.filter((tree) => !isSpeciesSentinel(tree.species)).length
+    const actual = numeric(rows[0]?.identified_trees) ?? 0
+    if (actual !== identified) {
+      return `identified_trees = ${actual}, fixtures say ${identified}`
+    }
+  }
+
+  // Crown area is the crowns summed as circles; the sized trees are the ones
+  // with a crown width at all.
+  if (id === 'summary:canopy-total' || id === 'species:sp-canopy-total') {
+    const areas = expected.map(canopyArea).filter((area): area is number => area != null)
+    const wanted = areas.reduce((sum, area) => sum + area, 0)
+    const actual = numeric(rows[0]?.canopy_area) ?? 0
+    if (Math.abs(actual - wanted) > 1e-6) {
+      return `canopy_area = ${actual}, fixtures say ${wanted}`
+    }
+    const sized = numeric(rows[0]?.sized_trees) ?? 0
+    if (sized !== areas.length) {
+      return `sized_trees = ${sized}, fixtures say ${areas.length}`
+    }
+  }
+
+  // The source split counts every tree once, and its identified part is the
+  // trees whose species is a taxon.
+  if (id === 'summary:tree-sources') {
+    const identified = expected.filter((tree) => !isSpeciesSentinel(tree.species)).length
+    const actual = rows.reduce((sum, row) => sum + (numeric(row.identified_count) ?? 0), 0)
+    if (actual !== identified) {
+      return `identified_count sums to ${actual}, fixtures say ${identified}`
+    }
+  }
+
   if (id === 'summary:unique-species') {
     const distinct = new Set(
       expected.map((tree) => tree.species).filter((species) => !isSpeciesSentinel(species)),
@@ -313,14 +359,16 @@ export function checkResult(
     }
   }
 
-  // A species native to several ecoregions fans out to one row per ecoregion;
-  // a tree whose best match is the city's own ecoregion or biome is a full fit.
-  if (id === 'summary:local-native-share' || id === 'species:sp-biome-fit') {
+  // Of the identified trees, the share whose species' best match is the
+  // city's own ecoregion or biome. An unidentified tree has no native range
+  // and is in neither the numerator nor the denominator.
+  if (id === 'summary:local-native-share') {
     const context = cityContext(queryCase.state.city)
-    const fits = expected.filter((tree) =>
+    const identified = expected.filter((tree) => !isSpeciesSentinel(tree.species))
+    const fits = identified.filter((tree) =>
       ['Native', 'Same biome, non-native'].includes(nativeLocalityBucket(tree, context) ?? ''),
     ).length
-    const wanted = expected.length ? fits / expected.length : null
+    const wanted = identified.length ? fits / identified.length : null
     const actual = numeric(rows[0]?.biome_fit_pct)
     if (wanted != null && (actual == null || Math.abs(actual - wanted) > 1e-6)) {
       return `biome_fit_pct = ${actual}, fixtures say ${wanted}`
@@ -410,6 +458,10 @@ const BUCKET_CHART_FIELDS: Record<string, string> = {
   'species:sp-wildlife-value': 'wildlife_value',
   'species:sp-growth-rate': 'growth_rate',
   'species:sp-fire-risk': 'fire_risk',
+  'summary:trunk-size': 'dbh_class_label',
+  'summary:crown-size': 'crown_class_label',
+  'summary:tree-sources': 'source_kind',
+  'species:sp-crown-size': 'crown_class_label',
   'summary:plant-year': 'plant_year',
   'species:sp-age-distribution': 'planted_year',
   'species:sp-size-distribution': 'dbh_class_label',

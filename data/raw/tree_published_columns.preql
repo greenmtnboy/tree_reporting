@@ -1,0 +1,12 @@
+# Columns a published tree parquet carries that tree_common does not declare,
+# for the models that read published parquets rather than build them: the
+# rollup's source view (full_tree_info_source.preql), the heights' source
+# view (tree_height_source.preql) and each city's derived model
+# (city_derived.preql), which reads its own city's parquet. Declared once so
+# the three agree on the concepts while each binds them to its own file.
+
+import tree_common;
+
+property tree_id.data_source string; # originating dataset, as every city materialises it and the rollup carries it
+property tree_id.height_m float; # tree height in metres from a LIDAR canopy survey, as the city published it; null where the tree is under no surveyed crown
+property tree_id.height_crown_radius_m float; # radius in metres of the crown height_m came from, as the city published it

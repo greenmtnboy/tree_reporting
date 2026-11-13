@@ -14,9 +14,11 @@
 # browser reads the parquet through tree_rollup_source.preql, whose root
 # carries the same datasource name and the same `rollup_tree_count`.
 #
-# Five grains. Each finer one adds a tree-level bucket from
-# tree_summary_grains.preql to (city, species): plant year, DBH class and the
-# dot map's cells. Species stays in every grain because every page filter is
+# Seven grains. Each finer one adds a tree-level bucket to (city, species):
+# plant year, DBH class and the dot map's cells from
+# tree_summary_grains.preql, and two the browser cannot derive for itself and
+# so reads as stored columns: the kind of source a tree came from, and its
+# crown width class (with the crown area summed beside the count). Species stays in every grain because every page filter is
 # a species property, so a filtered chart is still a re-sum. A chart is served
 # only when it groups by the bucket concept itself, under its own name
 # (pytrilogy #827); the dashboard queries are written that way. They are
@@ -28,6 +30,7 @@
 import tree_common;
 import tree_summary_grains;
 import full_tree_info_source;
+import tree_predictions_source;
 import tree_enrichment_source;
 import ecoregion_info_source;
 
@@ -111,6 +114,64 @@ file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_ro
 freshness by rollup_inputs_published_through
 order by city asc, species asc
 storage (row_group_size = 20480)
+assert @kept_by(species, city, 0.75);
+
+# Where each tree came from, as a kind rather than a dataset name. The labels
+# follow one convention (DATA_SOURCES in shared/ingest.py; tree_dedup.preql's
+# `source_class` reads it the same way): `COMMUNITY_{code}`, `OSM_{code}`,
+# `SATELLITE_{code}`, `PREDICTED_{code}`, and anything else is a municipal
+# dataset. The browser's scope has no tree-level `data_source` string to
+# derive this from, so its root binds `source_kind` as a stored column.
+auto source_kind <- case
+    when substring(data_source, 1, 10) = 'COMMUNITY_' then 'community'
+    when substring(data_source, 1, 10) = 'SATELLITE_' then 'satellite'
+    when substring(data_source, 1, 4) = 'OSM_' then 'osm'
+    when substring(data_source, 1, 10) = 'PREDICTED_' then 'predicted'
+    else 'municipal'
+end;
+
+datasource tree_rollup_origin (
+    city,
+    species,
+    source_kind,
+    rollup_tree_count,
+    rollup_inputs_published_through,
+)
+grain (city, species, source_kind)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_origin_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_rollup_origin_v{data_version}.parquet`
+freshness by rollup_inputs_published_through
+order by city asc, species asc
+assert @kept_by(species, city, 0.75);
+
+# Crown width: the one a source observed (a survey's crown spread, an OSM
+# diameter_crown tag, a crown read from imagery), else the allometric estimate
+# tree_predictions publishes. Five classes in metres; null where the tree has
+# neither. The crown's area as a circle is summed beside the count, so a
+# species' share of the canopy can be set against its share of the stems.
+auto canopy_width_m <- coalesce(crown_width_m, predicted_crown_width_m);
+auto crown_class <- case
+    when canopy_width_m is null then null
+    when canopy_width_m < 3 then 1
+    when canopy_width_m < 5 then 2
+    when canopy_width_m < 8 then 3
+    when canopy_width_m < 12 then 4
+    else 5
+end;
+auto canopy_area_m2 <- 3.141592653589793 * (canopy_width_m / 2) * (canopy_width_m / 2);
+auto rollup_canopy_area_m2 <- sum(canopy_area_m2);
+
+datasource tree_rollup_crown (
+    city,
+    species,
+    crown_class,
+    rollup_tree_count,
+    ?rollup_canopy_area_m2,
+    rollup_inputs_published_through,
+)
+grain (city, species, crown_class)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/tree_rollup_crown_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/tree_rollup_crown_v{data_version}.parquet`
+freshness by rollup_inputs_published_through
+order by city asc, species asc
 assert @kept_by(species, city, 0.75);
 
 # The mean position of each city's trees: where the Species page's world map
