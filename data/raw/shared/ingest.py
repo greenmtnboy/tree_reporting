@@ -2284,9 +2284,9 @@ DEDUP_CELL_METRES: dict[str, int] = {
     # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
     # 11,366 staged OSM nodes against 23,842 anchors.  Mutual-NN 72.3% in
     # 5-10 m, 44.4% in 10-20 m (n=90): a 10 m guarantee caps it at 20.
-    # Marginal table: 10->14 removes 23 duplicates for 14 hidden trees (1.64),
-    # 14->20 removes 22 for 25 (0.88), so 14 m.
-    "USDUR": 14,
+    # Marginal table over the calibrated sizes: 10->20 removes 45 duplicates
+    # for 39 hidden trees (1.15), so 20 m.
+    "USDUR": 20,
     # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
     # 24,731 staged OSM nodes against 215,139 anchors.  Mutual-NN 61.6% in
     # 5-10 m, 28.8% in 10-20 m (n=594): a 10 m guarantee caps it at 20.
@@ -2296,9 +2296,9 @@ DEDUP_CELL_METRES: dict[str, int] = {
     # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
     # 9,048 staged OSM nodes against 59,157 anchors.  Mutual-NN 60.4% in
     # 5-10 m, 34.3% in 10-20 m (n=312): a 10 m guarantee caps it at 20.
-    # Marginal table: 10->14 removes 59 duplicates for 58 hidden trees (1.02),
-    # 14->20 removes 52 for 119 (0.44), so 14 m.
-    "USAUS": 14,
+    # Marginal table: 8->10 removes 36 duplicates for 31 hidden trees (1.16),
+    # 10->20 removes 111 for 177 (0.63), so 10 m.
+    "USAUS": 10,
     # Calibrated 2026-11-06 on the first build (31,351 staged OSM nodes against
     # 37,828 Arlington and Falls Church anchors).  Mutual-NN 92.1% in the 2-5 m
     # band (n=581) collapsing to 31.8% in 5-10 m (n=264): guarantee 5 m.
