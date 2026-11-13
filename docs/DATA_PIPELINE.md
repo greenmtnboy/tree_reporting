@@ -120,6 +120,11 @@ Rules:
 
 ## The species feed (`website/publish_species.py`)
 
+The manually published, immutable heat/water study bundles use the same
+create-only object-storage mechanism. Their schema, reproduction commands and
+source-combination rules are in [Context releases](CONTEXT_RELEASES.md). They
+are separate from daily city/core jobs and never change the tree pipeline.
+
 `publish-website-species` runs on the core's daily schedule, after the rollup,
 enrichment and ecoregion producers, with `when = "always"` so independently
 updated cities still reach the site. It reads generation-pinned city parquets,
