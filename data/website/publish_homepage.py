@@ -278,11 +278,12 @@ class HmacClient:
             if (root.findtext(tag("IsTruncated"), namespaces=ns) or "false").lower() != "true":
                 return found
 
-    def put(self, bucket: str, name: str, body: bytes, *, if_generation_match: int) -> int:
+    def put(self, bucket: str, name: str, body: bytes, *, if_generation_match: int,
+            content_type: str = CONTENT_TYPE, cache_control: str = CACHE_CONTROL) -> int:
         """Upload; returns the new generation. 412 means another run published first."""
         headers = {
-            "content-type": CONTENT_TYPE,
-            "cache-control": CACHE_CONTROL,
+            "content-type": content_type,
+            "cache-control": cache_control,
             "x-goog-if-generation-match": str(if_generation_match),
         }
         try:
