@@ -2257,20 +2257,48 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USCLT": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USNAP": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 23,187 staged OSM nodes against 191,412 inventory anchors.  Mutual-NN
+    # 95.8% in 2-5 m, 42.5% in 5-10 m (n=1,002): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 243 duplicates for 137 hidden trees (1.77),
+    # 8->10 removes 122 for 230 (0.53), so 8 m is where the paying stops.
+    "USCLT": 8,
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 12,738 staged OSM nodes against 29,366 anchors.  Mutual-NN 70.2% in
+    # 2-5 m, 8.7% in 5-10 m (n=23): a 5 m guarantee.  Marginal table: 2->4
+    # removes 81 duplicates for 17 hidden trees (4.76), 4->6 removes 10 for 16
+    # (0.62), so the paying stops at 4 m.
+    "USNAP": 4,
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 10,878 staged OSM nodes against 98,921 Trees Atlanta plantings.  Mutual-NN
+    # 85.3% in 2-5 m, 57.1% in 5-10 m (n=163, a coin flip): a 5 m guarantee,
+    # a 10 m cell.  Marginal table agrees: 8->10 removes 31 for 25 (1.24),
+    # 10->14 removes 48 for 78 (0.62).
     "USATL": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USNOL": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USDUR": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 941 staged OSM nodes against 104,407 anchors.  Mutual-NN stays above 60%
+    # through 20 m, so the band rule says nothing and the marginal table
+    # decides: 6->8 removes 29 duplicates for 2 hidden trees (14.5), 8->10
+    # removes 5 for 10 (0.50).
+    "USNOL": 8,
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 11,366 staged OSM nodes against 23,842 anchors.  Mutual-NN 72.3% in
+    # 5-10 m, 44.4% in 10-20 m (n=90): a 10 m guarantee caps it at 20.
+    # Marginal table: 10->14 removes 23 duplicates for 14 hidden trees (1.64),
+    # 14->20 removes 22 for 25 (0.88), so 14 m.
+    "USDUR": 14,
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 24,731 staged OSM nodes against 215,139 anchors.  Mutual-NN 61.6% in
+    # 5-10 m, 28.8% in 10-20 m (n=594): a 10 m guarantee caps it at 20.
+    # Marginal table: 8->10 removes 68 duplicates for 36 hidden trees (1.89),
+    # 10->14 removes 62 for 98 (0.63), so 10 m.
     "USHOU": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USAUS": 10,
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 9,048 staged OSM nodes against 59,157 anchors.  Mutual-NN 60.4% in
+    # 5-10 m, 34.3% in 10-20 m (n=312): a 10 m guarantee caps it at 20.
+    # Marginal table: 10->14 removes 59 duplicates for 58 hidden trees (1.02),
+    # 14->20 removes 52 for 119 (0.44), so 14 m.
+    "USAUS": 14,
     # Calibrated 2026-11-06 on the first build (31,351 staged OSM nodes against
     # 37,828 Arlington and Falls Church anchors).  Mutual-NN 92.1% in the 2-5 m
     # band (n=581) collapsing to 31.8% in 5-10 m (n=264): guarantee 5 m.
