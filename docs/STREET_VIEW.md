@@ -1,42 +1,29 @@
 # Tree card Street View
 
-The tree card opens a Google Maps Embed API iframe requesting the nearest outdoor
-Street View panorama within 100 metres. Visitors can look around inside the
-iframe. A separate, non-interactive MapLibre inset uses the app's existing CARTO
-basemap and marks the selected tree. It does not track the Street View camera.
-The iframe does not expose camera coordinates or direction, so automatic
-“Face tree”, live camera arrows, and synchronized minimap movement are unavailable.
-No heading is guessed. Imagery can predate the tree and is not a confirmation.
+Street View loads the Maps JavaScript API on demand. The inset marks the tree
+in green and the actual panorama camera in blue, with an arrow that tracks its
+heading as visitors turn or navigate. The map fits both locations. Full screen
+expands the entire workspace: side by side on desktop and stacked on phones.
+Closing restores focus and releases the maps, observers and panorama listeners.
+
+Move tree / set species and Report missing tree open the existing reviewed
+correction form alongside the panorama. These are remote suggestions, not visits
+or check-ins. Imagery can predate a tree; reports are reviewed before publication.
 
 ## Configuration and billing
 
-The GitHub Pages build still reads `VITE_GOOGLE_MAPS_API_KEY` from the `deploy`
-environment's secret (repository secrets also work). Enable **Maps Embed API** in
-the project that owns this key and allow **Maps Embed API** in the key's API
-restrictions. This feature no longer needs Maps JavaScript API or Street View
-Static API. Remove those from this key's allowed APIs if nothing else uses them.
+The build reads `VITE_GOOGLE_MAPS_API_KEY`. Enable **Maps JavaScript API** on its
+Google Cloud project and in the key's API restrictions. An Embed-only key will
+no longer suffice. Restrict HTTP referrers to the deployed website (and use a
+separate development key for localhost). Key changes require a rebuild.
 
-Restrict the key to the website's HTTP referrers, e.g.
-`https://greenmtnboy.github.io/*`. The iframe explicitly uses
-`strict-origin-when-cross-origin`, which sends the origin for key validation.
-The existing secret can be retained; changing its value requires a rebuild.
-For local live verification, use an untracked `src/.env.local` and a development
-key restricted to the local website origin.
+Interactive panoramas incur Google's Dynamic Street View usage charges; configure
+billing quotas and alerts for the project. The inset remains MapLibre/CARTO.
+See https://developers.google.com/maps/documentation/javascript/usage-and-billing.
 
-Maps Embed API currently has unlimited no-charge usage. The application creates
-no Google Maps JavaScript map or panorama instances and makes no metadata API
-requests. The inset uses the same basemap provider as the main map.
-See https://developers.google.com/maps/documentation/embed/usage-and-billing.
-
-## Loading and limitations
-
-Google content loads only when the visitor opens the dialog. Missing configuration
-shows a message and an external Google Maps link. Google displays API-key and
-imagery errors inside its iframe; the parent cannot inspect that cross-origin
-content, and an iframe load event does not prove that imagery succeeded. The
-external link remains available for unavailable or blocked embeds. Closing removes
-the iframe and releases the inset map. The native modal provides focus containment,
-Escape to close, and focus restoration.
+Missing configuration, failed loading and unavailable imagery have status messages
+and an external Google Maps link. Google may display key/billing errors inside
+its panorama. No live Google key is required by the mocked component tests.
 
 Unknown species display a muted text question mark in the same responsive space
 as a tree photo, with “Species not recorded” beneath it. No image asset, GCS
@@ -48,4 +35,4 @@ check-in count read reports zero. Unknown counts (loading, offline, or missing
 Firebase configuration) do not imply zero. Reviewed `SATELLITE_*` records and
 predictions with check-ins never display the note.
 
-API reference: https://developers.google.com/maps/documentation/embed/embedding-map
+API reference: https://developers.google.com/maps/documentation/javascript/streetview

@@ -319,9 +319,22 @@
   </Teleport>
 
   <StreetViewDialog v-if="streetViewOpen && selectedTreeAnchor"
-    :position="{ lat: selectedTreeAnchor[1], lng: selectedTreeAnchor[0] }" @close="streetViewOpen = false" />
+    :position="{ lat: selectedTreeAnchor[1], lng: selectedTreeAnchor[0] }" @close="streetViewOpen = false; checkinDialog = null">
+    <template #feedback>
+      <template v-if="firebaseAvailable">
+        <button type="button" @click="openCheckin('update')">Move tree / set species</button>
+        <button type="button" @click="openCheckin('missing')">Report missing tree</button>
+        <p>Imagery may be old. All corrections are reviewed.</p>
+        <CheckinDialog v-if="checkinDialog" :key="checkinDialog.mode" inline
+          :tree-id="checkinDialog.treeId" :tree-lat="checkinDialog.lat" :tree-lng="checkinDialog.lng"
+          :species="checkinDialog.species" :tree-form="checkinDialog.treeForm" :dbh-inches="checkinDialog.dbhInches"
+          :plant-year="checkinDialog.plantYear" :initial-mode="checkinDialog.mode" :city="selectedCity"
+          remote-correction @close="checkinDialog = null" @success="handleCheckinSuccess" />
+      </template>
+    </template>
+  </StreetViewDialog>
   <CheckinDialog
-    v-if="checkinDialog"
+    v-if="checkinDialog && !streetViewOpen"
     :tree-id="checkinDialog.treeId"
     :tree-lat="checkinDialog.lat"
     :tree-lng="checkinDialog.lng"

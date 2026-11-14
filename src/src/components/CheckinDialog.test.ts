@@ -31,12 +31,12 @@ vi.mock('./SubmitLocationPicker.vue', () => ({
 let app: App
 let host: HTMLDivElement
 const root = document.body
-async function mount(remoteCorrection: boolean) {
+async function mount(remoteCorrection: boolean, initialMode?: 'missing', inline = false) {
   host = document.createElement('div')
   document.body.append(host)
   app = createApp(CheckinDialog, {
     treeId: 'community-long-tree-id', treeLat: 37.775, treeLng: -122.419,
-    species: 'Quercus laurifolia', dbhInches: 35.6, remoteCorrection,
+    species: 'Quercus laurifolia', dbhInches: 35.6, remoteCorrection, initialMode, inline,
   })
   app.component('RouterLink', defineComponent({ setup(_, { slots }) { return () => h('a', slots.default?.()) } }))
   app.mount(host)
@@ -76,6 +76,23 @@ describe('desktop corrections', () => {
     }))
     expect(mocks.checkin).not.toHaveBeenCalled()
     expect(root.textContent).toContain('Thanks — report sent.')
+  })
+
+  it('submits a missing-tree suggestion inline without recording a visit', async () => {
+    await mount(true, 'missing', true)
+    expect(host.querySelector('[role="region"]')).not.toBeNull()
+    expect(root.textContent).toContain('Report missing tree')
+    expect(mocks.locate).not.toHaveBeenCalled()
+    const reason = root.querySelector<HTMLInputElement>('input[value="never-existed"]')!
+    reason.checked = true
+    reason.dispatchEvent(new Event('change', { bubbles: true }))
+    await nextTick()
+    submitButton().click()
+    await settle()
+    expect(mocks.submit).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'missing', missingReason: 'never-existed', distanceMeters: null,
+    }))
+    expect(mocks.checkin).not.toHaveBeenCalled()
   })
 
   it('rejects unchanged and invalid values, and allows retry after a failed submission', async () => {
