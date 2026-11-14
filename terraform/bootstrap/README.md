@@ -42,7 +42,8 @@ Notes:
 
 - Projects created after April 28, 2025 no longer include `localhost` as an authorized domain by default, so add it manually for local development if needed.
 - Enter hostnames only in Authorized domains, for example `localhost` or `greenmtnboy.github.io`, not full URLs, ports, or paths.
-- The app is served from both `greenmtnboy.github.io` (`/tree_reporting/`) and `arborary.world` (`/explore/`); both hostnames must be listed. The Google Maps API key's HTTP referrer restrictions need the same two hosts (`https://arborary.world/*`).
+- Authorized domains are managed by Terraform (`authorized_domains` in `auth.tf`), and the list is authoritative: a domain added only in the console is removed on the next apply. The app is served from `greenmtnboy.github.io` (`/tree_reporting/`) and `arborary.world` (`/explore/`). The Google Maps API key's HTTP referrer restrictions (not in Terraform) need the same two hosts (`https://arborary.world/*`).
+- `tools/terraform.exe` on the workstation is the 32-bit build. Its 32-bit Google provider crashes reading the 12-digit project number during a full plan; `-target` plans that avoid those resources work, and an amd64 Terraform fixes it.
 - The app links a signed-in anonymous user to Google when possible so existing submissions keep the same Firebase `uid`.
 
 ## One-way doors
