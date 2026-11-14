@@ -8,7 +8,9 @@
       // Apply the saved/system preference before the app or stylesheet paints.
       (() => {
         let theme = 'system'
-        try { theme = localStorage.getItem('urban-trees-theme') || 'system' } catch {}
+        // Falls back to arborary.world's toggle (same origin when served at
+        // /explore/); keep in step with storedPreference in useTheme.ts.
+        try { theme = localStorage.getItem('urban-trees-theme') || localStorage.getItem('vitepress-theme-appearance') || 'system' } catch {}
         const dark = theme === 'dark' || (theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
         document.documentElement.dataset.theme = dark ? 'dark' : 'light'
         document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
@@ -17,7 +19,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script data-goatcounter="https://sf-tree-reporting.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
-    <title>Urban Trees</title>
+    <title>Tree Explorer</title>
   </head>
   <body>
     <div id="app"></div>

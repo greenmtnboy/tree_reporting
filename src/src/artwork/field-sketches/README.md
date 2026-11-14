@@ -47,7 +47,7 @@ labels with 12 botanical sketches. `biomeSketch.test.ts` fails if a future city'
 unmapped. The all-cities view retains the broadleaf study. The studio lists
 the cities using each drawing from the same context and mapping.
 The smaller city study lives inside
-`AppSidebar.vue` behind the Urban Trees name block. The studio uses the same renderer and
+`AppSidebar.vue` behind the Tree Explorer name block. The studio uses the same renderer and
 originals, so edits appear in both through Vite's hot reload.
 
 ## Generate the city

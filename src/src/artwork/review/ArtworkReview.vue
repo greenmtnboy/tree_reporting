@@ -33,7 +33,7 @@ watchEffect(() => {
   <div class="studio">
     <header class="studio-header">
       <div>
-        <p class="eyebrow">Urban Trees / Artwork</p>
+        <p class="eyebrow">Tree Explorer / Artwork</p>
         <h1>Field sketch studio</h1>
         <p class="intro">A closer look at the lines behind the landscape.</p>
       </div>
@@ -85,8 +85,7 @@ watchEffect(() => {
               <FieldSketch :key="`${selected}-${growthReplay}`" :name="selected" :grow="selected !== 'city'" class="context-study" :style="{ opacity: appOpacity }" />
               <div v-if="panel" class="panel-veil"></div>
               <div v-if="selected === 'city'" class="brand-preview">
-                <strong>Urban Trees</strong>
-                <span>The Concrete Jungle</span>
+                <strong>Tree Explorer</strong>
               </div>
               <div v-else class="context-label">
                 <span class="eyebrow">Lower right</span>

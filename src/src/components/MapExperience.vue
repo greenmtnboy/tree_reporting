@@ -1,7 +1,7 @@
 <template>
   <section v-if="showEntry" class="map-entry" aria-labelledby="map-entry-title">
     <div class="map-entry-card">
-      <span class="eyebrow">Urban Trees</span>
+      <span class="eyebrow">Tree Explorer</span>
       <h1 id="map-entry-title">Discover the trees around you.</h1>
       <p>Get to know your neighborhood, or explore an entire city.</p>
       <div class="entry-actions">

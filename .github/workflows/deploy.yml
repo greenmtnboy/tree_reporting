@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # write: the rolling explorer-latest release that arborary.world deploys from.
+  contents: write
   pages: write
   id-token: write
 
@@ -84,6 +85,60 @@ jobs:
           # Optional: the identify button is hidden when unset.
           VITE_PLANTNET_API_KEY: ${{ vars.VITE_PLANTNET_API_KEY }}
         run: pnpm build
+
+      # arborary.world serves the same app at /explore/. Its site repo
+      # (arborary-world/website) owns every file on that host and deletes what
+      # its own build does not contain, so the explorer is not pushed there:
+      # this job publishes a bundle built for the /explore/ base, and the
+      # website build unpacks it into its output on every deploy.
+      - name: Build for arborary.world/explore/
+        working-directory: src
+        env:
+          APP_BASE: /explore/
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          VITE_PLANTNET_API_KEY: ${{ vars.VITE_PLANTNET_API_KEY }}
+        # public/data holds local fixture parquets nothing in the app reads;
+        # leave them out of a bundle that is uploaded file by file over FTPS.
+        run: |
+          pnpm exec vite build --outDir dist-arborary
+          rm -rf dist-arborary/data
+          grep -q 'src="/explore/assets/' dist-arborary/index.html
+          tar -czf explorer.tar.gz -C dist-arborary .
+
+      - name: Publish the arborary.world bundle
+        working-directory: src
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # One rolling release; the website always takes its latest asset.
+        run: |
+          if ! gh release view explorer-latest >/dev/null 2>&1; then
+            gh release create explorer-latest --title "Tree Explorer (arborary.world build)" \
+              --notes "Rolling build of src/ for arborary.world/explore/, replaced on every deploy of main. Not a versioned release." \
+              --latest=false
+          fi
+          gh release upload explorer-latest explorer.tar.gz --clobber
+          echo "${GITHUB_SHA}" > explorer-commit.txt
+          gh release upload explorer-latest explorer-commit.txt --clobber
+
+      # Optional: redeploy arborary.world now rather than on its next push.
+      # Needs a fine-grained token with Contents read/write on
+      # arborary-world/website, stored as WEBSITE_DISPATCH_TOKEN.
+      - name: Ask arborary.world to redeploy
+        env:
+          GH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::WEBSITE_DISPATCH_TOKEN not set; arborary.world picks up this build on its next deploy."
+            exit 0
+          fi
+          gh api repos/arborary-world/website/dispatches \
+            -f event_type=explorer-published -f "client_payload[commit]=${GITHUB_SHA}"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

@@ -42,6 +42,9 @@ Notes:
 
 - Projects created after April 28, 2025 no longer include `localhost` as an authorized domain by default, so add it manually for local development if needed.
 - Enter hostnames only in Authorized domains, for example `localhost` or `greenmtnboy.github.io`, not full URLs, ports, or paths.
+- Authorized domains are managed by Terraform (`authorized_domains` in `auth.tf`), and the list is authoritative: a domain added only in the console is removed on the next apply. The app is served from `greenmtnboy.github.io` (`/tree_reporting/`) and `arborary.world` (`/explore/`).
+- The Street View key (`VITE_GOOGLE_MAPS_API_KEY`, console name `embed-sf-tree-reporting`) is restricted to the Maps Embed API, not by referrer, so a new host needs no key change. If a referrer allow list is ever added, it must name both hosts.
+- Use a 64-bit (windows_amd64) Terraform. The 32-bit build's Google provider crashes reading the 12-digit project number during a plan.
 - The app links a signed-in anonymous user to Google when possible so existing submissions keep the same Firebase `uid`.
 
 ## One-way doors

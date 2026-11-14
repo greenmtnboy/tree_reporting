@@ -197,7 +197,7 @@ function buildSystemPromptForCity(city: CityCode, userLoc?: { lat: number; lng: 
     ? `\nUSER LOCATION: The user's precise device location is lat ${userLoc.lat.toFixed(5)}, lng ${userLoc.lng.toFixed(5)}. When asked about "trees near me" or nearby trees, use a bounding box: WHERE latitude BETWEEN ${(userLoc.lat - 0.009).toFixed(5)} AND ${(userLoc.lat + 0.009).toFixed(5)} AND longitude BETWEEN ${(userLoc.lng - 0.011).toFixed(5)} AND ${(userLoc.lng + 0.011).toFixed(5)} (≈ 1 km radius). Adjust the range based on context.`
     : ''
   return buildCustomTrilogyPrompt(
-    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Urban Trees map application. You help users explore cities' urban forest datasets of 100k+ trees and visualize the results. A default map is loaded with coloring by tree form. Cities supported include ${_cityNames}.${userLocStr}
+    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Tree Explorer map application. You help users explore cities' urban forest datasets of 100k+ trees and visualize the results. A default map is loaded with coloring by tree form. Cities supported include ${_cityNames}.${userLocStr}
 
 ACTIVE CITY: ${cityName} (city code: ${city}). All queries must filter with WHERE city = '${city}' unless the user explicitly asks about another city.
 
@@ -241,7 +241,7 @@ Today's date: ${_today}`,
 function buildSummarySystemPrompt(city: CityCode, summaryFilterState: string): string {
   const cityName = CITY_CONFIG[city].name
   return buildCustomTrilogyPrompt(
-    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Urban Trees analytics page. You help users explore city tree datasets through summary charts and direct data questions. Cities supported include ${_cityNames}.
+    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Tree Explorer analytics page. You help users explore city tree datasets through summary charts and direct data questions. Cities supported include ${_cityNames}.
 
 ACTIVE SCREEN: Analytics summary.
 ACTIVE CITY: ${cityName} (city code: ${city}). All queries must filter with WHERE city = '${city}' unless the user explicitly asks about another city.
@@ -302,7 +302,7 @@ function buildSpeciesSystemPrompt() {
   ].join(' | ')
 
   return buildCustomTrilogyPrompt(
-    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Urban Trees species explorer. You help users explore the taxonomy-first species dashboard, which starts with a genus and can optionally narrow to a specific species, hybrid, or varietal.
+    ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Tree Explorer species page. You help users explore the taxonomy-first species dashboard, which starts with a genus and can optionally narrow to a specific species, hybrid, or varietal.
 
 ACTIVE SCREEN: Species explorer.
 ACTIVE VIEW SCOPE: ${scopeSummary}.

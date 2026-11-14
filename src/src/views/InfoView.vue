@@ -1,7 +1,7 @@
 <template>
   <div class="info-page">
     <div class="info-content">
-      <h1>About Urban Trees</h1>
+      <h1>About Tree Explorer</h1>
       <p class="info-lead">
         An interactive browser-based map of urban forests across multiple cities. Explore
         hundreds of thousands of street trees by location, species, and ecological
