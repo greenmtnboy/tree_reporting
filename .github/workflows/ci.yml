@@ -96,7 +96,8 @@ jobs:
       run: >
         uv run --no-project --with duckdb --with matplotlib --with numpy
         --with requests --with scipy --with "shapely>=2.1"
-        python -m unittest discover -s scripts/tests
+        --with pytest --with pyarrow --with rasterio --with pyproj --with statsmodels --with pillow
+        python -m pytest scripts/tests -q
 
   # Exercise the training/reviewer code with synthetic fixtures on CPU. Install
   # CPU wheels explicitly so this gate never downloads the Lambda CUDA stack.

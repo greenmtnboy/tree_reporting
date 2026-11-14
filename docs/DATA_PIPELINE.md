@@ -120,6 +120,11 @@ Rules:
 
 ## The species feed (`website/publish_species.py`)
 
+Current per-city heat/water observations publish to stable `duckdb/context/`
+paths through independent source-refresh jobs. Schemas, Trilogy source models
+and seed commands are in [Context data](CONTEXT_DATA.md). They do not publish
+tree snapshots or join environmental observations into the daily tree pipeline.
+
 `publish-website-species` runs on the core's daily schedule, after the rollup,
 enrichment and ecoregion producers, with `when = "always"` so independently
 updated cities still reach the site. It reads generation-pinned city parquets,

@@ -1,0 +1,3 @@
+# A source refresh, isolated from tree publication. Root-level call paths match
+# website_homepage.preql and the trilogy-cloud working-directory convention.
+call `./context/refresh_usbos.py`;

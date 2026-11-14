@@ -129,10 +129,19 @@ the relevant cached GeoJSON refreshes them. Generated exports, archives, and
 machine-local metadata are ignored by Git; presets such as
 `boston_sharing_frame.json` are versioned.
 
+## Boston canopy and summer heat
+
+`render_boston_canopy_grid.py` preserves the approved twelve-view desktop poster;
+`render_boston_canopy_mobile.py` shares its measurements and selects four larger
+views. Current city heat/water sources are published independently of these
+posters. See [Context data](../docs/CONTEXT_DATA.md) for the stable GCS paths,
+source adapters, Trilogy models and local seed commands. No frozen tree snapshots
+or poster replay bundles are published.
+
 ## Offline checks
 
 ```powershell
-uv run --no-project --with duckdb --with matplotlib --with numpy --with requests --with scipy --with "shapely>=2.1" python -m unittest discover -s scripts/tests
+uv run --no-project --with duckdb --with matplotlib --with numpy --with requests --with scipy --with "shapely>=2.1" --with pytest --with pyarrow --with rasterio --with pyproj --with statsmodels --with pillow python -m pytest scripts/tests -q
 ```
 
 These checks cover inventory-only selection, source opt-ins and color grouping, visibility and

@@ -1,0 +1,135 @@
+{
+  "source": "https://gbfs.lyft.com/gbfs/1.1/bos/en/station_information.json",
+  "documentation": "https://bluebikes.com/system-data",
+  "retrieved": "2026-11-13",
+  "snapshot_sha256": "46fc7850bf65fe236b9d6032a67fd69f65d99a22de5a40e1fa77e59f09d17a3d",
+  "use": "Landmark anchors only; bike-share data are not used as environmental measurements. Fixed nearest 500m cell, not neighborhood boundaries.",
+  "candidates": [
+    {
+      "place": "Brighton Center",
+      "anchor_lonlat": [
+        -71.15027189254761,
+        42.34894857235593
+      ],
+      "station_id": "f83512c9-0de8-11e7-991c-3863bb43a7d0",
+      "station_name": "Brighton Center - Washington St at Cambridge St"
+    },
+    {
+      "place": "Oak Square",
+      "anchor_lonlat": [
+        -71.16744293,
+        42.35062298
+      ],
+      "station_id": "2113555008851845550",
+      "station_name": "Oak Square - Washington St at Bigelow St"
+    },
+    {
+      "place": "Herter Park",
+      "anchor_lonlat": [
+        -71.13539289,
+        42.365723613644
+      ],
+      "station_id": "2035660824473983142",
+      "station_name": "Herter Park"
+    },
+    {
+      "place": "Fresh Pond",
+      "anchor_lonlat": [
+        -71.1429,
+        42.3832
+      ],
+      "station_id": "1331197c-f6c6-4f4a-a29b-95e580359886",
+      "station_name": "Fresh Pond Reservation"
+    },
+    {
+      "place": "Hyde Square",
+      "anchor_lonlat": [
+        -71.10984160567114,
+        42.32176525723952
+      ],
+      "station_id": "f834e1b2-0de8-11e7-991c-3863bb43a7d0",
+      "station_name": "Hyde Square - Centre St at Perkins St"
+    },
+    {
+      "place": "Newtonville",
+      "anchor_lonlat": [
+        -71.20764970779419,
+        42.351458116963016
+      ],
+      "station_id": "903b9b5d-4244-43e4-8441-0d17f9a994f7",
+      "station_name": "Washington St at Walnut St"
+    },
+    {
+      "place": "Harvard Square",
+      "anchor_lonlat": [
+        -71.11966431146357,
+        42.37433925370521
+      ],
+      "station_id": "800bde2c-51df-497c-ac2d-bc3a8c00c164",
+      "station_name": "Church St"
+    },
+    {
+      "place": "Jackson Square",
+      "anchor_lonlat": [
+        -71.10014140605927,
+        42.32293117195949
+      ],
+      "station_id": "f834ec42-0de8-11e7-991c-3863bb43a7d0",
+      "station_name": "Jackson Square T Stop"
+    },
+    {
+      "place": "Stony Brook",
+      "anchor_lonlat": [
+        -71.104374,
+        42.316966
+      ],
+      "station_id": "c98f50f6-1901-4c64-b164-8cf33245e022",
+      "station_name": "Stony Brook T Stop"
+    },
+    {
+      "place": "Huron Village",
+      "anchor_lonlat": [
+        -71.13426981498378,
+        42.381650612901176
+      ],
+      "station_id": "f8351569-0de8-11e7-991c-3863bb43a7d0",
+      "station_name": "Huron Ave At Vassal Lane"
+    },
+    {
+      "place": "Boston Landing",
+      "anchor_lonlat": [
+        -71.14167537549292,
+        42.356560923089404
+      ],
+      "station_id": "20b0b405-54ba-4a80-b89c-0819772665db",
+      "station_name": "Boston Landing"
+    },
+    {
+      "place": "Union Square, Allston",
+      "anchor_lonlat": [
+        -71.137313,
+        42.353334
+      ],
+      "station_id": "f8346803-0de8-11e7-991c-3863bb43a7d0",
+      "station_name": "Union Square - Brighton Ave at Cambridge St"
+    },
+    {
+      "place": "Radcliffe Quadrangle",
+      "anchor_lonlat": [
+        -71.125107,
+        42.380287
+      ],
+      "station_id": "f834b652-0de8-11e7-991c-3863bb43a7d0",
+      "station_name": "Harvard University Radcliffe Quadrangle at Shepard St / Garden St"
+    },
+    {
+      "place": "Newton — Crafts St",
+      "anchor_lonlat": [
+        -71.19943707257335,
+        42.35389024396587
+      ],
+      "station_id": "918335df-fc1a-45c2-9cfc-c5e2e93aecc0",
+      "station_name": "Washington St at Crafts St"
+    }
+  ]
+}
