@@ -3,6 +3,10 @@ import { computed, readonly, ref } from 'vue'
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type ColorTheme = 'light' | 'dark'
 const STORAGE_KEY = 'urban-trees-theme'
+/** arborary.world (VitePress) serves this app at /explore/ on the same origin
+ * and stores its toggle here as 'light' | 'dark' | 'auto'. Until the explorer
+ * has a choice of its own, follow the site's so the two never disagree. */
+const SITE_STORAGE_KEY = 'vitepress-theme-appearance'
 const preference = ref<ThemePreference>('system')
 const systemDark = ref(false)
 const resolvedTheme = computed<ColorTheme>(() =>
@@ -11,6 +15,11 @@ const resolvedTheme = computed<ColorTheme>(() =>
 
 function readPreference(value: string | null): ThemePreference {
   return value === 'light' || value === 'dark' ? value : 'system'
+}
+
+/** The explorer's own saved choice, else the arborary.world site's. */
+export function storedPreference(storage: Pick<Storage, 'getItem'>): ThemePreference {
+  return readPreference(storage.getItem(STORAGE_KEY) ?? storage.getItem(SITE_STORAGE_KEY))
 }
 
 function applyTheme() {
@@ -22,16 +31,18 @@ function applyTheme() {
 export function initializeTheme() {
   const query = window.matchMedia('(prefers-color-scheme: dark)')
   systemDark.value = query.matches
-  try { preference.value = readPreference(localStorage.getItem(STORAGE_KEY)) } catch { /* Use system. */ }
-  applyTheme()
+  const load = () => {
+    try { preference.value = storedPreference(localStorage) } catch { /* Use system. */ }
+    applyTheme()
+  }
+  load()
   const onSystemChange = (event: MediaQueryListEvent) => {
     systemDark.value = event.matches
     applyTheme()
   }
   const onStorage = (event: StorageEvent) => {
-    if (event.key !== STORAGE_KEY && event.key !== null) return
-    preference.value = readPreference(event.newValue)
-    applyTheme()
+    if (event.key !== STORAGE_KEY && event.key !== SITE_STORAGE_KEY && event.key !== null) return
+    load()
   }
   query.addEventListener('change', onSystemChange)
   window.addEventListener('storage', onStorage)

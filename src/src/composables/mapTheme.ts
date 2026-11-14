@@ -37,6 +37,25 @@ export function applyBasemapPaint(map: Map, style: StyleSpecification) {
   }
 }
 
+/** Carto's land is neutral (#0e0e0e dark, #fafaf8 light) while the app's
+ * surfaces are the field-journal greens and creams, so the map read as a hole
+ * cut in the page. Tint only the land fills toward the palette, a step darker
+ * (dark) or lighter (light) than the panels so tree colours keep their
+ * contrast; roads, water, labels and buildings stay Carto's. */
+const LAND_TINT: Record<ColorTheme, { background: string; landFill: string | null }> = {
+  dark: { background: '#141a16', landFill: '#141a16' },
+  light: { background: '#f9f7f0', landFill: null },
+}
+
+export function applyLandTint(map: Map, theme: ColorTheme) {
+  const tint = LAND_TINT[theme]
+  if (map.getLayer('background')) map.setPaintProperty('background', 'background-color', tint.background)
+  if (!tint.landFill) return
+  for (const id of ['landcover', 'landuse']) {
+    if (map.getLayer(id)?.type === 'fill') map.setPaintProperty(id, 'fill-color', tint.landFill)
+  }
+}
+
 export function bindMapTheme(map: Map) {
   const { resolvedTheme } = useTheme()
   let disposed = false
@@ -47,8 +66,12 @@ export function bindMapTheme(map: Map) {
     const request = ++revision
     if (!ready) return
     try {
-      const style = await loadStyle(resolvedTheme.value)
-      if (!disposed && request === revision) applyBasemapPaint(map, style)
+      const theme = resolvedTheme.value
+      const style = await loadStyle(theme)
+      if (!disposed && request === revision) {
+        applyBasemapPaint(map, style)
+        applyLandTint(map, theme)
+      }
     } catch (error) {
       if (!disposed && request === revision) console.warn('Could not update basemap theme', error)
     }

@@ -2,14 +2,16 @@
   <aside class="sidebar">
     <div class="sidebar-header">
       <FieldSketch name="city" class="city-study" />
-      <h1>Urban Trees</h1>
-      <div class="subtitle">The Concrete Jungle</div>
-      <a
-        href="https://github.com/greenmtnboy/tree_reporting"
-        target="_blank"
-        rel="noopener"
-        class="source-link"
-      >source code</a>
+      <h1>Tree Explorer</h1>
+      <div class="header-links">
+        <a href="https://arborary.world/" class="source-link">arborary.world</a>
+        <a
+          href="https://github.com/greenmtnboy/tree_reporting"
+          target="_blank"
+          rel="noopener"
+          class="source-link"
+        >source code</a>
+      </div>
     </div>
     <nav class="sidebar-nav">
       <router-link :to="mapRoute" class="nav-link">
@@ -295,9 +297,14 @@ function handleClick(lm: Landmark) {
   border-radius: 2px;
 }
 
+.header-links {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
 .source-link {
   display: inline-block;
-  margin-top: 4px;
   font-size: 0.72rem;
   color: var(--color-moss);
   text-decoration: none;

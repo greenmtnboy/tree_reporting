@@ -4,7 +4,7 @@
       <div v-if="visible" class="welcome-overlay" @click.self="dismiss">
         <div class="welcome-modal" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
           <div class="welcome-header">
-            <h2 id="welcome-title">Welcome to Urban Trees</h2>
+            <h2 id="welcome-title">Welcome to Tree Explorer</h2>
             <button class="welcome-close" @click="dismiss" aria-label="Close">&times;</button>
           </div>
           <div class="welcome-body">
@@ -13,7 +13,7 @@
 
             </p>
             <p>
-              The Urban Tree Explorer is an interactive map of <strong>individual trees</strong> across multiple cities.
+              Tree Explorer is an interactive map of <strong>individual trees</strong> across multiple cities.
               Navigate across your favorite city to discover the diversity and distribution of trees 
               in it's urban forest.
 

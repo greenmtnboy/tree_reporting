@@ -156,7 +156,7 @@ test.describe('Mobile layout', () => {
     await page.locator('.mobile-nav-item').filter({ hasText: 'Info' }).click()
 
     await expect(page.locator('.mobile-route-header')).toContainText('Project Info')
-    await expect(page.locator('.info-page h1')).toContainText('About Urban Trees')
+    await expect(page.locator('.info-page h1')).toContainText('About Tree Explorer')
   })
 
   test('analytics screen opens chat overlay', async ({ page }) => {

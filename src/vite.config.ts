@@ -12,8 +12,17 @@ const stubMotherDuck = {
   },
 }
 
+// Where the app is served from. GitHub Pages hosts it at /tree_reporting/;
+// arborary.world hosts the same build at /explore/ (APP_BASE=/explore/, see
+// deploy.yml). The router uses hash history, so any static subpath works.
+function appBase(): string {
+  const base = process.env.APP_BASE
+  if (base) return base.endsWith('/') ? base : `${base}/`
+  return process.env.GITHUB_PAGES === 'true' ? '/tree_reporting/' : '/'
+}
+
 export default defineConfig({
-  base: process.env.GITHUB_PAGES === 'true' ? '/tree_reporting/' : '/',
+  base: appBase(),
   plugins: [vue(), stubMotherDuck],
   resolve: {
     alias: {

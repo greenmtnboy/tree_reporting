@@ -18,10 +18,8 @@ test.describe('Desktop layout', () => {
 
   test('renders sidebar navigation and landmarks', async ({ page }) => {
     // Sidebar header
-    await expect(page.locator('.sidebar h1')).toHaveText('Urban Trees')
-    await expect(page.locator('.sidebar .subtitle')).toHaveText(
-      'The Concrete Jungle',
-    )
+    await expect(page.locator('.sidebar h1')).toHaveText('Tree Explorer')
+    await expect(page.locator('.sidebar .subtitle')).toHaveCount(0)
 
     // Primary nav reflects the current app structure.
     await expect(page.locator('.sidebar-nav')).toContainText('Map')

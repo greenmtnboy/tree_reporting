@@ -42,6 +42,7 @@ Notes:
 
 - Projects created after April 28, 2025 no longer include `localhost` as an authorized domain by default, so add it manually for local development if needed.
 - Enter hostnames only in Authorized domains, for example `localhost` or `greenmtnboy.github.io`, not full URLs, ports, or paths.
+- The app is served from both `greenmtnboy.github.io` (`/tree_reporting/`) and `arborary.world` (`/explore/`); both hostnames must be listed. The Google Maps API key's HTTP referrer restrictions need the same two hosts (`https://arborary.world/*`).
 - The app links a signed-in anonymous user to Google when possible so existing submissions keep the same Firebase `uid`.
 
 ## One-way doors
