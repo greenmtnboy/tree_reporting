@@ -37,6 +37,20 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.usclt_data_updated_through datetime; # when Charlotte data is through
+property <*>.usclt_osm_data_updated_through datetime; # GCS publication time of Charlotte's staged OSM parquet
+property <*>.usnap_data_updated_through datetime; # when Naples data is through
+property <*>.usnap_osm_data_updated_through datetime; # GCS publication time of Naples's staged OSM parquet
+property <*>.usatl_data_updated_through datetime; # when Atlanta data is through
+property <*>.usatl_osm_data_updated_through datetime; # GCS publication time of Atlanta's staged OSM parquet
+property <*>.usnol_data_updated_through datetime; # when New Orleans data is through
+property <*>.usnol_osm_data_updated_through datetime; # GCS publication time of New Orleans's staged OSM parquet
+property <*>.usdur_data_updated_through datetime; # when Durham data is through
+property <*>.usdur_osm_data_updated_through datetime; # GCS publication time of Durham's staged OSM parquet
+property <*>.ushou_data_updated_through datetime; # when Houston data is through
+property <*>.ushou_osm_data_updated_through datetime; # GCS publication time of Houston's staged OSM parquet
+property <*>.usaus_data_updated_through datetime; # when Austin data is through
+property <*>.usaus_osm_data_updated_through datetime; # GCS publication time of Austin's staged OSM parquet
 # property <*>.usnva_data_updated_through datetime; # derived in usnva/nova_tree_info.preql from its two inventories
 property <*>.usnva_osm_data_updated_through datetime; # GCS publication time of Northern Virginia's staged OSM parquet
 property <*>.czprg_data_updated_through datetime; # when Prague data is through

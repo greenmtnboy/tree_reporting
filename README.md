@@ -44,6 +44,13 @@ Currently has data from the following cities:
 - [Tempe, AZ, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USTEM)
 - [Denver, CO, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USDEN)
 - [Stoughton, WI, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USSTO)
+- [Austin, TX, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USAUS)
+- [Houston, TX, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USHOU)
+- [Durham, NC, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USDUR)
+- [Charlotte, NC, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USCLT)
+- [Atlanta, GA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USATL)
+- [New Orleans, LA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USNOL)
+- [Naples, FL, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USNAP)
 - [Vancouver, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAVAN)
 - [Calgary, AB, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CACAL)
 - [Edmonton, AB, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAEDM)
@@ -120,6 +127,13 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Tempe | City of Tempe - Tree Inventory | https://data.tempe.gov/datasets/tempegov::tree-inventory |
 | Denver | Denver Open Data - Parks, Medians, and Parkway Trees | https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::parks-medians-and-parkway-trees |
 | Stoughton | City of Stoughton - Public Tree Inventory (ArcGIS) | https://experience.arcgis.com/experience/f9b95eddac104c708619ccaf4c2c9de0 |
+| Austin, TX | City of Austin - Tree Inventory (Socrata, public domain) | https://data.austintexas.gov/d/wrik-xasw |
+| Houston, TX | City of Houston Parks & Recreation, Urban Forestry - street-tree inventory (ArcGIS) | https://geohwp.houstontx.gov/arcgis/rest/services/03_BaseData_External/Land_Base/FeatureServer/0 |
+| Durham, NC | City of Durham - Trees & Planting Sites (ArcGIS) | https://webgis2.durhamnc.gov/server/rest/services/PublicServices/Environmental/FeatureServer/11 |
+| Charlotte, NC | City of Charlotte - Landscape Management Trees (ArcGIS) | https://gis.charlottenc.gov/arcgis/rest/services/ENG/LSM_Trees/MapServer/0 |
+| Atlanta, GA | Trees Atlanta - Plant Inventory (ArcGIS) | https://www.arcgis.com/home/item.html?id=9a8404b7b48d499ab76b36c237434542 |
+| New Orleans, LA | City of New Orleans - Parks and Parkways tree assets (311 asset service, ArcGIS) | https://maps.nola.gov/server/rest/services/OpenGov/OpenGov311_Assets/MapServer/7 |
+| Naples, FL | City of Naples - City Trees (ArcGIS) | https://g.naplesgov.com/arcgis/rest/services/Community_Services/CityTrees/FeatureServer/0 |
 | Vancouver | Vancouver Open Data - Public Trees | https://opendata.vancouver.ca/explore/dataset/public-trees/ |
 | Calgary | City of Calgary Open Data - Public Trees | https://data.calgary.ca/Environment/Public-Trees/tfs4-3wwa |
 | Edmonton | City of Edmonton Open Data - Trees | https://data.edmonton.ca/Environmental-Services/Trees/eecg-fc54 |
@@ -172,6 +186,13 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Tempe | No landmark dataset in production yet | n/a |
 | Denver | Denver Open Data - Historic Landmark Structures | https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::historic-landmarks |
 | Stoughton | City of Stoughton - Historical Landmarks (Stoughton Landmarks Commission) | https://stoughtonwi.maps.arcgis.com/home/item.html?id=0ac41bae1fac4f4abdb873deed6f8d75 |
+| Austin, TX | City of Austin - Historical Landmarks (Socrata) | https://data.austintexas.gov/d/8k49-bptr |
+| Houston, TX | City of Houston - Historic Sites and Landmarks (Landmarks and Protected Landmarks) | https://services.arcgis.com/NummVBqZSIJKUeVR/arcgis/rest/services/COH_Historic_Sites_and_Landmarks_view/FeatureServer/6 |
+| Durham, NC | Durham City-County Planning - Local Historic Landmarks and National Register listings | https://webgis2.durhamnc.gov/server/rest/services/PublicServices/Planning/MapServer/1 |
+| Charlotte, NC | Charlotte-Mecklenburg Historic Landmarks Commission - designated properties (Mecklenburg County GIS) | https://meckgis.mecklenburgcountync.gov/server/rest/services/LocalHistoricProperty/FeatureServer/0 |
+| Atlanta, GA | City of Atlanta - Landmark and Historic Building/Sites (Urban Design Commission) | https://gis.atlantaga.gov/dpcd/rest/services/OpenDataService1/FeatureServer/16 |
+| New Orleans, LA | City of New Orleans - HDLC Landmarks (Historic District Landmarks Commission) | https://maps.nola.gov/server/rest/services/Administrative/Historic_Preservation/MapServer/0 |
+| Naples, FL | City of Naples - Historic Buildings; National Park Service - National Register of Historic Places | https://g.naplesgov.com/arcgis/rest/services/Building/HistoricBuildings/MapServer/0 |
 | Vancouver | Vancouver Open Data - Heritage Sites | https://opendata.vancouver.ca/explore/dataset/heritage-sites/ |
 | Calgary | City of Calgary Open Data - Historic Resource | https://data.calgary.ca/Government/Historic-Resource/99yf-6c5u |
 | Edmonton | City of Edmonton Open Data - Register and Inventory of Historic Resources | https://data.edmonton.ca/City-Administration/The-Register-and-Inventory-of-Historic-Resources-in/jgsn-dhai |

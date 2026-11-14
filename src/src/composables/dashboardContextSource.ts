@@ -284,6 +284,48 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'nearctic',
   },
+  USAUS: {
+    ecoregionId: 401, // Texas blackland prairies
+    usdaZone: 9,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USHOU: {
+    ecoregionId: 384, // Western Gulf coastal grasslands
+    usdaZone: 9,
+    biome: 'Tropical & Subtropical Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USDUR: {
+    ecoregionId: 330, // Appalachian Piedmont forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USNOL: {
+    ecoregionId: 337, // Mississippi lowland forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USATL: {
+    ecoregionId: 330, // Appalachian Piedmont forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USNAP: {
+    ecoregionId: 399, // Southeast US conifer savannas
+    usdaZone: 10,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USCLT: {
+    ecoregionId: 330, // Appalachian Piedmont forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

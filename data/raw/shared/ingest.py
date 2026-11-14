@@ -670,6 +670,9 @@ SPECIES_SYNONYMS: dict[str, str] = {
     "Eucalyptus maculata": "Corymbia maculata",
     "Tristania conferta": "Lophostemon confertus",
     "Tristania laurina": "Tristaniopsis laurina",
+    # Hybrid mark: species_audit.py pairs Trees Atlanta's spelling with the
+    # accepted species (Kew lists no hybrid).
+    "Camellia x lutchuensis": "Camellia lutchuensis",
     "Arecastrum romanzoffianum": "Syagrus romanzoffiana",
     "Podocarpus gracilior": "Afrocarpus gracilior",
     "Rhus lancea": "Searsia lancea",
@@ -1199,6 +1202,28 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     # Carolina silverbell.  Kew has no such name, and lists `H. carolina` as accepted
     # with `H. tetraptera` under it; three edits is past what the audit folds.
     "Halesia caroliniana": "Halesia carolina",
+    # Audited with tools/species_audit.py --parquet when Atlanta (Trees Atlanta)
+    # and Naples were wired (2026-11).
+    "Asimina biloba": "Asimina triloba",
+    "Chimonanthus virginicus": "Chionanthus virginicus",
+    "Euonymus americana": "Euonymus americanus",
+    "Ginkgo triloba": "Ginkgo biloba",
+    "Liriodendron tulipfera": "Liriodendron tulipifera",
+    "Magnolia virginiaina": "Magnolia virginiana",
+    "Oxydendrum arborea": "Oxydendrum arboreum",
+    "Quercus illicifolia": "Quercus ilicifolia",
+    "Ulmus americanus": "Ulmus americana",
+    "Vaccinium arborea": "Vaccinium arboreum",
+    "Cananaga odorata": "Cananga odorata",
+    "Aleurites moluccana": "Aleurites moluccanus",
+    "Psidium cattleianum": "Psidium cattleyanum",
+    # By hand, beyond the audit's two-edit reach: Naples and New Orleans.  Each
+    # key is absent from Kew's WCVP and each value accepted there.
+    "Querus virginaina": "Quercus virginiana",
+    "Sereona repens": "Serenoa repens",
+    "Calophyllum brasiliensis": "Calophyllum brasiliense",
+    "Terminalia muellerii": "Terminalia muelleri",
+    "Latania verscheffeltii": "Latania verschaffeltii",
 }
 
 
@@ -1467,6 +1492,13 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USCLT": ("CHARLOTTE_OPENDATA",),
+    "USNAP": ("NAPLES_OPENDATA",),
+    "USATL": ("TREES_ATLANTA",),
+    "USNOL": ("NEW_ORLEANS_OPENDATA",),
+    "USDUR": ("DURHAM_OPENDATA",),
+    "USHOU": ("HOUSTON_OPENDATA",),
+    "USAUS": ("AUSTIN_OPENDATA",),
     "USNVA": ("ARLINGTON", "FALLS_CHURCH"),
     "CZPRG": ("PRAGUE_OPENDATA",),
     "USSTO": ("STOUGHTON_OPENDATA",),
@@ -1543,6 +1575,13 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USCLT": "OSM_USCLT",
+    "USNAP": "OSM_USNAP",
+    "USATL": "OSM_USATL",
+    "USNOL": "OSM_USNOL",
+    "USDUR": "OSM_USDUR",
+    "USHOU": "OSM_USHOU",
+    "USAUS": "OSM_USAUS",
     "USNVA": "OSM_USNVA",
     "CZPRG": "OSM_CZPRG",
     "USSTO": "OSM_USSTO",
@@ -2110,6 +2149,13 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USCLT": (35.0, 35.45, -81.05, -80.6),
+    "USNAP": (26.05, 26.3, -81.85, -81.7),
+    "USATL": (33.5, 34.1, -84.75, -84.05),
+    "USNOL": (29.85, 30.2, -90.15, -89.6),
+    "USDUR": (35.85, 36.15, -79.05, -78.7),
+    "USHOU": (29.45, 30.15, -95.85, -95.0),
+    "USAUS": (30.05, 30.55, -98.05, -97.45),
     "USNVA": (38.59, 39.07, -77.55, -77.03),
     "CZPRG": (49.93, 50.19, 14.21, 14.72),
     "USSTO": (42.85, 42.97, -89.3, -89.11),
@@ -2211,6 +2257,48 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 23,187 staged OSM nodes against 191,412 inventory anchors.  Mutual-NN
+    # 95.8% in 2-5 m, 42.5% in 5-10 m (n=1,002): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 243 duplicates for 137 hidden trees (1.77),
+    # 8->10 removes 122 for 230 (0.53), so 8 m is where the paying stops.
+    "USCLT": 8,
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 12,738 staged OSM nodes against 29,366 anchors.  Mutual-NN 70.2% in
+    # 2-5 m, 8.7% in 5-10 m (n=23): a 5 m guarantee.  Marginal table: 2->4
+    # removes 81 duplicates for 17 hidden trees (4.76), 4->6 removes 10 for 16
+    # (0.62), so the paying stops at 4 m.
+    "USNAP": 4,
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 10,878 staged OSM nodes against 98,921 Trees Atlanta plantings.  Mutual-NN
+    # 85.3% in 2-5 m, 57.1% in 5-10 m (n=163, a coin flip): a 5 m guarantee,
+    # a 10 m cell.  Marginal table agrees: 8->10 removes 31 for 25 (1.24),
+    # 10->14 removes 48 for 78 (0.62).
+    "USATL": 10,
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 941 staged OSM nodes against 104,407 anchors.  Mutual-NN stays above 60%
+    # through 20 m, so the band rule says nothing and the marginal table
+    # decides: 6->8 removes 29 duplicates for 2 hidden trees (14.5), 8->10
+    # removes 5 for 10 (0.50).
+    "USNOL": 8,
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 11,366 staged OSM nodes against 23,842 anchors.  Mutual-NN 72.3% in
+    # 5-10 m, 44.4% in 10-20 m (n=90): a 10 m guarantee caps it at 20.
+    # Marginal table over the calibrated sizes: 10->20 removes 45 duplicates
+    # for 39 hidden trees (1.15), so 20 m.
+    "USDUR": 20,
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 24,731 staged OSM nodes against 215,139 anchors.  Mutual-NN 61.6% in
+    # 5-10 m, 28.8% in 10-20 m (n=594): a 10 m guarantee caps it at 20.
+    # Marginal table: 8->10 removes 68 duplicates for 36 hidden trees (1.89),
+    # 10->14 removes 62 for 98 (0.63), so 10 m.
+    "USHOU": 10,
+    # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+    # 9,048 staged OSM nodes against 59,157 anchors.  Mutual-NN 60.4% in
+    # 5-10 m, 34.3% in 10-20 m (n=312): a 10 m guarantee caps it at 20.
+    # Marginal table: 8->10 removes 36 duplicates for 31 hidden trees (1.16),
+    # 10->20 removes 111 for 177 (0.63), so 10 m.
+    "USAUS": 10,
     # Calibrated 2026-11-06 on the first build (31,351 staged OSM nodes against
     # 37,828 Arlington and Falls Church anchors).  Mutual-NN 92.1% in the 2-5 m
     # band (n=581) collapsing to 31.8% in 5-10 m (n=264): guarantee 5 m.
@@ -2456,6 +2544,15 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USCLT': ((35.0, 35.45, -81.05, -80.6),),
+    'USNAP': ((26.05, 26.3, -81.85, -81.7),),
+    # Trees Atlanta plants across the metro (Sandy Springs, Dunwoody, Clarkston,
+    # South Fulton, Tucker), not only inside the city limits.
+    'USATL': ((33.5, 34.1, -84.75, -84.05),),
+    'USNOL': ((29.85, 30.2, -90.15, -89.6),),
+    'USDUR': ((35.85, 36.15, -79.05, -78.7),),
+    'USHOU': ((29.45, 30.15, -95.85, -95.0),),
+    'USAUS': ((30.05, 30.55, -98.05, -97.45),),
     # The Potomac's Virginia shore, carved against USWAS; north of DC the
     # river bends west and the land east of it is Maryland, which is nobody's.
     'USNVA': (

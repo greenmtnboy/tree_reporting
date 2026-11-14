@@ -43,6 +43,13 @@ import fihel.helsinki_tree_info;
 import ussto.stoughton_tree_info;
 import czprg.prague_tree_info;
 import usnva.nova_tree_info;
+import usaus.austin_tree_info;
+import ushou.houston_tree_info;
+import usdur.durham_tree_info;
+import usnol.new_orleans_tree_info;
+import usatl.atlanta_tree_info;
+import usnap.naples_tree_info;
+import usclt.charlotte_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -93,6 +100,13 @@ merge fihel_source into data_source;
 merge ussto_source into data_source;
 merge czprg_source into data_source;
 merge usnva_source into data_source;
+merge usaus_source into data_source;
+merge ushou_source into data_source;
+merge usdur_source into data_source;
+merge usnol_source into data_source;
+merge usatl_source into data_source;
+merge usnap_source into data_source;
+merge usclt_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -152,7 +166,14 @@ dkcph_published_data_updated_through,
 fihel_published_data_updated_through,
 ussto_published_data_updated_through,
 czprg_published_data_updated_through,
-usnva_published_data_updated_through);
+usnva_published_data_updated_through,
+usaus_published_data_updated_through,
+ushou_published_data_updated_through,
+usdur_published_data_updated_through,
+usnol_published_data_updated_through,
+usatl_published_data_updated_through,
+usnap_published_data_updated_through,
+usclt_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

@@ -1,0 +1,32 @@
+import ..landmark_common;
+
+root datasource charlotte_landmarks_update_time (
+    data_updated_through: usclt_landmark_data_updated_through
+)
+file `./charlotte_landmarks_probe.py`;
+
+# The Charlotte-Mecklenburg Historic Landmarks Commission's register is a live
+# ArcGIS layer on Mecklenburg County's server, so this reads it directly: no
+# Nominatim geocoding, no committed CSV and no staging object.  The register
+# is county-wide; the script keeps the properties inside the city's bounds.
+root partial datasource raw_charlotte_landmark_info extends landmark_partition (
+    address: ?address,
+    property_type: ?property_type,
+    neighborhood: ?neighborhood,
+    year_built: ?year_built,
+    designation_date: ?designation_date,
+)
+complete where city = 'USCLT'
+file `./charlotte_landmarks.py`;
+
+partial datasource charlotte_landmark_info extends published_landmark_info (
+    ?address,
+    ?property_type,
+    ?neighborhood,
+    ?year_built,
+    ?designation_date,
+    usclt_landmark_data_updated_through,
+)
+complete where city = 'USCLT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usclt_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usclt_landmark_info_v{data_version}.parquet`
+freshness by usclt_landmark_data_updated_through;

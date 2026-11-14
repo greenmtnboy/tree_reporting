@@ -1,0 +1,32 @@
+import ..landmark_common;
+
+root datasource durham_landmarks_update_time (
+    data_updated_through: usdur_landmark_data_updated_through
+)
+file `./durham_landmarks_probe.py`;
+
+# Durham's Local Historic Landmarks and its individual National Register
+# listings, two live layers of the Planning MapServer on the same ArcGIS
+# server as the trees -- official registers, so no Nominatim geocoding, no
+# committed CSV and no staging object.  `lm_type` names the register.
+root partial datasource raw_durham_landmark_info extends landmark_partition (
+    address: ?address,
+    neighborhood: ?neighborhood,
+    lm_type: ?lm_type,
+    designation_date: ?designation_date,
+    year_designated: ?year_designated,
+)
+complete where city = 'USDUR'
+file `./durham_landmarks.py`;
+
+partial datasource durham_landmark_info extends published_landmark_info (
+    ?address,
+    ?neighborhood,
+    ?lm_type,
+    ?designation_date,
+    ?year_designated,
+    usdur_landmark_data_updated_through,
+)
+complete where city = 'USDUR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usdur_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usdur_landmark_info_v{data_version}.parquet`
+freshness by usdur_landmark_data_updated_through;

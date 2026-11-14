@@ -1,0 +1,35 @@
+import ..landmark_common;
+
+root datasource naples_landmarks_update_time (
+    data_updated_through: usnap_landmark_data_updated_through
+)
+file `./naples_landmarks_probe.py`;
+
+# The City of Naples' historic building footprints (on the same ArcGIS server
+# as the trees, named from the city's address points and parcels) and the
+# National Park Service's National Register listings inside the city's
+# bounds -- official registers read live, so no Nominatim geocoding, no
+# committed CSV and no staging object.  `lm_type` names the register and
+# `register_number` carries the NRIS reference number of a National Register
+# row.
+root partial datasource raw_naples_landmark_info extends landmark_partition (
+    address: ?address,
+    property_type: ?property_type,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USNAP'
+file `./naples_landmarks.py`;
+
+partial datasource naples_landmark_info extends published_landmark_info (
+    ?address,
+    ?property_type,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    usnap_landmark_data_updated_through,
+)
+complete where city = 'USNAP'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usnap_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usnap_landmark_info_v{data_version}.parquet`
+freshness by usnap_landmark_data_updated_through;

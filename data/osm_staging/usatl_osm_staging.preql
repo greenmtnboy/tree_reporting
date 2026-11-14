@@ -1,0 +1,16 @@
+# Scheduled OSM extraction for Atlanta, run by the `osm-usatl` [[cloud.job]] in
+# ../trilogy.toml. Everything shared with the other cities -- the canonical tree
+# concepts, the Overpass freshness probe, and why extraction is a separate job
+# at all -- lives in staging_common.preql; this file is just Atlanta's rows and
+# the staging object they land in.
+
+import staging_common;
+
+root datasource usatl_osm_rows extends osm_rows (
+)
+file `./osm_rows.py`
+where city = 'USATL';
+
+datasource usatl_osm_staging extends osm_staging (
+)
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usatl_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/usatl_osm_staging.parquet`;

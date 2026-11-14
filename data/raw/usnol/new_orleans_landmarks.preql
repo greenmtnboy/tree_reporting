@@ -1,0 +1,28 @@
+import ..landmark_common;
+
+root datasource new_orleans_landmarks_update_time (
+    data_updated_through: usnol_landmark_data_updated_through
+)
+file `./new_orleans_landmarks_probe.py`;
+
+# The Historic District Landmarks Commission's register (citywide and CBD) is a
+# live ArcGIS layer on the city's own GIS, so this reads it directly: no
+# Nominatim geocoding, no committed CSV and no staging object.  The status and
+# the commission travel in `protection_type`.
+root partial datasource raw_new_orleans_landmark_info extends landmark_partition (
+    address: ?address,
+    protection_type: ?protection_type,
+    year_built: ?year_built,
+)
+complete where city = 'USNOL'
+file `./new_orleans_landmarks.py`;
+
+partial datasource new_orleans_landmark_info extends published_landmark_info (
+    ?address,
+    ?protection_type,
+    ?year_built,
+    usnol_landmark_data_updated_through,
+)
+complete where city = 'USNOL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usnol_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usnol_landmark_info_v{data_version}.parquet`
+freshness by usnol_landmark_data_updated_through;

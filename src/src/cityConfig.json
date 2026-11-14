@@ -42,5 +42,12 @@
   "FIHEL": { "name": "Helsinki", "center": [24.9384, 60.1699] },
   "USSTO": { "name": "Stoughton, WI", "center": [-89.2179, 42.9169] },
   "CZPRG": { "name": "Prague", "center": [14.4378, 50.0755] },
-  "USNVA": { "name": "Northern Virginia", "center": [-77.3064, 38.8462] }
+  "USNVA": { "name": "Northern Virginia", "center": [-77.3064, 38.8462] },
+  "USAUS": { "name": "Austin", "center": [-97.7431, 30.2672] },
+  "USHOU": { "name": "Houston", "center": [-95.3698, 29.7604] },
+  "USDUR": { "name": "Durham", "center": [-78.8986, 35.994] },
+  "USNOL": { "name": "New Orleans", "center": [-90.0715, 29.9511] },
+  "USATL": { "name": "Atlanta", "center": [-84.388, 33.749] },
+  "USNAP": { "name": "Naples, FL", "center": [-81.7948, 26.142] },
+  "USCLT": { "name": "Charlotte", "center": [-80.8431, 35.2271] }
 }
