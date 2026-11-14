@@ -1,0 +1,25 @@
+import ..landmark_common;
+
+root datasource austin_landmarks_update_time (
+    data_updated_through: usaus_landmark_data_updated_through
+)
+file `./austin_landmarks_probe.py`;
+
+# The city's register of designated historic landmarks is a live Socrata
+# dataset on the same portal as the trees, so this reads it directly: no
+# Nominatim geocoding, no committed CSV and no staging object.
+root partial datasource raw_austin_landmark_info extends landmark_partition (
+    address: ?address,
+    landmark_number: ?landmark_number,
+)
+complete where city = 'USAUS'
+file `./austin_landmarks.py`;
+
+partial datasource austin_landmark_info extends published_landmark_info (
+    ?address,
+    ?landmark_number,
+    usaus_landmark_data_updated_through,
+)
+complete where city = 'USAUS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usaus_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usaus_landmark_info_v{data_version}.parquet`
+freshness by usaus_landmark_data_updated_through;

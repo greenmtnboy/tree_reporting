@@ -1,0 +1,31 @@
+import ..landmark_common;
+
+root datasource atlanta_landmarks_update_time (
+    data_updated_through: usatl_landmark_data_updated_through
+)
+file `./atlanta_landmarks_probe.py`;
+
+# The City of Atlanta's register of designated Landmark and Historic
+# Building/Sites is a live layer on the city's own ArcGIS Server
+# (gis.atlantaga.gov, Department of City Planning), so this reads it directly:
+# no Nominatim geocoding, no committed CSV and no staging object.  `lm_type`
+# names the zoning overlay (Landmark or Historic Building/Site).
+root partial datasource raw_atlanta_landmark_info extends landmark_partition (
+    address: ?address,
+    property_type: ?property_type,
+    lm_type: ?lm_type,
+    designation_date: ?designation_date,
+)
+complete where city = 'USATL'
+file `./atlanta_landmarks.py`;
+
+partial datasource atlanta_landmark_info extends published_landmark_info (
+    ?address,
+    ?property_type,
+    ?lm_type,
+    ?designation_date,
+    usatl_landmark_data_updated_through,
+)
+complete where city = 'USATL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usatl_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usatl_landmark_info_v{data_version}.parquet`
+freshness by usatl_landmark_data_updated_through;

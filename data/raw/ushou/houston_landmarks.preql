@@ -1,0 +1,32 @@
+import ..landmark_common;
+
+root datasource houston_landmarks_update_time (
+    data_updated_through: ushou_landmark_data_updated_through
+)
+file `./houston_landmarks_probe.py`;
+
+# The Planning & Development Department's register of City of Houston
+# Landmarks and Protected Landmarks is a live hosted layer on the City's
+# ArcGIS Online organisation, so this reads it directly: no Nominatim
+# geocoding, no committed CSV and no staging object.
+root partial datasource raw_houston_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    neighborhood: ?neighborhood,
+    year_built: ?year_built,
+    designation_date: ?designation_date,
+)
+complete where city = 'USHOU'
+file `./houston_landmarks.py`;
+
+partial datasource houston_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?neighborhood,
+    ?year_built,
+    ?designation_date,
+    ushou_landmark_data_updated_through,
+)
+complete where city = 'USHOU'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/ushou_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/ushou_landmark_info_v{data_version}.parquet`
+freshness by ushou_landmark_data_updated_through;

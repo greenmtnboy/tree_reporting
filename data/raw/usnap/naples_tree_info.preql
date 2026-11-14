@@ -1,0 +1,93 @@
+import ..tree_common;
+import ..community_tree_info;
+import ..tree_dedup;
+
+auto usnap_published_data_updated_through <- greatest(usnap_data_updated_through, usnap_community_data_updated_through, usnap_osm_data_updated_through);
+
+key usnap_source enum<string>['NAPLES_OPENDATA', 'COMMUNITY_USNAP', 'OSM_USNAP']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto usnap_source_label <- concat(usnap_source, '');
+merge usnap_source_label into source_label;
+
+root datasource naples_update_time (
+    data_updated_through: usnap_data_updated_through
+)
+file `./naples_update_time.py`;
+
+# Only this city's column, so an approval elsewhere does not mark USNAP's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource usnap_community_update_time (
+    usnap_community_data_updated_through: usnap_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# GCS publication time of the staged OSM parquet; it only moves when an
+# extraction is re-run and uploaded. Not a local mtime -- git does not preserve
+# it, so a committed staging file makes every fresh clone look like new data.
+root datasource usnap_osm_update_time (
+    data_updated_through: usnap_osm_data_updated_through
+)
+file `./naples_osm_probe.py`;
+
+# Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
+# the shared raw_* columns; a source that names a column differently re-binds
+# it here (`dbh: ?raw_dbh`).
+root partial datasource naples_raw_tree_info extends tree_partition (
+    data_source: usnap_source,
+)
+complete where city = 'USNAP' and usnap_source = 'NAPLES_OPENDATA'
+file `./naples_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to USNAP and makes
+# it a disjoint partition, and the `where` clause is what actually filters --
+# `complete where` asserts, it does not promise a predicate.
+root partial datasource usnap_community_tree_info extends tree_partition (
+    data_source: usnap_source,
+)
+complete where city = 'USNAP' and usnap_source = 'COMMUNITY_USNAP'
+file `../community_tree_info.py`
+where city = 'USNAP';
+
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
+# -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
+# by construction; the overlap is resolved by ../tree_dedup.preql.
+root partial datasource usnap_osm_tree_info extends tree_partition (
+    data_source: usnap_source,
+)
+complete where city = 'USNAP' and usnap_source = 'OSM_USNAP'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usnap_osm_staging.parquet`
+where (raw_latitude >= 26.05 and raw_latitude < 26.3 and raw_longitude >= -81.85 and raw_longitude < -81.7);
+
+
+# --- Cross-source dedup and attribute merge --------------------------------
+#
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
+# The per-city lines are the dbh merge, because Boston imputes it, and the
+# position policy: a city with an Overture lookup imports ../tree_position.preql
+# instead of the two position merges (see that file).
+merge merged_dbh into diameter_at_breast_height;
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
+
+
+# The published target extends ../tree_dedup.preql's `published_tree_info`:
+# the canonical columns, the prune, and the guard that refuses a build which
+# lost a quarter of the city.  The two `@source_kept` lines are the same guard
+# per bulk source; add one for every municipal or OSM label in the enum
+# (`test_every_city_refuses_a_collapsed_build`).
+partial datasource naples_tree_info extends published_tree_info (
+    data_source: usnap_source,
+    usnap_published_data_updated_through,
+)
+complete where city = 'USNAP'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnap_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnap_tree_info_v{data_version}.parquet`
+freshness by usnap_published_data_updated_through
+assert @source_kept(tree_id, usnap_source, 'NAPLES_OPENDATA', 0.75)
+assert @source_kept(tree_id, usnap_source, 'OSM_USNAP', 0.75);

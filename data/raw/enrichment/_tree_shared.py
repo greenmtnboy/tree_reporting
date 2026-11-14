@@ -157,7 +157,11 @@ REENRICH_INCOMPLETE_BEFORE = datetime(2026, 8, 23, 12, 0, tzinfo=timezone.utc)
 # Truncating them to the genus is wrong, not conservative: an "Acer implexa" is
 # an Acacia, so calling it an Acer asserts something false.
 CHIMERA_SPECIES: set[str] = {
+    "Acacia buergerianum",
+    "Acer biloba",
     "Acer implexa",
+    "Ailanthus americanus",
+    "Cladrastis buergerianum",
     "Cupressus plicata",
     "Erythrina camaldulensis",
     "Laurus lucidum",
