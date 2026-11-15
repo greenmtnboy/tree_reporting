@@ -41,6 +41,25 @@ for (const [label, viewport] of Object.entries({ desktop: { width: 1280, height:
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     })
 
+    test('Second Opinions sends people to flagged trees and is earned by visiting three', async ({ page }) => {
+      const flagged = ['sf-a', 'sf-b', 'sf-c', 'sf-d'].map(treeId => ({
+        treeId, city: 'USSFO', species: 'Ficus microcarpa', dbhInches: 50, speciesMeanDbh: 13,
+      }))
+      const visit = (treeId: string) => ({ treeId, city: 'USSFO', treeForm: null, ranking: null, reviewFlag: 'dbh_outlier' })
+      await open(page, { ...seed, reviewTargets: flagged, checkins: [visit('sf-a')] }, '/contributions?city=USSFO')
+      const mission = page.locator('[data-mission="second-look"]')
+      await expect(mission).toContainText('Second Opinions')
+      await expect(mission).toContainText('1 / 3')
+      await expect(mission.locator('a')).toHaveAttribute('href', '#/?city=USSFO&tree=sf-b')
+      await page.evaluate(visits => {
+        window.__treeE2E!.checkins = visits
+        window.dispatchEvent(new Event('focus'))
+      }, ['sf-a', 'sf-b', 'sf-c'].map(visit))
+      await expect(mission).toContainText('Badge earned')
+      // Say Hello (25) + Second Look (25) + the city's Second Opinions (150).
+      await expect(page.locator('.badge-total-points')).toHaveText('200 points')
+    })
+
     test('returning to desktop fetches new visits and awards points once per badge', async ({ page }) => {
       await open(page, seed)
       await expect(page.locator('[data-mission="rare"]')).toContainText('0 / 5')

@@ -165,6 +165,7 @@ import {
   BADGES,
   evaluateBadges,
   toBadgeCheckin,
+  toBadgeModification,
   toBadgeSubmission,
 } from '../lib/badges'
 
@@ -209,6 +210,7 @@ const signedInSummary = computed(() =>
 const {
   submissions,
   checkins,
+  modifications,
   loading: contributionsLoading,
   refresh: refreshContributions,
   error: contributionsError,
@@ -220,6 +222,7 @@ const earnedBadges = computed(() => [
   ...evaluateBadges(
     submissions.value.map(toBadgeSubmission),
     checkins.value.map(toBadgeCheckin),
+    modifications.value.map(toBadgeModification),
   ).filter((a) => a.earned),
   ...evaluateCityBadges(checkins.value).filter(b => b.earned),
 ])

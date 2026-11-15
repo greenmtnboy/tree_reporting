@@ -11,7 +11,7 @@ vi.mock('../lib/e2eFixtures', () => ({ e2eEnabled: false, e2eUser: () => undefin
 vi.mock('./useSubmissions', async () => {
   const { ref } = await import('vue')
   return { useMyContributions: () => ({
-    submissions: ref([]), checkins: ref([]), loading: ref(false), error: ref(null), refresh: vi.fn(),
+    submissions: ref([]), checkins: ref([]), modifications: ref([]), loading: ref(false), error: ref(null), refresh: vi.fn(),
   }) }
 })
 vi.mock('firebase/auth', () => ({

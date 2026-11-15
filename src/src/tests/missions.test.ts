@@ -28,6 +28,21 @@ describe('city missions', () => {
     expect(mission.nextTree?.treeId).toBe('1')
   })
 
+  it('sends people to flagged trees for Second Opinions, which needs no ranking', () => {
+    const targets = ['f1', 'f2', 'f3', 'f4'].map(treeId => ({ treeId, city: 'USSFO' }))
+    const flaggedVisit = (treeId: string) => ({ treeId, city: 'USSFO', treeForm: null, ranking: null, reviewFlag: 'dbh_outlier' })
+    expect(buildMissions('USSFO', [], [], targets.slice(0, 2)).map(m => m.key)).toEqual([])
+    const fresh = buildMissions('USSFO', [], [], targets).find(m => m.key === 'second-look')!
+    expect(fresh.nextTree?.treeId).toBe('f1')
+    const visits = [flaggedVisit('f1'), flaggedVisit('f1'), flaggedVisit('f2')]
+    const mission = buildMissions('USSFO', [], visits, targets).find(m => m.key === 'second-look')!
+    expect(mission.progress).toBe(2)
+    expect(mission.nextTree?.treeId).toBe('f3')
+    expect(evaluateCityBadges(visits).filter(b => b.earned)).toEqual([])
+    const earned = evaluateCityBadges([...visits, flaggedVisit('f3')]).filter(b => b.earned)
+    expect(earned.map(b => b.id)).toEqual(['city:USSFO:second-look'])
+  })
+
   it('offers palms where available and prioritizes them in LA’s biome', () => {
     const trees = Array.from({ length: 3 }, (_, i) => ({ ...tree(String(i), 'USLAX'), treeForm: 'palm' }))
     expect(buildMissions('USLAX', trees, [])[0]?.key).toBe('palm')

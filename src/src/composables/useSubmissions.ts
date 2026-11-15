@@ -455,6 +455,8 @@ export interface TreeModification {
   photoPath: string | null
   submittedAt: Date | null
   status: SubmissionStatus
+  /** The tree was flagged for a second look when reported (lib/treeReview.ts). */
+  reviewFlag: string | null
 }
 
 // Fields a report can blank out: the recorded value is wrong and no better one
@@ -489,6 +491,7 @@ export interface ModificationInput {
   proposedSpecies?: string | null
   proposedDbhInches?: number | null
   clearFields?: ClearableField[]
+  reviewFlag?: string | null
   notes?: string | null
   photoBlob?: Blob
   onProgress?: (fraction: number) => void
@@ -532,6 +535,9 @@ export async function submitTreeModification(input: ModificationInput): Promise<
     // Written only when something is cleared, so an ordinary report keeps the
     // field set the rules accepted before `clearFields` existed.
     ...(clearFields.length ? { clearFields } : {}),
+    // A report on a flagged tree is a second look too (the badge); written only
+    // when set, like clearFields.
+    ...(input.reviewFlag ? { reviewFlag: input.reviewFlag } : {}),
   }
   // Same shape as submitPhoto: the rate-limit marker is validated against
   // this document with getAfter(), so it cannot be skipped client-side.
@@ -576,6 +582,7 @@ function mapModificationDoc(id: string, data: Record<string, unknown>): TreeModi
     proposedSpecies: (data.proposedSpecies as string | null) ?? null,
     proposedDbhInches: numberOrNull(data.proposedDbhInches),
     clearFields: clearableFields(data.clearFields),
+    reviewFlag: typeof data.reviewFlag === 'string' ? data.reviewFlag : null,
     notes: (data.notes as string | null) ?? null,
     photoPath: (data.photoPath as string | null) ?? null,
     submittedAt: submittedAt instanceof Timestamp ? submittedAt.toDate() : null,

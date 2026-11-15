@@ -35,13 +35,15 @@ import { computed, watch } from 'vue'
 import {
   evaluateBadges,
   toBadgeCheckin,
+  toBadgeModification,
   toBadgeSubmission,
 } from '../lib/badges'
-import type { Checkin, Submission } from '../composables/useSubmissions'
+import type { Checkin, Submission, TreeModification } from '../composables/useSubmissions'
 
 const props = defineProps<{
   submissions: Submission[]
   checkins: Checkin[]
+  modifications?: TreeModification[]
 }>()
 
 const SEEN_KEY = `treeBadges.seen:${useAuth().user.value?.uid ?? 'guest'}`
@@ -62,6 +64,7 @@ const badges = computed(() => [
   ...evaluateBadges(
     props.submissions.map(toBadgeSubmission),
     props.checkins.map(toBadgeCheckin),
+    (props.modifications ?? []).map(toBadgeModification),
   ),
   ...evaluateCityBadges(props.checkins).filter(b => b.earned),
 ])

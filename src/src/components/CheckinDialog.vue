@@ -514,6 +514,7 @@ async function handleSubmit() {
         proposedSpecies: speciesChanged.value ? proposedSpecies.value.trim() : null,
         proposedDbhInches: dbhChanged.value ? proposedDbhValue.value : null,
         clearFields: dbhCleared.value ? ['dbhInches'] : [],
+        reviewFlag: props.reviewFlag ?? null,
         notes: notes.value,
         photoBlob: photoBlob.value ?? undefined,
         onProgress,

@@ -128,7 +128,7 @@ service cloud.firestore {
                          'userLat', 'userLng', 'distanceMeters', 'currentSpecies',
                          'currentDbhInches', 'missingReason', 'proposedLat', 'proposedLng',
                          'proposedSpecies', 'proposedDbhInches', 'clearFields', 'notes', 'photoPath',
-                         'submittedAt', 'status'])
+                         'reviewFlag', 'submittedAt', 'status'])
                     && request.resource.data.kind in ['missing', 'update']
                     && request.resource.data.treeId is string
                     && request.resource.data.treeId.size() <= 200
@@ -153,6 +153,8 @@ service cloud.firestore {
                     && !(request.resource.data.get('clearFields', []).hasAny(['dbhInches'])
                          && request.resource.data.get('proposedDbhInches', null) != null)
                     && optionalOwnPhoto(request.resource.data.get('photoPath', null), 'modifications')
+                    // The tree was flagged for a second look (city_derived.preql's review file).
+                    && request.resource.data.get('reviewFlag', null) in [null, 'dbh_outlier']
                     && modificationRateLimitAllows(request.auth.uid)
                     && getAfter(modificationRateLimitPath(request.auth.uid)).data.userId == request.auth.uid
                     && getAfter(modificationRateLimitPath(request.auth.uid)).data.lastModificationId == modificationId

@@ -325,6 +325,14 @@ describe('tree modifications', () => {
     await assertFails(modificationBatch(as('bob'), 'bob', { proposedDbhUnknown: true }).commit())
   })
 
+  test('a report can say the tree was flagged for a second look, with a known flag only', async () => {
+    await assertSucceeds(modificationBatch(as('alice'), 'alice', { reviewFlag: 'dbh_outlier' }).commit())
+    await seed((db) => setDoc(doc(db, 'modificationRateLimits', 'bob'), {
+      userId: 'bob', lastModificationId: 'm0', submittedAt: Timestamp.fromMillis(Date.now() - 5_000),
+    }))
+    await assertFails(modificationBatch(as('bob'), 'bob', { reviewFlag: 'made_up' }).commit())
+  })
+
   test('a report without its rate-limit marker is refused', async () => {
     await assertFails(modificationBatch(as('alice'), 'alice', {}, false).commit())
   })

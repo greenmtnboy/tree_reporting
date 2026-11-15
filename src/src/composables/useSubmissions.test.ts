@@ -250,6 +250,14 @@ describe('submitTreeModification', () => {
     expect('clearFields' in empty).toBe(false)
   })
 
+  it('records a second look on a report only for a flagged tree', async () => {
+    await submitTreeModification({ ...REPORT, kind: 'update', proposedSpecies: 'Acer rubrum' })
+    await submitTreeModification({ ...REPORT, kind: 'missing', missingReason: 'stump', reviewFlag: 'dbh_outlier' })
+    const [plain, flagged] = state.batches.map(b => b.writes[0].data)
+    expect('reviewFlag' in plain).toBe(false)
+    expect(flagged.reviewFlag).toBe('dbh_outlier')
+  })
+
   it('an update carries no missing reason, and its photo sits in the modifications folder', async () => {
     await submitTreeModification({
       ...REPORT,
