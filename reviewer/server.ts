@@ -472,6 +472,7 @@ app.post('/api/modifications/:id/approve', async (req, res, next) => {
         longitude: isUpdate ? (modification.proposedLng ?? null) : null,
         species: isUpdate ? (modification.proposedSpecies?.trim() || null) : null,
         dbhInches: isUpdate ? (modification.proposedDbhInches ?? null) : null,
+        dbhUnknown: isUpdate && modification.proposedDbhUnknown === true,
         submittedAt: modification.submittedAt ?? null,
         publishedAt: FieldValue.serverTimestamp(),
       })

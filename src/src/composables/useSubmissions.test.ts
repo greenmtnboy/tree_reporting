@@ -229,6 +229,16 @@ describe('submitTreeModification', () => {
     expect(rateLimit.data.lastModificationId).toBe(modification.path.split('/')[1])
   })
 
+  it('writes proposedDbhUnknown only on an update that clears the diameter', async () => {
+    await submitTreeModification({ ...REPORT, kind: 'update', proposedSpecies: 'Acer rubrum' })
+    await submitTreeModification({ ...REPORT, kind: 'update', proposedDbhUnknown: true })
+    await submitTreeModification({ ...REPORT, kind: 'missing', missingReason: 'stump', proposedDbhUnknown: true })
+    const [plain, cleared, missing] = state.batches.map(b => b.writes[0].data)
+    expect('proposedDbhUnknown' in plain, 'an ordinary report keeps the pre-existing rule field set').toBe(false)
+    expect(cleared).toMatchObject({ proposedDbhUnknown: true, proposedDbhInches: null })
+    expect('proposedDbhUnknown' in missing).toBe(false)
+  })
+
   it('an update carries no missing reason, and its photo sits in the modifications folder', async () => {
     await submitTreeModification({
       ...REPORT,

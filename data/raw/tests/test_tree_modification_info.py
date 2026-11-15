@@ -38,7 +38,7 @@ def test_each_field_takes_its_latest_correction():
     ])
     assert rows["bos-1"] == {
         "tree_id": "bos-1", "species": "Quercus rubra", "diameter_at_breast_height": 12.5,
-        "latitude": 42.31, "longitude": -71.1, "missing": False,
+        "dbh_unknown": False, "latitude": 42.31, "longitude": -71.1, "missing": False,
     }, "publishedAt orders the reports, not file order; a report that leaves a field alone keeps it"
 
 
@@ -53,6 +53,20 @@ def test_the_latest_report_decides_whether_the_tree_is_gone():
     assert rows["bos-1"]["species"] == "Acer rubrum", "a missing report keeps the earlier values, in case it is reversed"
     assert rows["bos-2"]["missing"] is False, "a later update says the tree is there after all"
     assert rows["bos-2"]["diameter_at_breast_height"] == 8
+
+
+def test_a_dbh_marked_unknown_clears_it_until_a_later_value():
+    rows = by_tree([
+        update("a", "2026-10-01T00:00:00Z", dbhInches=50),
+        update("a", "2026-10-02T00:00:00Z", dbhUnknown=True),
+        update("a", "2026-10-03T00:00:00Z", species="Ficus microcarpa"),
+        update("b", "2026-10-01T00:00:00Z", dbhUnknown=True),
+        update("b", "2026-10-02T00:00:00Z", dbhInches=14),
+    ])
+    assert (rows["a"]["diameter_at_breast_height"], rows["a"]["dbh_unknown"]) == (None, True), (
+        "unknown replaces the earlier value, and a report that leaves the DBH alone keeps it unknown"
+    )
+    assert (rows["b"]["diameter_at_breast_height"], rows["b"]["dbh_unknown"]) == (14, False)
 
 
 def test_a_proposed_species_is_folded_like_every_other_source():

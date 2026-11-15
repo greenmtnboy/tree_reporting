@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-  <div class="checkin-dialog" :class="{ 'checkin-dialog--remote': remoteCorrection }" role="dialog" aria-modal="true" aria-labelledby="checkin-title" @click.self="handleDismiss">
+  <div class="checkin-dialog" :class="{ 'checkin-dialog--remote': remoteCorrection, 'checkin-dialog--docked': docked }" role="dialog" :aria-modal="!docked" aria-labelledby="checkin-title" @click.self="handleDismiss">
     <div class="checkin-dialog__panel">
       <header class="checkin-dialog__header">
         <h2 id="checkin-title" class="checkin-dialog__title">{{ remoteCorrection ? 'Suggest a correction' : MODE_TITLES[mode] }}</h2>
@@ -112,10 +112,19 @@
                 inputmode="decimal"
                 min="0"
                 max="400"
-                step="0.5"
+                step="any"
                 class="text-input"
-                :placeholder="dbhInches != null ? String(dbhInches) : 'Measured around 4.5 ft up'"
+                data-testid="checkin-dbh"
+                :disabled="dbhUnknown"
+                :placeholder="dbhUnknown ? 'Unknown' : dbhInches != null ? String(dbhInches) : 'Measured around 4.5 ft up'"
               />
+            </label>
+            <label v-if="dbhInches != null" class="share-photo">
+              <input v-model="dbhUnknown" type="checkbox" data-testid="checkin-dbh-unknown" />
+              <span>
+                Diameter unknown
+                <span class="muted">— the recorded {{ dbhInches }} in is wrong and can't be measured from here.</span>
+              </span>
             </label>
           </template>
 
@@ -174,7 +183,7 @@
           <p v-if="mode === 'update' && dbhInvalid" class="error-text" data-testid="checkin-dbh-invalid">
             Diameter must be a number of inches between 0 and {{ MAX_DBH_IN }}.
           </p>
-          <p v-else-if="mode === 'update' && !hasChanges" class="muted">Change the pin, species or diameter to send a fix.</p>
+          <p v-else-if="mode === 'update' && !hasChanges" class="muted">Change the pin, species or diameter (or mark it unknown) to send a fix.</p>
 
           <div class="actions">
             <button type="button" class="btn-secondary" @click="handleDismiss">Cancel</button>
@@ -253,6 +262,8 @@ const props = defineProps<{
   plantYear?: number | null
   initialMode?: 'checkin' | 'update' | 'missing'
   remoteCorrection?: boolean
+  /** Street View is open on the right: take the docked card's column, no backdrop. */
+  docked?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -326,6 +337,9 @@ const proposedLng = ref(props.treeLng)
 const proposedSpecies = ref('')
 // v-model on a number input yields a number, or '' when cleared.
 const proposedDbh = ref<number | string>('')
+// The recorded diameter is wrong and nothing better is known: clear it. Distinct
+// from a blank input, which means "leave the diameter alone".
+const dbhUnknown = ref(false)
 const missingReason = ref<MissingReason>('removed')
 const notes = ref('')
 // Opt-in: a check-in photo stays private unless the user offers it here.
@@ -346,7 +360,7 @@ const proposedDbhValue = computed<number | null>(() => {
 // Something typed that proposedDbhValue refuses, so the user is told why the
 // fix is not being sent rather than seeing Send stay disabled.
 const dbhInvalid = computed(
-  () => proposedDbh.value !== '' && proposedDbh.value != null && proposedDbhValue.value == null,
+  () => !dbhUnknown.value && proposedDbh.value !== '' && proposedDbh.value != null && proposedDbhValue.value == null,
 )
 
 const speciesChanged = computed(() => {
@@ -355,11 +369,13 @@ const speciesChanged = computed(() => {
 })
 
 const dbhChanged = computed(
-  () => proposedDbhValue.value != null && proposedDbhValue.value !== props.dbhInches,
+  () => !dbhUnknown.value && proposedDbhValue.value != null && proposedDbhValue.value !== props.dbhInches,
 )
 
+const dbhCleared = computed(() => dbhUnknown.value && props.dbhInches != null)
+
 const hasChanges = computed(
-  () => movedMeters.value >= MIN_MOVE_M || speciesChanged.value || dbhChanged.value,
+  () => movedMeters.value >= MIN_MOVE_M || speciesChanged.value || dbhChanged.value || dbhCleared.value,
 )
 
 const canSubmit = computed(() => mode.value !== 'update' || (hasChanges.value && !dbhInvalid.value))
@@ -494,6 +510,7 @@ async function handleSubmit() {
         proposedLng: moved ? proposedLng.value : null,
         proposedSpecies: speciesChanged.value ? proposedSpecies.value.trim() : null,
         proposedDbhInches: dbhChanged.value ? proposedDbhValue.value : null,
+        proposedDbhUnknown: dbhCleared.value,
         notes: notes.value,
         photoBlob: photoBlob.value ?? undefined,
         onProgress,
@@ -672,8 +689,22 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
+/* Over the docked tree card's column, leaving Street View visible and live. */
+.checkin-dialog.checkin-dialog--docked {
+  background: transparent;
+  pointer-events: none;
+  justify-content: flex-start;
+  align-items: stretch;
+  padding: 16px;
+}
+.checkin-dialog--docked .checkin-dialog__panel {
+  pointer-events: auto;
+  max-width: var(--tree-dock-width, 420px);
+  max-height: none;
+}
+
 @media (min-width: 768px) {
-  .checkin-dialog--remote .checkin-dialog__panel {
+  .checkin-dialog--remote:not(.checkin-dialog--docked) .checkin-dialog__panel {
     max-width: 620px;
   }
 

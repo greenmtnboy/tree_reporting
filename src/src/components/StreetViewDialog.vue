@@ -1,6 +1,7 @@
 <template>
   <Teleport to="body">
-    <dialog ref="dialog" class="street-dialog" aria-labelledby="street-title" @close="emit('close')" @click="onBackdrop">
+    <dialog ref="dialog" class="street-dialog" :class="{ 'street-dialog--docked': docked }" aria-labelledby="street-title"
+      @close="emit('close')" @click="onBackdrop" @keydown.esc="dialog?.close()">
       <header>
         <h2 id="street-title">Street View near this tree</h2>
         <button type="button" aria-label="Close Street View" @click="dialog?.close()">✕</button>
@@ -34,7 +35,10 @@ import { basemapStyleUrl, bindMapTheme } from '../composables/mapTheme'
 import { useTheme } from '../composables/useTheme'
 import { streetViewEmbedUrl, streetViewExternalUrl, type TreePosition } from '../lib/streetView'
 
-const props = defineProps<{ position: TreePosition }>()
+// docked: a large non-modal panel to the right of the tree card, which
+// docks on the left (TreeMap), so the card stays readable and its correction
+// form usable while looking around. Undocked (phones) it is a modal over the sheet.
+const props = defineProps<{ position: TreePosition; docked?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 const dialog = ref<HTMLDialogElement>()
 const mapEl = ref<HTMLDivElement>()
@@ -46,12 +50,13 @@ let marker: maplibregl.Marker | undefined
 let unbindTheme: (() => void) | undefined
 const previousFocus = document.activeElement as HTMLElement | null
 function onBackdrop(event: MouseEvent) {
-  if (event.target !== dialog.value) return
+  if (props.docked || event.target !== dialog.value) return
   const rect = dialog.value!.getBoundingClientRect()
   if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.value?.close()
 }
 onMounted(() => {
-  dialog.value?.showModal()
+  if (props.docked) dialog.value?.show()
+  else dialog.value?.showModal()
   if (!mapEl.value) return
   const center: [number, number] = [props.position.lng, props.position.lat]
   miniMap = new maplibregl.Map({ container: mapEl.value, style: basemapStyleUrl(resolvedTheme.value),
@@ -87,5 +92,11 @@ p { padding: 20px; }
 .street-location p { padding: 8px 0; margin: 0; font-size: 12px; line-height: 1.4; }
 footer { font-size: 12px; flex-wrap: wrap; }
 footer span { flex: 1; min-width: 180px; }
+/* Non-modal, so not in the top layer: above the map and the docked card's
+   column, below the correction form (CheckinDialog, z-index 200). */
+.street-dialog--docked { inset: 16px 16px 16px calc(var(--tree-dock-width, 420px) + 32px); width: auto; height: auto; max-height: none; margin: 0; z-index: 150;
+  display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
+.street-dialog--docked .street-content { flex: 1; min-height: 0; grid-template-columns: minmax(200px, 1fr) 220px; }
+.street-dialog--docked .street-panorama { height: 100%; min-height: 0; }
 @media (max-width: 600px) { .street-content { grid-template-columns: minmax(200px, 1fr); } .street-minimap { height: 160px; } .street-panorama { height: 42dvh; } }
 </style>

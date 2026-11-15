@@ -127,7 +127,7 @@ service cloud.firestore {
                          'userId', 'kind', 'treeId', 'city', 'treeLat', 'treeLng',
                          'userLat', 'userLng', 'distanceMeters', 'currentSpecies',
                          'currentDbhInches', 'missingReason', 'proposedLat', 'proposedLng',
-                         'proposedSpecies', 'proposedDbhInches', 'notes', 'photoPath',
+                         'proposedSpecies', 'proposedDbhInches', 'proposedDbhUnknown', 'notes', 'photoPath',
                          'submittedAt', 'status'])
                     && request.resource.data.kind in ['missing', 'update']
                     && request.resource.data.treeId is string
@@ -144,6 +144,10 @@ service cloud.firestore {
                     && optionalString(request.resource.data.get('proposedSpecies', null), 200)
                     && optionalLatLng(request.resource.data.get('proposedLat', null), request.resource.data.get('proposedLng', null))
                     && optionalNumber(request.resource.data.get('proposedDbhInches', null))
+                    // Clear the recorded diameter; never alongside a new one.
+                    && request.resource.data.get('proposedDbhUnknown', false) in [false, true]
+                    && !(request.resource.data.get('proposedDbhUnknown', false) == true
+                         && request.resource.data.get('proposedDbhInches', null) != null)
                     && optionalOwnPhoto(request.resource.data.get('photoPath', null), 'modifications')
                     && modificationRateLimitAllows(request.auth.uid)
                     && getAfter(modificationRateLimitPath(request.auth.uid)).data.userId == request.auth.uid

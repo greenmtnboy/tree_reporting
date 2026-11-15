@@ -106,12 +106,12 @@
   >&#x25CE; Find Me</button>
 
   <!-- Three-pane tree info card; a full-screen sheet on mobile -->
-  <Teleport v-if="mapShown" to="body" :disabled="!props.simplified">
+  <Teleport v-if="mapShown" to="body" :disabled="!props.simplified && !streetViewDocked">
   <div
     v-if="treeCardLoading && !selectedTree"
     ref="treeCardEl"
     class="tree-card tree-card--loading"
-    :class="{ 'tree-card--sheet': props.simplified }"
+    :class="{ 'tree-card--sheet': props.simplified, 'tree-card--docked': streetViewDocked }"
     :style="treeCardStyle"
     role="status"
     aria-live="polite"
@@ -127,7 +127,7 @@
       </div>
     </div>
   </div>
-  <div v-else-if="selectedTree" ref="treeCardEl" class="tree-card" :class="{ 'tree-card--sheet': props.simplified }" :style="treeCardStyle" @click.stop>
+  <div v-else-if="selectedTree" ref="treeCardEl" class="tree-card" :class="{ 'tree-card--sheet': props.simplified, 'tree-card--docked': streetViewDocked }" :style="treeCardStyle" @click.stop>
     <div class="tree-card-header">
       <div class="tree-card-header-main">
         <div class="tree-card-title-wrap">
@@ -318,7 +318,7 @@
   </div>
   </Teleport>
 
-  <StreetViewDialog v-if="streetViewOpen && selectedTreeAnchor"
+  <StreetViewDialog v-if="streetViewOpen && selectedTreeAnchor" :docked="streetViewDocked"
     :position="{ lat: selectedTreeAnchor[1], lng: selectedTreeAnchor[0] }" @close="streetViewOpen = false" />
   <CheckinDialog
     v-if="checkinDialog"
@@ -332,6 +332,7 @@
     :initial-mode="checkinDialog.mode"
     :city="selectedCity"
     :remote-correction="!simplified"
+    :docked="streetViewDocked"
     @close="checkinDialog = null"
     @success="handleCheckinSuccess"
   />
@@ -1041,6 +1042,11 @@ const selectedTree = ref<PopupTreeRow | null>(null)
 const selectedTreeHeight = computed(() => selectedTree.value ? formatTreeHeight(selectedTree.value) : null)
 const streetViewOpen = ref(false)
 watch(() => selectedTree.value?.tree_id, () => { streetViewOpen.value = false })
+// Desktop Street View is a panel on the right with the card docked down the
+// left, rather than a modal over the anchored card.
+const streetViewDocked = computed(() => streetViewOpen.value && !props.simplified)
+// Back from the dock the card is anchored again, at its own size.
+watch(streetViewDocked, docked => { if (!docked) void nextTick(updateTreeCardPosition) })
 const unknownSpecies = computed(() => !selectedTree.value?.species || selectedTree.value.species === 'Unknown')
 
 // A placeholder `species` is not a taxon and has no enrichment row (see
@@ -1211,7 +1217,7 @@ function clampTreeCardPoint(x: number, y: number): { x: number; y: number } {
 
 const treeCardStyle = computed(() => {
   const point = selectedTreeScreenPoint.value
-  if (!point || props.simplified) return {}
+  if (!point || props.simplified || streetViewDocked.value) return {}
   return {
     left: `${point.x}px`,
     top: `${point.y}px`,
@@ -3404,6 +3410,26 @@ onUnmounted(() => {
   box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.46);
   animation: user-location-pulse 2s infinite;
 }
+
+/* Desktop with Street View open: the card docks down the left, panes
+   stacked, beside the Street View panel (StreetViewDialog, docked). */
+:root { --tree-dock-width: min(420px, 36vw); }
+.tree-card.tree-card--docked {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  bottom: 16px;
+  width: var(--tree-dock-width);
+  max-height: none;
+  transform: none;
+  z-index: 150;
+  overflow: hidden;
+}
+.tree-card--docked::after { display: none; }
+.tree-card--docked .tree-card-body { grid-template-columns: 1fr; overflow-y: auto; }
+.tree-card--docked .tree-card-pane { overflow: visible; }
+.tree-card--docked .tree-card-pane--tree,
+.tree-card--docked .tree-card-pane--species { border-right: none; border-bottom: 1px solid rgba(var(--accent-rgb), 0.08); }
 
 /* Mobile: the card is a full-screen sheet, open the moment a tree is tapped. */
 .tree-card.tree-card--sheet {

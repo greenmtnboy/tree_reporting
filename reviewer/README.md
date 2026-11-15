@@ -101,7 +101,8 @@ position inside it, an update that changes something), copies the change into
 `community/tree_modifications_manifest.json` (`latestPublishedAtByCity`, as
 for approved trees). Export rows carry only the change: tree id, city, kind,
 reason, and the proposed latitude/longitude/species/DBH, with null meaning
-"keep the source value". A tree can have several approved rows; a consumer
+"keep the source value", plus `dbhUnknown` (true: clear the tree's DBH; never
+alongside a value). A tree can have several approved rows; a consumer
 takes the last non-null value per field, and a later `missing` wins.
 `POST /api/modifications/republish` rebuilds the export.
 

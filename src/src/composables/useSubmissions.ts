@@ -443,6 +443,7 @@ export interface TreeModification {
   proposedLng: number | null
   proposedSpecies: string | null
   proposedDbhInches: number | null
+  proposedDbhUnknown: boolean
   notes: string | null
   photoPath: string | null
   submittedAt: Date | null
@@ -468,6 +469,8 @@ export interface ModificationInput {
   proposedLng?: number | null
   proposedSpecies?: string | null
   proposedDbhInches?: number | null
+  // Clear the recorded diameter: it is wrong and no better value is known.
+  proposedDbhUnknown?: boolean
   notes?: string | null
   photoBlob?: Blob
   onProgress?: (fraction: number) => void
@@ -507,6 +510,9 @@ export async function submitTreeModification(input: ModificationInput): Promise<
     photoPath,
     submittedAt: serverTimestamp(),
     status: 'pending' as SubmissionStatus,
+    // Written only when set, so an ordinary report keeps the field set the
+    // rules accepted before `proposedDbhUnknown` existed.
+    ...(isUpdate && input.proposedDbhUnknown ? { proposedDbhUnknown: true } : {}),
   }
   // Same shape as submitPhoto: the rate-limit marker is validated against
   // this document with getAfter(), so it cannot be skipped client-side.
@@ -550,6 +556,7 @@ function mapModificationDoc(id: string, data: Record<string, unknown>): TreeModi
     proposedLng: numberOrNull(data.proposedLng),
     proposedSpecies: (data.proposedSpecies as string | null) ?? null,
     proposedDbhInches: numberOrNull(data.proposedDbhInches),
+    proposedDbhUnknown: data.proposedDbhUnknown === true,
     notes: (data.notes as string | null) ?? null,
     photoPath: (data.photoPath as string | null) ?? null,
     submittedAt: submittedAt instanceof Timestamp ? submittedAt.toDate() : null,
