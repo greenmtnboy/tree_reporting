@@ -16,13 +16,12 @@ neu = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(neu)
 
 
-def _feature(species, *, global_id="E0E77880-2823-4372-A286-C519D37195B0", common=None,
+def _feature(species, *, global_id="E0E77880-2823-4372-A286-C519D37195B0",
              x=-71.09234, y=42.338003, diameter=None):
     return {
         "attributes": {
             "GlobalID": global_id,
             "SpeciesType": species,
-            "CommonName": common,
             "Diameter": diameter,
         },
         "geometry": {"x": x, "y": y},
@@ -55,7 +54,7 @@ class TestWoodyFilter:
 class TestTransform:
     def test_row_mapping(self):
         row = neu.transform(
-            [_feature("Acer rubrum", common="Red maple")]
+            [_feature("Acer rubrum")]
         ).to_pylist()[0]
         assert row["tree_id"] == "neu-e0e77880-2823-4372-a286-c519d37195b0"
         assert row["city"] == "USBOS"
@@ -63,6 +62,7 @@ class TestTransform:
         assert row["latitude"] == 42.338003
         assert row["longitude"] == -71.09234
         assert row["plant_date"] is None
+        assert "tree_name" not in row
         assert row["diameter_at_breast_height"] is None
 
     def test_a_zero_diameter_is_no_measurement(self):

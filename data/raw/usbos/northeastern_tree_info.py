@@ -8,7 +8,8 @@ ArcGIS Online org (NEUADMIN).
 
 The layer behind the public "Northeastern University Arboretum Viewer"
 experience: 2,193 plantings on the Fenway campus (2026-11-15), one point each,
-with a binomial (cultivar quoted in the same field) and a common name.  No
+with a binomial (cultivar quoted in the same field) and a common name, which
+is not read: common names come from the enrichment table.  No
 diameter, height, crown or planting date is filled on any row, and
 `Condition` is `Unknown` throughout, so the rows carry species and position
 only; Boston imputes the dbh from the species average like any other source.
@@ -34,7 +35,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -44,7 +44,7 @@ LAYER = FeatureLayer(
     "Trees/FeatureServer/3"
 )
 
-OUT_FIELDS = "OBJECTID,GlobalID,SpeciesType,CommonName,Diameter,Installed"
+OUT_FIELDS = "OBJECTID,GlobalID,SpeciesType,Diameter,Installed"
 
 # Ferns and herbaceous perennials planted in the campus beds (maidenhair,
 # wild ginger, painted fern, barrenwort, Christmas fern) and creeping thyme:
@@ -72,7 +72,6 @@ def is_woody(feature: dict) -> bool:
 def transform(features: list[dict]) -> pa.Table:
     tree_ids: list[str | None] = []
     species: list[str | None] = []
-    tree_names: list[str | None] = []
     latitudes: list[float | None] = []
     longitudes: list[float | None] = []
     dbhs: list[float | None] = []
@@ -83,7 +82,6 @@ def transform(features: list[dict]) -> pa.Table:
         # The quoted cultivar stays in: enforce_tree_schema reduces the
         # species to the taxon and keeps the selection on the tree row.
         species.append(normalize_species(rec.get("SpeciesType")))
-        tree_names.append(normalize_tree_name(rec.get("CommonName")))
         lat, lon = esri_point(feature.get("geometry"))
         latitudes.append(lat)
         longitudes.append(lon)
@@ -98,7 +96,6 @@ def transform(features: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_ids, type=pa.string()),
             "city": pa.array(["USBOS"] * n, type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_names, type=pa.string()),
             # `Installed` is empty on every row; `Inspected` is a survey
             # visit, not a planting, so it is not a plant_date.
             "plant_date": pa.array([None] * n, type=pa.date32()),
