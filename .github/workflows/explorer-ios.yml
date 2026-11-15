@@ -34,22 +34,30 @@ jobs:
           version: 10.33.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm ios:sync
-      - name: Build, install and launch on an iPhone simulator
+      # Compile before booting iOS; Xcode and a cold simulator otherwise
+      # compete for memory on the standard macOS runner.
+      - name: Build the iOS simulator app
+        run: |
+          xcodebuild -quiet -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/ios-build" \
+            ARCHS=arm64 CODE_SIGNING_ALLOWED=NO build
+          APP="$RUNNER_TEMP/ios-build/Build/Products/Release-iphonesimulator/App.app"
+          test -s "$APP/public/index.html"
+          echo "APP=$APP" >> "$GITHUB_ENV"
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/Explorer-simulator.zip"
+      - name: Install and launch on an iPhone simulator
         run: |
           DEVICE=$(xcrun simctl list devices available -j | jq -er '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone"))][0].udid')
           xcrun simctl boot "$DEVICE"
           echo "DEVICE=$DEVICE" >> "$GITHUB_ENV"
           xcrun simctl bootstatus "$DEVICE" -b
-          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
-            -destination "id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/ios-build" CODE_SIGNING_ALLOWED=NO build
-          APP="$RUNNER_TEMP/ios-build/Build/Products/Release-iphonesimulator/App.app"
-          test -s "$APP/public/index.html"
           xcrun simctl install "$DEVICE" "$APP"
           xcrun simctl launch "$DEVICE" world.arborary.explorer
           sleep 8
           xcrun simctl io "$DEVICE" screenshot "$RUNNER_TEMP/launch.png"
-          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/Explorer-simulator.zip"
       - name: Check native location and the city map
+        env:
+          MAESTRO_CLI_NO_ANALYTICS: '1'
         run: |
           cd "$RUNNER_TEMP"
           curl -fsSL --retry 2 -o maestro.zip https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.12.1/maestro.zip
@@ -57,12 +65,17 @@ jobs:
           unzip -q maestro.zip
           maestro/bin/maestro --device "$DEVICE" test --debug-output "$RUNNER_TEMP/maestro-debug" "$GITHUB_WORKSPACE/src/ios/smoke.yaml"
           xcrun simctl io "$DEVICE" screenshot "$RUNNER_TEMP/new-york.png"
+      - name: Capture failed simulator state
+        if: failure() && env.DEVICE != ''
+        run: xcrun simctl io "$DEVICE" screenshot "$RUNNER_TEMP/failure.png"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: explorer-ios-simulator
+          include-hidden-files: true
           path: |
             ${{ runner.temp }}/Explorer-simulator.zip
             ${{ runner.temp }}/launch.png
             ${{ runner.temp }}/new-york.png
+            ${{ runner.temp }}/failure.png
             ${{ runner.temp }}/maestro-debug/
