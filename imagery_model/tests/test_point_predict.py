@@ -244,6 +244,47 @@ def test_window_cores_reassemble_exactly_the_tile():
     assert torch.equal(ringed["genus_logits"][0], tile[:2])
 
 
+def test_cores_of_the_kept_region_alone_stitch_to_the_same_tile():
+    torch = pytest.importorskip("torch")
+    cells = 16
+    torch.manual_seed(0)
+    output = {"center_logits": torch.randn(4, cells, cells), "genus_logits": torch.randn(4, 3, cells, cells)}
+    for ring in (0, 1, 2):
+        start, size = point_predict.core_region(cells, ring)
+        assert (start, size) == (4 - ring, 8 + 2 * ring)
+        region = {key: value[..., start:start + size, start:start + size] for key, value in output.items()}
+        whole = point_predict.stitch_cores(output, cells, ring)
+        kept = point_predict.stitch_cores(region, cells, ring, origin=start)
+        for key in output:
+            assert torch.equal(kept[key], whole[key])
+
+
+def test_a_cached_tile_is_read_once_until_it_is_rewritten(tmp_path, monkeypatch):
+    import os
+    import rasterio
+
+    chip = point_chip_id(26919, 0, 8)
+    _cache_tile(tmp_path, 2023, chip, 0, 8, value=5)
+    folder = point_predict.point_cache_root(tmp_path) / "naip2023"
+    tif = next(folder.glob("*.tif"))
+    manifest = next(folder.glob("*.manifest.json"))
+    opened = []
+    real_open = rasterio.open
+    monkeypatch.setattr(rasterio, "open", lambda *a, **k: opened.append(a[0]) or real_open(*a, **k))
+
+    first = point_predict.cached_tile(tif, manifest)
+    again = point_predict.cached_tile(tif, manifest)
+    assert len(opened) == 1 and again[0] is first[0]
+    assert (first[0] == 5).all() and first[1] == 1.0
+    assert not first[0].flags.writeable  # one array, every caller's
+
+    image = np.full(first[0].shape, 9, dtype=np.uint8)
+    point_predict.write_cached_tile(tif, image, crs="EPSG:26919", west=0, north=8, resolution_m=0.3)
+    stamp = tif.stat().st_mtime_ns + 1_000_000_000
+    os.utime(tif, ns=(stamp, stamp))
+    assert (point_predict.cached_tile(tif, manifest)[0] == 9).all()
+
+
 def test_context_image_surrounds_the_tile_with_its_cached_neighbours(tmp_path, monkeypatch):
     monkeypatch.setattr(point_predict, "year_items", lambda bounds, year, stac_url: [])  # nothing to fetch
     west, north, step = 1000.0, 5000.0, 8 * 0.3
@@ -295,3 +336,12 @@ def test_a_tile_in_context_is_predicted_from_its_surround(tmp_path):
     )
     assert seen["shape"] == (4, 12, 12)
     assert len(result["bundle"]["predictionLayer"]["predictions"]) == 1
+    assert result["png"]
+
+    unrendered = point_predict.predict_tile(
+        predictor, lat, lon, artifacts=tmp_path, run="run", year=None, stac_url="unused", city="USBOS",
+        envelopes={}, territory={}, min_score=0.1, threshold=0.35, coefficients=None, readers=None,
+        epsg_hint=26919, context=True, render=False,
+    )
+    assert unrendered["png"] == b""
+    assert unrendered["bundle"]["predictionLayer"] == result["bundle"]["predictionLayer"]
