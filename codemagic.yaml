@@ -1,6 +1,6 @@
 workflows:
   explorer-testflight:
-    name: Arborary Explorer · internal TestFlight
+    name: Arborary.World · internal TestFlight
     instance_type: mac_mini_m2
     working_directory: src
     max_build_duration: 60
