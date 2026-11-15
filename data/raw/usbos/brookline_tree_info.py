@@ -16,7 +16,7 @@ from shared.ingest import emit, enforce_tree_schema, normalize_species, validate
 # ArcGIS FeatureServer — Brookline Tree Viewer
 QUERY_URL = "https://services1.arcgis.com/Oknk0tvfHOElpgGU/arcgis/rest/services/Brookline_Tree_Viewer_Web_WFL1/FeatureServer/0/query"
 PAGE_SIZE = 2000
-OUT_FIELDS = "OBJECTID,ScientificNameTxt,CommonNameTxt,DBH,YR_PLANT,IsStump"
+OUT_FIELDS = "OBJECTID,ScientificNameTxt,DBH,YR_PLANT,IsStump"
 
 
 def merc_to_wgs84(x: float, y: float) -> tuple[float, float]:
@@ -68,7 +68,6 @@ def build_table(features: list[dict]) -> pa.Table:
     tree_ids: list[str | None] = []
     cities: list[str] = []
     species_list: list[str | None] = []
-    tree_names: list[str | None] = []
     plant_dates: list[date | None] = []
     latitudes: list[float | None] = []
     longitudes: list[float | None] = []
@@ -93,9 +92,6 @@ def build_table(features: list[dict]) -> pa.Table:
         cities.append("USBOS")
         species_list.append(species)
 
-        cn = attrs.get("CommonNameTxt")
-        tree_names.append(cn.strip() if cn and cn.strip() else None)
-
         plant_dates.append(yr_to_date(attrs.get("YR_PLANT")))
 
         geom = feat.get("geometry")
@@ -115,7 +111,6 @@ def build_table(features: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_ids, type=pa.string()),
             "city": pa.array(cities, type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
-            "tree_name": pa.array(tree_names, type=pa.string()),
             "plant_date": pa.array(plant_dates, type=pa.date32()),
             "latitude": pa.array(latitudes, type=pa.float64()),
             "longitude": pa.array(longitudes, type=pa.float64()),

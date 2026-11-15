@@ -51,7 +51,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
-    normalize_tree_name,
     parse_plant_date_year,
     stream_to_table,
     validate_coordinates,
@@ -66,7 +65,7 @@ LAYER = FeatureLayer(
 # The layer publishes no lat/lon columns, so the geometry is what carries the
 # position; `out_sr=4326` reprojects it server-side out of the layer's Web
 # Mercator storage.
-OUT_FIELDS = "TREEID,SP_SCIEN,SP_COMM,DBH,INSTYR,FCODE"
+OUT_FIELDS = "TREEID,SP_SCIEN,DBH,INSTYR,FCODE"
 
 # `DBH` is a coded value, and these are the codes -- read off the layer's own
 # `AST_tree_dbh` domain (`?f=json`, `fields[].domain`) rather than guessed:
@@ -152,7 +151,6 @@ def iter_row_chunks():
 def transform(features: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -167,7 +165,6 @@ def transform(features: list[dict]) -> pa.Table:
 
         tree_id.append(f"hfx-{raw_id}")
         species.append(parse_species(rec.get("SP_SCIEN")))
-        tree_name.append(normalize_tree_name(rec.get("SP_COMM")))
         # INSTYR is the planting year, and 3,930 rows record it as 0 -- an
         # inventory's way of saying "before we started counting".
         # parse_plant_date_year returns None for that rather than year zero.
@@ -182,7 +179,6 @@ def transform(features: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["CAHFX"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

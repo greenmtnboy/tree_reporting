@@ -38,7 +38,7 @@ def test_records_to_table_emits_canonical_city_rows():
             # partition that Trilogy will union into the SF Parquet.
             "data_source": "COMMUNITY_USSFO",
             "species": "Platanus x hispanica",
-            "tree_name": "Platanus x hispanica",
+            "tree_name": None,
             "plant_date": None,
             "diameter_at_breast_height": None,
             "latitude": 37.77,

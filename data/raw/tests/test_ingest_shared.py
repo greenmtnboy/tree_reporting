@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from shared.ingest import (
     PORTAL_UNAVAILABLE_TIMESTAMP,
     TREE_COLUMN_TYPES,
+    TREE_NAME_MAX_REPEATS,
     UpstreamUnavailable,
     circumference_cm_to_dbh_inches,
     cm_to_inches,
@@ -40,7 +41,6 @@ from shared.ingest import (
     make_point_wkt,
     normalize_species,
     normalize_species_parts,
-    normalize_tree_name,
     parse_plant_date_year,
     parse_wkb_point,
     rd_centroid,
@@ -1605,47 +1605,6 @@ class TestStreamedIngest:
         assert "1 carry a cultivar" in err
 
 
-class TestNormalizeTreeName:
-    """The two inversions a municipal common-name column comes in.
-
-    `tree_name` is what the map's tree card shows above the scientific name,
-    so an un-inverted name is the whole point of this helper.
-    """
-
-    @pytest.mark.parametrize(
-        "raw,expected",
-        [
-            # A single comma inverts -- Calgary, Edmonton, Denver.
-            ("ASH, GREEN", "Green ash"),
-            ("Spruce, Colorado", "Colorado spruce"),
-            ("Aspen, quaking/trembling", "Quaking/trembling aspen"),
-            # A spaced hyphen inverts -- Burlington ON, on either side.
-            ("MAPLE - NORWAY", "Norway maple"),
-            ("BUCKEYE- OHIO", "Ohio buckeye"),
-            ("SWEETGUM -ROTUNDILOBA", "Rotundiloba sweetgum"),
-            ("HORNBEAM - BLUE-BEECH", "Blue-beech hornbeam"),
-            # A bare hyphen does not: these are single hyphenated names, and
-            # inverting them produced "Chestnut horse" and "Ash mountain".
-            ("HORSE-CHESTNUT", "Horse-chestnut"),
-            ("MOUNTAIN-ASH", "Mountain-ash"),
-            ("YELLOW-WOOD", "Yellow-wood"),
-            # Casing only, for a name that is already the right way round.
-            ("NORWAY MAPLE", "Norway maple"),
-            ("silver maple", "Silver maple"),
-            # Placeholders are not names.
-            ("N/A", None),
-            ("unknown", None),
-            ("", None),
-            (None, None),
-        ],
-    )
-    def test_normalize_tree_name(self, raw, expected):
-        assert normalize_tree_name(raw) == expected
-
-    def test_two_commas_are_a_list_not_an_inversion(self):
-        assert normalize_tree_name("Oak, red, northern") == "Oak, red, northern"
-
-
 # ---------------------------------------------------------------------------
 # The DBH plausibility guard
 # ---------------------------------------------------------------------------
@@ -1757,3 +1716,41 @@ class TestImplausiblePlantDates:
         assert capsys.readouterr().err == ""
         report_species_cleanup(summary, city="Test")
         assert "2 planting date(s) were before 1500 or in the future" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# tree_name is a tree's own name (docs/NAMED_TREES_AND_CROWN_POSITION.md)
+# ---------------------------------------------------------------------------
+
+def _named(names):
+    return pa.table({
+        "tree_id": [f"t{i}" for i in range(len(names))],
+        "city": ["USSFO"] * len(names),
+        "species": ["Quercus agrifolia"] * len(names),
+        "tree_name": names,
+    })
+
+
+class TestProperTreeNames:
+    def test_a_source_name_is_null_unless_the_ingest_declares_proper_names(self):
+        out = enforce_tree_schema(_named(["Coast live oak", "The Senator"]), data_source="SF_OPENDATA")
+        assert out.column("tree_name").to_pylist() == [None, None]
+        assert out.schema.field("tree_name").type == pa.string()
+
+    def test_declared_proper_names_publish(self):
+        out = enforce_tree_schema(
+            _named(["  The   Senator ", None, "", "Old Glory"]), data_source="SF_OPENDATA", proper_names=True
+        )
+        assert out.column("tree_name").to_pylist() == ["The Senator", None, None, "Old Glory"]
+
+    def test_a_name_shared_by_many_trees_is_a_common_name(self, capsys):
+        names = ["Oak"] * (TREE_NAME_MAX_REPEATS + 1) + ["Oak Tree One", "The Senator"]
+        out = enforce_tree_schema(_named(names), data_source="SF_OPENDATA", proper_names=True)
+        assert out.column("tree_name").to_pylist() == [None] * (TREE_NAME_MAX_REPEATS + 1) + ["Oak Tree One", "The Senator"]
+        assert "were published as null" in capsys.readouterr().err
+
+    def test_a_paged_ingest_counts_repeats_into_the_summary(self):
+        summary: dict[str, int] = {}
+        names = ["Street tree"] * (TREE_NAME_MAX_REPEATS + 2)
+        enforce_tree_schema(_named(names), data_source="SF_OPENDATA", proper_names=True, summary=summary)
+        assert summary["repeated_tree_name"] == TREE_NAME_MAX_REPEATS + 2

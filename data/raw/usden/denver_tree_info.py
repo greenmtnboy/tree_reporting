@@ -33,7 +33,7 @@ LAYER = FeatureLayer(
 
 # The layer publishes WGS84 lat/lon as ordinary columns, so the geometry is
 # redundant weight -- read the attributes and skip it.
-OUT_FIELDS = "SITE_ID,SPECIES_BOTANIC,SPECIES_COMMON,DIAMETER,X_LONG,Y_LAT"
+OUT_FIELDS = "SITE_ID,SPECIES_BOTANIC,DIAMETER,X_LONG,Y_LAT"
 
 # Denver marks a planting site with no tree in it by prefixing the species with
 # an underscore: "_Vacant Site", "_Vacant site - new", "_Vacant site-not
@@ -102,25 +102,6 @@ def is_planted_site(record: dict) -> bool:
     return stripped.lower() not in NON_SPECIES_VALUES
 
 
-def normalize_common_name(value: str | None) -> str | None:
-    """Denver writes common names inverted for sorting: "Pear, Flowering".
-
-    Un-invert the single-comma form so the map's tree card reads "Flowering
-    Pear".  Anything with a different shape is passed through as written.
-    """
-    if not value:
-        return None
-    text = " ".join(value.split())
-    if not text or text.lower() in {"n/a", "na", "unknown"}:
-        return None
-    head, sep, tail = text.partition(",")
-    if sep and "," not in tail:
-        head, tail = head.strip(), tail.strip()
-        if head and tail:
-            return f"{tail} {head}"
-    return text
-
-
 def iter_row_chunks():
     """One ArcGIS page at a time.
 
@@ -134,7 +115,6 @@ def iter_row_chunks():
 def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -148,7 +128,6 @@ def transform(rows: list[dict]) -> pa.Table:
 
         tree_id.append(f"den-{site_id}")
         species.append(normalize_species(rec.get("SPECIES_BOTANIC")))
-        tree_name.append(normalize_common_name(rec.get("SPECIES_COMMON")))
         # The layer carries INVENTORY_DATE -- when a surveyor visited -- and no
         # planting date.  Those are different facts and only one of them is
         # `plant_date`, so Denver publishes none.
@@ -162,7 +141,6 @@ def transform(rows: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["USDEN"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

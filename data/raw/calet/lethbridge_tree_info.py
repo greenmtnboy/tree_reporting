@@ -41,7 +41,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
-    normalize_tree_name,
     parse_plant_date_year,
     stream_to_table,
     validate_coordinates,
@@ -56,7 +55,7 @@ LAYER = FeatureLayer(
 # `X_Coord`/`Y_Coord` are the layer's own 3TM projection rather than lat/lon,
 # so the geometry is what carries a usable position; `out_sr=4326` reprojects
 # it server-side.
-OUT_FIELDS = "AssetID,botn_name,cultivar,comn_name,diameter,planted,status"
+OUT_FIELDS = "AssetID,botn_name,cultivar,diameter,planted,status"
 
 # `diameter` is centimetres, as every Canadian portal publishes.  19 rows
 # record 0, which is an unmeasured tree rather than one of no width; the top
@@ -104,7 +103,6 @@ def transform(features: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
     cultivar: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -120,7 +118,6 @@ def transform(features: list[dict]) -> pa.Table:
         tree_id.append(f"let-{raw_id}")
         species.append(normalize_species(rec.get("botn_name")))
         cultivar.append(clean(rec.get("cultivar")))
-        tree_name.append(normalize_tree_name(rec.get("comn_name")))
         plant_date.append(parse_plant_date_year(rec.get("planted")))
         latitude.append(geom.get("y"))
         longitude.append(geom.get("x"))
@@ -132,7 +129,6 @@ def transform(features: list[dict]) -> pa.Table:
             "city": pa.array(["CALET"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
             "cultivar": pa.array(cultivar, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

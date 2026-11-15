@@ -151,7 +151,6 @@ def usable_features(features: list[dict]) -> list[dict]:
 def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -167,11 +166,6 @@ def transform(rows: list[dict]) -> pa.Table:
         # tree_id is a single global namespace the rollup unions.
         tree_id.append(f"lgl-{lon:.7f}_{lat:.7f}")
         species.append(parse_species(props.get("Espece")))
-        # The portal publishes the French common name only, joined into
-        # `Espece`.  tree_name is the map's card title and sits behind the
-        # enrichment table's English name, so a French one would surface only
-        # on an unenriched taxon -- see caque/quebec_tree_info.py.
-        tree_name.append(None)
         plant_date.append(None)
         latitude.append(lat)
         longitude.append(lon)
@@ -182,7 +176,6 @@ def transform(rows: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["CALON"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

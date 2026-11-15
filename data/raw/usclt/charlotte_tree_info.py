@@ -55,11 +55,6 @@ usually eastern redcedar; the layer spells that one out) and the generic
 `Broadleaf Deciduous/Evergreen ...` forms, which are `Unknown`.  `PALM SPP`
 is the `Palm` sentinel and `UNKNOWN SHRUB` the `Shrub` one.
 
-`tree_name` is the un-inverted reading that resolved.  A name that resolved
-under no reading is published as written only when it is not in the
-all-capitals inverted convention; `OAK TURKEY` publishes no `tree_name`
-rather than "Oak turkey".
-
 A quoted selection (`CRAPEMYRTLE 'CAROLINA BEAUTY'`, `GINKGO 'LAKEVIEW'`) is
 the `cultivar`, title-cased from the source's capitals; an unterminated quote
 (`CHOKECHERRY: COMMON 'SHUB`) is not a cultivar.  `DBH` is inches;
@@ -82,7 +77,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     get_json_with_retry,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -164,11 +158,11 @@ def readings(text: str) -> list[str]:
     return out
 
 
-def charlotte_name(raw: str | None) -> tuple[str | None, str | None, str | None]:
-    """`(species, tree_name, cultivar)` for one `Common` value."""
+def charlotte_name(raw: str | None) -> tuple[str | None, str | None]:
+    """`(species, cultivar)` for one `Common` value."""
     text = " ".join((raw or "").split())
     if not any(ch.isalpha() for ch in text):
-        return None, None, None
+        return None, None
     match = _CULTIVAR.search(text)
     cultivar = None
     if match:
@@ -185,22 +179,17 @@ def charlotte_name(raw: str | None) -> tuple[str | None, str | None, str | None]
 
     key = common_name_key(text)
     if key in LOCAL_KEYS:
-        return LOCAL_KEYS[key], normalize_tree_name(text), cultivar
+        return LOCAL_KEYS[key], cultivar
     if _GENERIC_FORM.match(key):
-        return None, normalize_tree_name(text), cultivar
+        return None, cultivar
 
     for reading in readings(text):
         species = species_from_common_name(reading)
         if species is not None:
             if genus_only and " " in species:
                 species = species.split(" ")[0]
-            return species, normalize_tree_name(reading), cultivar
-
-    inverted_convention = (
-        text.isupper() and " " in text and ":" not in raw and "," not in text
-    )
-    name = None if inverted_convention else normalize_tree_name(readings(text)[0])
-    return None, name, cultivar
+            return species, cultivar
+    return None, cultivar
 
 
 def iter_row_chunks():
@@ -219,7 +208,6 @@ class Transformer:
         tree_id: list[str | None] = []
         species: list[str | None] = []
         cultivar: list[str | None] = []
-        tree_name: list[str | None] = []
         plant_date: list[date | None] = []
         latitude: list[float | None] = []
         longitude: list[float | None] = []
@@ -235,9 +223,8 @@ class Transformer:
                 tree_id.append(f"clt-{int(raw_id)}-{rec['OBJECTID']}")
             else:
                 tree_id.append(f"clt-{int(raw_id)}")
-            sp, name, cv = charlotte_name(rec.get("Common"))
+            sp, cv = charlotte_name(rec.get("Common"))
             species.append(sp)
-            tree_name.append(name)
             cultivar.append(cv)
             plant_date.append(None)
             lat, lon = esri_point(feature.get("geometry"))
@@ -251,7 +238,6 @@ class Transformer:
                 "city": pa.array(["USCLT"] * len(tree_id), type=pa.string()),
                 "species": pa.array(species, type=pa.string()),
                 "cultivar": pa.array(cultivar, type=pa.string()),
-                "tree_name": pa.array(tree_name, type=pa.string()),
                 "plant_date": pa.array(plant_date, type=pa.date32()),
                 "latitude": pa.array(latitude, type=pa.float64()),
                 "longitude": pa.array(longitude, type=pa.float64()),

@@ -101,7 +101,8 @@ def write_modifications(conn, path: Path, rows) -> None:
     conn.execute("DROP TABLE IF EXISTS mods")
     conn.execute(
         "CREATE TABLE mods (tree_id VARCHAR, species VARCHAR, diameter_at_breast_height DOUBLE, "
-        "dbh_unknown BOOLEAN DEFAULT false, latitude DOUBLE, longitude DOUBLE, missing BOOLEAN)"
+        "dbh_unknown BOOLEAN DEFAULT false, latitude DOUBLE, longitude DOUBLE, missing BOOLEAN, "
+        "tree_name VARCHAR, significance VARCHAR, significance_source VARCHAR)"
     )
     if rows:
         conn.executemany(

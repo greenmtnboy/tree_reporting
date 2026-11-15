@@ -27,7 +27,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
-    normalize_tree_name,
     validate_coordinates,
 )
 
@@ -351,7 +350,6 @@ def build_table(records: list[dict]) -> pa.Table:
     cities: list[str] = []
     species_list: list[str | None] = []
     cultivars: list[str | None] = []
-    tree_names: list[str | None] = []
     plant_dates: list[date | None] = []
     latitudes: list[float | None] = []
     longitudes: list[float | None] = []
@@ -368,7 +366,6 @@ def build_table(records: list[dict]) -> pa.Table:
         species_list.append(species)
         cultivars.append(_text(rec, "cultivar") or None)
 
-        tree_names.append(normalize_tree_name(rec.get("commonname")))
         plant_dates.append(parse_plant_date(_plant_date(rec)))
 
         point = _point(rec)
@@ -384,7 +381,6 @@ def build_table(records: list[dict]) -> pa.Table:
             "city": pa.array(cities, type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
             "cultivar": pa.array(cultivars, type=pa.string()),
-            "tree_name": pa.array(tree_names, type=pa.string()),
             "plant_date": pa.array(plant_dates, type=pa.date32()),
             "latitude": pa.array(latitudes, type=pa.float64()),
             "longitude": pa.array(longitudes, type=pa.float64()),

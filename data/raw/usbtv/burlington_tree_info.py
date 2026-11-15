@@ -25,7 +25,7 @@ LAYER = FeatureLayer(
     "https://maps.burlingtonvt.gov/arcgis/rest/services/"
     "Tree_Sites_Public_View/FeatureServer/0"
 )
-OUT_FIELDS = "OBJECTID,botanic,common,planted,diameter"
+OUT_FIELDS = "OBJECTID,botanic,planted,diameter"
 
 # Active tree sites only (T = Tree; excludes R = Removed, S = Stump, etc.)
 WHERE = "site_typ = 'T'"
@@ -55,7 +55,6 @@ def iter_row_chunks():
 def transform(features: list[dict]) -> pa.Table:
     tree_ids: list[str | None] = []
     species_list: list[str | None] = []
-    tree_names: list[str | None] = []
     plant_dates: list[date | None] = []
     latitudes: list[float | None] = []
     longitudes: list[float | None] = []
@@ -68,9 +67,6 @@ def transform(features: list[dict]) -> pa.Table:
         obj_id = rec.get("OBJECTID")
         tree_ids.append(f"btv-{obj_id}" if obj_id is not None else None)
         species_list.append(normalize_species(rec.get("botanic")))
-
-        cn = rec.get("common")
-        tree_names.append(cn.strip() if cn and cn.strip() else None)
 
         plant_dates.append(parse_plant_date_year(rec.get("planted")))
 
@@ -89,7 +85,6 @@ def transform(features: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_ids, type=pa.string()),
             "city": pa.array(["USBTV"] * len(tree_ids), type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
-            "tree_name": pa.array(tree_names, type=pa.string()),
             "plant_date": pa.array(plant_dates, type=pa.date32()),
             "latitude": pa.array(latitudes, type=pa.float64()),
             "longitude": pa.array(longitudes, type=pa.float64()),

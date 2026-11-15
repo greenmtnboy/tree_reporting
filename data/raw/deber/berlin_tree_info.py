@@ -14,7 +14,6 @@ Feature type: baumbestand:strassenbaeume (434k trees)
 Field mapping:
   gisid        -> tree_id  (prefixed "ber-" for global uniqueness)
   art_bot      -> species  (scientific name / Latin binomial)
-  art_dtsch    -> tree_name (German common name)
   pflanzjahr   -> plant_date (year integer → date(year, 1, 1), null if 0 or missing)
   stammumfg    -> diameter_at_breast_height (trunk circumference cm → DBH inches)
   geometry     -> latitude / longitude (WGS84 Point coordinates from GeoJSON)
@@ -94,7 +93,6 @@ def transform(features: list[dict]) -> pa.Table:
     tree_ids = []
     cities = []
     species_list = []
-    tree_names = []
     plant_dates = []
     latitudes = []
     longitudes = []
@@ -109,8 +107,6 @@ def transform(features: list[dict]) -> pa.Table:
         cities.append("DEBER")
 
         species_list.append(normalize_species(props.get("art_bot")))
-        raw_name = props.get("art_dtsch") or ""
-        tree_names.append(raw_name.strip() if raw_name.strip() else None)
         plant_dates.append(parse_plant_date(props.get("pflanzjahr")))
         dbhs.append(parse_dbh(props.get("stammumfg")))
 
@@ -128,7 +124,6 @@ def transform(features: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_ids, type=pa.string()),
             "city": pa.array(cities, type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
-            "tree_name": pa.array(tree_names, type=pa.string()),
             "plant_date": pa.array(plant_dates, type=pa.date32()),
             "latitude": pa.array(latitudes, type=pa.float64()),
             "longitude": pa.array(longitudes, type=pa.float64()),

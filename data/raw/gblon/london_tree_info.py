@@ -16,7 +16,6 @@ TfL, Royal Parks, LLDC, and Quintain. Last updated November 2025.
 CSV columns (2025 release):
   uniqueid        -> tree_id  (prefixed "lon-")
   taxon_species   -> species  (scientific/taxonomic name; may be genus-only)
-  common_name     -> tree_name
   lat / lon       -> latitude / longitude
   girth_dbh       -> diameter_at_breast_height  ("32 cm" string → DBH inches)
   (no plant_date column in this dataset)
@@ -231,9 +230,6 @@ def transform(rows: list[dict]) -> pa.Table:
         "full_scientific_name", "latin_name", "botanical_name",
         "scientific_name", "species_latin", "latin", "species",
     )
-    common_field = col(
-        "common_name", "common", "english_name", "common_name_uk",
-    )
     borough_field = col("borough", "borough_name", "district")
     year_field = col(
         "year_planted", "planting_year", "planted_year",
@@ -259,7 +255,6 @@ def transform(rows: list[dict]) -> pa.Table:
     tree_ids: list[str | None] = []
     cities: list[str] = []
     species_list: list[str | None] = []
-    tree_names: list[str | None] = []
     boroughs: list[str | None] = []
     plant_dates: list[date | None] = []
     latitudes: list[float | None] = []
@@ -275,10 +270,6 @@ def transform(rows: list[dict]) -> pa.Table:
         # species (scientific name only)
         raw_species = row.get(species_field, "") if species_field else ""
         species_list.append(normalize_species(raw_species))
-
-        # common name / tree name
-        raw_common = row.get(common_field, "") if common_field else ""
-        tree_names.append(raw_common.strip() if raw_common and raw_common.strip() else None)
 
         # borough
         raw_borough = row.get(borough_field, "") if borough_field else ""
@@ -325,7 +316,6 @@ def transform(rows: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_ids, type=pa.string()),
             "city": pa.array(cities, type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
-            "tree_name": pa.array(tree_names, type=pa.string()),
             "borough": pa.array(boroughs, type=pa.string()),
             "plant_date": pa.array(plant_dates, type=pa.date32()),
             "latitude": pa.array(latitudes, type=pa.float64()),

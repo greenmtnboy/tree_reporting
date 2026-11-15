@@ -14,7 +14,6 @@ API:    https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets/tree
 Field mapping:
   com_id           -> tree_id  (prefixed "mel-" for global uniqueness)
   genus + species  -> scientific name (combined as "Genus epithet")
-  common_name      -> tree_name
   dbh              -> diameter_at_breast_height (cm → inches: divide by 2.54)
   date_planted     -> plant_date
   geo_point_2d     -> latitude, longitude  (WKB binary)
@@ -98,17 +97,6 @@ def transform(table: pa.Table) -> pa.Table:
             type=pa.string(),
         )
 
-    # --- tree_name: common_name ---
-    cn_col = next(
-        (c for c in names if c.lower() in ("common_name", "commonname", "tree_name")),
-        None,
-    )
-    cn_list = table[cn_col].to_pylist() if cn_col else [None] * n
-    tree_name = pa.array(
-        [v.strip() if v and v.strip() else None for v in cn_list],
-        type=pa.string(),
-    )
-
     # --- lat/lon from geo_point_2d (WKB binary: byte_order + uint32 type + double x + double y) ---
     # OpenDataSoft exports geo_point_2d as WKB binary; x=longitude, y=latitude
     geo_col = next((c for c in names if c.lower() == "geo_point_2d"), None)
@@ -177,7 +165,6 @@ def transform(table: pa.Table) -> pa.Table:
             "tree_id": tree_id,
             "city": pa.array(["AUMEL"] * n, type=pa.string()),
             "species": species,
-            "tree_name": tree_name,
             "plant_date": plant_date,
             "latitude": lat,
             "longitude": lon,

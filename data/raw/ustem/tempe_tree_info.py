@@ -74,7 +74,6 @@ def transform(payload: dict) -> pa.Table:
 
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
     dbh: list[float | None] = []
@@ -86,7 +85,6 @@ def transform(payload: dict) -> pa.Table:
         sci = normalize_species(props.get('Species_Name'))
         tree_id.append(f"tem-{props.get('Tree_ID')}" if props.get('Tree_ID') is not None else None)
         species.append(sci)
-        tree_name.append(sci)
         if len(coords) > 1 and coords[0] is not None and coords[1] is not None:
             lon, lat = web_mercator_to_wgs84(coords[0], coords[1])
         else:
@@ -100,7 +98,6 @@ def transform(payload: dict) -> pa.Table:
         'tree_id': pa.array(tree_id, type=pa.string()),
         'city': pa.array(['USTEM'] * n, type=pa.string()),
         'species': pa.array(species, type=pa.string()),
-        'tree_name': pa.array(tree_name, type=pa.string()),
         'plant_date': pa.array([None] * n, type=pa.date32()),
         'latitude': pa.array(latitude, type=pa.float64()),
         'longitude': pa.array(longitude, type=pa.float64()),

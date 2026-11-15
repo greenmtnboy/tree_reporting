@@ -65,7 +65,6 @@ def transform(table: pa.Table) -> pa.Table:
         'tree_id': pa.array([f'bue-{value}' if value else None for value in ids], type=pa.string()),
         'city': pa.array(['ARBUE'] * n, type=pa.string()),
         'species': pa.array([normalize_species(value) for value in species_raw], type=pa.string()),
-        'tree_name': pa.array([normalize_species(value) for value in species_raw], type=pa.string()),
         'plant_date': pa.array([None] * n, type=pa.date32()),
         'latitude': pa.array([float(value) if value not in (None, '') else None for value in lat_raw], type=pa.float64()),
         'longitude': pa.array([float(value) if value not in (None, '') else None for value in lon_raw], type=pa.float64()),

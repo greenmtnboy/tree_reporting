@@ -37,13 +37,6 @@ what they are: the row still carries a species and a location.
 `ID` is a clean per-tree key -- 158,127 distinct across 158,127 rows, none
 null, checked over the whole table.
 
-**`tree_name` is deliberately left null.**  The only common name this portal
-publishes is `NOM_FRANCAIS`, and `tree_name` is what the map renders as the
-tree card's title -- behind the enrichment table's English common name, which
-wins when the species has a row.  So a French name would surface only for an
-unenriched taxon, on an otherwise English card, in place of a fallback chain
-that already ends at the scientific name.  Montreal carries a common name here
-because its portal publishes an English column alongside the French one.
 """
 
 import sys
@@ -119,7 +112,6 @@ def iter_row_chunks():
 def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -133,7 +125,6 @@ def transform(rows: list[dict]) -> pa.Table:
         tree_id.append(f"que-{raw_id}")
         species.append(normalize_species(rec.get("NOM_LATIN")))
         # Null by design -- see the docstring.  Still a typed column.
-        tree_name.append(None)
         plant_date.append(parse_plant_date(rec.get("DATE_PLANTE")))
         latitude.append(parse_coord(rec.get("LATITUDE")))
         longitude.append(parse_coord(rec.get("LONGITUDE")))
@@ -144,7 +135,6 @@ def transform(rows: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["CAQUE"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

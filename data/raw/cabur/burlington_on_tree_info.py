@@ -64,7 +64,6 @@ from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,
-    normalize_tree_name,
     parse_plant_date_year,
     stream_to_table,
     validate_coordinates,
@@ -104,7 +103,6 @@ def iter_row_chunks():
 def transform(features: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -120,7 +118,6 @@ def transform(features: list[dict]) -> pa.Table:
 
         tree_id.append(f"bur-{raw_id}")
         species.append(species_from_common_name(common))
-        tree_name.append(normalize_tree_name(common))
         plant_date.append(parse_plant_date_year(rec.get("YEAR_PLANTED")))
         lat, lon = esri_point(geom)
         latitude.append(lat)
@@ -132,7 +129,6 @@ def transform(features: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["CABUR"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

@@ -97,9 +97,9 @@ def test_the_models_parse():
 
 # tree_id, city, species, tree_name, dbh, has a prediction row
 FIXTURE_TREES = [
-    ("sf-1", "USSFO", "Acer platanoides", "Norway Maple", 30.0, True),   # enriched, named by the source
+    ("sf-1", "USSFO", "Acer platanoides", "The Senator", 30.0, True),    # enriched, a tree with its own name
     ("sf-2", "USSFO", "Acer platanoides", None, 12.0, True),             # enriched, unnamed
-    ("sf-3", "USSFO", "Newtaxon alba", "Whitewood", None, True),         # no enrichment row
+    ("sf-3", "USSFO", "Newtaxon alba", "Old Whitewood", None, True),     # no enrichment row, a named tree
     ("sf-4", "USSFO", "Newtaxon alba", None, None, False),               # no enrichment row, no name, no prediction
     ("sf-5", "USSFO", "Unknown", None, 20.0, True),                      # sentinel: an authored enrichment row
     ("sf-6", "USSFO", "Palm", "Palm", 40.0, True),                       # sentinel with a growth form
@@ -256,19 +256,21 @@ def test_display_name_prefers_the_first_common_name(rows):
     trees = by_id(rows)
     assert trees["sf-1"]["display_name"] == "Norway maple"
     assert trees["sf-2"]["display_name"] == "Norway maple"
-    # The source's own name is kept beside it, unchanged.
-    assert trees["sf-1"]["tree_name"] == "Norway Maple"
+    # The tree's own name is kept beside it, unchanged.
+    assert trees["sf-1"]["tree_name"] == "The Senator"
     assert trees["sf-2"]["tree_name"] is None
 
 
-def test_display_name_falls_back_to_the_source_name_then_the_species(rows):
+def test_display_name_falls_back_to_the_species_never_the_trees_name(rows):
+    """A tree's own name labels that tree, not its species."""
     trees = by_id(rows)
-    assert trees["sf-3"]["display_name"] == "Whitewood"
+    assert trees["sf-3"]["display_name"] == "Newtaxon alba"
+    assert trees["sf-3"]["tree_name"] == "Old Whitewood"
     assert trees["sf-4"]["display_name"] == "Newtaxon alba"
 
 
 def test_a_blank_first_common_name_is_skipped(rows):
-    """Blank is not a name: the source's blank is skipped too, down to the species."""
+    """Blank is not a name: it falls through to the species."""
     assert by_id(rows)["sf-7"]["display_name"] == "Ailanthus altissima"
 
 

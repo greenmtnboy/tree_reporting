@@ -14,7 +14,6 @@ Field mapping:
   asset_id     -> tree_id  (prefixed "van-" for global uniqueness)
   genus_name   -> combined with species_name for scientific name
   species_name -> species epithet (combined with genus_name)
-  common_name  -> tree_name
   diameter_cm  -> diameter_at_breast_height (cm → inches: divide by 2.54)
   plant_date   -> always null. The portal dropped `date_planted` from the
                   dataset on 2026-09-28, and an export that selects a missing
@@ -71,14 +70,6 @@ def transform(table: pa.Table) -> pa.Table:
         type=pa.string(),
     )
 
-    # --- tree_name: common_name ---
-    cn_col = next((c for c in names if c.lower() == "common_name"), None)
-    cn_list = table[cn_col].to_pylist() if cn_col else [None] * n
-    tree_name = pa.array(
-        [v.strip() if v and v.strip() else None for v in cn_list],
-        type=pa.string(),
-    )
-
     # --- lat/lon from geo_point_2d (WKB binary: byte_order + uint32 type + double x + double y) ---
     geo_col = next((c for c in names if c.lower() == "geo_point_2d"), None)
     if geo_col is not None:
@@ -113,7 +104,6 @@ def transform(table: pa.Table) -> pa.Table:
             "tree_id": tree_id,
             "city": pa.array(["CAVAN"] * n, type=pa.string()),
             "species": species,
-            "tree_name": tree_name,
             "plant_date": plant_date,
             "latitude": lat,
             "longitude": lon,

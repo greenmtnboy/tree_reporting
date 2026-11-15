@@ -23,8 +23,7 @@ column that turned out not to be per-tree.
 Its ETL renders Python's `None` rather than an empty field, so `SUFFIX` is the
 four characters `None` on 683,023 rows, and `BOTANICAL_NAME` and `COMMON_NAME`
 are on 56.  Nothing here special-cases it and nothing needs to: `"None"` is
-already in `_SPECIES_PLACEHOLDERS`, so `sanitize_species` drops it, and in
-`_UNKNOWN_COMMON_NAMES`, so `normalize_tree_name` does too.  It is called out
+already in `_SPECIES_PLACEHOLDERS`, so `sanitize_species` drops it.  It is called out
 because the columns this ingest does *not* read are full of it, and the next
 person to reach for `ADDRESS` or `SITE` will need to know.
 
@@ -46,7 +45,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -59,7 +57,7 @@ RESOURCE = CkanResource(
 
 # `geometry` is a GeoJSON point held in a `text` column, so it arrives as a
 # string.  The address columns are weight this ingest does not use.
-FIELDS = "STRUCTID,BOTANICAL_NAME,COMMON_NAME,DBH_TRUNK,geometry"
+FIELDS = "STRUCTID,BOTANICAL_NAME,DBH_TRUNK,geometry"
 
 # A recorded 0 would be an unmeasured tree rather than one of no width; the
 # column has none.  The top end does have 39 rows above 3 m, up to 9,380 cm.
@@ -91,7 +89,6 @@ def iter_row_chunks():
 def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -105,9 +102,6 @@ def transform(rows: list[dict]) -> pa.Table:
 
         tree_id.append(f"tor-{raw_id}")
         species.append(normalize_species(rec.get("BOTANICAL_NAME")))
-        # "Oak, swamp white" -- inverted so it sorts by genus, which
-        # normalize_tree_name un-inverts into "Swamp white oak".
-        tree_name.append(normalize_tree_name(rec.get("COMMON_NAME")))
         # The inventory records no planting date.  Still a typed date32 column:
         # an untyped pa.null() lands in the parquet as INT32 and breaks year().
         plant_date.append(None)
@@ -120,7 +114,6 @@ def transform(rows: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["CATOR"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

@@ -48,7 +48,7 @@ from pathlib import Path
 # run directly puts `shared/platforms` on the path rather than `data/raw`,
 # so the package import has to be bootstrapped.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from shared.ingest import normalize_tree_name, post_json_with_retry  # noqa: E402
+from shared.ingest import post_json_with_retry  # noqa: E402
 
 PAGE_SIZE = 5000
 
@@ -176,21 +176,6 @@ def split_label(label: str | None) -> tuple[str | None, str | None]:
             if depth == 0:
                 return text[:i].strip() or None, text[i + 1 : -1].strip() or None
     return text, None
-
-
-def tree_name_for(common: str | None) -> str | None:
-    """TreeKeeper common names come genus-first, with a colon (`maple:
-    Norway`, `cherry/plum: spp.`) or a comma (`Maple, Norway`), which is the
-    inversion `normalize_tree_name` already undoes; `spp.` is not a name."""
-    if not common:
-        return None
-    head, sep, qualifier = common.partition(":")
-    qualifier = qualifier.strip()
-    if sep and qualifier.lower() in ("spp.", "spp"):
-        return normalize_tree_name(head)
-    if sep:
-        return normalize_tree_name(f"{head.strip()}, {qualifier}")
-    return normalize_tree_name(common)
 
 
 def find_layers(url: str) -> list[dict]:

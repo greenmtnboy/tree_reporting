@@ -300,6 +300,12 @@ property modified_tree_id.modified_dbh_unknown bool; # the latest report that to
 property modified_tree_id.modified_latitude float; # the corrected position's latitude (always with its longitude)
 property modified_tree_id.modified_longitude float; # the corrected position's longitude (always with its latitude)
 property modified_tree_id.modified_missing bool; # the latest approved report says this tree is gone
+# The tree's name and why it is notable, from the latest report that gave
+# them; the empty string when a report cleared one ("none, whatever the source
+# says"), null when no report touched it.  ./tree_modification_info.py.
+property modified_tree_id.modified_tree_name string; # the tree's own name the latest report gave it
+property modified_tree_id.modified_significance string; # why the tree is notable, as the latest report gave it
+property modified_tree_id.modified_significance_source string; # where that came from, as the latest report gave it
 
 root datasource tree_modifications (
     tree_id: modified_tree_id,
@@ -309,6 +315,9 @@ root datasource tree_modifications (
     latitude: modified_latitude,
     longitude: modified_longitude,
     missing: modified_missing,
+    tree_name: modified_tree_name,
+    significance: modified_significance,
+    significance_source: modified_significance_source,
 )
 grain (modified_tree_id)
 file `./tree_modification_info.py`;
@@ -392,7 +401,15 @@ def corrected_longitude(lon) -> coalesce(modified_longitude, @by_source(lon));
 
 auto merged_latitude <- @corrected_latitude(raw_latitude);
 auto merged_longitude <- @corrected_longitude(raw_longitude);
-auto merged_tree_name <- @by_source(raw_tree_name);
+# A tree's own name (enforce_tree_schema publishes a source's only when the
+# ingest says it is one) and why it is notable.  An approved report wins, and
+# one that cleared the field (the empty string) publishes none.  No source
+# supplies a significance yet, so it comes from reports alone; a source that
+# does adds `raw_significance` to tree_partition, and every partition's file
+# has to carry the column first (docs/NAMED_TREES_AND_CROWN_POSITION.md).
+auto merged_tree_name <- nullif(coalesce(modified_tree_name, @by_source(raw_tree_name)), '');
+auto merged_significance <- nullif(modified_significance, '');
+auto merged_significance_source <- nullif(modified_significance_source, '');
 # The cultivar travels by source rather than with the winning species: a
 # community submission that names the selection is more specific than an
 # inventory row that does not, and the same order @by_source already uses.
@@ -414,6 +431,8 @@ auto merged_tree_ids <- nullif(array_to_string(array_sort((array_agg(tree_id ? t
 
 merge merged_species into species;
 merge merged_tree_name into tree_name;
+merge merged_significance into significance;
+merge merged_significance_source into significance_source;
 merge merged_cultivar into cultivar;
 merge merged_plant_date into plant_date;
 merge merged_photo_url into submission_photo_url;
@@ -502,6 +521,8 @@ template datasource published_tree_info (
     ?submission_photo_url,
     ?cultivar,
     ?crown_width_m,
+    ?significance,
+    ?significance_source,
     # Redundant on its face -- the prune means it always equals tree_id -- and
     # once dropped from the scaffold for exactly that reason, which left three
     # cities with fourteen columns where every other had fifteen.  It is the

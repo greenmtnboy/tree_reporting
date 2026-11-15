@@ -21,11 +21,10 @@ fails with "wrong version number").
 
 Field mapping:
   gid                    -> tree_id (prefixed "ath-"; unique across the layer)
-  desc                   -> species + tree_name.  The value is
+  desc                   -> species.  The value is
                             "Latin binomial (greek common name)", e.g.
                             "Citrus aurantium (νερατζιά)"; the parentheticals
-                            are stripped for species and the last one kept as
-                            tree_name.  One Greek-only value
+                            are stripped.  One Greek-only value
                             ("Αυτοφυής φοίνικας", self-sown palm) is routed to
                             the Palm sentinel by sanitize_species's Greek
                             aliases in shared.ingest.
@@ -63,22 +62,19 @@ WFS_PARAMS = {
 _PAREN_RE = re.compile(r"\(([^)]*)\)")
 
 
-def split_desc(desc: str | None) -> tuple[str | None, str | None]:
-    """Split "Latin name (greek common name)" into (species, tree_name).
+def species_of_desc(desc: str | None) -> str | None:
+    """The species half of "Latin name (greek common name)".
 
-    Every parenthetical is removed from the species half — the layer has values
-    like "Ligustrum japonicum (tree) (λιγούστρο)" — and the last non-empty one
-    becomes tree_name.  A value with no parenthetical (e.g. the Greek-only
-    "Αυτοφυής φοίνικας") is passed through whole as the species for
-    sanitize_species to judge, with no tree_name.
+    Every parenthetical is removed -- the layer has values like
+    "Ligustrum japonicum (tree) (λιγούστρο)".  A value with no parenthetical
+    (e.g. the Greek-only "Αυτοφυής φοίνικας") is passed through whole for
+    sanitize_species to judge.  The Greek common name is not kept: common
+    names come from the enrichment table.
     """
     if desc is None or not desc.strip():
-        return None, None
-    parentheticals = [p.strip() for p in _PAREN_RE.findall(desc) if p.strip()]
+        return None
     species = _PAREN_RE.sub(" ", desc).strip()
-    species = re.sub(r"\s+", " ", species) or None
-    tree_name = parentheticals[-1] if parentheticals else None
-    return species, tree_name
+    return re.sub(r"\s+", " ", species) or None
 
 
 def fetch_features() -> list[dict]:
@@ -93,7 +89,6 @@ def build_table(features: list[dict]) -> pa.Table:
     tree_ids: list[str | None] = []
     cities: list[str] = []
     species_list: list[str | None] = []
-    tree_names: list[str | None] = []
     latitudes: list[float | None] = []
     longitudes: list[float | None] = []
 
@@ -106,9 +101,7 @@ def build_table(features: list[dict]) -> pa.Table:
         tree_ids.append(f"ath-{gid}" if gid is not None else None)
         cities.append("GRATH")
 
-        species, tree_name = split_desc(props.get("desc"))
-        species_list.append(species)
-        tree_names.append(tree_name)
+        species_list.append(species_of_desc(props.get("desc")))
 
         geometry = feature.get("geometry") or {}
         coords = geometry.get("coordinates")
@@ -124,7 +117,6 @@ def build_table(features: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_ids, type=pa.string()),
             "city": pa.array(cities, type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
-            "tree_name": pa.array(tree_names, type=pa.string()),
             "latitude": pa.array(latitudes, type=pa.float64()),
             "longitude": pa.array(longitudes, type=pa.float64()),
         }

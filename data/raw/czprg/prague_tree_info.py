@@ -115,7 +115,6 @@ from shared.ingest import (  # noqa: E402
     UpstreamUnavailable,
     get_json_with_retry,
     normalize_species,
-    normalize_tree_name,
     parse_plant_date_year,
     validate_coordinates,
 )
@@ -259,17 +258,6 @@ def parse_cultivar(cultivar, name) -> str | None:
     return text or extract_cultivar(clean(name))
 
 
-def common_name(name, taxon) -> str | None:
-    """The Czech vernacular as the tree card's name, for a name at species rank.
-
-    A genus-level entry (`lípa - neurčená`) says less than the resolved
-    `Tilia` already does, and its ` - ` would read as an inversion mark.
-    """
-    if taxon is None or len(taxon.split()) < 2:
-        return None
-    return normalize_tree_name(clean(name))
-
-
 def is_stump(cultivar) -> bool:
     return (clean(cultivar) or "").casefold() in STUMP_MARKERS
 
@@ -309,7 +297,6 @@ def newest_per_asset(tiles: Iterator[list[dict]], counts: dict[str, int]) -> lis
 def transform(results: list[dict], counts: dict[str, int], unresolved: Counter) -> pa.Table:
     tree_id: list[str] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     cultivar: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
@@ -333,7 +320,6 @@ def transform(results: list[dict], counts: dict[str, int], unresolved: Counter) 
                 unresolved[clean(name)] += 1
         tree_id.append(f"prg-{clean(attrs.get('ID_CENTRAL'))}")
         species.append(taxon)
-        tree_name.append(common_name(name, taxon) if czech else None)
         cultivar.append(parse_cultivar(attrs.get("TAXON_KULTIVAR"), name))
         plant_date.append(parse_plant_date_year(attrs.get("VYSADBA")))
         longitude.append(float(points[0][0]))
@@ -345,7 +331,6 @@ def transform(results: list[dict], counts: dict[str, int], unresolved: Counter) 
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["CZPRG"] * n, type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "cultivar": pa.array(cultivar, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),

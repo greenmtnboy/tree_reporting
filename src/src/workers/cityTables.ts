@@ -279,7 +279,6 @@ export function treesSelectSql(from: string): string {
     tree_id,
     CAST(city AS VARCHAR) AS city,
     CAST(data_source AS VARCHAR) AS data_source,
-    CAST(source_tree_name AS VARCHAR) AS tree_name,
     plant_date,
     CAST(species AS VARCHAR) AS species,
     CAST(cultivar AS VARCHAR) AS cultivar,

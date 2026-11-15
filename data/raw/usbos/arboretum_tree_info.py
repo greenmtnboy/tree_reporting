@@ -14,7 +14,7 @@ from shared.ingest import emit, enforce_tree_schema, normalize_species, validate
 
 BASE_URL = "https://gis.arboretum.harvard.edu/arcgis/rest/services/Maps/Explorer/MapServer/34/query"
 PAGE_SIZE = 100_000
-OUT_FIELDS = "OBJECTID,SCIENTIFIC_NAME,COMMON_NAME,LATITUDE,LONGITUDE,DBH_NUM,DBH_UNIT_CODE,PLANT_DT"
+OUT_FIELDS = "OBJECTID,SCIENTIFIC_NAME,LATITUDE,LONGITUDE,DBH_NUM,DBH_UNIT_CODE,PLANT_DT"
 
 # Only include living, geographically mapped specimens
 WHERE = "IS_DEAD=0 AND IS_MAPPED=1"
@@ -74,7 +74,6 @@ def build_table(records: list[dict]) -> pa.Table:
     tree_ids: list[str | None] = []
     cities: list[str] = []
     species_list: list[str | None] = []
-    tree_names: list[str | None] = []
     plant_dates: list[date | None] = []
     latitudes: list[float | None] = []
     longitudes: list[float | None] = []
@@ -87,8 +86,6 @@ def build_table(records: list[dict]) -> pa.Table:
         # The quoted cultivar stays in: enforce_tree_schema reduces the
         # species to the taxon and keeps the selection on the tree row.
         species_list.append(normalize_species(rec.get("SCIENTIFIC_NAME")))
-        raw_common = rec.get("COMMON_NAME")
-        tree_names.append(raw_common.strip() if raw_common and raw_common.strip() else None)
         plant_dates.append(parse_plant_date(rec.get("PLANT_DT")))
         latitudes.append(float(rec["LATITUDE"]) if rec.get("LATITUDE") is not None else None)
         longitudes.append(float(rec["LONGITUDE"]) if rec.get("LONGITUDE") is not None else None)
@@ -99,7 +96,6 @@ def build_table(records: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_ids, type=pa.string()),
             "city": pa.array(cities, type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
-            "tree_name": pa.array(tree_names, type=pa.string()),
             "plant_date": pa.array(plant_dates, type=pa.date32()),
             "latitude": pa.array(latitudes, type=pa.float64()),
             "longitude": pa.array(longitudes, type=pa.float64()),

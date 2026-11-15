@@ -193,7 +193,7 @@ def test_a_reused_well_id_is_two_wells(cam):
 # --- field mapping ----------------------------------------------------------
 
 
-def test_the_published_row_takes_the_cartegraph_plant_date_and_a_sentence_case_name(cam):
+def test_the_published_row_takes_the_cartegraph_plant_date(cam):
     table = cam.build_table([
         row("1", species="Zelkova serrata", commonname="Japanese Zelkova",
             cartegra_1="2025-09-01T00:00:00.000"),
@@ -201,7 +201,7 @@ def test_the_published_row_takes_the_cartegraph_plant_date_and_a_sentence_case_n
             plantdate="2019-10-01T00:00:00.000", cartegra_1="2019-10-01T00:00:00.000"),
     ]).to_pylist()
     assert [str(r["plant_date"]) for r in table] == ["2025-09-01", "2019-10-01"]
-    assert [r["tree_name"] for r in table] == ["Japanese zelkova", "London planetree"]
+    assert "tree_name" not in table[0], "a common name is not a tree's own name"
 
 
 # --- the Harvard re-survey --------------------------------------------------

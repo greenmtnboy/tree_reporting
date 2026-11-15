@@ -181,7 +181,6 @@ datasource tree_info (
     city,
     data_source,
     species,
-    tree_name,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,

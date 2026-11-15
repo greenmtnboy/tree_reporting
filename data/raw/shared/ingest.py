@@ -1713,6 +1713,11 @@ TREE_COLUMN_TYPES: dict[str, pa.DataType] = {
 # Columns without a `?` prefix in the preql datasources — absence is a bug.
 REQUIRED_TREE_COLUMNS = ("tree_id", "city", "data_source", "species")
 
+# A proper name is a tree's own: one value repeated on more trees than this in
+# one ingest is a common name or a placeholder ("Oak", "Street tree"), and is
+# published as no name.  See enforce_tree_schema's `proper_names`.
+TREE_NAME_MAX_REPEATS = 3
+
 # The largest diameter an ingest will publish, in inches; see the guard in
 # enforce_tree_schema for why it exists and why it is 5 m.
 DBH_MAX_INCHES = 200.0
@@ -1734,6 +1739,7 @@ def enforce_tree_schema(
     data_source: str | None = None,
     seen_ids: set[str] | None = None,
     summary: dict[str, int] | None = None,
+    proper_names: bool = False,
 ) -> pa.Table:
     """Cast the tree ingest columns to their canonical Arrow types.
 
@@ -1761,6 +1767,16 @@ def enforce_tree_schema(
               which is what lets Trilogy union a city's municipal and community
               sources as disjoint partitions.  Scripts that emit a per-row
               ``data_source`` column (only the community ingest does) omit it.
+    proper_names: Whether this source's ``tree_name`` is a tree's own name
+              ("The Senator").  ``tree_name`` means exactly that, and is null
+              on nearly every tree; a source's common-name column is not one
+              (common names come from the enrichment table).  Every ingest
+              that predates the change wrote its common name there, so
+              without this flag the column is published as null, whatever the
+              script emitted.  With it, a value repeated on more than
+              ``TREE_NAME_MAX_REPEATS`` rows is still nulled, with a count in
+              the log: a name is unique to its tree.  (A paged ingest checks
+              repeats within a page.)
     Raises if ``tree_id`` repeats or is null.  ``tree_id`` is the declared
     ``grain`` of every city datasource and neither failure errors anywhere: a
     repeat fans out the joins Trilogy builds on that grain, so the Parquet comes
@@ -1894,6 +1910,10 @@ def enforce_tree_schema(
         else:
             report_species_cleanup(counts, city=city)
 
+    table = _proper_tree_names(
+        table, resolved["tree_name"], proper_names=proper_names, city=city, summary=summary
+    )
+
     for canonical, target in TREE_COLUMN_TYPES.items():
         actual = resolved[canonical]
         if actual not in names:
@@ -2019,6 +2039,52 @@ def enforce_tree_schema(
     return table
 
 
+def _proper_tree_names(
+    table: pa.Table,
+    column: str,
+    *,
+    proper_names: bool,
+    city: str = "",
+    summary: dict[str, int] | None = None,
+) -> pa.Table:
+    """``tree_name`` as a tree's own name, or null; see enforce_tree_schema."""
+    if column not in table.schema.names:
+        return table
+    idx = table.schema.get_field_index(column)
+    if not proper_names:
+        return table.set_column(idx, column, pa.nulls(table.num_rows, type=pa.string()))
+    values = [
+        " ".join(v.split()) or None if isinstance(v, str) else None
+        for v in table.column(idx).to_pylist()
+    ]
+    counts: dict[str, int] = {}
+    for v in values:
+        if v is not None:
+            counts[v] = counts.get(v, 0) + 1
+    repeated = {v for v, n in counts.items() if n > TREE_NAME_MAX_REPEATS}
+    n_repeated = sum(counts[v] for v in repeated)
+    if n_repeated:
+        values = [None if v in repeated else v for v in values]
+        if summary is not None:
+            summary["repeated_tree_name"] = summary.get("repeated_tree_name", 0) + n_repeated
+        else:
+            report_repeated_tree_names(n_repeated, city=city)
+    return table.set_column(idx, column, pa.array(values, type=pa.string()))
+
+
+def report_repeated_tree_names(count: int, *, city: str = "") -> None:
+    """One line for the names ``enforce_tree_schema`` nulled as repeats."""
+    if not count:
+        return
+    prefix = f"{city} ingest" if city else "Ingest"
+    print(
+        f"{prefix}: {count} tree name(s) were shared by more than "
+        f"{TREE_NAME_MAX_REPEATS} trees, so are not a tree's own name, and were "
+        f"published as null",
+        file=sys.stderr,
+    )
+
+
 def report_implausible_crown_width(count: int, *, city: str = "") -> None:
     """One line for the crown widths ``enforce_tree_schema`` nulled."""
     if not count:
@@ -2073,6 +2139,7 @@ def report_species_cleanup(counts: dict[str, int], *, city: str = "") -> None:
     report_implausible_dbh(counts.get("implausible_dbh", 0), city=city)
     report_implausible_crown_width(counts.get("implausible_crown_width", 0), city=city)
     report_implausible_plant_date(counts.get("implausible_plant_date", 0), city=city)
+    report_repeated_tree_names(counts.get("repeated_tree_name", 0), city=city)
     if any(counts.get(k) for k in ("dropped", "rewritten", "formed", "cultivared")):
         print(
             f"{prefix}: species cleanup -- {counts.get('dropped', 0)} value(s) were not "
@@ -3738,72 +3805,3 @@ def cm_to_inches(cm) -> float | None:
         return None
 
 
-_UNKNOWN_COMMON_NAMES = frozenset({"n/a", "na", "unknown", "none", "unidentified"})
-
-# A hyphen with whitespace on at least one side: an inversion separator.  A
-# bare hyphen is part of the word.  See `normalize_tree_name`.
-_INVERTING_HYPHEN = re.compile(r"\s-|-\s")
-
-
-def normalize_tree_name(value: str | None) -> str | None:
-    """A source's common-name field, un-inverted and put into sentence case.
-
-    Municipal inventories very often store the common name inverted so it
-    sorts by genus -- Calgary writes ``ASH, GREEN``, Edmonton ``Spruce,
-    Colorado``, Denver ``Pear, Flowering`` -- and they disagree about casing,
-    sometimes within one column (Winnipeg publishes both ``Colorado blue
-    spruce`` and ``silver maple``).  `tree_name` is what the map's tree card
-    shows above the scientific name, so neither is presentable as written.
-
-    Two steps, and the second is deliberately not reimplemented here: the
-    inverted form is un-inverted, then `normalize_common_name` from
-    `enrichment._common_name_style` applies the sentence-case convention with
-    its curated proper-noun lists, which is the same rule the enrichment table
-    is held to (see "Common names are sentence case" in AGENTS.md).  A name
-    that comes out wrong is one entry in those lists rather than a per-city
-    special case.
-
-    Two separators invert, and both are narrow on purpose.  A *single* comma
-    does: ``Aspen, quaking/trembling`` inverts, while a name with two commas
-    is a list and is left alone.  So does a hyphen with a space on at least
-    one side, which is how Burlington ON writes it (``MAPLE - NORWAY``,
-    ``BUCKEYE- OHIO``) -- but a bare hyphen is part of the word and must not,
-    or ``HORSE-CHESTNUT`` and ``MOUNTAIN-ASH`` come out as "Chestnut horse"
-    and "Ash mountain".  `shared.species.english.common_name_key` draws the same
-    line for the same reason.
-
-    A name inverted with neither -- Ottawa stores ``Maple Sugar``, ``Spruce
-    Blue/Colorado`` -- cannot be un-inverted mechanically (``Mountain Ash
-    European`` has three words and the head is the first *two*), and a city
-    like that should publish no ``tree_name`` rather than a wrong one.
-
-    Examples:
-        "ASH, GREEN"           -> "Green ash"
-        "Spruce, Colorado"     -> "Colorado spruce"
-        "MAPLE - NORWAY"       -> "Norway maple"
-        "BUCKEYE- OHIO"        -> "Ohio buckeye"
-        "HORSE-CHESTNUT"       -> "Horse-chestnut"
-        "silver maple"         -> "Silver maple"
-        "POPLAR SPECIES"       -> "Poplar species"
-        "N/A"                  -> None
-    """
-    from enrichment._common_name_style import normalize_common_name
-
-    if not value:
-        return None
-    text = " ".join(value.split())
-    if not text or text.lower() in _UNKNOWN_COMMON_NAMES:
-        return None
-    head, sep, tail = text.partition(",")
-    if sep and "," not in tail:
-        head, tail = head.strip(), tail.strip()
-        if head and tail:
-            text = f"{tail} {head}"
-    else:
-        match = _INVERTING_HYPHEN.search(text)
-        if match:
-            head = text[: match.start()].strip()
-            tail = text[match.end() :].strip()
-            if head and tail:
-                text = f"{tail} {head}"
-    return normalize_common_name(text)

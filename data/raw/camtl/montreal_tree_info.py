@@ -57,7 +57,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -72,7 +71,7 @@ RESOURCE = CkanResource(
 )
 
 FIELDS = (
-    "INV_TYPE,ARROND,EMP_NO,Essence_latin,Essence_ang,DHP,Date_Plantation,"
+    "INV_TYPE,ARROND,EMP_NO,Essence_latin,DHP,Date_Plantation,"
     "Latitude,Longitude"
 )
 
@@ -131,7 +130,6 @@ def iter_row_chunks():
 def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -144,10 +142,6 @@ def transform(rows: list[dict]) -> pa.Table:
 
         tree_id.append(f"mtl-{key}")
         species.append(normalize_species(rec.get("Essence_latin")))
-        # The portal publishes the common name in French *and* English; the map
-        # renders tree_name as the card's title, so the English column is the
-        # one to carry.  Title case there ("Silver Maple"), sentence case here.
-        tree_name.append(normalize_tree_name(rec.get("Essence_ang")))
         plant_date.append(parse_plant_date(rec.get("Date_Plantation")))
         latitude.append(parse_coord(rec.get("Latitude")))
         longitude.append(parse_coord(rec.get("Longitude")))
@@ -158,7 +152,6 @@ def transform(rows: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["CAMTL"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

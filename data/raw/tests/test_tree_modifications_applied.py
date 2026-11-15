@@ -47,14 +47,19 @@ MUNICIPAL = [
 ]
 COMMUNITY = [("community-x", "COMMUNITY_USSFO", "Acer rubrum", None, P5)]
 OSM = [("osm-1", "OSM_USSFO", None, None, (P3[0] + NUDGE, P3[1]))]  # absorbed by sf-3
-# (tree_id, species, dbh, dbh_unknown, latitude, longitude, missing), as tree_modification_info.py emits them
+# A tree's own name, as an ingest that declares proper names would emit it.
+SOURCE_NAMES = {"sf-2": "Lone Pine", "sf-5": "Big Fig"}
+# (tree_id, species, dbh, dbh_unknown, latitude, longitude, missing,
+#  tree_name, significance, significance_source), as tree_modification_info.py
+# emits them; '' is a cleared field.
 REPORTS = [
-    ("sf-1", "Quercus lobata", 22.5, False, None, None, False),
-    ("sf-2", None, None, False, MOVED[0], MOVED[1], False),
-    ("sf-3", None, None, False, None, None, True),
-    ("community-x", "Acer saccharum", None, False, None, None, False),
-    ("sf-5", None, None, True, None, None, False),
-    ("nyc-999", "Ulmus americana", 4.0, False, 40.7, -74.0, False),
+    ("sf-1", "Quercus lobata", 22.5, False, None, None, False,
+     "The Senator", "Planted at the city's founding.", "https://example.org/register"),
+    ("sf-2", None, None, False, MOVED[0], MOVED[1], False, None, None, None),
+    ("sf-3", None, None, False, None, None, True, None, None, None),
+    ("community-x", "Acer saccharum", None, False, None, None, False, None, "Survived the 1906 fire.", None),
+    ("sf-5", None, None, True, None, None, False, "", None, None),
+    ("nyc-999", "Ulmus americana", 4.0, False, 40.7, -74.0, False, "Elsewhere Elm", None, None),
 ]
 
 
@@ -67,8 +72,9 @@ def write_rows(conn, path: Path, rows) -> None:
     )
     if rows:
         conn.executemany(
-            "INSERT INTO src VALUES (?, 'USSFO', ?, ?, NULL, NULL, ?, ?, ?, NULL, NULL, NULL)",
-            [(tree_id, source, species, dbh, *point) for tree_id, source, species, dbh, point in rows],
+            "INSERT INTO src VALUES (?, 'USSFO', ?, ?, ?, NULL, ?, ?, ?, NULL, NULL, NULL)",
+            [(tree_id, source, species, SOURCE_NAMES.get(tree_id), dbh, *point)
+             for tree_id, source, species, dbh, point in rows],
         )
     conn.execute(f"COPY src TO '{path.as_posix()}' (FORMAT PARQUET)")
 
@@ -77,9 +83,10 @@ def write_reports(conn, path: Path, rows) -> None:
     conn.execute("DROP TABLE IF EXISTS mods")
     conn.execute(
         "CREATE TABLE mods (tree_id VARCHAR, species VARCHAR, diameter_at_breast_height DOUBLE, "
-        "dbh_unknown BOOLEAN, latitude DOUBLE, longitude DOUBLE, missing BOOLEAN)"
+        "dbh_unknown BOOLEAN, latitude DOUBLE, longitude DOUBLE, missing BOOLEAN, "
+        "tree_name VARCHAR, significance VARCHAR, significance_source VARCHAR)"
     )
-    conn.executemany("INSERT INTO mods VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
+    conn.executemany("INSERT INTO mods VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
     conn.execute(f"COPY mods TO '{path.as_posix()}' (FORMAT PARQUET)")
 
 
@@ -172,6 +179,28 @@ def test_a_report_corrects_a_community_tree_too(published):
 def test_an_unreported_tree_is_untouched(published):
     row = published["sf-4"]
     assert (row["species"], row["diameter_at_breast_height"], row["latitude"]) == ("Pinus radiata", 12.0, P4[0])
+    assert (row["tree_name"], row["significance"], row["significance_source"]) == (None, None, None)
+
+
+def test_a_report_names_a_tree_and_says_why(published):
+    row = published["sf-1"]
+    assert row["tree_name"] == "The Senator"
+    assert row["significance"] == "Planted at the city's founding."
+    assert row["significance_source"] == "https://example.org/register"
+
+
+def test_a_significance_without_a_name(published):
+    row = published["community-x"]
+    assert (row["tree_name"], row["significance"]) == (None, "Survived the 1906 fire.")
+
+
+def test_a_cleared_name_publishes_none_over_the_sources(published):
+    assert published["sf-5"]["tree_name"] is None, "'' clears the name the source gave"
+
+
+def test_a_source_name_publishes_without_a_report(published):
+    """Only a source that declares proper names emits one; a report that leaves it alone keeps it."""
+    assert published["sf-2"]["tree_name"] == "Lone Pine"
 
 
 def test_the_stored_column_is_false_on_every_published_row(published):

@@ -4,12 +4,26 @@ import core;
 key tree_id string; # unique identifier for the tree record (prefixed: sf-<id> or nyc-<id>)
 key species string; # scientific species name (Latin binomial, no common-name suffix)
 property tree_id.cultivar string; # the cultivated selection this tree is, e.g. 'Tina' in Malus sargentii 'Tina'; a property of the tree, not of the species, and never part of the species key
-property tree_id.tree_name string; # original name field from source data, which may be unique to certain trees
+property tree_id.tree_name string; # the tree's own proper name, e.g. 'The Senator'; null for nearly every tree. Never a common name: those come from the enrichment table (species.common_names)
+property tree_id.significance string; # why this tree is notable, a short blurb from an approved tree report; null for nearly every tree
+property tree_id.significance_source string; # where the significance came from: a register's name or a URL; null when the reviewer wrote it
 property tree_id.plant_date date; # date the tree was planted
 property tree_id.crown_width_m float; # observed crown spread in metres, where a source measured or read one: a municipal crown-spread field, an OSM diameter_crown tag, or a reviewed satellite detection's crown read from the image by the model. Null for most trees; the allometric estimate from DBH is tree_predictions' predicted_crown_width_m, never this.
 property tree_id.diameter_at_breast_height float; # diameter at breast height - standard forestry measure of tree diameter at about 4.5 feet above ground
-property tree_id.latitude float::latitude; # geographic latitude for mapping
-property tree_id.longitude float::longitude; # geographic longitude for mapping
+property tree_id.latitude float::latitude; # latitude of the tree's base (its trunk), for mapping
+property tree_id.longitude float::longitude; # longitude of the tree's base (its trunk), for mapping
+
+# Whether the map marks this tree out: it has a name or a significance blurb.
+auto is_notable <- tree_name is not null or significance is not null;
+
+# Where the crown is.  No source places a crown apart from its trunk yet, so
+# it is the base for every tree; a leaning or overhanging tree needs a source
+# that observed the crown, which will be stored as its own column and preferred
+# here (docs/NAMED_TREES_AND_CROWN_POSITION.md).  Derived, not stored: the base
+# moves after the source merge (Overture placement, approved reports), and a
+# stored copy would drift from it.
+auto crown_latitude <- latitude; # latitude of the centre of the tree's crown; the base's until a source observes the crown apart from it
+auto crown_longitude <- longitude; # longitude of the centre of the tree's crown; the base's until a source observes the crown apart from it
 property tree_id.borough string; # administrative borough/district (London borough, Tokyo ward)
 property tree_id.submission_photo_url string; # publicly readable photo of this specific tree, from an approved community submission; null for municipal sources. Distinct from species.photo_url in tree_enrichment.preql, which is a stock photo of the species.
 

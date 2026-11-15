@@ -60,10 +60,8 @@ Mississauga's, with three local layers in front of it:
 * everything else is `species_from_common_name`; an unresolved name
   publishes as `Unknown` rather than as a guess.
 
-`tree_name` is the published common name through `normalize_tree_name`, with
-the parenthesised values given their plain name (`TREE_NAMES`).  One value
-quotes a cultivar (`Indian Hawthorne 'Majestic Beauty'`); it goes to
-`cultivar`.
+One value quotes a cultivar (`Indian Hawthorne 'Majestic Beauty'`); it goes
+to `cultivar`.
 
 **Rows dropped, and why** (counts as of 2026-11-11):
 
@@ -106,7 +104,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.ingest import (
     emit,
     enforce_tree_schema,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -178,29 +175,6 @@ REGIONAL_KEYS: dict[str, str | None] = {
     "shin oak": "Quercus sinuata",
 }
 
-# The card's common name for the values `normalize_tree_name` cannot un-invert.
-TREE_NAMES: dict[str, str | None] = {
-    "Oak, Live (Southern)": "Southern live oak",
-    "Oak, Texas Live (Escarpment)": "Texas live oak",
-    "Oak, Mexican White (Netleaf)": "Mexican white oak",
-    "Bean, Mescal (Texas Mountain Laurel)": "Texas mountain laurel",
-    "Ash, Velvet (Arizona Ash)": "Velvet ash",
-    "Elm, Chinese (Lacebark Elm)": "Chinese elm",
-    "Orange, Japanese Bitter (Hardy orange)": "Hardy orange",
-    "Crape Myrtle (including hybrids)": "Crape myrtle",
-    "Oak, Scarlet Oak": "Scarlet oak",
-    "Sycamore. Mexican": "Mexican sycamore",
-    "Mulberry. Texas": "Texas mulberry",
-    "Osage, Orange": "Osage orange",
-    "Cypress, Bald.r": "Bald cypress",
-    "Chisos , Red oak": "Chisos red oak",
-    "Quercus stellata": None,
-    "Quercus marilandica": None,
-    "Ulmus crassifolia": None,
-    "Quercus buckley": None,
-    "Ashei juniperus": None,
-}
-
 # A quoted selection with both quotes present.  `extract_cultivar` also reads
 # a lone apostrophe as an opening quote, which turns "Eve's Necklace" into the
 # cultivar "s Necklace".
@@ -230,13 +204,6 @@ def species_of(raw: str | None) -> str | None:
         return REGIONAL_KEYS[key]
     return species_from_common_name(raw)
 
-
-def tree_name_of(raw: str | None) -> str | None:
-    if raw is None:
-        return None
-    if raw in TREE_NAMES:
-        return TREE_NAMES[raw]
-    return normalize_tree_name(_QUOTED_CULTIVAR.sub("", raw).strip())
 
 
 def cultivar_of(raw: str | None) -> str | None:
@@ -300,7 +267,6 @@ def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
     cultivar: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -316,7 +282,6 @@ def transform(rows: list[dict]) -> pa.Table:
         tree_id.append(f"aus-{raw_id}")
         species.append(species_of(raw))
         cultivar.append(cultivar_of(raw))
-        tree_name.append(tree_name_of(raw))
         plant_date.append(None)
         latitude.append(lat)
         longitude.append(lon)
@@ -328,7 +293,6 @@ def transform(rows: list[dict]) -> pa.Table:
             "city": pa.array(["USAUS"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
             "cultivar": pa.array(cultivar, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),
