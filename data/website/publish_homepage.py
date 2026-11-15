@@ -126,6 +126,7 @@ COUNTRIES = {
     "FR": "France",
     "GB": "United Kingdom",
     "GR": "Greece",
+    "IT": "Italy",
     "JP": "Japan",
     "NL": "Netherlands",
     "TW": "Taiwan",

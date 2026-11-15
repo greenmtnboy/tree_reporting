@@ -147,13 +147,17 @@ def drop_unidentified(table: pa.Table) -> pa.Table:
     return kept
 
 
-if __name__ == "__main__":
-    csv_bytes = download_csv()
-    table = load_arrow_table(csv_bytes)
+def load_published() -> pa.Table:
+    """The inventory exactly as this partition publishes it.
+
+    treeboston_big_old_trees.py links the Big Old Trees registry to these
+    rows, so it must see the same ids after the same filters.
+    """
+    table = load_arrow_table(download_csv())
     table = add_city_column(table)
     table = drop_unidentified(table)
     table = validate_coordinates(table, city="Boston", city_code="USBOS")
-    table = enforce_tree_schema(
+    return enforce_tree_schema(
         table,
         city="Boston",
         data_source="CITY_OF_BOSTON",
@@ -164,4 +168,7 @@ if __name__ == "__main__":
             "diameter_at_breast_height": "dbh",
         },
     )
-    emit(table)
+
+
+if __name__ == "__main__":
+    emit(load_published())

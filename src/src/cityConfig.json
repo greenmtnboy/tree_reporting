@@ -49,5 +49,6 @@
   "USNOL": { "name": "New Orleans", "center": [-90.0715, 29.9511] },
   "USATL": { "name": "Atlanta", "center": [-84.388, 33.749] },
   "USNAP": { "name": "Naples, FL", "center": [-81.7948, 26.142] },
-  "USCLT": { "name": "Charlotte", "center": [-80.8431, 35.2271] }
+  "USCLT": { "name": "Charlotte", "center": [-80.8431, 35.2271] },
+  "ITMIL": { "name": "Milan", "center": [9.19, 45.4642] }
 }

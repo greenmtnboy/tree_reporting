@@ -95,6 +95,8 @@ def test_the_shared_merge_classes_the_satellite_partition():
     assert "= 'SATELLITE_' then 'satellite'" in text
     assert "(max(value ? source_class = 'satellite') by cluster_id)" in text
     # Below municipal and community, above OSM: the order of the coalesce arms
-    # is the precedence.  The bulk-prediction arm is last (test_predicted_wiring).
+    # is the precedence.  The last arm, for a cluster that is one prediction or
+    # one unlinked notable-register row, is test_predicted_wiring's and
+    # test_notable_reconciliation's.
     arms = re.findall(r"max\(value \? source_class = '(\w+)'\) by cluster_id", text)
-    assert arms == ["community", "municipal", "satellite", "osm", "predicted"]
+    assert arms == ["community", "municipal", "satellite", "osm"]

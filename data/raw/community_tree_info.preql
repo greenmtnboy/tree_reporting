@@ -61,6 +61,7 @@ property <*>.usnol_community_data_updated_through datetime; # when approved comm
 property <*>.usatl_community_data_updated_through datetime; # when approved community submissions for USATL are through
 property <*>.usnap_community_data_updated_through datetime; # when approved community submissions for USNAP are through
 property <*>.usclt_community_data_updated_through datetime; # when approved community submissions for USCLT are through
+property <*>.itmil_community_data_updated_through datetime; # when approved community submissions for ITMIL are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

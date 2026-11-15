@@ -11,6 +11,8 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Milan', label: 'Comune di Milano - Territorio: localizzazione degli alberi (DS2484, 2023-03-31 release, CC BY 4.0)', url: 'https://dati.comune.milano.it/dataset/ds2484_infogeo_alberi_localizzazione' },
+  { city: 'Milan', label: 'Comune di Milano - Gli alberi monumentali nel Comune di Milano (DS2489, CC BY 4.0)', url: 'https://dati.comune.milano.it/dataset/ds2489-gli-alberi-monumentali-nel-comune-di-milano' },
   { city: 'Charlotte', label: 'City of Charlotte - Landscape Management Trees (ArcGIS)', url: 'https://gis.charlottenc.gov/arcgis/rest/services/ENG/LSM_Trees/MapServer/0' },
   { city: 'Naples, FL', label: 'City of Naples - City Trees (ArcGIS)', url: 'https://g.naplesgov.com/arcgis/rest/services/Community_Services/CityTrees/FeatureServer/0' },
   { city: 'Atlanta', label: 'Trees Atlanta - Plant Inventory (ArcGIS)', url: 'https://www.arcgis.com/home/item.html?id=9a8404b7b48d499ab76b36c237434542' },
@@ -48,6 +50,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'San Francisco', label: 'SF Open Data Portal', url: 'https://data.sf.gov/City-Infrastructure/San-Francisco-Street-Tree-Inventory/tkzw-k3nq' },
   { city: 'New York City', label: 'NYC Open Data Street Tree Census', url: 'https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh' },
   { city: 'Boston', label: 'City of Boston Open Data', url: 'https://data.boston.gov/dataset/bprd-trees' },
+  { city: 'Boston', label: "Tree Boston - Big Old Trees of Boston (volunteer registry)", url: 'https://treeboston.org/bot/' },
   { city: 'Paris', label: 'Paris Open Data (les-arbres)', url: 'https://opendata.paris.fr/explore/dataset/les-arbres/information/' },
   { city: 'Burlington, VT', label: 'City of Burlington VT ArcGIS FeatureServer', url: 'https://maps.burlingtonvt.gov/arcgis/rest/services/Tree_Sites_Public_View/FeatureServer/0' },
   { city: 'Vancouver', label: 'Vancouver Open Data (public-trees)', url: 'https://opendata.vancouver.ca/explore/dataset/public-trees/information/' },
@@ -84,6 +87,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Milan', label: 'Comune di Milano - Spazi freschi: parchi ed aree verdi (DS3018, CC BY 4.0)', url: 'https://dati.comune.milano.it/dataset/ds3018-spazi-freschi-parchi-ed-aree-verdi' },
   { city: 'Charlotte', label: 'Charlotte-Mecklenburg Historic Landmarks Commission - designated properties (Mecklenburg County GIS)', url: 'https://meckgis.mecklenburgcountync.gov/server/rest/services/LocalHistoricProperty/FeatureServer/0' },
   { city: 'Naples, FL', label: 'City of Naples - Historic Buildings; National Park Service - National Register of Historic Places', url: 'https://g.naplesgov.com/arcgis/rest/services/Building/HistoricBuildings/MapServer/0' },
   { city: 'Atlanta', label: 'City of Atlanta - Landmark and Historic Building/Sites (Urban Design Commission)', url: 'https://gis.atlantaga.gov/dpcd/rest/services/OpenDataService1/FeatureServer/16' },

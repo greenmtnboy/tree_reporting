@@ -25,6 +25,7 @@ from shared.ingest import (  # noqa: E402
     COMMUNITY_DATA_SOURCES,
     DATA_SOURCES,
     MUNICIPAL_DATA_SOURCES,
+    NOTABLE_DATA_SOURCES,
     OSM_DATA_SOURCES,
     PREDICTED_DATA_SOURCES,
     SATELLITE_DATA_SOURCES,
@@ -114,6 +115,8 @@ def test_preql_enum_matches_python_picklist(code: str):
         expected.append(SATELLITE_DATA_SOURCES[code])
     if code in PREDICTED_DATA_SOURCES:
         expected.append(PREDICTED_DATA_SOURCES[code])
+    if code in NOTABLE_DATA_SOURCES:
+        expected.append(NOTABLE_DATA_SOURCES[code])
     assert sorted(enum_values(city_models()[code])) == sorted(expected)
 
 
@@ -311,7 +314,9 @@ def test_every_city_refuses_a_collapsed_build(code: str):
     and satellite labels are left out on purpose: their rows are few and can
     all be absorbed by the inventory in one build (see `kept` in core.preql).
     Bulk predictions are left out too: a new run at a stricter threshold may
-    rightly shed a quarter of them.
+    rightly shed a quarter of them.  So are notable registers: a register row
+    linked to its inventory tree is absorbed by design, so most never publish
+    as rows of their own.
     """
     from trilogy.parsing.render import Renderer
 
@@ -322,7 +327,7 @@ def test_every_city_refuses_a_collapsed_build(code: str):
     expected = {"@kept(tree_id, 0.75)"} | {
         f"@source_kept(tree_id, {lower}_source, '{label}', 0.75)"
         for label in enum_values(city_models()[code])
-        if not label.startswith(("COMMUNITY_", "SATELLITE_", "PREDICTED_"))
+        if not label.startswith(("COMMUNITY_", "SATELLITE_", "PREDICTED_", "NOTABLE_"))
     }
     assert expected <= rendered, f"{code} is missing {sorted(expected - rendered)}"
 

@@ -888,6 +888,7 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Ceridiphyllum japonicum": "Cercidiphyllum japonicum",
     "Chionanthus retusa": "Chionanthus retusus",
     "Chiranthodendron pentadactyl": "Chiranthodendron pentadactylon",
+    "Clerodendron bungei": "Clerodendrum bungei",
     "Clerodendron trichotomum": "Clerodendrum trichotomum",
     "Cocus nucifera": "Cocos nucifera",
     "Corylus avellena": "Corylus avellana",
@@ -1002,6 +1003,7 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Syagrus romanzoffianum": "Syagrus romanzoffiana",
     "Syringa recticulata": "Syringa reticulata",
     "Syringa reticulate": "Syringa reticulata",
+    "Taxodium disticum": "Taxodium distichum",
     "Thuya occidentalis": "Thuja occidentalis",
     "Tilia oliverii": "Tilia oliveri",
     "Tilia x europea": "Tilia x europaea",
@@ -1492,6 +1494,7 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "ITMIL": ("MILAN_OPENDATA",),
     "USCLT": ("CHARLOTTE_OPENDATA",),
     "USNAP": ("NAPLES_OPENDATA",),
     "USATL": ("TREES_ATLANTA",),
@@ -1575,6 +1578,7 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "ITMIL": "OSM_ITMIL",
     "USCLT": "OSM_USCLT",
     "USNAP": "OSM_USNAP",
     "USATL": "OSM_USATL",
@@ -1672,6 +1676,25 @@ PREDICTED_DATA_SOURCES: dict[str, str] = {
     "USBOS": predicted_source_for("USBOS"),
 }
 
+
+def notable_source_for(city_code: str) -> str:
+    """The `data_source` label for a register of notable trees in *city_code*."""
+    return f"NOTABLE_{city_code}"
+
+
+# Cities with a notable-tree register: a list of a city's remarkable trees,
+# with a name or a reason they matter, published apart from its inventory
+# (Milan's alberi monumentali, Tree Boston's Big Old Trees).  A sixth source
+# class: each row is linked by its ingest to the inventory tree it is
+# (shared/notable.py) and lends that tree its name and significance, or
+# publishes as a tree of its own when nothing matches.  It never takes part in
+# the grid match; see tree_dedup.preql.  `test_notable_city_is_fully_wired`
+# checks the model half.
+NOTABLE_DATA_SOURCES: dict[str, str] = {
+    "ITMIL": notable_source_for("ITMIL"),
+    "USBOS": notable_source_for("USBOS"),
+}
+
 DATA_SOURCES: tuple[str, ...] = tuple(
     label
     for code in MUNICIPAL_DATA_SOURCES
@@ -1681,6 +1704,7 @@ DATA_SOURCES: tuple[str, ...] = tuple(
         *((OSM_DATA_SOURCES[code],) if code in OSM_DATA_SOURCES else ()),
         *((SATELLITE_DATA_SOURCES[code],) if code in SATELLITE_DATA_SOURCES else ()),
         *((PREDICTED_DATA_SOURCES[code],) if code in PREDICTED_DATA_SOURCES else ()),
+        *((NOTABLE_DATA_SOURCES[code],) if code in NOTABLE_DATA_SOURCES else ()),
     )
 )
 
@@ -2216,6 +2240,7 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "ITMIL": (45.38, 45.54, 9.03, 9.29),
     "USCLT": (35.0, 35.45, -81.05, -80.6),
     "USNAP": (26.05, 26.3, -81.85, -81.7),
     "USATL": (33.5, 34.1, -84.75, -84.05),
@@ -2324,6 +2349,14 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Calibrated 2026-11-15 before the first build, on a local Overpass
+    # extract (40,356 nodes) against the Comune's 255,075-row inventory:
+    # planting spacing p50 5.5 m; mutual-NN 99.7% under 2 m, 90.4% at 2-5 m,
+    # 54.6% at 5-10 m, so the bands say a 10 m cell.  Marginal table: 6->8
+    # removes 539 duplicates for 277 hidden trees (1.95), 8->10 219 for 201
+    # (1.09), 10->14 228 for 311 (0.73).  10 m is the last step that removes
+    # more duplicates than it hides trees.
+    "ITMIL": 10,
     # Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
     # 23,187 staged OSM nodes against 191,412 inventory anchors.  Mutual-NN
     # 95.8% in 2-5 m, 42.5% in 5-10 m (n=1,002): a 5 m guarantee caps it at 10.
@@ -2611,6 +2644,7 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'ITMIL': ((45.38, 45.54, 9.03, 9.29),),
     'USCLT': ((35.0, 35.45, -81.05, -80.6),),
     'USNAP': ((26.05, 26.3, -81.85, -81.7),),
     # Trees Atlanta plants across the metro (Sandy Springs, Dunwoody, Clarkston,

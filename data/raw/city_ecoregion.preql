@@ -74,6 +74,7 @@ select * from (values
     ('USNOL', 337),
     ('USATL', 330),
     ('USNAP', 399),
-    ('USCLT', 330)
+    ('USCLT', 330),
+    ('ITMIL', 675)
 ) as t(city, ecoregion_id)
 ''';

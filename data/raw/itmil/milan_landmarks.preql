@@ -1,0 +1,22 @@
+import ..landmark_common;
+
+root datasource milan_landmarks_update_time (
+    data_updated_through: itmil_landmark_data_updated_through
+)
+file `./milan_landmarks_probe.py`;
+
+# Milan's parks and gardens, a named-point layer on the same portal as the
+# monumental-tree register (milan_landmarks.py).
+root partial datasource raw_milan_landmark_info extends landmark_partition (
+    category: ?category,
+)
+complete where city = 'ITMIL'
+file `./milan_landmarks.py`;
+
+partial datasource milan_landmark_info extends published_landmark_info (
+    ?category,
+    itmil_landmark_data_updated_through,
+)
+complete where city = 'ITMIL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/itmil_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/itmil_landmark_info_v{data_version}.parquet`
+freshness by itmil_landmark_data_updated_through;

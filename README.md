@@ -74,6 +74,7 @@ Currently has data from the following cities:
 - [Taipei, Taiwan](https://greenmtnboy.github.io/tree_reporting/#/?city=TWTPE)
 - [Bogotá, Colombia](https://greenmtnboy.github.io/tree_reporting/#/?city=COBOG)
 - [Copenhagen, Denmark](https://greenmtnboy.github.io/tree_reporting/#/?city=DKCPH)
+- [Milan, Italy](https://greenmtnboy.github.io/tree_reporting/#/?city=ITMIL)
 - [Prague, Czechia](https://greenmtnboy.github.io/tree_reporting/#/?city=CZPRG)
 - [Helsinki, Finland](https://greenmtnboy.github.io/tree_reporting/#/?city=FIHEL)
 - [London, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBLON)
@@ -122,6 +123,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Boston (Watertown) | City of Watertown - 2022 Tree Inventory (MapGeo) | https://watertownma.mapgeo.io/ |
 | Boston (Arboretum) | Arnold Arboretum / Harvard GIS | https://gis.arboretum.harvard.edu/ |
 | Boston (Northeastern) | Northeastern University Arboretum Viewer (ArcGIS Online) | https://experience.arcgis.com/experience/81872a0c5c044ba5a70613cc1086bff3 |
+| Boston (notable trees) | Tree Boston - Big Old Trees of Boston (volunteer registry) | https://treeboston.org/bot/ |
 | Burlington VT | City of Burlington GIS - Tree Sites | https://maps.burlingtonvt.gov/ |
 | Washington, DC | Open Data DC - Urban Forestry Street Trees | https://opendata.dc.gov/datasets/DCGIS::urban-forestry-street-trees |
 | Los Angeles | Los Angeles Open Data - Street Tree Inventory - 1990s | https://data.lacity.org/api/views/vt5t-mscf |
@@ -158,6 +160,8 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Taipei | Taipei City Open Data - Parks and Street Lights Office, Street and Park Trees (OGDL-Taiwan-1.0) | https://data.gov.tw/dataset/128274 |
 | Bogotá | Datos Abiertos Bogotá - Jardín Botánico de Bogotá, Arbolado Urbano (CC BY 4.0) | https://datosabiertos.bogota.gov.co/dataset/censo-arbolado-urbano |
 | Copenhagen | City of Copenhagen Open Data - Tree Register (trae_basis, CC BY 4.0) | https://www.opendata.dk/city-of-copenhagen/trae_basis |
+| Milan | Comune di Milano - Territorio: localizzazione degli alberi (DS2484, 2023-03-31 release, CC BY 4.0) | https://dati.comune.milano.it/dataset/ds2484_infogeo_alberi_localizzazione |
+| Milan (notable trees) | Comune di Milano - Gli alberi monumentali nel Comune di Milano (DS2489, CC BY 4.0) | https://dati.comune.milano.it/dataset/ds2489-gli-alberi-monumentali-nel-comune-di-milano |
 | Prague | Geoportál Praha / IPR Praha - Sdílená data o zeleni, vegetační prvky (CC BY, datový podklad © IPR Praha) | https://opendata-iprpraha.hub.arcgis.com/datasets/iprpraha::sdílená-data-o-zeleni-vegetační-prvky-body-1 |
 | Helsinki | Helsinki Region Infoshare - City of Helsinki Tree Register (Puurekisteri, CC BY 4.0) | https://hri.fi/data/en_GB/dataset/helsingin-kaupungin-puurekisteri |
 | London | London Datastore - Public Realm Trees | https://data.london.gov.uk/dataset/2r45m |
@@ -217,6 +221,7 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Taipei | Bureau of Cultural Heritage, Ministry of Culture - Monuments and Historic Buildings (OGDL-Taiwan-1.0) | https://data.gov.tw/dataset/6246 |
 | Bogotá | Datos Abiertos Bogotá - IDPC, Monumentos and Bienes de Interés Cultural (CC BY-SA 4.0) | https://datosabiertos.bogota.gov.co/dataset/inventario-patrimonio-mueble-bogota-d-c |
 | Copenhagen | City of Copenhagen WFS - Monuments (monumenter, CC BY 4.0) | https://wfs-kbhkort.kk.dk/k101/ows?service=WFS&request=GetCapabilities |
+| Milan | Comune di Milano - Spazi freschi: parchi ed aree verdi (DS3018, CC BY 4.0) | https://dati.comune.milano.it/dataset/ds3018-spazi-freschi-parchi-ed-aree-verdi |
 | Prague | Národní památkový ústav (NPÚ) - Kulturní památky, Ústřední seznam kulturních památek (CC BY 4.0) | https://geoportal.npu.cz/arcgis/rest/services/Tematicke/CP_UAP_PVO/MapServer/1 |
 | Helsinki | City of Helsinki WFS - Buildings Protected by Detailed Plans, Protected Natural Monuments (CC BY 4.0) | https://hri.fi/data/en_GB/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa |
 | London | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |

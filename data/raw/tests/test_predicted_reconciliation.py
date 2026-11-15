@@ -46,7 +46,7 @@ def near(point, times: int = 1):
 COLUMNS = (
     "tree_id", "city", "data_source", "species", "tree_name", "plant_date",
     "diameter_at_breast_height", "latitude", "longitude", "submission_photo_url",
-    "cultivar", "crown_width_m",
+    "cultivar", "crown_width_m", "significance", "significance_source", "linked_tree_id",
 )
 # Boston's own script emits the portal's spelling for four columns.
 BOSTON_RENAME = {
@@ -89,13 +89,14 @@ def write_rows(conn, path: Path, rows, *, rename: dict[str, str] | None = None) 
             tree_id VARCHAR, city VARCHAR, data_source VARCHAR, species VARCHAR,
             tree_name VARCHAR, plant_date DATE, diameter_at_breast_height DOUBLE,
             latitude DOUBLE, longitude DOUBLE, submission_photo_url VARCHAR, cultivar VARCHAR,
-            crown_width_m DOUBLE
+            crown_width_m DOUBLE, significance VARCHAR, significance_source VARCHAR,
+            linked_tree_id VARCHAR
         )
         """
     )
     if rows:
         conn.executemany(
-            "INSERT INTO src VALUES (?, 'USBOS', ?, ?, NULL, NULL, ?, ?, ?, NULL, NULL, ?)",
+            "INSERT INTO src VALUES (?, 'USBOS', ?, ?, NULL, NULL, ?, ?, ?, NULL, NULL, ?, NULL, NULL, NULL)",
             [(tid, source, species, dbh, *point, crown) for tid, source, species, dbh, crown, point in rows],
         )
     select = ", ".join(f"{col} AS {(rename or {}).get(col, col)}" for col in COLUMNS)
@@ -104,16 +105,33 @@ def write_rows(conn, path: Path, rows, *, rename: dict[str, str] | None = None) 
 
 @pytest.fixture(scope="module")
 def published(tmp_path_factory) -> dict[str, dict]:
+    return run_boston(tmp_path_factory.mktemp("predicted_reconciliation"))
+
+
+def run_boston(
+    tmp: Path,
+    *,
+    municipal=None,
+    satellite=None,
+    predicted=None,
+    osm=None,
+    writers: dict | None = None,
+) -> dict[str, dict]:
+    """Boston's build SQL over fixture rows, keyed by published tree_id.
+
+    The rows default to this file's; `writers` maps a script name to a
+    function `(conn, path)` that writes its fixture parquet instead
+    (test_notable_reconciliation.py writes the Tree Boston registry that way).
+    """
     import duckdb
     from trilogy import Dialects, Environment
     from trilogy.dialect.config import DuckDBConfig
 
     from test_satellite_reconciliation import write_modifications
 
-    tmp = tmp_path_factory.mktemp("predicted_reconciliation")
     conn = duckdb.connect()
     by_script = {
-        "boston_tree_info.py": (MUNICIPAL, BOSTON_RENAME),
+        "boston_tree_info.py": (MUNICIPAL if municipal is None else municipal, BOSTON_RENAME),
         "arboretum_tree_info.py": ([], None),
         "cambridge_tree_info.py": ([], None),
         "brookline_tree_info.py": ([], None),
@@ -121,15 +139,19 @@ def published(tmp_path_factory) -> dict[str, dict]:
         "belmont_tree_info.py": ([], None),
         "watertown_tree_info.py": ([], None),
         "northeastern_tree_info.py": ([], None),
+        "treeboston_big_old_trees.py": ([], None),
         "community_tree_info.py": ([], None),
-        "satellite_tree_info.py": (SATELLITE, None),
-        "predicted_tree_info.py": (PREDICTED, None),
-        "usbos_osm_staging.parquet": (OSM, None),
+        "satellite_tree_info.py": (SATELLITE if satellite is None else satellite, None),
+        "predicted_tree_info.py": (PREDICTED if predicted is None else predicted, None),
+        "usbos_osm_staging.parquet": (OSM if osm is None else osm, None),
     }
     fixtures = {}
     for script, (rows, rename) in by_script.items():
         fixtures[script] = tmp / f"{script}.parquet"
-        write_rows(conn, fixtures[script], rows, rename=rename)
+        if writers and script in writers:
+            writers[script](conn, fixtures[script])
+        else:
+            write_rows(conn, fixtures[script], rows, rename=rename)
     fixtures["tree_modification_info.py"] = tmp / "modifications.parquet"
     write_modifications(conn, fixtures["tree_modification_info.py"], [])
 

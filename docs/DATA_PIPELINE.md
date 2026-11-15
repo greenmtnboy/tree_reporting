@@ -242,6 +242,21 @@ Every tree row carries `data_source`. The value list is `DATA_SOURCES` in
   `satellite/published_trees.ndjson`, read by `raw/satellite_tree_info.py`
   with one freshness column per city. The model's DBH estimate is never
   published as a measurement. A rejection is stored and never published.
+- **Notable** (`NOTABLE_{CODE}`, `NOTABLE_DATA_SOURCES`): a register of a
+  city's remarkable trees published apart from its inventory, Milan's
+  *alberi monumentali* (`itmil/milan_monumental_trees.py`) and Tree Boston's
+  Big Old Trees (`usbos/treeboston_big_old_trees.py`). It is the only source
+  that fills `tree_name` (with `proper_names=True`) and `significance`. A
+  register's coordinates are a map pin: of Milan's 13, three sit within 2 m
+  of a *different* tree. So the ingest links each row to one inventory row,
+  by genus, distance (30 m) and trunk size (within 30%), through
+  `shared/notable.py`, reading the inventory through the municipal ingest's
+  own `load_published()` so the id exists in the build. It emits that id as
+  `linked_tree_id`. The partition re-binds `significance`,
+  `significance_source` and `linked_tree_id`; the `tree_partition` template
+  binds them to a literal null for every other partition, so no staged OSM
+  file has to carry them. No `@source_kept` guard: a linked row is absorbed by
+  design.
 
 ### Territory versus bounds
 
@@ -331,6 +346,14 @@ exactly one row per tree, and none for a tree reported gone.
 - A city that imports the file but skips the `where` gate still builds,
   with counts that are simply high; `test_every_city_prunes_absorbed_rows`
   catches it.
+- A notable-register row never takes part in the grid. Its cluster is the
+  inventory tree its ingest linked it to, else itself, and no tier anchors
+  on it. Linked, it lends the cluster its `tree_name`, `significance` and
+  `significance_source` (a grouped max, below an approved report) and
+  nothing else. Unlinked, it is a tree of its own and publishes its own
+  values through `@by_source`'s last arm, which it shares with a lone
+  prediction: a rank-0 cluster is always exactly one row.
+  `test_notable_reconciliation.py` runs Boston's build SQL over the cases.
 
 ### Approved tree reports
 
@@ -394,7 +417,8 @@ The functions are in `core.preql` (`staging_common.preql` has its own `kept`):
 They replace hardcoded floors (Bogotá's 1,000,000-row check after its portal
 served 100 rows on 2026-10-13): a ratio needs no revising as a city grows.
 
-- Community and satellite labels are not guarded per source, and nothing is
+- Community, satellite, prediction and notable labels are not guarded per
+  source (a notable row linked to its tree is absorbed by design), and nothing is
   grouped `by data_source`: pytrilogy fails a group that is missing from the
   new build, and a city's few community or satellite trees can all be
   absorbed by its inventory in one rebuild.

@@ -13,7 +13,7 @@ property <*>.northeastern_data_updated_through datetime; # when Northeastern Uni
 property <*>.usbos_canopy_data_updated_through datetime; # GCS publication time of the staged LIDAR canopy-height lookup
 auto usbos_published_data_updated_through <- greatest(usbos_data_updated_through, usbos_community_data_updated_through, usbos_osm_data_updated_through, usbos_satellite_data_updated_through, usbos_predicted_data_updated_through, usbos_canopy_data_updated_through);
 auto usbos_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through, cambridge_data_updated_through, brookline_data_updated_through, somerville_data_updated_through, northeastern_data_updated_through);
-key usbos_source enum<string>['CITY_OF_BOSTON', 'ARNOLD_ARBORETUM', 'CAMBRIDGE', 'BROOKLINE', 'SOMERVILLE', 'BELMONT', 'WATERTOWN', 'NORTHEASTERN', 'COMMUNITY_USBOS', 'OSM_USBOS', 'SATELLITE_USBOS', 'PREDICTED_USBOS']; # originating dataset within the Boston metro; materialized as the uniform `data_source` column
+key usbos_source enum<string>['CITY_OF_BOSTON', 'ARNOLD_ARBORETUM', 'CAMBRIDGE', 'BROOKLINE', 'SOMERVILLE', 'BELMONT', 'WATERTOWN', 'NORTHEASTERN', 'NOTABLE_USBOS', 'COMMUNITY_USBOS', 'OSM_USBOS', 'SATELLITE_USBOS', 'PREDICTED_USBOS']; # originating dataset within the Boston metro; materialized as the uniform `data_source` column
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
@@ -177,6 +177,22 @@ root partial datasource northeastern_raw_tree_info extends tree_partition (
 )
 complete where city = 'USBOS' and usbos_source = 'NORTHEASTERN'
 file `./northeastern_tree_info.py`;
+
+# Tree Boston's Big Old Trees registry: a notable source (../tree_dedup.preql).
+# Each placed public tree is linked by its ingest to the City of Boston row it
+# is and lends that tree why it is notable; an unlinked one publishes at the
+# registry's point.  No freshness probe (the sheet export has no modified
+# time) and no `@source_kept` guard: a volunteer sheet that cannot be read
+# publishes no rows rather than failing the metro's build.
+root partial datasource treeboston_notable_tree_info extends tree_partition (
+    data_source: usbos_source,
+    species: ?raw_species,
+    significance: ?raw_significance,
+    significance_source: ?raw_significance_source,
+    linked_tree_id: ?raw_linked_tree_id,
+)
+complete where city = 'USBOS' and usbos_source = 'NOTABLE_USBOS'
+file `./treeboston_big_old_trees.py`;
 
 # Approved community submissions for this city. The shared ingest script emits
 # every city's rows; the `complete where` clause narrows it to USBOS and makes
