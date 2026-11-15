@@ -1,5 +1,5 @@
 <template>
-  <div ref="mapContainer" class="tree-map" :class="{ 'tree-map--mobile': props.simplified }"></div>
+  <div ref="mapContainer" class="tree-map" :class="{ 'tree-map--mobile': props.simplified, 'tree-map--placing': placingDeepLinkCamera }"></div>
   <MapCompass
     v-if="!displayError"
     :bearing="mapBearing"
@@ -545,6 +545,10 @@ const router = useRouter()
 // deep links below). Consumed by the first landing.
 let pendingInstantDeepLink: string | null = readRouteTreeId(route.query.tree)
 if (pendingInstantDeepLink) introActive.value = false
+// The desktop hides the basemap until its camera is on the linked tree, so the
+// city centre never shows first. Lifted once the camera is placed, or once the
+// link is resolved some other way (no such tree, a failed lookup, an error).
+const placingDeepLinkCamera = ref(!!pendingInstantDeepLink && !props.simplified)
 const {
   selectedCity,
   currentMapQuery,
@@ -1339,21 +1343,57 @@ function syncTreeRoute(treeId: string | null): void {
 // start a second flight to the same tree.
 let deepLinkInFlight: string | null = null
 
+/** Where a tree stands, from the bookmarked city's projection (a phone's window may not hold it yet). */
+async function lookupTreeCoords(treeId: string): Promise<[number, number] | null> {
+  const safeId = treeId.replace(/'/g, "''")
+  const { rows } = await duckQuery(
+    `SELECT longitude, latitude FROM trees_published WHERE tree_id = '${safeId}' LIMIT 1`,
+  )
+  const row = rows[0] as { longitude: number; latitude: number } | undefined
+  return row ? [Number(row.longitude), Number(row.latitude)] : null
+}
+
+/**
+ * The lookup a desktop opened on a tree made before its first trees drew,
+ * so the card's open does not ask again. `coords` null: no such tree.
+ */
+let instantDeepLinkLookup: { city: CityCode; treeId: string; coords: [number, number] | null } | null = null
+
+/**
+ * A desktop opened on a tree puts its camera there as soon as the city's
+ * projection is readable, before the tree query is set: the first trees it
+ * reads and draws are the ones around the tree, not the city centre's.
+ */
+async function placeCameraOnInstantDeepLink(city: CityCode): Promise<void> {
+  const treeId = pendingInstantDeepLink
+  if (!treeId || props.simplified || !mapRef.value) return
+  try {
+    const coords = await lookupTreeCoords(treeId)
+    instantDeepLinkLookup = { city, treeId, coords }
+    if (!coords || disposed || !mapRef.value || pendingInstantDeepLink !== treeId) return
+    mapRef.value.stop()
+    mapRef.value.jumpTo({ center: coords, zoom: 17, pitch: 50, bearing: INTRO_END_BEARING })
+    placingDeepLinkCamera.value = false
+  } catch (e) {
+    // openTreeFromRoute asks again once the city is up.
+    console.warn('[TreeDeepLink] early lookup failed', e)
+  }
+}
+
 async function openTreeFromRoute(): Promise<void> {
   const treeId = readRouteTreeId(route.query.tree)
   if (!treeId || !mapRef.value || lifecyclePhase.value !== 'ready') return
   if (selectedTree.value?.tree_id === treeId || deepLinkInFlight === treeId) return
   deepLinkInFlight = treeId
   try {
-    const safeId = treeId.replace(/'/g, "''")
-    // trees_published: a phone's window may not hold the tree yet.
-    const { rows } = await duckQuery(
-      `SELECT longitude, latitude FROM trees_published WHERE tree_id = '${safeId}' LIMIT 1`,
-    )
-    const row = rows[0] as { longitude: number; latitude: number } | undefined
+    const early = instantDeepLinkLookup
+    instantDeepLinkLookup = null
+    const found = early && early.treeId === treeId && early.city === selectedCity.value
+      ? early.coords
+      : await lookupTreeCoords(treeId)
     // The URL or the city may have moved on while the query ran.
     if (readRouteTreeId(route.query.tree) !== treeId || deepLinkInFlight !== treeId || !mapRef.value) return
-    if (!row) {
+    if (!found) {
       console.warn(`[TreeDeepLink] no tree "${treeId}" in ${selectedCity.value}; dropping ?tree`)
       deepLinkInFlight = null
       // A desktop that skipped its intro for this link is still at the intro's
@@ -1364,7 +1404,7 @@ async function openTreeFromRoute(): Promise<void> {
       syncTreeRoute(null)
       return
     }
-    const coords: [number, number] = [Number(row.longitude), Number(row.latitude)]
+    const coords = found
     const map = mapRef.value
     const landed = new Promise<void>((resolve) => { map.once('moveend', () => resolve()) })
     const pose = { center: coords, zoom: 17, pitch: props.simplified ? 0 : 50 }
@@ -1387,7 +1427,24 @@ async function openTreeFromRoute(): Promise<void> {
     console.error('[TreeDeepLink] failed', e)
   } finally {
     if (pendingInstantDeepLink === treeId) pendingInstantDeepLink = null
+    placingDeepLinkCamera.value = false
   }
+}
+
+// Whatever else becomes of the link, the ground is never hidden for long: an
+// error, the link leaving the URL, or a load that outlasts the fallback (the
+// city's centre then shows, as it did before the camera was placed early).
+if (placingDeepLinkCamera.value) {
+  const fallback = setTimeout(() => { placingDeepLinkCamera.value = false }, 20_000)
+  const stop = watch(
+    [placingDeepLinkCamera, mapError, () => readRouteTreeId(route.query.tree)],
+    ([placing, error, treeId]) => {
+      if (placing && !error && treeId) return
+      placingDeepLinkCamera.value = false
+      clearTimeout(fallback)
+      stop()
+    },
+  )
 }
 
 /**
@@ -2175,6 +2232,9 @@ async function initializeRequestedCity(map: maplibregl.Map): Promise<void> {
     await setCityContext(city)
     if (disposed) return
     if (!lifecycleCommitContextCity(transition)) continue
+    await placeCameraOnInstantDeepLink(city)
+    if (disposed) return
+    if (!lifecycleMatches(transition)) continue
     if (!await configureMapQuery()) continue
     if (disposed) return
     if (!lifecycleMatches(transition)) continue
@@ -2545,6 +2605,11 @@ onUnmounted(() => {
 .tree-map {
   width: 100%;
   height: 100%;
+}
+
+/* A desktop opened on a tree shows no ground until its camera stands there. */
+.tree-map--placing :deep(.maplibregl-canvas) {
+  opacity: 0;
 }
 
 :deep(.maplibregl-ctrl-group .maplibregl-ctrl-zoom-level) {
