@@ -516,3 +516,40 @@ def test_a_fine_tune_predicts_with_its_own_checkpoint_not_its_parents(tmp_path):
     files = bulk_predict.run_bundle_files(tmp_path, "r19")
     assert "runs/r19/checkpoints/002-0001701.ckpt" in files
     assert not any("000-0000282" in f or "parent-validation" in f for f in files)
+
+
+def test_shards_split_a_plan_into_disjoint_sets_that_cover_it():
+    tiles = [{"i": i, "j": j} for i in range(2070, 2100) for j in range(30500, 30530)]
+    assert all(bulk_predict.in_shard(t, None) for t in tiles)
+    shards = [[t for t in tiles if bulk_predict.in_shard(t, (k, 3))] for k in (1, 2, 3)]
+    assert sum(len(s) for s in shards) == len(tiles)
+    assert all(len(s) > len(tiles) // 4 for s in shards)
+    keys = [{(t["i"], t["j"]) for t in s} for s in shards]
+    assert not (keys[0] & keys[1] or keys[0] & keys[2] or keys[1] & keys[2])
+    # Neighbours mostly share a shard, so a process reuses the imagery it holds.
+    together = sum(bulk_predict.in_shard({"i": t["i"] + 1, "j": t["j"]}, (1, 3)) for t in shards[0])
+    assert together >= len(shards[0]) * 0.7
+
+
+def test_a_shard_is_k_of_n():
+    assert bulk_predict.parse_shard("2/3") == (2, 3)
+    for bad in ("0/3", "4/3", "2", "a/b"):
+        with pytest.raises(Exception):
+            bulk_predict.parse_shard(bad)
+
+
+def test_predict_takes_only_its_shards_tiles(tmp_path, monkeypatch):
+    from urban_tree_ml import point_predict
+
+    tiles = [{"i": i, "j": 0, "lat": 42.3, "lon": -71.0 + i * 0.001} for i in range(8)]
+    (tmp_path / "plan.json").write_text(json.dumps({
+        "city": "USBOS", "run": "run", "epsg": 26919, "tileM": 153.6, "runThreshold": 0.35, "tiles": tiles,
+    }))
+    monkeypatch.setattr(point_predict, "Predictor", lambda *a, **k: type("P", (), {"config": {"imagery": {}}})())
+    monkeypatch.setattr(point_predict, "predict_tile", lambda *a, **k: None)
+    args = bulk_predict.argparse.Namespace(
+        out=str(tmp_path), artifacts=str(tmp_path), sync=False, retry_errors=False, near=None, limit=None,
+        device="cpu", max_minutes=1.0, year=None, min_score=0.1, no_context=False, shard=(2, 2), threads=None,
+    )
+    assert bulk_predict.predict(args) == 0
+    assert sorted(p.stem for p in (tmp_path / "tiles").glob("*.json")) == ["4_0", "5_0", "6_0", "7_0"]

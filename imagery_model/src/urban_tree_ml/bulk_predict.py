@@ -29,7 +29,11 @@ dies loses at most the tile it was on:
     pass: 5x the interior density in the outer 0.6 m).  It costs four passes
     a tile; ``--no-context`` predicts tiles alone, as the reviewer's
     "Predict at" does.  Run it again to continue; a tile
-    already written is skipped.  NAIP windows are cached under
+    already written is skipped.  Only the cells a window keeps go through
+    the model's full-resolution layers (``model.forward_region``; the values
+    are those of a whole pass), about 1.5 s a tile on a ten-core CPU.
+    ``--shard K/N`` splits the plan into N disjoint sets, one process each.
+    NAIP windows are cached under
     ``artifacts/point-tiles/coverage-v2`` and a cached tile is found from the plan's UTM
     zone, so predicting again with a later run neither reads imagery nor
     searches the STAC catalog (it uses the newest year cached).
@@ -565,8 +569,32 @@ def plan(args: argparse.Namespace) -> int:
     (out / "plan.json").write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
     area_km2 = len(tiles) * tile_m * tile_m / 1e6
     print(f"{city}: {len(tiles)} tiles (~{area_km2:.0f} km2) around {len(points)} published trees; "
-          f"at ~3 s/tile about {len(tiles) * 3 / 3600:.1f} h", file=sys.stderr)
+          f"at ~1.5 s/tile on a CPU about {len(tiles) * 1.5 / 3600:.1f} h", file=sys.stderr)
     return 0
+
+
+SHARD_BLOCK = 4
+
+
+def parse_shard(value: str) -> tuple[int, int]:
+    """``K/N`` (1-based) as (k, n)."""
+    try:
+        k, n = (int(part) for part in value.split("/"))
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(f"expected K/N, got {value!r}") from error
+    if not 1 <= k <= n:
+        raise argparse.ArgumentTypeError(f"shard {value!r}: K runs from 1 to N")
+    return k, n
+
+
+def in_shard(tile: dict[str, Any], shard: tuple[int, int] | None) -> bool:
+    """Whether *tile* is shard K of N's.  Blocks of 4 x 4 tiles go to the shards
+    in turn along both axes, so the N processes of one run take disjoint tiles
+    and each still walks neighbours, whose imagery it then already holds."""
+    if shard is None:
+        return True
+    k, n = shard
+    return (tile["i"] // SHARD_BLOCK + tile["j"] // SHARD_BLOCK) % n == k - 1
 
 
 def tile_path(out: Path, tile: dict[str, Any]) -> Path:
@@ -669,7 +697,8 @@ def predict(args: argparse.Namespace) -> int:
         return prediction_pending(tile_path(out, tile), retry_errors=args.retry_errors,
                                   refresh_imagery=getattr(args, "refresh_imagery", False))
 
-    tiles = selected_tiles(manifest["tiles"], getattr(args, "tile_list", None))
+    shard = getattr(args, "shard", None)
+    tiles = [t for t in selected_tiles(manifest["tiles"], getattr(args, "tile_list", None)) if in_shard(t, shard)]
     todo = [t for t in tiles if pending(t)]
     total = len(tiles)
     print(f"{total - len(todo)}/{total} tiles done; {len(todo)} to go", file=sys.stderr)
@@ -683,6 +712,10 @@ def predict(args: argparse.Namespace) -> int:
         todo = todo[: args.limit]
     if not todo:
         return 0
+    if getattr(args, "threads", None):
+        import torch
+
+        torch.set_num_threads(args.threads)
     predictor = Predictor(artifacts, run, city, args.device)
     stac_url = str(predictor.config["imagery"].get("stac_url") or "https://planetarycomputer.microsoft.com/api/stac/v1")
     envelopes, territory = city_boxes()
@@ -700,6 +733,7 @@ def predict(args: argparse.Namespace) -> int:
                     stac_url=stac_url, city=city, envelopes=envelopes, territory=territory,
                     min_score=args.min_score, threshold=manifest["runThreshold"], coefficients=None, readers=None,
                     epsg_hint=int(manifest["epsg"]), context=not args.no_context,
+                    render=False,  # tile_record keeps the detections, not the image
                 )
             except Exception as error:  # one bad tile must not end the batch
                 if network_failure(error):
@@ -1010,6 +1044,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--tile-list", default=None,
                    help="restrict to a JSON array of plan record stems (i_j); combine with --refresh-imagery")
     p.add_argument("--no-context", action="store_true", help="predict each tile alone (edge artefacts; 1/4 the passes)")
+    p.add_argument("--shard", type=parse_shard, default=None, metavar="K/N",
+                   help="predict only the K-th of N disjoint sets of tiles; run one process per K on one machine")
+    p.add_argument("--threads", type=int, default=None, help="CPU threads for the model (default: torch's)")
 
     p = sub.add_parser("assemble", help="threshold, seam dedup and write the staged parquet")
     p.add_argument("--out", required=True)
