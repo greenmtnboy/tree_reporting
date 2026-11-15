@@ -121,6 +121,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Boston (Belmont) | Town of Belmont - TreeKeeper public tree inventory | https://belmontma.treekeepersoftware.com/ |
 | Boston (Watertown) | City of Watertown - 2022 Tree Inventory (MapGeo) | https://watertownma.mapgeo.io/ |
 | Boston (Arboretum) | Arnold Arboretum / Harvard GIS | https://gis.arboretum.harvard.edu/ |
+| Boston (Northeastern) | Northeastern University Arboretum Viewer (ArcGIS Online) | https://experience.arcgis.com/experience/81872a0c5c044ba5a70613cc1086bff3 |
 | Burlington VT | City of Burlington GIS - Tree Sites | https://maps.burlingtonvt.gov/ |
 | Washington, DC | Open Data DC - Urban Forestry Street Trees | https://opendata.dc.gov/datasets/DCGIS::urban-forestry-street-trees |
 | Los Angeles | Los Angeles Open Data - Street Tree Inventory - 1990s | https://data.lacity.org/api/views/vt5t-mscf |
