@@ -1,17 +1,21 @@
 name: Explorer iOS simulator
 on:
   workflow_dispatch:
-  push:
-    branches: ['codex/explorer-ios']
   pull_request:
     paths:
       - 'src/ios/**'
       - 'src/capacitor.config.json'
+      - 'src/vite.config.ts'
+      - 'src/package.json'
       - 'src/src/lib/geo.ts'
       - '.github/workflows/explorer-ios.yml'
 
 permissions:
   contents: read
+
+concurrency:
+  group: ios-simulator-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   simulator:
