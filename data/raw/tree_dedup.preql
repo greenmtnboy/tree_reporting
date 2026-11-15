@@ -296,6 +296,7 @@ auto cluster_id <- coalesce(
 key modified_tree_id string; # the published tree an approved tree report corrects
 property modified_tree_id.modified_species string; # the species the latest report gave this tree, as an accepted scientific name
 property modified_tree_id.modified_dbh float; # the trunk diameter, inches, the latest report gave this tree
+property modified_tree_id.modified_dbh_unknown bool; # the latest report that touched the diameter said it is wrong and unknown: publish none
 property modified_tree_id.modified_latitude float; # the corrected position's latitude (always with its longitude)
 property modified_tree_id.modified_longitude float; # the corrected position's longitude (always with its latitude)
 property modified_tree_id.modified_missing bool; # the latest approved report says this tree is gone
@@ -304,6 +305,7 @@ root datasource tree_modifications (
     tree_id: modified_tree_id,
     species: modified_species,
     diameter_at_breast_height: modified_dbh,
+    dbh_unknown: modified_dbh_unknown,
     latitude: modified_latitude,
     longitude: modified_longitude,
     missing: modified_missing,
@@ -381,7 +383,10 @@ auto merged_species <- coalesce(
 # dbh, the Overture-placed point -- applies corrections by calling the same
 # helper rather than repeating the coalesce.  A corrected position is final:
 # the ingest only ever emits the pair, and it is not snapped again.
-def corrected_dbh(dbh) -> coalesce(modified_dbh, @by_source(dbh));
+# A report can also clear the diameter (the source's is wrong and nobody has a
+# better one); that wins over every source too.  A tree with no report has a
+# null flag, which is not true, so it falls through to the coalesce.
+def corrected_dbh(dbh) -> case when modified_dbh_unknown = true then null else coalesce(modified_dbh, @by_source(dbh)) end;
 def corrected_latitude(lat) -> coalesce(modified_latitude, @by_source(lat));
 def corrected_longitude(lon) -> coalesce(modified_longitude, @by_source(lon));
 

@@ -8,6 +8,12 @@ The iframe does not expose camera coordinates or direction, so automatic
 “Face tree”, live camera arrows, and synchronized minimap movement are unavailable.
 No heading is guessed. Imagery can predate the tree and is not a confirmation.
 
+On desktop the dialog is a large non-modal panel on the right, and the tree
+card docks down the left beside it (`tree-card--docked`), so the card stays
+readable; the correction form opened from it takes the same column with no
+backdrop, leaving the panorama live while a diameter is read off it. Phones
+keep the modal over the full-screen sheet.
+
 ## Configuration and billing
 
 The GitHub Pages build still reads `VITE_GOOGLE_MAPS_API_KEY` from the `deploy`

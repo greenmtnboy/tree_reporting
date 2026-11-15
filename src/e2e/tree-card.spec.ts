@@ -246,6 +246,44 @@ for (const mobile of [false, true]) {
       await card.locator('.tree-card-close').click()
       await expect(card).toHaveCount(0)
     })
+
+    if (!mobile) {
+      test('Street View opens beside the card, which docks on the left, and so does a correction', async ({ page }) => {
+        test.setTimeout(180_000)
+
+        await openMap(page, mobile)
+        const tree = await findClickableTree(page, mobile)
+        await page.mouse.click(tree.x, tree.y)
+        const card = page.locator('.tree-card')
+        await expect(card).toBeVisible({ timeout: 15_000 })
+
+        await card.getByRole('button', { name: 'Street View' }).click()
+        const street = page.locator('dialog.street-dialog')
+        await expect(street).toBeVisible()
+        await expect(card).toHaveClass(/tree-card--docked/)
+        const viewport = page.viewportSize()!
+        const cardBox = (await card.boundingBox())!
+        const streetBox = (await street.boundingBox())!
+        expect(cardBox.x, 'the card docks at the left edge').toBeLessThan(40)
+        expect(cardBox.x + cardBox.width, 'card and Street View do not overlap').toBeLessThanOrEqual(streetBox.x)
+        expect(streetBox.width, 'Street View takes the rest of the width').toBeGreaterThan(viewport.width * 0.5)
+        expect(streetBox.height).toBeGreaterThan(viewport.height * 0.8)
+
+        // Non-modal: the docked card stays usable, and its correction form
+        // takes the card's column with Street View still showing.
+        await card.getByTestId('tree-report-link').click()
+        const form = page.locator('.checkin-dialog__panel')
+        await expect(form).toBeVisible()
+        await expect(street).toBeVisible()
+        const formBox = (await form.boundingBox())!
+        expect(formBox.x + formBox.width, 'the correction form does not cover Street View').toBeLessThanOrEqual(streetBox.x)
+        await page.locator('.checkin-dialog__close').click()
+
+        await street.getByRole('button', { name: 'Close Street View' }).click()
+        await expect(street).toHaveCount(0)
+        await expect(card).not.toHaveClass(/tree-card--docked/)
+      })
+    }
   })
 }
 

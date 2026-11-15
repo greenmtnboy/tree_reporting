@@ -97,6 +97,45 @@ describe('desktop corrections', () => {
     expect(root.textContent).toContain('Thanks — report sent.')
   })
 
+  it('can mark a recorded diameter unknown, which sends a clear rather than a value', async () => {
+    await mount(true)
+    const unknown = root.querySelector<HTMLInputElement>('[data-testid="checkin-dbh-unknown"]')!
+    unknown.checked = true
+    unknown.dispatchEvent(new Event('change', { bubbles: true }))
+    await nextTick()
+    expect(root.querySelector<HTMLInputElement>('[data-testid="checkin-dbh"]')!.disabled).toBe(true)
+    expect(submitButton().disabled).toBe(false)
+    submitButton().click()
+    await settle()
+    expect(mocks.submit).toHaveBeenCalledWith(expect.objectContaining({
+      proposedDbhInches: null, proposedDbhUnknown: true,
+    }))
+  })
+
+  it('takes a diameter that is not a whole or half inch', async () => {
+    await mount(true)
+    expect(root.querySelector<HTMLInputElement>('[data-testid="checkin-dbh"]')!.step).toBe('any')
+    await input('input[type="number"]', '12.3')
+    submitButton().click()
+    await settle()
+    expect(mocks.submit).toHaveBeenCalledWith(expect.objectContaining({
+      proposedDbhInches: 12.3, proposedDbhUnknown: false,
+    }))
+  })
+
+  it('docks beside Street View without a backdrop', async () => {
+    host = document.createElement('div')
+    document.body.append(host)
+    app = createApp(CheckinDialog, {
+      treeId: 't', treeLat: 37.775, treeLng: -122.419, dbhInches: 50, remoteCorrection: true, docked: true,
+    })
+    app.mount(host)
+    await nextTick()
+    const dialog = root.querySelector('.checkin-dialog')!
+    expect(dialog.classList.contains('checkin-dialog--docked')).toBe(true)
+    expect(dialog.getAttribute('aria-modal')).toBe('false')
+  })
+
   it('still gates mobile visits on geolocation', async () => {
     mocks.locate.mockResolvedValue({ coords: { latitude: 0, longitude: 0 } })
     await mount(false)

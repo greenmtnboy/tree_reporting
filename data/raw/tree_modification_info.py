@@ -17,6 +17,10 @@ A tree can collect several reports, and the latest one wins:
 * each field (species, DBH, position) takes the last non-null value any
   `update` gave it -- a later report that leaves a field alone keeps the
   earlier correction;
+* a report can instead mark the DBH unknown (`dbhUnknown`): the recorded
+  value is wrong and nobody has a better one.  That clears any earlier
+  corrected DBH and publishes the tree with none, until a later report gives
+  a value;
 * the tree is reported missing exactly when its latest report is `missing`,
   so a later `update` (the tree is there after all) restores it.
 
@@ -63,6 +67,7 @@ SCHEMA = pa.schema(
         ("tree_id", pa.string()),
         ("species", pa.string()),
         ("diameter_at_breast_height", pa.float64()),
+        ("dbh_unknown", pa.bool_()),
         ("latitude", pa.float64()),
         ("longitude", pa.float64()),
         ("missing", pa.bool_()),
@@ -115,7 +120,7 @@ def resolve(records: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         tree = trees.setdefault(
             tree_id,
             {"tree_id": tree_id, "species": None, "diameter_at_breast_height": None,
-             "latitude": None, "longitude": None, "missing": False},
+             "dbh_unknown": False, "latitude": None, "longitude": None, "missing": False},
         )
         if record.get("kind") == "missing":
             tree["missing"] = True
@@ -125,8 +130,10 @@ def resolve(records: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         if species is not None:
             tree["species"] = species
         dbh = _float(record.get("dbhInches"))
-        if dbh is not None and 0 < dbh <= MAX_DBH_INCHES:
-            tree["diameter_at_breast_height"] = dbh
+        if record.get("dbhUnknown") is True:
+            tree["diameter_at_breast_height"], tree["dbh_unknown"] = None, True
+        elif dbh is not None and 0 < dbh <= MAX_DBH_INCHES:
+            tree["diameter_at_breast_height"], tree["dbh_unknown"] = dbh, False
         lat, lon = _float(record.get("latitude")), _float(record.get("longitude"))
         if lat is not None and lon is not None and abs(lat) <= 90 and abs(lon) <= 180:
             tree["latitude"], tree["longitude"] = lat, lon

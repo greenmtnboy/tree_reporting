@@ -14,13 +14,16 @@ vi.mock('../composables/useTheme', () => ({ useTheme: () => ({ resolvedTheme: { 
 const position = { lat: 42.001, lng: -71 }
 let unmount: (() => void) | undefined
 const closed = vi.fn()
-async function mount(key = 'test-key') {
+const shownModal = vi.fn()
+const shown = vi.fn()
+async function mount(key = 'test-key', docked = false) {
   vi.stubEnv('VITE_GOOGLE_MAPS_API_KEY', key)
-  HTMLDialogElement.prototype.showModal = function () { this.open = true }
+  HTMLDialogElement.prototype.showModal = function () { shownModal(); this.open = true }
+  HTMLDialogElement.prototype.show = function () { shown(); this.open = true }
   HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new Event('close')) }
   const host = document.createElement('div')
   document.body.append(host)
-  const app = createApp(StreetViewDialog, { position, onClose: closed })
+  const app = createApp(StreetViewDialog, { position, docked, onClose: closed })
   app.mount(host)
   unmount = () => { app.unmount(); host.remove() }
   await nextTick()
@@ -72,4 +75,19 @@ it('closes from the button and releases the inset, iframe, and focus on unmount'
   expect(document.querySelector('iframe')).toBeNull()
   expect(document.activeElement).toBe(opener)
   opener.remove()
+})
+it('opens as a modal by default, and as a non-modal panel beside the docked card', async () => {
+  await mount()
+  expect(shownModal).toHaveBeenCalledOnce()
+  expect(document.querySelector('dialog')!.classList.contains('street-dialog--docked')).toBe(false)
+  unmount!(); unmount = undefined; vi.clearAllMocks()
+  await mount('test-key', true)
+  expect(shown).toHaveBeenCalledOnce()
+  expect(shownModal).not.toHaveBeenCalled()
+  expect(document.querySelector('dialog')!.classList.contains('street-dialog--docked')).toBe(true)
+})
+it('closes a docked panel on Escape, since a non-modal dialog does not', async () => {
+  await mount('test-key', true)
+  document.querySelector('dialog')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  expect(closed).toHaveBeenCalledOnce()
 })

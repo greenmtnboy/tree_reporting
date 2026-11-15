@@ -7,6 +7,7 @@ tree_modification_info.py's output repointed at a fixture of resolved reports.
 The reports land after the cluster merge, on the tree the reporter saw:
 
 * a corrected species or DBH replaces the merged value;
+* a DBH reported unknown publishes as null;
 * a corrected position moves the tree;
 * a tree reported gone is not published, and neither is anything its cluster
   absorbed;
@@ -32,6 +33,7 @@ P2 = (37.7750, -122.4250)
 P3 = (37.7800, -122.4300)
 P4 = (37.7850, -122.4350)
 P5 = (37.7900, -122.4400)
+P6 = (37.7950, -122.4450)
 NUDGE = 0.000012  # ~1.3 m of latitude
 MOVED = (P2[0] + 0.00003, P2[1])  # ~3 m north of where the city put sf-2
 
@@ -41,16 +43,18 @@ MUNICIPAL = [
     ("sf-2", "SF_OPENDATA", "Unknown", None, P2),
     ("sf-3", "SF_OPENDATA", "Acer rubrum", 9.0, P3),
     ("sf-4", "SF_OPENDATA", "Pinus radiata", 12.0, P4),
+    ("sf-5", "SF_OPENDATA", "Ficus microcarpa", 50.0, P6),
 ]
 COMMUNITY = [("community-x", "COMMUNITY_USSFO", "Acer rubrum", None, P5)]
 OSM = [("osm-1", "OSM_USSFO", None, None, (P3[0] + NUDGE, P3[1]))]  # absorbed by sf-3
-# (tree_id, species, dbh, latitude, longitude, missing), as tree_modification_info.py emits them
+# (tree_id, species, dbh, dbh_unknown, latitude, longitude, missing), as tree_modification_info.py emits them
 REPORTS = [
-    ("sf-1", "Quercus lobata", 22.5, None, None, False),
-    ("sf-2", None, None, MOVED[0], MOVED[1], False),
-    ("sf-3", None, None, None, None, True),
-    ("community-x", "Acer saccharum", None, None, None, False),
-    ("nyc-999", "Ulmus americana", 4.0, 40.7, -74.0, False),
+    ("sf-1", "Quercus lobata", 22.5, False, None, None, False),
+    ("sf-2", None, None, False, MOVED[0], MOVED[1], False),
+    ("sf-3", None, None, False, None, None, True),
+    ("community-x", "Acer saccharum", None, False, None, None, False),
+    ("sf-5", None, None, True, None, None, False),
+    ("nyc-999", "Ulmus americana", 4.0, False, 40.7, -74.0, False),
 ]
 
 
@@ -73,9 +77,9 @@ def write_reports(conn, path: Path, rows) -> None:
     conn.execute("DROP TABLE IF EXISTS mods")
     conn.execute(
         "CREATE TABLE mods (tree_id VARCHAR, species VARCHAR, diameter_at_breast_height DOUBLE, "
-        "latitude DOUBLE, longitude DOUBLE, missing BOOLEAN)"
+        "dbh_unknown BOOLEAN, latitude DOUBLE, longitude DOUBLE, missing BOOLEAN)"
     )
-    conn.executemany("INSERT INTO mods VALUES (?, ?, ?, ?, ?, ?)", rows)
+    conn.executemany("INSERT INTO mods VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
     conn.execute(f"COPY mods TO '{path.as_posix()}' (FORMAT PARQUET)")
 
 
@@ -137,7 +141,7 @@ def published(tmp_path_factory) -> dict[str, dict]:
 
 
 def test_only_the_trees_still_standing_publish(published):
-    assert set(published) == {"sf-1", "sf-2", "sf-4", "community-x"}, (
+    assert set(published) == {"sf-1", "sf-2", "sf-4", "sf-5", "community-x"}, (
         "sf-3 was reported gone and osm-1 was its duplicate; nyc-999 is not an SF tree"
     )
 
@@ -147,6 +151,12 @@ def test_a_corrected_species_and_dbh_replace_the_merged_values(published):
     assert row["species"] == "Quercus lobata"
     assert row["diameter_at_breast_height"] == 22.5
     assert (row["latitude"], row["longitude"]) == P1
+
+
+def test_a_dbh_reported_unknown_publishes_as_null(published):
+    row = published["sf-5"]
+    assert row["diameter_at_breast_height"] is None
+    assert row["species"] == "Ficus microcarpa", "clearing the DBH leaves the rest of the row alone"
 
 
 def test_a_corrected_position_moves_the_tree(published):

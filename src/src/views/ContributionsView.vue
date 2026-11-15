@@ -143,7 +143,8 @@ function describeModification(m: TreeModification): string {
   const parts: string[] = []
   if (m.proposedLat != null && m.proposedLng != null) parts.push('location')
   if (m.proposedSpecies) parts.push(`species → ${m.proposedSpecies}`)
-  if (m.proposedDbhInches != null) parts.push(`diameter → ${m.proposedDbhInches} in`)
+  if (m.proposedDbhUnknown) parts.push('diameter → unknown')
+  else if (m.proposedDbhInches != null) parts.push(`diameter → ${m.proposedDbhInches} in`)
   return parts.length ? `Fix: ${parts.join(', ')}` : 'Suggested fix'
 }
 
