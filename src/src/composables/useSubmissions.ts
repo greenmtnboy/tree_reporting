@@ -82,6 +82,8 @@ export interface Checkin {
   plantYear: number | null
   ranking?: RankingSnapshot | null
   speciesCityCount: number | null
+  /** The tree was flagged for a second look when visited (lib/treeReview.ts). */
+  reviewFlag: string | null
 }
 
 export type PhotoReviewStatus = 'pending' | 'published' | 'rejected'
@@ -103,6 +105,7 @@ export interface CheckinInput {
   plantYear?: number | null
   ranking?: RankingSnapshot | null
   speciesCityCount?: number | null
+  reviewFlag?: string | null
   onProgress?: (fraction: number) => void
 }
 
@@ -255,6 +258,7 @@ function mapCheckinDoc(id: string, data: Record<string, unknown>): Checkin {
     plantYear: data.plantYear == null ? null : Number(data.plantYear),
     speciesCityCount: data.speciesCityCount == null ? null : Number(data.speciesCityCount),
     ranking: (data.ranking as RankingSnapshot | null) ?? null,
+    reviewFlag: typeof data.reviewFlag === 'string' ? data.reviewFlag : null,
   }
 }
 
@@ -306,6 +310,9 @@ export async function recordCheckin(input: CheckinInput): Promise<{ id: string; 
     plantYear: input.plantYear ?? null,
     speciesCityCount: input.speciesCityCount ?? null,
     ...(input.ranking ? { ranking: input.ranking } : {}),
+    // Written only when set, so an ordinary check-in keeps the field set the
+    // rules accepted before `reviewFlag` existed.
+    ...(input.reviewFlag ? { reviewFlag: input.reviewFlag } : {}),
     at: serverTimestamp(),
   }
   const checkinRef = doc(collection(firestore, 'checkins'))

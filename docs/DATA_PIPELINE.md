@@ -51,6 +51,7 @@ per city, three independent schedules
                                             -> {code}_tree_predictions_v{n}.parquet
                                                {code}_tree_browser_v{n}.parquet
                                                {code}_tree_vocab_v{n}.parquet
+                                               {code}_tree_review_v{n}.parquet
   landmarks-{code}   no cron, by hand       landmark_staging/{code}_landmarks_staging.preql
   refresh-landmarks-{code}  weekly, Sun 03:00-04:20, 2 min apart
                                             raw/{code}/{slug}_landmarks.preql
@@ -508,6 +509,16 @@ the projection reads most of the file in DuckDB-wasm, and trusts it only
 when its counts sum to the projection's row count; otherwise it scans the
 projection. Its watermark is the city's `max()` of the projection's, since
 the per-tree column is null for a tree with no prediction row.
+
+The job's last file, `{code}_tree_review_v{n}.parquet` (`city_tree_review`),
+holds only the trees whose recorded values want a second look. Today that is
+`dbh_outlier`: a diameter of 30"+ that is over three times its species' mean
+in the city (binomials with 30+ measured inventory trees; never an imagery
+detection). The tree card reads it by tree id (`src/src/lib/treeReview.ts`)
+and asks for a check-in until someone visits; a check-in there records the
+flag for the Second Look badge. An approved correction clears a flag on the
+next build, since the comparison runs on the published, corrected diameter.
+A city can narrow its own file with a `where` on its datasource.
 
 Planner facts the model relies on: `**` is the power operator and there is
 no `exp`, `ln` or `cos`; DuckDB's `greatest()` skips nulls; the enrichment

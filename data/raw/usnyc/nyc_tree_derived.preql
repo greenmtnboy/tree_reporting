@@ -24,3 +24,6 @@ file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_t
 
 datasource usnyc_tree_vocab extends city_tree_vocab ()
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnyc_tree_vocab_v{data_version}.parquet`;
+
+datasource usnyc_tree_review extends city_tree_review ()
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_review_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnyc_tree_review_v{data_version}.parquet`;

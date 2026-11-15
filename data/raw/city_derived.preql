@@ -172,3 +172,58 @@ template datasource city_tree_vocab (
 )
 grain (city, data_source, species, cultivar, tree_name, display_name)
 freshness by city_inputs_published_through;
+
+# --- Trees that need a second look -----------------------------------------
+#
+# The trees whose recorded values look wrong, for the map to ask a visitor
+# to check: a note on the tree's card, and a badge for the check-in
+# (src/src/lib/badges.ts). One row per flagged tree, so the file is a few
+# thousand rows that the card reads by tree id -- not a column of the
+# projection, which every phone holds for every tree in view.
+#
+# `dbh_outlier`: a recorded diameter at least `review_dbh_min_inches` and more
+# than `review_dbh_species_multiple` times the mean of its species in this
+# city, where the city has measured at least `review_species_min_measured` of
+# that species. Calibrated on San Francisco's 2026-11 audit (a median and 90th
+# percentile rule over the portal's own export; the planner has neither):
+# 1,440 trees against the audit's 1,571, 1,412 of them shared. Only a
+# binomial is compared -- a genus or a sentinel (`Unknown`, `Palm`) mixes
+# species -- and never an imagery detection, whose diameter is the model's.
+#
+# A flag clears itself: an approved correction changes the published
+# diameter (or clears it, `clearFields`), and the next build compares the new
+# value. A check-in hides the note on the map without touching this file.
+#
+# A city can narrow its own file with a `where` on its datasource, which is
+# ANDed onto this one: the place for a city's own rule.
+const review_dbh_min_inches <- 30.0;
+const review_dbh_species_multiple <- 3.0;
+const review_species_min_measured <- 30;
+
+# Measured inventory trees only: a detection's diameter would pull the mean
+# toward the model's own guess.
+auto review_is_detection <- data_source like 'PREDICTED_%';
+auto review_species_measured <- count(tree_id ? diameter_at_breast_height > 0 and not review_is_detection) by species;
+auto review_species_mean_dbh <- avg(diameter_at_breast_height ? diameter_at_breast_height > 0 and not review_is_detection) by species;
+auto review_flag <- case
+    when review_is_detection then null
+    when strpos(species, ' ') = 0 or species like 'Unknown %' then null
+    when diameter_at_breast_height >= review_dbh_min_inches
+        and review_species_measured >= review_species_min_measured
+        and diameter_at_breast_height > review_dbh_species_multiple * review_species_mean_dbh
+        then 'dbh_outlier'
+    else null
+end;
+
+template datasource city_tree_review (
+    tree_id,
+    city,
+    species,
+    diameter_at_breast_height,
+    species_mean_dbh: review_species_mean_dbh,
+    review_flag,
+    inputs_published_through: city_inputs_published_through,
+)
+grain (tree_id)
+where review_flag is not null
+freshness by city_inputs_published_through;
