@@ -153,7 +153,11 @@ A portal's common-name column is not mapped: common names come from the
 enrichment table. `tree_name` is a tree's own proper name ("The Senator"),
 and only a portal that really publishes those emits it, passing
 `proper_names=True` to `enforce_tree_schema`; without that flag the column is
-published as null (docs/NAMED_TREES_AND_CROWN_POSITION.md).
+published as null (docs/NAMED_TREES_AND_CROWN_POSITION.md). A city's register
+of remarkable trees (monumental, heritage, champion) is not mapped into its
+inventory ingest: it is a `NOTABLE_{CODE}` partition of its own, linked to the
+inventory through `shared/notable.py` (docs/DATA_PIPELINE.md, "Sources";
+`itmil/milan_monumental_trees.py` is the pattern).
 
 - **Use the platform module**: `shared/platforms/arcgis.py`, `socrata.py`,
   `ckan.py`, `wfs.py`. They own paging, watermarks and geometry handling

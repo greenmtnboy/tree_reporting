@@ -221,6 +221,9 @@ root partial datasource tst_raw_tree_info (
     tree_name: ?raw_tree_name, plant_date: ?raw_plant_date, latitude: ?raw_latitude,
     longitude: ?raw_longitude, diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url, cultivar: ?raw_cultivar,
+    raw('''cast(null as varchar)'''): ?raw_significance,
+    raw('''cast(null as varchar)'''): ?raw_significance_source,
+    raw('''cast(null as varchar)'''): ?raw_linked_tree_id,
 )
 grain (tree_id)
 complete where city = 'USBTV' and tst_source = 'TST_OPENDATA'
@@ -239,6 +242,9 @@ root partial datasource tst_community_tree_info (
     tree_name: ?raw_tree_name, plant_date: ?raw_plant_date, diameter_at_breast_height: ?raw_dbh,
     latitude: ?raw_latitude, longitude: ?raw_longitude, submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
+    raw('''cast(null as varchar)'''): ?raw_significance,
+    raw('''cast(null as varchar)'''): ?raw_significance_source,
+    raw('''cast(null as varchar)'''): ?raw_linked_tree_id,
 )
 grain (tree_id)
 complete where city = 'USBTV' and tst_source = 'COMMUNITY_TST'
@@ -253,6 +259,9 @@ root partial datasource tst_osm_tree_info (
     tree_name: ?raw_tree_name, plant_date: ?raw_plant_date, latitude: ?raw_latitude,
     longitude: ?raw_longitude, diameter_at_breast_height: ?raw_dbh,
     submission_photo_url: ?raw_photo_url, cultivar: ?raw_cultivar,
+    raw('''cast(null as varchar)'''): ?raw_significance,
+    raw('''cast(null as varchar)'''): ?raw_significance_source,
+    raw('''cast(null as varchar)'''): ?raw_linked_tree_id,
 )
 grain (tree_id)
 complete where city = 'USBTV' and tst_source = 'OSM_TST'

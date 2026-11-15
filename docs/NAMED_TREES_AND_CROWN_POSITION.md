@@ -102,9 +102,21 @@ values** (and its coded-value domain) before it's trusted.
 | Paris *arbres remarquables* | `frpar` portal | flag, maybe name |
 | Melbourne Exceptional Tree Register, NYC Great Trees, UK Ancient Tree Inventory | separate registers | name + blurb, matched to an inventory tree spatially |
 
-A separate register names trees that are already in the inventory. Match it
-once, into the reviewer as admin-authored modifications with a person
-checking each match, not as a live cross-source join in the model.
+A separate register names trees that are already in the inventory.
+
+**Built (2026-11-15): notable registers as a source class.** Milan's
+monumental trees and Tree Boston's Big Old Trees are the first two, as
+`NOTABLE_{code}` partitions (docs/DATA_PIPELINE.md, "Sources"). Each register
+row is linked once, in its ingest, to the inventory row it is (same genus,
+within 30 m, trunk within 30%; `shared/notable.py`). In the model it joins
+only that tree's cluster and lends it a name and a blurb. A register row with
+no credible match publishes as a tree of its own at the register's point.
+Milan links 6 of 13 and Boston 8 of its 16 placed trees. A reviewer
+check of the unlinked ones (moving a link, or confirming a register tree the
+inventory lacks) would be the admin-authored modification above, and has not
+been built. `significance` reaches the model without a `tree_partition`
+column: the template binds it to a literal null (`raw(...)`) and the register
+partition re-binds it, so no OSM staging file needed a restage.
 
 ### Model and schema changes
 

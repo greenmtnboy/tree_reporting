@@ -59,6 +59,7 @@ import usnol.new_orleans_landmarks;
 import usatl.atlanta_landmarks;
 import usnap.naples_landmarks;
 import usclt.charlotte_landmarks;
+import itmil.milan_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

@@ -25,7 +25,7 @@ describe('cityAt', () => {
     // Somewhere in the Sahara, thousands of km from every wired city.
     expect(cityAt(23.4, 12.8)).toBeNull()
     // And the regression itself: without Milos on the map, the nearest city
-    // on the mainland (Berlin when this was written, Prague since) must not
+    // on the mainland (Berlin when this was written, then Prague, Milan since) must not
     // stand in for it.
     const withoutMilos = Object.fromEntries(
       Object.entries(CITY_CONFIG).filter(([code]) => !code.startsWith('GR')),
@@ -37,7 +37,7 @@ describe('cityAt', () => {
       },
       { code: '', km: Infinity },
     )
-    expect(nearest.code).toBe('CZPRG')
+    expect(nearest.code).toBe('ITMIL')
     expect(nearest.km).toBeGreaterThan(CITY_RADIUS_KM)
     expect(isWithinCity(nearest.code, ...MILOS)).toBe(false)
   })

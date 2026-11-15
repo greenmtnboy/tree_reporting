@@ -10,6 +10,8 @@
  * gets round to naming it here.
  */
 export const DATA_SOURCE_LABELS: Record<string, string> = {
+  MILAN_OPENDATA: 'Milan Open Data',
+  NOTABLE_ITMIL: 'Monumental Trees of Italy (Milan)',
   CHARLOTTE_OPENDATA: 'Charlotte Open Data',
   NAPLES_OPENDATA: 'City of Naples',
   TREES_ATLANTA: 'Trees Atlanta',
@@ -54,6 +56,7 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   BELMONT: 'Town of Belmont',
   WATERTOWN: 'City of Watertown',
   NORTHEASTERN: 'Northeastern University Arboretum',
+  NOTABLE_USBOS: 'Tree Boston - Big Old Trees',
   PARIS_OPENDATA: 'Paris Open Data',
   BURLINGTON_OPENDATA: 'City of Burlington, VT',
   VANCOUVER_OPENDATA: 'Vancouver Open Data',

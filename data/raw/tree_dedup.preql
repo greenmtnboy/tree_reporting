@@ -68,6 +68,22 @@
 #                     else itself.  Nothing ever joins a predicted row: two
 #                     predictions side by side stay two trees (the model's
 #                     own peak suppression already decided that).
+#   notable row    -> the inventory tree its ingest linked it to, else itself.
+#                     Never by grid: see "Notable registers" below.  Nothing
+#                     joins a notable row either.
+#
+# A notable row (`NOTABLE_{code}`) is a register of a city's remarkable trees
+# -- Milan's alberi monumentali, Tree Boston's Big Old Trees -- that names
+# trees the inventory already holds.  Its coordinates are a register's, not a
+# survey's: of Milan's thirteen, two sit within 5m of their own tree and three
+# sit within 2m of a *different* one (a hackberry beside an elm, a plane
+# beside a ginkgo).  A grid match would publish the monument's name on the
+# wrong tree, so the ingest links each register row to one inventory row by
+# genus, distance and trunk size (shared/notable.py) and emits that tree's id
+# as `linked_tree_id`; the row joins that cluster and no other.  An unlinked
+# row is a tree of its own, at the register's point.  Either way it lends the
+# cluster its name and why the tree is notable; its other values publish only
+# when it stands alone (its rank is a prediction's 0).
 #
 # A predicted row (`PREDICTED_{code}`, bulk imagery output nobody reviewed)
 # is the weakest evidence there is, so it only fills the map where no other
@@ -109,6 +125,13 @@ property tree_id.raw_longitude float;
 property tree_id.raw_dbh float;
 property tree_id.raw_crown_width_m float;
 property tree_id.raw_photo_url string;
+# Why a register calls the tree notable, and where that came from; only a
+# notable partition fills them (every other partition binds a literal null).
+property tree_id.raw_significance string;
+property tree_id.raw_significance_source string;
+# The inventory tree a notable register row describes, when its ingest found
+# one (shared/notable.py); null on every other row.
+property tree_id.raw_linked_tree_id string;
 
 # The row's `data_source` value as a plain string.  Each city merges its own
 # `{lc}_source` enum in; the enum itself stays per city because that is what
@@ -123,6 +146,7 @@ auto source_class <- case
     when substring(source_label, 1, 10) = 'SATELLITE_' then 'satellite'
     when substring(source_label, 1, 4) = 'OSM_' then 'osm'
     when substring(source_label, 1, 10) = 'PREDICTED_' then 'predicted'
+    when substring(source_label, 1, 8) = 'NOTABLE_' then 'notable'
     else 'municipal'
 end;
 
@@ -177,6 +201,7 @@ SELECT * FROM (VALUES
     ('GRATH', 0.00008983, 0.00011396),
     ('GRMLO', 0.00008983, 0.00011208),
     ('GRSAN', 0.00008983, 0.00011161),
+    ('ITMIL', 0.00008983, 0.00012807),
     ('JPTYO', 0.00007186, 0.00008848),
     ('NLAMS', 0.00008983, 0.00014706),
     ('TWTPE', 0.00008983, 0.00009919),
@@ -227,7 +252,7 @@ auto cell_d <- @grid_cell(0.5, 0.5);
 # measured in upstream_repro/redundant_group_by/memory.
 def municipal_anchor(cell) -> min(tree_id ? source_class = 'municipal') by cell;
 def person_anchor(cell) -> min(tree_id ? source_class = 'municipal' or source_class = 'community') by cell;
-def any_anchor(cell) -> min(tree_id ? source_class != 'osm' and source_class != 'predicted') by cell;
+def any_anchor(cell) -> min(tree_id ? source_class != 'osm' and source_class != 'predicted' and source_class != 'notable') by cell;
 # The last tier, for predicted rows only: an OSM node is a tree a person
 # mapped, so it absorbs a prediction beside it.  OSM rows never reach it (two
 # OSM nodes in a cell stay two trees, as they always have), which is why it
@@ -265,7 +290,13 @@ auto predicted_osm_anchor <- case
     else null
 end;
 
+# A notable row's cluster is decided before any grid tier, so a municipal tree
+# beside it cannot claim it: the linked tree, else itself.  The same
+# self-aggregate shape as the tiers above.
+auto notable_cluster <- min(coalesce(raw_linked_tree_id, tree_id) ? source_class = 'notable') by row_key;
+
 auto cluster_id <- coalesce(
+    notable_cluster,
     self_if_municipal,
     municipal_anchor_a, municipal_anchor_b, municipal_anchor_c, municipal_anchor_d,
     self_if_person,
@@ -347,7 +378,9 @@ def by_source(value) -> coalesce(
     (max(value ? source_class = 'municipal') by cluster_id),
     (max(value ? source_class = 'satellite') by cluster_id),
     (max(value ? source_class = 'osm') by cluster_id),
-    case when cluster_top_rank = 0 then (max(value ? source_class = 'predicted') by cluster_id) else null end
+    # A rank-0 cluster is one row: a prediction or an unlinked notable row,
+    # neither of which anything else ever joins.
+    case when cluster_top_rank = 0 then (max(value ? source_class = 'predicted' or source_class = 'notable') by cluster_id) else null end
 );
 
 auto source_rank <- case
@@ -403,13 +436,14 @@ auto merged_latitude <- @corrected_latitude(raw_latitude);
 auto merged_longitude <- @corrected_longitude(raw_longitude);
 # A tree's own name (enforce_tree_schema publishes a source's only when the
 # ingest says it is one) and why it is notable.  An approved report wins, and
-# one that cleared the field (the empty string) publishes none.  No source
-# supplies a significance yet, so it comes from reports alone; a source that
-# does adds `raw_significance` to tree_partition, and every partition's file
-# has to carry the column first (docs/NAMED_TREES_AND_CROWN_POSITION.md).
-auto merged_tree_name <- nullif(coalesce(modified_tree_name, @by_source(raw_tree_name)), '');
-auto merged_significance <- nullif(modified_significance, '');
-auto merged_significance_source <- nullif(modified_significance_source, '');
+# one that cleared the field (the empty string) publishes none.  Below a
+# report, any row of the cluster that has one: a name or a blurb is rare
+# enough (a notable register's row, linked to its inventory tree) that there
+# is nothing to rank, and a plain grouped max is one aggregate where
+# @by_source is five.  A prediction never has either.
+auto merged_tree_name <- nullif(coalesce(modified_tree_name, (max(raw_tree_name ? source_class != 'predicted') by cluster_id)), '');
+auto merged_significance <- nullif(coalesce(modified_significance, (max(raw_significance ? source_class = 'notable') by cluster_id)), '');
+auto merged_significance_source <- nullif(coalesce(modified_significance_source, (max(raw_significance_source ? source_class = 'notable') by cluster_id)), '');
 # The cultivar travels by source rather than with the winning species: a
 # community submission that names the selection is more specific than an
 # inventory row that does not, and the same order @by_source already uses.
@@ -502,6 +536,13 @@ template datasource tree_partition (
     submission_photo_url: ?raw_photo_url,
     cultivar: ?raw_cultivar,
     crown_width_m: ?raw_crown_width_m,
+    # Only a notable register fills these, and re-binds them to its file's
+    # columns.  A literal here rather than a column, so no other partition's
+    # file has to carry them: the OSM partitions read staged parquets, and a
+    # template column would break every city until every extract re-ran.
+    raw('''cast(null as varchar)'''): ?raw_significance,
+    raw('''cast(null as varchar)'''): ?raw_significance_source,
+    raw('''cast(null as varchar)'''): ?raw_linked_tree_id,
 )
 grain (tree_id);
 
