@@ -1,4 +1,11 @@
 import { computed, readonly, ref } from 'vue'
+import { Capacitor } from '@capacitor/core'
+import { Geolocation } from '@capacitor/geolocation'
+
+type PositionFix = {
+  timestamp: number
+  coords: Pick<GeolocationCoordinates, 'latitude' | 'longitude' | 'accuracy' | 'heading' | 'speed'>
+}
 
 const DEFAULT_POSITION_OPTIONS: PositionOptions = {
   enableHighAccuracy: true,
@@ -19,10 +26,10 @@ const sharedPosition = ref<SharedPosition | null>(null)
 const sharedPositionError = ref<string | null>(null)
 const sharedPositionWatchActive = ref(false)
 
-let sharedPositionWatchId: number | null = null
+let releaseSharedWatch: (() => void) | null = null
 let sharedPositionWatchRetainers = 0
 
-function normalizePosition(position: GeolocationPosition): SharedPosition {
+function normalizePosition(position: PositionFix): SharedPosition {
   return {
     lat: position.coords.latitude,
     lng: position.coords.longitude,
@@ -31,6 +38,10 @@ function normalizePosition(position: GeolocationPosition): SharedPosition {
     speed: position.coords.speed ?? null,
     timestamp: position.timestamp,
   }
+}
+
+export function geolocationAvailable(): boolean {
+  return Capacitor.isNativePlatform() || (typeof navigator !== 'undefined' && !!navigator.geolocation)
 }
 
 function geolocationUnavailableError(): Error {
@@ -46,7 +57,10 @@ function sharedPositionOptions(options: PositionOptions = {}): PositionOptions {
 
 export function getCurrentPosition(
   options: PositionOptions = {},
-): Promise<GeolocationPosition> {
+): Promise<PositionFix> {
+  if (Capacitor.isNativePlatform()) {
+    return Geolocation.getCurrentPosition(sharedPositionOptions(options))
+  }
   return new Promise((resolve, reject) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       reject(geolocationUnavailableError())
@@ -57,10 +71,28 @@ export function getCurrentPosition(
 }
 
 export function watchCurrentPosition(
-  onSuccess: PositionCallback,
-  onError?: PositionErrorCallback,
+  onSuccess: (position: PositionFix) => void,
+  onError?: (error: { message: string }) => void,
   options: PositionOptions = {},
 ): () => void {
+  if (Capacitor.isNativePlatform()) {
+    let stopped = false
+    const report = (error: unknown) => {
+      if (!stopped) onError?.({ message: error instanceof Error ? error.message : String(error) })
+    }
+    const started = Geolocation.watchPosition(sharedPositionOptions(options), (position, error) => {
+      if (stopped) return
+      if (error) report(error)
+      else if (position) onSuccess(position)
+    })
+    void started.catch(report)
+    return () => {
+      if (stopped) return
+      stopped = true
+      // The user can leave the map while the OS permission dialog is open.
+      void started.then(id => Geolocation.clearWatch({ id })).catch(() => {})
+    }
+  }
   if (typeof navigator === 'undefined' || !navigator.geolocation) {
     throw geolocationUnavailableError()
   }
@@ -75,6 +107,14 @@ export function watchCurrentPosition(
 }
 
 export async function getGeolocationPermissionState(): Promise<PermissionState | null> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { location } = await Geolocation.checkPermissions()
+      return location === 'prompt-with-rationale' ? 'prompt' : location
+    } catch {
+      return null // Location services may be disabled system-wide.
+    }
+  }
   if (typeof navigator === 'undefined' || !navigator.permissions?.query) return null
   try {
     const result = await navigator.permissions.query({ name: 'geolocation' as PermissionName })
@@ -107,11 +147,8 @@ export async function refreshSharedPosition(
 }
 
 function startSharedPositionWatch(options: PositionOptions = {}): void {
-  if (sharedPositionWatchId != null) return
-  if (typeof navigator === 'undefined' || !navigator.geolocation) {
-    throw geolocationUnavailableError()
-  }
-  sharedPositionWatchId = navigator.geolocation.watchPosition(
+  if (releaseSharedWatch) return
+  releaseSharedWatch = watchCurrentPosition(
     (position) => {
       sharedPosition.value = normalizePosition(position)
       sharedPositionError.value = null
@@ -119,16 +156,14 @@ function startSharedPositionWatch(options: PositionOptions = {}): void {
     (error) => {
       sharedPositionError.value = error.message || 'Location unavailable'
     },
-    sharedPositionOptions(options),
+    options,
   )
   sharedPositionWatchActive.value = true
 }
 
 function stopSharedPositionWatch(): void {
-  if (sharedPositionWatchId != null && typeof navigator !== 'undefined' && navigator.geolocation) {
-    navigator.geolocation.clearWatch(sharedPositionWatchId)
-  }
-  sharedPositionWatchId = null
+  releaseSharedWatch?.()
+  releaseSharedWatch = null
   sharedPositionWatchActive.value = false
 }
 

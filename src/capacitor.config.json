@@ -1,0 +1,6 @@
+{
+  "appId": "world.arborary.explorer",
+  "appName": "Arborary Explorer",
+  "webDir": "dist-ios",
+  "ios": { "contentInset": "always" }
+}

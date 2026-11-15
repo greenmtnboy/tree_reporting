@@ -380,6 +380,7 @@ import { formatPlantDate, formatTreeAge } from '../lib/plantDate'
 import { drawSpriteRadar } from '../lib/spriteRadar'
 import {
   acquireSharedPositionWatch,
+  geolocationAvailable,
   getGeolocationPermissionState,
   refreshSharedPosition,
 } from '../lib/geo'
@@ -2000,7 +2001,6 @@ watch(
 // --- Geolocation ---
 
 async function restoreGrantedUserLocation(applyCity: boolean): Promise<void> {
-  if (typeof navigator === 'undefined' || !navigator.geolocation) return
   try {
     const permissionState = await getGeolocationPermissionState()
     if (permissionState !== 'granted') return
@@ -2092,7 +2092,7 @@ watch([userLocation, mapRef], ([loc, map]) => {
 }, { immediate: true })
 
 function toggleUserLocation() {
-  if (!navigator.geolocation) return
+  if (!geolocationAvailable()) return
   if (!releaseSharedPositionWatch) {
     releaseSharedPositionWatch = acquireSharedPositionWatch()
   }

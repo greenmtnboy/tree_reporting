@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "build:ios": "vue-tsc -b && vite build --mode ios",
+    "ios:sync": "pnpm build:ios && cap sync ios",
     "build:e2e": "vue-tsc -b && vite build --mode e2e",
     "preview": "vite preview",
     "lint": "eslint . --ext .vue,.ts,.js",
@@ -25,6 +27,9 @@
     "artwork:check": "node src/artwork/generators/generate.mjs --check"
   },
   "dependencies": {
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/geolocation": "^8.2.4",
+    "@capacitor/ios": "^8.6.0",
     "@duckdb/duckdb-wasm": "1.33.1-dev18.0",
     "@trilogy-data/trilogy-studio-components": "0.1.32",
     "firebase": "^12.11.0",
@@ -34,6 +39,7 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
     "@duckdb/node-api": "1.5.0-r.1",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.1",

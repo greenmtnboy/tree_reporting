@@ -1,0 +1,64 @@
+name: Explorer iOS simulator
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/explorer-ios']
+  pull_request:
+    paths:
+      - 'src/ios/**'
+      - 'src/capacitor.config.json'
+      - 'src/src/lib/geo.ts'
+      - '.github/workflows/explorer-ios.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: src
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
+        with:
+          version: 10.33.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm ios:sync
+      - name: Build, install and launch on an iPhone simulator
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | jq -er '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone"))][0].udid')
+          xcrun simctl boot "$DEVICE"
+          echo "DEVICE=$DEVICE" >> "$GITHUB_ENV"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination "id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/ios-build" CODE_SIGNING_ALLOWED=NO build
+          APP="$RUNNER_TEMP/ios-build/Build/Products/Release-iphonesimulator/App.app"
+          test -s "$APP/public/index.html"
+          xcrun simctl install "$DEVICE" "$APP"
+          xcrun simctl launch "$DEVICE" world.arborary.explorer
+          sleep 8
+          xcrun simctl io "$DEVICE" screenshot "$RUNNER_TEMP/launch.png"
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/Explorer-simulator.zip"
+      - name: Check native location and the city map
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSL --retry 2 -o maestro.zip https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.12.1/maestro.zip
+          echo '54dbb0716425626604973cbb374c585ca30272375d9ce15177a1152765ddd9d7  maestro.zip' | shasum -a 256 -c -
+          unzip -q maestro.zip
+          maestro/bin/maestro --device "$DEVICE" test --debug-output "$RUNNER_TEMP/maestro-debug" "$GITHUB_WORKSPACE/src/ios/smoke.yaml"
+          xcrun simctl io "$DEVICE" screenshot "$RUNNER_TEMP/new-york.png"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: explorer-ios-simulator
+          path: |
+            ${{ runner.temp }}/Explorer-simulator.zip
+            ${{ runner.temp }}/launch.png
+            ${{ runner.temp }}/new-york.png
+            ${{ runner.temp }}/maestro-debug/

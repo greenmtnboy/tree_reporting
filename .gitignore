@@ -9,6 +9,7 @@ __pycache__/
 node_modules/
 
 dist/
+src/dist-ios/
 
 playwright-report/
 test-results/
