@@ -55,23 +55,24 @@ test('an out-of-range DBH is refused', () => {
   assert.throws(() => assertModificationPublishable(pending({ proposedDbhInches: 9000 })), /out of range/)
 })
 
-test('an update is publishable on a DBH marked unknown alone, but not with a value too', () => {
-  assert.doesNotThrow(() => assertModificationPublishable(pending({ proposedDbhUnknown: true })))
+test('an update is publishable on a cleared DBH alone, but not with a value too', () => {
+  assert.doesNotThrow(() => assertModificationPublishable(pending({ clearFields: ['dbhInches'] })))
   assert.throws(
-    () => assertModificationPublishable(pending({ proposedDbhUnknown: true, proposedDbhInches: 12 })),
-    /both a value and unknown/,
+    () => assertModificationPublishable(pending({ clearFields: ['dbhInches'], proposedDbhInches: 12 })),
+    /both a value and cleared/,
   )
+  assert.throws(() => assertModificationPublishable(pending({ clearFields: ['species'] })), /no change/)
 })
 
-test('the export row carries a cleared DBH as dbhUnknown with no value', () => {
-  const cleared = modificationExportRow('m1', { treeId: 'sf-1', city: 'ussfo', kind: 'update', dbhInches: 30, dbhUnknown: true }, null)
-  assert.equal(cleared.dbhUnknown, true)
+test('the export row carries a cleared DBH in clearFields with no value', () => {
+  const cleared = modificationExportRow('m1', { treeId: 'sf-1', city: 'ussfo', kind: 'update', dbhInches: 30, clearFields: ['dbhInches', 'bogus'] }, null)
+  assert.deepEqual(cleared.clearFields, ['dbhInches'])
   assert.equal(cleared.dbhInches, null)
   const plain = modificationExportRow('m2', { treeId: 'sf-1', city: 'USSFO', kind: 'update', dbhInches: 30 }, null)
-  assert.equal(plain.dbhUnknown, false)
+  assert.deepEqual(plain.clearFields, [])
   assert.equal(plain.dbhInches, 30)
-  const missing = modificationExportRow('m3', { treeId: 'sf-1', city: 'USSFO', kind: 'missing', dbhUnknown: true }, null)
-  assert.equal(missing.dbhUnknown, false)
+  const missing = modificationExportRow('m3', { treeId: 'sf-1', city: 'USSFO', kind: 'missing', clearFields: ['dbhInches'] }, null)
+  assert.deepEqual(missing.clearFields, [])
 })
 
 test('an already-decided modification is refused', () => {
@@ -114,7 +115,7 @@ test('the export row carries the change and nothing about the reporter', () => {
     longitude: SF_LNG,
     species: 'Acer rubrum',
     dbhInches: 12,
-    dbhUnknown: false,
+    clearFields: [],
     publishedAt: '2026-09-01T00:00:00.000Z',
   })
 })
@@ -131,7 +132,7 @@ test('a missing row never carries proposed values', () => {
 })
 
 test('the manifest keeps the latest publish per city', () => {
-  const base = { treeId: 't', kind: 'missing' as const, missingReason: null, latitude: null, longitude: null, species: null, dbhInches: null, dbhUnknown: false }
+  const base = { treeId: 't', kind: 'missing' as const, missingReason: null, latitude: null, longitude: null, species: null, dbhInches: null, clearFields: [] }
   const manifest = modificationManifest([
     { ...base, modificationId: 'a', city: 'USSFO', publishedAt: '2026-09-01T00:00:00.000Z' },
     { ...base, modificationId: 'b', city: 'USBOS', publishedAt: '2026-09-02T00:00:00.000Z' },

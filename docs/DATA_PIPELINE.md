@@ -339,8 +339,8 @@ approved ones to `community/tree_modifications.ndjson`;
 `raw/tree_modification_info.py` resolves them to one row per tree, the latest
 report winning field by field, and the tree reported gone only when its latest
 report says so (a later update restores it). A proposed species goes through
-`sanitize_species` like every other source. A report can also mark the DBH
-unknown (`dbhUnknown`, emitted as `dbh_unknown`): the recorded value is wrong
+`sanitize_species` like every other source. A report can also clear the DBH
+(`clearFields: ["dbhInches"]`, emitted as `dbh_unknown`): the recorded value is wrong
 and nobody has a better one, so `@corrected_dbh` publishes none until a later
 report gives a value. A blank DBH still means "keep the source's".
 

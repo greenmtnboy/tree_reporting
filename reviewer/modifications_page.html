@@ -40,7 +40,7 @@ function changeRows(m) {
     rows += `<dt>Move to</dt><dd class="changed">${osm(m.proposedLat, m.proposedLng)} (${metres(m.treeLat, m.treeLng, m.proposedLat, m.proposedLng)} m)</dd>`;
   }
   if (m.proposedSpecies) rows += `<dt>Species</dt><dd><span class="was">${esc(m.currentSpecies)}</span><span class="changed">${esc(m.proposedSpecies)}</span></dd>`;
-  if (m.proposedDbhUnknown) rows += `<dt>DBH (in)</dt><dd><span class="was">${esc(m.currentDbhInches)}</span><span class="changed">unknown (clear it)</span></dd>`;
+  if ((m.clearFields || []).includes('dbhInches')) rows += `<dt>DBH (in)</dt><dd><span class="was">${esc(m.currentDbhInches)}</span><span class="changed">unknown (clear it)</span></dd>`;
   else if (m.proposedDbhInches != null) rows += `<dt>DBH (in)</dt><dd><span class="was">${esc(m.currentDbhInches)}</span><span class="changed">${esc(m.proposedDbhInches)}</span></dd>`;
   return rows;
 }

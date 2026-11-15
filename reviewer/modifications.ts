@@ -46,8 +46,8 @@ export type PendingModification = {
   proposedLng?: number | null
   proposedSpecies?: string | null
   proposedDbhInches?: number | null
-  // The reporter says the recorded diameter is wrong and no value is known.
-  proposedDbhUnknown?: boolean | null
+  // Fields the reporter says are wrong with no better value: blank them.
+  clearFields?: unknown
   notes?: string | null
   photoPath?: string | null
   status: ModificationStatus
@@ -63,9 +63,19 @@ export type ModificationExportRow = {
   longitude: number | null
   species: string | null
   dbhInches: number | null
-  // Clear the tree's diameter (publish it as unknown). Never with dbhInches.
-  dbhUnknown: boolean
+  // Fields to publish blank, by name. A cleared field carries no value.
+  clearFields: ClearableField[]
   publishedAt: string | null
+}
+
+// Fields a report can clear (src/src/composables/useSubmissions.ts, and the
+// Firestore rules, keep the same list).
+export const CLEARABLE_FIELDS = ['dbhInches'] as const
+export type ClearableField = (typeof CLEARABLE_FIELDS)[number]
+
+export function clearableFields(value: unknown): ClearableField[] {
+  if (!Array.isArray(value)) return []
+  return CLEARABLE_FIELDS.filter(field => value.includes(field))
 }
 
 function finiteOrNull(value: unknown): number | null {
@@ -100,11 +110,11 @@ export function assertModificationPublishable(modification: PendingModification)
 
   const dbh = finiteOrNull(modification.proposedDbhInches)
   if (dbh != null && (dbh <= 0 || dbh > 400)) throw new Error(`Proposed DBH ${dbh} in is out of range`)
-  const dbhUnknown = modification.proposedDbhUnknown === true
-  if (dbhUnknown && dbh != null) throw new Error('Proposed DBH cannot be both a value and unknown')
+  const cleared = clearableFields(modification.clearFields)
+  if (cleared.includes('dbhInches') && dbh != null) throw new Error('Proposed DBH cannot be both a value and cleared')
 
   const species = modification.proposedSpecies?.trim() || null
-  if (lat == null && dbh == null && !dbhUnknown && species == null) throw new Error('Update proposes no change')
+  if (lat == null && dbh == null && !cleared.length && species == null) throw new Error('Update proposes no change')
 }
 
 /** The public export row: the change itself, with no user, notes, or photo. */
@@ -116,6 +126,7 @@ export function modificationExportRow(
   const kind: ModificationKind = data.kind === 'missing' ? 'missing' : 'update'
   const isUpdate = kind === 'update'
   const species = typeof data.species === 'string' ? data.species.trim() || null : null
+  const cleared = isUpdate ? clearableFields(data.clearFields) : []
   return {
     modificationId,
     treeId: String(data.treeId ?? ''),
@@ -125,8 +136,8 @@ export function modificationExportRow(
     latitude: isUpdate ? finiteOrNull(data.latitude) : null,
     longitude: isUpdate ? finiteOrNull(data.longitude) : null,
     species: isUpdate ? species : null,
-    dbhInches: isUpdate && data.dbhUnknown !== true ? finiteOrNull(data.dbhInches) : null,
-    dbhUnknown: isUpdate && data.dbhUnknown === true,
+    dbhInches: isUpdate && !cleared.includes('dbhInches') ? finiteOrNull(data.dbhInches) : null,
+    clearFields: cleared,
     publishedAt,
   }
 }
@@ -180,7 +191,7 @@ export function modificationListItem(
     proposedLng: finiteOrNull(data.proposedLng),
     proposedSpecies: stringOrNull(data.proposedSpecies),
     proposedDbhInches: finiteOrNull(data.proposedDbhInches),
-    proposedDbhUnknown: data.proposedDbhUnknown === true,
+    clearFields: clearableFields(data.clearFields),
     notes: stringOrNull(data.notes),
     status: stringOrNull(data.status),
     submittedAt: data.submittedAt?.toDate().toISOString() ?? null,

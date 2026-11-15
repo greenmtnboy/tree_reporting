@@ -108,7 +108,7 @@ describe('desktop corrections', () => {
     submitButton().click()
     await settle()
     expect(mocks.submit).toHaveBeenCalledWith(expect.objectContaining({
-      proposedDbhInches: null, proposedDbhUnknown: true,
+      proposedDbhInches: null, clearFields: ['dbhInches'],
     }))
   })
 
@@ -119,7 +119,7 @@ describe('desktop corrections', () => {
     submitButton().click()
     await settle()
     expect(mocks.submit).toHaveBeenCalledWith(expect.objectContaining({
-      proposedDbhInches: 12.3, proposedDbhUnknown: false,
+      proposedDbhInches: 12.3, clearFields: [],
     }))
   })
 

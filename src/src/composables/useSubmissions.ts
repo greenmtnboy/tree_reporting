@@ -443,11 +443,23 @@ export interface TreeModification {
   proposedLng: number | null
   proposedSpecies: string | null
   proposedDbhInches: number | null
-  proposedDbhUnknown: boolean
+  clearFields: ClearableField[]
   notes: string | null
   photoPath: string | null
   submittedAt: Date | null
   status: SubmissionStatus
+}
+
+// Fields a report can blank out: the recorded value is wrong and no better one
+// is known. A null proposal means "keep the source value", so a clear is named
+// here instead. Making a field clearable is one more name in this list, the
+// rules' (terraform/bootstrap/rules/firestore.rules) and the reviewer's.
+export const CLEARABLE_FIELDS = ['dbhInches'] as const
+export type ClearableField = (typeof CLEARABLE_FIELDS)[number]
+
+function clearableFields(value: unknown): ClearableField[] {
+  if (!Array.isArray(value)) return []
+  return CLEARABLE_FIELDS.filter(field => value.includes(field))
 }
 
 export interface ModificationInput {
@@ -469,8 +481,7 @@ export interface ModificationInput {
   proposedLng?: number | null
   proposedSpecies?: string | null
   proposedDbhInches?: number | null
-  // Clear the recorded diameter: it is wrong and no better value is known.
-  proposedDbhUnknown?: boolean
+  clearFields?: ClearableField[]
   notes?: string | null
   photoBlob?: Blob
   onProgress?: (fraction: number) => void
@@ -489,6 +500,7 @@ export async function submitTreeModification(input: ModificationInput): Promise<
   }
 
   const isUpdate = input.kind === 'update'
+  const clearFields = isUpdate ? clearableFields(input.clearFields) : []
   const docData = {
     userId: user.uid,
     kind: input.kind,
@@ -510,9 +522,9 @@ export async function submitTreeModification(input: ModificationInput): Promise<
     photoPath,
     submittedAt: serverTimestamp(),
     status: 'pending' as SubmissionStatus,
-    // Written only when set, so an ordinary report keeps the field set the
-    // rules accepted before `proposedDbhUnknown` existed.
-    ...(isUpdate && input.proposedDbhUnknown ? { proposedDbhUnknown: true } : {}),
+    // Written only when something is cleared, so an ordinary report keeps the
+    // field set the rules accepted before `clearFields` existed.
+    ...(clearFields.length ? { clearFields } : {}),
   }
   // Same shape as submitPhoto: the rate-limit marker is validated against
   // this document with getAfter(), so it cannot be skipped client-side.
@@ -556,7 +568,7 @@ function mapModificationDoc(id: string, data: Record<string, unknown>): TreeModi
     proposedLng: numberOrNull(data.proposedLng),
     proposedSpecies: (data.proposedSpecies as string | null) ?? null,
     proposedDbhInches: numberOrNull(data.proposedDbhInches),
-    proposedDbhUnknown: data.proposedDbhUnknown === true,
+    clearFields: clearableFields(data.clearFields),
     notes: (data.notes as string | null) ?? null,
     photoPath: (data.photoPath as string | null) ?? null,
     submittedAt: submittedAt instanceof Timestamp ? submittedAt.toDate() : null,
