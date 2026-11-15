@@ -260,6 +260,8 @@ const props = defineProps<{
   treeForm?: string | null
   dbhInches?: number | null
   plantYear?: number | null
+  /** The tree is flagged for a second look; a check-in records it (the badge). */
+  reviewFlag?: string | null
   initialMode?: 'checkin' | 'update' | 'missing'
   remoteCorrection?: boolean
   /** Street View is open on the right: take the docked card's column, no backdrop. */
@@ -489,6 +491,7 @@ async function handleSubmit() {
         dbhInches: props.dbhInches ?? null,
         plantYear: props.plantYear ?? null,
         speciesCityCount: speciesCityCount.value,
+        reviewFlag: props.reviewFlag ?? null,
         ranking: rankedTree.value ? { rarityTier: rankedTree.value.rarityTier, trunkRank: rankedTree.value.trunkRank, canopyRank: rankedTree.value.canopyRank } : null,
         onProgress,
       }))

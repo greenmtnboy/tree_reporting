@@ -33,6 +33,8 @@ export interface BadgeCheckin {
   /** How many trees of this species existed in the tree's city at check-in. */
   ranking?: RankingSnapshot | null
   speciesCityCount: number | null
+  /** The tree was flagged for a second look when visited; absent on older check-ins. */
+  reviewFlag?: string | null
 }
 
 export interface ContributionStats {
@@ -54,6 +56,7 @@ export interface ContributionStats {
   dawnCheckinCount: number
   nightCheckinCount: number
   multiPhotoSubmissionCount: number
+  secondLookCount: number
 }
 
 export interface BadgeDef {
@@ -115,6 +118,10 @@ export const BADGES: BadgeDef[] = [
   { id: 'giant', emoji: '🐘', title: 'Gentle Giant', description: `Check in on a tree at least ${GIANT_DBH_INCHES}″ across`, points: 25, target: 1, metric: 'giantCheckinCount' },
   { id: 'old-growth', emoji: '🕰️', title: 'Old Soul', description: `Check in on a tree planted ${OLD_GROWTH_YEARS}+ years ago`, points: 25, target: 1, metric: 'oldGrowthCheckinCount' },
 
+  // Second looks: a visit to a tree whose recorded values look wrong
+  { id: 'second-look', emoji: '🔍', title: 'Second Look', description: 'Check in on a tree flagged for a second look', points: 25, target: 1, metric: 'secondLookCount' },
+  { id: 'second-look-10', emoji: '📏', title: 'Fact Checker', description: 'Check in on 10 trees flagged for a second look', points: 100, target: 10, metric: 'secondLookCount' },
+
   // Geography
   { id: 'cities-2', emoji: '✈️', title: 'Branching Out', description: 'Contribute in 2 different cities', points: 50, target: 2, metric: 'distinctCityCount' },
   { id: 'cities-5', emoji: '🌍', title: 'World Canopy', description: 'Contribute in 5 different cities', points: 50, target: 5, metric: 'distinctCityCount' },
@@ -155,6 +162,7 @@ export function buildStats(
   let dawn = 0
   let night = 0
   let multiPhoto = 0
+  let secondLooks = 0
 
   const currentYear = new Date().getFullYear()
 
@@ -195,6 +203,7 @@ export function buildStats(
     if (c.ranking?.rarityTier === 'rare') rare += 1
     if (c.dbhInches != null && c.dbhInches >= GIANT_DBH_INCHES) giants += 1
     if (c.plantYear != null && currentYear - c.plantYear >= OLD_GROWTH_YEARS) oldGrowth += 1
+    if (c.reviewFlag) secondLooks += 1
   }
 
   return {
@@ -216,6 +225,7 @@ export function buildStats(
     dawnCheckinCount: dawn,
     nightCheckinCount: night,
     multiPhotoSubmissionCount: multiPhoto,
+    secondLookCount: secondLooks,
   }
 }
 
@@ -245,6 +255,7 @@ export function toBadgeCheckin(c: {
   plantYear: number | null
   ranking?: RankingSnapshot | null
   speciesCityCount: number | null
+  reviewFlag?: string | null
 }): BadgeCheckin {
   return {
     city: c.city,
@@ -256,6 +267,7 @@ export function toBadgeCheckin(c: {
     plantYear: c.plantYear,
     speciesCityCount: c.speciesCityCount,
     ranking: c.ranking,
+    reviewFlag: c.reviewFlag ?? null,
   }
 }
 

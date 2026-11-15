@@ -233,6 +233,25 @@ for (const mobile of [false, true]) {
       }
     })
 
+    test('a tree flagged for a second look asks for one until someone checks in', async ({ page }) => {
+      test.setTimeout(180_000)
+
+      await page.addInitScript(() => {
+        window.__treeE2E = {
+          treeCheckinCounts: new Proxy({}, { get: () => 0 }),
+          treeReviews: new Proxy({}, { get: () => ({ flag: 'dbh_outlier', speciesMeanDbh: 13 }) }),
+        }
+      })
+      await openMap(page, mobile)
+      const tree = await findClickableTree(page, mobile)
+      await page.mouse.click(tree.x, tree.y)
+
+      const note = page.getByTestId('tree-review-note')
+      await expect(note).toBeVisible({ timeout: 15_000 })
+      await expect(note).toContainText('unusually large for its species (about 13″ on average here)')
+      await expect(note).toContainText('second look')
+    })
+
     test('the tree card closes again', async ({ page }) => {
       test.setTimeout(180_000)
 

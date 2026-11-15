@@ -13,6 +13,7 @@
  * every branch guarded by it is dead code. Only `pnpm build:e2e` (which loads
  * `.env.e2e`) turns it on.
  */
+import type { TreeReview } from './treeReview'
 import type { RankedTree, RankingSnapshot } from './missions'
 import type { User } from 'firebase/auth'
 import type {
@@ -64,6 +65,7 @@ export interface E2ECheckinFixture {
   plantYear?: number | null
   ranking?: RankingSnapshot | null
   speciesCityCount?: number | null
+  reviewFlag?: string | null
   distanceMeters?: number | null
 }
 
@@ -85,6 +87,8 @@ export interface E2EFixtures {
   googleSignInCheckins?: E2ECheckinFixture[]
   rankings?: RankedTree[]
   rankingsUnavailable?: boolean
+  /** Trees flagged for a second look, by tree id (lib/treeReview.ts). */
+  treeReviews?: Record<string, TreeReview>
   /** `null` models a signed-out visitor; omitting it leaves real auth in charge. */
   user?: E2EUserFixture | null
   submissions?: E2ESubmissionFixture[]
@@ -194,6 +198,7 @@ export function e2eCheckins(): Checkin[] | null {
     plantYear: c.plantYear ?? null,
     speciesCityCount: c.speciesCityCount ?? null,
     ranking: c.ranking ?? null,
+    reviewFlag: c.reviewFlag ?? null,
   }))
 }
 

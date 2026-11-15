@@ -180,6 +180,15 @@ describe('recordCheckin', () => {
     await recordCheckin({ ...CHECKIN, submitPhotoForTree: true })
     expect(state.batches[0].writes[0].data).not.toHaveProperty('photoReview')
   })
+
+  it('records a second look only on a flagged tree', async () => {
+    await recordCheckin(CHECKIN)
+    expect(state.batches[0].writes[0].data).not.toHaveProperty('reviewFlag')
+    state.batches = []
+    state.marker = { countedAt: Timestamp.fromMillis(Date.now()) }
+    await recordCheckin({ ...CHECKIN, reviewFlag: 'dbh_outlier' })
+    expect(state.batches[0].writes[0].data.reviewFlag).toBe('dbh_outlier')
+  })
 })
 
 describe('submitTreeModification', () => {

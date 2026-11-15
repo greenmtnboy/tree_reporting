@@ -110,6 +110,13 @@ describe('check-ins', () => {
     }
   })
 
+  test('accepts a known review flag and refuses any other', async () => {
+    await assertSucceeds(setDoc(doc(as('alice'), 'checkins', 'flagged'), checkinDoc('alice', 'sf-1', { reviewFlag: 'dbh_outlier' })))
+    for (const reviewFlag of ['made_up', true, 7]) {
+      await assertFails(setDoc(doc(as('alice'), 'checkins', 'bad-flag'), checkinDoc('alice', 'sf-1', { reviewFlag })))
+    }
+  })
+
   test('a check-in shaped like the client writes it is accepted', async () => {
     await assertSucceeds(setDoc(doc(as('alice'), 'checkins', 'c1'), checkinDoc('alice', 'sf-1')))
   })

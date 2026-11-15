@@ -41,6 +41,15 @@ function earnedIds(subs: BadgeSubmission[], chks: BadgeCheckin[]): Set<string> {
 }
 
 describe('badge evaluation', () => {
+  it('a check-in at a tree flagged for a second look earns Second Look; ten earn Fact Checker', () => {
+    expect(earnedIds([], [checkin()]).has('second-look')).toBe(false)
+    const one = earnedIds([], [checkin({ reviewFlag: 'dbh_outlier' })])
+    expect(one.has('second-look')).toBe(true)
+    expect(one.has('second-look-10')).toBe(false)
+    const ten = Array.from({ length: 10 }, () => checkin({ reviewFlag: 'dbh_outlier' }))
+    expect(earnedIds([], ten).has('second-look-10')).toBe(true)
+  })
+
   it('earns nothing with no contributions', () => {
     expect(earnedIds([], []).size).toBe(0)
   })

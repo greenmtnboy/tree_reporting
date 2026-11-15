@@ -151,6 +151,7 @@
       <div class="tree-card-pane tree-card-pane--tree">
         <div class="tree-card-section-label">This tree</div>
         <p v-if="showPredictionNote" class="tc-prediction-note" data-testid="tree-prediction-note">This tree is predicted from aerial imagery; check in to confirm its existence.</p>
+        <p v-if="treeReviewNote" class="tc-prediction-note tc-review-note" data-testid="tree-review-note">{{ treeReviewNote }}</p>
         <div class="tc-grid">
           <template v-if="selectedTree.tree_id">
             <span class="tc-label">ID</span><span class="tc-value">{{ selectedTree.tree_id }}</span>
@@ -329,6 +330,7 @@
     :tree-form="checkinDialog.treeForm"
     :dbh-inches="checkinDialog.dbhInches"
     :plant-year="checkinDialog.plantYear"
+    :review-flag="checkinDialog.reviewFlag"
     :initial-mode="checkinDialog.mode"
     :city="selectedCity"
     :remote-correction="!simplified"
@@ -363,6 +365,7 @@ import MapCompass from './MapCompass.vue'
 import CheckinDialog from './CheckinDialog.vue'
 import StreetViewDialog from './StreetViewDialog.vue'
 import { isUnconfirmedPrediction } from '../data/dataSources'
+import { loadTreeReview, reviewNote, type ReviewFlag, type TreeReview } from '../lib/treeReview'
 import { firebaseAvailable } from '../lib/firebase'
 import {
   getTreeCheckinStats,
@@ -1074,6 +1077,7 @@ const checkinDialog = ref<{
   treeForm: string | null
   dbhInches: number | null
   plantYear: number | null
+  reviewFlag: ReviewFlag | null
   mode: 'checkin' | 'update' | 'missing'
 } | null>(null)
 
@@ -1103,6 +1107,7 @@ function openCheckin(mode: 'checkin' | 'update' | 'missing'): void {
     treeForm: selectedTree.value.tree_form,
     dbhInches: selectedTree.value.dbh,
     plantYear: plantYearFrom(selectedTree.value.plant_date),
+    reviewFlag: treeReview.value?.flag ?? null,
   }
 }
 
@@ -1114,6 +1119,23 @@ const checkinStats = ref<TreeCheckinStats | null>(null)
 let checkinStatsToken = 0
 // Unknown/unavailable counts are not evidence that nobody has checked in.
 const showPredictionNote = computed(() => isUnconfirmedPrediction(selectedTree.value?.data_source, checkinStats.value?.count))
+
+// A tree whose recorded values look wrong (lib/treeReview.ts): a note asking
+// for a second look, until someone checks in. Best-effort like the counter.
+const treeReview = ref<TreeReview | null>(null)
+let treeReviewToken = 0
+const treeReviewNote = computed(() => reviewNote(treeReview.value, checkinStats.value?.count, selectedTree.value?.dbh))
+
+watch(
+  () => [selectedTree.value?.tree_id ?? null, selectedCity.value] as const,
+  async ([treeId, city]) => {
+    const token = ++treeReviewToken
+    treeReview.value = null
+    if (!treeId || !city) return
+    const review = await loadTreeReview(treeId, city)
+    if (token === treeReviewToken) treeReview.value = review
+  },
+)
 
 watch(
   () => selectedTree.value?.tree_id ?? null,

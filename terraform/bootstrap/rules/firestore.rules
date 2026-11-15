@@ -207,7 +207,7 @@ service cloud.firestore {
                     && request.resource.data.keys().hasOnly([
                          'userId', 'treeId', 'lat', 'lng', 'treeLat', 'treeLng', 'city',
                          'distanceMeters', 'photoPath', 'photoReview', 'species', 'treeForm',
-                         'dbhInches', 'plantYear', 'speciesCityCount', 'ranking', 'at'])
+                         'dbhInches', 'plantYear', 'speciesCityCount', 'ranking', 'reviewFlag', 'at'])
                     && request.resource.data.at == request.time
                     && request.resource.data.treeId is string
                     && request.resource.data.treeId.size() <= 200
@@ -221,6 +221,8 @@ service cloud.firestore {
                     && optionalNumber(request.resource.data.get('dbhInches', null))
                     && optionalNumber(request.resource.data.get('plantYear', null))
                     && optionalNumber(request.resource.data.get('speciesCityCount', null))
+                    // The tree was flagged for a second look (city_derived.preql's review file).
+                    && request.resource.data.get('reviewFlag', null) in [null, 'dbh_outlier']
                     && (!('ranking' in request.resource.data) || (
                          request.resource.data.ranking is map
                          && request.resource.data.ranking.keys().hasOnly(['rarityTier', 'trunkRank', 'canopyRank'])

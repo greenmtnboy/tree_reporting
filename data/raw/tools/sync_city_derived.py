@@ -7,8 +7,8 @@ Run after adding a city, or after changing what a city's derived file says
 
 Each city in MUNICIPAL_DATA_SOURCES gets (city_derived.preql says why):
 
-  raw/{code}/{slug}_tree_derived.preql   its predictions, browser projection and
-                                         vocabulary, extending city_derived.preql's
+  raw/{code}/{slug}_tree_derived.preql   its predictions, browser projection,
+                                         vocabulary and review flags, extending city_derived.preql's
                                          templates over its own published parquet
   raw/{code}/{slug}_derived_probe.py     its watermark (shared/city_derived.py)
   a `derived-{code}` [[cloud.job]]       on its city job's cron and memory
@@ -96,6 +96,9 @@ datasource {lc}_tree_browser extends city_tree_browser ()
 
 datasource {lc}_tree_vocab extends city_tree_vocab ()
 {target(lc, "tree_vocab")}
+
+datasource {lc}_tree_review extends city_tree_review ()
+{target(lc, "tree_review")}
 """
 
 
