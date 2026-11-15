@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { BADGES } from '../src/lib/badges'
 
 for (const [name, viewport] of Object.entries({
   mobile: { width: 390, height: 844 }, desktop: { width: 1280, height: 800 },
@@ -14,7 +15,7 @@ for (const [name, viewport] of Object.entries({
       }
     })
     await page.goto('/#/profile')
-    await expect(page.locator('.badge-strip')).toContainText('1 / 28')
+    await expect(page.locator('.badge-strip')).toContainText(`1 / ${BADGES.length}`)
     await page.getByRole('button', { name: 'Link Google account' }).click()
     const alert = page.getByRole('alert')
     await expect(alert).toContainText('Account linking failed')
@@ -24,7 +25,7 @@ for (const [name, viewport] of Object.entries({
     await expect(alert).toBeFocused()
     await expect(page.getByText('Signed in anonymously.', { exact: true })).toBeVisible()
     await expect(page.getByText('guest-with-work', { exact: true })).toBeVisible()
-    await expect(page.locator('.badge-strip')).toContainText('1 / 28')
+    await expect(page.locator('.badge-strip')).toContainText(`1 / ${BADGES.length}`)
   })
 
   test(`account login confirms leaving guest work and loads the existing account — ${name}`, async ({ page }) => {
@@ -40,7 +41,7 @@ for (const [name, viewport] of Object.entries({
       }
     })
     await page.goto('/#/profile')
-    await expect(page.locator('.badge-strip')).toContainText('1 / 28')
+    await expect(page.locator('.badge-strip')).toContainText(`1 / ${BADGES.length}`)
     await page.getByRole('button', { name: 'Log in as account', exact: true }).click()
     const warning = page.getByRole('alertdialog')
     await expect(warning).toBeFocused()
@@ -50,13 +51,13 @@ for (const [name, viewport] of Object.entries({
     await warning.getByRole('button', { name: 'Keep guest account' }).click()
     await expect(warning).not.toBeVisible()
     await expect(page.getByText('guest-with-work', { exact: true })).toBeVisible()
-    await expect(page.locator('.badge-strip')).toContainText('1 / 28')
+    await expect(page.locator('.badge-strip')).toContainText(`1 / ${BADGES.length}`)
     await page.getByRole('button', { name: 'Log in as account', exact: true }).click()
     await warning.getByRole('button', { name: 'Leave guest and log in' }).click()
     await expect(page.getByText('Signed in with Google.', { exact: true })).toBeVisible()
     await expect(page.getByText('existing-google', { exact: true })).toBeVisible()
     await expect(page.getByText('guest-with-work', { exact: true })).not.toBeVisible()
-    await expect(page.locator('.badge-strip')).toContainText('2 / 28')
+    await expect(page.locator('.badge-strip')).toContainText(`2 / ${BADGES.length}`)
     await expect(warning).not.toBeVisible()
   })
 }
