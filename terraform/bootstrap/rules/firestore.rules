@@ -127,7 +127,7 @@ service cloud.firestore {
                          'userId', 'kind', 'treeId', 'city', 'treeLat', 'treeLng',
                          'userLat', 'userLng', 'distanceMeters', 'currentSpecies',
                          'currentDbhInches', 'missingReason', 'proposedLat', 'proposedLng',
-                         'proposedSpecies', 'proposedDbhInches', 'proposedDbhUnknown', 'notes', 'photoPath',
+                         'proposedSpecies', 'proposedDbhInches', 'clearFields', 'notes', 'photoPath',
                          'submittedAt', 'status'])
                     && request.resource.data.kind in ['missing', 'update']
                     && request.resource.data.treeId is string
@@ -144,9 +144,13 @@ service cloud.firestore {
                     && optionalString(request.resource.data.get('proposedSpecies', null), 200)
                     && optionalLatLng(request.resource.data.get('proposedLat', null), request.resource.data.get('proposedLng', null))
                     && optionalNumber(request.resource.data.get('proposedDbhInches', null))
-                    // Clear the recorded diameter; never alongside a new one.
-                    && request.resource.data.get('proposedDbhUnknown', false) in [false, true]
-                    && !(request.resource.data.get('proposedDbhUnknown', false) == true
+                    // Fields to blank out (wrong, no better value known), by name;
+                    // a field is never both cleared and given a new value. The size
+                    // bound is the number of clearable names.
+                    && request.resource.data.get('clearFields', []) is list
+                    && request.resource.data.get('clearFields', []).size() <= 1
+                    && request.resource.data.get('clearFields', []).hasOnly(['dbhInches'])
+                    && !(request.resource.data.get('clearFields', []).hasAny(['dbhInches'])
                          && request.resource.data.get('proposedDbhInches', null) != null)
                     && optionalOwnPhoto(request.resource.data.get('photoPath', null), 'modifications')
                     && modificationRateLimitAllows(request.auth.uid)

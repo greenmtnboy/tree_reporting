@@ -510,7 +510,7 @@ async function handleSubmit() {
         proposedLng: moved ? proposedLng.value : null,
         proposedSpecies: speciesChanged.value ? proposedSpecies.value.trim() : null,
         proposedDbhInches: dbhChanged.value ? proposedDbhValue.value : null,
-        proposedDbhUnknown: dbhCleared.value,
+        clearFields: dbhCleared.value ? ['dbhInches'] : [],
         notes: notes.value,
         photoBlob: photoBlob.value ?? undefined,
         onProgress,

@@ -221,7 +221,7 @@ export function e2eModifications(): TreeModification[] | null {
     proposedLng: null,
     proposedSpecies: m.proposedSpecies ?? null,
     proposedDbhInches: null,
-    proposedDbhUnknown: false,
+    clearFields: [],
     notes: null,
     photoPath: null,
     submittedAt: parseDate(m.submittedAt),

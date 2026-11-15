@@ -19,6 +19,7 @@ import {
 } from './checkinPhotos.ts'
 import {
   assertModificationPublishable,
+  clearableFields,
   modificationExportRow,
   modificationListItem,
   modificationManifest,
@@ -472,7 +473,7 @@ app.post('/api/modifications/:id/approve', async (req, res, next) => {
         longitude: isUpdate ? (modification.proposedLng ?? null) : null,
         species: isUpdate ? (modification.proposedSpecies?.trim() || null) : null,
         dbhInches: isUpdate ? (modification.proposedDbhInches ?? null) : null,
-        dbhUnknown: isUpdate && modification.proposedDbhUnknown === true,
+        clearFields: isUpdate ? clearableFields(modification.clearFields) : [],
         submittedAt: modification.submittedAt ?? null,
         publishedAt: FieldValue.serverTimestamp(),
       })

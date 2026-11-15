@@ -17,7 +17,7 @@ A tree can collect several reports, and the latest one wins:
 * each field (species, DBH, position) takes the last non-null value any
   `update` gave it -- a later report that leaves a field alone keeps the
   earlier correction;
-* a report can instead mark the DBH unknown (`dbhUnknown`): the recorded
+* a report can instead clear the DBH (`clearFields` names `dbhInches`): the recorded
   value is wrong and nobody has a better one.  That clears any earlier
   corrected DBH and publishes the tree with none, until a later report gives
   a value;
@@ -130,7 +130,8 @@ def resolve(records: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         if species is not None:
             tree["species"] = species
         dbh = _float(record.get("dbhInches"))
-        if record.get("dbhUnknown") is True:
+        cleared = record.get("clearFields")
+        if isinstance(cleared, list) and "dbhInches" in cleared:
             tree["diameter_at_breast_height"], tree["dbh_unknown"] = None, True
         elif dbh is not None and 0 < dbh <= MAX_DBH_INCHES:
             tree["diameter_at_breast_height"], tree["dbh_unknown"] = dbh, False

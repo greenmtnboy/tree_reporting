@@ -306,13 +306,16 @@ describe('tree modifications', () => {
     }).commit())
   })
 
-  test('a report can mark the diameter unknown, but not alongside a new value or as a non-boolean', async () => {
-    await assertSucceeds(modificationBatch(as('alice'), 'alice', { proposedDbhUnknown: true }).commit())
+  test('a report can clear the diameter, but not alongside a new value, nor clear an unknown field', async () => {
+    await assertSucceeds(modificationBatch(as('alice'), 'alice', { clearFields: ['dbhInches'] }).commit())
     await seed((db) => setDoc(doc(db, 'modificationRateLimits', 'bob'), {
       userId: 'bob', lastModificationId: 'm0', submittedAt: Timestamp.fromMillis(Date.now() - 5_000),
     }))
-    await assertFails(modificationBatch(as('bob'), 'bob', { proposedDbhUnknown: true, proposedDbhInches: 12 }).commit())
-    await assertFails(modificationBatch(as('bob'), 'bob', { proposedDbhUnknown: 'yes' }).commit())
+    await assertFails(modificationBatch(as('bob'), 'bob', { clearFields: ['dbhInches'], proposedDbhInches: 12 }).commit())
+    await assertFails(modificationBatch(as('bob'), 'bob', { clearFields: ['species'] }).commit())
+    await assertFails(modificationBatch(as('bob'), 'bob', { clearFields: 'dbhInches' }).commit())
+    await assertFails(modificationBatch(as('bob'), 'bob', { clearFields: ['dbhInches', 'dbhInches'] }).commit())
+    await assertFails(modificationBatch(as('bob'), 'bob', { proposedDbhUnknown: true }).commit())
   })
 
   test('a report without its rate-limit marker is refused', async () => {

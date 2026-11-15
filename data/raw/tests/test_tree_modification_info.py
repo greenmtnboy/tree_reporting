@@ -58,9 +58,9 @@ def test_the_latest_report_decides_whether_the_tree_is_gone():
 def test_a_dbh_marked_unknown_clears_it_until_a_later_value():
     rows = by_tree([
         update("a", "2026-10-01T00:00:00Z", dbhInches=50),
-        update("a", "2026-10-02T00:00:00Z", dbhUnknown=True),
+        update("a", "2026-10-02T00:00:00Z", clearFields=["dbhInches"]),
         update("a", "2026-10-03T00:00:00Z", species="Ficus microcarpa"),
-        update("b", "2026-10-01T00:00:00Z", dbhUnknown=True),
+        update("b", "2026-10-01T00:00:00Z", clearFields=["dbhInches"]),
         update("b", "2026-10-02T00:00:00Z", dbhInches=14),
     ])
     assert (rows["a"]["diameter_at_breast_height"], rows["a"]["dbh_unknown"]) == (None, True), (
