@@ -24,7 +24,7 @@ LAYER = FeatureLayer(
     'https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/'
     'Urban_Tree_Canopy/MapServer/23'
 )
-OUT_FIELDS = 'GLOBALID,SCI_NM,CMMN_NM,DATE_PLANT,DBH'
+OUT_FIELDS = 'GLOBALID,SCI_NM,DATE_PLANT,DBH'
 
 
 def parse_plant_date(value) -> date | None:
@@ -72,13 +72,6 @@ def tree_id_for(global_id: str | None) -> str | None:
     return f"was-{global_id.strip().strip('{}').lower()}"
 
 
-def normalize_common_name(value: str | None) -> str | None:
-    if not value:
-        return None
-    stripped = value.strip()
-    return stripped.capitalize() if stripped.islower() else stripped
-
-
 def iter_row_chunks():
     """One ArcGIS page at a time.
 
@@ -111,7 +104,6 @@ def iter_row_chunks():
 def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -121,10 +113,8 @@ def transform(rows: list[dict]) -> pa.Table:
         props = feature.get('attributes', {})
         geom = feature.get('geometry') or {}
         sci = normalize_species(props.get('SCI_NM'))
-        common = normalize_common_name(props.get('CMMN_NM'))
         tree_id.append(tree_id_for(props.get('GLOBALID')))
         species.append(sci)
-        tree_name.append(common or sci)
         plant_date.append(parse_plant_date(props.get('DATE_PLANT')))
         longitude.append(geom.get('x'))
         latitude.append(geom.get('y'))
@@ -136,7 +126,6 @@ def transform(rows: list[dict]) -> pa.Table:
         'tree_id': pa.array(tree_id, type=pa.string()),
         'city': pa.array(['USWAS'] * n, type=pa.string()),
         'species': pa.array(species, type=pa.string()),
-        'tree_name': pa.array(tree_name, type=pa.string()),
         'plant_date': pa.array(plant_date, type=pa.date32()),
         'latitude': pa.array(latitude, type=pa.float64()),
         'longitude': pa.array(longitude, type=pa.float64()),

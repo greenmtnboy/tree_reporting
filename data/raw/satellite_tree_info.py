@@ -155,7 +155,6 @@ def records_to_table(records: Iterable[Mapping[str, Any]]) -> pa.Table:
                 # Unconfirmed stays unidentified; enforce_tree_schema applies
                 # the shared Unknown sentinel.
                 "species": normalize_species(record.get("species")),
-                "tree_name": None,
                 "plant_date": None,
                 # Never the model's estimate -- see the module docstring.
                 "diameter_at_breast_height": _positive_float_or_none(
@@ -181,8 +180,7 @@ def records_to_table(records: Iterable[Mapping[str, Any]]) -> pa.Table:
             ("city", pa.string()),
             ("data_source", pa.string()),
             ("species", pa.string()),
-            ("tree_name", pa.string()),
-            ("plant_date", pa.date32()),
+                ("plant_date", pa.date32()),
             ("diameter_at_breast_height", pa.float64()),
             ("crown_width_m", pa.float64()),
             ("latitude", pa.float64()),

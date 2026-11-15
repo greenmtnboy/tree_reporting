@@ -48,7 +48,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species_parts,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -61,7 +60,7 @@ LAYER = FeatureLayer(
 
 # No lat/lon columns, so the geometry carries the position; `out_sr=4326`
 # reprojects it server-side out of the layer's BC Albers storage.
-OUT_FIELDS = "OBJECTID,Genus,Species,CultivarOrVariety,CommonName,dbh_cm,Status"
+OUT_FIELDS = "OBJECTID,Genus,Species,CultivarOrVariety,dbh_cm,Status"
 
 # The column is named for its unit and is centimetres, like every Canadian
 # portal.  One row records 0, which is an unmeasured tree rather than one of
@@ -99,7 +98,6 @@ def transform(features: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
     cultivar: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -115,7 +113,6 @@ def transform(features: list[dict]) -> pa.Table:
         tree_id.append(f"kel-{oid}")
         species.append(normalize_species_parts(rec.get("Genus"), rec.get("Species")))
         cultivar.append(clean(rec.get("CultivarOrVariety")))
-        tree_name.append(normalize_tree_name(rec.get("CommonName")))
         # `InventoryDate` is when a surveyor visited and `WateringDate` when
         # the tree was last watered.  Neither is a planting date, so Kelowna
         # publishes none -- still a typed date32 column, because an untyped
@@ -131,7 +128,6 @@ def transform(features: list[dict]) -> pa.Table:
             "city": pa.array(["CAKEL"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
             "cultivar": pa.array(cultivar, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

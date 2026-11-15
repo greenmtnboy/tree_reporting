@@ -33,7 +33,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -150,7 +149,6 @@ def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
     cultivar: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -168,7 +166,6 @@ def transform(rows: list[dict]) -> pa.Table:
         # `species` is Edmonton's common-name column -- see the module
         # docstring -- and it is inverted for sorting about half the time
         # ("Spruce, Colorado" beside a plain "Linden").
-        tree_name.append(normalize_tree_name(rec.get("species")))
         plant_date.append(parse_plant_date(rec.get("planted_date")))
         latitude.append(_as_float(rec.get("latitude")))
         longitude.append(_as_float(rec.get("longitude")))
@@ -180,7 +177,6 @@ def transform(rows: list[dict]) -> pa.Table:
             "city": pa.array(["CAEDM"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
             "cultivar": pa.array(cultivar, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

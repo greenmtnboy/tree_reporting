@@ -39,6 +39,7 @@ def test_each_field_takes_its_latest_correction():
     assert rows["bos-1"] == {
         "tree_id": "bos-1", "species": "Quercus rubra", "diameter_at_breast_height": 12.5,
         "dbh_unknown": False, "latitude": 42.31, "longitude": -71.1, "missing": False,
+        "tree_name": None, "significance": None, "significance_source": None,
     }, "publishedAt orders the reports, not file order; a report that leaves a field alone keeps it"
 
 
@@ -147,3 +148,36 @@ def test_a_missing_modifications_manifest_leaves_community_freshness_alone(monke
 
     monkeypatch.setattr(community_update_time.requests, "get", lambda url, timeout: Response(url))
     assert community_update_time.fetch_published_at_by_city()["USBOS"] == datetime(2026, 9, 1, tzinfo=timezone.utc)
+
+
+def test_a_report_names_a_tree_and_says_why():
+    rows = by_tree([
+        update("a", "2026-10-01T00:00:00Z", treeName="  The   Senator ", significance="Old.",
+               significanceSource="https://example.org"),
+        update("a", "2026-10-02T00:00:00Z", significance="Planted in 1850."),
+    ])
+    assert rows["a"]["tree_name"] == "The Senator", "whitespace collapsed"
+    assert rows["a"]["significance"] == "Planted in 1850.", "the latest report that gave one wins"
+    assert rows["a"]["significance_source"] == "https://example.org", "a report that leaves it alone keeps it"
+
+
+def test_a_cleared_name_publishes_as_the_empty_string_until_a_later_one():
+    rows = by_tree([
+        update("a", "2026-10-01T00:00:00Z", treeName="Big Fig"),
+        update("a", "2026-10-02T00:00:00Z", clearFields=["treeName", "significance"]),
+        update("b", "2026-10-01T00:00:00Z", clearFields=["treeName"]),
+        update("b", "2026-10-02T00:00:00Z", treeName="Lone Pine"),
+    ])
+    assert (rows["a"]["tree_name"], rows["a"]["significance"]) == ("", ""), (
+        "'' is 'none, whatever the source says'; the model nulls it"
+    )
+    assert rows["b"]["tree_name"] == "Lone Pine"
+
+
+def test_text_is_capped_and_blank_text_is_no_value():
+    rows = by_tree([
+        update("a", "2026-10-01T00:00:00Z", treeName="x" * 200, significance="y" * 2000),
+        update("a", "2026-10-02T00:00:00Z", treeName="   ", significance=7),
+    ])
+    assert rows["a"]["tree_name"] == "x" * mods.MAX_TREE_NAME_CHARS
+    assert rows["a"]["significance"] == "y" * mods.MAX_SIGNIFICANCE_CHARS, "a non-string is not a value"

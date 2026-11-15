@@ -30,7 +30,6 @@ from shared.platforms.arcgis import FeatureLayer, esri_ms_to_date, esri_point, i
 from shared.ingest import (
     emit,
     enforce_tree_schema,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -65,7 +64,6 @@ def is_tree(feature: dict) -> bool:
 def transform(features: list[dict]) -> pa.Table:
     tree_id: list[str] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -79,7 +77,6 @@ def transform(features: list[dict]) -> pa.Table:
         lat, lon = esri_point(feature.get("geometry"))
         tree_id.append(f"arl-{asset_id}")
         species.append(arlington_species(rec.get("CommonName")))
-        tree_name.append(normalize_tree_name(rec.get("CommonName")))
         plant_date.append(esri_ms_to_date(rec.get("Installed")))
         latitude.append(lat)
         longitude.append(lon)
@@ -89,7 +86,6 @@ def transform(features: list[dict]) -> pa.Table:
         "tree_id": pa.array(tree_id, type=pa.string()),
         "city": pa.array(["USNVA"] * len(tree_id), type=pa.string()),
         "species": pa.array(species, type=pa.string()),
-        "tree_name": pa.array(tree_name, type=pa.string()),
         "plant_date": pa.array(plant_date, type=pa.date32()),
         "latitude": pa.array(latitude, type=pa.float64()),
         "longitude": pa.array(longitude, type=pa.float64()),

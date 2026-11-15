@@ -44,7 +44,7 @@ handful of rows carry a common name in that column (`Live Oak`, 14; `Japanese
 Blueberry Tree`, 1) or a non-taxon (`Unidentifiable Tree`, 15, which would
 otherwise publish as the genus "Unidentifiable"); `NON_TAXON_SPECIES` maps
 those.  A blank scientific name falls back to `CommonName` through the shared
-English table (2 rows).  `CommonName` is the map card's name.
+English table (2 rows).
 
 `Diameter` (aliased "Exact DBH") is inches: mean 13, max 100, null on 8.
 `Washingtonia filifera X robusta` (3 rows) is the formula hybrid the shared
@@ -70,7 +70,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -131,7 +130,6 @@ def iter_row_chunks():
 def transform(features: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -144,7 +142,6 @@ def transform(features: list[dict]) -> pa.Table:
         raw_id = str(rec.get("GlobalID") or "").strip().strip("{}")
         tree_id.append(f"nol-{raw_id}" if raw_id else None)
         species.append(species_of(rec))
-        tree_name.append(normalize_tree_name(clean_text(rec.get("CommonName"))))
         plant_date.append(esri_ms_to_date(rec.get("Installed")))
         lat, lon = esri_point(feature.get("geometry"))
         latitude.append(lat)
@@ -157,7 +154,6 @@ def transform(features: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["USNOL"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

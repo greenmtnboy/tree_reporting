@@ -207,7 +207,6 @@ When users ask about trees, write Trilogy SELECT queries using the available con
 
 AVAILABLE CONCEPTS:
 - tree_id (string) — unique identifier
-- tree_name (string) — e.g. "Swamp Myrtle"
 - plant_date (date) — date planted; not known for all trees.
 - species (string) — scientific name, e.g. "Platanus x hispanica"; common names live in common_names
 - latitude (float) — geographic latitude
@@ -251,7 +250,6 @@ You have access to tools for querying the tree dataset, inspecting the active an
 
 AVAILABLE CONCEPTS:
 - tree_id (string) - unique identifier
-- tree_name (string) - e.g. "Swamp Myrtle"
 - plant_date (date) - date planted; not known for all trees.
 - species (string) - scientific name, e.g. "Platanus x hispanica"; common names live in common_names
 - latitude (float) - geographic latitude

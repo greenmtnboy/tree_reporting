@@ -41,7 +41,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -54,7 +53,7 @@ LAYER = FeatureLayer(
 
 # No lat/lon columns, so the geometry carries the position; `out_sr=4326`
 # reprojects it server-side out of the layer's BC Albers storage.
-OUT_FIELDS = "SiteID,BotanicalName,CommonName,DiameterAtBreastHeight,TreeCategory"
+OUT_FIELDS = "SiteID,BotanicalName,DiameterAtBreastHeight,TreeCategory"
 
 # Centimetres, as every Canadian portal publishes.  21 rows record 0, which is
 # an unmeasured tree rather than one of no width; the top of the column is
@@ -84,7 +83,6 @@ def iter_row_chunks():
 def transform(features: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -99,7 +97,6 @@ def transform(features: list[dict]) -> pa.Table:
 
         tree_id.append(f"vic-{raw_id}")
         species.append(normalize_species(rec.get("BotanicalName")))
-        tree_name.append(normalize_tree_name(rec.get("CommonName")))
         # The inventory records no planting date.  Still a typed date32 column:
         # an untyped pa.null() lands in the parquet as INT32 and breaks year().
         plant_date.append(None)
@@ -112,7 +109,6 @@ def transform(features: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["CAVIC"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

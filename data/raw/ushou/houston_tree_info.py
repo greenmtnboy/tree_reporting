@@ -72,9 +72,7 @@ rows unreadable refuses the build.
 The layer records no planting date, no cultivar column and no status, so
 `plant_date` is an all-null `date32`.  `Pear, Bradford` is the one name that
 carries a selection, so it supplies cultivar `Bradford` (which
-`enforce_tree_schema` keeps only once the name resolves to a taxon).  `tree_name` is the
-cleaned source name through `normalize_tree_name`, null for `Unknown`,
-`Other` and the one `Deadwooding` row (a work order, not a tree).
+`enforce_tree_schema` keeps only once the name resolves to a taxon).
 """
 
 import re
@@ -91,7 +89,6 @@ from shared.species.english import common_name_key, species_from_common_name
 from shared.ingest import (
     emit,
     enforce_tree_schema,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -143,7 +140,7 @@ REGIONAL_SPECIES: dict[str, str] = {
     "flameleaf sumac": "Rhus lanceolata",
 }
 
-# Values that name no tree; they publish as `Unknown` with no tree_name.
+# Values that name no tree; they publish as `Unknown`.
 NOT_A_NAME = frozenset({"", "unknown", "other", "deadwooding"})
 
 CULTIVARS: dict[str, str] = {
@@ -219,7 +216,6 @@ def transform(features: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
     cultivar: list[str | None] = []
-    tree_name: list[str | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
     dbh: list[float | None] = []
@@ -231,9 +227,6 @@ def transform(features: list[dict]) -> pa.Table:
         name = clean_name(rec.get("SPECIES"))
         species.append(species_of(name))
         cultivar.append(CULTIVARS.get(name))
-        tree_name.append(
-            None if name.lower() in NOT_A_NAME else normalize_tree_name(name)
-        )
         lat, lon = esri_point(feature.get("geometry"))
         latitude.append(lat)
         longitude.append(lon)
@@ -246,7 +239,6 @@ def transform(features: list[dict]) -> pa.Table:
             "city": pa.array(["USHOU"] * n, type=pa.string()),
             "species": pa.array(species, type=pa.string()),
             "cultivar": pa.array(cultivar, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array([None] * n, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

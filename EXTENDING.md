@@ -142,13 +142,18 @@ the city re-downloads on every tick.
 ### 5. The fetch script
 
 `{slug}_tree_info.py` downloads, maps to the canonical schema (`tree_id`,
-`city`, `species`, `cultivar`, `tree_name` (the portal's own common name,
-through `normalize_tree_name`), `plant_date` as `date32`, `latitude`,
+`city`, `species`, `cultivar`, `plant_date` as `date32`, `latitude`,
 `longitude`, `diameter_at_breast_height` in inches, and `crown_width_m` in
 metres if the portal records a crown spread -- few do; the schema emits it as
 null otherwise), calls
 `enforce_tree_schema(table, city=..., data_source="{LABEL}_OPENDATA",
 columns={...})` last, and writes an Arrow IPC stream to stdout.
+
+A portal's common-name column is not mapped: common names come from the
+enrichment table. `tree_name` is a tree's own proper name ("The Senator"),
+and only a portal that really publishes those emits it, passing
+`proper_names=True` to `enforce_tree_schema`; without that flag the column is
+published as null (docs/NAMED_TREES_AND_CROWN_POSITION.md).
 
 - **Use the platform module**: `shared/platforms/arcgis.py`, `socrata.py`,
   `ckan.py`, `wfs.py`. They own paging, watermarks and geometry handling

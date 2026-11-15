@@ -9,7 +9,7 @@ from pathlib import Path
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
-from shared.platforms.treekeeper import split_label, tree_name_for  # noqa: E402
+from shared.platforms.treekeeper import split_label  # noqa: E402
 
 
 def _load(name: str, relative: str):
@@ -45,15 +45,6 @@ class TestLabels:
 
     def test_a_missing_label(self):
         assert split_label(None) == (None, None)
-
-    def test_colon_inversion_is_undone(self):
-        assert tree_name_for("maple: Norway") == "Norway maple"
-
-    def test_comma_inversion_is_undone(self):
-        assert tree_name_for("Maple, Red") == "Red maple"
-
-    def test_spp_is_not_a_qualifier(self):
-        assert tree_name_for("cherry/plum: spp.") == "Cherry/plum"
 
 
 def _row(module, site_id, label, dbh=4.0):
@@ -93,7 +84,6 @@ class TestBelmont:
             ]
         )
         assert table.column("tree_id").to_pylist() == ["bel-1"]
-        assert table.column("tree_name").to_pylist() == ["Red maple"]
         assert dropped == {"no species": 1, "not a tree": 3}
 
     def test_a_zero_diameter_is_unmeasured(self):

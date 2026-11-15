@@ -60,8 +60,7 @@ few to justify a genus list and stay.
 `Cultivar` has no domain and stores the name with its spaces taken out
 (`AutumnBrilliance`, `NellieRStevens`, `WhitXXV`); the words are split back
 apart at case changes.  `StraightSpecies` and `NewCultivar` are not cultivars
-and become null.  There is no common-name column, so `tree_name` is null and
-the map falls back to the enrichment table's name.
+and become null.
 
 **There is no diameter.**  `PlantedSize` is the nursery stock (`15gal`,
 `2.5cal`) at planting: a container volume or a caliper measured six inches
@@ -101,7 +100,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species_parts,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -216,7 +214,6 @@ def make_transform():
         tree_id: list[str | None] = []
         species: list[str | None] = []
         cultivar: list[str | None] = []
-        tree_name: list[str | None] = []
         plant_date: list[date | None] = []
         latitude: list[float | None] = []
         longitude: list[float | None] = []
@@ -231,7 +228,6 @@ def make_transform():
             tree_id.append(f"atl-{raw_id}" if raw_id else None)
             species.append(species_of(rec.get("Genus"), rec.get("Species"), genera, epithets))
             cultivar.append(cultivar_of(rec.get("Cultivar")))
-            tree_name.append(normalize_tree_name(None))
             plant_date.append(esri_ms_to_date(rec.get("PlantedDate")))
             lat, lon = esri_point(feature.get("geometry"))
             latitude.append(lat)
@@ -244,7 +240,6 @@ def make_transform():
                 "city": pa.array(["USATL"] * len(tree_id), type=pa.string()),
                 "species": pa.array(species, type=pa.string()),
                 "cultivar": pa.array(cultivar, type=pa.string()),
-                "tree_name": pa.array(tree_name, type=pa.string()),
                 "plant_date": pa.array(plant_date, type=pa.date32()),
                 "latitude": pa.array(latitude, type=pa.float64()),
                 "longitude": pa.array(longitude, type=pa.float64()),

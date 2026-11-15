@@ -36,7 +36,6 @@ from shared.platforms.treekeeper import (  # noqa: E402
     fetch_sites,
     newest_value,
     split_label,
-    tree_name_for,
 )
 
 # The "Smart Tree Inventory" layer; the box is generously around the city
@@ -69,7 +68,6 @@ def build_table(rows: list[dict]) -> tuple[pa.Table, dict[str, int]]:
     dropped = {"no species": 0, "not a tree": 0}
     tree_ids: list[str] = []
     species_list: list[str] = []
-    tree_names: list[str | None] = []
     latitudes: list[float | None] = []
     longitudes: list[float | None] = []
     dbhs: list[float | None] = []
@@ -87,7 +85,6 @@ def build_table(rows: list[dict]) -> tuple[pa.Table, dict[str, int]]:
             continue
         tree_ids.append(f"som-{row['SITE_ID']}")
         species_list.append(species)
-        tree_names.append(tree_name_for(common))
         latitudes.append(row.get("LATITUDE"))
         longitudes.append(row.get("LONGITUDE"))
         dbh = row.get(DBH_INCHES)
@@ -98,7 +95,6 @@ def build_table(rows: list[dict]) -> tuple[pa.Table, dict[str, int]]:
             "tree_id": pa.array(tree_ids, type=pa.string()),
             "city": pa.array(["USBOS"] * len(tree_ids), type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
-            "tree_name": pa.array(tree_names, type=pa.string()),
             "latitude": pa.array(latitudes, type=pa.float64()),
             "longitude": pa.array(longitudes, type=pa.float64()),
             "diameter_at_breast_height": pa.array(dbhs, type=pa.float64()),

@@ -27,8 +27,8 @@ coded-value domains whose codes are the names themselves.  `spp`, blanks and
 domain carries its own typos (`acerifolla`, `glyptostoboide`, `meuhlengergil`);
 those are folded centrally by `SPECIES_MISSPELLINGS`, not here.
 
-`Variety` is the cultivar column, free text with trailing spaces.  `Common` is
-the common name the map's tree card shows.  `DBH` is inches.
+`Variety` is the cultivar column, free text with trailing spaces.  `DBH` is
+inches.
 
 **`plant_date` is the replanting date where there is one.**  The layer records
 no planting date, but a site whose `TreeReplaced` reads `Replaced` dates the
@@ -51,7 +51,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species_parts,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -62,7 +61,7 @@ LAYER = FeatureLayer(
 )
 
 OUT_FIELDS = (
-    "GlobalID,Genus,SPECIES,Variety,Common,DBH,TreeStatus,TreeReplaced,TreeReplaceDate"
+    "GlobalID,Genus,SPECIES,Variety,DBH,TreeStatus,TreeReplaced,TreeReplaceDate"
 )
 
 TREE_STATUS = "Tree"
@@ -104,7 +103,6 @@ def transform(features: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
     cultivar: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -120,7 +118,6 @@ def transform(features: list[dict]) -> pa.Table:
             normalize_species_parts(clean_text(rec.get("Genus")), clean_text(rec.get("SPECIES")))
         )
         cultivar.append(clean_text(rec.get("Variety")))
-        tree_name.append(normalize_tree_name(clean_text(rec.get("Common"))))
         plant_date.append(plant_date_of(rec))
         lat, lon = esri_point(feature.get("geometry"))
         latitude.append(lat)
@@ -134,7 +131,6 @@ def transform(features: list[dict]) -> pa.Table:
             "city": pa.array(["USSTO"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
             "cultivar": pa.array(cultivar, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

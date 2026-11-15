@@ -120,24 +120,19 @@ def parse_plant_date(value) -> date | None:
         return None
 
 
-def split_species(value: str | None) -> tuple[str | None, str | None]:
-    """"Pinus radiata :: Monterey Pine" -> ("Pinus radiata", "Monterey Pine").
+def scientific_half(value: str | None) -> str | None:
+    """"Pinus radiata :: Monterey Pine" -> "Pinus radiata".
 
     The scientific half is the species key -- see "The key rule" in
-    docs/SPECIES_ENRICHMENT.md -- and the common half is kept as `tree_name`.  A row with no
-    common half falls back to the scientific name, which is what the map shows
-    when nothing better exists.
+    docs/SPECIES_ENRICHMENT.md.  The common half is not kept: common names come
+    from the enrichment table.
     """
-    raw = value or ""
-    scientific = normalize_species(raw.split("::")[0])
-    common = raw.split("::", 1)[1].strip() if "::" in raw else None
-    return scientific, (common or scientific)
+    return normalize_species((value or "").split("::")[0])
 
 
 def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -147,7 +142,7 @@ def transform(rows: list[dict]) -> pa.Table:
         raw_id = (rec.get("treeid") or "").strip()
         if not raw_id:
             continue
-        scientific, common = split_species(rec.get("species"))
+        scientific = scientific_half(rec.get("species"))
         # A row with no species at all says nothing about a plant; the previous
         # ingest dropped these and so does this one, by declining to append.
         if scientific is None:
@@ -155,7 +150,6 @@ def transform(rows: list[dict]) -> pa.Table:
 
         tree_id.append(f"sf-{raw_id}")
         species.append(scientific)
-        tree_name.append(common)
         plant_date.append(parse_plant_date(rec.get("planteddate")))
         latitude.append(parse_float(rec.get("latitude")))
         longitude.append(parse_float(rec.get("longitude")))
@@ -166,7 +160,6 @@ def transform(rows: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["USSFO"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

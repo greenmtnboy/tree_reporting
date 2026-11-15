@@ -134,16 +134,18 @@ describe('world tables', () => {
 
   test('the trees view presents the published schema as VARCHAR over every block held and drops unplaced rows', async () => {
     expect(await describeTable(TREES_VIEW)).toEqual({
-      tree_id: 'VARCHAR', city: 'VARCHAR', data_source: 'VARCHAR', tree_name: 'VARCHAR', plant_date: 'DATE',
+      tree_id: 'VARCHAR', city: 'VARCHAR', data_source: 'VARCHAR', plant_date: 'DATE',
       species: 'VARCHAR', cultivar: 'VARCHAR', crown_width_m: 'DOUBLE', latitude: 'DOUBLE', longitude: 'DOUBLE',
       diameter_at_breast_height: 'DOUBLE', submission_photo_url: 'VARCHAR',
     })
     expect((await rows(`SELECT tree_id FROM ${TREES_VIEW} ORDER BY 1`)).map((r) => r.tree_id))
       .toEqual(['bos-1', 'bos-2', 'sf-1', 'sf-2', 'sf-3', 'sf-4', 'sf-5'])
-    // The view's tree_name is the source's own name, as published.
-    const names = await rows(`SELECT tree_id, tree_name, cultivar FROM ${TREES_VIEW} WHERE city = 'USSFO' ORDER BY 1`)
-    expect(names.map((r) => [r.tree_id, r.tree_name, r.cultivar])).toEqual([
-      ['sf-1', 'Oak', null], ['sf-2', null, null], ['sf-3', 'Monterey cypress', 'Goldcrest'], ['sf-4', null, null], ['sf-5', null, 'October Glory'],
+    // The cultivar is the source's own, as published. tree_name (a tree's own
+    // name) is not in the view: the card reads it, the chat does not
+    // (docs/NAMED_TREES_AND_CROWN_POSITION.md).
+    const names = await rows(`SELECT tree_id, cultivar FROM ${TREES_VIEW} WHERE city = 'USSFO' ORDER BY 1`)
+    expect(names.map((r) => [r.tree_id, r.cultivar])).toEqual([
+      ['sf-1', null], ['sf-2', null], ['sf-3', 'Goldcrest'], ['sf-4', null], ['sf-5', 'October Glory'],
     ])
   })
 

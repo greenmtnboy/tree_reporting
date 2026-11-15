@@ -13,7 +13,6 @@ API:    https://api.data.amsterdam.nl/v1/bomen/stamgegevens/?_format=json&page_s
 Field mapping (API v2 field names as of 2025):
   id                  -> tree_id  (prefixed "ams-" for global uniqueness)
   soortnaam           -> species  (scientific name only, normalised)
-  soortnaamTop        -> tree_name (Dutch common name with genus, e.g. "Linde (Tilia)")
   jaarVanAanleg       -> plant_date (year integer → January 1 of that year)
   stamdiameterklasse  -> diameter_at_breast_height (midpoint of class range, cm → inches)
   geometrie           -> latitude, longitude (WGS84 via GeoJSON or RD→WGS84 conversion)
@@ -166,7 +165,6 @@ def transform(rows: list[dict]) -> pa.Table:
     tree_ids: list[str | None] = []
     cities: list[str] = []
     species_list: list[str | None] = []
-    tree_names: list[str | None] = []
     plant_dates: list[date | None] = []
     latitudes: list[float | None] = []
     longitudes: list[float | None] = []
@@ -183,10 +181,6 @@ def transform(rows: list[dict]) -> pa.Table:
         species_list.append(normalize_species(
             rec.get("soortnaam") or rec.get("soortnaamLatijn")
         ))
-
-        # tree_name: soortnaamTop (Dutch common name; was "soortnaamNederlands" in v1)
-        nl_name = rec.get("soortnaamTop") or rec.get("soortnaamNederlands")
-        tree_names.append(nl_name.strip() if nl_name and nl_name.strip() else None)
 
         # plant_date: jaarVanAanleg (year; was "plantjaar" in API v1)
         plant_dates.append(parse_plant_date(
@@ -210,7 +204,6 @@ def transform(rows: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_ids, type=pa.string()),
             "city": pa.array(cities, type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
-            "tree_name": pa.array(tree_names, type=pa.string()),
             "plant_date": pa.array(plant_dates, type=pa.date32()),
             "latitude": pa.array(latitudes, type=pa.float64()),
             "longitude": pa.array(longitudes, type=pa.float64()),

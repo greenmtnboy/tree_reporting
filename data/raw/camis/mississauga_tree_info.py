@@ -75,7 +75,6 @@ from shared.ingest import (
     cm_to_inches,
     emit,
     enforce_tree_schema,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -109,7 +108,6 @@ def iter_row_chunks():
 def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
     dbh: list[float | None] = []
@@ -123,7 +121,6 @@ def transform(rows: list[dict]) -> pa.Table:
         species.append(species_from_common_name(common))
         # The common name is kept on the row as well as resolved: it is what
         # the city wrote, and the tree card shows it above the binomial.
-        tree_name.append(normalize_tree_name(common))
         latitude.append(rec.get("LATITUDE"))
         longitude.append(rec.get("LONGITUDE"))
         # Every Canadian portal publishes diameter in centimetres.
@@ -134,7 +131,6 @@ def transform(rows: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["CAMIS"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array([None] * len(tree_id), type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

@@ -133,10 +133,6 @@ def transform(features: list[dict]) -> pa.Table:
 
 
 if __name__ == "__main__":
-    # The layer publishes no common name, so `tree_name` is left off entirely
-    # rather than emitted as an all-null column -- the tree card falls back to
-    # the enrichment table's common name for the species, which is what it does
-    # for every city that has one.
     table = stream_to_table(
         iter_row_chunks(), transform, label="New Westminster OpenData"
     )

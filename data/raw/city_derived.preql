@@ -90,13 +90,15 @@ grain (tree_id);
 # keeps whatever those joins grew it to (docs/MOBILE_LOAD_BUDGET.md).
 #
 # What each column is:
-#   display_name   the enrichment table's first common name, else the name the
-#                  source recorded, else the species. The sentinels (`Unknown`,
-#                  `Palm`, ...) have authored enrichment rows (ingest.py,
-#                  SENTINEL_ENRICHMENT), so they label themselves the same way.
+#   display_name   the enrichment table's first common name, else the species.
+#                  Never the tree's own `tree_name`: that is a proper name
+#                  ('The Senator'), not a label for its species. The sentinels
+#                  (`Unknown`, `Palm`, ...) have authored enrichment rows
+#                  (ingest.py, SENTINEL_ENRICHMENT), so they label themselves
+#                  the same way.
 #   tree_form      the enrichment growth form, `default` where there is none;
 #                  the icon and the default colour are chosen from it.
-#   tree_name      the source's own name field, unchanged.
+#   tree_name      the tree's own name; null on nearly every tree.
 #   predicted_crown_width_m  the allometric estimate (tree_predictions.preql);
 #                  null for a tree the model could not size (a palm, or no
 #                  diameter and no planting date).
@@ -117,7 +119,7 @@ grain (tree_id);
 
 # What the map shows where a common name goes, and the growth form the icon
 # and default colour are chosen from (never null).
-auto display_name <- coalesce(nullif(trim(common_names[1]), ''), nullif(trim(tree_name), ''), species);
+auto display_name <- coalesce(nullif(trim(common_names[1]), ''), species);
 auto browser_tree_form <- coalesce(tree_form, 'default');
 
 # One that would lose a quarter of its city's rows is refused, keeping the

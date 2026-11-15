@@ -56,12 +56,6 @@ def parse_plant_date(value: str | None) -> date | None:
         return None
 
 
-def normalize_common_name(value: str | None) -> str | None:
-    if not value or value.upper() in PLACEHOLDER_NAMES:
-        return None
-    return value.replace('/', ' / ').replace('  ', ' ').title().strip()
-
-
 def normalize_botanical(value: str | None) -> str | None:
     if not value or value.upper() in PLACEHOLDER_NAMES:
         return None
@@ -84,7 +78,7 @@ def iter_row_chunks():
         response = session.get(
             DATASET_URL,
             params={
-                '$select': 'trees_id,common,botanical,dbh,inv_date,x,y',
+                '$select': 'trees_id,botanical,dbh,inv_date,x,y',
                 '$limit': str(PAGE_SIZE),
                 '$offset': str(offset),
             },
@@ -104,7 +98,6 @@ def fetch_rows() -> list[dict]:
 def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -113,9 +106,7 @@ def transform(rows: list[dict]) -> pa.Table:
     for row in rows:
         tree_id.append(f"lax-{row.get('trees_id')}" if row.get('trees_id') else None)
         botanical = normalize_botanical(row.get('botanical'))
-        common = normalize_common_name(row.get('common'))
         species.append(botanical)
-        tree_name.append(common or botanical)
         plant_date.append(parse_plant_date(row.get('inv_date')))
         try:
             lon = float(row.get('x')) if row.get('x') not in (None, '') else None
@@ -131,7 +122,6 @@ def transform(rows: list[dict]) -> pa.Table:
         'tree_id': pa.array(tree_id, type=pa.string()),
         'city': pa.array(['USLAX'] * n, type=pa.string()),
         'species': pa.array(species, type=pa.string()),
-        'tree_name': pa.array(tree_name, type=pa.string()),
         'plant_date': pa.array(plant_date, type=pa.date32()),
         'latitude': pa.array(latitude, type=pa.float64()),
         'longitude': pa.array(longitude, type=pa.float64()),

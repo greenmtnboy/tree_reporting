@@ -36,7 +36,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -45,7 +44,7 @@ from shared.platforms.socrata import SocrataDataset, iter_rows, point_lon_lat
 DATASET = SocrataDataset("data.winnipeg.ca", "hfwk-jp4h", timeout=180)
 
 # `point` is a GeoJSON object; `x`/`y` are UTM 14N and would need reprojecting.
-SELECT = "tree_id,botanical_name,common_name,diameter_at_breast_height,point"
+SELECT = "tree_id,botanical_name,diameter_at_breast_height,point"
 
 # 134 rows record a diameter of 0, which is an unmeasured tree rather than a
 # tree of no width, and 35 record more than 3 m -- the largest 35.52 m, which
@@ -79,7 +78,6 @@ def iter_row_chunks():
 def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -94,7 +92,6 @@ def transform(rows: list[dict]) -> pa.Table:
         tree_id.append(f"wpg-{raw_id}")
         species.append(normalize_species(rec.get("botanical_name")))
         # The column mixes casing ("Colorado blue spruce", "silver maple").
-        tree_name.append(normalize_tree_name(rec.get("common_name")))
         # The inventory records no planting date.  Still a typed date32 column:
         # an untyped pa.null() lands in the parquet as INT32 and breaks year().
         plant_date.append(None)
@@ -107,7 +104,6 @@ def transform(rows: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["CAWPG"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

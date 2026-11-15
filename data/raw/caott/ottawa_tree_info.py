@@ -59,15 +59,6 @@ point: `enforce_tree_schema` refuses a repeated `tree_id` because the grain
 fans out every join built on it.  `GLOBALID` is distinct on all 304,374 rows
 and is the runbook's first choice anyway, so it is the key here.
 
-**No `tree_name` is published**, unlike the rest of this batch.  The stored
-code *is* Ottawa's own common name, but inverted with nothing to invert on --
-`Maple Sugar`, `Spruce Blue/Colorado`, `Mountain Ash European` -- and
-`normalize_tree_name` only un-inverts a comma or a spaced hyphen, because a
-space-separated inversion cannot be undone mechanically (the head of `Mountain
-Ash European` is the first *two* words).  A card reading "Maple sugar" above
-*Acer saccharum* is worse than no common name at all, and the enrichment table
-supplies a proper one for every binomial the domain resolves.
-
 The layer has no usable lat/lon columns -- `X_COORD`/`Y_COORD` are in the
 server's own projection -- so the geometry is requested with `out_sr=4326` and
 reprojected server-side.

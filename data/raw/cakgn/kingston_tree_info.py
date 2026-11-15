@@ -40,7 +40,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -54,7 +53,7 @@ LAYER = FeatureLayer(
 
 # No lat/lon columns, so the geometry carries the position and `out_sr=4326`
 # reprojects it out of the layer's Web Mercator storage.
-OUT_FIELDS = "TREE_ID,SCIENTIFIC_NAME,COMMON_NAME,DBH_TRUNK,RETIRED_DATE"
+OUT_FIELDS = "TREE_ID,SCIENTIFIC_NAME,DBH_TRUNK,RETIRED_DATE"
 
 # 999 is the layer's "not measured" sentinel and 0 is the same thing written
 # differently; nothing real sits between 200 cm and 999.
@@ -98,7 +97,6 @@ def iter_row_chunks():
 def transform(features: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -113,7 +111,6 @@ def transform(features: list[dict]) -> pa.Table:
 
         tree_id.append(f"kgn-{raw_id}")
         species.append(normalize_species(rec.get("SCIENTIFIC_NAME")))
-        tree_name.append(normalize_tree_name(rec.get("COMMON_NAME")))
         # The inventory records no planting date.  Still a typed date32 column:
         # an untyped pa.null() lands in the parquet as INT32 and breaks year().
         plant_date.append(None)
@@ -126,7 +123,6 @@ def transform(features: list[dict]) -> pa.Table:
             "tree_id": pa.array(tree_id, type=pa.string()),
             "city": pa.array(["CAKGN"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

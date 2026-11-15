@@ -20,10 +20,8 @@ hundredfold and fanned out every join built on the grain.  `wam_id` is
 documented as "the unique identifier used to identify Parks assets.  Each tree
 has its own WAM_ID", and measures 581,011 distinct with zero nulls.
 
-Calgary writes everything in capitals and inverts its common names for
-sorting (`ASH, GREEN`), so the presentation columns need putting back the right
-way up -- `normalize_tree_name` for the common name, `normalize_cultivar` for
-the cultivar the portal publishes in its own column.
+Calgary writes everything in capitals, so the cultivar the portal publishes
+in its own column goes through `normalize_cultivar`.
 """
 
 import sys
@@ -38,7 +36,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species_parts,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -47,7 +44,7 @@ from shared.platforms.socrata import SocrataDataset, iter_rows, point_lon_lat
 DATASET = SocrataDataset("data.calgary.ca", "tfs4-3wwa", timeout=180)
 
 SELECT = (
-    "wam_id,asset_type,genus,species,cultivar,common_name,dbh_cm,point"
+    "wam_id,asset_type,genus,species,cultivar,dbh_cm,point"
 )
 
 # `asset_type` splits the layer three ways: TREE (500,035), SHRUB (39,268) and
@@ -119,7 +116,6 @@ def transform(rows: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
     cultivar: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -134,7 +130,6 @@ def transform(rows: list[dict]) -> pa.Table:
         tree_id.append(f"cal-{raw_id}")
         species.append(normalize_species_parts(rec.get("genus"), rec.get("species")))
         cultivar.append(normalize_cultivar(rec.get("cultivar")))
-        tree_name.append(normalize_tree_name(rec.get("common_name")))
         # The layer carries ACTIVE_DT, which the portal does not describe.  Its
         # values run 1893-2026 and rise smoothly with no migration spike, so it
         # is *probably* a planting date -- but "probably" is not good enough to
@@ -153,7 +148,6 @@ def transform(rows: list[dict]) -> pa.Table:
             "city": pa.array(["CACAL"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
             "cultivar": pa.array(cultivar, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

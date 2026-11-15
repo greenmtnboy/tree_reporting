@@ -89,7 +89,6 @@ def transform(table: pa.Table) -> pa.Table:
                 "tree_id": pa.array([], type=pa.string()),
                 "city": pa.array([], type=pa.string()),
                 "species": pa.array([], type=pa.string()),
-                "tree_name": pa.array([], type=pa.string()),
                 "plant_date": pa.array([], type=pa.date32()),
                 "latitude": pa.array([], type=pa.float64()),
                 "longitude": pa.array([], type=pa.float64()),
@@ -107,19 +106,12 @@ def transform(table: pa.Table) -> pa.Table:
     # --- species: "Genre espece" (scientific name only) ---
     genre_list = [row.get("genre") for row in rows]
     espece_list = [row.get("espece") for row in rows]
-    libelle_list = [row.get("libellefrancais") for row in rows]
 
     species = pa.array(
         [
             normalize_species(f"{(g or '').strip()} {(e or '').strip()}")
             for g, e in zip(genre_list, espece_list)
         ],
-        type=pa.string(),
-    )
-
-    species_list = species.to_pylist()
-    tree_name = pa.array(
-        [(v.strip() if v and v.strip() else None) or s for v, s in zip(libelle_list, species_list)],
         type=pa.string(),
     )
 
@@ -145,7 +137,6 @@ def transform(table: pa.Table) -> pa.Table:
             "tree_id": tree_id,
             "city": pa.array(["FRPAR"] * n, type=pa.string()),
             "species": species,
-            "tree_name": tree_name,
             # Paris has no planting date; emit a typed all-null DATE column so the
             # materialised parquet keeps a DATE logical type (pa.null() lands as INT32).
             "plant_date": pa.array([None] * n, type=pa.date32()),

@@ -60,7 +60,6 @@ from shared.ingest import (  # noqa: E402
     UNKNOWN_SPECIES,
     enforce_tree_schema,
     normalize_species,
-    normalize_tree_name,
     validate_coordinates,
 )
 from shared.platforms.arcgis import FeatureLayer, esri_ms_to_date, esri_point, iter_features  # noqa: E402
@@ -103,7 +102,7 @@ INVENTORY_COLUMNS = [
 ]
 PROVENANCE_COLUMNS = [
     "pipeline_city", "jurisdiction", "jurisdiction_fips", "selection",
-    "tree_name", "cultivar", "source_species_name", "source_common_name", "source_cultivar",
+    "cultivar", "source_species_name", "source_common_name", "source_cultivar",
     "source_dbh", "source_dbh_unit", "source_record_date", "source_record_date_kind",
     "source_status", "source_object_id", "source_native_status", "source_license_status",
 ]
@@ -413,7 +412,6 @@ def alexandria(out: Path) -> tuple[pa.Table, dict, dict]:
         "tree_id": [f"alx-{a['GlobalID'].strip('{}').lower()}" for a in attrs],
         "city": ["USALX"] * len(attrs),
         "species": [normalize_species(a.get("SpeciesName")) for a in attrs],
-        "tree_name": [normalize_tree_name(a.get("CommonName")) for a in attrs],
         "plant_date": pa.nulls(len(attrs), type=pa.date32()),
         "latitude": pa.array([p[0] for p in points], type=pa.float64()),
         "longitude": pa.array([p[1] for p in points], type=pa.float64()),
@@ -465,7 +463,6 @@ def fairfax_city(out: Path) -> tuple[pa.Table, dict, dict]:
         "tree_id": [f"ffxc-{a['Primary_ID']}" for a in attrs],
         "city": ["USFXC"] * len(attrs),
         "species": [normalize_species(a.get("Scientific")) for a in attrs],
-        "tree_name": [normalize_tree_name(a.get("Common_Nam")) for a in attrs],
         "plant_date": pa.nulls(len(attrs), type=pa.date32()),
         "latitude": pa.array([p[0] for p in points], type=pa.float64()),
         "longitude": pa.array([p[1] for p in points], type=pa.float64()),

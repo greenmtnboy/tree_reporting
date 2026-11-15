@@ -38,8 +38,7 @@ more specific (3,387 `Lagerstroemia` rows read `Common Crapemyrtle`).  Typos
 in the domains (`Carpinus carolina`, `Juniperus virginicus`) are folded
 centrally by `SPECIES_MISSPELLINGS`, not here.
 
-`commonname` is a coded domain whose codes are the names; it is the tree
-card's `tree_name`.  `variety` is the cultivar column (one row uses it).
+`variety` is the cultivar column (one row uses it).
 `diameterin` is DBH in inches.  `heightft` is a height band, not a crown
 spread, so no `crown_width_m` is published.
 
@@ -70,7 +69,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species_parts,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -158,7 +156,6 @@ def transform(features: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
     cultivar: list[str | None] = []
-    tree_name: list[str | None] = []
     plant_date: list[date | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
@@ -177,7 +174,6 @@ def transform(features: list[dict]) -> pa.Table:
         tree_id.append(f"dur-{raw_id}" if raw_id else None)
         species.append(species_of(rec))
         cultivar.append(cultivar_of(rec))
-        tree_name.append(normalize_tree_name(clean_text(rec.get("commonname"))))
         plant_date.append(plant_date_of(rec.get("plantingdate")))
         latitude.append(lat)
         longitude.append(lon)
@@ -193,7 +189,6 @@ def transform(features: list[dict]) -> pa.Table:
             "city": pa.array(["USDUR"] * len(tree_id), type=pa.string()),
             "species": pa.array(species, type=pa.string()),
             "cultivar": pa.array(cultivar, type=pa.string()),
-            "tree_name": pa.array(tree_name, type=pa.string()),
             "plant_date": pa.array(plant_date, type=pa.date32()),
             "latitude": pa.array(latitude, type=pa.float64()),
             "longitude": pa.array(longitude, type=pa.float64()),

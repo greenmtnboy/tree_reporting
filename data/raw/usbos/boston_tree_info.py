@@ -72,22 +72,7 @@ def cast_columns(table: pa.Table) -> pa.Table:
         idx = table.schema.get_field_index(dbh_col)
         table = table.set_column(idx, dbh_col, pc.cast(table[dbh_col], pa.float64()))
 
-    # spp_com: common name in "Genus, Qualifier" order — invert to "Qualifier Genus"
-    spp_com_col = next((c for c in table.schema.names if c.lower() == "spp_com"), None)
-    if spp_com_col is not None:
-        def invert_common_name(v: str | None) -> str | None:
-            if not v or not v.strip():
-                return None
-            parts = [p.strip() for p in v.split(",", 1)]
-            return f"{parts[1]} {parts[0]}" if len(parts) == 2 and parts[1] else parts[0]
-        tree_name = pa.array(
-            [invert_common_name(v) for v in table[spp_com_col].to_pylist()],
-            type=pa.string(),
-        )
-    else:
-        tree_name = pa.array([None] * table.num_rows, type=pa.string())
-
-    # Normalize spp_bot (scientific name) casing and use as fallback for tree_name
+    # Normalize spp_bot (scientific name) casing
     spp_bot_col = next((c for c in table.schema.names if c.lower() == "spp_bot"), None)
     if spp_bot_col is not None:
         idx = table.schema.get_field_index(spp_bot_col)
@@ -95,12 +80,6 @@ def cast_columns(table: pa.Table) -> pa.Table:
             idx, spp_bot_col,
             pa.array([normalize_species(v) for v in table[spp_bot_col].to_pylist()], type=pa.string()),
         )
-    spp_bot_list = table[spp_bot_col].to_pylist() if spp_bot_col else [None] * table.num_rows
-    tree_name = pa.array(
-        [t or s for t, s in zip(tree_name.to_pylist(), spp_bot_list)],
-        type=pa.string(),
-    )
-    table = table.append_column("tree_name", tree_name)
 
     # Normalize all column names to lowercase
     table = table.rename_columns([c.lower() for c in table.schema.names])

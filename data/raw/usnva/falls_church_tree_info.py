@@ -30,7 +30,6 @@ from shared.ingest import (
     emit,
     enforce_tree_schema,
     normalize_species,
-    normalize_tree_name,
     stream_to_table,
     validate_coordinates,
 )
@@ -39,7 +38,7 @@ LAYER = FeatureLayer(
     "https://services1.arcgis.com/2hmXRAz4ofcdQP6p/arcgis/rest/services/"
     "Public_Trees/FeatureServer/0"
 )
-OUT_FIELDS = "SITE_ID,SPECIES,COMMON_NAM,DBH,VACANT"
+OUT_FIELDS = "SITE_ID,SPECIES,DBH,VACANT"
 
 
 def is_tree(feature: dict) -> bool:
@@ -49,7 +48,6 @@ def is_tree(feature: dict) -> bool:
 def transform(features: list[dict]) -> pa.Table:
     tree_id: list[str] = []
     species: list[str | None] = []
-    tree_name: list[str | None] = []
     latitude: list[float | None] = []
     longitude: list[float | None] = []
     dbh: list[float | None] = []
@@ -62,7 +60,6 @@ def transform(features: list[dict]) -> pa.Table:
         lat, lon = esri_point(feature.get("geometry"))
         tree_id.append(f"fch-{site_id}")
         species.append(normalize_species(rec.get("SPECIES")))
-        tree_name.append(normalize_tree_name(rec.get("COMMON_NAM")))
         latitude.append(lat)
         longitude.append(lon)
         dbh.append(rec.get("DBH"))
@@ -72,7 +69,6 @@ def transform(features: list[dict]) -> pa.Table:
         "tree_id": pa.array(tree_id, type=pa.string()),
         "city": pa.array(["USNVA"] * len(tree_id), type=pa.string()),
         "species": pa.array(species, type=pa.string()),
-        "tree_name": pa.array(tree_name, type=pa.string()),
         "plant_date": pa.array(plant_date, type=pa.date32()),
         "latitude": pa.array(latitude, type=pa.float64()),
         "longitude": pa.array(longitude, type=pa.float64()),
