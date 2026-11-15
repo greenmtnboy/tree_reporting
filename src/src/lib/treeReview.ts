@@ -47,6 +47,46 @@ export async function loadTreeReview(treeId: string, city: string): Promise<Tree
   }
 }
 
+/** A flagged tree, as the Second Opinions mission lists it. */
+export interface ReviewTarget {
+  treeId: string
+  city: string
+  species: string | null
+  dbhInches: number | null
+  speciesMeanDbh: number | null
+}
+
+/**
+ * The city's flagged trees, most out of line first: the Second Opinions
+ * mission's targets. Best-effort, like the card: no file means no mission.
+ */
+export async function loadReviewTargets(city: string, limit = 10): Promise<ReviewTarget[]> {
+  const fixture = e2eFixtures()
+  if (fixture) return (fixture.reviewTargets ?? []).filter(t => t.city === city).slice(0, limit)
+  const url = cityReviewParquetUrl(city)
+  if (!url) return []
+  try {
+    const { rows } = await useDuckDB().query(`
+      SELECT tree_id, species, diameter_at_breast_height, species_mean_dbh
+      FROM read_parquet(${quote(url)})
+      WHERE review_flag = 'dbh_outlier'
+      ORDER BY diameter_at_breast_height / nullif(species_mean_dbh, 0) DESC NULLS LAST, tree_id
+      LIMIT ${Math.max(1, Math.floor(limit))}
+    `)
+    const num = (v: unknown) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v))
+    return rows.map(row => ({
+      treeId: String(row.tree_id),
+      city,
+      species: row.species == null ? null : String(row.species),
+      dbhInches: num(row.diameter_at_breast_height),
+      speciesMeanDbh: num(row.species_mean_dbh),
+    }))
+  } catch (err) {
+    console.warn('[Missions] review targets unavailable', err)
+    return []
+  }
+}
+
 /**
  * The card's note: shown while the tree is flagged and nobody has checked in
  * since (a visit is the second look). An unknown check-in count is not

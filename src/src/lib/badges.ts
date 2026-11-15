@@ -35,6 +35,17 @@ export interface BadgeCheckin {
   speciesCityCount: number | null
   /** The tree was flagged for a second look when visited; absent on older check-ins. */
   reviewFlag?: string | null
+  /** Second looks count trees, not visits. */
+  treeId?: string
+}
+
+/** The subset of a correction report that badges read. */
+export interface BadgeModification {
+  treeId: string
+  /** The tree was flagged for a second look when reported. */
+  reviewFlag: string | null
+  /** A rejected report earns nothing. */
+  rejected: boolean
 }
 
 export interface ContributionStats {
@@ -119,8 +130,8 @@ export const BADGES: BadgeDef[] = [
   { id: 'old-growth', emoji: '🕰️', title: 'Old Soul', description: `Check in on a tree planted ${OLD_GROWTH_YEARS}+ years ago`, points: 25, target: 1, metric: 'oldGrowthCheckinCount' },
 
   // Second looks: a visit to a tree whose recorded values look wrong
-  { id: 'second-look', emoji: '🔍', title: 'Second Look', description: 'Check in on a tree flagged for a second look', points: 25, target: 1, metric: 'secondLookCount' },
-  { id: 'second-look-10', emoji: '📏', title: 'Fact Checker', description: 'Check in on 10 trees flagged for a second look', points: 100, target: 10, metric: 'secondLookCount' },
+  { id: 'second-look', emoji: '🔍', title: 'Second Look', description: 'Check in on, or suggest a correction to, a tree flagged for a second look', points: 25, target: 1, metric: 'secondLookCount' },
+  { id: 'second-look-10', emoji: '📏', title: 'Fact Checker', description: 'Give 10 different flagged trees a second look', points: 100, target: 10, metric: 'secondLookCount' },
 
   // Geography
   { id: 'cities-2', emoji: '✈️', title: 'Branching Out', description: 'Contribute in 2 different cities', points: 50, target: 2, metric: 'distinctCityCount' },
@@ -145,6 +156,7 @@ function dayKey(d: Date): string {
 export function buildStats(
   submissions: BadgeSubmission[],
   checkins: BadgeCheckin[],
+  modifications: BadgeModification[] = [],
 ): ContributionStats {
   const species = new Set<string>()
   const cities = new Set<string>()
@@ -162,7 +174,9 @@ export function buildStats(
   let dawn = 0
   let night = 0
   let multiPhoto = 0
-  let secondLooks = 0
+  // Flagged trees given a second look, by a visit or a report; a check-in
+  // without a tree id counts on its own.
+  const secondLooks = new Set<string>()
 
   const currentYear = new Date().getFullYear()
 
@@ -203,7 +217,11 @@ export function buildStats(
     if (c.ranking?.rarityTier === 'rare') rare += 1
     if (c.dbhInches != null && c.dbhInches >= GIANT_DBH_INCHES) giants += 1
     if (c.plantYear != null && currentYear - c.plantYear >= OLD_GROWTH_YEARS) oldGrowth += 1
-    if (c.reviewFlag) secondLooks += 1
+    if (c.reviewFlag) secondLooks.add(c.treeId ?? `checkin:${secondLooks.size}`)
+  }
+
+  for (const m of modifications) {
+    if (m.reviewFlag && !m.rejected) secondLooks.add(m.treeId)
   }
 
   return {
@@ -225,7 +243,7 @@ export function buildStats(
     dawnCheckinCount: dawn,
     nightCheckinCount: night,
     multiPhotoSubmissionCount: multiPhoto,
-    secondLookCount: secondLooks,
+    secondLookCount: secondLooks.size,
   }
 }
 
@@ -256,8 +274,10 @@ export function toBadgeCheckin(c: {
   ranking?: RankingSnapshot | null
   speciesCityCount: number | null
   reviewFlag?: string | null
+  treeId?: string
 }): BadgeCheckin {
   return {
+    treeId: c.treeId,
     city: c.city,
     at: c.at,
     hasPhoto: c.photoPath != null,
@@ -271,11 +291,17 @@ export function toBadgeCheckin(c: {
   }
 }
 
+/** Adapt an app correction report (structural -- no Firestore import here). */
+export function toBadgeModification(m: { treeId: string; reviewFlag?: string | null; status: string }): BadgeModification {
+  return { treeId: m.treeId, reviewFlag: m.reviewFlag ?? null, rejected: m.status === 'rejected' }
+}
+
 export function evaluateBadges(
   submissions: BadgeSubmission[],
   checkins: BadgeCheckin[],
+  modifications: BadgeModification[] = [],
 ): BadgeState[] {
-  const stats = buildStats(submissions, checkins)
+  const stats = buildStats(submissions, checkins, modifications)
   return BADGES.map((def) => {
     const progress = Math.min(stats[def.metric], def.target)
     return { ...def, progress, earned: progress >= def.target }

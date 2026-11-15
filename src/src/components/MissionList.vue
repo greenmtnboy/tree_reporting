@@ -10,7 +10,7 @@
     <p v-if="loading" role="status">Finding missions…</p>
     <p v-else-if="failed" role="status">City rankings aren't available yet. Your check-ins and existing badges still count. <button type="button" @click="load">Retry</button></p>
     <p v-else-if="!missions.length">No missions with enough mapped targets yet. Try another city.</p>
-    <ul v-else class="mission-list">
+    <ul v-if="!loading && missions.length" class="mission-list">
       <li v-for="mission in missions" :key="mission.id" class="mission" :data-mission="mission.key">
         <strong>{{ mission.emoji }} {{ mission.title }}</strong>
         <p>{{ mission.description }}</p>
@@ -30,6 +30,7 @@ import { CITY_CONFIG, useMapData } from '../composables/useMapData'
 import { getCityBiome } from '../composables/dashboardContextSource'
 import { buildMissions, type MissionCheckin, type RankedTree } from '../lib/missions'
 import { loadMissionTrees } from '../lib/treeRankings'
+import { loadReviewTargets, type ReviewTarget } from '../lib/treeReview'
 
 const props = defineProps<{ checkins: MissionCheckin[] }>()
 const { displayCity } = useMapData()
@@ -37,28 +38,30 @@ const route = useRoute()
 const routeCity = typeof route.query.city === 'string' && route.query.city in CITY_CONFIG ? route.query.city : null
 const city = ref(routeCity ?? displayCity.value)
 const trees = ref<RankedTree[]>([])
+const reviewTargets = ref<ReviewTarget[]>([])
 const loading = ref(false)
 const failed = ref(false)
 let request = 0
 async function load() {
   const token = ++request
   trees.value = []
+  reviewTargets.value = []
   loading.value = true
   failed.value = false
-  try {
-    const result = await loadMissionTrees(city.value)
-    if (token === request) trees.value = result
-  } catch {
-    if (token === request) failed.value = true
-  } finally {
-    if (token === request) loading.value = false
-  }
+  // The flagged trees load beside the rankings and never fail the list: a
+  // city without a review file just has no Second Opinions mission.
+  const [ranked, flagged] = await Promise.allSettled([loadMissionTrees(city.value), loadReviewTargets(city.value)])
+  if (token !== request) return
+  if (ranked.status === 'fulfilled') trees.value = ranked.value
+  else failed.value = true
+  if (flagged.status === 'fulfilled') reviewTargets.value = flagged.value
+  loading.value = false
 }
 watch(() => route.query.city, next => {
   if (typeof next === 'string' && next in CITY_CONFIG) city.value = next
 })
 watch(city, load, { immediate: true })
-const missions = computed(() => buildMissions(city.value, trees.value, props.checkins))
+const missions = computed(() => buildMissions(city.value, trees.value, props.checkins, reviewTargets.value))
 </script>
 
 <style scoped>

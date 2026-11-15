@@ -46,8 +46,21 @@ describe('badge evaluation', () => {
     const one = earnedIds([], [checkin({ reviewFlag: 'dbh_outlier' })])
     expect(one.has('second-look')).toBe(true)
     expect(one.has('second-look-10')).toBe(false)
-    const ten = Array.from({ length: 10 }, () => checkin({ reviewFlag: 'dbh_outlier' }))
+    const ten = Array.from({ length: 10 }, (_, i) => checkin({ reviewFlag: 'dbh_outlier', treeId: `t${i}` }))
     expect(earnedIds([], ten).has('second-look-10')).toBe(true)
+  })
+
+  it('counts flagged trees, not visits, and a report on one counts unless rejected', () => {
+    const again = Array.from({ length: 10 }, () => checkin({ reviewFlag: 'dbh_outlier', treeId: 'same' }))
+    expect(buildStats([], again).secondLookCount).toBe(1)
+    const reports = [
+      { treeId: 'same', reviewFlag: 'dbh_outlier', rejected: false },
+      { treeId: 'other', reviewFlag: 'dbh_outlier', rejected: false },
+      { treeId: 'refused', reviewFlag: 'dbh_outlier', rejected: true },
+      { treeId: 'plain', reviewFlag: null, rejected: false },
+    ]
+    expect(buildStats([], again, reports).secondLookCount).toBe(2)
+    expect(evaluateBadges([], [], reports.slice(1, 2)).find(b => b.id === 'second-look')?.earned).toBe(true)
   })
 
   it('earns nothing with no contributions', () => {

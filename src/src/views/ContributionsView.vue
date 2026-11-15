@@ -23,7 +23,7 @@
         <section class="section">
           <h2 class="section-title">Badges</h2>
           <p v-if="loading" class="muted">Loading…</p>
-          <BadgeGrid v-else :key="user.uid" :submissions="submissions" :checkins="checkins" />
+          <BadgeGrid v-else :key="user.uid" :submissions="submissions" :checkins="checkins" :modifications="modifications" />
         </section>
 
         <section class="section">
