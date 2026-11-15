@@ -79,6 +79,52 @@ for (const [label, viewport] of [
       await expect(page.locator('.map-entry')).toHaveCount(0)
     })
 
+    if (label === 'desktop') {
+      test('draws its first trees around the linked tree, not the city centre', async ({ page }) => {
+        test.setTimeout(180_000)
+        await page.goto(`/#/?city=${CITY}&tree=${TREE_ID}`)
+        await page.waitForFunction(() => (window as unknown as { __treeMap?: unknown }).__treeMap, null, { timeout: 60_000 })
+        // Where the camera stands the moment the first trees are drawn.
+        await page.evaluate(() => {
+          const w = window as unknown as { __treeMap: { getCenter(): { lng: number; lat: number } }; __firstDrawCenter?: { lng: number; lat: number } }
+          const observer = new MutationObserver(() => {
+            if (w.__firstDrawCenter || !document.querySelector('[data-trees-loaded-for]')) return
+            w.__firstDrawCenter = w.__treeMap.getCenter()
+            observer.disconnect()
+          })
+          observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['data-trees-loaded-for'] })
+        })
+        // Where the camera stands on the first frame the basemap is visible.
+        await page.evaluate(() => {
+          const w = window as unknown as {
+            __treeMap: { getCenter(): { lng: number; lat: number }; on(type: string, fn: () => void): void }
+            __firstVisibleCenter?: { lng: number; lat: number }
+          }
+          w.__treeMap.on('render', () => {
+            if (w.__firstVisibleCenter || document.querySelector('.tree-map--placing')) return
+            w.__firstVisibleCenter = w.__treeMap.getCenter()
+          })
+        })
+        const card = page.locator('.tree-card')
+        await expect(card).toBeVisible({ timeout: 120_000 })
+        await expect(card).toContainText(TREE_ID)
+        const { first, visible, final } = await page.evaluate(() => {
+          const w = window as unknown as {
+            __treeMap: { getCenter(): { lng: number; lat: number } }
+            __firstDrawCenter?: { lng: number; lat: number }
+            __firstVisibleCenter?: { lng: number; lat: number }
+          }
+          return { first: w.__firstDrawCenter ?? null, visible: w.__firstVisibleCenter ?? null, final: w.__treeMap.getCenter() }
+        })
+        expect(first, 'the first draw was observed').not.toBeNull()
+        expect(Math.abs(first!.lng - final.lng)).toBeLessThan(1e-4)
+        expect(Math.abs(first!.lat - final.lat)).toBeLessThan(1e-4)
+        expect(visible, 'the basemap was shown').not.toBeNull()
+        expect(Math.abs(visible!.lng - final.lng), 'the city centre never showed first').toBeLessThan(1e-4)
+        expect(Math.abs(visible!.lat - final.lat), 'the city centre never showed first').toBeLessThan(1e-4)
+      })
+    }
+
     test('drops an unknown ?tree= instead of leaving it in the URL', async ({ page }) => {
       test.setTimeout(180_000)
       await page.goto(`/#/?city=${CITY}&tree=sf-does-not-exist`)
