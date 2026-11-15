@@ -345,3 +345,168 @@ def test_a_tile_in_context_is_predicted_from_its_surround(tmp_path):
     )
     assert unrendered["png"] == b""
     assert unrendered["bundle"]["predictionLayer"] == result["bundle"]["predictionLayer"]
+
+
+def test_a_thinner_margin_needs_a_block_of_tiles_for_its_cores_to_fit():
+    assert point_predict.block_tiles(512, 128) == 1  # a core of half a tile: every tile its own block
+    assert point_predict.block_tiles(512, 64) == 3   # 4 cores of 384 px are 3 tiles
+    assert point_predict.block_tiles(512, 96) == 5
+    assert point_predict.block_tiles(512, 32) == 7
+    for margin in (0, 256, 300):
+        with pytest.raises(ValueError):
+            point_predict.block_tiles(512, margin)
+
+
+def test_the_cores_of_a_blocks_windows_reassemble_exactly_the_block():
+    torch = pytest.importorskip("torch")
+    pixels, margin, stride, tiles = 16, 2, 2, 3
+    assert point_predict.block_tiles(pixels, margin) == tiles
+    side = tiles * pixels + 2 * margin  # the block is [2:50, 2:50]
+    surround = np.arange(4 * side * side, dtype=np.int64).reshape(4, side, side)
+    windows = torch.from_numpy(point_predict.context_windows(surround, pixels, margin))
+    assert windows.shape == (16, 4, pixels, pixels)
+    output = {"center_logits": windows[:, 0, ::stride, ::stride], "genus_logits": windows[:, :2, ::stride, ::stride]}
+    cells, margin_cells = tiles * pixels // stride, margin // stride
+
+    stitched = point_predict.stitch_cores(output, cells, margin=margin_cells)
+    block = torch.from_numpy(surround[:, 2:50:stride, 2:50:stride])
+    assert torch.equal(stitched["center_logits"][0], block[0])
+    assert torch.equal(stitched["genus_logits"][0], block[:2])
+
+    ringed = point_predict.stitch_cores(output, cells, ring=1, margin=margin_cells)
+    block = torch.from_numpy(surround[:, 0:52:stride, 0:52:stride])
+    assert torch.equal(ringed["center_logits"][0], block[0])
+
+    start, size = point_predict.core_region(pixels // stride, 1, margin_cells)
+    assert (start, size) == (0, 8)
+    region = {key: value[..., start:start + size, start:start + size] for key, value in output.items()}
+    kept = point_predict.stitch_cores(region, cells, ring=1, origin=start, margin=margin_cells)
+    assert torch.equal(kept["genus_logits"], ringed["genus_logits"])
+
+
+def test_only_the_windows_a_wanted_tile_touches_are_needed():
+    needed = lambda tiles: point_predict.windows_needed(4, 384, 512, tiles, 4)  # noqa: E731
+    assert needed([(0, 0)]) == [0, 1, 4, 5]
+    assert needed([(1, 1)]) == [5, 6, 9, 10]
+    assert needed([(2, 0)]) == [2, 3, 6, 7]
+    assert needed([(c, r) for c in range(3) for r in range(3)]) == list(range(16))
+    assert needed([]) == []
+
+
+def _block_predictor(seen):
+    torch = pytest.importorskip("torch")
+
+    def forward(windows, region=None):
+        seen.append(len(windows))
+        start, size = region
+        centre = torch.from_numpy(windows[:, 0, ::2, ::2].astype("float32")) / 10 - 5
+        centre = centre[:, start:start + size, start:start + size]
+        k = len(windows)
+        return {
+            "center_logits": centre, "dbh_log1p": torch.zeros_like(centre),
+            "genus_logits": torch.zeros(k, 2, size, size), "species_logits": torch.zeros(k, 3, size, size),
+        }
+
+    predictor = SimpleNamespace(
+        chip_pixels=16, stride=2, _forward=forward,
+        config={"evaluation": {"nms_kernel": 3, "max_detections_per_chip": 512}},
+    )
+    predictor._decode = lambda *a, **k: point_predict.Predictor._decode(predictor, *a, **k)
+    return predictor
+
+
+def test_a_block_is_decoded_once_and_its_peaks_go_to_their_tiles():
+    seen = []
+    predictor = _block_predictor(seen)
+    margin, side = 2, 3 * 16 + 4
+    image = np.zeros((4, side, side), dtype=np.uint8)
+
+    def crown(cell_x, cell_y):  # block output cells; the block starts *margin* pixels in
+        image[:, 2 * cell_y + margin, 2 * cell_x + margin] = 100
+
+    crown(3, 4)     # tile (0, 0)
+    crown(21, 10)   # tile (2, 1), local (5, 2)
+    crown(8, 20)    # first column of tile (1, 2)
+    crown(-1, 6)    # in the ring west of the block: the neighbour block's
+    chips = {(c, r): f"chip-{c}-{r}" for c in range(3) for r in range(3)}
+
+    records = point_predict.Predictor.predict_block(predictor, image, margin, chips, 0.1)
+
+    assert sum(seen) == 16
+    found = {position: [(r["chip_id"], r["output_x"], r["output_y"]) for r in rows]
+             for position, rows in records.items() if rows}
+    assert found == {
+        (0, 0): [("chip-0-0", 3, 4)], (2, 1): [("chip-2-1", 5, 2)], (1, 2): [("chip-1-2", 0, 4)],
+    }
+    assert all(r["score"] > 0.9 for rows in records.values() for r in rows)
+
+    seen.clear()
+    one = point_predict.Predictor.predict_block(predictor, image, margin, {(2, 1): "chip-2-1"}, 0.1)
+    assert sum(seen) == 4  # the four windows around the tile, not sixteen
+    assert [(r["output_x"], r["output_y"]) for r in one[(2, 1)]] == [(5, 2)]
+
+
+def test_a_block_predicts_its_wanted_tiles_from_shared_windows(tmp_path):
+    asked = {}
+
+    def predict_block(image, margin, chip_ids, min_score):
+        asked.update(shape=image.shape, margin=margin, chips=dict(chip_ids))
+        return {position: [{"score": 0.5, "output_x": 1, "output_y": 1, "chip_id": chip}]
+                for position, chip in chip_ids.items()}
+
+    predictor = SimpleNamespace(
+        chip_pixels=8, resolution_m=0.3, stride=2, checkpoint_sha256="c", taxonomy_version="t", bands=[1, 2, 3, 4],
+        taxonomy={"genera": [], "species": []}, predict_block=predict_block,
+    )
+    from pyproj import Transformer
+
+    to_utm = Transformer.from_crs("EPSG:4326", "EPSG:26919", always_xy=True)
+    back = Transformer.from_crs("EPSG:26919", "EPSG:4326", always_xy=True)
+    x, y = to_utm.transform(-71.06, 42.35)
+    west, north = grid_tile_origin(x, y, 2.4)  # the block's north-west tile
+    for row in range(-1, 4):
+        for column in range(-1, 4):
+            w, n = west + column * 2.4, north - row * 2.4
+            _cache_tile(tmp_path, 2023, point_chip_id(26919, w, n), w, n, value=10 * (row + 1) + column + 1)
+
+    def centre(column, row):
+        lon, lat = back.transform(west + (column + 0.5) * 2.4, north - (row + 0.5) * 2.4)
+        return lat, lon
+
+    wanted = {(0, 0): centre(0, 0), (2, 1): centre(2, 1)}
+    results = point_predict.predict_block(
+        predictor, wanted, tiles=3, margin=2, artifacts=tmp_path, run="run", year=None, stac_url="unused",
+        city="USBOS", envelopes={}, territory={}, min_score=0.1, threshold=0.35, coefficients=None, readers=None,
+        epsg_hint=26919, render=False,
+    )
+
+    assert asked["shape"] == (4, 28, 28) and asked["margin"] == 2
+    assert asked["chips"] == {(0, 0): point_chip_id(26919, west, north),
+                              (2, 1): point_chip_id(26919, west + 4.8, north - 2.4)}
+    assert set(results) == set(wanted)
+    for position, result in results.items():
+        assert result["bundle"]["chipId"] == asked["chips"][position]
+        assert len(result["bundle"]["predictionLayer"]["predictions"]) == 1
+
+
+def test_a_block_image_is_the_block_and_a_margin_of_its_neighbours(tmp_path, monkeypatch):
+    monkeypatch.setattr(point_predict, "year_items", lambda bounds, year, stac_url: [])
+    west, north, step = 1000.0, 5000.0, 8 * 0.3
+    for row in range(-1, 3):
+        for column in range(-1, 3):
+            if (column, row) != (2, 2):  # past NAIP's edge
+                w, n = west + column * step, north - row * step
+                _cache_tile(tmp_path, 2023, point_chip_id(26919, w, n), w, n, value=10 * (row + 2) + column + 2)
+    own = np.full((4, 8, 8), 99, dtype=np.uint8)
+
+    image = point_predict.block_image(
+        {(0, 0): own}, point_predict.point_cache_root(tmp_path) / "naip2023", crs="EPSG:26919", west=west,
+        north=north, tiles=2, pixels=8, margin=2, resolution_m=0.3, bands=[1, 2, 3, 4], stac_url="unused",
+    )
+
+    assert image.shape == (4, 20, 20)
+    assert (image[:, 2:10, 2:10] == 99).all()          # the tile in hand
+    assert (image[:, 2:10, 10:18] == 23).all()         # its east neighbour, read from the cache
+    assert (image[:, 10:18, 10:18] == 33).all()
+    assert image[0, 0, 0] == 11 and image[0, 0, 19] == 14 and image[0, 19, 0] == 41
+    assert image[0, 19, 19] == 0                       # no imagery there
