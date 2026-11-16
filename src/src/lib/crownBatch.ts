@@ -37,6 +37,8 @@ export interface CrownBatch {
   /** Metres: the crown width drawn, DEFAULT_CROWN_WIDTH where the tree has none. */
   width: Float64Array
   category: string[]
+  /** The drawn notable trees, as draw indices (ascending): the desktop draws a halo under each. */
+  notable: Uint32Array
   /** Mercator position of the query camera; vertices are relative to it. */
   origin: [number, number]
   /** Metres from the query camera within which the phone's crown budget holds. */
@@ -52,12 +54,12 @@ export interface CrownBatch {
 export function emptyCrownBatch(): CrownBatch {
   return {
     vertices: new Float32Array(), id: [], lng: new Float64Array(), lat: new Float64Array(), width: new Float64Array(), category: [],
-    origin: [0, 0], budgetDistance: CROWN_DISTANCE_MAX, reach: Infinity, rows: 0, timing: { sqlMs: 0, buildMs: 0 },
+    notable: new Uint32Array(), origin: [0, 0], budgetDistance: CROWN_DISTANCE_MAX, reach: Infinity, rows: 0, timing: { sqlMs: 0, buildMs: 0 },
   }
 }
 
 export function crownBatchBuffers(b: CrownBatch): ArrayBuffer[] {
-  return [b.vertices, b.lng, b.lat, b.width].map(a => a.buffer as ArrayBuffer)
+  return [b.vertices, b.lng, b.lat, b.width, b.notable].map(a => a.buffer as ArrayBuffer)
 }
 
 function rgb(hex: string, cache: Map<string, number[]>): number[] {
@@ -103,6 +105,7 @@ export function buildCrownBatch(c: TreeCrownColumns, camera: TreeRenderView, opt
   const id: string[] = [], category: string[] = []
   const lng = new Float64Array(n), lat = new Float64Array(n), widths = new Float64Array(n)
   const nearbyDistances: number[] = []
+  const notable: number[] = []
   const colors = new Map<string, number[]>()
   let cursor = 0, drawn = 0, farthest = 0
   for (let k = 0; k < n; k++) {
@@ -132,7 +135,8 @@ export function buildCrownBatch(c: TreeCrownColumns, camera: TreeRenderView, opt
       vertices[cursor++] = r
       vertices[cursor++] = g
       vertices[cursor++] = b
-      vertices[cursor++] = c.measured[i] ? 1 : 0
+      // The colour's alpha: 1 for a measured crown, plus 2 on a desktop notable sprite (its outline).
+      vertices[cursor++] = (c.measured[i] ? 1 : 0) + (!simplified && c.notable?.[i] ? 2 : 0)
       vertices[cursor++] = cell ? (cx < 0 ? cell.left : cell.right) : 0
       vertices[cursor++] = cell ? (cy > 0 ? cell.top : cell.bottom) : 0
       vertices[cursor++] = cell?.crownFraction ?? 1
@@ -140,6 +144,7 @@ export function buildCrownBatch(c: TreeCrownColumns, camera: TreeRenderView, opt
       vertices[cursor++] = cell?.base ?? 0.95
       vertices[cursor++] = aspect
     }
+    if (c.notable?.[i]) notable.push(drawn)
     id.push(c.id[i])
     category.push(c.category[i])
     lng[drawn] = c.lng[i]
@@ -156,7 +161,7 @@ export function buildCrownBatch(c: TreeCrownColumns, camera: TreeRenderView, opt
   }
   return {
     // Copy the used part so the transfer sends only what is drawn.
-    vertices: vertices.slice(0, cursor), id, category,
+    vertices: vertices.slice(0, cursor), id, category, notable: Uint32Array.from(notable),
     lng: lng.slice(0, drawn), lat: lat.slice(0, drawn), width: widths.slice(0, drawn),
     origin, budgetDistance, reach: simplified ? Infinity : spriteReach(rows >= limit, farthest, camera.altitude, camera.spriteDistance), rows, timing: { sqlMs: 0, buildMs: 0 },
   }

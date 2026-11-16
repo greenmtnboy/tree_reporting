@@ -81,19 +81,19 @@ describe('world tables', () => {
         CAST(predicted_crown_width_m AS FLOAT) AS predicted_crown_width_m,
         CAST(height_m AS FLOAT) AS height_m, CAST(predicted_height_m AS FLOAT) AS predicted_height_m
       ) FROM (VALUES ${values}) v(${WORLD_BLOCK_COLUMNS.join(', ')})`
-    // id, city, source, species, cultivar, source name, display name, form, planted, dbh, crown, predicted crown,
+    // id, city, source, species, cultivar, display name, form, notable, planted, dbh, crown, predicted crown,
     // height, predicted height, lat, lon, photo
     await conn.run(`COPY (${block(`
-      ('sf-1', 'USSFO', 'SF_OPENDATA', 'Quercus agrifolia', NULL, 'Oak', 'Coast live oak', 'spreading', DATE '2001-03-04', 12.5, 9.5, 7.0, 14.5, 11.0, 37.760, -122.430, NULL),
-      ('sf-2', 'USSFO', 'SF_OPENDATA', 'Washingtonia robusta', NULL, NULL, 'Mexican fan palm', 'palm', NULL, NULL, NULL, 6.0, NULL, 10.0, 37.7601, -122.4301, NULL),
-      ('sf-3', 'USSFO', 'COMMUNITY_USSFO', 'Cupressus macrocarpa', 'Goldcrest', 'Monterey cypress', 'Monterey cypress', 'default', NULL, 30, NULL, NULL, NULL, NULL, 37.7602, -122.4302, 'https://p/3.jpg'),
-      ('sf-4', 'USSFO', 'OSM_USSFO', 'Palm', NULL, NULL, 'Palm (species not recorded)', 'palm', NULL, 4, NULL, NULL, NULL, NULL, 37.7603, -122.4303, NULL),
-      ('sf-5', 'USSFO', 'OSM_USSFO', 'Acer rubrum', 'October Glory', NULL, 'Acer rubrum', 'drifted_form', NULL, 8, NULL, 3.0, NULL, 8.5, 37.7604, -122.4304, NULL),
-      ('sf-nowhere', 'USSFO', 'OSM_USSFO', 'Acer rubrum', NULL, NULL, 'Acer rubrum', 'default', NULL, 8, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+      ('sf-1', 'USSFO', 'SF_OPENDATA', 'Quercus agrifolia', NULL, 'Coast live oak', 'spreading', true, DATE '2001-03-04', 12.5, 9.5, 7.0, 14.5, 11.0, 37.760, -122.430, NULL),
+      ('sf-2', 'USSFO', 'SF_OPENDATA', 'Washingtonia robusta', NULL, 'Mexican fan palm', 'palm', NULL, NULL, NULL, NULL, 6.0, NULL, 10.0, 37.7601, -122.4301, NULL),
+      ('sf-3', 'USSFO', 'COMMUNITY_USSFO', 'Cupressus macrocarpa', 'Goldcrest', 'Monterey cypress', 'default', NULL, NULL, 30, NULL, NULL, NULL, NULL, 37.7602, -122.4302, 'https://p/3.jpg'),
+      ('sf-4', 'USSFO', 'OSM_USSFO', 'Palm', NULL, 'Palm (species not recorded)', 'palm', NULL, NULL, 4, NULL, NULL, NULL, NULL, 37.7603, -122.4303, NULL),
+      ('sf-5', 'USSFO', 'OSM_USSFO', 'Acer rubrum', 'October Glory', 'Acer rubrum', 'drifted_form', NULL, NULL, 8, NULL, 3.0, NULL, 8.5, 37.7604, -122.4304, NULL),
+      ('sf-nowhere', 'USSFO', 'OSM_USSFO', 'Acer rubrum', NULL, 'Acer rubrum', 'default', NULL, NULL, 8, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
     `)}) TO '${file('sf.parquet')}' (FORMAT PARQUET)`)
     await conn.run(`COPY (${block(`
-      ('bos-1', 'USBOS', 'BOS_OPENDATA', 'Acer rubrum', NULL, 'Red maple', 'Red maple', 'broadleaf', NULL, 14, NULL, 8.0, 12.0, 11.0, 42.360, -71.060, NULL),
-      ('bos-2', 'USBOS', 'PREDICTED_USBOS', 'Unknown', NULL, NULL, 'Unknown', 'default', NULL, NULL, NULL, 5.0, NULL, NULL, 42.361, -71.061, NULL)
+      ('bos-1', 'USBOS', 'BOS_OPENDATA', 'Acer rubrum', NULL, 'Red maple', 'broadleaf', NULL, NULL, 14, NULL, 8.0, 12.0, 11.0, 42.360, -71.060, NULL),
+      ('bos-2', 'USBOS', 'PREDICTED_USBOS', 'Unknown', NULL, 'Unknown', 'default', NULL, NULL, NULL, NULL, 5.0, NULL, NULL, 42.361, -71.061, NULL)
     `)}) TO '${file('bos.parquet')}' (FORMAT PARQUET)`)
     // The world's vocabulary: every value of the ENUM columns over every block.
     const both = `read_parquet(['${file('sf.parquet')}', '${file('bos.parquet')}'])`
@@ -109,7 +109,10 @@ describe('world tables', () => {
 
   test('the row keeps low-cardinality strings as world ENUMs, one tile index pair, and its place in its block', async () => {
     const columns = await describeTable(TREES_TABLE)
-    for (const column of ['species', 'tree_name', 'source_tree_name', 'cultivar', 'data_source', 'city']) expect(columns[column]).toMatch(/^ENUM\(/)
+    for (const column of ['species', 'display_name', 'cultivar', 'data_source', 'city']) expect(columns[column]).toMatch(/^ENUM\(/)
+    // A tree's own name is not on the row: one bit says it has one, the card reads the text.
+    expect(columns.notable).toBe('BOOLEAN')
+    expect(columns.tree_name).toBeUndefined()
     expect(columns.tree_form).toMatch(/^ENUM\('default', 'palm'/)
     expect(columns.predicted_crown_width_m).toBe('FLOAT')
     expect(columns.rn).toBe('UINTEGER')
@@ -151,7 +154,7 @@ describe('world tables', () => {
 
   test('display names, forms and predictions are the block\'s columns; a form outside the vocabulary is default', async () => {
     const got = (await rows(
-      `SELECT tree_id, CAST(tree_name AS VARCHAR) AS name, CAST(tree_form AS VARCHAR) AS form, dbh,
+      `SELECT tree_id, CAST(display_name AS VARCHAR) AS name, CAST(tree_form AS VARCHAR) AS form, dbh,
               predicted_crown_width_m AS width, height_m AS h, predicted_height_m AS p
        FROM ${TREES_TABLE} WHERE city = 'USSFO' ORDER BY 1`,
     )).map((r) => [r.tree_id, r.name, r.form, r.dbh, r.width, r.h, r.p])
@@ -162,6 +165,11 @@ describe('world tables', () => {
       ['sf-4', 'Palm (species not recorded)', 'palm', 4, null, null, null],
       ['sf-5', 'Acer rubrum', 'default', 8, 3, null, 8.5],
     ])
+  })
+
+  test('the notable bit is true on a notable tree and null on every other', async () => {
+    const got = await rows(`SELECT tree_id, notable FROM ${TREES_TABLE} ORDER BY 1`)
+    expect(got.filter((r) => r.notable !== null).map((r) => [r.tree_id, r.notable])).toEqual([['sf-1', true]])
   })
 
   test('every zoom up to 20 shifts the stored index to the value the formula gives', async () => {

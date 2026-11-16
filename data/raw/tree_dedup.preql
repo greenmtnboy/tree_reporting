@@ -50,8 +50,8 @@
 # OSM point and its nearest inventory tree are mutual nearest neighbours
 # >=88% of the time (the same tree, offset by GPS or imagery error); in the
 # 5-10m band that collapses to 15-50% in most cities, i.e. mostly distinct
-# neighbours.  Three cities (Buenos Aires, Burlington, Los Angeles) break at
-# 10m instead and use a 20m cell.  A missed duplicate double-renders one dot;
+# neighbours.  Two cities (Buenos Aires, Burlington) break at 10m instead and
+# use a 20m cell.  A missed duplicate double-renders one dot;
 # a false match hides a real tree, so an ambiguous band is left alone.
 #
 # ---------------------------------------------------------------------------
@@ -80,10 +80,10 @@
 # beside a ginkgo).  A grid match would publish the monument's name on the
 # wrong tree, so the ingest links each register row to one inventory row by
 # genus, distance and trunk size (shared/notable.py) and emits that tree's id
-# as `linked_tree_id`; the row joins that cluster and no other.  An unlinked
-# row is a tree of its own, at the register's point.  Either way it lends the
-# cluster its name and why the tree is notable; its other values publish only
-# when it stands alone (its rank is a prediction's 0).
+# as `linked_tree_id`; the row joins that cluster and no other, and lends it
+# its name and why the tree is notable.  The ingest drops an unlinked row
+# (shared/notable.py): a register is metadata, never a new tree.  Were one to
+# arrive it would stand alone (its rank is a prediction's 0).
 #
 # A predicted row (`PREDICTED_{code}`, bulk imagery output nobody reviewed)
 # is the weakest evidence there is, so it only fills the map where no other
@@ -218,7 +218,7 @@ SELECT * FROM (VALUES
     ('USDEN', 0.00008983, 0.00011675),
     ('USDUR', 0.00017966, 0.00022207),
     ('USHOU', 0.00008983, 0.00010352),
-    ('USLAX', 0.00017966, 0.00021678),
+    ('USLAX', 0.00008983, 0.00010839),
     ('USNAP', 0.00003593, 0.00004004),
     ('USNOL', 0.00007186, 0.00008300),
     ('USNPV', 0.00008983, 0.00012040),

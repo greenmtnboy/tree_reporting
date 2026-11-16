@@ -149,7 +149,9 @@ test.describe('Mobile layout', () => {
 
     await expect(page.locator('.mobile-route-header')).toContainText('Species Explorer')
     // The page opens on the city's commonest genus, so its title names both.
-    await expect(page.locator('.species-page h1')).toContainText('in San Francisco')
+    // That genus is a resolver-backed query: under the full suite's load it
+    // takes longer than expect's 5 s default, as the landmark list does.
+    await expect(page.locator('.species-page h1')).toContainText('in San Francisco', { timeout: LANDMARKS_TIMEOUT })
     await expect(page.locator('.mobile-bottom-bar')).toContainText('Chat')
 
     await openMobileMenu(page)

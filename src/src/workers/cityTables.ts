@@ -58,7 +58,6 @@ export const CITY_ENUM_TYPES = {
   source: 'tree_source_t',
   species: 'tree_species_t',
   name: 'tree_name_t',
-  sourceName: 'tree_source_name_t',
   cultivar: 'tree_cultivar_t',
 } as const
 
@@ -68,17 +67,17 @@ export const VOCAB_KINDS: Record<Exclude<keyof typeof CITY_ENUM_TYPES, 'form'>, 
   source: 'data_source',
   species: 'species',
   name: 'display_name',
-  sourceName: 'tree_name',
   cultivar: 'cultivar',
 }
 
 /**
- * The columns of a block file, in order (COLUMNS in
- * data/world/publish_blocks.py; data/raw/tests/test_publish_world_blocks.py
- * holds the two lists together).
+ * The block columns the worker reads, by name. Every one must be in COLUMNS
+ * in data/world/publish_blocks.py (data/raw/tests/test_publish_world_blocks.py
+ * holds it); the blocks may carry more, which is how a column is added before
+ * the map reads it.
  */
 export const WORLD_BLOCK_COLUMNS = [
-  'tree_id', 'city', 'data_source', 'species', 'cultivar', 'tree_name', 'display_name', 'tree_form', 'plant_date',
+  'tree_id', 'city', 'data_source', 'species', 'cultivar', 'display_name', 'tree_form', 'notable', 'plant_date',
   'diameter_at_breast_height', 'crown_width_m', 'predicted_crown_width_m', 'height_m', 'predicted_height_m',
   'latitude', 'longitude', 'submission_photo_url',
 ] as const
@@ -100,6 +99,24 @@ export const PUBLISHED_TREES_VIEW = 'trees_published'
  * worker loads the cell and puts its table here.
  */
 export const TREES_AT_TOKEN = '__trees_at__'
+/**
+ * In a `query`, one city's notable file (one row per tree with the block bit
+ * `notable` set: tree_id, city, tree_name, significance,
+ * significance_source). The worker reads it from the manifest's URL only when
+ * a query names it, so a map that never opens a notable tree's card never
+ * fetches one, and a card fetches only its own city's.
+ */
+export function notableToken(city: string): string {
+  return `__notable_${city.replace(/[^A-Za-z0-9]/g, '')}__`
+}
+export const NOTABLE_TOKEN_PATTERN = /__notable_([A-Za-z0-9]+)__/g
+
+/** What NOTABLE_TOKEN becomes: the file at `url`, or no rows where the manifest names none. */
+export function notableRelationSql(url: string | null): string {
+  if (url) return `read_parquet(${sqlString(url)})`
+  return `(SELECT CAST(NULL AS VARCHAR) AS tree_id, CAST(NULL AS VARCHAR) AS city, CAST(NULL AS VARCHAR) AS tree_name,
+    CAST(NULL AS VARCHAR) AS significance, CAST(NULL AS VARCHAR) AS significance_source WHERE false)`
+}
 
 /** Statements that remove the world's tables, in dependency order. */
 export function dropWorldTablesSql(cellTables: string[]): string[] {
@@ -231,8 +248,10 @@ function worldRowsSql(files: string[] | null, where: string): string {
       CAST(t.city AS ${CITY_ENUM_TYPES.city}) AS city,
       CAST(t.data_source AS ${CITY_ENUM_TYPES.source}) AS data_source,
       CAST(t.submission_photo_url AS VARCHAR) AS submission_photo_url,
-      CAST(t.display_name AS ${CITY_ENUM_TYPES.name}) AS tree_name,
-      CAST(t.tree_name AS ${CITY_ENUM_TYPES.sourceName}) AS source_tree_name,
+      CAST(t.display_name AS ${CITY_ENUM_TYPES.name}) AS display_name,
+      -- True on a tree with a proper name or a significance blurb, null
+      -- otherwise; the text is in the world's notable file, read on click.
+      CAST(t.notable AS BOOLEAN) AS notable,
       CAST(t.plant_date AS DATE) AS plant_date,
       CAST(t.species AS ${CITY_ENUM_TYPES.species}) AS species,
       CAST(t.cultivar AS ${CITY_ENUM_TYPES.cultivar}) AS cultivar,

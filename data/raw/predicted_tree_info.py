@@ -64,7 +64,7 @@ import io
 import os
 import sys
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterator, Mapping
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -79,12 +79,17 @@ from shared.ingest import (  # noqa: E402
     in_city_territory,
     normalize_species,
     parse_pushdown_filters,
+    report_species_cleanup,
     staging_url,
 )
 
 ID_PREFIX = "pred-"
 # The probability a species or genus label needs before it is published.
 NAME_CONFIDENCE = 0.8
+# Rows turned into Python records at a time.  Boston's three million staged
+# rows as one list of dicts, and a second list built from it, ran the 6 GB
+# city job out of memory; a batch is a few hundred megabytes at its peak.
+BATCH_ROWS = 100_000
 
 
 def staging_name(city_code: str) -> str:
@@ -98,21 +103,27 @@ def staged_location(city_code: str) -> str:
     return staging_url(staging_name(city_code))
 
 
-def load_staged(city_code: str) -> list[Mapping[str, Any]]:
-    """Read one city's staged predictions; a missing file is no rows."""
+def staged_file(city_code: str) -> pq.ParquetFile | None:
+    """One city's staged predictions, unread; None when there is no file."""
     location = staged_location(city_code)
     if not location.startswith(("http://", "https://")):
         path = Path(location)
         if not path.exists():
             print(f"Predicted ingest: no staged file at {path}; emitting 0 rows", file=sys.stderr)
-            return []
-        return pq.read_table(path).to_pylist()
+            return None
+        return pq.ParquetFile(path)
     response = requests.get(location, timeout=120)
     if response.status_code == 404:
         print(f"Predicted ingest: no staged file at {location}; emitting 0 rows", file=sys.stderr)
-        return []
+        return None
     response.raise_for_status()
-    return pq.read_table(io.BytesIO(response.content)).to_pylist()
+    return pq.ParquetFile(io.BytesIO(response.content))
+
+
+def load_staged(city_code: str) -> list[Mapping[str, Any]]:
+    """Read one city's staged predictions; a missing file is no rows."""
+    staged = staged_file(city_code)
+    return [] if staged is None else staged.read().to_pylist()
 
 
 def _confident(record: Mapping[str, Any], label: str) -> str | None:
@@ -167,10 +178,22 @@ SCHEMA = pa.schema(
 )
 
 
-def records_to_table(records, city_code: str) -> pa.Table:
+def records_to_table(
+    records,
+    city_code: str,
+    *,
+    seen_ids: set[str] | None = None,
+    summary: dict[str, int] | None = None,
+    skipped: dict[str, int] | None = None,
+) -> pa.Table:
+    """The canonical rows of *records*.  A caller working through a city in
+    batches passes the same *seen_ids*, *summary* and *skipped* each time and
+    reports them once at the end (`city_tables`); without them this reports
+    its own."""
     data_source = PREDICTED_DATA_SOURCES[city_code]
     rows: list[dict[str, Any]] = []
-    skipped: dict[str, int] = {}
+    report = skipped is None
+    skipped = {} if skipped is None else skipped
 
     def skip(reason: str) -> None:
         skipped[reason] = skipped.get(reason, 0) + 1
@@ -207,10 +230,31 @@ def records_to_table(records, city_code: str) -> pa.Table:
                 "borough": None,
             }
         )
+    if report:
+        report_skipped(skipped, city_code)
+    table = pa.Table.from_pylist(rows, schema=SCHEMA)
+    return enforce_tree_schema(table, city="Predicted", seen_ids=seen_ids, summary=summary)
+
+
+def report_skipped(skipped: Mapping[str, int], city_code: str) -> None:
     for reason, count in sorted(skipped.items()):
         print(f"Predicted ingest: skipped {count} {city_code} rows: {reason}", file=sys.stderr)
-    table = pa.Table.from_pylist(rows, schema=SCHEMA)
-    return enforce_tree_schema(table, city="Predicted")
+
+
+def city_tables(city_code: str) -> Iterator[pa.Table]:
+    """One city's canonical rows, a batch of the staged file at a time."""
+    staged = staged_file(city_code)
+    if staged is None:
+        return
+    seen: set[str] = set()
+    summary: dict[str, int] = {}
+    skipped: dict[str, int] = {}
+    for batch in staged.iter_batches(batch_size=BATCH_ROWS):
+        yield records_to_table(
+            batch.to_pylist(), city_code, seen_ids=seen, summary=summary, skipped=skipped
+        )
+    report_skipped(skipped, city_code)
+    report_species_cleanup(summary, city="Predicted")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -218,9 +262,7 @@ def main(argv: list[str] | None = None) -> None:
     city = filters.get("city")
     codes = [city.upper()] if city else sorted(PREDICTED_DATA_SOURCES)
     tables = [
-        records_to_table(load_staged(code), code)
-        for code in codes
-        if code in PREDICTED_DATA_SOURCES
+        table for code in codes if code in PREDICTED_DATA_SOURCES for table in city_tables(code)
     ]
     emit(pa.concat_tables(tables) if tables else records_to_table([], next(iter(PREDICTED_DATA_SOURCES))))
 

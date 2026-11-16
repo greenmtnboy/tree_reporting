@@ -64,9 +64,13 @@ def write_projection(con, path: Path, code: str, center: tuple[float, float], ro
         "data_source": f"'{code}_OPENDATA'",
         "species": f"[{', '.join(repr(s) for s in species)}][1 + i % {len(species)}]",
         "cultivar": "CASE WHEN i % 7 = 0 THEN 'Armstrong' END",
-        "tree_name": "CASE WHEN i % 3 = 0 THEN 'Street tree' END",
+        "tree_name": "CASE WHEN i % 1000 = 0 THEN 'Old Elm ' || i END",
         "display_name": f"[{', '.join(repr(s + ' (common)') for s in species)}][1 + i % {len(species)}]",
         "tree_form": "'broadleaf'",
+        # Named or blurbed (`is_notable`), true or null as the projection writes it.
+        "notable": "CASE WHEN i % 1000 IN (0, 500) THEN true END",
+        "significance": "CASE WHEN i % 1000 = 500 THEN 'Planted for the centenary' END",
+        "significance_source": f"CASE WHEN i % 1000 = 500 THEN 'NOTABLE_{code}' END",
         "plant_date": "CAST(NULL AS DATE)",
         "diameter_at_breast_height": "CAST(4 + i % 30 AS DOUBLE)",
         "crown_width_m": "CAST(NULL AS DOUBLE)",
@@ -94,8 +98,8 @@ def build(con, tmp_path: Path, sources: dict[str, str], name="out") -> tuple[dic
     out = tmp_path / name
     pb.load_rows(con, sources)
     pb.build_world(con)
-    blocks, vocab = pb.write_files(con, out)
-    manifest = pb.build_manifest(CITIES, blocks, vocab, {code: 1 for code in sources}, AT)
+    blocks, vocab, notable = pb.write_files(con, out)
+    manifest = pb.build_manifest(CITIES, blocks, vocab, notable, {code: 1 for code in sources}, AT)
     pb.validate(manifest, None)
     return manifest, out
 
@@ -133,6 +137,11 @@ def test_a_block_is_the_projection_columns_without_the_watermark(con, world):
     assert [(name, kind) for name, kind, *_ in described] == list(pb.COLUMNS)
     assert manifest["columns"] == [name for name, _ in pb.COLUMNS]
     assert "prediction_inputs_published_through" not in manifest["columns"]
+    # The text stays out of the blocks and the vocabulary: it is the notable
+    # file's, and a block row carries only the bit.
+    assert not {"tree_name", "significance", "significance_source"} & set(manifest["columns"])
+    assert "tree_name" not in pb.VOCAB_COLUMNS
+    assert {name for name, _ in pb.NOTABLE_COLUMNS} >= {"tree_name", "significance", "significance_source"}
 
 
 def test_blocks_from_different_inventories_sit_side_by_side_and_the_manifest_says_whose(world):
@@ -195,6 +204,7 @@ def test_a_rebuild_of_the_same_trees_names_every_file_the_same(con, tmp_path, wo
     again, _ = build(con, tmp_path, sources, name="again")
     assert again["blocks"] == manifest["blocks"]
     assert again["vocab"] == manifest["vocab"]
+    assert notable_files(again) == notable_files(manifest)
     assert pb.content_of(again) == pb.content_of(manifest)
 
 
@@ -209,15 +219,19 @@ def test_one_changed_tree_renames_only_its_block(con, tmp_path, world):
     changed = [a[0] for a, b in zip(manifest["blocks"], edited["blocks"]) if a != b]
     assert len(changed) == 1
     assert edited["vocab"] == manifest["vocab"]
+    assert notable_files(edited) == notable_files(manifest)
 
 
 def test_a_projection_built_before_a_column_existed_reads_it_as_null(con, tmp_path):
     older = write_projection(con, tmp_path / "usbos.parquet", "USBOS", BOSTON, 50, spread=0.01,
-                             drop=("height_m", "predicted_height_m", "cultivar"))
+                             drop=("height_m", "predicted_height_m", "cultivar", "notable", "significance",
+                                   "significance_source"))
     manifest, out = build(con, tmp_path, {"USBOS": older})
     files = ", ".join(f"'{(out / pb.block_name(b[0], b[2])).as_posix()}'" for b in manifest["blocks"])
     assert con.execute(
-        f"SELECT count(*), count(height_m), count(cultivar) FROM read_parquet([{files}])").fetchone() == (50, 0, 0)
+        f"SELECT count(*), count(height_m), count(cultivar), count(notable) FROM read_parquet([{files}])"
+    ).fetchone() == (50, 0, 0, 0)
+    assert notable_files(manifest) == {"USBOS": None}
 
 
 def test_a_projection_missing_a_required_column_fails_the_run(con, tmp_path):
@@ -235,6 +249,80 @@ def test_rows_without_a_position_are_left_out(con, tmp_path):
     )
     manifest, _ = build(con, tmp_path, {"USBOS": holed.as_posix()})
     assert manifest["trees"] == 19
+
+
+# ---------------------------------------------------------------------------
+# Notable trees: one bit in the blocks, the text in a file of its own
+# ---------------------------------------------------------------------------
+
+
+def blocks_of(manifest: dict, out: Path) -> str:
+    return ", ".join(f"'{(out / pb.block_name(b[0], b[2])).as_posix()}'" for b in manifest["blocks"])
+
+
+def notable_files(manifest: dict) -> dict:
+    """Each listed city's notable file, None where it has no notable tree."""
+    return {c["code"]: c["notable"] for c in manifest["cities"]}
+
+
+def test_a_block_carries_the_notable_bit_true_or_null_never_false(con, world):
+    manifest, out, _ = world
+    flags = dict(con.execute(
+        f"SELECT notable, count(*) FROM read_parquet([{blocks_of(manifest, out)}]) GROUP BY 1").fetchall())
+    # Boston's 5,000 rows have ten notable trees, Burlington's 800 two.
+    assert flags == {True: 12, None: 5788}
+
+
+def test_each_city_has_its_own_notable_file_named_in_its_manifest_entry(con, world):
+    manifest, out, _ = world
+    files = notable_files(manifest)
+    assert "notable" not in manifest, "no world-wide file: a city's text is its own"
+    for code, name in files.items():
+        assert re.fullmatch(rf"notable-{code.lower()}-[0-9a-f]{{16}}\.parquet", name)
+        cities = {row[0] for row in con.execute(f"SELECT DISTINCT city FROM read_parquet('{(out / name).as_posix()}')").fetchall()}
+        assert cities == {code}
+
+
+def test_the_notable_files_hold_the_text_of_every_notable_block_row_and_nothing_else(con, world):
+    manifest, out, _ = world
+    paths = [(out / name).as_posix() for name in notable_files(manifest).values()]
+    described = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{paths[0]}')").fetchall()
+    assert [(name, kind) for name, kind, *_ in described] == list(pb.NOTABLE_COLUMNS)
+    rows = con.execute(f"SELECT * FROM read_parquet({paths}) ORDER BY city, tree_id").fetchall()
+    flagged = con.execute(
+        f"SELECT tree_id, city FROM read_parquet([{blocks_of(manifest, out)}]) WHERE notable ORDER BY city, tree_id"
+    ).fetchall()
+    assert [(tree_id, city) for tree_id, city, *_ in rows] == flagged
+    by_id = {row[0]: row for row in rows}
+    assert by_id["usbos-1000"][2:] == ("Old Elm 1000", None, None)
+    assert by_id["usbtv-500"][2:] == (None, "Planted for the centenary", "NOTABLE_USBTV")
+
+
+def test_a_notable_tree_two_cities_publish_is_one_notable_row(con, tmp_path):
+    boston = write_projection(con, tmp_path / "usbos.parquet", "USBOS", BOSTON, 1001, spread=0.01)
+    neighbour = tmp_path / "ussto.parquet"
+    con.execute(
+        f"COPY (SELECT * REPLACE ('USSTO' AS city) FROM read_parquet('{boston}') WHERE tree_id = 'usbos-1000') "
+        f"TO '{neighbour.as_posix()}' (FORMAT parquet)"
+    )
+    manifest, out = build(con, tmp_path, {"USBOS": boston, "USSTO": neighbour.as_posix()})
+    rows = con.execute(f"SELECT tree_id, city FROM read_parquet('{(out / notable_files(manifest)['USBOS']).as_posix()}')").fetchall()
+    assert sorted(rows) == [("usbos-0", "USBOS"), ("usbos-1000", "USBOS"), ("usbos-500", "USBOS")]
+    assert set(notable_files(manifest)) == {"USBOS"}
+
+
+def test_a_changed_blurb_renames_its_citys_notable_file_and_nothing_else(con, tmp_path, world):
+    manifest, _, sources = world
+    edited_path = tmp_path / "usbos-edited.parquet"
+    con.execute(
+        f"COPY (SELECT * REPLACE (CASE WHEN tree_id = 'usbos-500' THEN 'Planted in 1925' ELSE significance END "
+        f"AS significance) FROM read_parquet('{sources['USBOS']}')) TO '{edited_path.as_posix()}' (FORMAT parquet)"
+    )
+    edited, _ = build(con, tmp_path, {**sources, "USBOS": edited_path.as_posix()}, name="edited")
+    assert edited["blocks"] == manifest["blocks"]
+    assert notable_files(edited)["USBOS"] != notable_files(manifest)["USBOS"]
+    assert notable_files(edited)["USBTV"] == notable_files(manifest)["USBTV"]
+    assert pb.content_of(edited) != pb.content_of(manifest)
 
 
 # ---------------------------------------------------------------------------
@@ -274,9 +362,9 @@ def test_rows_of_a_city_the_registry_does_not_list_fail_the_run(con, tmp_path):
     stray = write_projection(con, tmp_path / "xxabc.parquet", "XXABC", BOSTON, 5, spread=0.01)
     pb.load_rows(con, {"XXABC": stray})
     pb.build_world(con)
-    blocks, vocab = pb.write_files(con, tmp_path / "out")
+    blocks, vocab, notable = pb.write_files(con, tmp_path / "out")
     with pytest.raises(PublishError, match="XXABC"):
-        pb.build_manifest(CITIES, blocks, vocab, {}, AT)
+        pb.build_manifest(CITIES, blocks, vocab, notable, {}, AT)
 
 
 def test_an_unchanged_world_is_not_a_new_manifest(world):
@@ -295,6 +383,9 @@ def test_only_files_no_manifest_names_and_older_than_the_retention_are_deleted(w
     listed = {
         f"{pb.PREFIX}/{kept_name}": {"generation": 1, "modified": old},
         f"{pb.PREFIX}/{manifest['vocab']}": {"generation": 2, "modified": old},
+        **{f"{pb.PREFIX}/{name}": {"generation": 8, "modified": old} for name in notable_files(manifest).values()},
+        f"{pb.PREFIX}/notable-usbos-3333333333333333.parquet": {"generation": 9, "modified": old},
+        f"{pb.PREFIX}/notable-3333333333333333.parquet": {"generation": 10, "modified": old},
         f"{pb.PREFIX}/blocks/1-0000000000000000.parquet": {"generation": 3, "modified": old},
         f"{pb.PREFIX}/blocks/2-1111111111111111.parquet": {"generation": 4, "modified": now - timedelta(hours=5)},
         f"{pb.PREFIX}/vocab-2222222222222222.parquet": {"generation": 5, "modified": old},
@@ -303,11 +394,19 @@ def test_only_files_no_manifest_names_and_older_than_the_retention_are_deleted(w
     }
     assert pb.stale_objects(listed, pb.referenced(manifest), now) == [
         f"{pb.PREFIX}/blocks/1-0000000000000000.parquet",
+        f"{pb.PREFIX}/notable-3333333333333333.parquet",
+        f"{pb.PREFIX}/notable-usbos-3333333333333333.parquet",
         f"{pb.PREFIX}/vocab-2222222222222222.parquet",
     ]
     # The manifest being replaced keeps its files too: a tab that opened on it is still reading them.
-    previous = {"blocks": [[1, 5, "0000000000000000", [0, 5]]], "vocab": "vocab-2222222222222222.parquet"}
+    previous = {"blocks": [[1, 5, "0000000000000000", [0, 5]]], "vocab": "vocab-2222222222222222.parquet",
+                "cities": [{"code": "USBOS", "notable": "notable-usbos-3333333333333333.parquet"}],
+                # The manifest of 2026-11-16 named one world-wide file at the top level.
+                "notable": "notable-3333333333333333.parquet"}
     assert pb.stale_objects(listed, pb.referenced(manifest) | pb.referenced(previous), now) == []
+    # A manifest from before any notable file names none.
+    before = {"blocks": previous["blocks"], "vocab": previous["vocab"], "cities": [{"code": "USBOS"}]}
+    assert pb.referenced(before) == {"blocks/1-0000000000000000.parquet", "vocab-2222222222222222.parquet"}
     assert pb.referenced(None) == set()
 
 
@@ -320,12 +419,17 @@ def frontend(path: str) -> str:
     return (REPO / "src" / "src" / path).read_text(encoding="utf-8")
 
 
-def test_the_block_columns_are_the_ones_the_worker_reads():
+def test_the_blocks_carry_every_column_the_worker_reads():
+    """The worker reads its columns by name, so a column the blocks add is
+    harmless to a map that does not read it yet, and one they drop breaks
+    every open tab. The blocks gain a column before the worker reads it, and
+    lose one only once no released map reads it."""
     source = frontend("workers/cityTables.ts")
     listed = re.search(r"export const WORLD_BLOCK_COLUMNS = \[(.*?)\] as const", source, re.S).group(1)
-    assert re.findall(r"'([a-z_]+)'", listed) == [name for name, _ in pb.COLUMNS]
+    published = {name for name, _ in pb.COLUMNS}
+    assert set(re.findall(r"'([a-z_]+)'", listed)) <= published
     kinds = re.search(r"export const VOCAB_KINDS[^=]*= \{(.*?)\n\}", source, re.S).group(1)
-    assert sorted(re.findall(r": '([a-z_]+)'", kinds)) == sorted(pb.VOCAB_COLUMNS)
+    assert set(re.findall(r": '([a-z_]+)'", kinds)) <= set(pb.VOCAB_COLUMNS)
 
 
 def test_the_block_grid_is_the_maps_chunk_grid():

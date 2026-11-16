@@ -69,7 +69,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'Melbourne', label: 'Glen Eira City Council Park and Street Trees (data.gov.au, CC BY 2.5 AU)', url: 'https://data.gov.au/data/dataset/park-and-street-trees' },
   { city: 'Melbourne', label: 'Hobsons Bay City Council Street and Park Trees (data.gov.au, CC BY 2.5 AU)', url: 'https://data.gov.au/data/dataset/hbcc-street-and-park-trees' },
   { city: 'Buenos Aires', label: 'Buenos Aires Data (Arbolado publico lineal)', url: 'https://data.buenosaires.gob.ar/dataset/arbolado-publico-lineal' },
-  { city: 'Los Angeles', label: 'Los Angeles Open Data (Street Tree Inventory - 1990s)', url: 'https://data.lacity.org/api/views/vt5t-mscf' },
+  { city: 'Los Angeles', label: 'LA GeoHub (Trees, Bureau of Street Services)', url: 'https://www.arcgis.com/home/item.html?id=266c6255b1fc4ae8b8f100d8696e1fa4' },
   { city: 'Los Angeles', label: 'City of West Hollywood - City Tree Inventory (2015, CC0 1.0)', url: 'https://data.weho.org/Infrastructure/City-Tree-Inventory/qqwt-wx9z' },
   { city: 'Washington, DC', label: 'Open Data DC (Urban Forestry Street Trees)', url: 'https://opendata.dc.gov/datasets/DCGIS::urban-forestry-street-trees' },
   { city: 'Tempe', label: 'City of Tempe Tree Inventory', url: 'https://data.tempe.gov/datasets/tempegov::tree-inventory' },

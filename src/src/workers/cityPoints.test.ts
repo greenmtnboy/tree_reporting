@@ -104,7 +104,8 @@ describe('point chunk SQL', () => {
     await conn.run(`ALTER TABLE trees_fast ADD COLUMN crown_width_m DOUBLE; ALTER TABLE trees_fast ADD COLUMN predicted_crown_width_m FLOAT;
       UPDATE trees_fast SET crown_width_m = 12.3 WHERE tree_id = 'a';
       UPDATE trees_fast SET crown_width_m = 'NaN', predicted_crown_width_m = 7 WHERE tree_id = 'b';
-      UPDATE trees_fast SET crown_width_m = 90 WHERE tree_id = 'c';`)
+      UPDATE trees_fast SET crown_width_m = 90 WHERE tree_id = 'c';
+      ALTER TABLE trees_fast ADD COLUMN notable BOOLEAN; UPDATE trees_fast SET notable = true WHERE tree_id = 'a';`)
     const src = { prelude: 'WITH', from: 'trees_fast tf', where: '', dbh: 'COALESCE(tf.dbh, 3)' }
     const keyOf = (lng: number, lat: number) => { const [x, y] = tile(lng, lat, CHUNK_ZOOM); return chunkKey(x, y) }
     const boston = keyOf(-71.06, 42.36), east = keyOf(-71.06 + 360 / 4096, 42.36), sydney = keyOf(151.2, -33.87)

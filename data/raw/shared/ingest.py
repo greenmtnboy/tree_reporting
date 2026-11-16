@@ -2681,8 +2681,11 @@ DEDUP_CELL_METRES: dict[str, int] = {
     "AUMEL": 10,
     # 61.0% over n=421: duplicate-dominated.
     "ARBUE": 20,
-    # 67.2% over n=296: duplicate-dominated.
-    "USLAX": 20,
+    # Recalibrated on the Bureau of Street Services layer (2026-11): 99.4%
+    # mutual-NN under 2 m, 86.8% at 2-5 m, 41.8% at 5-10 m (n=880) -- a clean
+    # 5 m break.  The old 20 m cell (67.2% over n=296) was measured against the
+    # 1990s Socrata inventory, whose coordinates were truncated to ~90 m.
+    "USLAX": 10,
     # 35.1% over n=558.
     "USWAS": 10,
     # National Garden inventory is small and dense; not yet measured, default.

@@ -79,7 +79,10 @@ export async function writeCityProjection({ city, rows, bbox, species }: CityFix
       '${lower(city)}-' || i AS tree_id,
       '${city}' AS city,
       'FIXTURE' AS data_source,
-      CAST(NULL AS VARCHAR) AS tree_name,
+      CASE WHEN i % 997 = 0 THEN 'Fixture elm ' || i END AS tree_name,
+      CASE WHEN i % 997 IN (0, 500) THEN true END AS notable,
+      CASE WHEN i % 997 = 500 THEN 'Planted for the fixture' END AS significance,
+      CASE WHEN i % 997 = 500 THEN 'NOTABLE_FIXTURE' END AS significance_source,
       ['Red maple', 'Pin oak', 'Honeylocust', 'London plane'][1 + i % 4] AS display_name,
       ['broadleaf', 'spreading', 'columnar', 'default'][1 + i % 4] AS tree_form,
       CAST(NULL AS DATE) AS plant_date,
@@ -138,6 +141,10 @@ export async function writeWorld(cities: string[], build = '0'): Promise<{ block
   conn.query(`COPY (${Object.values(VOCAB_KINDS).map((column) =>
     `SELECT '${column}' AS kind, ${column} AS value FROM world WHERE ${column} IS NOT NULL GROUP BY 2`).join(' UNION ALL ')}
     ) TO '${WORLD_DIR}/${vocab}' (FORMAT parquet, COMPRESSION zstd)`)
+  const notable = `notable-${hash(1)}.parquet`
+  conn.query(`COPY (SELECT tree_id, city, tree_name, significance, significance_source
+    FROM read_parquet([${sources}], union_by_name = true) WHERE notable ORDER BY city, tree_id
+    ) TO '${WORLD_DIR}/${notable}' (FORMAT parquet, COMPRESSION zstd)`)
   const perCity = conn.query(`SELECT city, count(*) AS n, count(DISTINCT ${block}) AS blocks FROM world GROUP BY 1`).toArray()
   const trees = [...perBlock.values()].reduce((sum, b) => sum + b.rows, 0)
   conn.close()
@@ -147,6 +154,7 @@ export async function writeWorld(cities: string[], build = '0'): Promise<{ block
     block_zoom: BLOCK_ZOOM,
     columns: WORLD_BLOCK_COLUMNS,
     vocab,
+    notable,
     trees,
     cities: cities.map((city) => {
       const row = perCity.find((r) => String(r.city) === city)

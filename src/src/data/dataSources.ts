@@ -75,7 +75,7 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   GLEN_EIRA: 'Glen Eira City Council',
   HOBSONS_BAY: 'Hobsons Bay City Council',
   BUENOSAIRES_OPENDATA: 'Buenos Aires Data',
-  LOSANGELES_OPENDATA: 'LA Open Data',
+  LOSANGELES_OPENDATA: 'LA Bureau of Street Services',
   WEST_HOLLYWOOD: 'West Hollywood Open Data',
   WASHINGTONDC_OPENDATA: 'Open Data DC',
   TEMPE_OPENDATA: 'City of Tempe',

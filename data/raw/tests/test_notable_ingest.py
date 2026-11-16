@@ -150,6 +150,42 @@ def test_two_register_rows_never_share_a_tree():
     assert links == [None, "oak"]  # 1 m beats 2 m, and the loser stays unlinked
 
 
+def test_a_reviewed_link_wins_over_the_rule_and_takes_its_tree_first():
+    """Milan's 15: the register's point is 43 m off and its trunk stale; a person matched it."""
+    old = dict(register_row("Platanus x hispanica", HERE, 111 / 2.54), tree_id="mon-15")
+    near = dict(register_row("Platanus x hispanica", north(HERE, 2), 215 / 2.54), tree_id="mon-other")
+    links = link_to_inventory(
+        [old, near],
+        inventory([("big-plane", "Platanus x hispanica", north(HERE, 43), 215 / 2.54),
+                   ("young", "Platanus x hispanica", north(HERE, 5), 110 / 2.54)]),
+        reviewed={"mon-15": "big-plane"},
+    )
+    # The rule would have given `young` to mon-15; the reviewed tree is taken before it runs.
+    assert links == ["big-plane", None]
+
+
+def test_a_reviewed_link_to_a_tree_the_inventory_lost_is_not_linked(capsys):
+    links = link_to_inventory(
+        [dict(register_row("Platanus x hispanica", HERE, 80.0), tree_id="mon-15")],
+        inventory([("other", "Platanus x hispanica", north(HERE, 400), 80.0)]),
+        reviewed={"mon-15": "felled"},
+    )
+    assert links == [None]
+    assert "no longer holds" in capsys.readouterr().err
+
+
+def test_two_reviewed_links_to_one_tree_fail():
+    rows = [dict(register_row("Celtis australis", HERE, 50.0), tree_id=t) for t in ("a", "b")]
+    with pytest.raises(ValueError, match="two register rows"):
+        link_to_inventory(rows, inventory([("c", "Celtis australis", HERE, 50.0)]), reviewed={"a": "c", "b": "c"})
+
+
+def test_milan_reviewed_links_name_register_rows_and_distinct_trees(milan):
+    assert all(key.startswith("mil-mon-") for key in milan.REVIEWED_LINKS)
+    assert len(set(milan.REVIEWED_LINKS.values())) == len(milan.REVIEWED_LINKS)
+    assert milan.REVIEWED_LINKS["mil-mon-15-F205-MI-03"] == "mil-40459"
+
+
 def test_an_empty_register_needs_no_inventory():
     assert link_to_inventory([], None) == []
 
@@ -195,10 +231,10 @@ def test_milan_species_drops_the_botanical_authority(milan):
 
 def test_milan_significance_says_what_the_register_says(milan):
     text = milan.significance_for(feature("13/F205/MI/03", "x", "Taxodium disticum", "725", "25", "vigente")["properties"])
+    # No girth or height: the card shows the tree's own measurements.
     assert text == (
         "Listed on Italy's national register of monumental trees (no. 13/F205/MI/03) "
-        "for its age and/or size. Trunk girth 725 cm, height 25 m. "
-        "Also declared of notable public interest."
+        "for its age and/or size. Also declared of notable public interest."
     )
     assert "notable public interest" not in milan.significance_for(
         feature("03/F205/MI/03", "x", "Platanus", "625")["properties"]
@@ -238,9 +274,10 @@ def test_milan_build_publishes_names_and_links(milan):
     assert rows["mil-mon-14-F205-MI-03"]["linked_tree_id"] == "mil-40114"
     assert rows["mil-mon-14-F205-MI-03"]["tree_name"] == "Il Platano Siamese di Villa Litta"
     assert rows["mil-mon-14-F205-MI-03"]["data_source"] == "NOTABLE_ITMIL"
-    assert rows["mil-mon-07-F205-MI-03"]["linked_tree_id"] is None
-    assert rows["mil-mon-07-F205-MI-03"]["tree_name"] is None
-    assert rows["mil-mon-07-F205-MI-03"]["significance"].startswith("Listed on Italy's")
+    assert rows["mil-mon-14-F205-MI-03"]["significance"].startswith("Listed on Italy's")
+    # The hackberry matches no inventory tree: the register is metadata, so it adds no tree.
+    assert "mil-mon-07-F205-MI-03" not in rows
+    assert len(rows) == 1
 
 
 # --- Milan's inventory --------------------------------------------------------

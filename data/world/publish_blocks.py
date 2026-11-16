@@ -9,6 +9,7 @@
     gs://trilogy_public_models/duckdb/trees/world/v1/manifest.json
     gs://trilogy_public_models/duckdb/trees/world/v1/blocks/{key}-{hash}.parquet
     gs://trilogy_public_models/duckdb/trees/world/v1/vocab-{hash}.parquet
+    gs://trilogy_public_models/duckdb/trees/world/v1/notable-{code}-{hash}.parquet
 
 Run by the `publish-world-blocks` [[cloud.job]] (`world_tree_blocks.preql`
 `call`s this script) after the browser projections. The map reads these and
@@ -32,10 +33,16 @@ What it writes:
   territories) is written once.
 - **The vocabulary.** Every distinct value of the string columns the worker
   stores as ENUMs, one file for the world (a few hundred KB).
+- **The notable files.** One per city, as every published file is, named in
+  that city's manifest entry (`notable`; null when it has none). One row per
+  tree whose block row has `notable`
+  set: its name, its significance and where that came from. A block carries
+  only the bit; the map fetches this file the first time a notable tree's
+  card opens (docs/NAMED_TREES_AND_CROWN_POSITION.md). Hundreds of rows.
 - **The manifest.** The list of blocks with their row counts and cities, the
   vocabulary's name, and each city's tree count. It is the commit point.
 
-**Blocks and the vocabulary are content-addressed** (the name carries a hash
+**Blocks, the vocabulary and the notable file are content-addressed** (the name carries a hash
 of the bytes) and immutable, so a manifest never points at a file from
 another build, a browser may cache a block for a year, and a block whose
 trees did not change is not uploaded again. The manifest is written last,
@@ -98,17 +105,22 @@ DEFAULT_MEMORY_LIMIT = "2500MB"
 MANIFEST_CACHE_CONTROL = "public,max-age=300"
 IMMUTABLE_CACHE_CONTROL = "public,max-age=31536000,immutable"
 
-#: The columns of a block, in order: the projection's, less its watermark.
-#: `test_publish_world_blocks.py` holds the worker's read to the same list.
+#: The columns of a block, in order: the projection's, less its watermark and
+#: the notable text. A tree's own name and blurb are null on nearly every row,
+#: so they live in the city's notable file (NOTABLE_COLUMNS), read when a
+#: notable tree's card opens, never in a block every resident row carries.
+#: `test_publish_world_blocks.py` holds the worker's read to a subset of it.
 COLUMNS = (
     ("tree_id", "VARCHAR"),
     ("city", "VARCHAR"),
     ("data_source", "VARCHAR"),
     ("species", "VARCHAR"),
     ("cultivar", "VARCHAR"),
-    ("tree_name", "VARCHAR"),
     ("display_name", "VARCHAR"),
     ("tree_form", "VARCHAR"),
+    # True on a tree with a proper name or a significance blurb, null
+    # otherwise: an all-null column is a few bytes per row group.
+    ("notable", "BOOLEAN"),
     ("plant_date", "DATE"),
     ("diameter_at_breast_height", "DOUBLE"),
     ("crown_width_m", "DOUBLE"),
@@ -122,10 +134,19 @@ COLUMNS = (
     ("submission_photo_url", "VARCHAR"),
 )
 #: Columns a projection built before they existed may lack; read as null.
-OPTIONAL_COLUMNS = {"cultivar", "crown_width_m", "height_m", "predicted_height_m", "submission_photo_url"}
+OPTIONAL_COLUMNS = {"cultivar", "crown_width_m", "height_m", "predicted_height_m", "submission_photo_url", "notable"}
 #: The string columns the worker stores as ENUMs (CITY_ENUM_TYPES in
 #: src/src/workers/cityTables.ts), as `kind` in the vocabulary file.
-VOCAB_COLUMNS = ("city", "data_source", "species", "cultivar", "tree_name", "display_name")
+VOCAB_COLUMNS = ("city", "data_source", "species", "cultivar", "display_name")
+#: The notable file's columns: the text a notable tree's card shows, keyed by
+#: the block row it belongs to. A projection without one reads it as null.
+NOTABLE_COLUMNS = (
+    ("tree_id", "VARCHAR"),
+    ("city", "VARCHAR"),
+    ("tree_name", "VARCHAR"),
+    ("significance", "VARCHAR"),
+    ("significance_source", "VARCHAR"),
+)
 
 
 def log(message: str) -> None:
@@ -142,6 +163,10 @@ def block_name(key: int, digest: str) -> str:
 
 def vocab_name(digest: str) -> str:
     return f"vocab-{digest}.parquet"
+
+
+def notable_name(code: str, digest: str) -> str:
+    return f"notable-{code.lower()}-{digest}.parquet"
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +288,9 @@ def load_rows(con, sources: dict[str, str]) -> dict[str, int]:
         + ", ".join(f"{name} {kind}" for name, kind in COLUMNS)
         + ", xt INTEGER, yt INTEGER)"
     )
+    con.execute(
+        "CREATE OR REPLACE TABLE notable_staged (" + ", ".join(f"{name} {kind}" for name, kind in NOTABLE_COLUMNS) + ")"
+    )
     read: dict[str, int] = {}
     for code, source in sources.items():
         have = {row[0] for row in con.execute(f"DESCRIBE SELECT * FROM read_parquet('{source}')").fetchall()}
@@ -277,6 +305,14 @@ def load_rows(con, sources: dict[str, str]) -> dict[str, int]:
             "WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND tree_id IS NOT NULL"
         )
         read[code] = con.execute("SELECT count(*) FROM staged WHERE city = ?", [code]).fetchone()[0]
+        if "notable" in have:
+            notable = ", ".join(
+                f"CAST({name if name in have else 'NULL'} AS {kind}) AS {name}" for name, kind in NOTABLE_COLUMNS
+            )
+            con.execute(
+                f"INSERT INTO notable_staged SELECT {notable} FROM read_parquet('{source}') "
+                "WHERE notable AND latitude IS NOT NULL AND longitude IS NOT NULL AND tree_id IS NOT NULL"
+            )
     return read
 
 
@@ -301,9 +337,11 @@ def build_world(con) -> None:
     con.execute("DROP TABLE staged")
 
 
-def write_files(con, out: Path) -> tuple[list[dict], str]:
-    """The block files and the vocabulary into `out`, named by content.
-    Returns the blocks (`key`, `rows`, `hash`, `cities`) and the vocabulary's name."""
+def write_files(con, out: Path) -> tuple[list[dict], str, str]:
+    """The block files, the vocabulary and each city's notable file into
+    `out`, named by content. Returns the blocks (`key`, `rows`, `hash`,
+    `cities`), the vocabulary's name and the notable files' names by city
+    code (only cities with a notable tree)."""
     (out / "blocks").mkdir(parents=True, exist_ok=True)
     names = ", ".join(name for name, _ in COLUMNS)
     options = f"FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE {ROW_GROUP_SIZE}"
@@ -333,11 +371,28 @@ def write_files(con, out: Path) -> tuple[list[dict], str]:
     con.execute(f"COPY (SELECT kind, value FROM ({union}) ORDER BY kind, value) TO '{vocab_scratch.as_posix()}' ({options})")
     vocab = vocab_name(hashlib.sha256(vocab_scratch.read_bytes()).hexdigest()[:16])
     vocab_scratch.replace(out / vocab)
-    return list(by_block.values()), vocab
+
+    # The row the world kept: a tree two cities publish is one block row, so
+    # it is one notable row, under the city that block row names.
+    notable_scratch = out / "_notable.parquet"
+    notable_names = ", ".join(f"n.{name}" for name, _ in NOTABLE_COLUMNS)
+    con.execute(
+        f"CREATE OR REPLACE TEMP TABLE notable_kept AS SELECT {notable_names} "
+        "FROM notable_staged n JOIN world w USING (tree_id, city) WHERE w.notable"
+    )
+    notable: dict[str, str] = {}
+    for (code,) in con.execute("SELECT DISTINCT city FROM notable_kept ORDER BY 1").fetchall():
+        con.execute(
+            f"COPY (SELECT * FROM notable_kept WHERE city = '{code}' ORDER BY tree_id) "
+            f"TO '{notable_scratch.as_posix()}' ({options})"
+        )
+        notable[code] = notable_name(code, hashlib.sha256(notable_scratch.read_bytes()).hexdigest()[:16])
+        notable_scratch.replace(out / notable[code])
+    return list(by_block.values()), vocab, notable
 
 
-def build_manifest(cities: list[dict], blocks: list[dict], vocab: str, inputs: dict[str, int | None],
-                   generated_at: str) -> dict:
+def build_manifest(cities: list[dict], blocks: list[dict], vocab: str, notable: dict[str, str],
+                   inputs: dict[str, int | None], generated_at: str) -> dict:
     """The manifest: what the map fetches first.
 
     `blocks` rows are `[key, rows, hash, [city index, rows, ...]]`, the city
@@ -362,7 +417,7 @@ def build_manifest(cities: list[dict], blocks: list[dict], vocab: str, inputs: d
         "trees": sum(block["rows"] for block in blocks),
         "cities": [
             {"code": c["code"], "name": c["name"], "center": c["coordinates"], "trees": trees[c["code"]],
-             "blocks": count[c["code"]], "generation": inputs.get(c["code"])}
+             "blocks": count[c["code"]], "notable": notable.get(c["code"]), "generation": inputs.get(c["code"])}
             for c in listed
         ],
         "blocks": [
@@ -411,10 +466,21 @@ def content_of(manifest: dict) -> dict:
 
 
 def referenced(manifest: dict | None) -> set[str]:
-    """Object names (under PREFIX) a manifest points at."""
+    """Object names (under PREFIX) a manifest points at: blocks, the
+    vocabulary and each city's notable file (a manifest of 2026-11-16 named
+    one world file at the top level instead)."""
     if manifest is None:
         return set()
-    return {block_name(b[0], b[2]) for b in manifest["blocks"]} | {manifest["vocab"]}
+    notable = {c["notable"] for c in manifest["cities"] if c.get("notable")}
+    files = {manifest["vocab"]} | notable | ({manifest["notable"]} if manifest.get("notable") else set())
+    return {block_name(b[0], b[2]) for b in manifest["blocks"]} | files
+
+
+def parquet_rows(path: Path) -> int:
+    """A parquet file's row count, from its footer."""
+    import duckdb
+
+    return duckdb.sql(f"SELECT count(*) FROM read_parquet('{path.as_posix()}')").fetchone()[0]
 
 
 def dumps(manifest: dict) -> bytes:
@@ -439,12 +505,12 @@ def snapshot_inputs(cities: list[dict], bucket: Bucket | None) -> dict[str, int 
 
 
 def stale_objects(listed: dict[str, dict], keep: set[str], now: datetime) -> list[str]:
-    """Blocks and vocabularies no kept manifest names, old enough to delete."""
+    """Blocks, vocabularies and notable files no kept manifest names, old enough to delete."""
     cutoff = now - timedelta(days=RETAIN_DAYS)
     stale = []
     for name, meta in listed.items():
         relative = name.removeprefix(f"{PREFIX}/")
-        if not (relative.startswith("blocks/") or relative.startswith("vocab-")) or not relative.endswith(".parquet"):
+        if not relative.startswith(("blocks/", "vocab-", "notable-")) or not relative.endswith(".parquet"):
             continue
         if relative not in keep and meta["modified"] < cutoff:
             stale.append(name)
@@ -493,10 +559,10 @@ def main(argv: list[str] | None = None) -> int:
         con = connect(workdir)
         read = load_rows(con, sources)
         build_world(con)
-        blocks, vocab = write_files(con, out)
+        blocks, vocab, notable = write_files(con, out)
         con.close()
 
-        manifest = build_manifest(cities, blocks, vocab, inputs, started)
+        manifest = build_manifest(cities, blocks, vocab, notable, inputs, started)
         validate(manifest, live, force=args.force)
         body = dumps(manifest)
         (out / "manifest.json").write_bytes(body)
@@ -505,6 +571,7 @@ def main(argv: list[str] | None = None) -> int:
             f"candidate: {manifest['trees']:,} trees in {len(blocks):,} blocks from {len(manifest['cities'])} cities "
             f"({duplicates:,} rows another city also publishes dropped), "
             f"{sum((out / block_name(b['key'], b['hash'])).stat().st_size for b in blocks) / 1e6:.0f} MB of blocks, "
+            f"{sum(parquet_rows(out / name) for name in notable.values())} notable trees in {len(notable)} cities' files, "
             f"manifest {len(body):,} bytes"
         )
 
