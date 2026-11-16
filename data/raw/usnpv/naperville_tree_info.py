@@ -40,11 +40,10 @@ inverted common names (`ASH - GREEN`, `HONEYLOCUST`, `MAPLE - FREEMAN`), and
 the 156 codes the standing trees use, 66,995 of 72,350 rows.  `GENUS` and
 `FAMILY` are scientific but blank on 40% of active rows and misspelt in the
 domain (`Gleditsa`, `Crateagus`, `Koelreutaria`), so they are not used.
-The 21 tree names in use that the shared table does not resolve are
-answered by `LOCAL_COMMON_NAMES` below (5,145 rows; 3,367 of them
-`ELM - HYBRID`, the city's Accolade/Triumph/Frontier elms, which resolve to
-the genus because they are interspecific hybrids), along with 11 more
-domain names no standing tree uses yet.  Each is a candidate for the shared table.  The
+The other 21 tree names in use (5,145 rows; 3,367 of them `ELM - HYBRID`,
+the city's Accolade/Triumph/Frontier elms, which resolve to the genus because
+they are interspecific hybrids), and 11 domain names no standing tree uses
+yet, are in the shared table's Naperville section.  The
 remaining 210 rows (146 `UNKNOWN`, 64 blank) publish as `Unknown`.
 
 `CULTIVAR` (filled on 15% of active rows: `Autumn Blaze` 6,087, `Bradford`
@@ -100,50 +99,6 @@ STANDING_STATUSES = frozenset({"Active", "Private-Active"})
 # `ROWTREE_TYPE` codes that are a place, not a tree.
 NOT_A_TREE_TYPES = frozenset({"SITE", "STUMP", "NO SITE", "ANY"})
 
-# Domain names `species_from_common_name` does not resolve today, with the
-# accepted name for each (POWO).  A hybrid or a bare common genus resolves to
-# the genus, as the shared table does.  Delete an entry once the shared table
-# carries it.
-LOCAL_COMMON_NAMES: dict[str, str] = {
-    "ELM - HYBRID": "Ulmus",
-    "MAPLE - MIYABE": "Acer miyabei",
-    "LILAC - PEKING": "Syringa pekinensis",
-    "HORNBEAM": "Carpinus",
-    "ARBORVITAE": "Thuja",
-    "PERSIMMON": "Diospyros",
-    "HOPHORNBEAM - AMERICAN": "Ostrya virginiana",
-    "TUPELO - BLACK": "Nyssa sylvatica",
-    "OAK - HYBRID": "Quercus",
-    "CORKTREE": "Phellodendron",
-    "MAGNOLIA - HYBRID": "Magnolia",
-    "FILBERT": "Corylus",
-    "OAK - URBAN PINNACLE": "Quercus macrocarpa",
-    "DOGWOOD - CORNELIANCHERRY": "Cornus mas",
-    "MAGNOLIA - CUCUMBER": "Magnolia acuminata",
-    "MAPLE - THREE FLOWERS": "Acer triflorum",
-    "FIR - CONCOLOR": "Abies concolor",
-    "WAHOO": "Euonymus atropurpureus",
-    "BIRCH - HYBRID": "Betula",
-    "LARCH - AMERICAN": "Larix laricina",
-    "HAWTHORN - HYBRID": "Crataegus",
-    "DOGWOOD - HYBRID": "Cornus",
-    "DOGWOOD - KOUSA": "Cornus kousa",
-    "DOGWOOD - PAGODA": "Cornus alternifolia",
-    # In the domain, on no standing tree today.
-    "ASPEN": "Populus",
-    "DOUGLASFIR": "Pseudotsuga menziesii",
-    "FRINGETREE": "Chionanthus virginicus",
-    "HACKBERY - SUGAR": "Celtis laevigata",
-    "HAWTHORN - DOWNY": "Crataegus mollis",
-    "HORNBEAM - JAPANESE": "Carpinus japonica",
-    "LINDEN - HYBRID": "Tilia",
-    "OAK - HILLS": "Quercus ellipsoidalis",
-    "PEAR - KOREAN": "Pyrus fauriei",
-    "WALNUT - PERSIAN": "Juglans regia",
-    "WITCHHAZEL": "Hamamelis",
-}
-
-
 @cache
 def domains() -> tuple[frozenset[int], dict[str, str]]:
     """The standing `STATUS` codes and the `ROWTREE_TYPE` code -> name map."""
@@ -163,7 +118,7 @@ def species_for(code) -> str | None:
     if name is None:
         raise RuntimeError(f"Naperville ROWTREE_TYPE {code!r} is not in its domain")
     name = " ".join(name.split())
-    return species_from_common_name(name) or LOCAL_COMMON_NAMES.get(name)
+    return species_from_common_name(name)
 
 
 def clean_cultivar(value) -> str | None:
