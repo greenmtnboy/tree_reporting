@@ -46,6 +46,8 @@ template datasource published_city_trees (
     cultivar: ?cultivar,
     crown_width_m: ?crown_width_m,
     tree_name: ?tree_name,
+    significance: ?significance,
+    significance_source: ?significance_source,
     plant_date: ?plant_date,
     diameter_at_breast_height: ?diameter_at_breast_height,
     latitude: ?latitude,
@@ -99,6 +101,14 @@ grain (tree_id);
 #   tree_form      the enrichment growth form, `default` where there is none;
 #                  the icon and the default colour are chosen from it.
 #   tree_name      the tree's own name; null on nearly every tree.
+#   significance, significance_source  why the tree is notable and who says
+#                  so; null on nearly every tree. The world publish lifts the
+#                  notable rows' text into its notable file; the blocks carry
+#                  only the flag.
+#   notable        true when the tree has a name or a significance blurb
+#                  (`is_notable`), else NULL rather than false: an all-null
+#                  column is a few bytes per row group, and the map reads one
+#                  bit per tree from it (docs/NAMED_TREES_AND_CROWN_POSITION.md).
 #   predicted_crown_width_m  the allometric estimate (tree_predictions.preql);
 #                  null for a tree the model could not size (a palm, or no
 #                  diameter and no planting date).
@@ -121,6 +131,7 @@ grain (tree_id);
 # and default colour are chosen from (never null).
 auto display_name <- coalesce(nullif(trim(common_names[1]), ''), species);
 auto browser_tree_form <- coalesce(tree_form, 'default');
+auto browser_notable <- case when is_notable then true else null end;
 
 # One that would lose a quarter of its city's rows is refused, keeping the
 # published one (`kept`, core.preql).
@@ -131,6 +142,9 @@ template datasource city_tree_browser (
     species,
     cultivar: ?cultivar,
     tree_name: ?tree_name,
+    significance: ?significance,
+    significance_source: ?significance_source,
+    notable: ?browser_notable,
     display_name,
     tree_form: browser_tree_form,
     plant_date: ?plant_date,
@@ -151,7 +165,7 @@ storage (row_group_size = 10240)
 assert @kept(tree_id, 0.75);
 
 # The vocabularies the worker types the projection's string columns with: one
-# row per distinct (data_source, species, cultivar, tree_name, display_name)
+# row per distinct (data_source, species, cultivar, display_name)
 # with its tree count, in a file of a few thousand rows beside the
 # projection. A windowed phone needs every value before its first window
 # (a value first met in the fifth cell must already be in the ENUM), and a
@@ -167,12 +181,11 @@ template datasource city_tree_vocab (
     data_source,
     species,
     cultivar: ?cultivar,
-    tree_name: ?tree_name,
     display_name,
     tree_count: vocab_tree_count,
     inputs_published_through: city_inputs_published_through,
 )
-grain (city, data_source, species, cultivar, tree_name, display_name)
+grain (city, data_source, species, cultivar, display_name)
 freshness by city_inputs_published_through;
 
 # --- Trees that need a second look -----------------------------------------

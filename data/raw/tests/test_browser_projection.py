@@ -102,10 +102,18 @@ FIXTURE_TREES = [
     ("sf-3", "USSFO", "Newtaxon alba", "Old Whitewood", None, True),     # no enrichment row, a named tree
     ("sf-4", "USSFO", "Newtaxon alba", None, None, False),               # no enrichment row, no name, no prediction
     ("sf-5", "USSFO", "Unknown", None, 20.0, True),                      # sentinel: an authored enrichment row
-    ("sf-6", "USSFO", "Palm", "Palm", 40.0, True),                       # sentinel with a growth form
-    ("sf-7", "USSFO", "Ailanthus altissima", "  ", 15.0, True),          # blank source name, blank first common name
+    ("sf-6", "USSFO", "Palm", None, 40.0, True),                         # sentinel with a growth form
+    ("sf-7", "USSFO", "Ailanthus altissima", None, 15.0, True),          # blank first common name
     ("pred-1", "USSFO", "Unknown deciduous", None, None, False),         # an imagery detection: no prediction row
 ]
+
+# tree_id -> (significance, significance_source): a blurb with no name still
+# makes a tree notable.
+FIXTURE_SIGNIFICANCE = {
+    "sf-1": ("Planted for the 1915 exposition.", "https://example.org/register"),
+    "sf-4": ("The city's oldest of its kind.", None),
+}
+NOTABLE = {"sf-1", "sf-3", "sf-4"}
 
 
 @pytest.fixture(scope="module")
@@ -119,14 +127,16 @@ def fixture_files(tmp_path_factory):
         """
         CREATE TABLE rollup (
             tree_id VARCHAR, city VARCHAR, data_source VARCHAR, species VARCHAR, cultivar VARCHAR,
-            crown_width_m DOUBLE, tree_name VARCHAR, plant_date DATE, diameter_at_breast_height DOUBLE,
+            crown_width_m DOUBLE, tree_name VARCHAR, significance VARCHAR, significance_source VARCHAR,
+            plant_date DATE, diameter_at_breast_height DOUBLE,
             latitude DOUBLE, longitude DOUBLE, submission_photo_url VARCHAR
         )
         """
     )
     conn.executemany(
-        "INSERT INTO rollup VALUES (?, ?, ?, ?, NULL, NULL, ?, DATE '2001-05-01', ?, 37.77, -122.42, NULL)",
-        [(tree_id, city, "PREDICTED_USSFO" if tree_id.startswith("pred-") else "FIXTURE", species, name, dbh)
+        "INSERT INTO rollup VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, DATE '2001-05-01', ?, 37.77, -122.42, NULL)",
+        [(tree_id, city, "PREDICTED_USSFO" if tree_id.startswith("pred-") else "FIXTURE", species, name,
+          *FIXTURE_SIGNIFICANCE.get(tree_id, (None, None)), dbh)
          for tree_id, city, species, name, dbh, _ in FIXTURE_TREES],
     )
     conn.execute(
@@ -202,6 +212,7 @@ def rows(fixture_files) -> list[dict]:
         """
         select
             tree_id, city, data_source, species, cultivar, tree_name, display_name,
+            significance, significance_source, browser_notable,
             browser_tree_form, plant_date, diameter_at_breast_height, crown_width_m,
             published_predicted_crown_width_m, published_accepted_height_m,
             published_predicted_height_m, latitude, longitude, submission_photo_url
@@ -221,7 +232,7 @@ def vocab(fixture_files) -> list[dict]:
         fixture_files,
         """
         select
-            city, data_source, species, cultivar, tree_name, display_name,
+            city, data_source, species, cultivar, display_name,
             vocab_tree_count
         where city = 'USSFO';
         """,
@@ -297,6 +308,16 @@ def test_the_prediction_is_folded_in(rows):
     assert trees["sf-3"]["predicted_crown_width_m"] is None, "a prediction row with nothing to size from"
 
 
+def test_notable_is_true_or_null_never_false(rows):
+    """A name or a blurb flags the tree; everything else is NULL, not false, so
+    the column costs a few bytes per row group (city_derived.preql)."""
+    trees = by_id(rows)
+    for tree_id, row in trees.items():
+        assert row["browser_notable"] is (True if tree_id in NOTABLE else None), tree_id
+    assert trees["sf-4"]["tree_name"] is None and trees["sf-4"]["significance"] == "The city's oldest of its kind."
+    assert trees["sf-1"]["significance_source"] == "https://example.org/register"
+
+
 def test_heights_are_folded_in(rows):
     """Measured and predicted, side by side, from the predictions file."""
     trees = by_id(rows)
@@ -309,7 +330,9 @@ def test_heights_are_folded_in(rows):
 
 # --- The vocabulary ------------------------------------------------------------
 
-VOCAB_KEY = ("city", "data_source", "species", "cultivar", "tree_name", "display_name")
+# Not `tree_name`: a tree's own name is null on nearly every tree, and the
+# world publish lifts names into its notable file rather than an ENUM.
+VOCAB_KEY = ("city", "data_source", "species", "cultivar", "display_name")
 
 
 def test_the_vocabulary_is_the_projection_grouped(rows, vocab):
