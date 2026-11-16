@@ -126,6 +126,47 @@
                 <span class="muted">— the recorded {{ dbhInches }} in is wrong and can't be measured from here.</span>
               </span>
             </label>
+
+            <details class="notable-fields" :open="notableOpen" data-testid="checkin-notable" @toggle="notableOpen = ($event.target as HTMLDetailsElement).open">
+              <summary class="field-label">{{ treeName ? `Notable tree: ${treeName}` : 'Is this a notable tree?' }}</summary>
+              <p class="muted">
+                A tree with a name, a story or a place on a heritage register. The name and
+                blurb show on its card once a reviewer approves them.
+              </p>
+              <label class="field">
+                <span class="field-label">Name (optional)</span>
+                <input
+                  v-model="proposedTreeName"
+                  type="text"
+                  :maxlength="NOTABLE_TEXT_LIMITS.proposedTreeName"
+                  class="text-input"
+                  data-testid="checkin-tree-name"
+                  :placeholder="treeName || 'e.g. The Senator'"
+                />
+              </label>
+              <label class="field">
+                <span class="field-label">Why it's notable (optional)</span>
+                <textarea
+                  v-model="proposedSignificance"
+                  class="text-input"
+                  rows="3"
+                  :maxlength="NOTABLE_TEXT_LIMITS.proposedSignificance"
+                  data-testid="checkin-significance"
+                  :placeholder="significance || 'e.g. Planted in 1871 by the town\'s first mayor'"
+                ></textarea>
+              </label>
+              <label class="field">
+                <span class="field-label">Source link (optional)</span>
+                <input
+                  v-model="proposedSignificanceSource"
+                  type="url"
+                  :maxlength="NOTABLE_TEXT_LIMITS.proposedSignificanceSource"
+                  class="text-input"
+                  data-testid="checkin-significance-source"
+                  placeholder="A register, article or plaque that says so"
+                />
+              </label>
+            </details>
           </template>
 
           <!-- Tree is gone -->
@@ -183,7 +224,7 @@
           <p v-if="mode === 'update' && dbhInvalid" class="error-text" data-testid="checkin-dbh-invalid">
             Diameter must be a number of inches between 0 and {{ MAX_DBH_IN }}.
           </p>
-          <p v-else-if="mode === 'update' && !hasChanges" class="muted">Change the pin, species or diameter (or mark it unknown) to send a fix.</p>
+          <p v-else-if="mode === 'update' && !hasChanges" class="muted">Change the pin, species or diameter (or mark it unknown), or name a notable tree, to send a fix.</p>
 
           <div class="actions">
             <button type="button" class="btn-secondary" @click="handleDismiss">Cancel</button>
@@ -244,6 +285,7 @@ import {
   submitTreeModification,
   type MissingReason,
 } from '../composables/useSubmissions'
+import { NOTABLE_TEXT_LIMITS, notableText } from '../lib/notableText'
 import SubmitLocationPicker from './SubmitLocationPicker.vue'
 import { haversineKm, closestCityTo } from '../composables/useMapData'
 import { loadTreeRanking } from '../lib/treeRankings'
@@ -262,6 +304,9 @@ const props = defineProps<{
   plantYear?: number | null
   /** The tree is flagged for a second look; a check-in records it (the badge). */
   reviewFlag?: string | null
+  /** A notable tree's published name and blurb, shown as what a report would replace. */
+  treeName?: string | null
+  significance?: string | null
   initialMode?: 'checkin' | 'update' | 'missing'
   remoteCorrection?: boolean
   /** Street View is open on the right: take the docked card's column, no backdrop. */
@@ -343,6 +388,12 @@ const proposedDbh = ref<number | string>('')
 // from a blank input, which means "leave the diameter alone".
 const dbhUnknown = ref(false)
 const missingReason = ref<MissingReason>('removed')
+// A notable tree's name, blurb and source. Blank means "leave it as it is":
+// clearing a published name is the reviewer's, not a report's.
+const proposedTreeName = ref('')
+const proposedSignificance = ref('')
+const proposedSignificanceSource = ref('')
+const notableOpen = ref(false)
 const notes = ref('')
 // Opt-in: a check-in photo stays private unless the user offers it here.
 const submitPhotoForTree = ref(false)
@@ -376,8 +427,21 @@ const dbhChanged = computed(
 
 const dbhCleared = computed(() => dbhUnknown.value && props.dbhInches != null)
 
+// Each text field as it would be sent: null when blank or the same as what the
+// tree already shows. A source alone names nothing, so it rides with a name or
+// a blurb and never counts as a change by itself.
+const notableName = computed(() => {
+  const text = notableText(proposedTreeName.value, 'proposedTreeName')
+  return text && text !== (props.treeName ?? '').trim() ? text : null
+})
+const notableSignificance = computed(() => {
+  const text = notableText(proposedSignificance.value, 'proposedSignificance')
+  return text && text !== (props.significance ?? '').trim() ? text : null
+})
+const notableChanged = computed(() => notableName.value != null || notableSignificance.value != null)
+
 const hasChanges = computed(
-  () => movedMeters.value >= MIN_MOVE_M || speciesChanged.value || dbhChanged.value || dbhCleared.value,
+  () => movedMeters.value >= MIN_MOVE_M || speciesChanged.value || dbhChanged.value || dbhCleared.value || notableChanged.value,
 )
 
 const canSubmit = computed(() => mode.value !== 'update' || (hasChanges.value && !dbhInvalid.value))
@@ -514,6 +578,11 @@ async function handleSubmit() {
         proposedSpecies: speciesChanged.value ? proposedSpecies.value.trim() : null,
         proposedDbhInches: dbhChanged.value ? proposedDbhValue.value : null,
         clearFields: dbhCleared.value ? ['dbhInches'] : [],
+        proposedTreeName: notableName.value,
+        proposedSignificance: notableSignificance.value,
+        proposedSignificanceSource: notableChanged.value
+          ? notableText(proposedSignificanceSource.value, 'proposedSignificanceSource')
+          : null,
         reviewFlag: props.reviewFlag ?? null,
         notes: notes.value,
         photoBlob: photoBlob.value ?? undefined,
@@ -736,6 +805,24 @@ onBeforeUnmount(() => {
 .text-input:focus {
   outline: none;
   border-color: var(--color-leaf);
+}
+
+.notable-fields {
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.notable-fields summary {
+  cursor: pointer;
+}
+
+.notable-fields[open] {
+  padding-bottom: 12px;
+}
+
+.notable-fields > :not(summary) {
+  margin-top: 10px;
 }
 
 .reason-group {

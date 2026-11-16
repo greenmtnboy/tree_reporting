@@ -86,7 +86,8 @@ the file stays private. Report photos are never published.
 The mobile check-in dialog lets someone standing within 50 m of a mapped tree
 say one of two things about it besides "I'm here": **the tree is gone**
 (removed, a stump, or never there), or **suggest a fix** (a dragged-pin
-position and/or a corrected species or DBH). Each is a `treeModifications`
+position and/or a corrected species or DBH, and/or a notable tree's name, why
+it is notable and a source). Each is a `treeModifications`
 document tied to the existing tree id, `pending` until reviewed, rate-limited
 the same way submissions are (`modificationRateLimits`). Photos go to the
 private `modifications/{uid}/` prefix and are reviewer evidence only; they are
@@ -100,15 +101,34 @@ position inside it, an update that changes something), copies the change into
 `community/tree_modifications.ndjson` plus
 `community/tree_modifications_manifest.json` (`latestPublishedAtByCity`, as
 for approved trees). Export rows carry only the change: tree id, city, kind,
-reason, and the proposed latitude/longitude/species/DBH, with null meaning
-"keep the source value", plus `clearFields`, the fields to publish blank
-(today only `dbhInches`; a cleared field never carries a value). A tree can have several approved rows; a consumer
+reason, and the proposed latitude/longitude/species/DBH and
+`treeName`/`significance`/`significanceSource`, with null meaning "keep the
+source value", plus `clearFields`, the fields to publish blank (a cleared
+field never carries a value). A tree can have several approved rows; a consumer
 takes the last non-null value per field, and a later `missing` wins.
 `POST /api/modifications/republish` rebuilds the export.
 
-The data pipeline does not read this export yet: approving a report records
-and publishes it, but the city parquets are unchanged until an ingest applies
-it.
+**Notable trees** (docs/NAMED_TREES_AND_CROWN_POSITION.md). A proposed name
+(≤ 60 characters), blurb (≤ 500) and source (≤ 300, a link or a register's
+name; a link must be http or https) show in editable boxes on the report's
+card. **Approve** publishes what the boxes hold, so fix a typo or trim a blurb
+before approving; a box left blank drops that field from the change rather
+than clearing the tree's. A source alone is refused: it needs a name or a blurb
+to attribute. Free text from the public reaches the map only this way.
+
+**Name a tree directly**, above the queue, publishes a notable change with no
+report behind it (`POST /api/modifications/author`): name a register monument
+the ingest could not link, or clear a name, blurb or source a tree shows. Only
+the reviewer can clear one; the rules let a report propose text, never remove
+it. Use the tree id the map shows. A report keys on the published id, so a
+re-cluster that changes a tree's surviving id orphans it.
+
+`data/raw/tree_modification_info.py` reads the export into each city's build
+(`tree_dedup.preql`, "Approved corrections"), and the manifest's
+`latestPublishedAtByCity` makes the reported city stale, so an approval reaches
+the map on that city's next build, then its `derived-{code}` job and the world
+blocks. A name or blurb makes the tree notable: it glows, and its card shows
+the text.
 
 ## Satellite review (`/satellite`)
 

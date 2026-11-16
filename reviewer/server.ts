@@ -18,7 +18,9 @@ import {
   treeDocKey,
 } from './checkinPhotos.ts'
 import {
+  approvedNotableText,
   assertModificationPublishable,
+  authoredNotableModification,
   clearableFields,
   modificationExportRow,
   modificationListItem,
@@ -457,13 +459,17 @@ app.post('/api/modifications/:id/approve', async (req, res, next) => {
     const modificationId = req.params.id
     const modificationRef = db.collection('treeModifications').doc(modificationId)
     const publishedRef = db.collection('publishedTreeModifications').doc(modificationId)
+    // The reviewer's edit of a proposed name, blurb or source, when given.
+    const edits = (req.body && typeof req.body === 'object' ? req.body.notable : null) ?? {}
     await db.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(modificationRef)
       if (!snapshot.exists) throw new Error('Modification not found')
       const modification = snapshot.data() as PendingModification & { submittedAt?: Timestamp }
       assertModificationPublishable(modification)
       const isUpdate = modification.kind === 'update'
+      const text = isUpdate ? approvedNotableText(modification, edits) : null
       transaction.create(publishedRef, {
+        ...(text ?? {}),
         modificationId,
         treeId: modification.treeId,
         city: modification.city,
@@ -506,6 +512,31 @@ app.post('/api/modifications/:id/reject', async (req, res, next) => {
       })
     })
     res.json({ ok: true })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// A notable change the reviewer writes with no report behind it: name a tree
+// (a register monument the ingest could not link, say), or clear what one
+// shows. Published at once, like an approval.
+app.post('/api/modifications/author', async (req, res, next) => {
+  try {
+    const change = authoredNotableModification(req.body)
+    const publishedRef = db.collection('publishedTreeModifications').doc()
+    await publishedRef.create({
+      modificationId: publishedRef.id,
+      ...change,
+      missingReason: null,
+      latitude: null,
+      longitude: null,
+      species: null,
+      dbhInches: null,
+      authored: true,
+      submittedAt: null,
+      publishedAt: FieldValue.serverTimestamp(),
+    })
+    res.json({ ok: true, id: publishedRef.id, published: await rewriteModificationExport() })
   } catch (error) {
     next(error)
   }
