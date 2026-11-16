@@ -11,8 +11,8 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
-  { city: 'Wodonga', label: 'TODO: Wodonga tree inventory source', url: 'TODO' },
-  { city: 'Ballarat', label: 'TODO: Ballarat tree inventory source', url: 'TODO' },
+  { city: 'Wodonga', label: 'City of Wodonga - Street and reserve trees (ArcGIS, CC BY 4.0)', url: 'https://www.arcgis.com/home/item.html?id=f6e5ca95559a4253bf7d25897bf8ed15' },
+  { city: 'Ballarat', label: 'City of Ballarat Open Data - Trees (CC BY 3.0 AU)', url: 'https://data.ballarat.vic.gov.au/explore/dataset/trees/' },
   { city: 'Perth', label: 'City of Perth (Trees in the City)', url: 'https://www.arcgis.com/home/item.html?id=c5ce51d9789a4e9a8510acb8c8f3ecf4' },
   { city: 'Adelaide', label: 'City of Adelaide via data.sa.gov.au (Street Trees)', url: 'https://data.sa.gov.au/data/dataset/street-trees' },
   { city: 'Naperville', label: 'City of Naperville - Right of Way Tree Inventory (ArcGIS, CC0)', url: 'https://services1.arcgis.com/rXJ6QApc2sOtl1Pd/arcgis/rest/services/ROW_Tree_Inventory/FeatureServer/0' },
@@ -98,8 +98,8 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
-  { city: 'Wodonga', label: 'TODO: Wodonga landmark source' },
-  { city: 'Ballarat', label: 'TODO: Ballarat landmark source' },
+  { city: 'Wodonga', label: 'Victorian Heritage Register (Vicmap, Department of Transport and Planning, CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
+  { city: 'Ballarat', label: 'Victorian Heritage Register (Vicmap, Department of Transport and Planning, CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
   { city: 'Perth', label: 'City of Perth Heritage List (CPS2)', url: 'https://www.arcgis.com/home/item.html?id=550909775e984aa19d5b4fadcce4b3e6' },
   { city: 'Adelaide', label: 'SA Heritage Places (State and Local Heritage), data.sa.gov.au', url: 'https://data.sa.gov.au/data/dataset/sa-heritage-places' },
   { city: 'Naperville', label: 'Naperville Heritage Society plaque program (City of Naperville GIS); National Park Service - National Register of Historic Places', url: 'https://services1.arcgis.com/rXJ6QApc2sOtl1Pd/arcgis/rest/services/NapervilleHeritagePlaqueMap/FeatureServer/0' },

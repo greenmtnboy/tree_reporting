@@ -63,7 +63,7 @@ root partial datasource auwod_osm_tree_info extends tree_partition (
 )
 complete where city = 'AUWOD' and auwod_source = 'OSM_AUWOD'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/auwod_osm_staging.parquet`
-where (raw_latitude >= -36.3 and raw_latitude < -36.0 and raw_longitude >= 146.75 and raw_longitude < 147.1);
+where (raw_latitude >= -36.3 and raw_latitude < -36.0 and raw_longitude >= 146.65 and raw_longitude < 147.1);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

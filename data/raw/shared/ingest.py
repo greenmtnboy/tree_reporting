@@ -847,6 +847,31 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    "Pyrus betulaefolia": "Pyrus betulifolia",
+    "Quercus castaenifolia": "Quercus castaneifolia",
+    "Carpinus betula": "Carpinus betulus",
+    "Cottoneaster glaucophyllus": "Cotoneaster glaucophyllus",
+    "Eucalyptus virdis": "Eucalyptus viridis",
+    "Eucalyptus landsdowneana": "Eucalyptus lansdowneana",
+    "Corymbia callophylla": "Corymbia calophylla",
+    "Eucalyptus siedroxylon": "Eucalyptus sideroxylon",
+    "Casurina cunninghamiana": "Casuarina cunninghamiana",
+    "Melia azadarach": "Melia azedarach",
+    "Quercus engelmanii": "Quercus engelmannii",
+    "Malaleuca quinquenervia": "Melaleuca quinquenervia",
+    "Phoenix dadtyifera": "Phoenix dactylifera",
+    "Pinus jeffreyii": "Pinus jeffreyi",
+    "Casurina": "Casuarina",
+    "Garrya eleptica": "Garrya elliptica",
+    "Largerstromia indica": "Lagerstroemia indica",
+    "Zelkova seratta": "Zelkova serrata",
+    "Ceratonia silqua": "Ceratonia siliqua",
+    "Pistachio vera": "Pistacia vera",
+    "Vitex luscens": "Vitex lucens",
+    "Eucalyptus blakleyi": "Eucalyptus blakelyi",
+    "Fraxinus angustigolia": "Fraxinus angustifolia",
+    "Lagerstromia indica": "Lagerstroemia indica",
+    "Liquidambar straciflua": "Liquidambar styraciflua",
     "Acacia podalyriaefolia": "Acacia podalyriifolia",
     "Acacia retinoides": "Acacia retinodes",
     "Araucaria bidwilli": "Araucaria bidwillii",
@@ -2284,7 +2309,7 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
-    "AUWOD": (-36.3, -36.0, 146.75, 147.1),
+    "AUWOD": (-36.3, -36.0, 146.65, 147.1),
     "AUBAL": (-37.8, -37.3, 143.55, 144.1),
     "AUPER": (-32.0, -31.92, 115.8, 115.9),
     "AUADL": (-34.96, -34.88, 138.56, 138.64),
@@ -2706,7 +2731,7 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
-    'AUWOD': ((-36.3, -36.0, 146.75, 147.1),),
+    'AUWOD': ((-36.3, -36.0, 146.65, 147.1),),
     'AUBAL': ((-37.8, -37.3, 143.55, 144.1),),
     'AUPER': ((-32.0, -31.92, 115.8, 115.9),),
     'AUADL': ((-34.96, -34.88, 138.56, 138.64),),
