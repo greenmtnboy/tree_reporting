@@ -284,6 +284,24 @@ def test_every_city_prunes_absorbed_rows(code: str):
     )
 
 
+# Cities whose model unions neighbouring inventories that record the same
+# street trees (docs/BORDER_DEDUP.md).
+BORDER_DEDUP_CITIES = ("AUMEL", "USBOS")
+
+
+@pytest.mark.parametrize("code", BORDER_DEDUP_CITIES)
+def test_border_dedup_city_gates_on_its_stored_flag(code: str):
+    """The border flag only drops a row from the target's `where`, which can
+    read only a stored column; a model that computes the flag but does not
+    store and gate on it publishes every border tree twice, silently."""
+    column = f"{code.lower()}_border_duplicate"
+    target = published_target(code)
+    assert column in stored(target), f"{code}'s published target does not store {column}"
+    assert f"{column} = False" in where(target).split(" and "), (
+        f"{code}'s published target does not gate on {column}"
+    )
+
+
 @pytest.mark.parametrize("code", sorted(MUNICIPAL_DATA_SOURCES))
 def test_every_city_drops_trees_reported_gone(code: str):
     """Every city's published target stores `reported_missing` and gates on it.

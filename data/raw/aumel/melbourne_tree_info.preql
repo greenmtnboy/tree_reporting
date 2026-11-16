@@ -137,16 +137,88 @@ merge merged_latitude into latitude;
 merge merged_longitude into longitude;
 
 
+# --- Border trees between the councils' inventories --------------------------
+#
+# The shared merge makes every municipal row its own cluster, so a tree two
+# councils both inventory would publish twice.  Boston's metro has the same
+# block (usbos/boston_tree_info.preql; the design is docs/BORDER_DEDUP.md).
+# Here it is the City of Melbourne and Yarra along their shared streets
+# (Hoddle Street, Victoria Parade, Alexandra Parade): measured 2026-11-16 on
+# the published rows, Yarra's nearest Melbourne tree is under 1 m for 27, 1-2 m
+# for 45, 2-3 m for 26 and 3-4 m for 6, and the genus agrees for every one of
+# them (Melbourne publishes most of these at genus rank).  No other pair has a
+# tree within 2 m.  The offset runs wider than Boston's, so the cell is 3 m:
+# a guaranteed match within 1.5 m, a possible one to the 4.2 m diagonal,
+# still under Yarra's own 3.4 m tenth-percentile spacing.  Simulated on the
+# published rows, it drops 94 Yarra rows and no Melbourne tree is claimed by
+# two of them.
+#
+# A row is a border duplicate when a row of an EARLIER-wired inventory (the
+# enum's order) names the same genus and shares a cell with it in any of four
+# half-cell-staggered grids.  Earlier wins because its ids were published
+# first.  Two rows of one inventory never mark each other.
+auto aumel_border_rank <- case
+    when aumel_source = 'MELBOURNE_OPENDATA' then 1
+    when aumel_source = 'PORT_PHILLIP' then 2
+    when aumel_source = 'YARRA' then 3
+    when aumel_source = 'GLEN_EIRA' then 4
+    when aumel_source = 'HOBSONS_BAY' then 5
+    else null
+end;
+auto aumel_raw_genus <- case
+    when strpos(raw_species, ' ') > 0 then substring(raw_species, 1, strpos(raw_species, ' ') - 1)
+    else raw_species
+end;
+
+# 3 m at 37.81S: 3 / 111320 degrees of latitude, and that over cos(37.81) for
+# longitude.  The indices stay under 5e6 in magnitude, inside the 1e7
+# multiplier.  The genus is part of the cell key for the reason Boston's is
+# (a per-genus cross product between the four aggregates otherwise); a row
+# with no genus keys on its own tree_id and never matches.
+def aumel_border_cell(dx, dy) -> concat(
+    cast(
+        cast(floor(raw_longitude / 0.00003411 + dx) as bigint) * 10000000
+        + cast(floor(raw_latitude / 0.00002695 + dy) as bigint)
+    as string),
+    '|',
+    coalesce(aumel_raw_genus, concat('#', tree_id))
+);
+def aumel_first_rank(cell) -> min(aumel_border_rank) by cell;
+
+auto aumel_border_cell_a <- @aumel_border_cell(0, 0);
+auto aumel_border_cell_b <- @aumel_border_cell(0.5, 0);
+auto aumel_border_cell_c <- @aumel_border_cell(0, 0.5);
+auto aumel_border_cell_d <- @aumel_border_cell(0.5, 0.5);
+
+# The row's own rank as a self-aggregate on `row_key`: comparing a cell
+# aggregate with a row-level case directly is the keyless-join planner bug.
+auto aumel_own_border_rank <- min(aumel_border_rank) by row_key;
+# least() skips nulls: a row with no partner in a grid compares against the
+# others.
+auto aumel_border_duplicate <- coalesce(
+    aumel_own_border_rank > least(
+        @aumel_first_rank(aumel_border_cell_a),
+        @aumel_first_rank(aumel_border_cell_b),
+        @aumel_first_rank(aumel_border_cell_c),
+        @aumel_first_rank(aumel_border_cell_d)
+    ),
+    false
+);
+
+
 # The `where` below is the prune: this target publishes only the row that owns
-# its cluster, so the parquet holds exactly one tree per row.  It needs
-# pytrilogy 0.3.348+ and fails quietly on older planners -- see "The prune" in
-# ../tree_dedup.preql.
+# its cluster, so the parquet holds exactly one tree per row, and drops the
+# border duplicates above.  It needs pytrilogy 0.3.378+ -- see "The prune" in
+# ../tree_dedup.preql.  `aumel_border_duplicate` is stored (always false)
+# because a datasource's `where` may only read the datasource's own columns.
 partial datasource melbourne_tree_info extends published_tree_info (
     data_source: aumel_source,
+    aumel_border_duplicate,
     aumel_published_data_updated_through,
 )
 complete where city = 'AUMEL'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aumel_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/aumel_tree_info_v{data_version}.parquet`
+where aumel_border_duplicate = false
 freshness by aumel_published_data_updated_through
 assert @source_kept(tree_id, aumel_source, 'MELBOURNE_OPENDATA', 0.75)
 assert @source_kept(tree_id, aumel_source, 'PORT_PHILLIP', 0.75)
