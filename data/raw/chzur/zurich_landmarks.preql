@@ -1,0 +1,31 @@
+import ..landmark_common;
+
+root datasource zurich_landmarks_update_time (
+    data_updated_through: chzur_landmark_data_updated_through
+)
+file `./zurich_landmarks_probe.py`;
+
+# Zürich's heritage inventory (Denkmalpflege-Inventar, CC0) is a layer on the
+# same municipal WFS as its trees, read directly; see zurich_landmarks.py.
+# The register's own attributes ride along in existing landmark_common
+# properties: the inventory class (category), formal protection
+# (protection_type), the address and the year built.
+root partial datasource raw_zurich_landmark_info extends landmark_partition (
+    category: ?category,
+    protection_type: ?protection_type,
+    address: ?address,
+    year_built: ?year_built,
+)
+complete where city = 'CHZUR'
+file `./zurich_landmarks.py`;
+
+partial datasource zurich_landmark_info extends published_landmark_info (
+    ?category,
+    ?protection_type,
+    ?address,
+    ?year_built,
+    chzur_landmark_data_updated_through,
+)
+complete where city = 'CHZUR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/chzur_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/chzur_landmark_info_v{data_version}.parquet`
+freshness by chzur_landmark_data_updated_through;

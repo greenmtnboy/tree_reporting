@@ -1,0 +1,24 @@
+import ..landmark_common;
+
+root datasource basel_landmarks_update_time (
+    data_updated_through: chbas_landmark_data_updated_through
+)
+file `./basel_landmarks_probe.py`;
+
+# Basel's inventory of gardens worthy of protection (Inventar der
+# schützenswerten Gartenanlagen) is a layer on the canton's WFS, the same
+# geodata service as its trees, read directly: no geocoding, no committed CSV
+# and no staging object.
+root partial datasource raw_basel_landmark_info extends landmark_partition (
+    category: ?category,
+)
+complete where city = 'CHBAS'
+file `./basel_landmarks.py`;
+
+partial datasource basel_landmark_info extends published_landmark_info (
+    ?category,
+    chbas_landmark_data_updated_through,
+)
+complete where city = 'CHBAS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/chbas_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/chbas_landmark_info_v{data_version}.parquet`
+freshness by chbas_landmark_data_updated_through;

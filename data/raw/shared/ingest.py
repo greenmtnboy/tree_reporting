@@ -1283,6 +1283,30 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Calophyllum brasiliensis": "Calophyllum brasiliense",
     "Terminalia muellerii": "Terminalia muelleri",
     "Latania verscheffeltii": "Latania verschaffeltii",
+    # Columbus, Vienna, Eugene, Zürich, Nottingham, Basel (Nov 2026): keys
+    # absent from WCVP, values accepted there (tools/species_audit.py --parquet).
+    "Zelkova serrulata": "Zelkova serrata",
+    "Tamarix tetranda": "Tamarix tetrandra",
+    "Ziziphus jujube": "Ziziphus jujuba",
+    "Cladrastris kentukea": "Cladrastis kentukea",
+    "Hammamellis": "Hamamelis",
+    "Nothofagus antartica": "Nothofagus antarctica",
+    "Umbellulaira californica": "Umbellularia californica",
+    "Rhamnus pershiana": "Frangula purshiana",
+    "Salix babyloncia": "Salix babylonica",
+    "Tilia platyphylos": "Tilia platyphyllos",
+    "Cotinus coggyria": "Cotinus coggygria",
+    "Tilia tormantosa": "Tilia tomentosa",
+    "Robinia pseudoacasia": "Robinia pseudoacacia",
+    "Pseudotsuga menziessi": "Pseudotsuga menziesii",
+    "Styphnoiobium japonica": "Styphnolobium japonicum",
+    "Ilex x altaclarensis": "Ilex x altaclerensis",
+    "Cotoneaster x wateri": "Cotoneaster x watereri",
+    "Chionantus retusus": "Chionanthus retusus",
+    "Clerodendrum trichotomun": "Clerodendrum trichotomum",
+    "Cupressus sempervierens": "Cupressus sempervirens",
+    "Eucommina ulmoides": "Eucommia ulmoides",
+    "Quercus macrantheram": "Quercus macranthera",
 }
 
 
@@ -1551,6 +1575,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "CHBAS": ("BASEL_OPENDATA",),
+    "GBNOT": ("NOTTINGHAM_OPENDATA",),
+    "CHZUR": ("ZURICH_OPENDATA",),
+    "USEUG": ("EUGENE_OPENDATA",),
+    "ATVIE": ("VIENNA_OPENDATA",),
+    "USCOL": ("COLUMBUS_OPENDATA",),
     "AUWOD": ("WODONGA_OPENDATA",),
     "AUBAL": ("BALLARAT_OPENDATA",),
     "AUPER": ("PERTH_OPENDATA",),
@@ -1641,6 +1671,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "CHBAS": "OSM_CHBAS",
+    "GBNOT": "OSM_GBNOT",
+    "CHZUR": "OSM_CHZUR",
+    "USEUG": "OSM_USEUG",
+    "ATVIE": "OSM_ATVIE",
+    "USCOL": "OSM_USCOL",
     "AUWOD": "OSM_AUWOD",
     "AUBAL": "OSM_AUBAL",
     "AUPER": "OSM_AUPER",
@@ -2310,6 +2346,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "CHBAS": (47.51, 47.6, 7.54, 7.7),
+    "GBNOT": (52.88, 53.02, -1.25, -1.08),
+    "CHZUR": (47.31, 47.44, 8.44, 8.63),
+    "USEUG": (43.97, 44.14, -123.21, -122.98),
+    "ATVIE": (48.11, 48.33, 16.18, 16.58),
+    "USCOL": (39.8, 40.16, -83.21, -82.77),
     "AUWOD": (-36.3, -36.0, 146.65, 147.1),
     "AUBAL": (-37.8, -37.3, 143.55, 144.1),
     "AUPER": (-32.0, -31.92, 115.8, 115.9),
@@ -2425,6 +2467,49 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 10,227 staged OSM nodes against 32,520 anchors.  Mutual-NN 93.1% in
+    # 2-5 m, 38.0% in 5-10 m (n=216): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 53 duplicates for 47 hidden trees (1.13),
+    # 8->10 removes 27 for 43 (0.63), so 8 m.
+    "CHBAS": 8,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 10,118 staged OSM nodes against 43,955 anchors.  Mutual-NN 62.6% in
+    # 5-10 m and 22.2% in 10-20 m (n=297): a 10 m guarantee caps it at 20.
+    # Marginal table: 8->10 removes 112 duplicates for 73 hidden trees (1.53),
+    # 10->14 removes 75 for 94 (0.80), so 10 m.
+    "GBNOT": 10,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 35,616 staged OSM nodes against 81,142 anchors.  Mutual-NN 88.4% in
+    # 2-5 m, 37.6% in 5-10 m (n=972): a 5 m guarantee caps it at 10.
+    # Marginal table: 4->6 removes 531 duplicates for 162 hidden trees (3.28),
+    # 6->8 removes 200 for 219 (0.91), so 6 m.
+    "CHZUR": 6,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 4,054 staged OSM nodes against 89,207 anchors.  Mutual-NN 93.7% in
+    # 2-5 m, 46.1% in 5-10 m (n=141): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 49 duplicates for 24 hidden trees (2.04),
+    # 8->10 removes 18 for 29 (0.62), so 8 m.
+    "USEUG": 8,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 177,557 staged OSM nodes against 229,635 anchors; 121k of them sit
+    # within 2 m of an inventory tree (OSM imported the Baumkataster).
+    # Mutual-NN 57.7% in 2-5 m (n=9,675): a 2 m guarantee caps it at 4.
+    # Marginal table: 2->4 removes 5,389 duplicates for 2,052 hidden trees
+    # (2.63), 4->6 removes 1,947 for 2,496 (0.78), so 4 m.
+    "ATVIE": 4,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 20,320 staged OSM nodes against 170,308 anchors.  Mutual-NN 85.3% in
+    # 2-5 m, 17.7% in 5-10 m (n=649): a 5 m guarantee caps it at 10.
+    # Marginal table: 4->6 removes 261 duplicates for 126 hidden trees (2.07),
+    # 6->8 removes 83 for 167 (0.50), so 6 m.
+    "USCOL": 6,
     # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
     # --inventory-parquet on a local ingest run).
     # 1,322 staged OSM nodes against 94,652 anchors.  Mutual-NN stays above
@@ -2766,6 +2851,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'CHBAS': ((47.51, 47.6, 7.54, 7.7),),
+    'GBNOT': ((52.88, 53.02, -1.25, -1.08),),
+    'CHZUR': ((47.31, 47.44, 8.44, 8.63),),
+    'USEUG': ((43.97, 44.14, -123.21, -122.98),),
+    'ATVIE': ((48.11, 48.33, 16.18, 16.58),),
+    'USCOL': ((39.8, 40.16, -83.21, -82.77),),
     'AUWOD': ((-36.3, -36.0, 146.65, 147.1),),
     'AUBAL': ((-37.8, -37.3, 143.55, 144.1),),
     'AUPER': ((-32.0, -31.92, 115.8, 115.9),),

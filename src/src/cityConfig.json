@@ -56,5 +56,11 @@
   "AUADL": { "name": "Adelaide", "center": [138.6007, -34.9285] },
   "AUPER": { "name": "Perth", "center": [115.8605, -31.9505] },
   "AUBAL": { "name": "Ballarat", "center": [143.8503, -37.5622] },
-  "AUWOD": { "name": "Wodonga", "center": [146.8875, -36.1218] }
+  "AUWOD": { "name": "Wodonga", "center": [146.8875, -36.1218] },
+  "USCOL": { "name": "Columbus", "center": [-82.9988, 39.9612] },
+  "ATVIE": { "name": "Vienna", "center": [16.3738, 48.2082] },
+  "USEUG": { "name": "Eugene", "center": [-123.0868, 44.0521] },
+  "CHZUR": { "name": "Zürich", "center": [8.5417, 47.3769] },
+  "GBNOT": { "name": "Nottingham", "center": [-1.1581, 52.9548] },
+  "CHBAS": { "name": "Basel", "center": [7.5886, 47.5596] }
 }

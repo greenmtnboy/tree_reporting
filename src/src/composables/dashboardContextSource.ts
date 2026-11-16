@@ -368,6 +368,42 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'australasia',
   },
+  USCOL: {
+    ecoregionId: 342, // Southern Great Lakes forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  ATVIE: {
+    ecoregionId: 674, // Pannonian mixed forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  USEUG: {
+    ecoregionId: 403, // Willamette Valley oak savanna
+    usdaZone: 8,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  CHZUR: {
+    ecoregionId: 686, // Western European broadleaf forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  GBNOT: {
+    ecoregionId: 651, // Celtic broadleaf forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  CHBAS: {
+    ecoregionId: 686, // Western European broadleaf forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

@@ -116,8 +116,10 @@ SENTINELS = (
 # `test_city_wiring.py::test_city_has_a_homepage_country` until it is added.
 COUNTRIES = {
     "AR": "Argentina",
+    "AT": "Austria",
     "AU": "Australia",
     "CA": "Canada",
+    "CH": "Switzerland",
     "CO": "Colombia",
     "DE": "Germany",
     "CZ": "Czechia",

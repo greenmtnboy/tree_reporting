@@ -1,0 +1,23 @@
+import ..landmark_common;
+
+root datasource vienna_landmarks_update_time (
+    data_updated_through: atvie_landmark_data_updated_through
+)
+file `./vienna_landmarks_probe.py`;
+
+# Vienna's historic gardens and its sights are two layers on the same
+# municipal WFS as its trees, read directly: no geocoding, no committed CSV and
+# no staging object.
+root partial datasource raw_vienna_landmark_info extends landmark_partition (
+    category: ?category,
+)
+complete where city = 'ATVIE'
+file `./vienna_landmarks.py`;
+
+partial datasource vienna_landmark_info extends published_landmark_info (
+    ?category,
+    atvie_landmark_data_updated_through,
+)
+complete where city = 'ATVIE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/atvie_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/atvie_landmark_info_v{data_version}.parquet`
+freshness by atvie_landmark_data_updated_through;

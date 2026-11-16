@@ -68,6 +68,12 @@ property <*>.auadl_community_data_updated_through datetime; # when approved comm
 property <*>.auper_community_data_updated_through datetime; # when approved community submissions for AUPER are through
 property <*>.aubal_community_data_updated_through datetime; # when approved community submissions for AUBAL are through
 property <*>.auwod_community_data_updated_through datetime; # when approved community submissions for AUWOD are through
+property <*>.uscol_community_data_updated_through datetime; # when approved community submissions for USCOL are through
+property <*>.atvie_community_data_updated_through datetime; # when approved community submissions for ATVIE are through
+property <*>.useug_community_data_updated_through datetime; # when approved community submissions for USEUG are through
+property <*>.chzur_community_data_updated_through datetime; # when approved community submissions for CHZUR are through
+property <*>.gbnot_community_data_updated_through datetime; # when approved community submissions for GBNOT are through
+property <*>.chbas_community_data_updated_through datetime; # when approved community submissions for CHBAS are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

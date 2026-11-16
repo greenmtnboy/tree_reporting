@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Basel', label: 'Stadtgärtnerei Basel-Stadt - Baumkataster: Baumbestand (data.bs.ch 100052, CC BY 4.0, Geodaten Kanton Basel-Stadt)', url: 'https://data.bs.ch/explore/dataset/100052/' },
+  { city: 'Nottingham', label: 'Nottingham City Council - Trees (NCC Maintained) (ArcGIS, OGL v3; contains OS data © Crown copyright and database right)', url: 'https://www.arcgis.com/home/item.html?id=854f59402043403eabce650cc7ab1150' },
+  { city: 'Zürich', label: 'Stadt Zürich Open Data - Baumkataster (Grün Stadt Zürich, CC0)', url: 'https://data.stadt-zuerich.ch/dataset/geo_baumkataster' },
+  { city: 'Eugene', label: 'City of Eugene, Parks and Open Space - Public Trees (ArcGIS)', url: 'https://www.arcgis.com/home/item.html?id=defd8da338a443818b6a6f8b65b8076b' },
+  { city: 'Vienna', label: 'Stadt Wien Open Data - Baumkataster (BAUMKATOGD, CC BY 4.0; Datenquelle: Stadt Wien - data.wien.gv.at)', url: 'https://www.data.gv.at/katalog/dataset/c91a4635-8b7d-43fe-9b27-d95dec8392a7' },
+  { city: 'Columbus', label: 'City of Columbus Recreation and Parks, Urban Forestry - Public Owned Trees (ArcGIS, CC0)', url: 'https://www.arcgis.com/home/item.html?id=674e4a358e8042f69a734f229a93823c' },
   { city: 'Wodonga', label: 'City of Wodonga - Street and reserve trees (ArcGIS, CC BY 4.0)', url: 'https://www.arcgis.com/home/item.html?id=f6e5ca95559a4253bf7d25897bf8ed15' },
   { city: 'Ballarat', label: 'City of Ballarat Open Data - Trees (CC BY 3.0 AU)', url: 'https://data.ballarat.vic.gov.au/explore/dataset/trees/' },
   { city: 'Ballarat', label: 'City of Ballarat Open Data - Exceptional Tree Register (CC BY 3.0 AU)', url: 'https://data.ballarat.vic.gov.au/explore/dataset/exceptional-tree-register/' },
@@ -99,6 +105,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Basel', label: 'Kanton Basel-Stadt - Inventar der schützenswerten Gartenanlagen (CC BY 4.0, Geodaten Kanton Basel-Stadt)', url: 'https://wfs.geo.bs.ch/' },
+  { city: 'Nottingham', label: 'Historic England - National Heritage List for England (listed buildings, scheduled monuments, registered parks and gardens; OGL); ONS Local Authority District boundary (OGL)', url: 'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer' },
+  { city: 'Zürich', label: 'Stadt Zürich Open Data - Denkmalpflege-Inventar, regional and cantonal objects (CC0)', url: 'https://data.stadt-zuerich.ch/dataset/geo_denkmalpflege_inventar' },
+  { city: 'Eugene', label: 'City of Eugene Planning Division - Historic Sites (City Landmarks and National Register)', url: 'https://www.arcgis.com/home/item.html?id=e012d77a3a624a1e9f1ce01c8bb0ae8d' },
+  { city: 'Vienna', label: 'Stadt Wien Open Data - Historische Gartenanlagen and Sehenswürdigkeiten (CC BY 4.0)', url: 'https://data.wien.gv.at/' },
+  { city: 'Columbus', label: 'City of Columbus - Register of Historic Properties (CC0); National Park Service - National Register of Historic Places', url: 'https://maps2.columbus.gov/arcgis/rest/services/Schemas/Development/MapServer/0' },
   { city: 'Wodonga', label: 'Victorian Heritage Register (Vicmap, Department of Transport and Planning, CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
   { city: 'Ballarat', label: 'Victorian Heritage Register (Vicmap, Department of Transport and Planning, CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
   { city: 'Perth', label: 'City of Perth Heritage List (CPS2)', url: 'https://www.arcgis.com/home/item.html?id=550909775e984aa19d5b4fadcce4b3e6' },
