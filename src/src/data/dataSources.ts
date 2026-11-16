@@ -18,6 +18,7 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   BOULDER_OPENDATA: 'City of Boulder',
   MILAN_OPENDATA: 'Milan Open Data',
   NOTABLE_ITMIL: 'Monumental Trees of Italy (Milan)',
+  NOTABLE_AUBAL: 'City of Ballarat - Exceptional Tree Register',
   CHARLOTTE_OPENDATA: 'Charlotte Open Data',
   NAPLES_OPENDATA: 'City of Naples',
   TREES_ATLANTA: 'Trees Atlanta',

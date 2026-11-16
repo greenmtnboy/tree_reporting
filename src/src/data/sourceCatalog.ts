@@ -13,6 +13,7 @@ export interface AttributionSourceLink {
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'Wodonga', label: 'City of Wodonga - Street and reserve trees (ArcGIS, CC BY 4.0)', url: 'https://www.arcgis.com/home/item.html?id=f6e5ca95559a4253bf7d25897bf8ed15' },
   { city: 'Ballarat', label: 'City of Ballarat Open Data - Trees (CC BY 3.0 AU)', url: 'https://data.ballarat.vic.gov.au/explore/dataset/trees/' },
+  { city: 'Ballarat', label: 'City of Ballarat Open Data - Exceptional Tree Register (CC BY 3.0 AU)', url: 'https://data.ballarat.vic.gov.au/explore/dataset/exceptional-tree-register/' },
   { city: 'Perth', label: 'City of Perth (Trees in the City)', url: 'https://www.arcgis.com/home/item.html?id=c5ce51d9789a4e9a8510acb8c8f3ecf4' },
   { city: 'Adelaide', label: 'City of Adelaide via data.sa.gov.au (Street Trees)', url: 'https://data.sa.gov.au/data/dataset/street-trees' },
   { city: 'Naperville', label: 'City of Naperville - Right of Way Tree Inventory (ArcGIS, CC0)', url: 'https://services1.arcgis.com/rXJ6QApc2sOtl1Pd/arcgis/rest/services/ROW_Tree_Inventory/FeatureServer/0' },

@@ -49,6 +49,11 @@ def milan_inventory():
 
 
 @pytest.fixture(scope="module")
+def ballarat():
+    return load("ballarat_exceptional_trees", "aubal/ballarat_exceptional_trees.py")
+
+
+@pytest.fixture(scope="module")
 def treeboston():
     return load("treeboston_big_old_trees", "usbos/treeboston_big_old_trees.py")
 
@@ -278,6 +283,75 @@ def test_milan_build_publishes_names_and_links(milan):
     # The hackberry matches no inventory tree: the register is metadata, so it adds no tree.
     assert "mil-mon-07-F205-MI-03" not in rows
     assert len(rows) == 1
+
+
+# --- Ballarat's Exceptional Tree Register -------------------------------------
+
+
+def ballarat_record(asset, species, *, number=1, national_trust="No", point=(-37.565, 143.877), **criteria):
+    record = {column: "No" for column in (
+        "outstanding_size", "particularly_old", "outstanding_example", "rare_or_localised",
+        "curious_growth_form", "aesthetic_value", "horticultural_value", "location_context",
+        "outstanding_habitat_value", "historical_value", "aboriginal_association",
+        "social_cultural_spiritual",
+    )}
+    record.update({k: "Yes" for k, v in criteria.items() if v})
+    record.update({
+        "central_asset_id": asset, "species": species, "number": number,
+        "national_trust": national_trust, "geo_point_2d": {"lat": point[0], "lon": point[1]},
+        "feature_location": f"{species} 1 Some Street", "diameter_breast_height": "> 90cm",
+    })
+    return record
+
+
+def test_ballarat_significance_names_the_criteria_in_register_order(ballarat):
+    text = ballarat.significance_for(ballarat_record(
+        "00301489", "Ulmus glabra", historical_value=True, outstanding_size=True, rare_or_localised=True,
+    ))
+    assert text == ("On the City of Ballarat's Exceptional Tree Register for its size, its rarity "
+                    "and its history.")
+
+
+def test_ballarat_significance_says_group_and_national_trust(ballarat):
+    text = ballarat.significance_for(ballarat_record(
+        "00301000", "Mixed Sp.", number=3801, national_trust="Yes", historical_value=True,
+    ))
+    assert text == ("On the City of Ballarat's Exceptional Tree Register for its history. "
+                    "Listed as a group of 3,801 trees. Also on the National Trust's Register "
+                    "of Significant Trees.")
+
+
+def test_ballarat_links_by_asset_id_and_drops_an_asset_the_inventory_lacks(ballarat):
+    table = ballarat.build(
+        [
+            ballarat_record("00301489", "Ulmus glabra 'Camperdownii'", outstanding_size=True),
+            ballarat_record("00157318", "Populus deltoides", outstanding_size=True),
+        ],
+        # The linked tree is a different genus 40 m off: the asset id decides, not the rule.
+        inventory([("bal-00301489", "Ulmus glabra", (-37.565 + 40 / M_PER_DEG, 143.877), 29.5)]),
+    )
+    rows = table.to_pylist()
+    assert [r["tree_id"] for r in rows] == ["bal-etr-00301489"]
+    (row,) = rows
+    assert row["linked_tree_id"] == "bal-00301489"
+    assert row["data_source"] == "NOTABLE_AUBAL"
+    assert row["tree_name"] is None
+    assert row["diameter_at_breast_height"] is None
+    assert row["significance_source"] == ballarat.LANDING_URL
+
+
+def test_ballarat_group_of_mixed_taxa_has_no_species(ballarat):
+    assert ballarat.species_of("Native Sp.") is None
+    assert ballarat.species_of("Mixed Sp.") is None
+    assert ballarat.species_of("Ulmus glabra 'Camperdownii'") == "Ulmus glabra 'Camperdownii'"
+
+
+def test_ballarat_refuses_a_reshaped_register(ballarat, monkeypatch):
+    broken = ballarat_record("1", "Quercus robur")
+    del broken["national_trust"]
+    monkeypatch.setattr(ballarat, "get_json_with_retry", lambda *a, **k: [broken])
+    with pytest.raises(RuntimeError, match="missing"):
+        ballarat.fetch_records()
 
 
 # --- Milan's inventory --------------------------------------------------------
