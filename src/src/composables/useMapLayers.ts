@@ -3,6 +3,7 @@ import maplibregl from 'maplibre-gl'
 import type { Landmark, TreeForm } from '../types'
 import { TreeCrownLayer } from './treeCrownLayer'
 import { SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM } from '../lib/treeCrowns'
+import { NOTABLE_GLOW_ALPHA, NOTABLE_GLOW_COLOR, NOTABLE_GLOW_PX } from '../lib/notableGlow'
 import { TreeDotsLayer, type TreeDotsPick } from './treeDotsLayer'
 import { useDuckDB } from './useDuckDB'
 
@@ -73,6 +74,8 @@ const HEATMAP_OPACITY_NORMAL: any[] = [
 // every layer's filter over every feature of the tile.
 const HEAT_LAYER_PREFIX = 'trees-heat-'
 const CIRCLE_LAYER_PREFIX = 'trees-circle-'
+/** A notable tree's halo under its circle, one per colour's source layer (lib/notableGlow.ts). */
+const NOTABLE_LAYER_PREFIX = 'trees-notable-'
 
 function styleLayerIds(mapInstance: maplibregl.Map, prefix: string): string[] {
   return (mapInstance.getStyle()?.layers ?? []).filter((l) => l.id.startsWith(prefix)).map((l) => l.id)
@@ -198,6 +201,30 @@ function circleLayerSpec(hexColor: string, simplified: boolean): maplibregl.Laye
       'circle-pitch-scale': 'map',
       'circle-stroke-width': 0.65,
       'circle-stroke-color': 'rgba(255,255,255,0)',
+    },
+  }
+}
+
+/**
+ * The halo under a notable tree's circle: the colour's own source layer,
+ * filtered to the features that carry `notable` (the worker writes it only
+ * on those), so it matches almost nothing. Wider than the circle and blurred.
+ */
+function notableLayerSpec(hexColor: string, simplified: boolean): maplibregl.LayerSpecification {
+  return {
+    id: `${NOTABLE_LAYER_PREFIX}${hexColor}`,
+    type: 'circle',
+    source: 'trees',
+    'source-layer': hexColor,
+    filter: ['has', 'notable'],
+    minzoom: CIRCLE_ZOOM_MIN,
+    ...(simplified ? {} : { maxzoom: CIRCLE_ZOOM_MAX }),
+    paint: {
+      'circle-radius': ['+', ['*', [...buildCircleRadiusExpression()], 1.8], NOTABLE_GLOW_PX] as maplibregl.ExpressionSpecification,
+      'circle-color': NOTABLE_GLOW_COLOR,
+      'circle-blur': 0.75,
+      'circle-opacity': NOTABLE_GLOW_ALPHA + 0.2,
+      'circle-pitch-alignment': 'map',
     },
   }
 }
@@ -385,7 +412,9 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
   }
 
   function removeColorLayers(mapInstance: maplibregl.Map) {
-    for (const id of [...treeHeatLayerIds(mapInstance), ...treeCircleLayerIds(mapInstance)]) mapInstance.removeLayer(id)
+    for (const id of [...treeHeatLayerIds(mapInstance), ...treeCircleLayerIds(mapInstance), ...styleLayerIds(mapInstance, NOTABLE_LAYER_PREFIX)]) {
+      mapInstance.removeLayer(id)
+    }
     // Legacy single-source-layer ids.
     for (const id of ['trees-circle', ...TREE_CATEGORIES.map((cat) => `${HEAT_LAYER_PREFIX}${cat}`)]) {
       if (mapInstance.getLayer(id)) mapInstance.removeLayer(id)
@@ -404,6 +433,8 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     const circleBefore = simplified
       ? (mapInstance.getLayer('landmarks-eye') ? 'landmarks-eye' : undefined)
       : crownId
+    // Each colour's halo under every circle, so a neighbour's circle is never hidden by it.
+    for (const hex of colors) mapInstance.addLayer(notableLayerSpec(hex, simplified), circleBefore)
     for (const hex of colors) mapInstance.addLayer(circleLayerSpec(hex, simplified), circleBefore)
     lastBuiltColors = [...colors]
   }

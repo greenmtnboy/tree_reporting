@@ -37,6 +37,7 @@ import {
   COLOR_OVERRIDE_TABLE,
   DBH_COLORS,
   SPECIES_SHADE_TABLE,
+  NOTABLE_TOKEN_PATTERN,
   TREES_AT_TOKEN,
   UNKNOWN_SHADE_COLOR,
   WINDOW_SHAPE_TABLE,
@@ -46,6 +47,7 @@ import {
   blockCellSql,
   colorSql,
   dropWorldTablesSql,
+  notableRelationSql,
   publishedTreesViewSql,
   scopeSql,
   tileIndexSql,
@@ -84,7 +86,7 @@ import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 import { snapShade } from '../lib/foliageSeason'
 import { assembleLayeredTiles } from './mvtLayers'
 import {
-  CHUNK_ZOOM, bucketByChunk, gridOrderChunks, pointChunkColorsSql, pointChunksSql, pointPalette,
+  CHUNK_ZOOM, bucketByChunk, flaggedRows, gridOrderChunks, pointChunkColorsSql, pointChunksSql, pointPalette,
   type PointChunkBatch, type PointChunkColors, type PointChunkDirectory, type PointKeys,
 } from './cityPoints'
 
@@ -1335,7 +1337,9 @@ ${sliceSource(i).prelude} rows AS (
         64,
         true
       ),
-      'dbh': TRY_CAST(${src.dbh} AS DOUBLE)
+      'dbh': TRY_CAST(${src.dbh} AS DOUBLE),
+      -- Written only on a notable tree: a null property is left out of the tile.
+      'notable': CASE WHEN tf.notable THEN true END
     } AS feature
   FROM ${sliceSource(i).from}
 )
@@ -1530,6 +1534,7 @@ ${src.prelude} pts AS (
     tf.y_3857,
     ${src.id} AS id,
     ${src.dbh} AS dbh,
+    tf.notable,
     ${color.expr} AS display_color,
     ${tileXExpr('tf', z)} AS xtile,
     ${tileYExpr('tf', z)} AS ytile
@@ -1550,7 +1555,8 @@ ${src.prelude} pts AS (
         true
       ),
       'id': id,
-      'dbh': TRY_CAST(dbh AS DOUBLE)
+      'dbh': TRY_CAST(dbh AS DOUBLE),
+      'notable': CASE WHEN notable THEN true END
     } AS feature
   FROM pts
 )
@@ -1679,6 +1685,7 @@ ${src.prelude} points AS (
   SELECT
     ${src.id} AS id,
     ${src.dbh} AS dbh,
+    tf.notable,
     ${color.expr} AS display_color,
     ST_AsMVTGeom(
       ST_Point(tf.x_3857, tf.y_3857),
@@ -1692,7 +1699,7 @@ ${src.prelude} points AS (
     AND tf.y_3857 BETWEEN ${bounds.minY} AND ${bounds.maxY}
   LIMIT 50000
 )
-SELECT ${x} AS xtile, ${y} AS ytile, display_color AS layer, ST_AsMVT({'geom': geom, 'id': id, 'dbh': TRY_CAST(dbh AS DOUBLE)}, 'trees', 4096, 'geom') AS mvt
+SELECT ${x} AS xtile, ${y} AS ytile, display_color AS layer, ST_AsMVT({'geom': geom, 'id': id, 'dbh': TRY_CAST(dbh AS DOUBLE), 'notable': CASE WHEN notable THEN true END}, 'trees', 4096, 'geom') AS mvt
 FROM points
 WHERE geom IS NOT NULL
 GROUP BY display_color
@@ -2051,6 +2058,10 @@ async function runQuery(sql: string, maxRows?: number, at?: { lng: number; lat: 
   await ensureInit()
   await waitForCityContext()
   if (!conn || !db) throw new Error('DuckDB not initialized')
+  sql = sql.replace(NOTABLE_TOKEN_PATTERN, (_, city: string) => {
+    const file = world?.manifest.notable.get(city)
+    return notableRelationSql(file ? worldFileUrl(file) : null)
+  })
 
   if (at) {
     const cz = cellZoom()
@@ -2155,12 +2166,14 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrownColumns> {
     for (let i = 0; i < n; i++) out[i] = String(col.get(i))
     return out
   }
-  const measuredCol = result.getChild('measured')!
-  const measured = new Uint8Array(n)
-  for (let i = 0; i < n; i++) measured[i] = measuredCol.get(i) ? 1 : 0
+  const flags = (name: string) => {
+    const col = result.getChild(name)!, out = new Uint8Array(n)
+    for (let i = 0; i < n; i++) out[i] = col.get(i) ? 1 : 0
+    return out
+  }
   const columns: TreeCrownColumns = {
-    id: strings('id'), lng: numbers('lng'), lat: numbers('lat'), width: numbers('width'), measured,
-    color: strings('color'), category: strings('category'), dbh: numbers('dbh'), height: numbers('height'),
+    id: strings('id'), lng: numbers('lng'), lat: numbers('lat'), width: numbers('width'), measured: flags('measured'),
+    color: strings('color'), category: strings('category'), dbh: numbers('dbh'), height: numbers('height'), notable: flags('notable'),
   }
   return columns
 }
@@ -2240,10 +2253,13 @@ async function getPointChunks(rowsKey: string, keys: number[]): Promise<PointChu
       crown: columnArray(table, 'crown', Uint8Array),
       color: columnArray(table, 'color', Uint8Array),
       rowid: columnArray(table, 'rowid', Uint32Array),
+      notable: columnArray(table, 'notable', Uint8Array),
     })
-    const grids = gridOrderChunks(offsets, columns.x, columns.y, { dbh: columns.dbh, crown: columns.crown, color: columns.color, rowid: columns.rowid })
-    console.info('[Perf] duckdb-worker:point-chunks', { chunks: keys.length, rows: table.numRows, ms: Math.round(nowMs() - t0) })
-    return { rowsKey, colorKey, palette, keys, offsets, ...columns, grids }
+    const { notable: flags, ...drawn } = columns
+    const grids = gridOrderChunks(offsets, drawn.x, drawn.y, { dbh: drawn.dbh, crown: drawn.crown, color: drawn.color, rowid: drawn.rowid, notable: flags })
+    const notable = flaggedRows(flags)
+    console.info('[Perf] duckdb-worker:point-chunks', { chunks: keys.length, rows: table.numRows, notable: notable.length, ms: Math.round(nowMs() - t0) })
+    return { rowsKey, colorKey, palette, keys, offsets, ...drawn, notable, grids }
   })
 }
 
@@ -2389,7 +2405,7 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         const { rowsKey, keys } = msg.params as WorkerMethodMap['getPointChunks']['params']
         const result = await getPointChunks(rowsKey, keys)
         send({ type: 'response', requestId: msg.requestId, ok: true, result },
-          result ? [result.offsets.buffer, result.x.buffer, result.y.buffer, result.dbh.buffer, result.crown.buffer, result.color.buffer, result.rowid.buffer,
+          result ? [result.offsets.buffer, result.x.buffer, result.y.buffer, result.dbh.buffer, result.crown.buffer, result.color.buffer, result.rowid.buffer, result.notable.buffer,
             ...result.grids.map((g) => g.start.buffer)] : undefined)
         break
       }

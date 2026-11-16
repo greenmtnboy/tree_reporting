@@ -94,10 +94,12 @@ export interface TreeCrownColumns {
   category: string[]
   dbh: Float64Array
   height: Float64Array
+  /** 1 on a notable tree (a proper name or a blurb); absent reads as none. */
+  notable?: Uint8Array
 }
 
 export function crownColumnBuffers(c: TreeCrownColumns): ArrayBuffer[] {
-  return [c.lng, c.lat, c.width, c.measured, c.dbh, c.height].map(a => a.buffer as ArrayBuffer)
+  return [c.lng, c.lat, c.width, c.measured, c.dbh, c.height, ...(c.notable ? [c.notable] : [])].map(a => a.buffer as ArrayBuffer)
 }
 
 export function crownZoomOpacity(zoom: number): number {

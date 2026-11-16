@@ -181,7 +181,10 @@ describe('tile worker on DuckDB-WASM', () => {
       expect(names.length, `z${z} has no layers`).toBeGreaterThan(0)
       for (const name of names) {
         expect(name, `z${z}`).toMatch(/^#[0-9a-fA-F]{6}$/)
-        expect(layers[name].properties, `z${z} ${name}`).toEqual(properties)
+        // `notable` rides only on a notable tree's own feature (written when true), never on an aggregate.
+        const props = layers[name].properties
+        expect(props.filter((p) => p !== 'notable'), `z${z} ${name}`).toEqual(properties)
+        if (properties.includes('grid_m')) expect(props, `z${z} ${name}`).not.toContain('notable')
       }
     }
   })
