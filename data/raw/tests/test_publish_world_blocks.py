@@ -137,8 +137,11 @@ def test_a_block_is_the_projection_columns_without_the_watermark(con, world):
     assert [(name, kind) for name, kind, *_ in described] == list(pb.COLUMNS)
     assert manifest["columns"] == [name for name, _ in pb.COLUMNS]
     assert "prediction_inputs_published_through" not in manifest["columns"]
-    # The text stays out of the blocks: it is the notable file's.
-    assert not {"significance", "significance_source"} & set(manifest["columns"])
+    # The text stays out of the blocks and the vocabulary: it is the notable
+    # file's, and a block row carries only the bit.
+    assert not {"tree_name", "significance", "significance_source"} & set(manifest["columns"])
+    assert "tree_name" not in pb.VOCAB_COLUMNS
+    assert {name for name, _ in pb.NOTABLE_COLUMNS} >= {"tree_name", "significance", "significance_source"}
 
 
 def test_blocks_from_different_inventories_sit_side_by_side_and_the_manifest_says_whose(world):

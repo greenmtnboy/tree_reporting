@@ -105,15 +105,17 @@ DEFAULT_MEMORY_LIMIT = "2500MB"
 MANIFEST_CACHE_CONTROL = "public,max-age=300"
 IMMUTABLE_CACHE_CONTROL = "public,max-age=31536000,immutable"
 
-#: The columns of a block, in order: the projection's, less its watermark.
-#: `test_publish_world_blocks.py` holds the worker's read to the same list.
+#: The columns of a block, in order: the projection's, less its watermark and
+#: the notable text. A tree's own name and blurb are null on nearly every row,
+#: so they live in the city's notable file (NOTABLE_COLUMNS), read when a
+#: notable tree's card opens, never in a block every resident row carries.
+#: `test_publish_world_blocks.py` holds the worker's read to a subset of it.
 COLUMNS = (
     ("tree_id", "VARCHAR"),
     ("city", "VARCHAR"),
     ("data_source", "VARCHAR"),
     ("species", "VARCHAR"),
     ("cultivar", "VARCHAR"),
-    ("tree_name", "VARCHAR"),
     ("display_name", "VARCHAR"),
     ("tree_form", "VARCHAR"),
     # True on a tree with a proper name or a significance blurb, null
@@ -135,7 +137,7 @@ COLUMNS = (
 OPTIONAL_COLUMNS = {"cultivar", "crown_width_m", "height_m", "predicted_height_m", "submission_photo_url", "notable"}
 #: The string columns the worker stores as ENUMs (CITY_ENUM_TYPES in
 #: src/src/workers/cityTables.ts), as `kind` in the vocabulary file.
-VOCAB_COLUMNS = ("city", "data_source", "species", "cultivar", "tree_name", "display_name")
+VOCAB_COLUMNS = ("city", "data_source", "species", "cultivar", "display_name")
 #: The notable file's columns: the text a notable tree's card shows, keyed by
 #: the block row it belongs to. A projection without one reads it as null.
 NOTABLE_COLUMNS = (
