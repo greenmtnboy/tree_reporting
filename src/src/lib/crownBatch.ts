@@ -135,7 +135,8 @@ export function buildCrownBatch(c: TreeCrownColumns, camera: TreeRenderView, opt
       vertices[cursor++] = r
       vertices[cursor++] = g
       vertices[cursor++] = b
-      vertices[cursor++] = c.measured[i] ? 1 : 0
+      // The colour's alpha: 1 for a measured crown, plus 2 on a desktop notable sprite (its outline).
+      vertices[cursor++] = (c.measured[i] ? 1 : 0) + (!simplified && c.notable?.[i] ? 2 : 0)
       vertices[cursor++] = cell ? (cx < 0 ? cell.left : cell.right) : 0
       vertices[cursor++] = cell ? (cy > 0 ? cell.top : cell.bottom) : 0
       vertices[cursor++] = cell?.crownFraction ?? 1

@@ -11,7 +11,7 @@ import { CROWN_STRIDE as STRIDE, emptyCrownBatch, type CrownBatch, type CrownBat
 import { FOOTPRINT_PAD, insidePolygon, viewFootprint, type Point } from '../lib/viewFootprint'
 import { lngLatFrom3857, lngLatTo3857, MERCATOR_WORLD_M } from '../lib/treeDots'
 import { initialSpriteBudget, isSoftwareRenderer, nextSpriteBudget, settleStepDown, stepDownUnseen, type BatchSample, type SpriteBudget } from '../lib/spriteBudget'
-import { NOTABLE_GLOW_ALPHA, NOTABLE_GLOW_RGB, NOTABLE_HALO_SCALE } from '../lib/notableGlow'
+import { NOTABLE_GLOW_ALPHA, NOTABLE_GLOW_RGB, NOTABLE_HALO_SCALE, NOTABLE_OUTLINE_RGB, NOTABLE_OUTLINE_WIDTH } from '../lib/notableGlow'
 
 type GL = WebGLRenderingContext | WebGL2RenderingContext
 /** A 60 Hz frame; what an upload's frame takes beyond it is the upload's cost. */
@@ -547,6 +547,14 @@ export class TreeCrownLayer implements CustomLayerInterface {
         float raa = ${derivatives ? 'max(fwidth(r), 0.002)' : '0.03'};
         float disc = 1.0 - smoothstep(1.0 - raa, 1.0, r);
         vec4 canopy = vec4(min(v_color.rgb * mix(1.1, 0.8, r), vec3(1.0)) * disc, disc);
+        if (v_color.a > 1.5) {
+          // A notable tree: its silhouette outlined from the same distance field, just outside the
+          // trunk and foliage edge, and the overhead disc's rim. Every other sprite skips this.
+          float edge = max(distance.r, distance.g);
+          float band = smoothstep(0.5 - ${NOTABLE_OUTLINE_WIDTH.toFixed(2)} - aa.g, 0.5 - ${NOTABLE_OUTLINE_WIDTH.toFixed(2)} + aa.g, edge) * (1.0 - side.a);
+          side += vec4(vec3(${NOTABLE_OUTLINE_RGB}) * band, band);
+          canopy.rgb = mix(canopy.rgb, vec3(${NOTABLE_OUTLINE_RGB}) * disc, smoothstep(0.84 - raa, 0.84, r) * disc);
+        }
         // The shape morphs over the whole band, the look switches in its middle: blending the two
         // across it shows a see-through disc over the sprite.
         ${webgl2 ? 'fragColor' : 'gl_FragColor'} = mix(side, canopy, smoothstep(0.35, 0.65, v_top)) * u_opacity * v_reach;

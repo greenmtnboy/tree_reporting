@@ -3233,8 +3233,8 @@ onUnmounted(() => {
   letter-spacing: 0.02em;
   padding: 1px 7px;
   border-radius: 999px;
-  color: #3d2f00;
-  background: #ffd54a;
+  color: #00263d;
+  background: #38b6ff;
 }
 
 .tc-notable-source {
