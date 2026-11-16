@@ -10,6 +10,7 @@ import {
   pointsNear, relativeMatrix,
 } from '../lib/treeDots'
 import { DEFAULT_CROWN_WIDTH, MAX_CROWN_WIDTH, REACH_FADE } from '../lib/treeCrowns'
+import { NOTABLE_GLOW_ALPHA, NOTABLE_GLOW_PX, NOTABLE_GLOW_RGB } from '../lib/notableGlow'
 
 /**
  * The desktop map's trees below the sprites: trunk-sized circles from z6
@@ -129,7 +130,7 @@ function uniforms(gl: GL2, program: WebGLProgram, names: string[]): Record<strin
 const CIRCLE_VS = `#version 300 es
 precision highp float;
 layout(location = 0) in vec2 a_pos;
-// Palette index, dbh (inches), crown width (CROWN_BYTE_PER_M; 0 unknown).
+// Palette index, dbh (inches), crown width (CROWN_BYTE_PER_M; 0 unknown), notable (0 or 1).
 layout(location = 1) in vec4 a_attr;
 uniform mat4 u_matrix;
 uniform vec2 u_center;
@@ -154,8 +155,11 @@ uniform vec2 u_eye;
 out vec3 v_color;
 out float v_radius;
 out float v_opacity;
+// A notable tree's halo past its disc, device pixels; 0 for every other tree.
+out float v_glow;
 void main() {
   gl_Position = u_matrix * vec4(a_pos - u_center, 0.0, 1.0);
+  v_glow = 0.0;
   v_opacity = u_opacity;
   if (u_reach >= 0.0) {
     // Fill in past the sprites: a dot shows as much as the sprite over it has faded.
@@ -184,7 +188,9 @@ void main() {
   float crown = a_attr.z > 0.0 ? a_attr.z / ${CROWN_BYTE_PER_M.toFixed(1)} : ${DEFAULT_CROWN_WIDTH.toFixed(1)};
   float radius = max(mix(u_radius.x, u_radius.y, s), crown * 0.5 * u_px_per_m) * u_dpr * (gl_Position.w > 0.0 ? u_camdist / gl_Position.w : 0.0);
   v_radius = radius;
-  gl_PointSize = 2.0 * radius + 2.0;
+  // A notable tree's halo: the same point, wider. Every other tree takes the path above unchanged.
+  v_glow = a_attr.w > 0.0 ? max(${NOTABLE_GLOW_PX.toFixed(1)} * u_dpr, radius * 0.6) : 0.0;
+  gl_PointSize = 2.0 * (radius + v_glow) + 2.0;
   v_color = texelFetch(u_palette, ivec2(int(a_attr.x), 0), 0).rgb;
 }`
 
@@ -193,14 +199,27 @@ precision highp float;
 in vec3 v_color;
 in float v_radius;
 in float v_opacity;
+in float v_glow;
 out vec4 o;
 void main() {
-  float d = length(gl_PointCoord - 0.5) * (2.0 * v_radius + 2.0);
+  float d = length(gl_PointCoord - 0.5) * (2.0 * (v_radius + v_glow) + 2.0);
   float a = clamp(v_radius - d + 0.5, 0.0, 1.0) * v_opacity;
-  if (a <= 0.0) discard;
-  o = vec4(v_color * a, a);
+  // The halo under the disc: warm, brightest at the disc's edge, gone at the point's.
+  float h = v_glow > 0.0 ? (1.0 - smoothstep(v_radius, v_radius + v_glow, d)) * ${NOTABLE_GLOW_ALPHA.toFixed(2)} * v_opacity : 0.0;
+  float t = a + h * (1.0 - a);
+  if (t <= 0.0) discard;
+  o = vec4(v_color * a + vec3(${NOTABLE_GLOW_RGB}) * h * (1.0 - a), t);
 }`
 
+
+/** The batch's notable rows (ascending) that fall in [from, to), relative to `from`. */
+function notableIn(rows: Uint32Array, from: number, to: number): Uint32Array {
+  let a = 0
+  while (a < rows.length && rows[a] < from) a++
+  let b = a
+  while (b < rows.length && rows[b] < to) b++
+  return rows.slice(a, b).map((i) => i - from)
+}
 
 interface ChunkGpu {
   pos: WebGLBuffer
@@ -220,6 +239,8 @@ interface Chunk {
   crown: Uint8Array
   color: Uint8Array
   rowid: Uint32Array
+  /** This chunk's notable rows, as indices here: their attribute's `.w` is set and they glow. */
+  notable: Uint32Array
   /** A row's index here by its rowid; -1 for a row the current filter leaves out. */
   indexByRowid: Int32Array
   palette: string[]
@@ -689,6 +710,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
         crown: batch.crown.subarray(from, to),
         color: batch.color.subarray(from, to),
         rowid: batch.rowid.subarray(from, to),
+        notable: notableIn(batch.notable, from, to),
         indexByRowid: new Int32Array(),
         palette: batch.palette, colorKey: batch.colorKey, grid: batch.grids[s],
         uploadPoints: true, uploadColors: true,
@@ -721,6 +743,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
     if (chunk.uploadColors) {
       const attr = new Uint8Array(chunk.count * 4)
       for (let i = 0; i < chunk.count; i++) { attr[i * 4] = chunk.color[i]; attr[i * 4 + 1] = chunk.dbh[i]; attr[i * 4 + 2] = chunk.crown[i] }
+      for (const i of chunk.notable) attr[i * 4 + 3] = 1
       gl.bindBuffer(gl.ARRAY_BUFFER, gpu.attr)
       gl.bufferData(gl.ARRAY_BUFFER, attr, gl.STATIC_DRAW)
       chunk.uploadColors = false
@@ -811,7 +834,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
       g.uniform1f(this.circleU.u_scale, Math.cos(this.map.getCenter().lat * Math.PI / 180))
       g.activeTexture(g.TEXTURE0)
       g.uniform1i(this.circleU.u_palette, 0)
-      const view = this.viewBox3857(0, maxDotRadius(radius, pxPerMetre) + 2)
+      const view = this.viewBox3857(0, maxDotRadius(radius, pxPerMetre) + NOTABLE_GLOW_PX + 2)
       for (const chunk of this.chunks.values()) {
         if (!chunk.gpu || !intersects(this.chunkBox(chunk), view)) continue
         const local = this.chunkCamera(matrix as ArrayLike<number>, chunk, cam.camX, cam.camY)

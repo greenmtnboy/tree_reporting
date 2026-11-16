@@ -11,6 +11,7 @@ import { CROWN_STRIDE as STRIDE, emptyCrownBatch, type CrownBatch, type CrownBat
 import { FOOTPRINT_PAD, insidePolygon, viewFootprint, type Point } from '../lib/viewFootprint'
 import { lngLatFrom3857, lngLatTo3857, MERCATOR_WORLD_M } from '../lib/treeDots'
 import { initialSpriteBudget, isSoftwareRenderer, nextSpriteBudget, settleStepDown, stepDownUnseen, type BatchSample, type SpriteBudget } from '../lib/spriteBudget'
+import { NOTABLE_GLOW_ALPHA, NOTABLE_GLOW_RGB, NOTABLE_HALO_SCALE } from '../lib/notableGlow'
 
 type GL = WebGLRenderingContext | WebGL2RenderingContext
 /** A 60 Hz frame; what an upload's frame takes beyond it is the upload's cost. */
@@ -450,6 +451,8 @@ export class TreeCrownLayer implements CustomLayerInterface {
       uniform vec2 u_viewport;
       uniform vec2 u_right;
       uniform float u_view_angle;
+      // 1 in the halo pass: the notable trees' quads again, wider, before the sprites.
+      uniform float u_halo;
       ${webgl2 ? 'out' : 'varying'} vec2 v_uv;
       ${webgl2 ? 'out' : 'varying'} float v_top;` : ''}
       uniform mat4 u_matrix;
@@ -492,8 +495,11 @@ export class TreeCrownLayer implements CustomLayerInterface {
         // From overhead: a disc the crown's own width, centred on the trunk. A disc on the ground
         // seen at elevation e is sin(e) as tall as it is wide; round only from straight above.
         float discHalf = max(abs(crownRight.x) * a_shape.x, minHalf);
-        anchor.xy += vec2(a_corner.x * mix(halfWidth, discHalf, v_top),
+        vec2 offset = vec2(a_corner.x * mix(halfWidth, discHalf, v_top),
           mix((a_corner.y + 2.0 * a_shape.z - 1.0) * halfHeight, a_corner.y * discHalf * u_viewport.x / u_viewport.y * sinE, v_top));
+        // The halo: the quad grown about its own centre (its corner.y = 0 line), the sprite's middle.
+        vec2 middle = vec2(0.0, mix((2.0 * a_shape.z - 1.0) * halfHeight, 0.0, v_top));
+        anchor.xy += middle + (offset - middle) * mix(1.0, ${NOTABLE_HALO_SCALE.toFixed(2)}, u_halo);
         gl_Position = anchor.w > 0.0 ? anchor : vec4(2.0, 2.0, 2.0, 1.0);
         v_uv = a_uv;`}
       }`
@@ -505,6 +511,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
       ${webgl2 ? 'in' : 'varying'} float v_reach;
       uniform float u_opacity;
       ${!this.simplified ? `uniform sampler2D u_distance;
+      uniform float u_halo;
       ${webgl2 ? 'in' : 'varying'} vec2 v_uv;
       ${webgl2 ? 'in' : 'varying'} float v_top;` : ''}
       ${webgl2 ? 'out vec4 fragColor;' : ''}
@@ -519,6 +526,12 @@ export class TreeCrownLayer implements CustomLayerInterface {
         float alpha = edge * (0.015 + ring * dash * 0.65) * v_fade * u_opacity;
         ${webgl2 ? 'fragColor' : 'gl_FragColor'} = vec4(v_color.rgb * alpha, alpha);
         ` : `
+        if (u_halo > 0.5) {
+          // A soft gold ellipse the sprite drawn over it covers in the middle: its rim is the glow.
+          float glow = (1.0 - smoothstep(0.3, 1.0, length(v_corner))) * ${NOTABLE_GLOW_ALPHA.toFixed(2)} * u_opacity * v_reach;
+          ${webgl2 ? 'fragColor' : 'gl_FragColor'} = vec4(vec3(${NOTABLE_GLOW_RGB}) * glow, glow);
+          return;
+        }
         vec3 distance = ${webgl2 ? 'texture' : 'texture2D'}(u_distance, v_uv).rgb;
         // Screen-space derivatives keep the edge about one physical pixel
         // wide, whether the sprite is a small marker or a large nearby tree.
@@ -561,7 +574,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
     this.program = program
     this.buffer = gl.createBuffer()!
     this.attributes = ['a_center', 'a_corner', 'a_radius', 'a_color', 'a_uv', 'a_shape'].map(name => gl.getAttribLocation(program, name))
-    this.uniforms = Object.fromEntries(['u_matrix', 'u_camera', 'u_budget_camera', 'u_meters', 'u_budget_distance', 'u_opacity', 'u_distance', 'u_viewport', 'u_right', 'u_view_angle', 'u_reach']
+    this.uniforms = Object.fromEntries(['u_matrix', 'u_camera', 'u_budget_camera', 'u_meters', 'u_budget_distance', 'u_opacity', 'u_distance', 'u_viewport', 'u_right', 'u_view_angle', 'u_reach', 'u_halo']
       .map(name => [name, gl.getUniformLocation(program, name)]))
     this.textures = []
     if (this.sprites) {
@@ -629,6 +642,13 @@ export class TreeCrownLayer implements CustomLayerInterface {
       const bearing = this.map.getBearing() * Math.PI / 180
       gl.uniform2f(this.uniforms.u_right, Math.cos(bearing), Math.sin(bearing))
       gl.uniform1f(this.uniforms.u_view_angle, this.viewAngle ? 1 : 0)
+      // The notable trees' halos first, so each sprite draws over its own.
+      const notable = this.drawn.notable
+      if (notable.length) {
+        gl.uniform1f(this.uniforms.u_halo, 1)
+        for (const i of notable) gl.drawArrays(gl.TRIANGLES, i * 6, 6)
+      }
+      gl.uniform1f(this.uniforms.u_halo, 0)
     }
     gl.drawArrays(gl.TRIANGLES, 0, this.count)
     // MapLibre unbinds its VAO before custom drawing. Leave that default VAO

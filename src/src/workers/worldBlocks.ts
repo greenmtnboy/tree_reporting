@@ -44,6 +44,11 @@ export type WorldManifest = {
   trees: number
   /** The vocabulary file's name under the world's base URL. */
   vocab: string
+  /**
+   * Each city's notable file by city code (one row per block row with
+   * `notable` set: its name, blurb and source); a city without one is absent.
+   */
+  notable: Map<string, string>
   cities: WorldCity[]
   blocks: Map<number, WorldBlock>
 }
@@ -83,11 +88,25 @@ export function blockOfCell(cellKey: number, cellZoom: number): number {
   return blockKey(Math.floor(cellKey / n) >> shift, (cellKey % n) >> shift)
 }
 
+/**
+ * Each city's notable file. The manifest of 2026-11-16 named one world-wide
+ * file at the top level instead; every city reads that one until a manifest
+ * names its own.
+ */
+function notableFiles(cities: { code: string; notable?: string | null }[], worldWide?: string): Map<string, string> {
+  const files = new Map<string, string>()
+  for (const city of cities) {
+    const file = city.notable || worldWide
+    if (file) files.set(city.code, file)
+  }
+  return files
+}
+
 /** Read a manifest as fetched. Throws on a shape this build of the map does not read. */
 export function parseWorldManifest(json: unknown): WorldManifest {
   const m = json as {
-    format?: number; generated_at?: string; block_zoom?: number; vocab?: string; trees?: number
-    cities?: { code: string; name: string; center: [number, number]; trees: number; blocks: number }[]
+    format?: number; generated_at?: string; block_zoom?: number; vocab?: string; notable?: string; trees?: number
+    cities?: { code: string; name: string; center: [number, number]; trees: number; blocks: number; notable?: string | null }[]
     blocks?: [number, number, string, number[]][]
   }
   if (!m || m.format !== WORLD_MANIFEST_FORMAT) throw new Error(`World manifest format ${m?.format} is not ${WORLD_MANIFEST_FORMAT}`)
@@ -100,6 +119,7 @@ export function parseWorldManifest(json: unknown): WorldManifest {
     generatedAt: String(m.generated_at),
     trees: Number(m.trees),
     vocab: m.vocab,
+    notable: notableFiles(m.cities, m.notable),
     cities: m.cities.map((c) => ({ code: c.code, name: c.name, center: c.center, trees: c.trees, blocks: c.blocks })),
     blocks,
   }

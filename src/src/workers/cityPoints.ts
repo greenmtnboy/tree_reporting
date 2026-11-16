@@ -95,6 +95,12 @@ export interface PointChunkBatch {
   /** The row's place in its block file (`rn`): with the chunk, the tree card's lookup and how a colour refresh finds its tree. */
   rowid: Uint32Array
   /**
+   * The batch's notable trees, as indices into its rows (ascending, after the
+   * draw-grid reorder). A handful in a world of millions, so a list rather
+   * than a byte per tree on the page.
+   */
+  notable: Uint32Array
+  /**
    * Each chunk's 512 m draw grid. A chunk's rows are stored in its grid's
    * cell order, so a frame draws the ranges of the cells in view and a pick
    * scans a few cells.
@@ -178,6 +184,7 @@ SELECT
   CAST(tf.y_3857 - (${sqlDouble(WEB_MERCATOR_MAX)} - (${cy} + 1) * ${sqlDouble(CHUNK_SIZE_M)}) AS FLOAT) AS y,
   CAST(LEAST(255, GREATEST(1, round(${src.dbh}))) AS UTINYINT) AS dbh,
   ${crownByteSql()} AS crown,
+  CAST(COALESCE(tf.notable, false) AS UTINYINT) AS notable,
   ${paletteIndexSql(colorExpr, palette)} AS color
 FROM ${src.from}
 WHERE ${src.where}${chunkFilterSql(keys)}`
@@ -221,6 +228,15 @@ export function bucketByChunk<T extends Record<string, Float32Array | Uint8Array
     out[name] = permuted
   }
   return { offsets, columns: out as T }
+}
+
+/** The indices of the set bytes of `flags`: a batch's notable rows. */
+export function flaggedRows(flags: Uint8Array): Uint32Array {
+  let n = 0
+  for (let i = 0; i < flags.length; i++) if (flags[i]) n++
+  const out = new Uint32Array(n)
+  for (let i = 0, k = 0; i < flags.length; i++) if (flags[i]) out[k++] = i
+  return out
 }
 
 /**

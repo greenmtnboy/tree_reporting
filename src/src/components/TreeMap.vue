@@ -131,7 +131,8 @@
     <div class="tree-card-header">
       <div class="tree-card-header-main">
         <div class="tree-card-title-wrap">
-          <div class="tree-card-title">{{ selectedTree.tree_name || 'Unknown tree' }}<span v-if="scientificName && scientificName !== selectedTree.tree_name" class="tree-card-binomial"> (<span class="tree-card-species">{{ scientificName }}</span><span v-if="selectedTree.cultivar"> '{{ selectedTree.cultivar }}'</span>)</span></div>
+          <div v-if="selectedTree.notable_name" class="tree-card-title" data-testid="tree-card-name">{{ selectedTree.notable_name }}</div>
+          <div :class="selectedTree.notable_name ? 'tree-card-subtitle' : 'tree-card-title'">{{ selectedTree.display_name || 'Unknown tree' }}<span v-if="scientificName && scientificName !== selectedTree.display_name" class="tree-card-binomial"> (<span class="tree-card-species">{{ scientificName }}</span><span v-if="selectedTree.cultivar"> '{{ selectedTree.cultivar }}'</span>)</span></div>
         </div>
         <div class="tree-card-header-actions">
           <button v-if="!simplified && firebaseAvailable" type="button" class="tree-card-correction"
@@ -150,6 +151,11 @@
       <!-- Left pane: this tree -->
       <div class="tree-card-pane tree-card-pane--tree">
         <div class="tree-card-section-label">This tree</div>
+        <div v-if="selectedTree.notable" class="tc-notable" data-testid="tree-notable">
+          <span class="tc-notable-badge">Notable tree</span>
+          <p v-if="selectedTree.significance" class="tc-description" data-testid="tree-significance">{{ selectedTree.significance }}</p>
+          <a v-if="notableSourceUrl" class="tc-notable-source" :href="notableSourceUrl" target="_blank" rel="noopener noreferrer">Source</a>
+        </div>
         <p v-if="showPredictionNote" class="tc-prediction-note" data-testid="tree-prediction-note">This tree is predicted from aerial imagery; check in to confirm its existence.</p>
         <p v-if="treeReviewNote" class="tc-prediction-note tc-review-note" data-testid="tree-review-note">{{ treeReviewNote }}</p>
         <div class="tc-grid">
@@ -387,7 +393,7 @@ import { THINKING_PHRASES } from '../constants/loadingPhrases'
 import { CROWN_ZOOM_START, validTreeHeight } from '../lib/treeCrowns'
 import { applyMapUrlFilters, DBH_LEGEND, hasMapUrlFilters, MAP_FILTER_FIELDS, readMapColorBy, readMapUrlFilters } from '../lib/mapUrlFilters'
 import { FOLIAGE_LEGEND_NOTE, FOLIAGE_PHASE_LABEL, foliagePhase, speciesShadeSql } from '../lib/foliageSeason'
-import { TREES_AT_TOKEN, UNKNOWN_SHADE_COLOR } from '../workers/cityTables'
+import { notableToken, TREES_AT_TOKEN, UNKNOWN_SHADE_COLOR } from '../workers/cityTables'
 import { bookmarkAt, directoryIndex, type WorldDirectory } from '../workers/worldBlocks'
 
 const { resolvedTheme } = useTheme()
@@ -999,7 +1005,17 @@ const { loadingMessage, runIntroZoomOut, cancelIntro, runGlobeSwoopTo, recordInt
 
 interface PopupTreeRow {
   tree_id: string
-  tree_name: string | null
+  /** The inventory's city code: whose notable file holds this tree's text. */
+  city: string | null
+  /** The species' common name, else the scientific one (the projection's display_name). */
+  display_name: string | null
+  /** True on a tree with a proper name or a significance blurb; its text comes from the notable file. */
+  notable: boolean | null
+  /** The tree's own name ("Il Platano di Villa Litta"), from the notable file. */
+  notable_name?: string | null
+  /** Why it is notable, and where that came from (a URL or a register's code). */
+  significance?: string | null
+  significance_source?: string | null
   species: string | null
   /** The cultivated selection, e.g. 'Tina' -- a property of this tree, not of the species. */
   cultivar: string | null
@@ -1320,6 +1336,7 @@ function stopTreeCardLoading(): void {
 function selectTree(row: PopupTreeRow, coords: [number, number]): void {
   stopTreeCardLoading()
   selectedTree.value = row
+  if (row.notable && row.city) void loadNotableText(row.tree_id, row.city, popupRequestToken)
   selectedTreeAnchor.value = coords
   syncTreeRoute(row.tree_id)
   updateTreeCardPosition()
@@ -1327,6 +1344,31 @@ function selectTree(row: PopupTreeRow, coords: [number, number]): void {
   // dimensions to work with. Re-run once it has been rendered and measured.
   void nextTick(() => updateTreeCardPosition())
 }
+
+/**
+ * A notable tree's name and blurb, from the world's notable file: fetched
+ * the first time a notable card opens, never on load. The card is already
+ * showing; this fills it in.
+ */
+async function loadNotableText(treeId: string, city: string, requestToken: number): Promise<void> {
+  try {
+    const { rows } = await duckQuery(
+      `SELECT tree_name, significance, significance_source FROM ${notableToken(city)} WHERE tree_id = '${treeId.replace(/'/g, "''")}' LIMIT 1`,
+    )
+    const current = selectedTree.value
+    if (requestToken !== popupRequestToken || current?.tree_id !== treeId || !rows[0]) return
+    const text = rows[0] as { tree_name: string | null; significance: string | null; significance_source: string | null }
+    selectedTree.value = { ...current, notable_name: text.tree_name, significance: text.significance, significance_source: text.significance_source }
+  } catch (e) {
+    console.warn('[Tree Card] notable text', e)
+  }
+}
+
+/** A notable tree's source, when it is a link; a register's code is not shown. */
+const notableSourceUrl = computed(() => {
+  const source = selectedTree.value?.significance_source
+  return source && /^https?:\/\//.test(source) ? source : null
+})
 
 function closeTreeCard(): void {
   // Drop any in-flight lookup so it cannot reopen the card it was closed over.
@@ -1622,7 +1664,9 @@ async function showTreeCard(feature: GeoJSON.Feature, fallbackCoords: [number, n
   const cardQuery = (from: string) => `
       SELECT
         tf.tree_id,
-        tf.tree_name,
+        CAST(tf.city AS VARCHAR) AS city,
+        CAST(tf.display_name AS VARCHAR) AS display_name,
+        tf.notable,
         tf.species,
         tf.cultivar,
         tf.plant_date,
@@ -3164,6 +3208,38 @@ onUnmounted(() => {
 
 .tree-card-species {
   font-style: italic;
+}
+
+/* Under a notable tree's own name: what it is. */
+.tree-card-subtitle {
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: rgba(var(--ink-rgb), 0.78);
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
+.tc-notable {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.tc-notable-badge {
+  align-self: flex-start;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: #3d2f00;
+  background: #ffd54a;
+}
+
+.tc-notable-source {
+  font-size: 0.72rem;
+  color: rgba(var(--ink-rgb), 0.66);
 }
 
 /* Three-pane body — side by side on desktop, stacked on mobile */

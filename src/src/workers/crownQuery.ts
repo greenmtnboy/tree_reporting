@@ -72,6 +72,7 @@ WITH ${baseQuery === null ? '' : `${source.trees ? `trees AS (${source.trees}), 
     CASE WHEN ${valid('tf.height_m', MAX_TREE_HEIGHT)} THEN tf.height_m
       WHEN ${valid('tf.predicted_height_m', MAX_TREE_HEIGHT)} THEN tf.predicted_height_m END AS height,
     CAST(tf.tree_form AS VARCHAR) AS category, tf.dbh,
+    COALESCE(tf.notable, false) AS notable,
     ((tf.x_3857 - ${x}) * ${cosLat}) ** 2 +
     ((tf.y_3857 - ${y}) * ${cosLat}) ** 2 + ${camera.altitude ** 2} AS distance_squared
   FROM ${source.from} tf
@@ -79,7 +80,7 @@ WITH ${baseQuery === null ? '' : `${source.trees ? `trees AS (${source.trees}), 
   WHERE ${extent}${baseQuery === null ? '' : `
     AND EXISTS (SELECT 1 FROM base WHERE base.tree_id = tf.tree_id)`}
 )
-SELECT id, lng, lat, width, measured, color, category, dbh, height FROM nearby
+SELECT id, lng, lat, width, measured, color, category, dbh, height, notable FROM nearby
 ${camera.bounds ? '' : `WHERE width IS NOT NULL AND distance_squared < ${CROWN_DISTANCE_MAX ** 2}`}
 ORDER BY distance_squared, id LIMIT ${camera.bounds ? spriteLimit(camera) : MAX_CROWNS}`
 }
