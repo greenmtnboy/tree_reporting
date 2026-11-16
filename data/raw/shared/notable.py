@@ -19,8 +19,13 @@ register's (when both are measured).  A monumental tree is the biggest of its
 genus for some distance around, so trunk size is what separates it from the
 younger tree of the same genus beside it -- Milan's Platanus at Giardini
 Montanelli has an 8 cm plane 21 m away and nothing of its own 199 cm within
-30 m, and is left unlinked rather than named onto a sapling.  An unlinked row
-publishes as a tree of its own, at the register's point.
+30 m, and is left unlinked rather than named onto a sapling.
+
+**A register is metadata, never a tree.**  An unlinked row is dropped
+(`notable_table`): a register's point is not a survey's, so a monument the
+inventory does not hold, or holds too far off to trust, is not added to the
+map as a new tree at the register's coordinates.  It comes back on its own
+when the inventory or the link rule finds its tree.
 
 **The ids are the inventory partition's own.**  The caller passes the table the
 municipal ingest emits -- the same reader, the same filters, after
@@ -154,12 +159,23 @@ def notable_table(
     *,
     city: str,
 ) -> pa.Table:
-    """The register as the tree schema plus the three notable columns.
+    """The register's linked rows as the tree schema plus the three notable
+    columns.  An unlinked row is dropped: a register only lends its name and
+    blurb to a tree the inventory holds (see the module docstring).
 
     `enforce_tree_schema` is still the caller's to run (with
     `proper_names=True`); `significance`, `significance_source` and
     `linked_tree_id` pass through it as extra columns.
     """
+    kept = [(r, link) for r, link in zip(rows, links, strict=True) if link is not None]
+    if len(kept) < len(rows):
+        print(
+            f"{city} notable register: {len(rows) - len(kept)} of {len(rows)} rows match no "
+            "inventory tree and are dropped",
+            file=sys.stderr,
+        )
+    rows = [r for r, _ in kept]
+    links = [link for _, link in kept]
     return pa.table(
         {
             "tree_id": pa.array([r["tree_id"] for r in rows], type=pa.string()),

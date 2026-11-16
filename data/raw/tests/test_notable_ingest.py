@@ -238,9 +238,10 @@ def test_milan_build_publishes_names_and_links(milan):
     assert rows["mil-mon-14-F205-MI-03"]["linked_tree_id"] == "mil-40114"
     assert rows["mil-mon-14-F205-MI-03"]["tree_name"] == "Il Platano Siamese di Villa Litta"
     assert rows["mil-mon-14-F205-MI-03"]["data_source"] == "NOTABLE_ITMIL"
-    assert rows["mil-mon-07-F205-MI-03"]["linked_tree_id"] is None
-    assert rows["mil-mon-07-F205-MI-03"]["tree_name"] is None
-    assert rows["mil-mon-07-F205-MI-03"]["significance"].startswith("Listed on Italy's")
+    assert rows["mil-mon-14-F205-MI-03"]["significance"].startswith("Listed on Italy's")
+    # The hackberry matches no inventory tree: the register is metadata, so it adds no tree.
+    assert "mil-mon-07-F205-MI-03" not in rows
+    assert len(rows) == 1
 
 
 # --- Milan's inventory --------------------------------------------------------
