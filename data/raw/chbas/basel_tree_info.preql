@@ -36,6 +36,7 @@ file `./basel_osm_probe.py`;
 # it here (`dbh: ?raw_dbh`).
 root partial datasource basel_raw_tree_info extends tree_partition (
     data_source: chbas_source,
+    borough: ?borough,
 )
 complete where city = 'CHBAS' and chbas_source = 'BASEL_OPENDATA'
 file `./basel_tree_info.py`;
@@ -47,6 +48,7 @@ file `./basel_tree_info.py`;
 # `complete where` asserts, it does not promise a predicate.
 root partial datasource chbas_community_tree_info extends tree_partition (
     data_source: chbas_source,
+    borough: ?borough,
 )
 complete where city = 'CHBAS' and chbas_source = 'COMMUNITY_CHBAS'
 file `../community_tree_info.py`
@@ -60,10 +62,11 @@ where city = 'CHBAS';
 # staged extract keeps the territory it was cut with until its next firing.
 root partial datasource chbas_osm_tree_info extends tree_partition (
     data_source: chbas_source,
+    borough: ?borough,
 )
 complete where city = 'CHBAS' and chbas_source = 'OSM_CHBAS'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/chbas_osm_staging.parquet`
-where (raw_latitude >= 47.51 and raw_latitude < 47.6 and raw_longitude >= 7.55 and raw_longitude < 7.7);
+where (raw_latitude >= 47.51 and raw_latitude < 47.6 and raw_longitude >= 7.54 and raw_longitude < 7.7);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
@@ -86,6 +89,7 @@ merge merged_longitude into longitude;
 # (`test_every_city_refuses_a_collapsed_build`).
 partial datasource basel_tree_info extends published_tree_info (
     data_source: chbas_source,
+    ?borough,
     chbas_published_data_updated_through,
 )
 complete where city = 'CHBAS'

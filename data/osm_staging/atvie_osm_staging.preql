@@ -6,11 +6,17 @@
 
 import staging_common;
 
+# Vienna's municipal and community sources declare `borough` -- the Bezirk
+# -- so this partition must declare it too (see dkcph_osm_staging.preql).
+property tree_id.borough string;
+
 root datasource atvie_osm_rows extends osm_rows (
+    borough: ?borough,
 )
 file `./osm_rows.py`
 where city = 'ATVIE';
 
 datasource atvie_osm_staging extends osm_staging (
+    ?borough,
 )
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/atvie_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/atvie_osm_staging.parquet`;

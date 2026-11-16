@@ -6,11 +6,17 @@
 
 import staging_common;
 
+# Basel's municipal and community sources declare `borough` -- the Gemeinde
+# -- so this partition must declare it too (see dkcph_osm_staging.preql).
+property tree_id.borough string;
+
 root datasource chbas_osm_rows extends osm_rows (
+    borough: ?borough,
 )
 file `./osm_rows.py`
 where city = 'CHBAS';
 
 datasource chbas_osm_staging extends osm_staging (
+    ?borough,
 )
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/chbas_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/chbas_osm_staging.parquet`;

@@ -5,23 +5,25 @@ root datasource zurich_landmarks_update_time (
 )
 file `./zurich_landmarks_probe.py`;
 
-# STUB. Every city needs a landmarks model even if it yields zero rows -- a
-# missing file fails the landmark lane for every city, and the agent has no
-# geographic context for this one.
-#
-# Point the raw datasource at whichever source this city has, in preference
-# order: an official designation registry, the same portal as the trees, an
-# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
-# geocoded via Nominatim (then add a `landmarks-chzur` job with NO cron).
-#
-# Both datasources extend ../landmark_common.preql's templates: add the
-# register's own attributes to both, mapped in one and stored in the other.
+# Zürich's heritage inventory (Denkmalpflege-Inventar, CC0) is a layer on the
+# same municipal WFS as its trees, read directly; see zurich_landmarks.py.
+# The register's own attributes ride along in existing landmark_common
+# properties: the inventory class (category), formal protection
+# (protection_type), the address and the year built.
 root partial datasource raw_zurich_landmark_info extends landmark_partition (
+    category: ?category,
+    protection_type: ?protection_type,
+    address: ?address,
+    year_built: ?year_built,
 )
 complete where city = 'CHZUR'
 file `./zurich_landmarks.py`;
 
 partial datasource zurich_landmark_info extends published_landmark_info (
+    ?category,
+    ?protection_type,
+    ?address,
+    ?year_built,
     chzur_landmark_data_updated_through,
 )
 complete where city = 'CHZUR'

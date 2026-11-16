@@ -45,6 +45,8 @@ Currently has data from the following cities:
 - [Denver, CO, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USDEN)
 - [Boulder, CO, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USBOU)
 - [Naperville, IL, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USNPV)
+- [Columbus, OH, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USCOL)
+- [Eugene, OR, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USEUG)
 - [Stoughton, WI, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USSTO)
 - [Austin, TX, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USAUS)
 - [Houston, TX, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USHOU)
@@ -80,8 +82,12 @@ Currently has data from the following cities:
 - [Prague, Czechia](https://greenmtnboy.github.io/tree_reporting/#/?city=CZPRG)
 - [Helsinki, Finland](https://greenmtnboy.github.io/tree_reporting/#/?city=FIHEL)
 - [London, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBLON)
+- [Nottingham, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBNOT)
 - [Amsterdam, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLAMS)
 - [Berlin, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEBER)
+- [Vienna, Austria](https://greenmtnboy.github.io/tree_reporting/#/?city=ATVIE)
+- [Zürich, Switzerland](https://greenmtnboy.github.io/tree_reporting/#/?city=CHZUR)
+- [Basel, Switzerland](https://greenmtnboy.github.io/tree_reporting/#/?city=CHBAS)
 - [Melbourne, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUMEL)
 - [Adelaide, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUADL)
 - [Perth, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUPER)
@@ -138,6 +144,8 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Denver | Denver Open Data - Parks, Medians, and Parkway Trees | https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::parks-medians-and-parkway-trees |
 | Boulder, CO | City of Boulder - Tree Inventory Open Data (ArcGIS, CC0) | https://www.arcgis.com/home/item.html?id=dbbae8bdb0a44d17934243b88e85ef2b |
 | Naperville, IL | City of Naperville - Right of Way Tree Inventory (ArcGIS, CC0) | https://www.arcgis.com/home/item.html?id=9ee23fb99f1d4391824b66fddc2f10f1 |
+| Columbus, OH | City of Columbus Recreation and Parks, Urban Forestry - Public Owned Trees (ArcGIS, CC0) | https://www.arcgis.com/home/item.html?id=674e4a358e8042f69a734f229a93823c |
+| Eugene, OR | City of Eugene, Parks and Open Space - Public Trees (ArcGIS) | https://www.arcgis.com/home/item.html?id=defd8da338a443818b6a6f8b65b8076b |
 | Stoughton | City of Stoughton - Public Tree Inventory (ArcGIS) | https://experience.arcgis.com/experience/f9b95eddac104c708619ccaf4c2c9de0 |
 | Austin, TX | City of Austin - Tree Inventory (Socrata, public domain) | https://data.austintexas.gov/d/wrik-xasw |
 | Houston, TX | City of Houston Parks & Recreation, Urban Forestry - street-tree inventory (ArcGIS) | https://geohwp.houstontx.gov/arcgis/rest/services/03_BaseData_External/Land_Base/FeatureServer/0 |
@@ -174,8 +182,12 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Prague | Geoportál Praha / IPR Praha - Sdílená data o zeleni, vegetační prvky (CC BY, datový podklad © IPR Praha) | https://opendata-iprpraha.hub.arcgis.com/datasets/iprpraha::sdílená-data-o-zeleni-vegetační-prvky-body-1 |
 | Helsinki | Helsinki Region Infoshare - City of Helsinki Tree Register (Puurekisteri, CC BY 4.0) | https://hri.fi/data/en_GB/dataset/helsingin-kaupungin-puurekisteri |
 | London | London Datastore - Public Realm Trees | https://data.london.gov.uk/dataset/2r45m |
+| Nottingham | Nottingham City Council - Trees (NCC Maintained) (ArcGIS, OGL v3) | https://www.arcgis.com/home/item.html?id=854f59402043403eabce650cc7ab1150 |
 | Amsterdam | Amsterdam Data Portal - Bomen (Stamgegevens) | https://api.data.amsterdam.nl/v1/bomen/stamgegevens/ |
 | Berlin | Berlin Geodateninfrastruktur - Baumbestand (WFS) | https://gdi.berlin.de/services/wfs/baumbestand |
+| Vienna | Stadt Wien Open Data - Baumkataster (BAUMKATOGD, CC BY 4.0; Datenquelle: Stadt Wien - data.wien.gv.at) | https://www.data.gv.at/katalog/dataset/c91a4635-8b7d-43fe-9b27-d95dec8392a7 |
+| Zürich | Stadt Zürich Open Data - Baumkataster (Grün Stadt Zürich, CC0) | https://data.stadt-zuerich.ch/dataset/geo_baumkataster |
+| Basel | Stadtgärtnerei Basel-Stadt - Baumkataster: Baumbestand (data.bs.ch, CC BY 4.0, Geodaten Kanton Basel-Stadt) | https://data.bs.ch/explore/dataset/100052/ |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
 | Melbourne (Yarra) | City of Yarra - Street and Park Trees (CC BY 4.0) | https://data.gov.au/data/dataset/yarra-street-park-trees |
@@ -209,6 +221,8 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Tempe | No landmark dataset in production yet | n/a |
 | Denver | Denver Open Data - Historic Landmark Structures | https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::historic-landmarks |
 | Stoughton | City of Stoughton - Historical Landmarks (Stoughton Landmarks Commission) | https://stoughtonwi.maps.arcgis.com/home/item.html?id=0ac41bae1fac4f4abdb873deed6f8d75 |
+| Columbus, OH | City of Columbus - Register of Historic Properties (CC0); National Park Service - National Register of Historic Places | https://maps2.columbus.gov/arcgis/rest/services/Schemas/Development/MapServer/0 |
+| Eugene, OR | City of Eugene Planning Division - Historic Sites (City Landmarks and National Register) | https://www.arcgis.com/home/item.html?id=e012d77a3a624a1e9f1ce01c8bb0ae8d |
 | Austin, TX | City of Austin - Historical Landmarks (Socrata) | https://data.austintexas.gov/d/8k49-bptr |
 | Houston, TX | City of Houston - Historic Sites and Landmarks (Landmarks and Protected Landmarks) | https://services.arcgis.com/NummVBqZSIJKUeVR/arcgis/rest/services/COH_Historic_Sites_and_Landmarks_view/FeatureServer/6 |
 | Durham, NC | Durham City-County Planning - Local Historic Landmarks and National Register listings | https://webgis2.durhamnc.gov/server/rest/services/PublicServices/Planning/MapServer/1 |
@@ -243,8 +257,12 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Prague | Národní památkový ústav (NPÚ) - Kulturní památky, Ústřední seznam kulturních památek (CC BY 4.0) | https://geoportal.npu.cz/arcgis/rest/services/Tematicke/CP_UAP_PVO/MapServer/1 |
 | Helsinki | City of Helsinki WFS - Buildings Protected by Detailed Plans, Protected Natural Monuments (CC BY 4.0) | https://hri.fi/data/en_GB/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa |
 | London | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |
+| Nottingham | Historic England - National Heritage List for England (OGL), clipped to the ONS district boundary | https://historicengland.org.uk/listing/the-list/ |
 | Amsterdam | Amsterdam Data Portal - Monumenten | https://api.data.amsterdam.nl/v1/monumenten/monumenten/ |
 | Berlin | OpenStreetMap (Overpass API) - historic=* | https://overpass-api.de/ |
+| Vienna | Stadt Wien Open Data - Historische Gartenanlagen and Sehenswürdigkeiten (CC BY 4.0) | https://data.wien.gv.at/ |
+| Zürich | Stadt Zürich Open Data - Denkmalpflege-Inventar, regional and cantonal objects (CC0) | https://data.stadt-zuerich.ch/dataset/geo_denkmalpflege_inventar |
+| Basel | Kanton Basel-Stadt - Inventar der schützenswerten Gartenanlagen (CC BY 4.0) | https://www.geo.bs.ch/ |
 | Melbourne | Melbourne Open Data - Landmarks and Places of Interest | https://data.melbourne.vic.gov.au/explore/dataset/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/ |
 | Paris | Ministere de la Culture - Immeubles proteges au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
 | Buenos Aires | No landmark dataset in production yet | n/a |
