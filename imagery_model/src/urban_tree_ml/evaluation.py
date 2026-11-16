@@ -232,7 +232,10 @@ def _decode_batch(
     nms_kernel: int,
     target_center: Any | None = None,
     detection_mask: Any | None = None,
+    min_score: float | None = None,
 ) -> list[dict[str, object]]:
+    """*min_score* drops peaks scoring below it before the per-chip cap, for a
+    caller decoding a map much larger than a chip."""
     import torch
     from torch.nn import functional as functional
 
@@ -241,6 +244,8 @@ def _decode_batch(
         center[:, None], kernel_size=nms_kernel, stride=1, padding=nms_kernel // 2
     ).squeeze(1)
     peaks = center.eq(pooled)
+    if min_score is not None:
+        peaks &= center >= min_score
     genus_probability = prediction["genus_logits"].softmax(dim=1)
     species_probability = prediction["species_logits"].softmax(dim=1)
     records: list[dict[str, object]] = []

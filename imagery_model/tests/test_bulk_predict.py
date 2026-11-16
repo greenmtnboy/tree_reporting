@@ -553,3 +553,89 @@ def test_predict_takes_only_its_shards_tiles(tmp_path, monkeypatch):
     )
     assert bulk_predict.predict(args) == 0
     assert sorted(p.stem for p in (tmp_path / "tiles").glob("*.json")) == ["4_0", "5_0", "6_0", "7_0"]
+
+
+def test_a_plan_without_a_margin_keeps_the_one_it_was_started_with():
+    assert bulk_predict.plan_blocks({}) == (128, 1)
+    assert bulk_predict.plan_blocks({"contextMarginPx": 64, "blockTiles": 3}) == (64, 3)
+
+
+def test_a_tile_knows_its_place_in_its_block():
+    assert bulk_predict.block_of({"i": 2084, "j": 30525}, 3) == (694, 10175)
+    assert bulk_predict.block_position({"i": 2082, "j": 30527}, 3) == (0, 0)  # north-west: j grows north
+    assert bulk_predict.block_position({"i": 2084, "j": 30525}, 3) == (2, 2)
+    assert bulk_predict.block_position({"i": -1, "j": -1}, 3) == (2, 0)
+    todo = [{"i": 3, "j": 0}, {"i": 0, "j": 0}, {"i": 4, "j": 2}, {"i": 2, "j": 1}]
+    assert bulk_predict.block_units(todo, 3) == [[todo[0], todo[2]], [todo[1], todo[3]]]
+    assert bulk_predict.block_units(todo, 1) == [[t] for t in todo]
+
+
+def test_a_shard_never_splits_a_block():
+    tiles = [{"i": i, "j": j} for i in range(2070, 2100) for j in range(30500, 30530)]
+    for block in (1, 3, 5):
+        owners: dict[tuple[int, int], set[int]] = {}
+        for tile in tiles:
+            (shard,) = [k for k in (1, 2, 3) if bulk_predict.in_shard(tile, (k, 3), block)]
+            owners.setdefault(bulk_predict.block_of(tile, block), set()).add(shard)
+        assert all(len(shards) == 1 for shards in owners.values())
+        assert {k for shards in owners.values() for k in shards} == {1, 2, 3}
+
+
+def test_predict_works_a_planned_block_at_a_time(tmp_path, monkeypatch):
+    from urban_tree_ml import point_predict
+
+    tiles = [{"i": i, "j": j, "lat": 42.0 + j, "lon": -71.0 + i} for i in range(3) for j in range(3)]
+    tiles.append({"i": 3, "j": 0, "lat": 42.0, "lon": -68.0})
+    (tmp_path / "plan.json").write_text(json.dumps({
+        "city": "USBOS", "run": "run", "epsg": 26919, "tileM": 153.6, "runThreshold": 0.35,
+        "contextMarginPx": 64, "blockTiles": 3, "tiles": tiles,
+    }))
+    (tmp_path / "tiles").mkdir()
+    (tmp_path / "tiles" / "1_1.json").write_text(json.dumps({"status": "ok"}))  # done earlier
+    predictor = type("P", (), {"config": {"imagery": {}}, "chip_pixels": 512})
+    monkeypatch.setattr(point_predict, "Predictor", lambda *a, **k: predictor())
+    monkeypatch.setattr(bulk_predict, "city_boxes", lambda: ({}, {}))
+    calls = []
+
+    def predict_block(predictor, wanted, *, tiles, margin, **kwargs):
+        calls.append((dict(wanted), tiles, margin, kwargs["render"]))
+        if len(wanted) == 1:
+            raise ValueError("bad block")
+        return {position: (None if position == (0, 0) else {"bundle": bundle()}) for position in wanted}
+
+    monkeypatch.setattr(point_predict, "predict_block", predict_block)
+    monkeypatch.setattr(point_predict, "predict_tile", lambda *a, **k: pytest.fail("predicted a tile alone"))
+
+    assert bulk_predict.main(["predict", "--out", str(tmp_path)]) == 0
+
+    (first, block, margin, render), (second, *_) = calls
+    assert (block, margin, render) == (3, 64, False)
+    assert len(first) == 8 and (1, 1) not in first           # the tile already written is not asked for
+    assert first[(0, 2)] == (42.0, -71.0) and first[(2, 0)] == (44.0, -69.0)
+    assert second == {(0, 2): (42.0, -68.0)}                 # the next block's only planned tile
+    read = lambda name: json.loads((tmp_path / "tiles" / name).read_text())  # noqa: E731
+    assert read("0_0.json")["status"] == "ok" and read("0_0.json")["contextMarginPx"] == 64
+    assert read("0_2.json")["status"] == "skipped"           # position (0, 0): no imagery
+    assert read("1_1.json") == {"status": "ok"}
+    assert read("3_0.json") == {"status": "error", "error": "ValueError: bad block"}
+
+
+def test_a_plan_records_its_margin_and_refuses_one_that_tiles_nothing_small(tmp_path, monkeypatch):
+    run = tmp_path / "runs" / "run"
+    run.mkdir(parents=True)
+    (run / "config-usbos.json").write_text(json.dumps({
+        "imagery": {"chip_pixels": 512, "resolution_m": 0.3}, "evaluation": {"confidence_threshold": 0.35},
+    }))
+    monkeypatch.setattr(bulk_predict, "published_points", lambda city: [(42.35, -71.06)])
+    monkeypatch.setattr(bulk_predict, "city_boxes", lambda: ({"USBOS": (42.0, 43.0, -72.0, -70.0)}, {}))
+    base = ["--artifacts", str(tmp_path), "plan", "--city", "USBOS", "--run", "run"]
+
+    assert bulk_predict.main([*base, "--out", str(tmp_path / "a")]) == 0
+    planned = json.loads((tmp_path / "a" / "plan.json").read_text())
+    assert (planned["contextMarginPx"], planned["blockTiles"]) == (64, 3) and planned["tiles"]
+
+    assert bulk_predict.main([*base, "--out", str(tmp_path / "b"), "--margin", "128"]) == 0
+    assert json.loads((tmp_path / "b" / "plan.json").read_text())["blockTiles"] == 1
+
+    with pytest.raises(SystemExit):
+        bulk_predict.main([*base, "--out", str(tmp_path / "c"), "--margin", "100"])

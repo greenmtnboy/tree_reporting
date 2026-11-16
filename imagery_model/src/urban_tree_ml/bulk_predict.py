@@ -21,17 +21,21 @@ dies loses at most the tile it was on:
 ``predict``
     Runs planned tiles through ``point_predict.predict_tile`` -- the
     reviewer's own fetch, decode and bundle path -- inside a time budget, and
-    writes one small JSON per tile under ``<out>/tiles``.  Each tile is
-    predicted in context (``point_predict.context_image``): four chip-sized
-    windows a quarter tile outside it, each keeping its middle half, so no
-    detection comes from within a quarter tile of a window edge.  A tile
+    writes one small JSON per tile under ``<out>/tiles``.  Tiles are
+    predicted in context: from chip-sized windows that each discard a margin
+    at every edge, so no detection comes from near a window's edge.  A tile
     predicted alone piles low-score detections on its border (Boston's v13
-    pass: 5x the interior density in the outer 0.6 m).  It costs four passes
-    a tile; ``--no-context`` predicts tiles alone, as the reviewer's
-    "Predict at" does.  Run it again to continue; a tile
-    already written is skipped.  Only the cells a window keeps go through
-    the model's full-resolution layers (``model.forward_region``; the values
-    are those of a whole pass), about 1.5 s a tile on a ten-core CPU.
+    pass: 5x the interior density in the outer 0.6 m).  The plan fixes the
+    margin (``plan --margin``, 64 px): the windows' cores then tile a block
+    of 3 x 3 tiles, sixteen windows for nine tiles, and ``predict`` works a
+    block at a time.  The effect at a window's edge is gone by 32 px
+    (``point_predict.DEFAULT_MARGIN_PX`` has the measurement).  A plan
+    written before the margin was recorded keeps the quarter-tile margin it
+    was started with, four windows of its own for every tile, and
+    ``--no-context`` predicts tiles alone, as the reviewer's "Predict at"
+    does.  Run it again to continue; a tile already written is skipped.
+    Only the cells a window keeps go through the model's full-resolution
+    layers (``model.forward_region``; the values are those of a whole pass).
     ``--shard K/N`` splits the plan into N disjoint sets, one process each.
     NAIP windows are cached under
     ``artifacts/point-tiles/coverage-v2`` and a cached tile is found from the plan's UTM
@@ -141,7 +145,15 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Iterable
 
-from urban_tree_ml.point_predict import IMAGERY_CACHE_VERSION, INGEST_PATH, PARQUET_URL, city_boxes, owning_city
+from urban_tree_ml.point_predict import (
+    DEFAULT_MARGIN_PX,
+    IMAGERY_CACHE_VERSION,
+    INGEST_PATH,
+    PARQUET_URL,
+    block_tiles,
+    city_boxes,
+    owning_city,
+)
 
 ID_PREFIX = "pred-"
 MODEL_CROWN_METHOD = "model_crown_head"
@@ -512,6 +524,11 @@ def run_geometry(artifacts: Path, run: str, city: str) -> tuple[float, float]:
     return int(imagery["chip_pixels"]) * float(imagery["resolution_m"]), float(config["evaluation"]["confidence_threshold"])
 
 
+def run_chip_pixels(artifacts: Path, run: str, city: str) -> int:
+    config = json.loads((artifacts / "runs" / run / f"config-{city.lower()}.json").read_text(encoding="utf-8"))
+    return int(config["imagery"]["chip_pixels"])
+
+
 def published_points(city: str) -> list[tuple[float, float]]:
     import duckdb
 
@@ -528,6 +545,10 @@ def plan(args: argparse.Namespace) -> int:
     city = args.city.upper()
     artifacts = Path(args.artifacts)
     tile_m, run_threshold = run_geometry(artifacts, args.run, city)
+    block = block_tiles(run_chip_pixels(artifacts, args.run, city), args.margin)
+    if block > MAX_BLOCK_TILES:
+        raise SystemExit(f"--margin {args.margin} needs blocks of {block} x {block} tiles; "
+                         "pick a margin whose windows tile a few tiles (64 or 128 px of 512)")
     points = published_points(city)
     if not points:
         raise SystemExit(f"{city} has no published trees to plan around")
@@ -564,7 +585,8 @@ def plan(args: argparse.Namespace) -> int:
     manifest = {
         "city": city, "run": args.run, "epsg": epsg, "tileM": tile_m, "rings": args.rings,
         "runThreshold": run_threshold, "publishedTrees": len(points),
-        "markedTiles": len(marked), "fill": bool(args.fill), "boundary": boundary, "tiles": tiles,
+        "markedTiles": len(marked), "fill": bool(args.fill), "boundary": boundary,
+        "contextMarginPx": args.margin, "blockTiles": block, "tiles": tiles,
     }
     (out / "plan.json").write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
     area_km2 = len(tiles) * tile_m * tile_m / 1e6
@@ -574,6 +596,32 @@ def plan(args: argparse.Namespace) -> int:
 
 
 SHARD_BLOCK = 4
+# A plan without ``contextMarginPx`` was started on a quarter-tile margin, every
+# tile its own block; continuing it must not change how its tiles are predicted.
+LEGACY_MARGIN_PX, MAX_BLOCK_TILES = 128, 7
+
+
+def plan_blocks(manifest: dict[str, Any]) -> tuple[int, int]:
+    """(context margin in pixels, block side in tiles) a plan is predicted with."""
+    return int(manifest.get("contextMarginPx", LEGACY_MARGIN_PX)), int(manifest.get("blockTiles", 1))
+
+
+def block_of(tile: dict[str, Any], block: int) -> tuple[int, int]:
+    return tile["i"] // block, tile["j"] // block
+
+
+def block_position(tile: dict[str, Any], block: int) -> tuple[int, int]:
+    """A tile's (column, row) in its block, row 0 the northmost (j grows north)."""
+    return tile["i"] % block, block - 1 - tile["j"] % block
+
+
+def block_units(todo: list[dict[str, Any]], block: int) -> list[list[dict[str, Any]]]:
+    """*todo* grouped into the blocks predicted together, in the order *todo*
+    first reaches each."""
+    units: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    for tile in todo:
+        units.setdefault(block_of(tile, block), []).append(tile)
+    return list(units.values())
 
 
 def parse_shard(value: str) -> tuple[int, int]:
@@ -587,14 +635,17 @@ def parse_shard(value: str) -> tuple[int, int]:
     return k, n
 
 
-def in_shard(tile: dict[str, Any], shard: tuple[int, int] | None) -> bool:
-    """Whether *tile* is shard K of N's.  Blocks of 4 x 4 tiles go to the shards
-    in turn along both axes, so the N processes of one run take disjoint tiles
-    and each still walks neighbours, whose imagery it then already holds."""
+def in_shard(tile: dict[str, Any], shard: tuple[int, int] | None, block: int = 1) -> bool:
+    """Whether *tile* is shard K of N's.  Squares of about 4 x 4 tiles go to the
+    shards in turn along both axes, so the N processes of one run take disjoint
+    tiles and each still walks neighbours, whose imagery it then already holds.
+    The squares are whole prediction blocks (*block* tiles a side), which one
+    process must predict together."""
     if shard is None:
         return True
     k, n = shard
-    return (tile["i"] // SHARD_BLOCK + tile["j"] // SHARD_BLOCK) % n == k - 1
+    side = block * max(1, SHARD_BLOCK // block)
+    return (tile["i"] // side + tile["j"] // side) % n == k - 1
 
 
 def tile_path(out: Path, tile: dict[str, Any]) -> Path:
@@ -658,13 +709,14 @@ def wait_for_network(attempt: int, deadline: float) -> bool:
     return True
 
 
-def tile_record(result: dict[str, Any] | None, *, context: bool) -> dict[str, Any]:
-    """A predicted tile's record: the bundle minus its imagery and inventory, what assemble reads."""
+def tile_record(result: dict[str, Any] | None, *, context: bool, margin: int | None = None) -> dict[str, Any]:
+    """A predicted tile's record: the bundle minus its imagery and inventory, what assemble reads.
+    *margin* is recorded for a tile predicted in a block of several."""
     if result is None:
         return {"status": "skipped", "imageryCacheVersion": IMAGERY_CACHE_VERSION}
     bundle = result["bundle"]
     return {
-        "status": "ok", "context": context,
+        "status": "ok", "context": context, **({"contextMarginPx": margin} if margin else {}),
         "imageryCacheVersion": IMAGERY_CACHE_VERSION,
         "tileId": bundle["tileId"], "chipId": bundle["chipId"], "city": bundle["city"],
         "imageryVersion": bundle["imageryVersion"],
@@ -683,7 +735,7 @@ def tile_record(result: dict[str, Any] | None, *, context: bool) -> dict[str, An
 
 
 def predict(args: argparse.Namespace) -> int:
-    from urban_tree_ml.point_predict import Predictor, predict_tile
+    from urban_tree_ml.point_predict import Predictor, predict_block, predict_tile
 
     out = Path(args.out)
     if args.sync:
@@ -692,13 +744,16 @@ def predict(args: argparse.Namespace) -> int:
     city, run = manifest["city"], manifest["run"]
     artifacts = Path(args.artifacts)
     (out / "tiles").mkdir(parents=True, exist_ok=True)
+    margin, block = (0, 1) if args.no_context else plan_blocks(manifest)
 
     def pending(tile: dict[str, Any]) -> bool:
         return prediction_pending(tile_path(out, tile), retry_errors=args.retry_errors,
                                   refresh_imagery=getattr(args, "refresh_imagery", False))
 
     shard = getattr(args, "shard", None)
-    tiles = [t for t in selected_tiles(manifest["tiles"], getattr(args, "tile_list", None)) if in_shard(t, shard)]
+    tiles = [
+        t for t in selected_tiles(manifest["tiles"], getattr(args, "tile_list", None)) if in_shard(t, shard, block)
+    ]
     todo = [t for t in tiles if pending(t)]
     total = len(tiles)
     print(f"{total - len(todo)}/{total} tiles done; {len(todo)} to go", file=sys.stderr)
@@ -717,39 +772,57 @@ def predict(args: argparse.Namespace) -> int:
 
         torch.set_num_threads(args.threads)
     predictor = Predictor(artifacts, run, city, args.device)
+    if block > 1 and block_tiles(predictor.chip_pixels, margin) != block:
+        raise SystemExit(f"plan.json's {block}-tile blocks do not fit a {margin} px margin on "
+                         f"{predictor.chip_pixels} px windows; plan again")
     stac_url = str(predictor.config["imagery"].get("stac_url") or "https://planetarycomputer.microsoft.com/api/stac/v1")
     envelopes, territory = city_boxes()
+    shared = dict(
+        artifacts=artifacts, run=run, year=args.year, stac_url=stac_url, city=city, envelopes=envelopes,
+        territory=territory, min_score=args.min_score, threshold=manifest["runThreshold"], coefficients=None,
+        readers=None, epsg_hint=int(manifest["epsg"]),
+        render=False,  # tile_record keeps the detections, not the image
+    )
+
+    def records(unit: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """The record of each tile of *unit*: one tile, or the pending tiles of one block."""
+        if block == 1:
+            (tile,) = unit
+            result = predict_tile(predictor, tile["lat"], tile["lon"], context=not args.no_context, **shared)
+            return [tile_record(result, context=not args.no_context)]
+        positions = [block_position(tile, block) for tile in unit]
+        results = predict_block(
+            predictor, {position: (tile["lat"], tile["lon"]) for position, tile in zip(positions, unit)},
+            tiles=block, margin=margin, **shared,
+        )
+        return [tile_record(results[position], context=True, margin=margin) for position in positions]
+
     deadline = time.monotonic() + args.max_minutes * 60
     done = 0
     offline = False
-    for tile in todo:
+    for unit in block_units(todo, block):
         if offline or time.monotonic() > deadline:
             break
-        path = tile_path(out, tile)
+        paths = [tile_path(out, tile) for tile in unit]
+        name = paths[0].name if len(paths) == 1 else f"{paths[0].name} and {len(paths) - 1} more of its block"
         for attempt in itertools.count():
             try:
-                result = predict_tile(
-                    predictor, tile["lat"], tile["lon"], artifacts=artifacts, run=run, year=args.year,
-                    stac_url=stac_url, city=city, envelopes=envelopes, territory=territory,
-                    min_score=args.min_score, threshold=manifest["runThreshold"], coefficients=None, readers=None,
-                    epsg_hint=int(manifest["epsg"]), context=not args.no_context,
-                    render=False,  # tile_record keeps the detections, not the image
-                )
+                written = records(unit)
             except Exception as error:  # one bad tile must not end the batch
                 if network_failure(error):
                     # Not the tile's fault (a machine just woken from sleep has no DNS
                     # for a minute): wait and try the same tile, never record it.
-                    print(f"{path.name}: network unavailable ({error.__class__.__name__}); waiting", file=sys.stderr)
+                    print(f"{name}: network unavailable ({error.__class__.__name__}); waiting", file=sys.stderr)
                     if wait_for_network(attempt, deadline):
                         continue
                     offline = True
                     break
                 record = {"status": "error", "error": f"{error.__class__.__name__}: {error}"}
-                print(f"{path.name}: {record['error']}", file=sys.stderr)
-            else:
-                record = tile_record(result, context=not args.no_context)
-            path.write_text(json.dumps(record) + "\n", encoding="utf-8")
-            done += 1
+                print(f"{name}: {record['error']}", file=sys.stderr)
+                written = [record] * len(unit)
+            for path, record in zip(paths, written):
+                path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            done += len(unit)
             break
     remaining = len(todo) - done
     if args.sync:
@@ -1027,6 +1100,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--boundary", default=None, help="GeoJSON polygon(s); keep only tiles centred inside")
     p.add_argument("--fill", action="store_true", help="plan every tile inside --boundary, not only those near published trees")
     p.add_argument("--out", required=True)
+    p.add_argument("--margin", type=int, default=DEFAULT_MARGIN_PX, metavar="PX",
+                   help=f"pixels each context window discards at its edges (default {DEFAULT_MARGIN_PX}: "
+                        "16 windows for every 3 x 3 tiles; 128 is four windows a tile)")
 
     p = sub.add_parser("predict", help="predict planned tiles within a time budget; rerun to continue")
     p.add_argument("--out", required=True)

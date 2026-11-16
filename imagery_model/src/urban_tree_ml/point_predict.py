@@ -41,7 +41,9 @@ import ast
 import hashlib
 import io
 import json
+import math
 import os
+from dataclasses import dataclass
 from functools import lru_cache
 import sys
 from datetime import date
@@ -103,55 +105,108 @@ def point_chip_id(epsg: int, west: float, north: float) -> str:
 
 # A tile predicted alone sees zero padding at its border and the peak decoder
 # takes any slope running off it for a peak: Boston's v13 bulk pass had five
-# times the interior density in each tile's outer 0.6 m.  So a tile is
-# predicted in context instead -- four chip-sized windows a quarter tile
-# outside it, each keeping only its middle half, which together are exactly
-# the tile and leave every kept cell at least a quarter tile from the edge of
-# the window that saw it.  The input stays the size the model was trained on.
+# times the interior density in each tile's outer 0.6 m.  So tiles are
+# predicted in context instead -- chip-sized windows (the input stays the size
+# the model was trained on) that each keep only their core, everything further
+# than a margin from the window's edge.  The cores tile the ground.
+#
+# The margin decides the cost.  At a quarter tile (128 px of 512) a window
+# keeps a quarter of what it sees and each tile needs four of its own: the
+# reviewer's "Predict at" and plans made before 2026-11-15.  Measured on v20
+# (60 Boston tiles, a window's edge cells against the same ground seen from
+# the middle of a window half a tile over, at 0.13): 4.4x the peaks in the
+# outer 2 px, 1.25x at 8-15 px, and from 32 px in nothing separates an edge
+# view from an interior one.  So a bulk plan uses 64 px: a core of 384 px,
+# which tiles three tiles exactly (3 x 512 = 4 x 384), sixteen windows for
+# nine tiles rather than thirty-six.  ``block_tiles`` is that arithmetic.
+#
 # The stitched maps carry a ring of the neighbours' cells as wide as the peak
-# decoder's reach, so a crown peaking just across the seam is not also a peak
-# on this side's border cell; peaks found in the ring are the neighbour's.
-WINDOW_OFFSETS = ((0, 0), (1, 0), (0, 1), (1, 1))  # (column, row) in half tiles
+# decoder's reach, so a crown peaking just across the block's edge is not also
+# a peak on this side's border cell; peaks found in the ring are the
+# neighbour's.
+DEFAULT_MARGIN_PX = 64
+WINDOW_BATCH = 8  # windows through the model at once; bounds memory, not speed
 
 
-def context_windows(image, pixels: int):
-    """The four windows of a ``context_image`` (1.5 tiles a side), [4, bands, pixels, pixels]."""
+def block_tiles(pixels: int, margin: int) -> int:
+    """How many tiles a side the smallest block is that windows of *pixels*
+    with *margin* discarded on every side tile exactly: 1 at a quarter tile,
+    3 at an eighth."""
+    core = pixels - 2 * margin
+    if margin <= 0 or core <= 0:
+        raise ValueError(f"a margin of {margin} px leaves a {pixels} px window no core")
+    return core // math.gcd(pixels, core)
+
+
+def context_windows(image, pixels: int, margin: int | None = None):
+    """The windows of a block's image (the block and *margin* pixels around it,
+    ``context_image`` or ``block_image``), row by row: [n * n, bands, pixels,
+    pixels].  *margin* defaults to a quarter tile, the single-tile block."""
     import numpy as np
 
-    half = pixels // 2
-    return np.stack([image[:, r * half:r * half + pixels, c * half:c * half + pixels] for c, r in WINDOW_OFFSETS])
+    margin = pixels // 4 if margin is None else margin
+    core = pixels - 2 * margin
+    n = (image.shape[-1] - 2 * margin) // core
+    return np.stack([
+        image[:, r * core:r * core + pixels, c * core:c * core + pixels]
+        for r in range(n) for c in range(n)
+    ])
 
 
-def stitch_cores(output: dict[str, Any], cells: int, ring: int = 0, origin: int = 0) -> dict[str, Any]:
-    """One tile's output maps from the four windows' (``context_windows`` order):
-    the middle half of each window, *cells* output cells a side, plus *ring*
-    cells of the neighbours on every side (cell (ring, ring) is the tile's first).
+def stitch_cores(output: dict[str, Any], cells: int, ring: int = 0, origin: int = 0,
+                 margin: int | None = None) -> dict[str, Any]:
+    """One block's output maps from its windows' (``context_windows`` order):
+    each window's core, *cells* output cells a side together, plus *ring*
+    cells of the neighbours on every side (cell (ring, ring) is the block's
+    first).
 
-    *origin* is the window cell the maps start at, for maps computed on the
-    kept region alone (``core_region``) rather than on the whole window."""
-    if cells % 4:
-        raise ValueError(f"a tile of {cells} output cells does not split into window cores")
-    quarter, half = cells // 4, cells // 2
-    if ring > quarter:
+    *margin* is in output cells and defaults to half a core, the single-tile
+    block.  *origin* is the window cell the maps start at, for maps computed
+    on the kept region alone (``core_region``) rather than on the whole window."""
+    count = next(iter(output.values())).shape[0]
+    n = math.isqrt(count)
+    core = cells // n if n else 0
+    if n * n != count or cells % n or (margin is None and core % 2):
+        raise ValueError(f"a block of {cells} output cells does not split into {count} window cores")
+    margin = core // 2 if margin is None else margin
+    if ring > margin:
         raise ValueError(f"a ring of {ring} cells reaches past the windows")
-    # A window's core in its own cells, widened by the ring on the tile's outer side.
-    spans = ((quarter - ring - origin, quarter + half - origin),
-             (quarter - origin, quarter + half + ring - origin))
+
+    def span(k: int) -> tuple[int, int]:
+        # A window's core in its own cells, widened by the ring on the block's outer side.
+        return (margin - (ring if k == 0 else 0) - origin,
+                margin + core + (ring if k == n - 1 else 0) - origin)
+
     stitched = {}
     for key, value in output.items():
-        tile = value.new_empty((1, *value.shape[1:-2], cells + 2 * ring, cells + 2 * ring))
-        for k, (c, r) in enumerate(WINDOW_OFFSETS):
-            (r0, r1), (c0, c1) = spans[r], spans[c]
-            row, col = r * (half + ring), c * (half + ring)
-            tile[0, ..., row:row + r1 - r0, col:col + c1 - c0] = value[k, ..., r0:r1, c0:c1]
-        stitched[key] = tile
+        block = value.new_empty((1, *value.shape[1:-2], cells + 2 * ring, cells + 2 * ring))
+        for k in range(count):
+            r, c = divmod(k, n)
+            (r0, r1), (c0, c1) = span(r), span(c)
+            row, col = r * core + (ring if r else 0), c * core + (ring if c else 0)
+            block[0, ..., row:row + r1 - r0, col:col + c1 - c0] = value[k, ..., r0:r1, c0:c1]
+        stitched[key] = block
     return stitched
 
 
-def core_region(cells: int, ring: int = 0) -> tuple[int, int]:
+def core_region(cells: int, ring: int = 0, margin: int | None = None) -> tuple[int, int]:
     """(first cell, size) of the part of a window's output ``stitch_cores`` can
-    use: its middle half and the ring either side."""
-    return cells // 4 - ring, cells // 2 + 2 * ring
+    use: its core and the ring either side.  *cells* is the window's side and
+    *margin* (default a quarter of it) the cells discarded at each edge."""
+    margin = cells // 4 if margin is None else margin
+    return margin - ring, cells - 2 * margin + 2 * ring
+
+
+def windows_needed(n: int, core: int, pixels: int, tiles: list[tuple[int, int]], reach: int) -> list[int]:
+    """Which of a block's n x n windows (``context_windows`` order) have a core
+    within *reach* pixels of one of *tiles* ((column, row) in the block)."""
+    def meets(k: int, position: int) -> bool:
+        return position * pixels - reach < (k + 1) * core and k * core < (position + 1) * pixels + reach
+
+    return [
+        r * n + c for r in range(n) for c in range(n)
+        if any(meets(c, column) and meets(r, row) for column, row in tiles)
+    ]
 
 
 def city_boxes(ingest_path: Path = INGEST_PATH) -> tuple[dict[str, Box], dict[str, tuple[Box, ...]]]:
@@ -451,6 +506,39 @@ def context_image(image, cache_dir: Path, *, crs: str, west: float, north: float
     return canvas[:, pixels - margin:2 * pixels + margin, pixels - margin:2 * pixels + margin]
 
 
+def block_image(images: dict[tuple[int, int], Any], cache_dir: Path, *, crs: str, west: float, north: float,
+                tiles: int, pixels: int, margin: int, resolution_m: float, bands: list[int], stac_url: str):
+    """A block of *tiles* x *tiles* grid tiles whose north-west corner is
+    (west, north), with *margin* pixels of the tiles around it:
+    [bands, tiles * pixels + 2 * margin, ...].
+
+    *images* holds the tiles already in hand by (column, row) in the block,
+    row 0 the northmost; every other tile, and the ring around the block, is
+    read from the cache (``neighbour_tile``).
+    """
+    import numpy as np
+    from concurrent.futures import ThreadPoolExecutor
+
+    tile_m = pixels * resolution_m
+    positions = [(c, r) for r in range(-1, tiles + 1) for c in range(-1, tiles + 1)]
+    missing = [p for p in positions if p not in images]
+
+    def read(position: tuple[int, int]):
+        c, r = position
+        return neighbour_tile(
+            cache_dir, crs=crs, west=west + c * tile_m, north=north - r * tile_m,
+            pixels=pixels, resolution_m=resolution_m, bands=bands, stac_url=stac_url,
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        found = {**images, **dict(zip(missing, pool.map(read, missing)))}
+    first = next(iter(found.values()))
+    canvas = np.zeros((first.shape[0], (tiles + 2) * pixels, (tiles + 2) * pixels), dtype=first.dtype)
+    for (c, r), tile in found.items():
+        canvas[:, (r + 1) * pixels:(r + 2) * pixels, (c + 1) * pixels:(c + 2) * pixels] = tile
+    return canvas[:, pixels - margin:(tiles + 1) * pixels + margin, pixels - margin:(tiles + 1) * pixels + margin]
+
+
 def render_png(image) -> bytes:
     import numpy as np
     from PIL import Image
@@ -535,15 +623,17 @@ class Predictor:
                 return self.network(tensor)
             return self.network.forward_region(tensor, *region)
 
-    def _decode(self, output: dict[str, Any], chip_id: str) -> list[dict[str, Any]]:
+    def _decode(self, output: dict[str, Any], chip_id: str, *, limit: int | None = None,
+                min_score: float | None = None) -> list[dict[str, Any]]:
         from urban_tree_ml.evaluation import _decode_batch
 
         evaluation = self.config["evaluation"]
         return _decode_batch(
             output,
             [chip_id],
-            max_detections_per_chip=int(evaluation["max_detections_per_chip"]),
+            max_detections_per_chip=limit or int(evaluation["max_detections_per_chip"]),
             nms_kernel=int(evaluation["nms_kernel"]),
+            min_score=min_score,
         )
 
     def predict(self, image, chip_id: str) -> list[dict[str, Any]]:
@@ -565,46 +655,69 @@ class Predictor:
                 records.append({**record, "output_x": x, "output_y": y})
         return records
 
+    def predict_block(self, image, margin: int, chip_ids: dict[tuple[int, int], str],
+                      min_score: float) -> dict[tuple[int, int], list[dict[str, Any]]]:
+        """The candidates scoring at least *min_score* of each tile in *chip_ids*
+        ((column, row) in the block -> chip id), highest first, from a block's
+        image (``block_image``).  Windows whose core no asked-for tile needs are
+        not run."""
+        import torch
 
-def predict_tile(
-    predictor: "Predictor",
-    lat: float,
-    lon: float,
-    *,
-    artifacts: Path,
-    run: str,
-    year: int | None,
-    stac_url: str,
-    city: str | None,
-    envelopes: dict[str, Box],
-    territory: dict[str, tuple[Box, ...]],
-    min_score: float,
-    threshold: float,
-    coefficients: "CrownCoefficients | None",
-    readers: "dict[str, InventoryReader] | None",
-    epsg_hint: int | None = None,
-    context: bool = False,
-    render: bool = True,
-) -> dict[str, Any] | None:
-    """Fetch (or reuse the cached) grid tile nearest a point, predict it and build its bundle.
+        pixels, stride = self.chip_pixels, self.stride
+        cells, ring = pixels // stride, int(self.config["evaluation"]["nms_kernel"]) // 2
+        core = pixels - 2 * margin
+        if margin % stride or core % stride:
+            raise ValueError(f"a margin of {margin} px is not whole output cells of {stride} px")
+        n = (image.shape[-1] - 2 * margin) // core
+        block_cells = n * core // stride
+        needed = windows_needed(n, core, pixels, list(chip_ids), ring * stride)
+        windows = context_windows(image, pixels, margin)
+        region = core_region(cells, ring, margin // stride)
+        parts = [
+            self._forward(windows[needed[k:k + WINDOW_BATCH]], region)
+            for k in range(0, len(needed), WINDOW_BATCH)
+        ]
+        output = {}
+        for key in parts[0]:
+            done = torch.cat([part[key] for part in parts])
+            # A window not run has no peaks: its centre is certain background.
+            full = done.new_full((n * n, *done.shape[1:]), float("-inf") if key == "center_logits" else 0.0)
+            full[needed] = done
+            output[key] = full
+        stitched = stitch_cores(output, block_cells, ring, origin=region[0], margin=margin // stride)
+        side = block_cells + 2 * ring
+        cap = int(self.config["evaluation"]["max_detections_per_chip"])
+        records: dict[tuple[int, int], list[dict[str, Any]]] = {position: [] for position in chip_ids}
+        for record in self._decode(stitched, "", limit=side * side, min_score=max(min_score, 1e-6)):
+            x, y = int(record["output_x"]) - ring, int(record["output_y"]) - ring
+            position = (x // cells, y // cells)
+            if 0 <= x < block_cells and 0 <= y < block_cells and position in records and len(records[position]) < cap:
+                records[position].append({
+                    **record, "chip_id": chip_ids[position], "output_x": x % cells, "output_y": y % cells,
+                })
+        return records
 
-    Returns None for a tile with too little imagery or in no city's territory.
-    *readers* caches inventory readers across calls; None skips the
-    current-tree overlay.  bulk_predict.py runs the same path over a grid, so
-    what it publishes is what the reviewer shows for the tile.
 
-    *epsg_hint* (bulk_predict knows its grid's zone) looks for the tile in the
-    window cache first -- *year*'s, or the newest cached -- and searches STAC
-    only on a miss; without it every call searches, so a newer NAIP year is
-    picked up.
+@dataclass
+class TileImagery:
+    """A grid tile's imagery and where it sits."""
 
-    *context* predicts the tile with its neighbours' imagery around it
-    (``context_image``, ``Predictor.predict_in_context``): no detections
-    piled on the tile's edges, at four forward passes a tile.
+    crs: str
+    chip_id: str
+    west: float
+    north: float
+    affine: list[float]
+    bounds: dict[str, float]
+    image: Any
+    valid_fraction: float
+    manifest: dict[str, Any]
+    cache_dir: Path  # the window cache of the tile's acquisition year
 
-    *render* False leaves the tile's PNG empty (and the bundle's image hash
-    with it), for a caller that keeps only the detections.
-    """
+
+def load_tile(predictor: "Predictor", lat: float, lon: float, *, artifacts: Path, year: int | None,
+              stac_url: str, epsg_hint: int | None = None) -> TileImagery:
+    """The grid tile nearest a point: from the window cache, else read from NAIP
+    and cached (``predict_tile`` says how *epsg_hint* and *year* choose)."""
     def locate(epsg: int) -> tuple[str, str, float, float]:
         from pyproj import Transformer
 
@@ -654,17 +767,32 @@ def predict_tile(
             write_cached_tile(tif_path, image, crs=crs, west=west, north=north,
                               resolution_m=predictor.resolution_m, valid=valid)
             manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    if valid_fraction < MIN_VALID_FRACTION:
-        print(f"{lat},{lon}: only {valid_fraction:.0%} of the tile has imagery; skipped", file=sys.stderr)
-        return None
+    return TileImagery(crs, chip_id, west, north, affine, bounds, image, valid_fraction, manifest,
+                       manifest_path.parent)
 
-    centre_lat = (bounds["north"] + bounds["south"]) / 2
-    centre_lon = (bounds["east"] + bounds["west"]) / 2
+
+def tile_city(tile: TileImagery, lat: float, lon: float, city: str | None, envelopes: dict[str, Box],
+              territory: dict[str, tuple[Box, ...]]) -> str | None:
+    """The city a tile's bundle belongs to, or None (and why, on stderr) for a
+    tile with too little imagery or in no city's territory."""
+    if tile.valid_fraction < MIN_VALID_FRACTION:
+        print(f"{lat},{lon}: only {tile.valid_fraction:.0%} of the tile has imagery; skipped", file=sys.stderr)
+        return None
+    centre_lat = (tile.bounds["north"] + tile.bounds["south"]) / 2
+    centre_lon = (tile.bounds["east"] + tile.bounds["west"]) / 2
     city = (city or owning_city(centre_lat, centre_lon, envelopes, territory) or "").upper()
     if not city:
         print(f"{lat},{lon}: in no city's territory; pass --city", file=sys.stderr)
         return None
+    return city
 
+
+def tile_result(predictor: "Predictor", tile: TileImagery, detections: list[dict[str, Any]], city: str, *,
+                run: str, envelopes: dict[str, Box], min_score: float, threshold: float,
+                coefficients: "CrownCoefficients | None", readers: "dict[str, InventoryReader] | None",
+                render: bool) -> dict[str, Any]:
+    """A tile's bundle from its decoded candidates (``predict_tile``'s result)."""
+    bounds, manifest, chip_id = tile.bounds, tile.manifest, tile.chip_id
     inventory = None
     if readers is not None:
         for code in cities_meeting(bounds, envelopes):
@@ -677,20 +805,11 @@ def predict_tile(
         inventory = MultiInventory({
             code: readers[code] for code in cities_meeting(bounds, envelopes) if readers.get(code)
         })
-
-    if context:
-        surround = context_image(
-            image, manifest_path.parent, crs=crs, west=west, north=north, pixels=predictor.chip_pixels,
-            resolution_m=predictor.resolution_m, bands=predictor.bands, stac_url=stac_url,
-        )
-        detections = predictor.predict_in_context(surround, chip_id)
-    else:
-        detections = predictor.predict(image, chip_id)
     records = [r for r in detections if float(r["score"]) >= min_score]
     dates = sorted(date.fromisoformat(s["acquisition_datetime"][:10]).isoformat() for s in manifest["sources"])
     version = imagery_version(manifest)
     tid = tile_id(city, version, chip_id)
-    png = render_png(image) if render else b""
+    png = render_png(tile.image) if render else b""
     bundle = build_bundle(
         chip={"chip_id": chip_id, "column_offset": 0, "row_offset": 0},
         predictions=records,
@@ -698,8 +817,8 @@ def predict_tile(
         version=version,
         provider="naip",
         acquisition=(dates[0], dates[-1], [s["item_id"] for s in manifest["sources"]]),
-        raster_affine=tuple(affine),
-        crs=crs,
+        raster_affine=tuple(tile.affine),
+        crs=tile.crs,
         resolution_m=predictor.resolution_m,
         chip_pixels=predictor.chip_pixels,
         stride=predictor.stride,
@@ -715,6 +834,125 @@ def predict_tile(
         cohort="point",
     )
     return {"bundle": bundle, "records": records, "tileId": tid, "city": city, "png": png, "inventory": inventory}
+
+
+def predict_tile(
+    predictor: "Predictor",
+    lat: float,
+    lon: float,
+    *,
+    artifacts: Path,
+    run: str,
+    year: int | None,
+    stac_url: str,
+    city: str | None,
+    envelopes: dict[str, Box],
+    territory: dict[str, tuple[Box, ...]],
+    min_score: float,
+    threshold: float,
+    coefficients: "CrownCoefficients | None",
+    readers: "dict[str, InventoryReader] | None",
+    epsg_hint: int | None = None,
+    context: bool = False,
+    render: bool = True,
+) -> dict[str, Any] | None:
+    """Fetch (or reuse the cached) grid tile nearest a point, predict it and build its bundle.
+
+    Returns None for a tile with too little imagery or in no city's territory.
+    *readers* caches inventory readers across calls; None skips the
+    current-tree overlay.  bulk_predict.py runs the same path over a grid, so
+    what it publishes is what the reviewer shows for the tile.
+
+    *epsg_hint* (bulk_predict knows its grid's zone) looks for the tile in the
+    window cache first -- *year*'s, or the newest cached -- and searches STAC
+    only on a miss; without it every call searches, so a newer NAIP year is
+    picked up.
+
+    *context* predicts the tile with its neighbours' imagery around it
+    (``context_image``, ``Predictor.predict_in_context``): no detections
+    piled on the tile's edges, at four forward passes a tile.
+
+    *render* False leaves the tile's PNG empty (and the bundle's image hash
+    with it), for a caller that keeps only the detections.
+    """
+    tile = load_tile(predictor, lat, lon, artifacts=artifacts, year=year, stac_url=stac_url, epsg_hint=epsg_hint)
+    city = tile_city(tile, lat, lon, city, envelopes, territory)
+    if city is None:
+        return None
+    if context:
+        surround = context_image(
+            tile.image, tile.cache_dir, crs=tile.crs, west=tile.west, north=tile.north,
+            pixels=predictor.chip_pixels, resolution_m=predictor.resolution_m, bands=predictor.bands,
+            stac_url=stac_url,
+        )
+        detections = predictor.predict_in_context(surround, tile.chip_id)
+    else:
+        detections = predictor.predict(tile.image, tile.chip_id)
+    return tile_result(
+        predictor, tile, detections, city, run=run, envelopes=envelopes, min_score=min_score,
+        threshold=threshold, coefficients=coefficients, readers=readers, render=render,
+    )
+
+
+def predict_block(
+    predictor: "Predictor",
+    wanted: dict[tuple[int, int], tuple[float, float]],
+    *,
+    tiles: int,
+    margin: int,
+    artifacts: Path,
+    run: str,
+    year: int | None,
+    stac_url: str,
+    city: str | None,
+    envelopes: dict[str, Box],
+    territory: dict[str, tuple[Box, ...]],
+    min_score: float,
+    threshold: float,
+    coefficients: "CrownCoefficients | None",
+    readers: "dict[str, InventoryReader] | None",
+    epsg_hint: int | None = None,
+    render: bool = True,
+) -> dict[tuple[int, int], dict[str, Any] | None]:
+    """``predict_tile`` in context for several tiles of one block at once.
+
+    *wanted* maps a tile's (column, row) in a block of *tiles* x *tiles* grid
+    tiles (row 0 the northmost) to a point in it.  The block is predicted from
+    chip-sized windows that discard *margin* pixels at every edge and whose
+    cores tile it (``block_tiles``), so its tiles share windows instead of
+    each running four of their own.  Each tile's result is what
+    ``predict_tile`` returns, None included.
+    """
+    loaded = {
+        position: load_tile(predictor, lat, lon, artifacts=artifacts, year=year, stac_url=stac_url,
+                            epsg_hint=epsg_hint)
+        for position, (lat, lon) in wanted.items()
+    }
+    cities = {
+        position: tile_city(loaded[position], *wanted[position], city, envelopes, territory)
+        for position in wanted
+    }
+    results: dict[tuple[int, int], dict[str, Any] | None] = {position: None for position in wanted}
+    live = [position for position in wanted if cities[position] is not None]
+    if not live:
+        return results
+    (column, row), first = live[0], loaded[live[0]]
+    tile_m = predictor.chip_pixels * predictor.resolution_m
+    image = block_image(
+        {position: tile.image for position, tile in loaded.items()}, first.cache_dir, crs=first.crs,
+        west=first.west - column * tile_m, north=first.north + row * tile_m, tiles=tiles,
+        pixels=predictor.chip_pixels, margin=margin, resolution_m=predictor.resolution_m,
+        bands=predictor.bands, stac_url=stac_url,
+    )
+    detections = predictor.predict_block(
+        image, margin, {position: loaded[position].chip_id for position in live}, min_score,
+    )
+    for position in live:
+        results[position] = tile_result(
+            predictor, loaded[position], detections[position], cities[position], run=run, envelopes=envelopes,
+            min_score=min_score, threshold=threshold, coefficients=coefficients, readers=readers, render=render,
+        )
+    return results
 
 
 # ---------------------------------------------------------------------------
