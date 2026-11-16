@@ -267,10 +267,16 @@ def transform(raw: pa.Table) -> pa.Table:
     )
 
 
-if __name__ == "__main__":
+def load_published() -> pa.Table:
+    """The inventory exactly as this partition publishes it.
+
+    ballarat_exceptional_trees.py links the register to these rows, so it must
+    see the same ids after the same filters.
+    """
     table = transform(download())
     table = validate_coordinates(table, city="Ballarat", city_code="AUBAL")
-    table = enforce_tree_schema(
-        table, city="Ballarat", data_source="BALLARAT_OPENDATA"
-    )
-    emit(table)
+    return enforce_tree_schema(table, city="Ballarat", data_source="BALLARAT_OPENDATA")
+
+
+if __name__ == "__main__":
+    emit(load_published())

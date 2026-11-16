@@ -1762,6 +1762,7 @@ def notable_source_for(city_code: str) -> str:
 NOTABLE_DATA_SOURCES: dict[str, str] = {
     "ITMIL": notable_source_for("ITMIL"),
     "USBOS": notable_source_for("USBOS"),
+    "AUBAL": notable_source_for("AUBAL"),
 }
 
 DATA_SOURCES: tuple[str, ...] = tuple(

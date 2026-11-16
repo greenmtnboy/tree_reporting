@@ -2,9 +2,10 @@ import ..tree_common;
 import ..community_tree_info;
 import ..tree_dedup;
 
-auto aubal_published_data_updated_through <- greatest(aubal_data_updated_through, aubal_community_data_updated_through, aubal_osm_data_updated_through);
+property <*>.aubal_exceptional_data_updated_through datetime; # when Ballarat's Exceptional Tree Register was last published
+auto aubal_published_data_updated_through <- greatest(aubal_data_updated_through, aubal_community_data_updated_through, aubal_osm_data_updated_through, aubal_exceptional_data_updated_through);
 
-key aubal_source enum<string>['BALLARAT_OPENDATA', 'COMMUNITY_AUBAL', 'OSM_AUBAL']; # originating dataset for the row
+key aubal_source enum<string>['BALLARAT_OPENDATA', 'NOTABLE_AUBAL', 'COMMUNITY_AUBAL', 'OSM_AUBAL']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
@@ -15,6 +16,11 @@ root datasource ballarat_update_time (
     data_updated_through: aubal_data_updated_through
 )
 file `./ballarat_update_time.py`;
+
+root datasource ballarat_exceptional_update_time (
+    data_updated_through: aubal_exceptional_data_updated_through
+)
+file `./ballarat_exceptional_update_time.py`;
 
 # Only this city's column, so an approval elsewhere does not mark AUBAL's
 # Parquet stale. Trilogy probes this as MAX over the one column.
@@ -39,6 +45,20 @@ root partial datasource ballarat_raw_tree_info extends tree_partition (
 )
 complete where city = 'AUBAL' and aubal_source = 'BALLARAT_OPENDATA'
 file `./ballarat_tree_info.py`;
+
+# The city's Exceptional Tree Register: a notable source (../tree_dedup.preql).
+# Each row names its inventory asset, and its ingest links it to that tree,
+# which takes the register's reasons as its significance; a row the inventory
+# does not hold is dropped.  No `@source_kept` guard: 150 rows are not a bulk
+# source.
+root partial datasource ballarat_exceptional_tree_info extends tree_partition (
+    data_source: aubal_source,
+    significance: ?raw_significance,
+    significance_source: ?raw_significance_source,
+    linked_tree_id: ?raw_linked_tree_id,
+)
+complete where city = 'AUBAL' and aubal_source = 'NOTABLE_AUBAL'
+file `./ballarat_exceptional_trees.py`;
 
 
 # Approved community submissions for this city. The shared ingest script emits

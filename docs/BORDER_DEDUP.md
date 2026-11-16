@@ -24,6 +24,17 @@ along the kerb. So the rule is: within ~2 m, never across a contradicting
 genus, one to one, and the earlier-published inventory keeps the tree so ids
 people have linked to stay stable. About 100 trees, 0.06% of the metro.
 
+### Melbourne (2026-11-16)
+
+Melbourne's model unions five councils' inventories, and the City of
+Melbourne and Yarra both record the trees on their shared streets. Yarra's
+nearest Melbourne tree is under 1 m for 27, 1-2 m for 45, 2-3 m for 26 and
+3-4 m for 6, with the genus agreeing for every one, wider than Boston's
+offset. The same block runs there with a 3 m cell, which is still under
+Yarra's own 3.4 m tenth-percentile spacing. It drops 94 Yarra rows, and
+`tests/test_border_dedup_melbourne.py` runs it on fixture rows. No other
+pair of councils has a tree within 2 m.
+
 ## Where it belongs
 
 In `usbos/boston_tree_info.preql`. It is the one model that sees every metro

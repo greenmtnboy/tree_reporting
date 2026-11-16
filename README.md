@@ -184,6 +184,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Adelaide | City of Adelaide - Street Trees (data.sa.gov.au, CC BY 4.0) | https://data.sa.gov.au/data/dataset/street-trees |
 | Perth | City of Perth - Trees in the City (ArcGIS, CC BY 4.0) | https://www.arcgis.com/home/item.html?id=c5ce51d9789a4e9a8510acb8c8f3ecf4 |
 | Ballarat | City of Ballarat Open Data - Trees (CC BY) | https://data.ballarat.vic.gov.au/explore/dataset/trees/ |
+| Ballarat (notable trees) | City of Ballarat Open Data - Exceptional Tree Register (CC BY 3.0 AU) | https://data.ballarat.vic.gov.au/explore/dataset/exceptional-tree-register/ |
 | Wodonga | City of Wodonga - Street and Reserve Trees (ArcGIS, CC BY 4.0) | https://www.arcgis.com/home/item.html?id=f6e5ca95559a4253bf7d25897bf8ed15 |
 | Paris | Paris Open Data - Les Arbres | https://opendata.paris.fr/explore/dataset/les-arbres/ |
 | Buenos Aires | Buenos Aires Data - Arbolado publico lineal | https://data.buenosaires.gob.ar/dataset/arbolado-publico-lineal |
