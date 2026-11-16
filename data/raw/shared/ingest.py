@@ -847,6 +847,8 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    "Koelreutaria paniculata": "Koelreuteria paniculata",
+    "Melalueca uncinata": "Melaleuca uncinata",
     "Abies balsamaea": "Abies balsamea",
     "Acacia mearsnii": "Acacia mearnsii",
     "Acer buergeranum": "Acer buergerianum",
@@ -1543,9 +1545,9 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "DEBER": ("BERLIN_OPENDATA",),
     "NLAMS": ("AMSTERDAM_OPENDATA",),
     "GBLON": ("LONDON_OPENDATA",),
-    "AUMEL": ("MELBOURNE_OPENDATA",),
+    "AUMEL": ("MELBOURNE_OPENDATA", "PORT_PHILLIP", "YARRA", "GLEN_EIRA", "HOBSONS_BAY"),
     "ARBUE": ("BUENOSAIRES_OPENDATA",),
-    "USLAX": ("LOSANGELES_OPENDATA",),
+    "USLAX": ("LOSANGELES_OPENDATA", "WEST_HOLLYWOOD"),
     "USWAS": ("WASHINGTONDC_OPENDATA",),
     "USTEM": ("TEMPE_OPENDATA",),
     "GRATH": ("ATHENS_OPENDATA",),
@@ -2254,7 +2256,7 @@ def _check_tree_id_grain(
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "AUWOD": (-36.3, -36.0, 146.75, 147.1),
     "AUBAL": (-37.8, -37.3, 143.55, 144.1),
-    "AUPER": (-31.99, -31.92, 115.8, 115.9),
+    "AUPER": (-32.0, -31.92, 115.8, 115.9),
     "AUADL": (-34.96, -34.88, 138.56, 138.64),
     "USNPV": (41.66, 41.83, -88.3, -88.05),
     "USBOU": (39.95, 40.13, -105.35, -105.15),
@@ -2676,7 +2678,7 @@ Box = tuple[float, float, float, float]
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'AUWOD': ((-36.3, -36.0, 146.75, 147.1),),
     'AUBAL': ((-37.8, -37.3, 143.55, 144.1),),
-    'AUPER': ((-31.99, -31.92, 115.8, 115.9),),
+    'AUPER': ((-32.0, -31.92, 115.8, 115.9),),
     'AUADL': ((-34.96, -34.88, 138.56, 138.64),),
     'USNPV': ((41.66, 41.83, -88.3, -88.05),),
     'USBOU': ((39.95, 40.13, -105.35, -105.15),),

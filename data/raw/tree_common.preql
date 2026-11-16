@@ -39,9 +39,9 @@ property <*>.cavan_data_updated_through datetime; # when Vancouver data is throu
 property <*>.deber_data_updated_through datetime; # when Berlin data is through
 property <*>.nlams_data_updated_through datetime; # when Amsterdam data is through
 property <*>.gblon_data_updated_through datetime; # when London data is through
-property <*>.aumel_data_updated_through datetime; # when Melbourne data is through
+# property <*>.aumel_data_updated_through datetime; # derived in aumel/melbourne_tree_info.preql from its five council inventories
 property <*>.arbue_data_updated_through datetime; # when Buenos Aires data is through
-property <*>.uslax_data_updated_through datetime; # when Los Angeles data is through
+# property <*>.uslax_data_updated_through datetime; # derived in uslax/losangeles_tree_info.preql from its two inventories
 property <*>.uswas_data_updated_through datetime; # when Washington DC data is through
 property <*>.ustem_data_updated_through datetime; # when Tempe data is through
 property <*>.grath_data_updated_through datetime; # when Athens data is through
