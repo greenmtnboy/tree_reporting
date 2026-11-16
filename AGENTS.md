@@ -34,11 +34,12 @@ pnpm test            # vitest, offline apart from two resolver-backed suites
 pnpm lint
 pnpm test:e2e        # Playwright against a --mode e2e build
 pnpm test:queries    # compiles and executes the whole dashboard catalog against the live resolver; gates PRs
-pnpm test:wasm       # the tile worker on DuckDB-WASM under Node, ~20 s; fetches the spatial extension; run after any worker SQL change
+pnpm test:wasm       # the tile worker on DuckDB-WASM under Node, ~20 s, offline; run after any worker SQL change
 pnpm bench:chat      # the agent chat benchmark; spends the demo model budget, run by hand
 pnpm bench:memory    # renderer memory and bytes for one city load against a preview; run before and after any loader change (docs/MOBILE_LOAD_BUDGET.md)
 pnpm bench:nearby    # every request between the Near Me tap and the first trees on a phone, under a shaped network (MAP_BENCH_NET=4g); run before and after any change to the worker's start or the phone's cell loads
 pnpm bench:tiles     # time to settle after each zoom and pan, and how long tiles trickle in; run before and after any tile-query change
+pnpm bench:nearby    # a phone's wait from the Near Me tap to trees on a shaped link, with the request waterfall; run before and after any change to the worker's start
 pnpm bench:dashboard # the summary dashboard's first open on a phone: bytes per file, renderer memory, time until its queries stop
 
 # data, from data/raw

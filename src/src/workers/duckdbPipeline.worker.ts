@@ -30,6 +30,8 @@ import {
   fetchPublishedFile,
   fetchWorldFile,
   fetchWorldManifest,
+  fetchWorldRange,
+  parquetExtensionUrl,
   worldFileUrl,
 } from './parquetUrls'
 import { normalizeValue } from './normalizeValue'
@@ -48,6 +50,7 @@ import {
   colorSql,
   dropWorldTablesSql,
   notableRelationSql,
+  PUBLISHED_TREES_VIEW,
   publishedTreesViewSql,
   scopeSql,
   tileIndexSql,
@@ -79,12 +82,14 @@ import {
 
 const MAX_TILE_CACHE_ENTRIES = 1536
 const MAX_PARALLEL_TILE_WORK = 3
-const PREPARED_FEATURE_TABLE_ZOOM = 15
+/** The first zoom whose tiles hold a point per tree; below it a tile is an aggregate. */
+const DETAIL_TILE_ZOOM = 15
 const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
 
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 import { snapShade } from '../lib/foliageSeason'
-import { assembleLayeredTiles } from './mvtLayers'
+import { encodePointTiles, type PointProperty } from './pointTiles'
+import { SparseBlock, type Box } from './sparseBlocks'
 import {
   CHUNK_ZOOM, bucketByChunk, flaggedRows, gridOrderChunks, pointChunkColorsSql, pointChunksSql, pointPalette,
   type PointChunkBatch, type PointChunkColors, type PointChunkDirectory, type PointKeys,
@@ -106,10 +111,27 @@ const CIRCLE_TILE_MIN_ZOOM = 12
  * where one does, so the tile's value table holds a few dozen sizes rather
  * than one float per cell.
  */
-function aggregatedDbhSql(z: number): { agg: string; property: string } {
+function aggregatedDbhSql(z: number): { agg: string; select: string } {
   return z < CIRCLE_TILE_MIN_ZOOM
-    ? { agg: 'NULL', property: '' }
-    : { agg: 'round(AVG(dbh))', property: "\n      'dbh': TRY_CAST(dbh AS INTEGER)," }
+    ? { agg: 'NULL', select: '' }
+    : { agg: 'round(AVG(dbh))', select: 'TRY_CAST(dbh AS INTEGER) AS dbh,' }
+}
+
+/** What a tree's own feature carries: a tap reads the id, the circles the diameter. */
+const POINT_PROPERTIES: PointProperty[] = [
+  { name: 'id', kind: 'string' },
+  { name: 'dbh', kind: 'double' },
+  // Written only on a notable tree.
+  { name: 'notable', kind: 'flag' },
+]
+
+/** What an overview cell carries: the heatmaps read its count and grid size, the circles (z12 up) its diameter. */
+function aggregateProperties(z: number, gridMeters: number): PointProperty[] {
+  return [
+    ...(z < CIRCLE_TILE_MIN_ZOOM ? [] : [{ name: 'dbh', kind: 'int' as const }]),
+    { name: 'point_count', kind: 'int' },
+    { name: 'grid_m', kind: 'int', value: gridMeters },
+  ]
 }
 
 const DEFAULT_CATEGORY_LABELS: Record<string, string> = {
@@ -143,21 +165,6 @@ const inflightTileRequests = new Map<string, Promise<Uint8Array>>()
 const inflightNeighborhoodBatch = new Map<string, Promise<void>>()
 /** The ground each in-flight neighbourhood batch covers, by its key. */
 const inflightNeighborhoodRanges = new Map<string, { rev: number; z: number } & TileBounds>()
-/** The content key of the feature table each zoom currently holds. */
-const preparedFeatureTablesReady = new Map<number, string>()
-const inflightFeatureTableBuild = new Map<string, Promise<void>>()
-/**
- * Bumped whenever the rows under trees_fast change (a city load, a window
- * move): a feature-table build that started before stops between slices and
- * is never marked ready. Its key alone cannot tell, since every city's
- * default query has the same one.
- */
-let featureTableGeneration = 0
-
-function resetFeatureTables() {
-  preparedFeatureTablesReady.clear()
-  featureTableGeneration += 1
-}
 const visibleTileRangeByZoom = new Map<number, TileBounds>()
 const prefetchedVisibleRangeSigByZoom = new Map<number, string>()
 const pendingTileQueue: QueuedTileRequest[] = []
@@ -178,7 +185,6 @@ let activeDistinctColors: string[] = Object.values(DEFAULT_CATEGORY_COLORS)
 let activeColorLabelMap: Record<string, string> = { ...DEFAULT_CATEGORY_LABELS }
 let activeViewportZoom = 13
 let activeViewportCenter: { lng: number; lat: number } | null = null
-let spatialExtensionReady = false
 let prewarmDoneRevision = -1
 let prewarmPromise: Promise<void> | null = null
 let autoTileFetchEnabled = true
@@ -244,6 +250,79 @@ const WHOLE_BLOCK_LOADS = 2
 const WHOLE_BLOCK_BYTES = 16 * 1024 * 1024
 const wholeBlocks = new Map<string, Promise<Uint8Array>>()
 const wholeBlockSizes = new Map<string, number>()
+/**
+ * A block of this many rows or more is not fetched whole for a phone's load:
+ * only its footer and the row groups the load's cells fall in are
+ * (sparseBlocks.ts). Central Boston's block is 129,000 rows and 4.1 MB, and a
+ * street view's two cells are five of its thirteen row groups, 1.6 MB. Below
+ * this (a megabyte or so) the footer's extra round trip is not worth the
+ * bytes; nine blocks in ten are smaller.
+ */
+const SPARSE_BLOCK_ROWS = 30_000
+/** Blocks held in part, newest last, within the same allowance as the whole ones. */
+const sparseBlocks = new Map<string, Promise<SparseBlock>>()
+const sparseBlockSizes = new Map<string, number>()
+/** Blocks whose partial read failed once: read whole from then on. */
+const sparseRefused = new Set<string>()
+
+/** Forget the oldest entries of `held` (newest last) until `sizes` fit the allowance; never `keep`. */
+function trimHeldBlocks(held: Map<string, unknown>, sizes: Map<string, number>, keep: string): void {
+  let total = 0
+  for (const size of sizes.values()) total += size
+  for (const name of [...held.keys()]) {
+    if (total <= WHOLE_BLOCK_BYTES || name === keep) break
+    total -= sizes.get(name) ?? 0
+    held.delete(name)
+    sizes.delete(name)
+  }
+}
+
+/** A block held in part: the one kept, or a new one that is kept once its footer is read. */
+function sparseBlock(file: string): Promise<SparseBlock> {
+  const held = sparseBlocks.get(file)
+  if (held) {
+    sparseBlocks.delete(file)
+    sparseBlocks.set(file, held)
+    return held
+  }
+  const opened = SparseBlock.open(file, fetchWorldRange)
+  sparseBlocks.set(file, opened)
+  opened.then((block) => {
+    if (sparseBlocks.get(file) !== opened) return
+    sparseBlockSizes.set(file, block.total)
+    trimHeldBlocks(sparseBlocks, sparseBlockSizes, file)
+  }, () => {
+    if (sparseBlocks.get(file) === opened) sparseBlocks.delete(file)
+  })
+  return opened
+}
+
+function refuseSparse(file: string): void {
+  sparseRefused.add(file)
+  sparseBlocks.delete(file)
+  sparseBlockSizes.delete(file)
+}
+
+/**
+ * The bytes a read of `box` needs from a block file, as a buffer the engine
+ * can be handed as that file: the row groups under the box for a large block,
+ * the whole file for a small one or one whose partial read has failed.
+ */
+async function blockBytes(file: string, rows: number, box: Box): Promise<{ bytes: Uint8Array; sparse: SparseBlock | null }> {
+  if (rows >= SPARSE_BLOCK_ROWS && !sparseRefused.has(file) && !wholeBlocks.has(file)) {
+    try {
+      const block = await sparseBlock(file)
+      await block.cover(box)
+      return { bytes: block.bytes, sparse: block }
+    } catch (error) {
+      // A file that is gone is the load's to report; anything else, the file is read whole.
+      if (error instanceof WorldFileError && error.status === 404) throw error
+      console.warn('[duckdb-worker] a partial read of a block failed; reading it whole', file, error)
+      refuseSparse(file)
+    }
+  }
+  return { bytes: await wholeBlock(file), sparse: null }
+}
 
 /**
  * A block file's bytes: the copy kept, or a fetch that is kept. A fetch that
@@ -262,14 +341,7 @@ function wholeBlock(file: string): Promise<Uint8Array> {
   fetched.then((bytes) => {
     if (wholeBlocks.get(file) !== fetched) return
     wholeBlockSizes.set(file, bytes.byteLength)
-    let total = 0
-    for (const size of wholeBlockSizes.values()) total += size
-    for (const name of [...wholeBlocks.keys()]) {
-      if (total <= WHOLE_BLOCK_BYTES || name === file) break
-      total -= wholeBlockSizes.get(name) ?? 0
-      wholeBlocks.delete(name)
-      wholeBlockSizes.delete(name)
-    }
+    trimHeldBlocks(wholeBlocks, wholeBlockSizes, file)
   }, () => {
     if (wholeBlocks.get(file) === fetched) wholeBlocks.delete(file)
   })
@@ -303,18 +375,56 @@ function startEarlyFiles(): EarlyFiles {
   }
 }
 
+/** Half the side of the ground a phone's screen shows where Near Me opens (z17), in metres, with room to spare. */
+const OPENING_VIEW_HALF_M = 200
+
+/** The cells a phone's screen shows where Near Me opens on a point: the ones its first tiles will ask for. */
+function openingCells(lng: number, lat: number, cz: number, manifest: WorldManifest): number[] {
+  const dLat = OPENING_VIEW_HALF_M / 111_320
+  const dLng = dLat / Math.max(0.01, Math.cos((lat * Math.PI) / 180))
+  const cells = cellsInBox({ west: lng - dLng, east: lng + dLng, south: lat - dLat, north: lat + dLat }, cz, MAX_SCOPE_CELLS) ?? []
+  return cells.filter((key) => manifest.blocks.has(blockOfCell(key, cz)))
+}
+
 /**
- * Fetch the block under a point before anything can read it: Near Me knows
- * where the camera will open while the engine is still downloading, and the
- * block's bytes are what the first trees wait for after it.
+ * Fetch the trees under a point before anything can read them: Near Me knows
+ * where the camera will open while the engine is still downloading, and those
+ * bytes are what the first trees wait for after it. A phone asks for what its
+ * opening view's cells need of their block (blockBytes); a desktop's cell is
+ * the block.
+ *
+ * Then, as soon as the engine is up, a phone's cells under that view are cut
+ * out of the block. The first tile used to ask for them, and it is asked for
+ * only once the bookmark, the colour scheme and the map's layers are all in
+ * place: a third of a second of loading that now runs beside that set-up
+ * instead of after it.
  */
 function prefetchBlockAt(lng: number, lat: number): void {
-  void ensureInit().catch(() => {})
+  const started = ensureInit()
   const manifest = world ? Promise.resolve(world.manifest) : earlyFiles?.manifest.then(parseWorldManifest)
   manifest?.then((m) => {
-    const at = blockAt(lng, lat)
-    const block = m.blocks.get(blockKey(at.x, at.y))
-    if (block) wholeBlock(blockFile(block)).catch(() => {})
+    const cz = cellZoom()
+    if (cz === BLOCK_ZOOM) {
+      const at = blockAt(lng, lat)
+      const block = m.blocks.get(blockKey(at.x, at.y))
+      if (block) wholeBlock(blockFile(block)).catch(() => {})
+      return
+    }
+    // The same cells, and so the same box, as the load below asks for: it finds these bytes held.
+    const cells = openingCells(lng, lat, cz, m)
+    const blocks = [...new Set(cells.map((key) => blockOfCell(key, cz)))]
+    if (cells.length === 0 || blocks.length > WHOLE_BLOCK_LOADS) return
+    const box = cellsBounds(cells, cz)
+    for (const key of blocks) {
+      const block = m.blocks.get(key)!
+      blockBytes(blockFile(block), block.rows, box).catch(() => {})
+    }
+  }).catch(() => {})
+  started.then(() => {
+    const win = world
+    // A desktop's resident layer asks for the blocks it draws.
+    if (!win || win.cellZoom === BLOCK_ZOOM) return
+    return ensureWindowCells(openingCells(lng, lat, win.cellZoom, win.manifest))
   }).catch(() => {})
 }
 /** The most cells an intro's prefetch of a tile range loads ahead of its aggregate. */
@@ -482,24 +592,6 @@ function shouldPersistLowZoomSfTile(key: string): boolean {
 
 function neighborhoodBatchKey(rev: number, z: number, minX: number, maxX: number, minY: number, maxY: number): string {
   return `${rev}:${treeFilterSignature()}:${z}:${minX}-${maxX}:${minY}-${maxY}`
-}
-
-/**
- * What a feature table's rows depend on: the query and the published filter.
- * Not the colours: the table holds each tree's species, form and id and the
- * read resolves the colour (`colorSql`), so a colour scheme or chat override
- * change keeps the table (7 s to build on Boston). Not the query revision
- * either: a republish of the same SQL must find the table it already has,
- * and a build that started a moment before the first publish must still
- * count.
- */
-function featureTableBuildKey(baseQuery: string, z: number): string {
-  const query = isDefaultBaseQuery(baseQuery) ? 'default' : hashText(normalizeSql(baseQuery))
-  return `${query}:${publishedTreeIdFilterSignature}:${z}`
-}
-
-function featureTableName(z: number): string {
-  return `tile_features_z${z}`
 }
 
 function shouldUseZoomBatch(z: number): boolean {
@@ -803,8 +895,9 @@ function resetWorld(reason: string): Promise<void> {
         colorOverrideActive = false
       }
       await loadWorld()
-      if (contextCity) await conn!.query(publishedTreesViewSql(cityBrowserParquetUrl(contextCity)))
-      resetFeatureTables()
+      // The view went with the world's tables; a standing query that reads it gets it back now.
+      publishedViewCity = undefined
+      await publishedView(tileQuerySql)
       invalidateTileCaches('world-reset')
     } finally {
       worldReset = null
@@ -934,27 +1027,49 @@ async function loadWindowCells(win: World, cells: number[]): Promise<void> {
       // A street's view is a cell or two of one block, and there the range
       // reads cost more than the file (WHOLE_BLOCK_LOADS): it is fetched
       // whole, or was already when Near Me said where it would open.
-      const blockFiles = [...byBlock.keys()].map((key) => blockFile(win.manifest.blocks.get(key)!))
+      //
+      // A large block is not fetched whole either: only the row groups the
+      // cells' box reaches (blockBytes), in a buffer the engine reads as the
+      // file. Should the engine read past them it throws, and the load is
+      // made again from the whole files.
+      const blocks = [...byBlock.keys()].map((key) => win.manifest.blocks.get(key)!)
+      const blockFiles = blocks.map(blockFile)
       const whole = blockFiles.length <= WHOLE_BLOCK_LOADS
       const registered: string[] = []
-      let files = blockFiles.map(worldFileUrl)
-      try {
+      const box = cellsBounds(cells, cz)
+      const stage = async (): Promise<boolean> => {
+        let files = blockFiles.map(worldFileUrl)
+        const partial: string[] = []
         if (whole) {
-          const fetched = await Promise.all(blockFiles.map(wholeBlock))
-          if (!live()) return
+          const fetched = await Promise.all(blocks.map((block) => blockBytes(blockFile(block), block.rows, box)))
+          if (!live()) return false
           files = []
+          bytes = 0
           for (const [i, file] of fetched.entries()) {
             // The name keeps the block's key where the staging SQL can be read for it.
-            const name = `whole_${seq}/${blockFiles[i]}`
-            await db.registerFileBuffer(name, new Uint8Array(file))
+            const name = `whole_${seq}_${registered.length}/${blockFiles[i]}`
+            await db!.registerFileBuffer(name, new Uint8Array(file.bytes))
             registered.push(name)
             files.push(name)
-            bytes += file.byteLength
+            bytes += file.sparse ? file.sparse.fetched : file.bytes.byteLength
+            if (file.sparse) partial.push(blockFiles[i])
           }
         }
-        const sql = windowStagingSql(staging, files, cells, cellsBounds(cells, cz), cz)
-        await conn.query(sql.create)
-        for (const row of (await conn.query(sql.counts)).toArray()) counts.set(Number(row.cell), Number(row.n))
+        try {
+          await conn!.query(windowStagingSql(staging, files, cells, box, cz).create)
+        } catch (error) {
+          if (partial.length === 0) throw error
+          console.warn('[duckdb-worker] a block held in part could not be read; reading it whole', partial, error)
+          partial.forEach(refuseSparse)
+          await conn!.query(`DROP TABLE IF EXISTS ${staging}`)
+          return stage()
+        }
+        return true
+      }
+      try {
+        if (!await stage()) return
+        const { counts: countsSql } = windowStagingSql(staging, blockFiles.map(worldFileUrl), cells, box, cz)
+        for (const row of (await conn.query(countsSql)).toArray()) counts.set(Number(row.cell), Number(row.n))
         if (!live()) return
         for (const key of cells) {
           const rows = counts.get(key) ?? 0
@@ -990,7 +1105,6 @@ async function loadWindowCells(win: World, cells: number[]): Promise<void> {
       // replan a several-hundred-table union after each one.
       win.viewCurrent = false
       for (const name of evict) await conn.query(`DROP TABLE IF EXISTS ${name}`)
-      resetFeatureTables()
     }
 
     console.info('[Perf] duckdb-worker:window-load', {
@@ -1060,28 +1174,111 @@ async function withCells<T>(cells: number[], read: (tables: string[]) => Promise
   }
 }
 
+/**
+ * The engine's own files, asked for before the engine is started: on the
+ * entry screen, while the viewer is still choosing (prefetchEngine). The wasm
+ * is 34 MB (about 9 MB on the wire) and was the longest single wait between a
+ * Near Me tap and a tree; fetched from the entry screen, a viewer who takes a
+ * few seconds to tap finds most of it already here.
+ *
+ * `module` is the wasm as a blob URL, which the engine instantiates from
+ * instead of fetching again: not left to the HTTP cache, because a second
+ * request for a response still arriving is a second download in some
+ * browsers. It costs the compile's overlap with the download, so the engine
+ * takes this path only when a prefetch was started ahead of it.
+ */
+type EngineFiles = {
+  bundle: Promise<duckdb.DuckDBBundle>
+  module: Promise<string | null>
+  /** Settles when the parquet extension is in the browser's cache, or could not be fetched. */
+  extension: Promise<void>
+}
+let engineFiles: EngineFiles | null = null
+
+function selectEngineBundle(): Promise<duckdb.DuckDBBundle> {
+  return duckdb.selectBundle({
+    mvp: { mainModule: DUCKDB_ASSET_URLS.mvp.mainModule, mainWorker: DUCKDB_ASSET_URLS.mvp.mainWorker },
+    eh: { mainModule: DUCKDB_ASSET_URLS.eh.mainModule, mainWorker: DUCKDB_ASSET_URLS.eh.mainWorker },
+  })
+}
+
+/** Ask for the parquet extension the engine will load, so its own request finds it cached. */
+function fetchParquetExtension(bundle: Promise<duckdb.DuckDBBundle>): Promise<void> {
+  return bundle.then(async ({ mainModule }) => {
+    const url = parquetExtensionUrl(mainModule)
+    if (url) await (await fetch(url)).arrayBuffer()
+  }).catch(() => {})
+}
+
+function prefetchEngine(): void {
+  if (engineFiles || db || initPromise) return
+  const t0 = nowMs()
+  const bundle = selectEngineBundle()
+  const module = bundle.then(async ({ mainModule, mainWorker }) => {
+    // The engine's worker script: fetched here only to be in the cache when the worker is made.
+    if (mainWorker) void fetch(mainWorker).then((response) => response.arrayBuffer()).catch(() => {})
+    const response = await fetch(mainModule)
+    if (!response.ok) return null
+    // As a blob, never an ArrayBuffer: 34 MB that need not sit in this worker's heap.
+    const body = await response.blob()
+    console.info('[Perf] duckdb-worker:engine-prefetch', { mb: Math.round(body.size / 1e5) / 10, ms: Math.round(nowMs() - t0) })
+    // Streaming compilation takes only a response typed as wasm, whatever the host called it.
+    return URL.createObjectURL(new Blob([body], { type: 'application/wasm' }))
+  }).catch(() => null)
+  engineFiles = { bundle, module, extension: fetchParquetExtension(bundle) }
+}
+
+/**
+ * How long a prefetched engine may take to compile before it is given up on.
+ * The bytes are already here, so this is compile time alone; a browser that
+ * would not compile from a blob might never answer, and the engine's own
+ * fetch is the way that is known to work.
+ */
+const PREFETCHED_ENGINE_DEADLINE_MS = 20_000
+
+/** Start the engine from `module` (a prefetched blob) or the bundle's own URL. */
+async function startEngine(bundle: duckdb.DuckDBBundle, module: string | null): Promise<duckdb.AsyncDuckDB> {
+  const worker = new Worker(bundle.mainWorker!)
+  const engine = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), worker)
+  let deadline: ReturnType<typeof setTimeout> | undefined
+  try {
+    const started = engine.instantiate(module ?? bundle.mainModule, bundle.pthreadWorker)
+    await (module
+      ? Promise.race([started, new Promise<never>((_, reject) => {
+        deadline = setTimeout(() => reject(new Error('the prefetched engine did not start in time')), PREFETCHED_ENGINE_DEADLINE_MS)
+      })])
+      : started)
+  } catch (error) {
+    worker.terminate()
+    throw error
+  } finally {
+    clearTimeout(deadline)
+  }
+  return engine
+}
+
 async function doInit() {
   if (db) return
   const t0 = nowMs()
-  console.info('[Perf] duckdb-worker:init:start')
+  console.info('[Perf] duckdb-worker:init:start', { enginePrefetched: !!engineFiles })
   const early = earlyFiles = startEarlyFiles()
 
-  const bundles: duckdb.DuckDBBundles = {
-    mvp: {
-      mainModule: DUCKDB_ASSET_URLS.mvp.mainModule,
-      mainWorker: DUCKDB_ASSET_URLS.mvp.mainWorker,
-    },
-    eh: {
-      mainModule: DUCKDB_ASSET_URLS.eh.mainModule,
-      mainWorker: DUCKDB_ASSET_URLS.eh.mainWorker,
-    },
+  const files = engineFiles
+  engineFiles = null
+  const bundle = await (files?.bundle ?? selectEngineBundle())
+  // With no prefetch ahead of it the engine fetches its own wasm, compiling as it arrives.
+  const extension = files?.extension ?? fetchParquetExtension(Promise.resolve(bundle))
+  const module = await files?.module ?? null
+  try {
+    db = await startEngine(bundle, module).catch((e) => {
+      if (!module) throw e
+      console.warn('[duckdb-worker] the prefetched engine did not start; fetching it again', e)
+      return startEngine(bundle, null)
+    })
+  } finally {
+    if (module) URL.revokeObjectURL(module)
   }
-  const bundle = await duckdb.selectBundle(bundles)
-
-  const logger = new duckdb.ConsoleLogger()
-  const worker = new Worker(bundle.mainWorker!)
-  db = new duckdb.AsyncDuckDB(logger, worker)
-  await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
+  console.info('[Perf] duckdb-worker:engine', { ms: Math.round(nowMs() - t0), prefetched: !!module })
   // Since duckdb-wasm 1.31 an unset forceFullHTTPReads means true: every
   // remote parquet was downloaded whole on first touch, so a window load
   // fetched the full projection and its row groups pruned nothing. Range
@@ -1106,6 +1303,8 @@ async function doInit() {
   // The table is read whole, so its file is fetched whole (startEarlyFiles)
   // and read from memory; from the bucket only if that fetch failed.
   const speciesBytes = await early.species
+  // The first parquet read loads the extension: from the cache, once the fetch that put it there is done.
+  await extension
   const speciesFile = speciesBytes ? 'species_enrichment.parquet' : REMOTE_SPECIES_PARQUET_URL
   if (speciesBytes) await db.registerFileBuffer(speciesFile, speciesBytes)
   const hasTrunkPhoto = await parquetHasColumn(speciesFile, 'trunk_photo_url')
@@ -1175,20 +1374,6 @@ async function doInit() {
     }
   }
 
-  spatialExtensionReady = false
-  try {
-    await conn.query('LOAD spatial;')
-    spatialExtensionReady = true
-  } catch {
-    try {
-      await conn.query('INSTALL spatial;')
-      await conn.query('LOAD spatial;')
-      spatialExtensionReady = true
-    } catch (e) {
-      console.error('DuckDB spatial extension unavailable:', e)
-    }
-  }
-
   if (ecoregionBytes) await db.dropFile('ecoregion_browser.parquet').catch(() => {})
 
   // The world's manifest and vocabulary. No tree is loaded until a view asks.
@@ -1239,6 +1424,7 @@ async function setSpeciesShadeSql(sql: string | null) {
   const normalized = sql?.trim() || null
   const signature = normalized ? `shade-${hashText(normalizeSql(normalized))}` : 'none'
   if (signature === speciesShadeSignature) return
+  const t0 = nowMs()
   await conn.query(`DROP TABLE IF EXISTS ${SPECIES_SHADE_TABLE}`)
   if (normalized) {
     // Exact hexes first, then each snapped to the paint palette (snapShade):
@@ -1274,6 +1460,7 @@ GROUP BY species`)
     activeDistinctColors = await baseDistinctColors()
     activeColorLabelMap = baseScheme() === 'form' ? { ...DEFAULT_CATEGORY_LABELS } : {}
   }
+  console.info('[Perf] duckdb-worker:species-shade', { on: speciesShadeActive, colors: activeDistinctColors.length, ms: Math.round(nowMs() - t0) })
   invalidateTileCaches('color-scheme')
   postColorMapUpdate()
 }
@@ -1288,99 +1475,6 @@ async function ensureInit(): Promise<void> {
     })
   }
   await initPromise
-}
-
-async function ensurePreparedFeatureTableForZoom(z: number, baseQuery: string): Promise<void> {
-  if (!conn || z !== PREPARED_FEATURE_TABLE_ZOOM) return
-  if (baseQuery !== effectiveBaseQuery(tileQuerySql)) return
-
-  const key = featureTableBuildKey(baseQuery, z)
-  if (preparedFeatureTablesReady.get(z) === key) return
-
-  const generation = featureTableGeneration
-  const inflightKey = `${generation}:${key}`
-  const inflight = inflightFeatureTableBuild.get(inflightKey)
-  if (inflight) {
-    await inflight
-    return
-  }
-
-  const xExpr = tileXExpr('tf', z)
-  const yExpr = tileYExpr('tf', z)
-  const table = featureTableName(z)
-  const src = tileRowSource(baseQuery, { join: '' })
-
-  const request = (async () => {
-    // trees_fast is a view over the held cells, with no rowid to slice on:
-    // the table is built a cell table at a time instead, each one a slice.
-    await viewIsCurrent()
-    const tables = world ? [...world.chunks.keys()] : []
-    const slices = Math.max(1, tables.length)
-    const sliceSource = (i: number) => tileRowSource(baseQuery, { join: '' }, tables.length ? tables[i] : WINDOW_SHAPE_TABLE)
-    // The colour is not stored: the read joins it (featureTableBuildKey).
-    // The id is a column too, so it is held once, and goes back into the
-    // struct at read time.
-    const sliceSql = (i: number) => `
-${i === 0 ? `CREATE OR REPLACE TEMP TABLE ${table} AS` : `INSERT INTO ${table}`}
-${sliceSource(i).prelude} rows AS (
-  SELECT
-    ${xExpr} AS xtile,
-    ${yExpr} AS ytile,
-    ${src.id} AS tree_id,
-    tf.species,
-    tf.tree_form,
-    {
-      'geom': ST_AsMVTGeom(
-        ST_Point(tf.x_3857, tf.y_3857),
-        ST_Extent(ST_TileEnvelope(${z}, ${xExpr}, ${yExpr})),
-        4096,
-        64,
-        true
-      ),
-      'dbh': TRY_CAST(${src.dbh} AS DOUBLE),
-      -- Written only on a notable tree: a null property is left out of the tile.
-      'notable': CASE WHEN tf.notable THEN true END
-    } AS feature
-  FROM ${sliceSource(i).from}
-)
-SELECT xtile, ytile, tree_id, species, tree_form, feature
-FROM rows
-WHERE xtile >= 0
-  AND ytile >= 0
-  AND xtile < CAST(pow(2, ${z}) AS INTEGER)
-  AND ytile < CAST(pow(2, ${z}) AS INTEGER)
-`
-    // No geometry filter here: DuckDB-WASM pushes one into the scan and runs
-    // ST_AsMVTGeom twice per tree (11.4 s against 3.6 s on Boston). A point
-    // clipped to its own tile is never empty; the readers' ST_AsMVT FILTER
-    // keeps the guard.
-    const t0 = nowMs()
-    // Readers check this key; the first slice replaces the table under it.
-    preparedFeatureTablesReady.delete(z)
-    let longestMs = 0
-    const current = () => generation === featureTableGeneration && key === featureTableBuildKey(effectiveBaseQuery(tileQuerySql), z)
-    for (let i = 0; i < slices; i += 1) {
-      // Rows or query changed while an earlier slice ran: this table is for neither.
-      if (!current()) {
-        console.info('[Perf] duckdb-worker:feature-table:abandoned', { z, slice: i, slices })
-        return
-      }
-      const ts = nowMs()
-      await conn!.query(sliceSql(i))
-      longestMs = Math.max(longestMs, nowMs() - ts)
-    }
-    console.info('[Perf] duckdb-worker:feature-table', { z, ms: Math.round(nowMs() - t0), slices, longestSliceMs: Math.round(longestMs) })
-    if (!current()) return
-    // CREATE OR REPLACE swapped the table under whatever key was there.
-    preparedFeatureTablesReady.set(z, key)
-  })()
-
-  inflightFeatureTableBuild.set(inflightKey, request)
-  try {
-    await request
-  } finally {
-    inflightFeatureTableBuild.delete(inflightKey)
-  }
 }
 
 async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, baseQuery: string, simplifyGridMeters = 0, explicitRange?: TileBounds): Promise<void> {
@@ -1412,13 +1506,6 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   const aggColor = colorSql('tf', colorOverrideActive, baseScheme(), { aggregated: true })
   const aggSrc = tileRowSource(baseQuery, aggColor)
   const aggDbh = aggregatedDbhSql(z)
-  // The z15 feature table is a whole-city materialisation (one MVT geometry
-  // per tree) that the desktop's LOD prewarm builds after the intro lands. A
-  // tile request reads it when it is there and runs the direct join
-  // otherwise; it never builds it, so a phone, which never prewarms, never
-  // pays for it.
-  const useFeatureTable = z === PREPARED_FEATURE_TABLE_ZOOM
-    && preparedFeatureTablesReady.get(PREPARED_FEATURE_TABLE_ZOOM) === featureTableBuildKey(baseQuery, PREPARED_FEATURE_TABLE_ZOOM)
   const tileCount = Math.pow(2, z)
   const blockX = Math.floor(x / blockSize)
   const blockY = Math.floor(y / blockSize)
@@ -1433,7 +1520,7 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   // tile to a slow single-tile fallback query. The overview zooms keep the
   // fixed block: a view's first tiles arrive before its range is reported,
   // and a second aggregate over the range would redo most of the block.
-  const visibleRange = !explicitRange && z >= PREPARED_FEATURE_TABLE_ZOOM ? getVisibleTileRange(z) : null
+  const visibleRange = !explicitRange && z >= DETAIL_TILE_ZOOM ? getVisibleTileRange(z) : null
   if (visibleRange
     && x >= visibleRange.minX && x <= visibleRange.maxX
     && y >= visibleRange.minY && y <= visibleRange.maxY) {
@@ -1456,29 +1543,9 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
   }
 
   const request = (async () => {
-    // The feature table has no colour: it is resolved here over the range's
-    // rows (a few tens of thousands), so a colour change never rebuilds it.
-    const tableColor = colorSql('f', colorOverrideActive, baseScheme())
-    const sql = useFeatureTable ? `
-WITH rows AS (
-  SELECT
-    f.xtile,
-    f.ytile,
-    ${tableColor.expr} AS display_color,
-    struct_insert(f.feature, id := f.tree_id) AS feature
-  FROM ${featureTableName(PREPARED_FEATURE_TABLE_ZOOM)} f
-  ${tableColor.join}
-  WHERE f.xtile BETWEEN ${minX} AND ${maxX}
-    AND f.ytile BETWEEN ${minY} AND ${maxY}
-)
-SELECT
-  xtile,
-  ytile,
-  display_color AS layer,
-  ST_AsMVT(feature, 'trees', 4096, 'geom') FILTER (WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)) AS mvt
-FROM rows
-GROUP BY xtile, ytile, display_color
-` : simplifyGridMeters > 0 ? `
+    // The query returns rows and pointTiles.ts encodes them: one row per
+    // overview cell or per tree, each with the tile it falls in.
+    const sql = simplifyGridMeters > 0 ? `
 ${aggSrc.prelude} pts AS (
   SELECT
     tf.x_3857,
@@ -1501,88 +1568,40 @@ ${aggSrc.prelude} pts AS (
     COUNT(*) AS point_count
   FROM pts
   GROUP BY 1, 2, 3, 4, 5
-), rows AS (
-  SELECT
-    xtile,
-    ytile,
-    display_color,
-    {
-      'geometry': ST_AsMVTGeom(
-        ST_Point(gx, gy),
-        ST_Extent(ST_TileEnvelope(${z}, xtile, ytile)),
-        4096,
-        64,
-        true
-      ),${aggDbh.property}
-      'point_count': TRY_CAST(point_count AS INTEGER),
-      'grid_m': ${simplifyGridMeters}
-    } AS feature
-  FROM agg
 )
-SELECT
-  xtile,
-  ytile,
-  display_color AS layer,
-  ST_AsMVT(feature, 'trees', 4096, 'geometry') AS mvt
-FROM rows
-WHERE feature.geometry IS NOT NULL AND NOT ST_IsEmpty(feature.geometry)
-GROUP BY xtile, ytile, display_color
+SELECT xtile, ytile, display_color AS layer, gx AS x, gy AS y, ${aggDbh.select} TRY_CAST(point_count AS INTEGER) AS point_count
+FROM agg
 ` : `
 ${src.prelude} pts AS (
   SELECT
-    tf.x_3857,
-    tf.y_3857,
-    ${src.id} AS id,
-    ${src.dbh} AS dbh,
-    tf.notable,
-    ${color.expr} AS display_color,
     ${tileXExpr('tf', z)} AS xtile,
-    ${tileYExpr('tf', z)} AS ytile
+    ${tileYExpr('tf', z)} AS ytile,
+    ${color.expr} AS layer,
+    tf.x_3857 AS x,
+    tf.y_3857 AS y,
+    ${src.id} AS id,
+    TRY_CAST(${src.dbh} AS DOUBLE) AS dbh,
+    tf.notable
   FROM ${src.from}
   WHERE ${src.where}${tileXExpr('tf', z)} BETWEEN ${minX} AND ${maxX}
     AND ${tileYExpr('tf', z)} BETWEEN ${minY} AND ${maxY}
-), rows AS (
-  SELECT
-    xtile,
-    ytile,
-    display_color,
-    {
-      'geom': ST_AsMVTGeom(
-        ST_Point(x_3857, y_3857),
-        ST_Extent(ST_TileEnvelope(${z}, xtile, ytile)),
-        4096,
-        64,
-        true
-      ),
-      'id': id,
-      'dbh': TRY_CAST(dbh AS DOUBLE),
-      'notable': CASE WHEN notable THEN true END
-    } AS feature
-  FROM pts
 )
-SELECT
-  xtile,
-  ytile,
-  display_color AS layer,
-  -- The geometry guard is the aggregate's FILTER, not a WHERE: DuckDB-WASM
-  -- pushes a WHERE on feature.geom into the scan ahead of the tile range and
-  -- runs ST_AsMVTGeom on every tree in the city (8.3 s against 32 ms for a
-  -- four-tile z16 batch on Boston).
-  ST_AsMVT(feature, 'trees', 4096, 'geom') FILTER (WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)) AS mvt
-FROM rows
-GROUP BY xtile, ytile, display_color
+SELECT * FROM pts
 `
 
     const t0 = nowMs()
     const result = await conn.query(sql)
-    // One row per tile and colour; each colour becomes its own source layer.
-    const tiles = assembleLayeredTiles(result.toArray(), MVT_FALLBACK_LAYER)
+    const queried = nowMs()
+    // One tile per (xtile, ytile); each colour is its own source layer.
+    const tiles = encodePointTiles(result, z, simplifyGridMeters > 0 ? aggregateProperties(z, simplifyGridMeters) : POINT_PROPERTIES, MVT_FALLBACK_LAYER)
     console.info('[Perf] duckdb-worker:neighborhood-batch', {
       z,
-      mode: useFeatureTable ? 'feature-table' : simplifyGridMeters > 0 ? `agg${simplifyGridMeters}` : 'points',
+      mode: simplifyGridMeters > 0 ? `agg${simplifyGridMeters}` : 'points',
       tiles: (maxX - minX + 1) * (maxY - minY + 1),
       nonEmpty: tiles.size,
+      rows: result.numRows,
       ms: Math.round(nowMs() - t0),
+      encodeMs: Math.round(nowMs() - queried),
     })
 
     if (rev === tileQueryRevision) {
@@ -1662,51 +1681,31 @@ ${aggSrc.prelude} pts AS (
     COUNT(*) AS point_count
   FROM pts
   GROUP BY 1, 2, 3
-), tiles AS (
-  SELECT display_color, {
-    'geometry': ST_AsMVTGeom(
-      ST_Point(gx, gy),
-      ST_Extent(ST_TileEnvelope(${z}, ${x}, ${y})),
-      4096,
-      64,
-      true
-    ),${aggDbh.property}
-    'point_count': TRY_CAST(point_count AS INTEGER),
-    'grid_m': ${simplifyGridMeters}
-  } AS feature
-  FROM agg
 )
-SELECT ${x} AS xtile, ${y} AS ytile, display_color AS layer, ST_AsMVT(feature, 'trees', 4096, 'geometry') AS mvt
-FROM tiles
-WHERE feature.geometry IS NOT NULL AND NOT ST_IsEmpty(feature.geometry)
-GROUP BY display_color
+SELECT ${x} AS xtile, ${y} AS ytile, display_color AS layer, gx AS x, gy AS y, ${aggDbh.select} TRY_CAST(point_count AS INTEGER) AS point_count
+FROM agg
 ` : `
 ${src.prelude} points AS (
   SELECT
+    ${x} AS xtile,
+    ${y} AS ytile,
+    ${color.expr} AS layer,
+    tf.x_3857 AS x,
+    tf.y_3857 AS y,
     ${src.id} AS id,
-    ${src.dbh} AS dbh,
-    tf.notable,
-    ${color.expr} AS display_color,
-    ST_AsMVTGeom(
-      ST_Point(tf.x_3857, tf.y_3857),
-      ST_Extent(ST_TileEnvelope(${z}, ${x}, ${y})),
-      4096,
-      64,
-      true
-    ) AS geom
+    TRY_CAST(${src.dbh} AS DOUBLE) AS dbh,
+    tf.notable
   FROM ${src.from}
   WHERE ${src.where}tf.x_3857 BETWEEN ${bounds.minX} AND ${bounds.maxX}
     AND tf.y_3857 BETWEEN ${bounds.minY} AND ${bounds.maxY}
   LIMIT 50000
 )
-SELECT ${x} AS xtile, ${y} AS ytile, display_color AS layer, ST_AsMVT({'geom': geom, 'id': id, 'dbh': TRY_CAST(dbh AS DOUBLE), 'notable': CASE WHEN notable THEN true END}, 'trees', 4096, 'geom') AS mvt
-FROM points
-WHERE geom IS NOT NULL
-GROUP BY display_color
+SELECT * FROM points
 `
 
     const result = await conn.query(sql)
-    const tile = assembleLayeredTiles(result.toArray(), MVT_FALLBACK_LAYER).get(`${x}/${y}`)?.mvt ?? new Uint8Array()
+    const properties = simplifyGridMeters > 0 ? aggregateProperties(z, simplifyGridMeters) : POINT_PROPERTIES
+    const tile = encodePointTiles(result, z, properties, MVT_FALLBACK_LAYER).get(`${x}/${y}`)?.mvt ?? new Uint8Array()
     if (windowCoversTile(z, x, y)) setCachedTile(key, tile)
     return new Uint8Array(tile)
   })()
@@ -1727,8 +1726,6 @@ function invalidateTileCaches(reason: string) {
   inflightTileRequests.clear()
   inflightNeighborhoodBatch.clear()
   inflightNeighborhoodRanges.clear()
-  // Feature tables are keyed by content, not revision: a table built for
-  // this query, filter and colour set is still right after a republish.
   visibleTileRangeByZoom.clear()
   prefetchedVisibleRangeSigByZoom.clear()
   prewarmDoneRevision = -1
@@ -1738,8 +1735,7 @@ function invalidateTileCaches(reason: string) {
 function setTileQuery(sql: string | null) {
   // The map republishes its query on every configuration pass, most of them
   // with the same SQL. Bumping the revision then throws away every tile and
-  // batch and rebuilds the z15 feature table (20 s for a 1.5M-row city) for
-  // rows that did not change.
+  // batch for rows that did not change.
   if (queryIdentity(sql) === queryIdentity(tileQuerySql)) return
   tileQuerySql = sql
   tileQueryRevision += 1
@@ -1752,8 +1748,8 @@ async function setPublishedTreeIdFilterSql(sql: string | null) {
   await viewIsCurrent()
   const normalized = sql?.trim() || null
   // Every configuration pass republishes the filter, usually unchanged (most
-  // often: none, as before). Rebuilding the table then invalidating every
-  // tile for the same rows cost the desktop a second z15 feature table.
+  // often: none, as before). Rebuilding the table would invalidate every
+  // tile for the same rows.
   if ((normalized ?? '') === (publishedTreeIdFilterSql ?? '')) return
 
   await conn.query(`DROP TABLE IF EXISTS ${PUBLISHED_TREE_FILTER_TABLE}`)
@@ -1855,12 +1851,48 @@ async function setDbhColors(enabled: boolean) {
   postColorMapUpdate()
 }
 
+function landmarkUrlFor(city: string): string {
+  return cityLandmarkParquetUrl(city) ?? REMOTE_LANDMARKS_PARQUET_URL
+}
+
+/** A city's landmark file, whole, or null when it cannot be fetched; asked for once however often it is named. */
+const landmarkFiles = new Map<string, Promise<Uint8Array | null>>()
+function landmarkFile(city: string): Promise<Uint8Array | null> {
+  let file = landmarkFiles.get(city)
+  if (!file) landmarkFiles.set(city, file = fetchPublishedFile(landmarkUrlFor(city)))
+  return file
+}
+
+/** The city `trees_published` reads; undefined until a read has needed it since the bookmark moved. */
+let publishedViewCity: string | null | undefined
+
 /**
- * Make `city` the bookmark in context: its projection behind
- * `trees_published`, its landmarks, its default query. It loads no trees and
- * drops none: what is held follows the camera, so moving the bookmark as the
- * camera crosses from one inventory into the next costs two small reads and
- * redraws nothing.
+ * Point `trees_published` at the bookmark's projection, if `sql` reads it and
+ * it does not already. Binding the view reads the file's footer: eight
+ * requests and 0.6 MB for Boston, a second and a half on a phone's link. That
+ * used to happen for every bookmark, ahead of the first tree; two reads use
+ * the view (a deep-linked tree's position, the check-in's species count), and
+ * now only they wait for it.
+ */
+async function publishedView(sql: string | null): Promise<void> {
+  if (!conn || !sql?.includes(PUBLISHED_TREES_VIEW) || publishedViewCity === contextCity) return
+  const city = contextCity
+  try {
+    await conn.query(publishedTreesViewSql(city ? cityBrowserParquetUrl(city) : null))
+  } catch (e) {
+    // A city whose projection is not out yet: its reads find no rows.
+    console.warn('[duckdb-worker] city projection unavailable', city, e)
+    await conn.query(publishedTreesViewSql(null))
+  }
+  publishedViewCity = city
+}
+
+/**
+ * Make `city` the bookmark in context: its landmarks, its default query, and
+ * the projection `trees_published` will read (publishedView). It loads no
+ * trees and drops none: what is held follows the camera, so moving the
+ * bookmark as the camera crosses from one inventory into the next costs one
+ * small file and redraws nothing.
  */
 async function setCityContext(city: string) {
   await ensureInit()
@@ -1870,25 +1902,29 @@ async function setCityContext(city: string) {
   if (world && world.cellZoom !== cellZoom()) await resetWorld('the window\'s cell size changed')
 
   if (contextCity !== city) {
+    // The file whole, asked for when the engine was (landmarkFile): a few
+    // kilobytes that DuckDB's own read of the bucket made five requests in a
+    // row for, each a round trip the first tree waited behind.
+    const bytes = await landmarkFile(city)
+    landmarkFiles.delete(city)
+    const name = bytes ? `landmarks_${city}.parquet` : landmarkUrlFor(city)
     try {
-      await conn.query(publishedTreesViewSql(cityBrowserParquetUrl(city)))
-    } catch (e) {
-      // A city whose projection is not out yet: its reads find no rows.
-      console.warn('[duckdb-worker] city projection unavailable', city, e)
-      await conn.query(publishedTreesViewSql(null))
-    }
-    const landmarkUrl = cityLandmarkParquetUrl(city) ?? REMOTE_LANDMARKS_PARQUET_URL
-    try {
+      if (bytes) await db!.registerFileBuffer(name, bytes)
       await conn.query(`
         CREATE OR REPLACE TABLE landmarks AS
         SELECT landmark_id, city, name, latitude, longitude
-        FROM read_parquet('${landmarkUrl}')
+        FROM read_parquet('${name}')
         WHERE latitude IS NOT NULL AND longitude IS NOT NULL
       `)
     } catch (e) {
       console.warn('[duckdb-worker] landmarks-load:failed', e)
+    } finally {
+      if (bytes) await db!.dropFile(name).catch(() => {})
     }
     contextCity = city
+    // `trees_published` follows on the first read that names it (publishedView).
+    publishedViewCity = undefined
+    await publishedView(tileQuerySql)
   }
 
   postColorMapUpdate()
@@ -1921,14 +1957,14 @@ function setVisibleTileRange(z: number, minX: number, maxX: number, minY: number
 async function prefetchVisibleTilesAtZoom(z: number, rangeOverride?: TileBounds): Promise<PrefetchStatus> {
   await ensureInit()
   await waitForCityContext()
-  if (!conn || !spatialExtensionReady || !shouldUseZoomBatch(z) && z < PREPARED_FEATURE_TABLE_ZOOM) return 'skipped'
+  if (!conn || !shouldUseZoomBatch(z) && z < DETAIL_TILE_ZOOM) return 'skipped'
 
   // An overview zoom's tile requests batch fixed 4x4 blocks, and each block's
   // aggregate scans the city: the intro's footprint at z14 spans six of them
   // (7.3 s on Boston). The range is warmed as one aggregate instead, and it
   // is passed in, never stored, because the main thread's range reports for
   // these zooms drive nothing else. The intro holds its camera on this.
-  if (z < PREPARED_FEATURE_TABLE_ZOOM) {
+  if (z < DETAIL_TILE_ZOOM) {
     if (!rangeOverride) return 'skipped'
     // The range's trees have to be held to be aggregated: nothing loaded the city ahead of this.
     const cells = new Set<number>()
@@ -1955,10 +1991,7 @@ async function prefetchVisibleTilesAtZoom(z: number, rangeOverride?: TileBounds)
   const sig = `${tileQueryRevision}:${treeFilterSignature()}:${z}:${range.minX}-${range.maxX}:${range.minY}-${range.maxY}`
   if (prefetchedVisibleRangeSigByZoom.get(z) === sig) return 'deduped'
 
-  // The visible range only: the intro gates its motion on this, and the
-  // whole-city z15 feature table (20 to 100 s of wasm on Boston) held the
-  // camera at the start pose until it finished. The prewarm builds it once
-  // the intro has landed; until then the range is a points batch.
+  // The visible range only: the intro gates its motion on this.
   const baseQuery = effectiveBaseQuery(tileQuerySql)
 
   const centerX = Math.floor((range.minX + range.maxX) / 2)
@@ -1971,7 +2004,7 @@ async function prefetchVisibleTilesAtZoom(z: number, rangeOverride?: TileBounds)
 async function prewarmLodCaches(): Promise<void> {
   await ensureInit()
   await waitForCityContext()
-  if (!conn || !spatialExtensionReady) return
+  if (!conn) return
 
   const rev = tileQueryRevision
   if (prewarmDoneRevision === rev) return
@@ -1985,32 +2018,15 @@ async function prewarmLodCaches(): Promise<void> {
   console.info('[Perf] duckdb-worker:prewarm:start', { zoom: Math.floor(activeViewportZoom) })
   prewarmPromise = (async () => {
     const viewport = activeViewportCenter
-    const focusZoom = Math.max(PREPARED_FEATURE_TABLE_ZOOM, Math.min(19, Math.floor(activeViewportZoom)))
-
-    if (focusZoom === PREPARED_FEATURE_TABLE_ZOOM) {
-      await ensurePreparedFeatureTableForZoom(PREPARED_FEATURE_TABLE_ZOOM, baseQuery)
-    }
-
+    // The tiles around the camera at its zoom, the one above it and the first
+    // detail zoom, so a first zoom out or in draws from the cache.
+    const focusZoom = Math.max(DETAIL_TILE_ZOOM, Math.min(19, Math.floor(activeViewportZoom)))
     if (viewport) {
-      const cFocus = lngLatToTile(viewport.lng, viewport.lat, focusZoom)
-      await ensureNeighborhoodBatchTiles(focusZoom, cFocus.x, cFocus.y, baseQuery)
-
-      const zMinusOne = focusZoom - 1
-      if (zMinusOne >= PREPARED_FEATURE_TABLE_ZOOM) {
-        if (zMinusOne === PREPARED_FEATURE_TABLE_ZOOM) {
-          await ensurePreparedFeatureTableForZoom(PREPARED_FEATURE_TABLE_ZOOM, baseQuery)
-        }
-        const cMinusOne = lngLatToTile(viewport.lng, viewport.lat, zMinusOne)
-        await ensureNeighborhoodBatchTiles(zMinusOne, cMinusOne.x, cMinusOne.y, baseQuery)
+      for (const z of new Set([focusZoom, Math.max(DETAIL_TILE_ZOOM, focusZoom - 1), DETAIL_TILE_ZOOM])) {
+        const c = lngLatToTile(viewport.lng, viewport.lat, z)
+        await ensureNeighborhoodBatchTiles(z, c.x, c.y, baseQuery)
       }
     }
-
-    await ensurePreparedFeatureTableForZoom(PREPARED_FEATURE_TABLE_ZOOM, baseQuery)
-    if (viewport) {
-      const c15 = lngLatToTile(viewport.lng, viewport.lat, PREPARED_FEATURE_TABLE_ZOOM)
-      await ensureNeighborhoodBatchTiles(PREPARED_FEATURE_TABLE_ZOOM, c15.x, c15.y, baseQuery)
-    }
-
 
     if (tileQueryRevision === rev) {
       prewarmDoneRevision = rev
@@ -2058,6 +2074,7 @@ async function runQuery(sql: string, maxRows?: number, at?: { lng: number; lat: 
   await ensureInit()
   await waitForCityContext()
   if (!conn || !db) throw new Error('DuckDB not initialized')
+  await publishedView(sql)
   sql = sql.replace(NOTABLE_TOKEN_PATTERN, (_, city: string) => {
     const file = world?.manifest.notable.get(city)
     return notableRelationSql(file ? worldFileUrl(file) : null)
@@ -2328,7 +2345,8 @@ type WorkerMethodMap = {
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
   ensureWindowAt: { params: { lng: number; lat: number }; result: void }
-  prefetchWindowAt: { params: { lng: number; lat: number }; result: void }
+  prefetchWindowAt: { params: { lng: number; lat: number; city?: string }; result: void }
+  prefetchEngine: { params: Record<string, never>; result: void }
   setVisibleTileRange: { params: { z: number; minX: number; maxX: number; minY: number; maxY: number }; result: void }
   prefetchVisibleTilesAtZoom: {
     params: { z: number; range?: { minX: number; maxX: number; minY: number; maxY: number } }
@@ -2421,32 +2439,38 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       }
       case 'ensureInit': {
-        const { window } = msg.params as WorkerMethodMap['ensureInit']['params']
+        const { window, city } = msg.params as WorkerMethodMap['ensureInit']['params']
         if (window !== undefined) windowPolicy = window ?? DESKTOP_POLICY
+        // The bookmark's landmarks download beside the engine.
+        if (city) void landmarkFile(city)
         await ensureInit()
         send({ type: 'response', requestId: msg.requestId, ok: true, result: { ready, initError } })
         break
       }
       case 'setTileQuery': {
         const { sql } = msg.params as WorkerMethodMap['setTileQuery']['params']
+        await publishedView(sql)
         setTileQuery(sql)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }
       case 'setPublishedTreeIdFilterSql': {
         const { sql } = msg.params as WorkerMethodMap['setPublishedTreeIdFilterSql']['params']
+        await publishedView(sql)
         await setPublishedTreeIdFilterSql(sql)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }
       case 'setColorOverrideSql': {
         const { sql } = msg.params as WorkerMethodMap['setColorOverrideSql']['params']
+        await publishedView(sql)
         await setColorOverrideSql(sql)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }
       case 'setSpeciesShadeSql': {
         const { sql } = msg.params as WorkerMethodMap['setSpeciesShadeSql']['params']
+        await publishedView(sql)
         await setSpeciesShadeSql(sql)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
@@ -2485,9 +2509,15 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }
+      case 'prefetchEngine': {
+        prefetchEngine()
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
+        break
+      }
       case 'prefetchWindowAt': {
-        const { lng, lat } = msg.params as WorkerMethodMap['prefetchWindowAt']['params']
+        const { lng, lat, city } = msg.params as WorkerMethodMap['prefetchWindowAt']['params']
         prefetchBlockAt(lng, lat)
+        if (city) void landmarkFile(city)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }

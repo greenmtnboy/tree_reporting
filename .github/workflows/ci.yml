@@ -201,10 +201,10 @@ jobs:
       run: pnpm test
 
   # The tile worker on DuckDB-WASM under Node, the engine the browser runs:
-  # its planner differs from native DuckDB's (a WHERE on ST_AsMVTGeom is
-  # pushed into the scan, #144), so the default suite cannot see those
-  # regressions. Separate because it fetches the spatial extension from
-  # extensions.duckdb.org. About 20 s.
+  # its planner differs from native DuckDB's (a WHERE on an expensive
+  # expression is pushed into the scan, #144), so the default suite cannot
+  # see those regressions. It installs no extension: a tile query that
+  # reached for spatial again fails here. About 20 s.
   wasm-tests:
     timeout-minutes: 10
     runs-on: ubuntu-latest

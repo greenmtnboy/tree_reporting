@@ -51,7 +51,7 @@ try {
       return Math.round(performance.now() - t0)
     }, [lat, lng, z, pitch])
     const after = await metrics()
-    // One source layer per colour (workers/mvtLayers.ts).
+    // One source layer per colour (workers/pointTiles.ts).
     const features = await page.evaluate(() => {
       const map = window.__treeMap
       // The desktop's resident layer holds every tree (composables/treeDotsLayer.ts).

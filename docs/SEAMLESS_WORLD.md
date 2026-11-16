@@ -147,9 +147,25 @@ How a cell's rows arrive depends on how much of its block it is:
   range reads lose: DuckDB-wasm's read-ahead doubles to a megabyte past every
   seek, so two cells of Boston's 3.6 MB South End block were 22 requests in
   a row and 4.6 MB (6.5 s at 9 Mbps). A load that touches two blocks or fewer
-  fetches them whole (`WHOLE_BLOCK_LOADS`), keeps the bytes for the block's
-  next cell, and Near Me asks for its block as soon as it has a fix, beside
-  the engine's download (`prefetchWindowAt`).
+  reads them from memory instead (`WHOLE_BLOCK_LOADS`): the worker fetches
+  the bytes and registers them with the engine as the file.
+- **A small block is fetched whole, a large one in part.** Nine blocks in
+  ten are under 30,000 trees (a megabyte) and are one request, kept for the
+  block's next cell. A city centre's is not: Boston's is 129,000 trees and
+  4.1 MB, and on a phone's link it was the last thing the first trees waited
+  for. For those (`SPARSE_BLOCK_ROWS`) the worker reads the file's footer
+  itself (`parquetFooter.ts`), fetches the row groups whose latitude and
+  longitude ranges reach the cells' box, side by side, and hands the engine a
+  buffer the size of the file with only those filled (`sparseBlocks.ts`).
+  The engine prunes row groups by the same rule and reads nothing else: two
+  cells of that block are five of thirteen row groups, 1.6 MB in three
+  requests. What was not fetched is 0xFF, which the engine cannot parse, so a
+  read that ever strayed there throws and the load is made again from the
+  whole file; a failed range request does the same.
+- **Near Me asks as soon as it has a fix** (`prefetchWindowAt`), beside the
+  engine's download: for the bytes its opening view's cells need, and, once
+  the engine is up, for those cells to be loaded, without waiting for the
+  first tile to ask.
 
 The phone's crowns load only the cells on screen (`TreeRenderView.view`). They
 reach 1.8 km, nine z14 cells, and asking for all of them made a street's first
@@ -213,8 +229,8 @@ city under the map's centre is the leading city of its block, or of the
 fullest block within two (`bookmarkAt`), so a park or a harbour is still
 that city and open country is no city. When it differs from the bookmark:
 
-1. the worker puts the new city in context (`setCityContext`: its projection
-   behind `trees_published`, its landmarks; two small reads, no tree moves);
+1. the worker puts the new city in context (`setCityContext`: its
+   landmarks, one small file fetched whole; no tree moves);
 2. the lifecycle adopts it with no phase change, so no overlay and no intro;
 3. the URL's `city` is replaced, and the selector, the title and the
    landmarks follow.
@@ -231,7 +247,10 @@ with the swoop; it now ends on trees that load for the view, not a city load.
 ### What is still a city
 
 - `trees_published`: the bookmarked city's projection file, read in place,
-  for a species count or a deep-linked tree. Unchanged for phones; a desktop
+  for a species count or a deep-linked tree. The view is bound to the file by
+  the first read that names it (`publishedView` in the worker), not when the
+  bookmark is set: binding reads the file's footer, eight requests for
+  Boston, and the first tree used to wait behind it. Unchanged for phones; a desktop
   used to read these from its loaded table, and now reads the file's
   `tree_id` column (Boston: 33 of its 75 MB, less than the 75 MB the old
   city load fetched before it could answer).

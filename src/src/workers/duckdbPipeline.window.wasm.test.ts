@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { rmSync } from 'node:fs'
-import { FIXTURE_DIR, fetchedWorldFiles, writeCityProjection, writeWorld } from './wasm/fixtures'
+import { readFileSync, rmSync, statSync } from 'node:fs'
+import { FIXTURE_DIR, fetchedWorldFiles, fetchedWorldRanges, rangeFault, writeCityProjection, writeWorld } from './wasm/fixtures'
 import { executedSql } from './wasm/nodeDuckDB'
 import { startWorker, type WorkerHarness } from './wasm/workerHarness'
 import { CELL_ZOOM, cellAt, cellsBounds, cellKey, type WindowPolicy } from './cityWindow'
@@ -35,6 +35,15 @@ function lngLatToTile(lng: number, lat: number, z: number) {
     x: Math.floor(((lng + 180) / 360) * n),
     y: Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n),
   }
+}
+
+/** A block as the fixture world's manifest lists it: its file and its rows. */
+function manifestBlock([lng, lat]: [number, number]): { file: string; rows: number; bytes: number } {
+  const at = blockAt(lng, lat)
+  const manifest = JSON.parse(readFileSync(`${FIXTURE_DIR}/world/v1/manifest.json`, 'utf-8')) as { blocks: [number, number, string][] }
+  const [key, rows, hash] = manifest.blocks.find((block) => block[0] === blockKey(at.x, at.y))!
+  const file = `blocks/${key}-${hash}.parquet`
+  return { file, rows, bytes: statSync(`${FIXTURE_DIR}/world/v1/${file}`).size }
 }
 
 describe('a phone holds the city in windows', () => {
@@ -85,19 +94,28 @@ describe('a phone holds the city in windows', () => {
     expect(inCell).toBeGreaterThan(1000)
     expect(await count('SELECT count(*) AS n FROM trees_fast')).toBe(inCell)
     expect(loads()).toHaveLength(1)
-    // The cell came out of the one block file that holds it. A street's view is
-    // a cell or two of one block, so the file is fetched whole, once: its range
-    // reads cost more requests and more bytes than the file (WHOLE_BLOCK_LOADS).
+    // The cell came out of the one block file that holds it, and the engine
+    // read it from memory: its own range reads of a remote block cost more
+    // requests and more bytes than the file (WHOLE_BLOCK_LOADS).
     const block = blockAt(CENTER[0], CENTER[1])
     const read = executedSql.filter((sql) => /CREATE TABLE trees_window_staging/.test(sql)).flatMap((sql) => [...sql.matchAll(/blocks\/(\d+)-/g)].map((m) => Number(m[1])))
     expect(read).toEqual([blockKey(block.x, block.y)])
-    const fetched = fetchedWorldFiles.filter((name) => name.startsWith('blocks/'))
-    expect(fetched).toHaveLength(1)
-    expect(fetched[0]).toMatch(new RegExp(`^blocks/${blockKey(block.x, block.y)}-`))
+    // The block is a city centre's, tens of thousands of trees, so it was not
+    // fetched whole: its footer, then the row groups this cell falls in
+    // (sparseBlocks.ts). The cell above holds every one of its trees all the same.
+    const listed = manifestBlock(CENTER)
+    expect(listed.rows).toBeGreaterThan(30_000)
+    expect(fetchedWorldFiles.filter((name) => name.startsWith('blocks/'))).toEqual([])
+    expect(fetchedWorldRanges.every((range) => range.name === listed.file)).toBe(true)
+    expect(fetchedWorldRanges.length).toBeGreaterThanOrEqual(2)
+    expect(fetchedWorldRanges[0].start + fetchedWorldRanges[0].bytes).toBe(listed.bytes)
+    expect(fetchedWorldRanges.reduce((sum, range) => sum + range.bytes, 0)).toBeLessThan(listed.bytes * 0.75)
   })
 
-  it('reads the next cell of a block it fetched from the bytes it kept', async () => {
+  it('reads the next cell of a block from the row groups it kept, fetching only the ones it lacks', async () => {
     const before = fetchedWorldFiles.length
+    const ranges = fetchedWorldRanges.length
+    const held = fetchedWorldRanges.reduce((sum, range) => sum + range.bytes, 0)
     const cell = cellAt(CENTER[0], CENTER[1])
     const box = cellsBounds([cellKey(cell.x + 1, cell.y)])
     const next: [number, number] = [(box.west + box.east) / 2, (box.south + box.north) / 2]
@@ -109,6 +127,15 @@ describe('a phone holds the city in windows', () => {
     expect(tile.transient).toBe(false)
     expect(loads().length).toBe(loaded + 1)
     expect(fetchedWorldFiles.length).toBe(before)
+    // No second read of the footer, and never a byte twice: what is held of the block stays under its size.
+    const listed = manifestBlock(CENTER)
+    const more = fetchedWorldRanges.slice(ranges)
+    expect(more.every((range) => range.name === listed.file && range.start + range.bytes < listed.bytes)).toBe(true)
+    expect(held + more.reduce((sum, range) => sum + range.bytes, 0)).toBeLessThanOrEqual(listed.bytes)
+    const inCell = await count(`SELECT count(*) AS n FROM trees_published
+      WHERE longitude >= ${box.west} AND longitude < ${box.east} AND latitude > ${box.south} AND latitude <= ${box.north}`)
+    expect(await count(`SELECT count(*) AS n FROM trees_fast
+      WHERE (xtile_z20 >> ${20 - CELL_ZOOM}) = ${cell.x + 1} AND (ytile_z20 >> ${20 - CELL_ZOOM}) = ${cell.y}`)).toBe(inCell)
   })
 
   it('gathers the tiles of one view into a single load', async () => {
@@ -189,6 +216,57 @@ describe('a phone holds the city in windows', () => {
     const update = worker.messages.slice(before).filter((m) => m.type === 'colorMapUpdate').pop()
     expect(update?.distinctColors).toEqual(expect.arrayContaining(['#123456', '#654321']))
     await worker.call('setColorOverrideSql', { sql: null })
+  })
+
+  // Two ways a partial read can go wrong, each in a large block beside the
+  // centre's that nothing has read yet: the requests fail, or the engine is
+  // handed bytes it cannot read. Either way the cell must hold exactly its
+  // published trees, from the whole file.
+  for (const [mode, lng] of [['refuse', -70.99], ['garble', -71.15]] as const) {
+    it(`reads a block whole when its partial read fails (${mode})`, async () => {
+      const at: [number, number] = [lng, 42.36]
+      const listed = manifestBlock(at)
+      expect(listed.rows).toBeGreaterThan(30_000)
+      const cell = cellAt(at[0], at[1])
+      const box = cellsBounds([cellKey(cell.x, cell.y)])
+      const whole = () => fetchedWorldFiles.filter((name) => name === listed.file).length
+      const before = whole()
+      const warned = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      rangeFault.mode = mode
+      try {
+        await lookAt(at, 16.5)
+        const tile = await worker.call<TileResult>('getTile', { z: 16, ...lngLatToTile(at[0], at[1], 16) })
+        expect(tile.transient).toBe(false)
+        expect(tile.tileBuffer.byteLength).toBeGreaterThan(0)
+      } finally {
+        rangeFault.mode = 'none'
+      }
+      expect(warned.mock.calls.some((call) => /read(ing)? it whole/.test(String(call[0])))).toBe(true)
+      warned.mockRestore()
+      expect(whole()).toBe(before + 1)
+      const inCell = await count(`SELECT count(*) AS n FROM trees_published
+        WHERE longitude >= ${box.west} AND longitude < ${box.east} AND latitude > ${box.south} AND latitude <= ${box.north}`)
+      expect(inCell).toBeGreaterThan(1000)
+      expect(await count(`SELECT count(*) AS n FROM trees_fast
+        WHERE (xtile_z20 >> ${20 - CELL_ZOOM}) = ${cell.x} AND (ytile_z20 >> ${20 - CELL_ZOOM}) = ${cell.y}`)).toBe(inCell)
+    })
+  }
+
+  it('Near Me loads the cells under its fix as soon as the engine is up, before a tile asks', async () => {
+    const fix: [number, number] = [-70.94, 42.29]
+    const cell = cellAt(fix[0], fix[1])
+    const inCell = `(xtile_z20 >> ${20 - CELL_ZOOM}) = ${cell.x} AND (ytile_z20 >> ${20 - CELL_ZOOM}) = ${cell.y}`
+    expect(await count(`SELECT count(*) AS n FROM trees_fast WHERE ${inCell}`)).toBe(0)
+    const before = loads().length
+    await worker.call('prefetchWindowAt', { lng: fix[0], lat: fix[1], city: CITY })
+    await vi.waitFor(() => expect(loads().length).toBe(before + 1))
+    expect(await count(`SELECT count(*) AS n FROM trees_fast WHERE ${inCell}`)).toBeGreaterThan(300)
+    // The view's tile then draws from what is held.
+    await lookAt(fix, 16.5)
+    const tile = await worker.call<TileResult>('getTile', { z: 16, ...lngLatToTile(fix[0], fix[1], 16) })
+    expect(tile.transient).toBe(false)
+    expect(tile.tileBuffer.byteLength).toBeGreaterThan(0)
+    expect(loads().length).toBe(before + 1)
   })
 
   it('starts over with whole blocks when the window is turned off', async () => {

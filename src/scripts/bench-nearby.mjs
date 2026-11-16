@@ -15,6 +15,12 @@
 // reading it does, then taps Near Me; the times are then also given from the
 // tap. Without it the page opens straight into Near Me.
 // MAP_BENCH_WATERFALL=0 prints the totals alone.
+//
+// Routing a request turns the browser's HTTP cache off, so a shaped run would
+// charge a file twice that a browser fetches once. The route handler stands
+// in for the cache where the app relies on it: the build's hashed assets and
+// DuckDB's extensions, each charged for its first request only (a second
+// request waits for the first, as a browser's cache does, then costs nothing).
 import { chromium, devices } from '@playwright/test'
 import process from 'node:process'
 import { gzipSync } from 'node:zlib'
@@ -58,6 +64,13 @@ function wireBytes(url, response, body) {
   }
   return body.byteLength
 }
+/** The first fetch of each cacheable URL, for the requests that repeat it. */
+const cached = new Map()
+function cacheable(request) {
+  if (request.method() !== 'GET' || request.headers().range) return false
+  const url = new URL(request.url())
+  return url.host === 'extensions.duckdb.org' || (url.origin === new URL(base).origin && url.pathname.includes('/assets/'))
+}
 if (profile) {
   const perHost = new Map()
   const acquire = async (host) => {
@@ -67,7 +80,7 @@ if (profile) {
     slot.active += 1
     return () => { slot.active -= 1; slot.waiting.shift()?.() }
   }
-  await context.route('**/*', async (route) => {
+  const shaped = async (route) => {
     const release = await acquire(new URL(route.request().url()).host)
     try {
       const started = Date.now()
@@ -76,11 +89,20 @@ if (profile) {
       const wanted = profile.rttMs + (wireBytes(route.request().url(), response, body) * 8) / (profile.mbps * 1e6) * 1000
       const wait = wanted - (Date.now() - started)
       if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait))
-      await route.fulfill({ response, body })
-    } catch {
-      await route.abort().catch(() => {})
+      return { response, body }
     } finally {
       release()
+    }
+  }
+  await context.route('**/*', async (route) => {
+    try {
+      const url = route.request().url()
+      const first = cacheable(route.request()) ? cached.get(url) : undefined
+      const fetched = first ?? shaped(route)
+      if (!first && cacheable(route.request())) cached.set(url, fetched)
+      await route.fulfill(await fetched)
+    } catch {
+      await route.abort().catch(() => {})
     }
   })
 }

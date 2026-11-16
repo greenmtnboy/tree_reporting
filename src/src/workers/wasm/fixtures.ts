@@ -27,6 +27,14 @@ export class WorldFileError extends Error {
 
 /** Every world file the worker has fetched, oldest first, for tests that count them. */
 export const fetchedWorldFiles: string[] = []
+/** Every part of a world file the worker has fetched, oldest first, with its length. */
+export const fetchedWorldRanges: { name: string; start: number; bytes: number }[] = []
+/**
+ * What a test makes a partial fetch do wrong: `refuse` fails the request,
+ * `garble` answers a row group's bytes with noise of the right length (a
+ * footer is still answered truly), as a buffer the engine read past would be.
+ */
+export const rangeFault: { mode: 'none' | 'refuse' | 'garble' } = { mode: 'none' }
 
 /** Same exports as `../parquetUrls`, all under FIXTURE_DIR. */
 export const fixtureParquetUrls = {
@@ -41,6 +49,9 @@ export const fixtureParquetUrls = {
   WORLD_MANIFEST_URL: `${WORLD_DIR}/manifest.json`,
   worldFileUrl: (name: string) => `${WORLD_DIR}/${name}`,
   WorldFileError,
+  // Under Node the engine reads its extensions itself; nothing is asked for ahead.
+  DUCKDB_EXTENSION_VERSION: '',
+  parquetExtensionUrl: (): string | null => null,
   // The start's small files, whole, as the worker fetches them beside the engine.
   fetchPublishedFile: async (url: string): Promise<Uint8Array | null> => existsSync(url) ? new Uint8Array(readFileSync(url)) : null,
   fetchWorldManifest: async (): Promise<unknown> => JSON.parse(readFileSync(`${WORLD_DIR}/manifest.json`, 'utf-8')),
@@ -49,6 +60,17 @@ export const fixtureParquetUrls = {
     if (!existsSync(path)) throw new WorldFileError(name, 404)
     fetchedWorldFiles.push(name)
     return new Uint8Array(readFileSync(path))
+  },
+  fetchWorldRange: async (name: string, range: { start: number; end: number } | { suffix: number }) => {
+    const path = `${WORLD_DIR}/${name}`
+    if (!existsSync(path)) throw new WorldFileError(name, 404)
+    const file = new Uint8Array(readFileSync(path))
+    if (rangeFault.mode === 'refuse') throw new Error('range requests are refused')
+    const start = 'suffix' in range ? Math.max(0, file.length - range.suffix) : range.start
+    const bytes = file.slice(start, 'suffix' in range ? file.length : range.end)
+    if (rangeFault.mode === 'garble' && !('suffix' in range)) bytes.fill(0xff)
+    fetchedWorldRanges.push({ name, start, bytes: bytes.length })
+    return { bytes, start, total: file.length }
   },
   cityTreeParquetUrl: (city: string) => `${FIXTURE_DIR}/${lower(city)}_tree_info_v2.parquet`,
   cityBrowserParquetUrl: (city: string) => `${FIXTURE_DIR}/${lower(city)}_tree_browser_v2.parquet`,

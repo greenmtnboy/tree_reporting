@@ -175,16 +175,19 @@ Levers, in the order they are worth trying:
    below: 128 m at z11, 64 m at z12, where the heatmap is the only layer.
 3. **Size the neighbourhood block by tree count, not by zoom.** Now only a
    latency question: the detail-zoom batches do not show in memory.
-4. **Replace the spatial extension.** `ST_AsMVT` is its only use and a
-   point-only MVT encoder is small JavaScript, but there is no evidence it
-   is faster: the engine runs in its own worker, so the encoder would run
-   beside it, and Arrow rows are a few times the bytes of an MVT blob per
-   tile. The case is the 6 MB extension download and its heap share, neither
-   isolated yet. The native profile below puts the encoding at about 6 µs a
-   feature on one thread, so it is the cost of an overview batch; gate on
-   that share and the download, not on the argument.
+4. **Replace the spatial extension.** Done 2026-11-16 (`pointTiles.ts`; see
+   "Near Me: the wait before the first tree" below). The download was the
+   case: 6 MB on the wire and 23 MB of wasm to compile, fetched after the
+   engine and before the first tree. The encoding moved to JavaScript costs
+   about 50 ms for a street view's 8,300 trees.
 
 ## Tile latency
+
+> **Since 2026-11-16 the worker has no spatial extension and no z15 feature
+> table.** Tile queries return rows and `pointTiles.ts` encodes them, so
+> there is no `ST_AsMVTGeom` for the wasm planner to push into a scan and no
+> per-tree geometry worth materialising. What follows is how the tile path
+> got its batching; read "feature table" and `ST_AsMVT` as history.
 
 Stage 1 made the map slower to use while making it cheaper to load, and
 the load bench could not see it: it settles at one camera. `pnpm bench:tiles`
@@ -506,7 +509,92 @@ The bucketed-output proposal (`docs/TRILOGY_BUCKETED_OUTPUT_SPEC.md`,
 one file per cell and a manifest) is not needed for this: one sorted file
 prunes as well from its footer.
 
+## Near Me: the wait before the first tree
+
+Measured 2026-11-16 with `pnpm bench:nearby`: iPhone 13 Mini emulation,
+Boston's South End, every request (the workers' included) shaped to 9 Mbps
+and 85 ms, desktop CPU. The link is the constraint in these runs, so a phone
+adds compile and query time on top; unshaped, on localhost, the same load
+went from 5.7 to 8.9 s down to 1.9 s.
+
+| From | Before (#206) | After |
+|---|---:|---:|
+| Opened straight into Near Me, to trees | 20.8, 21.6 s | 12.9, 13.3 s |
+| The tap, after 3 s on the entry screen | 21.4, 24.2 s | 9.1, 9.2 s |
+| The tap, after 8 s on the entry screen | 20.2 s | 5.1, 5.5 s |
+
+Where the 24 seconds went, from the waterfall:
+
+| | Before | Now |
+|---|---|---|
+| DuckDB's wasm, 34 MB (9 MB gzipped) | 8.5 s, from the tap | from the entry screen; what is left of it at the tap |
+| Parquet extension, 3 MB | 0.9 s, after the engine | beside the engine |
+| Spatial extension, 23 MB (6 MB on the wire) | 5.8 s, after that | gone |
+| The bookmark's projection footer and landmarks | 2.1 s, 13 requests in a row | not before the trees; landmarks one request beside the engine |
+| The block under the view | 4.1 MB whole | 1.6 MB, three requests side by side |
+| Colour scheme, layers, cells, tiles, draw | 4.5 s, one after another | the cells load beside the set-up |
+
+What changed:
+
+- **The spatial extension is gone.** It encoded tiles and did nothing else.
+  The tile queries return one row per tree or overview cell and
+  `pointTiles.ts` writes the protobuf: points with an id, a diameter and a
+  count, a source layer per colour. The z15 feature table went with it: it
+  existed to hold `ST_AsMVTGeom`'s output, and without that it is a copy of
+  the rows. `pnpm test:wasm` no longer needs the network.
+- **The engine's files download from the entry screen** (`prefetchEngine`,
+  `MapExperience.vue`). Both of the entry's buttons lead to the map, so the
+  wasm, the engine's worker script and the parquet extension are asked for
+  400 ms after the entry appears. Nothing is compiled and no data is read
+  there, which is what slowed the Species tab when #206 tried starting the
+  engine on the entry screen. A viewer who asked their browser to save data
+  is left alone. The wasm is kept as a blob and the engine instantiates from
+  it, since a second request for a response still arriving is a second
+  download in some browsers. That path gives up compiling while downloading,
+  so it is taken only when a prefetch was started; a page opened straight
+  into Near Me fetches as before, with the extension beside the engine
+  instead of after it.
+- **The first tree does not wait for the bookmark's projection.**
+  `trees_published` is bound by the first read that names it (a deep-linked
+  tree, the check-in's species count). Binding it read the projection's
+  footer: eight requests and 0.6 MB for Boston. The landmarks file is fetched
+  whole when the fix names the city, not read by the engine in five requests.
+- **A large block is read in part** (`sparseBlocks.ts`, `parquetFooter.ts`,
+  and "How the map reads it" in `docs/SEAMLESS_WORLD.md`): its footer, then
+  the row groups under the view's cells.
+- **The view's cells load as soon as the engine is up**, from the fix, not
+  when the first tile asks, which is after the bookmark, the colour scheme
+  and the layers.
+
+What is left, in the order it would pay:
+
+1. **The engine itself.** 9 MB on the wire, and nothing before it can draw a
+   tree. With the prefetch the wait is whatever of it the viewer did not
+   spend on the entry screen; a first visit that taps at once still waits
+   about eight seconds for it on this link. The bytes are DuckDB's.
+2. **Smaller row groups in the blocks.** A block's row groups are 10,240
+   rows, and the two cells of this view (16,000 trees) reach five of them,
+   51,000 rows. Smaller groups would bring the bytes nearer the trees; how
+   near is not measured. It is a constant in `data/world/publish_blocks.py`
+   and a re-upload of every block; the reader needs no change.
+3. **The colour scheme's table** (`setSpeciesShadeSql`): nine statements,
+   about 0.3 s on a desktop and more on a phone, between the engine and the
+   first tile. The 3,200-row `INSERT` of snapped shades is a third of it.
+4. **A real phone.** None of this was measured on one: the bench shapes the
+   link, not the CPU of the workers.
+
 ## Measuring
+
+`pnpm bench:nearby` (`scripts/bench-nearby.mjs`) is the measure for the wait
+before the first tree: it taps Near Me (after `MAP_BENCH_ENTRY_MS` on the
+entry screen, or opens straight into it), and prints every request in order
+with its range and size, the worker's `[Perf]` lines among them, and the
+time until tree features are on screen. `MAP_BENCH_NET=4g` shapes every
+request in the route handler, the only place that sees a worker's worker;
+that turns the browser's cache off, so the handler stands in for it where
+the app relies on it (the build's assets and DuckDB's extensions are charged
+once). Shaped runs inflate CPU-bound steps about threefold, since Playwright
+carries every body; compare those between builds, not against a clock.
 
 ```powershell
 cd src

@@ -6,13 +6,13 @@
  * unmodified against the engine the browser runs.
  *
  * Why wasm and not native DuckDB: the two plan some queries differently. A
- * WHERE on `ST_AsMVTGeom` that native DuckDB applies after the tile range is
- * pushed into the scan by the wasm build, which then runs the geometry on
+ * WHERE over an expensive expression that native DuckDB applies after the
+ * tile range was pushed into the scan by the wasm build, which then ran it on
  * every tree in the city (#144). This build reproduces that; native does not.
  *
- * Spatial is fetched from extensions.duckdb.org on first LOAD (about 4 MB):
- * the Node runtime reads extensions through a synchronous XHR shim, and a
- * LOAD from a local file, a registered buffer or a local repository hangs.
+ * No extension is installed. The worker's tiles once needed spatial, fetched
+ * from extensions.duckdb.org on first LOAD; they are encoded in JavaScript
+ * now (pointTiles.ts), and a query that names an `ST_` function fails here.
  */
 import * as blocking from '@duckdb/duckdb-wasm/blocking'
 import { createRequire } from 'node:module'
@@ -24,7 +24,7 @@ const DIST = dirname(require.resolve('@duckdb/duckdb-wasm/dist/duckdb-eh.wasm'))
 type BlockingDb = Awaited<ReturnType<typeof blocking.createDuckDB>>
 type BlockingConnection = ReturnType<BlockingDb['connect']>
 
-/** Boot one in-process DuckDB-WASM (eh bundle). Half a second, no spatial yet. */
+/** Boot one in-process DuckDB-WASM (eh bundle). Half a second. */
 export async function createNodeDuckDB(): Promise<BlockingDb> {
   const db = await blocking.createDuckDB(
     { mvp: { mainModule: join(DIST, 'duckdb-mvp.wasm'), mainWorker: '' }, eh: { mainModule: join(DIST, 'duckdb-eh.wasm'), mainWorker: '' } },

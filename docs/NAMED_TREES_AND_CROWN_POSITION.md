@@ -218,7 +218,7 @@ trees are named" from the rollup.
 `tf.notable` to `nearby` and a halo quad under flagged sprites only. That's
 one boolean column in a query that already reads the row.
 
-**Phone** (MVT, `duckdbPipeline.worker.ts` feature table, `useMapLayers.ts`):
+**Phone** (MVT, `duckdbPipeline.worker.ts` tile queries and `pointTiles.ts`, `useMapLayers.ts`):
 - Add a `notable` property to the prepared feature struct, **only when
   true**. A null property isn't written, so ordinary features keep their
   size.

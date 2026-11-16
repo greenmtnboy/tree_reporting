@@ -10,7 +10,7 @@ export default defineConfig({
     // config and CI job (vitest.queries.config.ts) — network, not runtime.
     // The chat benchmark spends the demo model budget and takes the better
     // part of an hour (vitest.chatbench.config.ts); it is run by hand.
-    // The DuckDB-WASM suite fetches the spatial extension (vitest.wasm.config.ts).
+    // The DuckDB-WASM suite boots the wasm engine per file (vitest.wasm.config.ts).
     exclude: ['**/node_modules/**', '**/e2e/**', '**/dashboard-queries.test.ts', '**/bench/**', '**/*.wasm.test.ts'],
   },
 })

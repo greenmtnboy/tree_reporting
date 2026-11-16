@@ -68,7 +68,7 @@ const HEATMAP_OPACITY_NORMAL: any[] = [
 // --- Per-colour layers ---
 
 // The worker writes one MVT source layer per colour, named by the colour
-// (workers/mvtLayers.ts), and the map draws one heatmap and one circle layer
+// (workers/pointTiles.ts), and the map draws one heatmap and one circle layer
 // per source layer. Each layer's bucket then reads only its own features:
 // with a single source layer and a colour filter per layer, MapLibre ran
 // every layer's filter over every feature of the tile.
