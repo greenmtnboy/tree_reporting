@@ -17,8 +17,8 @@ The `NOTABLE_ITMIL` partition (tree_dedup.preql, "notable row"):
     survey; three sit within 2 m of a different tree.  Each row is linked by
     shared/notable.py to the inventory tree of the same genus and a matching
     trunk within 30 m, read from milan_tree_info.py's own published table so
-    the id exists in the build.  Six of the 13 link (2026-11-15); the others
-    publish at the register's point as trees of their own.
+    the id exists in the build.  A row that links to no tree is dropped: a
+    register is metadata on an inventory tree, never a tree of its own.
   * **The name is the Comune's.**  The register has no name column, but the
     Comune's page for each tree is titled, and the title is in the link's slug.
     A slug that starts with an article (`il-platano-siamese-di-villa-litta`)

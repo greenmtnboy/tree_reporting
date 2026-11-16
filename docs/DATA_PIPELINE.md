@@ -350,9 +350,10 @@ exactly one row per tree, and none for a tree reported gone.
   inventory tree its ingest linked it to, else itself, and no tier anchors
   on it. Linked, it lends the cluster its `tree_name`, `significance` and
   `significance_source` (a grouped max, below an approved report) and
-  nothing else. Unlinked, it is a tree of its own and publishes its own
-  values through `@by_source`'s last arm, which it shares with a lone
-  prediction: a rank-0 cluster is always exactly one row.
+  nothing else. The ingest drops an unlinked row (`notable_table`), so none
+  should reach the build; one that did would be a tree of its own, published
+  through `@by_source`'s last arm, which it shares with a lone prediction: a
+  rank-0 cluster is always exactly one row.
   `test_notable_reconciliation.py` runs Boston's build SQL over the cases.
 
 ### Approved tree reports

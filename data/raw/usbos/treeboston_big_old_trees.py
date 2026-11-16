@@ -27,7 +27,7 @@ A `NOTABLE_USBOS` partition (tree_dedup.preql, "notable row"):
   * **Linked** by shared/notable.py to the City of Boston inventory row of the
     same genus and a matching trunk within 30 m, read through
     boston_tree_info.py's own reader so the id exists in the build; an
-    unlinked tree publishes at the registry's point.
+    unlinked tree is dropped.
   * **No name**: the registry gives none.  The significance says the tree is
     on the registry and gives the trunk the volunteers measured; heights are
     not quoted (an elm recorded at 214 ft).

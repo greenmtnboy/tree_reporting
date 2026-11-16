@@ -180,8 +180,8 @@ file `./northeastern_tree_info.py`;
 
 # Tree Boston's Big Old Trees registry: a notable source (../tree_dedup.preql).
 # Each placed public tree is linked by its ingest to the City of Boston row it
-# is and lends that tree why it is notable; an unlinked one publishes at the
-# registry's point.  No freshness probe (the sheet export has no modified
+# is and lends that tree why it is notable; an unlinked one is dropped by the
+# ingest.  No freshness probe (the sheet export has no modified
 # time) and no `@source_kept` guard: a volunteer sheet that cannot be read
 # publishes no rows rather than failing the metro's build.
 root partial datasource treeboston_notable_tree_info extends tree_partition (
