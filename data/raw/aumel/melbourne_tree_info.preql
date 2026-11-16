@@ -2,9 +2,18 @@ import ..tree_common;
 import ..community_tree_info;
 import ..tree_dedup;
 
-auto aumel_published_data_updated_through <- greatest(aumel_data_updated_through, aumel_community_data_updated_through, aumel_osm_data_updated_through);
+property <*>.melbourne_city_data_updated_through datetime; # when the City of Melbourne's Urban Forest dataset is through
+property <*>.port_phillip_data_updated_through datetime; # when the City of Port Phillip's trees resource on data.gov.au is through
+property <*>.yarra_data_updated_through datetime; # when the City of Yarra's street and park trees resource on data.gov.au is through
+property <*>.glen_eira_data_updated_through datetime; # when Glen Eira's park and street trees resource on data.gov.au is through
+property <*>.hobsons_bay_data_updated_through datetime; # when Hobsons Bay's street and park trees resource on data.gov.au is through
 
-key aumel_source enum<string>['MELBOURNE_OPENDATA', 'COMMUNITY_AUMEL', 'OSM_AUMEL']; # originating dataset for the row
+auto aumel_published_data_updated_through <- greatest(aumel_data_updated_through, aumel_community_data_updated_through, aumel_osm_data_updated_through);
+auto aumel_data_updated_through <- greatest(melbourne_city_data_updated_through, port_phillip_data_updated_through, yarra_data_updated_through, glen_eira_data_updated_through, hobsons_bay_data_updated_through);
+
+# The City of Melbourne plus four inner-metropolitan councils inside AUMEL's
+# territory, each its own municipal partition (the Boston metro pattern).
+key aumel_source enum<string>['MELBOURNE_OPENDATA', 'PORT_PHILLIP', 'YARRA', 'GLEN_EIRA', 'HOBSONS_BAY', 'COMMUNITY_AUMEL', 'OSM_AUMEL']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
@@ -12,9 +21,31 @@ auto aumel_source_label <- concat(aumel_source, '');
 merge aumel_source_label into source_label;
 
 root datasource melbourne_update_time (
-    data_updated_through: aumel_data_updated_through
+    data_updated_through: melbourne_city_data_updated_through
 )
 file `./melbourne_update_time.py`;
+
+# The four councils publish on data.gov.au's CKAN; each probe is the
+# resource's data watermark (shared/platforms/ckan.py `data_last_modified`).
+root datasource port_phillip_update_time (
+    data_updated_through: port_phillip_data_updated_through
+)
+file `./port_phillip_update_time.py`;
+
+root datasource yarra_update_time (
+    data_updated_through: yarra_data_updated_through
+)
+file `./yarra_update_time.py`;
+
+root datasource glen_eira_update_time (
+    data_updated_through: glen_eira_data_updated_through
+)
+file `./glen_eira_update_time.py`;
+
+root datasource hobsons_bay_update_time (
+    data_updated_through: hobsons_bay_data_updated_through
+)
+file `./hobsons_bay_update_time.py`;
 
 # Only this city's column, so an approval elsewhere does not mark AUMEL's
 # Parquet stale. Trilogy probes this as MAX over the one column.
@@ -50,6 +81,35 @@ root partial datasource melbourne_raw_tree_info extends tree_partition (
 )
 complete where city = 'AUMEL' and aumel_source = 'MELBOURNE_OPENDATA'
 file `./melbourne_tree_info.py`;
+
+# The four neighbouring councils.  Port Phillip and Yarra share boundary
+# streets with the City of Melbourne, so a tree on one of those can appear in
+# two inventories; the cross-source merge never joins two municipal rows, so
+# such a pair stays two rows.  Yarra and Hobsons Bay publish no crown spread
+# (the template binds it; the column is emitted null).
+root partial datasource port_phillip_raw_tree_info extends tree_partition (
+    data_source: aumel_source,
+)
+complete where city = 'AUMEL' and aumel_source = 'PORT_PHILLIP'
+file `./port_phillip_tree_info.py`;
+
+root partial datasource yarra_raw_tree_info extends tree_partition (
+    data_source: aumel_source,
+)
+complete where city = 'AUMEL' and aumel_source = 'YARRA'
+file `./yarra_tree_info.py`;
+
+root partial datasource glen_eira_raw_tree_info extends tree_partition (
+    data_source: aumel_source,
+)
+complete where city = 'AUMEL' and aumel_source = 'GLEN_EIRA'
+file `./glen_eira_tree_info.py`;
+
+root partial datasource hobsons_bay_raw_tree_info extends tree_partition (
+    data_source: aumel_source,
+)
+complete where city = 'AUMEL' and aumel_source = 'HOBSONS_BAY'
+file `./hobsons_bay_tree_info.py`;
 
 
 # Approved community submissions for this city. The shared ingest script
@@ -89,4 +149,8 @@ complete where city = 'AUMEL'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aumel_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/aumel_tree_info_v{data_version}.parquet`
 freshness by aumel_published_data_updated_through
 assert @source_kept(tree_id, aumel_source, 'MELBOURNE_OPENDATA', 0.75)
+assert @source_kept(tree_id, aumel_source, 'PORT_PHILLIP', 0.75)
+assert @source_kept(tree_id, aumel_source, 'YARRA', 0.75)
+assert @source_kept(tree_id, aumel_source, 'GLEN_EIRA', 0.75)
+assert @source_kept(tree_id, aumel_source, 'HOBSONS_BAY', 0.75)
 assert @source_kept(tree_id, aumel_source, 'OSM_AUMEL', 0.75);

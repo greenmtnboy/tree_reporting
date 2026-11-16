@@ -1,0 +1,37 @@
+import ..landmark_common;
+
+root datasource naperville_landmarks_update_time (
+    data_updated_through: usnpv_landmark_data_updated_through
+)
+file `./naperville_landmarks_probe.py`;
+
+# The Naperville Heritage Society's plaque buildings (a layer on the city's own
+# ArcGIS Online organisation, the one that hosts the trees) and the National
+# Park Service's National Register listings in Naperville -- registers read
+# live, so no Nominatim geocoding, no committed CSV and no staging object.
+# `lm_type` names the register, `neighborhood` the historic district a plaque
+# building sits in, and `register_number` the NRIS reference number of a
+# National Register row.
+root partial datasource raw_naperville_landmark_info extends landmark_partition (
+    address: ?address,
+    neighborhood: ?neighborhood,
+    year_built: ?year_built,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USNPV'
+file `./naperville_landmarks.py`;
+
+partial datasource naperville_landmark_info extends published_landmark_info (
+    ?address,
+    ?neighborhood,
+    ?year_built,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    usnpv_landmark_data_updated_through,
+)
+complete where city = 'USNPV'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usnpv_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usnpv_landmark_info_v{data_version}.parquet`
+freshness by usnpv_landmark_data_updated_through;

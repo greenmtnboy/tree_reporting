@@ -332,6 +332,42 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'palearctic',
   },
+  USBOU: {
+    ecoregionId: 402, // Western shortgrass prairie
+    usdaZone: 6,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USNPV: {
+    ecoregionId: 387, // Central US forest-grasslands transition
+    usdaZone: 6,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  AUADL: {
+    ecoregionId: 200, // Flinders-Lofty montane woodlands
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'australasia',
+  },
+  AUPER: {
+    ecoregionId: 206, // Southwest Australia woodlands
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'australasia',
+  },
+  AUBAL: {
+    ecoregionId: 176, // Southeast Australia temperate forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'australasia',
+  },
+  AUWOD: {
+    ecoregionId: 192, // Southeast Australia temperate savanna
+    usdaZone: 9,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'australasia',
+  },
 }
 
 function escapeStringLiteral(value: string) {

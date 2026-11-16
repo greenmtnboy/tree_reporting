@@ -51,6 +51,12 @@ import usatl.atlanta_tree_info;
 import usnap.naples_tree_info;
 import usclt.charlotte_tree_info;
 import itmil.milan_tree_info;
+import usbou.boulder_tree_info;
+import usnpv.naperville_tree_info;
+import auadl.adelaide_tree_info;
+import auper.perth_tree_info;
+import aubal.ballarat_tree_info;
+import auwod.wodonga_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -109,6 +115,12 @@ merge usatl_source into data_source;
 merge usnap_source into data_source;
 merge usclt_source into data_source;
 merge itmil_source into data_source;
+merge usbou_source into data_source;
+merge usnpv_source into data_source;
+merge auadl_source into data_source;
+merge auper_source into data_source;
+merge aubal_source into data_source;
+merge auwod_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -176,7 +188,13 @@ usnol_published_data_updated_through,
 usatl_published_data_updated_through,
 usnap_published_data_updated_through,
 usclt_published_data_updated_through,
-itmil_published_data_updated_through);
+itmil_published_data_updated_through,
+usbou_published_data_updated_through,
+usnpv_published_data_updated_through,
+auadl_published_data_updated_through,
+auper_published_data_updated_through,
+aubal_published_data_updated_through,
+auwod_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

@@ -43,6 +43,8 @@ Currently has data from the following cities:
 - [Los Angeles, CA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USLAX)
 - [Tempe, AZ, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USTEM)
 - [Denver, CO, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USDEN)
+- [Boulder, CO, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USBOU)
+- [Naperville, IL, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USNPV)
 - [Stoughton, WI, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USSTO)
 - [Austin, TX, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USAUS)
 - [Houston, TX, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USHOU)
@@ -81,6 +83,10 @@ Currently has data from the following cities:
 - [Amsterdam, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLAMS)
 - [Berlin, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEBER)
 - [Melbourne, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUMEL)
+- [Adelaide, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUADL)
+- [Perth, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUPER)
+- [Ballarat, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUBAL)
+- [Wodonga, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUWOD)
 - [Paris, France](https://greenmtnboy.github.io/tree_reporting/#/?city=FRPAR)
 - [Buenos Aires, Argentina](https://greenmtnboy.github.io/tree_reporting/#/?city=ARBUE)
 - [Athens, Greece](https://greenmtnboy.github.io/tree_reporting/#/?city=GRATH)
@@ -127,8 +133,11 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Burlington VT | City of Burlington GIS - Tree Sites | https://maps.burlingtonvt.gov/ |
 | Washington, DC | Open Data DC - Urban Forestry Street Trees | https://opendata.dc.gov/datasets/DCGIS::urban-forestry-street-trees |
 | Los Angeles | LA GeoHub - Trees (Bureau of Street Services) | https://www.arcgis.com/home/item.html?id=266c6255b1fc4ae8b8f100d8696e1fa4 |
+| Los Angeles (West Hollywood) | City of West Hollywood - City Tree Inventory (2015, CC0) | https://data.weho.org/d/qqwt-wx9z |
 | Tempe | City of Tempe - Tree Inventory | https://data.tempe.gov/datasets/tempegov::tree-inventory |
 | Denver | Denver Open Data - Parks, Medians, and Parkway Trees | https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::parks-medians-and-parkway-trees |
+| Boulder, CO | City of Boulder - Tree Inventory Open Data (ArcGIS, CC0) | https://www.arcgis.com/home/item.html?id=dbbae8bdb0a44d17934243b88e85ef2b |
+| Naperville, IL | City of Naperville - Right of Way Tree Inventory (ArcGIS, CC0) | https://www.arcgis.com/home/item.html?id=9ee23fb99f1d4391824b66fddc2f10f1 |
 | Stoughton | City of Stoughton - Public Tree Inventory (ArcGIS) | https://experience.arcgis.com/experience/f9b95eddac104c708619ccaf4c2c9de0 |
 | Austin, TX | City of Austin - Tree Inventory (Socrata, public domain) | https://data.austintexas.gov/d/wrik-xasw |
 | Houston, TX | City of Houston Parks & Recreation, Urban Forestry - street-tree inventory (ArcGIS) | https://geohwp.houstontx.gov/arcgis/rest/services/03_BaseData_External/Land_Base/FeatureServer/0 |
@@ -168,6 +177,14 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Amsterdam | Amsterdam Data Portal - Bomen (Stamgegevens) | https://api.data.amsterdam.nl/v1/bomen/stamgegevens/ |
 | Berlin | Berlin Geodateninfrastruktur - Baumbestand (WFS) | https://gdi.berlin.de/services/wfs/baumbestand |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
+| Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
+| Melbourne (Yarra) | City of Yarra - Street and Park Trees (CC BY 4.0) | https://data.gov.au/data/dataset/yarra-street-park-trees |
+| Melbourne (Glen Eira) | Glen Eira City Council - Park and Street Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/park-and-street-trees |
+| Melbourne (Hobsons Bay) | Hobsons Bay City Council - Street and Park Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/hbcc-street-and-park-trees |
+| Adelaide | City of Adelaide - Street Trees (data.sa.gov.au, CC BY 4.0) | https://data.sa.gov.au/data/dataset/street-trees |
+| Perth | City of Perth - Trees in the City (ArcGIS, CC BY 4.0) | https://www.arcgis.com/home/item.html?id=c5ce51d9789a4e9a8510acb8c8f3ecf4 |
+| Ballarat | City of Ballarat Open Data - Trees (CC BY) | https://data.ballarat.vic.gov.au/explore/dataset/trees/ |
+| Wodonga | City of Wodonga - Street and Reserve Trees (ArcGIS, CC BY 4.0) | https://www.arcgis.com/home/item.html?id=f6e5ca95559a4253bf7d25897bf8ed15 |
 | Paris | Paris Open Data - Les Arbres | https://opendata.paris.fr/explore/dataset/les-arbres/ |
 | Buenos Aires | Buenos Aires Data - Arbolado publico lineal | https://data.buenosaires.gob.ar/dataset/arbolado-publico-lineal |
 | Athens | City of Athens Open Data - Trees of the National Garden | https://opendata.cityofathens.gr/dataset/gis-athens-8303d4c8-371b-11ec-b388-0242ac120009 |

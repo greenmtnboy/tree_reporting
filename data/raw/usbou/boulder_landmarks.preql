@@ -1,0 +1,27 @@
+import ..landmark_common;
+
+root datasource boulder_landmarks_update_time (
+    data_updated_through: usbou_landmark_data_updated_through
+)
+file `./boulder_landmarks_probe.py`;
+
+# The City of Boulder's register of individually designated historic
+# landmarks (approved designations only), a live ArcGIS layer read at refresh
+# time -- an official register, so no Nominatim geocoding, no committed CSV and
+# no staging object.  Parcel polygons; the template derives the centroid.
+# `lm_type` names the register.
+root partial datasource raw_boulder_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+)
+complete where city = 'USBOU'
+file `./boulder_landmarks.py`;
+
+partial datasource boulder_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    usbou_landmark_data_updated_through,
+)
+complete where city = 'USBOU'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usbou_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usbou_landmark_info_v{data_version}.parquet`
+freshness by usbou_landmark_data_updated_through;

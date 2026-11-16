@@ -1,0 +1,34 @@
+import ..landmark_common;
+
+root datasource perth_landmarks_update_time (
+    data_updated_through: auper_landmark_data_updated_through
+)
+file `./perth_landmarks_probe.py`;
+
+# The City of Perth Heritage List (City Planning Scheme No. 2), read live from
+# the city's ArcGIS layer on the same organisation as the trees. An official
+# designation registry, so there is no curated CSV and no staging object; the
+# probe is the layer's own edit date.
+root partial datasource raw_perth_landmark_info extends landmark_partition (
+    address: ?address,
+    protection_type: ?protection_type,
+    register_number: ?register_number,
+    category: ?category,
+    year_built: ?year_built,
+    designation_date: ?designation_date,
+)
+complete where city = 'AUPER'
+file `./perth_landmarks.py`;
+
+partial datasource perth_landmark_info extends published_landmark_info (
+    ?address,
+    ?protection_type,
+    ?register_number,
+    ?category,
+    ?year_built,
+    ?designation_date,
+    auper_landmark_data_updated_through,
+)
+complete where city = 'AUPER'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/auper_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/auper_landmark_info_v{data_version}.parquet`
+freshness by auper_landmark_data_updated_through;

@@ -847,6 +847,63 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    "Pyrus betulaefolia": "Pyrus betulifolia",
+    "Quercus castaenifolia": "Quercus castaneifolia",
+    "Carpinus betula": "Carpinus betulus",
+    "Cottoneaster glaucophyllus": "Cotoneaster glaucophyllus",
+    "Eucalyptus virdis": "Eucalyptus viridis",
+    "Eucalyptus landsdowneana": "Eucalyptus lansdowneana",
+    "Corymbia callophylla": "Corymbia calophylla",
+    "Eucalyptus siedroxylon": "Eucalyptus sideroxylon",
+    "Casurina cunninghamiana": "Casuarina cunninghamiana",
+    "Melia azadarach": "Melia azedarach",
+    "Quercus engelmanii": "Quercus engelmannii",
+    "Malaleuca quinquenervia": "Melaleuca quinquenervia",
+    "Phoenix dadtyifera": "Phoenix dactylifera",
+    "Pinus jeffreyii": "Pinus jeffreyi",
+    "Casurina": "Casuarina",
+    "Garrya eleptica": "Garrya elliptica",
+    "Largerstromia indica": "Lagerstroemia indica",
+    "Zelkova seratta": "Zelkova serrata",
+    "Ceratonia silqua": "Ceratonia siliqua",
+    "Pistachio vera": "Pistacia vera",
+    "Vitex luscens": "Vitex lucens",
+    "Eucalyptus blakleyi": "Eucalyptus blakelyi",
+    "Fraxinus angustigolia": "Fraxinus angustifolia",
+    "Lagerstromia indica": "Lagerstroemia indica",
+    "Liquidambar straciflua": "Liquidambar styraciflua",
+    "Acacia podalyriaefolia": "Acacia podalyriifolia",
+    "Acacia retinoides": "Acacia retinodes",
+    "Araucaria bidwilli": "Araucaria bidwillii",
+    "Archontopheonix cunninghamiana": "Archontophoenix cunninghamiana",
+    "Buxus semperivirens": "Buxus sempervirens",
+    "Camellia sasangua": "Camellia sasanqua",
+    "Castaneopis": "Castanopsis",
+    "Catalpa bignonoides": "Catalpa bignonioides",
+    "Citrus xlimon": "Citrus x limon",
+    "Cupressus torolusa": "Cupressus torulosa",
+    "Eucalyptus micorcorys": "Eucalyptus microcorys",
+    "Fraxinus excelsoir": "Fraxinus excelsior",
+    "Hibiscus syriascus": "Hibiscus syriacus",
+    "Jacaranda mimosaefolia": "Jacaranda mimosifolia",
+    "Jacarandra mimosifolia": "Jacaranda mimosifolia",
+    "Lauris nobilis": "Laurus nobilis",
+    "Leptospermum obavatum": "Leptospermum obovatum",
+    "Ligustrum sinensis": "Ligustrum sinense",
+    "Liquidamber formosana": "Liquidambar formosana",
+    "Melaleuca rugulosus": "Melaleuca rugulosa",
+    "Melia azederach": "Melia azedarach",
+    "Olea europa": "Olea europaea",
+    "Pinus halapensis": "Pinus halepensis",
+    "Populus x candadenis": "Populus x canadensis",
+    "Prunus armenaica": "Prunus armeniaca",
+    "Pyrus calleryanna": "Pyrus calleryana",
+    "Quercus petrea": "Quercus petraea",
+    "Ulmus xhollandica": "Ulmus x hollandica",
+    "Virgillia oroboides": "Virgilia oroboides",
+    "Acer beurgerianum": "Acer buergerianum",
+    "Koelreutaria paniculata": "Koelreuteria paniculata",
+    "Melalueca uncinata": "Melaleuca uncinata",
     "Abies balsamaea": "Abies balsamea",
     "Acacia mearsnii": "Acacia mearnsii",
     "Acer buergeranum": "Acer buergerianum",
@@ -1494,6 +1551,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "AUWOD": ("WODONGA_OPENDATA",),
+    "AUBAL": ("BALLARAT_OPENDATA",),
+    "AUPER": ("PERTH_OPENDATA",),
+    "AUADL": ("ADELAIDE_OPENDATA",),
+    "USNPV": ("NAPERVILLE_OPENDATA",),
+    "USBOU": ("BOULDER_OPENDATA",),
     "ITMIL": ("MILAN_OPENDATA",),
     "USCLT": ("CHARLOTTE_OPENDATA",),
     "USNAP": ("NAPLES_OPENDATA",),
@@ -1537,9 +1600,9 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "DEBER": ("BERLIN_OPENDATA",),
     "NLAMS": ("AMSTERDAM_OPENDATA",),
     "GBLON": ("LONDON_OPENDATA",),
-    "AUMEL": ("MELBOURNE_OPENDATA",),
+    "AUMEL": ("MELBOURNE_OPENDATA", "PORT_PHILLIP", "YARRA", "GLEN_EIRA", "HOBSONS_BAY"),
     "ARBUE": ("BUENOSAIRES_OPENDATA",),
-    "USLAX": ("LOSANGELES_OPENDATA",),
+    "USLAX": ("LOSANGELES_OPENDATA", "WEST_HOLLYWOOD"),
     "USWAS": ("WASHINGTONDC_OPENDATA",),
     "USTEM": ("TEMPE_OPENDATA",),
     "GRATH": ("ATHENS_OPENDATA",),
@@ -1578,6 +1641,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "AUWOD": "OSM_AUWOD",
+    "AUBAL": "OSM_AUBAL",
+    "AUPER": "OSM_AUPER",
+    "AUADL": "OSM_AUADL",
+    "USNPV": "OSM_USNPV",
+    "USBOU": "OSM_USBOU",
     "ITMIL": "OSM_ITMIL",
     "USCLT": "OSM_USCLT",
     "USNAP": "OSM_USNAP",
@@ -2240,6 +2309,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "AUWOD": (-36.3, -36.0, 146.65, 147.1),
+    "AUBAL": (-37.8, -37.3, 143.55, 144.1),
+    "AUPER": (-32.0, -31.92, 115.8, 115.9),
+    "AUADL": (-34.96, -34.88, 138.56, 138.64),
+    "USNPV": (41.66, 41.83, -88.3, -88.05),
+    "USBOU": (39.95, 40.13, -105.35, -105.15),
     "ITMIL": (45.38, 45.54, 9.03, 9.29),
     "USCLT": (35.0, 35.45, -81.05, -80.6),
     "USNAP": (26.05, 26.3, -81.85, -81.7),
@@ -2349,6 +2424,49 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 1,322 staged OSM nodes against 94,652 anchors.  Mutual-NN stays above
+    # 60% through 20 m, so the band rule says nothing and the marginal table
+    # decides: 8->10 removes 24 duplicates for 3 hidden trees (8.0); past 10 m
+    # it is 8 for 1 to 14 m and 4 for 3 to 20 m (n=9 in the 10-20 m band),
+    # too few to justify the next calibrated size, so 10 m.
+    "AUWOD": 10,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 6,367 staged OSM nodes against 84,119 anchors.  Mutual-NN 60.9% in
+    # 5-10 m, 18.6% in 10-20 m (n=483): a 10 m guarantee caps it at 20.
+    # Marginal table: 8->10 removes 149 duplicates for 95 hidden trees (1.57),
+    # 10->14 removes 94 for 202 (0.47), so 10 m.
+    "AUBAL": 10,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 8,926 staged OSM nodes against 17,115 anchors.  Mutual-NN 93.7% in
+    # 2-5 m, 57.5% in 5-10 m (n=219, a coin flip): a 5 m guarantee, a 10 m
+    # cell.  Marginal table agrees: 8->10 removes 48 for 32 (1.50), 10->14
+    # removes 35 for 51 (0.69).
+    "AUPER": 10,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 17,825 staged OSM nodes against 6,030 anchors.  Mutual-NN 96.1% in
+    # 2-5 m, 47.8% in 5-10 m (n=297): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 82 duplicates for 52 hidden trees (1.58),
+    # 8->10 removes 42 for 46 (0.91), so 8 m.
+    "AUADL": 8,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 42,245 staged OSM nodes against 72,349 anchors.  Mutual-NN 96.5% in
+    # 2-5 m, 23.1% in 5-10 m (n=854): a 5 m guarantee caps it at 10.
+    # Marginal table: 4->6 removes 464 duplicates for 38 hidden trees (12.2),
+    # 6->8 removes 136 for 153 (0.89), so 6 m.
+    "USNPV": 6,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 7,100 staged OSM nodes against 49,588 anchors.  Mutual-NN 92.9% in
+    # 2-5 m, 52.0% in 5-10 m (n=175): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 52 duplicates for 23 hidden trees (2.26),
+    # 8->10 removes 17 for 21 (0.81), so 8 m.
+    "USBOU": 8,
     # Calibrated 2026-11-15 before the first build, on a local Overpass
     # extract (40,356 nodes) against the Comune's 255,075-row inventory:
     # planting spacing p50 5.5 m; mutual-NN 99.7% under 2 m, 90.4% at 2-5 m,
@@ -2647,6 +2765,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'AUWOD': ((-36.3, -36.0, 146.65, 147.1),),
+    'AUBAL': ((-37.8, -37.3, 143.55, 144.1),),
+    'AUPER': ((-32.0, -31.92, 115.8, 115.9),),
+    'AUADL': ((-34.96, -34.88, 138.56, 138.64),),
+    'USNPV': ((41.66, 41.83, -88.3, -88.05),),
+    'USBOU': ((39.95, 40.13, -105.35, -105.15),),
     'ITMIL': ((45.38, 45.54, 9.03, 9.29),),
     'USCLT': ((35.0, 35.45, -81.05, -80.6),),
     'USNAP': ((26.05, 26.3, -81.85, -81.7),),

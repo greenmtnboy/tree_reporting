@@ -1,0 +1,27 @@
+import ..landmark_common;
+
+root datasource ballarat_landmarks_update_time (
+    data_updated_through: aubal_landmark_data_updated_through
+)
+file `./ballarat_landmarks_probe.py`;
+
+# Ballarat's places on the Victorian Heritage Register, read live from
+# Vicmap's open-data WFS and cut to the City of Ballarat with the LGA's own
+# boundary (see ballarat_landmarks.py) -- an official register, so no
+# Nominatim geocoding, no committed CSV and no staging object.  `lm_type`
+# names the register and `register_number` carries the VHR number (H2089).
+root partial datasource raw_ballarat_landmark_info extends landmark_partition (
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+)
+complete where city = 'AUBAL'
+file `./ballarat_landmarks.py`;
+
+partial datasource ballarat_landmark_info extends published_landmark_info (
+    ?lm_type,
+    ?register_number,
+    aubal_landmark_data_updated_through,
+)
+complete where city = 'AUBAL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/aubal_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/aubal_landmark_info_v{data_version}.parquet`
+freshness by aubal_landmark_data_updated_through;

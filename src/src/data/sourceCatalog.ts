@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Wodonga', label: 'City of Wodonga - Street and reserve trees (ArcGIS, CC BY 4.0)', url: 'https://www.arcgis.com/home/item.html?id=f6e5ca95559a4253bf7d25897bf8ed15' },
+  { city: 'Ballarat', label: 'City of Ballarat Open Data - Trees (CC BY 3.0 AU)', url: 'https://data.ballarat.vic.gov.au/explore/dataset/trees/' },
+  { city: 'Perth', label: 'City of Perth (Trees in the City)', url: 'https://www.arcgis.com/home/item.html?id=c5ce51d9789a4e9a8510acb8c8f3ecf4' },
+  { city: 'Adelaide', label: 'City of Adelaide via data.sa.gov.au (Street Trees)', url: 'https://data.sa.gov.au/data/dataset/street-trees' },
+  { city: 'Naperville', label: 'City of Naperville - Right of Way Tree Inventory (ArcGIS, CC0)', url: 'https://services1.arcgis.com/rXJ6QApc2sOtl1Pd/arcgis/rest/services/ROW_Tree_Inventory/FeatureServer/0' },
+  { city: 'Boulder', label: 'City of Boulder - Tree Inventory Open Data (ArcGIS, CC0)', url: 'https://gis.bouldercolorado.gov/ags_svr2/rest/services/parks/TreesOpenData/MapServer/0' },
   { city: 'Milan', label: 'Comune di Milano - Territorio: localizzazione degli alberi (DS2484, 2023-03-31 release, CC BY 4.0)', url: 'https://dati.comune.milano.it/dataset/ds2484_infogeo_alberi_localizzazione' },
   { city: 'Milan', label: 'Comune di Milano - Gli alberi monumentali nel Comune di Milano (DS2489, CC BY 4.0)', url: 'https://dati.comune.milano.it/dataset/ds2489-gli-alberi-monumentali-nel-comune-di-milano' },
   { city: 'Charlotte', label: 'City of Charlotte - Landscape Management Trees (ArcGIS)', url: 'https://gis.charlottenc.gov/arcgis/rest/services/ENG/LSM_Trees/MapServer/0' },
@@ -58,8 +64,13 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'Amsterdam', label: 'City of Amsterdam REST API (bomen/stamgegevens)', url: 'https://api.data.amsterdam.nl/v1/bomen/stamgegevens/' },
   { city: 'London', label: 'London Datastore (Public Realm Trees)', url: 'https://data.london.gov.uk/dataset/2r45m' },
   { city: 'Melbourne', label: 'City of Melbourne Open Data (Urban Forest)', url: 'https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/' },
+  { city: 'Melbourne', label: 'City of Port Phillip Trees (data.gov.au, CC BY 2.5 AU)', url: 'https://data.gov.au/data/dataset/city-of-port-phillip-trees' },
+  { city: 'Melbourne', label: 'City of Yarra Street and Park Trees (data.gov.au, CC BY 4.0)', url: 'https://data.gov.au/data/dataset/yarra-street-park-trees' },
+  { city: 'Melbourne', label: 'Glen Eira City Council Park and Street Trees (data.gov.au, CC BY 2.5 AU)', url: 'https://data.gov.au/data/dataset/park-and-street-trees' },
+  { city: 'Melbourne', label: 'Hobsons Bay City Council Street and Park Trees (data.gov.au, CC BY 2.5 AU)', url: 'https://data.gov.au/data/dataset/hbcc-street-and-park-trees' },
   { city: 'Buenos Aires', label: 'Buenos Aires Data (Arbolado publico lineal)', url: 'https://data.buenosaires.gob.ar/dataset/arbolado-publico-lineal' },
   { city: 'Los Angeles', label: 'LA GeoHub (Trees, Bureau of Street Services)', url: 'https://www.arcgis.com/home/item.html?id=266c6255b1fc4ae8b8f100d8696e1fa4' },
+  { city: 'Los Angeles', label: 'City of West Hollywood - City Tree Inventory (2015, CC0 1.0)', url: 'https://data.weho.org/Infrastructure/City-Tree-Inventory/qqwt-wx9z' },
   { city: 'Washington, DC', label: 'Open Data DC (Urban Forestry Street Trees)', url: 'https://opendata.dc.gov/datasets/DCGIS::urban-forestry-street-trees' },
   { city: 'Tempe', label: 'City of Tempe Tree Inventory', url: 'https://data.tempe.gov/datasets/tempegov::tree-inventory' },
   { city: 'Athens', label: 'City of Athens Open Data (Trees of the National Garden)', url: 'https://opendata.cityofathens.gr/dataset/gis-athens-8303d4c8-371b-11ec-b388-0242ac120009' },
@@ -87,6 +98,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Wodonga', label: 'Victorian Heritage Register (Vicmap, Department of Transport and Planning, CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
+  { city: 'Ballarat', label: 'Victorian Heritage Register (Vicmap, Department of Transport and Planning, CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
+  { city: 'Perth', label: 'City of Perth Heritage List (CPS2)', url: 'https://www.arcgis.com/home/item.html?id=550909775e984aa19d5b4fadcce4b3e6' },
+  { city: 'Adelaide', label: 'SA Heritage Places (State and Local Heritage), data.sa.gov.au', url: 'https://data.sa.gov.au/data/dataset/sa-heritage-places' },
+  { city: 'Naperville', label: 'Naperville Heritage Society plaque program (City of Naperville GIS); National Park Service - National Register of Historic Places', url: 'https://services1.arcgis.com/rXJ6QApc2sOtl1Pd/arcgis/rest/services/NapervilleHeritagePlaqueMap/FeatureServer/0' },
+  { city: 'Boulder', label: 'City of Boulder - Historic Landmarks (individual landmarks)', url: 'https://gis.bouldercolorado.gov/ags_svr1/rest/services/plan/HistoricLandmarks/MapServer/0' },
   { city: 'Milan', label: 'Comune di Milano - Spazi freschi: parchi ed aree verdi (DS3018, CC BY 4.0)', url: 'https://dati.comune.milano.it/dataset/ds3018-spazi-freschi-parchi-ed-aree-verdi' },
   { city: 'Charlotte', label: 'Charlotte-Mecklenburg Historic Landmarks Commission - designated properties (Mecklenburg County GIS)', url: 'https://meckgis.mecklenburgcountync.gov/server/rest/services/LocalHistoricProperty/FeatureServer/0' },
   { city: 'Naples, FL', label: 'City of Naples - Historic Buildings; National Park Service - National Register of Historic Places', url: 'https://g.naplesgov.com/arcgis/rest/services/Building/HistoricBuildings/MapServer/0' },

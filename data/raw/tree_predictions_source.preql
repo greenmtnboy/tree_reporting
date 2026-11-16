@@ -33,7 +33,11 @@ root datasource tree_predictions (
 grain (tree_id)
 file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/arbue_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/auadl_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aubal_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aumel_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/auper_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/auwod_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caajx_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cabur_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cacal_tree_predictions_v{data_version}.parquet`,
@@ -70,6 +74,7 @@ file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usatl_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usaus_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbou_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbtv_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usclt_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usden_tree_predictions_v{data_version}.parquet`,
@@ -78,6 +83,7 @@ file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslax_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnap_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnol_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnpv_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnva_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_predictions_v{data_version}.parquet`,

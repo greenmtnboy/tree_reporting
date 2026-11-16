@@ -1,0 +1,31 @@
+import ..landmark_common;
+
+root datasource adelaide_landmarks_update_time (
+    data_updated_through: auadl_landmark_data_updated_through
+)
+file `./adelaide_landmarks_probe.py`;
+
+# The SA Heritage Register (State Heritage Places) and the City of Adelaide's
+# Local Heritage Places, read live from the state's "SA Heritage Places"
+# download (data.sa.gov.au, CC BY) and narrowed to the Adelaide LGA by the
+# script. An official designation registry, so there is no curated CSV and no
+# staging object; the probe is the download's own Last-Modified.
+root partial datasource raw_adelaide_landmark_info extends landmark_partition (
+    address: ?address,
+    protection_type: ?protection_type,
+    register_number: ?register_number,
+    category: ?category,
+)
+complete where city = 'AUADL'
+file `./adelaide_landmarks.py`;
+
+partial datasource adelaide_landmark_info extends published_landmark_info (
+    ?address,
+    ?protection_type,
+    ?register_number,
+    ?category,
+    auadl_landmark_data_updated_through,
+)
+complete where city = 'AUADL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/auadl_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/auadl_landmark_info_v{data_version}.parquet`
+freshness by auadl_landmark_data_updated_through;

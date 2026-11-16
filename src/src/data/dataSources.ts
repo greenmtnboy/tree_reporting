@@ -10,6 +10,12 @@
  * gets round to naming it here.
  */
 export const DATA_SOURCE_LABELS: Record<string, string> = {
+  WODONGA_OPENDATA: 'Wodonga Open Data',
+  BALLARAT_OPENDATA: 'Ballarat Open Data',
+  PERTH_OPENDATA: 'Perth Open Data',
+  ADELAIDE_OPENDATA: 'Adelaide Open Data',
+  NAPERVILLE_OPENDATA: 'City of Naperville',
+  BOULDER_OPENDATA: 'City of Boulder',
   MILAN_OPENDATA: 'Milan Open Data',
   NOTABLE_ITMIL: 'Monumental Trees of Italy (Milan)',
   CHARLOTTE_OPENDATA: 'Charlotte Open Data',
@@ -64,8 +70,13 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   AMSTERDAM_OPENDATA: 'City of Amsterdam',
   LONDON_OPENDATA: 'London Datastore',
   MELBOURNE_OPENDATA: 'City of Melbourne',
+  PORT_PHILLIP: 'City of Port Phillip',
+  YARRA: 'City of Yarra',
+  GLEN_EIRA: 'Glen Eira City Council',
+  HOBSONS_BAY: 'Hobsons Bay City Council',
   BUENOSAIRES_OPENDATA: 'Buenos Aires Data',
   LOSANGELES_OPENDATA: 'LA Bureau of Street Services',
+  WEST_HOLLYWOOD: 'West Hollywood Open Data',
   WASHINGTONDC_OPENDATA: 'Open Data DC',
   TEMPE_OPENDATA: 'City of Tempe',
   // Athens's municipal partition is the National Garden inventory — the only
