@@ -2282,6 +2282,15 @@ timeout_seconds = 1800
 memory_mb = 2048
 
 [[cloud.job]]
+key = "derived-atvie"
+name = "urban-tree-derived-atvie"
+entrypoint = "raw/atvie/vienna_tree_derived.preql"
+operation = "refresh"
+schedule = "0 30 18 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
 key = "derived-auadl"
 name = "urban-tree-derived-auadl"
 entrypoint = "raw/auadl/adelaide_tree_derived.preql"
@@ -2498,6 +2507,24 @@ timeout_seconds = 1800
 memory_mb = 2048
 
 [[cloud.job]]
+key = "derived-chbas"
+name = "urban-tree-derived-chbas"
+entrypoint = "raw/chbas/basel_tree_derived.preql"
+operation = "refresh"
+schedule = "0 50 19 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-chzur"
+name = "urban-tree-derived-chzur"
+entrypoint = "raw/chzur/zurich_tree_derived.preql"
+operation = "refresh"
+schedule = "0 10 19 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
 key = "derived-cobog"
 name = "urban-tree-derived-cobog"
 entrypoint = "raw/cobog/bogota_tree_derived.preql"
@@ -2559,6 +2586,15 @@ operation = "refresh"
 schedule = "0 40 13 * * FRI,MON"
 timeout_seconds = 1800
 memory_mb = 4096
+
+[[cloud.job]]
+key = "derived-gbnot"
+name = "urban-tree-derived-gbnot"
+entrypoint = "raw/gbnot/nottingham_tree_derived.preql"
+operation = "refresh"
+schedule = "0 30 19 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
 
 [[cloud.job]]
 key = "derived-grath"
@@ -2678,6 +2714,15 @@ timeout_seconds = 1800
 memory_mb = 2048
 
 [[cloud.job]]
+key = "derived-uscol"
+name = "urban-tree-derived-uscol"
+entrypoint = "raw/uscol/columbus_tree_derived.preql"
+operation = "refresh"
+schedule = "0 10 18 * * TUE,FRI"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
 key = "derived-usden"
 name = "urban-tree-derived-usden"
 entrypoint = "raw/usden/denver_tree_derived.preql"
@@ -2692,6 +2737,15 @@ name = "urban-tree-derived-usdur"
 entrypoint = "raw/usdur/durham_tree_derived.preql"
 operation = "refresh"
 schedule = "0 40 7 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-useug"
+name = "urban-tree-derived-useug"
+entrypoint = "raw/useug/eugene_tree_derived.preql"
+operation = "refresh"
+schedule = "0 50 18 * * THU,SUN"
 timeout_seconds = 1800
 memory_mb = 2048
 
@@ -3031,6 +3085,210 @@ operation = "refresh"
 # The next free two-minute Sunday slot; every one must land before the 05:00
 # union (tests/test_cloud_jobs.py).
 schedule = "0 54 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-uscol"
+name = "urban-tree-city-uscol"
+entrypoint = "raw/uscol/columbus_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city USCOL`.
+schedule = "0 10 18 * * TUE,FRI"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-uscol"
+name = "urban-tree-osm-uscol"
+entrypoint = "osm_staging/uscol_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 0 6 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-uscol"
+name = "urban-tree-landmarks-refresh-uscol"
+entrypoint = "raw/uscol/columbus_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 56 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-atvie"
+name = "urban-tree-city-atvie"
+entrypoint = "raw/atvie/vienna_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city ATVIE`.
+schedule = "0 30 18 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-atvie"
+name = "urban-tree-osm-atvie"
+entrypoint = "osm_staging/atvie_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 0 6 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-atvie"
+name = "urban-tree-landmarks-refresh-atvie"
+entrypoint = "raw/atvie/vienna_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 58 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-useug"
+name = "urban-tree-city-useug"
+entrypoint = "raw/useug/eugene_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city USEUG`.
+schedule = "0 50 18 * * THU,SUN"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-useug"
+name = "urban-tree-osm-useug"
+entrypoint = "osm_staging/useug_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 0 6 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-useug"
+name = "urban-tree-landmarks-refresh-useug"
+entrypoint = "raw/useug/eugene_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 2 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-chzur"
+name = "urban-tree-city-chzur"
+entrypoint = "raw/chzur/zurich_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city CHZUR`.
+schedule = "0 10 19 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-chzur"
+name = "urban-tree-osm-chzur"
+entrypoint = "osm_staging/chzur_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 0 6 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-chzur"
+name = "urban-tree-landmarks-refresh-chzur"
+entrypoint = "raw/chzur/zurich_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 4 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-gbnot"
+name = "urban-tree-city-gbnot"
+entrypoint = "raw/gbnot/nottingham_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city GBNOT`.
+schedule = "0 30 19 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-gbnot"
+name = "urban-tree-osm-gbnot"
+entrypoint = "osm_staging/gbnot_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 0 6 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-gbnot"
+name = "urban-tree-landmarks-refresh-gbnot"
+entrypoint = "raw/gbnot/nottingham_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 6 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-chbas"
+name = "urban-tree-city-chbas"
+entrypoint = "raw/chbas/basel_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city CHBAS`.
+schedule = "0 50 19 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-chbas"
+name = "urban-tree-osm-chbas"
+entrypoint = "osm_staging/chbas_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 0 6 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-chbas"
+name = "urban-tree-landmarks-refresh-chbas"
+entrypoint = "raw/chbas/basel_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 8 2 * * SUN"
 timeout_seconds = 900
 memory_mb = 2048
 

@@ -66,6 +66,12 @@ import auadl.adelaide_landmarks;
 import auper.perth_landmarks;
 import aubal.ballarat_landmarks;
 import auwod.wodonga_landmarks;
+import uscol.columbus_landmarks;
+import atvie.vienna_landmarks;
+import useug.eugene_landmarks;
+import chzur.zurich_landmarks;
+import gbnot.nottingham_landmarks;
+import chbas.basel_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

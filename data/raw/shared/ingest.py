@@ -1551,6 +1551,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "CHBAS": ("BASEL_OPENDATA",),
+    "GBNOT": ("NOTTINGHAM_OPENDATA",),
+    "CHZUR": ("ZURICH_OPENDATA",),
+    "USEUG": ("EUGENE_OPENDATA",),
+    "ATVIE": ("VIENNA_OPENDATA",),
+    "USCOL": ("COLUMBUS_OPENDATA",),
     "AUWOD": ("WODONGA_OPENDATA",),
     "AUBAL": ("BALLARAT_OPENDATA",),
     "AUPER": ("PERTH_OPENDATA",),
@@ -1641,6 +1647,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "CHBAS": "OSM_CHBAS",
+    "GBNOT": "OSM_GBNOT",
+    "CHZUR": "OSM_CHZUR",
+    "USEUG": "OSM_USEUG",
+    "ATVIE": "OSM_ATVIE",
+    "USCOL": "OSM_USCOL",
     "AUWOD": "OSM_AUWOD",
     "AUBAL": "OSM_AUBAL",
     "AUPER": "OSM_AUPER",
@@ -2310,6 +2322,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "CHBAS": (47.51, 47.6, 7.55, 7.7),
+    "GBNOT": (52.88, 53.02, -1.25, -1.08),
+    "CHZUR": (47.31, 47.44, 8.44, 8.63),
+    "USEUG": (43.97, 44.14, -123.21, -122.98),
+    "ATVIE": (48.11, 48.33, 16.18, 16.58),
+    "USCOL": (39.8, 40.16, -83.21, -82.77),
     "AUWOD": (-36.3, -36.0, 146.65, 147.1),
     "AUBAL": (-37.8, -37.3, 143.55, 144.1),
     "AUPER": (-32.0, -31.92, 115.8, 115.9),
@@ -2425,6 +2443,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CHBAS": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "GBNOT": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CHZUR": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USEUG": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "ATVIE": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USCOL": 10,
     # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
     # --inventory-parquet on a local ingest run).
     # 1,322 staged OSM nodes against 94,652 anchors.  Mutual-NN stays above
@@ -2766,6 +2796,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'CHBAS': ((47.51, 47.6, 7.55, 7.7),),
+    'GBNOT': ((52.88, 53.02, -1.25, -1.08),),
+    'CHZUR': ((47.31, 47.44, 8.44, 8.63),),
+    'USEUG': ((43.97, 44.14, -123.21, -122.98),),
+    'ATVIE': ((48.11, 48.33, 16.18, 16.58),),
+    'USCOL': ((39.8, 40.16, -83.21, -82.77),),
     'AUWOD': ((-36.3, -36.0, 146.65, 147.1),),
     'AUBAL': ((-37.8, -37.3, 143.55, 144.1),),
     'AUPER': ((-32.0, -31.92, 115.8, 115.9),),

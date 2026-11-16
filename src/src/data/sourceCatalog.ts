@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Basel', label: 'TODO: Basel tree inventory source', url: 'TODO' },
+  { city: 'Nottingham', label: 'TODO: Nottingham tree inventory source', url: 'TODO' },
+  { city: 'Zürich', label: 'TODO: Zürich tree inventory source', url: 'TODO' },
+  { city: 'Eugene', label: 'TODO: Eugene tree inventory source', url: 'TODO' },
+  { city: 'Vienna', label: 'TODO: Vienna tree inventory source', url: 'TODO' },
+  { city: 'Columbus', label: 'TODO: Columbus tree inventory source', url: 'TODO' },
   { city: 'Wodonga', label: 'City of Wodonga - Street and reserve trees (ArcGIS, CC BY 4.0)', url: 'https://www.arcgis.com/home/item.html?id=f6e5ca95559a4253bf7d25897bf8ed15' },
   { city: 'Ballarat', label: 'City of Ballarat Open Data - Trees (CC BY 3.0 AU)', url: 'https://data.ballarat.vic.gov.au/explore/dataset/trees/' },
   { city: 'Ballarat', label: 'City of Ballarat Open Data - Exceptional Tree Register (CC BY 3.0 AU)', url: 'https://data.ballarat.vic.gov.au/explore/dataset/exceptional-tree-register/' },
@@ -99,6 +105,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Basel', label: 'TODO: Basel landmark source' },
+  { city: 'Nottingham', label: 'TODO: Nottingham landmark source' },
+  { city: 'Zürich', label: 'TODO: Zürich landmark source' },
+  { city: 'Eugene', label: 'TODO: Eugene landmark source' },
+  { city: 'Vienna', label: 'TODO: Vienna landmark source' },
+  { city: 'Columbus', label: 'TODO: Columbus landmark source' },
   { city: 'Wodonga', label: 'Victorian Heritage Register (Vicmap, Department of Transport and Planning, CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
   { city: 'Ballarat', label: 'Victorian Heritage Register (Vicmap, Department of Transport and Planning, CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
   { city: 'Perth', label: 'City of Perth Heritage List (CPS2)', url: 'https://www.arcgis.com/home/item.html?id=550909775e984aa19d5b4fadcce4b3e6' },

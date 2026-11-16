@@ -81,6 +81,12 @@ select * from (values
     ('AUADL', 200),
     ('AUPER', 206),
     ('AUBAL', 176),
-    ('AUWOD', 192)
+    ('AUWOD', 192),
+    ('USCOL', 342),
+    ('ATVIE', 674),
+    ('USEUG', 403),
+    ('CHZUR', 686),
+    ('GBNOT', 651),
+    ('CHBAS', 686)
 ) as t(city, ecoregion_id)
 ''';

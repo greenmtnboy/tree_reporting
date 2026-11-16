@@ -51,6 +51,18 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.chbas_data_updated_through datetime; # when Basel data is through
+property <*>.chbas_osm_data_updated_through datetime; # GCS publication time of Basel's staged OSM parquet
+property <*>.gbnot_data_updated_through datetime; # when Nottingham data is through
+property <*>.gbnot_osm_data_updated_through datetime; # GCS publication time of Nottingham's staged OSM parquet
+property <*>.chzur_data_updated_through datetime; # when Zürich data is through
+property <*>.chzur_osm_data_updated_through datetime; # GCS publication time of Zürich's staged OSM parquet
+property <*>.useug_data_updated_through datetime; # when Eugene data is through
+property <*>.useug_osm_data_updated_through datetime; # GCS publication time of Eugene's staged OSM parquet
+property <*>.atvie_data_updated_through datetime; # when Vienna data is through
+property <*>.atvie_osm_data_updated_through datetime; # GCS publication time of Vienna's staged OSM parquet
+property <*>.uscol_data_updated_through datetime; # when Columbus data is through
+property <*>.uscol_osm_data_updated_through datetime; # GCS publication time of Columbus's staged OSM parquet
 property <*>.auwod_data_updated_through datetime; # when Wodonga data is through
 property <*>.auwod_osm_data_updated_through datetime; # GCS publication time of Wodonga's staged OSM parquet
 property <*>.aubal_data_updated_through datetime; # when Ballarat data is through
