@@ -404,6 +404,42 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'palearctic',
   },
+  USSEA: {
+    ecoregionId: 364, // Puget lowland forests
+    usdaZone: 8,
+    biome: 'Temperate Conifer Forests',
+    realm: 'nearctic',
+  },
+  USPOR: {
+    ecoregionId: 403, // Willamette Valley oak savanna
+    usdaZone: 8,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USPHL: {
+    ecoregionId: 393, // Mid-Atlantic US coastal savannas
+    usdaZone: 7,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USPIT: {
+    ecoregionId: 329, // Appalachian mixed mesophytic forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USSJC: {
+    ecoregionId: 423, // California interior chaparral and woodlands
+    usdaZone: 9,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'nearctic',
+  },
+  USSAC: {
+    ecoregionId: 385, // California Central Valley grasslands
+    usdaZone: 9,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

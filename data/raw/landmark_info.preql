@@ -72,6 +72,12 @@ import useug.eugene_landmarks;
 import chzur.zurich_landmarks;
 import gbnot.nottingham_landmarks;
 import chbas.basel_landmarks;
+import ussea.seattle_landmarks;
+import uspor.portland_landmarks;
+import usphl.philadelphia_landmarks;
+import uspit.pittsburgh_landmarks;
+import ussjc.sanjose_landmarks;
+import ussac.sacramento_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

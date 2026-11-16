@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Sacramento', label: 'TODO: Sacramento tree inventory source', url: 'TODO' },
+  { city: 'San Jose', label: 'TODO: San Jose tree inventory source', url: 'TODO' },
+  { city: 'Pittsburgh', label: 'TODO: Pittsburgh tree inventory source', url: 'TODO' },
+  { city: 'Philadelphia', label: 'TODO: Philadelphia tree inventory source', url: 'TODO' },
+  { city: 'Portland', label: 'TODO: Portland tree inventory source', url: 'TODO' },
+  { city: 'Seattle', label: 'TODO: Seattle tree inventory source', url: 'TODO' },
   { city: 'Basel', label: 'Stadtgärtnerei Basel-Stadt - Baumkataster: Baumbestand (data.bs.ch 100052, CC BY 4.0, Geodaten Kanton Basel-Stadt)', url: 'https://data.bs.ch/explore/dataset/100052/' },
   { city: 'Nottingham', label: 'Nottingham City Council - Trees (NCC Maintained) (ArcGIS, OGL v3; contains OS data © Crown copyright and database right)', url: 'https://www.arcgis.com/home/item.html?id=854f59402043403eabce650cc7ab1150' },
   { city: 'Zürich', label: 'Stadt Zürich Open Data - Baumkataster (Grün Stadt Zürich, CC0)', url: 'https://data.stadt-zuerich.ch/dataset/geo_baumkataster' },
@@ -105,6 +111,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Sacramento', label: 'TODO: Sacramento landmark source' },
+  { city: 'San Jose', label: 'TODO: San Jose landmark source' },
+  { city: 'Pittsburgh', label: 'TODO: Pittsburgh landmark source' },
+  { city: 'Philadelphia', label: 'TODO: Philadelphia landmark source' },
+  { city: 'Portland', label: 'TODO: Portland landmark source' },
+  { city: 'Seattle', label: 'TODO: Seattle landmark source' },
   { city: 'Basel', label: 'Kanton Basel-Stadt - Inventar der schützenswerten Gartenanlagen (CC BY 4.0, Geodaten Kanton Basel-Stadt)', url: 'https://wfs.geo.bs.ch/' },
   { city: 'Nottingham', label: 'Historic England - National Heritage List for England (listed buildings, scheduled monuments, registered parks and gardens; OGL); ONS Local Authority District boundary (OGL)', url: 'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer' },
   { city: 'Zürich', label: 'Stadt Zürich Open Data - Denkmalpflege-Inventar, regional and cantonal objects (CC0)', url: 'https://data.stadt-zuerich.ch/dataset/geo_denkmalpflege_inventar' },
