@@ -847,6 +847,7 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    "Acer beurgerianum": "Acer buergerianum",
     "Koelreutaria paniculata": "Koelreuteria paniculata",
     "Melalueca uncinata": "Melaleuca uncinata",
     "Abies balsamaea": "Abies balsamea",
