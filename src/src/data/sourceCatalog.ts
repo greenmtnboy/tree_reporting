@@ -59,7 +59,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'London', label: 'London Datastore (Public Realm Trees)', url: 'https://data.london.gov.uk/dataset/2r45m' },
   { city: 'Melbourne', label: 'City of Melbourne Open Data (Urban Forest)', url: 'https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/' },
   { city: 'Buenos Aires', label: 'Buenos Aires Data (Arbolado publico lineal)', url: 'https://data.buenosaires.gob.ar/dataset/arbolado-publico-lineal' },
-  { city: 'Los Angeles', label: 'Los Angeles Open Data (Street Tree Inventory - 1990s)', url: 'https://data.lacity.org/api/views/vt5t-mscf' },
+  { city: 'Los Angeles', label: 'LA GeoHub (Trees, Bureau of Street Services)', url: 'https://www.arcgis.com/home/item.html?id=266c6255b1fc4ae8b8f100d8696e1fa4' },
   { city: 'Washington, DC', label: 'Open Data DC (Urban Forestry Street Trees)', url: 'https://opendata.dc.gov/datasets/DCGIS::urban-forestry-street-trees' },
   { city: 'Tempe', label: 'City of Tempe Tree Inventory', url: 'https://data.tempe.gov/datasets/tempegov::tree-inventory' },
   { city: 'Athens', label: 'City of Athens Open Data (Trees of the National Garden)', url: 'https://opendata.cityofathens.gr/dataset/gis-athens-8303d4c8-371b-11ec-b388-0242ac120009' },

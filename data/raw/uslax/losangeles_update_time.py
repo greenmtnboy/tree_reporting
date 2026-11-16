@@ -3,15 +3,12 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Los Angeles's municipal tree inventory.
+"""Freshness probe for Los Angeles's street-tree inventory.
 
-Reads `rowsUpdatedAt` off the dataset's Socrata view metadata, so a refresh
-only re-downloads the inventory when the city has actually republished it.
-
-This was three byte-identical copies -- Los Angeles, and the other two Socrata
-cities -- before `shared.platforms.socrata` existed.  See `rows_updated_at` for why
-it is that field rather than `viewLastModified`, and why it raises rather
-than degrading when the field is missing.
+Reads `editingInfo.dataLastEditDate` off the Bureau of Street Services layer
+(see losangeles_tree_info.py).  The layer is a historical inventory the city no
+longer maintains, so this has read 2020-11-19 since it was published and a
+refresh re-downloads only if the city ever republishes it.
 """
 
 import sys
@@ -20,13 +17,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.ingest import emit_freshness
-from shared.platforms.socrata import SocrataDataset, rows_updated_at
+from shared.platforms.arcgis import FeatureLayer, layer_last_edit
 
-DATASET = SocrataDataset("data.lacity.org", "vt5t-mscf")
+LAYER = FeatureLayer(
+    "https://services5.arcgis.com/7nsPwEMP38bSkCjy/arcgis/rest/services/"
+    "Trees_Data_Bureau_of_Street_Services/FeatureServer/0"
+)
 
 
 def fetch_modified_at() -> datetime:
-    return rows_updated_at(DATASET)
+    return layer_last_edit(LAYER)
 
 
 if __name__ == "__main__":
