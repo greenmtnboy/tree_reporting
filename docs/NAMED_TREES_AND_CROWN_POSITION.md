@@ -169,7 +169,7 @@ every city in one scan), `tree_info.preql` (the resolver's model),
 vocabulary grain drops `tree_name`). The projection also carries
 `significance` and `significance_source` (null on nearly every row), because
 the world publish builds its notable file from the projections. It keeps
-`tree_name` until the blocks stop reading it (step 4). `tree_info.preql`'s
+`tree_name` until the blocks stop carrying it (step 6). `tree_info.preql`'s
 union datasource carries all three, so the semantic model can answer "which
 trees are named" from the rollup.
 
@@ -177,15 +177,20 @@ trees are named" from the rollup.
 
 **World blocks** (`data/world/publish_blocks.py`):
 - **Add** `notable BOOLEAN`, null when false. In parquet an almost
-  all-null column is a few bytes per row group.
-- **Remove** `tree_name` from `COLUMNS` and `VOCAB_COLUMNS`. It's an ENUM
-  every resident row carries today and it will be null on ~all of them.
-  Swapping it for a 1-byte flag is a net saving in block bytes, vocab size
-  and the worker's per-row width.
+  all-null column is a few bytes per row group. **Built (step 4):** on
+  Milan's and Boston's projections (2.9M trees, 51 blocks) it costs 25 KB of
+  87 MB, +0.03%.
 - **Publish a notable file** beside the vocabulary: content-addressed,
-  named in the manifest (the commit point), one row per notable tree with
-  `tree_id, city, tree_name, significance, significance_source`. Hundreds of
-  rows, a few KB. Built from the projections' notable rows in the same run.
+  named in the manifest (`notable`, beside `vocab`; the manifest is the
+  commit point), one row per notable block row with `tree_id, city,
+  tree_name, significance, significance_source`. Built from the
+  projections' notable rows in the same run; a tree two cities publish is
+  one row, under the city its block row names. **Built (step 4):** 29 rows
+  today (Milan 13, Boston 16).
+- **Remove** `tree_name` from `COLUMNS` and `VOCAB_COLUMNS`, **after** the
+  frontend stops reading it (step 6 below). It's an ENUM every resident row
+  carries and it is null on ~all of them. Swapping it for a 1-byte flag is
+  a net saving in block bytes, vocab size and the worker's per-row width.
 
 **Worker** (`workers/cityTables.ts`):
 - `WORLD_BLOCK_COLUMNS` / `worldRowsSql`: `notable` in, `tree_name` /
@@ -301,20 +306,29 @@ key on it, and the frontend must not ship until the blocks carry `notable`.
    `tree_name` is non-null on ~0 rows per city. Then the step-2 readers
    (rollup, resolver model, projection `notable`), then the `derived-{code}`
    jobs.
-4. **World blocks PR**: `notable` in, `tree_name` out, the notable file,
-   manifest field. `test_publish_world_blocks.py` keeps `COLUMNS` and
-   `WORLD_BLOCK_COLUMNS` in step, **so this lands together with the worker
-   change in step 5.** The live frontend reads `tree_name` from the blocks
-   by name; mixing old and new would fail the read. Either ship 4 and 5 as
-   one release, or have the worker read both shapes for one cycle.
-5. **Frontend PR**: worker shape, dots/sprite/phone glow, card, chat docs.
-   Benchmarks before and after: `pnpm bench:memory`, `bench:tiles`,
+   **Done 2026-11-16:** 52/52 city parquets carry `significance`
+   (`tree_name` is set only on Milan's 7 register names). The step-2 readers
+   merged (#223); every `derived-{code}` projection carries `notable` (Milan
+   13, Boston 16) and its vocabulary dropped `tree_name`; the rollup carries
+   the 29 rows.
+4. **World blocks PR** (additive): `notable` in, the notable file, the
+   manifest's `notable` field. `tree_name` **stays** in the blocks. The worker
+   reads block columns by name and checks only the manifest's `format`, so
+   a column the live map does not read yet is harmless and no `world/v2` is
+   needed. `test_publish_world_blocks.py` holds the blocks to carrying every
+   column the worker reads (a superset, not the same list). Publishes on the
+   next `publish-world-blocks` run.
+5. **Frontend PR**: worker shape (`notable` in, `tree_name` out),
+   dots/sprite/phone glow, card, chat docs. Ships after step 4's blocks are
+   live. Benchmarks before and after: `pnpm bench:memory`, `bench:tiles`,
    `bench:dashboard`, `test:wasm`. **The bar is no regression on any of
    them.** The expected direction is a small saving, from the `tree_name`
    ENUM leaving the resident row.
-6. **Reports**: public form fields, reviewer approval/editing, export,
+6. **Blocks drop `tree_name`** (`COLUMNS`, `VOCAB_COLUMNS`) once no released
+   map reads it, then the projection and its vocabulary stop carrying it.
+7. **Reports**: public form fields, reviewer approval/editing, export,
    `tree_modification_info.py`.
-7. Source-native names, one source at a time.
+8. Source-native names, one source at a time.
 
 ## Appendix: the crown on the map, once a source exists
 

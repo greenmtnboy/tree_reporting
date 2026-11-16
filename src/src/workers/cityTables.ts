@@ -73,9 +73,10 @@ export const VOCAB_KINDS: Record<Exclude<keyof typeof CITY_ENUM_TYPES, 'form'>, 
 }
 
 /**
- * The columns of a block file, in order (COLUMNS in
- * data/world/publish_blocks.py; data/raw/tests/test_publish_world_blocks.py
- * holds the two lists together).
+ * The block columns the worker reads, by name. Every one must be in COLUMNS
+ * in data/world/publish_blocks.py (data/raw/tests/test_publish_world_blocks.py
+ * holds it); the blocks may carry more, which is how a column is added before
+ * the map reads it.
  */
 export const WORLD_BLOCK_COLUMNS = [
   'tree_id', 'city', 'data_source', 'species', 'cultivar', 'tree_name', 'display_name', 'tree_form', 'plant_date',

@@ -23,6 +23,7 @@ gs://trilogy_public_models/duckdb/trees/world/v1/
   manifest.json                    the list of blocks; the commit point
   blocks/{key}-{hash}.parquet      one Web Mercator z12 tile of trees
   vocab-{hash}.parquet             every value of the string columns
+  notable-{hash}.parquet           the name and blurb of every notable tree
 ```
 
 - **A block** is the z12 tile `key = x * 4096 + y`: the grid the desktop's
@@ -36,6 +37,11 @@ gs://trilogy_public_models/duckdb/trees/world/v1/
   two trees on one spot.
 - **The vocabulary** is one file for the world, `(kind, value)` rows for the
   six columns the worker stores as ENUMs. 186 KB today.
+- **The notable file** holds one row per block row whose `notable` bit is
+  set: `tree_id, city, tree_name, significance, significance_source`. A
+  block carries only the bit; the map fetches the text when a notable
+  tree's card opens (`docs/NAMED_TREES_AND_CROWN_POSITION.md`). 29 rows
+  on 2026-11-16. The manifest names it in `notable`, as it names `vocab`.
 - **The manifest** lists each block as `[key, rows, hash, [city index, rows,
   ...]]`, and each city with its tree count. 61 KB today.
 
@@ -47,7 +53,8 @@ memory limit.
 
 ### Content-addressed, manifest last
 
-A block's name carries a hash of its bytes, and so does the vocabulary's.
+A block's name carries a hash of its bytes, and so do the vocabulary's and
+the notable file's.
 That buys four things:
 
 - Everything one manifest names is from one build. A reader never sees a
