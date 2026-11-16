@@ -9,7 +9,7 @@
     gs://trilogy_public_models/duckdb/trees/world/v1/manifest.json
     gs://trilogy_public_models/duckdb/trees/world/v1/blocks/{key}-{hash}.parquet
     gs://trilogy_public_models/duckdb/trees/world/v1/vocab-{hash}.parquet
-    gs://trilogy_public_models/duckdb/trees/world/v1/notable-{hash}.parquet
+    gs://trilogy_public_models/duckdb/trees/world/v1/notable-{code}-{hash}.parquet
 
 Run by the `publish-world-blocks` [[cloud.job]] (`world_tree_blocks.preql`
 `call`s this script) after the browser projections. The map reads these and
@@ -33,7 +33,9 @@ What it writes:
   territories) is written once.
 - **The vocabulary.** Every distinct value of the string columns the worker
   stores as ENUMs, one file for the world (a few hundred KB).
-- **The notable file.** One row per tree whose block row has `notable`
+- **The notable files.** One per city, as every published file is, named in
+  that city's manifest entry (`notable`; null when it has none). One row per
+  tree whose block row has `notable`
   set: its name, its significance and where that came from. A block carries
   only the bit; the map fetches this file the first time a notable tree's
   card opens (docs/NAMED_TREES_AND_CROWN_POSITION.md). Hundreds of rows.
@@ -161,8 +163,8 @@ def vocab_name(digest: str) -> str:
     return f"vocab-{digest}.parquet"
 
 
-def notable_name(digest: str) -> str:
-    return f"notable-{digest}.parquet"
+def notable_name(code: str, digest: str) -> str:
+    return f"notable-{code.lower()}-{digest}.parquet"
 
 
 # ---------------------------------------------------------------------------
@@ -334,9 +336,10 @@ def build_world(con) -> None:
 
 
 def write_files(con, out: Path) -> tuple[list[dict], str, str]:
-    """The block files, the vocabulary and the notable file into `out`, named
-    by content. Returns the blocks (`key`, `rows`, `hash`, `cities`), the
-    vocabulary's name and the notable file's."""
+    """The block files, the vocabulary and each city's notable file into
+    `out`, named by content. Returns the blocks (`key`, `rows`, `hash`,
+    `cities`), the vocabulary's name and the notable files' names by city
+    code (only cities with a notable tree)."""
     (out / "blocks").mkdir(parents=True, exist_ok=True)
     names = ", ".join(name for name, _ in COLUMNS)
     options = f"FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE {ROW_GROUP_SIZE}"
@@ -372,15 +375,21 @@ def write_files(con, out: Path) -> tuple[list[dict], str, str]:
     notable_scratch = out / "_notable.parquet"
     notable_names = ", ".join(f"n.{name}" for name, _ in NOTABLE_COLUMNS)
     con.execute(
-        f"COPY (SELECT {notable_names} FROM notable_staged n JOIN world w USING (tree_id, city) "
-        f"WHERE w.notable ORDER BY n.city, n.tree_id) TO '{notable_scratch.as_posix()}' ({options})"
+        f"CREATE OR REPLACE TEMP TABLE notable_kept AS SELECT {notable_names} "
+        "FROM notable_staged n JOIN world w USING (tree_id, city) WHERE w.notable"
     )
-    notable = notable_name(hashlib.sha256(notable_scratch.read_bytes()).hexdigest()[:16])
-    notable_scratch.replace(out / notable)
+    notable: dict[str, str] = {}
+    for (code,) in con.execute("SELECT DISTINCT city FROM notable_kept ORDER BY 1").fetchall():
+        con.execute(
+            f"COPY (SELECT * FROM notable_kept WHERE city = '{code}' ORDER BY tree_id) "
+            f"TO '{notable_scratch.as_posix()}' ({options})"
+        )
+        notable[code] = notable_name(code, hashlib.sha256(notable_scratch.read_bytes()).hexdigest()[:16])
+        notable_scratch.replace(out / notable[code])
     return list(by_block.values()), vocab, notable
 
 
-def build_manifest(cities: list[dict], blocks: list[dict], vocab: str, notable: str,
+def build_manifest(cities: list[dict], blocks: list[dict], vocab: str, notable: dict[str, str],
                    inputs: dict[str, int | None], generated_at: str) -> dict:
     """The manifest: what the map fetches first.
 
@@ -403,11 +412,10 @@ def build_manifest(cities: list[dict], blocks: list[dict], vocab: str, notable: 
         "block_zoom": BLOCK_ZOOM,
         "columns": [name for name, _ in COLUMNS],
         "vocab": vocab,
-        "notable": notable,
         "trees": sum(block["rows"] for block in blocks),
         "cities": [
             {"code": c["code"], "name": c["name"], "center": c["coordinates"], "trees": trees[c["code"]],
-             "blocks": count[c["code"]], "generation": inputs.get(c["code"])}
+             "blocks": count[c["code"]], "notable": notable.get(c["code"]), "generation": inputs.get(c["code"])}
             for c in listed
         ],
         "blocks": [
@@ -456,11 +464,13 @@ def content_of(manifest: dict) -> dict:
 
 
 def referenced(manifest: dict | None) -> set[str]:
-    """Object names (under PREFIX) a manifest points at. A manifest from
-    before the notable file names none."""
+    """Object names (under PREFIX) a manifest points at: blocks, the
+    vocabulary and each city's notable file (a manifest of 2026-11-16 named
+    one world file at the top level instead)."""
     if manifest is None:
         return set()
-    files = {manifest["vocab"]} | ({manifest["notable"]} if manifest.get("notable") else set())
+    notable = {c["notable"] for c in manifest["cities"] if c.get("notable")}
+    files = {manifest["vocab"]} | notable | ({manifest["notable"]} if manifest.get("notable") else set())
     return {block_name(b[0], b[2]) for b in manifest["blocks"]} | files
 
 
@@ -559,7 +569,8 @@ def main(argv: list[str] | None = None) -> int:
             f"candidate: {manifest['trees']:,} trees in {len(blocks):,} blocks from {len(manifest['cities'])} cities "
             f"({duplicates:,} rows another city also publishes dropped), "
             f"{sum((out / block_name(b['key'], b['hash'])).stat().st_size for b in blocks) / 1e6:.0f} MB of blocks, "
-            f"{parquet_rows(out / notable)} notable trees, manifest {len(body):,} bytes"
+            f"{sum(parquet_rows(out / name) for name in notable.values())} notable trees in {len(notable)} cities' files, "
+            f"manifest {len(body):,} bytes"
         )
 
         public_url = f"{PUBLIC_HOST}/{BUCKET}/{MANIFEST}"

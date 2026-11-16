@@ -201,7 +201,7 @@ def test_a_rebuild_of_the_same_trees_names_every_file_the_same(con, tmp_path, wo
     again, _ = build(con, tmp_path, sources, name="again")
     assert again["blocks"] == manifest["blocks"]
     assert again["vocab"] == manifest["vocab"]
-    assert again["notable"] == manifest["notable"]
+    assert notable_files(again) == notable_files(manifest)
     assert pb.content_of(again) == pb.content_of(manifest)
 
 
@@ -216,7 +216,7 @@ def test_one_changed_tree_renames_only_its_block(con, tmp_path, world):
     changed = [a[0] for a, b in zip(manifest["blocks"], edited["blocks"]) if a != b]
     assert len(changed) == 1
     assert edited["vocab"] == manifest["vocab"]
-    assert edited["notable"] == manifest["notable"]
+    assert notable_files(edited) == notable_files(manifest)
 
 
 def test_a_projection_built_before_a_column_existed_reads_it_as_null(con, tmp_path):
@@ -228,7 +228,7 @@ def test_a_projection_built_before_a_column_existed_reads_it_as_null(con, tmp_pa
     assert con.execute(
         f"SELECT count(*), count(height_m), count(cultivar), count(notable) FROM read_parquet([{files}])"
     ).fetchone() == (50, 0, 0, 0)
-    assert con.execute(f"SELECT count(*) FROM read_parquet('{(out / manifest['notable']).as_posix()}')").fetchone() == (0,)
+    assert notable_files(manifest) == {"USBOS": None}
 
 
 def test_a_projection_missing_a_required_column_fails_the_run(con, tmp_path):
@@ -257,6 +257,11 @@ def blocks_of(manifest: dict, out: Path) -> str:
     return ", ".join(f"'{(out / pb.block_name(b[0], b[2])).as_posix()}'" for b in manifest["blocks"])
 
 
+def notable_files(manifest: dict) -> dict:
+    """Each listed city's notable file, None where it has no notable tree."""
+    return {c["code"]: c["notable"] for c in manifest["cities"]}
+
+
 def test_a_block_carries_the_notable_bit_true_or_null_never_false(con, world):
     manifest, out, _ = world
     flags = dict(con.execute(
@@ -265,13 +270,22 @@ def test_a_block_carries_the_notable_bit_true_or_null_never_false(con, world):
     assert flags == {True: 12, None: 5788}
 
 
-def test_the_notable_file_holds_the_text_of_every_notable_block_row_and_nothing_else(con, world):
+def test_each_city_has_its_own_notable_file_named_in_its_manifest_entry(con, world):
     manifest, out, _ = world
-    assert re.fullmatch(r"notable-[0-9a-f]{16}\.parquet", manifest["notable"])
-    path = (out / manifest["notable"]).as_posix()
-    described = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{path}')").fetchall()
+    files = notable_files(manifest)
+    assert "notable" not in manifest, "no world-wide file: a city's text is its own"
+    for code, name in files.items():
+        assert re.fullmatch(rf"notable-{code.lower()}-[0-9a-f]{{16}}\.parquet", name)
+        cities = {row[0] for row in con.execute(f"SELECT DISTINCT city FROM read_parquet('{(out / name).as_posix()}')").fetchall()}
+        assert cities == {code}
+
+
+def test_the_notable_files_hold_the_text_of_every_notable_block_row_and_nothing_else(con, world):
+    manifest, out, _ = world
+    paths = [(out / name).as_posix() for name in notable_files(manifest).values()]
+    described = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{paths[0]}')").fetchall()
     assert [(name, kind) for name, kind, *_ in described] == list(pb.NOTABLE_COLUMNS)
-    rows = con.execute(f"SELECT * FROM read_parquet('{path}')").fetchall()
+    rows = con.execute(f"SELECT * FROM read_parquet({paths}) ORDER BY city, tree_id").fetchall()
     flagged = con.execute(
         f"SELECT tree_id, city FROM read_parquet([{blocks_of(manifest, out)}]) WHERE notable ORDER BY city, tree_id"
     ).fetchall()
@@ -289,11 +303,12 @@ def test_a_notable_tree_two_cities_publish_is_one_notable_row(con, tmp_path):
         f"TO '{neighbour.as_posix()}' (FORMAT parquet)"
     )
     manifest, out = build(con, tmp_path, {"USBOS": boston, "USSTO": neighbour.as_posix()})
-    rows = con.execute(f"SELECT tree_id, city FROM read_parquet('{(out / manifest['notable']).as_posix()}')").fetchall()
+    rows = con.execute(f"SELECT tree_id, city FROM read_parquet('{(out / notable_files(manifest)['USBOS']).as_posix()}')").fetchall()
     assert sorted(rows) == [("usbos-0", "USBOS"), ("usbos-1000", "USBOS"), ("usbos-500", "USBOS")]
+    assert set(notable_files(manifest)) == {"USBOS"}
 
 
-def test_a_changed_blurb_renames_the_notable_file_and_no_block(con, tmp_path, world):
+def test_a_changed_blurb_renames_its_citys_notable_file_and_nothing_else(con, tmp_path, world):
     manifest, _, sources = world
     edited_path = tmp_path / "usbos-edited.parquet"
     con.execute(
@@ -302,7 +317,8 @@ def test_a_changed_blurb_renames_the_notable_file_and_no_block(con, tmp_path, wo
     )
     edited, _ = build(con, tmp_path, {**sources, "USBOS": edited_path.as_posix()}, name="edited")
     assert edited["blocks"] == manifest["blocks"]
-    assert edited["notable"] != manifest["notable"]
+    assert notable_files(edited)["USBOS"] != notable_files(manifest)["USBOS"]
+    assert notable_files(edited)["USBTV"] == notable_files(manifest)["USBTV"]
     assert pb.content_of(edited) != pb.content_of(manifest)
 
 
@@ -364,8 +380,9 @@ def test_only_files_no_manifest_names_and_older_than_the_retention_are_deleted(w
     listed = {
         f"{pb.PREFIX}/{kept_name}": {"generation": 1, "modified": old},
         f"{pb.PREFIX}/{manifest['vocab']}": {"generation": 2, "modified": old},
-        f"{pb.PREFIX}/{manifest['notable']}": {"generation": 8, "modified": old},
-        f"{pb.PREFIX}/notable-3333333333333333.parquet": {"generation": 9, "modified": old},
+        **{f"{pb.PREFIX}/{name}": {"generation": 8, "modified": old} for name in notable_files(manifest).values()},
+        f"{pb.PREFIX}/notable-usbos-3333333333333333.parquet": {"generation": 9, "modified": old},
+        f"{pb.PREFIX}/notable-3333333333333333.parquet": {"generation": 10, "modified": old},
         f"{pb.PREFIX}/blocks/1-0000000000000000.parquet": {"generation": 3, "modified": old},
         f"{pb.PREFIX}/blocks/2-1111111111111111.parquet": {"generation": 4, "modified": now - timedelta(hours=5)},
         f"{pb.PREFIX}/vocab-2222222222222222.parquet": {"generation": 5, "modified": old},
@@ -375,14 +392,17 @@ def test_only_files_no_manifest_names_and_older_than_the_retention_are_deleted(w
     assert pb.stale_objects(listed, pb.referenced(manifest), now) == [
         f"{pb.PREFIX}/blocks/1-0000000000000000.parquet",
         f"{pb.PREFIX}/notable-3333333333333333.parquet",
+        f"{pb.PREFIX}/notable-usbos-3333333333333333.parquet",
         f"{pb.PREFIX}/vocab-2222222222222222.parquet",
     ]
     # The manifest being replaced keeps its files too: a tab that opened on it is still reading them.
     previous = {"blocks": [[1, 5, "0000000000000000", [0, 5]]], "vocab": "vocab-2222222222222222.parquet",
+                "cities": [{"code": "USBOS", "notable": "notable-usbos-3333333333333333.parquet"}],
+                # The manifest of 2026-11-16 named one world-wide file at the top level.
                 "notable": "notable-3333333333333333.parquet"}
     assert pb.stale_objects(listed, pb.referenced(manifest) | pb.referenced(previous), now) == []
-    # The manifest live today predates the notable file and names none.
-    before = {"blocks": previous["blocks"], "vocab": previous["vocab"]}
+    # A manifest from before any notable file names none.
+    before = {"blocks": previous["blocks"], "vocab": previous["vocab"], "cities": [{"code": "USBOS"}]}
     assert pb.referenced(before) == {"blocks/1-0000000000000000.parquet", "vocab-2222222222222222.parquet"}
     assert pb.referenced(None) == set()
 
