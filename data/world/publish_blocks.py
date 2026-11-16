@@ -91,9 +91,17 @@ MANIFEST = f"{PREFIX}/manifest.json"
 BLOCK_ZOOM = 12
 #: The zoom rows are indexed at before they are cut into blocks.
 INDEX_ZOOM = 20
-#: 10,240 as the projections are written, for the same reason: a phone's
-#: window filters on a cell and DuckDB skips the groups outside it.
-ROW_GROUP_SIZE = 10_240
+#: Small, so a read of a few cells skips most of a block: a phone fetches
+#: only the row groups whose latitude and longitude ranges reach its view
+#: (src/src/workers/sparseBlocks.ts). Measured on central Boston's block
+#: (129,000 trees, 4.1 MB) for a street view's two cells, 16,000 trees:
+#: 10,240-row groups, as the projections are written, were 1.56 MB of it;
+#: 4,096 is 0.96 MB; 2,048, the smallest DuckDB writes, is 0.74 MB. 4,096
+#: keeps the file its size and its footer (50 KB there) inside the 64 KB the
+#: worker reads for it in one request, for every block up to about 165,000
+#: trees (fourteen are larger, and take a second); 2,048 grows the file 4%
+#: and that footer to 99 KB.
+ROW_GROUP_SIZE = 4_096
 #: A candidate with fewer trees than this share of the live manifest's is
 #: refused (`--force` overrides it, for a deliberate shrink).
 KEPT_RATIO = 0.75

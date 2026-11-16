@@ -7,7 +7,7 @@ import { footerLength, parquetRowGroups, rowGroupsInBox } from './parquetFooter'
 
 /**
  * The footer reader against the engine's own reading of the same file: a
- * block as the pipeline writes one (zstd, 10,240-row groups, rows in cell
+ * block as the pipeline writes one (zstd, 4,096-row groups, rows in cell
  * order), with the column kinds a block has, strings and nulls included.
  */
 describe('parquet footer', () => {
@@ -31,7 +31,7 @@ describe('parquet footer', () => {
         CAST(i AS BIGINT) AS n
       FROM range(100000) t(i)
       ORDER BY longitude, latitude
-    ) TO '${file}' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE 10240)`)
+    ) TO '${file}' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE 4096)`)
     bytes = new Uint8Array(readFileSync(file))
   })
   afterAll(() => {

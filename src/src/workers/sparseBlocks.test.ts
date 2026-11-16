@@ -8,7 +8,8 @@ import { SparseBlock, type RangeFetch, type RangeRequest } from './sparseBlocks'
 /**
  * A block held in part, read by the engine as if it were the file: whatever
  * a box's read needs must be there, and what the engine does not read must
- * not have been fetched. The file is a block as the pipeline writes one.
+ * not have been fetched. The file is shaped like a block the pipeline writes,
+ * in ten row groups so the requests below can be counted.
  */
 describe('a block held in part', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sparse-block-')).replace(/\\/g, '/')
