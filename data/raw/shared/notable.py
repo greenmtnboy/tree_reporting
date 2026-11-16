@@ -91,6 +91,7 @@ def link_to_inventory(
     max_metres: float = DEFAULT_MAX_METRES,
     dbh_tolerance: float = DEFAULT_DBH_TOLERANCE,
     label: str = "",
+    reviewed: dict[str, str] | None = None,
 ) -> list[str | None]:
     """The inventory `tree_id` each register row is, or None.
 
@@ -100,9 +101,16 @@ def link_to_inventory(
     (inches).  Two register rows never link to the same tree: the closer one
     keeps it and the other is left unlinked.  An empty register needs no
     inventory (None), so its ingest need not download one.
+
+    *reviewed* maps a register row's `tree_id` to the inventory `tree_id` a
+    person checked it is (the register's point or trunk can be decades
+    stale).  It wins over the rule, and its tree is taken before the rule
+    runs.  A reviewed tree the inventory no longer holds is not linked: a
+    link to a missing id would drop the register row's cluster silently.
     """
     if not register or inventory is None:
         return [None] * len(register)
+    reviewed = reviewed or {}
     by_genus: dict[str, list[tuple[str, float, float, float | None]]] = {}
     genera = {genus_of(r.get("species")) for r in register} - {None}
     ids = inventory.column("tree_id").to_pylist()
@@ -115,8 +123,32 @@ def link_to_inventory(
         if genus in genera and lat is not None and lon is not None:
             by_genus.setdefault(genus, []).append((tid, lat, lon, dbh))
 
+    links: list[str | None] = [None] * len(register)
+    taken: set[str] = set()
+    held = set(ids)
+    register_ids = {row.get("tree_id") for row in register}
+    for stale in sorted(set(reviewed) - register_ids):
+        print(f"{label or 'Notable'} register: reviewed link for {stale}, which the register no longer lists", file=sys.stderr)
+    for index, row in enumerate(register):
+        target = reviewed.get(row.get("tree_id"))
+        if target is None:
+            continue
+        if target not in held:
+            print(
+                f"{label or 'Notable'} register: reviewed link {row.get('tree_id')} -> {target}, "
+                "a tree the inventory no longer holds; left unlinked",
+                file=sys.stderr,
+            )
+            continue
+        if target in taken:
+            raise ValueError(f"reviewed links send two register rows to {target}")
+        taken.add(target)
+        links[index] = target
+
     candidates: list[tuple[float, int, str]] = []
     for index, row in enumerate(register):
+        if row.get("tree_id") in reviewed:
+            continue
         genus = genus_of(row.get("species"))
         lat, lon = row.get("latitude"), row.get("longitude")
         if genus is None or lat is None or lon is None:
@@ -136,8 +168,6 @@ def link_to_inventory(
         if best is not None:
             candidates.append((best[0], index, best[1]))
 
-    links: list[str | None] = [None] * len(register)
-    taken: set[str] = set()
     for _, index, tid in sorted(candidates):
         if tid in taken:
             continue
@@ -145,9 +175,8 @@ def link_to_inventory(
         links[index] = tid
     print(
         f"{label or 'Notable'} register: {sum(1 for l in links if l)} of "
-        f"{len(register)} linked to an inventory tree (same genus, within "
-        f"{max_metres:g} m, trunk within {dbh_tolerance:.0%}); the rest publish "
-        f"at the register's own point",
+        f"{len(register)} linked to an inventory tree ({sum(1 for r in register if reviewed.get(r.get('tree_id')))} "
+        f"reviewed; the rest same genus, within {max_metres:g} m, trunk within {dbh_tolerance:.0%})",
         file=sys.stderr,
     )
     return links
