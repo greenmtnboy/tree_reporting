@@ -115,8 +115,8 @@ inventory tree, never a new tree at the register's point.
 Milan links 11 of 13 (6 by the rule, 5 by a reviewed list in its ingest,
 `REVIEWED_LINKS`, 2026-11-16) and Boston 8 of its 16 placed trees. A reviewer
 check of the unlinked ones (moving a link, or confirming a register tree the
-inventory lacks) would be the admin-authored modification above, and has not
-been built. `significance` reaches the model without a `tree_partition`
+inventory lacks) is the admin-authored modification above (built in step 7:
+the reviewer's *Name a tree directly*). `significance` reaches the model without a `tree_partition`
 column: the template binds it to a literal null (`raw(...)`) and the register
 partition re-binds it, so no OSM staging file needed a restage.
 
@@ -332,8 +332,15 @@ key on it, and the frontend must not ship until the blocks carry `notable`.
    The projection keeps `tree_name`: it is where the world publish reads each
    city's notable file from, and null on nearly every row it costs almost
    nothing there. Its vocabulary dropped `tree_name` in step 3.
-7. **Reports**: public form fields, reviewer approval/editing, export,
-   `tree_modification_info.py`.
+7. **Reports** (built): the "Suggest a fix" form's *Notable tree* section
+   (name, why, source; written only when given), the Firestore rules (the same
+   limits; a client can propose text, never clear it), the reviewer (editable
+   boxes on the card, Approve publishes the edit; *Name a tree directly* for an
+   admin-authored change or a clear), and `treeName`, `significance`,
+   `significanceSource` on the export, which `tree_modification_info.py`
+   already read. The rules ship through Terraform (`bootstrap`), not the merge;
+   they were applied 2026-11-16, ahead of the frontend. Until they are, a
+   report carrying the text is refused and an ordinary report is unaffected.
 8. Source-native names, one source at a time.
 
 ## Appendix: the crown on the map, once a source exists

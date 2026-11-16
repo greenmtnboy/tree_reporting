@@ -9,12 +9,31 @@
 .nophoto{display:grid;place-items:center;min-height:120px;background:#050806;color:var(--muted);border-radius:4px}
 .kind{display:inline-block;padding:2px 8px;border:1px solid var(--accent);border-radius:999px;font-size:12px;letter-spacing:.06em;text-transform:uppercase}.kind.missing{border-color:#a86d6d;color:#f0b4b4}
 .changed{color:var(--link)}.was{color:var(--muted);text-decoration:line-through;margin-right:6px}
+.notable input,.notable textarea,.author input,.author textarea,.author select{width:100%;box-sizing:border-box;font:inherit;padding:6px 8px;background:#050806;color:inherit;border:1px solid var(--accent);border-radius:4px}
+.author{margin:0 0 24px;padding:12px 16px;border:1px solid var(--accent);border-radius:6px}.author summary{cursor:pointer;font-weight:600}
+.author form{display:grid;gap:10px;margin-top:12px;max-width:640px}.author .clears{display:flex;gap:16px;flex-wrap:wrap}
+.limit{color:var(--muted);font-size:12px}
 </style>
 </head>
 <body><header class="topbar"><a class="brand" href="/">Tree reviewer</a><nav><a href="/">Photo submissions</a><a href="/modifications" aria-current="page">Tree reports</a><a href="/photos">Tree photos</a><a href="/satellite">Satellite</a></nav></header>
 <main class="page">
 <h1>Pending tree reports</h1>
-<p>Reports against trees already on the map: a tree that is gone, or a corrected position, species or trunk diameter. Approving publishes the change to <code>community/tree_modifications.ndjson</code>; the user, notes and photo stay private.</p>
+<p>Reports against trees already on the map: a tree that is gone, a corrected position, species or trunk diameter, or a notable tree's name and story. Approving publishes the change to <code>community/tree_modifications.ndjson</code>; the user, notes and photo stay private. Edit a proposed name or blurb before approving; a blank box leaves that field out of the change.</p>
+<details class="author"><summary>Name a tree directly</summary>
+<p>A notable change with no report behind it: name a register monument the ingest could not link, or clear a name or blurb a tree shows. Use the tree id the map shows (its card, or <code>#/?tree=</code> in its link). Published at once; the tree's city picks it up on its next build.</p>
+<form id="author">
+<label>Tree id <input name="treeId" required maxlength="200" placeholder="mil-40459"></label>
+<label>City code <input name="city" required maxlength="10" placeholder="ITMIL"></label>
+<label>Name <span class="limit">(≤ 60)</span><input name="treeName" maxlength="60"></label>
+<label>Why it's notable <span class="limit">(≤ 500)</span><textarea name="significance" maxlength="500" rows="3"></textarea></label>
+<label>Source <span class="limit">(≤ 300; a link or a register's name)</span><input name="significanceSource" maxlength="300"></label>
+<div class="clears">Clear what the tree shows:
+<label><input type="checkbox" name="clear" value="treeName"> name</label>
+<label><input type="checkbox" name="clear" value="significance"> blurb</label>
+<label><input type="checkbox" name="clear" value="significanceSource"> source</label></div>
+<div class="actions"><button type="submit">Publish</button></div>
+<p id="author-status"></p>
+</form></details>
 <p id="status">Loading…</p>
 <section id="queue" class="queue"></section>
 </main>
@@ -42,6 +61,13 @@ function changeRows(m) {
   if (m.proposedSpecies) rows += `<dt>Species</dt><dd><span class="was">${esc(m.currentSpecies)}</span><span class="changed">${esc(m.proposedSpecies)}</span></dd>`;
   if ((m.clearFields || []).includes('dbhInches')) rows += `<dt>DBH (in)</dt><dd><span class="was">${esc(m.currentDbhInches)}</span><span class="changed">unknown (clear it)</span></dd>`;
   else if (m.proposedDbhInches != null) rows += `<dt>DBH (in)</dt><dd><span class="was">${esc(m.currentDbhInches)}</span><span class="changed">${esc(m.proposedDbhInches)}</span></dd>`;
+  // A notable tree's text, editable: what Approve publishes is what the boxes hold.
+  if (m.proposedTreeName != null || m.proposedSignificance != null) {
+    const val = v => v == null ? '' : esc(v);
+    rows += `<dt>Name</dt><dd class="notable"><input data-notable="treeName" maxlength="60" value="${val(m.proposedTreeName)}"></dd>`;
+    rows += `<dt>Why notable</dt><dd class="notable"><textarea data-notable="significance" maxlength="500" rows="3">${val(m.proposedSignificance)}</textarea></dd>`;
+    rows += `<dt>Source</dt><dd class="notable"><input data-notable="significanceSource" maxlength="300" value="${val(m.proposedSignificanceSource)}"></dd>`;
+  }
   return rows;
 }
 async function load() {
@@ -60,9 +86,11 @@ async function load() {
     <dt>Notes</dt><dd>${esc(m.notes)}</dd><dt>Submitted</dt><dd>${esc(m.submittedAt)}</dd><dt>User</dt><dd>${esc(m.userId)}</dd></dl>
     <div class="actions"><button data-action="approve">Approve</button><button class="reject" data-action="reject">Reject</button></div></div></article>`).join('');
 }
-async function decide(id, action) {
+async function decide(id, action, card) {
   let body = {};
   if (action === 'reject') { const reason = prompt('Optional rejection reason') ?? null; if (reason === null) return; body = { reason }; }
+  const boxes = card.querySelectorAll('[data-notable]');
+  if (action === 'approve' && boxes.length) body = { notable: Object.fromEntries([...boxes].map(b => [b.dataset.notable, b.value])) };
   const r = await fetch('/api/modifications/' + encodeURIComponent(id) + '/' + action, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(await r.text());
   await load();
@@ -70,7 +98,20 @@ async function decide(id, action) {
 queue.addEventListener('click', e => {
   const b = e.target.closest('button[data-action]'); if (!b) return;
   const card = b.closest('[data-id]'); b.disabled = true;
-  decide(card.dataset.id, b.dataset.action).catch(err => { alert(err.message); b.disabled = false; });
+  decide(card.dataset.id, b.dataset.action, card).catch(err => { alert(err.message); b.disabled = false; });
+});
+const author = document.querySelector('#author'), authorStatus = document.querySelector('#author-status');
+author.addEventListener('submit', async e => {
+  e.preventDefault();
+  const form = new FormData(author);
+  const body = { treeId: form.get('treeId'), city: form.get('city'), treeName: form.get('treeName'),
+    significance: form.get('significance'), significanceSource: form.get('significanceSource'), clearFields: form.getAll('clear') };
+  authorStatus.textContent = 'Publishing…';
+  const r = await fetch('/api/modifications/author', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) { authorStatus.textContent = 'Not published: ' + await r.text(); return; }
+  const { published } = await r.json();
+  author.reset();
+  authorStatus.textContent = `Published. The export now holds ${published} approved changes.`;
 });
 load().catch(err => status.textContent = 'Could not load queue: ' + err.message);
 </script>

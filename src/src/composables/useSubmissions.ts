@@ -1,5 +1,6 @@
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import type { RankingSnapshot } from '../lib/missions'
+import { NOTABLE_TEXT_LIMITS, notableText, type NotableTextField } from '../lib/notableText'
 import {
   collection,
   doc,
@@ -450,6 +451,9 @@ export interface TreeModification {
   proposedLng: number | null
   proposedSpecies: string | null
   proposedDbhInches: number | null
+  proposedTreeName: string | null
+  proposedSignificance: string | null
+  proposedSignificanceSource: string | null
   clearFields: ClearableField[]
   notes: string | null
   photoPath: string | null
@@ -490,6 +494,9 @@ export interface ModificationInput {
   proposedLng?: number | null
   proposedSpecies?: string | null
   proposedDbhInches?: number | null
+  proposedTreeName?: string | null
+  proposedSignificance?: string | null
+  proposedSignificanceSource?: string | null
   clearFields?: ClearableField[]
   reviewFlag?: string | null
   notes?: string | null
@@ -511,6 +518,13 @@ export async function submitTreeModification(input: ModificationInput): Promise<
 
   const isUpdate = input.kind === 'update'
   const clearFields = isUpdate ? clearableFields(input.clearFields) : []
+  const notable: Partial<Record<NotableTextField, string>> = {}
+  if (isUpdate) {
+    for (const field of Object.keys(NOTABLE_TEXT_LIMITS) as NotableTextField[]) {
+      const text = notableText(input[field], field)
+      if (text) notable[field] = text
+    }
+  }
   const docData = {
     userId: user.uid,
     kind: input.kind,
@@ -535,6 +549,9 @@ export async function submitTreeModification(input: ModificationInput): Promise<
     // Written only when something is cleared, so an ordinary report keeps the
     // field set the rules accepted before `clearFields` existed.
     ...(clearFields.length ? { clearFields } : {}),
+    // A proposed name, blurb or source, written only when given, like
+    // clearFields: an ordinary report keeps the field set older rules accept.
+    ...notable,
     // A report on a flagged tree is a second look too (the badge); written only
     // when set, like clearFields.
     ...(input.reviewFlag ? { reviewFlag: input.reviewFlag } : {}),
@@ -581,6 +598,9 @@ function mapModificationDoc(id: string, data: Record<string, unknown>): TreeModi
     proposedLng: numberOrNull(data.proposedLng),
     proposedSpecies: (data.proposedSpecies as string | null) ?? null,
     proposedDbhInches: numberOrNull(data.proposedDbhInches),
+    proposedTreeName: typeof data.proposedTreeName === 'string' ? data.proposedTreeName : null,
+    proposedSignificance: typeof data.proposedSignificance === 'string' ? data.proposedSignificance : null,
+    proposedSignificanceSource: typeof data.proposedSignificanceSource === 'string' ? data.proposedSignificanceSource : null,
     clearFields: clearableFields(data.clearFields),
     reviewFlag: typeof data.reviewFlag === 'string' ? data.reviewFlag : null,
     notes: (data.notes as string | null) ?? null,

@@ -337,6 +337,8 @@
     :dbh-inches="checkinDialog.dbhInches"
     :plant-year="checkinDialog.plantYear"
     :review-flag="checkinDialog.reviewFlag"
+    :tree-name="selectedTree?.tree_id === checkinDialog.treeId ? selectedTree.notable_name : null"
+    :significance="selectedTree?.tree_id === checkinDialog.treeId ? selectedTree.significance : null"
     :initial-mode="checkinDialog.mode"
     :city="selectedCity"
     :remote-correction="!simplified"

@@ -112,6 +112,37 @@ describe('desktop corrections', () => {
     }))
   })
 
+  it('names a notable tree: name and blurb count as a fix, a source alone does not', async () => {
+    await mount(true)
+    const name = root.querySelector<HTMLInputElement>('[data-testid="checkin-tree-name"]')!
+    expect(name.maxLength).toBe(60)
+    await input('[data-testid="checkin-significance-source"]', 'https://example.org/register')
+    expect(submitButton().disabled, 'a source names nothing by itself').toBe(true)
+    await input('[data-testid="checkin-tree-name"]', '  The   Senator ')
+    await input('[data-testid="checkin-significance"]', 'Planted in 1871.')
+    expect(submitButton().disabled).toBe(false)
+    submitButton().click()
+    await settle()
+    expect(mocks.submit).toHaveBeenCalledWith(expect.objectContaining({
+      proposedTreeName: 'The Senator',
+      proposedSignificance: 'Planted in 1871.',
+      proposedSignificanceSource: 'https://example.org/register',
+      proposedSpecies: null,
+      proposedDbhInches: null,
+    }))
+  })
+
+  it('sends no notable text on an ordinary fix', async () => {
+    await mount(true)
+    await input('[data-testid="checkin-significance-source"]', 'https://example.org/register')
+    await input('input[type="number"]', '20')
+    submitButton().click()
+    await settle()
+    expect(mocks.submit).toHaveBeenCalledWith(expect.objectContaining({
+      proposedTreeName: null, proposedSignificance: null, proposedSignificanceSource: null, proposedDbhInches: 20,
+    }))
+  })
+
   it('takes a diameter that is not a whole or half inch', async () => {
     await mount(true)
     expect(root.querySelector<HTMLInputElement>('[data-testid="checkin-dbh"]')!.step).toBe('any')

@@ -325,6 +325,20 @@ describe('tree modifications', () => {
     await assertFails(modificationBatch(as('bob'), 'bob', { proposedDbhUnknown: true }).commit())
   })
 
+  test('a report can name a notable tree and say why, within the length limits', async () => {
+    await assertSucceeds(modificationBatch(as('alice'), 'alice', {
+      proposedTreeName: 'The Senator',
+      proposedSignificance: 'Planted by the first mayor in 1871.',
+      proposedSignificanceSource: 'https://example.org/heritage-trees',
+    }).commit())
+    await assertFails(modificationBatch(as('bob'), 'bob', { proposedTreeName: 'x'.repeat(61) }).commit())
+    await assertFails(modificationBatch(as('carol'), 'carol', { proposedSignificance: 'x'.repeat(501) }).commit())
+    await assertFails(modificationBatch(as('dave'), 'dave', { proposedSignificanceSource: 'x'.repeat(301) }).commit())
+    await assertFails(modificationBatch(as('erin'), 'erin', { proposedTreeName: 42 }).commit())
+    // A client can propose a name but never clear one: that is the reviewer's.
+    await assertFails(modificationBatch(as('frank'), 'frank', { clearFields: ['treeName'] }).commit())
+  })
+
   test('a report can say the tree was flagged for a second look, with a known flag only', async () => {
     await assertSucceeds(modificationBatch(as('alice'), 'alice', { reviewFlag: 'dbh_outlier' }).commit())
     await seed((db) => setDoc(doc(db, 'modificationRateLimits', 'bob'), {

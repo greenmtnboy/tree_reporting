@@ -145,6 +145,8 @@ function describeModification(m: TreeModification): string {
   if (m.proposedSpecies) parts.push(`species → ${m.proposedSpecies}`)
   if (m.clearFields.includes('dbhInches')) parts.push('diameter → unknown')
   else if (m.proposedDbhInches != null) parts.push(`diameter → ${m.proposedDbhInches} in`)
+  if (m.proposedTreeName) parts.push(`name → ${m.proposedTreeName}`)
+  else if (m.proposedSignificance) parts.push('why it\'s notable')
   return parts.length ? `Fix: ${parts.join(', ')}` : 'Suggested fix'
 }
 

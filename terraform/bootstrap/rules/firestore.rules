@@ -128,6 +128,7 @@ service cloud.firestore {
                          'userLat', 'userLng', 'distanceMeters', 'currentSpecies',
                          'currentDbhInches', 'missingReason', 'proposedLat', 'proposedLng',
                          'proposedSpecies', 'proposedDbhInches', 'clearFields', 'notes', 'photoPath',
+                         'proposedTreeName', 'proposedSignificance', 'proposedSignificanceSource',
                          'reviewFlag', 'submittedAt', 'status'])
                     && request.resource.data.kind in ['missing', 'update']
                     && request.resource.data.treeId is string
@@ -144,6 +145,12 @@ service cloud.firestore {
                     && optionalString(request.resource.data.get('proposedSpecies', null), 200)
                     && optionalLatLng(request.resource.data.get('proposedLat', null), request.resource.data.get('proposedLng', null))
                     && optionalNumber(request.resource.data.get('proposedDbhInches', null))
+                    // A notable tree's name, why it is notable, and a source link
+                    // (docs/NAMED_TREES_AND_CROWN_POSITION.md); the client, the
+                    // reviewer and the ingest hold the same limits.
+                    && optionalString(request.resource.data.get('proposedTreeName', null), 60)
+                    && optionalString(request.resource.data.get('proposedSignificance', null), 500)
+                    && optionalString(request.resource.data.get('proposedSignificanceSource', null), 300)
                     // Fields to blank out (wrong, no better value known), by name;
                     // a field is never both cleared and given a new value. The size
                     // bound is the number of clearable names.

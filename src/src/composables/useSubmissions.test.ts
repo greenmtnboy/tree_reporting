@@ -250,6 +250,26 @@ describe('submitTreeModification', () => {
     expect('clearFields' in empty).toBe(false)
   })
 
+  it('writes a notable name, blurb and source only when given, tidied and capped', async () => {
+    await submitTreeModification({ ...REPORT, kind: 'update', proposedSpecies: 'Acer rubrum' })
+    await submitTreeModification({
+      ...REPORT,
+      kind: 'update',
+      proposedTreeName: '  The   Senator ',
+      proposedSignificance: 'x'.repeat(600),
+      proposedSignificanceSource: '   ',
+    })
+    await submitTreeModification({ ...REPORT, kind: 'missing', missingReason: 'stump', proposedTreeName: 'Elm' })
+    const [plain, named, missing] = state.batches.map(b => b.writes[0].data)
+    for (const field of ['proposedTreeName', 'proposedSignificance', 'proposedSignificanceSource']) {
+      expect(field in plain, 'an ordinary report keeps the pre-existing rule field set').toBe(false)
+      expect(field in missing).toBe(false)
+    }
+    expect(named.proposedTreeName).toBe('The Senator')
+    expect((named.proposedSignificance as string).length).toBe(500)
+    expect('proposedSignificanceSource' in named).toBe(false)
+  })
+
   it('records a second look on a report only for a flagged tree', async () => {
     await submitTreeModification({ ...REPORT, kind: 'update', proposedSpecies: 'Acer rubrum' })
     await submitTreeModification({ ...REPORT, kind: 'missing', missingReason: 'stump', reviewFlag: 'dbh_outlier' })
