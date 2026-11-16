@@ -65,7 +65,7 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   LONDON_OPENDATA: 'London Datastore',
   MELBOURNE_OPENDATA: 'City of Melbourne',
   BUENOSAIRES_OPENDATA: 'Buenos Aires Data',
-  LOSANGELES_OPENDATA: 'LA Open Data',
+  LOSANGELES_OPENDATA: 'LA Bureau of Street Services',
   WASHINGTONDC_OPENDATA: 'Open Data DC',
   TEMPE_OPENDATA: 'City of Tempe',
   // Athens's municipal partition is the National Garden inventory — the only
