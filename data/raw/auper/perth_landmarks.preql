@@ -5,23 +5,28 @@ root datasource perth_landmarks_update_time (
 )
 file `./perth_landmarks_probe.py`;
 
-# STUB. Every city needs a landmarks model even if it yields zero rows -- a
-# missing file fails the landmark lane for every city, and the agent has no
-# geographic context for this one.
-#
-# Point the raw datasource at whichever source this city has, in preference
-# order: an official designation registry, the same portal as the trees, an
-# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
-# geocoded via Nominatim (then add a `landmarks-auper` job with NO cron).
-#
-# Both datasources extend ../landmark_common.preql's templates: add the
-# register's own attributes to both, mapped in one and stored in the other.
+# The City of Perth Heritage List (City Planning Scheme No. 2), read live from
+# the city's ArcGIS layer on the same organisation as the trees. An official
+# designation registry, so there is no curated CSV and no staging object; the
+# probe is the layer's own edit date.
 root partial datasource raw_perth_landmark_info extends landmark_partition (
+    address: ?address,
+    protection_type: ?protection_type,
+    register_number: ?register_number,
+    category: ?category,
+    year_built: ?year_built,
+    designation_date: ?designation_date,
 )
 complete where city = 'AUPER'
 file `./perth_landmarks.py`;
 
 partial datasource perth_landmark_info extends published_landmark_info (
+    ?address,
+    ?protection_type,
+    ?register_number,
+    ?category,
+    ?year_built,
+    ?designation_date,
     auper_landmark_data_updated_through,
 )
 complete where city = 'AUPER'

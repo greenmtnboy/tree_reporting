@@ -13,8 +13,8 @@ export interface AttributionSourceLink {
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'Wodonga', label: 'TODO: Wodonga tree inventory source', url: 'TODO' },
   { city: 'Ballarat', label: 'TODO: Ballarat tree inventory source', url: 'TODO' },
-  { city: 'Perth', label: 'TODO: Perth tree inventory source', url: 'TODO' },
-  { city: 'Adelaide', label: 'TODO: Adelaide tree inventory source', url: 'TODO' },
+  { city: 'Perth', label: 'City of Perth (Trees in the City)', url: 'https://www.arcgis.com/home/item.html?id=c5ce51d9789a4e9a8510acb8c8f3ecf4' },
+  { city: 'Adelaide', label: 'City of Adelaide via data.sa.gov.au (Street Trees)', url: 'https://data.sa.gov.au/data/dataset/street-trees' },
   { city: 'Naperville', label: 'TODO: Naperville tree inventory source', url: 'TODO' },
   { city: 'Boulder', label: 'TODO: Boulder tree inventory source', url: 'TODO' },
   { city: 'Milan', label: 'Comune di Milano - Territorio: localizzazione degli alberi (DS2484, 2023-03-31 release, CC BY 4.0)', url: 'https://dati.comune.milano.it/dataset/ds2484_infogeo_alberi_localizzazione' },
@@ -95,8 +95,8 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 export const LANDMARK_SOURCES: CitySourceLink[] = [
   { city: 'Wodonga', label: 'TODO: Wodonga landmark source' },
   { city: 'Ballarat', label: 'TODO: Ballarat landmark source' },
-  { city: 'Perth', label: 'TODO: Perth landmark source' },
-  { city: 'Adelaide', label: 'TODO: Adelaide landmark source' },
+  { city: 'Perth', label: 'City of Perth Heritage List (CPS2)', url: 'https://www.arcgis.com/home/item.html?id=550909775e984aa19d5b4fadcce4b3e6' },
+  { city: 'Adelaide', label: 'SA Heritage Places (State and Local Heritage), data.sa.gov.au', url: 'https://data.sa.gov.au/data/dataset/sa-heritage-places' },
   { city: 'Naperville', label: 'TODO: Naperville landmark source' },
   { city: 'Boulder', label: 'TODO: Boulder landmark source' },
   { city: 'Milan', label: 'Comune di Milano - Spazi freschi: parchi ed aree verdi (DS3018, CC BY 4.0)', url: 'https://dati.comune.milano.it/dataset/ds3018-spazi-freschi-parchi-ed-aree-verdi' },
