@@ -71,6 +71,8 @@ property tree_id.species string;
 property tree_id.cultivar string;
 property tree_id.crown_width_m float;
 property tree_id.tree_name string;
+property tree_id.significance string;
+property tree_id.significance_source string;
 property tree_id.plant_date date;
 property tree_id.diameter_at_breast_height float;
 property tree_id.latitude float;
@@ -98,6 +100,8 @@ root datasource city_published_trees (
     cultivar: ?cultivar,
     crown_width_m: ?crown_width_m,
     tree_name: ?tree_name,
+    significance: ?significance,
+    significance_source: ?significance_source,
     plant_date: ?plant_date,
     diameter_at_breast_height: ?diameter_at_breast_height,
     latitude: ?latitude,
@@ -168,6 +172,8 @@ datasource full_tree_info (
     ?cultivar,
     ?crown_width_m,
     ?tree_name,
+    ?significance,
+    ?significance_source,
     ?plant_date,
     ?diameter_at_breast_height,
     ?latitude,

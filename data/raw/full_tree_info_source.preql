@@ -38,6 +38,8 @@ root datasource full_tree_info (
     cultivar: ?cultivar,
     crown_width_m: ?crown_width_m,
     tree_name: ?tree_name,
+    significance: ?significance,
+    significance_source: ?significance_source,
     plant_date: ?plant_date,
     diameter_at_breast_height: ?diameter_at_breast_height,
     latitude: ?latitude,

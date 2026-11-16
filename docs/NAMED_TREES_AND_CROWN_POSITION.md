@@ -161,12 +161,17 @@ first source-native name or blurb adds `raw_significance` to the template,
 `staging_common.preql` and `osm.py`, and restages OSM before the cities
 build.
 
-**Step 2 (after every city has rebuilt):** the readers of published
+**Step 2 (built, branch `notable-readers`):** the readers of published
 parquets, which fail on a city file that lacks a column they name:
 `full_tree_publish.preql` / `full_tree_info_source.preql` (the rollup reads
 every city in one scan), `tree_info.preql` (the resolver's model),
 `city_derived.preql` (`city_tree_browser` gains `notable: is_notable`; the
-vocabulary grain drops `tree_name`).
+vocabulary grain drops `tree_name`). The projection also carries
+`significance` and `significance_source` (null on nearly every row), because
+the world publish builds its notable file from the projections. It keeps
+`tree_name` until the blocks stop reading it (step 4). `tree_info.preql`'s
+union datasource carries all three, so the semantic model can answer "which
+trees are named" from the rollup.
 
 ### What the map loads: one bit, text on click
 
