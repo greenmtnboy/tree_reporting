@@ -112,7 +112,8 @@ within 30 m, trunk within 30%; `shared/notable.py`). In the model it joins
 only that tree's cluster and lends it a name and a blurb. A register row with
 no credible match is **dropped** (2026-11-16): a register is metadata on an
 inventory tree, never a new tree at the register's point.
-Milan links 6 of 13 and Boston 8 of its 16 placed trees. A reviewer
+Milan links 11 of 13 (6 by the rule, 5 by a reviewed list in its ingest,
+`REVIEWED_LINKS`, 2026-11-16) and Boston 8 of its 16 placed trees. A reviewer
 check of the unlinked ones (moving a link, or confirming a register tree the
 inventory lacks) would be the admin-authored modification above, and has not
 been built. `significance` reaches the model without a `tree_partition`

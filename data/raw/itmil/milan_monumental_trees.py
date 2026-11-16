@@ -52,6 +52,31 @@ RESOURCE = CkanResource(
 DATA_SOURCE = "NOTABLE_ITMIL"
 REGISTER = "Elenco degli alberi monumentali d'Italia"
 
+# Register rows a person matched to their inventory tree where the rule
+# (shared/notable.py: same genus, within 30 m, trunk within 30%) cannot: the
+# register's point sits 40-110 m off. Each is the tree that stands out by
+# species, trunk and age near that point; reviewed 2026-11-16 against the
+# published inventory. Register no. 09 (Villa Marietti, no hackberry within
+# 120 m) and no. 12 (della Biodiversità: three planes of 160-168 cm at
+# 49-60 m) stay unlinked, so they are not published.
+REVIEWED_LINKS = {
+    # Il Platano del 1773, Villa Litta: the park's biggest and oldest plane
+    # (215 cm, planted 1827), the nearest large one at 43 m. The register's
+    # 111 cm trunk is stale.
+    "mil-mon-15-F205-MI-03": "mil-40459",
+    # Noce del Caucaso, Parco Sempione: the only large Pterocarya near (150 cm
+    # vs the register's 138, planted 1844), 54 m; the next is 102 cm.
+    "mil-mon-04-F205-MI-03": "mil-186358",
+    # Il Platano Grande, Giardini Montanelli: trunk 200 cm vs 199, planted
+    # 1842, 71 m.
+    "mil-mon-03-F205-MI-03": "mil-164301",
+    # Bagolaro, Giardini Montanelli: trunk 135 cm vs 135, the largest Celtis
+    # near, 93 m.
+    "mil-mon-07-F205-MI-03": "mil-164302",
+    # Bagolaro, Villa Belgiojoso: 133 cm vs 140, the largest Celtis near, 59 m.
+    "mil-mon-08-F205-MI-03": "mil-142617",
+}
+
 # The listing criteria of DM 23/10/2014, art. 5, as the register words them.
 CRITERIA_EN = {
     "età e/o dimensioni": "its age and/or size",
@@ -126,15 +151,8 @@ def significance_for(props: dict) -> str:
     if reasons:
         text += " for " + " and ".join(reasons)
     text += "."
-    girth = clean(props.get("CIRCONFERENZA FUSTO (cm)"))
-    height = clean(props.get("ALTEZZA (m)"))
-    measures = []
-    if girth:
-        measures.append(f"trunk girth {girth.replace(' ', '')} cm")
-    if height:
-        measures.append(f"height {height} m")
-    if measures:
-        text += " " + ", ".join(measures).capitalize() + "."
+    # No girth or height: the card shows the tree's own measurements, and a
+    # register's are from the day it was listed.
     if (clean(props.get("PROPOSTA DICHIARAZIONE NOTEVOLE INTERESSE PUBBLICO")) or "").lower() == "vigente":
         text += " Also declared of notable public interest."
     return text
@@ -171,7 +189,7 @@ def register_rows(features: list[dict]) -> list[dict]:
 
 def build(features: list[dict], inventory) -> "pa.Table":  # noqa: F821
     rows = register_rows(features)
-    links = link_to_inventory(rows, inventory, label="Milan monumental")
+    links = link_to_inventory(rows, inventory, label="Milan monumental", reviewed=REVIEWED_LINKS)
     table = notable_table(rows, links, city="ITMIL")
     table = validate_coordinates(table, city="Milan", city_code="ITMIL")
     return enforce_tree_schema(
