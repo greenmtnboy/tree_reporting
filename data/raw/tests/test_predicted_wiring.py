@@ -162,3 +162,32 @@ def test_a_missing_staged_file_is_no_rows(tmp_path, monkeypatch):
 
     monkeypatch.setenv("PREDICTED_STAGING_URL", str(tmp_path / "{code}.parquet"))
     assert load_staged("USBOS") == []
+
+
+def test_a_staged_file_is_read_in_batches_with_one_report(tmp_path, monkeypatch, capsys):
+    """Boston's three million rows as one list of records ran the city job out
+    of memory, so the file is worked through a batch at a time: the rows are
+    the ones a single pass gives, the skip and cleanup lines print once, and an
+    id repeated in a later batch is still refused."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    import predicted_tree_info as predicted
+
+    records = [record(tree_id=f"pred-{n}") for n in range(7)] + [record(tree_id="pred-x", city="USNYC")]
+    path = tmp_path / "usbos.parquet"
+    pq.write_table(pa.Table.from_pylist(records), path)
+    monkeypatch.setenv("PREDICTED_STAGING_URL", str(tmp_path / "{code}.parquet"))
+    monkeypatch.setattr(predicted, "BATCH_ROWS", 3)
+
+    tables = list(predicted.city_tables("USBOS"))
+    assert len(tables) == 3
+    whole = predicted.records_to_table(predicted.load_staged("USBOS"), "USBOS")
+    capsys.readouterr()
+    assert pa.concat_tables(tables).equals(whole)
+
+    list(predicted.city_tables("USBOS"))
+    assert capsys.readouterr().err.count("skipped 1 USBOS rows: another city's row") == 1
+
+    pq.write_table(pa.Table.from_pylist(records[:4] + records[:1]), path)
+    with pytest.raises(Exception, match="pred-0"):
+        list(predicted.city_tables("USBOS"))
