@@ -29,14 +29,16 @@ gs://trilogy_public_models/duckdb/trees/world/v1/
 - **A block** is the z12 tile `key = x * 4096 + y`: the grid the desktop's
   point chunks already use (`CHUNK_ZOOM` in `src/src/workers/cityPoints.ts`),
   7.2 km across in Boston. It holds every tree in it whichever city
-  published it, in the projection's columns less its watermark. Rows are in
+  published it, in the projection's columns less its watermark and the
+  notable text (`tree_name`, `significance`, `significance_source`). Rows are in
   Morton order of their z20 tile, so a phone's z14 cell is one run of rows.
 - **A tree two inventories both publish** (an OpenStreetMap node inside two
   cities' territories) is written once, to the first city by code. The
   projections carry 15,459 such rows today; drawn from city files they were
   two trees on one spot.
 - **The vocabulary** is one file for the world, `(kind, value)` rows for the
-  six columns the worker stores as ENUMs. 186 KB today.
+  five string columns the worker stores as ENUMs (city, source, species,
+  cultivar, display name).
 - **The notable files**, one per city with a notable tree, hold one row
   per block row whose `notable` bit is set: `tree_id, city, tree_name,
   significance, significance_source`. A block carries only the bit; the map

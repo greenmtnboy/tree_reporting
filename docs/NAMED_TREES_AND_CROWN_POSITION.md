@@ -191,7 +191,7 @@ trees are named" from the rollup.
   4):** 29 rows today (Milan 13, Boston 16). #224 published one world-wide
   file; it was split per city before any map read it.
 - **Remove** `tree_name` from `COLUMNS` and `VOCAB_COLUMNS`, **after** the
-  frontend stops reading it (step 6 below). It's an ENUM every resident row
+  frontend stops reading it (step 6 below; the notable file keeps it). It's an ENUM every resident row
   carries and it is null on ~all of them. Swapping it for a 1-byte flag is
   a net saving in block bytes, vocab size and the worker's per-row width.
 
@@ -328,7 +328,10 @@ key on it, and the frontend must not ship until the blocks carry `notable`.
    them.** The expected direction is a small saving, from the `tree_name`
    ENUM leaving the resident row.
 6. **Blocks drop `tree_name`** (`COLUMNS`, `VOCAB_COLUMNS`) once no released
-   map reads it, then the projection and its vocabulary stop carrying it.
+   map reads it (the map has read names only from the notable file since #227).
+   The projection keeps `tree_name`: it is where the world publish reads each
+   city's notable file from, and null on nearly every row it costs almost
+   nothing there. Its vocabulary dropped `tree_name` in step 3.
 7. **Reports**: public form fields, reviewer approval/editing, export,
    `tree_modification_info.py`.
 8. Source-native names, one source at a time.
