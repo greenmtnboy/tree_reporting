@@ -154,10 +154,8 @@ enrichment table. `tree_name` is a tree's own proper name ("The Senator"),
 and only a portal that really publishes those emits it, passing
 `proper_names=True` to `enforce_tree_schema`; without that flag the column is
 published as null (docs/NAMED_TREES_AND_CROWN_POSITION.md). A city's register
-of remarkable trees (monumental, heritage, champion) is not mapped into its
-inventory ingest: it is a `NOTABLE_{CODE}` partition of its own, linked to the
-inventory through `shared/notable.py` (docs/DATA_PIPELINE.md, "Sources";
-`itmil/milan_monumental_trees.py` is the pattern).
+of remarkable trees is never mapped into its inventory ingest; see
+[Notable registers](#notable-registers-optional) below.
 
 - **Use the platform module**: `shared/platforms/arcgis.py`, `socrata.py`,
   `ckan.py`, `wfs.py`. They own paging, watermarks and geometry handling
@@ -294,6 +292,56 @@ pattern for any curated CSV.
 ```bash
 cd data && trilogy refresh raw/{code}/{slug}_landmarks.preql -f {slug}_landmark_info
 ```
+
+## Notable registers (optional)
+
+Some cities publish a register of remarkable trees apart from their
+inventory: monumental, heritage, champion or "big old trees" lists. A register
+is where a tree's proper name (`tree_name`) and why it matters
+(`significance`, `significance_source`) come from, and those trees glow on the
+map. It is worth a look while surveying the portal, but a city ships without
+one; Milan (`itmil/milan_monumental_trees.py`, a national register) and Boston
+(`usbos/treeboston_big_old_trees.py`, a volunteer sheet) are the two patterns.
+
+**A register is metadata, never a source of trees.** Its points are map pins,
+not a survey: three of Milan's 13 sit within 2 m of a *different* tree. So:
+
+- **Link, never grid-match.** The ingest links each row to one inventory row
+  through `shared/notable.py` (same genus, within 30 m, trunk within 30% when
+  both are measured), reading the inventory through the municipal ingest's own
+  reader so the linked id exists in the build. It emits that id as
+  `linked_tree_id`; `tree_dedup` puts the row in that tree's cluster and
+  nowhere else.
+- **An unlinked row is dropped** (`notable_table`). A monument the inventory
+  does not hold, or holds too far away to trust, is not added at the
+  register's point. A person who has identified the tree can pin it in the
+  ingest (Milan's `REVIEWED_LINKS`), or name it from the reviewer's *Name a
+  tree directly* form with no code change.
+- **A register is the only ingest that fills `tree_name`** (an approved
+  report is the other path), with `proper_names=True` on
+  `enforce_tree_schema`. A register with no names (Boston's) still lends
+  `significance`. Quote the source's own words and link the tree's page.
+
+Wiring:
+
+1. `{slug}_{register}.py` in the city directory, emitting `data_source =
+   "NOTABLE_{CODE}"`.
+2. `NOTABLE_DATA_SOURCES` in `shared/ingest.py`: `"{code}": "NOTABLE_{CODE}"`.
+3. The enum value in `{code}_source`, and a `root partial datasource ...
+   extends tree_partition` that re-binds `significance: ?raw_significance`,
+   `significance_source: ?raw_significance_source` and `linked_tree_id:
+   ?raw_linked_tree_id`, with `complete where ... = 'NOTABLE_{CODE}'`. No
+   `@source_kept` guard and no freshness probe unless the register has one;
+   copy the Milan or Boston block.
+4. Run the offline tests: `test_notable_ingest.py` checks every register's
+   label and links, `test_data_sources.py` the partition.
+5. Check the licence. A register with none stated (Boston's sheet) needs the
+   user's say-so before it publishes.
+
+A register on an existing city is a new source: after merge and Cloud Sync,
+force the city's target (docs/DATA_PIPELINE.md, "Rebuilding"), then the world
+blocks, and check the city's `notable` file in the manifest with a
+cache-busted read.
 
 ## Species rules an ingest must respect
 

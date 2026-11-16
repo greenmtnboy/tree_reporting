@@ -51,7 +51,7 @@ file `./milan_tree_info.py`;
 # Italy's register of monumental trees, Milan's 13 entries: a notable source
 # (../tree_dedup.preql).  Each row is linked by its ingest to the inventory
 # tree it is and lends that tree its name and why it is listed; a row with no
-# credible inventory match publishes at the register's point.  No
+# credible inventory match is dropped by the ingest.  No
 # `@source_kept` guard: thirteen rows are not a bulk source.
 root partial datasource milan_monumental_tree_info extends tree_partition (
     data_source: itmil_source,
