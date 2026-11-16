@@ -231,12 +231,14 @@ describe('parquet schema', () => {
       const url = worldFileUrl(blockFile(block!))
       const columns = (await conn.runAndReadAll(`SELECT column_name FROM (DESCRIBE SELECT * FROM read_parquet('${url}'))`))
         .getRowObjects().map((r) => String(r.column_name))
-      expect(columns).toEqual([...WORLD_BLOCK_COLUMNS])
+      // The blocks may carry more than the worker reads: a column is published before the map reads it (#224).
+      expect(columns).toEqual(expect.arrayContaining([...WORLD_BLOCK_COLUMNS]))
       const rows = (await conn.runAndReadAll(`SELECT count(*) AS n, count(DISTINCT tree_id) AS ids FROM read_parquet('${url}')`)).getRowObjects()[0]
       expect([Number(rows.n), Number(rows.ids)]).toEqual([block!.rows, block!.rows])
       const kinds = (await conn.runAndReadAll(`SELECT DISTINCT kind FROM read_parquet('${worldFileUrl(manifest.vocab)}') ORDER BY 1`))
         .getRowObjects().map((r) => String(r.kind))
-      expect(kinds).toEqual(Object.values(VOCAB_KINDS).sort())
+      // And the vocabulary may hold kinds the worker no longer reads (a column leaves the blocks after the map stops reading it).
+      expect(kinds).toEqual(expect.arrayContaining(Object.values(VOCAB_KINDS)))
     })
   }, 60_000)
 })
