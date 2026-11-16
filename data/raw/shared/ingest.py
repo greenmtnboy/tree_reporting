@@ -2424,18 +2424,49 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 1,322 staged OSM nodes against 94,652 anchors.  Mutual-NN stays above
+    # 60% through 20 m, so the band rule says nothing and the marginal table
+    # decides: 8->10 removes 24 duplicates for 3 hidden trees (8.0); past 10 m
+    # it is 8 for 1 to 14 m and 4 for 3 to 20 m (n=9 in the 10-20 m band),
+    # too few to justify the next calibrated size, so 10 m.
     "AUWOD": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 6,367 staged OSM nodes against 84,119 anchors.  Mutual-NN 60.9% in
+    # 5-10 m, 18.6% in 10-20 m (n=483): a 10 m guarantee caps it at 20.
+    # Marginal table: 8->10 removes 149 duplicates for 95 hidden trees (1.57),
+    # 10->14 removes 94 for 202 (0.47), so 10 m.
     "AUBAL": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 8,926 staged OSM nodes against 17,115 anchors.  Mutual-NN 93.7% in
+    # 2-5 m, 57.5% in 5-10 m (n=219, a coin flip): a 5 m guarantee, a 10 m
+    # cell.  Marginal table agrees: 8->10 removes 48 for 32 (1.50), 10->14
+    # removes 35 for 51 (0.69).
     "AUPER": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "AUADL": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USNPV": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USBOU": 10,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 17,825 staged OSM nodes against 6,030 anchors.  Mutual-NN 96.1% in
+    # 2-5 m, 47.8% in 5-10 m (n=297): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 82 duplicates for 52 hidden trees (1.58),
+    # 8->10 removes 42 for 46 (0.91), so 8 m.
+    "AUADL": 8,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 42,245 staged OSM nodes against 72,349 anchors.  Mutual-NN 96.5% in
+    # 2-5 m, 23.1% in 5-10 m (n=854): a 5 m guarantee caps it at 10.
+    # Marginal table: 4->6 removes 464 duplicates for 38 hidden trees (12.2),
+    # 6->8 removes 136 for 153 (0.89), so 6 m.
+    "USNPV": 6,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 7,100 staged OSM nodes against 49,588 anchors.  Mutual-NN 92.9% in
+    # 2-5 m, 52.0% in 5-10 m (n=175): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 52 duplicates for 23 hidden trees (2.26),
+    # 8->10 removes 17 for 21 (0.81), so 8 m.
+    "USBOU": 8,
     # Calibrated 2026-11-15 before the first build, on a local Overpass
     # extract (40,356 nodes) against the Comune's 255,075-row inventory:
     # planting spacing p50 5.5 m; mutual-NN 99.7% under 2 m, 90.4% at 2-5 m,
