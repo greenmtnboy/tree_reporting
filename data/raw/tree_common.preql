@@ -51,6 +51,18 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.auwod_data_updated_through datetime; # when Wodonga data is through
+property <*>.auwod_osm_data_updated_through datetime; # GCS publication time of Wodonga's staged OSM parquet
+property <*>.aubal_data_updated_through datetime; # when Ballarat data is through
+property <*>.aubal_osm_data_updated_through datetime; # GCS publication time of Ballarat's staged OSM parquet
+property <*>.auper_data_updated_through datetime; # when Perth data is through
+property <*>.auper_osm_data_updated_through datetime; # GCS publication time of Perth's staged OSM parquet
+property <*>.auadl_data_updated_through datetime; # when Adelaide data is through
+property <*>.auadl_osm_data_updated_through datetime; # GCS publication time of Adelaide's staged OSM parquet
+property <*>.usnpv_data_updated_through datetime; # when Naperville data is through
+property <*>.usnpv_osm_data_updated_through datetime; # GCS publication time of Naperville's staged OSM parquet
+property <*>.usbou_data_updated_through datetime; # when Boulder data is through
+property <*>.usbou_osm_data_updated_through datetime; # GCS publication time of Boulder's staged OSM parquet
 property <*>.itmil_data_updated_through datetime; # when Milan data is through
 property <*>.itmil_osm_data_updated_through datetime; # GCS publication time of Milan's staged OSM parquet
 property <*>.usclt_data_updated_through datetime; # when Charlotte data is through

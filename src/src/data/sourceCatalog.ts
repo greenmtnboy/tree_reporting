@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Wodonga', label: 'TODO: Wodonga tree inventory source', url: 'TODO' },
+  { city: 'Ballarat', label: 'TODO: Ballarat tree inventory source', url: 'TODO' },
+  { city: 'Perth', label: 'TODO: Perth tree inventory source', url: 'TODO' },
+  { city: 'Adelaide', label: 'TODO: Adelaide tree inventory source', url: 'TODO' },
+  { city: 'Naperville', label: 'TODO: Naperville tree inventory source', url: 'TODO' },
+  { city: 'Boulder', label: 'TODO: Boulder tree inventory source', url: 'TODO' },
   { city: 'Milan', label: 'Comune di Milano - Territorio: localizzazione degli alberi (DS2484, 2023-03-31 release, CC BY 4.0)', url: 'https://dati.comune.milano.it/dataset/ds2484_infogeo_alberi_localizzazione' },
   { city: 'Milan', label: 'Comune di Milano - Gli alberi monumentali nel Comune di Milano (DS2489, CC BY 4.0)', url: 'https://dati.comune.milano.it/dataset/ds2489-gli-alberi-monumentali-nel-comune-di-milano' },
   { city: 'Charlotte', label: 'City of Charlotte - Landscape Management Trees (ArcGIS)', url: 'https://gis.charlottenc.gov/arcgis/rest/services/ENG/LSM_Trees/MapServer/0' },
@@ -87,6 +93,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Wodonga', label: 'TODO: Wodonga landmark source' },
+  { city: 'Ballarat', label: 'TODO: Ballarat landmark source' },
+  { city: 'Perth', label: 'TODO: Perth landmark source' },
+  { city: 'Adelaide', label: 'TODO: Adelaide landmark source' },
+  { city: 'Naperville', label: 'TODO: Naperville landmark source' },
+  { city: 'Boulder', label: 'TODO: Boulder landmark source' },
   { city: 'Milan', label: 'Comune di Milano - Spazi freschi: parchi ed aree verdi (DS3018, CC BY 4.0)', url: 'https://dati.comune.milano.it/dataset/ds3018-spazi-freschi-parchi-ed-aree-verdi' },
   { city: 'Charlotte', label: 'Charlotte-Mecklenburg Historic Landmarks Commission - designated properties (Mecklenburg County GIS)', url: 'https://meckgis.mecklenburgcountync.gov/server/rest/services/LocalHistoricProperty/FeatureServer/0' },
   { city: 'Naples, FL', label: 'City of Naples - Historic Buildings; National Park Service - National Register of Historic Places', url: 'https://g.naplesgov.com/arcgis/rest/services/Building/HistoricBuildings/MapServer/0' },

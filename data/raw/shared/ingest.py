@@ -1494,6 +1494,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "AUWOD": ("WODONGA_OPENDATA",),
+    "AUBAL": ("BALLARAT_OPENDATA",),
+    "AUPER": ("PERTH_OPENDATA",),
+    "AUADL": ("ADELAIDE_OPENDATA",),
+    "USNPV": ("NAPERVILLE_OPENDATA",),
+    "USBOU": ("BOULDER_OPENDATA",),
     "ITMIL": ("MILAN_OPENDATA",),
     "USCLT": ("CHARLOTTE_OPENDATA",),
     "USNAP": ("NAPLES_OPENDATA",),
@@ -1578,6 +1584,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "AUWOD": "OSM_AUWOD",
+    "AUBAL": "OSM_AUBAL",
+    "AUPER": "OSM_AUPER",
+    "AUADL": "OSM_AUADL",
+    "USNPV": "OSM_USNPV",
+    "USBOU": "OSM_USBOU",
     "ITMIL": "OSM_ITMIL",
     "USCLT": "OSM_USCLT",
     "USNAP": "OSM_USNAP",
@@ -2240,6 +2252,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "AUWOD": (-36.3, -36.0, 146.75, 147.1),
+    "AUBAL": (-37.8, -37.3, 143.55, 144.1),
+    "AUPER": (-31.99, -31.92, 115.8, 115.9),
+    "AUADL": (-34.96, -34.88, 138.56, 138.64),
+    "USNPV": (41.66, 41.83, -88.3, -88.05),
+    "USBOU": (39.95, 40.13, -105.35, -105.15),
     "ITMIL": (45.38, 45.54, 9.03, 9.29),
     "USCLT": (35.0, 35.45, -81.05, -80.6),
     "USNAP": (26.05, 26.3, -81.85, -81.7),
@@ -2349,6 +2367,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "AUWOD": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "AUBAL": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "AUPER": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "AUADL": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USNPV": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USBOU": 10,
     # Calibrated 2026-11-15 before the first build, on a local Overpass
     # extract (40,356 nodes) against the Comune's 255,075-row inventory:
     # planting spacing p50 5.5 m; mutual-NN 99.7% under 2 m, 90.4% at 2-5 m,
@@ -2644,6 +2674,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'AUWOD': ((-36.3, -36.0, 146.75, 147.1),),
+    'AUBAL': ((-37.8, -37.3, 143.55, 144.1),),
+    'AUPER': ((-31.99, -31.92, 115.8, 115.9),),
+    'AUADL': ((-34.96, -34.88, 138.56, 138.64),),
+    'USNPV': ((41.66, 41.83, -88.3, -88.05),),
+    'USBOU': ((39.95, 40.13, -105.35, -105.15),),
     'ITMIL': ((45.38, 45.54, 9.03, 9.29),),
     'USCLT': ((35.0, 35.45, -81.05, -80.6),),
     'USNAP': ((26.05, 26.3, -81.85, -81.7),),

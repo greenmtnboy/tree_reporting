@@ -60,6 +60,12 @@ import usatl.atlanta_landmarks;
 import usnap.naples_landmarks;
 import usclt.charlotte_landmarks;
 import itmil.milan_landmarks;
+import usbou.boulder_landmarks;
+import usnpv.naperville_landmarks;
+import auadl.adelaide_landmarks;
+import auper.perth_landmarks;
+import aubal.ballarat_landmarks;
+import auwod.wodonga_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish
