@@ -22,7 +22,7 @@ for (const [name, viewport] of [
       const dots = (map?.getLayer('trees-dots') as unknown as { implementation?: { count: number } } | undefined)?.implementation
       if (dots) return dots.count
       if (!map?.getSource('trees')) return 0
-      // One source layer per colour (workers/mvtLayers.ts).
+      // One source layer per colour (workers/pointTiles.ts).
       const sourceLayers = new Set(map.getStyle().layers.flatMap((l) => ('source-layer' in l && l.source === 'trees' && l['source-layer'] ? [l['source-layer']] : [])))
       return [...sourceLayers].reduce((n, sourceLayer) => n + map.querySourceFeatures('trees', { sourceLayer }).length, 0)
     }), { timeout: 60_000 }).toBeGreaterThan(0)

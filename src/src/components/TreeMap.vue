@@ -2530,9 +2530,9 @@ function onTreesFirstLoaded() {
     msSincePublish: Math.round(nowMs() - mapQueryChangedAt),
     resident: treesResident(),
   })
-  // The LOD prewarm materialises the whole city again (the z15 feature
-  // table) and a phone has no memory to spare for that; nearby mode skips
-  // it for the same reason. On the desktop it waits for the intro to land:
+  // The LOD prewarm batches the tiles around the camera at three zooms. A
+  // phone's own view asks for what it shows, and nearby mode opens on one
+  // street. On the desktop it waits for the intro to land:
   // the worker has one connection, and a prewarm beside the fly-out held
   // the camera at the start pose for over a minute on Boston. A city
   // switch has no intro, so runIntroZoomOut resolves at once. A page

@@ -120,7 +120,7 @@ test('a phone panned from Boston to Burlington draws Burlington\'s trees', async
   await expect.poll(() => page.evaluate(() => {
     const map = window.__treeMap!
     if (!map.getSource('trees')) return 0
-    // One source layer per colour (workers/mvtLayers.ts).
+    // One source layer per colour (workers/pointTiles.ts).
     const sourceLayers = new Set(map.getStyle().layers.flatMap((l) => ('source-layer' in l && l.source === 'trees' && l['source-layer'] ? [l['source-layer']] : [])))
     return [...sourceLayers].reduce((n, sourceLayer) => n + map.querySourceFeatures('trees', { sourceLayer }).length, 0)
   }), { timeout: 90_000 }).toBeGreaterThan(20)

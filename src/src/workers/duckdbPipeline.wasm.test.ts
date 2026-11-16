@@ -15,7 +15,8 @@ vi.mock('./parquetUrls', async () => (await import('./wasm/fixtures')).fixturePa
 /**
  * The tile worker, unmodified, on DuckDB-WASM under Node: the engine the
  * browser runs, whose planner differs from native DuckDB's (see
- * wasm/nodeDuckDB.ts). The world is two synthetic cities cut into blocks as
+ * wasm/nodeDuckDB.ts). No extension is installed in it: a tile query that
+ * reached for the spatial extension again would fail here. The world is two synthetic cities cut into blocks as
  * the pipeline cuts them: 300k trees over central Boston and 20k over
  * Burlington, 290 km away, with species of its own. The worker runs as a
  * desktop does: whole blocks, held near the camera.
@@ -63,37 +64,17 @@ function tileLayers(buf: ArrayBuffer): Record<string, { features: number; proper
   }))
 }
 
-type PlanNode = { name: string; children: PlanNode[]; extra_info?: Record<string, unknown> }
-
-/**
- * The expressions DuckDB evaluates while scanning a table: the scan's own
- * pushed filters and any FILTER directly above it. Whatever is here runs on
- * every row of the city, before the tile range has narrowed anything.
- */
-function scanFilterExpressions(plan: PlanNode[]): string[] {
-  const out: string[] = []
-  const isScan = (node: PlanNode) => node.name.trim().endsWith('SCAN')
-  const walk = (node: PlanNode) => {
-    if (isScan(node)) out.push(JSON.stringify(node.extra_info ?? {}))
-    if (node.name.trim() === 'FILTER' && node.children.some(isScan)) out.push(JSON.stringify(node.extra_info ?? {}))
-    node.children.forEach(walk)
-  }
-  plan.forEach(walk)
-  return out
+/** A tile's features with their properties and place in the tile, by source layer. */
+function tileFeatures(buf: ArrayBuffer): Record<string, Array<Record<string, unknown> & { x: number; y: number }>> {
+  const tile = new VectorTile(new Pbf(new Uint8Array(buf)))
+  return Object.fromEntries(Object.entries(tile.layers).map(([name, layer]: [string, any]) => [
+    name,
+    Array.from({ length: layer.length }, (_, i) => ({ ...layer.feature(i).properties, ...layer.feature(i).loadGeometry()[0][0] })),
+  ]))
 }
 
 describe('tile worker on DuckDB-WASM', () => {
   let worker: WorkerHarness
-  /** The tile SQL the worker ran during the walk, before any test's own queries. */
-  let walkTileSql: string[] = []
-
-  const plan = async (sql: string): Promise<PlanNode[]> => {
-    const result = await worker.call<QueryResult>('query', { sql: `EXPLAIN (FORMAT json) ${sql}` })
-    return JSON.parse(String(result.rows[0].explain_value))
-  }
-  const geometryInScan = async (sql: string) =>
-    scanFilterExpressions(await plan(sql)).filter(e => /ST_AsMVTGeom|ST_IsEmpty/i.test(e))
-
   let world: { blocks: number; trees: number }
   const count = async (sql: string) => Number((await worker.call<QueryResult>('query', { sql })).rows[0].n)
 
@@ -109,10 +90,17 @@ describe('tile worker on DuckDB-WASM', () => {
     rmSync(FIXTURE_DIR, { recursive: true, force: true })
   })
 
-  it('reads the manifest and the vocabulary, loads the spatial extension, and holds no tree yet', async () => {
+  it('reads the manifest and the vocabulary, loads no extension, and holds no tree yet', async () => {
     expect(await count('SELECT count(*) AS n FROM trees_fast')).toBe(0)
-    // The bookmark's city-wide reads come from its projection, in place.
+    // The bookmark's city-wide reads come from its projection, in place, and
+    // the projection is not opened until one asks: binding the view reads the
+    // file's footer, which the first tree used to wait behind.
+    const bindings = () => executedSql.filter((sql) => /VIEW trees_published/.test(sql)).length
+    expect(bindings()).toBe(0)
     expect(await count('SELECT count(*) AS n FROM trees_published')).toBe(ROWS)
+    expect(bindings()).toBe(1)
+    expect(await count('SELECT count(*) AS n FROM trees_published')).toBe(ROWS)
+    expect(bindings()).toBe(1)
     expect(fetchedWorldFiles.filter((name) => name.startsWith('blocks/'))).toEqual([])
     const directory = await worker.call<WorldDirectory>('getWorldDirectory')
     expect(directory.trees).toBe(ROWS + OTHER_ROWS)
@@ -121,8 +109,8 @@ describe('tile worker on DuckDB-WASM', () => {
     // One vocabulary for the world: a species only the far city has is already a value of the type.
     const species = await worker.call<QueryResult>('query', { sql: 'SELECT unnest(enum_range(NULL::tree_species_t)) AS v' })
     expect(species.rows.map((r) => r.v)).toEqual(expect.arrayContaining(['Acer rubrum', ...OTHER_SPECIES]))
-    const spatial = await worker.call<QueryResult>('query', { sql: "SELECT loaded FROM duckdb_extensions() WHERE extension_name = 'spatial'" })
-    expect(spatial.rows[0].loaded).toBe(true)
+    // The bookmark's landmarks were read from a file fetched whole, and it is not left registered.
+    expect([...registeredFiles]).toEqual([])
   })
 
   it('serves trees at every zoom of a walk from the city view to the street', async () => {
@@ -137,7 +125,59 @@ describe('tile worker on DuckDB-WASM', () => {
       expect(tile.tileBuffer.byteLength, `z${z} centre tile is empty`).toBeGreaterThan(0)
     }
     await worker.call('prewarmLodCaches', {})
-    walkTileSql = [...new Set(executedSql.filter(sql => /ST_AsMVT\(/.test(sql)))]
+  })
+
+  it('the parquet extension asked for beside the engine is the one this engine loads', async () => {
+    // The fixtures stand in for parquetUrls.ts; this is the module itself.
+    const { DUCKDB_EXTENSION_VERSION, parquetExtensionUrl } = await vi.importActual<typeof import('./parquetUrls')>('./parquetUrls')
+    const engine = await worker.call<QueryResult>('query', { sql: 'SELECT library_version AS v FROM pragma_version()' })
+    expect(DUCKDB_EXTENSION_VERSION).toBe(engine.rows[0].v)
+    expect(parquetExtensionUrl('/assets/duckdb-eh-abc123.wasm')).toBe(`https://extensions.duckdb.org/${engine.rows[0].v}/wasm_eh/parquet.duckdb_extension.wasm`)
+    expect(parquetExtensionUrl('/assets/duckdb-mvp-abc123.wasm')).toContain('/wasm_mvp/')
+  })
+
+  it('draws its tiles without the spatial extension: nothing the walk ran names it, and it was never loaded', async () => {
+    // 23 MB of wasm that a phone fetched and compiled before its first tree (pointTiles.ts).
+    expect(executedSql.filter((sql) => /\bST_\w+\s*\(|\b(LOAD|INSTALL)\s+spatial/i.test(sql))).toEqual([])
+    const spatial = await worker.call<QueryResult>('query', { sql: "SELECT loaded FROM duckdb_extensions() WHERE extension_name = 'spatial'" })
+    expect(spatial.rows.map((r) => r.loaded)).not.toContain(true)
+  })
+
+  it('a street tile holds each of its trees once, at its own place in the tile', async () => {
+    const z = 16
+    const c = lngLatToTile(CENTER[0], CENTER[1], z)
+    await worker.call('setViewportZoom', { zoom: z + 0.5 })
+    await worker.call('setViewportCenter', { lng: CENTER[0], lat: CENTER[1] })
+    await worker.call('setVisibleTileRange', { z, ...rangeAround(z, 1) })
+    const drawn = Object.values(tileFeatures((await worker.call<TileResult>('getTile', { z, x: c.x, y: c.y })).tileBuffer)).flat()
+    const held = await worker.call<QueryResult>('query', { sql: `
+      SELECT tree_id, x_3857, y_3857, dbh FROM trees_fast
+      WHERE (xtile_z20 >> 4) = ${c.x} AND (ytile_z20 >> 4) = ${c.y}` })
+    expect(held.rows.length).toBeGreaterThan(10)
+    expect(drawn.map((f) => f.id).sort()).toEqual(held.rows.map((r) => r.tree_id).sort())
+    // Tile units from the tile's north-west corner, 4096 to a side.
+    const half = 20037508.342789244
+    const size = (2 * half) / 2 ** z
+    const byId = new Map(drawn.map((f) => [f.id, f]))
+    for (const row of held.rows) {
+      const feature = byId.get(row.tree_id)!
+      expect(feature.x).toBe(Math.round((Number(row.x_3857) + half - c.x * size) / size * 4096))
+      expect(feature.y).toBe(Math.round((half - c.y * size - Number(row.y_3857)) / size * 4096))
+      expect(feature.x).toBeGreaterThanOrEqual(0)
+      expect(feature.x).toBeLessThanOrEqual(4096)
+      expect(feature.dbh).toBe(Number(row.dbh))
+    }
+  })
+
+  it('an overview tile counts every tree of its ground once', async () => {
+    const z = 13
+    const c = lngLatToTile(CENTER[0], CENTER[1], z)
+    await worker.call('setViewportZoom', { zoom: z + 0.5 })
+    await worker.call('setViewportCenter', { lng: CENTER[0], lat: CENTER[1] })
+    const cells = Object.values(tileFeatures((await worker.call<TileResult>('getTile', { z, x: c.x, y: c.y })).tileBuffer)).flat()
+    const held = await count(`SELECT count(*) AS n FROM trees_fast WHERE (xtile_z20 >> 7) = ${c.x} AND (ytile_z20 >> 7) = ${c.y}`)
+    expect(held).toBeGreaterThan(1000)
+    expect(cells.reduce((sum, cell) => sum + Number(cell.point_count), 0)).toBe(held)
   })
 
   it('the walk loaded the blocks around the camera whole, each fetched once, and left no file registered', async () => {
@@ -153,17 +193,7 @@ describe('tile worker on DuckDB-WASM', () => {
     expect([...registeredFiles]).toEqual([])
   })
 
-  it('builds the z15 feature table a held block at a time, holding every held tree once', async () => {
-    const built = worker.perf.filter(p => /duckdb-worker:feature-table$/.test(p.label)).slice(-1)[0]
-    const tables = await count("SELECT count(*) AS n FROM duckdb_tables() WHERE table_name LIKE 'trees_cell_%'")
-    expect(built?.detail.slices).toBe(tables)
-    const held = await count('SELECT count(*) AS n FROM trees_fast')
-    const n = await worker.call<QueryResult>('query', { sql: 'SELECT count(*) AS n, count(DISTINCT tree_id) AS ids FROM tile_features_z15' })
-    expect(Number(n.rows[0].n)).toBe(held)
-    expect(Number(n.rows[0].ids)).toBe(held)
-  })
-
-  it('every tile holds one source layer per colour, named by the colour (mvtLayers.ts)', async () => {
+  it('every tile holds one source layer per colour, named by the colour (pointTiles.ts)', async () => {
     // What each zoom's features carry: the heatmaps read point_count and
     // grid_m, the circles (tiles z12 and up) dbh, a tap the tree id.
     const expected: Record<number, string[]> = {
@@ -189,55 +219,26 @@ describe('tile worker on DuckDB-WASM', () => {
     }
   })
 
-  it('the plan check catches the geometry guard pushed into the scan (#144)', async () => {
-    // The points batch as it was before #144: the guard as a WHERE over the
-    // feature, which DuckDB-WASM evaluates in the scan, on every tree.
-    const c = lngLatToTile(CENTER[0], CENTER[1], 16)
-    const pushed = `
-      WITH rows AS (
-        SELECT (tf.xtile_z20 >> 4) AS xtile, (tf.ytile_z20 >> 4) AS ytile,
-          { 'geom': ST_AsMVTGeom(ST_Point(tf.x_3857, tf.y_3857), ST_Extent(ST_TileEnvelope(16, (tf.xtile_z20 >> 4), (tf.ytile_z20 >> 4))), 4096, 64, true) } AS feature
-        FROM trees_fast tf
-        WHERE (tf.xtile_z20 >> 4) BETWEEN ${c.x} AND ${c.x + 1} AND (tf.ytile_z20 >> 4) BETWEEN ${c.y} AND ${c.y + 1}
-      )
-      SELECT xtile, ytile, ST_AsMVT(feature, 'trees', 4096, 'geom') AS mvt
-      FROM rows WHERE feature.geom IS NOT NULL AND NOT ST_IsEmpty(feature.geom)
-      GROUP BY xtile, ytile`
-    expect(await geometryInScan(pushed)).not.toEqual([])
-  })
-
-  it('no tile query the worker ran evaluates tile geometry while scanning the city', async () => {
-    const tileQueries = walkTileSql
-    // Points batches, overview aggregates and the z15 feature table all ran.
-    expect(tileQueries.length).toBeGreaterThanOrEqual(3)
-    const offenders: string[] = []
-    for (const sql of tileQueries) {
-      const found = await geometryInScan(sql)
-      if (found.length) offenders.push(`${sql.trim().slice(0, 300)}\n  scan evaluates: ${found.join(' | ').slice(0, 300)}`)
-    }
-    expect(offenders, offenders.join('\n\n')).toEqual([])
-  })
-
-  it('a colour change keeps the z15 feature table and recolours its tiles at read time', async () => {
-    await worker.call('setViewportZoom', { zoom: 15.5 })
+  it('a colour change recolours the tiles: a tree\'s layer is its colour when the tile is read', async () => {
+    const z = 15
+    const c = lngLatToTile(CENTER[0], CENTER[1], z)
+    await worker.call('setViewportZoom', { zoom: z + 0.5 })
     await worker.call('setViewportCenter', { lng: CENTER[0], lat: CENTER[1] })
-    await worker.call('prewarmLodCaches', {})
-    const builds = () => worker.perf.filter(p => p.label.includes('feature-table')).length
-    const before = builds()
-    expect(before).toBeGreaterThanOrEqual(1)
+    await worker.call('setVisibleTileRange', { z, ...rangeAround(z, 1) })
+    const before = tileLayers((await worker.call<TileResult>('getTile', { z, x: c.x, y: c.y })).tileBuffer)
+    const trees = Object.values(before).reduce((sum, layer) => sum + layer.features, 0)
+    expect(trees).toBeGreaterThan(0)
     // A per-tree override, as a chat publish installs one.
     await worker.call('setColorOverrideSql', { sql: "SELECT tree_id, '#123456' AS override_color FROM trees" })
-    await worker.call('prewarmLodCaches', {})
-    expect(builds(), 'the colour change rebuilt the feature table').toBe(before)
-    const c = lngLatToTile(CENTER[0], CENTER[1], 15)
-    await worker.call('setVisibleTileRange', { z: 15, ...rangeAround(15, 1) })
-    const tile = await worker.call<TileResult>('getTile', { z: 15, x: c.x, y: c.y })
-    expect(tile.tileBuffer.byteLength).toBeGreaterThan(0)
-    const served = worker.perf.filter(p => p.label.includes('neighborhood-batch') && p.detail.z === 15).slice(-1)[0]
-    expect(served?.detail.mode).toBe('feature-table')
-    expect(Object.keys(tileLayers(tile.tileBuffer))).toEqual(['#123456'])
-    await worker.call('setColorOverrideSql', { sql: null })
-    expect(builds()).toBe(before)
+    const tile = await worker.call<TileResult>('getTile', { z, x: c.x, y: c.y })
+    const recoloured = tileLayers(tile.tileBuffer)
+    try {
+      expect(Object.keys(recoloured)).toEqual(['#123456'])
+      expect(recoloured['#123456'].features).toBe(trees)
+    } finally {
+      await worker.call('setColorOverrideSql', { sql: null })
+    }
+    expect(tileLayers((await worker.call<TileResult>('getTile', { z, x: c.x, y: c.y })).tileBuffer)).toEqual(before)
   })
 
   it('an intro prefetch of an overview range is one aggregate and serves the range with fetching paused (#146)', async () => {

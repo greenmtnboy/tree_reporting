@@ -51,7 +51,7 @@ function decode(buf: ArrayBuffer): { features: number; colors: Set<string>; byte
   const colors = new Set<string>()
   if (buf.byteLength === 0) return { features: 0, colors, bytes: 0 }
   const tile = new VectorTile(new Pbf(new Uint8Array(buf)))
-  // One source layer per colour (mvtLayers.ts); a tile from before that has one `trees` layer.
+  // One source layer per colour (pointTiles.ts); a tile from before that has one `trees` layer.
   let features = 0
   for (const [name, layer] of Object.entries(tile.layers) as [string, { length: number; feature(i: number): { properties: Record<string, unknown> } }][]) {
     features += layer.length
@@ -127,7 +127,7 @@ describe.skipIf(!DATA)('leaf-shade tile cost on the real Boston projection', () 
       }
       log(`z${z} view: first tile ${firstMs} ms; ${tiles} tiles, ${features} features, ${(bytes / 1024).toFixed(0)} KB, ${colors.size} colours`)
     }
-    // The desktop prewarm after the intro lands (z15 feature table + blocks around the camera at z16).
+    // The tile-drawing desktop's prewarm after the intro lands (the tiles around the camera at z15 and z16).
     await worker.call('setViewportZoom', { zoom: 16.3 })
     const t0 = now()
     await worker.call('prewarmLodCaches', {})
@@ -141,7 +141,7 @@ describe.skipIf(!DATA)('leaf-shade tile cost on the real Boston projection', () 
     await worker.call<unknown[]>('getMapTrees', { lng: CENTER[0] + 0.004, lat: CENTER[1], altitude: 600, bounds, visibleBounds: bounds })
     log(`crown query again (warm): ${Math.round(now() - t2)} ms`)
     for (const p of perfSince(perfStart)) {
-      if (/neighborhood-batch|feature-table|prewarm:done|invalidate/.test(p.label)) log(`  ${p.label.replace('[Perf] duckdb-worker:', '')} ${JSON.stringify(p.detail)}`)
+      if (/neighborhood-batch|prewarm:done|invalidate/.test(p.label)) log(`  ${p.label.replace('[Perf] duckdb-worker:', '')} ${JSON.stringify(p.detail)}`)
     }
     return executedSql.slice(sqlStart)
   }
@@ -164,28 +164,18 @@ describe.skipIf(!DATA)('leaf-shade tile cost on the real Boston projection', () 
 
     // --- Alternatives, timed on the worker's own SQL with the colour read swapped ---
     log('\n=== alternatives (worker SQL, colour read swapped) ===')
-    const batchZ11 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 9\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
-    const batchZ14 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 6\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
-    const batchZ13 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 7\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
-    const batchZ12 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 8\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
-    const batchZ16 = foliageSql.find((s) => /ST_AsMVT\(/.test(s) && /\(tf\.xtile_z20 >> 4\)/.test(s) && !/tile_features/.test(s))
+    const batchZ11 = foliageSql.find((s) => /FROM agg\b/.test(s) && /\(tf\.xtile_z20 >> 9\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
+    const batchZ14 = foliageSql.find((s) => /FROM agg\b/.test(s) && /\(tf\.xtile_z20 >> 6\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
+    const batchZ13 = foliageSql.find((s) => /FROM agg\b/.test(s) && /\(tf\.xtile_z20 >> 7\)/.test(s) && /GROUP BY 1, 2, 3, 4, 5(, 6)?/.test(s))
+    const batchZ16 = foliageSql.find((s) => /SELECT \* FROM pts\b/.test(s) && /\(tf\.xtile_z20 >> 4\)/.test(s))
     const time = async (name: string, sql: string | undefined) => {
       if (!sql) { log(`${name}: (sql not captured)`); return }
       const t = now()
       const r = await worker.call<QueryResult>('query', { sql })
-      // The query RPC normalises a BLOB to a plain number array.
-      const feats = r.rows.reduce((n, row) => n + (Array.isArray(row.mvt) ? decode(new Uint8Array(row.mvt as number[]).buffer).features : 0), 0)
-      log(`${name}: ${Math.round(now() - t)} ms${r.rows.length ? `, ${r.rows.length} tiles, ${feats} features` : ''}`)
+      // One row per feature: the worker encodes the tiles from these (pointTiles.ts).
+      log(`${name}: ${Math.round(now() - t)} ms${r.rows.length ? `, ${r.rows.length} features` : ''}`)
     }
     await worker.call('setSpeciesShadeSql', { sql: speciesShadeSql('autumn') })
-    // The same aggregate handed back as columns instead of MVT: what an Arrow-fed layer would ask for.
-    const asColumns = (sql: string) => sql.slice(0, sql.indexOf('), rows AS (')) + ') SELECT xtile, ytile, gx, gy, display_color, point_count FROM agg'
-    for (const [name, sql] of [['z11 block', batchZ11], ['z12 block', batchZ12], ['z13 block', batchZ13]] as const) {
-      if (!sql) continue
-      const t = now()
-      const r = await worker.call<QueryResult>('query', { sql: asColumns(sql) })
-      log(`${name} as columns, no MVT: ${Math.round(now() - t)} ms, ${r.rows.length} cells`)
-    }
     const join = "LEFT JOIN __species_shade __ss ON CAST(tf.species AS VARCHAR) = __ss.species"
     const expr = "COALESCE(list_extract(__ss.shades, 1 + CAST(hash(tf.tree_id) % len(__ss.shades) AS INTEGER)), '#9e9e9e')"
     for (const [name, sql] of [['z11 block', batchZ11], ['z13 block', batchZ13], ['z14 block', batchZ14], ['z16 batch', batchZ16]] as const) {

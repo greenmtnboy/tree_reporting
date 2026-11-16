@@ -47,6 +47,25 @@ export async function fetchWorldFile(name: string): Promise<Uint8Array> {
 }
 
 /**
+ * Part of a block file: bytes `[start, end)`, or its last `suffix` bytes.
+ * The answer says where the bytes start and how long the whole file is (the
+ * bucket exposes Content-Range). A server that ignores the range answers with
+ * the whole file, which is reported as such.
+ */
+export async function fetchWorldRange(
+  name: string, range: { start: number; end: number } | { suffix: number },
+): Promise<{ bytes: Uint8Array; start: number; total: number }> {
+  const header = 'suffix' in range ? `bytes=-${range.suffix}` : `bytes=${range.start}-${range.end - 1}`
+  const response = await fetch(worldFileUrl(name), { headers: { Range: header } })
+  if (!response.ok) throw new WorldFileError(name, response.status)
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  if (response.status !== 206) return { bytes, start: 0, total: bytes.length }
+  const match = /^bytes (\d+)-\d+\/(\d+)$/.exec(response.headers.get('Content-Range') ?? '')
+  if (!match) throw new Error(`World file ${name}: a partial answer with no readable Content-Range`)
+  return { bytes, start: Number(match[1]), total: Number(match[2]) }
+}
+
+/**
  * A small published file, whole, or null when it cannot be fetched. For the
  * files the worker's start reads in full anyway: asked for beside the engine's
  * download instead of after it, and in one request where DuckDB's range reads
@@ -59,6 +78,23 @@ export async function fetchPublishedFile(url: string): Promise<Uint8Array | null
   } catch {
     return null
   }
+}
+
+/**
+ * The DuckDB release the bundled duckdb-wasm is built from: the directory of
+ * extensions.duckdb.org it asks for its parquet reader in. The engine only
+ * asks once it is running and meets its first parquet file, so the worker
+ * asks for the same URL earlier, beside the engine's own download, and the
+ * engine's request is then answered from the browser's cache. A wrong version
+ * here is a megabyte fetched for nothing and no error, so
+ * duckdbPipeline.wasm.test.ts pins it to the engine's own answer.
+ */
+export const DUCKDB_EXTENSION_VERSION = 'v1.4.3'
+
+/** The parquet extension the engine at `mainModule` will load, or null when it should not be asked for ahead. */
+export function parquetExtensionUrl(mainModule: string): string | null {
+  const platform = /duckdb-mvp/.test(mainModule) ? 'wasm_mvp' : 'wasm_eh'
+  return `https://extensions.duckdb.org/${DUCKDB_EXTENSION_VERSION}/${platform}/parquet.duckdb_extension.wasm`
 }
 
 export class WorldFileError extends Error {

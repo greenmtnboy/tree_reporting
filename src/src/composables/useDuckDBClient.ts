@@ -27,7 +27,8 @@ type WorkerMethodMap = {
   setViewportZoom: { params: { zoom: number }; result: void }
   setViewportCenter: { params: { lng: number; lat: number }; result: void }
   ensureWindowAt: { params: { lng: number; lat: number }; result: void }
-  prefetchWindowAt: { params: { lng: number; lat: number }; result: void }
+  prefetchWindowAt: { params: { lng: number; lat: number; city?: string }; result: void }
+  prefetchEngine: { params: Record<string, never>; result: void }
   setVisibleTileRange: { params: { z: number; minX: number; maxX: number; minY: number; maxY: number }; result: void }
   prefetchVisibleTilesAtZoom: { params: { z: number; range?: TileRangeParams }; result: PrefetchStatus }
   prewarmLodCaches: { params: Record<string, never>; result: void }
@@ -219,10 +220,21 @@ async function ensureWindowAt(lng: number, lat: number): Promise<void> {
 
 /**
  * Start fetching the trees under a point the map is about to open on (Near
- * Me's fix), while the engine that will read them is still downloading.
+ * Me's fix), and the landmarks of the city it is in, while the engine that
+ * will read them is still downloading.
  */
-function prefetchWindowAt(lng: number, lat: number): void {
-  fireAndForget('prefetchWindowAt', { lng, lat })
+function prefetchWindowAt(lng: number, lat: number, city?: string): void {
+  fireAndForget('prefetchWindowAt', { lng, lat, city })
+}
+
+/**
+ * Download the engine's files without starting it: for a screen the map is
+ * likely to follow (the entry's two buttons). Nothing is compiled and no data
+ * is read, so it competes with nothing but the link.
+ */
+function prefetchEngine(): void {
+  if (ready.value || initPromise) return
+  fireAndForget('prefetchEngine', {})
 }
 
 /** Set before the first city load; the map's layout decides it. */
@@ -284,8 +296,12 @@ async function ensureTileProtocolRegistered(initialCity?: string) {
   protocolRegistered = true
 }
 
-/** Start DuckDB init early (e.g. before the map is created) with a known city. */
-function preWarmForCity(city: string) {
+/**
+ * Start DuckDB init early (e.g. before the map is created). With a city, its
+ * landmarks download beside the engine; Near Me does not know its city yet
+ * and names it with the fix (prefetchWindowAt).
+ */
+function preWarmForCity(city?: string) {
   void ensureInit(city)
 }
 
@@ -331,6 +347,7 @@ export function useDuckDB() {
     setWindowPolicy,
     ensureWindowAt,
     prefetchWindowAt,
+    prefetchEngine,
     setViewportZoom,
     setViewportCenter,
     setVisibleTileRange,

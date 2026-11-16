@@ -25,16 +25,20 @@ a red run.
   (`src/workers/wasm/nodeDuckDB.ts`, the same wasm engine in-process), the
   parquet URLs for a temporary directory holding a synthetic 300k-tree browser
   projection (`wasm/fixtures.ts`), and the tests drive the worker through its
-  message protocol (`wasm/workerHarness.ts`). It walks z11 to z18, then checks
-  every tile query it ran with `EXPLAIN (FORMAT json)`: nothing in a table
-  scan's filter may evaluate `ST_AsMVTGeom` or `ST_IsEmpty`. That is the
-  wasm-only pushdown from #144 (12.5 s against 18 ms for one z16 batch over
-  1.5M rows); native DuckDB plans it correctly, so `cityTables.test.ts` cannot
-  see it. It also checks the intro's overview warm-up (#146): one aggregate
-  over the range, and every tile in it served while fetching is paused.
-  Needs the network: spatial is fetched from extensions.duckdb.org on first
-  LOAD, because a LOAD from a local file, a registered buffer or a local
-  repository hangs under the Node runtime.
+  message protocol (`wasm/workerHarness.ts`). It walks z11 to z18 and decodes
+  the tiles with MapLibre's own reader: every tree of a street tile once, at
+  its place in the tile; an overview tile's counts summing to the trees under
+  it; a source layer per colour. The engine here has no extension installed,
+  and the suite asserts none was loaded and no statement named an `ST_`
+  function: the worker encodes its tiles in JavaScript (`pointTiles.ts`), and
+  the spatial extension it once used for that was 23 MB of wasm on every
+  phone's first load. It also checks the intro's overview warm-up (#146): one
+  aggregate over the range, and every tile in it served while fetching is
+  paused. `duckdbPipeline.window.wasm.test.ts` is the same worker as a phone:
+  cells cut from blocks, a large block read in part and falling back to the
+  whole file when a partial read fails, Near Me's cells loaded ahead of its
+  first tile. Offline; the wasm planner still differs from native DuckDB's
+  (#144), which is why these run on it.
 - `pnpm bench:chat`: the agent chat benchmark below. Run by hand.
 - `pnpm test:crowns`: deterministic WebGL crown-renderer checks on a separate
   Vite dev server (port 6174), with no remote map or tree data. Checks a 12 m

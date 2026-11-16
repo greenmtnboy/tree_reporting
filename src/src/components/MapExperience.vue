@@ -48,19 +48,32 @@ const emit = defineEmits<{ 'entry-change': [visible: boolean] }>()
 const route = useRoute()
 const router = useRouter()
 const { displayCity, setUserLocation } = useMapData()
-// The map's engine is the longest wait before a tree: about 14 MB of DuckDB
-// and its spatial extension, then the species table and the world's manifest.
-// Near Me starts it with the location request, so it downloads while the
-// viewer answers the prompt and the fix arrives, not after. Not before the
-// tap: the entry screen starts nothing (a visitor may be headed for another
-// tab, whose own queries the download would slow). The window is the one
-// TreeMap asks for on this layout; if a layout asks for another, the worker
-// reads the manifest again and nothing else.
-const { setWindowPolicy, preWarmForCity, prefetchWindowAt } = useDuckDB()
+// The map's engine is the longest wait before a tree: about 10 MB of DuckDB
+// on the wire, then the species table and the world's manifest. Near Me
+// starts it with the location request, so it runs while the viewer answers
+// the prompt and the fix arrives, not after. The entry screen itself starts no
+// engine and reads no data (a visitor may be headed for another tab, whose
+// own queries a running engine would slow); it only downloads the engine's
+// files (prefetchEngineFiles), so a tap finds them here. The window is the
+// one TreeMap asks for on this layout; if a layout asks for another, the
+// worker reads the manifest again and nothing else.
+const { setWindowPolicy, preWarmForCity, prefetchWindowAt, prefetchEngine } = useDuckDB()
 const { isMobile } = useIsMobile()
 function warmMapEngine() {
   setWindowPolicy(resolveMapWindow(isMobile.value)?.policy ?? null)
-  preWarmForCity(displayCity.value)
+  // No city: the bookmark is wherever the fix lands, and is named with it.
+  preWarmForCity()
+}
+// How long the entry is on screen before the engine's files are asked for:
+// past the entry's own first paint, and past a visitor who was only passing
+// through to another tab.
+const ENGINE_PREFETCH_DELAY_MS = 400
+let enginePrefetchTimer: number | undefined
+function prefetchEngineFiles() {
+  // A viewer who asked their browser to save data pays for the engine only once they ask for the map.
+  if ((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData) return
+  window.clearTimeout(enginePrefetchTimer)
+  enginePrefetchTimer = window.setTimeout(prefetchEngine, ENGINE_PREFETCH_DELAY_MS)
 }
 // City is a destination hint, never an implicit experience selection.
 const mode = computed(() => {
@@ -69,7 +82,11 @@ const mode = computed(() => {
 })
 const location = ref<{ lat: number; lng: number } | null>(null)
 const showEntry = computed(() => !mode.value || (mode.value === 'nearby' && !location.value))
-watch(showEntry, value => emit('entry-change', value), { immediate: true })
+watch(showEntry, (value) => {
+  emit('entry-change', value)
+  // Both of the entry's buttons lead to the map.
+  if (value && !mode.value) prefetchEngineFiles()
+}, { immediate: true })
 const locating = ref(false)
 const locationError = ref('')
 let request = 0
@@ -101,7 +118,7 @@ async function locate() {
     const position = { lat: fix.coords.latitude, lng: fix.coords.longitude }
     const city = cityAt(position.lat, position.lng)
     if (!city) throw new Error('We do not have a tree inventory near you yet. Choose Explore City to visit a mapped city.')
-    prefetchWindowAt(position.lng, position.lat)
+    prefetchWindowAt(position.lng, position.lat, city)
     await entryNavigation
     if (id !== request) return
     await router.replace({ query: { ...route.query, city, mode: 'nearby', tree: undefined } })
@@ -154,7 +171,10 @@ watch(mode, (value) => {
     void router.replace({ query: { ...route.query, mode: 'explore' } })
   }
 }, { immediate: true })
-onUnmounted(() => { request++ })
+onUnmounted(() => {
+  request++
+  window.clearTimeout(enginePrefetchTimer)
+})
 </script>
 
 <style scoped>
