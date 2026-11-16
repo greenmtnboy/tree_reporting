@@ -181,13 +181,14 @@ trees are named" from the rollup.
   all-null column is a few bytes per row group. **Built (step 4):** on
   Milan's and Boston's projections (2.9M trees, 51 blocks) it costs 25 KB of
   87 MB, +0.03%.
-- **Publish a notable file** beside the vocabulary: content-addressed,
-  named in the manifest (`notable`, beside `vocab`; the manifest is the
-  commit point), one row per notable block row with `tree_id, city,
-  tree_name, significance, significance_source`. Built from the
-  projections' notable rows in the same run; a tree two cities publish is
-  one row, under the city its block row names. **Built (step 4):** 29 rows
-  today (Milan 13, Boston 16).
+- **Publish a notable file per city** beside the vocabulary:
+  content-addressed, named in that city's manifest entry (`notable`; the
+  manifest is the commit point), one row per notable block row with
+  `tree_id, city, tree_name, significance, significance_source`. Built from
+  the projections' notable rows in the same run; a tree two cities publish
+  is one row, in the file of the city its block row names. **Built (step
+  4):** 29 rows today (Milan 13, Boston 16). #224 published one world-wide
+  file; it was split per city before any map read it.
 - **Remove** `tree_name` from `COLUMNS` and `VOCAB_COLUMNS`, **after** the
   frontend stops reading it (step 6 below). It's an ENUM every resident row
   carries and it is null on ~all of them. Swapping it for a 1-byte flag is
@@ -312,8 +313,8 @@ key on it, and the frontend must not ship until the blocks carry `notable`.
    merged (#223); every `derived-{code}` projection carries `notable` (Milan
    13, Boston 16) and its vocabulary dropped `tree_name`; the rollup carries
    the 29 rows.
-4. **World blocks PR** (additive): `notable` in, the notable file, the
-   manifest's `notable` field. `tree_name` **stays** in the blocks. The worker
+4. **World blocks PR** (additive): `notable` in, a notable file per city,
+   named in each city's manifest entry. `tree_name` **stays** in the blocks. The worker
    reads block columns by name and checks only the manifest's `format`, so
    a column the live map does not read yet is harmless and no `world/v2` is
    needed. `test_publish_world_blocks.py` holds the blocks to carrying every
