@@ -235,6 +235,10 @@ exclude = [
     "raw/*/*_overture_extract.py",
     "raw/*/*_landmarks_geocode.py",
     "raw/*/*_landmarks_extract.py",
+    # A build file: the crown fit's committed CSV.  allometry_model.preql
+    # reads the parquet `crown_allometry_fit.py --publish` uploads under the
+    # CSV's content hash, so the 178 KB source never needs to reach a worker.
+    "raw/crown_width_coefficients.csv",
 ]
 
 # ===========================================================================

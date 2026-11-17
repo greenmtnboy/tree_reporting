@@ -23,7 +23,11 @@
 # term over 87 species and dropped it as unstable). Both are curation
 # questions this dataset exists to put numbers in front of.
 #
-# The coefficient table is a CSV `file` datasource, joined on `genus`. The
+# The coefficient table is a `file` datasource, joined on `genus`: the
+# committed crown_width_coefficients.csv, published as a parquet named by its
+# content hash (`crown_allometry_fit.py --publish`). The CSV itself is
+# excluded from the cloud sync; test_tree_predictions.py holds the URL to the
+# committed CSV's hash, so a refit cannot ship without re-pointing it. The
 # genus comes from the enrichment table rather than from the first word of
 # `species`, because the enrichment table has already corrected the
 # misspellings a city publishes (`Petula pendula` -> Betula) and it is also
@@ -66,7 +70,7 @@ root datasource crown_width_coefficients (
     dbh_max_cm: crown_fit_dbh_max_cm,
 )
 grain (genus)
-file `./crown_width_coefficients.csv`
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/reference/crown_width_coefficients_850666b75f15.parquet`
 where crown_coefficient_level = 'genus';
 
 # The class a tree falls back to when its genus has no fit, decided by the
@@ -110,7 +114,7 @@ root datasource crown_width_fallbacks (
     dbh_max_cm: crown_fallback_row_dbh_max_cm,
 )
 grain (crown_fallback_taxon)
-file `./crown_width_coefficients.csv`
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/reference/crown_width_coefficients_850666b75f15.parquet`
 where crown_fallback_row_level = 'division' or crown_fallback_row_level = 'global';
 
 auto crown_fallback_level <- @for_class(crown_fallback_row_level, crown_fallback_taxon);

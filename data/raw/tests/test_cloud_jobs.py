@@ -588,10 +588,9 @@ def test_the_landmark_union_is_published_after_its_inputs():
 # honest in both directions -- nothing excluded is reachable by a job, and
 # nothing in the list is dead -- and fail before a city takes the sync over.
 #
-# The one file worth moving if this ever tightens again is
-# raw/crown_width_coefficients.csv: 178 KB, in the bundle only because
-# tree_predictions.preql reads it with a relative `file` clause rather than
-# from GCS like a staged object.
+# raw/crown_width_coefficients.csv, 178 KB, was the largest data file in the
+# bundle; it is now a build file (excluded), and allometry_model.preql reads
+# its content-addressed parquet from GCS.
 
 BUNDLE_INCLUDE = ("*.preql", "*.py", "*.sql", "*.toml", "*.json", "*.csv")
 BUNDLE_DEFAULT_EXCLUDE = ("*/__pycache__/*", "*/.venv/*", "*/tests/*")
