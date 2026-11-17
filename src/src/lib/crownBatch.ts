@@ -3,6 +3,7 @@ import {
   mercatorPoint, metersPerMercatorUnit, spriteAspect, spriteReach, validCrownWidth,
   type TreeCrownColumns, type TreeRenderView,
 } from './treeCrowns'
+import { crownFormIndex, crownTurn, packCrownAlpha } from './crownShapes'
 
 /** Floats per vertex; six vertices (two triangles) per tree. */
 export const CROWN_STRIDE = 15
@@ -125,6 +126,9 @@ export function buildCrownBatch(c: TreeCrownColumns, camera: TreeRenderView, opt
     const dbh = Number.isFinite(c.dbh[i]) && c.dbh[i] > 0 ? c.dbh[i] : 3
     const trunk = Math.min(1, Math.sqrt(dbh / 42))
     const aspect = cell ? spriteAspect(width, c.height[i], cell.crownFraction, cell.heightFraction) : 1
+    // The colour's alpha: 1 for a measured crown, plus 2 on a desktop notable sprite (its outline);
+    // its fraction is the overhead crown's form and turn (lib/crownShapes).
+    const alpha = packCrownAlpha((c.measured[i] ? 1 : 0) + (!simplified && c.notable?.[i] ? 2 : 0), crownFormIndex(c.category[i]), crownTurn(c.lng[i], c.lat[i]))
     for (let v = 0; v < CORNERS.length; v += 2) {
       const cx = CORNERS[v], cy = CORNERS[v + 1]
       vertices[cursor++] = dx[i]
@@ -135,8 +139,7 @@ export function buildCrownBatch(c: TreeCrownColumns, camera: TreeRenderView, opt
       vertices[cursor++] = r
       vertices[cursor++] = g
       vertices[cursor++] = b
-      // The colour's alpha: 1 for a measured crown, plus 2 on a desktop notable sprite (its outline).
-      vertices[cursor++] = (c.measured[i] ? 1 : 0) + (!simplified && c.notable?.[i] ? 2 : 0)
+      vertices[cursor++] = alpha
       vertices[cursor++] = cell ? (cx < 0 ? cell.left : cell.right) : 0
       vertices[cursor++] = cell ? (cy > 0 ? cell.top : cell.bottom) : 0
       vertices[cursor++] = cell?.crownFraction ?? 1

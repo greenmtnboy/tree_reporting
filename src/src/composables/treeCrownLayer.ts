@@ -11,6 +11,8 @@ import { CROWN_STRIDE as STRIDE, emptyCrownBatch, type CrownBatch, type CrownBat
 import { FOOTPRINT_PAD, insidePolygon, viewFootprint, type Point } from '../lib/viewFootprint'
 import { lngLatFrom3857, lngLatTo3857, MERCATOR_WORLD_M } from '../lib/treeDots'
 import { initialSpriteBudget, isSoftwareRenderer, nextSpriteBudget, settleStepDown, stepDownUnseen, type BatchSample, type SpriteBudget } from '../lib/spriteBudget'
+import { CROWN_UNPACK_GLSL } from '../lib/crownShapes'
+import { crownShapeAtlas, loadCrownShapeAtlas, crownCellGLSL, CROWN_COARSE_RANGE, CROWN_FINE_RANGE, CROWN_TEXELS_PER_UNIT } from './treeCrownShapeAtlas'
 import { NOTABLE_GLOW_ALPHA, NOTABLE_GLOW_RGB, NOTABLE_HALO_SCALE, NOTABLE_OUTLINE_RGB, NOTABLE_OUTLINE_WIDTH } from '../lib/notableGlow'
 
 type GL = WebGLRenderingContext | WebGL2RenderingContext
@@ -111,6 +113,9 @@ export class TreeCrownLayer implements CustomLayerInterface {
   private debug = { queries: 0, discarded: 0, lastQueryMs: 0, lastSqlMs: 0, lastBuildMs: 0, lastBatch: 0, lastUploadMs: 0 }
   private sprites?: ReturnType<typeof createTreeSpriteAtlas>
   private textures: WebGLTexture[] = []
+  /** Whether the crowns' texture holds the atlas yet, and the atlas waiting for the next render to upload it. */
+  private crownsReady = false
+  private pendingCrowns?: HTMLCanvasElement
   /** The installed batch's drawn trees, in draw order; `data` holds their vertices. */
   private drawn: CrownBatch = emptyCrownBatch()
   private drawnTrees?: DrawnTree[]
@@ -121,7 +126,14 @@ export class TreeCrownLayer implements CustomLayerInterface {
   private stepDownFrom?: { camera: CrownCamera; bearing: number; groundReach: number }
   private get minZoom() { return this.simplified ? CROWN_ZOOM_START : SPRITE_CROWN_ZOOM_START }
 
-  constructor(private load: LoadCrowns, private simplified: boolean) {}
+  /**
+   * Whether overhead crowns are drawn by their form (lib/crownShapes) or as plain discs. Unset, by
+   * the renderer: a software GL runs both sides of the shader's branches and pays for every
+   * mipmapped read, so it keeps the discs. The renderer tests set it, running on one.
+   */
+  private shapes = false
+
+  constructor(private load: LoadCrowns, private simplified: boolean, private crownShapes?: boolean) {}
 
   /**
    * Where the desktop sprites stand in for the dots: inside `polygon` (the fetched footprint in
@@ -433,10 +445,10 @@ export class TreeCrownLayer implements CustomLayerInterface {
 
   private initialize(gl: GL) {
     if (!this.simplified) this.sprites ??= createTreeSpriteAtlas()
-    if (!this.simplified && this.debug.queries === 0) {
-      const info = gl.getExtension('WEBGL_debug_renderer_info')
-      this.budget = initialSpriteBudget(isSoftwareRenderer(info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : ''))
-    }
+    const info = gl.getExtension('WEBGL_debug_renderer_info')
+    const software = isSoftwareRenderer(info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : '')
+    if (!this.simplified && this.debug.queries === 0) this.budget = initialSpriteBudget(software)
+    this.shapes = this.crownShapes ?? !software
     const webgl2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext
     const derivatives = webgl2 || !!gl.getExtension('OES_standard_derivatives')
     const header = webgl2 ? '#version 300 es\n' : ''
@@ -454,7 +466,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
       // 1 in the halo pass: the notable trees' quads again, wider, before the sprites.
       uniform float u_halo;
       ${webgl2 ? 'out' : 'varying'} vec2 v_uv;
-      ${webgl2 ? 'out' : 'varying'} float v_top;` : ''}
+      ${webgl2 ? 'flat out' : 'varying'} float v_top;` : ''}
       uniform mat4 u_matrix;
       uniform vec3 u_camera;
       uniform vec3 u_budget_camera;
@@ -464,7 +476,11 @@ export class TreeCrownLayer implements CustomLayerInterface {
       ${webgl2 ? 'out' : 'varying'} vec4 v_color;
       ${webgl2 ? 'out' : 'varying'} float v_fade;
       ${webgl2 ? 'out' : 'varying'} float v_reach;
+      // Where this corner reads the overhead crown of the tree's form, at the tree's turn (lib/crownShapes).
+      ${webgl2 ? 'out' : 'varying'} vec2 v_crown;
       uniform float u_reach;
+      ${CROWN_UNPACK_GLSL}
+      ${crownCellGLSL()}
       void main() {
         float distance = length(vec3(a_center, 0.0) - u_camera) * u_meters;
         float budget = length(vec3(a_center, 0.0) - u_budget_camera) * u_meters;
@@ -475,7 +491,9 @@ export class TreeCrownLayer implements CustomLayerInterface {
         // the query camera (u_budget_camera), so the fade stays on the trees actually loaded.
         v_reach = 1.0 - smoothstep(u_reach * ${REACH_FADE}, u_reach, budget);
         v_corner = a_corner;
-        v_color = a_color;
+        vec3 crown = unpackCrown(a_color.a);
+        v_color = vec4(a_color.rgb, crown.x);
+        v_crown = crownCellUV(crown.y, turnCrown(a_corner, crown.z));
         ${this.simplified ? `gl_Position = v_fade > 0.0
           ? u_matrix * vec4(a_center + a_corner * a_radius, 0.0, 1.0)
           : vec4(2.0, 2.0, 2.0, 1.0);` : `
@@ -509,21 +527,48 @@ export class TreeCrownLayer implements CustomLayerInterface {
       ${webgl2 ? 'in' : 'varying'} vec4 v_color;
       ${webgl2 ? 'in' : 'varying'} float v_fade;
       ${webgl2 ? 'in' : 'varying'} float v_reach;
+      ${webgl2 ? 'in' : 'varying'} vec2 v_crown;
       uniform float u_opacity;
+      // The overhead crowns, baked by form (composables/treeCrownShapeAtlas): R the outline's
+      // distance, G the interior strokes', B the outline's again on a coarser scale.
+      ${this.shapes ? `uniform sampler2D u_crowns;
+      // 0 until the atlas is built (loadCrownShapeAtlas): the crown is a plain disc meanwhile.
+      uniform float u_crowns_ready;` : ''}
+      // In screen pixels: x the signed distance to the outline (negative inside), y to the nearest
+      // stroke, z the crown's radius; w the outline's coarse distance in disc units. aa is disc
+      // units per pixel, fwidth of length(v_corner).
+      vec4 crownPixels(float aa) {
+        float r = length(v_corner);
+        vec4 disc = vec4((r - 1.0) / aa, 1e3, 1.0 / aa, r - 1.0);
+        ${this.shapes ? `if (u_crowns_ready < 0.5) return disc;
+        // The mip level from the pixel's size, so the read needs no derivative of its own.
+        vec3 field = ${webgl2 ? `textureLod(u_crowns, v_crown, log2(max(aa * ${CROWN_TEXELS_PER_UNIT.toFixed(1)}, 1.0)))` : 'texture2D(u_crowns, v_crown)'}.rgb;
+        vec2 fine = (0.5 - field.rg) * ${(2 * CROWN_FINE_RANGE).toFixed(4)};
+        float coarse = (0.5 - field.b) * ${(2 * CROWN_COARSE_RANGE).toFixed(4)};
+        // Past the fine channel's range (a small crown's whole inside is within a few pixels of
+        // its outline) the coarse one says how far in.
+        float edge = abs(field.r - 0.5) < 0.47 ? fine.x : coarse;
+        return vec4(edge / aa, fine.y / aa, 1.0 / aa, coarse);` : 'return disc;'}
+      }
       ${!this.simplified ? `uniform sampler2D u_distance;
+      // The side atlas's distance channel per unit of texture coordinate (treeSpriteAtlas).
+      uniform vec2 u_distance_scale;
       uniform float u_halo;
       ${webgl2 ? 'in' : 'varying'} vec2 v_uv;
-      ${webgl2 ? 'in' : 'varying'} float v_top;` : ''}
+      ${webgl2 ? 'flat in' : 'varying'} float v_top;` : ''}
       ${webgl2 ? 'out vec4 fragColor;' : ''}
       void main() {
         ${this.simplified ? `
-        float radius = length(v_corner);
-        float aa = ${derivatives ? 'max(fwidth(radius), 0.002)' : '0.025'};
-        float edge = 1.0 - smoothstep(1.0 - aa, 1.0, radius);
-        float ring = smoothstep(1.0 - max(aa * 1.8, 0.025) - aa, 1.0 - max(aa * 1.8, 0.025), radius);
+        // The crown's outline by its form (lib/crownShapes), its strokes fainter inside it.
+        vec4 crown = crownPixels(${derivatives ? 'max(fwidth(length(v_corner)), 0.002)' : '0.025'});
+        float edge = 1.0 - smoothstep(-0.5, 0.5, crown.x);
+        float width = max(1.8, 0.025 * crown.z);
+        float ring = smoothstep(-width - 1.0, -width, crown.x);
+        // Strokes only once the crown is big enough on screen to read them.
+        float stroke = (1.0 - smoothstep(0.4, 1.1, crown.y)) * (1.0 - ring) * smoothstep(14.0, 28.0, crown.z);
         // A broken outline identifies a model estimate; solid means recorded.
         float dash = v_color.a > 0.5 ? 1.0 : step(0.28, fract((atan(v_corner.y, v_corner.x) + 3.141593) * 12.0 / 6.283186));
-        float alpha = edge * (0.015 + ring * dash * 0.65) * v_fade * u_opacity;
+        float alpha = edge * (0.015 + ring * dash * 0.65 + stroke * 0.3) * v_fade * u_opacity;
         ${webgl2 ? 'fragColor' : 'gl_FragColor'} = vec4(v_color.rgb * alpha, alpha);
         ` : `
         if (u_halo > 0.5) {
@@ -532,28 +577,49 @@ export class TreeCrownLayer implements CustomLayerInterface {
           ${webgl2 ? 'fragColor' : 'gl_FragColor'} = vec4(vec3(${NOTABLE_GLOW_RGB}) * glow, glow);
           return;
         }
-        vec3 distance = ${webgl2 ? 'texture' : 'texture2D'}(u_distance, v_uv).rgb;
+        // v_top is the tree's own (one value over its quad), so each tree takes one side of each
+        // branch: a sprite seen from the side never reads the overhead crown, and one seen from
+        // overhead never reads the side atlas; only the band between reads both. The branches hold
+        // no derivative and read at an explicit level, so a GPU skips the side not taken rather
+        // than running both: the derivatives are taken here, from the coordinates.
+        float r = length(v_corner);
         // Screen-space derivatives keep the edge about one physical pixel
         // wide, whether the sprite is a small marker or a large nearby tree.
-        vec3 aa = ${derivatives ? 'max(fwidth(distance) * 0.5, vec3(0.001))' : 'vec3(0.025)'};
-        vec3 coverage = smoothstep(vec3(0.5) - aa, vec3(0.5) + aa, distance);
-        vec4 trunk = vec4(vec3(93.0, 64.0, 55.0) / 255.0 * coverage.r, coverage.r);
-        vec4 foliage = vec4(v_color.rgb * coverage.g, coverage.g);
-        vec4 blooms = vec4(vec3(248.0, 187.0, 208.0) / 255.0 * coverage.b, coverage.b);
-        vec4 tree = foliage + trunk * (1.0 - foliage.a);
-        vec4 side = blooms + tree * (1.0 - blooms.a);
-        // Overhead: a soft-edged crown disc, lighter at its middle like a lit canopy.
-        float r = length(v_corner);
-        float raa = ${derivatives ? 'max(fwidth(r), 0.002)' : '0.03'};
-        float disc = 1.0 - smoothstep(1.0 - raa, 1.0, r);
-        vec4 canopy = vec4(min(v_color.rgb * mix(1.1, 0.8, r), vec3(1.0)) * disc, disc);
-        if (v_color.a > 1.5) {
-          // A notable tree: its silhouette outlined from the same distance field, just outside the
-          // trunk and foliage edge, and the overhead disc's rim. Every other sprite skips this.
-          float edge = max(distance.r, distance.g);
-          float band = smoothstep(0.5 - ${NOTABLE_OUTLINE_WIDTH.toFixed(2)} - aa.g, 0.5 - ${NOTABLE_OUTLINE_WIDTH.toFixed(2)} + aa.g, edge) * (1.0 - side.a);
-          side += vec4(vec3(${NOTABLE_OUTLINE_RGB}) * band, band);
-          canopy.rgb = mix(canopy.rgb, vec3(${NOTABLE_OUTLINE_RGB}) * disc, smoothstep(0.84 - raa, 0.84, r) * disc);
+        float sideAA = ${derivatives ? 'max(0.5 * length(vec2(length(dFdx(v_uv) * u_distance_scale), length(dFdy(v_uv) * u_distance_scale))), 0.001)' : '0.025'};
+        float crownAA = ${derivatives ? 'max(fwidth(r), 0.002)' : '0.03'};
+        vec4 side = vec4(0.0);
+        if (v_top < 0.65) {
+          vec3 distance = ${webgl2 ? 'textureLod(u_distance, v_uv, 0.0)' : 'texture2D(u_distance, v_uv)'}.rgb;
+          vec3 aa = vec3(sideAA);
+          vec3 coverage = smoothstep(vec3(0.5) - aa, vec3(0.5) + aa, distance);
+          vec4 trunk = vec4(vec3(93.0, 64.0, 55.0) / 255.0 * coverage.r, coverage.r);
+          vec4 foliage = vec4(v_color.rgb * coverage.g, coverage.g);
+          vec4 blooms = vec4(vec3(248.0, 187.0, 208.0) / 255.0 * coverage.b, coverage.b);
+          vec4 tree = foliage + trunk * (1.0 - foliage.a);
+          side = blooms + tree * (1.0 - blooms.a);
+          if (v_color.a > 1.5) {
+            // A notable tree: its silhouette outlined from the same distance field, just outside the
+            // trunk and foliage edge. Every other sprite skips this.
+            float edge = max(distance.r, distance.g);
+            float band = smoothstep(0.5 - ${NOTABLE_OUTLINE_WIDTH.toFixed(2)} - aa.g, 0.5 - ${NOTABLE_OUTLINE_WIDTH.toFixed(2)} + aa.g, edge) * (1.0 - side.a);
+            side += vec4(vec3(${NOTABLE_OUTLINE_RGB}) * band, band);
+          }
+        }
+        vec4 canopy = vec4(0.0);
+        if (v_top > 0.35) {
+          // Overhead: the crown's shape by its form (lib/crownShapes), lighter at its middle like a
+          // lit canopy, its strokes and rim a shade darker.
+          vec4 crown = crownPixels(crownAA);
+          float fill = 1.0 - smoothstep(-0.5, 0.5, crown.x);
+          float stroke = (1.0 - smoothstep(0.4, 1.1, crown.y)) * smoothstep(14.0, 28.0, crown.z);
+          float rim = smoothstep(-2.5, -0.5, crown.x);
+          vec3 lit = min(v_color.rgb * mix(1.1, 0.8, r), vec3(1.0)) * (1.0 - 0.2 * stroke) * (1.0 - 0.18 * rim);
+          canopy = vec4(lit * fill, fill);
+          if (v_color.a > 1.5) {
+            // A notable tree: a gold rim inside its outline, a sixth of the crown deep.
+            float band = smoothstep(-0.16 - 1.0 / crown.z, -0.16, crown.w) * fill;
+            canopy.rgb = mix(canopy.rgb, vec3(${NOTABLE_OUTLINE_RGB}) * fill, band);
+          }
         }
         // The shape morphs over the whole band, the look switches in its middle: blending the two
         // across it shows a see-through disc over the sprite.
@@ -582,24 +648,44 @@ export class TreeCrownLayer implements CustomLayerInterface {
     this.program = program
     this.buffer = gl.createBuffer()!
     this.attributes = ['a_center', 'a_corner', 'a_radius', 'a_color', 'a_uv', 'a_shape'].map(name => gl.getAttribLocation(program, name))
-    this.uniforms = Object.fromEntries(['u_matrix', 'u_camera', 'u_budget_camera', 'u_meters', 'u_budget_distance', 'u_opacity', 'u_distance', 'u_viewport', 'u_right', 'u_view_angle', 'u_reach', 'u_halo']
+    this.uniforms = Object.fromEntries(['u_matrix', 'u_camera', 'u_budget_camera', 'u_meters', 'u_budget_distance', 'u_opacity', 'u_distance', 'u_viewport', 'u_right', 'u_view_angle', 'u_reach', 'u_halo', 'u_crowns', 'u_crowns_ready', 'u_distance_scale']
       .map(name => [name, gl.getUniformLocation(program, name)]))
-    this.textures = []
-    if (this.sprites) {
-      for (const canvas of [this.sprites.distance]) {
-        const texture = gl.createTexture()!
-        gl.bindTexture(gl.TEXTURE_2D, texture)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
-        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE)
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas)
-        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.BROWSER_DEFAULT_WEBGL)
-        this.textures.push(texture)
-      }
+    // The side sprites' atlas on the desktop, then the overhead crowns' both renderers read (the last).
+    this.textures = this.sprites ? [this.createTexture(gl, this.sprites.distance)] : []
+    const crowns = this.shapes ? crownShapeAtlas() : undefined
+    if (this.shapes) this.textures.push(this.createTexture(gl, crowns))
+    this.crownsReady = !!crowns
+    this.pendingCrowns = undefined
+    if (this.shapes && !crowns) {
+      void loadCrownShapeAtlas().then(atlas => {
+        if (this.gl !== gl) return
+        // Uploaded in the next render, where MapLibre expects the GL state to change.
+        this.pendingCrowns = atlas
+        this.map?.triggerRepaint()
+      })
     }
+  }
+
+  /** A clamped, linear texture of `canvas` (its distance channels as data), mipmapped if it is the crowns'; a blank texel without one. */
+  private createTexture(gl: GL, canvas?: HTMLCanvasElement, texture = gl.createTexture()!): WebGLTexture {
+    gl.bindTexture(gl.TEXTURE_2D, texture)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    if (!canvas) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]))
+      return texture
+    }
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
+    gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas)
+    gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.BROWSER_DEFAULT_WEBGL)
+    if (canvas !== this.sprites?.distance) {
+      gl.generateMipmap(gl.TEXTURE_2D)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+    }
+    return texture
   }
 
   render(gl: GL, matrix: Parameters<CustomLayerInterface['render']>[1]) {
@@ -643,9 +729,17 @@ export class TreeCrownLayer implements CustomLayerInterface {
     gl.uniform1f(this.uniforms.u_reach, Number.isFinite(this.reach) ? this.reach : 1e9)
     const arrival = Math.min(1, (performance.now() - this.appearedAt) / 300)
     gl.uniform1f(this.uniforms.u_opacity, opacity * (this.simplified ? arrival : 1))
+    if (this.pendingCrowns) {
+      this.createTexture(gl, this.pendingCrowns, this.textures[this.textures.length - 1])
+      this.pendingCrowns = undefined
+      this.crownsReady = true
+    }
+    this.textures.forEach((texture, i) => { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, texture) })
+    if (this.shapes) gl.uniform1i(this.uniforms.u_crowns, this.textures.length - 1)
+    gl.uniform1f(this.uniforms.u_crowns_ready, this.crownsReady ? 1 : 0)
     if (!this.simplified) {
-      this.textures.forEach((texture, i) => { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, texture) })
       gl.uniform1i(this.uniforms.u_distance, 0)
+      gl.uniform2fv(this.uniforms.u_distance_scale, this.sprites!.distanceScale)
       gl.uniform2f(this.uniforms.u_viewport, this.map.getCanvas().clientWidth, this.map.getCanvas().clientHeight)
       const bearing = this.map.getBearing() * Math.PI / 180
       gl.uniform2f(this.uniforms.u_right, Math.cos(bearing), Math.sin(bearing))

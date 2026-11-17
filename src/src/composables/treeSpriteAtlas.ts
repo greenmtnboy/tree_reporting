@@ -1,4 +1,5 @@
 import { treeArtwork, treeShapeDistance, type TreeShape } from '../lib/treeArtwork'
+import { CROWN_FORMS } from '../lib/crownShapes'
 import type { TreeForm } from '../types'
 
 const IMAGE_SIZE = 192
@@ -6,7 +7,8 @@ const GUTTER = 4
 const CELL = IMAGE_SIZE + GUTTER * 2
 const COLUMNS = 3
 const DISTANCE_RANGE = 8 / IMAGE_SIZE
-export const SPRITE_FORMS: TreeForm[] = ['broadleaf', 'conifer', 'palm', 'columnar', 'ornamental', 'spreading', 'weeping', 'multi_trunk', 'default']
+/** The atlas cells' order is the vertex's form index (lib/crownShapes). */
+export const SPRITE_FORMS: TreeForm[] = CROWN_FORMS
 
 export interface SpriteCell {
   left: number
@@ -73,5 +75,8 @@ function buildAtlas() {
     })
   })
   ctx.putImageData(pixels, 0, 0)
-  return { distance, cells }
+  // How fast a channel changes per unit of texture coordinate, an edge's distance field having a
+  // slope of one: the shader's antialiasing width from the coordinates' own derivatives.
+  const distanceScale = [distance.width / IMAGE_SIZE / (2 * DISTANCE_RANGE), distance.height / IMAGE_SIZE / (2 * DISTANCE_RANGE)]
+  return { distance, cells, distanceScale }
 }

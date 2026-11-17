@@ -43,6 +43,8 @@
     { id: 'small', lng: center[0] + 0.00035, lat: center[1], width: 6, measured: true, color: '#4CAF50' },
   ]
   let calls = 0, empty = false, mobile = false
+  // The harness runs on a software GL, which keeps plain discs unless told otherwise; ?shapes=auto leaves it to the renderer.
+  const shapes = new URLSearchParams(location.search).get('shapes') === 'auto' ? undefined : true
   // A list of trees as the worker's columns, built into a batch the way the worker does.
   const batch = (list, camera, options) => buildCrownBatch({
     id: list.map(t => t.id), lng: Float64Array.from(list, t => t.lng), lat: Float64Array.from(list, t => t.lat),
@@ -60,7 +62,7 @@
     container: 'map', center, zoom: 19.5, maxPitch: 85, preserveDrawingBuffer: true,
     style: { version: 8, sources: {}, layers: [{ id: 'ground', type: 'background', paint: { 'background-color': '#ffffff' } }] },
   })
-  let layer = new TreeCrownLayer(load, mobile)
+  let layer = new TreeCrownLayer(load, mobile, shapes)
   map.on('load', () => {
     map.addLayer(layer)
     map.addSource('trees', { type: 'geojson', promoteId: 'id', data: { type: 'FeatureCollection', features: crowns.map(crown => ({
@@ -105,7 +107,7 @@
     layer.invalidate()
   }
   document.querySelector('#mobile').onclick = () => {
-    map.removeLayer(layer.id); mobile = true; layer = new TreeCrownLayer(load, mobile)
+    map.removeLayer(layer.id); mobile = true; layer = new TreeCrownLayer(load, mobile, shapes)
     map.addLayer(layer)
     map.jumpTo({ center, zoom: 19, pitch: 0, bearing: 0 })
   }
