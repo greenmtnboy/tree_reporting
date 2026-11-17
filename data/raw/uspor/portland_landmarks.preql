@@ -1,0 +1,35 @@
+import ..landmark_common;
+
+root datasource portland_landmarks_update_time (
+    data_updated_through: uspor_landmark_data_updated_through
+)
+file `./portland_landmarks_probe.py`;
+
+# Portland's Historic Landmarks and Conservation Landmarks (the Bureau of
+# Planning and Sustainability's zoning-code layers on portlandmaps.com) and
+# the National Park Service's National Register listings in Portland that the
+# city's layer does not already carry -- registers read live, so no Nominatim
+# geocoding, no committed CSV and no staging object. `lm_type` names the
+# register (or both), `register_number` the NRIS reference number, and
+# `year_designated` the National Register listing year.
+root partial datasource raw_portland_landmark_info extends landmark_partition (
+    address: ?address,
+    year_built: ?year_built,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USPOR'
+file `./portland_landmarks.py`;
+
+partial datasource portland_landmark_info extends published_landmark_info (
+    ?address,
+    ?year_built,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    uspor_landmark_data_updated_through,
+)
+complete where city = 'USPOR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/uspor_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/uspor_landmark_info_v{data_version}.parquet`
+freshness by uspor_landmark_data_updated_through;

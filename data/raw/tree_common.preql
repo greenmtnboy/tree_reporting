@@ -51,6 +51,18 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.ussac_data_updated_through datetime; # when Sacramento data is through
+property <*>.ussac_osm_data_updated_through datetime; # GCS publication time of Sacramento's staged OSM parquet
+property <*>.ussjc_data_updated_through datetime; # when San Jose data is through
+property <*>.ussjc_osm_data_updated_through datetime; # GCS publication time of San Jose's staged OSM parquet
+property <*>.uspit_data_updated_through datetime; # when Pittsburgh data is through
+property <*>.uspit_osm_data_updated_through datetime; # GCS publication time of Pittsburgh's staged OSM parquet
+property <*>.usphl_data_updated_through datetime; # when Philadelphia data is through
+property <*>.usphl_osm_data_updated_through datetime; # GCS publication time of Philadelphia's staged OSM parquet
+property <*>.uspor_data_updated_through datetime; # when Portland data is through
+property <*>.uspor_osm_data_updated_through datetime; # GCS publication time of Portland's staged OSM parquet
+property <*>.ussea_data_updated_through datetime; # when Seattle data is through
+property <*>.ussea_osm_data_updated_through datetime; # GCS publication time of Seattle's staged OSM parquet
 property <*>.chbas_data_updated_through datetime; # when Basel data is through
 property <*>.chbas_osm_data_updated_through datetime; # GCS publication time of Basel's staged OSM parquet
 property <*>.gbnot_data_updated_through datetime; # when Nottingham data is through

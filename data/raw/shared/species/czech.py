@@ -229,7 +229,7 @@ CZECH_SPECIES: dict[str, str] = {
     "jablon domaci": "Malus domestica",
     "jablon lesni": "Malus sylvestris",
     "jablon purpurova": "Malus x purpurea",
-    "jablon mnohokveta": "Malus floribunda",
+    "jablon mnohokveta": "Malus x floribunda",
     "jablon neurcena": "Malus",
     # --- Aesculus ---
     "jirovec madal": "Aesculus hippocastanum",

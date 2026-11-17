@@ -63,6 +63,12 @@ import useug.eugene_tree_info;
 import chzur.zurich_tree_info;
 import gbnot.nottingham_tree_info;
 import chbas.basel_tree_info;
+import ussea.seattle_tree_info;
+import uspor.portland_tree_info;
+import usphl.philadelphia_tree_info;
+import uspit.pittsburgh_tree_info;
+import ussjc.sanjose_tree_info;
+import ussac.sacramento_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -133,6 +139,12 @@ merge useug_source into data_source;
 merge chzur_source into data_source;
 merge gbnot_source into data_source;
 merge chbas_source into data_source;
+merge ussea_source into data_source;
+merge uspor_source into data_source;
+merge usphl_source into data_source;
+merge uspit_source into data_source;
+merge ussjc_source into data_source;
+merge ussac_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -212,7 +224,13 @@ atvie_published_data_updated_through,
 useug_published_data_updated_through,
 chzur_published_data_updated_through,
 gbnot_published_data_updated_through,
-chbas_published_data_updated_through);
+chbas_published_data_updated_through,
+ussea_published_data_updated_through,
+uspor_published_data_updated_through,
+usphl_published_data_updated_through,
+uspit_published_data_updated_through,
+ussjc_published_data_updated_through,
+ussac_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

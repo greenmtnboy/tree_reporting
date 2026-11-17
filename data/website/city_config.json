@@ -62,5 +62,11 @@
   "USEUG": { "name": "Eugene", "center": [-123.0868, 44.0521] },
   "CHZUR": { "name": "Zürich", "center": [8.5417, 47.3769] },
   "GBNOT": { "name": "Nottingham", "center": [-1.1581, 52.9548] },
-  "CHBAS": { "name": "Basel", "center": [7.5886, 47.5596] }
+  "CHBAS": { "name": "Basel", "center": [7.5886, 47.5596] },
+  "USSEA": { "name": "Seattle", "center": [-122.3321, 47.6062] },
+  "USPOR": { "name": "Portland", "center": [-122.6784, 45.5152] },
+  "USPHL": { "name": "Philadelphia", "center": [-75.1652, 39.9526] },
+  "USPIT": { "name": "Pittsburgh", "center": [-79.9959, 40.4406] },
+  "USSJC": { "name": "San Jose", "center": [-121.8863, 37.3382] },
+  "USSAC": { "name": "Sacramento", "center": [-121.4944, 38.5816] }
 }

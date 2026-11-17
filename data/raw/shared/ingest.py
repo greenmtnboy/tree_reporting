@@ -822,6 +822,11 @@ SPECIES_SYNONYMS: dict[str, str] = {
     "Prunus eminens": "Prunus x eminens",
     "Prunus x cerasifera": "Prunus cerasifera",
     "Salix fragilis": "Salix x fragilis",
+    # Philadelphia and Sacramento (Nov 2026): WCVP lists each key as a synonym
+    # of its value.
+    "Pinus thunbergiana": "Pinus thunbergii",
+    "Aesculus octandra": "Aesculus flava",
+    "Quercus prinus": "Quercus montana",
 }
 
 
@@ -1307,6 +1312,55 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Cupressus sempervierens": "Cupressus sempervirens",
     "Eucommina ulmoides": "Eucommia ulmoides",
     "Quercus macrantheram": "Quercus macranthera",
+    # Seattle, Portland, Philadelphia, Pittsburgh, San Jose, Sacramento (Nov
+    # 2026): keys absent from WCVP, values accepted there
+    # (tools/species_audit.py --parquet, plus a few paired by hand).
+    "Syringia reticulata": "Syringa reticulata",
+    "Acer pensyvanicum": "Acer pensylvanicum",
+    "Kalopanax semtemlobus": "Kalopanax septemlobus",
+    "Acer henryii": "Acer henryi",
+    "Magnolia soulangiana": "Magnolia x soulangeana",
+    "Cedrella sinensis": "Toona sinensis",
+    "Aesculus california": "Aesculus californica",
+    "Ligustrum japonica": "Ligustrum japonicum",
+    "Podocarpus macrophylla": "Podocarpus macrophyllus",
+    "Quercus castaneafolia": "Quercus castaneifolia",
+    "Quercus muehlenbergi": "Quercus muehlenbergii",
+    "Trachycarpus fortune": "Trachycarpus fortunei",
+    "Metasequoia glyptostroboi": "Metasequoia glyptostroboides",
+    "Acer x fremanii": "Acer x freemanii",
+    "Robinia x ambiqua": "Robinia x ambigua",
+    "Syzgium australe": "Syzygium australe",
+    "Brachea edulis": "Brahea edulis",
+    "Eleagnus pungens": "Elaeagnus pungens",
+    "Prunus martimia": "Prunus maritima",
+    "Rhus copallina": "Rhus copallinum",
+    "Trachylospermum jasminoides": "Trachelospermum jasminoides",
+    "Ulmus parviflora": "Ulmus parvifolia",
+    "Rhodendron": "Rhododendron",
+    "Carpinus japonicus": "Carpinus japonica",
+    "Parrotia persia": "Parrotia persica",
+    "Quercus paulstris": "Quercus palustris",
+    "Quercus hypoluecoides": "Quercus hypoleucoides",
+    "Prunus x yedeoensis": "Prunus x yedoensis",
+    "Sciadopitys virticillata": "Sciadopitys verticillata",
+    "Koelrueteria paniculata": "Koelreuteria paniculata",
+    "Quecus bicolor": "Quercus bicolor",
+    "Cornus x rutgerensis": "Cornus x rutgersensis",
+    "Philadelpus": "Philadelphus",
+    "Abies nordmannia": "Abies nordmanniana",
+    "Eunonymus fortunei": "Euonymus fortunei",
+    "Thujopsia dolabrata": "Thujopsis dolabrata",
+    "Luma apiculate": "Luma apiculata",
+    "Osmanthus delavay": "Osmanthus delavayi",
+    "Prunus cerrasifera": "Prunus cerasifera",
+    "Ceris canadensis": "Cercis canadensis",
+    "Sequoia sempervire": "Sequoia sempervirens",
+    "Camelia": "Camellia",
+    "Daphniphyllum himalaense": "Daphniphyllum himalense",
+    "Lyonothamnus floribunda": "Lyonothamnus floribundus",
+    "Prunus x domestica": "Prunus domestica",
+    "Malus floribunda": "Malus x floribunda",
 }
 
 
@@ -1575,6 +1629,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USSAC": ("SACRAMENTO_OPENDATA",),
+    "USSJC": ("SANJOSE_OPENDATA",),
+    "USPIT": ("PITTSBURGH_OPENDATA",),
+    "USPHL": ("PHILADELPHIA_OPENDATA",),
+    "USPOR": ("PORTLAND_OPENDATA",),
+    "USSEA": ("SEATTLE_OPENDATA",),
     "CHBAS": ("BASEL_OPENDATA",),
     "GBNOT": ("NOTTINGHAM_OPENDATA",),
     "CHZUR": ("ZURICH_OPENDATA",),
@@ -1671,6 +1731,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USSAC": "OSM_USSAC",
+    "USSJC": "OSM_USSJC",
+    "USPIT": "OSM_USPIT",
+    "USPHL": "OSM_USPHL",
+    "USPOR": "OSM_USPOR",
+    "USSEA": "OSM_USSEA",
     "CHBAS": "OSM_CHBAS",
     "GBNOT": "OSM_GBNOT",
     "CHZUR": "OSM_CHZUR",
@@ -2346,6 +2412,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USSAC": (38.43, 38.7, -121.57, -121.36),
+    "USSJC": (37.12, 37.47, -122.05, -121.58),
+    "USPIT": (40.36, 40.51, -80.1, -79.86),
+    "USPHL": (39.86, 40.14, -75.29, -74.95),
+    "USPOR": (45.42, 45.66, -122.84, -122.47),
+    "USSEA": (47.48, 47.74, -122.46, -122.22),
     "CHBAS": (47.51, 47.6, 7.54, 7.7),
     "GBNOT": (52.88, 53.02, -1.25, -1.08),
     "CHZUR": (47.31, 47.44, 8.44, 8.63),
@@ -2467,6 +2539,48 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 9,654 staged OSM nodes against 106,242 anchors.  Mutual-NN 94.3% in
+    # 2-5 m, 56.3% in 5-10 m (n=371): a 5 m guarantee caps it at 10.
+    # Marginal table: 8->10 removes 71 duplicates for 57 hidden trees (1.25),
+    # 10->14 removes 58 for 110 (0.53), so 10 m.
+    "USSAC": 10,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 12,059 staged OSM nodes against 267,111 anchors.  The 5-10 m band is
+    # neighbour-dominated: a 5 m guarantee caps it at 10.
+    # Marginal table: 4->6 removes 128 duplicates for 24 hidden trees (5.33),
+    # 6->8 removes 40 for 44 (0.91), so 6 m.
+    "USSJC": 6,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 8,363 staged OSM nodes against 40,185 anchors.  Mutual-NN 90.9% in
+    # 2-5 m, 38.3% in 5-10 m (n=579): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 173 duplicates for 106 hidden trees (1.63),
+    # 8->10 removes 69 for 125 (0.55), so 8 m.
+    "USPIT": 8,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 11,429 staged OSM nodes against 151,922 anchors.  The 5-10 m band is
+    # neighbour-dominated: a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 143 duplicates for 93 hidden trees (1.54),
+    # 8->10 removes 69 for 91 (0.76), so 8 m.
+    "USPHL": 8,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 30,058 staged OSM nodes against 277,939 anchors.  Mutual-NN 94.5% in
+    # 2-5 m, 43.8% in 5-10 m (n=1,010): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 316 duplicates for 168 hidden trees (1.88),
+    # 8->10 removes 126 for 190 (0.66), so 8 m.
+    "USPOR": 8,
+    # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+    # --inventory-parquet on a local ingest run).
+    # 23,081 staged OSM nodes against 239,240 anchors.  Mutual-NN 88.7% in
+    # 2-5 m, 34.2% in 5-10 m (n=1,810): a 5 m guarantee caps it at 10.
+    # Marginal table: 4->6 removes 1,082 duplicates for 318 hidden trees (3.40),
+    # 6->8 removes 406 for 419 (0.97), so 6 m.
+    "USSEA": 6,
     # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
     # --inventory-parquet on a local ingest run).
     # 10,227 staged OSM nodes against 32,520 anchors.  Mutual-NN 93.1% in
@@ -2851,6 +2965,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USSAC': ((38.43, 38.7, -121.57, -121.36),),
+    'USSJC': ((37.12, 37.47, -122.05, -121.58),),
+    'USPIT': ((40.36, 40.51, -80.1, -79.86),),
+    'USPHL': ((39.86, 40.14, -75.29, -74.95),),
+    'USPOR': ((45.42, 45.66, -122.84, -122.47),),
+    'USSEA': ((47.48, 47.74, -122.46, -122.22),),
     'CHBAS': ((47.51, 47.6, 7.54, 7.7),),
     'GBNOT': ((52.88, 53.02, -1.25, -1.08),),
     'CHZUR': ((47.31, 47.44, 8.44, 8.63),),

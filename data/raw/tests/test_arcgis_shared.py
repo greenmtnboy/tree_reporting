@@ -117,6 +117,13 @@ class TestEsriTime:
         row, not telling us the field mapping is wrong."""
         assert esri_ms_to_datetime(9e18) is None
 
+    def test_pre_1970_dates_convert(self):
+        # Seattle's SDOT layer carries 1950s planting dates; Windows'
+        # fromtimestamp refuses negatives, so these used to come back None.
+        assert esri_ms_to_datetime(-460857600000) == datetime(
+            1955, 5, 26, tzinfo=timezone.utc
+        )
+
 
 # ---------------------------------------------------------------------------
 # Freshness
