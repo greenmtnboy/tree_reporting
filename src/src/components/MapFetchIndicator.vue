@@ -93,9 +93,10 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-/* Above the bottom navigation, level with the legend on the other side. */
+/* Under the city selector: the legend spans the bottom of a phone's map. */
 .map-fetching--mobile {
-  bottom: 104px;
+  top: 64px;
+  bottom: auto;
 }
 
 .map-fetching-text {

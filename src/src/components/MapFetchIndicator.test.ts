@@ -107,7 +107,7 @@ describe('MapFetchIndicator', () => {
     expect(indicator()!.classList.contains('map-fetching-leave-active')).toBe(false)
   })
 
-  it('sits above the bottom navigation on a phone', async () => {
+  it('sits under the city selector on a phone, clear of the legend', async () => {
     mobile.value = true
     mount()
     active.value = true
