@@ -126,3 +126,23 @@ test('a phone panned from Boston to Burlington draws Burlington\'s trees', async
   }), { timeout: 90_000 }).toBeGreaterThan(20)
   await expect(page.locator('.map-loading')).toHaveCount(0)
 })
+
+test('a phone shows the corner leaf while the blocks under a pan are fetched, and drops it after', async ({ page }) => {
+  test.setTimeout(240_000)
+  await openMap(page, 'USBOS', { width: 390, height: 844 })
+  await expect(page.locator('.map-fetching')).toHaveCount(0)
+  // Slow the next blocks down so the fetch is long enough to be seen.
+  await page.route(/\/blocks\//, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1_500))
+    await route.continue()
+  })
+  await page.evaluate(([lng, lat]) => window.__treeMap!.jumpTo({ center: [lng, lat], zoom: 15 }), CENTERS.USBTV)
+  const leaf = page.locator('.map-fetching')
+  await expect(leaf).toBeVisible({ timeout: 30_000 })
+  await expect(leaf.locator('.leaf-spinner')).toBeVisible()
+  await expect(leaf.locator('em')).toHaveText('Fetching nearby trees')
+  await expect(leaf.locator('.map-fetching-phrase')).not.toBeEmpty()
+  // The full-screen overlay is for the first load only.
+  await expect(page.locator('.map-loading')).toHaveCount(0)
+  await expect(leaf).toHaveCount(0, { timeout: 90_000 })
+})

@@ -193,6 +193,18 @@ describe('tile worker on DuckDB-WASM', () => {
     expect([...registeredFiles]).toEqual([])
   })
 
+  it('tells the main thread its init stages in order and how many block loads are running, back to none', async () => {
+    const stages = worker.messages.filter((m) => m.type === 'initStage').map((m) => m.stage)
+    expect(stages).toEqual(['engine', 'guide', 'world', 'ready'])
+    const loads = worker.messages.filter((m) => m.type === 'windowLoads').map((m) => m.active as number)
+    // The walk loaded blocks: each load said it started and that it ended.
+    expect(loads.length).toBeGreaterThan(1)
+    expect(loads.length % 2).toBe(0)
+    expect(Math.min(...loads)).toBeGreaterThanOrEqual(0)
+    expect(Math.max(...loads)).toBeGreaterThan(0)
+    expect(loads[loads.length - 1]).toBe(0)
+  })
+
   it('every tile holds one source layer per colour, named by the colour (pointTiles.ts)', async () => {
     // What each zoom's features carry: the heatmaps read point_count and
     // grid_m, the circles (tiles z12 and up) dbh, a tap the tree id.
