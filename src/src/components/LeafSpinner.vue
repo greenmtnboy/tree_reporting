@@ -30,32 +30,37 @@ withDefaults(defineProps<{ size?: number }>(), { size: 20 })
 const poses = [
   { // Broadside, with the stem tipped up.
     midrib: 'M-12 0 C-5 -2 2 1 11 -3',
-    light: 'C5 -2 1 -12 -12 0Z',
-    shade: 'C5 3 -2 9 -12 0Z',
+    light: 'C7 -12 -2 -11 -12 0Z',
+    shade: 'C8 6 -3 10 -12 0Z',
+    veins: 'M-2.7 -.8 Q-4.4 -1.9 -5.5 -3.8 M2.8 -1 Q.7 1.6 -1.3 3.1',
     stem: 'M11 -3 Q12.5 -4 13 -6',
   },
   { // Almost edge-on. Keep a sliver of the underside visible.
     midrib: 'M-12 0 C-5 0 3 3 12 1',
     light: 'C5 2 -3 -2 -12 0Z',
     shade: 'C5 5 -3 4 -12 0Z',
+    veins: 'M-2.4 1 Q-3.7 .6 -4.5 .5 M3.1 1.7 Q1.8 2 .7 2.2',
     stem: 'M12 1 Q13.5 1 14 0',
   },
   { // The underside opens first and the tip lags behind.
     midrib: 'M-10 -3 C-6 2 1 4 10 4',
-    light: 'C4 3 -1 -3 -10 -3Z',
-    shade: 'C4 4 -6 8 -10 -3Z',
+    light: 'C6 1 -1 -4 -10 -3Z',
+    shade: 'C5 7 -6 9 -10 -3Z',
+    veins: 'M-3.3 2 Q-4.4 .5 -5.1 -.6 M1.5 3.3 Q.1 4.1 -1.5 4.6',
     stem: 'M10 4 Q11.5 4 13 5.5',
   },
   { // The tip hooks under while the stem is still aloft.
     midrib: 'M-6 8 C-10 1 -4 -6 8 -4',
     light: 'C1 -9 -13 -4 -6 8Z',
     shade: 'C2 -3 -5 0 -6 8Z',
+    veins: 'M-5.7 .2 Q-6.4 .3 -7.1 1 M-1.9 -2.9 Q-2.5 -1.5 -2.7 -.8',
     stem: 'M8 -4 Q10 -4 11.5 -2',
   },
   { // The blade unfurls into a shallow cup.
     midrib: 'M-11 2 C-6 -2 2 5 10 -2',
-    light: 'C4 1 -3 -7 -11 2Z',
-    shade: 'C5 8 -3 6 -11 2Z',
+    light: 'C6 -4 -3 -9 -11 2Z',
+    shade: 'C6 8 -3 8 -11 2Z',
+    veins: 'M-3 .7 Q-4.4 -.4 -5.3 -1.8 M2 1 Q.5 3 -1.2 3.9',
     stem: 'M10 -2 Q12 -3.5 12.5 -5',
   },
 ]
@@ -64,6 +69,7 @@ const loop = [...poses, poses[0]]
 const contours = {
   light: loop.map(pose => pose.midrib + pose.light),
   shade: loop.map(pose => pose.midrib + pose.shade),
+  veins: loop.map(pose => pose.veins),
   stem: loop.map(pose => pose.stem),
 }
 
@@ -85,12 +91,13 @@ onUnmounted(() => preference?.removeEventListener('change', syncMotion))
 .leaf-spinner {
   flex: none;
   width: auto;
-  stroke: color-mix(in srgb, var(--color-autumn) 70%, #372a13);
+  stroke: color-mix(in srgb, var(--color-leaf) 65%, #24482d);
   stroke-width: .75;
   stroke-linejoin: round;
 }
 
-.light { fill: color-mix(in srgb, var(--color-autumn) 25%, #f6b655); }
-.shade { fill: var(--color-autumn); }
+.light { fill: color-mix(in srgb, var(--color-leaf) 28%, #a8cc77); }
+.shade { fill: color-mix(in srgb, var(--color-leaf) 62%, #568849); }
+.veins { fill: none; stroke-width: .85; stroke-linecap: round; opacity: .72; }
 .stem { fill: none; stroke-width: 1; stroke-linecap: round; }
 </style>
