@@ -476,6 +476,42 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'palearctic',
   },
+  NZCHC: {
+    ecoregionId: 190, // Canterbury-Otago tussock grasslands
+    usdaZone: 9,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'australasia',
+  },
+  IESDC: {
+    ecoregionId: 651, // Celtic broadleaf forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  AUCBR: {
+    ecoregionId: 168, // Eastern Australian temperate forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'australasia',
+  },
+  PTLIS: {
+    ecoregionId: 805, // Southwest Iberian Mediterranean sclerophyllous and mixed forests
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'palearctic',
+  },
+  BEGNT: {
+    ecoregionId: 664, // European Atlantic mixed forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  GBBRS: {
+    ecoregionId: 663, // English Lowlands beech forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

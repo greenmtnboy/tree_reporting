@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Bristol', label: 'TODO: Bristol tree inventory source', url: 'TODO' },
+  { city: 'Ghent', label: 'TODO: Ghent tree inventory source', url: 'TODO' },
+  { city: 'Lisbon', label: 'TODO: Lisbon tree inventory source', url: 'TODO' },
+  { city: 'Canberra', label: 'TODO: Canberra tree inventory source', url: 'TODO' },
+  { city: 'South Dublin', label: 'TODO: South Dublin tree inventory source', url: 'TODO' },
+  { city: 'Christchurch', label: 'TODO: Christchurch tree inventory source', url: 'TODO' },
   { city: 'Frankfurt', label: 'Stadt Frankfurt am Main Offene Daten - Baumkataster (Grünflächenamt, dl-de/by-2.0)', url: 'https://offenedaten.frankfurt.de/dcat/dataset/de-he-frankfurtam-baumkataster_op.html' },
   { city: 'Cologne', label: 'Stadt Köln Offene Daten - Baumkataster (Amt für Landschaftspflege und Grünflächen, Datenlizenz Deutschland Zero 2.0)', url: 'https://offenedaten-koeln.de/dataset/baumkataster-koeln-fortlaufend-aktualisiert' },
   { city: 'Baltimore', label: 'Baltimore City Recreation & Parks, Forestry - Street Tree Inventory (ArcGIS)', url: 'https://gis.baltimorecity.gov/egis/rest/services/Foresty/TreeInventory_Public/MapServer/0' },
@@ -117,6 +123,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Bristol', label: 'TODO: Bristol landmark source' },
+  { city: 'Ghent', label: 'TODO: Ghent landmark source' },
+  { city: 'Lisbon', label: 'TODO: Lisbon landmark source' },
+  { city: 'Canberra', label: 'TODO: Canberra landmark source' },
+  { city: 'South Dublin', label: 'TODO: South Dublin landmark source' },
+  { city: 'Christchurch', label: 'TODO: Christchurch landmark source' },
   { city: 'Frankfurt', label: 'Stadt Frankfurt am Main, Umweltamt - Naturdenkmale and Geschützte Landschaftsbestandteile (WFS, dl-de/by-2.0)', url: 'https://geowebdienste.frankfurt.de/WFS_Naturdenkmale?request=GetCapabilities&service=WFS' },
   { city: 'Cologne', label: 'Stadt Köln Offene Daten - Denkmalliste, named monuments (Datenlizenz Deutschland Zero 2.0)', url: 'https://offenedaten-koeln.de/dataset/liste-der-koelner-denkmaeler' },
   { city: 'Baltimore', label: 'Baltimore City Landmark List (CHAP, Open Baltimore); National Park Service - National Register of Historic Places', url: 'https://data.baltimorecity.gov/datasets/8a570598d14c41ada202a6a0155bb0aa' },

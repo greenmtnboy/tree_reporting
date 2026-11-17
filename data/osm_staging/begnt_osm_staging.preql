@@ -1,0 +1,16 @@
+# Scheduled OSM extraction for Ghent, run by the `osm-begnt` [[cloud.job]] in
+# ../trilogy.toml. Everything shared with the other cities -- the canonical tree
+# concepts, the Overpass freshness probe, and why extraction is a separate job
+# at all -- lives in staging_common.preql; this file is just Ghent's rows and
+# the staging object they land in.
+
+import staging_common;
+
+root datasource begnt_osm_rows extends osm_rows (
+)
+file `./osm_rows.py`
+where city = 'BEGNT';
+
+datasource begnt_osm_staging extends osm_staging (
+)
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/begnt_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/begnt_osm_staging.parquet`;

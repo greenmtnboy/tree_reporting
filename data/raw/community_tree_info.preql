@@ -86,6 +86,12 @@ property <*>.esmad_community_data_updated_through datetime; # when approved comm
 property <*>.usbal_community_data_updated_through datetime; # when approved community submissions for USBAL are through
 property <*>.decgn_community_data_updated_through datetime; # when approved community submissions for DECGN are through
 property <*>.defra_community_data_updated_through datetime; # when approved community submissions for DEFRA are through
+property <*>.nzchc_community_data_updated_through datetime; # when approved community submissions for NZCHC are through
+property <*>.iesdc_community_data_updated_through datetime; # when approved community submissions for IESDC are through
+property <*>.aucbr_community_data_updated_through datetime; # when approved community submissions for AUCBR are through
+property <*>.ptlis_community_data_updated_through datetime; # when approved community submissions for PTLIS are through
+property <*>.begnt_community_data_updated_through datetime; # when approved community submissions for BEGNT are through
+property <*>.gbbrs_community_data_updated_through datetime; # when approved community submissions for GBBRS are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

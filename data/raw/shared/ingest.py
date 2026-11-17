@@ -1672,6 +1672,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "GBBRS": ("BRISTOL_OPENDATA",),
+    "BEGNT": ("GHENT_OPENDATA",),
+    "PTLIS": ("LISBON_OPENDATA",),
+    "AUCBR": ("CANBERRA_OPENDATA",),
+    "IESDC": ("SOUTH_DUBLIN_OPENDATA",),
+    "NZCHC": ("CHRISTCHURCH_OPENDATA",),
     "DEFRA": ("FRANKFURT_OPENDATA",),
     "DECGN": ("COLOGNE_OPENDATA",),
     "USBAL": ("BALTIMORE_OPENDATA",),
@@ -1780,6 +1786,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "GBBRS": "OSM_GBBRS",
+    "BEGNT": "OSM_BEGNT",
+    "PTLIS": "OSM_PTLIS",
+    "AUCBR": "OSM_AUCBR",
+    "IESDC": "OSM_IESDC",
+    "NZCHC": "OSM_NZCHC",
     "DEFRA": "OSM_DEFRA",
     "DECGN": "OSM_DECGN",
     "USBAL": "OSM_USBAL",
@@ -2467,6 +2479,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "GBBRS": (51.39, 51.55, -2.73, -2.5),
+    "BEGNT": (50.97, 51.19, 3.57, 3.85),
+    "PTLIS": (38.68, 38.8, -9.24, -9.08),
+    "AUCBR": (-35.95, -35.12, 148.75, 149.4),
+    "IESDC": (53.2, 53.36, -6.56, -6.24),
+    "NZCHC": (-43.9, -43.35, 172.4, 173.15),
     "DEFRA": (50.01, 50.24, 8.47, 8.81),
     "DECGN": (50.83, 51.09, 6.77, 7.17),
     "USBAL": (39.19, 39.38, -76.72, -76.52),
@@ -2600,6 +2618,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "GBBRS": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "BEGNT": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "PTLIS": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "AUCBR": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "IESDC": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "NZCHC": 10,
     # Frankfurt: osm_dedup_validation.py --inventory-parquet: mutual-NN 91.8% in
     # 2-5 m, 40.8% in 5-10 m (n=995): a 5 m guarantee caps it at 10.
     # Marginal table: 6->8 removes 292 duplicates for 183 hidden trees (1.60),
@@ -3057,6 +3087,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'GBBRS': ((51.39, 51.55, -2.73, -2.5),),
+    'BEGNT': ((50.97, 51.19, 3.57, 3.85),),
+    'PTLIS': ((38.68, 38.8, -9.24, -9.08),),
+    'AUCBR': ((-35.95, -35.12, 148.75, 149.4),),
+    'IESDC': ((53.2, 53.36, -6.56, -6.24),),
+    'NZCHC': ((-43.9, -43.35, 172.4, 173.15),),
     'DEFRA': ((50.01, 50.24, 8.47, 8.81),),
     'DECGN': ((50.83, 51.09, 6.77, 7.17),),
     'USBAL': ((39.19, 39.38, -76.72, -76.52),),
