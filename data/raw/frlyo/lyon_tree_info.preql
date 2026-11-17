@@ -36,6 +36,7 @@ file `./lyon_osm_probe.py`;
 # it here (`dbh: ?raw_dbh`).
 root partial datasource lyon_raw_tree_info extends tree_partition (
     data_source: frlyo_source,
+    borough: ?borough,
 )
 complete where city = 'FRLYO' and frlyo_source = 'LYON_OPENDATA'
 file `./lyon_tree_info.py`;
@@ -47,6 +48,7 @@ file `./lyon_tree_info.py`;
 # `complete where` asserts, it does not promise a predicate.
 root partial datasource frlyo_community_tree_info extends tree_partition (
     data_source: frlyo_source,
+    borough: ?borough,
 )
 complete where city = 'FRLYO' and frlyo_source = 'COMMUNITY_FRLYO'
 file `../community_tree_info.py`
@@ -60,6 +62,7 @@ where city = 'FRLYO';
 # staged extract keeps the territory it was cut with until its next firing.
 root partial datasource frlyo_osm_tree_info extends tree_partition (
     data_source: frlyo_source,
+    borough: ?borough,
 )
 complete where city = 'FRLYO' and frlyo_source = 'OSM_FRLYO'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/frlyo_osm_staging.parquet`
@@ -86,6 +89,7 @@ merge merged_longitude into longitude;
 # (`test_every_city_refuses_a_collapsed_build`).
 partial datasource lyon_tree_info extends published_tree_info (
     data_source: frlyo_source,
+    ?borough,
     frlyo_published_data_updated_through,
 )
 complete where city = 'FRLYO'

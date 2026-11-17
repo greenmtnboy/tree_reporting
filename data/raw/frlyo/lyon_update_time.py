@@ -3,26 +3,21 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Lyon's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for the Métropole de Lyon's street-tree register.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+`MAX(datereleve)` -- the date each tree was last surveyed, the register's own
+per-row stamp -- read as one feature sorted descending, so the probe costs one
+small request against a 112k-row layer.  The survey runs continuously (the
+newest stamp was three days old when this was written), so the city rebuilds
+on most ticks of its twice-weekly cron.  The WFS publishes no layer-level
+edit stamp and the portal's catalogue record is not machine-readable from
+outside its single-page app, so this is the best watermark there is; its
+blind spot is a deletion, which moves no survey date and is picked up at the
+next survey.
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
-
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+`wfs_max_property` raises when the column is missing or empty -- the register
+changing shape -- and lets a transport failure degrade to the epoch through
+`emit_freshness`, so Lyon sits out that run.
 """
 
 import sys
@@ -30,13 +25,18 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.ingest import emit_freshness
+from shared.platforms.wfs import WfsLayer, wfs_max_property
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+# Kept in step with `lyon_tree_info.py`.
+LAYER = WfsLayer(
+    "https://data.grandlyon.com/geoserver/metropole-de-lyon/ows",
+    "metropole-de-lyon:abr_arbres_alignement.abrarbre",
+)
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Lyon's published-through timestamp")
+    return wfs_max_property(LAYER, "datereleve")
 
 
 if __name__ == "__main__":
