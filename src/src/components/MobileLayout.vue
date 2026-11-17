@@ -40,7 +40,9 @@
           :data-testid="`mobile-action-${action.key}`"
           @click="action.onClick"
         >
-          <span v-if="action.key === 'submit'" class="mobile-action-btn__plus" aria-hidden="true">+</span>
+          <svg v-if="action.key === 'submit'" class="mobile-action-btn__plus" viewBox="-12 -12 24 24" aria-hidden="true">
+            <path d="M0 -8V8M-8 0H8" />
+          </svg>
           <template v-else>{{ action.label }}</template>
         </button>
       </div>
@@ -441,10 +443,15 @@ function handleLandmarkClick(lm: Landmark) {
   filter: brightness(0.9);
 }
 
+/* Drawn, not typed: a "+" glyph sits wherever its font's metrics put it. */
 .mobile-action-btn__plus {
-  font-size: 1.4rem;
-  font-weight: 700;
-  line-height: 1;
+  display: block;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
 }
 
 .mobile-nav-wrap {
