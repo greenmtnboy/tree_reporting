@@ -74,6 +74,19 @@ def rows() -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def test_the_model_reads_the_committed_csv():
+    """allometry_model.preql reads the CSV's published parquet, which is named
+    by the CSV's content hash; a refit that was not published and re-pointed
+    fails here rather than shipping the old coefficients."""
+    text = statements(ARITHMETIC)
+    assert "crown_width_coefficients.csv" not in text, "the CSV is excluded from the sync"
+    urls = set(re.findall(r"file `([^`]*crown_width_coefficients[^`]*)`", text))
+    assert urls == {fit.published_url()}, (
+        f"allometry_model.preql reads {urls}; the committed CSV publishes as "
+        f"{fit.published_url()} -- run `uv run tools/crown_allometry_fit.py --publish`"
+    )
+
+
 def test_csv_has_the_columns_the_model_reads(rows):
     assert list(rows[0].keys()) == fit.CSV_COLUMNS
     for column in ("level", "taxon", "fit_level", "fit_taxon", "n", "b", "scale", "dbh_max_cm"):
@@ -543,6 +556,9 @@ def fixture_files(tmp_path_factory) -> dict[str, Path]:
     }
     for table, path in zip(("rollup", "enrichment", "city"), files.values()):
         conn.execute(f"COPY {table} TO '{path.as_posix()}' (FORMAT PARQUET)")
+    # The coefficient table, as `--publish` writes it, standing in for its URL.
+    files["crown_width_coefficients_"] = tmp / "crown_width_coefficients.parquet"
+    fit.write_parquet(files["crown_width_coefficients_"])
     return files
 
 

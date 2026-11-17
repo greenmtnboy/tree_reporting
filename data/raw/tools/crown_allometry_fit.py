@@ -7,10 +7,20 @@
 
     cd data/raw && uv run tools/crown_allometry_fit.py --write            # refit from Tallo
     cd data/raw && uv run tools/crown_allometry_fit.py --write --coverage # + rollup coverage
+    cd data/raw && uv run tools/crown_allometry_fit.py --publish          # upload the committed CSV
 
 Tallo is a static reference dataset, so this fit is run by hand and its CSV
 committed; the age and height models, fitted on the map's own trees, are
 fitted inside tree_predictions.preql on every build.
+
+The committed CSV is the source and the reviewed diff; the jobs never see it.
+It is excluded from the cloud sync, and allometry_model.preql reads a parquet
+of it from the public bucket instead, named by the CSV's content hash
+(`published_url()`).  So a refit is three steps: `--write`, `--publish`, then
+paste the URL `--publish` prints into allometry_model.preql's two `file`
+clauses.  The hash in the URL is what makes the edit reach the jobs -- the
+preql changes, so the sync ships it -- and test_tree_predictions.py fails
+until the URL names the committed CSV's hash.
 
 Source
 ------
@@ -87,7 +97,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import io
+import subprocess
 import math
 import sys
 import zipfile
@@ -102,6 +114,9 @@ COEFFICIENTS_CSV = RAW / "crown_width_coefficients.csv"
 TALLO_ZIP_URL = "https://raw.githubusercontent.com/selva-lab-repo/TALLO/main/DB/Tallo.csv.zip"
 TALLO_VERSION = "Tallo 1.0.0 (Jucker et al. 2022)"
 TALLO_CACHE = HERE / ".cache" / "Tallo.csv"
+
+PUBLISHED_PREFIX = "gs://trilogy_public_models/duckdb/trees/reference"
+PUBLIC_PREFIX = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/reference"
 
 ROLLUP_URL = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info_v2.parquet"
 
@@ -331,15 +346,68 @@ def report(conn: duckdb.DuckDBPyConnection, rows: list[dict], coverage: bool) ->
         print(f"  {level:<14} {n:>10,}  {100 * n / total:5.1f}%", file=sys.stderr)
 
 
+def csv_digest(path: Path = COEFFICIENTS_CSV) -> str:
+    """The first 12 hex digits of the CSV's sha256, line endings folded to LF
+    so a Windows checkout and CI agree."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()[:12]
+
+
+def published_name(path: Path = COEFFICIENTS_CSV) -> str:
+    return f"crown_width_coefficients_{csv_digest(path)}.parquet"
+
+
+def published_url(path: Path = COEFFICIENTS_CSV) -> str:
+    return f"{PUBLIC_PREFIX}/{published_name(path)}"
+
+
+# The column types the model's properties expect; the CSV is read with these
+# rather than sniffed so the parquet's schema does not move with the values.
+PARQUET_TYPES = {
+    "level": "VARCHAR", "taxon": "VARCHAR", "family": "VARCHAR", "division": "VARCHAR",
+    "fit_level": "VARCHAR", "fit_taxon": "VARCHAR", "n": "BIGINT",
+    "ln_a": "DOUBLE", "b": "DOUBLE", "sigma": "DOUBLE", "r2": "DOUBLE",
+    "dbh_min_cm": "DOUBLE", "dbh_max_cm": "DOUBLE", "scale": "DOUBLE",
+}
+
+
+def write_parquet(target: Path, source: Path = COEFFICIENTS_CSV) -> None:
+    columns = ", ".join(f"'{c}': '{t}'" for c, t in PARQUET_TYPES.items())
+    duckdb.connect().execute(
+        f"COPY (SELECT * FROM read_csv('{source.as_posix()}', header = true, columns = {{{columns}}})) "
+        f"TO '{target.as_posix()}' (FORMAT PARQUET)"
+    )
+
+
+def publish() -> str:
+    """Write the committed CSV as a parquet and upload it under its hash.
+    Content-addressed, so an upload never replaces what a job reads."""
+    import tempfile
+
+    name = published_name()
+    with tempfile.TemporaryDirectory() as tmp:
+        local = Path(tmp) / name
+        write_parquet(local)
+        subprocess.run(
+            ["gcloud", "storage", "cp", str(local), f"{PUBLISHED_PREFIX}/{name}"],
+            check=True, shell=sys.platform == "win32",
+        )
+    return published_url()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--write", action="store_true", help="refit from Tallo and rewrite the CSV")
     parser.add_argument("--tallo", help="path to Tallo.csv (downloaded and cached when omitted)")
     parser.add_argument("--coverage", action="store_true", help="also report coverage against the published rollup (network)")
+    parser.add_argument("--publish", action="store_true", help="upload the committed CSV as the parquet the model reads")
     args = parser.parse_args()
 
+    if args.publish and not args.write:
+        url = publish()
+        print(f"published; allometry_model.preql's file clauses should read:\n{url}")
+        return 0
     if not args.write:
-        parser.error("--write is required")
+        parser.error("--write or --publish is required")
 
     conn = duckdb.connect()
     load(conn, tallo_path(args.tallo))
