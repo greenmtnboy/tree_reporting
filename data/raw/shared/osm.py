@@ -188,6 +188,8 @@ OSM_EXTRA_NULL_COLUMNS: dict[str, dict[str, "pa.DataType"]] = {
     # Vienna's Bezirk and Basel's Gemeinde (Basel, Riehen, Bettingen).
     "ATVIE": {"borough": pa.string()},
     "CHBAS": {"borough": pa.string()},
+    # Lyon's commune (the Métropole spans 59 of them).
+    "FRLYO": {"borough": pa.string()},
 }
 
 
