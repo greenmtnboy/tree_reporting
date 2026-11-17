@@ -458,12 +458,6 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Mediterranean Forests, Woodlands & Scrub',
     realm: 'palearctic',
   },
-  ESBCN: {
-    ecoregionId: 799, // Northeast Spain and Southern France Mediterranean forests
-    usdaZone: 10,
-    biome: 'Mediterranean Forests, Woodlands & Scrub',
-    realm: 'palearctic',
-  },
   USBAL: {
     ecoregionId: 399, // Southeast US conifer savannas
     usdaZone: 7,
@@ -472,6 +466,12 @@ const CITY_DASHBOARD_CONTEXT: Record<
   },
   DECGN: {
     ecoregionId: 664, // European Atlantic mixed forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  DEFRA: {
+    ecoregionId: 686, // Western European broadleaf forests
     usdaZone: 8,
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'palearctic',

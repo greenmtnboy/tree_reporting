@@ -72,7 +72,7 @@
   "DEHAM": { "name": "Hamburg", "center": [9.9937, 53.5511] },
   "FRLYO": { "name": "Lyon", "center": [4.8357, 45.764] },
   "ESMAD": { "name": "Madrid", "center": [-3.7038, 40.4168] },
-  "ESBCN": { "name": "Barcelona", "center": [2.1686, 41.3874] },
   "USBAL": { "name": "Baltimore", "center": [-76.6122, 39.2904] },
-  "DECGN": { "name": "Cologne", "center": [6.9603, 50.9375] }
+  "DECGN": { "name": "Cologne", "center": [6.9603, 50.9375] },
+  "DEFRA": { "name": "Frankfurt", "center": [8.6821, 50.1109] }
 }

@@ -2,55 +2,55 @@ import ..tree_common;
 import ..community_tree_info;
 import ..tree_dedup;
 
-auto esbcn_published_data_updated_through <- greatest(esbcn_data_updated_through, esbcn_community_data_updated_through, esbcn_osm_data_updated_through);
+auto defra_published_data_updated_through <- greatest(defra_data_updated_through, defra_community_data_updated_through, defra_osm_data_updated_through);
 
-key esbcn_source enum<string>['BARCELONA_OPENDATA', 'COMMUNITY_ESBCN', 'OSM_ESBCN']; # originating dataset for the row
+key defra_source enum<string>['FRANKFURT_OPENDATA', 'COMMUNITY_DEFRA', 'OSM_DEFRA']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
-auto esbcn_source_label <- concat(esbcn_source, '');
-merge esbcn_source_label into source_label;
+auto defra_source_label <- concat(defra_source, '');
+merge defra_source_label into source_label;
 
-root datasource barcelona_update_time (
-    data_updated_through: esbcn_data_updated_through
+root datasource frankfurt_update_time (
+    data_updated_through: defra_data_updated_through
 )
-file `./barcelona_update_time.py`;
+file `./frankfurt_update_time.py`;
 
-# Only this city's column, so an approval elsewhere does not mark ESBCN's
+# Only this city's column, so an approval elsewhere does not mark DEFRA's
 # Parquet stale. Trilogy probes this as MAX over the one column.
-root datasource esbcn_community_update_time (
-    esbcn_community_data_updated_through: esbcn_community_data_updated_through
+root datasource defra_community_update_time (
+    defra_community_data_updated_through: defra_community_data_updated_through
 )
 file `../community_update_time.py`;
 
 # GCS publication time of the staged OSM parquet; it only moves when an
 # extraction is re-run and uploaded. Not a local mtime -- git does not preserve
 # it, so a committed staging file makes every fresh clone look like new data.
-root datasource esbcn_osm_update_time (
-    data_updated_through: esbcn_osm_data_updated_through
+root datasource defra_osm_update_time (
+    data_updated_through: defra_osm_data_updated_through
 )
-file `./barcelona_osm_probe.py`;
+file `./frankfurt_osm_probe.py`;
 
 # Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
 # the shared raw_* columns; a source that names a column differently re-binds
 # it here (`dbh: ?raw_dbh`).
-root partial datasource barcelona_raw_tree_info extends tree_partition (
-    data_source: esbcn_source,
+root partial datasource frankfurt_raw_tree_info extends tree_partition (
+    data_source: defra_source,
 )
-complete where city = 'ESBCN' and esbcn_source = 'BARCELONA_OPENDATA'
-file `./barcelona_tree_info.py`;
+complete where city = 'DEFRA' and defra_source = 'FRANKFURT_OPENDATA'
+file `./frankfurt_tree_info.py`;
 
 
 # Approved community submissions for this city. The shared ingest script emits
-# every city's rows; the `complete where` clause narrows it to ESBCN and makes
+# every city's rows; the `complete where` clause narrows it to DEFRA and makes
 # it a disjoint partition, and the `where` clause is what actually filters --
 # `complete where` asserts, it does not promise a predicate.
-root partial datasource esbcn_community_tree_info extends tree_partition (
-    data_source: esbcn_source,
+root partial datasource defra_community_tree_info extends tree_partition (
+    data_source: defra_source,
 )
-complete where city = 'ESBCN' and esbcn_source = 'COMMUNITY_ESBCN'
+complete where city = 'DEFRA' and defra_source = 'COMMUNITY_DEFRA'
 file `../community_tree_info.py`
-where city = 'ESBCN';
+where city = 'DEFRA';
 
 
 # OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
@@ -58,12 +58,12 @@ where city = 'ESBCN';
 # by construction; the overlap is resolved by ../tree_dedup.preql. The `where`
 # is the city's CITY_TERRITORY (tools/sync_osm_territory.py keeps it so): a
 # staged extract keeps the territory it was cut with until its next firing.
-root partial datasource esbcn_osm_tree_info extends tree_partition (
-    data_source: esbcn_source,
+root partial datasource defra_osm_tree_info extends tree_partition (
+    data_source: defra_source,
 )
-complete where city = 'ESBCN' and esbcn_source = 'OSM_ESBCN'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/esbcn_osm_staging.parquet`
-where (raw_latitude >= 41.31 and raw_latitude < 41.47 and raw_longitude >= 2.05 and raw_longitude < 2.23);
+complete where city = 'DEFRA' and defra_source = 'OSM_DEFRA'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/defra_osm_staging.parquet`
+where (raw_latitude >= 50.01 and raw_latitude < 50.24 and raw_longitude >= 8.47 and raw_longitude < 8.81);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
@@ -84,12 +84,12 @@ merge merged_longitude into longitude;
 # lost a quarter of the city.  The two `@source_kept` lines are the same guard
 # per bulk source; add one for every municipal or OSM label in the enum
 # (`test_every_city_refuses_a_collapsed_build`).
-partial datasource barcelona_tree_info extends published_tree_info (
-    data_source: esbcn_source,
-    esbcn_published_data_updated_through,
+partial datasource frankfurt_tree_info extends published_tree_info (
+    data_source: defra_source,
+    defra_published_data_updated_through,
 )
-complete where city = 'ESBCN'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/esbcn_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/esbcn_tree_info_v{data_version}.parquet`
-freshness by esbcn_published_data_updated_through
-assert @source_kept(tree_id, esbcn_source, 'BARCELONA_OPENDATA', 0.75)
-assert @source_kept(tree_id, esbcn_source, 'OSM_ESBCN', 0.75);
+complete where city = 'DEFRA'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/defra_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/defra_tree_info_v{data_version}.parquet`
+freshness by defra_published_data_updated_through
+assert @source_kept(tree_id, defra_source, 'FRANKFURT_OPENDATA', 0.75)
+assert @source_kept(tree_id, defra_source, 'OSM_DEFRA', 0.75);

@@ -97,8 +97,8 @@ select * from (values
     ('DEHAM', 664),
     ('FRLYO', 686),
     ('ESMAD', 793),
-    ('ESBCN', 799),
     ('USBAL', 399),
-    ('DECGN', 664)
+    ('DECGN', 664),
+    ('DEFRA', 686)
 ) as t(city, ecoregion_id)
 ''';

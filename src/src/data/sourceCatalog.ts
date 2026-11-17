@@ -11,9 +11,9 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Frankfurt', label: 'TODO: Frankfurt tree inventory source', url: 'TODO' },
   { city: 'Cologne', label: 'TODO: Cologne tree inventory source', url: 'TODO' },
   { city: 'Baltimore', label: 'TODO: Baltimore tree inventory source', url: 'TODO' },
-  { city: 'Barcelona', label: 'TODO: Barcelona tree inventory source', url: 'TODO' },
   { city: 'Madrid', label: 'TODO: Madrid tree inventory source', url: 'TODO' },
   { city: 'Lyon', label: 'TODO: Lyon tree inventory source', url: 'TODO' },
   { city: 'Hamburg', label: 'TODO: Hamburg tree inventory source', url: 'TODO' },
@@ -117,9 +117,9 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Frankfurt', label: 'TODO: Frankfurt landmark source' },
   { city: 'Cologne', label: 'TODO: Cologne landmark source' },
   { city: 'Baltimore', label: 'TODO: Baltimore landmark source' },
-  { city: 'Barcelona', label: 'TODO: Barcelona landmark source' },
   { city: 'Madrid', label: 'TODO: Madrid landmark source' },
   { city: 'Lyon', label: 'TODO: Lyon landmark source' },
   { city: 'Hamburg', label: 'TODO: Hamburg landmark source' },
