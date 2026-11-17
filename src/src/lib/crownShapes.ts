@@ -74,9 +74,9 @@ export function crownShape(form: TreeForm, x: number, y: number): { edge: number
   const cos = Math.cos, abs = Math.abs
   switch (form) {
     case 'conifer': {
-      // A star of needle tips, a smaller whorl inside it a half step turned.
-      const tip = 1 - tri(a * 13 / TAU), inner = 1 - tri(a * 13 / TAU + 0.5)
-      return { edge: r - (0.8 + 0.2 * tip * tip), detail: Math.min(abs(r - 0.56 * (0.78 + 0.22 * inner * inner)), abs(r - 0.26 * (0.75 + 0.25 * tip))) }
+      // A straight-edged star of needle tips, a smaller whorl inside it a half step turned, the leader at its heart.
+      const tip = 1 - tri(a * 11 / TAU), inner = 1 - tri(a * 11 / TAU + 0.5)
+      return { edge: r - (0.8 + 0.2 * tip), detail: Math.min(abs(r - 0.52 * (0.78 + 0.22 * inner)), abs(r - 0.1)) }
     }
     case 'palm': {
       // Seven pointed fronds from a hub, each with its midrib.
@@ -86,9 +86,27 @@ export function crownShape(form: TreeForm, x: number, y: number): { edge: number
     case 'columnar':
       // A tight round top, the column's crown a ring within it.
       return { edge: r - (0.94 + 0.06 * abs(cos(4.5 * a))), detail: abs(r - 0.46) }
-    case 'ornamental':
-      // Five rounded petals around a blossom's heart.
-      return { edge: r - (0.7 + 0.3 * Math.sqrt(abs(cos(2.5 * a)))), detail: abs(r - 0.22) }
+    case 'ornamental': {
+      // Flowering branches: an airy crown of round bunches about a centre, five branches out from
+      // the trunk and blossoms along them.
+      let edge = r - 0.5, detail = Infinity
+      for (let i = 0; i < 7; i++) {
+        const b = i * TAU / 7
+        edge = Math.min(edge, Math.hypot(x - 0.64 * cos(b), y - 0.64 * Math.sin(b)) - 0.36)
+      }
+      for (let i = 0; i < 5; i++) {
+        const b = i * TAU / 5 + 0.3, ux = cos(b), uy = Math.sin(b)
+        // The branch: a segment from the trunk to 0.72 out.
+        const t = Math.max(0, Math.min(0.72, x * ux + y * uy))
+        detail = Math.min(detail, Math.hypot(x - t * ux, y - t * uy))
+        // Blossoms: small rings at the branch's tip, along it, and off it either side.
+        for (const [along, off] of [[0.74, 0], [0.45, 0.13], [0.5, -0.15], [0.25, 0.1]]) {
+          const bx = along * ux - off * uy, by = along * uy + off * ux
+          detail = Math.min(detail, abs(Math.hypot(x - bx, y - by) - 0.055))
+        }
+      }
+      return { edge, detail }
+    }
     case 'spreading':
       // Broad uneven lobes, inner masses of foliage in arcs.
       return {
@@ -96,18 +114,21 @@ export function crownShape(form: TreeForm, x: number, y: number): { edge: number
         detail: cos(2 * a + 0.8) > 0.2 ? abs(r - 0.6 * (0.86 + 0.14 * abs(cos(3.5 * a)))) : 1,
       }
     case 'weeping': {
-      // A fringed curtain, strands falling from a ring of branches.
-      const strand = fract(a * 16 / TAU)
-      return { edge: r - (0.9 + 0.1 * abs(cos(8 * a))), detail: Math.min(abs(r - 0.42), r > 0.48 ? r * Math.sin(Math.min(strand, 1 - strand) * TAU / 16) : 1) }
+      // A willow from above: a shaggy fringe, tiers of drooping branches hanging in scallops inside it.
+      return {
+        edge: r - (0.88 + 0.07 * abs(cos(11.5 * a)) + 0.05 * abs(cos(17.5 * a + 1))),
+        detail: Math.min(abs(r - 0.66 * (0.93 + 0.07 * abs(cos(9.5 * a + 0.4)))), abs(r - 0.38 * (0.9 + 0.1 * abs(cos(5.5 * a + 1.1))))),
+      }
     }
     case 'multi_trunk': {
-      // Three crowns overlapping, each one's outline showing through.
+      // Three leafy crowns overlapping, each one's lobed outline showing through, a stem under each.
       let edge = Infinity, detail = Infinity
       for (let i = 0; i < 3; i++) {
-        const b = i * TAU / 3 + 0.5
-        const d = Math.hypot(x - 0.44 * cos(b), y - 0.44 * Math.sin(b)) - 0.56
+        const b = i * TAU / 3 + 0.5, cx = 0.44 * cos(b), cy = 0.44 * Math.sin(b)
+        const rho = Math.hypot(x - cx, y - cy), phi = Math.atan2(y - cy, x - cx)
+        const d = rho - 0.56 * (0.88 + 0.12 * abs(cos(3.5 * phi + i)))
         edge = Math.min(edge, d)
-        detail = Math.min(detail, abs(d))
+        detail = Math.min(detail, abs(d), abs(rho - 0.05))
       }
       return { edge, detail }
     }
