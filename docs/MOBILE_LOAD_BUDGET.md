@@ -572,11 +572,25 @@ What is left, in the order it would pay:
    tree. With the prefetch the wait is whatever of it the viewer did not
    spend on the entry screen; a first visit that taps at once still waits
    about eight seconds for it on this link. The bytes are DuckDB's.
-2. **Smaller row groups in the blocks.** A block's row groups are 10,240
-   rows, and the two cells of this view (16,000 trees) reach five of them,
-   51,000 rows. Smaller groups would bring the bytes nearer the trees; how
-   near is not measured. It is a constant in `data/world/publish_blocks.py`
-   and a re-upload of every block; the reader needs no change.
+2. **Smaller row groups in the blocks.** Done for the next build of the
+   blocks: `ROW_GROUP_SIZE` in `data/world/publish_blocks.py` is 4,096. The
+   block measured above was written at 10,240, where the two cells of this
+   view (16,136 trees) reach five groups, 51,200 rows and 1.56 MB. The same
+   block rewritten, the same view:
+
+   | Row group | Groups read | Rows | Bytes | Footer | File |
+   |---:|---:|---:|---:|---:|---:|
+   | 10,240 | 5 of 13 | 51,200 | 1.56 MB | 21 KB | 4.15 MB |
+   | 4,096 | 8 of 32 | 32,768 | 0.96 MB | 50 KB | 4.16 MB |
+   | 2,048 | 12 of 64 | 24,576 | 0.74 MB | 99 KB | 4.32 MB |
+
+   2,048 is the smallest DuckDB writes. It was passed over for 4,096: it
+   grows the file a desktop fetches whole, and its footer no longer fits the
+   64 KB the worker reads for it in one request (`TAIL_BYTES`). At 4,096 the
+   footer fits for a block of up to about 165,000 trees; fourteen blocks are
+   larger (eight in Boston's metro, the rest Bogotá's and one of San
+   Francisco's) and take a second request for it. One block and one view;
+   the wait itself has not been measured again.
 3. **The colour scheme's table** (`setSpeciesShadeSql`): nine statements,
    about 0.3 s on a desktop and more on a phone, between the engine and the
    first tile. The 3,200-row `INSERT` of snapped shades is a third of it.

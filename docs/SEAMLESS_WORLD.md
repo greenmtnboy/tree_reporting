@@ -158,8 +158,9 @@ How a cell's rows arrive depends on how much of its block it is:
   longitude ranges reach the cells' box, side by side, and hands the engine a
   buffer the size of the file with only those filled (`sparseBlocks.ts`).
   The engine prunes row groups by the same rule and reads nothing else: two
-  cells of that block are five of thirteen row groups, 1.6 MB in three
-  requests. What was not fetched is 0xFF, which the engine cannot parse, so a
+  cells of that block were five of thirteen row groups, 1.6 MB in three
+  requests, when blocks were written in 10,240-row groups; at the 4,096 they
+  are written in now it is 1.0 MB. What was not fetched is 0xFF, which the engine cannot parse, so a
   read that ever strayed there throws and the load is made again from the
   whole file; a failed range request does the same.
 - **Near Me asks as soon as it has a fix** (`prefetchWindowAt`), beside the

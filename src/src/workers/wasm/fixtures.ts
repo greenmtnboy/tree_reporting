@@ -157,7 +157,7 @@ export async function writeWorld(cities: string[], build = '0'): Promise<{ block
   }
   for (const key of perBlock.keys()) {
     conn.query(`COPY (SELECT ${WORLD_BLOCK_COLUMNS.join(', ')} FROM world WHERE ${block} = ${key} ORDER BY (yt >> 6), (xt >> 6), tree_id)
-      TO '${WORLD_DIR}/blocks/${key}-${hash(key)}.parquet' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE 10240)`)
+      TO '${WORLD_DIR}/blocks/${key}-${hash(key)}.parquet' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE 4096)`)
   }
   const vocab = `vocab-${hash(0)}.parquet`
   conn.query(`COPY (${Object.values(VOCAB_KINDS).map((column) =>
