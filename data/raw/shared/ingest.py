@@ -662,6 +662,14 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 # and is deliberately not here.
 SPECIES_SYNONYMS: dict[str, str] = {
     # Nomenclatural and taxonomic synonyms (POWO lists the key under the value).
+    # Batch 4 (Lyon, Madrid, Hamburg, Cologne): hybrid marks and WCVP synonyms.
+    "Acer x opalus": "Acer opalus",
+    "X cupressocyparis x leylandii": "Cupressus x leylandii",
+    "Quercus schochiana": "Quercus x schochiana",
+    "Sorbus thuringiaca": "Sorbus x thuringiaca",
+    "Quercus benderi": "Quercus x benderi",
+    "Quercus kewensis": "Quercus x kewensis",
+    "Platanus hybrida": "Platanus x hispanica",
     "Platanus x acerifolia": "Platanus x hispanica",
     "Sophora japonica": "Styphnolobium japonicum",
     "Tilia x vulgaris": "Tilia x europaea",
@@ -852,6 +860,37 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # Batch 4 (Lyon, Madrid, Hamburg, Cologne): each key absent from WCVP, each value accepted there.
+    "Quercus ryzophylla": "Quercus rysophylla",
+    "Acer pennsylvanicum": "Acer pensylvanicum",
+    "Quercus wizlizenii": "Quercus wislizeni",
+    "Hibiscus synosyriacus": "Hibiscus sinosyriacus",
+    "Evodia daniellii": "Tetradium daniellii",
+    "Evodia hupehensis": "Tetradium daniellii",
+    "Malus pumilla": "Malus domestica",
+    "Crataegus ripidophylla": "Crataegus rhipidophylla",
+    "Acer freemannii": "Acer x freemanii",
+    "Salix elaeagnos": "Salix eleagnos",
+    "Ilex altaclarensis": "Ilex x altaclerensis",
+    "Cladastris lutea": "Cladrastis kentukea",
+    "Crataegus lavallei": "Crataegus x lavalleei",
+    "Tilia platiphyllos": "Tilia platyphyllos",
+    "Pyrus calleriana": "Pyrus calleryana",
+    "Amelanchier lamarkii": "Amelanchier x lamarckii",
+    "Acer speudoplatanus": "Acer pseudoplatanus",
+    "Acer shirasawanun": "Acer shirasawanum",
+    "Calocedro decurrens": "Calocedrus decurrens",
+    "Caria illinoinensis": "Carya illinoinensis",
+    "Cefalotaxus fortunei": "Cephalotaxus fortunei",
+    "Cunningamia lanceolata": "Cunninghamia lanceolata",
+    "Elaegnus angustifolia": "Elaeagnus angustifolia",
+    "Magnolia acumunata": "Magnolia acuminata",
+    "Magnolia lilliflora": "Magnolia liliiflora",
+    "Pistacia chinenesis": "Pistacia chinensis",
+    "Quercus libanii": "Quercus libani",
+    "Sciadopitis verticillata": "Sciadopitys verticillata",
+    "Stewartia pseudocamelia": "Stewartia pseudocamellia",
+    "Fontanesia phillyreodes": "Fontanesia philliraeoides",
     "Pyrus betulaefolia": "Pyrus betulifolia",
     "Quercus castaenifolia": "Quercus castaneifolia",
     "Carpinus betula": "Carpinus betulus",

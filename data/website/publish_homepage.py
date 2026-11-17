@@ -122,6 +122,7 @@ COUNTRIES = {
     "CH": "Switzerland",
     "CO": "Colombia",
     "DE": "Germany",
+    "ES": "Spain",
     "CZ": "Czechia",
     "DK": "Denmark",
     "FI": "Finland",

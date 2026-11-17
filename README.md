@@ -53,6 +53,7 @@ Currently has data from the following cities:
 - [Pittsburgh, PA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USPIT)
 - [San Jose, CA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USSJC)
 - [Sacramento, CA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USSAC)
+- [Baltimore, MD, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USBAL)
 - [Stoughton, WI, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USSTO)
 - [Austin, TX, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USAUS)
 - [Houston, TX, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USHOU)
@@ -94,6 +95,10 @@ Currently has data from the following cities:
 - [Vienna, Austria](https://greenmtnboy.github.io/tree_reporting/#/?city=ATVIE)
 - [Zürich, Switzerland](https://greenmtnboy.github.io/tree_reporting/#/?city=CHZUR)
 - [Basel, Switzerland](https://greenmtnboy.github.io/tree_reporting/#/?city=CHBAS)
+- [Cologne, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DECGN)
+- [Madrid, Spain](https://greenmtnboy.github.io/tree_reporting/#/?city=ESMAD)
+- [Lyon, France](https://greenmtnboy.github.io/tree_reporting/#/?city=FRLYO)
+- [Hamburg, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEHAM)
 - [Melbourne, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUMEL)
 - [Adelaide, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUADL)
 - [Perth, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUPER)
@@ -158,6 +163,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Pittsburgh, PA | City of Pittsburgh, Department of Public Works Forestry Division - City of Pittsburgh Trees (WPRDC, CC BY) | https://data.wprdc.org/dataset/city-trees |
 | San Jose, CA | City of San José - Street Tree (ArcGIS, CC BY) | https://data.sanjoseca.gov/dataset/street-tree |
 | Sacramento, CA | City of Sacramento Public Works, Urban Forestry - City Maintained Trees (ArcGIS, City of Sacramento Open Data Terms of Use) | https://www.arcgis.com/home/item.html?id=b9b716e09b5048179ab648bb4518452b |
+| Baltimore, MD | Baltimore City Recreation & Parks, Forestry - Street Tree Inventory (ArcGIS) | https://gis.baltimorecity.gov/egis/rest/services/Foresty/TreeInventory_Public/MapServer/0 |
 | Stoughton | City of Stoughton - Public Tree Inventory (ArcGIS) | https://experience.arcgis.com/experience/f9b95eddac104c708619ccaf4c2c9de0 |
 | Austin, TX | City of Austin - Tree Inventory (Socrata, public domain) | https://data.austintexas.gov/d/wrik-xasw |
 | Houston, TX | City of Houston Parks & Recreation, Urban Forestry - street-tree inventory (ArcGIS) | https://geohwp.houstontx.gov/arcgis/rest/services/03_BaseData_External/Land_Base/FeatureServer/0 |
@@ -200,6 +206,10 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Vienna | Stadt Wien Open Data - Baumkataster (BAUMKATOGD, CC BY 4.0; Datenquelle: Stadt Wien - data.wien.gv.at) | https://www.data.gv.at/katalog/dataset/c91a4635-8b7d-43fe-9b27-d95dec8392a7 |
 | Zürich | Stadt Zürich Open Data - Baumkataster (Grün Stadt Zürich, CC0) | https://data.stadt-zuerich.ch/dataset/geo_baumkataster |
 | Basel | Stadtgärtnerei Basel-Stadt - Baumkataster: Baumbestand (data.bs.ch, CC BY 4.0, Geodaten Kanton Basel-Stadt) | https://data.bs.ch/explore/dataset/100052/ |
+| Cologne | Stadt Köln Offene Daten - Baumkataster (Amt für Landschaftspflege und Grünflächen, Datenlizenz Deutschland Zero 2.0) | https://offenedaten-koeln.de/dataset/baumkataster-koeln-fortlaufend-aktualisiert |
+| Madrid | Ayuntamiento de Madrid - Arbolado en parques y zonas verdes (detalle), datos.madrid.es (CC BY 4.0) | https://datos.madrid.es/dataset/300761-0-arbolado-especies |
+| Lyon | Métropole de Lyon - Arbres d'alignement (data.grandlyon.com WFS, Licence Ouverte) | https://data.grandlyon.com/portail/fr/jeux-de-donnees/arbres-alignement-metropole-lyon/info |
+| Hamburg | Freie und Hansestadt Hamburg, BUKEA - Straßenbaumkataster (WFS, dl-de/by-2.0) | http://www.hamburg.de/fhh-permalink/1065232 |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
 | Melbourne (Yarra) | City of Yarra - Street and Park Trees (CC BY 4.0) | https://data.gov.au/data/dataset/yarra-street-park-trees |
@@ -241,6 +251,7 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Pittsburgh, PA | City of Pittsburgh - City Designated Individual Historic Sites; National Park Service - National Register of Historic Places | https://data.wprdc.org/dataset/city-designated-individual-historic-sites |
 | San Jose, CA | City of San José - Historic Resources Inventory, City Landmarks (CC BY); National Park Service - National Register of Historic Places | https://data.sanjoseca.gov/dataset/historical-resources-inventory |
 | Sacramento, CA | City of Sacramento - Register of Historic and Cultural Resources, Historic Landmarks; National Park Service - National Register of Historic Places | https://services5.arcgis.com/54falWtcpty3V47Z/arcgis/rest/services/Historic_Landmarks/FeatureServer/0 |
+| Baltimore, MD | Baltimore City Landmark List (CHAP, Open Baltimore); National Park Service - National Register of Historic Places | https://data.baltimorecity.gov/datasets/8a570598d14c41ada202a6a0155bb0aa |
 | Austin, TX | City of Austin - Historical Landmarks (Socrata) | https://data.austintexas.gov/d/8k49-bptr |
 | Houston, TX | City of Houston - Historic Sites and Landmarks (Landmarks and Protected Landmarks) | https://services.arcgis.com/NummVBqZSIJKUeVR/arcgis/rest/services/COH_Historic_Sites_and_Landmarks_view/FeatureServer/6 |
 | Durham, NC | Durham City-County Planning - Local Historic Landmarks and National Register listings | https://webgis2.durhamnc.gov/server/rest/services/PublicServices/Planning/MapServer/1 |
@@ -281,6 +292,10 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Vienna | Stadt Wien Open Data - Historische Gartenanlagen and Sehenswürdigkeiten (CC BY 4.0) | https://data.wien.gv.at/ |
 | Zürich | Stadt Zürich Open Data - Denkmalpflege-Inventar, regional and cantonal objects (CC0) | https://data.stadt-zuerich.ch/dataset/geo_denkmalpflege_inventar |
 | Basel | Kanton Basel-Stadt - Inventar der schützenswerten Gartenanlagen (CC BY 4.0) | https://www.geo.bs.ch/ |
+| Cologne | Stadt Köln Offene Daten - Denkmalliste, named monuments (Datenlizenz Deutschland Zero 2.0) | https://offenedaten-koeln.de/dataset/liste-der-koelner-denkmaeler |
+| Madrid | Ayuntamiento de Madrid / Comunidad de Madrid - Bienes de Interés Cultural y Patrimonial (CC BY 4.0) | https://datos.madrid.es/dataset/300717-0-cultural-bien-mapas |
+| Lyon | Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Mérimée, Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
+| Hamburg | Freie und Hansestadt Hamburg - Denkmalkartierung: listed gardens, monuments and buildings (WFS, dl-de/by-2.0) | https://geodienste.hamburg.de/HH_WFS_Denkmalschutz?SERVICE=WFS&REQUEST=GetCapabilities |
 | Melbourne | Melbourne Open Data - Landmarks and Places of Interest | https://data.melbourne.vic.gov.au/explore/dataset/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/ |
 | Paris | Ministere de la Culture - Immeubles proteges au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
 | Buenos Aires | No landmark dataset in production yet | n/a |
