@@ -95,7 +95,14 @@
       :class="{ active: userLocation !== null }"
       :title="userLocation ? 'Pan to my location' : 'Show my location on the map'"
       @click="toggleUserLocation"
-    >&#x25CE; Find Me</button>
+    >
+      <svg class="locate-icon" viewBox="-8 -8 16 16" aria-hidden="true">
+        <circle r="4.6" />
+        <circle class="locate-icon-dot" r="1.5" />
+        <path d="M0 -7.5V-4.6M0 4.6V7.5M-7.5 0H-4.6M4.6 0H7.5" />
+      </svg>
+      Find Me
+    </button>
   </div>
   <button
     v-else
@@ -103,7 +110,14 @@
     :class="{ active: userLocation !== null }"
     :title="userLocation ? 'Pan to my location' : 'Show my location on the map'"
     @click="toggleUserLocation"
-  >&#x25CE; Find Me</button>
+  >
+    <svg class="locate-icon" viewBox="-8 -8 16 16" aria-hidden="true">
+      <circle r="4.6" />
+      <circle class="locate-icon-dot" r="1.5" />
+      <path d="M0 -7.5V-4.6M0 4.6V7.5M-7.5 0H-4.6M4.6 0H7.5" />
+    </svg>
+    Find Me
+  </button>
 
   <!-- Three-pane tree info card; a full-screen sheet on mobile -->
   <Teleport v-if="mapShown" to="body" :disabled="!props.simplified && !streetViewDocked">
@@ -2747,18 +2761,41 @@ onUnmounted(() => {
   color: #ffcdd2;
 }
 
+/* The reticle beside "Find Me", on both layouts. */
+.locate-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.locate-icon-dot {
+  fill: currentColor;
+  stroke: none;
+}
+
 .locate-btn-desktop {
   position: absolute;
   top: 10px;
   left: 10px;
   z-index: 4;
-  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* As tall as the zoom column is wide, so the top row reads as one set. */
+  height: 31px;
+  padding: 0 12px;
   border-radius: 6px;
   border: 1px solid rgba(var(--accent-rgb), 0.16);
   background: rgba(var(--surface-rgb), 0.82);
+  box-shadow: 0 10px 24px rgba(7, 10, 11, 0.24);
   color: rgba(var(--ink-rgb), 0.74);
   font-size: 0.78rem;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
@@ -2826,10 +2863,13 @@ onUnmounted(() => {
 
 .city-selector--mobile {
   flex-wrap: nowrap;
-  gap: 6px;
-  /* Stop short of the MapLibre zoom control in the top-right corner
-     (29px wide + 10px margin), so the row never slides under it. */
-  right: 56px;
+  /* The zoom column's own inset, and one 8px gap between everything up here:
+     the row stops 8px short of the zoom column (31px wide + 10px margin), and
+     the compass puck hangs 8px under its right end (MapCompass.vue). */
+  top: 10px;
+  left: 10px;
+  right: 49px;
+  gap: 8px;
 }
 
 /* On narrow screens the select must be able to shrink below its desktop
@@ -2857,7 +2897,12 @@ onUnmounted(() => {
 }
 
 .cache-refresh-btn {
-  padding: 4px 8px;
+  display: grid;
+  place-items: center;
+  width: 29px;
+  height: 29px;
+  padding: 0;
+  line-height: 1;
   border-radius: 6px;
   border: 1px solid rgba(var(--accent-rgb), 0.14);
   background: rgba(var(--surface-rgb), 0.74);
@@ -2947,7 +2992,7 @@ onUnmounted(() => {
 .map-legend {
   position: absolute;
   bottom: 28px;
-  right: 8px;
+  right: 10px;
   background: rgba(var(--surface-rgb), 0.84);
   border: 1px solid rgba(var(--accent-rgb), 0.16);
   border-radius: 8px;
@@ -2957,7 +3002,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 5px;
   pointer-events: auto;
-  max-width: min(320px, calc(100% - 16px));
+  max-width: min(320px, calc(100% - 20px));
   max-height: min(50%, 400px);
   overflow-y: auto;
   box-shadow: 0 16px 32px rgba(7, 10, 11, 0.22);
@@ -2988,7 +3033,7 @@ onUnmounted(() => {
 .legend-scope > span { color: var(--color-muted); font-size: .72rem; }
 .legend-clear { justify-self: start; padding: 6px 0; color: var(--color-leaf); text-decoration: underline; background: none; border: 0; cursor: pointer; }
 .legend-color-control { display: grid; gap: 4px; font-size: .72rem; margin: 4px 0; }
-.legend-color-control select { min-width: 0; max-width: 100%; color: var(--color-ink); background: var(--color-surface); border: 1px solid var(--color-muted); border-radius: 4px; padding: 5px; }
+.legend-color-control select { min-width: 0; max-width: 100%; color: var(--color-ink); background: rgb(var(--surface-rgb)); border: 1px solid rgba(var(--accent-rgb), 0.32); border-radius: 6px; padding: 5px 6px; }
 .legend-heading { font-size: .72rem; }
 .tc-shades { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .tc-swatch {
@@ -3036,7 +3081,10 @@ onUnmounted(() => {
   align-self: stretch;
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   padding: 0 12px;
+  line-height: 1;
+  box-shadow: 0 10px 24px rgba(7, 10, 11, 0.24);
 }
 
 .locate-btn.active {

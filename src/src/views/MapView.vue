@@ -9,7 +9,11 @@
         aria-label="Submit a tree"
         title="Submit a tree"
       >
-        <span aria-hidden="true">+</span>
+        <!-- Drawn, not typed: a "+" glyph sits wherever its font's metrics put it,
+             which is never the middle of the button. -->
+        <svg class="submit-fab-icon" viewBox="-12 -12 24 24" aria-hidden="true">
+          <path d="M0 -8.5V8.5M-8.5 0H8.5" />
+        </svg>
       </router-link>
     </div>
   </div>
@@ -50,13 +54,21 @@ import { firebaseAvailable } from '../lib/firebase'
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-display);
-  font-size: 1.8rem;
-  line-height: 1;
+  padding: 0;
   text-decoration: none;
   box-shadow: 0 10px 24px rgba(7, 10, 11, 0.24);
   z-index: 20;
   transition: transform 0.15s ease, background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.submit-fab-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
 }
 
 .submit-fab:hover {
@@ -79,6 +91,12 @@ import { firebaseAvailable } from '../lib/firebase'
     color: var(--color-on-accent);
     border-color: var(--color-leaf);
     box-shadow: 0 18px 34px rgba(6, 8, 10, 0.4);
+  }
+
+  .submit-fab-icon {
+    width: 26px;
+    height: 26px;
+    stroke-width: 1.9;
   }
 }
 </style>

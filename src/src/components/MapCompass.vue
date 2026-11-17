@@ -166,14 +166,15 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
 }
 
 /* Mobile stacks a city-selector bar across the top, so drop down past it and
-   sit alongside the zoom-level readout instead. The bar is ~45px tall
-   (8px offset + the select's height), so 54px clears it. The open dial is
-   larger than the desktop's: its letters are touch targets. */
+   sit alongside the zoom-level readout instead. The bar is 40px tall at a
+   10px offset, so 58px hangs the puck 8px under it: the same gap it keeps
+   from the zoom column. The open dial is larger than the desktop's: its
+   letters are touch targets. */
 .map-compass--mobile {
   --compass-size: 92px;
   --compass-radius: 29px;
   --compass-hit: 28px;
-  top: 54px;
+  top: 58px;
 }
 
 /* Anchored top-right, so collapsing shrinks back toward the corner it opens
