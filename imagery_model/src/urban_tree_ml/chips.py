@@ -14,6 +14,7 @@ from urban_tree_ml.confirmed_trees import confirmed_tree_rows
 from urban_tree_ml.feedback import load_training_feedback
 from urban_tree_ml.inventory import planted_after_imagery
 from urban_tree_ml.imagery_dates import resolve_planting_cutoff
+from urban_tree_ml.prepared_image_cache import PreparedImageCache
 from urban_tree_ml.targets import (
     DetectionMaskRegion,
     PointLabel,
@@ -118,6 +119,9 @@ def build_chips(
                 f"configured band {max(config.imagery.bands)} exceeds raster count {source.count}"
             )
         transformer = Transformer.from_crs("EPSG:4326", source.crs, always_xy=True)
+        image_cache = PreparedImageCache.configured(
+            source, config.imagery, config.paths.root, "all-band-raster-masks-v1"
+        )
         added_trees = confirmed_tree_rows(feedback_region_records, config, source.crs)
         if not added_trees.empty:
             frame = pd.concat([frame, added_trees], ignore_index=True)
@@ -204,14 +208,25 @@ def build_chips(
                 skipped_invalid += 1
                 continue
             window = Window(col_off, row_off, chip_pixels, chip_pixels)
-            raw = source.read(config.imagery.bands, window=window)
-            masks = source.read_masks(config.imagery.bands, window=window)
-            valid_mask = np.all(masks > 0, axis=0)
+            prepared_image = None
+            if image_cache is not None:
+                prepared_image = image_cache.read(
+                    window,
+                    lambda window=window: np.all(
+                        source.read_masks(config.imagery.bands, window=window) > 0, axis=0
+                    ),
+                )
+            if prepared_image is None:
+                raw = source.read(config.imagery.bands, window=window)
+                masks = source.read_masks(config.imagery.bands, window=window)
+                valid_mask = np.all(masks > 0, axis=0)
+                image = raw.astype(np.float32) * config.imagery.input_scale
+            else:
+                image, valid_mask = prepared_image.image, prepared_image.valid_mask
             valid_fraction = float(valid_mask.mean())
             if valid_fraction < config.imagery.minimum_valid_fraction:
                 skipped_invalid += 1
                 continue
-            image = raw.astype(np.float32) * config.imagery.input_scale
             denominator = image[3] + image[0] if image.shape[0] >= 4 else None
             ndvi = (
                 np.divide(
@@ -355,8 +370,11 @@ def build_chips(
             chip_path = split_dir / f"{chip_id}.npz"
             temporary_chip = chip_path.with_name(f".{chip_path.name}.{uuid4().hex}.part")
             try:
-                with temporary_chip.open("wb") as output:
-                    np.savez_compressed(output, image=image, **targets)
+                with temporary_chip.open("w+b") as output:
+                    if prepared_image is None:
+                        np.savez_compressed(output, image=image, **targets)
+                    else:
+                        prepared_image.write_targets(output, targets)
                     output.flush()
                     os.fsync(output.fileno())
                 os.replace(temporary_chip, chip_path)
@@ -499,6 +517,9 @@ def build_chips(
             str(local_normalization_path) if local_normalization_path is not None else None
         ),
     }
+    if image_cache is not None:
+        image_cache.validate_source()
+        summary["prepared_image_cache"] = image_cache.stats
     (output_root / "summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

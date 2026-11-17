@@ -34,9 +34,21 @@ fi
 if [[ -n "${TREE_ML_PREPARED_RUN:-}" ]]; then
   extra=(--prepared-run "$TREE_ML_PREPARED_RUN")
 fi
+# Optional GCS cache credentials stay outside source/input archives. Mount only
+# the explicitly configured ADC file, read-only, for the lifetime of this job.
+cache_mounts=()
+if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]]; then
+  [[ -f "$GOOGLE_APPLICATION_CREDENTIALS" ]] || { echo "ADC file missing" >&2; exit 1; }
+  cache_mounts=(-v "$GOOGLE_APPLICATION_CREDENTIALS:/run/gcp-adc.json:ro"
+                -e GOOGLE_APPLICATION_CREDENTIALS=/run/gcp-adc.json)
+fi
+
 docker run --rm --gpus all "${devices[@]}" --ipc=host \
   --name "tree-${TREE_ML_EXPERIMENT}" \
   -v "$TREE_ML_DATA_ROOT:$TREE_ML_DATA_ROOT" \
+  "${cache_mounts[@]}" \
+  -e TREE_ML_PREPARED_IMAGE_CACHE_URI -e TREE_ML_PREPARED_IMAGE_CACHE_DIR \
+  -e GOOGLE_CLOUD_PROJECT -e GOOGLE_CLOUD_QUOTA_PROJECT \
   -e TREE_ML_DATA_ROOT -e "TORCH_HOME=$TREE_ML_DATA_ROOT/cache/torch" \
   --entrypoint uv urban-tree-ml:joint run --frozen --no-sync python \
   "${entrypoint[@]}" --experiment "$TREE_ML_EXPERIMENT" \
