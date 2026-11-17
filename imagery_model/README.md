@@ -449,3 +449,54 @@ Do not select the model on a single headline accuracy. The final report should i
 - neighborhood maps of errors, including shadows, dense crowns, young trees, and private land.
 
 See [DESIGN.md](DESIGN.md) for the experiment gates and leakage/label limitations.
+
+## Prepared image cache in GCS
+
+`build-chips` and training preparation can share immutable prepared image tiles
+through a private GCS bucket and a local read-through cache. Install the `imagery`
+dependency group and authenticate with Application Default Credentials. The
+runtime identity needs object read and create access on the cache bucket.
+
+Set `TREE_ML_PREPARED_IMAGE_CACHE_URI=gs://YOUR_PRIVATE_BUCKET/prepared`, or write
+`prepared-image-cache.json` under `TREE_ML_DATA_ROOT` with this content.
+
+```json
+{"uri": "gs://YOUR_PRIVATE_BUCKET/prepared"}
+```
+
+The environment variable takes precedence, including an empty value to disable
+caching. `TREE_ML_PREPARED_IMAGE_CACHE_DIR` optionally overrides the local default
+`<data-root>/cache/prepared-images`. Local hits avoid network requests. A fresh
+machine downloads an existing tile once. A miss prepares and uploads the tile.
+Each build's `summary.json` records hits, misses, bytes transferred, source-hash
+time and remote time for subsequent cost and performance comparisons.
+
+The cache stores float32 imagery, the source validity mask and the image's
+compressed NPZ member. Output chips keep the usual NPZ schema. Every build
+regenerates curation targets, exclusions, scoring/training masks, admission and
+normalization through the ordinary pipeline. Appending fresh targets preserves
+the cached compressed image bytes.
+
+Keys include source content and VRT dependencies/sidecars, ordered bands, input
+scale, exact window, georeferencing, mask recipe, decoder versions and platform.
+Source hashing reads the full dependency graph on each build. Changed imagery or
+pixel preparation creates a new key. Curation edits reuse pixels while rebuilding
+supervision. Linux and Windows deliberately have separate identities because
+historical raster boundary reproduction differs. Frozen validation guards still
+apply. Local corruption is repaired from GCS. Corrupt remote objects, source
+mutation, authentication failures and conflicting concurrent writers fail the
+build with an error. Uploads use create-only generation preconditions and local
+publication uses complete temporary files.
+
+For a containerized job, provision ADC separately on its host and set
+`GOOGLE_APPLICATION_CREDENTIALS` to that host file in the job's environment.
+`lambda/joint.sh` mounts it read-only at `/run/gcp-adc.json` and forwards the cache
+and GCP project environment variables. Configure the URI in that same job
+environment or in its persistent data root. Keep credentials outside Git, frozen
+input/source archives and collected outputs. The launch tool does not copy local
+ADC credentials to a remote instance. A remote host needs its own credential
+provisioning before enabling GCS caching.
+
+The first build fills the cache and includes upload overhead. Warm-cache timing
+and source hashing should be measured on representative acquisitions before
+estimating full-run savings. Cache storage and GCS operations/egress are billable.
