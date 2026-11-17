@@ -1,0 +1,31 @@
+import ..landmark_common;
+
+root datasource ghent_landmarks_update_time (
+    data_updated_through: begnt_landmark_data_updated_through
+)
+file `./ghent_landmarks_probe.py`;
+
+# Ghent's protected heritage -- monuments, cultural-historical landscapes and
+# town views designated under the Flemish heritage decree -- read from the
+# Agentschap Onroerend Erfgoed's layers on the public Mercator WFS (Gratis open
+# data licentie Vlaanderen); see ghent_landmarks.py.  One landmark per
+# designation object.  The register's own attributes ride along in existing
+# landmark_common properties: the designation type (category), the address and
+# the date the protection took effect.
+root partial datasource raw_ghent_landmark_info extends landmark_partition (
+    category: ?category,
+    address: ?address,
+    designation_date: ?designation_date,
+)
+complete where city = 'BEGNT'
+file `./ghent_landmarks.py`;
+
+partial datasource ghent_landmark_info extends published_landmark_info (
+    ?category,
+    ?address,
+    ?designation_date,
+    begnt_landmark_data_updated_through,
+)
+complete where city = 'BEGNT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/begnt_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/begnt_landmark_info_v{data_version}.parquet`
+freshness by begnt_landmark_data_updated_through;

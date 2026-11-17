@@ -1,0 +1,28 @@
+import ..landmark_common;
+
+root datasource fingal_landmarks_update_time (
+    data_updated_through: iefin_landmark_data_updated_through
+)
+file `./fingal_landmarks_probe.py`;
+
+# Fingal County Council's Record of Protected Structures (Development Plan
+# 2023-2029), read live from the council's ArcGIS organisation (the same one
+# as the trees) -- an official register, so no geocoding, no committed CSV and
+# no staging object.  `lm_type` names the register and `register_number`
+# carries the RPS number (747a), the extras landmark_common.preql already
+# declares.
+root partial datasource raw_fingal_landmark_info extends landmark_partition (
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+)
+complete where city = 'IEFIN'
+file `./fingal_landmarks.py`;
+
+partial datasource fingal_landmark_info extends published_landmark_info (
+    ?lm_type,
+    ?register_number,
+    iefin_landmark_data_updated_through,
+)
+complete where city = 'IEFIN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/iefin_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/iefin_landmark_info_v{data_version}.parquet`
+freshness by iefin_landmark_data_updated_through;

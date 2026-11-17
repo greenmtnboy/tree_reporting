@@ -1,0 +1,32 @@
+import ..landmark_common;
+
+root datasource christchurch_landmarks_update_time (
+    data_updated_through: nzchc_landmark_data_updated_through
+)
+file `./christchurch_landmarks_probe.py`;
+
+# The Christchurch District Plan's scheduled heritage items (Schedule of
+# Significant Historic Heritage), read live from the council's ArcGIS layer on
+# the same server as the trees -- no geocoding, no CSV, no staging object.
+# `register_number` is the schedule number, `lm_type` the Heritage New
+# Zealand List category, `category` the plan's significance grading and
+# `neighborhood` the suburb.
+root partial datasource raw_christchurch_landmark_info extends landmark_partition (
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    category: ?category,
+    neighborhood: ?neighborhood,
+)
+complete where city = 'NZCHC'
+file `./christchurch_landmarks.py`;
+
+partial datasource christchurch_landmark_info extends published_landmark_info (
+    ?lm_type,
+    ?register_number,
+    ?category,
+    ?neighborhood,
+    nzchc_landmark_data_updated_through,
+)
+complete where city = 'NZCHC'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/nzchc_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/nzchc_landmark_info_v{data_version}.parquet`
+freshness by nzchc_landmark_data_updated_through;

@@ -1,0 +1,30 @@
+import ..landmark_common;
+
+root datasource bristol_landmarks_update_time (
+    data_updated_through: gbbrs_landmark_data_updated_through
+)
+file `./bristol_landmarks_probe.py`;
+
+# Historic England's National Heritage List for England -- listed buildings,
+# scheduled monuments and registered parks and gardens -- cut to the ONS
+# district boundary of the City of Bristol (E06000023), read live, so no
+# Nominatim geocoding, no committed CSV and no staging object. `lm_type` names
+# the designation and its grade, `register_number` the NHLE list-entry number,
+# `year_designated` the year first listed, scheduled or registered.
+root partial datasource raw_bristol_landmark_info extends landmark_partition (
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'GBBRS'
+file `./bristol_landmarks.py`;
+
+partial datasource bristol_landmark_info extends published_landmark_info (
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    gbbrs_landmark_data_updated_through,
+)
+complete where city = 'GBBRS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/gbbrs_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/gbbrs_landmark_info_v{data_version}.parquet`
+freshness by gbbrs_landmark_data_updated_through;

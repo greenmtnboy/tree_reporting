@@ -99,6 +99,12 @@ select * from (values
     ('ESMAD', 793),
     ('USBAL', 399),
     ('DECGN', 664),
-    ('DEFRA', 686)
+    ('DEFRA', 686),
+    ('NZCHC', 190),
+    ('IEFIN', 651),
+    ('AUCBR', 168),
+    ('PTLIS', 805),
+    ('BEGNT', 664),
+    ('GBBRS', 663)
 ) as t(city, ecoregion_id)
 ''';

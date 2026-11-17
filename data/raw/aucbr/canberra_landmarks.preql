@@ -1,0 +1,36 @@
+import ..landmark_common;
+
+root datasource canberra_landmarks_update_time (
+    data_updated_through: aucbr_landmark_data_updated_through
+)
+file `./canberra_landmarks_probe.py`;
+
+# Canberra's heritage places from its two registers, read live: the ACT
+# Heritage Register (Territory land; registered and provisionally registered
+# places, restricted Aboriginal places left out, each place's block polygons
+# merged into one) and the Commonwealth Heritage List (National Land: the
+# Parliamentary Triangle, the War Memorial, Lake Burley Griffin). No geocoding,
+# no committed CSV and no staging object. `lm_type` names the register,
+# `category` the kind of place (Historic, Natural, Aboriginal), and
+# `register_number` the register's own id.
+root partial datasource raw_canberra_landmark_info extends landmark_partition (
+    address: ?address,
+    category: ?category,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'AUCBR'
+file `./canberra_landmarks.py`;
+
+partial datasource canberra_landmark_info extends published_landmark_info (
+    ?address,
+    ?category,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    aucbr_landmark_data_updated_through,
+)
+complete where city = 'AUCBR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/aucbr_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/aucbr_landmark_info_v{data_version}.parquet`
+freshness by aucbr_landmark_data_updated_through;

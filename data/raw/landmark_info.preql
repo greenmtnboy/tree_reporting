@@ -84,6 +84,12 @@ import esmad.madrid_landmarks;
 import usbal.baltimore_landmarks;
 import decgn.cologne_landmarks;
 import defra.frankfurt_landmarks;
+import nzchc.christchurch_landmarks;
+import iefin.fingal_landmarks;
+import aucbr.canberra_landmarks;
+import ptlis.lisbon_landmarks;
+import begnt.ghent_landmarks;
+import gbbrs.bristol_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

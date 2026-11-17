@@ -1,0 +1,25 @@
+import ..landmark_common;
+
+root datasource lisbon_landmarks_update_time (
+    data_updated_through: ptlis_landmark_data_updated_through
+)
+file `./lisbon_landmarks_probe.py`;
+
+# Lisbon's classified heritage (Património Mundial, Monumentos Nacionais,
+# Interesse Público and Interesse Municipal) and its public statuary, from the
+# Câmara Municipal's own `Patrimonio` feature service, read directly -- no
+# geocoding, no committed CSV and no staging object.  `category` is the
+# designation ("Monumento Nacional", "Estatuária").
+root partial datasource raw_lisbon_landmark_info extends landmark_partition (
+    category: ?category,
+)
+complete where city = 'PTLIS'
+file `./lisbon_landmarks.py`;
+
+partial datasource lisbon_landmark_info extends published_landmark_info (
+    ?category,
+    ptlis_landmark_data_updated_through,
+)
+complete where city = 'PTLIS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/ptlis_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/ptlis_landmark_info_v{data_version}.parquet`
+freshness by ptlis_landmark_data_updated_through;

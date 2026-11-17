@@ -74,5 +74,11 @@
   "ESMAD": { "name": "Madrid", "center": [-3.7038, 40.4168] },
   "USBAL": { "name": "Baltimore", "center": [-76.6122, 39.2904] },
   "DECGN": { "name": "Cologne", "center": [6.9603, 50.9375] },
-  "DEFRA": { "name": "Frankfurt", "center": [8.6821, 50.1109] }
+  "DEFRA": { "name": "Frankfurt", "center": [8.6821, 50.1109] },
+  "NZCHC": { "name": "Christchurch", "center": [172.6362, -43.5321] },
+  "IEFIN": { "name": "Fingal", "center": [-6.22, 53.46] },
+  "AUCBR": { "name": "Canberra", "center": [149.13, -35.28] },
+  "PTLIS": { "name": "Lisbon", "center": [-9.1393, 38.7223] },
+  "BEGNT": { "name": "Ghent", "center": [3.7174, 51.0543] },
+  "GBBRS": { "name": "Bristol", "center": [-2.5879, 51.4545] }
 }

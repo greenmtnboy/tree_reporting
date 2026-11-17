@@ -51,6 +51,18 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.gbbrs_data_updated_through datetime; # when Bristol data is through
+property <*>.gbbrs_osm_data_updated_through datetime; # GCS publication time of Bristol's staged OSM parquet
+property <*>.begnt_data_updated_through datetime; # when Ghent data is through
+property <*>.begnt_osm_data_updated_through datetime; # GCS publication time of Ghent's staged OSM parquet
+property <*>.ptlis_data_updated_through datetime; # when Lisbon data is through
+property <*>.ptlis_osm_data_updated_through datetime; # GCS publication time of Lisbon's staged OSM parquet
+property <*>.aucbr_data_updated_through datetime; # when Canberra data is through
+property <*>.aucbr_osm_data_updated_through datetime; # GCS publication time of Canberra's staged OSM parquet
+property <*>.iefin_data_updated_through datetime; # when Fingal data is through
+property <*>.iefin_osm_data_updated_through datetime; # GCS publication time of Fingal's staged OSM parquet
+property <*>.nzchc_data_updated_through datetime; # when Christchurch data is through
+property <*>.nzchc_osm_data_updated_through datetime; # GCS publication time of Christchurch's staged OSM parquet
 property <*>.defra_data_updated_through datetime; # when Frankfurt data is through
 property <*>.defra_osm_data_updated_through datetime; # GCS publication time of Frankfurt's staged OSM parquet
 property <*>.decgn_data_updated_through datetime; # when Cologne data is through
