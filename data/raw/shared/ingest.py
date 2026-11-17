@@ -1739,6 +1739,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "NZWLG": ("WELLINGTON_OPENDATA",),
+    "DELEJ": ("LEIPZIG_OPENDATA",),
+    "CHGVA": ("GENEVA_SITG",),
+    "FRTLS": ("TOULOUSE_OPENDATA",),
+    "NLUTC": ("UTRECHT_OPENDATA",),
+    "CAHAM": ("HAMILTON_OPENDATA",),
     "GBBRS": ("BRISTOL_OPENDATA",),
     "BEGNT": ("GHENT_OPENDATA",),
     "PTLIS": ("LISBON_OPENDATA",),
@@ -1853,6 +1859,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "NZWLG": "OSM_NZWLG",
+    "DELEJ": "OSM_DELEJ",
+    "CHGVA": "OSM_CHGVA",
+    "FRTLS": "OSM_FRTLS",
+    "NLUTC": "OSM_NLUTC",
+    "CAHAM": "OSM_CAHAM",
     "GBBRS": "OSM_GBBRS",
     "BEGNT": "OSM_BEGNT",
     "PTLIS": "OSM_PTLIS",
@@ -2546,6 +2558,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "NZWLG": (-41.37, -41.13, 174.6, 174.9),
+    "DELEJ": (51.23, 51.45, 12.23, 12.55),
+    "CHGVA": (46.12, 46.37, 5.95, 6.32),
+    "FRTLS": (43.47, 43.75, 1.2, 1.6),
+    "NLUTC": (52.02, 52.15, 4.96, 5.2),
+    "CAHAM": (43.04, 43.48, -80.25, -79.62),
     "GBBRS": (51.39, 51.55, -2.73, -2.5),
     "BEGNT": (50.97, 51.19, 3.57, 3.85),
     "PTLIS": (38.68, 38.8, -9.24, -9.08),
@@ -2685,6 +2703,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "NZWLG": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "DELEJ": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CHGVA": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "FRTLS": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "NLUTC": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAHAM": 10,
     # Bristol: calibrated 2026-11-17 with --inventory-parquet (55,947 anchors)
     # against the staged extract. Mutual-NN 29.2% in 10-20 m (n=233): a 10 m
     # guarantee caps it at 20. Marginal table: 8->10 removes 107 duplicates for
@@ -3173,6 +3203,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'NZWLG': ((-41.37, -41.13, 174.6, 174.9),),
+    'DELEJ': ((51.23, 51.45, 12.23, 12.55),),
+    'CHGVA': ((46.12, 46.37, 5.95, 6.32),),
+    'FRTLS': ((43.47, 43.75, 1.2, 1.6),),
+    'NLUTC': ((52.02, 52.15, 4.96, 5.2),),
+    'CAHAM': ((43.04, 43.48, -80.25, -79.62),),
     'GBBRS': ((51.39, 51.55, -2.73, -2.5),),
     'BEGNT': ((50.97, 51.19, 3.57, 3.85),),
     'PTLIS': ((38.68, 38.8, -9.24, -9.08),),

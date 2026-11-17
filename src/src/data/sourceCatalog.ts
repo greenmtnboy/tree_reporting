@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Wellington', label: 'TODO: Wellington tree inventory source', url: 'TODO' },
+  { city: 'Leipzig', label: 'TODO: Leipzig tree inventory source', url: 'TODO' },
+  { city: 'Geneva', label: 'TODO: Geneva tree inventory source', url: 'TODO' },
+  { city: 'Toulouse', label: 'TODO: Toulouse tree inventory source', url: 'TODO' },
+  { city: 'Utrecht', label: 'TODO: Utrecht tree inventory source', url: 'TODO' },
+  { city: 'Hamilton', label: 'TODO: Hamilton tree inventory source', url: 'TODO' },
   { city: 'Bristol', label: 'Bristol City Council - Trees (Open Government Licence v3.0)', url: 'https://www.arcgis.com/home/item.html?id=7a99218a4bf347ff948f0e5882406a8c' },
   { city: 'Ghent', label: 'Stad Gent Groendienst - Locaties bomen Gent (Modellicentie Gratis Hergebruik)', url: 'https://data.stad.gent/explore/dataset/locaties-bomen-gent/' },
   { city: 'Lisbon', label: 'Câmara Municipal de Lisboa - Arvoredo (Lisboa Aberta, CC0)', url: 'https://dados.cm-lisboa.pt/dataset/arvoredo' },
@@ -123,6 +129,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Wellington', label: 'TODO: Wellington landmark source' },
+  { city: 'Leipzig', label: 'TODO: Leipzig landmark source' },
+  { city: 'Geneva', label: 'TODO: Geneva landmark source' },
+  { city: 'Toulouse', label: 'TODO: Toulouse landmark source' },
+  { city: 'Utrecht', label: 'TODO: Utrecht landmark source' },
+  { city: 'Hamilton', label: 'TODO: Hamilton landmark source' },
   { city: 'Bristol', label: 'Historic England - National Heritage List for England (OGL)', url: 'https://historicengland.org.uk/listing/the-list/' },
   { city: 'Ghent', label: 'Agentschap Onroerend Erfgoed - protected monuments, landscapes and town views (Gratis open data licentie Vlaanderen)', url: 'https://inventaris.onroerenderfgoed.be/erfgoedobjecten?gemeente=44021' },
   { city: 'Lisbon', label: 'Câmara Municipal de Lisboa - Património classificado and Estatuária (CC0)', url: 'https://services.arcgis.com/1dSrzEWVQn5kHHyK/arcgis/rest/services/Patrimonio/FeatureServer' },

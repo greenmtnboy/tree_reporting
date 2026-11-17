@@ -105,6 +105,12 @@ select * from (values
     ('AUCBR', 168),
     ('PTLIS', 805),
     ('BEGNT', 664),
-    ('GBBRS', 663)
+    ('GBBRS', 663),
+    ('CAHAM', 342),
+    ('NLUTC', 664),
+    ('FRTLS', 686),
+    ('CHGVA', 686),
+    ('DELEJ', 654),
+    ('NZWLG', 171)
 ) as t(city, ecoregion_id)
 ''';
