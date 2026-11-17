@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Baltimore', label: 'TODO: Baltimore tree inventory source', url: 'TODO' },
+  { city: 'Minneapolis', label: 'TODO: Minneapolis tree inventory source', url: 'TODO' },
+  { city: 'Barcelona', label: 'TODO: Barcelona tree inventory source', url: 'TODO' },
+  { city: 'Madrid', label: 'TODO: Madrid tree inventory source', url: 'TODO' },
+  { city: 'Lyon', label: 'TODO: Lyon tree inventory source', url: 'TODO' },
+  { city: 'Hamburg', label: 'TODO: Hamburg tree inventory source', url: 'TODO' },
   { city: 'Sacramento', label: 'City of Sacramento Public Works, Urban Forestry - City Maintained Trees (ArcGIS, City of Sacramento Open Data Terms of Use)', url: 'https://www.arcgis.com/home/item.html?id=b9b716e09b5048179ab648bb4518452b' },
   { city: 'San Jose', label: 'City of San José - Street Tree (ArcGIS, CC BY)', url: 'https://data.sanjoseca.gov/dataset/street-tree' },
   { city: 'Pittsburgh', label: 'City of Pittsburgh, Department of Public Works Forestry Division - City of Pittsburgh Trees (WPRDC, CC BY)', url: 'https://data.wprdc.org/dataset/city-trees' },
@@ -111,6 +117,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Baltimore', label: 'TODO: Baltimore landmark source' },
+  { city: 'Minneapolis', label: 'TODO: Minneapolis landmark source' },
+  { city: 'Barcelona', label: 'TODO: Barcelona landmark source' },
+  { city: 'Madrid', label: 'TODO: Madrid landmark source' },
+  { city: 'Lyon', label: 'TODO: Lyon landmark source' },
+  { city: 'Hamburg', label: 'TODO: Hamburg landmark source' },
   { city: 'Sacramento', label: 'City of Sacramento - Register of Historic and Cultural Resources, Historic Landmarks; National Park Service - National Register of Historic Places', url: 'https://services5.arcgis.com/54falWtcpty3V47Z/arcgis/rest/services/Historic_Landmarks/FeatureServer/0' },
   { city: 'San Jose', label: 'City of San José - Historic Resources Inventory, City Landmarks (CC BY); National Park Service - National Register of Historic Places', url: 'https://data.sanjoseca.gov/dataset/historical-resources-inventory' },
   { city: 'Pittsburgh', label: 'City of Pittsburgh - City Designated Individual Historic Sites; National Park Service - National Register of Historic Places', url: 'https://data.wprdc.org/dataset/city-designated-individual-historic-sites' },

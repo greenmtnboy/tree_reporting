@@ -68,5 +68,11 @@
   "USPHL": { "name": "Philadelphia", "center": [-75.1652, 39.9526] },
   "USPIT": { "name": "Pittsburgh", "center": [-79.9959, 40.4406] },
   "USSJC": { "name": "San Jose", "center": [-121.8863, 37.3382] },
-  "USSAC": { "name": "Sacramento", "center": [-121.4944, 38.5816] }
+  "USSAC": { "name": "Sacramento", "center": [-121.4944, 38.5816] },
+  "DEHAM": { "name": "Hamburg", "center": [9.9937, 53.5511] },
+  "FRLYO": { "name": "Lyon", "center": [4.8357, 45.764] },
+  "ESMAD": { "name": "Madrid", "center": [-3.7038, 40.4168] },
+  "ESBCN": { "name": "Barcelona", "center": [2.1686, 41.3874] },
+  "USMSP": { "name": "Minneapolis", "center": [-93.265, 44.9778] },
+  "USBAL": { "name": "Baltimore", "center": [-76.6122, 39.2904] }
 }

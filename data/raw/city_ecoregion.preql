@@ -93,6 +93,12 @@ select * from (values
     ('USPHL', 393),
     ('USPIT', 329),
     ('USSJC', 423),
-    ('USSAC', 385)
+    ('USSAC', 385),
+    ('DEHAM', 664),
+    ('FRLYO', 686),
+    ('ESMAD', 793),
+    ('ESBCN', 799),
+    ('USMSP', 343),
+    ('USBAL', 399)
 ) as t(city, ecoregion_id)
 ''';
