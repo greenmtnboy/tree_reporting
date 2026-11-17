@@ -1,8 +1,14 @@
 <template>
-  <svg class="leaf-spinner" :style="{ width: `${size}px`, height: `${size}px` }" viewBox="0 0 24 24" aria-hidden="true">
-    <g class="leaf-spinner-leaf">
-      <path d="M12 2.5C7 6 5 10 6.2 14.6c.9 3.3 3.3 5.4 5.8 6.9 2.5-1.5 4.9-3.6 5.8-6.9C19 10 17 6 12 2.5Z" fill="currentColor" />
-      <path d="M12 5.5v15.5M12 10.5l-2.6-2M12 13.5l3-2.4M12 16.5l-2.8-2.1" fill="none" stroke="var(--leaf-spinner-vein, rgba(255, 255, 255, 0.55))" stroke-width="1" stroke-linecap="round" />
+  <svg class="leaf-spinner" :height="size" viewBox="0 0 40 24" aria-hidden="true">
+    <g transform="translate(20 12)">
+      <g class="leaf-drift">
+        <g class="leaf-blade">
+          <path d="M0 7.3C-4.6 6.7-7.1 2.7-5.2-2.6C-4-5.9-.4-7.7 3.1-10.2C2.8-6.6 6.4-2.6 5.2 1.9C4.5 4.8 2.5 6.7 0 7.3Z" fill="currentColor" />
+          <path d="M0 7.3C-1.6 2.5.3-4.2 3.1-10.2C2.8-6.6 6.4-2.6 5.2 1.9C4.5 4.8 2.5 6.7 0 7.3Z" class="leaf-fold" />
+          <path d="M-2.2 10.2Q-.3 9 0 7.1" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+          <path d="M0 7.1C-1.3 3.4-.1-2.7 2.1-7.4M-.5 3.5Q1.6 2.6 3.2.7M-.2.7Q-2.3-.5-3.3-2.4" class="leaf-veins" />
+        </g>
+      </g>
     </g>
   </svg>
 </template>
@@ -13,31 +19,51 @@ withDefaults(defineProps<{ size?: number }>(), { size: 20 })
 
 <style scoped>
 .leaf-spinner {
-  flex-shrink: 0;
-  color: var(--color-leaf);
+  flex: none;
+  width: auto;
   overflow: visible;
+  color: var(--color-leaf);
+  --flight-time: 3.2s;
 }
 
-/* A leaf caught in an eddy: a full turn with a flutter, not a mechanical spin. */
-.leaf-spinner-leaf {
-  transform-origin: 12px 12px;
-  transform-box: view-box;
-  animation: leaf-twirl 1.8s cubic-bezier(0.45, 0.05, 0.4, 0.95) infinite;
+.leaf-fold { fill: color-mix(in srgb, currentColor 70%, #e8de99); }
+
+.leaf-veins {
+  fill: none;
+  stroke: var(--surface-1);
+  stroke-width: 0.75;
+  stroke-linecap: round;
+  opacity: 0.65;
 }
 
-@keyframes leaf-twirl {
-  0% { transform: rotate(0deg) scale(1, 1); }
-  25% { transform: rotate(100deg) scale(0.75, 1); }
-  50% { transform: rotate(180deg) scale(1, 1); }
-  75% { transform: rotate(280deg) scale(0.75, 1); }
-  100% { transform: rotate(360deg) scale(1, 1); }
-}
+.leaf-blade { transform: rotate(38deg); }
 
-@media (prefers-reduced-motion: reduce) {
-  .leaf-spinner-leaf { animation: leaf-sway 2.4s ease-in-out infinite; }
-  @keyframes leaf-sway {
-    0%, 100% { transform: rotate(-12deg); }
-    50% { transform: rotate(12deg); }
+@media (prefers-reduced-motion: no-preference) {
+  /* A gust lifts the leaf to the right. It slips down through the same current
+     and swings wide to the left before the next lift. The end tangents match. */
+  .leaf-drift {
+    offset-path: path('M -5 1 C 0 -1 6 -6 9 -4 C 14 0 6 6 0 4 C -5 2 -9 -3 -11 -1 C -14 2 -10 3 -5 1 Z');
+    offset-anchor: 0px 0px;
+    offset-rotate: 0deg;
+    animation: drift var(--flight-time) cubic-bezier(.32, .18, .68, .82) infinite;
+  }
+
+  /* Bank into the lift, turn edge-on at the crest, then open out on the glide. */
+  .leaf-blade {
+    animation: bank var(--flight-time) ease-in-out infinite;
+  }
+
+  @keyframes drift {
+    to { offset-distance: 100%; }
+  }
+
+  @keyframes bank {
+    0%, 100% { transform: rotate(38deg) scaleX(.92); }
+    24% { transform: rotate(68deg) scaleX(1); }
+    38% { transform: rotate(88deg) scaleX(.22); }
+    52% { transform: rotate(55deg) scaleX(-.86); }
+    76% { transform: rotate(-28deg) scaleX(-.68); }
+    88% { transform: rotate(4deg) scaleX(.38); }
   }
 }
 </style>
