@@ -6,6 +6,7 @@ import type { CrownBatch, CrownBatchOptions } from '../lib/crownBatch'
 import type { WindowPolicy } from '../workers/cityWindow'
 import type { PointChunkBatch, PointChunkColors, PointChunkDirectory, PointKeys } from '../workers/cityPoints'
 import type { WorldDirectory } from '../workers/worldBlocks'
+import type { InitStage } from '../lib/loadProgress'
 
 type PrefetchStatus = 'executed' | 'deduped' | 'skipped'
 type TileRangeParams = { minX: number; maxX: number; minY: number; maxY: number }
@@ -52,6 +53,12 @@ const workerDistinctColors = ref<string[]>([])
 const workerColorLabelMap = ref<Record<string, string>>({})
 const dbPopulatedMs = ref<number | null>(null)
 const dbTreeCount = ref<number | null>(null)
+/** The furthest init stage the worker has reported; null before it starts. */
+const initStage = ref<InitStage | null>(null)
+/** Window loads fetching blocks in the worker right now. */
+const windowLoadsActive = ref(0)
+/** setCityContext calls not yet answered. */
+const cityContextPending = ref(0)
 
 let worker: Worker | null = null
 let nextRequestId = 1
@@ -83,6 +90,16 @@ function getWorker(): Worker {
     if (msg.type === 'cityContextReady') {
       dbPopulatedMs.value = msg.loadMs as number
       dbTreeCount.value = msg.treeCount as number
+      return
+    }
+
+    if (msg.type === 'initStage') {
+      initStage.value = msg.stage as InitStage
+      return
+    }
+
+    if (msg.type === 'windowLoads') {
+      windowLoadsActive.value = msg.active as number
       return
     }
 
@@ -206,8 +223,13 @@ function getWorldDirectory(): Promise<WorldDirectory | null> {
  * No trees move; the worker holds whatever is near the camera.
  */
 async function setCityContext(city: string): Promise<void> {
-  await ensureInit(city)
-  await rpc('setCityContext', { city, window: windowPolicy })
+  cityContextPending.value += 1
+  try {
+    await ensureInit(city)
+    await rpc('setCityContext', { city, window: windowPolicy })
+  } finally {
+    cityContextPending.value -= 1
+  }
   // The world's tables and the bookmark's landmarks are up — signal the rest of the app.
   ready.value = true
 }
@@ -359,5 +381,8 @@ export function useDuckDB() {
     workerColorLabelMap,
     dbPopulatedMs,
     dbTreeCount,
+    initStage,
+    windowLoadsActive,
+    cityContextPending,
   }
 }

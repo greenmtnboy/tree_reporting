@@ -7,9 +7,13 @@
     :collapsible="!!props.simplified"
     @select="swoopToBearing"
   />
-  <div v-if="isInitialLoading" class="map-loading" role="status">{{ nearbyLocation ? 'Loading trees around you…' : loadingMessage }}</div>
+  <div v-if="isInitialLoading" class="map-loading" :class="{ 'map-loading--steps': nearbyLocation }" role="status" aria-live="polite">
+    <MapLoadProgress v-if="nearbyLocation" :steps="NEARBY_LOAD_STEPS" :current="nearbyLoadStep" />
+    <template v-else>{{ loadingMessage }}</template>
+  </div>
   <div v-else-if="tileRefreshing" class="map-loading map-refreshing">{{ tileRefreshMessage }}</div>
   <div v-if="displayError" class="map-error">{{ displayError }}</div>
+  <MapFetchIndicator :active="fetchingTrees" :mobile="!!props.simplified" />
   <div v-if="spriteDebug" class="sprite-debug">
     <div aria-hidden="true">{{ spriteDebug }}</div>
     <label class="sprite-debug-control">
@@ -384,6 +388,9 @@ import { useIsMobile } from '../composables/useIsMobile'
 import { chooseFullDetail, markMapLoadSettled, markMapLoadStarted, resolveMapWindow } from '../composables/useMapWindow'
 import CitySelector from './CitySelector.vue'
 import MapCompass from './MapCompass.vue'
+import MapFetchIndicator from './MapFetchIndicator.vue'
+import MapLoadProgress from './MapLoadProgress.vue'
+import { NEARBY_LOAD_STEPS, nearbyLoadStepIndex } from '../lib/loadProgress'
 import CheckinDialog from './CheckinDialog.vue'
 import StreetViewDialog from './StreetViewDialog.vue'
 import { isUnconfirmedPrediction } from '../data/dataSources'
@@ -540,6 +547,9 @@ const {
   workerColorLabelMap,
   dbPopulatedMs,
   dbTreeCount,
+  initStage,
+  windowLoadsActive,
+  cityContextPending,
 } = useDuckDB()
 
 // Every layout holds only the ground near the camera (the worker reads the
@@ -668,6 +678,13 @@ const introCenterRef = computed((): [number, number] => CITY_CONFIG[mapDisplayCi
 
 const displayError = computed(() => mapError.value)
 const isInitialLoading = computed(() => showLoadingOverlay.value)
+// Near Me's first load, step by step; the corner leaf for every fetch after it.
+const nearbyLoadStep = computed(() => nearbyLoadStepIndex({
+  initStage: initStage.value,
+  cityContextPending: cityContextPending.value,
+  cityContextLoaded: dbPopulatedMs.value != null,
+}))
+const fetchingTrees = computed(() => windowLoadsActive.value > 0 && !isInitialLoading.value && !tileRefreshing.value && !displayError.value)
 // The compass is always on screen and always tracks the live bearing, but while a
 // scripted camera move owns the camera (intro sweep, globe swoop, city switch)
 // its buttons are inert — a mid-flight easeTo would fight the animation.
@@ -2749,6 +2766,11 @@ onUnmounted(() => {
   color: var(--color-leaf);
   border: 1px solid rgba(var(--accent-rgb), 0.18);
   box-shadow: 0 18px 36px rgba(7, 10, 11, 0.26);
+}
+
+.map-loading--steps {
+  padding: 16px 20px;
+  border-radius: 14px;
 }
 
 .map-refreshing {

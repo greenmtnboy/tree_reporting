@@ -174,6 +174,29 @@ for (const [label, viewport] of [
       await expect(page.getByRole('button', { name: /Find Me/ })).toBeVisible()
     })
 
+    test('the first nearby load walks through its steps, each playful over its plain meaning', async ({ page, context }) => {
+      test.setTimeout(180_000)
+      await context.grantPermissions(['geolocation'])
+      await context.setGeolocation({ latitude: 42.3601, longitude: -71.0589 })
+      // Hold the world's manifest back so the steps can be read before the trees arrive.
+      await page.route(/\/manifest\.json/, async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 2_000))
+        await route.continue()
+      })
+      await page.goto('/#/?city=USSFO&mode=nearby')
+      const progress = page.locator('.map-loading .map-load-progress')
+      await expect(progress).toBeVisible({ timeout: 30_000 })
+      await expect(progress.locator('.leaf-spinner')).toBeVisible()
+      const steps = progress.locator('li')
+      await expect(steps.first()).toHaveClass(/done/)
+      await expect(steps.first().locator('.map-load-progress-title')).toHaveText('Found your patch of forest')
+      await expect(steps.first().locator('em')).toHaveText('Location found')
+      await expect(progress.locator('em', { hasText: 'Fetching dependencies' })).toBeVisible()
+      await expect(progress.locator('li[aria-current="step"]')).toHaveCount(1)
+      await expect(page.locator('.tree-map')).toHaveAttribute('data-trees-loaded-for', 'USBOS', { timeout: 90_000 })
+      await expect(page.locator('.map-loading')).toHaveCount(0, { timeout: 60_000 })
+    })
+
     test('denied location offers retry and exploration without loading an unrelated city', async ({ page }) => {
       await page.addInitScript(() => {
         navigator.geolocation.getCurrentPosition = (_success, error) => error?.({ code: 1, message: 'Denied' } as GeolocationPositionError)

@@ -88,6 +88,7 @@ const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
 
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 import { snapShade } from '../lib/foliageSeason'
+import type { InitStage } from '../lib/loadProgress'
 import { encodePointTiles, type PointProperty } from './pointTiles'
 import { SparseBlock, type Box } from './sparseBlocks'
 import {
@@ -433,6 +434,20 @@ const MAX_PREFETCH_CELLS = 400
 const MAX_SCOPE_CELLS = 64
 /** How long tile requests are gathered before their cells are loaded in one scan. */
 const WINDOW_GATHER_MS = 40
+
+/**
+ * What the main thread is told about the worker's network: the init stage
+ * reached (the Near Me overlay walks through them) and how many window loads
+ * are fetching blocks (the corner leaf). Pushed, never asked for.
+ */
+let activeWindowLoads = 0
+function postInitStage(stage: InitStage): void {
+  ctx.postMessage({ type: 'initStage', stage })
+}
+function postWindowLoads(delta: number): void {
+  activeWindowLoads = Math.max(0, activeWindowLoads + delta)
+  ctx.postMessage({ type: 'windowLoads', active: activeWindowLoads })
+}
 
 // Context gate: tile generation and queries must not run until the first
 // setCityContext has completed (the world's tables and a bookmark exist).
@@ -1004,6 +1019,7 @@ async function loadWindowCells(win: World, cells: number[]): Promise<void> {
   }
   let bytes = 0
   const counts = new Map<number, number>()
+  postWindowLoads(1)
   try {
     if (cz === BLOCK_ZOOM) {
       // One file, one table: only a block's bytes are in the heap at a time.
@@ -1123,6 +1139,7 @@ async function loadWindowCells(win: World, cells: number[]): Promise<void> {
     if (gone && live()) void resetWorld('a block the manifest names is no longer published')
     throw error
   } finally {
+    postWindowLoads(-1)
     // A load that failed or was superseded leaves nothing behind.
     if (!live() || added.some((chunk) => !win.chunks.has(chunk.table))) {
       for (const chunk of added) {
@@ -1261,6 +1278,7 @@ async function doInit() {
   if (db) return
   const t0 = nowMs()
   console.info('[Perf] duckdb-worker:init:start', { enginePrefetched: !!engineFiles })
+  postInitStage('engine')
   const early = earlyFiles = startEarlyFiles()
 
   const files = engineFiles
@@ -1302,6 +1320,7 @@ async function doInit() {
   // Probe, and read nulls until then. Fold into the plain select afterwards.
   // The table is read whole, so its file is fetched whole (startEarlyFiles)
   // and read from memory; from the bucket only if that fetch failed.
+  postInitStage('guide')
   const speciesBytes = await early.species
   // The first parquet read loads the extension: from the cache, once the fetch that put it there is done.
   await extension
@@ -1377,12 +1396,14 @@ async function doInit() {
   if (ecoregionBytes) await db.dropFile('ecoregion_browser.parquet').catch(() => {})
 
   // The world's manifest and vocabulary. No tree is loaded until a view asks.
+  postInitStage('world')
   await loadWorld(early)
   postColorMapUpdate()
 
   ready = true
   initError = null
-  
+  postInitStage('ready')
+
   console.info('[Perf] duckdb-worker:init:done', { ms: Math.round(nowMs() - t0) })
 }
 
