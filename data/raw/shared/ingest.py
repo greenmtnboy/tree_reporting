@@ -2602,10 +2602,16 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 DEDUP_CELL_METRES: dict[str, int] = {
     # NOT YET CALIBRATED: default; measure after the first build.
     "DEFRA": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "DECGN": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USBAL": 10,
+    # Cologne: osm_dedup_validation.py --inventory-parquet: mutual-NN 91.5% in
+    # 2-5 m, 36.3% in 5-10 m (n=1,068): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 260 duplicates for 219 hidden trees (1.19),
+    # 8->10 removes 115 for 227 (0.51), so 8 m.
+    "DECGN": 8,
+    # Baltimore: osm_dedup_validation.py --inventory-parquet: mutual-NN 34.0% in
+    # 5-10 m (n=662): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 136 duplicates for 115 hidden trees (1.18),
+    # 8->10 removes 77 for 151 (0.51), so 8 m.
+    "USBAL": 8,
     # Madrid: osm_dedup_validation.py --inventory-parquet: mutual-NN 79.9% in
     # 2-5 m, 31.2% in 5-10 m (n=3,360): a 5 m guarantee caps it at 10.
     # Marginal table: 4->6 removes 2,485 duplicates for 1,358 hidden trees (1.83),
@@ -2616,8 +2622,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
     # Marginal table: 4->6 removes 1,682 duplicates for 663 hidden trees (2.54),
     # 6->8 removes 598 for 763 (0.78), so 6 m.
     "FRLYO": 6,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "DEHAM": 10,
+    # Hamburg: osm_dedup_validation.py --inventory-parquet: 279,840 OSM nodes
+    # (largely an import of the Strassenbaumkataster) against 229,876 anchors.
+    # Mutual-NN 89.8% in 2-5 m, 13.2% in 5-10 m (n=2,363): a 5 m guarantee caps
+    # it at 10. Marginal table: 4->6 removes 1,068 duplicates for 362 hidden
+    # trees (2.95), 6->8 removes 299 for 514 (0.58), so 6 m.
+    "DEHAM": 6,
     # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
     # --inventory-parquet on a local ingest run).
     # 9,654 staged OSM nodes against 106,242 anchors.  Mutual-NN 94.3% in
