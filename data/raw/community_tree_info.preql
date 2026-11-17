@@ -87,7 +87,7 @@ property <*>.usbal_community_data_updated_through datetime; # when approved comm
 property <*>.decgn_community_data_updated_through datetime; # when approved community submissions for DECGN are through
 property <*>.defra_community_data_updated_through datetime; # when approved community submissions for DEFRA are through
 property <*>.nzchc_community_data_updated_through datetime; # when approved community submissions for NZCHC are through
-property <*>.iesdc_community_data_updated_through datetime; # when approved community submissions for IESDC are through
+property <*>.iefin_community_data_updated_through datetime; # when approved community submissions for IEFIN are through
 property <*>.aucbr_community_data_updated_through datetime; # when approved community submissions for AUCBR are through
 property <*>.ptlis_community_data_updated_through datetime; # when approved community submissions for PTLIS are through
 property <*>.begnt_community_data_updated_through datetime; # when approved community submissions for BEGNT are through

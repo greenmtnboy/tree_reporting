@@ -85,7 +85,7 @@ import usbal.baltimore_landmarks;
 import decgn.cologne_landmarks;
 import defra.frankfurt_landmarks;
 import nzchc.christchurch_landmarks;
-import iesdc.south_dublin_landmarks;
+import iefin.fingal_landmarks;
 import aucbr.canberra_landmarks;
 import ptlis.lisbon_landmarks;
 import begnt.ghent_landmarks;

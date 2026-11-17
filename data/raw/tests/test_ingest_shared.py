@@ -1359,7 +1359,7 @@ class TestSpeciesSynonyms:
     def test_synonyms_of_inverts_the_map(self):
         from shared.ingest import SPECIES_SYNONYMS, synonyms_of
 
-        assert synonyms_of("Platanus x hispanica") == ['Platanus acerifolia', 'Platanus hispanica', 'Platanus hybrida', 'Platanus x acerifolia']
+        assert synonyms_of("Platanus x hispanica") == ['Platanus acerifolia', 'Platanus hispanica', 'Platanus hybrida', 'Platanus x acerifolia', 'Platanus x hybrida']
         assert synonyms_of("Acer rubrum") == []
         for accepted in set(SPECIES_SYNONYMS.values()):
             assert all(SPECIES_SYNONYMS[s] == accepted for s in synonyms_of(accepted))

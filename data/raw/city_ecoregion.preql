@@ -101,7 +101,7 @@ select * from (values
     ('DECGN', 664),
     ('DEFRA', 686),
     ('NZCHC', 190),
-    ('IESDC', 651),
+    ('IEFIN', 651),
     ('AUCBR', 168),
     ('PTLIS', 805),
     ('BEGNT', 664),

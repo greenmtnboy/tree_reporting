@@ -5,23 +5,26 @@ root datasource christchurch_landmarks_update_time (
 )
 file `./christchurch_landmarks_probe.py`;
 
-# STUB. Every city needs a landmarks model even if it yields zero rows -- a
-# missing file fails the landmark lane for every city, and the agent has no
-# geographic context for this one.
-#
-# Point the raw datasource at whichever source this city has, in preference
-# order: an official designation registry, the same portal as the trees, an
-# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
-# geocoded via Nominatim (then add a `landmarks-nzchc` job with NO cron).
-#
-# Both datasources extend ../landmark_common.preql's templates: add the
-# register's own attributes to both, mapped in one and stored in the other.
+# The Christchurch District Plan's scheduled heritage items (Schedule of
+# Significant Historic Heritage), read live from the council's ArcGIS layer on
+# the same server as the trees -- no geocoding, no CSV, no staging object.
+# `register_number` is the schedule number, `lm_type` the Heritage New
+# Zealand List category, `category` the plan's significance grading and
+# `neighborhood` the suburb.
 root partial datasource raw_christchurch_landmark_info extends landmark_partition (
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    category: ?category,
+    neighborhood: ?neighborhood,
 )
 complete where city = 'NZCHC'
 file `./christchurch_landmarks.py`;
 
 partial datasource christchurch_landmark_info extends published_landmark_info (
+    ?lm_type,
+    ?register_number,
+    ?category,
+    ?neighborhood,
     nzchc_landmark_data_updated_through,
 )
 complete where city = 'NZCHC'

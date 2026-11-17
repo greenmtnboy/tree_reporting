@@ -11,12 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
-  { city: 'Bristol', label: 'TODO: Bristol tree inventory source', url: 'TODO' },
-  { city: 'Ghent', label: 'TODO: Ghent tree inventory source', url: 'TODO' },
-  { city: 'Lisbon', label: 'TODO: Lisbon tree inventory source', url: 'TODO' },
-  { city: 'Canberra', label: 'TODO: Canberra tree inventory source', url: 'TODO' },
-  { city: 'South Dublin', label: 'TODO: South Dublin tree inventory source', url: 'TODO' },
-  { city: 'Christchurch', label: 'TODO: Christchurch tree inventory source', url: 'TODO' },
+  { city: 'Bristol', label: 'Bristol City Council - Trees (Open Government Licence v3.0)', url: 'https://www.arcgis.com/home/item.html?id=7a99218a4bf347ff948f0e5882406a8c' },
+  { city: 'Ghent', label: 'Stad Gent Groendienst - Locaties bomen Gent (Modellicentie Gratis Hergebruik)', url: 'https://data.stad.gent/explore/dataset/locaties-bomen-gent/' },
+  { city: 'Lisbon', label: 'Câmara Municipal de Lisboa - Arvoredo (Lisboa Aberta, CC0)', url: 'https://dados.cm-lisboa.pt/dataset/arvoredo' },
+  { city: 'Canberra', label: 'ACT Government - ACTGOV Tree Assets (CC BY 4.0)', url: 'https://www.arcgis.com/home/item.html?id=d401a7266ba74dc18c1902ae6e71fe90' },
+  { city: 'Fingal', label: 'Fingal County Council Open Data - Trees_FCC (CC BY 4.0; locations approximate)', url: 'https://data.fingal.ie/datasets/FingalCoCo::trees-fcc-1' },
+  { city: 'Christchurch', label: 'Christchurch City Council, Tree (OpenData) (CC BY 4.0)', url: 'https://www.arcgis.com/home/item.html?id=0c557c04453e435ba1e50389db0ede90' },
   { city: 'Frankfurt', label: 'Stadt Frankfurt am Main Offene Daten - Baumkataster (Grünflächenamt, dl-de/by-2.0)', url: 'https://offenedaten.frankfurt.de/dcat/dataset/de-he-frankfurtam-baumkataster_op.html' },
   { city: 'Cologne', label: 'Stadt Köln Offene Daten - Baumkataster (Amt für Landschaftspflege und Grünflächen, Datenlizenz Deutschland Zero 2.0)', url: 'https://offenedaten-koeln.de/dataset/baumkataster-koeln-fortlaufend-aktualisiert' },
   { city: 'Baltimore', label: 'Baltimore City Recreation & Parks, Forestry - Street Tree Inventory (ArcGIS)', url: 'https://gis.baltimorecity.gov/egis/rest/services/Foresty/TreeInventory_Public/MapServer/0' },
@@ -123,12 +123,13 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
-  { city: 'Bristol', label: 'TODO: Bristol landmark source' },
-  { city: 'Ghent', label: 'TODO: Ghent landmark source' },
-  { city: 'Lisbon', label: 'TODO: Lisbon landmark source' },
-  { city: 'Canberra', label: 'TODO: Canberra landmark source' },
-  { city: 'South Dublin', label: 'TODO: South Dublin landmark source' },
-  { city: 'Christchurch', label: 'TODO: Christchurch landmark source' },
+  { city: 'Bristol', label: 'Historic England - National Heritage List for England (OGL)', url: 'https://historicengland.org.uk/listing/the-list/' },
+  { city: 'Ghent', label: 'Agentschap Onroerend Erfgoed - protected monuments, landscapes and town views (Gratis open data licentie Vlaanderen)', url: 'https://inventaris.onroerenderfgoed.be/erfgoedobjecten?gemeente=44021' },
+  { city: 'Lisbon', label: 'Câmara Municipal de Lisboa - Património classificado and Estatuária (CC0)', url: 'https://services.arcgis.com/1dSrzEWVQn5kHHyK/arcgis/rest/services/Patrimonio/FeatureServer' },
+  { city: 'Canberra', label: 'ACT Heritage Register (ACT Government, CC BY 4.0)', url: 'https://www.arcgis.com/home/item.html?id=d03d3fa41dcc49c4a4ea9058f3f44060' },
+  { city: 'Canberra', label: 'Commonwealth Heritage List (DCCEEW, CC BY 3.0 AU)', url: 'https://www.arcgis.com/home/item.html?id=bf02ea66970c40d18b15e782b20a2fa9' },
+  { city: 'Fingal', label: 'Fingal County Council - Record of Protected Structures, Development Plan 2023-2029 (CC BY 4.0)', url: 'https://data.fingal.ie/datasets/601387c1d5ed4f6aa172fcf231a61fd3' },
+  { city: 'Christchurch', label: 'Christchurch District Plan heritage items (Christchurch City Council, CC BY 4.0)', url: 'https://www.arcgis.com/home/item.html?id=f756c115142041fea96c3ac778ecbde4' },
   { city: 'Frankfurt', label: 'Stadt Frankfurt am Main, Umweltamt - Naturdenkmale and Geschützte Landschaftsbestandteile (WFS, dl-de/by-2.0)', url: 'https://geowebdienste.frankfurt.de/WFS_Naturdenkmale?request=GetCapabilities&service=WFS' },
   { city: 'Cologne', label: 'Stadt Köln Offene Daten - Denkmalliste, named monuments (Datenlizenz Deutschland Zero 2.0)', url: 'https://offenedaten-koeln.de/dataset/liste-der-koelner-denkmaeler' },
   { city: 'Baltimore', label: 'Baltimore City Landmark List (CHAP, Open Baltimore); National Park Service - National Register of Historic Places', url: 'https://data.baltimorecity.gov/datasets/8a570598d14c41ada202a6a0155bb0aa' },

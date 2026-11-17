@@ -14,7 +14,7 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   GHENT_OPENDATA: 'Ghent Open Data',
   LISBON_OPENDATA: 'Lisbon Open Data',
   CANBERRA_OPENDATA: 'Canberra Open Data',
-  SOUTH_DUBLIN_OPENDATA: 'South Dublin Open Data',
+  FINGAL_OPENDATA: 'Fingal Open Data',
   CHRISTCHURCH_OPENDATA: 'Christchurch Open Data',
   FRANKFURT_OPENDATA: 'Frankfurt Open Data',
   COLOGNE_OPENDATA: 'Cologne Open Data',

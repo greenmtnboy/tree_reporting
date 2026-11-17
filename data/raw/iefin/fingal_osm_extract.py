@@ -4,15 +4,15 @@
 # dependencies = ["google-cloud-storage", "pyarrow", "pytrilogy", "requests"]
 # ///
 
-"""Extract South Dublin's OpenStreetMap trees into the staged parquet in GCS.
+"""Extract Fingal's OpenStreetMap trees into the staged parquet in GCS.
 
 Everything lives in `shared.osm.extract_city`; this file exists so each city
 has a discoverable entry point and so a city that needs to diverge (a tighter
 bbox, an extra tag) has somewhere to do it.
 
-    cd data/raw && uv run iesdc/south_dublin_osm_extract.py
+    cd data/raw && uv run iefin/fingal_osm_extract.py
 
-The scheduled `osm-iesdc` [[cloud.job]] is the normal path; this is the manual
+The scheduled `osm-iefin` [[cloud.job]] is the normal path; this is the manual
 counterpart, for bootstrapping the city before its job is deployed.  Both share
 `fetch_osm_trees` / `build_table`, so they cannot drift on content -- only on
 who writes the GCS object.
@@ -24,8 +24,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.osm import extract_city  # noqa: E402
 
-CITY_CODE = "IESDC"
-CITY_NAME = "South Dublin OSM"
+CITY_CODE = "IEFIN"
+CITY_NAME = "Fingal OSM"
 
 
 if __name__ == "__main__":

@@ -76,7 +76,7 @@ import usbal.baltimore_tree_info;
 import decgn.cologne_tree_info;
 import defra.frankfurt_tree_info;
 import nzchc.christchurch_tree_info;
-import iesdc.south_dublin_tree_info;
+import iefin.fingal_tree_info;
 import aucbr.canberra_tree_info;
 import ptlis.lisbon_tree_info;
 import begnt.ghent_tree_info;
@@ -164,7 +164,7 @@ merge usbal_source into data_source;
 merge decgn_source into data_source;
 merge defra_source into data_source;
 merge nzchc_source into data_source;
-merge iesdc_source into data_source;
+merge iefin_source into data_source;
 merge aucbr_source into data_source;
 merge ptlis_source into data_source;
 merge begnt_source into data_source;
@@ -262,7 +262,7 @@ usbal_published_data_updated_through,
 decgn_published_data_updated_through,
 defra_published_data_updated_through,
 nzchc_published_data_updated_through,
-iesdc_published_data_updated_through,
+iefin_published_data_updated_through,
 aucbr_published_data_updated_through,
 ptlis_published_data_updated_through,
 begnt_published_data_updated_through,

@@ -103,7 +103,7 @@ OSM_CITY_NAMES: dict[str, str] = {
     "BEGNT": "Ghent",
     "PTLIS": "Lisbon",
     "AUCBR": "Canberra",
-    "IESDC": "South Dublin",
+    "IEFIN": "Fingal",
     "NZCHC": "Christchurch",
     "DEFRA": "Frankfurt",
     "DECGN": "Cologne",

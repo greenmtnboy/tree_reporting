@@ -5,23 +5,25 @@ root datasource ghent_landmarks_update_time (
 )
 file `./ghent_landmarks_probe.py`;
 
-# STUB. Every city needs a landmarks model even if it yields zero rows -- a
-# missing file fails the landmark lane for every city, and the agent has no
-# geographic context for this one.
-#
-# Point the raw datasource at whichever source this city has, in preference
-# order: an official designation registry, the same portal as the trees, an
-# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
-# geocoded via Nominatim (then add a `landmarks-begnt` job with NO cron).
-#
-# Both datasources extend ../landmark_common.preql's templates: add the
-# register's own attributes to both, mapped in one and stored in the other.
+# Ghent's protected heritage -- monuments, cultural-historical landscapes and
+# town views designated under the Flemish heritage decree -- read from the
+# Agentschap Onroerend Erfgoed's layers on the public Mercator WFS (Gratis open
+# data licentie Vlaanderen); see ghent_landmarks.py.  One landmark per
+# designation object.  The register's own attributes ride along in existing
+# landmark_common properties: the designation type (category), the address and
+# the date the protection took effect.
 root partial datasource raw_ghent_landmark_info extends landmark_partition (
+    category: ?category,
+    address: ?address,
+    designation_date: ?designation_date,
 )
 complete where city = 'BEGNT'
 file `./ghent_landmarks.py`;
 
 partial datasource ghent_landmark_info extends published_landmark_info (
+    ?category,
+    ?address,
+    ?designation_date,
     begnt_landmark_data_updated_through,
 )
 complete where city = 'BEGNT'

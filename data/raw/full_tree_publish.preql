@@ -187,7 +187,7 @@ file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/decgn_tree_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/defra_tree_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nzchc_tree_info_v{data_version}.parquet`,
-    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/iesdc_tree_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/iefin_tree_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aucbr_tree_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ptlis_tree_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/begnt_tree_info_v{data_version}.parquet`,

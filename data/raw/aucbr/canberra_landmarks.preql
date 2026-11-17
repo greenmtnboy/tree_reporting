@@ -5,23 +5,30 @@ root datasource canberra_landmarks_update_time (
 )
 file `./canberra_landmarks_probe.py`;
 
-# STUB. Every city needs a landmarks model even if it yields zero rows -- a
-# missing file fails the landmark lane for every city, and the agent has no
-# geographic context for this one.
-#
-# Point the raw datasource at whichever source this city has, in preference
-# order: an official designation registry, the same portal as the trees, an
-# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
-# geocoded via Nominatim (then add a `landmarks-aucbr` job with NO cron).
-#
-# Both datasources extend ../landmark_common.preql's templates: add the
-# register's own attributes to both, mapped in one and stored in the other.
+# Canberra's heritage places from its two registers, read live: the ACT
+# Heritage Register (Territory land; registered and provisionally registered
+# places, restricted Aboriginal places left out, each place's block polygons
+# merged into one) and the Commonwealth Heritage List (National Land: the
+# Parliamentary Triangle, the War Memorial, Lake Burley Griffin). No geocoding,
+# no committed CSV and no staging object. `lm_type` names the register,
+# `category` the kind of place (Historic, Natural, Aboriginal), and
+# `register_number` the register's own id.
 root partial datasource raw_canberra_landmark_info extends landmark_partition (
+    address: ?address,
+    category: ?category,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
 )
 complete where city = 'AUCBR'
 file `./canberra_landmarks.py`;
 
 partial datasource canberra_landmark_info extends published_landmark_info (
+    ?address,
+    ?category,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
     aucbr_landmark_data_updated_through,
 )
 complete where city = 'AUCBR'

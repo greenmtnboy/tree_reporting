@@ -100,6 +100,12 @@ Currently has data from the following cities:
 - [Madrid, Spain](https://greenmtnboy.github.io/tree_reporting/#/?city=ESMAD)
 - [Lyon, France](https://greenmtnboy.github.io/tree_reporting/#/?city=FRLYO)
 - [Hamburg, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEHAM)
+- [Bristol, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBBRS)
+- [Ghent, Belgium](https://greenmtnboy.github.io/tree_reporting/#/?city=BEGNT)
+- [Lisbon, Portugal](https://greenmtnboy.github.io/tree_reporting/#/?city=PTLIS)
+- [Fingal (County Dublin), Ireland](https://greenmtnboy.github.io/tree_reporting/#/?city=IEFIN)
+- [Canberra, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUCBR)
+- [Christchurch, New Zealand](https://greenmtnboy.github.io/tree_reporting/#/?city=NZCHC)
 - [Melbourne, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUMEL)
 - [Adelaide, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUADL)
 - [Perth, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUPER)
@@ -212,6 +218,12 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Madrid | Ayuntamiento de Madrid - Arbolado en parques y zonas verdes (detalle), datos.madrid.es (CC BY 4.0) | https://datos.madrid.es/dataset/300761-0-arbolado-especies |
 | Lyon | Métropole de Lyon - Arbres d'alignement (data.grandlyon.com WFS, Licence Ouverte) | https://data.grandlyon.com/portail/fr/jeux-de-donnees/arbres-alignement-metropole-lyon/info |
 | Hamburg | Freie und Hansestadt Hamburg, BUKEA - Straßenbaumkataster (WFS, dl-de/by-2.0) | http://www.hamburg.de/fhh-permalink/1065232 |
+| Christchurch | Christchurch City Council, Tree (OpenData) (CC BY 4.0) | https://www.arcgis.com/home/item.html?id=0c557c04453e435ba1e50389db0ede90 |
+| Fingal | Fingal County Council Open Data - Trees_FCC (CC BY 4.0; locations approximate) | https://data.fingal.ie/datasets/FingalCoCo::trees-fcc-1 |
+| Canberra | ACT Government - ACTGOV Tree Assets (CC BY 4.0) | https://www.arcgis.com/home/item.html?id=d401a7266ba74dc18c1902ae6e71fe90 |
+| Lisbon | Câmara Municipal de Lisboa - Arvoredo (Lisboa Aberta, CC0) | https://dados.cm-lisboa.pt/dataset/arvoredo |
+| Ghent | Stad Gent Groendienst - Locaties bomen Gent (Modellicentie Gratis Hergebruik) | https://data.stad.gent/explore/dataset/locaties-bomen-gent/ |
+| Bristol | Bristol City Council - Trees (Open Government Licence v3.0) | https://www.arcgis.com/home/item.html?id=7a99218a4bf347ff948f0e5882406a8c |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
 | Melbourne (Yarra) | City of Yarra - Street and Park Trees (CC BY 4.0) | https://data.gov.au/data/dataset/yarra-street-park-trees |
@@ -299,6 +311,13 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Madrid | Ayuntamiento de Madrid / Comunidad de Madrid - Bienes de Interés Cultural y Patrimonial (CC BY 4.0) | https://datos.madrid.es/dataset/300717-0-cultural-bien-mapas |
 | Lyon | Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Mérimée, Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
 | Hamburg | Freie und Hansestadt Hamburg - Denkmalkartierung: listed gardens, monuments and buildings (WFS, dl-de/by-2.0) | https://geodienste.hamburg.de/HH_WFS_Denkmalschutz?SERVICE=WFS&REQUEST=GetCapabilities |
+| Christchurch | Christchurch District Plan heritage items (Christchurch City Council, CC BY 4.0) | https://www.arcgis.com/home/item.html?id=f756c115142041fea96c3ac778ecbde4 |
+| Fingal | Fingal County Council - Record of Protected Structures, Development Plan 2023-2029 (CC BY 4.0) | https://data.fingal.ie/datasets/601387c1d5ed4f6aa172fcf231a61fd3 |
+| Canberra | ACT Heritage Register (ACT Government, CC BY 4.0) | https://www.arcgis.com/home/item.html?id=d03d3fa41dcc49c4a4ea9058f3f44060 |
+| Canberra | Commonwealth Heritage List (DCCEEW, CC BY 3.0 AU) | https://www.arcgis.com/home/item.html?id=bf02ea66970c40d18b15e782b20a2fa9 |
+| Lisbon | Câmara Municipal de Lisboa - Património classificado and Estatuária (CC0) | https://services.arcgis.com/1dSrzEWVQn5kHHyK/arcgis/rest/services/Patrimonio/FeatureServer |
+| Ghent | Agentschap Onroerend Erfgoed - protected monuments, landscapes and town views (Gratis open data licentie Vlaanderen) | https://inventaris.onroerenderfgoed.be/erfgoedobjecten?gemeente=44021 |
+| Bristol | Historic England - National Heritage List for England (OGL) | https://historicengland.org.uk/listing/the-list/ |
 | Melbourne | Melbourne Open Data - Landmarks and Places of Interest | https://data.melbourne.vic.gov.au/explore/dataset/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/ |
 | Paris | Ministere de la Culture - Immeubles proteges au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
 | Buenos Aires | No landmark dataset in production yet | n/a |

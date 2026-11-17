@@ -482,7 +482,7 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'australasia',
   },
-  IESDC: {
+  IEFIN: {
     ecoregionId: 651, // Celtic broadleaf forests
     usdaZone: 9,
     biome: 'Temperate Broadleaf & Mixed Forests',

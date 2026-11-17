@@ -59,8 +59,8 @@ property <*>.ptlis_data_updated_through datetime; # when Lisbon data is through
 property <*>.ptlis_osm_data_updated_through datetime; # GCS publication time of Lisbon's staged OSM parquet
 property <*>.aucbr_data_updated_through datetime; # when Canberra data is through
 property <*>.aucbr_osm_data_updated_through datetime; # GCS publication time of Canberra's staged OSM parquet
-property <*>.iesdc_data_updated_through datetime; # when South Dublin data is through
-property <*>.iesdc_osm_data_updated_through datetime; # GCS publication time of South Dublin's staged OSM parquet
+property <*>.iefin_data_updated_through datetime; # when Fingal data is through
+property <*>.iefin_osm_data_updated_through datetime; # GCS publication time of Fingal's staged OSM parquet
 property <*>.nzchc_data_updated_through datetime; # when Christchurch data is through
 property <*>.nzchc_osm_data_updated_through datetime; # GCS publication time of Christchurch's staged OSM parquet
 property <*>.defra_data_updated_through datetime; # when Frankfurt data is through

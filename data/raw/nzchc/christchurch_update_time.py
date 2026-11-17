@@ -1,42 +1,48 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "pytrilogy", "requests"]
+# dependencies = ["pyarrow", "pytrilogy", "requests", "tzdata"]
 # ///
-"""Freshness probe for Christchurch's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Christchurch's tree inventory.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+The `OpenData/Tree` layer on gis.ccc.govt.nz publishes no `editingInfo`, so
+the probe reads MAX(`LastEditDate`) over the whole layer with one statistics
+query (2026-11-17 16:09 when the city was wired; the council edits the
+inventory most working days).  The editor stamps look like New Zealand
+wall-clock time labelled UTC (the maximum was half a day ahead of real UTC
+when read), so the probe re-reads the stamp as Pacific/Auckland wall time
+before converting it to UTC; otherwise the watermark would sit up to 13 hours
+in the future.  `LastEditDate` is stamped on every edit, a removal
+included -- a removed tree stays in the layer with `ServiceStatus = Removed`
+-- so the maximum moves whenever the published set can.
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
+The ArcGIS Online item's `modified` (2026-04-13) is not used: it is the
+catalogue entry, not the rows.
 
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+`field_max` raises when the field is gone or the statistics row is empty, a
+schema question that must not degrade to "no new data"; an outage is caught
+by `get_json_with_retry` inside it and does degrade.
 """
 
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.platforms.arcgis import FeatureLayer, field_max
+from shared.ingest import emit_freshness
+from zoneinfo import ZoneInfo
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+LOCAL_TZ = ZoneInfo("Pacific/Auckland")
+
+LAYER = FeatureLayer(
+    "https://gis.ccc.govt.nz/server/rest/services/OpenData/Tree/FeatureServer/0"
+)
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Christchurch's published-through timestamp")
+    stamp = field_max(LAYER, "LastEditDate")
+    return stamp.replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc)
 
 
 if __name__ == "__main__":

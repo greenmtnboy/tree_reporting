@@ -79,7 +79,7 @@ file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grath_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grsan_tree_predictions_v{data_version}.parquet`,
-    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/iesdc_tree_predictions_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/iefin_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/itmil_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/jptyo_tree_predictions_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlams_tree_predictions_v{data_version}.parquet`,

@@ -662,6 +662,18 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 # and is deliberately not here.
 SPECIES_SYNONYMS: dict[str, str] = {
     # Nomenclatural and taxonomic synonyms (POWO lists the key under the value).
+    # Batch 5 (Lisbon, Ghent, Canberra, Christchurch, Fingal): WCVP synonyms and hybrid marks.
+    "Platanus x hybrida": "Platanus x hispanica",
+    "Albizia lophantha": "Paraserianthes lophantha",
+    "Plumbago capensis": "Plumbago auriculata",
+    "Datura suaveolens": "Brugmansia suaveolens",
+    "Populus euramericana": "Populus x canadensis",
+    "Sophora sinensis": "Styphnolobium japonicum",
+    "Ulmus carpinifolia": "Ulmus minor",
+    "Rhamnus frangula": "Frangula alnus",
+    "Tilia vulgaris": "Tilia x europaea",
+    "Cupressus leylandii": "Cupressus x leylandii",
+    "Osmanthus fortunei": "Osmanthus x fortunei",
     # Batch 4 (Lyon, Madrid, Hamburg, Cologne): hybrid marks and WCVP synonyms.
     "Acer x opalus": "Acer opalus",
     "X cupressocyparis x leylandii": "Cupressus x leylandii",
@@ -860,6 +872,61 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # Batch 5 (Lisbon, Ghent, Bristol, Canberra, Christchurch, Fingal): each key absent from WCVP, each value accepted there.
+    "Schinnus terebinthifolius": "Schinus terebinthifolia",
+    "Lochroma cyaneum": "Iochroma cyaneum",
+    "Prunus amigdalus": "Prunus amygdalus",
+    "Chamaecyparissus obtusa": "Chamaecyparis obtusa",
+    "Jasminum officinalis": "Jasminum officinale",
+    "Aloysia citriodora": "Aloysia citrodora",
+    "Ulmus leavis": "Ulmus laevis",
+    "Quercus pallustris": "Quercus palustris",
+    "Prunus gondouinnii": "Prunus x gondouinii",
+    "Quercus binundorum": "Quercus x bimundorum",
+    "Celtis autralis": "Celtis australis",
+    "Cedrus libanii": "Cedrus libani",
+    "Betula utilus": "Betula utilis",
+    "Castanea dentana": "Castanea dentata",
+    "Cercius canadensis": "Cercis canadensis",
+    "Juniperus virginiata": "Juniperus virginiana",
+    "Prunus domestic": "Prunus domestica",
+    "Qeurcus coccinea": "Quercus coccinea",
+    "Crataegus crus-gallii": "Crataegus crus-galli",
+    "Eucalyptus gunii": "Eucalyptus gunnii",
+    "Tetradium danielli": "Tetradium daniellii",
+    "Thujopsis dolobrata": "Thujopsis dolabrata",
+    "Liquidamber acalycina": "Liquidambar acalycina",
+    "Picea brewerana": "Picea breweriana",
+    "Stuartia pseudocamellia": "Stewartia pseudocamellia",
+    "Melaleuca linarifolia": "Melaleuca linariifolia",
+    "Eucalyptus agrophilia": "Eucalyptus argophloia",
+    "Eucalyptus acaciformis": "Eucalyptus acaciiformis",
+    "Callistemon citrinis": "Melaleuca citrina",
+    "Calothamnus quadrifolis": "Melaleuca quadrifida",
+    "X cuppressocyparis leylandii": "Cupressus x leylandii",
+    "Pseudopanax crassifolium": "Pseudopanax crassifolius",
+    "Crataegus laevigatus": "Crataegus laevigata",
+    "Sophora microhylla": "Sophora microphylla",
+    "Copromsa": "Coprosma",
+    "Lagerstromeria indica": "Lagerstroemia indica",
+    "Juglans hindisii": "Juglans hindsii",
+    "Melaleuca quarosa": "Melaleuca squarrosa",
+    "Pterocarya x rehderana": "Pterocarya x rehderiana",
+    "Taiwania cyptomerioides": "Taiwania cryptomerioides",
+    "Abies nephrolepsis": "Abies nephrolepis",
+    "Brachychiton gregori": "Brachychiton gregorii",
+    "Fitzroya cupressioides": "Fitzroya cupressoides",
+    "Liquidambar formosa": "Liquidambar formosana",
+    "Plantanus": "Platanus",
+    "Rhaphiolepsis indica": "Rhaphiolepis indica",
+    "Rhododendron araboreum": "Rhododendron arboreum",
+    "Styrax hemsleyana": "Styrax hemsleyanus",
+    "Corylus colorna": "Corylus colurna",
+    "Amelanchier lamarchii": "Amelanchier x lamarckii",
+    "Robinia pseudocacia": "Robinia pseudoacacia",
+    "Abies nordmanianna": "Abies nordmanniana",
+    "Pyracantha coccinia": "Pyracantha coccinea",
+    "Amelanchier alniflora": "Amelanchier alnifolia",
     # Batch 4 (Lyon, Madrid, Hamburg, Cologne, Frankfurt): each key absent from WCVP, each value accepted there.
     "Cercis silliquastrum": "Cercis siliquastrum",
     "Abies vejari": "Abies vejarii",
@@ -1676,7 +1743,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "BEGNT": ("GHENT_OPENDATA",),
     "PTLIS": ("LISBON_OPENDATA",),
     "AUCBR": ("CANBERRA_OPENDATA",),
-    "IESDC": ("SOUTH_DUBLIN_OPENDATA",),
+    "IEFIN": ("FINGAL_OPENDATA",),
     "NZCHC": ("CHRISTCHURCH_OPENDATA",),
     "DEFRA": ("FRANKFURT_OPENDATA",),
     "DECGN": ("COLOGNE_OPENDATA",),
@@ -1790,7 +1857,7 @@ OSM_DATA_SOURCES: dict[str, str] = {
     "BEGNT": "OSM_BEGNT",
     "PTLIS": "OSM_PTLIS",
     "AUCBR": "OSM_AUCBR",
-    "IESDC": "OSM_IESDC",
+    "IEFIN": "OSM_IEFIN",
     "NZCHC": "OSM_NZCHC",
     "DEFRA": "OSM_DEFRA",
     "DECGN": "OSM_DECGN",
@@ -2483,7 +2550,7 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "BEGNT": (50.97, 51.19, 3.57, 3.85),
     "PTLIS": (38.68, 38.8, -9.24, -9.08),
     "AUCBR": (-35.95, -35.12, 148.75, 149.4),
-    "IESDC": (53.2, 53.36, -6.56, -6.24),
+    "IEFIN": (53.35, 53.64, -6.48, -5.99),
     "NZCHC": (-43.9, -43.35, 172.4, 173.15),
     "DEFRA": (50.01, 50.24, 8.47, 8.81),
     "DECGN": (50.83, 51.09, 6.77, 7.17),
@@ -2620,16 +2687,31 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 DEDUP_CELL_METRES: dict[str, int] = {
     # NOT YET CALIBRATED: default; measure after the first build.
     "GBBRS": 10,
+    # Ghent: calibrated 2026-11-17 with --inventory-parquet (68,232 anchors)
+    # against the staged extract. Mutual-NN 32.1% in 5-10 m (n=470): a 5 m
+    # guarantee caps it at 10. Marginal table: 4->6 removes 379 duplicates for
+    # 97 hidden trees (3.91), 6->8 removes 108 for 111 (0.97), so 6 m.
+    "BEGNT": 6,
+    # Lisbon: calibrated 2026-11-17 with --inventory-parquet (75,839 anchors)
+    # against the staged extract. Mutual-NN 84.9% in 2-5 m, 33.5% in 5-10 m
+    # (n=892): a 5 m guarantee caps it at 10. Marginal table: 4->6 removes 483
+    # duplicates for 246 hidden trees (1.96), 6->8 removes 198 for 297 (0.67),
+    # so 6 m.
+    "PTLIS": 6,
+    # Canberra: calibrated 2026-11-17 with --inventory-parquet (786,310 anchors)
+    # against the staged extract. Mutual-NN 90.7% in 2-5 m, 36.1% in 5-10 m
+    # (n=2,055): a 5 m guarantee caps it at 10. Marginal table: 6->8 removes
+    # 569 duplicates for 492 hidden trees (1.16), 8->10 removes 215 for 448
+    # (0.48), so 8 m.
+    "AUCBR": 8,
     # NOT YET CALIBRATED: default; measure after the first build.
-    "BEGNT": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "PTLIS": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "AUCBR": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "IESDC": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "NZCHC": 10,
+    "IEFIN": 10,
+    # Christchurch: calibrated 2026-11-17 with --inventory-parquet (132,548 anchors)
+    # against the staged extract. Mutual-NN 91.5% in 2-5 m, 50.6% in 5-10 m
+    # (n=2,527): a 5 m guarantee caps it at 10. Marginal table: 6->8 removes
+    # 686 duplicates for 396 hidden trees (1.73), 8->10 removes 426 for 427
+    # (1.00), so 8 m.
+    "NZCHC": 8,
     # Frankfurt: osm_dedup_validation.py --inventory-parquet: mutual-NN 91.8% in
     # 2-5 m, 40.8% in 5-10 m (n=995): a 5 m guarantee caps it at 10.
     # Marginal table: 6->8 removes 292 duplicates for 183 hidden trees (1.60),
@@ -3091,7 +3173,27 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'BEGNT': ((50.97, 51.19, 3.57, 3.85),),
     'PTLIS': ((38.68, 38.8, -9.24, -9.08),),
     'AUCBR': ((-35.95, -35.12, 148.75, 149.4),),
-    'IESDC': ((53.2, 53.36, -6.56, -6.24),),
+    # Fingal: one rectangle per longitude column, each column's south edge the
+    # lowest Fingal land or inventory point in it (OSM relation 1114164).
+    # Diagonal stretches of the border leave ~8.5 km2 of Dublin City's fringe
+    # inside (Ballymun, Santry, Finglas edges); carve it when Dublin City is added.
+    'IEFIN': (
+        (53.3553, 53.64, -6.475, -6.4),
+        (53.3602, 53.64, -6.4, -6.37),
+        (53.3531, 53.64, -6.37, -6.355),
+        (53.353, 53.64, -6.355, -6.345),
+        (53.3697, 53.64, -6.345, -6.33),
+        (53.3785, 53.64, -6.33, -6.315),
+        (53.3988, 53.64, -6.315, -6.3),
+        (53.3974, 53.64, -6.3, -6.26),
+        (53.3968, 53.64, -6.26, -6.22),
+        (53.4058, 53.64, -6.22, -6.18),
+        (53.4059, 53.64, -6.18, -6.16),
+        (53.3875, 53.64, -6.16, -6.15),
+        (53.3843, 53.64, -6.15, -6.13),
+        (53.3747, 53.64, -6.13, -6.1),
+        (53.3597, 53.64, -6.1, -5.995),
+    ),
     'NZCHC': ((-43.9, -43.35, 172.4, 173.15),),
     'DEFRA': ((50.01, 50.24, 8.47, 8.81),),
     'DECGN': ((50.83, 51.09, 6.77, 7.17),),
