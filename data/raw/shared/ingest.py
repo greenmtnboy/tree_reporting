@@ -2685,7 +2685,10 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
+    # Bristol: calibrated 2026-11-17 with --inventory-parquet (55,947 anchors)
+    # against the staged extract. Mutual-NN 29.2% in 10-20 m (n=233): a 10 m
+    # guarantee caps it at 20. Marginal table: 8->10 removes 107 duplicates for
+    # 46 hidden trees (2.33), 10->14 removes 66 for 81 (0.81), so 10 m.
     "GBBRS": 10,
     # Ghent: calibrated 2026-11-17 with --inventory-parquet (68,232 anchors)
     # against the staged extract. Mutual-NN 32.1% in 5-10 m (n=470): a 5 m
@@ -2704,8 +2707,9 @@ DEDUP_CELL_METRES: dict[str, int] = {
     # 569 duplicates for 492 hidden trees (1.16), 8->10 removes 215 for 448
     # (0.48), so 8 m.
     "AUCBR": 8,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "IEFIN": 10,
+    # Calibrated 2026-11-17 against 115,908 OSM trees: marginal true/false
+    # 1.06 at 8 m, 0.68 at 10 m; inventory spacing p50 9.1 m.
+    "IEFIN": 8,
     # Christchurch: calibrated 2026-11-17 with --inventory-parquet (132,548 anchors)
     # against the staged extract. Mutual-NN 91.5% in 2-5 m, 50.6% in 5-10 m
     # (n=2,527): a 5 m guarantee caps it at 10. Marginal table: 6->8 removes
