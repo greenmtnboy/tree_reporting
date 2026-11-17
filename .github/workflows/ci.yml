@@ -127,7 +127,7 @@ jobs:
       run: |
         uv venv --python 3.13
         uv pip install torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cpu
-        uv pip install -e . pytest pillow rasterio pyproj==3.7.2
+        uv pip install -e . pytest pillow rasterio pyproj==3.7.2 google-cloud-storage==3.17.1
     - name: Run all imagery and reviewer tests
       working-directory: ./imagery_model
       env:
