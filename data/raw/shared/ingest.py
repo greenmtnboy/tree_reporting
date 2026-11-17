@@ -2602,10 +2602,16 @@ DEDUP_CELL_METRES: dict[str, int] = {
     "DECGN": 10,
     # NOT YET CALIBRATED: default; measure after the first build.
     "USBAL": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "ESMAD": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "FRLYO": 10,
+    # Madrid: osm_dedup_validation.py --inventory-parquet: mutual-NN 79.9% in
+    # 2-5 m, 31.2% in 5-10 m (n=3,360): a 5 m guarantee caps it at 10.
+    # Marginal table: 4->6 removes 2,485 duplicates for 1,358 hidden trees (1.83),
+    # 6->8 removes 758 for 1,096 (0.69), so 6 m.
+    "ESMAD": 6,
+    # Lyon: osm_dedup_validation.py --inventory-parquet: mutual-NN 86.0% in
+    # 2-5 m, 29.6% in 5-10 m (n=3,288): a 5 m guarantee caps it at 10.
+    # Marginal table: 4->6 removes 1,682 duplicates for 663 hidden trees (2.54),
+    # 6->8 removes 598 for 763 (0.78), so 6 m.
+    "FRLYO": 6,
     # NOT YET CALIBRATED: default; measure after the first build.
     "DEHAM": 10,
     # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
