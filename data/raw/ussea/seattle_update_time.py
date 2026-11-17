@@ -3,26 +3,22 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Seattle's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Seattle's public trees (SDOT street trees + Parks trees).
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+The later of the two layers' row-edit stamps:
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
+* **SDOT Trees**: MAX(`MODDATE`) over the whole layer (2026-11-03 when the
+  city was wired).  `MODDATE` is the asset's last modification in SDOT's
+  asset system, date precision, and moves when a tree is planted, removed or
+  re-inspected.  Not `editingInfo`: the hosted layer is reloaded daily, so its
+  edit stamp moves every day whether or not a tree changed.
+* **SPR Tree View**: MAX(`GIS_EDT_DT`), the Parks editor's own edit stamp
+  (2026-11-04).  The view is refreshed weekly, and its `editingInfo` moves on
+  every refresh for the same reason.
 
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+`field_max` raises when a field is gone or the statistics row is empty, a
+schema question that must not degrade to "no new data"; an outage is caught
+by `get_json_with_retry` inside it and does degrade.
 """
 
 import sys
@@ -30,13 +26,19 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.platforms.arcgis import FeatureLayer, field_max
+from shared.ingest import emit_freshness
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+SDOT = FeatureLayer(
+    "https://services.arcgis.com/ZOyb2t4B0UYuYNYH/arcgis/rest/services/SDOT_Trees_CDL/FeatureServer/0"
+)
+SPR = FeatureLayer(
+    "https://services.arcgis.com/ZOyb2t4B0UYuYNYH/arcgis/rest/services/SPR_Tree_View/FeatureServer/0"
+)
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Seattle's published-through timestamp")
+    return max(field_max(SDOT, "MODDATE"), field_max(SPR, "GIS_EDT_DT"))
 
 
 if __name__ == "__main__":

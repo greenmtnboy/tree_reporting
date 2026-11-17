@@ -11,12 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
-  { city: 'Sacramento', label: 'TODO: Sacramento tree inventory source', url: 'TODO' },
-  { city: 'San Jose', label: 'TODO: San Jose tree inventory source', url: 'TODO' },
-  { city: 'Pittsburgh', label: 'TODO: Pittsburgh tree inventory source', url: 'TODO' },
-  { city: 'Philadelphia', label: 'TODO: Philadelphia tree inventory source', url: 'TODO' },
-  { city: 'Portland', label: 'TODO: Portland tree inventory source', url: 'TODO' },
-  { city: 'Seattle', label: 'TODO: Seattle tree inventory source', url: 'TODO' },
+  { city: 'Sacramento', label: 'City of Sacramento Public Works, Urban Forestry - City Maintained Trees (ArcGIS, City of Sacramento Open Data Terms of Use)', url: 'https://www.arcgis.com/home/item.html?id=b9b716e09b5048179ab648bb4518452b' },
+  { city: 'San Jose', label: 'City of San José - Street Tree (ArcGIS, CC BY)', url: 'https://data.sanjoseca.gov/dataset/street-tree' },
+  { city: 'Pittsburgh', label: 'City of Pittsburgh, Department of Public Works Forestry Division - City of Pittsburgh Trees (WPRDC, CC BY)', url: 'https://data.wprdc.org/dataset/city-trees' },
+  { city: 'Philadelphia', label: 'Philadelphia Parks & Recreation - Tree Inventory, newest yearly layer (OpenDataPhilly, City of Philadelphia terms of use)', url: 'https://opendataphilly.org/datasets/philadelphia-tree-inventory/' },
+  { city: 'Portland', label: 'City of Portland, Portland Parks & Recreation Urban Forestry - Street Tree Inventory (Active Records) and Parks Tree Inventory (ArcGIS)', url: 'https://www.arcgis.com/home/item.html?id=c2b02440053f459db71e1109b9947e51' },
+  { city: 'Seattle', label: 'City of Seattle - SDOT Trees (in service) and Seattle Parks and Recreation Tree View (ArcGIS, Seattle Open Data Terms of Use)', url: 'https://cos-data.seattle.gov/d/gapw-b2rf' },
   { city: 'Basel', label: 'Stadtgärtnerei Basel-Stadt - Baumkataster: Baumbestand (data.bs.ch 100052, CC BY 4.0, Geodaten Kanton Basel-Stadt)', url: 'https://data.bs.ch/explore/dataset/100052/' },
   { city: 'Nottingham', label: 'Nottingham City Council - Trees (NCC Maintained) (ArcGIS, OGL v3; contains OS data © Crown copyright and database right)', url: 'https://www.arcgis.com/home/item.html?id=854f59402043403eabce650cc7ab1150' },
   { city: 'Zürich', label: 'Stadt Zürich Open Data - Baumkataster (Grün Stadt Zürich, CC0)', url: 'https://data.stadt-zuerich.ch/dataset/geo_baumkataster' },
@@ -111,12 +111,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
-  { city: 'Sacramento', label: 'TODO: Sacramento landmark source' },
-  { city: 'San Jose', label: 'TODO: San Jose landmark source' },
-  { city: 'Pittsburgh', label: 'TODO: Pittsburgh landmark source' },
-  { city: 'Philadelphia', label: 'TODO: Philadelphia landmark source' },
-  { city: 'Portland', label: 'TODO: Portland landmark source' },
-  { city: 'Seattle', label: 'TODO: Seattle landmark source' },
+  { city: 'Sacramento', label: 'City of Sacramento - Register of Historic and Cultural Resources, Historic Landmarks; National Park Service - National Register of Historic Places', url: 'https://services5.arcgis.com/54falWtcpty3V47Z/arcgis/rest/services/Historic_Landmarks/FeatureServer/0' },
+  { city: 'San Jose', label: 'City of San José - Historic Resources Inventory, City Landmarks (CC BY); National Park Service - National Register of Historic Places', url: 'https://data.sanjoseca.gov/dataset/historical-resources-inventory' },
+  { city: 'Pittsburgh', label: 'City of Pittsburgh - City Designated Individual Historic Sites; National Park Service - National Register of Historic Places', url: 'https://data.wprdc.org/dataset/city-designated-individual-historic-sites' },
+  { city: 'Philadelphia', label: 'National Park Service - National Register of Historic Places, marked where the Philadelphia Register of Historic Places also designates them', url: 'https://opendataphilly.org/datasets/philadelphia-registered-historic-properties/' },
+  { city: 'Portland', label: 'City of Portland Bureau of Planning and Sustainability - Historic and Conservation Landmarks; National Park Service - National Register of Historic Places', url: 'https://www.portlandmaps.com/od/rest/services/COP_OpenData_ZoningCode/MapServer/131' },
+  { city: 'Seattle', label: 'City of Seattle - Landmarks (SDCI); National Park Service - National Register of Historic Places', url: 'https://www.arcgis.com/home/item.html?id=462a18bf1f9f459eb7fd8ea08c843880' },
   { city: 'Basel', label: 'Kanton Basel-Stadt - Inventar der schützenswerten Gartenanlagen (CC BY 4.0, Geodaten Kanton Basel-Stadt)', url: 'https://wfs.geo.bs.ch/' },
   { city: 'Nottingham', label: 'Historic England - National Heritage List for England (listed buildings, scheduled monuments, registered parks and gardens; OGL); ONS Local Authority District boundary (OGL)', url: 'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer' },
   { city: 'Zürich', label: 'Stadt Zürich Open Data - Denkmalpflege-Inventar, regional and cantonal objects (CC0)', url: 'https://data.stadt-zuerich.ch/dataset/geo_denkmalpflege_inventar' },

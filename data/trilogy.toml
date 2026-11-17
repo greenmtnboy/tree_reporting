@@ -3388,7 +3388,8 @@ operation = "refresh"
 # Starts in the twice-weekly tier, placed the day after this city's OSM
 # extract. Measure before moving it: `portal_cadence.py --record --city USPOR`.
 schedule = "0 50 21 * * TUE,FRI"
-timeout_seconds = 1800
+# The street layer pages 200 rows at a time (about 1,260 requests, ~25 min).
+timeout_seconds = 3600
 memory_mb = 2048
 
 [[cloud.job]]

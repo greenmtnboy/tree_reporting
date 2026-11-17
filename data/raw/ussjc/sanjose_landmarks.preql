@@ -5,23 +5,28 @@ root datasource sanjose_landmarks_update_time (
 )
 file `./sanjose_landmarks_probe.py`;
 
-# STUB. Every city needs a landmarks model even if it yields zero rows -- a
-# missing file fails the landmark lane for every city, and the agent has no
-# geographic context for this one.
-#
-# Point the raw datasource at whichever source this city has, in preference
-# order: an official designation registry, the same portal as the trees, an
-# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
-# geocoded via Nominatim (then add a `landmarks-ussjc` job with NO cron).
-#
-# Both datasources extend ../landmark_common.preql's templates: add the
-# register's own attributes to both, mapped in one and stored in the other.
+# San José's City Landmarks (the designated rows of the city's Historic
+# Resources Inventory, on the same ArcGIS Server as the trees) and the National
+# Park Service's National Register listings in San José -- registers read live,
+# so no Nominatim geocoding, no committed CSV and no staging object. `lm_type`
+# names the register and `register_number` the city's landmark number
+# (`HL-137`) or the NRIS reference number.
 root partial datasource raw_sanjose_landmark_info extends landmark_partition (
+    address: ?address,
+    year_built: ?year_built,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
 )
 complete where city = 'USSJC'
 file `./sanjose_landmarks.py`;
 
 partial datasource sanjose_landmark_info extends published_landmark_info (
+    ?address,
+    ?year_built,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
     ussjc_landmark_data_updated_through,
 )
 complete where city = 'USSJC'

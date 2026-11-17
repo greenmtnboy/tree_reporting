@@ -30,7 +30,7 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -83,6 +83,9 @@ class FeatureLayer:
 # Esri time
 # ---------------------------------------------------------------------------
 
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
 def esri_ms_to_datetime(value) -> datetime | None:
     """Esri's epoch-milliseconds to an aware UTC datetime, or None.
 
@@ -94,7 +97,9 @@ def esri_ms_to_datetime(value) -> datetime | None:
     if value in (None, ""):
         return None
     try:
-        return datetime.fromtimestamp(float(value) / 1000, tz=timezone.utc)
+        # Epoch plus a delta, not fromtimestamp: Windows' fromtimestamp
+        # refuses negative values, which nulled every pre-1970 date there.
+        return _EPOCH + timedelta(milliseconds=float(value))
     except (OverflowError, OSError, ValueError, TypeError):
         return None
 

@@ -47,6 +47,12 @@ Currently has data from the following cities:
 - [Naperville, IL, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USNPV)
 - [Columbus, OH, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USCOL)
 - [Eugene, OR, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USEUG)
+- [Portland, OR, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USPOR)
+- [Seattle, WA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USSEA)
+- [Philadelphia, PA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USPHL)
+- [Pittsburgh, PA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USPIT)
+- [San Jose, CA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USSJC)
+- [Sacramento, CA, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USSAC)
 - [Stoughton, WI, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USSTO)
 - [Austin, TX, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USAUS)
 - [Houston, TX, United States](https://greenmtnboy.github.io/tree_reporting/#/?city=USHOU)
@@ -146,6 +152,12 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Naperville, IL | City of Naperville - Right of Way Tree Inventory (ArcGIS, CC0) | https://www.arcgis.com/home/item.html?id=9ee23fb99f1d4391824b66fddc2f10f1 |
 | Columbus, OH | City of Columbus Recreation and Parks, Urban Forestry - Public Owned Trees (ArcGIS, CC0) | https://www.arcgis.com/home/item.html?id=674e4a358e8042f69a734f229a93823c |
 | Eugene, OR | City of Eugene, Parks and Open Space - Public Trees (ArcGIS) | https://www.arcgis.com/home/item.html?id=defd8da338a443818b6a6f8b65b8076b |
+| Portland, OR | City of Portland, Portland Parks & Recreation Urban Forestry - Street Tree Inventory (Active Records) and Parks Tree Inventory (ArcGIS) | https://www.arcgis.com/home/item.html?id=c2b02440053f459db71e1109b9947e51 |
+| Seattle, WA | City of Seattle - SDOT Trees (in service) and Seattle Parks and Recreation Tree View (ArcGIS, Seattle Open Data Terms of Use) | https://cos-data.seattle.gov/d/gapw-b2rf |
+| Philadelphia, PA | Philadelphia Parks & Recreation - Tree Inventory, newest yearly layer (OpenDataPhilly, City of Philadelphia terms of use) | https://opendataphilly.org/datasets/philadelphia-tree-inventory/ |
+| Pittsburgh, PA | City of Pittsburgh, Department of Public Works Forestry Division - City of Pittsburgh Trees (WPRDC, CC BY) | https://data.wprdc.org/dataset/city-trees |
+| San Jose, CA | City of San José - Street Tree (ArcGIS, CC BY) | https://data.sanjoseca.gov/dataset/street-tree |
+| Sacramento, CA | City of Sacramento Public Works, Urban Forestry - City Maintained Trees (ArcGIS, City of Sacramento Open Data Terms of Use) | https://www.arcgis.com/home/item.html?id=b9b716e09b5048179ab648bb4518452b |
 | Stoughton | City of Stoughton - Public Tree Inventory (ArcGIS) | https://experience.arcgis.com/experience/f9b95eddac104c708619ccaf4c2c9de0 |
 | Austin, TX | City of Austin - Tree Inventory (Socrata, public domain) | https://data.austintexas.gov/d/wrik-xasw |
 | Houston, TX | City of Houston Parks & Recreation, Urban Forestry - street-tree inventory (ArcGIS) | https://geohwp.houstontx.gov/arcgis/rest/services/03_BaseData_External/Land_Base/FeatureServer/0 |
@@ -223,6 +235,12 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Stoughton | City of Stoughton - Historical Landmarks (Stoughton Landmarks Commission) | https://stoughtonwi.maps.arcgis.com/home/item.html?id=0ac41bae1fac4f4abdb873deed6f8d75 |
 | Columbus, OH | City of Columbus - Register of Historic Properties (CC0); National Park Service - National Register of Historic Places | https://maps2.columbus.gov/arcgis/rest/services/Schemas/Development/MapServer/0 |
 | Eugene, OR | City of Eugene Planning Division - Historic Sites (City Landmarks and National Register) | https://www.arcgis.com/home/item.html?id=e012d77a3a624a1e9f1ce01c8bb0ae8d |
+| Portland, OR | City of Portland Bureau of Planning and Sustainability - Historic and Conservation Landmarks; National Park Service - National Register of Historic Places | https://www.portlandmaps.com/od/rest/services/COP_OpenData_ZoningCode/MapServer/131 |
+| Seattle, WA | City of Seattle - Landmarks (SDCI); National Park Service - National Register of Historic Places | https://www.arcgis.com/home/item.html?id=462a18bf1f9f459eb7fd8ea08c843880 |
+| Philadelphia, PA | National Park Service - National Register of Historic Places, marked where the Philadelphia Register of Historic Places also designates them | https://opendataphilly.org/datasets/philadelphia-registered-historic-properties/ |
+| Pittsburgh, PA | City of Pittsburgh - City Designated Individual Historic Sites; National Park Service - National Register of Historic Places | https://data.wprdc.org/dataset/city-designated-individual-historic-sites |
+| San Jose, CA | City of San José - Historic Resources Inventory, City Landmarks (CC BY); National Park Service - National Register of Historic Places | https://data.sanjoseca.gov/dataset/historical-resources-inventory |
+| Sacramento, CA | City of Sacramento - Register of Historic and Cultural Resources, Historic Landmarks; National Park Service - National Register of Historic Places | https://services5.arcgis.com/54falWtcpty3V47Z/arcgis/rest/services/Historic_Landmarks/FeatureServer/0 |
 | Austin, TX | City of Austin - Historical Landmarks (Socrata) | https://data.austintexas.gov/d/8k49-bptr |
 | Houston, TX | City of Houston - Historic Sites and Landmarks (Landmarks and Protected Landmarks) | https://services.arcgis.com/NummVBqZSIJKUeVR/arcgis/rest/services/COH_Historic_Sites_and_Landmarks_view/FeatureServer/6 |
 | Durham, NC | Durham City-County Planning - Local Historic Landmarks and National Register listings | https://webgis2.durhamnc.gov/server/rest/services/PublicServices/Planning/MapServer/1 |

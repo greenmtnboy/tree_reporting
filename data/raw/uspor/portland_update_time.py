@@ -3,26 +3,24 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Portland's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Portland's tree inventory (street trees and park trees).
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+Both layers are MapServer layers on portlandmaps.com with no `editingInfo`,
+so the probe takes the latest of four stamps:
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
+* Street Tree Inventory - Active Records (layer 1415): no edit-date column,
+  so MAX(`Date_Inventoried`) (2024-10-28 when the city was wired) and the
+  City of Portland Hub catalogue's `modified` for the layer (2025-01-23).  The
+  layer is republished whole -- its OBJECTIDs run 1..N with no gaps -- and a
+  republish moves the catalogue stamp even when no new inventory date does.
+* Parks Tree Inventory (layer 220): MAX(`last_edited_date`) (editor
+  tracking; 2024-08-20) and its Hub `modified` (2024-09-10).
 
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+The maximum, not a choice, because the catalogue stamp can fail to move on an
+in-place overwrite and the data stamp can fail to move on a reload
+(`hub_last_modified`'s docstring).  `field_max` and `hub_last_modified` raise
+on a missing field or an unlisted layer -- a schema question -- and degrade on
+an outage.
 """
 
 import sys
@@ -30,13 +28,22 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.platforms.arcgis import FeatureLayer, field_max, hub_last_modified
+from shared.ingest import emit_freshness
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+HUB = "gis-pdx.opendata.arcgis.com"
+SERVICE = "https://www.portlandmaps.com/od/rest/services/COP_OpenData_Environment/MapServer"
+STREET = FeatureLayer(f"{SERVICE}/1415", timeout=120)
+PARKS = FeatureLayer(f"{SERVICE}/220", timeout=120)
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Portland's published-through timestamp")
+    return max(
+        field_max(STREET, "Date_Inventoried"),
+        hub_last_modified(HUB, STREET.base),
+        field_max(PARKS, "last_edited_date"),
+        hub_last_modified(HUB, PARKS.base),
+    )
 
 
 if __name__ == "__main__":
