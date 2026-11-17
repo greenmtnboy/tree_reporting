@@ -2600,8 +2600,11 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "DEFRA": 10,
+    # Frankfurt: osm_dedup_validation.py --inventory-parquet: mutual-NN 91.8% in
+    # 2-5 m, 40.8% in 5-10 m (n=995): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 292 duplicates for 183 hidden trees (1.60),
+    # 8->10 removes 128 for 208 (0.62), so 8 m.
+    "DEFRA": 8,
     # Cologne: osm_dedup_validation.py --inventory-parquet: mutual-NN 91.5% in
     # 2-5 m, 36.3% in 5-10 m (n=1,068): a 5 m guarantee caps it at 10.
     # Marginal table: 6->8 removes 260 duplicates for 219 hidden trees (1.19),
