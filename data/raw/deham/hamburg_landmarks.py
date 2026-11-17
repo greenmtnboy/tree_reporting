@@ -19,10 +19,17 @@ Three of the service's feature types are read, each a category:
   tree is most often *in*;
 * `denkmalobjekte_symbolhaft` -- statues, memorials, fountains and cranes,
   561 points (`Kaiser-Wilhelm-Denkmal in den Großen Wallanlagen`);
-* `gebaeude` -- listed buildings, 12,286 polygons, **grouped by name**: the
-  register draws a housing estate or a complex as one polygon per house
-  (`Fritz-Schumacher-Siedlung` on 558 of them, `Großmarkthalle` on 7), so the
-  polygons sharing a name publish as one landmark, a MULTIPOLYGON of them all.
+* `gebaeude` -- listed buildings, 12,286 polygons, **grouped by name and
+  place**: the register draws a housing estate or a complex as one polygon
+  per house (`Fritz-Schumacher-Siedlung` on 558 of them, `Großmarkthalle` on
+  7), so polygons sharing a name publish as one landmark, a MULTIPOLYGON --
+  but a name is not a place: `Auferstehungskirche`, `Christuskirche` and
+  `Lutherkirche` are each several churches up to 24 km apart.  The layer
+  carries no district (`info` holds only the street address), so a name's
+  polygons are split into clusters, single-linkage at 1 km between polygon
+  centres: a contiguous estate or cemetery stays one landmark however long
+  (the Ohlsdorf cemetery's 39 buildings span 3 km), while churches in
+  different quarters part.
 
 A row is kept only when it has a name of its own.  The register names most
 buildings by their address (`Haakestraße 30`) or not at all; like
@@ -42,9 +49,15 @@ building group is keyed on a slug of its name** (`hamburg-building-fritz-
 schumacher-siedlung`): the name is what defines the group, so the id moves only
 when the group does, whereas the smallest `globalid` in it would change
 whenever that one house was redrawn or delisted.  Spellings that slug alike
-(`'Wikingerhaus'` and `Wikingerhaus`) are one group.
+(`'Wikingerhaus'` and `Wikingerhaus`) are one group.  When a name forms more
+than one cluster, each cluster's id adds the slug of its street -- the street
+of the address in `info` most of its polygons carry
+(`hamburg-building-auferstehungskirche-langenhorner-chaussee`) -- and a
+running number only if two clusters of one name share a street, numbered
+south to north.
 """
 
+import math
 import re
 import sys
 from collections import Counter
@@ -65,6 +78,7 @@ LAYERS = (
     ("gebaeude", "building", "Listed building", True),
 )
 _FOLD = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
+CLUSTER_KM = 1.0
 # A name that ends in a house number, or carries a number range: an address.
 _ADDRESS = re.compile(r"\d+\s*[a-zA-Z]?\s*$|\d+\s*[a-zA-Z]?\s*[/-]\s*\d")
 
@@ -121,29 +135,97 @@ def polygons(geometry: dict) -> list:
     return []
 
 
-def grouped_records(groups: dict[str, list], slug: str, category: str) -> list[dict]:
-    """One landmark per name slug, its polygons gathered into one MULTIPOLYGON.
+def centre(polys: list) -> tuple[float, float]:
+    """The mean vertex of a feature's outer rings: a polygon's rough centre."""
+    points = [pt for polygon in polys for pt in polygon[0]]
+    return (
+        sum(pt[0] for pt in points) / len(points),
+        sum(pt[1] for pt in points) / len(points),
+    )
 
-    *groups* maps a name slug to `(name, polygons)` pairs.  Spellings that
-    differ only in case, quoting or punctuation (`'Wikingerhaus'`,
-    `Wikingerhaus`) share a slug and are one landmark, named by the spelling
-    most of its polygons carry.
+
+def distance_km(a: tuple[float, float], b: tuple[float, float]) -> float:
+    lon1, lat1, lon2, lat2 = map(math.radians, (a[0], a[1], b[0], b[1]))
+    h = (
+        math.sin((lat2 - lat1) / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
+    )
+    return 2 * 6371.0 * math.asin(math.sqrt(h))
+
+
+def clusters(members: list[dict]) -> list[list[dict]]:
+    """Single-linkage clusters of *members* at `CLUSTER_KM` between centres."""
+    parent = list(range(len(members)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i in range(len(members)):
+        for j in range(i + 1, len(members)):
+            if distance_km(members[i]["centre"], members[j]["centre"]) <= CLUSTER_KM:
+                parent[find(i)] = find(j)
+    out: dict[int, list[dict]] = {}
+    for i, member in enumerate(members):
+        out.setdefault(find(i), []).append(member)
+    return list(out.values())
+
+
+def street_of(info: str | None) -> str | None:
+    """`Gründgensstraße 28, Martin-Luther-King-Kirche (...)` -> `Gründgensstraße`."""
+    first = clean((info or "").split(",")[0])
+    if first is None:
+        return None
+    street = re.sub(r"\s+(\d.*|o\.\s*Nr\..*)$", "", first)
+    return clean(street)
+
+
+def grouped_records(groups: dict[str, list], slug: str, category: str) -> list[dict]:
+    """One landmark per name slug and place, its polygons as one MULTIPOLYGON.
+
+    *groups* maps a name slug to its member polygons (`name`, `polys`,
+    `centre`, `street`).  Spellings that differ only in case, quoting or
+    punctuation (`'Wikingerhaus'`, `Wikingerhaus`) share a slug; the slug's
+    members are then split into clusters (`clusters`), and each cluster is
+    named by the spelling most of its polygons carry.
     """
     records: list[dict] = []
+    split = 0
     for key_slug in sorted(groups):
-        members = groups[key_slug]
-        spellings = Counter(name for name, _ in members)
-        name = min(spellings, key=lambda n: (-spellings[n], n))
-        parts = [polygon for _, polys in members for polygon in polys]
-        wkt = geojson_to_wkt({"type": "MultiPolygon", "coordinates": parts})
-        records.append(
-            {
-                "landmark_id": f"hamburg-{slug}-{key_slug}",
-                "name": name,
-                "geometry_raw": wkt,
-                "category": category,
-            }
-        )
+        parts_of_name = clusters(groups[key_slug])
+        if len(parts_of_name) > 1:
+            split += 1
+        # South to north, so a running number is reproducible.
+        parts_of_name.sort(key=lambda c: (min(m["centre"][1] for m in c), min(m["centre"][0] for m in c)))
+        suffixes: list[str] = []
+        for cluster in parts_of_name:
+            if len(parts_of_name) == 1:
+                suffixes.append("")
+                continue
+            streets = Counter(m["street"] for m in cluster if m["street"])
+            street = min(streets, key=lambda n: (-streets[n], n)) if streets else ""
+            suffixes.append(name_slug(street) or "place")
+        repeats = Counter(suffixes)
+        running: Counter = Counter()
+        for cluster, suffix in zip(parts_of_name, suffixes):
+            if repeats[suffix] > 1:
+                running[suffix] += 1
+                suffix = f"{suffix}-{running[suffix]}"
+            spellings = Counter(m["name"] for m in cluster)
+            name = min(spellings, key=lambda n: (-spellings[n], n))
+            parts = [polygon for m in cluster for polygon in m["polys"]]
+            wkt = geojson_to_wkt({"type": "MultiPolygon", "coordinates": parts})
+            landmark_id = f"hamburg-{slug}-{key_slug}" + (f"-{suffix}" if suffix else "")
+            records.append(
+                {"landmark_id": landmark_id, "name": name, "geometry_raw": wkt, "category": category}
+            )
+    print(
+        f"Hamburg {slug} groups: {len(groups)} name(s), {split} split by place "
+        f"into {len(records)} landmark(s)",
+        file=sys.stderr,
+    )
     return records
 
 
@@ -161,7 +243,7 @@ def read_landmarks() -> list[dict]:
         features = read_layer(type_name)
         # A name that is only a building type (`Wohnhaus`, `Wohnwirtschaftsgebäude`)
         # or `Keine Angabe` (not stated) names nothing.
-        generic = {"keine angabe"} | {
+        generic = {"keine angabe", "wohnhaus"} | {
             part.strip().casefold()
             for f in features
             for part in str((f.get("properties") or {}).get("bautyp") or "").split(";")
@@ -202,7 +284,14 @@ def read_landmarks() -> list[dict]:
                 if not key_slug:
                     dropped["unnamed"] += 1
                     continue
-                groups.setdefault(key_slug, []).append((name, parts))
+                groups.setdefault(key_slug, []).append(
+                    {
+                        "name": name,
+                        "polys": parts,
+                        "centre": centre(parts),
+                        "street": street_of(props.get("info")),
+                    }
+                )
                 kept += 1
                 continue
             key = f"hamburg-{slug}-{guid.strip('{}').lower()}"
@@ -215,7 +304,10 @@ def read_landmarks() -> list[dict]:
             kept += 1
         if group:
             grouped = grouped_records(groups, slug, category)
-            seen.update(r["landmark_id"] for r in grouped)
+            ids = [r["landmark_id"] for r in grouped]
+            if len(set(ids)) != len(ids) or seen.intersection(ids):
+                raise RuntimeError("Hamburg heritage register: building group ids repeat")
+            seen.update(ids)
             records.extend(grouped)
             print(
                 f"Hamburg {type_name}: {kept} kept as {len(grouped)} named landmark(s), "

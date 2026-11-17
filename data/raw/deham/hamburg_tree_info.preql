@@ -63,7 +63,7 @@ root partial datasource deham_osm_tree_info extends tree_partition (
 )
 complete where city = 'DEHAM' and deham_source = 'OSM_DEHAM'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/deham_osm_staging.parquet`
-where (raw_latitude >= 53.39 and raw_latitude < 53.74 and raw_longitude >= 9.73 and raw_longitude < 10.33);
+where (raw_latitude >= 53.39 and raw_latitude < 53.74 and raw_longitude >= 9.7 and raw_longitude < 10.33);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

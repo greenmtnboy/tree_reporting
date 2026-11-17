@@ -95,6 +95,7 @@ Currently has data from the following cities:
 - [Vienna, Austria](https://greenmtnboy.github.io/tree_reporting/#/?city=ATVIE)
 - [Zürich, Switzerland](https://greenmtnboy.github.io/tree_reporting/#/?city=CHZUR)
 - [Basel, Switzerland](https://greenmtnboy.github.io/tree_reporting/#/?city=CHBAS)
+- [Frankfurt, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEFRA)
 - [Cologne, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DECGN)
 - [Madrid, Spain](https://greenmtnboy.github.io/tree_reporting/#/?city=ESMAD)
 - [Lyon, France](https://greenmtnboy.github.io/tree_reporting/#/?city=FRLYO)
@@ -206,6 +207,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Vienna | Stadt Wien Open Data - Baumkataster (BAUMKATOGD, CC BY 4.0; Datenquelle: Stadt Wien - data.wien.gv.at) | https://www.data.gv.at/katalog/dataset/c91a4635-8b7d-43fe-9b27-d95dec8392a7 |
 | Zürich | Stadt Zürich Open Data - Baumkataster (Grün Stadt Zürich, CC0) | https://data.stadt-zuerich.ch/dataset/geo_baumkataster |
 | Basel | Stadtgärtnerei Basel-Stadt - Baumkataster: Baumbestand (data.bs.ch, CC BY 4.0, Geodaten Kanton Basel-Stadt) | https://data.bs.ch/explore/dataset/100052/ |
+| Frankfurt | Stadt Frankfurt am Main Offene Daten - Baumkataster (Grünflächenamt, dl-de/by-2.0) | https://offenedaten.frankfurt.de/dcat/dataset/de-he-frankfurtam-baumkataster_op.html |
 | Cologne | Stadt Köln Offene Daten - Baumkataster (Amt für Landschaftspflege und Grünflächen, Datenlizenz Deutschland Zero 2.0) | https://offenedaten-koeln.de/dataset/baumkataster-koeln-fortlaufend-aktualisiert |
 | Madrid | Ayuntamiento de Madrid - Arbolado en parques y zonas verdes (detalle), datos.madrid.es (CC BY 4.0) | https://datos.madrid.es/dataset/300761-0-arbolado-especies |
 | Lyon | Métropole de Lyon - Arbres d'alignement (data.grandlyon.com WFS, Licence Ouverte) | https://data.grandlyon.com/portail/fr/jeux-de-donnees/arbres-alignement-metropole-lyon/info |
@@ -292,6 +294,7 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Vienna | Stadt Wien Open Data - Historische Gartenanlagen and Sehenswürdigkeiten (CC BY 4.0) | https://data.wien.gv.at/ |
 | Zürich | Stadt Zürich Open Data - Denkmalpflege-Inventar, regional and cantonal objects (CC0) | https://data.stadt-zuerich.ch/dataset/geo_denkmalpflege_inventar |
 | Basel | Kanton Basel-Stadt - Inventar der schützenswerten Gartenanlagen (CC BY 4.0) | https://www.geo.bs.ch/ |
+| Frankfurt | Stadt Frankfurt am Main, Umweltamt - Naturdenkmale and Geschützte Landschaftsbestandteile (WFS, dl-de/by-2.0) | https://geowebdienste.frankfurt.de/WFS_Naturdenkmale?request=GetCapabilities&service=WFS |
 | Cologne | Stadt Köln Offene Daten - Denkmalliste, named monuments (Datenlizenz Deutschland Zero 2.0) | https://offenedaten-koeln.de/dataset/liste-der-koelner-denkmaeler |
 | Madrid | Ayuntamiento de Madrid / Comunidad de Madrid - Bienes de Interés Cultural y Patrimonial (CC BY 4.0) | https://datos.madrid.es/dataset/300717-0-cultural-bien-mapas |
 | Lyon | Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Mérimée, Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |

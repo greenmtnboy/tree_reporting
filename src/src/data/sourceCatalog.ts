@@ -11,7 +11,7 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
-  { city: 'Frankfurt', label: 'TODO: Frankfurt tree inventory source', url: 'TODO' },
+  { city: 'Frankfurt', label: 'Stadt Frankfurt am Main Offene Daten - Baumkataster (Grünflächenamt, dl-de/by-2.0)', url: 'https://offenedaten.frankfurt.de/dcat/dataset/de-he-frankfurtam-baumkataster_op.html' },
   { city: 'Cologne', label: 'Stadt Köln Offene Daten - Baumkataster (Amt für Landschaftspflege und Grünflächen, Datenlizenz Deutschland Zero 2.0)', url: 'https://offenedaten-koeln.de/dataset/baumkataster-koeln-fortlaufend-aktualisiert' },
   { city: 'Baltimore', label: 'Baltimore City Recreation & Parks, Forestry - Street Tree Inventory (ArcGIS)', url: 'https://gis.baltimorecity.gov/egis/rest/services/Foresty/TreeInventory_Public/MapServer/0' },
   { city: 'Madrid', label: 'Ayuntamiento de Madrid - Arbolado en parques y zonas verdes (detalle), datos.madrid.es (CC BY 4.0)', url: 'https://datos.madrid.es/dataset/300761-0-arbolado-especies' },
@@ -117,7 +117,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
-  { city: 'Frankfurt', label: 'TODO: Frankfurt landmark source' },
+  { city: 'Frankfurt', label: 'Stadt Frankfurt am Main, Umweltamt - Naturdenkmale and Geschützte Landschaftsbestandteile (WFS, dl-de/by-2.0)', url: 'https://geowebdienste.frankfurt.de/WFS_Naturdenkmale?request=GetCapabilities&service=WFS' },
   { city: 'Cologne', label: 'Stadt Köln Offene Daten - Denkmalliste, named monuments (Datenlizenz Deutschland Zero 2.0)', url: 'https://offenedaten-koeln.de/dataset/liste-der-koelner-denkmaeler' },
   { city: 'Baltimore', label: 'Baltimore City Landmark List (CHAP, Open Baltimore); National Park Service - National Register of Historic Places', url: 'https://data.baltimorecity.gov/datasets/8a570598d14c41ada202a6a0155bb0aa' },
   { city: 'Madrid', label: 'Ayuntamiento de Madrid / Comunidad de Madrid - Bienes de Interés Cultural y Patrimonial (CC BY 4.0)', url: 'https://datos.madrid.es/dataset/300717-0-cultural-bien-mapas' },

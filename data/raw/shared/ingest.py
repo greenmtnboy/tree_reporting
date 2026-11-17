@@ -860,7 +860,11 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
-    # Batch 4 (Lyon, Madrid, Hamburg, Cologne): each key absent from WCVP, each value accepted there.
+    # Batch 4 (Lyon, Madrid, Hamburg, Cologne, Frankfurt): each key absent from WCVP, each value accepted there.
+    "Cercis silliquastrum": "Cercis siliquastrum",
+    "Abies vejari": "Abies vejarii",
+    "Quercus phillyraeoides": "Quercus phillyreoides",
+    "Zelkova schneiderana": "Zelkova schneideriana",
     "Quercus ryzophylla": "Quercus rysophylla",
     "Acer pennsylvanicum": "Acer pensylvanicum",
     "Quercus wizlizenii": "Quercus wislizeni",

@@ -3624,7 +3624,7 @@ operation = "refresh"
 # Overpass allows two slots per client IP and answers an over-budget request
 # with HTTP 200 carrying an error remark, so a collision looks like a city with
 # no trees in OSM. This minute must be used by no other extract job.
-schedule = "0 0 4 * * SUN"
+schedule = "0 0 7 * * MON"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -3658,7 +3658,7 @@ operation = "refresh"
 # Overpass allows two slots per client IP and answers an over-budget request
 # with HTTP 200 carrying an error remark, so a collision looks like a city with
 # no trees in OSM. This minute must be used by no other extract job.
-schedule = "0 0 4 * * SUN"
+schedule = "0 0 7 * * TUE"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -3692,7 +3692,7 @@ operation = "refresh"
 # Overpass allows two slots per client IP and answers an over-budget request
 # with HTTP 200 carrying an error remark, so a collision looks like a city with
 # no trees in OSM. This minute must be used by no other extract job.
-schedule = "0 0 4 * * SUN"
+schedule = "0 0 7 * * WED"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -3726,7 +3726,7 @@ operation = "refresh"
 # Overpass allows two slots per client IP and answers an over-budget request
 # with HTTP 200 carrying an error remark, so a collision looks like a city with
 # no trees in OSM. This minute must be used by no other extract job.
-schedule = "0 0 4 * * SUN"
+schedule = "0 0 7 * * THU"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -3760,7 +3760,7 @@ operation = "refresh"
 # Overpass allows two slots per client IP and answers an over-budget request
 # with HTTP 200 carrying an error remark, so a collision looks like a city with
 # no trees in OSM. This minute must be used by no other extract job.
-schedule = "0 0 4 * * SUN"
+schedule = "0 0 7 * * FRI"
 timeout_seconds = 1800
 memory_mb = 1024
 
@@ -3794,7 +3794,7 @@ operation = "refresh"
 # Overpass allows two slots per client IP and answers an over-budget request
 # with HTTP 200 carrying an error remark, so a collision looks like a city with
 # no trees in OSM. This minute must be used by no other extract job.
-schedule = "0 0 4 * * SUN"
+schedule = "0 0 7 * * SAT"
 timeout_seconds = 1800
 memory_mb = 1024
 
