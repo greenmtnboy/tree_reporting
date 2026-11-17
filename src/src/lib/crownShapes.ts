@@ -60,84 +60,149 @@ export const CROWN_UNPACK_GLSL = `
       }`
 
 const TAU = Math.PI * 2
-const tri = (t: number) => 1 - Math.abs(2 * (t - Math.floor(t)) - 1)
-const fract = (t: number) => t - Math.floor(t)
+const abs = Math.abs
+type Lobe = [angle: number, notch: number, crest: number]
 
-/**
- * The crown of `form` at (x, y) in its unit disc: `edge` is negative inside the outline (a radial
- * offset, not yet a true distance), `detail` the distance to the nearest interior stroke (fronds'
- * midribs, whorls, clumps). Every outline stays inside the unit disc and reaches it, so the crown
- * is still as wide as it is measured.
- */
+/** Unequal boughs around the skyline. Each notch rolls up to a rounded shoulder,
+ * then down to the next notch. Sample the periodic profile once, not per texel. */
+function skyline(lobes: Lobe[]) {
+  const n = 720, radii = new Float64Array(n + 1)
+  let i = 0
+  for (let j = 0; j < n; j++) {
+    const deg = 360 * j / n
+    if (i + 1 < lobes.length && deg >= lobes[i + 1][0]) i++
+    const [start, low, high] = lobes[i], next = lobes[(i + 1) % lobes.length]
+    const t = (deg - start) / ((next[0] || 360) - start)
+    const floor = low + (next[1] - low) * t
+    radii[j] = floor + (high - floor) * Math.sin(Math.PI * t) ** 0.72
+  }
+  radii[n] = radii[0]
+  return (a: number) => {
+    const u = (a / TAU - Math.floor(a / TAU)) * n, k = Math.floor(u)
+    return radii[k] + (radii[k + 1] - radii[k]) * (u - k)
+  }
+}
+
+const headProfile = skyline([[0,.90,1],[32,.85,.97],[70,.83,.96],[115,.89,1],[154,.83,.98],[191,.87,.96],[218,.77,.9],[263,.86,.99],[303,.82,.96],[334,.86,.97]])
+const broadleaf = skyline([[0,.88,1],[40,.84,.96],[68,.87,.92],[88,.83,1],[132,.85,.97],[165,.82,.95],[180,.88,1],[220,.81,.91],[247,.85,.95],[268,.82,1],[312,.84,.98],[342,.87,.94]])
+const poplar = skyline([[0,.91,.98],[58,.86,.93],[106,.88,1],[164,.90,.97],[231,.86,.96],[283,.88,.94]])
+const cherry = skyline([[0,.84,.94],[25,.82,1],[53,.84,.90],[70,.62,.85],[88,.79,.98],[125,.81,.90],[147,.75,.98],[176,.87,1],[202,.83,.91],[224,.66,.83],[241,.76,.97],[279,.81,.93],[304,.74,.88],[320,.79,.97]])
+const oakSpreading = skyline([[0,.91,.97],[34,.83,.87],[68,.80,.96],[102,.81,.93],[134,.89,1],[160,.96,.99],[192,.89,.91],[223,.78,.83],[258,.79,.96],[287,.83,.95],[318,.91,1],[348,.94,.96]])
+const willow = skyline([[0,.83,.98],[32,.81,.92],[55,.78,.96],[95,.8,.92],[126,.76,.98],[164,.83,1],[190,.8,.95],[213,.78,.96],[243,.85,.94],[269,.76,1],[303,.8,.93],[329,.75,.95]])
+const generic = skyline([[0,.92,.99],[73,.88,.96],[139,.91,1],[200,.86,.95],[267,.90,.98],[322,.89,.96]])
+
+// Open quadratic strokes in disc coordinates: start, control, end, then control/end
+// pairs for a continuing line. Share short chords between nearby atlas texels.
+function ink(...paths: number[][]) {
+  type Chord = { x: number; y: number; dx: number; dy: number; inv: number }
+  const bins = Array.from({ length: 64 }, (): Chord[] => [])
+  const bin = (v: number) => Math.min(7, Math.max(0, Math.floor((v + 1) * 4)))
+  const range = 0.14 // wider than the stroke channel's encoded distance
+  for (const path of paths) {
+    for (let i = 0; i + 5 < path.length; i += 4) {
+      const [ax, ay, bx, by, cx, cy] = path.slice(i, i + 6)
+      let x = ax, y = ay
+      for (let j = 1; j <= 5; j++) {
+        const t = j / 5, s = 1 - t
+        const nx = s*s*ax + 2*s*t*bx + t*t*cx, ny = s*s*ay + 2*s*t*by + t*t*cy
+        const dx = nx - x, dy = ny - y, chord = { x, y, dx, dy, inv: 1 / (dx*dx + dy*dy) }
+        for (let row = bin(Math.min(y, ny) - range); row <= bin(Math.max(y, ny) + range); row++) {
+          for (let col = bin(Math.min(x, nx) - range); col <= bin(Math.max(x, nx) + range); col++) bins[row*8 + col].push(chord)
+        }
+        x = nx; y = ny
+      }
+    }
+  }
+  return (x: number, y: number) => {
+    let best = range * range
+    for (const c of bins[bin(y)*8 + bin(x)]) {
+      const px = x - c.x, py = y - c.y, t = Math.max(0, Math.min(1, (px*c.dx + py*c.dy)*c.inv))
+      best = Math.min(best, (px - t*c.dx)**2 + (py - t*c.dy)**2)
+    }
+    return best < range * range ? Math.sqrt(best) : 1
+  }
+}
+
+// Each quadratic starts at the trunk. The controls bend the bough as it
+// grows outward. Secondary forks start on a parent limb.
+const oakInk = ink([0,0, -.16,.26,-.53,.51], [0,0, .19,.16,.58,.26],
+  [0,0, .11,-.23,.35,-.54], [0,0, -.26,-.05,-.59,-.30], [-.20,.27,-.33,.31,-.47,.30])
+const poplarInk = ink([0,0,-.11,.17,-.18,.49], [0,0,.16,.08,.36,.34],
+  [0,0,.11,-.20,.13,-.49], [0,0,-.18,-.08,-.34,-.31])
+const spreadingInk = ink([0,0,-.39,.04,-.77,.28], [-.36,.09,-.53,.02,-.66,-.09],
+  [0,0,.38,-.02,.77,-.31], [.36,-.08,.57,-.06,.68,.04],
+  [-.36,.09,-.42,.28,-.47,.47], [0,0,-.05,-.28,-.27,-.53])
+const willowInk = ink([0,0,-.43,.04,-.72,.32], [0,0,-.28,.25,-.28,.67],
+  [0,0,.05,.34,.34,.61], [0,0,.37,.20,.70,.11],
+  [0,0,.38,-.07,.58,-.42], [0,0,.15,-.32,.01,-.68], [0,0,-.25,-.24,-.64,-.30])
+const multiInk = ink([0,0,-.04,.28,-.15,.68], [0,0,.33,-.20,.69,-.18],
+  [0,0,-.23,-.25,-.64,-.34], [-.05,.35,.06,.48,.15,.55])
+const genericInk = ink([0,0,-.13,.22,-.42,.39], [0,0,.19,.09,.50,.08], [0,0,-.13,-.17,-.16,-.42])
+
+// A signed distance inside each five-petalled blossom gives the desktop its
+// coloured petals and lets the phone draw the same flowers in one ink.
+const blossomPetals = [
+  [-.49,.22,.15], [-.13,.53,.11], [.35,.40,.15], [.53,-.09,.10],
+  [.07,-.31,.16], [-.44,-.44,.11],
+].flatMap(([x, y, radius], index) => Array.from({ length: 5 }, (_, petal) => {
+  const angle = TAU * petal / 5 + index * .8
+  return [x + radius * .60 * Math.cos(angle), y + radius * .60 * Math.sin(angle), radius * .44]
+}))
+
+const frondLengths = [.99,.94,1,.90,.98,.94,.98]
+const firLengths = [1,.88,.96,.99,.89,.98,.92,1,.91,.96]
+
 export function crownShape(form: TreeForm, x: number, y: number): { edge: number; detail: number } {
-  const r = Math.hypot(x, y), a = Math.atan2(y, x)
-  const cos = Math.cos, abs = Math.abs
+  const r = Math.sqrt(x*x + y*y), a = Math.atan2(y, x)
   switch (form) {
     case 'conifer': {
-      // A straight-edged star of needle tips, a smaller whorl inside it a half step turned, the leader at its heart.
-      const tip = 1 - tri(a * 11 / TAU), inner = 1 - tri(a * 11 / TAU + 0.5)
-      return { edge: r - (0.8 + 0.2 * tip), detail: Math.min(abs(r - 0.52 * (0.78 + 0.22 * inner)), abs(r - 0.1)) }
+      // Long tapering sprays with narrow tips and daylight between boughs.
+      const u = (a / TAU + 1) * 10 + .08 * Math.sin(3*a)
+      const i = Math.round(u), flank = abs(u - i) * 2
+      const length = firLengths[i % 10]
+      const edge = r - (.49 + (length - .49) * (1 - flank) ** 1.45)
+      const lateral = r * Math.sin((u - i) * TAU / 10)
+      const rib = Math.hypot(lateral, Math.max(0, r - length + .11))
+      return { edge, detail: rib }
     }
     case 'palm': {
-      // Seven pointed fronds from a hub, each with its midrib.
-      const t = fract(a * 7 / TAU)
-      return { edge: r - (0.24 + 0.76 * tri(t) ** 1.2), detail: r > 0.1 ? r * Math.sin(abs(t - 0.5) * TAU / 7) : abs(r - 0.1) }
+      // Bow each midrib as it leaves the bud; a shallow cut or two breaks
+      // the leaf's margin, without turning the compound frond into a comb.
+      const u = (a / TAU + 1) * 7 - .46 - .25*r + .065*Math.sin(a*3)
+      const i = Math.round(u), t = abs(u - i)*2, length = frondLengths[i % 7]
+      const teeth = .045 * (1 - Math.cos(r * 29)) * Math.sin(Math.PI * Math.min(1, r))**2
+      const edge = r - (.21 + (length - .21) * (1 - t) ** 1.12 - teeth * t)
+      const rib = r * Math.sin((u - i) * TAU / 7)
+      return { edge, detail: Math.hypot(rib, Math.max(.065 - r, r - length + .09, 0)) }
     }
-    case 'columnar':
-      // A tight round top, the column's crown a ring within it.
-      return { edge: r - (0.94 + 0.06 * abs(cos(4.5 * a))), detail: abs(r - 0.46) }
+    case 'columnar': return { edge: r - poplar(a), detail: poplarInk(x,y) }
     case 'ornamental': {
-      // Flowering branches: an airy crown of round bunches about a centre, five branches out from
-      // the trunk and blossoms along them.
-      let edge = r - 0.5, detail = Infinity
-      for (let i = 0; i < 7; i++) {
-        const b = i * TAU / 7
-        edge = Math.min(edge, Math.hypot(x - 0.64 * cos(b), y - 0.64 * Math.sin(b)) - 0.36)
+      let nearest = 1
+      for (const [px, py, radius] of blossomPetals) {
+        const dx = x - px, dy = y - py
+        if (abs(dx) < .23 && abs(dy) < .23) nearest = Math.min(nearest, Math.sqrt(dx*dx + dy*dy) - radius)
       }
-      for (let i = 0; i < 5; i++) {
-        const b = i * TAU / 5 + 0.3, ux = cos(b), uy = Math.sin(b)
-        // The branch: a segment from the trunk to 0.72 out.
-        const t = Math.max(0, Math.min(0.72, x * ux + y * uy))
-        detail = Math.min(detail, Math.hypot(x - t * ux, y - t * uy))
-        // Blossoms: small rings at the branch's tip, along it, and off it either side.
-        for (const [along, off] of [[0.74, 0], [0.45, 0.13], [0.5, -0.15], [0.25, 0.1]]) {
-          const bx = along * ux - off * uy, by = along * uy + off * ux
-          detail = Math.min(detail, abs(Math.hypot(x - bx, y - by) - 0.055))
-        }
-      }
-      return { edge, detail }
+      return { edge: r - cherry(a), detail: nearest }
     }
-    case 'spreading':
-      // Broad uneven lobes, inner masses of foliage in arcs.
-      return {
-        edge: r - (0.84 + 0.1 * abs(cos(1.5 * a + 0.4)) + 0.06 * abs(cos(4.5 * a))),
-        detail: cos(2 * a + 0.8) > 0.2 ? abs(r - 0.6 * (0.86 + 0.14 * abs(cos(3.5 * a)))) : 1,
-      }
-    case 'weeping': {
-      // A willow from above: a shaggy fringe, tiers of drooping branches hanging in scallops inside it.
-      return {
-        edge: r - (0.88 + 0.07 * abs(cos(11.5 * a)) + 0.05 * abs(cos(17.5 * a + 1))),
-        detail: Math.min(abs(r - 0.66 * (0.93 + 0.07 * abs(cos(9.5 * a + 0.4)))), abs(r - 0.38 * (0.9 + 0.1 * abs(cos(5.5 * a + 1.1))))),
-      }
+    case 'spreading': {
+      // The long scaffold extends northwest and southeast across the trunk.
+      const radius = oakSpreading(a) * (1 - .16 * Math.sin(a + Math.PI / 4) ** 2)
+      return { edge: r - radius, detail: spreadingInk(x,y) }
     }
+    case 'weeping': return { edge: r - willow(a + .5*r) + .035 * (1 - Math.cos(19*a + 4*Math.sin(3*a) - 4*r)), detail: willowInk(x,y) }
     case 'multi_trunk': {
-      // Three leafy crowns overlapping, each one's lobed outline showing through, a stem under each.
-      let edge = Infinity, detail = Infinity
-      for (let i = 0; i < 3; i++) {
-        const b = i * TAU / 3 + 0.5, cx = 0.44 * cos(b), cy = 0.44 * Math.sin(b)
-        const rho = Math.hypot(x - cx, y - cy), phi = Math.atan2(y - cy, x - cx)
-        const d = rho - 0.56 * (0.88 + 0.12 * abs(cos(3.5 * phi + i)))
-        edge = Math.min(edge, d)
-        detail = Math.min(detail, abs(d), abs(rho - 0.05))
+      // Three offset heads at different heights. The front head hides the
+      // backs' contact line; there are no full circles drawn through foliage.
+      const head = (cx: number, cy: number, radius: number, turn: number) => {
+        const dx = x - cx, dy = y - cy
+        return Math.sqrt(dx*dx + dy*dy) - radius * headProfile(Math.atan2(dy,dx) + turn)
       }
-      return { edge, detail }
+      const left = head(-.40,-.19,.555,.8), right = head(.39,-.17,.57,-.9), front = head(-.03,.36,.638,.764)
+      const back = Math.min(left,right)
+      return { edge: Math.min(front,back), detail: multiInk(x,y) }
     }
-    default:
-      // Broadleaf and the rest: a billowing cloud of seven lobes, broken arcs of inner clumps.
-      return {
-        edge: r - (0.9 + 0.1 * abs(cos(3.5 * a))),
-        detail: cos(3 * a + 0.5) > 0 ? abs(r - 0.55 * (0.88 + 0.12 * abs(cos(2.5 * a + 0.7)))) : 1,
-      }
+    case 'broadleaf': return { edge: r - broadleaf(a + Math.PI / 9), detail: oakInk(x,y) }
+    default: return { edge: r - generic(a), detail: genericInk(x,y) }
   }
 }
 

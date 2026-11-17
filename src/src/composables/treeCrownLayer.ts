@@ -11,8 +11,8 @@ import { CROWN_STRIDE as STRIDE, emptyCrownBatch, type CrownBatch, type CrownBat
 import { FOOTPRINT_PAD, insidePolygon, viewFootprint, type Point } from '../lib/viewFootprint'
 import { lngLatFrom3857, lngLatTo3857, MERCATOR_WORLD_M } from '../lib/treeDots'
 import { initialSpriteBudget, isSoftwareRenderer, nextSpriteBudget, settleStepDown, stepDownUnseen, type BatchSample, type SpriteBudget } from '../lib/spriteBudget'
-import { CROWN_UNPACK_GLSL } from '../lib/crownShapes'
-import { crownShapeAtlas, loadCrownShapeAtlas, crownCellGLSL, CROWN_COARSE_RANGE, CROWN_FINE_RANGE, CROWN_TEXELS_PER_UNIT } from './treeCrownShapeAtlas'
+import { crownFormIndex, CROWN_UNPACK_GLSL } from '../lib/crownShapes'
+import { crownShapeAtlas, loadCrownShapeAtlas, crownCellGLSL, CROWN_COARSE_RANGE, CROWN_FINE_RANGE, CROWN_TEXELS_PER_UNIT, FOLIAGE_SHADE } from './treeCrownShapeAtlas'
 import { NOTABLE_GLOW_ALPHA, NOTABLE_GLOW_RGB, NOTABLE_HALO_SCALE, NOTABLE_OUTLINE_RGB, NOTABLE_OUTLINE_WIDTH } from '../lib/notableGlow'
 
 type GL = WebGLRenderingContext | WebGL2RenderingContext
@@ -115,7 +115,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
   private textures: WebGLTexture[] = []
   /** Whether the crowns' texture holds the atlas yet, and the atlas waiting for the next render to upload it. */
   private crownsReady = false
-  private pendingCrowns?: HTMLCanvasElement
+  private pendingCrowns?: ImageData
   /** The installed batch's drawn trees, in draw order; `data` holds their vertices. */
   private drawn: CrownBatch = emptyCrownBatch()
   private drawnTrees?: DrawnTree[]
@@ -478,6 +478,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
       ${webgl2 ? 'out' : 'varying'} float v_reach;
       // Where this corner reads the overhead crown of the tree's form, at the tree's turn (lib/crownShapes).
       ${webgl2 ? 'out' : 'varying'} vec2 v_crown;
+      ${webgl2 ? 'out' : 'varying'} float v_flowering;
       uniform float u_reach;
       ${CROWN_UNPACK_GLSL}
       ${crownCellGLSL()}
@@ -493,6 +494,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
         v_corner = a_corner;
         vec3 crown = unpackCrown(a_color.a);
         v_color = vec4(a_color.rgb, crown.x);
+        v_flowering = crown.y == ${crownFormIndex('ornamental').toFixed(1)} ? 1.0 : 0.0;
         v_crown = crownCellUV(crown.y, turnCrown(a_corner, crown.z));
         ${this.simplified ? `gl_Position = v_fade > 0.0
           ? u_matrix * vec4(a_center + a_corner * a_radius, 0.0, 1.0)
@@ -528,6 +530,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
       ${webgl2 ? 'in' : 'varying'} float v_fade;
       ${webgl2 ? 'in' : 'varying'} float v_reach;
       ${webgl2 ? 'in' : 'varying'} vec2 v_crown;
+      ${webgl2 ? 'in' : 'varying'} float v_flowering;
       uniform float u_opacity;
       // The overhead crowns, baked by form (composables/treeCrownShapeAtlas): R the outline's
       // distance, G the interior strokes', B the outline's again on a coarser scale.
@@ -537,12 +540,16 @@ export class TreeCrownLayer implements CustomLayerInterface {
       // In screen pixels: x the signed distance to the outline (negative inside), y to the nearest
       // stroke, z the crown's radius; w the outline's coarse distance in disc units. aa is disc
       // units per pixel, fwidth of length(v_corner).
-      vec4 crownPixels(float aa) {
+      // shade: how much the baked foliage masses darken the canopy here (the atlas's alpha).
+      vec4 crownPixels(float aa, out float shade) {
         float r = length(v_corner);
         vec4 disc = vec4((r - 1.0) / aa, 1e3, 1.0 / aa, r - 1.0);
+        shade = 0.0;
         ${this.shapes ? `if (u_crowns_ready < 0.5) return disc;
         // The mip level from the pixel's size, so the read needs no derivative of its own.
-        vec3 field = ${webgl2 ? `textureLod(u_crowns, v_crown, log2(max(aa * ${CROWN_TEXELS_PER_UNIT.toFixed(1)}, 1.0)))` : 'texture2D(u_crowns, v_crown)'}.rgb;
+        vec4 texel = ${webgl2 ? `textureLod(u_crowns, v_crown, log2(max(aa * ${CROWN_TEXELS_PER_UNIT.toFixed(1)}, 1.0)))` : 'texture2D(u_crowns, v_crown)'};
+        vec3 field = texel.rgb;
+        shade = texel.a * ${FOLIAGE_SHADE.toFixed(3)};
         vec2 fine = (0.5 - field.rg) * ${(2 * CROWN_FINE_RANGE).toFixed(4)};
         float coarse = (0.5 - field.b) * ${(2 * CROWN_COARSE_RANGE).toFixed(4)};
         // Past the fine channel's range (a small crown's whole inside is within a few pixels of
@@ -560,7 +567,8 @@ export class TreeCrownLayer implements CustomLayerInterface {
       void main() {
         ${this.simplified ? `
         // The crown's outline by its form (lib/crownShapes), its strokes fainter inside it.
-        vec4 crown = crownPixels(${derivatives ? 'max(fwidth(length(v_corner)), 0.002)' : '0.025'});
+        float shade;
+        vec4 crown = crownPixels(${derivatives ? 'max(fwidth(length(v_corner)), 0.002)' : '0.025'}, shade);
         float edge = 1.0 - smoothstep(-0.5, 0.5, crown.x);
         float width = max(1.8, 0.025 * crown.z);
         float ring = smoothstep(-width - 1.0, -width, crown.x);
@@ -568,7 +576,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
         float stroke = (1.0 - smoothstep(0.4, 1.1, crown.y)) * (1.0 - ring) * smoothstep(14.0, 28.0, crown.z);
         // A broken outline identifies a model estimate; solid means recorded.
         float dash = v_color.a > 0.5 ? 1.0 : step(0.28, fract((atan(v_corner.y, v_corner.x) + 3.141593) * 12.0 / 6.283186));
-        float alpha = edge * (0.015 + ring * dash * 0.65 + stroke * 0.3) * v_fade * u_opacity;
+        float alpha = edge * (0.05 + ring * dash * 0.65 + stroke * 0.3) * v_fade * u_opacity;
         ${webgl2 ? 'fragColor' : 'gl_FragColor'} = vec4(v_color.rgb * alpha, alpha);
         ` : `
         if (u_halo > 0.5) {
@@ -589,11 +597,12 @@ export class TreeCrownLayer implements CustomLayerInterface {
         float crownAA = ${derivatives ? 'max(fwidth(r), 0.002)' : '0.03'};
         vec4 side = vec4(0.0);
         if (v_top < 0.65) {
-          vec3 distance = ${webgl2 ? 'textureLod(u_distance, v_uv, 0.0)' : 'texture2D(u_distance, v_uv)'}.rgb;
+          vec4 material = ${webgl2 ? 'textureLod(u_distance, v_uv, 0.0)' : 'texture2D(u_distance, v_uv)'};
+          vec3 distance = material.rgb;
           vec3 aa = vec3(sideAA);
           vec3 coverage = smoothstep(vec3(0.5) - aa, vec3(0.5) + aa, distance);
           vec4 trunk = vec4(vec3(93.0, 64.0, 55.0) / 255.0 * coverage.r, coverage.r);
-          vec4 foliage = vec4(v_color.rgb * coverage.g, coverage.g);
+          vec4 foliage = vec4(v_color.rgb * material.a * coverage.g, coverage.g);
           vec4 blooms = vec4(vec3(248.0, 187.0, 208.0) / 255.0 * coverage.b, coverage.b);
           vec4 tree = foliage + trunk * (1.0 - foliage.a);
           side = blooms + tree * (1.0 - blooms.a);
@@ -607,13 +616,22 @@ export class TreeCrownLayer implements CustomLayerInterface {
         }
         vec4 canopy = vec4(0.0);
         if (v_top > 0.35) {
-          // Overhead: the crown's shape by its form (lib/crownShapes), lighter at its middle like a
-          // lit canopy, its strokes and rim a shade darker.
-          vec4 crown = crownPixels(crownAA);
+          // Matte plan foliage. Broad, shallow shading follows the contour and
+          // the overlaps marked by the artist, without a bright radial centre.
+          float shade;
+          vec4 crown = crownPixels(crownAA, shade);
           float fill = 1.0 - smoothstep(-0.5, 0.5, crown.x);
-          float stroke = (1.0 - smoothstep(0.4, 1.1, crown.y)) * smoothstep(14.0, 28.0, crown.z);
-          float rim = smoothstep(-2.5, -0.5, crown.x);
-          vec3 lit = min(v_color.rgb * mix(1.1, 0.8, r), vec3(1.0)) * (1.0 - 0.2 * stroke) * (1.0 - 0.18 * rim);
+          float visible = smoothstep(14.0, 28.0, crown.z);
+          float fold = 1.0 - smoothstep(0.0, max(1.6, 0.11 * crown.z), crown.y);
+          float stroke = 1.0 - smoothstep(0.35, 1.1, crown.y);
+          float rim = smoothstep(-0.12, 0.0, crown.w);
+          // Overlapping foliage masses break up large areas of one colour (baked in the atlas's
+          // alpha, treeCrownShapeAtlas foliageShade); faded out at marker sizes, where the
+          // contour alone carries the form.
+          float value = 1.0 - 0.07 * rim - visible * (0.09 * fold + 0.15 * stroke + shade);
+          vec3 lit = v_color.rgb * value;
+          float petals = v_flowering * visible * (1.0 - smoothstep(-0.5, 0.5, crown.y));
+          lit = mix(lit, vec3(248.0, 187.0, 208.0) / 255.0, petals * 0.86);
           canopy = vec4(lit * fill, fill);
           if (v_color.a > 1.5) {
             // A notable tree: a gold rim inside its outline, a sixth of the crown deep.
@@ -667,7 +685,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
   }
 
   /** A clamped, linear texture of `canvas` (its distance channels as data), mipmapped if it is the crowns'; a blank texel without one. */
-  private createTexture(gl: GL, canvas?: HTMLCanvasElement, texture = gl.createTexture()!): WebGLTexture {
+  private createTexture(gl: GL, canvas?: HTMLCanvasElement | ImageData, texture = gl.createTexture()!): WebGLTexture {
     gl.bindTexture(gl.TEXTURE_2D, texture)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)

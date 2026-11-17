@@ -18,7 +18,8 @@ describe('crown shapes', () => {
       const below = crownShape(form, -0.9, -1e-6).edge, above = crownShape(form, -0.9, 1e-6).edge
       expect(Math.abs(below - above), form).toBeLessThan(1e-3)
     }
-  })
+    // 3600 rays a form, walked out in fine steps: seconds, more on a loaded CI runner.
+  }, 20_000)
 
   it('give each form a different crown', () => {
     // The share of the disc each covers, sampled on a grid: no two forms alike.
