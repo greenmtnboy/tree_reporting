@@ -1,72 +1,96 @@
 <template>
-  <svg class="leaf-spinner" :height="size * 1.5" viewBox="0 0 36 36" aria-hidden="true">
-    <g transform="translate(18 18)">
-      <g class="leaf-drift">
-        <g class="leaf-blade">
-          <path d="M0 7.3C-4.6 6.7-7.1 2.7-5.2-2.6C-4-5.9-.4-7.7 3.1-10.2C2.8-6.6 6.4-2.6 5.2 1.9C4.5 4.8 2.5 6.7 0 7.3Z" fill="currentColor" />
-          <path d="M0 7.3C-1.6 2.5.3-4.2 3.1-10.2C2.8-6.6 6.4-2.6 5.2 1.9C4.5 4.8 2.5 6.7 0 7.3Z" class="leaf-fold" />
-          <path d="M-2.2 10.2Q-.3 9 0 7.1" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-          <path d="M0 7.1C-1.3 3.4-.1-2.7 2.1-7.4M-.5 3.5Q1.6 2.6 3.2.7M-.2.7Q-2.3-.5-3.3-2.4" class="leaf-veins" />
-        </g>
-      </g>
-    </g>
+  <svg class="leaf-spinner" :height="size * 1.5" viewBox="-18 -18 36 36" aria-hidden="true">
+    <path
+      v-for="(frames, part) in contours"
+      :key="part"
+      :class="part"
+      :d="frames[0]"
+    >
+      <animate
+        v-if="motionAllowed"
+        attributeName="d"
+        :values="frames.join(';')"
+        keyTimes="0;0.22;0.39;0.59;0.78;1"
+        dur="3.6s"
+        repeatCount="indefinite"
+        calcMode="spline"
+        keySplines=".4 0 .78 .7;.26 .36 .65 .75;.36 .25 .6 1;.4 0 .6 .76;.35 .24 .58 1"
+      />
+    </path>
   </svg>
 </template>
 
 <script setup lang="ts">
+import { onMounted, onUnmounted, ref } from 'vue'
+
 withDefaults(defineProps<{ size?: number }>(), { size: 20 })
+
+// Both halves follow the same curved midrib, from the tip to the stem.
+// Only the contour rolls over. The leaf stays within a few pixels of its center.
+const poses = [
+  { // Broadside, with the stem tipped up.
+    midrib: 'M-12 0 C-5 -2 2 1 11 -3',
+    light: 'C5 -2 1 -12 -12 0Z',
+    shade: 'C5 3 -2 9 -12 0Z',
+    stem: 'M11 -3 Q12.5 -4 13 -6',
+  },
+  { // Almost edge-on. Keep a sliver of the underside visible.
+    midrib: 'M-12 0 C-5 0 3 3 12 1',
+    light: 'C5 2 -3 -2 -12 0Z',
+    shade: 'C5 5 -3 4 -12 0Z',
+    stem: 'M12 1 Q13.5 1 14 0',
+  },
+  { // The underside opens first and the tip lags behind.
+    midrib: 'M-10 -3 C-6 2 1 4 10 4',
+    light: 'C4 3 -1 -3 -10 -3Z',
+    shade: 'C4 4 -6 8 -10 -3Z',
+    stem: 'M10 4 Q11.5 4 13 5.5',
+  },
+  { // The tip hooks under while the stem is still aloft.
+    midrib: 'M-6 8 C-10 1 -4 -6 8 -4',
+    light: 'C1 -9 -13 -4 -6 8Z',
+    shade: 'C2 -3 -5 0 -6 8Z',
+    stem: 'M8 -4 Q10 -4 11.5 -2',
+  },
+  { // The blade unfurls into a shallow cup.
+    midrib: 'M-11 2 C-6 -2 2 5 10 -2',
+    light: 'C4 1 -3 -7 -11 2Z',
+    shade: 'C5 8 -3 6 -11 2Z',
+    stem: 'M10 -2 Q12 -3.5 12.5 -5',
+  },
+]
+
+const loop = [...poses, poses[0]]
+const contours = {
+  light: loop.map(pose => pose.midrib + pose.light),
+  shade: loop.map(pose => pose.midrib + pose.shade),
+  stem: loop.map(pose => pose.stem),
+}
+
+const motionAllowed = ref(false)
+let preference: MediaQueryList | undefined
+function syncMotion() {
+  motionAllowed.value = preference?.matches ?? false
+}
+
+onMounted(() => {
+  preference = window.matchMedia?.('(prefers-reduced-motion: no-preference)')
+  syncMotion()
+  preference?.addEventListener('change', syncMotion)
+})
+onUnmounted(() => preference?.removeEventListener('change', syncMotion))
 </script>
 
 <style scoped>
 .leaf-spinner {
   flex: none;
   width: auto;
-  overflow: visible;
-  color: var(--color-leaf);
-  --flight-timing: 3.2s linear infinite;
+  stroke: color-mix(in srgb, var(--color-autumn) 70%, #372a13);
+  stroke-width: .75;
+  stroke-linejoin: round;
 }
 
-.leaf-fold { fill: color-mix(in srgb, currentColor 70%, #e8de99); }
-
-.leaf-veins {
-  fill: none;
-  stroke: var(--surface-1);
-  stroke-width: 0.75;
-  stroke-linecap: round;
-  opacity: 0.65;
-}
-
-.leaf-blade { transform: rotate(38deg); }
-
-@media (prefers-reduced-motion: no-preference) {
-  /* A narrow S on the way down, then an updraft. The end tangents meet so
-     the same leaf stays in flight across the loop boundary. */
-  .leaf-drift {
-    offset-path: path('M 1 -9 C 5 -8 4 -4 1 -1 S -4 5 -2 8 C 1 12 4 9 3 5 C 2 1 -4 -4 -3 -8 C -2.5 -10 -1 -9.5 1 -9 Z');
-    offset-anchor: 0px 0px;
-    offset-rotate: 0deg;
-    animation: drift var(--flight-timing);
-  }
-
-  /* Spin in a tilted plane. The changing tilt lets the tip sweep an ellipse. */
-  .leaf-blade {
-    animation: twirl var(--flight-timing);
-  }
-
-  @keyframes drift {
-    from { offset-distance: 0%; }
-    65% {
-      offset-distance: 52%;
-      animation-timing-function: cubic-bezier(.32, .19, .68, .81);
-    }
-    to { offset-distance: 100%; }
-  }
-
-  @keyframes twirl {
-    0% { transform: rotate(-16deg) scaleY(.78) rotate(12deg); }
-    32% { transform: rotate(12deg) scaleY(.48) rotate(122deg); }
-    68% { transform: rotate(-20deg) scaleY(.84) rotate(263deg); }
-    100% { transform: rotate(-16deg) scaleY(.78) rotate(372deg); }
-  }
-}
+.light { fill: color-mix(in srgb, var(--color-autumn) 25%, #f6b655); }
+.shade { fill: var(--color-autumn); }
+.stem { fill: none; stroke-width: 1; stroke-linecap: round; }
 </style>
