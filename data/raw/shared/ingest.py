@@ -1629,8 +1629,8 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "DECGN": ("COLOGNE_OPENDATA",),
     "USBAL": ("BALTIMORE_OPENDATA",),
-    "USMSP": ("MINNEAPOLIS_OPENDATA",),
     "ESBCN": ("BARCELONA_OPENDATA",),
     "ESMAD": ("MADRID_OPENDATA",),
     "FRLYO": ("LYON_OPENDATA",),
@@ -1737,8 +1737,8 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "DECGN": "OSM_DECGN",
     "USBAL": "OSM_USBAL",
-    "USMSP": "OSM_USMSP",
     "ESBCN": "OSM_ESBCN",
     "ESMAD": "OSM_ESMAD",
     "FRLYO": "OSM_FRLYO",
@@ -2424,8 +2424,8 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "DECGN": (50.83, 51.09, 6.77, 7.17),
     "USBAL": (39.19, 39.38, -76.72, -76.52),
-    "USMSP": (44.88, 45.06, -93.33, -93.19),
     "ESBCN": (41.31, 41.47, 2.05, 2.23),
     "ESMAD": (40.31, 40.65, -3.89, -3.52),
     "FRLYO": (45.55, 45.95, 4.66, 5.07),
@@ -2558,9 +2558,9 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
     # NOT YET CALIBRATED: default; measure after the first build.
-    "USBAL": 10,
+    "DECGN": 10,
     # NOT YET CALIBRATED: default; measure after the first build.
-    "USMSP": 10,
+    "USBAL": 10,
     # NOT YET CALIBRATED: default; measure after the first build.
     "ESBCN": 10,
     # NOT YET CALIBRATED: default; measure after the first build.
@@ -2995,8 +2995,8 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'DECGN': ((50.83, 51.09, 6.77, 7.17),),
     'USBAL': ((39.19, 39.38, -76.72, -76.52),),
-    'USMSP': ((44.88, 45.06, -93.33, -93.19),),
     'ESBCN': ((41.31, 41.47, 2.05, 2.23),),
     'ESMAD': ((40.31, 40.65, -3.89, -3.52),),
     'FRLYO': ((45.55, 45.95, 4.66, 5.07),),

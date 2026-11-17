@@ -73,6 +73,6 @@
   "FRLYO": { "name": "Lyon", "center": [4.8357, 45.764] },
   "ESMAD": { "name": "Madrid", "center": [-3.7038, 40.4168] },
   "ESBCN": { "name": "Barcelona", "center": [2.1686, 41.3874] },
-  "USMSP": { "name": "Minneapolis", "center": [-93.265, 44.9778] },
-  "USBAL": { "name": "Baltimore", "center": [-76.6122, 39.2904] }
+  "USBAL": { "name": "Baltimore", "center": [-76.6122, 39.2904] },
+  "DECGN": { "name": "Cologne", "center": [6.9603, 50.9375] }
 }

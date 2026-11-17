@@ -2,55 +2,55 @@ import ..tree_common;
 import ..community_tree_info;
 import ..tree_dedup;
 
-auto usmsp_published_data_updated_through <- greatest(usmsp_data_updated_through, usmsp_community_data_updated_through, usmsp_osm_data_updated_through);
+auto decgn_published_data_updated_through <- greatest(decgn_data_updated_through, decgn_community_data_updated_through, decgn_osm_data_updated_through);
 
-key usmsp_source enum<string>['MINNEAPOLIS_OPENDATA', 'COMMUNITY_USMSP', 'OSM_USMSP']; # originating dataset for the row
+key decgn_source enum<string>['COLOGNE_OPENDATA', 'COMMUNITY_DECGN', 'OSM_DECGN']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
-auto usmsp_source_label <- concat(usmsp_source, '');
-merge usmsp_source_label into source_label;
+auto decgn_source_label <- concat(decgn_source, '');
+merge decgn_source_label into source_label;
 
-root datasource minneapolis_update_time (
-    data_updated_through: usmsp_data_updated_through
+root datasource cologne_update_time (
+    data_updated_through: decgn_data_updated_through
 )
-file `./minneapolis_update_time.py`;
+file `./cologne_update_time.py`;
 
-# Only this city's column, so an approval elsewhere does not mark USMSP's
+# Only this city's column, so an approval elsewhere does not mark DECGN's
 # Parquet stale. Trilogy probes this as MAX over the one column.
-root datasource usmsp_community_update_time (
-    usmsp_community_data_updated_through: usmsp_community_data_updated_through
+root datasource decgn_community_update_time (
+    decgn_community_data_updated_through: decgn_community_data_updated_through
 )
 file `../community_update_time.py`;
 
 # GCS publication time of the staged OSM parquet; it only moves when an
 # extraction is re-run and uploaded. Not a local mtime -- git does not preserve
 # it, so a committed staging file makes every fresh clone look like new data.
-root datasource usmsp_osm_update_time (
-    data_updated_through: usmsp_osm_data_updated_through
+root datasource decgn_osm_update_time (
+    data_updated_through: decgn_osm_data_updated_through
 )
-file `./minneapolis_osm_probe.py`;
+file `./cologne_osm_probe.py`;
 
 # Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
 # the shared raw_* columns; a source that names a column differently re-binds
 # it here (`dbh: ?raw_dbh`).
-root partial datasource minneapolis_raw_tree_info extends tree_partition (
-    data_source: usmsp_source,
+root partial datasource cologne_raw_tree_info extends tree_partition (
+    data_source: decgn_source,
 )
-complete where city = 'USMSP' and usmsp_source = 'MINNEAPOLIS_OPENDATA'
-file `./minneapolis_tree_info.py`;
+complete where city = 'DECGN' and decgn_source = 'COLOGNE_OPENDATA'
+file `./cologne_tree_info.py`;
 
 
 # Approved community submissions for this city. The shared ingest script emits
-# every city's rows; the `complete where` clause narrows it to USMSP and makes
+# every city's rows; the `complete where` clause narrows it to DECGN and makes
 # it a disjoint partition, and the `where` clause is what actually filters --
 # `complete where` asserts, it does not promise a predicate.
-root partial datasource usmsp_community_tree_info extends tree_partition (
-    data_source: usmsp_source,
+root partial datasource decgn_community_tree_info extends tree_partition (
+    data_source: decgn_source,
 )
-complete where city = 'USMSP' and usmsp_source = 'COMMUNITY_USMSP'
+complete where city = 'DECGN' and decgn_source = 'COMMUNITY_DECGN'
 file `../community_tree_info.py`
-where city = 'USMSP';
+where city = 'DECGN';
 
 
 # OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
@@ -58,12 +58,12 @@ where city = 'USMSP';
 # by construction; the overlap is resolved by ../tree_dedup.preql. The `where`
 # is the city's CITY_TERRITORY (tools/sync_osm_territory.py keeps it so): a
 # staged extract keeps the territory it was cut with until its next firing.
-root partial datasource usmsp_osm_tree_info extends tree_partition (
-    data_source: usmsp_source,
+root partial datasource decgn_osm_tree_info extends tree_partition (
+    data_source: decgn_source,
 )
-complete where city = 'USMSP' and usmsp_source = 'OSM_USMSP'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usmsp_osm_staging.parquet`
-where (raw_latitude >= 44.88 and raw_latitude < 45.06 and raw_longitude >= -93.33 and raw_longitude < -93.19);
+complete where city = 'DECGN' and decgn_source = 'OSM_DECGN'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/decgn_osm_staging.parquet`
+where (raw_latitude >= 50.83 and raw_latitude < 51.09 and raw_longitude >= 6.77 and raw_longitude < 7.17);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
@@ -84,12 +84,12 @@ merge merged_longitude into longitude;
 # lost a quarter of the city.  The two `@source_kept` lines are the same guard
 # per bulk source; add one for every municipal or OSM label in the enum
 # (`test_every_city_refuses_a_collapsed_build`).
-partial datasource minneapolis_tree_info extends published_tree_info (
-    data_source: usmsp_source,
-    usmsp_published_data_updated_through,
+partial datasource cologne_tree_info extends published_tree_info (
+    data_source: decgn_source,
+    decgn_published_data_updated_through,
 )
-complete where city = 'USMSP'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usmsp_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usmsp_tree_info_v{data_version}.parquet`
-freshness by usmsp_published_data_updated_through
-assert @source_kept(tree_id, usmsp_source, 'MINNEAPOLIS_OPENDATA', 0.75)
-assert @source_kept(tree_id, usmsp_source, 'OSM_USMSP', 0.75);
+complete where city = 'DECGN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/decgn_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/decgn_tree_info_v{data_version}.parquet`
+freshness by decgn_published_data_updated_through
+assert @source_kept(tree_id, decgn_source, 'COLOGNE_OPENDATA', 0.75)
+assert @source_kept(tree_id, decgn_source, 'OSM_DECGN', 0.75);

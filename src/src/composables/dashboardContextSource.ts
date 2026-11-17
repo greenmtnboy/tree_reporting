@@ -464,17 +464,17 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Mediterranean Forests, Woodlands & Scrub',
     realm: 'palearctic',
   },
-  USMSP: {
-    ecoregionId: 343, // Upper Midwest US forest-savanna transition
-    usdaZone: 5,
-    biome: 'Temperate Broadleaf & Mixed Forests',
-    realm: 'nearctic',
-  },
   USBAL: {
     ecoregionId: 399, // Southeast US conifer savannas
     usdaZone: 7,
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'nearctic',
+  },
+  DECGN: {
+    ecoregionId: 664, // European Atlantic mixed forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
   },
 }
 

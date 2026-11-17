@@ -73,8 +73,8 @@ import deham.hamburg_tree_info;
 import frlyo.lyon_tree_info;
 import esmad.madrid_tree_info;
 import esbcn.barcelona_tree_info;
-import usmsp.minneapolis_tree_info;
 import usbal.baltimore_tree_info;
+import decgn.cologne_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -155,8 +155,8 @@ merge deham_source into data_source;
 merge frlyo_source into data_source;
 merge esmad_source into data_source;
 merge esbcn_source into data_source;
-merge usmsp_source into data_source;
 merge usbal_source into data_source;
+merge decgn_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -247,8 +247,8 @@ deham_published_data_updated_through,
 frlyo_published_data_updated_through,
 esmad_published_data_updated_through,
 esbcn_published_data_updated_through,
-usmsp_published_data_updated_through,
-usbal_published_data_updated_through);
+usbal_published_data_updated_through,
+decgn_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

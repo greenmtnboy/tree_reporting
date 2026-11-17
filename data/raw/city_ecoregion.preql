@@ -98,7 +98,7 @@ select * from (values
     ('FRLYO', 686),
     ('ESMAD', 793),
     ('ESBCN', 799),
-    ('USMSP', 343),
-    ('USBAL', 399)
+    ('USBAL', 399),
+    ('DECGN', 664)
 ) as t(city, ecoregion_id)
 ''';
