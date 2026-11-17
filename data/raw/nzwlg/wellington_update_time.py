@@ -1,42 +1,46 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["pyarrow", "pytrilogy", "requests"]
+# dependencies = ["pyarrow", "pytrilogy", "requests", "tzdata"]
 # ///
-"""Freshness probe for Wellington's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Wellington's tree inventory.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+`Parks/Parks/MapServer/53` is a MapServer layer: no `editingInfo`, and no
+edit-date column.  Two stamps, and the probe takes the later:
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
+* the council hub's DCAT `modified` for the dataset served at that layer
+  (`hub_last_modified`; 2026-10-01 when the city was wired), which moves when
+  the service is republished;
+* MAX(`last_visited`), the survey date of the most recently inspected tree
+  (2024-07-01 when wired).  The stamps are dates at midnight; like
+  Christchurch's they are read as New Zealand wall time labelled UTC, so the
+  watermark never sits in the future.
 
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+A missing dataset in the feed or an empty statistics row raises (a schema
+question); an outage degrades through `emit_freshness`.
 """
 
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.platforms.arcgis import FeatureLayer, field_max, hub_last_modified
+from shared.ingest import emit_freshness
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+LOCAL_TZ = ZoneInfo("Pacific/Auckland")
+
+HUB_HOST = "data-wcc.opendata.arcgis.com"
+LAYER_URL = "https://gis.wcc.govt.nz/arcgis/rest/services/Parks/Parks/MapServer/53"
+LAYER = FeatureLayer(LAYER_URL)
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Wellington's published-through timestamp")
+    catalogue = hub_last_modified(HUB_HOST, LAYER_URL)
+    visited = field_max(LAYER, "last_visited")
+    visited = visited.replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc)
+    return max(catalogue, visited)
 
 
 if __name__ == "__main__":

@@ -102,6 +102,12 @@ Currently has data from the following cities:
 - [Hamburg, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DEHAM)
 - [Bristol, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBBRS)
 - [Ghent, Belgium](https://greenmtnboy.github.io/tree_reporting/#/?city=BEGNT)
+- [Hamilton, Ontario, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAHAM)
+- [Utrecht, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLUTC)
+- [Toulouse, France](https://greenmtnboy.github.io/tree_reporting/#/?city=FRTLS)
+- [Geneva, Switzerland](https://greenmtnboy.github.io/tree_reporting/#/?city=CHGVA)
+- [Leipzig, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DELEJ)
+- [Wellington, New Zealand](https://greenmtnboy.github.io/tree_reporting/#/?city=NZWLG)
 - [Lisbon, Portugal](https://greenmtnboy.github.io/tree_reporting/#/?city=PTLIS)
 - [Fingal (County Dublin), Ireland](https://greenmtnboy.github.io/tree_reporting/#/?city=IEFIN)
 - [Canberra, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUCBR)
@@ -224,6 +230,12 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Lisbon | Câmara Municipal de Lisboa - Arvoredo (Lisboa Aberta, CC0) | https://dados.cm-lisboa.pt/dataset/arvoredo |
 | Ghent | Stad Gent Groendienst - Locaties bomen Gent (Modellicentie Gratis Hergebruik) | https://data.stad.gent/explore/dataset/locaties-bomen-gent/ |
 | Bristol | Bristol City Council - Trees (Open Government Licence v3.0) | https://www.arcgis.com/home/item.html?id=7a99218a4bf347ff948f0e5882406a8c |
+| Hamilton | City of Hamilton - Public Tree Inventory (City of Hamilton Open Data Licence v1.1) | https://open.hamilton.ca/datasets/public-tree-inventory |
+| Utrecht | Gemeente Utrecht - Bomenkaart 2026 (CC BY 4.0) | https://open.utrecht.nl/dataset/bomenkaart-2026/ea248c2e-7ae4-47b3-bd57-f34b2d876667 |
+| Toulouse | Toulouse Métropole - Arbres urbains (Licence Ouverte v2.0) | https://data.toulouse-metropole.fr/explore/dataset/arbres-urbains/ |
+| Geneva | SITG - Inventaire cantonal des arbres (Ville de Genève, Conservatoire et Jardin botaniques; Données SITG, open access; 1976 paper-inventory records omitted) | https://sitg.ge.ch/donnees/sipv-ica-arbre-isole |
+| Leipzig | Stadt Leipzig - Baumkataster (dl-de/by-2.0) | https://opendata.leipzig.de/dataset/baumkataster-stadt-leipzig1 |
+| Wellington | Wellington City Council - WCC Trees (CC BY 4.0) | https://data-wcc.opendata.arcgis.com/datasets/93ca9097fd4b487e9fcf55ad75941136_53 |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
 | Melbourne (Yarra) | City of Yarra - Street and Park Trees (CC BY 4.0) | https://data.gov.au/data/dataset/yarra-street-park-trees |
@@ -318,6 +330,12 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Lisbon | Câmara Municipal de Lisboa - Património classificado and Estatuária (CC0) | https://services.arcgis.com/1dSrzEWVQn5kHHyK/arcgis/rest/services/Patrimonio/FeatureServer |
 | Ghent | Agentschap Onroerend Erfgoed - protected monuments, landscapes and town views (Gratis open data licentie Vlaanderen) | https://inventaris.onroerenderfgoed.be/erfgoedobjecten?gemeente=44021 |
 | Bristol | Historic England - National Heritage List for England (OGL) | https://historicengland.org.uk/listing/the-list/ |
+| Hamilton | City of Hamilton - Heritage Properties (City of Hamilton Open Data Licence v1.1) | https://open.hamilton.ca/datasets/heritage-properties |
+| Utrecht | Gemeente Utrecht - Rijksmonumenten and Gemeentelijke monumenten, named objects (CC BY-SA 4.0) | https://open.utrecht.nl/dataset/rijksmonumenten/e30f329c-a1d9-45d8-a68b-91fbdf723703 |
+| Toulouse | Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
+| Geneva | SITG - Objets classés (Inventaire des monuments d'art et d'histoire du canton de Genève) | https://sitg.ge.ch/donnees/dps-classement |
+| Leipzig | Stadt Leipzig - Grünflächen, Amt für Stadtgrün und Gewässer (no licence stated; displayed with attribution only, not licensed for reuse) | https://geodienste.leipzig.de/l3/OpenData/wfs |
+| Wellington | Wellington City Council - 2024 District Plan heritage schedules SCHED1-3 (CC BY 4.0) | https://data-wcc.opendata.arcgis.com/datasets/WCC::heritage-buildings-sched1-2024-district-plan/about |
 | Melbourne | Melbourne Open Data - Landmarks and Places of Interest | https://data.melbourne.vic.gov.au/explore/dataset/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/ |
 | Paris | Ministere de la Culture - Immeubles proteges au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
 | Buenos Aires | No landmark dataset in production yet | n/a |

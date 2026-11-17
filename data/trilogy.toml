@@ -4133,7 +4133,7 @@ operation = "refresh"
 # Starts in the twice-weekly tier, placed the day after this city's OSM
 # extract. Measure before moving it: `portal_cadence.py --record --city CAHAM`.
 schedule = "0 0 12 * * SUN,WED"
-timeout_seconds = 1800
+timeout_seconds = 3600
 memory_mb = 2048
 
 [[cloud.job]]

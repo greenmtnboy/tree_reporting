@@ -5,23 +5,27 @@ root datasource geneva_landmarks_update_time (
 )
 file `./geneva_landmarks_probe.py`;
 
-# STUB. Every city needs a landmarks model even if it yields zero rows -- a
-# missing file fails the landmark lane for every city, and the agent has no
-# geographic context for this one.
-#
-# Point the raw datasource at whichever source this city has, in preference
-# order: an official designation registry, the same portal as the trees, an
-# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
-# geocoded via Nominatim (then add a `landmarks-chgva` job with NO cron).
-#
-# Both datasources extend ../landmark_common.preql's templates: add the
-# register's own attributes to both, mapped in one and stored in the other.
+# Geneva's classified monuments (objets classés under the cantonal LPMNS),
+# SITG's `DPS_CLASSEMENT` layer, read live from the same ArcGIS server as the
+# trees; one landmark per classification decree, its polygons as one
+# multipolygon (see geneva_landmarks.py).  The register's own attributes ride
+# along in existing landmark_common properties: the kind of object
+# (category), classification and federal protection (protection_type), the
+# decree number (register_number) and the decree year (year_designated).
 root partial datasource raw_geneva_landmark_info extends landmark_partition (
+    category: ?category,
+    protection_type: ?protection_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
 )
 complete where city = 'CHGVA'
 file `./geneva_landmarks.py`;
 
 partial datasource geneva_landmark_info extends published_landmark_info (
+    ?category,
+    ?protection_type,
+    ?register_number,
+    ?year_designated,
     chgva_landmark_data_updated_through,
 )
 complete where city = 'CHGVA'
