@@ -1,0 +1,25 @@
+import ..landmark_common;
+
+root datasource frankfurt_landmarks_update_time (
+    data_updated_through: defra_landmark_data_updated_through
+)
+file `./frankfurt_landmarks_probe.py`;
+
+# Frankfurt's designated natural monuments (Naturdenkmale, § 28 BNatSchG) and
+# protected landscape features (§ 29), read directly from the city's WFS: one
+# landmark per designation, mostly single named trees, with the register as
+# `category`.  No geocoding, no committed CSV and no staging object.  The
+# built-heritage list is map-only and is not read; see frankfurt_landmarks.py.
+root partial datasource raw_frankfurt_landmark_info extends landmark_partition (
+    category: ?category,
+)
+complete where city = 'DEFRA'
+file `./frankfurt_landmarks.py`;
+
+partial datasource frankfurt_landmark_info extends published_landmark_info (
+    ?category,
+    defra_landmark_data_updated_through,
+)
+complete where city = 'DEFRA'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/defra_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/defra_landmark_info_v{data_version}.parquet`
+freshness by defra_landmark_data_updated_through;

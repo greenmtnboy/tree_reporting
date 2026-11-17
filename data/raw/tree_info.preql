@@ -69,6 +69,12 @@ import usphl.philadelphia_tree_info;
 import uspit.pittsburgh_tree_info;
 import ussjc.sanjose_tree_info;
 import ussac.sacramento_tree_info;
+import deham.hamburg_tree_info;
+import frlyo.lyon_tree_info;
+import esmad.madrid_tree_info;
+import usbal.baltimore_tree_info;
+import decgn.cologne_tree_info;
+import defra.frankfurt_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -145,6 +151,12 @@ merge usphl_source into data_source;
 merge uspit_source into data_source;
 merge ussjc_source into data_source;
 merge ussac_source into data_source;
+merge deham_source into data_source;
+merge frlyo_source into data_source;
+merge esmad_source into data_source;
+merge usbal_source into data_source;
+merge decgn_source into data_source;
+merge defra_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -230,7 +242,13 @@ uspor_published_data_updated_through,
 usphl_published_data_updated_through,
 uspit_published_data_updated_through,
 ussjc_published_data_updated_through,
-ussac_published_data_updated_through);
+ussac_published_data_updated_through,
+deham_published_data_updated_through,
+frlyo_published_data_updated_through,
+esmad_published_data_updated_through,
+usbal_published_data_updated_through,
+decgn_published_data_updated_through,
+defra_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

@@ -662,6 +662,14 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 # and is deliberately not here.
 SPECIES_SYNONYMS: dict[str, str] = {
     # Nomenclatural and taxonomic synonyms (POWO lists the key under the value).
+    # Batch 4 (Lyon, Madrid, Hamburg, Cologne): hybrid marks and WCVP synonyms.
+    "Acer x opalus": "Acer opalus",
+    "X cupressocyparis x leylandii": "Cupressus x leylandii",
+    "Quercus schochiana": "Quercus x schochiana",
+    "Sorbus thuringiaca": "Sorbus x thuringiaca",
+    "Quercus benderi": "Quercus x benderi",
+    "Quercus kewensis": "Quercus x kewensis",
+    "Platanus hybrida": "Platanus x hispanica",
     "Platanus x acerifolia": "Platanus x hispanica",
     "Sophora japonica": "Styphnolobium japonicum",
     "Tilia x vulgaris": "Tilia x europaea",
@@ -852,6 +860,41 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # Batch 4 (Lyon, Madrid, Hamburg, Cologne, Frankfurt): each key absent from WCVP, each value accepted there.
+    "Cercis silliquastrum": "Cercis siliquastrum",
+    "Abies vejari": "Abies vejarii",
+    "Quercus phillyraeoides": "Quercus phillyreoides",
+    "Zelkova schneiderana": "Zelkova schneideriana",
+    "Quercus ryzophylla": "Quercus rysophylla",
+    "Acer pennsylvanicum": "Acer pensylvanicum",
+    "Quercus wizlizenii": "Quercus wislizeni",
+    "Hibiscus synosyriacus": "Hibiscus sinosyriacus",
+    "Evodia daniellii": "Tetradium daniellii",
+    "Evodia hupehensis": "Tetradium daniellii",
+    "Malus pumilla": "Malus domestica",
+    "Crataegus ripidophylla": "Crataegus rhipidophylla",
+    "Acer freemannii": "Acer x freemanii",
+    "Salix elaeagnos": "Salix eleagnos",
+    "Ilex altaclarensis": "Ilex x altaclerensis",
+    "Cladastris lutea": "Cladrastis kentukea",
+    "Crataegus lavallei": "Crataegus x lavalleei",
+    "Tilia platiphyllos": "Tilia platyphyllos",
+    "Pyrus calleriana": "Pyrus calleryana",
+    "Amelanchier lamarkii": "Amelanchier x lamarckii",
+    "Acer speudoplatanus": "Acer pseudoplatanus",
+    "Acer shirasawanun": "Acer shirasawanum",
+    "Calocedro decurrens": "Calocedrus decurrens",
+    "Caria illinoinensis": "Carya illinoinensis",
+    "Cefalotaxus fortunei": "Cephalotaxus fortunei",
+    "Cunningamia lanceolata": "Cunninghamia lanceolata",
+    "Elaegnus angustifolia": "Elaeagnus angustifolia",
+    "Magnolia acumunata": "Magnolia acuminata",
+    "Magnolia lilliflora": "Magnolia liliiflora",
+    "Pistacia chinenesis": "Pistacia chinensis",
+    "Quercus libanii": "Quercus libani",
+    "Sciadopitis verticillata": "Sciadopitys verticillata",
+    "Stewartia pseudocamelia": "Stewartia pseudocamellia",
+    "Fontanesia phillyreodes": "Fontanesia philliraeoides",
     "Pyrus betulaefolia": "Pyrus betulifolia",
     "Quercus castaenifolia": "Quercus castaneifolia",
     "Carpinus betula": "Carpinus betulus",
@@ -1629,6 +1672,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "DEFRA": ("FRANKFURT_OPENDATA",),
+    "DECGN": ("COLOGNE_OPENDATA",),
+    "USBAL": ("BALTIMORE_OPENDATA",),
+    "ESMAD": ("MADRID_OPENDATA",),
+    "FRLYO": ("LYON_OPENDATA",),
+    "DEHAM": ("HAMBURG_OPENDATA",),
     "USSAC": ("SACRAMENTO_OPENDATA",),
     "USSJC": ("SANJOSE_OPENDATA",),
     "USPIT": ("PITTSBURGH_OPENDATA",),
@@ -1731,6 +1780,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "DEFRA": "OSM_DEFRA",
+    "DECGN": "OSM_DECGN",
+    "USBAL": "OSM_USBAL",
+    "ESMAD": "OSM_ESMAD",
+    "FRLYO": "OSM_FRLYO",
+    "DEHAM": "OSM_DEHAM",
     "USSAC": "OSM_USSAC",
     "USSJC": "OSM_USSJC",
     "USPIT": "OSM_USPIT",
@@ -2412,6 +2467,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "DEFRA": (50.01, 50.24, 8.47, 8.81),
+    "DECGN": (50.83, 51.09, 6.77, 7.17),
+    "USBAL": (39.19, 39.38, -76.72, -76.52),
+    "ESMAD": (40.31, 40.65, -3.89, -3.52),
+    "FRLYO": (45.55, 45.95, 4.66, 5.07),
+    "DEHAM": (53.39, 53.74, 9.7, 10.33),
     "USSAC": (38.43, 38.7, -121.57, -121.36),
     "USSJC": (37.12, 37.47, -122.05, -121.58),
     "USPIT": (40.36, 40.51, -80.1, -79.86),
@@ -2539,6 +2600,37 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Frankfurt: osm_dedup_validation.py --inventory-parquet: mutual-NN 91.8% in
+    # 2-5 m, 40.8% in 5-10 m (n=995): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 292 duplicates for 183 hidden trees (1.60),
+    # 8->10 removes 128 for 208 (0.62), so 8 m.
+    "DEFRA": 8,
+    # Cologne: osm_dedup_validation.py --inventory-parquet: mutual-NN 91.5% in
+    # 2-5 m, 36.3% in 5-10 m (n=1,068): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 260 duplicates for 219 hidden trees (1.19),
+    # 8->10 removes 115 for 227 (0.51), so 8 m.
+    "DECGN": 8,
+    # Baltimore: osm_dedup_validation.py --inventory-parquet: mutual-NN 34.0% in
+    # 5-10 m (n=662): a 5 m guarantee caps it at 10.
+    # Marginal table: 6->8 removes 136 duplicates for 115 hidden trees (1.18),
+    # 8->10 removes 77 for 151 (0.51), so 8 m.
+    "USBAL": 8,
+    # Madrid: osm_dedup_validation.py --inventory-parquet: mutual-NN 79.9% in
+    # 2-5 m, 31.2% in 5-10 m (n=3,360): a 5 m guarantee caps it at 10.
+    # Marginal table: 4->6 removes 2,485 duplicates for 1,358 hidden trees (1.83),
+    # 6->8 removes 758 for 1,096 (0.69), so 6 m.
+    "ESMAD": 6,
+    # Lyon: osm_dedup_validation.py --inventory-parquet: mutual-NN 86.0% in
+    # 2-5 m, 29.6% in 5-10 m (n=3,288): a 5 m guarantee caps it at 10.
+    # Marginal table: 4->6 removes 1,682 duplicates for 663 hidden trees (2.54),
+    # 6->8 removes 598 for 763 (0.78), so 6 m.
+    "FRLYO": 6,
+    # Hamburg: osm_dedup_validation.py --inventory-parquet: 279,840 OSM nodes
+    # (largely an import of the Strassenbaumkataster) against 229,876 anchors.
+    # Mutual-NN 89.8% in 2-5 m, 13.2% in 5-10 m (n=2,363): a 5 m guarantee caps
+    # it at 10. Marginal table: 4->6 removes 1,068 duplicates for 362 hidden
+    # trees (2.95), 6->8 removes 299 for 514 (0.58), so 6 m.
+    "DEHAM": 6,
     # Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
     # --inventory-parquet on a local ingest run).
     # 9,654 staged OSM nodes against 106,242 anchors.  Mutual-NN 94.3% in
@@ -2965,6 +3057,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'DEFRA': ((50.01, 50.24, 8.47, 8.81),),
+    'DECGN': ((50.83, 51.09, 6.77, 7.17),),
+    'USBAL': ((39.19, 39.38, -76.72, -76.52),),
+    'ESMAD': ((40.31, 40.65, -3.89, -3.52),),
+    'FRLYO': ((45.55, 45.95, 4.66, 5.07),),
+    'DEHAM': ((53.39, 53.74, 9.7, 10.33),),
     'USSAC': ((38.43, 38.7, -121.57, -121.36),),
     'USSJC': ((37.12, 37.47, -122.05, -121.58),),
     'USPIT': ((40.36, 40.51, -80.1, -79.86),),

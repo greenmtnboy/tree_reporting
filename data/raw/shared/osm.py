@@ -99,6 +99,12 @@ _CIRCUMFERENCE_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(cm|m)?\s*$", re.I)
 # that type", which is a long way from "you forgot a column".  London is the
 # only instance today.
 OSM_CITY_NAMES: dict[str, str] = {
+    "DEFRA": "Frankfurt",
+    "DECGN": "Cologne",
+    "USBAL": "Baltimore",
+    "ESMAD": "Madrid",
+    "FRLYO": "Lyon",
+    "DEHAM": "Hamburg",
     "USSAC": "Sacramento",
     "USSJC": "San Jose",
     "USPIT": "Pittsburgh",
@@ -182,6 +188,8 @@ OSM_EXTRA_NULL_COLUMNS: dict[str, dict[str, "pa.DataType"]] = {
     # Vienna's Bezirk and Basel's Gemeinde (Basel, Riehen, Bettingen).
     "ATVIE": {"borough": pa.string()},
     "CHBAS": {"borough": pa.string()},
+    # Lyon's commune (the Métropole spans 59 of them).
+    "FRLYO": {"borough": pa.string()},
 }
 
 

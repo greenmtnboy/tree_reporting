@@ -1,0 +1,24 @@
+import ..landmark_common;
+
+root datasource hamburg_landmarks_update_time (
+    data_updated_through: deham_landmark_data_updated_through
+)
+file `./hamburg_landmarks_probe.py`;
+
+# Hamburg's official heritage register (Denkmalkartierung), read directly from
+# the city's WFS: listed gardens and parks, monuments, and named listed
+# buildings, with the layer as `category`.  No geocoding, no committed CSV and
+# no staging object.
+root partial datasource raw_hamburg_landmark_info extends landmark_partition (
+    category: ?category,
+)
+complete where city = 'DEHAM'
+file `./hamburg_landmarks.py`;
+
+partial datasource hamburg_landmark_info extends published_landmark_info (
+    ?category,
+    deham_landmark_data_updated_through,
+)
+complete where city = 'DEHAM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/deham_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/deham_landmark_info_v{data_version}.parquet`
+freshness by deham_landmark_data_updated_through;

@@ -1,0 +1,25 @@
+import ..landmark_common;
+
+root datasource madrid_landmarks_update_time (
+    data_updated_through: esmad_landmark_data_updated_through
+)
+file `./madrid_landmarks_probe.py`;
+
+# Madrid's Bienes de Interés Cultural y Patrimonial: the official designation
+# register (Comunidad de Madrid, served for the municipal term by the
+# Ayuntamiento's map service), read directly -- no geocoding, no committed CSV
+# and no staging object.  `category` is the designation and its kind
+# ("BIC declarado: Monumento", "BIP declarado").
+root partial datasource raw_madrid_landmark_info extends landmark_partition (
+    category: ?category,
+)
+complete where city = 'ESMAD'
+file `./madrid_landmarks.py`;
+
+partial datasource madrid_landmark_info extends published_landmark_info (
+    ?category,
+    esmad_landmark_data_updated_through,
+)
+complete where city = 'ESMAD'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/esmad_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/esmad_landmark_info_v{data_version}.parquet`
+freshness by esmad_landmark_data_updated_through;

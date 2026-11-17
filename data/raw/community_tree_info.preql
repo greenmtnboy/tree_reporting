@@ -80,6 +80,12 @@ property <*>.usphl_community_data_updated_through datetime; # when approved comm
 property <*>.uspit_community_data_updated_through datetime; # when approved community submissions for USPIT are through
 property <*>.ussjc_community_data_updated_through datetime; # when approved community submissions for USSJC are through
 property <*>.ussac_community_data_updated_through datetime; # when approved community submissions for USSAC are through
+property <*>.deham_community_data_updated_through datetime; # when approved community submissions for DEHAM are through
+property <*>.frlyo_community_data_updated_through datetime; # when approved community submissions for FRLYO are through
+property <*>.esmad_community_data_updated_through datetime; # when approved community submissions for ESMAD are through
+property <*>.usbal_community_data_updated_through datetime; # when approved community submissions for USBAL are through
+property <*>.decgn_community_data_updated_through datetime; # when approved community submissions for DECGN are through
+property <*>.defra_community_data_updated_through datetime; # when approved community submissions for DEFRA are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

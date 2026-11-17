@@ -440,6 +440,42 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'nearctic',
   },
+  DEHAM: {
+    ecoregionId: 664, // European Atlantic mixed forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  FRLYO: {
+    ecoregionId: 686, // Western European broadleaf forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  ESMAD: {
+    ecoregionId: 793, // Iberian sclerophyllous and semi-deciduous forests
+    usdaZone: 9,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'palearctic',
+  },
+  USBAL: {
+    ecoregionId: 399, // Southeast US conifer savannas
+    usdaZone: 7,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  DECGN: {
+    ecoregionId: 664, // European Atlantic mixed forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  DEFRA: {
+    ecoregionId: 686, // Western European broadleaf forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

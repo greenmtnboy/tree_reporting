@@ -1,0 +1,28 @@
+import ..landmark_common;
+
+root datasource lyon_landmarks_update_time (
+    data_updated_through: frlyo_landmark_data_updated_through
+)
+file `./lyon_landmarks_probe.py`;
+
+
+# The national Monuments Historiques register (Mérimée), filtered to the
+# Métropole's 59 communes; the extras are Paris's, read from the same file.
+root partial datasource raw_lyon_landmark_info extends landmark_partition (
+    arrondissement: ?arrondissement,
+    protection_type: ?protection_type,
+    denomination: ?denomination,
+)
+complete where city = 'FRLYO'
+file `./lyon_landmarks.py`;
+
+
+partial datasource lyon_landmark_info extends published_landmark_info (
+    ?arrondissement,
+    ?protection_type,
+    ?denomination,
+    frlyo_landmark_data_updated_through,
+)
+complete where city = 'FRLYO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/frlyo_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/frlyo_landmark_info_v{data_version}.parquet`
+freshness by frlyo_landmark_data_updated_through;

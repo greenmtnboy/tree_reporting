@@ -78,6 +78,12 @@ import usphl.philadelphia_landmarks;
 import uspit.pittsburgh_landmarks;
 import ussjc.sanjose_landmarks;
 import ussac.sacramento_landmarks;
+import deham.hamburg_landmarks;
+import frlyo.lyon_landmarks;
+import esmad.madrid_landmarks;
+import usbal.baltimore_landmarks;
+import decgn.cologne_landmarks;
+import defra.frankfurt_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish
