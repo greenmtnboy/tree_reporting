@@ -12,7 +12,9 @@ export const SPRITE_OPAQUE_ZOOM = 14
 export const SPRITE_HANDOFF_ZOOMS = 0.6
 export const SPRITE_CROWN_ZOOM_START = SPRITE_OPAQUE_ZOOM - SPRITE_HANDOFF_ZOOMS
 export const SPRITE_BASE_OPACITY = 0.72
-export const SPRITE_FULL_OPACITY_ZOOM = 21
+// Soon after the handoff: overlapping sprites drawn see-through double up into darker patches,
+// and the trees already sit under the map's labels.
+export const SPRITE_FULL_OPACITY_ZOOM = 15
 /** Desktop sprites are drawn at metre scale but never narrower than this many CSS pixels. */
 export const MIN_SPRITE_PX = 4
 /** Metres; the crown a desktop sprite is drawn with when the tree has no measured or predicted width. */
