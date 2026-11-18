@@ -1,0 +1,26 @@
+import ..landmark_common;
+
+root datasource leipzig_landmarks_update_time (
+    data_updated_through: delej_landmark_data_updated_through
+)
+file `./leipzig_landmarks_probe.py`;
+
+# Leipzig's named parks and green spaces, from the green-space register of
+# the Amt fuer Stadtgruen und Gewaesser on the city's WFS (the trees' own
+# portal; Saxony's heritage register is not open data), with the register's
+# object type as `category`.  The publisher states no licence for this layer:
+# displayed with attribution only.  No geocoding, no committed CSV and no
+# staging object.
+root partial datasource raw_leipzig_landmark_info extends landmark_partition (
+    category: ?category,
+)
+complete where city = 'DELEJ'
+file `./leipzig_landmarks.py`;
+
+partial datasource leipzig_landmark_info extends published_landmark_info (
+    ?category,
+    delej_landmark_data_updated_through,
+)
+complete where city = 'DELEJ'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/delej_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/delej_landmark_info_v{data_version}.parquet`
+freshness by delej_landmark_data_updated_through;

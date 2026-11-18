@@ -90,6 +90,12 @@ import aucbr.canberra_landmarks;
 import ptlis.lisbon_landmarks;
 import begnt.ghent_landmarks;
 import gbbrs.bristol_landmarks;
+import caham.hamilton_landmarks;
+import nlutc.utrecht_landmarks;
+import frtls.toulouse_landmarks;
+import chgva.geneva_landmarks;
+import delej.leipzig_landmarks;
+import nzwlg.wellington_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

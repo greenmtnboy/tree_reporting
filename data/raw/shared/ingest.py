@@ -662,6 +662,12 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 # and is deliberately not here.
 SPECIES_SYNONYMS: dict[str, str] = {
     # Nomenclatural and taxonomic synonyms (POWO lists the key under the value).
+    # Batch 6 (Hamilton, Utrecht, Toulouse, Geneva, Leipzig, Wellington): WCVP synonyms and hybrid marks.
+    "Malus magdeburgensis": "Malus x magdeburgensis",  # Utrecht
+    "Deutzia magnifica": "Deutzia x magnifica",  # Toulouse
+    "Agonis juniperina": "Taxandria juniperina",  # Wellington
+    "Amelanchier spicata": "Amelanchier x spicata",  # Geneva
+    "Rosa centifolia": "Rosa x centifolia",  # Geneva
     # Batch 5 (Lisbon, Ghent, Canberra, Christchurch, Fingal): WCVP synonyms and hybrid marks.
     "Platanus x hybrida": "Platanus x hispanica",
     "Albizia lophantha": "Paraserianthes lophantha",
@@ -872,6 +878,51 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # Batch 6 (Hamilton, Utrecht, Toulouse, Geneva, Leipzig, Wellington): each key absent from WCVP, each value accepted there.
+    "Asimini triloba": "Asimina triloba",  # Utrecht
+    "Carya illioinensis": "Carya illinoinensis",  # Utrecht
+    "Coryllus avelana": "Corylus avellana",  # Utrecht
+    "Diospyros virginiaca": "Diospyros virginiana",  # Utrecht
+    "Qeurcus palustris": "Quercus palustris",  # Utrecht
+    "Quecus robur": "Quercus robur",  # Utrecht
+    "Quercus palustrus": "Quercus palustris",  # Utrecht
+    "Tillia cordata": "Tilia cordata",  # Utrecht
+    "Abies numindica": "Abies numidica",  # Toulouse
+    "Cercidyphyllum japonicum": "Cercidiphyllum japonicum",  # Toulouse
+    "Cercidyphyllum magnificum": "Cercidiphyllum magnificum",  # Toulouse
+    "Cladastris": "Cladrastis",  # Toulouse
+    "Cotoneaster franchettii": "Cotoneaster franchetii",  # Toulouse
+    "Cryptomeria japonicum": "Cryptomeria japonica",  # Toulouse
+    "Euonymus japonicum": "Euonymus japonicus",  # Toulouse
+    "Ilex aquilifolium": "Ilex aquifolium",  # Toulouse
+    "Lagestroemia indica": "Lagerstroemia indica",  # Toulouse
+    "Metasequoia glybtostroboides": "Metasequoia glyptostroboides",  # Toulouse
+    "Quercus pyrenaicum": "Quercus pyrenaica",  # Toulouse
+    "Alectyron excelsus": "Alectryon excelsus",  # Wellington
+    "Camelia japonica": "Camellia japonica",  # Wellington
+    "Eucalyptus cineria": "Eucalyptus cinerea",  # Wellington
+    "Eucalyptus leucoxlyon": "Eucalyptus leucoxylon",  # Wellington
+    "Paraserianthes lophanthia": "Paraserianthes lophantha",  # Wellington
+    "Pinus thumbergii": "Pinus thunbergii",  # Wellington
+    "Prumnopytis taxifolia": "Prumnopitys taxifolia",  # Wellington
+    "Quercus cannarienis": "Quercus canariensis",  # Wellington
+    "Prumnopytis ferruginea": "Prumnopitys ferruginea",  # Wellington
+    "Tilia europea": "Tilia x europaea",  # Wellington
+    "Cuppressus": "Cupressus",  # Leipzig
+    "Robinia pseudoaccacia": "Robinia pseudoacacia",  # Leipzig
+    "Carya laclniosa": "Carya laciniosa",  # Hamilton
+    "Euonymus atropurpurea": "Euonymus atropurpureus",  # Hamilton
+    "Fagus sylvatic": "Fagus sylvatica",  # Hamilton
+    "Fraxlnus nigra": "Fraxinus nigra",  # Hamilton
+    "Juglans clnerea": "Juglans cinerea",  # Hamilton
+    "Larix lariclna": "Larix laricina",  # Hamilton
+    "Pinus rigtda": "Pinus rigida",  # Hamilton
+    "Prunus vlrginiana": "Prunus virginiana",  # Hamilton
+    "Quercus cocclnea": "Quercus coccinea",  # Hamilton
+    "Robinia pseudoacacla": "Robinia pseudoacacia",  # Hamilton
+    "Thuja occldentalis": "Thuja occidentalis",  # Hamilton
+    "Chamaecyparis nootkatensts": "Cupressus nootkatensis",  # Hamilton
+    "Lmus": "Ulmus",  # Hamilton
     # Batch 5 (Lisbon, Ghent, Bristol, Canberra, Christchurch, Fingal): each key absent from WCVP, each value accepted there.
     "Schinnus terebinthifolius": "Schinus terebinthifolia",
     "Lochroma cyaneum": "Iochroma cyaneum",
@@ -1739,6 +1790,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "NZWLG": ("WELLINGTON_OPENDATA",),
+    "DELEJ": ("LEIPZIG_OPENDATA",),
+    "CHGVA": ("GENEVA_SITG",),
+    "FRTLS": ("TOULOUSE_OPENDATA",),
+    "NLUTC": ("UTRECHT_OPENDATA",),
+    "CAHAM": ("HAMILTON_OPENDATA",),
     "GBBRS": ("BRISTOL_OPENDATA",),
     "BEGNT": ("GHENT_OPENDATA",),
     "PTLIS": ("LISBON_OPENDATA",),
@@ -1853,6 +1910,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "NZWLG": "OSM_NZWLG",
+    "DELEJ": "OSM_DELEJ",
+    "CHGVA": "OSM_CHGVA",
+    "FRTLS": "OSM_FRTLS",
+    "NLUTC": "OSM_NLUTC",
+    "CAHAM": "OSM_CAHAM",
     "GBBRS": "OSM_GBBRS",
     "BEGNT": "OSM_BEGNT",
     "PTLIS": "OSM_PTLIS",
@@ -2546,6 +2609,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "NZWLG": (-41.37, -41.13, 174.6, 174.9),
+    "DELEJ": (51.23, 51.45, 12.23, 12.55),
+    "CHGVA": (46.12, 46.37, 5.95, 6.32),
+    "FRTLS": (43.47, 43.75, 1.2, 1.6),
+    "NLUTC": (52.02, 52.15, 4.96, 5.2),
+    "CAHAM": (43.04, 43.48, -80.25, -79.62),
     "GBBRS": (51.39, 51.55, -2.73, -2.5),
     "BEGNT": (50.97, 51.19, 3.57, 3.85),
     "PTLIS": (38.68, 38.8, -9.24, -9.08),
@@ -2685,6 +2754,42 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Calibrated 2026-11-17 (osm_dedup_validation.py, local inventory parquet)
+    # against the staged extract. Mutual-NN 90.3% in 2-5 m, 45.5% in 5-10 m
+    # (n=143): a 5 m guarantee caps it at 10. Marginal table: 6->8 removes 42
+    # duplicates for 27 hidden trees (1.56), 8->10 removes 26 for 32 (0.81),
+    # so 8 m.
+    "NZWLG": 8,
+    # Calibrated 2026-11-17 (osm_dedup_validation.py, local inventory parquet)
+    # against the staged extract. Mutual-NN 84.0% in 2-5 m, 24.5% in 5-10 m
+    # (n=2,637): a 5 m guarantee caps it at 10. Marginal table: 4->6 removes
+    # 1,329 duplicates for 579 hidden trees (2.30), 6->8 removes 461 for 658
+    # (0.70), so 6 m.
+    "DELEJ": 6,
+    # Calibrated 2026-11-17 (osm_dedup_validation.py, local inventory parquet)
+    # against the staged extract. Mutual-NN 85.6% in 2-5 m, 34.5% in 5-10 m
+    # (n=2,754): a 5 m guarantee caps it at 10. Marginal table: 4->6 removes
+    # 1,576 duplicates for 572 hidden trees (2.76), 6->8 removes 563 for 657
+    # (0.86), so 6 m.
+    "CHGVA": 6,
+    # Calibrated 2026-11-17 (osm_dedup_validation.py, local inventory parquet)
+    # against the staged extract. OSM is largely an import of the inventory
+    # (118k pairs within 2 m, median d1/d2 0.00). Mutual-NN 67.7% in 2-5 m, 8.1%
+    # in 5-10 m (n=307). Marginal table: 4->6 removes 152 duplicates for 144
+    # hidden trees (1.06), 6->8 removes 24 for 112 (0.21), so 6 m.
+    "FRTLS": 6,
+    # Calibrated 2026-11-17 (osm_dedup_validation.py, local inventory parquet)
+    # against the staged extract. Mutual-NN 84.8% in 2-5 m, 22.0% in 5-10 m
+    # (n=946): a 5 m guarantee caps it at 10. Marginal table: 4->6 removes 463
+    # duplicates for 209 hidden trees (2.22), 6->8 removes 157 for 279 (0.56),
+    # so 6 m.
+    "NLUTC": 6,
+    # Calibrated 2026-11-17 (osm_dedup_validation.py, local inventory parquet)
+    # against the staged extract. Mutual-NN 94.2% in 2-5 m, 44.4% in 5-10 m
+    # (n=189): a 5 m guarantee caps it at 10. Marginal table: 6->8 removes 61
+    # duplicates for 30 hidden trees (2.03), 8->10 removes 20 for 38 (0.53),
+    # so 8 m.
+    "CAHAM": 8,
     # Bristol: calibrated 2026-11-17 with --inventory-parquet (55,947 anchors)
     # against the staged extract. Mutual-NN 29.2% in 10-20 m (n=233): a 10 m
     # guarantee caps it at 20. Marginal table: 8->10 removes 107 duplicates for
@@ -3173,6 +3278,51 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'NZWLG': ((-41.37, -41.13, 174.6, 174.9),),
+    'DELEJ': ((51.23, 51.45, 12.23, 12.55),),
+    'CHGVA': ((46.12, 46.37, 5.95, 6.32),),
+    'FRTLS': ((43.47, 43.75, 1.2, 1.6),),
+    'NLUTC': ((52.02, 52.15, 4.96, 5.2),),
+    'CAHAM': (
+        (43.04, 43.25, -80.25, -79.62),
+        (43.25, 43.475, -80.25, -80.0),
+        (43.25, 43.475, -79.68, -79.62),
+        (43.25, 43.275, -80.0, -79.68),
+        (43.275, 43.28, -80.0, -79.69),
+        (43.28, 43.285, -80.0, -79.745),
+        (43.285, 43.29, -80.0, -79.875),
+        (43.285, 43.29, -79.835, -79.825),
+        (43.285, 43.29, -79.815, -79.755),
+        (43.29, 43.295, -80.0, -79.89),
+        (43.29, 43.295, -79.805, -79.76),
+        (43.295, 43.3, -79.8, -79.765),
+        (43.295, 43.305, -80.0, -79.9),
+        (43.3, 43.305, -79.795, -79.765),
+        (43.305, 43.31, -79.785, -79.77),
+        (43.305, 43.315, -80.0, -79.905),
+        (43.315, 43.325, -80.0, -79.895),
+        (43.325, 43.33, -80.0, -79.88),
+        (43.33, 43.335, -80.0, -79.875),
+        (43.33, 43.335, -79.87, -79.865),
+        (43.335, 43.345, -80.0, -79.86),
+        (43.345, 43.35, -80.0, -79.855),
+        (43.35, 43.36, -80.0, -79.87),
+        (43.36, 43.365, -79.88, -79.87),
+        (43.36, 43.37, -80.0, -79.89),
+        (43.37, 43.375, -79.9, -79.895),
+        (43.37, 43.38, -80.0, -79.91),
+        (43.38, 43.39, -80.0, -79.915),
+        (43.39, 43.395, -80.0, -79.91),
+        (43.395, 43.4, -79.925, -79.915),
+        (43.395, 43.41, -80.0, -79.935),
+        (43.41, 43.415, -80.0, -79.955),
+        (43.415, 43.42, -80.0, -79.96),
+        (43.42, 43.445, -80.0, -79.955),
+        (43.445, 43.45, -80.0, -79.96),
+        (43.45, 43.46, -80.0, -79.965),
+        (43.46, 43.47, -80.0, -79.97),
+        (43.47, 43.475, -80.0, -79.975),
+    ),
     'GBBRS': ((51.39, 51.55, -2.73, -2.5),),
     'BEGNT': ((50.97, 51.19, 3.57, 3.85),),
     'PTLIS': ((38.68, 38.8, -9.24, -9.08),),
@@ -3261,7 +3411,45 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'JPTYO': ((35.48, 35.9, 138.93, 139.95),),
     'CAMON': ((46.02, 46.2, -64.95, -64.66),),
     'CAAJX': ((43.78, 43.95, -79.1, -78.93),),
-    'CABUR': ((43.25, 43.475, -80.0, -79.68),),
+    'CABUR': (
+        (43.275, 43.28, -79.69, -79.68),
+        (43.28, 43.285, -79.745, -79.68),
+        (43.285, 43.29, -79.875, -79.835),
+        (43.285, 43.29, -79.825, -79.815),
+        (43.285, 43.29, -79.755, -79.68),
+        (43.29, 43.295, -79.89, -79.805),
+        (43.29, 43.295, -79.76, -79.68),
+        (43.295, 43.3, -79.9, -79.8),
+        (43.295, 43.305, -79.765, -79.68),
+        (43.3, 43.305, -79.9, -79.795),
+        (43.305, 43.31, -79.905, -79.785),
+        (43.305, 43.31, -79.77, -79.68),
+        (43.31, 43.315, -79.905, -79.68),
+        (43.315, 43.325, -79.895, -79.68),
+        (43.325, 43.33, -79.88, -79.68),
+        (43.33, 43.335, -79.875, -79.87),
+        (43.33, 43.335, -79.865, -79.68),
+        (43.335, 43.345, -79.86, -79.68),
+        (43.345, 43.35, -79.855, -79.68),
+        (43.35, 43.365, -79.87, -79.68),
+        (43.36, 43.365, -79.89, -79.88),
+        (43.365, 43.37, -79.89, -79.68),
+        (43.37, 43.375, -79.91, -79.9),
+        (43.37, 43.375, -79.895, -79.68),
+        (43.375, 43.38, -79.91, -79.68),
+        (43.38, 43.39, -79.915, -79.68),
+        (43.39, 43.395, -79.91, -79.68),
+        (43.395, 43.4, -79.935, -79.925),
+        (43.395, 43.4, -79.915, -79.68),
+        (43.4, 43.41, -79.935, -79.68),
+        (43.41, 43.415, -79.955, -79.68),
+        (43.415, 43.42, -79.96, -79.68),
+        (43.42, 43.445, -79.955, -79.68),
+        (43.445, 43.45, -79.96, -79.68),
+        (43.45, 43.46, -79.965, -79.68),
+        (43.46, 43.47, -79.97, -79.68),
+        (43.47, 43.475, -79.975, -79.68),
+    ),
     'CAOTT': ((44.92, 45.58, -76.4, -75.2),),
     'CAMIS': (
         (43.475, 43.55, -79.88, -79.5),

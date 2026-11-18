@@ -1,0 +1,33 @@
+import ..landmark_common;
+
+root datasource geneva_landmarks_update_time (
+    data_updated_through: chgva_landmark_data_updated_through
+)
+file `./geneva_landmarks_probe.py`;
+
+# Geneva's classified monuments (objets classés under the cantonal LPMNS),
+# SITG's `DPS_CLASSEMENT` layer, read live from the same ArcGIS server as the
+# trees; one landmark per classification decree, its polygons as one
+# multipolygon (see geneva_landmarks.py).  The register's own attributes ride
+# along in existing landmark_common properties: the kind of object
+# (category), classification and federal protection (protection_type), the
+# decree number (register_number) and the decree year (year_designated).
+root partial datasource raw_geneva_landmark_info extends landmark_partition (
+    category: ?category,
+    protection_type: ?protection_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'CHGVA'
+file `./geneva_landmarks.py`;
+
+partial datasource geneva_landmark_info extends published_landmark_info (
+    ?category,
+    ?protection_type,
+    ?register_number,
+    ?year_designated,
+    chgva_landmark_data_updated_through,
+)
+complete where city = 'CHGVA'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/chgva_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/chgva_landmark_info_v{data_version}.parquet`
+freshness by chgva_landmark_data_updated_through;

@@ -191,7 +191,13 @@ file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aucbr_tree_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ptlis_tree_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/begnt_tree_info_v{data_version}.parquet`,
-    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gbbrs_tree_info_v{data_version}.parquet`
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gbbrs_tree_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caham_tree_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlutc_tree_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frtls_tree_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/chgva_tree_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/delej_tree_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nzwlg_tree_info_v{data_version}.parquet`
 ];
 
 datasource full_tree_info (

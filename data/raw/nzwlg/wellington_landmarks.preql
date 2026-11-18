@@ -1,0 +1,29 @@
+import ..landmark_common;
+
+root datasource wellington_landmarks_update_time (
+    data_updated_through: nzwlg_landmark_data_updated_through
+)
+file `./wellington_landmarks_probe.py`;
+
+# The Wellington City 2024 District Plan's scheduled historic heritage --
+# SCHED1 buildings, SCHED2 structures, SCHED3 heritage areas -- read live from
+# the council's ArcGIS server, the same one as the trees.  `register_number`
+# is the plan reference, `lm_type` the plan's item type and `address` the
+# full address.
+root partial datasource raw_wellington_landmark_info extends landmark_partition (
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    address: ?address,
+)
+complete where city = 'NZWLG'
+file `./wellington_landmarks.py`;
+
+partial datasource wellington_landmark_info extends published_landmark_info (
+    ?lm_type,
+    ?register_number,
+    ?address,
+    nzwlg_landmark_data_updated_through,
+)
+complete where city = 'NZWLG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/nzwlg_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/nzwlg_landmark_info_v{data_version}.parquet`
+freshness by nzwlg_landmark_data_updated_through;
