@@ -662,6 +662,8 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 # and is deliberately not here.
 SPECIES_SYNONYMS: dict[str, str] = {
     # Nomenclatural and taxonomic synonyms (POWO lists the key under the value).
+    # Batch 8 (San Diego, Kitchener, Sydney, Louisville, Montpellier, Grenoble): WCVP synonyms and hybrid marks.
+    "Hesperotropsis leylandii": "Cupressus x leylandii",  # Montpellier
     # Batch 7 (Bordeaux, Strasbourg, Eindhoven, Bern, Rennes, Antwerp): WCVP synonyms and hybrid marks.
     "Arbutus andrachnoides": "Arbutus x andrachnoides",  # Rennes
     "Aesculus neglecta": "Aesculus x neglecta",  # Bordeaux
@@ -884,6 +886,37 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # Batch 8 (San Diego, Kitchener, Sydney, Louisville, Montpellier, Grenoble): each key absent from WCVP, each value accepted there.
+    "Rosa lucieae": "Rosa luciae",  # Montpellier
+    "Platanus x acerfolia": "Platanus x hispanica",  # Kitchener
+    "Koelreuteria paniculate": "Koelreuteria paniculata",  # Louisville
+    "Oxydendrum arboretum": "Oxydendrum arboreum",  # Louisville
+    "Acacia podalyrifolia": "Acacia podalyriifolia",  # Sydney
+    "Alectryon excelsum": "Alectryon excelsus",  # Sydney
+    "Bizmarckia nobilis": "Bismarckia nobilis",  # Sydney
+    "Ceiba speciose": "Ceiba speciosa",  # Sydney
+    "Elaeocarpus eumundii": "Elaeocarpus eumundi",  # Sydney
+    "Euphorbia pulcherima": "Euphorbia pulcherrima",  # Sydney
+    "Koelreutaria bipinnata": "Koelreuteria bipinnata",  # Sydney
+    "Tilia tomensa": "Tilia tomentosa",  # Grenoble
+    "Taxodium distychum": "Taxodium distichum",  # Grenoble
+    "Aulnus cordata": "Alnus cordata",  # Grenoble
+    "Gleditsia triacanthose": "Gleditsia triacanthos",  # Grenoble
+    "Prunus x yeodensis": "Prunus x yedoensis",  # Grenoble
+    "Celtis siliquastrum": "Cercis siliquastrum",  # Grenoble
+    "Pterocarya stenoptea": "Pterocarya stenoptera",  # Grenoble
+    "Celtis autralias": "Celtis australis",  # Grenoble
+    "Celtis autralid": "Celtis australis",  # Grenoble
+    "Celtis occidentaliq": "Celtis occidentalis",  # Grenoble
+    "Dyospiros kaki": "Diospyros kaki",  # Grenoble
+    "Punus avium": "Prunus avium",  # Grenoble
+    "Pinus serrulata": "Prunus serrulata",  # Grenoble
+    "Pinus calleryana": "Pyrus calleryana",  # Grenoble
+    "Cinnamomum burmannii": "Cinnamomum burmanni",  # San Diego
+    "Dimocarpus longon": "Dimocarpus longan",  # San Diego
+    "Grevillea banskii": "Grevillea banksii",  # San Diego
+    "Lirodendron tulipifera": "Liriodendron tulipifera",  # San Diego
+    "Paulowinia kawakamii": "Paulownia kawakamii",  # San Diego
     # Batch 7 (Bordeaux, Strasbourg, Eindhoven, Bern, Rennes, Antwerp): each key absent from WCVP, each value accepted there.
     "Carya illinoinessis": "Carya illinoinensis",  # Strasbourg
     "Chionanthus retesus": "Chionanthus retusus",  # Strasbourg
@@ -2687,10 +2720,10 @@ def _check_tree_id_grain(
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "AUSYD": (-33.93, -33.85, 151.17, 151.24),
-    "FRGNB": (45.05, 45.3, 5.6, 5.9),
+    "FRGNB": (44.95, 45.3, 5.6, 5.9),
     "FRMPL": (43.56, 43.66, 3.8, 3.95),
     "USLOU": (37.99, 38.38, -85.95, -85.4),
-    "CAKIT": (43.37, 43.52, -80.57, -80.38),
+    "CAKIT": (43.36, 43.52, -80.57, -80.38),
     "USSAN": (32.53, 33.12, -117.31, -116.9),
     "BEANR": (51.13, 51.38, 4.21, 4.52),
     "FRRNS": (47.95, 48.31, -1.96, -1.44),
@@ -3394,10 +3427,10 @@ Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'AUSYD': ((-33.93, -33.85, 151.17, 151.24),),
-    'FRGNB': ((45.05, 45.3, 5.6, 5.9),),
+    'FRGNB': ((44.95, 45.3, 5.6, 5.9),),
     'FRMPL': ((43.56, 43.66, 3.8, 3.95),),
     'USLOU': ((37.99, 38.38, -85.95, -85.4),),
-    'CAKIT': ((43.37, 43.52, -80.57, -80.38),),
+    'CAKIT': ((43.36, 43.52, -80.57, -80.38),),
     'USSAN': ((32.53, 33.12, -117.31, -116.9),),
     'BEANR': ((51.13, 51.38, 4.21, 4.52),),
     'FRRNS': ((47.95, 48.31, -1.96, -1.44),),

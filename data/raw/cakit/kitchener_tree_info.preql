@@ -63,7 +63,7 @@ root partial datasource cakit_osm_tree_info extends tree_partition (
 )
 complete where city = 'CAKIT' and cakit_source = 'OSM_CAKIT'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cakit_osm_staging.parquet`
-where (raw_latitude >= 43.37 and raw_latitude < 43.52 and raw_longitude >= -80.57 and raw_longitude < -80.38);
+where (raw_latitude >= 43.36 and raw_latitude < 43.52 and raw_longitude >= -80.57 and raw_longitude < -80.38);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

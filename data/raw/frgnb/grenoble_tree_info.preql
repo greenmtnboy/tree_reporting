@@ -63,7 +63,7 @@ root partial datasource frgnb_osm_tree_info extends tree_partition (
 )
 complete where city = 'FRGNB' and frgnb_source = 'OSM_FRGNB'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/frgnb_osm_staging.parquet`
-where (raw_latitude >= 45.05 and raw_latitude < 45.3 and raw_longitude >= 5.6 and raw_longitude < 5.9);
+where (raw_latitude >= 44.95 and raw_latitude < 45.3 and raw_longitude >= 5.6 and raw_longitude < 5.9);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
