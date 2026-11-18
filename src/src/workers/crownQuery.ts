@@ -1,3 +1,4 @@
+import { speciesCodeSql } from '../lib/foliageSeason'
 import { polygonPredicate } from '../lib/viewFootprint'
 import { CROWN_DISTANCE_MAX, MAX_CROWNS, MAX_TREE_SPRITES, MAX_CROWN_WIDTH, MAX_TREE_HEIGHT, MERCATOR_WORLD_METERS, mercatorPoint, metersPerMercatorUnit, type TreeRenderView } from '../lib/treeCrowns'
 
@@ -22,8 +23,11 @@ export type CrownColor = { join: string; expr: string }
  */
 export type CrownSource = {
   from: string; trees?: string | null
-  /** A table of the species that drop their leaves (`species`): a tree's `deciduous` column. Absent, none is. */
-  deciduous?: string
+  /**
+   * Read each tree's code in the world's species ENUM (`species_code`), from which the worker
+   * works out its leaf-off months (lib/foliageSeason FoliageLookup). Absent, every code is -1.
+   */
+  speciesCode?: boolean
 }
 
 function spriteLimit(camera: TreeRenderView): number {
@@ -77,7 +81,7 @@ WITH ${baseQuery === null ? '' : `${source.trees ? `trees AS (${source.trees}), 
       WHEN ${valid('tf.predicted_height_m', MAX_TREE_HEIGHT)} THEN tf.predicted_height_m END AS height,
     CAST(tf.tree_form AS VARCHAR) AS category, tf.dbh,
     COALESCE(tf.notable, false) AS notable,
-    ${source.deciduous ? `CAST(tf.species AS VARCHAR) IN (SELECT species FROM ${source.deciduous})` : 'false'} AS deciduous,
+    ${source.speciesCode ? speciesCodeSql('tf') : '-1'} AS species_code,
     ((tf.x_3857 - ${x}) * ${cosLat}) ** 2 +
     ((tf.y_3857 - ${y}) * ${cosLat}) ** 2 + ${camera.altitude ** 2} AS distance_squared
   FROM ${source.from} tf
@@ -85,7 +89,7 @@ WITH ${baseQuery === null ? '' : `${source.trees ? `trees AS (${source.trees}), 
   WHERE ${extent}${baseQuery === null ? '' : `
     AND EXISTS (SELECT 1 FROM base WHERE base.tree_id = tf.tree_id)`}
 )
-SELECT id, lng, lat, width, measured, color, category, dbh, height, notable, deciduous FROM nearby
+SELECT id, lng, lat, width, measured, color, category, dbh, height, notable, species_code FROM nearby
 ${camera.bounds ? '' : `WHERE width IS NOT NULL AND distance_squared < ${CROWN_DISTANCE_MAX ** 2}`}
 ORDER BY distance_squared, id LIMIT ${camera.bounds ? spriteLimit(camera) : MAX_CROWNS}`
 }

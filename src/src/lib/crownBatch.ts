@@ -4,7 +4,7 @@ import {
   type TreeCrownColumns, type TreeRenderView,
 } from './treeCrowns'
 import { crownFormIndex, crownTurn, LEAFLESS_OFFSET, packCrownAlpha } from './crownShapes'
-import { foliagePhase } from './foliageSeason'
+import { leafOffBit } from './foliageSeason'
 
 /** Floats per vertex; six vertices (two triangles) per tree. */
 export const CROWN_STRIDE = 15
@@ -24,8 +24,8 @@ export interface CrownBatchOptions {
   /** The atlas cells by tree form; desktop only. */
   cells?: Record<string, SpriteCellGeometry>
   /**
-   * The map's date (epoch ms; lib/mapDate): a deciduous tree is drawn bare where its own latitude
-   * is in winter on it (lib/foliageSeason). Absent, every tree is drawn in leaf.
+   * The map's date (epoch ms; lib/mapDate): a tree is drawn bare when its leaf-off months
+   * (`leafOff`, lib/foliageSeason) hold the date's month. Absent, every tree is drawn in leaf.
    */
   date?: number
 }
@@ -117,12 +117,13 @@ export function buildCrownBatch(c: TreeCrownColumns, camera: TreeRenderView, opt
   const notable: number[] = []
   const colors = new Map<string, number[]>()
   let cursor = 0, drawn = 0, farthest = 0, bare = 0
-  const date = options.date === undefined || !c.deciduous ? undefined : new Date(options.date)
-  // Bare: a deciduous species, in winter where it stands.
-  const isBare = (i: number) => !!date && !!c.deciduous![i] && foliagePhase(date, c.lat[i]) === 'bare'
+  // Bare: the tree's prebaked leaf-off months hold the map date's month; one bit test a tree.
+  const month = options.date === undefined || !c.leafOff ? 0 : leafOffBit(new Date(options.date))
+  const leafOff = c.leafOff
+  const isBare = (i: number) => (leafOff![i] & month) !== 0
   // The phone draws its bare trees as a second call (one texture read a pixel either way), so they
   // go last; ground rings need no depth order, and the stable partition keeps the rest as it was.
-  if (simplified && date) {
+  if (simplified && month) {
     const leafy: number[] = [], winter: number[] = []
     for (const i of order) (isBare(i) ? winter : leafy).push(i)
     order.set(leafy.concat(winter))
@@ -146,7 +147,7 @@ export function buildCrownBatch(c: TreeCrownColumns, camera: TreeRenderView, opt
     const aspect = cell ? spriteAspect(width, c.height[i], cell.crownFraction, cell.heightFraction) : 1
     // The colour's alpha: 1 for a measured crown, plus 2 on a desktop notable sprite (its outline);
     // its fraction is the overhead crown's form and turn (lib/crownShapes).
-    const leafless = isBare(i)
+    const leafless = month !== 0 && isBare(i)
     if (leafless) bare++
     const alpha = packCrownAlpha((c.measured[i] ? 1 : 0) + (!simplified && c.notable?.[i] ? 2 : 0),
       crownFormIndex(c.category[i]) + (leafless ? LEAFLESS_OFFSET : 0), crownTurn(c.lng[i], c.lat[i]))

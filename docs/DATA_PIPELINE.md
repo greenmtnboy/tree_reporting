@@ -62,6 +62,8 @@ the core, daily, reading only published parquets
   refresh-enrichment    raw/tree_enrichment.preql       -> tree_enrichment_v{n}.parquet
   refresh-allometry-fits, refresh-height-fits (at most weekly)
                                                         -> {age,height}_{genus,class}_fits_v{n}.parquet
+  refresh-foliage-defaults  raw/foliage_defaults.preql (at most weekly)
+                                                        -> foliage_defaults_v{n}.parquet
   publish-world-blocks  world_tree_blocks.preql         -> world/v1/manifest.json
                                                         world/v1/blocks/{key}-{hash}.parquet
                                                         world/v1/vocab-{hash}.parquet
@@ -474,6 +476,27 @@ city's browser projection (below), where the pipeline has already folded
 them in; recorded values take precedence.
 Predictions stay outside the frontend Trilogy model bundle. See
 `MAP_CROWNS.md` for rendering and limits.
+
+## Leaf habit where a tree stands (`raw/foliage_defaults.preql`)
+
+The map draws a deciduous tree bare in its winter. A binomial answers that
+from the enrichment table's `is_evergreen`; a tree recorded only to its genus
+(16.5k `Quercus` in Boston alone) or of a species whose habit is unknown does
+not, and the answer depends on where it stands: Boston's identified oaks are
+all deciduous, Naples, Florida's all live oaks. `refresh-foliage-defaults`
+publishes, per 1-degree cell and genus, the share of the genus's identified
+trees that are deciduous, falling back to the 5-degree region and then the
+whole world when a level has fewer than 20 identified trees. About 13k rows
+and 80 kB (November 2026). It reads the rollup and the enrichment table by
+name and refreshes on the fits' weekly watermark.
+
+The browser does not join it per tree. The worker builds a lookup once per
+world (`FoliageLookup`, `src/src/lib/foliageSeason.ts`) keyed by the code of
+the world's species ENUM, and the crown and dot reads return that code
+(`enum_code`) instead of joining a species table. Each tree's leaf-off
+months come from the lookup and a latitude-by-month table baked at module
+load (`SEASON_BANDS`). Until the file is published, a species keeps the
+enrichment's own answer.
 
 ## The world's geo blocks (`world_tree_blocks.preql`, `world/publish_blocks.py`)
 

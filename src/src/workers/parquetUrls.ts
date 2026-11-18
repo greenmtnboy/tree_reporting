@@ -7,6 +7,8 @@ export const REMOTE_TREES_BASE_URL: string =
 export const TREE_DATA_VERSION = 2
 export const REMOTE_TREES_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/full_tree_info_v${TREE_DATA_VERSION}.parquet`
 export const REMOTE_SPECIES_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/tree_enrichment_v${TREE_DATA_VERSION}.parquet`
+/** Whether a genus drops its leaves where it stands, per 1-degree cell (data/raw/foliage_defaults.preql; lib/foliageSeason). */
+export const REMOTE_FOLIAGE_DEFAULTS_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/foliage_defaults_v${TREE_DATA_VERSION}.parquet`
 export const REMOTE_ECOREGION_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/ecoregion_info_v${TREE_DATA_VERSION}.parquet`
 /** The ecoregion dimension as the worker reads it: id, biome, realm (data/raw/ecoregion_browser.preql). */
 export const REMOTE_ECOREGION_BROWSER_PARQUET_URL = `${REMOTE_TREES_BASE_URL}/ecoregion_browser_v${TREE_DATA_VERSION}.parquet`

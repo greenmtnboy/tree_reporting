@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildCrownBatch, CROWN_STRIDE } from './crownBatch'
 import { CROWN_FORMS, unpackCrownAlpha } from './crownShapes'
+import { leafOffMonths } from './foliageSeason'
 import { DEFAULT_CROWN_WIDTH, metersPerMercatorUnit, type TreeCrownColumns } from './treeCrowns'
 
 function columns(rows: { id: string; lat: number; width?: number }[]): TreeCrownColumns {
@@ -51,13 +52,14 @@ describe('buildCrownBatch', () => {
     expect(batch.rows).toBe(2)
   })
 
-  it('draws a deciduous tree bare in the winter where it stands, and only there', () => {
-    // Trees far from the camera in latitude, so the desktop draws them all (no distance cut).
+  it('draws a tree bare in the months its leaf-off mask holds, and only then', () => {
+    // Trees far from the camera in latitude, so the desktop draws them all (no distance cut). Each
+    // deciduous tree's mask is its latitude's, as the worker reads it (lib/foliageSeason leafOffSql).
     const rows = [
-      { id: 'boston', lat: 42, deciduous: 1 }, { id: 'boston-pine', lat: 42, deciduous: 0 },
-      { id: 'melbourne', lat: -37, deciduous: 1 }, { id: 'singapore', lat: 1.3, deciduous: 1 },
+      { id: 'boston', lat: 42, deciduous: true }, { id: 'boston-pine', lat: 42, deciduous: false },
+      { id: 'melbourne', lat: -37, deciduous: true }, { id: 'singapore', lat: 1.3, deciduous: true },
     ]
-    const c = { ...columns(rows), deciduous: Uint8Array.from(rows, r => r.deciduous) }
+    const c = { ...columns(rows), leafOff: Uint16Array.from(rows, r => (r.deciduous ? leafOffMonths(r.lat) : 0)) }
     const bareIn = (date: Date) => {
       const b = buildCrownBatch(c, camera, { simplified: false, bearing: 0, date: date.getTime() })
       return b.id.filter((_, i) => unpackCrownAlpha(b.vertices[i * 6 * CROWN_STRIDE + 8]).form >= CROWN_FORMS.length).sort()
