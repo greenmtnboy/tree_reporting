@@ -548,6 +548,42 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'australasia',
   },
+  FRBOD: {
+    ecoregionId: 648, // Cantabrian mixed forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  FRSXB: {
+    ecoregionId: 686, // Western European broadleaf forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  NLEIN: {
+    ecoregionId: 664, // European Atlantic mixed forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  CHBRN: {
+    ecoregionId: 686, // Western European broadleaf forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  FRRNS: {
+    ecoregionId: 664, // European Atlantic mixed forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  BEANR: {
+    ecoregionId: 664, // European Atlantic mixed forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

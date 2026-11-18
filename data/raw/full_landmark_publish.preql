@@ -186,7 +186,13 @@ file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/frtls_landmark_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/chgva_landmark_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/delej_landmark_info_v{data_version}.parquet`,
-    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/nzwlg_landmark_info_v{data_version}.parquet`
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/nzwlg_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/frbod_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/frsxb_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/nlein_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/chbrn_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/frrns_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/beanr_landmark_info_v{data_version}.parquet`
 ];
 
 

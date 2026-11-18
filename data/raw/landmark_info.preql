@@ -96,6 +96,12 @@ import frtls.toulouse_landmarks;
 import chgva.geneva_landmarks;
 import delej.leipzig_landmarks;
 import nzwlg.wellington_landmarks;
+import frbod.bordeaux_landmarks;
+import frsxb.strasbourg_landmarks;
+import nlein.eindhoven_landmarks;
+import chbrn.bern_landmarks;
+import frrns.rennes_landmarks;
+import beanr.antwerp_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

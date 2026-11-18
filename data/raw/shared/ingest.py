@@ -662,6 +662,12 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 # and is deliberately not here.
 SPECIES_SYNONYMS: dict[str, str] = {
     # Nomenclatural and taxonomic synonyms (POWO lists the key under the value).
+    # Batch 7 (Bordeaux, Strasbourg, Eindhoven, Bern, Rennes, Antwerp): WCVP synonyms and hybrid marks.
+    "Arbutus andrachnoides": "Arbutus x andrachnoides",  # Rennes
+    "Aesculus neglecta": "Aesculus x neglecta",  # Bordeaux
+    "Quercus macdanielii": "Quercus x macdanielii",  # Eindhoven
+    "Tilia flavescens": "Tilia x flavescens",  # Eindhoven
+    "Cedrela sinensis": "Toona sinensis",  # Eindhoven
     # Batch 6 (Hamilton, Utrecht, Toulouse, Geneva, Leipzig, Wellington): WCVP synonyms and hybrid marks.
     "Malus magdeburgensis": "Malus x magdeburgensis",  # Utrecht
     "Deutzia magnifica": "Deutzia x magnifica",  # Toulouse
@@ -878,6 +884,53 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # Batch 7 (Bordeaux, Strasbourg, Eindhoven, Bern, Rennes, Antwerp): each key absent from WCVP, each value accepted there.
+    "Carya illinoinessis": "Carya illinoinensis",  # Strasbourg
+    "Chionanthus retesus": "Chionanthus retusus",  # Strasbourg
+    "Laburnum x waterei": "Laburnum x watereri",  # Strasbourg
+    "Prunus institia": "Prunus insititia",  # Strasbourg
+    "Prunus x yedonensis": "Prunus x yedoensis",  # Strasbourg
+    "Sassafras albudum": "Sassafras albidum",  # Strasbourg
+    "Thuya": "Thuja",  # Strasbourg
+    "Thuya plicata": "Thuja plicata",  # Strasbourg
+    "Thuya orientalis": "Platycladus orientalis",  # Strasbourg
+    "Pistacia sinensis": "Pistacia chinensis",  # Strasbourg
+    "Prunus x hillierii": "Prunus x hillieri",  # Strasbourg
+    "Prunus x schmitii": "Prunus x schmittii",  # Strasbourg
+    "Cupressocyparis x leylandii": "Cupressus x leylandii",  # Strasbourg
+    "Populus x euroamericana": "Populus x canadensis",  # Strasbourg
+    "Acer maximowiiczianum": "Acer maximowiczianum",  # Antwerp
+    "Magnolia tripelata": "Magnolia tripetala",  # Antwerp
+    "Picea engelmanni": "Picea engelmannii",  # Antwerp
+    "Quercus x rosaceae": "Quercus x rosacea",  # Antwerp
+    "Salix exiga": "Salix exigua",  # Antwerp
+    "Toxicodendron verniciflua": "Toxicodendron vernicifluum",  # Antwerp
+    "Acer campestris": "Acer campestre",  # Rennes
+    "Aesculus hippcastanum": "Aesculus hippocastanum",  # Rennes
+    "Aesculus hyppocastanum": "Aesculus hippocastanum",  # Rennes
+    "Calocedrus deccurens": "Calocedrus decurrens",  # Rennes
+    "Crataegus riypidophylla": "Crataegus rhipidophylla",  # Rennes
+    "Crataegus x lavalleri": "Crataegus x lavalleei",  # Rennes
+    "Decaisnea fragesii": "Decaisnea fargesii",  # Rennes
+    "Ehretia dicknonii": "Ehretia dicksonii",  # Rennes
+    "Heptacodium miconoides": "Heptacodium miconioides",  # Rennes
+    "Liriodendron chinensis": "Liriodendron chinense",  # Rennes
+    "Quercus castanaefolia": "Quercus castaneifolia",  # Rennes
+    "Quercus dendata": "Quercus dentata",  # Rennes
+    "Rhus thyphina": "Rhus typhina",  # Rennes
+    "Salix acerifolia": "Salix acutifolia",  # Rennes
+    "Salix hookerianum": "Salix hookeriana",  # Rennes
+    "Salix rosemarinifolia": "Salix rosmarinifolia",  # Rennes
+    "Saxegothea conspicua": "Saxegothaea conspicua",  # Rennes
+    "Tilia dasystila": "Tilia dasystyla",  # Rennes
+    "Ulmus laevi": "Ulmus laevis",  # Rennes
+    "Ulmus x holandia": "Ulmus x hollandica",  # Rennes
+    "Alnus gutinosa": "Alnus glutinosa",  # Bordeaux
+    "Arbustus x andrachnoides": "Arbutus x andrachnoides",  # Bordeaux
+    "Brachychiton populneum": "Brachychiton populneus",  # Bordeaux
+    "Quercus muelhenbergii": "Quercus muehlenbergii",  # Bordeaux
+    "Prunus subhertilla": "Prunus x subhirtella",  # Eindhoven
+    "Pinus griffitii": "Pinus wallichiana",  # Eindhoven
     # Batch 6 (Hamilton, Utrecht, Toulouse, Geneva, Leipzig, Wellington): each key absent from WCVP, each value accepted there.
     "Asimini triloba": "Asimina triloba",  # Utrecht
     "Carya illioinensis": "Carya illinoinensis",  # Utrecht
@@ -1790,6 +1843,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "BEANR": ("ANTWERPEN_OPENDATA",),
+    "FRRNS": ("RENNES_OPENDATA",),
+    "CHBRN": ("BERN_OPENDATA",),
+    "NLEIN": ("EINDHOVEN_OPENDATA",),
+    "FRSXB": ("STRASBOURG_OPENDATA",),
+    "FRBOD": ("BORDEAUX_OPENDATA",),
     "NZWLG": ("WELLINGTON_OPENDATA",),
     "DELEJ": ("LEIPZIG_OPENDATA",),
     "CHGVA": ("GENEVA_SITG",),
@@ -1910,6 +1969,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "BEANR": "OSM_BEANR",
+    "FRRNS": "OSM_FRRNS",
+    "CHBRN": "OSM_CHBRN",
+    "NLEIN": "OSM_NLEIN",
+    "FRSXB": "OSM_FRSXB",
+    "FRBOD": "OSM_FRBOD",
     "NZWLG": "OSM_NZWLG",
     "DELEJ": "OSM_DELEJ",
     "CHGVA": "OSM_CHGVA",
@@ -2609,6 +2674,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "BEANR": (51.13, 51.38, 4.21, 4.52),
+    "FRRNS": (47.95, 48.31, -1.96, -1.44),
+    "CHBRN": (46.9, 47.0, 7.28, 7.5),
+    "NLEIN": (51.37, 51.51, 5.35, 5.58),
+    "FRSXB": (48.43, 48.71, 7.53, 7.9),
+    "FRBOD": (44.7, 45.03, -0.85, -0.37),
     "NZWLG": (-41.37, -41.13, 174.6, 174.9),
     "DELEJ": (51.23, 51.45, 12.23, 12.55),
     "CHGVA": (46.12, 46.37, 5.95, 6.32),
@@ -2754,6 +2825,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "BEANR": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "FRRNS": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CHBRN": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "NLEIN": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "FRSXB": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "FRBOD": 10,
     # Calibrated 2026-11-17 (osm_dedup_validation.py, local inventory parquet)
     # against the staged extract. Mutual-NN 90.3% in 2-5 m, 45.5% in 5-10 m
     # (n=143): a 5 m guarantee caps it at 10. Marginal table: 6->8 removes 42
@@ -3278,6 +3361,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'BEANR': ((51.13, 51.38, 4.21, 4.52),),
+    'FRRNS': ((47.95, 48.31, -1.96, -1.44),),
+    'CHBRN': ((46.9, 47.0, 7.28, 7.5),),
+    'NLEIN': ((51.37, 51.51, 5.35, 5.58),),
+    'FRSXB': ((48.43, 48.71, 7.53, 7.9),),
+    'FRBOD': ((44.7, 45.03, -0.85, -0.37),),
     'NZWLG': ((-41.37, -41.13, 174.6, 174.9),),
     'DELEJ': ((51.23, 51.45, 12.23, 12.55),),
     'CHGVA': ((46.12, 46.37, 5.95, 6.32),),

@@ -87,6 +87,12 @@ import frtls.toulouse_tree_info;
 import chgva.geneva_tree_info;
 import delej.leipzig_tree_info;
 import nzwlg.wellington_tree_info;
+import frbod.bordeaux_tree_info;
+import frsxb.strasbourg_tree_info;
+import nlein.eindhoven_tree_info;
+import chbrn.bern_tree_info;
+import frrns.rennes_tree_info;
+import beanr.antwerp_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -181,6 +187,12 @@ merge frtls_source into data_source;
 merge chgva_source into data_source;
 merge delej_source into data_source;
 merge nzwlg_source into data_source;
+merge frbod_source into data_source;
+merge frsxb_source into data_source;
+merge nlein_source into data_source;
+merge chbrn_source into data_source;
+merge frrns_source into data_source;
+merge beanr_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -284,7 +296,13 @@ nlutc_published_data_updated_through,
 frtls_published_data_updated_through,
 chgva_published_data_updated_through,
 delej_published_data_updated_through,
-nzwlg_published_data_updated_through);
+nzwlg_published_data_updated_through,
+frbod_published_data_updated_through,
+frsxb_published_data_updated_through,
+nlein_published_data_updated_through,
+chbrn_published_data_updated_through,
+frrns_published_data_updated_through,
+beanr_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (
