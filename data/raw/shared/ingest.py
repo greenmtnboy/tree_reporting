@@ -2876,18 +2876,24 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "AUSYD": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "FRGNB": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "FRMPL": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USLOU": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAKIT": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USSAN": 10,
+    # Calibrated 2026-11-18: 8 m keeps 2.1 true per false at the margin (88.8% recall);
+    # 10 m drops below 1.
+    "AUSYD": 8,
+    # Calibrated 2026-11-18: OSM mirrors the inventory closely (92% within 2 m);
+    # 4 m keeps 4.2 true per false, 6 m falls to 0.70.
+    "FRGNB": 4,
+    # Calibrated 2026-11-18: 6 m keeps 1.3 true per false at the margin (94.2% recall);
+    # 8 m falls to 0.44.
+    "FRMPL": 6,
+    # Calibrated 2026-11-18: 6 m keeps 2.0 true per false at the margin;
+    # 8 m falls to 0.36 (dense planting projects).
+    "USLOU": 6,
+    # Calibrated 2026-11-18: few OSM trees (370 near the inventory); 8 m keeps 2.5
+    # true per false at the margin, 10 m reaches 1.0.
+    "CAKIT": 8,
+    # Calibrated 2026-11-18 (osm_dedup_validation): 6 m keeps 3.3 true per false
+    # at the margin; 8 m drops below 1 (0.81).
+    "USSAN": 6,
     # Calibrated 2026-11-18: 8m cell: recall 93.7%, 3.2% false; 10m adds +27 true / +58 false.
     "BEANR": 8,
     # Calibrated 2026-11-18: 6m cell: recall 91.4%, 5.0% false; 8m adds +273 true / +687 false.
