@@ -100,6 +100,8 @@ export interface PointChunkBatch {
    * than a byte per tree on the page.
    */
   notable: Uint32Array
+  /** 1 for a tree of a species that drops its leaves: the dots draw it bare in its winter. */
+  deciduous: Uint8Array
   /**
    * Each chunk's 512 m draw grid. A chunk's rows are stored in its grid's
    * cell order, so a frame draws the ranges of the cells in view and a pick
@@ -172,7 +174,7 @@ export function crownByteSql(alias = 'tf'): string {
 }
 
 /** Every drawn tree of the chunks: its chunk, rowid, position from the chunk's origin, size and colour. */
-export function pointChunksSql(src: PointRowSource, keys: readonly number[], colorExpr: string, palette: readonly string[]): string {
+export function pointChunksSql(src: PointRowSource, keys: readonly number[], colorExpr: string, palette: readonly string[], deciduous?: string): string {
   const chunk = chunkKeySql()
   const cx = `${tileIndexSql('tf', 'x', CHUNK_ZOOM)}`
   const cy = `${tileIndexSql('tf', 'y', CHUNK_ZOOM)}`
@@ -185,6 +187,7 @@ SELECT
   CAST(LEAST(255, GREATEST(1, round(${src.dbh}))) AS UTINYINT) AS dbh,
   ${crownByteSql()} AS crown,
   CAST(COALESCE(tf.notable, false) AS UTINYINT) AS notable,
+  CAST(${deciduous ? `CAST(tf.species AS VARCHAR) IN (SELECT species FROM ${deciduous})` : 'false'} AS UTINYINT) AS deciduous,
   ${paletteIndexSql(colorExpr, palette)} AS color
 FROM ${src.from}
 WHERE ${src.where}${chunkFilterSql(keys)}`

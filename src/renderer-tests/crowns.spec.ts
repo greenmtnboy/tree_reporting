@@ -3,7 +3,8 @@ import { test, expect, type Page } from '@playwright/test'
 async function settle(page: Page) {
   await expect.poll(() => page.evaluate(() => {
     const layer = (window as any).crownTest?.layer
-    return layer && !layer.inFlight && !layer.timer && layer.count > 0
+    // The overhead crowns' atlas is built at idle; until it lands they are plain discs.
+    return layer && !layer.inFlight && !layer.timer && layer.count > 0 && layer.crownsReady
   })).toBe(true)
   await page.waitForFunction(() => {
     const layer = (window as any).crownTest.layer
@@ -93,12 +94,12 @@ test('crowns render at metre scale, respect zoom/distance, and release their res
     const expected = 12 / (40075016.68557849 * Math.cos(crowns[0].lat * Math.PI / 180) / (512 * 2 ** map.getZoom())) * ratio
     const cell = layer.sprites.cells.get('broadleaf')
     const height = expected / cell.crownFraction
-    const x = Math.round(point.x * ratio), y = canvas.height - Math.round(point.y * ratio) + Math.round(height * (0.95 - 0.38))
+    const x = Math.round(point.x * ratio), y = canvas.height - Math.round(point.y * ratio) + Math.round(height * (0.95 - 0.42))
     const pixels = new Uint8Array(160 * 4)
     gl.readPixels(x - 80, y, 160, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
     const green = Array.from({ length: 160 }, (_, i) => i).filter(i => pixels[i * 4 + 1] - pixels[i * 4] > 20)
     return { width: Math.max(...green) - Math.min(...green), expected, error: gl.getError(), iconLayers: map.getLayersOrder().filter((id: string) => id === 'trees-icon').length,
-      picked: layer.pick({ x: point.x, y: point.y - height / ratio * (0.95 - 0.38) })?.id }
+      picked: layer.pick({ x: point.x, y: point.y - height / ratio * (0.95 - 0.42) })?.id }
   })
   expect(sprite.error).toBe(0)
   expect(sprite.iconLayers).toBe(1)
@@ -191,7 +192,7 @@ test('first sprites wait for complete sizing and cross the former handoff withou
   expect(Math.max(...frames.widths) - Math.min(...frames.widths)).toBeLessThanOrEqual(2)
 })
 
-test('enlarged sprite edges stay sharp and all materials share one draw and texture', async ({ page }, testInfo) => {
+test('enlarged sprite edges stay sharp and all materials share one draw and four textures', async ({ page }, testInfo) => {
   await page.goto('/renderer-tests/crowns.html')
   await settle(page)
   await page.evaluate(() => {
@@ -207,18 +208,20 @@ test('enlarged sprite edges stay sharp and all materials share one draw and text
     const expected = 12 / (40075016.68557849 * Math.cos(crowns[0].lat * Math.PI / 180) / (512 * 2 ** 21))
     const size = expected / layer.sprites.cells.get('broadleaf').crownFraction
     const row = new Uint8Array(600 * 4)
-    gl.readPixels(Math.round(point.x) - 300, canvas.height - Math.round(point.y - size * 0.57), 600, 1, gl.RGBA, gl.UNSIGNED_BYTE, row)
+    gl.readPixels(Math.round(point.x) - 300, canvas.height - Math.round(point.y - size * 0.53), 600, 1, gl.RGBA, gl.UNSIGNED_BYTE, row)
     const covered = Array.from({ length: 600 }, (_, i) => i).filter(i => row[i * 4] < 165)
     // Only the edge should contain intermediate coverage, not a several-pixel
     // enlarged raster fringe. The tree spans roughly 400 screen pixels here.
     const partial = Array.from({ length: 600 }, (_, i) => i).filter(i => row[i * 4] > 94 && row[i * 4] < 237)
-    return { partial: partial.length, width: Math.max(...covered) - Math.min(...covered), expected, textureCount: layer.textures.length, error: gl.getError() }
+    return { partial: partial.length, width: Math.max(...covered) - Math.min(...covered), expected, textureCount: layer.textures.filter(Boolean).length, error: gl.getError() }
   })
   expect(edge.error).toBe(0)
   expect(edge.expected).toBeGreaterThan(350)
   expect(edge.partial).toBeLessThanOrEqual(4)
   expect(Math.abs(edge.width - edge.expected)).toBeLessThan(3)
-  expect(edge.textureCount).toBe(1)
+  // The side sprites' atlas and the overhead crowns', and 1×1 placeholders for their leafless
+  // twins until a winter's deciduous tree is drawn.
+  expect(edge.textureCount).toBe(4)
   await page.screenshot({ path: testInfo.outputPath('close-up.png') })
   await page.getByRole('button', { name: 'All tree shapes' }).click()
   await settle(page)
@@ -255,7 +258,7 @@ test('enlarged sprite edges stay sharp and all materials share one draw and text
   await page.screenshot({ path: testInfo.outputPath('all-shapes.png') })
 })
 
-test('from overhead a sprite is its crown: a disc the crown wide, centred on the trunk', async ({ page }) => {
+test('from overhead a sprite is its crown: its outline the crown wide, centred on the trunk', async ({ page }) => {
   await page.goto('/renderer-tests/crowns.html')
   await settle(page)
   // Straight above the tree, so it is seen from 90 degrees (past SPRITE_TOPDOWN_FULL_DEG).
@@ -271,14 +274,12 @@ test('from overhead a sprite is its crown: a disc the crown wide, centred on the
     const point = map.project([crowns[0].lng, crowns[0].lat])
     const ratio = canvas.width / canvas.clientWidth
     const expected = 12 / (40075016.68557849 * Math.cos(crowns[0].lat * Math.PI / 180) / (512 * 2 ** map.getZoom())) * ratio
-    // The green extent along a row (dx) or a column (dy) through the trunk.
-    const extent = (dx: number, dy: number, n: number) => {
-      const pixels = new Uint8Array(n * 4)
-      gl.readPixels(Math.round(point.x * ratio) + dx, canvas.height - Math.round(point.y * ratio) + dy, dx === 0 ? 1 : n, dx === 0 ? n : 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
-      const green = Array.from({ length: n }, (_, i) => i).filter(i => pixels[i * 4 + 1] - pixels[i * 4] > 20)
-      return Math.max(...green) - Math.min(...green)
-    }
-    return { width: extent(-100, 0, 200), height: extent(0, -100, 200), expected, picked: layer.pick({ x: point.x, y: point.y })?.id, error: gl.getError() }
+    // The green box around the trunk: a lobed outline reaches the crown's width at its lobes.
+    const n = 200, pixels = new Uint8Array(n * n * 4)
+    gl.readPixels(Math.round(point.x * ratio) - n / 2, canvas.height - Math.round(point.y * ratio) - n / 2, n, n, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+    const xs: number[] = [], ys: number[] = []
+    for (let i = 0; i < n * n; i++) if (pixels[i * 4 + 1] - pixels[i * 4] > 20) { xs.push(i % n); ys.push(Math.floor(i / n)) }
+    return { width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys), expected, picked: layer.pick({ x: point.x, y: point.y })?.id, error: gl.getError() }
   })
   expect(disc.error).toBe(0)
   expect(Math.abs(disc.width - disc.expected)).toBeLessThan(5)
@@ -389,4 +390,89 @@ test('GPU distance fading works while a replacement query is still pending', asy
   })
   expect(frame.retainedVertices).toBeGreaterThan(0)
   expect(frame.green).toBe(0)
+})
+
+test('overhead, each form draws its own crown inside its width, on the desktop and the phone', async ({ page }) => {
+  await page.goto('/renderer-tests/crowns.html')
+  await settle(page)
+  for (const mobile of [false, true]) {
+    await page.evaluate(mobile => {
+      const { map, crowns } = (window as any).crownTest
+      const forms = ['broadleaf', 'conifer', 'palm', 'columnar', 'ornamental', 'spreading', 'weeping', 'multi_trunk', 'default']
+      const center = map.getCenter()
+      // One 12 m crown of each form on a 3 x 3 grid 15 m apart, all seen from nearly straight above.
+      crowns.splice(0, crowns.length, ...forms.map((category, i) => ({
+        id: category, lng: center.lng + (i % 3 - 1) * 15 / (111320 * Math.cos(center.lat * Math.PI / 180)), lat: center.lat + (Math.floor(i / 3) - 1) * 15 / 111320,
+        width: 12, measured: true, color: '#4CAF50', category,
+      })))
+      if (mobile) document.querySelector<HTMLButtonElement>('#mobile')!.click()
+      map.jumpTo({ center, zoom: 18.8, pitch: 0, bearing: 0 })
+      ;(window as any).crownTest.layer.invalidate()
+    }, mobile)
+    await settle(page)
+    const shapes = await page.evaluate(() => {
+      const { map, crowns } = (window as any).crownTest
+      const canvas = map.getCanvas()
+      const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
+      const ratio = canvas.width / canvas.clientWidth
+      const expected = 12 / (40075016.68557849 * Math.cos(crowns[0].lat * Math.PI / 180) / (512 * 2 ** map.getZoom())) * ratio
+      const n = Math.ceil(expected * 1.3)
+      return crowns.map((crown: any) => {
+        const point = map.project([crown.lng, crown.lat])
+        const pixels = new Uint8Array(n * n * 4)
+        gl.readPixels(Math.round(point.x * ratio) - n / 2, canvas.height - Math.round(point.y * ratio) - n / 2, n, n, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+        const xs: number[] = [], ys: number[] = []
+        let covered = 0
+        for (let i = 0; i < n * n; i++) {
+          if (pixels[i * 4 + 1] - pixels[i * 4] > 12) { xs.push(i % n); ys.push(Math.floor(i / n)); covered++ }
+        }
+        return { form: crown.category, width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys), covered, expected, error: gl.getError() }
+      })
+    })
+    for (const shape of shapes) {
+      expect(shape.error).toBe(0)
+      // Never wider than the crown, and reaching it but for a lobe's turn (three-lobed multi-trunk's box is the narrowest).
+      expect(shape.width, `${shape.form} ${mobile ? 'phone' : 'desktop'}`).toBeLessThan(shape.expected + 3)
+      expect(shape.width, `${shape.form} ${mobile ? 'phone' : 'desktop'}`).toBeGreaterThan(shape.expected * 0.84)
+      expect(shape.height, `${shape.form} ${mobile ? 'phone' : 'desktop'}`).toBeLessThan(shape.expected + 3)
+      expect(shape.height, `${shape.form} ${mobile ? 'phone' : 'desktop'}`).toBeGreaterThan(shape.expected * 0.84)
+    }
+    // The forms are drawn differently: a palm's fronds cover far less than a broadleaf's cloud,
+    // and on the phone its outline and strokes mark more than a columnar crown's plain ring would.
+    const covered = Object.fromEntries(shapes.map((shape: { form: string; covered: number }) => [shape.form, shape.covered]))
+    if (!mobile) expect(covered.palm).toBeLessThan(covered.broadleaf * 0.6)
+    expect(new Set(shapes.map((shape: { covered: number }) => shape.covered)).size).toBeGreaterThan(6)
+  }
+})
+
+test('a software renderer keeps plain crown discs: no shape atlas, the crown as wide', async ({ page }) => {
+  await page.goto('/renderer-tests/crowns.html?shapes=auto')
+  await expect.poll(() => page.evaluate(() => {
+    const layer = (window as any).crownTest?.layer
+    return layer && !layer.inFlight && !layer.timer && layer.count > 0
+  })).toBe(true)
+  await page.evaluate(async () => {
+    const { map, crowns } = (window as any).crownTest
+    map.jumpTo({ center: [crowns[0].lng, crowns[0].lat], pitch: 0 })
+  })
+  await page.waitForTimeout(600)
+  const disc = await page.evaluate(async () => {
+    const { map, crowns, layer } = (window as any).crownTest
+    await new Promise(resolve => { map.once('render', resolve); map.triggerRepaint() })
+    const canvas = map.getCanvas()
+    const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
+    const point = map.project([crowns[0].lng, crowns[0].lat])
+    const ratio = canvas.width / canvas.clientWidth
+    const expected = 12 / (40075016.68557849 * Math.cos(crowns[0].lat * Math.PI / 180) / (512 * 2 ** map.getZoom())) * ratio
+    const pixels = new Uint8Array(200 * 4)
+    gl.readPixels(Math.round(point.x * ratio) - 100, canvas.height - Math.round(point.y * ratio), 200, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+    const green = Array.from({ length: 200 }, (_, i) => i).filter(i => pixels[i * 4 + 1] - pixels[i * 4] > 20)
+    return { software: !layer.shapes, textures: layer.textures.filter(Boolean).length, width: Math.max(...green) - Math.min(...green), expected, error: gl.getError() }
+  })
+  expect(disc.error).toBe(0)
+  expect(disc.software).toBe(true)
+  // The side atlas, and its leafless twin's 1×1 placeholder: no crown atlas.
+  expect(disc.textures).toBe(2)
+  // A disc: the row through its trunk is the whole crown.
+  expect(Math.abs(disc.width - disc.expected)).toBeLessThan(5)
 })

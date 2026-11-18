@@ -12,7 +12,9 @@ export const SPRITE_OPAQUE_ZOOM = 14
 export const SPRITE_HANDOFF_ZOOMS = 0.6
 export const SPRITE_CROWN_ZOOM_START = SPRITE_OPAQUE_ZOOM - SPRITE_HANDOFF_ZOOMS
 export const SPRITE_BASE_OPACITY = 0.72
-export const SPRITE_FULL_OPACITY_ZOOM = 21
+// Soon after the handoff: overlapping sprites drawn see-through double up into darker patches,
+// and the trees already sit under the map's labels.
+export const SPRITE_FULL_OPACITY_ZOOM = 15
 /** Desktop sprites are drawn at metre scale but never narrower than this many CSS pixels. */
 export const MIN_SPRITE_PX = 4
 /** Metres; the crown a desktop sprite is drawn with when the tree has no measured or predicted width. */
@@ -21,8 +23,9 @@ export const DEFAULT_CROWN_WIDTH = 6
  * Desktop sprites seen from above. An upright sprite shortens with the angle the camera looks
  * down at it (by the cosine of that elevation), and between these two elevations it turns into
  * a disc of its crown: the tree as seen from overhead, foreshortened to sin(elevation) as tall as
- * it is wide, so round only from straight above. Per tree, so in a pitched view the trees
- * under the camera are seen from above and the distant ones from the side.
+ * it is wide, so round only from straight above. The elevation is the view's (90 degrees less the
+ * map's pitch), the same for every tree in a frame: looking straight down, the whole screen is
+ * crowns from above, and the view tips into upright sprites all at once as it pitches.
  */
 export const SPRITE_TOPDOWN_START_DEG = 55
 export const SPRITE_TOPDOWN_FULL_DEG = 75
@@ -96,10 +99,12 @@ export interface TreeCrownColumns {
   height: Float64Array
   /** 1 on a notable tree (a proper name or a blurb); absent reads as none. */
   notable?: Uint8Array
+  /** 1 where the species drops its leaves (species_enrichment.is_evergreen false); absent reads as none. */
+  deciduous?: Uint8Array
 }
 
 export function crownColumnBuffers(c: TreeCrownColumns): ArrayBuffer[] {
-  return [c.lng, c.lat, c.width, c.measured, c.dbh, c.height, ...(c.notable ? [c.notable] : [])].map(a => a.buffer as ArrayBuffer)
+  return [c.lng, c.lat, c.width, c.measured, c.dbh, c.height, ...(c.notable ? [c.notable] : []), ...(c.deciduous ? [c.deciduous] : [])].map(a => a.buffer as ArrayBuffer)
 }
 
 export function crownZoomOpacity(zoom: number): number {

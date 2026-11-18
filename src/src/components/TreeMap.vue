@@ -30,6 +30,11 @@
         <option v-for="m in SPRITE_DISTANCE_CHOICES" :key="m" :value="m">{{ (m / 1000).toLocaleString() }} km</option>
       </select>
     </label>
+    <label class="sprite-debug-control">
+      Map date
+      <input type="date" :value="mapDateParam ?? ''" aria-label="Map date" data-testid="map-date" @change="chooseMapDate(($event.target as HTMLInputElement).value || null)">
+      <button v-if="mapDateParam" type="button" @click="chooseMapDate(null)">Today</button>
+    </label>
     <canvas ref="radarCanvas" class="sprite-radar" aria-hidden="true" />
   </div>
   <div v-if="mapWindow?.reason && !windowNoticeDismissed && !isInitialLoading" class="map-window-notice" role="status">
@@ -416,6 +421,7 @@ import { THINKING_PHRASES } from '../constants/loadingPhrases'
 import { CROWN_ZOOM_START, validTreeHeight } from '../lib/treeCrowns'
 import { applyMapUrlFilters, DBH_LEGEND, hasMapUrlFilters, MAP_FILTER_FIELDS, readMapColorBy, readMapUrlFilters } from '../lib/mapUrlFilters'
 import { FOLIAGE_LEGEND_NOTE, FOLIAGE_PHASE_LABEL, foliagePhase, speciesShadeSql } from '../lib/foliageSeason'
+import { MAP_DATE_PARAM, mapDateChoice, parseMapDate } from '../lib/mapDate'
 import { notableToken, TREES_AT_TOKEN, UNKNOWN_SHADE_COLOR } from '../workers/cityTables'
 import { bookmarkAt, directoryIndex, type WorldDirectory } from '../workers/worldBlocks'
 
@@ -607,9 +613,28 @@ const activeUrlFilters = computed(() => MAP_FILTER_FIELDS
   .map(field => ({ name: field === 'species' ? 'Species' : 'Genus', values: urlFilters.value[field] })))
 const mapColorBy = computed(() => readMapColorBy(route.query, urlFilters.value))
 const effectiveMapQuery = computed(() => applyMapUrlFilters(mapQueryFor(currentMapQuery.value, selectedCity.value), urlFilters.value))
-// The season the leaf-shade mode paints, from the calendar and the city's
+// The map's date: today, or the route's `?date=YYYY-MM-DD` (the debug panel sets it), so a
+// link can show the map in another season. The crowns read it from lib/mapDate.
+const mapDateParam = computed(() => {
+  const value = route.query[MAP_DATE_PARAM]
+  return parseMapDate(value) ? String(value).trim() : null
+})
+watch(mapDateParam, (value, previous) => {
+  mapDateChoice.value = value
+  // The first run is setup's, before the layers exist.
+  if (previous !== undefined && value !== previous) redrawCrowns()
+}, { immediate: true })
+
+function chooseMapDate(value: string | null) {
+  const query = { ...route.query }
+  if (value && parseMapDate(value)) query[MAP_DATE_PARAM] = value
+  else delete query[MAP_DATE_PARAM]
+  void router.replace({ query })
+}
+
+// The season the leaf-shade mode paints, from the map's date and the city's
 // hemisphere (cityConfig centres are [lng, lat]).
-const foliagePhaseNow = computed(() => foliagePhase(new Date(), CITY_CONFIG[mapDisplayCity.value].center[1]))
+const foliagePhaseNow = computed(() => foliagePhase(parseMapDate(mapDateParam.value) ?? new Date(), CITY_CONFIG[mapDisplayCity.value].center[1]))
 // The trunk scheme is a rule over the row, so it colours trees paged in later; a chat override wins outright.
 const dbhColors = computed(() => !colorOverrideSql.value && mapColorBy.value === 'dbh')
 // The leaf-shade scheme is a per-species table under any override, not a per-tree one.
@@ -924,7 +949,7 @@ function updateZoomLevel() {
 
 const {
   addTreeLayers, applyColorToLayers, forceTreesTileRefetchPass, pickCrownSprite, renderedTreeSprites,
-  treesResident, residentTreeCount, residentViewSettled, pickResidentTree, spriteStats, spriteRadar, setSpriteLimit, setSpriteDistance,
+  treesResident, residentTreeCount, residentViewSettled, pickResidentTree, spriteStats, spriteRadar, setSpriteLimit, setSpriteDistance, redrawCrowns,
 } = useMapLayers({
   map: mapRef,
   simplified: props.simplified ?? false,
@@ -3737,8 +3762,11 @@ onUnmounted(() => {
   margin: 3px 0;
   pointer-events: auto;
 }
-.sprite-debug-control select {
+.sprite-debug-control select,
+.sprite-debug-control input,
+.sprite-debug-control button {
   font: inherit;
+  color-scheme: dark;
   color: #fff;
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.35);

@@ -1,6 +1,7 @@
+import type { TreeAppearance } from '../lib/leaflessArtwork'
 import type { TreeForm } from '../types'
 import { CATEGORY_COLORS } from '../treeFormColors'
-import { treeArtwork, fillTreeShape, TREE_TRUNK_COLOR, TREE_BLOOM_COLOR } from '../lib/treeArtwork'
+import { treeArtwork, paintUprightShade, fillTreeShape, TREE_TRUNK_COLOR, TREE_BLOOM_COLOR } from '../lib/treeArtwork'
 
 export const TREE_ICON_SIZE = 48
 
@@ -64,17 +65,23 @@ export function getTreeForm(qSpecies: string): CategoryInfo {
 }
 
 /** Generate a canvas image for a tree category silhouette */
-export function drawTreeIcon(category: TreeForm, size: number, color?: string): HTMLCanvasElement {
+export function drawTreeIcon(category: TreeForm, size: number, color?: string, appearance: TreeAppearance = 'leafy'): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')!
   color = color ?? CATEGORY_COLORS[category]
-  const artwork = treeArtwork(category)
-  for (const [shapes, fill] of [[artwork.trunk, TREE_TRUNK_COLOR], [artwork.foliage, color], [artwork.blooms, TREE_BLOOM_COLOR]] as const) {
-    ctx.fillStyle = fill
-    for (const shape of shapes) fillTreeShape(ctx, shape, size)
-  }
+  const artwork = treeArtwork(category, appearance)
+  ctx.fillStyle = color
+  for (const shape of artwork.foliage) fillTreeShape(ctx, shape, size)
+  ctx.globalCompositeOperation = 'source-atop'
+  paintUprightShade(ctx, category, size)
+  ctx.globalCompositeOperation = 'destination-over'
+  ctx.fillStyle = TREE_TRUNK_COLOR
+  for (const shape of artwork.trunk) fillTreeShape(ctx, shape, size)
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.fillStyle = TREE_BLOOM_COLOR
+  for (const shape of artwork.blooms) fillTreeShape(ctx, shape, size)
   // Faint outline around the whole tree silhouette
   ctx.globalCompositeOperation = 'source-over'
   const outlineData = ctx.getImageData(0, 0, size, size)

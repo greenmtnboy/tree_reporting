@@ -538,6 +538,8 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     /** Cull desktop sprites past this many metres along the ground, or null for none (the debug panel's control). */
     setSpriteDistance: (metres: number | null) => crownLayer?.setSpriteDistance(metres),
     spriteRadar: () => crownLayer?.radar() ?? null,
+    /** Redraw the crowns from a fresh batch: the map's date changed which trees are bare (lib/mapDate). */
+    redrawCrowns: () => crownLayer?.invalidate(),
     addTreeLayers,
     applyColorToLayers,
     forceTreesTileRefetchPass,
