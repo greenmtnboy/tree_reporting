@@ -2293,7 +2293,7 @@ async function getPointChunks(rowsKey: string, keys: number[]): Promise<PointChu
   return withCells(cellsOfChunks(keys), async (tables) => {
     if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
     const { src, color, palette } = pointSource(tables)
-    const table = await conn!.query(pointChunksSql(src, keys, color.expr, palette))
+    const table = await conn!.query(pointChunksSql(src, keys, color.expr, palette, DECIDUOUS_SPECIES_TABLE))
     if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
     const { offsets, columns } = bucketByChunk(columnArray(table, 'chunk', Uint32Array), keys, {
       x: columnArray(table, 'x', Float32Array),
@@ -2303,9 +2303,10 @@ async function getPointChunks(rowsKey: string, keys: number[]): Promise<PointChu
       color: columnArray(table, 'color', Uint8Array),
       rowid: columnArray(table, 'rowid', Uint32Array),
       notable: columnArray(table, 'notable', Uint8Array),
+      deciduous: columnArray(table, 'deciduous', Uint8Array),
     })
     const { notable: flags, ...drawn } = columns
-    const grids = gridOrderChunks(offsets, drawn.x, drawn.y, { dbh: drawn.dbh, crown: drawn.crown, color: drawn.color, rowid: drawn.rowid, notable: flags })
+    const grids = gridOrderChunks(offsets, drawn.x, drawn.y, { dbh: drawn.dbh, crown: drawn.crown, color: drawn.color, rowid: drawn.rowid, deciduous: drawn.deciduous, notable: flags })
     const notable = flaggedRows(flags)
     console.info('[Perf] duckdb-worker:point-chunks', { chunks: keys.length, rows: table.numRows, notable: notable.length, ms: Math.round(nowMs() - t0) })
     return { rowsKey, colorKey, palette, keys, offsets, ...drawn, notable, grids }
@@ -2455,7 +2456,7 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         const { rowsKey, keys } = msg.params as WorkerMethodMap['getPointChunks']['params']
         const result = await getPointChunks(rowsKey, keys)
         send({ type: 'response', requestId: msg.requestId, ok: true, result },
-          result ? [result.offsets.buffer, result.x.buffer, result.y.buffer, result.dbh.buffer, result.crown.buffer, result.color.buffer, result.rowid.buffer, result.notable.buffer,
+          result ? [result.offsets.buffer, result.x.buffer, result.y.buffer, result.dbh.buffer, result.crown.buffer, result.color.buffer, result.rowid.buffer, result.notable.buffer, result.deciduous.buffer,
             ...result.grids.map((g) => g.start.buffer)] : undefined)
         break
       }
