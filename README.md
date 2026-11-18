@@ -108,6 +108,12 @@ Currently has data from the following cities:
 - [Geneva, Switzerland](https://greenmtnboy.github.io/tree_reporting/#/?city=CHGVA)
 - [Leipzig, Germany](https://greenmtnboy.github.io/tree_reporting/#/?city=DELEJ)
 - [Wellington, New Zealand](https://greenmtnboy.github.io/tree_reporting/#/?city=NZWLG)
+- [Bordeaux, France](https://greenmtnboy.github.io/tree_reporting/#/?city=FRBOD)
+- [Strasbourg, France](https://greenmtnboy.github.io/tree_reporting/#/?city=FRSXB)
+- [Eindhoven, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLEIN)
+- [Bern, Switzerland](https://greenmtnboy.github.io/tree_reporting/#/?city=CHBRN)
+- [Rennes, France](https://greenmtnboy.github.io/tree_reporting/#/?city=FRRNS)
+- [Antwerp, Belgium](https://greenmtnboy.github.io/tree_reporting/#/?city=BEANR)
 - [Lisbon, Portugal](https://greenmtnboy.github.io/tree_reporting/#/?city=PTLIS)
 - [Fingal (County Dublin), Ireland](https://greenmtnboy.github.io/tree_reporting/#/?city=IEFIN)
 - [Canberra, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUCBR)
@@ -236,6 +242,12 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Geneva | SITG - Inventaire cantonal des arbres (Ville de Genève, Conservatoire et Jardin botaniques; Données SITG, open access; 1976 paper-inventory records omitted) | https://sitg.ge.ch/donnees/sipv-ica-arbre-isole |
 | Leipzig | Stadt Leipzig - Baumkataster (dl-de/by-2.0) | https://opendata.leipzig.de/dataset/baumkataster-stadt-leipzig1 |
 | Wellington | Wellington City Council - WCC Trees (CC BY 4.0) | https://data-wcc.opendata.arcgis.com/datasets/93ca9097fd4b487e9fcf55ad75941136_53 |
+| Bordeaux | Bordeaux Métropole - Patrimoine arboré (Licence Ouverte) | https://opendata.bordeaux-metropole.fr/explore/dataset/ec_arbre_p/ |
+| Strasbourg | Ville et Eurométropole de Strasbourg - Patrimoine arboré (Licence Ouverte v2.0) | https://data.strasbourg.eu/explore/dataset/patrimoine_arbore/ |
+| Eindhoven | Gemeente Eindhoven - Bomen (public domain) | https://data.eindhoven.nl/explore/dataset/bomen/ |
+| Bern | Stadt Bern - Baumkataster (Stadtgrün Bern; opendata.swiss open use) | https://opendata.swiss/en/dataset/baumkataster1 |
+| Rennes | Rennes Métropole - Arbres (ODbL 1.0) | https://data.rennesmetropole.fr/explore/dataset/arbre/ |
+| Antwerp | Stad Antwerpen - boom (Gratis Open Data Licentie; bron stad Antwerpen) | https://portaal-stadantwerpen.opendata.arcgis.com/datasets/stadAntwerpen::boom |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
 | Melbourne (Yarra) | City of Yarra - Street and Park Trees (CC BY 4.0) | https://data.gov.au/data/dataset/yarra-street-park-trees |
@@ -336,6 +348,13 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Geneva | SITG - Objets classés (Inventaire des monuments d'art et d'histoire du canton de Genève) | https://sitg.ge.ch/donnees/dps-classement |
 | Leipzig | Stadt Leipzig - Grünflächen, Amt für Stadtgrün und Gewässer (no licence stated; displayed with attribution only, not licensed for reuse) | https://geodienste.leipzig.de/l3/OpenData/wfs |
 | Wellington | Wellington City Council - 2024 District Plan heritage schedules SCHED1-3 (CC BY 4.0) | https://data-wcc.opendata.arcgis.com/datasets/WCC::heritage-buildings-sched1-2024-district-plan/about |
+| Bordeaux | Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
+| Strasbourg | Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
+| Eindhoven | Gemeente Eindhoven - Monumenten, gemeentelijke monumenten (public domain) | https://data.eindhoven.nl/explore/dataset/monumenten/ |
+| Bern | Stadt Bern - Sehenswürdigkeiten and Bauinventar Baugruppen (opendata.swiss open use) | https://opendata.swiss/en/dataset/bauinventar1 |
+| Rennes | Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
+| Antwerp | Agentschap Onroerend Erfgoed - protected monuments, landscapes and town views (Gratis open data licentie Vlaanderen) | https://inventaris.onroerenderfgoed.be/erfgoedobjecten?gemeente=11002 |
+| Eindhoven | Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0) | https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS |
 | Melbourne | Melbourne Open Data - Landmarks and Places of Interest | https://data.melbourne.vic.gov.au/explore/dataset/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/ |
 | Paris | Ministere de la Culture - Immeubles proteges au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
 | Buenos Aires | No landmark dataset in production yet | n/a |

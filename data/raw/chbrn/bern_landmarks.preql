@@ -1,0 +1,27 @@
+import ..landmark_common;
+
+root datasource bern_landmarks_update_time (
+    data_updated_through: chbrn_landmark_data_updated_through
+)
+file `./bern_landmarks_probe.py`;
+
+# Bern's landmarks from two layers on the city geoportal (terms_open), read
+# live: the city's list of sights (Sehenswürdigkeiten, points) and the named
+# building ensembles of the monument office's Bauinventar (Baugruppen,
+# polygons); see bern_landmarks.py for what is left out and why. `category`
+# names the source, `address` is the sights' street address.
+root partial datasource raw_bern_landmark_info extends landmark_partition (
+    category: ?category,
+    address: ?address,
+)
+complete where city = 'CHBRN'
+file `./bern_landmarks.py`;
+
+partial datasource bern_landmark_info extends published_landmark_info (
+    ?category,
+    ?address,
+    chbrn_landmark_data_updated_through,
+)
+complete where city = 'CHBRN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/chbrn_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/chbrn_landmark_info_v{data_version}.parquet`
+freshness by chbrn_landmark_data_updated_through;

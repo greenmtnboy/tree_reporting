@@ -1,0 +1,34 @@
+import ..landmark_common;
+
+root datasource eindhoven_landmarks_update_time (
+    data_updated_through: nlein_landmark_data_updated_through
+)
+file `./eindhoven_landmarks_probe.py`;
+
+# Eindhoven's municipal and national monument registers: the city's
+# gemeentelijke monumenten (data.eindhoven.nl `monumenten`, public domain)
+# and RCE's rijksmonumenten (PDOK Protected Sites, CC BY 4.0) inside the
+# municipality's boundary; only monuments the register names (a church, a
+# factory, a farmstead) publish, not those known only by an address.  See
+# eindhoven_landmarks.py.  The register's attributes ride along in existing
+# landmark_common properties: the register (category), its number, the
+# address and the year built.
+root partial datasource raw_eindhoven_landmark_info extends landmark_partition (
+    category: ?category,
+    register_number: ?register_number,
+    address: ?address,
+    year_built: ?year_built,
+)
+complete where city = 'NLEIN'
+file `./eindhoven_landmarks.py`;
+
+partial datasource eindhoven_landmark_info extends published_landmark_info (
+    ?category,
+    ?register_number,
+    ?address,
+    ?year_built,
+    nlein_landmark_data_updated_through,
+)
+complete where city = 'NLEIN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/nlein_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/nlein_landmark_info_v{data_version}.parquet`
+freshness by nlein_landmark_data_updated_through;
