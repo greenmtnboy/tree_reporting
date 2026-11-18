@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Sydney', label: 'TODO: Sydney tree inventory source', url: 'TODO' },
+  { city: 'Grenoble', label: 'TODO: Grenoble tree inventory source', url: 'TODO' },
+  { city: 'Montpellier', label: 'TODO: Montpellier tree inventory source', url: 'TODO' },
+  { city: 'Louisville', label: 'TODO: Louisville tree inventory source', url: 'TODO' },
+  { city: 'Kitchener', label: 'TODO: Kitchener tree inventory source', url: 'TODO' },
+  { city: 'San Diego', label: 'TODO: San Diego tree inventory source', url: 'TODO' },
   { city: 'Antwerp', label: 'Stad Antwerpen - boom (Gratis Open Data Licentie; bron stad Antwerpen)', url: 'https://portaal-stadantwerpen.opendata.arcgis.com/datasets/stadAntwerpen::boom' },
   { city: 'Rennes', label: 'Rennes Métropole - Arbres (ODbL 1.0)', url: 'https://data.rennesmetropole.fr/explore/dataset/arbre/' },
   { city: 'Bern', label: 'Stadt Bern - Baumkataster (Stadtgrün Bern; opendata.swiss open use)', url: 'https://opendata.swiss/en/dataset/baumkataster1' },
@@ -135,6 +141,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Sydney', label: 'TODO: Sydney landmark source' },
+  { city: 'Grenoble', label: 'TODO: Grenoble landmark source' },
+  { city: 'Montpellier', label: 'TODO: Montpellier landmark source' },
+  { city: 'Louisville', label: 'TODO: Louisville landmark source' },
+  { city: 'Kitchener', label: 'TODO: Kitchener landmark source' },
+  { city: 'San Diego', label: 'TODO: San Diego landmark source' },
   { city: 'Antwerp', label: 'Agentschap Onroerend Erfgoed - protected monuments, landscapes and town views (Gratis open data licentie Vlaanderen)', url: 'https://inventaris.onroerenderfgoed.be/erfgoedobjecten?gemeente=11002' },
   { city: 'Rennes', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
   { city: 'Bern', label: 'Stadt Bern - Sehenswürdigkeiten and Bauinventar Baugruppen (opendata.swiss open use)', url: 'https://opendata.swiss/en/dataset/bauinventar1' },

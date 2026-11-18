@@ -92,5 +92,11 @@
   "NLEIN": { "name": "Eindhoven", "center": [5.4697, 51.4416] },
   "CHBRN": { "name": "Bern", "center": [7.4474, 46.948] },
   "FRRNS": { "name": "Rennes", "center": [-1.6778, 48.1173] },
-  "BEANR": { "name": "Antwerp", "center": [4.4025, 51.2194] }
+  "BEANR": { "name": "Antwerp", "center": [4.4025, 51.2194] },
+  "USSAN": { "name": "San Diego", "center": [-117.1611, 32.7157] },
+  "CAKIT": { "name": "Kitchener", "center": [-80.4925, 43.4516] },
+  "USLOU": { "name": "Louisville", "center": [-85.7585, 38.2527] },
+  "FRMPL": { "name": "Montpellier", "center": [3.8767, 43.6108] },
+  "FRGNB": { "name": "Grenoble", "center": [5.7245, 45.1885] },
+  "AUSYD": { "name": "Sydney", "center": [151.2093, -33.8688] }
 }

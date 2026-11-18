@@ -104,6 +104,12 @@ property <*>.nlein_community_data_updated_through datetime; # when approved comm
 property <*>.chbrn_community_data_updated_through datetime; # when approved community submissions for CHBRN are through
 property <*>.frrns_community_data_updated_through datetime; # when approved community submissions for FRRNS are through
 property <*>.beanr_community_data_updated_through datetime; # when approved community submissions for BEANR are through
+property <*>.ussan_community_data_updated_through datetime; # when approved community submissions for USSAN are through
+property <*>.cakit_community_data_updated_through datetime; # when approved community submissions for CAKIT are through
+property <*>.uslou_community_data_updated_through datetime; # when approved community submissions for USLOU are through
+property <*>.frmpl_community_data_updated_through datetime; # when approved community submissions for FRMPL are through
+property <*>.frgnb_community_data_updated_through datetime; # when approved community submissions for FRGNB are through
+property <*>.ausyd_community_data_updated_through datetime; # when approved community submissions for AUSYD are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.
