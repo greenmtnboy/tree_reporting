@@ -137,7 +137,9 @@ def city_register() -> dict[str, list]:
             continue
         geom = feature.get("geometry") or {}
         wkt = make_point_wkt(geom.get("x"), geom.get("y"))
-        if wkt is None:
+        # The MapServer writes an empty point as x/y "NaN"; DuckDB cannot read
+        # POINT(NaN NaN), so it counts as no point.
+        if wkt is None or "nan" in wkt.lower():
             skipped["no point"] += 1
             continue
         if number in seen:
@@ -177,7 +179,7 @@ def national_register() -> dict[str, list]:
             ref = clean(attrs.get("NRIS_Refnum"))
             name = clean(attrs.get("RESNAME"))
             wkt = esri_geometry_to_wkt(feature.get("geometry"))
-            if not ref or not name or wkt is None or ref in seen:
+            if not ref or not name or wkt is None or "nan" in wkt.lower() or ref in seen:
                 continue
             if (clean(attrs.get("City")) or "").lower() not in NRHP_CITIES:
                 continue
