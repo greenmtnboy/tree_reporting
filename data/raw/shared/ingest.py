@@ -2825,18 +2825,20 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "BEANR": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "FRRNS": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CHBRN": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "NLEIN": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "FRSXB": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "FRBOD": 10,
+    # Calibrated 2026-11-18: 8m cell: recall 93.7%, 3.2% false; 10m adds +27 true / +58 false.
+    "BEANR": 8,
+    # Calibrated 2026-11-18: 6m cell: recall 91.4%, 5.0% false; 8m adds +273 true / +687 false.
+    "FRRNS": 6,
+    # Calibrated 2026-11-18: 6m cell: recall 95.3%, 3.2% false; 8m adds +122 true / +190 false.
+    "CHBRN": 6,
+    # Calibrated 2026-11-18: 8m cell: recall 97.0%, 2.4% false; 10m adds +44 true / +142 false.
+    "NLEIN": 8,
+    # Calibrated 2026-11-18: OSM carries much of the city's own layer (114k OSM vs 83k inventory).
+    # 4m cell: recall 98.7%, 1.4% false; 6m adds +479 true / +915 false.
+    "FRSXB": 4,
+    # Calibrated 2026-11-18 (osm_dedup_validation.py, local inventory parquet):
+    # 4m cell: recall 96.3%, 3.6% false; 6m adds +314 true / +589 false.
+    "FRBOD": 4,
     # Calibrated 2026-11-17 (osm_dedup_validation.py, local inventory parquet)
     # against the staged extract. Mutual-NN 90.3% in 2-5 m, 45.5% in 5-10 m
     # (n=143): a 5 m guarantee caps it at 10. Marginal table: 6->8 removes 42
