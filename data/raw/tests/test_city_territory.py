@@ -99,6 +99,12 @@ def test_the_neighbours_are_carved_where_the_rollup_showed_duplicates():
         (49.25, -123.10): ("CAVAN", "CANWE"),
         (43.85, -79.05): ("CAAJX", "CATOR"),
         (43.40, -79.80): ("CABUR", "CAMIS"),
+        # CABUR's first box reached into Hamilton; carved by both inventories.
+        (43.256, -79.869): ("CAHAM", "CABUR"),  # downtown Hamilton
+        (43.335, -79.905): ("CAHAM", "CABUR"),  # Waterdown
+        (43.288, -79.790): ("CAHAM", "CABUR"),  # Hamilton Beach Strip
+        (43.302, -79.860): ("CABUR", "CAHAM"),  # Aldershot
+        (43.326, -79.800): ("CABUR", "CAHAM"),  # downtown Burlington
         (38.896, -77.072): ("USNVA", "USWAS"),  # Rosslyn
         (38.905, -77.065): ("USWAS", "USNVA"),  # Georgetown
         (38.871, -77.056): ("USNVA", "USWAS"),  # the Pentagon

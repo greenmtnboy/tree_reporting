@@ -11,6 +11,18 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Antwerp', label: 'Stad Antwerpen - boom (Gratis Open Data Licentie; bron stad Antwerpen)', url: 'https://portaal-stadantwerpen.opendata.arcgis.com/datasets/stadAntwerpen::boom' },
+  { city: 'Rennes', label: 'Rennes Métropole - Arbres (ODbL 1.0)', url: 'https://data.rennesmetropole.fr/explore/dataset/arbre/' },
+  { city: 'Bern', label: 'Stadt Bern - Baumkataster (Stadtgrün Bern; opendata.swiss open use)', url: 'https://opendata.swiss/en/dataset/baumkataster1' },
+  { city: 'Eindhoven', label: 'Gemeente Eindhoven - Bomen (public domain)', url: 'https://data.eindhoven.nl/explore/dataset/bomen/' },
+  { city: 'Strasbourg', label: 'Ville et Eurométropole de Strasbourg - Patrimoine arboré (Licence Ouverte v2.0)', url: 'https://data.strasbourg.eu/explore/dataset/patrimoine_arbore/' },
+  { city: 'Bordeaux', label: 'Bordeaux Métropole - Patrimoine arboré (Licence Ouverte)', url: 'https://opendata.bordeaux-metropole.fr/explore/dataset/ec_arbre_p/' },
+  { city: 'Wellington', label: 'Wellington City Council - WCC Trees (CC BY 4.0)', url: 'https://data-wcc.opendata.arcgis.com/datasets/93ca9097fd4b487e9fcf55ad75941136_53' },
+  { city: 'Leipzig', label: 'Stadt Leipzig - Baumkataster (dl-de/by-2.0)', url: 'https://opendata.leipzig.de/dataset/baumkataster-stadt-leipzig1' },
+  { city: 'Geneva', label: 'SITG - Inventaire cantonal des arbres (Ville de Genève, Conservatoire et Jardin botaniques; Données SITG, open access; 1976 paper-inventory records omitted)', url: 'https://sitg.ge.ch/donnees/sipv-ica-arbre-isole' },
+  { city: 'Toulouse', label: 'Toulouse Métropole - Arbres urbains (Licence Ouverte v2.0)', url: 'https://data.toulouse-metropole.fr/explore/dataset/arbres-urbains/' },
+  { city: 'Utrecht', label: 'Gemeente Utrecht - Bomenkaart 2026 (CC BY 4.0)', url: 'https://open.utrecht.nl/dataset/bomenkaart-2026/ea248c2e-7ae4-47b3-bd57-f34b2d876667' },
+  { city: 'Hamilton', label: 'City of Hamilton - Public Tree Inventory (City of Hamilton Open Data Licence v1.1)', url: 'https://open.hamilton.ca/datasets/public-tree-inventory' },
   { city: 'Bristol', label: 'Bristol City Council - Trees (Open Government Licence v3.0)', url: 'https://www.arcgis.com/home/item.html?id=7a99218a4bf347ff948f0e5882406a8c' },
   { city: 'Ghent', label: 'Stad Gent Groendienst - Locaties bomen Gent (Modellicentie Gratis Hergebruik)', url: 'https://data.stad.gent/explore/dataset/locaties-bomen-gent/' },
   { city: 'Lisbon', label: 'Câmara Municipal de Lisboa - Arvoredo (Lisboa Aberta, CC0)', url: 'https://dados.cm-lisboa.pt/dataset/arvoredo' },
@@ -123,6 +135,19 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Antwerp', label: 'Agentschap Onroerend Erfgoed - protected monuments, landscapes and town views (Gratis open data licentie Vlaanderen)', url: 'https://inventaris.onroerenderfgoed.be/erfgoedobjecten?gemeente=11002' },
+  { city: 'Rennes', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
+  { city: 'Bern', label: 'Stadt Bern - Sehenswürdigkeiten and Bauinventar Baugruppen (opendata.swiss open use)', url: 'https://opendata.swiss/en/dataset/bauinventar1' },
+  { city: 'Eindhoven', label: 'Gemeente Eindhoven - Monumenten, gemeentelijke monumenten (public domain)', url: 'https://data.eindhoven.nl/explore/dataset/monumenten/' },
+  { city: 'Eindhoven', label: 'Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0)', url: 'https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS' },
+  { city: 'Strasbourg', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
+  { city: 'Bordeaux', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
+  { city: 'Wellington', label: 'Wellington City Council - 2024 District Plan heritage schedules SCHED1-3 (CC BY 4.0)', url: 'https://data-wcc.opendata.arcgis.com/datasets/WCC::heritage-buildings-sched1-2024-district-plan/about' },
+  { city: 'Leipzig', label: 'Stadt Leipzig - Grünflächen, Amt für Stadtgrün und Gewässer (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://geodienste.leipzig.de/l3/OpenData/wfs' },
+  { city: 'Geneva', label: 'SITG - Objets classés (Inventaire des monuments d\'art et d\'histoire du canton de Genève)', url: 'https://sitg.ge.ch/donnees/dps-classement' },
+  { city: 'Toulouse', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
+  { city: 'Utrecht', label: 'Gemeente Utrecht - Rijksmonumenten and Gemeentelijke monumenten, named objects (CC BY-SA 4.0)', url: 'https://open.utrecht.nl/dataset/rijksmonumenten/e30f329c-a1d9-45d8-a68b-91fbdf723703' },
+  { city: 'Hamilton', label: 'City of Hamilton - Heritage Properties (City of Hamilton Open Data Licence v1.1)', url: 'https://open.hamilton.ca/datasets/heritage-properties' },
   { city: 'Bristol', label: 'Historic England - National Heritage List for England (OGL)', url: 'https://historicengland.org.uk/listing/the-list/' },
   { city: 'Ghent', label: 'Agentschap Onroerend Erfgoed - protected monuments, landscapes and town views (Gratis open data licentie Vlaanderen)', url: 'https://inventaris.onroerenderfgoed.be/erfgoedobjecten?gemeente=44021' },
   { city: 'Lisbon', label: 'Câmara Municipal de Lisboa - Património classificado and Estatuária (CC0)', url: 'https://services.arcgis.com/1dSrzEWVQn5kHHyK/arcgis/rest/services/Patrimonio/FeatureServer' },

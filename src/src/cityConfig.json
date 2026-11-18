@@ -80,5 +80,17 @@
   "AUCBR": { "name": "Canberra", "center": [149.13, -35.28] },
   "PTLIS": { "name": "Lisbon", "center": [-9.1393, 38.7223] },
   "BEGNT": { "name": "Ghent", "center": [3.7174, 51.0543] },
-  "GBBRS": { "name": "Bristol", "center": [-2.5879, 51.4545] }
+  "GBBRS": { "name": "Bristol", "center": [-2.5879, 51.4545] },
+  "CAHAM": { "name": "Hamilton", "center": [-79.8711, 43.2557] },
+  "NLUTC": { "name": "Utrecht", "center": [5.1214, 52.0907] },
+  "FRTLS": { "name": "Toulouse", "center": [1.4442, 43.6047] },
+  "CHGVA": { "name": "Geneva", "center": [6.1432, 46.2044] },
+  "DELEJ": { "name": "Leipzig", "center": [12.3731, 51.3397] },
+  "NZWLG": { "name": "Wellington", "center": [174.7762, -41.2865] },
+  "FRBOD": { "name": "Bordeaux", "center": [-0.5792, 44.8378] },
+  "FRSXB": { "name": "Strasbourg", "center": [7.7521, 48.5734] },
+  "NLEIN": { "name": "Eindhoven", "center": [5.4697, 51.4416] },
+  "CHBRN": { "name": "Bern", "center": [7.4474, 46.948] },
+  "FRRNS": { "name": "Rennes", "center": [-1.6778, 48.1173] },
+  "BEANR": { "name": "Antwerp", "center": [4.4025, 51.2194] }
 }

@@ -1,0 +1,27 @@
+import ..landmark_common;
+
+root datasource hamilton_landmarks_update_time (
+    data_updated_through: caham_landmark_data_updated_through
+)
+file `./hamilton_landmarks_probe.py`;
+
+# Hamilton's Municipal Heritage Register (Designated and Registered
+# Non-Designated properties), read live off the City's Open Hamilton layer --
+# an official register, so no geocoding and nothing to stage.
+root partial datasource raw_hamilton_landmark_info extends landmark_partition (
+    address: ?address,
+    year_built: ?year_built,
+    property_type: ?property_type,
+)
+complete where city = 'CAHAM'
+file `./hamilton_landmarks.py`;
+
+partial datasource hamilton_landmark_info extends published_landmark_info (
+    ?address,
+    ?year_built,
+    ?property_type,
+    caham_landmark_data_updated_through,
+)
+complete where city = 'CAHAM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/caham_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/caham_landmark_info_v{data_version}.parquet`
+freshness by caham_landmark_data_updated_through;

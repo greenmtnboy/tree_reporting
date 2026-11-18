@@ -92,6 +92,18 @@ property <*>.aucbr_community_data_updated_through datetime; # when approved comm
 property <*>.ptlis_community_data_updated_through datetime; # when approved community submissions for PTLIS are through
 property <*>.begnt_community_data_updated_through datetime; # when approved community submissions for BEGNT are through
 property <*>.gbbrs_community_data_updated_through datetime; # when approved community submissions for GBBRS are through
+property <*>.caham_community_data_updated_through datetime; # when approved community submissions for CAHAM are through
+property <*>.nlutc_community_data_updated_through datetime; # when approved community submissions for NLUTC are through
+property <*>.frtls_community_data_updated_through datetime; # when approved community submissions for FRTLS are through
+property <*>.chgva_community_data_updated_through datetime; # when approved community submissions for CHGVA are through
+property <*>.delej_community_data_updated_through datetime; # when approved community submissions for DELEJ are through
+property <*>.nzwlg_community_data_updated_through datetime; # when approved community submissions for NZWLG are through
+property <*>.frbod_community_data_updated_through datetime; # when approved community submissions for FRBOD are through
+property <*>.frsxb_community_data_updated_through datetime; # when approved community submissions for FRSXB are through
+property <*>.nlein_community_data_updated_through datetime; # when approved community submissions for NLEIN are through
+property <*>.chbrn_community_data_updated_through datetime; # when approved community submissions for CHBRN are through
+property <*>.frrns_community_data_updated_through datetime; # when approved community submissions for FRRNS are through
+property <*>.beanr_community_data_updated_through datetime; # when approved community submissions for BEANR are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

@@ -1,0 +1,31 @@
+import ..landmark_common;
+
+root datasource strasbourg_landmarks_update_time (
+    data_updated_through: frsxb_landmark_data_updated_through
+)
+file `./strasbourg_landmarks_probe.py`;
+
+# Strasbourg's protected monuments -- buildings classés or inscrits under the
+# Monuments Historiques -- read from the Ministry of Culture's national Mérimée
+# export (Licence Ouverte v2.0) and filtered to the 33 communes of the
+# Eurométropole, the tree inventory's territory; see strasbourg_landmarks.py.
+# The register's own attributes ride along in existing landmark_common
+# properties: the address, the protection (date and type, as Paris carries it)
+# and the building type.
+root partial datasource raw_strasbourg_landmark_info extends landmark_partition (
+    address: ?address,
+    protection_type: ?protection_type,
+    denomination: ?denomination,
+)
+complete where city = 'FRSXB'
+file `./strasbourg_landmarks.py`;
+
+partial datasource strasbourg_landmark_info extends published_landmark_info (
+    ?address,
+    ?protection_type,
+    ?denomination,
+    frsxb_landmark_data_updated_through,
+)
+complete where city = 'FRSXB'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/frsxb_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/frsxb_landmark_info_v{data_version}.parquet`
+freshness by frsxb_landmark_data_updated_through;
